@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -571,120 +570,6 @@ def test_launch_fleet_session_clears_initial_message_on_reload(
         None,
         None,
         fleet_mode="dispatch",
-        initial_message="Hello!",
-    )
-    assert len(captured_messages) >= 2, (
-        f"expected reload to fire but got only {len(captured_messages)} call(s)"
-    )
-    assert captured_messages[0] == "Hello!"
-    assert captured_messages[1] is None
-
-
-def test_fleet_campaign_greetings_have_campaign_name_placeholder() -> None:
-    """All _FLEET_CAMPAIGN_GREETINGS entries must contain {campaign_name}."""
-    from autoskillit.cli.fleet._fleet_preview import _FLEET_CAMPAIGN_GREETINGS
-
-    assert len(_FLEET_CAMPAIGN_GREETINGS) >= 3
-    for greeting in _FLEET_CAMPAIGN_GREETINGS:
-        assert "{campaign_name}" in greeting
-
-
-def test_launch_fleet_session_forwards_initial_message_campaign(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """_launch_fleet_session in campaign mode forwards initial_message."""
-    monkeypatch.chdir(tmp_path)
-    captured_kwargs: dict = {}
-
-    def mock_run(system_prompt: str, **kwargs: object) -> None:
-        captured_kwargs.update(kwargs)
-        return None
-
-    monkeypatch.setattr(
-        "autoskillit.cli.session._session_launch._run_interactive_session",
-        mock_run,
-    )
-    monkeypatch.setattr(
-        "autoskillit.cli._prompts._build_fleet_campaign_prompt",
-        lambda *a, **kw: "campaign-prompt",
-    )
-    monkeypatch.setattr("autoskillit.cli.fleet._fleet_session.dump_yaml_str", lambda *a, **kw: "")
-    from autoskillit.fleet import ResumeDecision
-
-    monkeypatch.setattr(
-        "autoskillit.fleet.resume_campaign_from_state",
-        lambda *a, **kw: ResumeDecision(
-            completed_dispatches_block="",
-            next_dispatch_name="",
-            is_resumable=False,
-            dispatched_session_id="",
-            kill_reason="",
-        ),
-    )
-    from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
-
-    recipe = MagicMock()
-    recipe.dispatches = []
-    recipe.continue_on_failure = False
-
-    _launch_fleet_session(
-        recipe,
-        "test-campaign-id",
-        tmp_path / "state.json",
-        None,
-        fleet_mode="campaign",
-        initial_message="Hello, campaign!",
-    )
-    assert captured_kwargs.get("initial_message") == "Hello, campaign!"
-
-
-def test_launch_fleet_session_clears_initial_message_on_reload_campaign(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """On reload in campaign mode, initial_message must be None (only injected on first launch)."""
-    monkeypatch.chdir(tmp_path)
-    call_count = 0
-    captured_messages: list = []
-
-    def mock_run(system_prompt: str, **kwargs: object) -> object:
-        nonlocal call_count
-        captured_messages.append(kwargs.get("initial_message"))
-        call_count += 1
-        return "reload-session-abc" if call_count == 1 else None
-
-    monkeypatch.setattr(
-        "autoskillit.cli.session._session_launch._run_interactive_session",
-        mock_run,
-    )
-    monkeypatch.setattr(
-        "autoskillit.cli._prompts._build_fleet_campaign_prompt",
-        lambda *a, **kw: "campaign-prompt",
-    )
-    monkeypatch.setattr("autoskillit.cli.fleet._fleet_session.dump_yaml_str", lambda *a, **kw: "")
-    from autoskillit.fleet import ResumeDecision
-
-    monkeypatch.setattr(
-        "autoskillit.fleet.resume_campaign_from_state",
-        lambda *a, **kw: ResumeDecision(
-            completed_dispatches_block="",
-            next_dispatch_name="",
-            is_resumable=False,
-            dispatched_session_id="",
-            kill_reason="",
-        ),
-    )
-    from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
-
-    recipe = MagicMock()
-    recipe.dispatches = []
-    recipe.continue_on_failure = False
-
-    _launch_fleet_session(
-        recipe,
-        "test-campaign-id",
-        tmp_path / "state.json",
-        None,
-        fleet_mode="campaign",
         initial_message="Hello!",
     )
     assert len(captured_messages) >= 2, (

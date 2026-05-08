@@ -927,6 +927,38 @@ async def test_third_concurrent_dispatch_refused_with_max2(
     assert results[2]["success"] is False
 
 
+@pytest.mark.anyio
+async def test_fourth_concurrent_dispatch_refused_with_max3(
+    fleet_runtime_factory,
+) -> None:
+    """FleetSemaphore(max=3) rejects a fourth concurrent dispatch immediately."""
+    rt = fleet_runtime_factory(max_concurrent_dispatches=3)
+    rt.add_recipe("slow-recipe")
+    results: list[dict | None] = [None, None, None, None]
+
+    async def _slow(idx: int) -> None:
+        results[idx] = await rt.dispatch(
+            "slow-recipe", shim_mode="sleep_then_exit", sleep_sec=3.0, timeout_sec=15
+        )
+
+    async def _fast() -> None:
+        await anyio.sleep(0.3)
+        results[3] = await rt.dispatch("slow-recipe", shim_mode="success")
+
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(_slow, 0)
+        tg.start_soon(_slow, 1)
+        tg.start_soon(_slow, 2)
+        tg.start_soon(_fast)
+
+    assert results[0] is not None and results[0]["success"] is True
+    assert results[1] is not None and results[1]["success"] is True
+    assert results[2] is not None and results[2]["success"] is True
+    assert results[3] is not None
+    assert results[3]["error"] == "fleet_parallel_refused"
+    assert results[3]["success"] is False
+
+
 # ---------------------------------------------------------------------------
 # Test: resume_session_id threads through to the subprocess cmd
 # ---------------------------------------------------------------------------

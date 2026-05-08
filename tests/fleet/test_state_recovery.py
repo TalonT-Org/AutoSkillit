@@ -101,3 +101,29 @@ class TestDeriveOrchestratorResumeSpec:
         state = _make_state(orchestrator_session_id="", dispatches=dispatches)
         result = derive_orchestrator_resume_spec(state)
         assert result == NamedResume(session_id="latest-caller-sess")
+
+    def test_derive_falls_back_for_pending_dispatch(self) -> None:
+        from autoskillit.fleet.state_recovery import derive_orchestrator_resume_spec
+
+        dispatches = [
+            DispatchRecord(
+                name="dispatch-1",
+                status=DispatchStatus.PENDING,
+                caller_session_id="pending-caller-sess",
+            ),
+        ]
+        state = _make_state(orchestrator_session_id="", dispatches=dispatches)
+        result = derive_orchestrator_resume_spec(state)
+        assert result == NamedResume(session_id="pending-caller-sess")
+
+    def test_derive_returns_no_resume_for_pending_dispatch_without_caller_session_id(
+        self,
+    ) -> None:
+        from autoskillit.fleet.state_recovery import derive_orchestrator_resume_spec
+
+        dispatches = [
+            DispatchRecord(name="dispatch-1", status=DispatchStatus.PENDING),
+        ]
+        state = _make_state(orchestrator_session_id="", dispatches=dispatches)
+        result = derive_orchestrator_resume_spec(state)
+        assert result == NoResume()

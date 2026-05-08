@@ -10,7 +10,13 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import RetryReason, _parse_issue_ref, get_logger
+from autoskillit.core import (
+    LABEL_LIFECYCLE_REGISTRY,
+    IssueLabelState,
+    RetryReason,
+    _parse_issue_ref,
+    get_logger,
+)
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import _extract_block
@@ -446,19 +452,32 @@ async def claim_issue(
                 }
             )
 
+        target_state = tool_ctx.config.github.state_for_label(effective_label)
+        if target_state is not None:
+            label_def = LABEL_LIFECYCLE_REGISTRY[target_state]
+            ensure_color = label_def.color
+            ensure_description = label_def.description
+            remove_labels = [
+                tool_ctx.config.github.label_for_state(s) for s in label_def.removes_on_entry
+            ]
+        else:
+            ensure_color = "fbca04"
+            ensure_description = "Issue is actively being processed by a pipeline session"
+            remove_labels = [tool_ctx.config.github.fail_label]
+
         await tool_ctx.github_client.ensure_label(
             owner,
             repo,
             effective_label,
-            color="fbca04",
-            description="Issue is actively being processed by a pipeline session",
+            color=ensure_color,
+            description=ensure_description,
         )
 
         swap_result = await tool_ctx.github_client.swap_labels(
             owner,
             repo,
             issue_number,
-            remove_labels=[tool_ctx.config.github.fail_label],
+            remove_labels=remove_labels,
             add_labels=[effective_label],
         )
         if not swap_result.get("success"):
@@ -541,10 +560,6 @@ async def release_issue(
         config_fail_label = tool_ctx.config.github.fail_label
         effective_staged_label = staged_label or tool_ctx.config.github.staged_label
 
-        remove_set = [effective_label]
-        if config_fail_label:
-            remove_set.append(config_fail_label)
-
         if should_stage:
             if err := tool_ctx.config.github.check_label_allowed(effective_staged_label):
                 return json.dumps(
@@ -556,14 +571,34 @@ async def release_issue(
                     }
                 )
 
+            staged_state = tool_ctx.config.github.state_for_label(effective_staged_label)
+            if staged_state is not None:
+                staged_def = LABEL_LIFECYCLE_REGISTRY[staged_state]
+                staged_color = staged_def.color
+                staged_description = staged_def.description
+                remove_labels = [
+                    tool_ctx.config.github.label_for_state(s) for s in staged_def.removes_on_entry
+                ]
+                queued_lbl = tool_ctx.config.github.queued_label
+                if queued_lbl not in remove_labels:
+                    remove_labels.append(queued_lbl)
+            else:
+                staged_color = "0075ca"
+                staged_description = (
+                    f"Implementation staged and waiting for promotion to {promotion_target}"
+                )
+                remove_labels = [
+                    effective_label,
+                    config_fail_label,
+                    tool_ctx.config.github.queued_label,
+                ]
+
             ensure_result = await tool_ctx.github_client.ensure_label(
                 owner,
                 repo,
                 effective_staged_label,
-                color="0075ca",
-                description=(
-                    f"Implementation staged and waiting for promotion to {promotion_target}"
-                ),
+                color=staged_color,
+                description=staged_description,
             )
             if not ensure_result.get("success"):
                 return json.dumps(
@@ -581,7 +616,7 @@ async def release_issue(
                 owner,
                 repo,
                 issue_number,
-                remove_labels=remove_set,
+                remove_labels=remove_labels,
                 add_labels=[effective_staged_label],
             )
             if not swap_result.get("success"):
@@ -605,11 +640,28 @@ async def release_issue(
                     }
                 )
 
+            fail_state = tool_ctx.config.github.state_for_label(fail_label)
+            if fail_state is not None:
+                fail_def = LABEL_LIFECYCLE_REGISTRY[fail_state]
+                fail_color = fail_def.color
+                fail_description = fail_def.description
+                remove_labels = [
+                    tool_ctx.config.github.label_for_state(s) for s in fail_def.removes_on_entry
+                ]
+                queued_lbl = tool_ctx.config.github.queued_label
+                if queued_lbl not in remove_labels:
+                    remove_labels.append(queued_lbl)
+            else:
+                fail_color = "d73a4a"
+                fail_description = "Recipe execution failed"
+                remove_labels = [effective_label, tool_ctx.config.github.queued_label]
+
             ensure_result = await tool_ctx.github_client.ensure_label(
                 owner,
                 repo,
                 fail_label,
-                color="d73a4a",
+                color=fail_color,
+                description=fail_description,
             )
             if not ensure_result.get("success"):
                 return json.dumps(
@@ -627,7 +679,7 @@ async def release_issue(
                 owner,
                 repo,
                 issue_number,
-                remove_labels=[effective_label],
+                remove_labels=remove_labels,
                 add_labels=[fail_label],
             )
             if not swap_result.get("success"):
@@ -654,11 +706,14 @@ async def release_issue(
                 "release_issue bare removal (no fail_label or target_branch) for %s",
                 issue_url,
             )
+            all_lifecycle_labels = [
+                tool_ctx.config.github.label_for_state(s) for s in IssueLabelState
+            ]
             swap_result = await tool_ctx.github_client.swap_labels(
                 owner,
                 repo,
                 issue_number,
-                remove_labels=remove_set,
+                remove_labels=all_lifecycle_labels,
                 add_labels=[],
             )
             if not swap_result.get("success"):

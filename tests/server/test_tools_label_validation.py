@@ -76,6 +76,24 @@ class TestClaimIssueWhitelist:
         )
         assert result["success"] is True
 
+    @pytest.mark.anyio
+    async def test_queued_label_is_allowed_by_default(self, tool_ctx_kitchen_open, monkeypatch):
+        """claim_issue with label=queued succeeds when allowed_labels defaults to empty."""
+        tool_ctx_kitchen_open.config.github.allowed_labels = []
+        mock_client = AsyncMock()
+        mock_client.fetch_issue.return_value = {"success": True, "labels": []}
+        mock_client.ensure_label.return_value = {"success": True, "created": True}
+        mock_client.swap_labels.return_value = {"success": True, "labels": ["queued"]}
+        monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", mock_client)
+
+        result = json.loads(
+            await claim_issue(
+                issue_url="https://github.com/owner/repo/issues/1",
+                label="queued",
+            )
+        )
+        assert result["success"] is True
+
 
 class TestReleaseIssueWhitelist:
     @pytest.mark.anyio

@@ -8,7 +8,11 @@ from typing import Any
 
 import structlog
 
-from autoskillit.core import _parse_issue_ref, get_logger
+from autoskillit.core import (
+    LABEL_LIFECYCLE_REGISTRY,
+    _parse_issue_ref,
+    get_logger,
+)
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
 from autoskillit.server._notify import track_response_size
@@ -127,19 +131,32 @@ async def claim_and_resolve_issue(
                 }
             )
 
+        target_state = tool_ctx.config.github.state_for_label(effective_label)
+        if target_state is not None:
+            label_def = LABEL_LIFECYCLE_REGISTRY[target_state]
+            ensure_color = label_def.color
+            ensure_description = label_def.description
+            remove_labels = [
+                tool_ctx.config.github.label_for_state(s) for s in label_def.removes_on_entry
+            ]
+        else:
+            ensure_color = "fbca04"
+            ensure_description = "Issue is actively being processed by a pipeline session"
+            remove_labels = [tool_ctx.config.github.fail_label]
+
         await tool_ctx.github_client.ensure_label(
             owner,
             repo,
             effective_label,
-            color="fbca04",
-            description="Issue is actively being processed by a pipeline session",
+            color=ensure_color,
+            description=ensure_description,
         )
 
         swap_result = await tool_ctx.github_client.swap_labels(
             owner,
             repo,
             issue_number,
-            remove_labels=[tool_ctx.config.github.fail_label],
+            remove_labels=remove_labels,
             add_labels=[effective_label],
         )
         claim_ms = int((time.monotonic() - _claim_start) * 1000)

@@ -52,3 +52,18 @@ def test_fleet_prompt_contains_budget_exceeded_routing():
     )
     assert "QUOTA WAIT REQUIRED" in prompt
     assert "QUOTA BUDGET EXCEEDED" in prompt
+
+
+def test_fleet_prompt_contains_missing_on_failure_sentinel():
+    """The L2 fleet prompt must instruct the model to emit missing_on_failure sentinel."""
+    prompt = _build_food_truck_prompt(
+        recipe="test-recipe",
+        task="Test task",
+        ingredients={},
+        mcp_prefix=DIRECT_PREFIX,
+        dispatch_id="test-dispatch",
+        campaign_id="test-campaign",
+        l3_timeout_sec=300,
+    )
+    assert "recipe authoring error. Emit the sentinel block with success=false" in prompt
+    assert 'reason="missing_on_failure"' in prompt

@@ -7,6 +7,7 @@ import pytest
 from autoskillit.core import Severity
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeStep, StepResultCondition, StepResultRoute
+from autoskillit.recipe.validator import validate_recipe_structure
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -313,6 +314,182 @@ def test_action_step_not_flagged() -> None:
     findings = run_semantic_rules(recipe)
     flagged = [f for f in findings if f.rule == "on-result-missing-failure-route"]
     assert flagged == []
+
+
+# ---------------------------------------------------------------------------
+# tool-step-missing-failure-route
+# ---------------------------------------------------------------------------
+
+
+def test_tool_step_without_on_failure_is_error() -> None:
+    """A tool step with on_success but no on_failure must be flagged."""
+    recipe = _make_recipe(
+        {
+            "start": RecipeStep(tool="run_cmd", with_args={"cmd": "echo x"}, on_success="done"),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "tool-step-missing-failure-route"]
+    assert len(flagged) == 1
+    assert flagged[0].severity == Severity.ERROR
+    assert "start" in flagged[0].message
+
+
+def test_python_step_without_on_failure_is_error() -> None:
+    """A python step with on_success but no on_failure must be flagged."""
+    recipe = _make_recipe(
+        {
+            "start": RecipeStep(python="module.func", on_success="done"),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "tool-step-missing-failure-route"]
+    assert len(flagged) == 1
+    assert flagged[0].severity == Severity.ERROR
+
+
+def test_tool_step_with_on_failure_passes() -> None:
+    """A tool step with both on_success and on_failure passes the rule."""
+    recipe = _make_recipe(
+        {
+            "start": RecipeStep(
+                tool="run_cmd",
+                with_args={"cmd": "echo x"},
+                on_success="done",
+                on_failure="escalate",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "tool-step-missing-failure-route"]
+    assert flagged == []
+
+
+def test_constant_step_without_on_failure_passes() -> None:
+    """Constant steps don't invoke tools — on_failure is not required."""
+    recipe = _make_recipe(
+        {
+            "start": RecipeStep(constant="value", on_success="done"),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "tool-step-missing-failure-route"]
+    assert flagged == []
+
+
+def test_action_stop_without_on_failure_passes() -> None:
+    """Stop steps are terminal — on_failure is not required."""
+    recipe = _make_recipe(
+        {
+            "start": RecipeStep(action="stop", message="All done."),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "tool-step-missing-failure-route"]
+    assert flagged == []
+
+
+# ---------------------------------------------------------------------------
+# tool-step-missing-success-route
+# ---------------------------------------------------------------------------
+
+
+def test_tool_step_without_success_route_is_warning() -> None:
+    """A tool step with on_failure but no on_success/on_result is flagged."""
+    recipe = _make_recipe(
+        {
+            "start": RecipeStep(
+                tool="run_cmd", with_args={"cmd": "echo x"}, on_failure="escalate"
+            ),
+            "escalate": RecipeStep(action="stop", message="failed"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "tool-step-missing-success-route"]
+    assert len(flagged) == 1
+    assert flagged[0].severity == Severity.WARNING
+
+
+def test_tool_step_with_on_result_passes_success_route() -> None:
+    """A tool step with on_result (instead of on_success) has a success route."""
+    recipe = _make_recipe(
+        {
+            "start": RecipeStep(
+                tool="run_cmd",
+                with_args={"cmd": "echo x"},
+                on_result=StepResultRoute(
+                    conditions=[StepResultCondition(route="done", when=None)]
+                ),
+                on_failure="escalate",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+            "escalate": RecipeStep(action="stop", message="failed"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "tool-step-missing-success-route"]
+    assert flagged == []
+
+
+# ---------------------------------------------------------------------------
+# Terminal target expansion (escalate is valid for on_failure/on_success/on_context_limit)
+# ---------------------------------------------------------------------------
+
+
+def test_on_failure_escalate_is_valid_terminal() -> None:
+    """on_failure: escalate should be accepted without a step named 'escalate'."""
+    recipe = _make_recipe(
+        {
+            "start": RecipeStep(
+                tool="run_cmd",
+                with_args={"cmd": "echo x"},
+                on_success="done",
+                on_failure="escalate",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+    errors = validate_recipe_structure(recipe)
+    assert not any("unknown step 'escalate'" in e for e in errors)
+
+
+def test_on_success_escalate_is_valid_terminal() -> None:
+    """on_success: escalate should be accepted without a step named 'escalate'."""
+    recipe = _make_recipe(
+        {
+            "start": RecipeStep(
+                tool="run_cmd",
+                with_args={"cmd": "echo x"},
+                on_success="escalate",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+    errors = validate_recipe_structure(recipe)
+    assert not any("unknown step 'escalate'" in e for e in errors)
+
+
+def test_on_context_limit_escalate_is_valid_terminal() -> None:
+    """on_context_limit: escalate should be accepted as a terminal target."""
+    recipe = _make_recipe(
+        {
+            "start": RecipeStep(
+                tool="run_cmd",
+                with_args={"cmd": "echo x"},
+                on_success="done",
+                on_failure="done",
+                on_context_limit="escalate",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+    errors = validate_recipe_structure(recipe)
+    assert not any("unknown step 'escalate'" in e for e in errors)
 
 
 # ---------------------------------------------------------------------------

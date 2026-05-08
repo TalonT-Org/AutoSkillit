@@ -667,6 +667,14 @@ def test_orchestrator_prompt_documents_all_action_types(action_type):
     assert f'action: "{action_type}"' in prompt or f"action: {action_type}" in prompt
 
 
+def test_orchestrator_prompt_contains_missing_on_failure_instruction():
+    """The L1 orchestrator prompt must instruct the model to stop on missing on_failure."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("my-recipe", mcp_prefix=DIRECT_PREFIX)
+    assert "recipe authoring error. Stop the pipeline and report the missing route." in prompt
+
+
 def test_campaign_prompt_tool_list_still_enumerates_six_tools():
     """The 6 operational tools must still be listed in the campaign prompt after the fix."""
     from unittest.mock import MagicMock

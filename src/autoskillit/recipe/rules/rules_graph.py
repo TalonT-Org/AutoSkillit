@@ -254,6 +254,68 @@ def _check_on_result_missing_failure_route(ctx: ValidationContext) -> list[RuleF
 
 
 @semantic_rule(
+    name="tool-step-missing-failure-route",
+    description=(
+        "All tool and python steps must declare on_failure. When a tool call "
+        "returns success: false, the orchestrator needs a deterministic route. "
+        "Without on_failure, failure handling is deferred to model improvisation."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_tool_step_missing_failure_route(ctx: ValidationContext) -> list[RuleFinding]:
+    wf = ctx.recipe
+    findings: list[RuleFinding] = []
+    for step_name, step in wf.steps.items():
+        is_tool_invocation = step.tool is not None or step.python is not None
+        if not (is_tool_invocation and step.on_failure is None):
+            continue
+        findings.append(
+            RuleFinding(
+                rule="tool-step-missing-failure-route",
+                severity=Severity.ERROR,
+                step_name=step_name,
+                message=(
+                    f"Step '{step_name}' invokes a tool/python callable but has no "
+                    f"on_failure route. Add on_failure: <target> (use 'escalate' to "
+                    f"abort the recipe on failure)."
+                ),
+            )
+        )
+    return findings
+
+
+@semantic_rule(
+    name="tool-step-missing-success-route",
+    description=(
+        "Tool and python steps should declare on_success or on_result. Without "
+        "a success route, the orchestrator has no defined next step after a "
+        "successful tool call."
+    ),
+    severity=Severity.WARNING,
+)
+def _check_tool_step_missing_success_route(ctx: ValidationContext) -> list[RuleFinding]:
+    wf = ctx.recipe
+    findings: list[RuleFinding] = []
+    for step_name, step in wf.steps.items():
+        is_tool_invocation = step.tool is not None or step.python is not None
+        has_success_route = step.on_success is not None or step.on_result is not None
+        if not (is_tool_invocation and not has_success_route):
+            continue
+        findings.append(
+            RuleFinding(
+                rule="tool-step-missing-success-route",
+                severity=Severity.WARNING,
+                step_name=step_name,
+                message=(
+                    f"Step '{step_name}' invokes a tool/python callable but has no "
+                    f"success route (on_success or on_result). Add on_success: <target>."
+                ),
+            )
+        )
+    return findings
+
+
+@semantic_rule(
     name="push-before-audit",
     description="push_to_remote reachable without passing through audit-impl first",
     severity=Severity.WARNING,

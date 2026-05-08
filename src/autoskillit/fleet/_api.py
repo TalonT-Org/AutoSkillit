@@ -24,7 +24,7 @@ from autoskillit.core import (
 from autoskillit.fleet.result_parser import L3ParseResult, parse_l3_result_block
 from autoskillit.fleet.state import DispatchStatus
 from autoskillit.fleet.state_types import (
-    _ABANDON_KILL_REASONS,
+    _ABANDON_REASONS,
     DispatchCompleted,
     DispatchOutcome,
     DispatchRejected,
@@ -218,7 +218,7 @@ async def execute_dispatch(
 
 def _is_abandon_reason(skill_result: SkillResult) -> bool:
     """Return True when the kill reason indicates resume would be futile."""
-    if skill_result.retry_reason in _ABANDON_KILL_REASONS:
+    if skill_result.retry_reason in _ABANDON_REASONS:
         return True
     if (
         skill_result.retry_reason == RetryReason.RESUME

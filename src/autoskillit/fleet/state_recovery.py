@@ -6,7 +6,7 @@ from pathlib import Path
 
 from autoskillit.core import InfraExitCategory, NamedResume, NoResume, RetryReason, get_logger
 from autoskillit.fleet.state_types import (
-    _ABANDON_KILL_REASONS,
+    _ABANDON_REASONS,
     _INFRASTRUCTURE_FAILURE_REASONS,
     _VISIBLE_IN_BLOCK_STATUSES,
     FLEET_HALTED_SENTINEL,
@@ -50,7 +50,7 @@ def has_failed_dispatch(state_path: Path) -> bool:
 
 def _is_abandon_kill_reason(kill_reason: str, infra_exit_category: str) -> bool:
     """Check if stored kill metadata indicates resume would be futile."""
-    if kill_reason in _ABANDON_KILL_REASONS:
+    if kill_reason in _ABANDON_REASONS:
         return True
     if (
         kill_reason == RetryReason.RESUME

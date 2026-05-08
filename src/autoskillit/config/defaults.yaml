@@ -83,9 +83,11 @@ github:
   in_progress_label: "in-progress"
   staged_label: "staged"
   fail_label: "fail"
+  queued_label: "queued"
   allowed_labels:
     - "bug"
     - "enhancement"
+    - "queued"
     - "in-progress"
     - "staged"
     - "fail"

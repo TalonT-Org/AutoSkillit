@@ -170,7 +170,11 @@ from .types import GitHubApiLog as GitHubApiLog
 from .types import GitHubFetcher as GitHubFetcher
 from .types import HeadlessExecutor as HeadlessExecutor
 from .types import InfraExitCategory as InfraExitCategory
+from .types import IssueLabelState as IssueLabelState
 from .types import KillReason as KillReason
+from .types import LabelDef as LabelDef
+from .types import LABEL_LIFECYCLE_REGISTRY as LABEL_LIFECYCLE_REGISTRY
+from .types import LABEL_TRANSITIONS as LABEL_TRANSITIONS
 from .types import LoadReport as LoadReport
 from .types import LoadResult as LoadResult
 from .types import MarketplaceInstall as MarketplaceInstall
@@ -230,3 +234,4 @@ from .types import resolve_target_skill as resolve_target_skill
 from .types import resume_spec_from_cli as resume_spec_from_cli
 from .types import session_type as session_type
 from .types import truncate_text as truncate_text
+from .types import validate_label_transition as validate_label_transition

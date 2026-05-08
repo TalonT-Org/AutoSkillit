@@ -79,6 +79,7 @@ class TestDefaultsYamlAllowedLabels:
         expected = {
             "bug",
             "enhancement",
+            "queued",
             "in-progress",
             "staged",
             "autoreported",

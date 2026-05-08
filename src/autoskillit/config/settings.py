@@ -435,6 +435,7 @@ class AutomationConfig:
                 in_progress_label=str(val(gh, "in_progress_label", _gh["in_progress_label"])),
                 staged_label=str(val(gh, "staged_label", _gh["staged_label"])),
                 fail_label=str(val(gh, "fail_label", _gh["fail_label"])),
+                queued_label=str(val(gh, "queued_label", _gh["queued_label"])),
                 allowed_labels=list(val(gh, "allowed_labels", _gh["allowed_labels"])),
             ),
             report_bug=ReportBugConfig(

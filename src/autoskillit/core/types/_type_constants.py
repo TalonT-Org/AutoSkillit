@@ -10,7 +10,7 @@ from datetime import date
 from importlib.metadata import version
 from typing import NamedTuple
 
-from ._type_enums import FeatureLifecycle, FleetErrorCode
+from ._type_enums import FeatureLifecycle, FleetErrorCode, IssueLabelState
 
 __all__ = [
     "AUTOSKILLIT_INSTALLED_VERSION",
@@ -54,6 +54,10 @@ __all__ = [
     "FeatureDef",
     "FEATURE_REGISTRY",
     "RETIRED_FEATURES",
+    "LabelDef",
+    "LABEL_LIFECYCLE_REGISTRY",
+    "LABEL_TRANSITIONS",
+    "validate_label_transition",
     "RETIRED_SKILL_NAMES",
     "SKILL_FILE_ADVISORY_MAP",
     "SKILL_ACTIVATE_DEPS_REQUIRED",
@@ -439,6 +443,80 @@ FEATURE_REGISTRY: dict[str, FeatureDef] = {
         since_version="0.9.351",
     ),
 }
+
+
+@dataclass(frozen=True, slots=True)
+class LabelDef:
+    """Metadata for a lifecycle label managed by the issue state machine."""
+
+    state: IssueLabelState
+    color: str
+    description: str
+    removes_on_entry: frozenset[IssueLabelState]
+
+
+LABEL_LIFECYCLE_REGISTRY: dict[IssueLabelState, LabelDef] = {
+    IssueLabelState.QUEUED: LabelDef(
+        state=IssueLabelState.QUEUED,
+        color="c2e0c6",
+        description="Issue claimed by orchestrator, waiting for recipe pickup",
+        removes_on_entry=frozenset({IssueLabelState.FAIL}),
+    ),
+    IssueLabelState.IN_PROGRESS: LabelDef(
+        state=IssueLabelState.IN_PROGRESS,
+        color="fbca04",
+        description="Issue is actively being processed by a pipeline session",
+        removes_on_entry=frozenset({IssueLabelState.QUEUED, IssueLabelState.FAIL}),
+    ),
+    IssueLabelState.STAGED: LabelDef(
+        state=IssueLabelState.STAGED,
+        color="0075ca",
+        description="Issue resolved, PR staged for promotion",
+        removes_on_entry=frozenset({IssueLabelState.IN_PROGRESS, IssueLabelState.FAIL}),
+    ),
+    IssueLabelState.FAIL: LabelDef(
+        state=IssueLabelState.FAIL,
+        color="d73a4a",
+        description="Recipe execution failed",
+        removes_on_entry=frozenset({IssueLabelState.IN_PROGRESS}),
+    ),
+}
+
+LABEL_TRANSITIONS: dict[IssueLabelState | None, frozenset[IssueLabelState | None]] = {
+    None: frozenset({IssueLabelState.QUEUED, IssueLabelState.IN_PROGRESS}),
+    IssueLabelState.QUEUED: frozenset({IssueLabelState.IN_PROGRESS, None}),
+    IssueLabelState.IN_PROGRESS: frozenset(
+        {
+            IssueLabelState.STAGED,
+            IssueLabelState.FAIL,
+            None,
+        }
+    ),
+    IssueLabelState.STAGED: frozenset(),
+    IssueLabelState.FAIL: frozenset({IssueLabelState.QUEUED, IssueLabelState.IN_PROGRESS}),
+}
+
+
+def validate_label_transition(
+    current: IssueLabelState | None,
+    target: IssueLabelState | None,
+) -> None:
+    """Raise ValueError if the label state transition is not allowed."""
+    allowed = LABEL_TRANSITIONS.get(current)
+    if allowed is not None and target not in allowed:
+        msg = f"Invalid label transition: {current!r} -> {target!r}"
+        raise ValueError(msg)
+
+
+for _ls in IssueLabelState:
+    if _ls not in LABEL_LIFECYCLE_REGISTRY:
+        raise AssertionError(f"IssueLabelState.{_ls.name} missing from LABEL_LIFECYCLE_REGISTRY")
+    if _ls not in LABEL_TRANSITIONS:
+        raise AssertionError(f"IssueLabelState.{_ls.name} missing from LABEL_TRANSITIONS")
+if None not in LABEL_TRANSITIONS:
+    raise AssertionError("LABEL_TRANSITIONS must contain a None (unlabeled) entry")
+del _ls
+
 
 RETIRED_FEATURES: frozenset[str] = frozenset()
 

@@ -7,7 +7,7 @@ import os
 from dataclasses import dataclass, field
 from typing import ClassVar
 
-from autoskillit.core import OutputFormat, get_logger
+from autoskillit.core import IssueLabelState, OutputFormat, get_logger
 
 logger = get_logger(__name__)
 
@@ -164,14 +164,18 @@ class GitHubConfig:
     in_progress_label: str = "in-progress"
     staged_label: str = "staged"
     fail_label: str = "fail"
+    queued_label: str = "queued"
     allowed_labels: list[str] = field(default_factory=list)
 
     def check_label_allowed(self, label: str) -> str | None:
         """Return None if label is permitted, or an error message string if not.
 
         When allowed_labels is empty, all labels are permitted (unrestricted/opt-out mode).
+        Lifecycle labels (QUEUED, IN_PROGRESS, STAGED, FAIL) are always permitted.
         """
         if not self.allowed_labels:
+            return None
+        if self.state_for_label(label) is not None:
             return None
         if label not in self.allowed_labels:
             allowed_sorted = sorted(self.allowed_labels)
@@ -180,6 +184,21 @@ class GitHubConfig:
                 f"Allowed: {allowed_sorted}. "
                 f"Add '{label}' to github.allowed_labels in your config to permit it."
             )
+        return None
+
+    def label_for_state(self, state: IssueLabelState) -> str:
+        _map: dict[IssueLabelState, str] = {
+            IssueLabelState.QUEUED: self.queued_label,
+            IssueLabelState.IN_PROGRESS: self.in_progress_label,
+            IssueLabelState.STAGED: self.staged_label,
+            IssueLabelState.FAIL: self.fail_label,
+        }
+        return _map[state]
+
+    def state_for_label(self, label: str) -> IssueLabelState | None:
+        for state in IssueLabelState:
+            if self.label_for_state(state) == label:
+                return state
         return None
 
     def check_labels_allowed(self, labels: list[str]) -> str | None:

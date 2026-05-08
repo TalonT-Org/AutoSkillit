@@ -816,7 +816,7 @@ def test_campaign_dangling_ingredient_passes_when_forwarded(tmp_path: Path):
     assert found == []
 
 
-def test_campaign_dangling_ingredient_passes_when_target_does_not_declares(tmp_path: Path):
+def test_campaign_dangling_ingredient_passes_when_target_does_not_declare(tmp_path: Path):
     """Rule passes when target sub-recipe does not declare the ingredient."""
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
@@ -915,6 +915,7 @@ def test_campaign_dangling_ingredient_fires_per_dispatch(tmp_path: Path):
     found = _findings(recipe, "campaign-dangling-ingredient", project_dir=tmp_path)
     assert len(found) == 1
     assert "phase-omit" in found[0].message
+    assert "phase-forward" not in found[0].message
 
 
 def test_campaign_dangling_ingredient_ignores_gate_dispatches(tmp_path: Path):

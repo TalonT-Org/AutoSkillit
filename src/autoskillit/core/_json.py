@@ -9,6 +9,8 @@ from typing import Any
 try:
     import orjson as _orjson
 
+    _USE_ORJSON: bool = True
+
     def fast_loads(s: str | bytes) -> Any:
         """Raises orjson.JSONDecodeError (a subclass of json.JSONDecodeError) on invalid input."""
         return _orjson.loads(s)
@@ -28,6 +30,7 @@ try:
         return _orjson.dumps(obj, option=opts or None, default=default).decode("utf-8")
 
 except ImportError:
+    _USE_ORJSON: bool = False  # type: ignore[no-redef]
 
     def fast_loads(s: str | bytes) -> Any:  # type: ignore[misc]
         """Raises json.JSONDecodeError on invalid input."""

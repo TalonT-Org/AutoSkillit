@@ -77,6 +77,9 @@ def test_stdlib_fallback_fast_loads(stdlib_json_mod) -> None:
     assert not hasattr(stdlib_json_mod, "_orjson"), (
         "orjson must not be accessible in the stdlib fallback module"
     )
+    assert stdlib_json_mod._USE_ORJSON is False, (
+        "_USE_ORJSON sentinel must be False when orjson is blocked"
+    )
     assert stdlib_json_mod.fast_loads('{"a": 1}') == {"a": 1}
     assert stdlib_json_mod.fast_loads(b'{"x": true}') == {"x": True}
     with pytest.raises(json.JSONDecodeError):

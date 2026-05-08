@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import shutil
 import sys
 from datetime import UTC, datetime
@@ -95,10 +96,7 @@ def fleet_dispatch() -> None:
     if confirm.lower() in ("n", "no"):
         return
 
-    import random
-
     greeting = random.choice(_FLEET_DISPATCH_GREETINGS).format(recipe_table=recipe_table)
-
     _launch_fleet_session(
         None,
         None,
@@ -225,10 +223,7 @@ def fleet_campaign(
     if not proceed:
         return
 
-    import random
-
     greeting = random.choice(_FLEET_CAMPAIGN_GREETINGS).format(campaign_name=campaign_name)
-
     _launch_fleet_session(
         parsed,
         campaign_id,

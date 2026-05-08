@@ -63,7 +63,7 @@ class TestRecordGateDispatch:
         assert phase.status == DispatchStatus.PENDING
 
     @pytest.mark.anyio
-    async def test_record_gate_dispatch_writes_failure(
+    async def test_record_gate_dispatch_writes_refused(
         self, tool_ctx_kitchen_open, monkeypatch, tmp_path
     ):
         sp = _init_state(tmp_path, "gate-check", "phase-one")
@@ -74,12 +74,12 @@ class TestRecordGateDispatch:
         raw = await record_gate_dispatch(dispatch_name="gate-check", approved=False)
         result = json.loads(raw)
         assert result["success"] is True
-        assert result["status"] == "failure"
+        assert result["status"] == "refused"
 
         state = read_state(sp)
         assert state is not None
         gate = next(d for d in state.dispatches if d.name == "gate-check")
-        assert gate.status == DispatchStatus.FAILURE
+        assert gate.status == DispatchStatus.REFUSED
 
     @pytest.mark.anyio
     async def test_record_gate_dispatch_rejects_unknown_dispatch(
@@ -294,3 +294,20 @@ class TestCampaignResumeChain:
         assert decision.next_dispatch_name == "build-map"
         assert "full-audit" in decision.completed_dispatches_block
         assert "review-gate" in decision.completed_dispatches_block
+
+
+def test_refused_dispatch_is_terminal():
+    from autoskillit.fleet.state_types import TERMINAL_DISPATCH_STATUSES
+
+    assert DispatchStatus.REFUSED in TERMINAL_DISPATCH_STATUSES
+
+
+def test_refused_gate_resume_selects_next(tmp_path):
+    sp = _init_state(tmp_path, "gate-check", "phase-one")
+    from autoskillit.fleet.state_gates import record_gate_outcome
+
+    record_gate_outcome(sp, "gate-check", approved=False)
+    decision = resume_campaign_from_state(sp, continue_on_failure=True)
+    assert decision is not None
+    assert decision.next_dispatch_name == "phase-one"
+    assert "refused" in decision.completed_dispatches_block.lower()

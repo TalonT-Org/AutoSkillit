@@ -291,6 +291,7 @@ TERMINAL_DISPATCH_STATUSES: frozenset[str] = frozenset(
         DispatchStatus.FAILURE,
         DispatchStatus.SKIPPED,
         DispatchStatus.RELEASED,
+        DispatchStatus.REFUSED,
     }
 )
 

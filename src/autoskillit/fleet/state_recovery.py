@@ -82,7 +82,16 @@ def classify_stale_dispatch(
             logger.warning("classify_stale_dispatch: sidecar vanished during read", exc_info=True)
         else:
             sidecar_path_str = str(sidecar)
-            if not raw_lines or read_sidecar_from_path(sidecar):
+            try:
+                has_entries = bool(read_sidecar_from_path(sidecar))
+            except Exception:
+                logger.warning(
+                    "classify_stale_dispatch: read_sidecar_from_path failed for %s",
+                    sidecar,
+                    exc_info=True,
+                )
+                has_entries = False
+            if not raw_lines or has_entries:
                 if _is_abandon_kill_reason(dispatch.kill_reason, dispatch.infra_exit_category):
                     return (DispatchStatus.INTERRUPTED, "")
                 return (DispatchStatus.RESUMABLE, sidecar_path_str)

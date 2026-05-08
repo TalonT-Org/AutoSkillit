@@ -1043,7 +1043,7 @@ class TestClassifyStaleDispatch:
             sidecar_path=str(sidecar),
             kill_reason="idle_stall",
         )
-        with patch("pathlib.Path.read_text", side_effect=OSError("vanished")):
+        with patch.object(sidecar, "read_text", side_effect=OSError("vanished")):
             status, sidecar_path_out = classify_stale_dispatch(record)
         assert status == DispatchStatus.INTERRUPTED
         assert sidecar_path_out == ""

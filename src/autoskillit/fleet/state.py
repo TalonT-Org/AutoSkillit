@@ -10,7 +10,11 @@ import fcntl
 import json
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from types import TracebackType
+    from typing import IO
 
 from autoskillit.core import get_logger, write_versioned_json
 from autoskillit.fleet.state_gates import record_gate_outcome
@@ -165,7 +169,7 @@ class CampaignStateMutator:
         self._state_path = state_path
         self._lock_path = state_path.with_suffix(".lock")
         self._state: CampaignState | None = None
-        self._flock_handle: Any = None
+        self._flock_handle: IO[bytes] | None = None
         self._dirty: bool = False
 
     def __enter__(self) -> CampaignStateMutator:
@@ -192,10 +196,23 @@ class CampaignStateMutator:
     def mark_dirty(self) -> None:
         self._dirty = True
 
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         try:
             if self._dirty and self._state is not None and exc_type is None:
-                _write_state(self._state_path, self._state)
+                try:
+                    _write_state(self._state_path, self._state)
+                except Exception:
+                    logger.error(
+                        "CampaignStateMutator.__exit__: _write_state failed for %s",
+                        self._state_path,
+                        exc_info=True,
+                    )
+                    raise
         finally:
             try:
                 if self._flock_handle is not None:

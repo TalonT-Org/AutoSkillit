@@ -8,7 +8,6 @@ import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import anyio
 import anyio.abc
@@ -17,9 +16,6 @@ import psutil
 from autoskillit.core import get_logger
 
 logger = get_logger(__name__)
-
-if TYPE_CHECKING:
-    pass
 
 
 @asynccontextmanager
@@ -60,23 +56,28 @@ async def _fleet_signal_guard(
                     from autoskillit.execution import async_kill_process_tree, read_starttime_ticks
                     from autoskillit.fleet import (  # noqa: PLC0415
                         CampaignStateMutator,
+                        DispatchRecord,
                         DispatchStatus,
                         classify_stale_dispatch,
                     )
 
                     with CampaignStateMutator(state_path) as m:
                         if m.state is not None:
+
+                            def _apply_stale(d: DispatchRecord) -> None:
+                                new_status, sidecar = classify_stale_dispatch(d)
+                                d.status = new_status
+                                d.reason = f"signal_{signame}"
+                                if sidecar:
+                                    d.sidecar_path = sidecar
+                                d.ended_at = time.time()
+                                m.mark_dirty()
+
                             for dispatch in m.state.dispatches:
                                 if dispatch.status != DispatchStatus.RUNNING:
                                     continue
                                 if dispatch.dispatched_pid == 0:
-                                    new_status, sidecar = classify_stale_dispatch(dispatch)
-                                    dispatch.status = new_status
-                                    dispatch.reason = f"signal_{signame}"
-                                    if sidecar:
-                                        dispatch.sidecar_path = sidecar
-                                    dispatch.ended_at = time.time()
-                                    m.mark_dirty()
+                                    _apply_stale(dispatch)
                                     continue
 
                                 # Verify PID identity before killing
@@ -113,14 +114,14 @@ async def _fleet_signal_guard(
                                                 " (non-linux fallback)",
                                                 exc_info=True,
                                             )
+                                    else:
+                                        logger.info(
+                                            "signal_guard: PID %d not found (non-linux fallback)"
+                                            " — transitioning without kill",
+                                            dispatch.dispatched_pid,
+                                        )
 
-                                new_status, sidecar = classify_stale_dispatch(dispatch)
-                                dispatch.status = new_status
-                                dispatch.reason = f"signal_{signame}"
-                                if sidecar:
-                                    dispatch.sidecar_path = sidecar
-                                dispatch.ended_at = time.time()
-                                m.mark_dirty()
+                                _apply_stale(dispatch)
 
                     if cleanup_on_interrupt:
                         try:

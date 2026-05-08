@@ -281,10 +281,11 @@ async def _run_dispatch(
 ) -> str:
     """Inner dispatch body — called after lock acquisition."""
     from autoskillit.fleet.state import (
-        CampaignStateMutator,
         DispatchRecord,
         DispatchStatus,
         normalize_dispatch_token_usage,
+        upsert_dispatch_record_by_name,
+        write_captured_values,
         write_initial_state,
     )
 
@@ -460,16 +461,7 @@ async def _run_dispatch(
             started_at=started_at,
             ended_at=ended_at,
         )
-        with CampaignStateMutator(state_path) as m:
-            if m.state is not None:
-                for i, d in enumerate(m.state.dispatches):
-                    if d.name == effective_name:
-                        m.state.dispatches[i] = record
-                        m.mark_dirty()
-                        break
-                else:
-                    m.state.dispatches.append(record)
-                    m.mark_dirty()
+        upsert_dispatch_record_by_name(state_path, record)
         _post_dispatch_cleanup(tool_ctx, skill_result, cache_invalidator, quota_refresher)
         return fleet_error(
             FleetErrorCode.FLEET_L3_TIMEOUT,
@@ -524,22 +516,11 @@ async def _run_dispatch(
 
     extracted: dict[str, str] = {}
     if final_status == DispatchStatus.SUCCESS and capture and parsed.payload:
-        extracted = _extract_captures(capture, parsed.payload) if parsed.payload else {}
+        extracted = _extract_captures(capture, parsed.payload)
 
-    with CampaignStateMutator(state_path) as m:
-        if m.state is not None:
-            for i, d in enumerate(m.state.dispatches):
-                if d.name == effective_name:
-                    m.state.dispatches[i] = record
-                    m.mark_dirty()
-                    break
-            else:
-                m.state.dispatches.append(record)
-                m.mark_dirty()
-            if extracted:
-                m.state.captured_values = {**m.state.captured_values, **extracted}
-                m.mark_dirty()
-
+    upsert_dispatch_record_by_name(state_path, record)
+    if extracted:
+        write_captured_values(state_path, extracted)
     _post_dispatch_cleanup(tool_ctx, skill_result, cache_invalidator, quota_refresher)
 
     if parsed.outcome == "completed_clean":

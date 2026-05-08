@@ -67,6 +67,16 @@ def record_gate_outcome(
                 m.state.dispatches[i] = new_record
                 m.mark_dirty()
                 break
+        else:
+            return GateRecordResult(
+                success=False,
+                dispatch_name=dispatch_name,
+                error_code="fleet_gate_dispatch_vanished",
+                error_message=(
+                    f"Dispatch '{dispatch_name}' was present at pre-check"
+                    " but absent during mutation."
+                ),
+            )
 
         return GateRecordResult(
             success=True,

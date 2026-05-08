@@ -132,7 +132,7 @@ class TestAllMutationsAcquireLock:
             raw["dispatches"][0]["status"] = "running"
             sp.write_text(json.dumps(raw))
 
-        with patch("fcntl.flock", side_effect=tracking_flock):
+        with patch("autoskillit.fleet.state.fcntl.flock", side_effect=tracking_flock):
             if fn_name == "mark_dispatch_running":
                 fn(sp, "d1", dispatch_id="x", dispatched_pid=42)  # type: ignore[operator]
             elif fn_name == "mark_dispatch_interrupted":

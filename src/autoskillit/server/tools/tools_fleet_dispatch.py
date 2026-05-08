@@ -32,6 +32,14 @@ def _write_dispatch_to_campaign_state(
     """
     try:
         envelope = json.loads(result_envelope)
+    except json.JSONDecodeError:
+        logger.warning(
+            "_write_dispatch_to_campaign_state: result_envelope is not valid JSON for %s",
+            effective_name,
+            exc_info=True,
+        )
+        return
+    try:
         dispatch_status_str = envelope.get("dispatch_status")
         if not dispatch_status_str:
             return

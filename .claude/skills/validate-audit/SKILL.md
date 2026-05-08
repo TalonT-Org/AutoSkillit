@@ -436,6 +436,7 @@ headless.
   Tickets:   {ticket_body_1_path}
              {ticket_body_2_path}  (one line per ticket group)
   Contested: {contested_findings_path}  (omit if N_contested == 0)
+  Report:    {validated_report_path}
 validated_report_path = {validated_report_path}
 verdict = validated
 ```

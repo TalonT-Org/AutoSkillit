@@ -25,6 +25,7 @@ from autoskillit.fleet import (
     read_state,
     reset_failed_dispatch,
     update_orchestrator_session_id,
+    upsert_dispatch_record_by_name,
     write_captured_values,
     write_initial_state,
 )
@@ -39,6 +40,7 @@ _MUTATION_FUNCTIONS: dict[str, object] = {
     "write_captured_values": write_captured_values,
     "reset_failed_dispatch": reset_failed_dispatch,
     "update_orchestrator_session_id": update_orchestrator_session_id,
+    "upsert_dispatch_record_by_name": upsert_dispatch_record_by_name,
 }
 
 
@@ -151,6 +153,8 @@ class TestAllMutationsAcquireLock:
                 fn(sp, "d1")  # type: ignore[operator]
             elif fn_name == "update_orchestrator_session_id":
                 fn(sp, "sess-123")  # type: ignore[operator]
+            elif fn_name == "upsert_dispatch_record_by_name":
+                fn(sp, DispatchRecord(name="d1", status=DispatchStatus.SUCCESS))  # type: ignore[operator]
 
         assert flock_calls, f"{fn_name} did not call fcntl.flock"
         assert any(op == fcntl.LOCK_EX for _, op in flock_calls), (
@@ -186,20 +190,10 @@ class TestAppendAndCaptureAtomic:
                 if all_success and not state.captured_values:
                     observed_intermediate.append(True)
 
-        from autoskillit.fleet import CampaignStateMutator
-
         def writer() -> None:
             start_barrier.wait()
-            with CampaignStateMutator(sp) as m:
-                if m.state is not None:
-                    for i, d in enumerate(m.state.dispatches):
-                        if d.name == "d1":
-                            m.state.dispatches[i] = DispatchRecord(
-                                name="d1", status=DispatchStatus.SUCCESS
-                            )
-                            break
-                    m.state.captured_values = {"key": "val"}
-                    m.mark_dirty()
+            append_dispatch_record(sp, DispatchRecord(name="d1", status=DispatchStatus.SUCCESS))
+            write_captured_values(sp, {"key": "val"})
 
         t_write = threading.Thread(target=writer)
         t_read = threading.Thread(target=reader)

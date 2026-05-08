@@ -11,188 +11,145 @@ Resolution order (low → high priority):
 from __future__ import annotations
 
 import dataclasses
-import logging
-import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from autoskillit.config._config_dataclasses import (
+    _COMMAND_UNSET,
+    _METADATA_KEYS,
+    _SECRETS_ONLY_KEYS,
+    BranchingConfig,
+    CIConfig,
+    ClassifyFixConfig,
+    ConfigSchemaError,
+    FleetConfig,
+    GitHubConfig,
+    ImplementGateConfig,
+    LinuxTracingConfig,
+    LoggingConfig,
+    McpResponseConfig,
+    MigrationConfig,
+    ModelConfig,
+    PacksConfig,
+    ProvidersConfig,
+    QuotaGuardConfig,
+    ReadDbConfig,
+    ReportBugConfig,
+    ResetWorkspaceConfig,
+    ReviewConfig,
+    RunSkillConfig,
+    SafetyConfig,
+    SkillsConfig,
+    SubsetsConfig,
+    TestCheckConfig,
+    TokenUsageConfig,
+    WorkspaceConfig,
+    WorktreeSetupConfig,
+)
+from autoskillit.config._config_loader import (
+    _build_packs_config,
+    _build_subsets_config,
+    _to_optional_commands,
+    _to_optional_list,
+    load_config,
+)
 from autoskillit.core import (
-    CATEGORY_TAGS,
-    OutputFormat,
+    FEATURE_REGISTRY,
+    FeatureLifecycle,
     atomic_write,
     dump_yaml_str,
-    load_yaml,
-    pkg_root,
+    get_logger,
+    is_dev_install,
+    is_feature_enabled,
 )
 
 if TYPE_CHECKING:
     from dynaconf import Dynaconf
 
-_logger = logging.getLogger(__name__)  # noqa: TID251
+logger = get_logger(__name__)
+
+_UNSET = object()
+
+# Known tool timeouts for coherence validation.
+# These are the maximum observed blocking durations for tools that may produce
+# zero stdout during execution — used to validate idle_output_timeout coherence.
+_MERGE_QUEUE_DEFAULT = 600
+_MERGE_QUEUE_RECIPE_MAX = 900
+_CI_WATCH_DEFAULT = 300
 
 
-class ConfigSchemaError(ValueError):
-    """Raised when a config YAML layer contains unrecognized or misplaced keys."""
+def _timeout_coherence_gate(run_skill: RunSkillConfig) -> None:
+    """Warn when idle_output_timeout is too low relative to known long-polling tool durations.
+
+    The idle stall watchdog monitors raw stdout byte growth with no awareness of MCP tool
+    execution state. When idle_output_timeout <= a known tool's max duration, the watchdog
+    can fire and kill legitimate sessions that are simply waiting on a long poll.
+
+    This is a WARNING-only gate — existing configs continue working.
+    """
+    idle = run_skill.idle_output_timeout
+    if idle == 0:
+        return
+    if idle <= _MERGE_QUEUE_RECIPE_MAX:
+        logger.warning(
+            "idle_output_timeout_coherence",
+            idle_output_timeout=idle,
+            merge_queue_recipe_max=_MERGE_QUEUE_RECIPE_MAX,
+            merge_queue_default=_MERGE_QUEUE_DEFAULT,
+            ci_watch_default=_CI_WATCH_DEFAULT,
+            message=(
+                f"idle_output_timeout={idle}s is at or below the maximum known blocking tool "
+                f"duration ({_MERGE_QUEUE_RECIPE_MAX}s for wait_for_merge_queue recipe override). "
+                f"This creates a race condition where the idle stall watchdog fires before the "
+                f"long-polling tool returns. Consider raising idle_output_timeout to at least "
+                f"{_MERGE_QUEUE_RECIPE_MAX + 100}s, or set it to 0 to disable the watchdog "
+                f"for L2 food truck sessions."
+            ),
+        )
 
 
-_SECRETS_ONLY_KEYS: frozenset[str] = frozenset({"github.token"})
-_METADATA_KEYS: frozenset[str] = frozenset({"version"})
+__all__ = [
+    "AutomationConfig",
+    "BranchingConfig",
+    "CIConfig",
+    "ClassifyFixConfig",
+    "ConfigSchemaError",
+    "FleetConfig",
+    "GitHubConfig",
+    "ImplementGateConfig",
+    "LinuxTracingConfig",
+    "LoggingConfig",
+    "McpResponseConfig",
+    "MigrationConfig",
+    "ModelConfig",
+    "PacksConfig",
+    "ProvidersConfig",
+    "QuotaGuardConfig",
+    "ReadDbConfig",
+    "ReportBugConfig",
+    "ResetWorkspaceConfig",
+    "ReviewConfig",
+    "RunSkillConfig",
+    "SafetyConfig",
+    "SkillsConfig",
+    "SubsetsConfig",
+    "TestCheckConfig",
+    "TokenUsageConfig",
+    "WorkspaceConfig",
+    "WorktreeSetupConfig",
+    "load_config",
+    "validate_layer_keys",
+    "write_config_layer",
+]
 
 
-@dataclass
-class TestCheckConfig:
-    command: list[str] = field(default_factory=lambda: ["task", "test-check"])
-    timeout: int = 600
-
-
-@dataclass
-class ClassifyFixConfig:
-    path_prefixes: list[str] = field(default_factory=list)
-
-
-@dataclass
-class ResetWorkspaceConfig:
-    command: list[str] | None = None
-    preserve_dirs: set[str] = field(default_factory=set)
-
-
-@dataclass
-class ImplementGateConfig:
-    marker: str = "Dry-walkthrough verified = TRUE"
-    skill_names: set[str] = field(
-        default_factory=lambda: {
-            "/autoskillit:implement-worktree",
-            "/autoskillit:implement-worktree-no-merge",
-        }
-    )
-
-
-@dataclass
-class SafetyConfig:
-    reset_guard_marker: str = ".autoskillit-workspace"
-    require_dry_walkthrough: bool = True
-    test_gate_on_merge: bool = True
-    protected_branches: list[str] = field(
-        default_factory=lambda: ["main", "integration", "stable"]
-    )
-
-
-@dataclass
-class ReadDbConfig:
-    timeout: int = 30
-    max_rows: int = 10000
-
-
-@dataclass
-class RunSkillConfig:
-    timeout: int = 7200
-    stale_threshold: int = 1200  # 20 minutes
-    completion_marker: str = "%%ORDER_UP%%"
-    completion_drain_timeout: float = 5.0
-    exit_after_stop_delay_ms: int = 120000
-
-    @property
-    def output_format(self) -> OutputFormat:
-        """Derived from feature requirements — not independently configurable."""
-        return OutputFormat.derive(completion_marker=self.completion_marker)
-
-
-@dataclass
-class ModelConfig:
-    default: str = "sonnet"
-    override: str | None = None
-
-
-@dataclass
-class WorktreeSetupConfig:
-    command: list[str] | None = None
-
-
-@dataclass
-class MigrationConfig:
-    suppressed: list[str] = field(default_factory=list)
-
-
-@dataclass
-class TokenUsageConfig:
-    verbosity: str = "summary"  # "summary" | "none"
-
-
-@dataclass
-class QuotaGuardConfig:
-    enabled: bool = True
-    threshold: float = 90.0
-    buffer_seconds: int = 60
-    cache_max_age: int = 300
-    credentials_path: str = "~/.claude/.credentials.json"
-    cache_path: str = "~/.claude/autoskillit_quota_cache.json"
-
-
-@dataclass
-class GitHubConfig:
-    token: str | None = None
-    default_repo: str | None = None
-    in_progress_label: str = "in-progress"
-    staged_label: str = "staged"
-
-
-@dataclass
-class ReportBugConfig:
-    timeout: int = 600
-    model: str | None = None
-    report_dir: str | None = None  # None = {cwd}/.autoskillit/temp/bug-reports/
-    github_filing: bool = True
-    github_labels: list[str] = field(default_factory=lambda: ["autoreported", "bug"])
-
-
-@dataclass
-class LoggingConfig:
-    level: str = "INFO"
-    json_output: bool | None = None  # None = auto-detect from stderr.isatty()
-
-
-@dataclass
-class LinuxTracingConfig:
-    enabled: bool = True
-    proc_interval: float = 5.0
-    log_dir: str = ""  # empty = platform default (~/.local/share/autoskillit/logs on Linux)
-    tmpfs_path: str = "/dev/shm"  # RAM-backed tmpfs for crash-resilient streaming
-
-
-@dataclass
-class McpResponseConfig:
-    alert_threshold_tokens: int = 2000
-
-
-@dataclass
-class BranchingConfig:
-    default_base_branch: str = "main"
-    promotion_target: str = "main"  # Canonical upstream default for staged-label comparison.
-
-
-@dataclass
-class CIConfig:
-    workflow: str | None = None
-
-
-@dataclass
-class SkillsConfig:
-    tier1: list[str] = field(default_factory=list)
-    tier2: list[str] = field(default_factory=list)
-    tier3: list[str] = field(default_factory=list)
-
-    def __post_init__(self) -> None:
-        t1, t2, t3 = set(self.tier1), set(self.tier2), set(self.tier3)
-        dupes = (t1 & t2) | (t1 & t3) | (t2 & t3)
-        if dupes:
-            raise ValueError(f"Skills assigned to multiple tiers: {sorted(dupes)}")
-
-
-@dataclass
-class SubsetsConfig:
-    disabled: list[str] = field(default_factory=list)
-    custom_tags: dict[str, list[str]] = field(default_factory=dict)
+def _parse_int_field(val: Any, config_key: str) -> int:
+    """Convert a config value to int, raising a descriptive ConfigSchemaError on failure."""
+    try:
+        return int(val)
+    except (TypeError, ValueError) as exc:
+        raise ConfigSchemaError(f"{config_key} must be an integer, got {val!r}") from exc
 
 
 def _field_defaults(cls: type) -> dict[str, Any]:
@@ -227,8 +184,80 @@ class AutomationConfig:
     mcp_response: McpResponseConfig = field(default_factory=McpResponseConfig)
     branching: BranchingConfig = field(default_factory=BranchingConfig)
     ci: CIConfig = field(default_factory=CIConfig)
+    review: ReviewConfig = field(default_factory=ReviewConfig)
     skills: SkillsConfig = field(default_factory=SkillsConfig)
     subsets: SubsetsConfig = field(default_factory=SubsetsConfig)
+    packs: PacksConfig = field(default_factory=PacksConfig)
+    workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig)
+    fleet: FleetConfig = field(default_factory=FleetConfig)
+    providers: ProvidersConfig = field(default_factory=ProvidersConfig)
+    features: dict[str, bool] = field(default_factory=dict)
+    experimental_enabled: bool = False
+
+    @staticmethod
+    def _build_features_dict(raw: dict[str, Any]) -> tuple[dict[str, bool], bool]:
+        """Validate and coerce the features section from a raw config dict.
+
+        Returns (features_dict, experimental_enabled).
+
+        Raises ConfigSchemaError for:
+        - Unknown feature names (not in FEATURE_REGISTRY)
+        - Attempting to enable a DISABLED lifecycle feature
+        - Dependency violations: enabling feature B without its required feature A
+
+        Coerces all values to bool.
+        """
+        raw = dict(raw)  # copy to avoid mutating caller's dict
+        _raw_exp = raw.pop("experimental_enabled", _UNSET)
+        if _raw_exp is _UNSET:
+            _raw_exp = raw.pop("EXPERIMENTAL_ENABLED", _UNSET)
+        experimental_enabled: bool = is_dev_install() if _raw_exp is _UNSET else bool(_raw_exp)
+        result: dict[str, bool] = {}
+        for name, value in raw.items():
+            if not isinstance(name, str):
+                raise ConfigSchemaError(
+                    f"Feature key must be a string, got {type(name).__name__!r}: {name!r}"
+                )
+            name = name.lower()
+            if name not in FEATURE_REGISTRY:
+                known = sorted(FEATURE_REGISTRY.keys())
+                raise ConfigSchemaError(
+                    f"Unknown feature {name!r} in features config. Known features: {known}"
+                )
+            if not isinstance(value, bool):
+                raise ConfigSchemaError(
+                    f"Feature {name!r} value must be a bool, "
+                    f"got {type(value).__name__!r}: {value!r}"
+                )
+            if value is True:
+                if FEATURE_REGISTRY[name].lifecycle == FeatureLifecycle.DISABLED:
+                    raise ConfigSchemaError(
+                        f"Feature {name!r} has lifecycle DISABLED"
+                        " and cannot be explicitly enabled."
+                    )
+            result[name] = value
+
+        # Dependency validation
+        for name, enabled in result.items():
+            if not enabled:
+                continue
+            defn = FEATURE_REGISTRY[name]
+            for dep in defn.depends_on:
+                try:
+                    dep_default = FEATURE_REGISTRY[dep].default_enabled
+                except KeyError:
+                    raise ConfigSchemaError(
+                        f"Feature {name!r} depends_on {dep!r}, which is not in FEATURE_REGISTRY. "
+                        f"This is a bug in the FeatureDef definition."
+                    )
+                dep_enabled = result.get(dep, dep_default)
+                if not dep_enabled:
+                    raise ConfigSchemaError(
+                        f"Feature {name!r} is enabled but its dependency {dep!r} is disabled. "
+                        f"Enable {dep!r} first."
+                    )
+
+        return result, experimental_enabled
 
     @classmethod
     def from_dynaconf(cls, d: Dynaconf) -> AutomationConfig:
@@ -244,6 +273,14 @@ class AutomationConfig:
 
         def val(section: dict[str, Any], key: str, default: Any) -> Any:
             return section.get(key, default)
+
+        def _parse_int_config(value: Any, field_name: str) -> int:
+            try:
+                return int(value)
+            except (ValueError, TypeError) as exc:
+                raise ConfigSchemaError(
+                    f"Config field '{field_name}' must be an integer, got {value!r}"
+                ) from exc
 
         tc = sec("test_check")
         cf = sec("classify_fix")
@@ -264,8 +301,14 @@ class AutomationConfig:
         mr = sec("mcp_response")
         br = sec("branching")
         ci = sec("ci")
+        rv = sec("review")
         sk = sec("skills")
         _sub = sec("subsets")
+        pk = sec("packs")
+        ws_raw = sec("workspace")
+        fr = sec("fleet")
+        pvd = sec("providers")
+        feat = sec("features")
 
         _tc = _field_defaults(TestCheckConfig)
         _cf = _field_defaults(ClassifyFixConfig)
@@ -286,12 +329,24 @@ class AutomationConfig:
         _mr = _field_defaults(McpResponseConfig)
         _br = _field_defaults(BranchingConfig)
         _ci = _field_defaults(CIConfig)
+        _rv = _field_defaults(ReviewConfig)
         _sk = _field_defaults(SkillsConfig)
+        _wsc = _field_defaults(WorkspaceConfig)
+        _fr = _field_defaults(FleetConfig)
+        _pvd = _field_defaults(ProvidersConfig)
 
-        return cls(
+        _features_dict, _exp_enabled = AutomationConfig._build_features_dict(
+            dict(feat) if isinstance(feat, dict) else {}
+        )
+
+        _raw_command = val(tc, "command", None)
+        result = cls(
             test_check=TestCheckConfig(
-                command=list(val(tc, "command", _tc["command"])),
+                command=list(_raw_command) if _raw_command is not None else _COMMAND_UNSET,
                 timeout=int(val(tc, "timeout", _tc["timeout"])),
+                filter_mode=val(tc, "filter_mode", _tc["filter_mode"]) or None,
+                base_ref=val(tc, "base_ref", _tc["base_ref"]) or None,
+                commands=_to_optional_commands(val(tc, "commands", _tc["commands"])),
             ),
             classify_fix=ClassifyFixConfig(
                 path_prefixes=list(val(cf, "path_prefixes", _cf["path_prefixes"])),
@@ -326,6 +381,15 @@ class AutomationConfig:
                 exit_after_stop_delay_ms=int(
                     val(rs, "exit_after_stop_delay_ms", _rs["exit_after_stop_delay_ms"])
                 ),
+                natural_exit_grace_seconds=float(
+                    val(rs, "natural_exit_grace_seconds", _rs["natural_exit_grace_seconds"])
+                ),
+                idle_output_timeout=int(
+                    val(rs, "idle_output_timeout", _rs["idle_output_timeout"])
+                ),
+                max_suppression_seconds=int(
+                    val(rs, "max_suppression_seconds", _rs["max_suppression_seconds"])
+                ),
             ),
             model=ModelConfig(
                 default=_d if (_d := val(mc, "default", None)) is not None else _mc["default"],
@@ -342,9 +406,26 @@ class AutomationConfig:
             ),
             quota_guard=QuotaGuardConfig(
                 enabled=bool(val(qg, "enabled", _qg["enabled"])),
-                threshold=float(val(qg, "threshold", _qg["threshold"])),
+                short_window_enabled=bool(
+                    val(qg, "short_window_enabled", _qg["short_window_enabled"])
+                ),
+                long_window_enabled=bool(
+                    val(qg, "long_window_enabled", _qg["long_window_enabled"])
+                ),
+                short_window_threshold=float(
+                    val(qg, "short_window_threshold", _qg["short_window_threshold"])
+                ),
+                long_window_threshold=float(
+                    val(qg, "long_window_threshold", _qg["long_window_threshold"])
+                ),
+                long_window_patterns=list(
+                    val(qg, "long_window_patterns", _qg["long_window_patterns"])
+                ),
                 buffer_seconds=int(val(qg, "buffer_seconds", _qg["buffer_seconds"])),
                 cache_max_age=int(val(qg, "cache_max_age", _qg["cache_max_age"])),
+                cache_refresh_interval=int(
+                    val(qg, "cache_refresh_interval", _qg["cache_refresh_interval"])
+                ),
                 credentials_path=str(val(qg, "credentials_path", _qg["credentials_path"])),
                 cache_path=str(val(qg, "cache_path", _qg["cache_path"])),
             ),
@@ -353,6 +434,9 @@ class AutomationConfig:
                 default_repo=val(gh, "default_repo", _gh["default_repo"]) or None,
                 in_progress_label=str(val(gh, "in_progress_label", _gh["in_progress_label"])),
                 staged_label=str(val(gh, "staged_label", _gh["staged_label"])),
+                fail_label=str(val(gh, "fail_label", _gh["fail_label"])),
+                queued_label=str(val(gh, "queued_label", _gh["queued_label"])),
+                allowed_labels=list(val(gh, "allowed_labels", _gh["allowed_labels"])),
             ),
             report_bug=ReportBugConfig(
                 timeout=int(val(rb, "timeout", _rb["timeout"])),
@@ -374,6 +458,7 @@ class AutomationConfig:
                 proc_interval=float(val(lt, "proc_interval", _lt["proc_interval"])),
                 log_dir=str(val(lt, "log_dir", _lt["log_dir"])),
                 tmpfs_path=str(val(lt, "tmpfs_path", _lt["tmpfs_path"])),
+                max_sessions=int(val(lt, "max_sessions", _lt["max_sessions"])),
             ),
             mcp_response=McpResponseConfig(
                 alert_threshold_tokens=int(
@@ -388,6 +473,13 @@ class AutomationConfig:
             ),
             ci=CIConfig(
                 workflow=val(ci, "workflow", _ci["workflow"]) or None,
+                event=val(ci, "event", _ci["event"]) or None,
+            ),
+            review=ReviewConfig(
+                local_review_rounds=_parse_int_config(
+                    val(rv, "local_review_rounds", _rv["local_review_rounds"]),
+                    "review.local_review_rounds",
+                ),
             ),
             skills=SkillsConfig(
                 tier1=list(val(sk, "tier1", _sk["tier1"])),
@@ -395,13 +487,67 @@ class AutomationConfig:
                 tier3=list(val(sk, "tier3", _sk["tier3"])),
             ),
             subsets=_build_subsets_config(_sub),
+            packs=_build_packs_config(pk),
+            workspace=WorkspaceConfig(
+                worktree_root=val(ws_raw, "worktree_root", _wsc["worktree_root"]) or None,
+                runs_root=val(ws_raw, "runs_root", _wsc["runs_root"]) or None,
+                temp_dir=val(ws_raw, "temp_dir", _wsc["temp_dir"]) or None,
+            ),
+            fleet=FleetConfig(
+                default_timeout_sec=int(
+                    val(fr, "default_timeout_sec", _fr["default_timeout_sec"])
+                ),
+                max_concurrent_dispatches=int(
+                    val(fr, "max_concurrent_dispatches", _fr["max_concurrent_dispatches"])
+                ),
+                max_total_issues=int(val(fr, "max_total_issues", _fr["max_total_issues"])),
+                enable_deadline_extension=bool(
+                    val(fr, "enable_deadline_extension", _fr["enable_deadline_extension"])
+                ),
+                max_extension_seconds=float(
+                    val(fr, "max_extension_seconds", _fr["max_extension_seconds"])
+                ),
+                idle_output_timeout=float(
+                    val(fr, "idle_output_timeout", _fr["idle_output_timeout"])
+                ),
+            ),
+            providers=ProvidersConfig(
+                default_provider=val(pvd, "default_provider", _pvd["default_provider"]),
+                profiles=val(pvd, "profiles", _pvd["profiles"]),
+                step_overrides=val(pvd, "step_overrides", _pvd["step_overrides"]),
+                provider_retry_limit=_parse_int_field(
+                    val(pvd, "provider_retry_limit", _pvd["provider_retry_limit"]),
+                    "providers.provider_retry_limit",
+                ),
+            ),
+            features=_features_dict,
+            experimental_enabled=_exp_enabled,
         )
+        try:
+            result.fleet.validate(
+                is_feature_enabled(
+                    "fleet", result.features, experimental_enabled=result.experimental_enabled
+                )
+            )
+        except ValueError as exc:
+            raise ValueError(f"fleet config: {exc}") from exc
+        _timeout_coherence_gate(result.run_skill)
+        return result
 
 
 def _build_config_schema() -> dict[str, frozenset[str]]:
     """Derive a two-level schema map {section: {valid_field_names}} from AutomationConfig."""
     schema: dict[str, frozenset[str]] = {}
     for f in dataclasses.fields(AutomationConfig):
+        # Special case: features is a dict[str, bool]; valid sub-keys come from FEATURE_REGISTRY
+        if f.name == "features":
+            schema["features"] = frozenset(FEATURE_REGISTRY.keys()) | frozenset(
+                {"experimental_enabled"}
+            )
+            continue
+        # Skip the scalar experimental_enabled field — it is handled under the features section
+        if f.name == "experimental_enabled":
+            continue
         sub_type: type | None = None
         if f.default_factory is not dataclasses.MISSING:  # type: ignore[misc]
             factory = f.default_factory  # type: ignore[assignment]
@@ -491,134 +637,3 @@ def write_config_layer(path: Path, data: dict[str, Any]) -> None:
     validate_layer_keys(data, path, is_secrets_layer=False)
     path.parent.mkdir(parents=True, exist_ok=True)
     atomic_write(path, dump_yaml_str(data, default_flow_style=False, allow_unicode=True))
-
-
-def _build_subsets_config(raw: dict[str, Any]) -> SubsetsConfig:
-    """Parse subsets section, emitting warnings for unknown disabled categories."""
-    disabled = list(raw.get("disabled", []))
-    custom_tags_raw = raw.get("custom_tags", {}) or {}
-    if not isinstance(custom_tags_raw, dict):
-        raise ValueError(
-            f"subsets.custom_tags must be a dict mapping tag names to skill lists, "
-            f"got {type(custom_tags_raw).__name__!r}: {custom_tags_raw!r}"
-        )
-    custom_tags: dict[str, list[str]] = {}
-    for k, v in custom_tags_raw.items():
-        if isinstance(v, list):
-            custom_tags[str(k)] = [str(item) for item in v]
-        else:
-            _logger.warning(
-                "Ignoring non-list value for custom_tags entry %r: %r",
-                k,
-                v,
-            )
-    known_categories = CATEGORY_TAGS | frozenset(custom_tags.keys())
-    for tag in disabled:
-        if tag not in known_categories:
-            _logger.warning(
-                "Unknown category %r in subsets.disabled"
-                " (not in CATEGORY_TAGS and not a custom_tag)",
-                tag,
-            )
-    return SubsetsConfig(disabled=disabled, custom_tags=custom_tags)
-
-
-def _to_optional_list(value: Any) -> list[str] | None:
-    """Return None if value is falsy, else coerce to list[str]."""
-    if not value:
-        return None
-    return list(value)
-
-
-def _apply_layer(base: dict[str, Any], override: dict[str, Any]) -> None:
-    """Apply override into base with dict deep-merge and list-replace semantics.
-
-    Dicts are recursively merged so that a partial section in a later layer
-    (e.g. project config with only github.default_repo) does not wipe sibling
-    keys set by an earlier layer (e.g. user config with github.token).
-    All other value types — including lists — are replaced outright, preserving
-    the intuitive expectation that setting test_check.command in a config file
-    gives exactly that command (not the defaults appended to it).
-    """
-    for key, value in override.items():
-        if key in base and isinstance(base[key], dict) and isinstance(value, dict):
-            _apply_layer(base[key], value)
-        else:
-            base[key] = value
-
-
-def _merge_yaml_layers(*paths: Path) -> dict[str, Any]:
-    """Load and merge YAML files in order, applying _apply_layer for each."""
-    result: dict[str, Any] = {}
-    for path in paths:
-        if path.is_file():
-            data = load_yaml(path)
-            if isinstance(data, dict):
-                _apply_layer(result, data)
-    return result
-
-
-def _make_dynaconf(project_dir: Path | None = None) -> Dynaconf:
-    """Create a Dynaconf instance for env-var overrides over pre-merged file layers.
-
-    File layers (defaults, user, project, secrets) are merged in advance with
-    dict deep-merge + list-replace semantics. User-writable layers are validated
-    for unrecognized keys before merging. The merged result is written to a temp
-    YAML file so that Dynaconf can apply env var overrides (AUTOSKILLIT_SECTION__KEY).
-
-    Deferred import keeps dynaconf off the module-level import chain.
-    """
-    from dynaconf import Dynaconf  # noqa: PLC0415
-
-    defaults_path = pkg_root() / "config" / "defaults.yaml"
-    root = project_dir or Path.cwd()
-
-    # Layer definitions: (path, should_validate, is_secrets_layer)
-    _layers = [
-        (defaults_path, False, False),
-        (Path.home() / ".autoskillit" / "config.yaml", True, False),
-        (root / ".autoskillit" / "config.yaml", True, False),
-        (root / ".autoskillit" / ".secrets.yaml", True, True),
-    ]
-
-    merged: dict[str, Any] = {}
-    for path, should_validate, is_secrets in _layers:
-        if path.is_file():
-            data = load_yaml(path)
-            if isinstance(data, dict):
-                if should_validate:
-                    validate_layer_keys(data, path, is_secrets_layer=is_secrets)
-                _apply_layer(merged, data)
-            elif data is not None:
-                raise ConfigSchemaError(
-                    f"Invalid configuration in {str(path)!r}: "
-                    f"expected a YAML mapping at the top level, "
-                    f"got {type(data).__name__!r}."
-                )
-
-    # Write to a temp file so Dynaconf can load it and apply env var overrides.
-    # Dynaconf reads files lazily; we trigger eager loading before the file is
-    # deleted so the in-memory cache remains valid.
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as tmp:
-        tmp.write(dump_yaml_str(merged))
-        tmp_path = Path(tmp.name)
-
-    try:
-        d = Dynaconf(
-            envvar_prefix="AUTOSKILLIT",
-            preload=[str(tmp_path)],
-            settings_files=[],
-            merge_enabled=False,
-            load_dotenv=False,
-            environments=False,
-        )
-        d.as_dict()  # trigger eager load so the temp file can be safely deleted
-    finally:
-        tmp_path.unlink(missing_ok=True)
-
-    return d
-
-
-def load_config(project_dir: Path | None = None) -> AutomationConfig:
-    """Load layered config: defaults < user < project < secrets < env vars."""
-    return AutomationConfig.from_dynaconf(_make_dynaconf(project_dir))

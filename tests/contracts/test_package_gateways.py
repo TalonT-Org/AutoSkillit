@@ -211,12 +211,16 @@ def test_factory_make_context_returns_toolcontext(monkeypatch):
     from autoskillit.pipeline.context import ToolContext
     from autoskillit.server._factory import make_context
 
+    monkeypatch.setattr("autoskillit.server._factory._check_plugin_installed", lambda: False)
     ctx = make_context(AutomationConfig())
     assert isinstance(ctx, ToolContext)
     assert ctx.gate.enabled is False  # starts closed
     assert isinstance(ctx.audit, DefaultAuditLog)
     assert ctx.token_log is not None
-    assert ctx.plugin_dir == str(pkg_root())
+    from autoskillit.core.types._type_plugin_source import DirectInstall
+
+    assert isinstance(ctx.plugin_source, DirectInstall)
+    assert ctx.plugin_source.plugin_dir == pkg_root()
 
 
 def test_factory_make_context_accepts_runner():
@@ -229,10 +233,12 @@ def test_factory_make_context_accepts_runner():
 
 def test_factory_make_context_accepts_plugin_dir(tmp_path):
     from autoskillit.config import AutomationConfig
+    from autoskillit.core.types._type_plugin_source import DirectInstall
     from autoskillit.server._factory import make_context
 
     ctx = make_context(AutomationConfig(), plugin_dir=str(tmp_path))
-    assert ctx.plugin_dir == str(tmp_path)
+    assert isinstance(ctx.plugin_source, DirectInstall)
+    assert ctx.plugin_source.plugin_dir == tmp_path
 
 
 # ---------------------------------------------------------------------------
@@ -323,10 +329,13 @@ def test_package_all_matches_exports() -> None:
         "core",
         "config",
         "pipeline",
+        "planner",
         "execution",
         "workspace",
         "recipe",
         "migration",
+        "fleet",
+        "hooks",
         "cli",
         "server",
     ]
@@ -367,3 +376,43 @@ def test_package_all_matches_exports() -> None:
                     )
 
     assert not violations, "__all__ completeness violations:\n" + "\n".join(violations)
+
+
+# ── REQ-ARCH-005: root-level module allowlist ──────────────────────────────────
+
+
+def test_root_module_allowlist() -> None:
+    """REQ-ARCH-005: Exactly the expected set of .py files exists at the package root.
+
+    Fails when a new root-level .py file is added without updating this allowlist,
+    forcing deliberate acknowledgement of new root-level additions.
+    Also fails if an expected file is missing, catching stale allowlist entries.
+    """
+    _ALLOWED_ROOT_MODULES = frozenset(
+        {
+            "__init__.py",
+            "__main__.py",
+            "_llm_triage.py",
+            "_test_filter.py",
+            "hook_registry.py",
+            "smoke_utils.py",
+            "version.py",
+        }
+    )
+
+    actual = frozenset(p.name for p in SRC_ROOT.glob("*.py"))
+
+    unexpected = actual - _ALLOWED_ROOT_MODULES
+    assert not unexpected, (
+        f"Unauthorized root-level .py file(s) added to src/autoskillit/: "
+        f"{sorted(unexpected)}. "
+        "Either move the file to a sub-package or update the allowlist in "
+        "test_root_module_allowlist()."
+    )
+
+    missing = _ALLOWED_ROOT_MODULES - actual
+    assert not missing, (
+        f"Expected root-level .py file(s) no longer found in src/autoskillit/: "
+        f"{sorted(missing)}. "
+        "Remove the file from the allowlist in test_root_module_allowlist()."
+    )

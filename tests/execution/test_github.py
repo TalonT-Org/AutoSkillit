@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
+import time
+from unittest.mock import AsyncMock, patch
+
 import httpx
 import pytest
 
@@ -11,6 +16,8 @@ from autoskillit.execution.github import (
     _parse_issue_ref,
     parse_merge_queue_response,
 )
+
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 # ---------------------------------------------------------------------------
 # _parse_issue_ref unit tests
@@ -316,58 +323,51 @@ async def test_create_issue_request_error(httpx_mock):
 
 
 # ---------------------------------------------------------------------------
-# add_comment
+# update_issue_body
 # ---------------------------------------------------------------------------
 
-_COMMENT_JSON = {
-    "id": 99,
-    "html_url": "https://github.com/owner/repo/issues/7#issuecomment-99",
+_UPDATE_BODY_JSON = {
+    "number": 7,
+    "html_url": "https://github.com/owner/repo/issues/7",
+    "body": "updated body",
 }
 
 
 @pytest.mark.anyio
-async def test_add_comment_success(httpx_mock):
+async def test_update_issue_body_success(httpx_mock):
     httpx_mock.add_response(
-        url="https://api.github.com/repos/owner/repo/issues/7/comments",
-        method="POST",
-        json=_COMMENT_JSON,
+        url="https://api.github.com/repos/owner/repo/issues/7",
+        method="PATCH",
+        json=_UPDATE_BODY_JSON,
     )
     fetcher = DefaultGitHubFetcher(token="tok")
-    result = await fetcher.add_comment("owner", "repo", 7, "New occurrence details")
+    result = await fetcher.update_issue_body(
+        "owner", "repo", 7, "original body\n\n## New Occurrence\n\ndetails"
+    )
     assert result["success"] is True
-    assert result["comment_id"] == 99
+    assert result["issue_url"] == "https://github.com/owner/repo/issues/7"
 
 
 @pytest.mark.anyio
-async def test_add_comment_http_error(httpx_mock):
+async def test_update_issue_body_http_error(httpx_mock):
     httpx_mock.add_response(
-        url="https://api.github.com/repos/owner/repo/issues/7/comments",
-        method="POST",
+        url="https://api.github.com/repos/owner/repo/issues/7",
+        method="PATCH",
         status_code=404,
         json={"message": "Not Found"},
     )
     fetcher = DefaultGitHubFetcher(token="tok")
-    result = await fetcher.add_comment("owner", "repo", 7, "body")
+    result = await fetcher.update_issue_body("owner", "repo", 7, "new body")
     assert result["success"] is False
     assert "404" in result["error"]
 
 
 @pytest.mark.anyio
-async def test_add_comment_request_error(httpx_mock):
+async def test_update_issue_body_request_error(httpx_mock):
     httpx_mock.add_exception(httpx.ConnectError("down"))
     fetcher = DefaultGitHubFetcher(token="tok")
-    result = await fetcher.add_comment("owner", "repo", 7, "body")
+    result = await fetcher.update_issue_body("owner", "repo", 7, "new body")
     assert result["success"] is False
-
-
-# ---------------------------------------------------------------------------
-# Protocol conformance
-# ---------------------------------------------------------------------------
-
-
-def test_github_fetcher_protocol_includes_write_methods():
-    fetcher = DefaultGitHubFetcher(token=None)
-    assert isinstance(fetcher, GitHubFetcher)
 
 
 # ---------------------------------------------------------------------------
@@ -463,10 +463,6 @@ class TestFetchTitle:
         result = await fetcher.fetch_title("owner/repo#1")
         assert result["success"] is False
         assert "error" in result
-
-    def test_protocol_conformance(self):
-        """DefaultGitHubFetcher satisfies GitHubFetcher protocol (has fetch_title)."""
-        assert isinstance(DefaultGitHubFetcher(), GitHubFetcher)
 
 
 # ---------------------------------------------------------------------------
@@ -596,18 +592,6 @@ async def test_ensure_label_returns_error_on_network_failure(httpx_mock):
 # ---------------------------------------------------------------------------
 
 
-def test_github_fetcher_protocol_has_add_labels():
-    assert hasattr(GitHubFetcher, "add_labels")
-
-
-def test_github_fetcher_protocol_has_remove_label():
-    assert hasattr(GitHubFetcher, "remove_label")
-
-
-def test_github_fetcher_protocol_has_ensure_label():
-    assert hasattr(GitHubFetcher, "ensure_label")
-
-
 def test_default_github_fetcher_implements_full_protocol():
     fetcher = DefaultGitHubFetcher(token=None)
     assert isinstance(fetcher, GitHubFetcher)
@@ -615,7 +599,7 @@ def test_default_github_fetcher_implements_full_protocol():
         "fetch_issue",
         "search_issues",
         "create_issue",
-        "add_comment",
+        "update_issue_body",
         "add_labels",
         "remove_label",
         "ensure_label",
@@ -762,6 +746,68 @@ def test_parse_merge_queue_response_bad_node_skips_not_drops_rest():
     assert entries[1]["pr_number"] == 30
 
 
+# ---------------------------------------------------------------------------
+# swap_labels
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_swap_labels_replaces_atomically(httpx_mock):
+    """swap_labels GETs current labels then PUTs the computed target set atomically."""
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo/issues/42/labels",
+        method="GET",
+        json=[{"name": "in-progress"}, {"name": "bug"}],
+    )
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo/issues/42/labels",
+        method="PUT",
+        json=[{"name": "bug"}, {"name": "staged"}],
+    )
+    client = DefaultGitHubFetcher(token="tok")
+
+    with patch("autoskillit.execution.github.asyncio.sleep", new_callable=AsyncMock):
+        result = await client.swap_labels(
+            "owner", "repo", 42, remove_labels=["in-progress"], add_labels=["staged"]
+        )
+
+    assert result["success"] is True
+    assert set(result["labels"]) == {"bug", "staged"}
+
+    requests = httpx_mock.get_requests()
+    put_request = next(r for r in requests if r.method == "PUT")
+    body = json.loads(put_request.content)
+    assert set(body["labels"]) == {"bug", "staged"}
+
+
+@pytest.mark.anyio
+async def test_swap_labels_remove_only(httpx_mock):
+    """swap_labels with empty add_labels removes the label and leaves the rest."""
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo/issues/42/labels",
+        method="GET",
+        json=[{"name": "in-progress"}, {"name": "bug"}],
+    )
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo/issues/42/labels",
+        method="PUT",
+        json=[{"name": "bug"}],
+    )
+    client = DefaultGitHubFetcher(token="tok")
+
+    with patch("autoskillit.execution.github.asyncio.sleep", new_callable=AsyncMock):
+        result = await client.swap_labels(
+            "owner", "repo", 42, remove_labels=["in-progress"], add_labels=[]
+        )
+
+    assert result["success"] is True
+
+    requests = httpx_mock.get_requests()
+    put_request = next(r for r in requests if r.method == "PUT")
+    body = json.loads(put_request.content)
+    assert body["labels"] == ["bug"]
+
+
 def test_parse_merge_queue_response_missing_position_sorts_last():
     """Entries without a position key sort after entries with explicit positions."""
     data = {
@@ -789,3 +835,165 @@ def test_parse_merge_queue_response_missing_position_sorts_last():
     assert len(entries) == 2
     assert entries[0]["pr_number"] == 1
     assert entries[1]["pr_number"] == 99
+
+
+# ---------------------------------------------------------------------------
+# T1 — Mutating throttle enforces 1s gap
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_mutating_throttle_enforces_delay(httpx_mock):
+    """Two consecutive mutating calls sleep to enforce 1s gap."""
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo/issues",
+        method="POST",
+        json={"number": 1, "html_url": "https://github.com/owner/repo/issues/1"},
+    )
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo/issues",
+        method="POST",
+        json={"number": 2, "html_url": "https://github.com/owner/repo/issues/2"},
+    )
+    fetcher = DefaultGitHubFetcher(token="test")
+    with patch("autoskillit.execution.github.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+        await fetcher.create_issue("owner", "repo", "Title 1", "body")
+        await fetcher.create_issue("owner", "repo", "Title 2", "body")
+
+    assert mock_sleep.call_count == 1
+    sleep_duration = mock_sleep.call_args[0][0]
+    assert sleep_duration == pytest.approx(1.0, abs=0.1)
+
+
+# ---------------------------------------------------------------------------
+# T2 — Read-only methods bypass throttle
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_read_methods_bypass_throttle(httpx_mock):
+    """fetch_issue does not trigger throttle delay after a mutating call."""
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo/issues",
+        method="POST",
+        json={"number": 1, "html_url": "https://github.com/owner/repo/issues/1"},
+    )
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo/issues/1",
+        json=_ISSUE_NO_COMMENTS_JSON,
+    )
+    fetcher = DefaultGitHubFetcher(token="test")
+    with patch("autoskillit.execution.github.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+        await fetcher.create_issue("owner", "repo", "Title", "body")
+        await fetcher.fetch_issue("owner/repo#1", include_comments=False)
+
+    mock_sleep.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# T3 — ensure_label cache hit skips API call
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_ensure_label_cache_hit(httpx_mock):
+    """Second ensure_label for same owner/repo/label returns cached result without API call."""
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo/labels",
+        method="POST",
+        status_code=201,
+        json={"name": "bug", "color": "ededed"},
+    )
+    fetcher = DefaultGitHubFetcher(token="tok")
+    with patch("autoskillit.execution.github.asyncio.sleep", new_callable=AsyncMock):
+        result1 = await fetcher.ensure_label("owner", "repo", "bug")
+        result2 = await fetcher.ensure_label("owner", "repo", "bug")
+
+    assert result1 == {"success": True, "created": True}
+    assert result2 == {"success": True, "created": False}
+    assert len(httpx_mock.get_requests()) == 1
+
+
+# ---------------------------------------------------------------------------
+# T4 — ensure_label cache is scoped to owner/repo/label triple
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_ensure_label_cache_different_repos(httpx_mock):
+    """ensure_label for different repos hits API separately."""
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo1/labels",
+        method="POST",
+        status_code=201,
+        json={"name": "bug", "color": "ededed"},
+    )
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo2/labels",
+        method="POST",
+        status_code=201,
+        json={"name": "bug", "color": "ededed"},
+    )
+    fetcher = DefaultGitHubFetcher(token="tok")
+    with patch("autoskillit.execution.github.asyncio.sleep", new_callable=AsyncMock):
+        result1 = await fetcher.ensure_label("owner", "repo1", "bug")
+        result2 = await fetcher.ensure_label("owner", "repo2", "bug")
+
+    assert len(httpx_mock.get_requests()) == 2
+    assert result1 == {"success": True, "created": True}
+    assert result2 == {"success": True, "created": True}
+
+
+# ---------------------------------------------------------------------------
+# T8 — Throttle lock serializes concurrent mutating calls
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_throttle_serializes_concurrent_mutating_calls(httpx_mock):
+    """Lock must block the second call until the first fully exits _throttle_mutating.
+
+    Seeds _last_mutating_ts so both coroutines need to sleep, then uses a
+    recording side_effect that yields to the event loop inside the lock region.
+    The assertion verifies strict sequential ordering of sleeps: second sleep must
+    start only after the first sleep has ended — impossible without the lock.
+    """
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo/issues/42/labels",
+        method="POST",
+        json=[{"name": "bug"}],
+    )
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo/issues",
+        method="POST",
+        json={"number": 2, "html_url": "https://github.com/owner/repo/issues/2"},
+    )
+    fetcher = DefaultGitHubFetcher(token="test")
+    # Seed _last_mutating_ts so both coroutines will need to sleep,
+    # placing both in the lock-held region where ordering matters.
+    fetcher._last_mutating_ts = time.monotonic()
+
+    events: list[str] = []
+    # Capture the real sleep before the patch replaces it; asyncio.sleep is patched
+    # globally via the module attribute, so recording_sleep must use this reference
+    # directly to avoid infinite recursion when yielding to the event loop.
+    _real_sleep = asyncio.sleep
+
+    async def recording_sleep(_delay: float) -> None:
+        events.append("sleep_start")
+        await _real_sleep(0)  # yield to event loop while lock is held
+        events.append("sleep_end")
+
+    with patch("autoskillit.execution.github.asyncio.sleep", side_effect=recording_sleep):
+        await asyncio.gather(
+            fetcher.add_labels("owner", "repo", 42, ["bug"]),
+            fetcher.create_issue("owner", "repo", "Title", "body"),
+        )
+
+    starts = [i for i, e in enumerate(events) if e == "sleep_start"]
+    ends = [i for i, e in enumerate(events) if e == "sleep_end"]
+    assert len(starts) == 2 and len(ends) == 2
+    # Second sleep must start after the first sleep ends — only possible with the lock.
+    assert starts[1] > ends[0], (
+        "Second sleep started before first sleep ended: lock is not serializing coroutines"
+    )

@@ -9,6 +9,7 @@ NO MOCKS — that's the whole point.
 
 from __future__ import annotations
 
+import os
 import sys
 import textwrap
 
@@ -22,6 +23,8 @@ from autoskillit.execution.process import (
     kill_process_tree,
     run_managed_async,
 )
+
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 # ---------------------------------------------------------------------------
 # Helper scripts — small Python programs that reproduce specific scenarios
@@ -115,6 +118,9 @@ class TestCancellationKillsProcess:
         script = tmp_path / "sleep.py"
         script.write_text("import time; time.sleep(3600)")
 
+        parent = psutil.Process(os.getpid())
+        children_before = set(c.pid for c in parent.children(recursive=True))
+
         async with anyio.create_task_group() as tg:
 
             async def _run() -> None:
@@ -130,6 +136,10 @@ class TestCancellationKillsProcess:
 
         # Give the kernel a moment
         await anyio.sleep(0.5)
+
+        children_after = set(c.pid for c in parent.children(recursive=True))
+        leaked = children_after - children_before
+        assert not leaked, f"Child processes not cleaned up after cancellation: {leaked}"
 
 
 class TestAsyncKillDoesNotBlockLoop:
@@ -212,7 +222,7 @@ class TestRunManagedAsyncPassesPidToMonitor:
         captured = {}
 
         async def capturing_monitor(*args, **kwargs):
-            from autoskillit.execution._process_monitor import SessionMonitorResult
+            from autoskillit.execution.process._process_monitor import SessionMonitorResult
 
             captured["pid"] = kwargs.get("pid")
             captured["positional_pid"] = args[5] if len(args) > 5 else None
@@ -221,7 +231,9 @@ class TestRunManagedAsyncPassesPidToMonitor:
         session_file = tmp_path / "fake_session.jsonl"
         session_file.write_text("")
 
-        with patch("autoskillit.execution._process_race._session_log_monitor", capturing_monitor):
+        with patch(
+            "autoskillit.execution.process._process_race._session_log_monitor", capturing_monitor
+        ):
             result = await run_managed_async(
                 ["sleep", "5"],
                 cwd=tmp_path,

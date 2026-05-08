@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
+
+from autoskillit.core.io import write_versioned_json
+
+pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
 class TestLoadYamlExtended:
@@ -43,6 +49,48 @@ class TestLoadYamlExtended:
         with pytest.raises(YAMLError):
             load_yaml("{bad yaml: [unclosed")
 
+    @pytest.mark.parametrize(
+        "input_kind",
+        ["string", "path"],
+        ids=["str-input", "path-input"],
+    )
+    def test_load_yaml_uses_c_loader_when_available(self, tmp_path, monkeypatch, input_kind):
+        import yaml as _yaml
+
+        from autoskillit.core.io import load_yaml
+
+        if not getattr(_yaml, "__with_libyaml__", False):
+            pytest.skip("LibYAML not available")
+        captured: dict[str, object] = {}
+        original_load = _yaml.load
+
+        def spy(data, *, Loader=None, **kw):
+            assert not kw, f"unexpected kwargs passed to yaml.load: {kw}"
+            captured["Loader"] = Loader
+            return original_load(data, Loader=Loader, **kw)
+
+        monkeypatch.setattr("autoskillit.core.io.yaml.load", spy)
+
+        if input_kind == "path":
+            p = tmp_path / "t.yaml"
+            p.write_text("a: 1\n")
+            result = load_yaml(p)
+            assert result == {"a": 1}
+        else:
+            load_yaml("key: val")
+
+        assert captured["Loader"] is _yaml.CSafeLoader
+
+    def test_loader_is_csafe_or_safe(self):
+        import yaml as _yaml
+
+        from autoskillit.core.io import _Loader
+
+        if getattr(_yaml, "__with_libyaml__", False):
+            assert _Loader is _yaml.CSafeLoader
+        else:
+            assert _Loader is _yaml.SafeLoader
+
 
 class TestDumpYamlStr:
     def test_roundtrip_with_load_yaml(self):
@@ -70,6 +118,34 @@ class TestDumpYamlStr:
         result = dump_yaml_str(data, default_flow_style=False)
         # Block style: items on separate lines, no inline [...] for lists
         assert "[1, 2, 3]" not in result
+
+    def test_dumper_is_cdumper_or_dumper(self):
+        import yaml as _yaml
+
+        from autoskillit.core.io import _Dumper
+
+        if getattr(_yaml, "__with_libyaml__", False):
+            assert _Dumper is _yaml.CDumper
+        else:
+            assert _Dumper is _yaml.Dumper
+
+    def test_dump_yaml_str_uses_c_dumper_when_available(self, monkeypatch):
+        import yaml as _yaml
+
+        from autoskillit.core.io import dump_yaml_str
+
+        if not getattr(_yaml, "__with_libyaml__", False):
+            pytest.skip("LibYAML not available")
+        captured: dict[str, object] = {}
+        original_dump = _yaml.dump
+
+        def spy(data, **kw):
+            captured["Dumper"] = kw.get("Dumper")
+            return original_dump(data, **kw)
+
+        monkeypatch.setattr("autoskillit.core.io.yaml.dump", spy)
+        dump_yaml_str({"x": 1})
+        assert captured["Dumper"] is _yaml.CDumper
 
 
 class TestYamlConsolidationArchitecture:
@@ -99,25 +175,6 @@ class TestYamlConsolidationArchitecture:
         assert not violations, f"Direct yaml imports found outside core/io.py: {violations}"
 
 
-# ---------------------------------------------------------------------------
-# T1 — _parse_issue_ref importable from core
-# ---------------------------------------------------------------------------
-
-
-def test_parse_issue_ref_importable_from_core():
-    from autoskillit.core import _parse_issue_ref
-
-    owner, repo, number = _parse_issue_ref("https://github.com/acme/proj/issues/42")
-    assert owner == "acme" and repo == "proj" and number == 42
-
-
-def test_parse_issue_ref_not_in_io():
-    import autoskillit.core.io as io_mod
-
-    assert not hasattr(io_mod, "_parse_issue_ref")
-    assert "_parse_issue_ref" not in io_mod.__all__
-
-
 def test_atomic_write_is_canonical_public_name():
     """_atomic_write must not appear in core.io.__all__; atomic_write must."""
     import autoskillit.core.io as io_mod
@@ -137,3 +194,61 @@ def test_atomic_write_private_alias_removed():
     import autoskillit.core.io as io_mod
 
     assert not hasattr(io_mod, "_atomic_write")
+
+
+# ---------------------------------------------------------------------------
+# write_versioned_json — schema version envelope helper
+# ---------------------------------------------------------------------------
+
+
+def test_write_versioned_json_enriches_payload_with_schema_version(tmp_path):
+
+    from autoskillit.core.io import write_versioned_json
+
+    target = tmp_path / "f.json"
+    write_versioned_json(target, {"a": 1}, schema_version=2)
+    assert json.loads(target.read_text(encoding="utf-8")) == {"a": 1, "schema_version": 2}
+
+
+def test_write_versioned_json_preserves_existing_keys_atomically(tmp_path, monkeypatch):
+    """Asserts the helper routes through ``atomic_write`` (no partial-file
+    fallout on a simulated mid-write crash)."""
+
+    from autoskillit.core import io as io_mod
+    from autoskillit.core.io import write_versioned_json
+
+    calls: list[tuple[str, str]] = []
+    real_atomic_write = io_mod.atomic_write
+
+    def spy(path, content):
+        calls.append((str(path), content))
+        return real_atomic_write(path, content)
+
+    monkeypatch.setattr(io_mod, "atomic_write", spy)
+
+    target = tmp_path / "nested.json"
+    payload = {"outer": {"inner": [1, 2, 3]}, "name": "demo"}
+    write_versioned_json(target, payload, schema_version=7)
+
+    assert len(calls) == 1
+    assert calls[0][0] == str(target)
+    decoded = json.loads(target.read_text(encoding="utf-8"))
+    assert decoded == {"outer": {"inner": [1, 2, 3]}, "name": "demo", "schema_version": 7}
+
+
+def test_write_versioned_json_rejects_non_dict_payload(tmp_path):
+    import pytest
+
+    target = tmp_path / "bad.json"
+    with pytest.raises(TypeError, match="dict payload"):
+        write_versioned_json(target, [1, 2, 3], schema_version=1)  # type: ignore[arg-type]
+    assert not target.exists()
+
+
+def test_write_versioned_json_produces_indented_output(tmp_path):
+    target = tmp_path / "f.json"
+    write_versioned_json(target, {"a": 1, "b": [2, 3]}, schema_version=1)
+    raw = target.read_text(encoding="utf-8")
+    lines = raw.strip().splitlines()
+    assert len(lines) > 1, "Output must be multi-line (indented)"
+    assert json.loads(raw) == {"a": 1, "b": [2, 3], "schema_version": 1}

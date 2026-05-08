@@ -1,4 +1,4 @@
-"""L2 migration domain — version graph, adapter dispatch, failure persistence."""
+"""IL-2 migration domain — version graph, adapter dispatch, failure persistence."""
 
 from __future__ import annotations
 

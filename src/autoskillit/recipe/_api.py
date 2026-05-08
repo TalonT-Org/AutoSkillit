@@ -2,26 +2,36 @@
 
 from __future__ import annotations
 
-import dataclasses
-import re
+import hashlib
 import threading
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass as _dc
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any
 
 from autoskillit.core import (
     LoadResult,
     RecipeSource,
-    TerminalColumn,
+    SkillLister,
     YAMLError,
-    _render_gfm_table,
     get_logger,
     load_yaml,
     pkg_root,
+    resolve_temp_dir,
 )
 from autoskillit.recipe._analysis import make_validation_context
+from autoskillit.recipe._recipe_composition import (
+    _build_active_recipe,
+)
+from autoskillit.recipe._recipe_ingredients import (
+    ListRecipesResult,  # noqa: F401
+    LoadRecipeResult,
+    OpenKitchenResult,  # noqa: F401
+    RecipeListItem,
+    build_ingredient_rows,  # noqa: F401
+    format_ingredients_table,
+)
 from autoskillit.recipe.contracts import (
     check_contract_staleness,
     load_recipe_card,
@@ -35,149 +45,25 @@ from autoskillit.recipe.diagrams import (
 )
 from autoskillit.recipe.io import (
     RecipeInfo,
+    _load_recipe_dict,
     _parse_recipe,
     builtin_recipes_dir,
     builtin_sub_recipes_dir,
     find_recipe_by_name,
-    find_sub_recipe_by_name,
     list_recipes,
+    substitute_temp_placeholder,
 )
-from autoskillit.recipe.io import (
-    load_recipe as _load_recipe_from_path,
-)
-from autoskillit.recipe.schema import StepResultCondition, StepResultRoute
+from autoskillit.recipe.schema import Recipe
 from autoskillit.recipe.validator import (
     build_quality_dict,
     compute_recipe_validity,
     filter_version_rule,
     findings_to_dicts,
     run_semantic_rules,
-    validate_recipe,
+    validate_recipe_structure,
 )
 
-_logger = get_logger(__name__)
-
-# ---------------------------------------------------------------------------
-# GFM ingredient table column specs
-# ---------------------------------------------------------------------------
-
-_GFM_DESC_MAX_WIDTH: int = 60
-
-_GFM_INGREDIENT_COLUMNS: tuple[TerminalColumn, ...] = (
-    TerminalColumn("Name", max_width=30, align=">"),
-    TerminalColumn("Description", max_width=_GFM_DESC_MAX_WIDTH, align="<"),
-    TerminalColumn("Default", max_width=20, align=">"),
-)
-
-
-# ---------------------------------------------------------------------------
-# Schema contract: handler → formatter boundary
-# ---------------------------------------------------------------------------
-
-
-def _ingredient_sort_key(name: str, required: bool, default: object) -> tuple[int, str]:
-    """Sort ingredients: required > auto-detect > flags > optional > constants."""
-    if required and default is None:
-        return (0, name)
-    if default == "":
-        return (1, name)
-    if default in ("true", "false"):
-        return (2, name)
-    if default is None:
-        return (3, name)
-    return (4, name)  # has a non-empty default (constants, rarely changed)
-
-
-def build_ingredient_rows(
-    recipe: Any,
-    resolved_defaults: dict[str, str] | None = None,
-) -> list[tuple[str, str, str]]:
-    """Build (name, description, default) rows for a recipe's ingredients.
-
-    This is the shared source of truth for ingredient row data, consumed by
-    both the GFM table formatter (LLM path) and the terminal renderer
-    (terminal path). Descriptions are full-length here — truncation is the
-    terminal renderer's responsibility.
-
-    Returns rows sorted by ingredient priority (required first, then alphabetical).
-    """
-    resolved = resolved_defaults or {}
-    raw: list[tuple[str, str, str, tuple[int, str]]] = []
-    for name, ing in (getattr(recipe, "ingredients", None) or {}).items():
-        if getattr(ing, "hidden", False):
-            continue
-        desc = getattr(ing, "description", "")
-        required = getattr(ing, "required", False)
-        default = getattr(ing, "default", None)
-        sort_key = _ingredient_sort_key(name, required, default)
-        if default is None and required:
-            default_str, name_str = "(required)", f"{name} *"
-        elif default == "":
-            res = resolved.get(name)
-            default_str = res if res else "auto-detect"
-            name_str = name
-        elif default == "true":
-            default_str, name_str = "on", name
-        elif default == "false":
-            default_str, name_str = "off", name
-        elif default is None:
-            default_str, name_str = "--", name
-        else:
-            default_str, name_str = str(default), name
-        raw.append((name_str, desc, default_str, sort_key))
-    raw.sort(key=lambda r: r[3])
-    return [(r[0], r[1], r[2]) for r in raw]
-
-
-def format_ingredients_table(
-    recipe: Any, resolved_defaults: dict[str, str] | None = None
-) -> str | None:
-    """Build a pre-formatted ingredients table from a parsed Recipe.
-
-    When ``resolved_defaults`` is provided, auto-detect ingredients (``default: ""``)
-    use the resolved value instead of showing "auto-detect".
-    """
-    ingredients = getattr(recipe, "ingredients", None)
-    if not ingredients:
-        return None
-
-    rows = build_ingredient_rows(recipe, resolved_defaults)
-
-    if not rows:
-        return None
-
-    return _render_gfm_table(_GFM_INGREDIENT_COLUMNS, rows)
-
-
-class LoadRecipeResult(TypedDict, total=False):
-    """Typed schema for the load_recipe handler → formatter boundary."""
-
-    content: str
-    diagram: str | None
-    suggestions: list[dict[str, Any]]
-    valid: bool
-    kitchen_rules: list[str]
-    error: str
-    greeting: str
-    ingredients_table: str
-
-
-class RecipeListItem(TypedDict):
-    """Typed schema for a single recipe entry in the list_recipes response."""
-
-    name: str
-    description: str
-    summary: str
-    source: str
-
-
-class ListRecipesResult(TypedDict, total=False):
-    """Typed schema for the list_recipes handler → formatter boundary."""
-
-    recipes: list[RecipeListItem]
-    count: int
-    errors: list[dict[str, str]]
-
+logger = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
 # Stage timing helper
@@ -191,7 +77,7 @@ def _t(label: str, t0: float, name: str) -> float:
     filtering without requiring an explicit isEnabledFor() guard.
     """
     elapsed_ms = (time.perf_counter() - t0) * 1000
-    _logger.debug("load_recipe_stage", recipe=name, stage=label, elapsed_ms=round(elapsed_ms, 1))
+    logger.debug("load_recipe_stage", recipe=name, stage=label, elapsed_ms=round(elapsed_ms, 1))
     return time.perf_counter()
 
 
@@ -218,6 +104,19 @@ def _get_pkg_version() -> str:
     from autoskillit import __version__
 
     return __version__
+
+
+def _compute_registry_hash(experiment_types_dir: Path) -> str:
+    """Compute md5 hash of sorted (path, mtime_ns) pairs for experiment-type YAMLs."""
+    if not experiment_types_dir.exists():
+        return ""
+    entries: list[tuple[str, int]] = []
+    for p in sorted(experiment_types_dir.glob("*.yaml")):
+        try:
+            entries.append((p.name, p.stat().st_mtime_ns))
+        except OSError:
+            continue
+    return hashlib.md5(str(entries).encode(), usedforsecurity=False).hexdigest()
 
 
 @_dc
@@ -255,183 +154,41 @@ def format_recipe_list_response(result: LoadResult[RecipeInfo]) -> dict[str, obj
     return response
 
 
-def list_all(project_dir: Path | None = None) -> dict[str, Any]:
+def list_all(
+    project_dir: Path | None = None,
+    *,
+    features: dict[str, bool] | None = None,
+) -> dict[str, Any]:
     """List all recipes from project and built-in sources.
 
     Returns:
         {"recipes": list[{"name", "description", "summary"}]}
         Includes "errors" key when recipes fail to parse.
     """
+    from autoskillit.core import is_feature_enabled  # noqa: PLC0415
+    from autoskillit.recipe.schema import NON_INTERACTIVE_KINDS  # noqa: PLC0415
+
     _pdir = project_dir if project_dir is not None else Path.cwd()
-    result = list_recipes(_pdir)
+    _features = features or {}
+    fleet_enabled = is_feature_enabled("fleet", _features)
+    exclude_kinds = frozenset() if fleet_enabled else NON_INTERACTIVE_KINDS
+    result = list_recipes(_pdir, exclude_kinds=exclude_kinds)
     return format_recipe_list_response(result)
 
 
-def _drop_sub_recipe_step(recipe: Any, step_name: str) -> Any:
-    """Return a new Recipe with the named sub_recipe placeholder step removed."""
-    new_steps = {k: v for k, v in recipe.steps.items() if k != step_name}
-    return dataclasses.replace(recipe, steps=new_steps)
-
-
-def _merge_sub_recipe(parent: Any, placeholder_name: str, sub: Any) -> Any:
-    """Replace the sub_recipe placeholder step with the sub-recipe's steps.
-
-    Algorithm:
-    1. Compute a safe name prefix from the sub-recipe name.
-    2. For each step in sub, create a prefixed copy with routing fixed:
-       - Routes to "done" → parent placeholder's on_success
-       - Routes to "escalate" → parent placeholder's on_failure
-       - Routes to other sub-recipe step names → add prefix
-    3. Insert sub-recipe steps in place of the placeholder.
-    4. Merge ingredients: add sub-recipe's non-hidden ingredients into parent.
-    5. Merge kitchen_rules: union (deduplicated), sub-recipe rules appended.
-    """
-    if placeholder_name not in parent.steps:
-        raise KeyError(
-            f"_merge_sub_recipe: placeholder step '{placeholder_name}' not found in "
-            f"recipe '{parent.name}'. Available steps: {list(parent.steps.keys())}"
-        )
-    placeholder = parent.steps[placeholder_name]
-    on_success = placeholder.on_success or "done"
-    on_failure = placeholder.on_failure or "escalate"
-
-    # Build prefix: "sprint-prefix" → "sprint_prefix_", "my-sub" → "my_sub_"
-    raw_prefix = re.sub(r"[^a-z0-9]", "_", (sub.name or placeholder_name).lower())
-    if not raw_prefix.endswith("_"):
-        raw_prefix += "_"
-    prefix = raw_prefix
-
-    sub_step_names = set(sub.steps.keys())
-
-    def _fix_route(target: str | None) -> str | None:
-        if target is None:
-            return None
-        if target == "done":
-            return on_success
-        if target == "escalate":
-            return on_failure
-        if target in sub_step_names:
-            return prefix + target
-        return target
-
-    def _fix_result_route(route: Any) -> Any:
-        if route is None:
-            return None
-        if route.conditions:
-            return StepResultRoute(
-                conditions=[
-                    StepResultCondition(when=c.when, route=_fix_route(c.route) or "")
-                    for c in route.conditions
-                ]
-            )
-        return StepResultRoute(
-            field=route.field,
-            routes={k: (_fix_route(v) or v) for k, v in route.routes.items()},
-        )
-
-    prefixed_steps: dict[str, Any] = {}
-    for sub_step_name, sub_step in sub.steps.items():
-        new_name = prefix + sub_step_name
-        new_step = dataclasses.replace(
-            sub_step,
-            on_success=_fix_route(sub_step.on_success),
-            on_failure=_fix_route(sub_step.on_failure),
-            on_context_limit=_fix_route(sub_step.on_context_limit),
-            on_exhausted=_fix_route(sub_step.on_exhausted),
-            on_result=_fix_result_route(sub_step.on_result),
-        )
-        prefixed_steps[new_name] = new_step
-
-    # Assemble new steps dict: sub-recipe steps injected in place of placeholder
-    new_steps: dict[str, Any] = {}
-    for step_name, step in parent.steps.items():
-        if step_name == placeholder_name:
-            new_steps.update(prefixed_steps)
-        else:
-            new_steps[step_name] = step
-
-    # Merge ingredients: sub-recipe non-hidden ingredients into parent
-    merged_ingredients = dict(parent.ingredients)
-    for ing_name, ing in sub.ingredients.items():
-        if ing_name not in merged_ingredients:
-            merged_ingredients[ing_name] = ing
-
-    # Merge kitchen_rules: union (parent first, then sub-recipe additions)
-    seen_rules: set[str] = set(parent.kitchen_rules)
-    merged_rules = list(parent.kitchen_rules)
-    for rule in sub.kitchen_rules:
-        if rule not in seen_rules:
-            merged_rules.append(rule)
-            seen_rules.add(rule)
-
-    return dataclasses.replace(
-        parent,
-        steps=new_steps,
-        ingredients=merged_ingredients,
-        kitchen_rules=merged_rules,
-    )
-
-
-def _build_active_recipe(
-    recipe: Any,
-    ingredient_overrides: dict[str, str] | None,
-    project_dir: Path,
-) -> tuple[Any, Any | None]:
-    """Return (active_recipe, combined_recipe | None).
-
-    active_recipe: the Recipe to serve to the agent.
-        - If no sub_recipe steps: returns recipe unchanged.
-        - If sub_recipe step with gate=false: returns recipe with sub_recipe step dropped.
-        - If sub_recipe step with gate=true: returns the merged (combined) recipe.
-
-    combined_recipe: the merged Recipe if any gate was true, else None.
-        Used to run dual validation (REQ-VALID-004).
-    """
-    overrides = ingredient_overrides or {}
-    sub_recipe_steps = [
-        (name, step) for name, step in recipe.steps.items() if step.sub_recipe is not None
-    ]
-    if not sub_recipe_steps:
-        return recipe, None
-
-    combined: Any | None = None
-    working = recipe
-
-    # Re-read each step from working.steps to get the current state after prior
-    # merge/drop operations, rather than using the stale reference from recipe.steps.
-    for step_name, _orig_step in sub_recipe_steps:
-        current_step = working.steps.get(step_name)
-        if current_step is None or current_step.sub_recipe is None:
-            continue
-        gate_name = current_step.gate or ""
-        gate_ingredient = working.ingredients.get(gate_name) if gate_name else None
-        gate_default: str = (gate_ingredient.default or "false") if gate_ingredient else "false"
-        gate_value = overrides.get(gate_name, gate_default)
-
-        if gate_value.lower() in ("true", "1", "yes"):
-            sr_path = find_sub_recipe_by_name(current_step.sub_recipe, project_dir)
-            if sr_path is None:
-                raise FileNotFoundError(
-                    f"Sub-recipe '{current_step.sub_recipe}' not found. "
-                    f"Expected in recipes/sub-recipes/{current_step.sub_recipe}.yaml"
-                )
-            try:
-                sub_recipe = _load_recipe_from_path(sr_path)
-            except (YAMLError, ValueError, OSError) as exc:
-                raise ValueError(
-                    f"Failed to load sub-recipe '{current_step.sub_recipe}' "
-                    f"(gate: {gate_name}={gate_value}): {exc}"
-                ) from exc
-            working = _merge_sub_recipe(working, step_name, sub_recipe)
-            combined = working
-        else:
-            working = _drop_sub_recipe_step(working, step_name)
-
-    return working, combined
-
-
-def validate_from_path(path: Path) -> dict[str, Any]:
+def validate_from_path(
+    path: Path,
+    temp_dir_relpath: str = ".autoskillit/temp",
+    *,
+    lister: SkillLister | None = None,
+) -> dict[str, Any]:
     """Validate a recipe YAML file at the given path.
+
+    Args:
+        path: Path to the recipe YAML file.
+        temp_dir_relpath: Relative path to the temp directory used for
+            ``{{AUTOSKILLIT_TEMP}}`` substitution. Defaults to
+            ``.autoskillit/temp``.
 
     Returns:
         {"valid": bool, "errors": list, "quality": dict, "semantic": list, "contracts": list}
@@ -444,7 +201,9 @@ def validate_from_path(path: Path) -> dict[str, Any]:
         }
 
     try:
-        data = load_yaml(path)
+        raw_text = path.read_text(encoding="utf-8")
+        substituted = substitute_temp_placeholder(raw_text, temp_dir_relpath)
+        data = load_yaml(substituted)
     except YAMLError as exc:
         return {
             "valid": False,
@@ -457,12 +216,21 @@ def validate_from_path(path: Path) -> dict[str, Any]:
             "findings": [{"error": "File must contain a YAML mapping"}],
         }
 
-    from autoskillit.workspace import SkillResolver  # noqa: PLC0415
+    if lister is None:
+        from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
+
+        lister = DefaultSkillResolver()
+
+    from autoskillit.core import SkillResolver as _SkillResolver  # noqa: PLC0415
+
+    _skill_resolver = lister if isinstance(lister, _SkillResolver) else None
 
     recipe = _parse_recipe(data)
-    errors = validate_recipe(recipe)
-    known_skills = frozenset(s.name for s in SkillResolver().list_all())
-    ctx = make_validation_context(recipe, available_skills=known_skills)
+    errors = validate_recipe_structure(recipe)
+    known_skills = frozenset(s.name for s in lister.list_all())
+    ctx = make_validation_context(
+        recipe, available_skills=known_skills, skill_resolver=_skill_resolver
+    )
     report = ctx.dataflow
     semantic_findings = run_semantic_rules(ctx)
 
@@ -487,14 +255,65 @@ def validate_from_path(path: Path) -> dict[str, Any]:
     }
 
 
+def _build_stop_step_semantics(recipe: Recipe) -> str:
+    stop_steps = {name: step for name, step in recipe.steps.items() if step.action == "stop"}
+    if not stop_steps:
+        return ""
+    names = ", ".join(f"'{n}'" for n in stop_steps)
+    lines = [
+        "ACTION: STOP STEP SEMANTICS:",
+        f"- Steps {names} are terminal stop steps.",
+        "- When routed to a stop step, display its message and TERMINATE immediately.",
+        "- Do NOT call any MCP tools after a stop step.",
+        "- Do NOT attempt recovery, error reporting, or off-recipe actions.",
+        "- A stop step is an INTENTIONAL terminus — the recipe author designed this as"
+        " the endpoint.",
+    ]
+    for name, step in stop_steps.items():
+        if step.message:
+            lines.append(f"  Stop step '{name}' message: {step.message!r}")
+    return "\n".join(lines)
+
+
+def _build_orchestration_rules(
+    recipe: Recipe | None = None, stop_semantics: str | None = None
+) -> str:
+    parts = [
+        "STEP EXECUTION IS NOT DISCRETIONARY:\n"
+        "You MUST execute every step the pipeline routes you to. "
+        "The ONLY mechanism for skipping a step is skip_when_false evaluating to false. "
+        "When skip_when_false evaluates to true (or is absent), the step is MANDATORY. "
+        "NEVER skip a step because the PR is small, the diff is trivial, or you judge "
+        "the step unnecessary. NEVER replace recipe steps with manual tool calls. "
+        "Consequence: skipping PR review steps results in unreviewed code, missing "
+        "diff annotations, and no architectural lens analysis."
+    ]
+    if recipe is not None:
+        sem = stop_semantics if stop_semantics is not None else _build_stop_step_semantics(recipe)
+        if sem:
+            parts.append(sem)
+    parts.append(
+        "ACTION: ROUTE STEP SEMANTICS:\n"
+        '- When you reach a step with action: "route", evaluate the step\'s on_result\n'
+        "  conditions against captured context variables. Route to the matching target.\n"
+        "- Do NOT call any MCP tools for this step type — routing evaluation IS the step.\n"
+        "- If no on_result condition matches and on_failure is defined, follow on_failure."
+    )
+    return "\n\n".join(parts)
+
+
 def load_and_validate(
     name: str,
     project_dir: Path | None = None,
     *,
     suppressed: Sequence[str] | None = None,
     recipe_info: RecipeInfo | None = None,
+    recipe_list: list[RecipeInfo] | None = None,
     resolved_defaults: dict[str, str] | None = None,
     ingredient_overrides: dict[str, str] | None = None,
+    temp_dir: Path | None = None,
+    temp_dir_relpath: str | None = None,
+    lister: SkillLister | None = None,
 ) -> LoadRecipeResult:
     """Load a recipe by name and run full validation.
 
@@ -515,11 +334,28 @@ def load_and_validate(
     pkg_version = _get_pkg_version()
     project_recipes_dir = _pdir / ".autoskillit" / "recipes"
     _builtin_dir = builtin_recipes_dir()
+    from autoskillit.recipe.experiment_type_registry import (  # noqa: PLC0415
+        BUNDLED_EXPERIMENT_TYPES_DIR,
+    )
+    from autoskillit.recipe.methodology_tradition_registry import (  # noqa: PLC0415
+        BUNDLED_METHODOLOGY_TRADITIONS_DIR,
+    )
+
+    _exp_types_hash = _compute_registry_hash(BUNDLED_EXPERIMENT_TYPES_DIR)
+    _user_exp_types_dir = _pdir / ".autoskillit" / "experiment-types"
+    _user_exp_hash = _compute_registry_hash(_user_exp_types_dir)
+    _method_traditions_hash = _compute_registry_hash(BUNDLED_METHODOLOGY_TRADITIONS_DIR)
+    _user_method_traditions_dir = _pdir / ".autoskillit" / "methodology-traditions"
+    _user_method_traditions_hash = _compute_registry_hash(_user_method_traditions_dir)
     cache_key = (
         name,
         str(_pdir),
         tuple(sorted(suppressed)) if suppressed else (),
         tuple(sorted(ingredient_overrides.items())) if ingredient_overrides else (),
+        _exp_types_hash,
+        _user_exp_hash,
+        _method_traditions_hash,
+        _user_method_traditions_hash,
     )
 
     with _LOAD_CACHE_LOCK:
@@ -536,7 +372,7 @@ def load_and_validate(
             and rm == cached.recipe_mtime
             and rs == cached.recipe_size
         ):
-            _logger.debug("load_recipe_cache_hit", recipe=name)
+            logger.debug("load_recipe_cache_hit", recipe=name)
             return cached.result
 
     t0 = time.perf_counter()
@@ -544,14 +380,17 @@ def load_and_validate(
     # Stage: find recipe
     if recipe_info is not None:
         match: RecipeInfo | None = recipe_info
+        _recipe_list = recipe_list
     else:
         match = find_recipe_by_name(name, _pdir)
+        _recipe_list = None
     t0 = _t("find_recipe", t0, name)
 
     if match is None:
         return {"error": f"No recipe named '{name}' found"}
 
     raw = match.content if match.content is not None else match.path.read_text()
+    _temp_relpath = temp_dir_relpath or ".autoskillit/temp"
     suggestions: list[dict[str, Any]] = []
     valid = True
     recipe = None
@@ -565,30 +404,56 @@ def load_and_validate(
 
     try:
         # Stage: yaml parse
-        data = load_yaml(raw)
+        data = _load_recipe_dict(match.path, raw_text=raw, temp_dir_relpath=_temp_relpath)
         t0 = _t("yaml_parse", t0, name)
 
         if isinstance(data, dict) and "steps" in data:
             recipe = _parse_recipe(data)
 
+            from autoskillit.recipe.identity import compute_composite_hash  # noqa: PLC0415
+
+            _recipe_bytes = match.path.read_bytes()
+            recipe.content_hash = (
+                match.content_hash
+                if match.content_hash
+                else "sha256:" + hashlib.sha256(_recipe_bytes).hexdigest()
+            )
+            recipe.composite_hash = compute_composite_hash(
+                match.path,
+                recipe,
+                skills_dir=pkg_root() / "skills",
+                project_dir=_pdir,
+                content_bytes=_recipe_bytes,
+            )
+
             # Stage: sub-recipe composition (lazy-loaded prefixes)
             active_recipe, combined_recipe = _build_active_recipe(
-                recipe, ingredient_overrides, _pdir
+                recipe, ingredient_overrides, _pdir, _temp_relpath
             )
 
             # Stage: structural validation on active recipe
-            errors = validate_recipe(active_recipe)
+            errors = validate_recipe_structure(active_recipe)
             if combined_recipe is not None:
                 # Dual validation: also validate the combined (merged) graph
-                combined_errors = validate_recipe(combined_recipe)
+                combined_errors = validate_recipe_structure(combined_recipe)
                 errors.extend(f"[combined] {e}" for e in combined_errors)
-            t0 = _t("validate_recipe", t0, name)
+            t0 = _t("validate_recipe_structure", t0, name)
 
             # Stage: semantic rules (builds ValidationContext once — shared computation)
-            from autoskillit.workspace import SkillResolver  # noqa: PLC0415
+            if lister is None:
+                from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
 
-            known = frozenset(r.name for r in list_recipes(_pdir).items)
-            known_skills = frozenset(s.name for s in SkillResolver().list_all())
+                lister = DefaultSkillResolver()
+
+            from autoskillit.core import SkillResolver as _SkillResolver  # noqa: PLC0415
+
+            _skill_resolver = lister if isinstance(lister, _SkillResolver) else None
+
+            known = frozenset(
+                r.name
+                for r in (_recipe_list if _recipe_list is not None else list_recipes(_pdir).items)
+            )
+            known_skills = frozenset(s.name for s in lister.list_all())
             sub_recipes_dir = builtin_sub_recipes_dir()
             known_sub_recipes: frozenset[str] = (
                 frozenset(p.stem for p in sub_recipes_dir.glob("*.yaml"))
@@ -604,6 +469,7 @@ def load_and_validate(
                 available_skills=known_skills,
                 available_sub_recipes=known_sub_recipes,
                 project_dir=_pdir,
+                skill_resolver=_skill_resolver,
             )
             semantic_findings = run_semantic_rules(val_ctx)
             semantic_suggestions = findings_to_dicts(semantic_findings)
@@ -624,9 +490,8 @@ def load_and_validate(
 
             # Stage: staleness check
             if contract:
-                staleness_cache_path = (
-                    _pdir / ".autoskillit" / "temp" / "recipe_staleness_cache.json"
-                )
+                resolved_temp = temp_dir if temp_dir is not None else resolve_temp_dir(_pdir, None)
+                staleness_cache_path = resolved_temp / "recipe_staleness_cache.json"
                 stale = check_contract_staleness(
                     contract, recipe_path=match.path, cache_path=staleness_cache_path
                 )
@@ -643,7 +508,7 @@ def load_and_validate(
             t0 = _t("yaml_parse", t0, name)
 
     except YAMLError as exc:
-        _logger.warning("Recipe YAML parse error", name=name, exc_info=True)
+        logger.warning("Recipe YAML parse error", name=name, exc_info=True)
         suggestions.append(
             {
                 "rule": "validation-error",
@@ -654,7 +519,7 @@ def load_and_validate(
         )
         valid = False
     except ValueError as exc:
-        _logger.warning("Recipe structure invalid", name=name, exc_info=True)
+        logger.warning("Recipe structure invalid", name=name, exc_info=True)
         suggestions.append(
             {
                 "rule": "validation-error",
@@ -665,7 +530,7 @@ def load_and_validate(
         )
         valid = False
     except (FileNotFoundError, OSError) as exc:
-        _logger.warning("Recipe file not found or unreadable", name=name, exc_info=True)
+        logger.warning("Recipe file not found or unreadable", name=name, exc_info=True)
         suggestions.append(
             {
                 "rule": "validation-error",
@@ -695,8 +560,24 @@ def load_and_validate(
     }
     if _serving_recipe is not None and _serving_recipe.kitchen_rules:
         result["kitchen_rules"] = _serving_recipe.kitchen_rules
+    if _serving_recipe is not None and _serving_recipe.requires_packs:
+        result["requires_packs"] = _serving_recipe.requires_packs
+    if _serving_recipe is not None and _serving_recipe.requires_features:
+        result["requires_features"] = _serving_recipe.requires_features
     if ing_table:
         result["ingredients_table"] = ing_table
+    # Compute once; reused by both fields to avoid a second traversal of recipe.steps.
+    # Two delivery paths are intentional: orchestration_rules embeds the text for Channel A
+    # (open_kitchen response / system prompt); stop_step_semantics is a dedicated field for
+    # Channel B consumers (load_recipe docstring injection) that need the text in isolation.
+    _stop_semantics = _build_stop_step_semantics(recipe) if recipe else ""
+    result["orchestration_rules"] = _build_orchestration_rules(
+        recipe, stop_semantics=_stop_semantics
+    )
+    result["stop_step_semantics"] = _stop_semantics
+    result["content_hash"] = recipe.content_hash if recipe else ""
+    result["composite_hash"] = recipe.composite_hash if recipe else ""
+    result["recipe_version"] = recipe.recipe_version if recipe else None
 
     # Write to cache (only when recipe was found and fully processed)
     if match is not None:

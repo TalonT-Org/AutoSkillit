@@ -27,7 +27,8 @@ complexity, and produce machine-readable output for the `merge-prs` recipe.
 **NEVER:**
 - Merge, close, or modify any PR
 - Modify any source code files
-- Create files outside `.autoskillit/temp/merge-prs/` directory
+- Create files outside `{{AUTOSKILLIT_TEMP}}/merge-prs/` directory
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use subagents to fetch PR data in parallel
@@ -42,7 +43,10 @@ complexity, and produce machine-readable output for the `merge-prs` recipe.
 
 ## Arguments
 
-`{base_branch}` — the base branch to list PRs against (e.g., `main`)
+`{base_branch} [merge_queue_data_path=<path>]`
+
+- `base_branch` — the base branch to list PRs against (e.g., `main`)
+- `merge_queue_data_path` (optional) — absolute path to a JSON file containing pre-fetched merge queue data (produced by `fetch_merge_queue_data` run_python step). When provided and present, read from file instead of calling GitHub GraphQL API inline.
 
 ## Workflow
 
@@ -60,48 +64,32 @@ If `gh` returns an auth error: abort with a clear message.
 
 ### Step 0.5: Detect GitHub Merge Queue
 
-Before fetching diffs, query the GitHub GraphQL API to determine whether a merge queue
+Before fetching diffs, load pre-fetched merge queue data to determine whether a merge queue
 is active on `{base_branch}` with `MERGEABLE` entries.
 
-1. Resolve the repo owner and name:
+1. Read pre-fetched merge queue data from disk when available:
+   ```bash
+   if [ -n "${merge_queue_data_path:-}" ]; then
+       if [ -f "$merge_queue_data_path" ]; then
+           QUEUE_ENTRIES="$(cat "$merge_queue_data_path")"
+       else
+           echo "WARNING: merge_queue_data_path='$merge_queue_data_path' provided but file not found — possible misconfiguration. Falling back to no-queue mode."
+           QUEUE_ENTRIES="[]"
+       fi
+   else
+       QUEUE_ENTRIES="[]"  # no path provided (standalone invocation) → QUEUE_MODE=false
+   fi
    ```
-   gh repo view --json owner,name
-   ```
-   Extract `OWNER` and `REPO` from the JSON output.
+   `QUEUE_ENTRIES` is a JSON array of `{position, state, pr_number, pr_title}` objects,
+   pre-fetched by the `fetch_merge_queue_data` run_python step in the recipe. When
+   `merge_queue_data_path` is absent (standalone invocation), `QUEUE_ENTRIES` defaults to
+   `[]`, which sets `QUEUE_MODE = false`.
 
-2. Query the merge queue:
-   ```
-   gh api graphql -f query='{
-     repository(owner: "OWNER", name: "REPO") {
-       mergeQueue(branch: "BASE_BRANCH") {
-         entries(first: 50) {
-           nodes {
-             position
-             state
-             pullRequest { number title }
-           }
-         }
-       }
-     }
-   }'
-   ```
-   Pipe the JSON output through `autoskillit.execution.github.parse_merge_queue_response`:
-   ```
-   python -c "
-   import sys, json
-   _m = __import__('autoskillit' + '.execution.github', fromlist=[''])
-   data = json.load(sys.stdin)
-   entries = _m.parse_merge_queue_response(data)
-   print(json.dumps(entries))
-   "
-   ```
-
-3. Determine mode:
+2. Determine mode:
    - If the resulting entry list contains at least one entry with `state == "MERGEABLE"`:
      set **`QUEUE_MODE = true`** and store the full sorted entry list as `QUEUE_ENTRIES`.
-   - Otherwise (empty list, no MERGEABLE entries, or `gh api graphql` returned a
-     non-zero exit code): set **`QUEUE_MODE = false`** and proceed with the existing
-     analysis path.
+   - Otherwise (empty list or no MERGEABLE entries):
+     set **`QUEUE_MODE = false`** and proceed with the existing analysis path.
 
    Log which mode was selected and the entry count to the terminal so pipeline runs are
    observable.
@@ -153,43 +141,77 @@ is active on `{base_branch}` with `MERGEABLE` entries.
   building the overlap matrix. PRs that fail either gate are reported in the manifest but
   excluded from merge ordering.
 
+  Use a single GraphQL alias query to fetch CI status and reviews for all PRs at once
+  (1 API call regardless of PR count, instead of 2N sequential REST calls). Chunk into
+  batches of 20 PRs to stay within GraphQL complexity limits.
+
   ```bash
   ELIGIBLE_PRS=()
   CI_BLOCKED_PRS=()      # [{number, title, reason}]
   REVIEW_BLOCKED_PRS=()  # [{number, title, reason}]
 
-  for PR in "${ALL_PRS[@]}"; do
-    PR_NUM=$(echo "$PR" | jq -r .number)
-    PR_TITLE=$(echo "$PR" | jq -r .title)
+  # Build GraphQL alias query for all PRs in batches of 20
+  ALL_PR_NUMS=($(echo "$ALL_PRS" | jq -r '.[].number'))
+  BATCH_SIZE=20
+  for batch_start in $(seq 0 $BATCH_SIZE $((${#ALL_PR_NUMS[@]} - 1))); do
+    BATCH_NUMS=("${ALL_PR_NUMS[@]:$batch_start:$BATCH_SIZE}")
 
-    # --- CI Gate ---
-    CI_CHECKS=$(gh pr checks "$PR_NUM" --json name,status,conclusion 2>/dev/null \
-      || echo "[]")
-    FAILING=$(echo "$CI_CHECKS" | jq '[.[] | select(
-      .conclusion != null and
-      .conclusion != "success" and
-      .conclusion != "skipped" and
-      .conclusion != "neutral"
-    )] | length')
-    IN_PROGRESS=$(echo "$CI_CHECKS" | jq '[.[] | select(.conclusion == null)] | length')
+    QUERY="query { "
+    for i in $(seq 0 $((${#BATCH_NUMS[@]} - 1))); do
+      NUM="${BATCH_NUMS[$i]}"
+      QUERY="${QUERY} pr${i}: repository(owner: \"${OWNER}\", name: \"${REPO}\") {
+        pullRequest(number: ${NUM}) {
+          number
+          reviews(last: 20) { nodes { state } }
+          commits(last: 1) { nodes { commit { statusCheckRollup {
+            state
+            contexts(last: 100) { nodes { ... on CheckRun { name status conclusion } } }
+          } } } }
+        }
+      }"
+    done
+    QUERY="${QUERY} }"
+    BATCH_RESULT=$(gh api graphql -f query="${QUERY}")
 
-    if [ "$FAILING" -gt 0 ] || [ "$IN_PROGRESS" -gt 0 ]; then
-      REASON="CI failing: ${FAILING} failed, ${IN_PROGRESS} in-progress"
-      CI_BLOCKED_PRS+=("{\"number\":${PR_NUM},\"title\":\"${PR_TITLE}\",\"reason\":\"${REASON}\"}")
-      continue
-    fi
+    # Parse per-PR results from BATCH_RESULT
+    for i in $(seq 0 $((${#BATCH_NUMS[@]} - 1))); do
+      NUM="${BATCH_NUMS[$i]}"
+      PR_TITLE=$(echo "$ALL_PRS" | jq -r --argjson n "$NUM" '.[] | select(.number == $n) | .title')
+      PR_DATA=$(echo "$BATCH_RESULT" | jq --arg key "pr${i}" '.data[$key].pullRequest')
 
-    # --- Review Gate ---
-    REVIEWS=$(gh pr view "$PR_NUM" --json reviews -q '.reviews // []')
-    CHANGES_REQUESTED=$(echo "$REVIEWS" | jq '[.[] | select(.state == "CHANGES_REQUESTED")] | length')
+      # --- CI Gate ---
+      FAILING=$(echo "$PR_DATA" | jq '
+        [(.commits.nodes[0].commit.statusCheckRollup.contexts.nodes // [])[] |
+         select(.conclusion != null and
+                .conclusion != "success" and
+                .conclusion != "skipped" and
+                .conclusion != "neutral")] | length')
+      IN_PROGRESS=$(echo "$PR_DATA" | jq '
+        [(.commits.nodes[0].commit.statusCheckRollup.contexts.nodes // [])[] |
+         select(.conclusion == null)] | length')
 
-    if [ "$CHANGES_REQUESTED" -gt 0 ]; then
-      REASON="${CHANGES_REQUESTED} unresolved CHANGES_REQUESTED review(s)"
-      REVIEW_BLOCKED_PRS+=("{\"number\":${PR_NUM},\"title\":\"${PR_TITLE}\",\"reason\":\"${REASON}\"}")
-      continue
-    fi
+      if [ "${FAILING:-0}" -gt 0 ] || [ "${IN_PROGRESS:-0}" -gt 0 ]; then
+        REASON="CI failing: ${FAILING} failed, ${IN_PROGRESS} in-progress"
+        CI_BLOCKED_PRS+=("{\"number\":${NUM},\"title\":\"${PR_TITLE}\",\"reason\":\"${REASON}\"}")
+        continue
+      fi
 
-    ELIGIBLE_PRS+=("$PR")
+      # --- Review Gate ---
+      CHANGES_REQUESTED=$(echo "$PR_DATA" | jq '
+        [.reviews.nodes |
+         group_by(.author.login)[] |
+         last |
+         select(.state == "CHANGES_REQUESTED")] | length')
+
+      if [ "${CHANGES_REQUESTED:-0}" -gt 0 ]; then
+        REASON="${CHANGES_REQUESTED} unresolved CHANGES_REQUESTED review(s)"
+        REVIEW_BLOCKED_PRS+=("{\"number\":${NUM},\"title\":\"${PR_TITLE}\",\"reason\":\"${REASON}\"}")
+        continue
+      fi
+
+      mapfile -t _pr_entry < <(echo "$ALL_PRS" | jq -c --argjson n "$NUM" '.[] | select(.number == $n)')
+      ELIGIBLE_PRS+=("${_pr_entry[@]}")
+    done
   done
   ```
 
@@ -255,13 +277,13 @@ Compute a timestamp: `YYYY-MM-DD_HHMMSS`.
 
 Compute integration branch name: `pr-batch/pr-merge-{YYYYMMDD-HHMMSS}`.
 
-Ensure `.autoskillit/temp/merge-prs/` exists.
+Ensure `{{AUTOSKILLIT_TEMP}}/merge-prs/` exists.
 
-**5a. Machine-readable order file:** `.autoskillit/temp/merge-prs/pr_order_{ts}.json`
+**5a. Machine-readable order file:** `{{AUTOSKILLIT_TEMP}}/merge-prs/pr_order_{ts}.json`
 
 ```json
 {
-    "integration_branch": "pr-batch/pr-merge-YYYYMMDD-HHMMSS",
+    "batch_branch": "pr-batch/pr-merge-YYYYMMDD-HHMMSS",
     "base_branch": "{base_branch}",
     "generated_at": "{ISO timestamp}",
     "pr_count": 5,
@@ -300,7 +322,7 @@ Ensure `.autoskillit/temp/merge-prs/` exists.
 
 `pr_count` reflects the number of **eligible** PRs (i.e., `${#ELIGIBLE_PRS[@]}`).
 
-**5b. Human-readable analysis plan:** `.autoskillit/temp/merge-prs/pr_analysis_plan_{ts}.md`
+**5b. Human-readable analysis plan:** `{{AUTOSKILLIT_TEMP}}/merge-prs/pr_analysis_plan_{ts}.md`
 
 This file is named `*_plan_*.md` so `audit-impl` can discover it as the baseline specification.
 
@@ -364,7 +386,7 @@ This file is named `*_plan_*.md` so `audit-impl` can discover it as the baseline
 Verify:
 - `pr_order_{ts}.json` is valid JSON and parseable
 - Every listed PR number appears exactly once
-- `integration_branch` field is set
+- `batch_branch` field is set
 
 Report to terminal:
 - Order file path
@@ -376,7 +398,7 @@ Report to terminal:
 ## Output Location
 
 ```
-.autoskillit/temp/merge-prs/
+{{AUTOSKILLIT_TEMP}}/merge-prs/
 ├── pr_order_{ts}.json              # Machine-readable manifest (captured by recipe)
 └── pr_analysis_plan_{ts}.md        # Human-readable analysis (discovered by audit-impl)
 ```
@@ -394,7 +416,7 @@ structured output tokens as the very last lines of your text output:
 ```
 pr_order_file = {absolute_path_to_pr_order_json}
 analysis_file = {absolute_path_to_pr_analysis_plan_md}
-integration_branch = {integration_branch_name}
+batch_branch = {batch_branch_name}
 pr_count = {eligible_pr_count}
 simple_count = {simple_pr_count}
 needs_check_count = {needs_check_pr_count}
@@ -407,4 +429,4 @@ queue_mode = {queue_mode}   # true when merge queue has ≥1 MERGEABLE entry; fa
 
 - **`/autoskillit:merge-pr`** — Merges individual PRs from this skill's ordered list
 - **`/autoskillit:make-plan`** — Called for complex PRs that need conflict resolution plans
-- **`/autoskillit:audit-impl`** — Receives `.autoskillit/temp/merge-prs/` as plans_input
+- **`/autoskillit:audit-impl`** — Receives `{{AUTOSKILLIT_TEMP}}/merge-prs/` as plans_input

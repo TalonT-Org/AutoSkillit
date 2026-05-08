@@ -1,5 +1,6 @@
 ---
 name: setup-project
+activate_deps: [write-recipe]
 description: Explore a target project and generate tailored recipes and config through an interactive workflow. Use when user wants to onboard a new project to AutoSkillit, says "setup project", or wants a starting point config.
 hooks:
   PreToolUse:
@@ -33,12 +34,13 @@ Explore a target project and generate tailored recipes and AutoSkillit config th
 **NEVER:**
 - Modify any files in the target project without user confirmation at the summary gate
 - Run commands that change the target project
-- Create files outside `.autoskillit/temp/setup-project/` directory (until the summary gate)
+- Create files outside `{{AUTOSKILLIT_TEMP}}/setup-project/` directory (until the summary gate)
 - Assume test framework — detect it from evidence
 - Use Makefile or `make` in generated examples — use Taskfile/`task` if a task runner is needed
 - Suggest `reset_guard_marker` config — that's a workspace concern, not project setup
 - Include install instructions or "Getting Started" sections — user is already running the skill
 - Hardcode `base_branch = main` — detect the current branch
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Read the target project using Glob, Read, and Grep — no shell commands against target
@@ -137,12 +139,12 @@ Consolidate subagent findings into a structured profile:
 - Current git branch (for `base_branch` default)
 - Discovered workflow patterns from conversation history (if opted in) — recurring tool sequences and skill chains, ranked by frequency, with candidate recipe drafts
 
-### Step 3: Write Analysis to .autoskillit/temp/ (relative to the current working directory)
+### Step 3: Write Analysis to {{AUTOSKILLIT_TEMP}}/ (relative to the current working directory)
 
 Before presenting anything interactively, write the full analysis (project profile, workflow patterns, candidate workflows, shell command patterns) to:
 
 ```
-.autoskillit/temp/setup-project/analysis_{project_name}_{YYYY-MM-DD_HHMMSS}.md
+{{AUTOSKILLIT_TEMP}}/setup-project/analysis_{project_name}_{YYYY-MM-DD_HHMMSS}.md
 ```
 
 Tell the user: "Full analysis saved to {path} for your review."
@@ -151,15 +153,9 @@ Tell the user: "Full analysis saved to {path} for your review."
 
 Interactive flow. For each candidate workflow discovered:
 
-**CRITICAL:** Do NOT output any prose status text between workflow iterations.
-After completing one workflow's presentation and user response, immediately
-begin presenting the next workflow.
-
 1. **Always offer the standard implementation pipeline first** (plan → dry-walkthrough → implement → test → merge), even if not discovered in history. This is the core AutoSkillit workflow.
 
 2. For each candidate workflow (including the standard one):
-   Do NOT output any prose status text between workflows — immediately begin the
-   next workflow's presentation after the user responds.
    - Present the workflow chain and explain what it automates
    - Ask the user: "Would you like me to generate a recipe for this workflow?"
    - Before generating, resolve skill references in the workflow:
@@ -173,6 +169,7 @@ begin presenting the next workflow.
        List each conflicting skill name on its own line in the prompt.
      - Record the user's preferences and pass them as context to write-recipe
    - If yes: LOAD `/autoskillit:write-recipe` using the Skill tool to generate the script. The agent already has full context from the exploration phases (workflow name, detected variables like project_dir/work_dir/base_branch, tool call sequence, routing logic) — no explicit parameter passing is needed. write-recipe uses that context directly to produce a clean script.
+   - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, proceed without recipe generation and prompt the user to create the recipe manually.
    - Explain what a recipe is (discovered via `list_recipes` MCP tool, loaded via `load_recipe`, the agent interprets the YAML and executes the steps), show the generated script content
    - Track the user's approval — do NOT write to disk yet
    - Move to the next candidate workflow
@@ -188,9 +185,9 @@ Interactive config suggestion flow:
 3. Track approvals — do NOT write to disk yet
 4. Do NOT suggest `reset_guard_marker` — that's a workspace concern, not project setup
 5. Ask the user for their preferred default base branch:
-   > "What is your default base branch? (e.g., 'integration' for the 3-tier model, 'main' for the classic model)"
-   > Default: `integration`
-   If the user selects a value different from the package default (`integration`), add it to the config diff as:
+   > "What is your default base branch? (e.g., 'develop' for the 3-tier model, 'main' for the classic model)"
+   > Default: `develop`
+   If the user selects a value different from the package default (`develop`), add it to the config diff as:
    ```yaml
    branching:
      default_base_branch: {user_choice}
@@ -207,7 +204,12 @@ If no config exists, present the suggested config in full. If config exists, onl
 Suggested config template:
 ```yaml
 test_check:
+  # Single command (most projects):
   command: {detected test command as list}
+  # Multi-surface projects (e.g. Rust + Python e2e):
+  # commands:
+  #   - [cargo, nextest, run]
+  #   - [task, e2e-check]
   # timeout: 600
 
 # classify_fix:
@@ -253,7 +255,7 @@ Do NOT include:
 ## Output
 
 Artifacts created:
-- `.autoskillit/temp/setup-project/analysis_{project_name}_{YYYY-MM-DD_HHMMSS}.md` — full analysis (always)
+- `{{AUTOSKILLIT_TEMP}}/setup-project/analysis_{project_name}_{YYYY-MM-DD_HHMMSS}.md` — full analysis (always)
 - `.autoskillit/recipes/{name}.yaml` — approved recipes
 - `.autoskillit/config.yaml` — updated config (if changes approved)
 

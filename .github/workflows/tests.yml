@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, stable]
   pull_request:
-    branches: [main, integration, stable]
+    branches: [main, develop, stable]
   merge_group:
 
 permissions:
@@ -32,7 +32,8 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
-          uv-version: "0.9.21"
+          version: "0.9.21"
+          enable-cache: false
 
       - name: Verify lockfile is up to date
         run: uv lock --check
@@ -53,11 +54,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
-          uv-version: "0.9.21"
+          version: "0.9.21"
 
       - name: Install go-task
         uses: arduino/setup-task@v2
@@ -72,6 +75,12 @@ jobs:
           echo "task: $(task --version)"
           uv run python --version
 
+      - name: Configure git auth for private deps
+        run: git config --global url."https://${{ secrets.GH_USER }}:${{ secrets.GH_PAT }}@github.com/TalonT-Org/".insteadOf "https://github.com/TalonT-Org/"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Install dependencies
         run: uv sync --locked --extra dev
 
@@ -79,4 +88,19 @@ jobs:
         run: uv run autoskillit recipes render
 
       - name: Run tests
-        run: task test-all
+        env:
+          AUTOSKILLIT_FILTER_STATS_FILE: ${{ github.workspace }}/.autoskillit/temp/filter-stats.json
+        run: |
+          mkdir -p .autoskillit/temp
+          if [[ "${{ github.event_name }}" == "pull_request" && "${{ github.base_ref }}" == "develop" ]]; then
+            export AUTOSKILLIT_TEST_FILTER=conservative
+          fi
+          task test-all
+
+      - name: Upload filter stats
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: filter-stats-${{ matrix.os }}
+          path: .autoskillit/temp/filter-stats.json
+          if-no-files-found: ignore

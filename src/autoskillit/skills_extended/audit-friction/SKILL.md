@@ -29,14 +29,15 @@ The user may provide a "since" date (e.g., `2/7`, `2026-02-07`, `last month`). I
 
 **NEVER:**
 - Modify any source code files
-- Create files outside `.autoskillit/temp/audit-friction/` directory
+- Create files outside `{{AUTOSKILLIT_TEMP}}/audit-friction/` directory
 - Have subagents write files — they return all findings in response text only
 - Analyze subagent log subdirectories (`*/subagents/`) — top-level session files only
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use subagents heavily for parallel log analysis
-- All output goes under `.autoskillit/temp/audit-friction/` (create if needed)
-- Final report: `.autoskillit/temp/audit-friction/friction_audit_{YYYY-MM-DD_HHMMSS}.md`
+- All output goes under `{{AUTOSKILLIT_TEMP}}/audit-friction/` (create if needed)
+- Final report: `{{AUTOSKILLIT_TEMP}}/audit-friction/friction_audit_{YYYY-MM-DD_HHMMSS}.md`
 - Report the file and line counts to the terminal before choosing analysis mode
 
 ## Friction Categories
@@ -61,13 +62,13 @@ Logs are too large to read in full. All analysis uses targeted grep commands to 
 grep -n '"is_error".*true' FILE | head -100
 
 # Error keywords in content
-grep -in '"not found\|permission denied\|no such file\|command not found\|ENOENT\|"failed\|"cannot\|"error"\|exit code [1-9]\|Traceback\|AssertionError' FILE | head -200
+rg -i '"not found|permission denied|no such file|command not found|ENOENT|"failed|"cannot|"error"|exit code [1-9]|Traceback|AssertionError' FILE | head -200
 
 # Human correction language (look inside "type":"human" lines)
-grep -n '"type":"human"' FILE | grep -i 'wrong\|"no,\|try again\|you already\|that.s not\|incorrect\|revert\|undo\|stop' | head -50
+rg -n '"type":"human"' FILE | rg -i 'wrong|"no,|try again|you already|that.s not|incorrect|revert|undo|stop' | head -50
 
 # Test / build failures
-grep -in 'FAILED\|test.*failed\|build.*failed\|compile.*error\|syntax error' FILE | head -100
+rg -i 'FAILED|test.*failed|build.*failed|compile.*error|syntax error' FILE | head -100
 
 # Consecutive tool call loops — extract tool names in document order, show runs of 2+ back-to-back
 grep -o '"name":"[^"]*"' FILE | awk -F'"' '{print $4}' | uniq -c | awk '$1>=2' | head -30
@@ -76,7 +77,7 @@ grep -o '"name":"[^"]*"' FILE | awk -F'"' '{print $4}' | uniq -c | awk '$1>=2' |
 grep -n '"name":"TOOL_NAME"' FILE | head -30
 
 # Permission / access blockers
-grep -in 'permission denied\|access denied\|not allowed\|forbidden' FILE | head -50
+rg -i 'permission denied|access denied|not allowed|forbidden' FILE | head -50
 ```
 
 For each match batch, pull context (`-A 10 -B 10`) to confirm it is a real friction event rather than incidental text, then record the line range and category.
@@ -173,9 +174,9 @@ After all subagents return:
 
 ### Step 6: Write Report
 
-Ensure `.autoskillit/temp/audit-friction/` exists (`mkdir -p`).
+Ensure `{{AUTOSKILLIT_TEMP}}/audit-friction/` exists (`mkdir -p`).
 
-Save to: `.autoskillit/temp/audit-friction/friction_audit_{YYYY-MM-DD_HHMMSS}.md`
+Save to: `{{AUTOSKILLIT_TEMP}}/audit-friction/friction_audit_{YYYY-MM-DD_HHMMSS}.md`
 
 Structure:
 

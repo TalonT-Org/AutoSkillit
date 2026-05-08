@@ -1,6 +1,6 @@
 """Git merge workflow for the merge_worktree MCP tool.
 
-L3 service module. Executes the full merge pipeline:
+IL-3 service module. Executes the full merge pipeline:
 path validation → worktree verification → branch detection → test gate →
 fetch → rebase → main-repo merge → worktree cleanup.
 
@@ -10,6 +10,7 @@ Public API:
 
 from __future__ import annotations
 
+import dataclasses
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -19,11 +20,13 @@ from autoskillit.core import (
     MergeFailedStep,
     MergeState,
     SubprocessRunner,
-    TerminationReason,
     get_logger,
     is_protected_branch,
     truncate_text,
 )
+from autoskillit.server._editable_guard import scan_editable_installs_for_worktree
+from autoskillit.server._subprocess import _process_runner_result
+from autoskillit.workspace import remove_git_worktree, remove_worktree_sidecar
 
 if TYPE_CHECKING:
     from autoskillit.config import AutomationConfig
@@ -68,15 +71,61 @@ async def _run_git(
     Returns (returncode, stdout, stderr). Handles TIMED_OUT termination.
     """
     result = await runner(cmd, cwd=Path(cwd), timeout=timeout)
-    if result.termination == TerminationReason.TIMED_OUT:
-        return -1, result.stdout, f"Process timed out after {timeout}s"
-    return result.returncode, result.stdout, result.stderr
+    return _process_runner_result(result, timeout)
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class GitMergeTarget:
+    """Verified merge target — proof that main_repo's branch was checked."""
+
+    path: str
+    branch: str
+
+
+async def _verify_merge_target(
+    main_repo: str,
+    expected_branch: str,
+    runner: SubprocessRunner,
+) -> GitMergeTarget | dict[str, Any]:
+    """Verify main_repo has expected_branch checked out.
+
+    Returns GitMergeTarget on success, or an error dict on mismatch
+    (compatible with perform_merge return format).
+    """
+    rc, current_out, _ = await _run_git(["git", "branch", "--show-current"], main_repo, 10, runner)
+    if rc != 0:
+        return {
+            "error": (
+                f"Failed to determine current branch of '{main_repo}' "
+                f"(git branch --show-current exited with rc={rc}). "
+                f"Ensure the work directory has '{expected_branch}' "
+                f"checked out before merging."
+            ),
+            "failed_step": MergeFailedStep.MERGE,
+            "state": MergeState.WORKTREE_INTACT,
+            "worktree_path": "",  # filled in by caller
+        }
+    current_branch = current_out.strip()
+    if current_branch != expected_branch:
+        return {
+            "error": (
+                f"Target repository '{main_repo}' is on branch "
+                f"'{current_branch}', expected '{expected_branch}'. "
+                f"Ensure the work directory has '{expected_branch}' "
+                f"checked out before merging."
+            ),
+            "failed_step": MergeFailedStep.MERGE,
+            "state": MergeState.WORKTREE_INTACT,
+            "worktree_path": "",  # filled in by caller
+        }
+    return GitMergeTarget(path=main_repo, branch=current_branch)
 
 
 async def perform_merge(
     worktree_path: str,
     base_branch: str,
     *,
+    remote: str = "origin",
     config: AutomationConfig,
     runner: SubprocessRunner,
     tester: TestRunner | None = None,
@@ -229,23 +278,22 @@ async def perform_merge(
                 "state": MergeState.WORKTREE_INTACT,
                 "worktree_path": worktree_path,
             }
-        passed, test_stdout = await tester.run(Path(worktree_path))
-        if not passed:
+        test_result = await tester.run(Path(worktree_path))
+        if not test_result.passed:
             return {
                 "error": "Tests failed in worktree — merge blocked",
                 "failed_step": MergeFailedStep.TEST_GATE,
                 "state": MergeState.WORKTREE_INTACT,
                 "worktree_path": worktree_path,
-                "test_output": test_stdout,
+                "test_stdout": test_result.stdout,
+                "test_stderr": test_result.stderr,
             }
 
     # 5. Fetch
-    fetch_rc, _, fetch_stderr = await _run_git(
-        ["git", "fetch", "origin"], worktree_path, 60, runner
-    )
+    fetch_rc, _, fetch_stderr = await _run_git(["git", "fetch", remote], worktree_path, 60, runner)
     if fetch_rc != 0:
         return {
-            "error": "git fetch origin failed",
+            "error": f"git fetch {remote} failed",
             "failed_step": MergeFailedStep.FETCH,
             "state": MergeState.WORKTREE_INTACT,
             "stderr": truncate_text(fetch_stderr),
@@ -254,7 +302,7 @@ async def perform_merge(
 
     # 5.5. Verify base branch remote tracking ref exists
     ref_rc, _, _ = await _run_git(
-        ["git", "rev-parse", "--verify", f"refs/remotes/origin/{base_branch}"],
+        ["git", "rev-parse", "--verify", f"refs/remotes/{remote}/{base_branch}"],
         worktree_path,
         10,
         runner,
@@ -263,8 +311,8 @@ async def perform_merge(
         return {
             "error": (
                 f"Base branch '{base_branch}' has no remote tracking ref — "
-                f"push it to origin before running this pipeline: "
-                f"git push -u origin {base_branch}"
+                f"push it to {remote} before running this pipeline: "
+                f"git push -u {remote} {base_branch}"
             ),
             "failed_step": MergeFailedStep.PRE_REBASE_CHECK,
             "state": MergeState.WORKTREE_INTACT_BASE_NOT_PUBLISHED,
@@ -276,7 +324,7 @@ async def perform_merge(
     # Standard git rebase cannot replay merge commits and fails with a generic error.
     # Catch this early with a specific, actionable message.
     mc_rc, mc_out, _ = await _run_git(
-        ["git", "log", "--merges", "--oneline", f"origin/{base_branch}..HEAD"],
+        ["git", "log", "--merges", "--oneline", f"{remote}/{base_branch}..HEAD"],
         worktree_path,
         15,
         runner,
@@ -286,7 +334,7 @@ async def perform_merge(
         return {
             "error": (
                 f"Worktree branch contains {len(merge_list)} merge commit(s) not yet in "
-                f"origin/{base_branch}. Standard git rebase cannot replay merge commits. "
+                f"{remote}/{base_branch}. Standard git rebase cannot replay merge commits. "
                 "The conflict-resolution plan must use 'git cherry-pick' or "
                 "'git checkout <remote> -- <file>' to produce a linear commit history. "
                 "Route this failure to cleanup_failure — do NOT use run_cmd to bypass."
@@ -299,7 +347,7 @@ async def perform_merge(
 
     # 6. Rebase
     rc, _, rebase_stderr = await _run_git(
-        ["git", "rebase", "--autostash", f"origin/{base_branch}"], worktree_path, 120, runner
+        ["git", "rebase", "--autostash", f"{remote}/{base_branch}"], worktree_path, 120, runner
     )
     if rc != 0:
         abort_rc, _, abort_stderr = await _run_git(
@@ -325,7 +373,8 @@ async def perform_merge(
 
     # 6.5. Post-rebase test gate — re-tests the rebased commits before merging
     if tester is not None and config.safety.test_gate_on_merge:
-        passed, _ = await tester.run(Path(worktree_path))
+        test_result = await tester.run(Path(worktree_path))
+        passed = test_result.passed
         if not passed:
             return {
                 "error": (
@@ -335,6 +384,8 @@ async def perform_merge(
                 "failed_step": MergeFailedStep.POST_REBASE_TEST_GATE,
                 "state": MergeState.WORKTREE_INTACT,
                 "worktree_path": worktree_path,
+                "test_stdout": test_result.stdout,
+                "test_stderr": test_result.stderr,
             }
 
     # 7. Discover main repo path
@@ -354,9 +405,33 @@ async def perform_merge(
             "worktree_path": worktree_path,
         }
 
+    # 7.5 Verify main_repo is on base_branch
+    target_or_err = await _verify_merge_target(main_repo, base_branch, runner)
+    if isinstance(target_or_err, dict):
+        target_or_err["worktree_path"] = worktree_path
+        return target_or_err
+    target = target_or_err
+
+    # 7.6 Pre-merge dirty check — reject if main repo has uncommitted changes
+    rc, status_out, _ = await _run_git(["git", "status", "--porcelain"], target.path, 10, runner)
+    if rc == 0 and status_out.strip():
+        dirty_files = [line for line in status_out.splitlines() if line.strip()]
+        return {
+            "error": (
+                f"Main repository has {len(dirty_files)} dirty file(s): "
+                f"{', '.join(f.strip() for f in dirty_files[:10])}"
+                f"{' ...' if len(dirty_files) > 10 else ''}. "
+                f"Clean the working tree before merging."
+            ),
+            "failed_step": MergeFailedStep.DIRTY_MAIN_REPO,
+            "state": MergeState.WORKTREE_INTACT,
+            "worktree_path": worktree_path,
+            "dirty_files": dirty_files,
+        }
+
     # 8. Merge
     rc, _, merge_stderr = await _run_git(
-        ["git", "merge", "--no-edit", worktree_branch], main_repo, 60, runner
+        ["git", "merge", "--no-edit", worktree_branch], target.path, 60, runner
     )
     if rc != 0:
         abort_rc, _, abort_stderr = await _run_git(
@@ -380,16 +455,49 @@ async def perform_merge(
             **({"abort_failed": True, "abort_stderr": abort_stderr} if abort_failed else {}),
         }
 
+    # 8.5. Pre-deletion editable install guard
+    poisoned = scan_editable_installs_for_worktree(Path(worktree_path))
+    if poisoned:
+        descriptions = "; ".join(poisoned)
+        logger.error(
+            "merge_worktree_editable_install_guard",
+            worktree_path=worktree_path,
+            poisoned_installs=poisoned,
+        )
+        return {
+            "error": (
+                f"Editable install(s) targeting this worktree detected in system Python: "
+                f"{descriptions}. "
+                f"Remove the editable install first: "
+                f"`uv pip uninstall autoskillit --python <system-python>` "
+                f"then re-run merge_worktree."
+            ),
+            "failed_step": MergeFailedStep.EDITABLE_INSTALL_GUARD,
+            "state": MergeState.MERGE_SUCCEEDED_CLEANUP_BLOCKED,
+            "worktree_path": worktree_path,
+            "merge_succeeded": True,
+            "poisoned_installs": poisoned,
+            "worktree_removed": False,
+            "branch_deleted": False,
+            "cleanup_succeeded": False,
+        }
+
     # 9. Cleanup
-    wt_rc, _, wt_stderr = await _run_git(
-        ["git", "worktree", "remove", "--force", worktree_path], main_repo, 30, runner
-    )
-    if wt_rc != 0:
+    wt_result = await remove_git_worktree(Path(worktree_path), Path(main_repo), runner)
+    wt_rc = 0 if wt_result.success else 1
+    if not wt_result.success:
         logger.warning(
             "merge_worktree_cleanup_failed",
             operation="worktree_remove",
             path=worktree_path,
-            stderr=wt_stderr.strip(),
+            failures=wt_result.failed,
+        )
+
+    sidecar_result = remove_worktree_sidecar(Path(main_repo), worktree_branch)
+    if not sidecar_result.success:
+        logger.warning(
+            "merge_worktree_sidecar_cleanup_failed",
+            failures=sidecar_result.failed,
         )
 
     br_rc, _, br_stderr = await _run_git(
@@ -406,7 +514,7 @@ async def perform_merge(
     return {
         "merge_succeeded": True,
         "merged_branch": worktree_branch,
-        "into_branch": base_branch,
+        "into_branch": target.branch,
         "worktree_removed": wt_rc == 0,
         "branch_deleted": br_rc == 0,
         "cleanup_succeeded": wt_rc == 0 and br_rc == 0,

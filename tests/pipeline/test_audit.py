@@ -5,7 +5,32 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from autoskillit.pipeline.audit import DefaultAuditLog, FailureRecord
+import pytest
+
+from autoskillit.pipeline.audit import (
+    DefaultAuditLog,
+    FailureRecord,
+    _validate_failure_record_dict,
+)
+
+pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]
+
+
+def _valid_failure_record_dict(**overrides: object) -> dict:
+    """Module-level factory for valid failure record dicts.
+
+    Used by TestValidateFailureRecordDict and TestLoadFromLogDirTypeValidation.
+    """
+    base: dict = {
+        "timestamp": "2026-03-28T00:00:00Z",
+        "skill_command": "/autoskillit:implement-worktree",
+        "exit_code": 1,
+        "subtype": "error",
+        "needs_retry": False,
+        "retry_reason": "none",
+        "stderr": "oops",
+    }
+    return {**base, **overrides}
 
 
 def _make_record(**overrides: object) -> FailureRecord:
@@ -27,11 +52,28 @@ class TestFailureRecord:
         d = record.to_dict()
         assert json.loads(json.dumps(d)) == d
 
-    def test_to_dict_contains_all_fields(self):
-        record = _make_record(skill_command="/test:cmd", exit_code=42)
+    def test_to_dict_contains_all_fields(self) -> None:
+        record = _make_record(
+            timestamp="2026-01-01T00:00:00",
+            skill_command="/foo",
+            exit_code=1,
+            subtype="timeout",
+            needs_retry=False,
+            retry_reason="",
+            stderr="err",
+        )
         d = record.to_dict()
-        assert d["skill_command"] == "/test:cmd"
-        assert d["exit_code"] == 42
+        assert set(d.keys()) == {
+            "timestamp",
+            "skill_command",
+            "exit_code",
+            "subtype",
+            "needs_retry",
+            "retry_reason",
+            "stderr",
+        }
+        assert d["skill_command"] == "/foo"
+        assert d["exit_code"] == 1
 
 
 class TestDefaultAuditLog:
@@ -241,11 +283,6 @@ class TestDefaultAuditLogLoadFromLogDir:
 class TestIterSessionLogEntries:
     """Tests for the _iter_session_log_entries shared generator (P6-F1)."""
 
-    def test_iter_session_log_entries_importable(self):
-        from autoskillit.pipeline.audit import _iter_session_log_entries
-
-        assert callable(_iter_session_log_entries)
-
     def test_iter_session_log_entries_yields_matching_files(self, tmp_path):
         import json
 
@@ -296,3 +333,500 @@ class TestIterSessionLogEntries:
 
         paths = list(_iter_session_log_entries(tmp_path, "", "audit_log.json"))
         assert paths == []
+
+
+def test_iter_session_log_entries_kitchen_id_filter(tmp_path):
+    """kitchen_id_filter yields only entries with matching kitchen_id."""
+    import json
+
+    from autoskillit.pipeline.audit import _iter_session_log_entries
+
+    entries = [
+        {
+            "session_id": "a",
+            "dir_name": "a",
+            "timestamp": "2026-03-27T08:00:00",
+            "cwd": "/work",
+            "kitchen_id": "run-1",
+            "step_name": "plan",
+        },
+        {
+            "session_id": "b",
+            "dir_name": "b",
+            "timestamp": "2026-03-27T08:01:00",
+            "cwd": "/work",
+            "kitchen_id": "run-1",
+            "step_name": "implement",
+        },
+        {
+            "session_id": "c",
+            "dir_name": "c",
+            "timestamp": "2026-03-27T08:02:00",
+            "cwd": "/work",
+            "kitchen_id": "run-2",
+            "step_name": "plan",
+        },
+    ]
+    (tmp_path / "sessions.jsonl").write_text("\n".join(json.dumps(e) for e in entries))
+    for e in entries:  # dummy token files so entries pass file-existence check
+        d = tmp_path / "sessions" / e["dir_name"]
+        d.mkdir(parents=True)
+        (d / "token_usage.json").write_text(
+            json.dumps(
+                {
+                    "step_name": e["step_name"],
+                    "input_tokens": 1,
+                    "output_tokens": 1,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                    "timing_seconds": 1.0,
+                }
+            )
+        )
+
+    results = list(
+        _iter_session_log_entries(
+            tmp_path, since="", filename="token_usage.json", kitchen_id_filter="run-1"
+        )
+    )
+    assert len(results) == 2  # 2 sessions with kitchen_id="run-1"
+
+    # Verify the filter is directional — run-2 has only 1 session
+    results_run2 = list(
+        _iter_session_log_entries(
+            tmp_path, since="", filename="token_usage.json", kitchen_id_filter="run-2"
+        )
+    )
+    assert len(results_run2) == 1
+
+
+def test_iter_session_log_entries_kitchen_id_backward_compat(tmp_path):
+    """kitchen_id_filter falls back to pipeline_id key in old sessions.jsonl entries."""
+    import json
+
+    from autoskillit.pipeline.audit import _iter_session_log_entries
+
+    # Old-format entries that use pipeline_id key (not kitchen_id)
+    entries = [
+        {
+            "session_id": "old-a",
+            "dir_name": "old-a",
+            "timestamp": "2026-03-27T08:00:00",
+            "cwd": "/work",
+            "pipeline_id": "legacy-run",  # old key
+            "step_name": "plan",
+        },
+        {
+            "session_id": "old-b",
+            "dir_name": "old-b",
+            "timestamp": "2026-03-27T08:01:00",
+            "cwd": "/work",
+            "pipeline_id": "other-run",  # different old key
+            "step_name": "implement",
+        },
+    ]
+    (tmp_path / "sessions.jsonl").write_text("\n".join(json.dumps(e) for e in entries))
+    for e in entries:
+        d = tmp_path / "sessions" / e["dir_name"]
+        d.mkdir(parents=True)
+        (d / "token_usage.json").write_text(
+            json.dumps(
+                {
+                    "step_name": e["step_name"],
+                    "input_tokens": 1,
+                    "output_tokens": 1,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                    "timing_seconds": 0.5,
+                }
+            )
+        )
+
+    # kitchen_id_filter should find old entries via pipeline_id fallback
+    results = list(
+        _iter_session_log_entries(
+            tmp_path, since="", filename="token_usage.json", kitchen_id_filter="legacy-run"
+        )
+    )
+    assert len(results) == 1
+
+
+class TestValidateFailureRecordDict:
+    def test_valid_dict_returns_true(self):
+        assert _validate_failure_record_dict(_valid_failure_record_dict()) is True
+
+    def test_missing_key_returns_false(self):
+        d = _valid_failure_record_dict()
+        del d["stderr"]
+        assert _validate_failure_record_dict(d) is False
+
+    def test_wrong_type_exit_code_returns_false(self):
+        assert _validate_failure_record_dict(_valid_failure_record_dict(exit_code="bad")) is False
+
+    def test_wrong_type_needs_retry_returns_false(self):
+        # "true" is a str, not bool
+        assert (
+            _validate_failure_record_dict(_valid_failure_record_dict(needs_retry="true")) is False
+        )
+
+    def test_wrong_type_timestamp_returns_false(self):
+        assert _validate_failure_record_dict(_valid_failure_record_dict(timestamp=12345)) is False
+
+    def test_int_for_bool_field_returns_false(self):
+        # 0 and 1 are int, not bool — must be rejected for needs_retry: bool
+        assert _validate_failure_record_dict(_valid_failure_record_dict(needs_retry=1)) is False
+
+    def test_extra_keys_are_ignored(self):
+        d = _valid_failure_record_dict()
+        d["extra_unexpected_key"] = "ignored"
+        assert _validate_failure_record_dict(d) is True
+
+
+class TestLoadFromLogDirTypeValidation:
+    def test_wrong_type_exit_code_is_skipped(self, tmp_path):
+        """record_dict with exit_code as str is skipped, not silently accepted."""
+        _write_audit_session(
+            tmp_path, "s001", [_valid_failure_record_dict(exit_code="not-an-int")]
+        )
+        log = DefaultAuditLog()
+        n = log.load_from_log_dir(tmp_path)
+        assert n == 0
+        assert log.get_report() == []
+
+    def test_wrong_type_needs_retry_is_skipped(self, tmp_path):
+        """record_dict with needs_retry as str is skipped."""
+        _write_audit_session(tmp_path, "s001", [_valid_failure_record_dict(needs_retry="true")])
+        log = DefaultAuditLog()
+        n = log.load_from_log_dir(tmp_path)
+        assert n == 0
+
+    def test_missing_field_is_skipped(self, tmp_path):
+        """record_dict missing a required field is skipped."""
+        bad = _valid_failure_record_dict()
+        del bad["retry_reason"]
+        _write_audit_session(tmp_path, "s001", [bad])
+        log = DefaultAuditLog()
+        n = log.load_from_log_dir(tmp_path)
+        assert n == 0
+
+    def test_valid_record_alongside_invalid_is_preserved(self, tmp_path):
+        """A valid record in the same session file is loaded despite invalid siblings."""
+        records = [
+            _valid_failure_record_dict(exit_code="bad"),  # skipped
+            _valid_failure_record_dict(skill_command="/ok", exit_code=2),  # kept
+        ]
+        _write_audit_session(tmp_path, "s001", records)
+        log = DefaultAuditLog()
+        n = log.load_from_log_dir(tmp_path)
+        assert n == 1
+        assert log.get_report()[0].skill_command == "/ok"
+
+
+# --- Group N: campaign_id_filter tests ---
+
+
+def _write_audit_session_cid(
+    log_root: Path,
+    dir_name: str,
+    records: list,
+    campaign_id: str = "",
+    kitchen_id: str = "",
+    timestamp: str = "2026-04-20T00:00:00+00:00",
+) -> None:
+    """Write audit session with campaign_id in the index entry."""
+    session_dir = log_root / "sessions" / dir_name
+    session_dir.mkdir(parents=True, exist_ok=True)
+    (session_dir / "audit_log.json").write_text(json.dumps(records))
+    index_entry = {
+        "dir_name": dir_name,
+        "timestamp": timestamp,
+        "campaign_id": campaign_id,
+        "kitchen_id": kitchen_id,
+    }
+    with (log_root / "sessions.jsonl").open("a") as f:
+        f.write(json.dumps(index_entry) + "\n")
+
+
+def test_iter_entries_campaign_id_filter_matches(tmp_path):
+    """Only entries with matching campaign_id are yielded."""
+    from autoskillit.pipeline.audit import _iter_session_log_entries
+
+    _write_audit_session_cid(tmp_path, "c1-a", [_valid_failure_record_dict()], campaign_id="c1")
+    _write_audit_session_cid(tmp_path, "c1-b", [_valid_failure_record_dict()], campaign_id="c1")
+    _write_audit_session_cid(tmp_path, "c2-a", [_valid_failure_record_dict()], campaign_id="c2")
+
+    results = list(
+        _iter_session_log_entries(
+            tmp_path, since="", filename="audit_log.json", campaign_id_filter="c1"
+        )
+    )
+    assert len(results) == 2
+    dir_names = {p.parent.name for p in results}
+    assert dir_names == {"c1-a", "c1-b"}
+
+
+def test_iter_entries_campaign_id_filter_empty_passes_all(tmp_path):
+    """Empty campaign_id_filter passes all entries."""
+    from autoskillit.pipeline.audit import _iter_session_log_entries
+
+    _write_audit_session_cid(tmp_path, "c1-a", [_valid_failure_record_dict()], campaign_id="c1")
+    _write_audit_session_cid(tmp_path, "c2-a", [_valid_failure_record_dict()], campaign_id="c2")
+    _write_audit_session_cid(tmp_path, "no-cid", [_valid_failure_record_dict()], campaign_id="")
+
+    results = list(
+        _iter_session_log_entries(
+            tmp_path, since="", filename="audit_log.json", campaign_id_filter=""
+        )
+    )
+    assert len(results) == 3
+
+
+def test_iter_entries_campaign_id_filter_combined_with_kitchen_id(tmp_path):
+    """Both campaign_id_filter and kitchen_id_filter applied as AND logic."""
+    from autoskillit.pipeline.audit import _iter_session_log_entries
+
+    _write_audit_session_cid(
+        tmp_path, "match", [_valid_failure_record_dict()], campaign_id="c1", kitchen_id="k1"
+    )
+    _write_audit_session_cid(
+        tmp_path, "wrong-cid", [_valid_failure_record_dict()], campaign_id="c2", kitchen_id="k1"
+    )
+    _write_audit_session_cid(
+        tmp_path, "wrong-kid", [_valid_failure_record_dict()], campaign_id="c1", kitchen_id="k2"
+    )
+
+    results = list(
+        _iter_session_log_entries(
+            tmp_path,
+            since="",
+            filename="audit_log.json",
+            kitchen_id_filter="k1",
+            campaign_id_filter="c1",
+        )
+    )
+    assert len(results) == 1
+    assert results[0].parent.name == "match"
+
+
+def test_audit_load_campaign_id_filter(tmp_path):
+    """DefaultAuditLog.load_from_log_dir respects campaign_id_filter."""
+    _write_audit_session_cid(
+        tmp_path, "c1-a", [_valid_failure_record_dict(skill_command="/camp1")], campaign_id="c1"
+    )
+    _write_audit_session_cid(
+        tmp_path, "c2-a", [_valid_failure_record_dict(skill_command="/camp2")], campaign_id="c2"
+    )
+
+    log = DefaultAuditLog()
+    n = log.load_from_log_dir(tmp_path, campaign_id_filter="c1")
+    assert n == 1
+    assert log.get_report()[0].skill_command == "/camp1"
+
+
+def _write_audit_session_order_id(
+    log_root: Path,
+    dir_name: str,
+    records: list,
+    order_id: str = "",
+    timestamp: str = "2026-05-01T00:00:00+00:00",
+) -> None:
+    """Write audit session with order_id in the index entry."""
+    from pathlib import Path as _Path
+
+    session_dir = _Path(log_root) / "sessions" / dir_name
+    session_dir.mkdir(parents=True, exist_ok=True)
+    (session_dir / "audit_log.json").write_text(json.dumps(records))
+    index_entry = {
+        "dir_name": dir_name,
+        "timestamp": timestamp,
+        "session_id": dir_name,
+        "order_id": order_id,
+    }
+    with (_Path(log_root) / "sessions.jsonl").open("a") as f:
+        f.write(json.dumps(index_entry) + "\n")
+
+
+def test_iter_session_log_entries_order_id_filter(tmp_path):
+    """order_id_filter selects only sessions with matching order_id."""
+    from autoskillit.pipeline.audit import _iter_session_log_entries
+
+    _write_audit_session_order_id(
+        tmp_path, "oid-a1", [_valid_failure_record_dict()], order_id="abc"
+    )
+    _write_audit_session_order_id(
+        tmp_path, "oid-a2", [_valid_failure_record_dict()], order_id="abc"
+    )
+    _write_audit_session_order_id(
+        tmp_path, "oid-xyz", [_valid_failure_record_dict()], order_id="xyz"
+    )
+
+    results = list(
+        _iter_session_log_entries(
+            tmp_path, since="", filename="audit_log.json", order_id_filter="abc"
+        )
+    )
+    assert len(results) == 2
+    dir_names = {p.parent.name for p in results}
+    assert dir_names == {"oid-a1", "oid-a2"}
+
+
+def _write_audit_session_dispatch_id(
+    log_root: Path,
+    dir_name: str,
+    records: list,
+    dispatch_id: str = "",
+    timestamp: str = "2026-05-01T00:00:00+00:00",
+) -> None:
+    """Write audit session with dispatch_id in the index entry."""
+    from pathlib import Path as _Path
+
+    session_dir = _Path(log_root) / "sessions" / dir_name
+    session_dir.mkdir(parents=True, exist_ok=True)
+    (session_dir / "audit_log.json").write_text(json.dumps(records))
+    index_entry = {
+        "dir_name": dir_name,
+        "timestamp": timestamp,
+        "session_id": dir_name,
+        "dispatch_id": dispatch_id,
+    }
+    with (_Path(log_root) / "sessions.jsonl").open("a") as f:
+        f.write(json.dumps(index_entry) + "\n")
+
+
+def test_iter_session_log_entries_dispatch_id_filter(tmp_path):
+    """dispatch_id_filter selects only sessions with matching dispatch_id."""
+    from autoskillit.pipeline.audit import _iter_session_log_entries
+
+    _write_audit_session_dispatch_id(
+        tmp_path, "did-a1", [_valid_failure_record_dict()], dispatch_id="d-abc"
+    )
+    _write_audit_session_dispatch_id(
+        tmp_path, "did-a2", [_valid_failure_record_dict()], dispatch_id="d-abc"
+    )
+    _write_audit_session_dispatch_id(
+        tmp_path, "did-xyz", [_valid_failure_record_dict()], dispatch_id="d-xyz"
+    )
+
+    results = list(
+        _iter_session_log_entries(
+            tmp_path, since="", filename="audit_log.json", dispatch_id_filter="d-abc"
+        )
+    )
+    assert len(results) == 2
+    dir_names = {p.parent.name for p in results}
+    assert dir_names == {"did-a1", "did-a2"}
+
+
+def test_iter_session_log_entries_dispatch_id_filter_empty_passes_all(tmp_path):
+    """Empty dispatch_id_filter passes all sessions through."""
+    from autoskillit.pipeline.audit import _iter_session_log_entries
+
+    _write_audit_session_dispatch_id(
+        tmp_path, "did-d1", [_valid_failure_record_dict()], dispatch_id="d1"
+    )
+    _write_audit_session_dispatch_id(
+        tmp_path, "did-d2", [_valid_failure_record_dict()], dispatch_id="d2"
+    )
+    _write_audit_session_dispatch_id(
+        tmp_path, "did-empty", [_valid_failure_record_dict()], dispatch_id=""
+    )
+
+    results = list(
+        _iter_session_log_entries(
+            tmp_path, since="", filename="audit_log.json", dispatch_id_filter=""
+        )
+    )
+    assert len(results) == 3
+
+
+def test_iter_entries_dispatch_id_filter_combined_with_campaign_id(tmp_path):
+    """dispatch_id_filter AND campaign_id_filter apply as AND logic."""
+    from pathlib import Path as _Path
+
+    from autoskillit.pipeline.audit import _iter_session_log_entries
+
+    for dir_name, dispatch_id, campaign_id in [
+        ("match", "d1", "c1"),
+        ("wrong-did", "d2", "c1"),
+        ("wrong-cid", "d1", "c2"),
+    ]:
+        session_dir = _Path(tmp_path) / "sessions" / dir_name
+        session_dir.mkdir(parents=True, exist_ok=True)
+        (session_dir / "audit_log.json").write_text(json.dumps([_valid_failure_record_dict()]))
+        index_entry = {
+            "dir_name": dir_name,
+            "timestamp": "2026-05-01T00:00:00+00:00",
+            "session_id": dir_name,
+            "dispatch_id": dispatch_id,
+            "campaign_id": campaign_id,
+        }
+        with (_Path(tmp_path) / "sessions.jsonl").open("a") as f:
+            f.write(json.dumps(index_entry) + "\n")
+
+    results = list(
+        _iter_session_log_entries(
+            tmp_path,
+            since="",
+            filename="audit_log.json",
+            dispatch_id_filter="d1",
+            campaign_id_filter="c1",
+        )
+    )
+    assert len(results) == 1
+    assert results[0].parent.name == "match"
+
+
+def test_iter_session_log_entries_dispatch_id_combined_with_order_id(tmp_path):
+    """dispatch_id_filter AND order_id_filter apply as AND logic."""
+    from pathlib import Path as _Path
+
+    from autoskillit.pipeline.audit import _iter_session_log_entries
+
+    for dir_name, dispatch_id, order_id in [
+        ("both-match", "d1", "o1"),
+        ("dispatch-only", "d1", "o2"),
+        ("order-only", "d2", "o1"),
+    ]:
+        session_dir = _Path(tmp_path) / "sessions" / dir_name
+        session_dir.mkdir(parents=True, exist_ok=True)
+        (session_dir / "audit_log.json").write_text(json.dumps([_valid_failure_record_dict()]))
+        index_entry = {
+            "dir_name": dir_name,
+            "timestamp": "2026-05-01T00:00:00+00:00",
+            "session_id": dir_name,
+            "dispatch_id": dispatch_id,
+            "order_id": order_id,
+        }
+        with (_Path(tmp_path) / "sessions.jsonl").open("a") as f:
+            f.write(json.dumps(index_entry) + "\n")
+
+    results = list(
+        _iter_session_log_entries(
+            tmp_path,
+            since="",
+            filename="audit_log.json",
+            dispatch_id_filter="d1",
+            order_id_filter="o1",
+        )
+    )
+    assert len(results) == 1
+    assert results[0].parent.name == "both-match"
+
+
+def test_audit_load_dispatch_id_filter(tmp_path):
+    """DefaultAuditLog.load_from_log_dir respects dispatch_id_filter."""
+    from autoskillit.pipeline.audit import DefaultAuditLog
+
+    _write_audit_session_dispatch_id(
+        tmp_path, "d1-a", [_valid_failure_record_dict()], dispatch_id="d1"
+    )
+    _write_audit_session_dispatch_id(
+        tmp_path, "d1-b", [_valid_failure_record_dict()], dispatch_id="d1"
+    )
+    _write_audit_session_dispatch_id(
+        tmp_path, "d2-a", [_valid_failure_record_dict()], dispatch_id="d2"
+    )
+
+    log = DefaultAuditLog()
+    n = log.load_from_log_dir(tmp_path, dispatch_id_filter="d1")
+    assert n == 2

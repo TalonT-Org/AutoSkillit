@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core.paths import pkg_root
-from autoskillit.workspace.skills import SkillResolver
+from autoskillit.workspace.skills import DefaultSkillResolver
 
 _SKILLS_DIRS = [pkg_root() / "skills", pkg_root() / "skills_extended"]
 
@@ -65,6 +65,21 @@ _ANTI_PROSE_GUARD_PATTERNS = [
     re.compile(r"(?i)do\s+not\s+emit\s+(?:any\s+)?(?:prose|text|status)"),
 ]
 
+# Skills whose narration suppression is handled globally by _inject_narration_suppression()
+# in build_skill_session_cmd() (headless path) and sous-chef/SKILL.md (cook path).
+# Per-loop inline anti-prose guards are intentionally absent — they are redundant.
+_GLOBALLY_GUARDED_SKILLS: frozenset[str] = frozenset(
+    {
+        "process-issues",
+        "open-integration-pr",
+        "setup-project",
+        "collapse-issues",
+        "validate-audit",
+        "validate-test-audit",
+        "validate-review-decisions",
+    }
+)
+
 
 def _all_skill_dirs() -> list[Path]:
     """Discover all skill directories that contain a SKILL.md from both skill directories."""
@@ -75,7 +90,7 @@ def _all_skill_dirs() -> list[Path]:
 
 
 def _skill_text(skill_name: str) -> str:
-    result = SkillResolver().resolve(skill_name)
+    result = DefaultSkillResolver().resolve(skill_name)
     assert result is not None, f"Skill not found: {skill_name}"
     return result.path.read_text()
 
@@ -176,7 +191,7 @@ def _check_loop_boundary(skill_text: str) -> list[str]:
     return violations
 
 
-@pytest.mark.parametrize("skill_name", ["open-pr", "open-integration-pr"])
+@pytest.mark.parametrize("skill_name", ["open-integration-pr"])
 def test_no_prose_output_immediately_before_skill_invocation(skill_name: str) -> None:
     """Assert that no SKILL.md step instructs the model to output plain text
     immediately before a Skill tool call.
@@ -196,7 +211,7 @@ def test_no_prose_output_immediately_before_skill_invocation(skill_name: str) ->
     )
 
 
-@pytest.mark.parametrize("skill_name", ["open-pr", "open-integration-pr"])
+@pytest.mark.parametrize("skill_name", ["open-integration-pr"])
 def test_arch_lens_context_via_file_not_prose(skill_name: str) -> None:
     """Assert that PR context for arch-lens skills is passed via a temp
     file (Write tool), not as inline prose text output.
@@ -206,7 +221,7 @@ def test_arch_lens_context_via_file_not_prose(skill_name: str) -> None:
     it as a conversational text block.
     """
     text = _skill_text(skill_name)
-    assert f".autoskillit/temp/{skill_name}/pr_arch_lens_context_" in text, (
+    assert f"{{{{AUTOSKILLIT_TEMP}}}}/{skill_name}/pr_arch_lens_context_" in text, (
         f"{skill_name}/SKILL.md does not reference a skill-scoped pr_arch_lens_context file. "
         "PR context must be written to a skill-scoped temp file, not a shared path."
     )
@@ -222,12 +237,17 @@ def test_no_text_then_tool_in_any_step(skill_dir: Path) -> None:
     same step or consecutive sub-steps, or an unguarded loop with
     tool invocations.
 
+    Skills in _GLOBALLY_GUARDED_SKILLS are exempt from the loop-boundary
+    check — their narration suppression is injected at the prompt level
+    by build_skill_session_cmd() and sous-chef/SKILL.md.
+
     This is a project-wide structural invariant, not specific to
     open-pr or arch-lens.
     """
     text = (skill_dir / "SKILL.md").read_text()
     violations = _check_text_then_tool(text)
-    violations.extend(_check_loop_boundary(text))
+    if skill_dir.name not in _GLOBALLY_GUARDED_SKILLS:
+        violations.extend(_check_loop_boundary(text))
     assert not violations, (
         f"{skill_dir.name}/SKILL.md contains text-then-tool anti-pattern:\n"
         + "\n".join(f"  - {v}" for v in violations)
@@ -333,3 +353,42 @@ For each issue in the batch (process sequentially):
 """
     violations = _check_loop_boundary(vulnerable_pattern)
     assert len(violations) >= 1, "Detector failed to catch unguarded MCP loop"
+
+
+# Detects skills that instruct Agent/Task subagent spawning.
+# Any such skill MUST contain the run_in_background prohibition.
+_SPAWN_INDICATOR_RE = re.compile(
+    r"Task tool|Explore subagent"
+    r"|spawn.*subagent|subagent.*spawn|launch.*subagent"
+    r"|parallel.*subagent|subagent.*parallel",
+    re.IGNORECASE,
+)
+_BACKGROUND_PROHIBITION_RE = re.compile(r"run_in_background.*prohibited", re.IGNORECASE)
+
+# Skills whose SKILL.md mentions subagents only in a negative/prohibitive context
+# (e.g., "rather than spawning subagents", "do not spawn subagents"). The spawn
+# indicator regex matches these descriptively — they are not spawning skills.
+_NON_SPAWNING_SKILL_DIRS: frozenset[str] = frozenset(
+    {
+        "report-bug",  # "rather than spawning parallel subagents" — describes non-spawning
+        "issue-splitter",  # "do not spawn subagents" — prohibits spawning inline
+    }
+)
+
+
+@pytest.mark.parametrize("skill_dir", _all_skill_dirs(), ids=lambda p: p.name)
+def test_no_background_subagent_in_spawning_skills(skill_dir: Path) -> None:
+    if skill_dir.name in _NON_SPAWNING_SKILL_DIRS:
+        return  # Skill mentions subagents only descriptively/negatively — rule does not apply.
+    skill_md = skill_dir / "SKILL.md"
+    if not skill_md.exists():
+        return
+    content = skill_md.read_text(encoding="utf-8")
+    if not _SPAWN_INDICATOR_RE.search(content):
+        return  # Skill does not spawn subagents — rule does not apply.
+    assert _BACKGROUND_PROHIBITION_RE.search(content), (
+        f"{skill_dir.name}/SKILL.md contains subagent-spawning instructions "
+        "but lacks the background-execution prohibition. "
+        "Add to its NEVER block: "
+        "'- Run subagents in the background (`run_in_background: true` is prohibited)'"
+    )

@@ -3,13 +3,30 @@
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Mapping
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 from typing import Final
 
-from autoskillit.core import RecipeSource
+import regex as re
+
+from autoskillit.core import FEATURE_REGISTRY, RECIPE_PACK_TAGS, DispatchGateType, RecipeSource
 
 AUTOSKILLIT_VERSION_KEY: Final = "autoskillit_version"
+RECIPE_VERSION_KEY: Final = "recipe_version"
+CAMPAIGN_REF_RE: Final = re.compile(r"\$\{\{\s*campaign\.(\w+)\s*\}\}")
+
+
+class RecipeKind(StrEnum):
+    STANDARD = "standard"
+    CAMPAIGN = "campaign"
+    FOOD_TRUCK = "food-truck"
+
+
+NON_INTERACTIVE_KINDS: Final[frozenset[RecipeKind]] = frozenset(
+    {RecipeKind.CAMPAIGN, RecipeKind.FOOD_TRUCK}
+)
 
 
 @dataclass
@@ -17,6 +34,7 @@ class RecipeIngredient:
     description: str
     required: bool = False
     default: str | None = None
+    type: str | None = None
     hidden: bool = False  # When True, excluded from ingredients table shown to agent
 
     def __post_init__(self) -> None:
@@ -64,6 +82,7 @@ _TERMINAL_TARGETS: frozenset[str] = frozenset({"done", "escalate"})
 
 @dataclass
 class RecipeStep:
+    name: str = ""  # Set from the YAML dict key after parsing; enables block member lookup
     tool: str | None = None
     action: str | None = None  # Built-in action: "route", "stop", "confirm"
     python: str | None = None
@@ -82,9 +101,50 @@ class RecipeStep:
     optional: bool = False
     skip_when_false: str | None = None
     model: str | None = None
+    provider: str | None = None
     description: str = ""
     sub_recipe: str | None = None  # Name of sub-recipe file (no extension)
     gate: str | None = None  # Ingredient name whose value controls lazy loading
+    optional_context_refs: list[str] = field(
+        default_factory=list
+    )  # Context variable names that may be referenced before they are captured (cyclic routes)
+    stale_threshold: int | None = None  # None means use global RunSkillConfig.stale_threshold
+    idle_output_timeout: int | None = None  # None = use global cfg; 0 = disabled for this step
+    block: str | None = None  # Named block anchor this step belongs to (e.g. "pre_queue_gate")
+
+
+@dataclass(frozen=True, slots=True)
+class RecipeBlock:
+    """A named contiguous region of the step routing graph with budget constraints.
+
+    Populated by ``extract_blocks`` in ``recipe/_analysis.py`` during validation.
+    Steps declare membership via ``step.block = <name>``.  The block primitive
+    enables per-block semantic rules (budget guards, single-producer checks, etc.)
+    that individual-step rules cannot express.
+    """
+
+    name: str  # e.g. "pre_queue_gate"
+    entry: str  # name of the step at the block entry point (no in-block predecessor)
+    exit: str  # name of the step at the block exit point (no in-block successor)
+    members: tuple[RecipeStep, ...]  # ordered member steps (by YAML declaration order)
+    tool_counts: Mapping[str, int]  # {"run_cmd": 1, "check_repo_merge_state": 1, …}
+    gh_api_occurrences: int  # total count of "gh api" substrings across all run_cmd cmds
+
+
+@dataclass
+class CampaignDispatch:
+    """A single dispatch entry in a campaign recipe."""
+
+    name: str
+    recipe: str = ""
+    task: str = ""
+    ingredients: dict[str, str] = field(
+        default_factory=dict
+    )  # string-only: YAML pass-through key-value pairs, not structured RecipeIngredient objects
+    depends_on: list[str] = field(default_factory=list)
+    capture: dict[str, str] = field(default_factory=dict)
+    gate: DispatchGateType | None = None
+    message: str | None = None
 
 
 @dataclass
@@ -96,13 +156,40 @@ class Recipe:
     steps: dict[str, RecipeStep] = field(default_factory=dict)
     kitchen_rules: list[str] = field(default_factory=list)
     version: str | None = None
+    recipe_version: str | None = None
+    content_hash: str = ""
+    composite_hash: str = ""
     experimental: bool = False
+    requires_packs: list[str] = field(default_factory=list)
+    # Keys from PACK_REGISTRY (skill pack names, e.g. "fleet", "planner").
+    # Named 'requires_packs' (not 'requires_skill_packs') for brevity.
+    kind: RecipeKind = RecipeKind.STANDARD
+    categories: list[str] = field(default_factory=list)
+    dispatches: list[CampaignDispatch] = field(default_factory=list)
+    requires_recipe_packs: list[str] = field(default_factory=list)
+    # Keys from RECIPE_PACK_REGISTRY. Named 'requires_recipe_packs' to
+    # distinguish from 'requires_packs'; the asymmetry is intentional.
+    allowed_recipes: list[str] = field(default_factory=list)
+    continue_on_failure: bool = False
+    # Populated by extract_blocks() during load; empty tuple for recipes with no block: anchors.
+    blocks: tuple[RecipeBlock, ...] = field(default_factory=tuple)
+    requires_features: list[str] = field(default_factory=list)
+    # Keys from FEATURE_REGISTRY. Recipes declare the features whose skill_categories
+    # they need so init_session can merge them into session_features at dispatch time.
 
     def __post_init__(self) -> None:
         self.name = self.name.strip()
         self.description = self.description.strip()
         self.summary = self.summary.strip()
         self.kitchen_rules = [rule.strip() for rule in self.kitchen_rules]
+        unknown_cats = set(self.categories) - RECIPE_PACK_TAGS
+        if unknown_cats:
+            raise ValueError(
+                f"Unknown categories {sorted(unknown_cats)!r}. Valid: {sorted(RECIPE_PACK_TAGS)}"
+            )
+        unknown_features = set(self.requires_features) - set(FEATURE_REGISTRY)
+        if unknown_features:
+            raise ValueError(f"Unknown features in requires_features: {sorted(unknown_features)}")
 
 
 @dataclass
@@ -113,7 +200,12 @@ class RecipeInfo:
     path: Path
     summary: str = ""
     version: str | None = None
+    recipe_version: str | None = None
+    content_hash: str = ""
     content: str | None = None  # raw YAML text; None when set via parse_recipe_metadata
+    kind: RecipeKind = RecipeKind.STANDARD
+    experimental: bool = False
+    requires_packs: list[str] = field(default_factory=list)
 
 
 @dataclass

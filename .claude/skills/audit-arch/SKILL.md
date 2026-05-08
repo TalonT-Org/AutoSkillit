@@ -1,5 +1,6 @@
 ---
 name: audit-arch
+categories: [audit]
 description: Audit codebase for adherence to architectural standards, practices, and rules. Use when user says "audit arch", "audit architecture", "check architecture", or "architectural review". Spawns parallel subagents to examine multiple architectural aspects and generates a structured report.
 hooks:
   PreToolUse:
@@ -26,7 +27,7 @@ Audit the codebase for adherence to architectural standards and rules.
 
 **ALWAYS:**
 - Use subagents for parallel exploration
-- Write report to `temp/audit-arch/arch_audit_{YYYY-MM-DD_HHMMSS}.md`
+- Write report to `{{AUTOSKILLIT_TEMP}}/audit-arch/arch_audit_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 - Provide file paths and line numbers
 - Categorize by severity (CRITICAL, HIGH, MEDIUM, LOW)
 
@@ -219,6 +220,16 @@ infrastructure -> depends on nothing project-specific
 - Confirm `ToolContext` is only instantiated in `server/_factory.py` and test files
 - Flag any `Default*` adapter instantiated outside the Composition Root in production code
 
+**Composition-Boundary Tiers — NOT Violations:**
+
+The Composition Root rule applies only to full DI wiring sessions. The following three tiers are legitimate composition boundaries and MUST NOT be flagged as P12 violations:
+
+- **Intra-package Default* instantiation** — sibling modules within the same sub-package wiring `Default*` adapters as dataclass field defaults. This pattern is intentional: the sub-package is a cohesive unit and the sibling wiring is not "escaping" the Composition Root. Example: `pipeline/context.py` instantiating `DefaultBackgroundSupervisor`, `DefaultMcpResponseLog` as field defaults.
+- **L3 CLI / interactive launcher composition boundaries** — modules in `cli/` with their own lifecycle that do not receive a `ToolContext` at all. These modules compose their own lightweight dependencies because they operate outside the server pipeline. Examples: `cli/_workspace.py`, `cli/_cook.py`.
+- **DI convenience default** — an optional parameter typed `SomeProtocol | None = None` with a deferred-import fallback inside `if param is None:`. This is a dependency-injection convenience pattern, not a Composition Root bypass. Example: `recording.py`.
+
+Only `Default*` instantiation that bypasses the Composition Root AND falls outside all three tiers is a P12 violation.
+
 **Severity:** HIGH — concrete class leakage in field annotations defeats substitutability; Protocol naming gaps make the DI contract non-discoverable
 
 ---
@@ -278,9 +289,23 @@ These apply across all principles when evaluating architectural decisions:
 
 ---
 
+## Pre-Flight Verification Checklist
+
+Before reporting any finding, complete the mandatory verification for its category. A finding MUST NOT be reported unless the required verification has been performed.
+
+| Finding category | Required verification before reporting |
+|---|---|
+| **Missing export** (symbol absent from public API) | Use the Read tool to open the relevant `__init__.py`. Verify both `__all__` contents and direct re-export statements. Discard the finding if the symbol is present. |
+| **Missing decorator** (e.g., `runtime_checkable`) | Use the Read tool to open the file containing the class definition. Inspect the 3–5 lines directly preceding the `class` keyword. Discard the finding if the decorator is present. |
+| **Enforcement gap** (no test for a rule or constant) | Use the Grep tool to search `tests/` for the exact symbol or constant name. Discard the finding if a matching test file is found. |
+| **Code duplication** | Use the Read tool to retrieve the full body of each function. Compare the full signature (parameters, return type) and logic step-by-step. Same-named functions at different abstraction levels are NOT duplicates. Discard if logically distinct. |
+| **Misplaced file or incorrect import path** | Use the Bash tool to run `git log --oneline -- {file_path}` (substituting the actual path). Inspect commit messages for intentional placement decisions. Discard the finding if a commit explains the placement. |
+
+---
+
 ## Audit Workflow
 
-1. **Launch parallel subagents** for each principle
+1. **Launch parallel subagents** for each principle. Each subagent MUST NOT invent or enforce principles beyond its assigned principle.
 2. **Apply P1 3-question gate** before finalizing any P1 findings — confirm all three questions are YES and the pattern is not listed under "Non-SSOT Patterns — Do NOT flag these"
 3. **Apply cross-cutting exemptions** — verify CC-flagged patterns are not listed under "Standard patterns that are NOT cross-cutting violations" (error accumulation, validator collections, or facade re-exports)
 4. **Apply severity gate** — CRITICAL requires data loss, security bypass, or correctness bug; downgrade findings that do not meet this bar
@@ -288,16 +313,46 @@ These apply across all principles when evaluating architectural decisions:
 6. **Consolidate findings** by principle and severity
 7. **Cross-reference:** Ensure findings are categorized by the principle they violate, not just where discovered
 8. **Suggest new principle** (optional) — see below
-9. **Write report** to `temp/audit-arch/arch_audit_{YYYY-MM-DD_HHMMSS}.md`
-10. **Output summary** to terminal
+9. **Pre-Flight Verification Pass** — for every finding, perform the verification from the Pre-Flight Verification Checklist; drop the finding if verification fails.
+10. **Self-Validation Pass** — before finalizing findings, spot-check a sample of factual claims against the actual codebase. Perform all four checks:
+
+   a. **HIGH/CRITICAL re-read**: For every HIGH or CRITICAL finding, use the Read
+      tool to re-open the exact file and line range cited. Confirm the code exhibits
+      the claimed behavior. Downgrade or remove the finding if the evidence does not
+      hold.
+
+   b. **Concrete-class check** (resource-leak and data-loss findings): For any
+      finding about a missing `aclose`, unclosed resource, or silent data loss, read
+      the concrete class body — not only the Protocol or interface declaration. If the
+      concrete implementation provides the method or handles the data correctly,
+      remove or revise the finding to reflect the accurate scope.
+
+   c. **Enforcement-search confirmation** (enforcement-gap findings): For any finding
+      claiming no test enforces a rule or constant, confirm that a Grep search of
+      `tests/` for the exact symbol was performed during this audit. If it was not,
+      run it now; discard the finding if a matching test exists.
+
+   d. **Internal validation note**: After completing (a)–(c), record a one-sentence
+      note for each reviewed finding: either `CONFIRMED – <original claim stands>` or
+      `REVISED – <corrected claim or reason for removal>`. These notes are for
+      internal quality control and do not appear in the final report.
+
+11. **Write report** to `{{AUTOSKILLIT_TEMP}}/audit-arch/arch_audit_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+12. **Output summary** to terminal
 
 ---
 
 ## Principle Suggestion (Optional)
 
-After consolidating findings, consider whether a **new** architectural principle would significantly benefit the codebase.
+Launch ONE dedicated subagent AFTER all per-principle findings are consolidated. This subagent's only job is to propose a single new principle.
 
-**Criteria - ALL must be true:**
+**Constraints — ALL are mandatory:**
+- At most ONE suggestion per audit, labeled "PROPOSED PRINCIPLE".
+- A proposed principle MUST NOT generate findings, errors, warnings, or severity ratings.
+- A proposed principle MUST NOT be enforced in this or any subsequent audit.
+- Subagents running P1–P14 audits MUST NOT invent or enforce principles beyond their assigned principle.
+
+**Criteria — ALL must be true** (for the dedicated suggestion subagent):
 - Not a one-off issue
 - No existing principle covers it
 - Would prevent recurring architectural debt or bugs
@@ -318,6 +373,49 @@ Do NOT flag:
 - Re-export shims (thin wrappers only)
 - Project config reads (package.json, build configs)
 - External tool output (test runner output, build logs)
+
+---
+
+## Exception Whitelist
+
+### General Exceptions (GE)
+
+These exceptions apply across all principles. Before reporting a finding, verify it does not match any entry below.
+
+**GE-1** — Deferred function-body imports with `# noqa: PLC0415` are not P3/P4 layer violations. Only module-level unsuppressed cross-layer imports are flagged.
+*Source: audit-arch round 1 contest batch.*
+
+**GE-2** — `TYPE_CHECKING`-only imports create zero runtime coupling and must not be flagged as cross-layer or cross-domain violations.
+*Source: audit-arch round 1 contest batch.*
+
+**GE-7** — Stdlib-only forced duplication with an output-equivalence test is accepted; not a P6 violation when the module has a documented zero-external-imports constraint.
+*Source: audit-arch round 2 contest batch.*
+
+**GE-9** — Decorator-based registration imports in `__init__.py` (e.g., importing `rules_*.py` to trigger `@semantic_rule` registration) are intentional and not impure side effects.
+*Source: audit-arch round 2 contest batch.*
+
+**GE-13** — "No dedicated test file" ≠ "no test coverage." Before claiming a module lacks coverage, grep `tests/` for `from <package>.<module> import`. Absence of `test_<module>.py` is not evidence.
+*Source: audit-arch round 1 and cohesion round 1 contest batches.*
+
+**GE-16** — Same-shape functions with different return types serving different layers or precision purposes are not duplicates.
+*Source: audit-arch round 2 contest batch.*
+
+**GE-17** — Approximately 6 lines of shared boilerplate between functions with fundamentally different feature sets is not duplication. Threshold: fewer than 8 lines of overlap between functions whose core logic is distinct does not constitute a P6 violation.
+*Source: audit-arch round 2 contest batch.*
+
+### Project-Specific Exceptions (PS)
+
+These exceptions apply to known autoskillit codebase patterns that are legitimately non-standard.
+
+**PS-1** — `smoke_utils.py` at package root: stable callable-path API; `autoskillit.smoke_utils.*` is baked into recipe YAMLs and must remain at the top-level path.
+
+**PS-2** — `hook_registry.py` at package root: the `hooks/` sub-package has a stdlib-only constraint; `hook_registry` cannot be placed inside `hooks/`. See commit `ee83681d`.
+
+**PS-4** — `_llm_triage.py` at package root: circular import constraint with its sole caller `server/helpers.py` prevents placing it inside `server/`.
+
+**PS-7** — `SkillResolver` naming: no `SkillResolver` Protocol exists; the `Default*` naming convention applies only to Protocol implementors. `SkillResolver` is the only implementation and needs no `Default` prefix.
+
+**PS-8** — L3 `server/` and `cli/` are excluded from REQ-IMP-001 intentionally; `IL-005` and `IL-006` provide compensating controls at the gateway boundary.
 
 ---
 

@@ -18,7 +18,7 @@ Analyze open GitHub issues, classify each into a recipe route, group them into p
 ## When to Use
 
 - User says "triage issues", "prioritize issues", or "plan issue order"
-- Before starting a multi-issue implementation sprint
+- Before starting a multi-issue implementation batch
 - When a backlog needs sequencing into implementable batches
 - As input to a pipeline that processes issues in batch order
 
@@ -31,12 +31,15 @@ Analyze open GitHub issues, classify each into a recipe route, group them into p
 - Apply GitHub labels when `--no-label` is passed
 - Skip human escalation for ambiguous issues
 - Add useless comments to the codebase — do not use the codebase as a notepad
-- Create files outside `.autoskillit/temp/triage-issues/` directory
+- Create files outside `{{AUTOSKILLIT_TEMP}}/triage-issues/` directory
+- Use `--body` shell substitution (`--body "$(...)`) for `gh issue edit` — always write to
+  `{{AUTOSKILLIT_TEMP}}/triage-issues/edit_body_{timestamp}.md` and use `--body-file`
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
 - Pause for human input on ambiguous classifications
-- Write the triage report and manifest to `.autoskillit/temp/triage-issues/` (relative to the current working directory)
+- Write the triage report and manifest to `{{AUTOSKILLIT_TEMP}}/triage-issues/` (relative to the current working directory)
 - Use `gh` CLI for all GitHub operations (not raw API calls)
 - Include rationale for every recipe classification
 - Record human decisions in the final report
@@ -55,30 +58,6 @@ Parse optional arguments from the user's invocation:
                structured requirements (`REQ-{GRP}-NNN` format) to the issue body.
                Skips issues that already have a `## Requirements` section (idempotent).
                No effect on `recipe:remediation` issues.
-
-### Step 0.5 — Code-Index Initialization (required before any code-index tool call)
-
-Call `set_project_path` with the repo root where this skill was invoked (not a worktree path):
-
-```
-mcp__code-index__set_project_path(path="{PROJECT_ROOT}")
-```
-
-Code-index tools require **project-relative paths**. Always use paths like:
-
-    src/<your_package>/some_module.py
-
-NOT absolute paths like:
-
-    /absolute/path/to/src/<your_package>/some_module.py
-
-> **Note:** Code-index tools (`find_files`, `search_code_advanced`, `get_file_summary`,
-> `get_symbol_body`) are only available when the `code-index` MCP server is configured.
-> If `set_project_path` returns an error, fall back to native `Glob` and `Grep` tools
-> for the same searches — they provide equivalent results without the code-index server.
-
-Agents launched via `run_skill` inherit no code-index state from the parent session — this
-call is mandatory at the start of every headless session that uses code-index tools.
 
 ### Step 1: Authenticate and Fetch Issues
 
@@ -150,6 +129,13 @@ Use `model: "sonnet"` for all subagents.
 
 ### Step 3: Recipe Classification
 
+**Priority signal — Validated Audit Report:**
+If the issue title contains "Validated Audit Report" (the exact prefix set by `prepare-issue`
+when creating an issue from a validated audit output), classify as `recipe:implementation`
+with `high` confidence. Do NOT allow issue scope (number of findings / large scope) to override
+this signal — a 40-finding audit is structural quality improvement work, not broken behavior.
+Skip the "Is existing behavior broken?" analysis for these issues.
+
 Classify each issue into a recipe route using the primary behavioral criterion — is existing behavior broken?
 
 **Is existing behavior broken?**
@@ -173,6 +159,8 @@ Examples that route to `implementation`:
 - A plan/recipe that scoped too narrowly (gap in design, not a crash)
 - Improving error messages, refactoring, writing documentation
 - Adding support for a new file format — regardless of scope or complexity
+- A validated audit report with structural/quality findings (split oversized files, add missing
+  docstrings, naming consistency) — regardless of finding count
 
 **Common misclassification: "the orchestrator did the wrong thing"**
 When an LLM orchestrator bypasses routing, retries instead of escalating, or ignores a failure — that is almost always a **gap** (missing guardrail, missing discipline rule), not a runtime error. The orchestrator didn't crash; it made an unguarded choice. Route to `implementation` unless the orchestrator hit an actual exception.
@@ -225,14 +213,19 @@ For each issue in the working set classified as `recipe:implementation`:
    per issue but skip `gh issue edit`. Record `requirements_generated: true` in manifest.
 5. Otherwise, append via:
    ```bash
-   gh issue edit {N} --body "$(gh issue view {N} --json body -q .body)
+   ts=$(date +%Y-%m-%d_%H%M%S)
+   EDIT_BODY_FILE="{{AUTOSKILLIT_TEMP}}/triage-issues/edit_body_${ts}.md"
+   REQUIREMENTS_FILE="{{AUTOSKILLIT_TEMP}}/triage-issues/requirements_${ts}.md"
+   mkdir -p "{{AUTOSKILLIT_TEMP}}/triage-issues"
 
-## Requirements
+   # Fetch current body to temp file (avoids shell interpolation):
+   gh issue view {N} --json body -q .body > "${EDIT_BODY_FILE}"
 
-### {Group Name}
+   # Populate ${REQUIREMENTS_FILE} with the generated requirements content, then:
+   printf '\n\n## Requirements\n\n' >> "${EDIT_BODY_FILE}"
+   cat "${REQUIREMENTS_FILE}" >> "${EDIT_BODY_FILE}"
 
-- **REQ-{GRP}-001:** ...
-..."
+   gh issue edit {N} --body-file "${EDIT_BODY_FILE}"
    ```
 6. If the issue is too vague for clean extraction: skip silently and record
    `requirements_generated: false` in the manifest for that issue.
@@ -271,9 +264,9 @@ Order the batches for sequential execution:
 ### Step 7: Write Outputs
 
 Compute timestamp: `YYYY-MM-DD_HHMMSS`.
-Ensure `.autoskillit/temp/triage-issues/` exists.
+Ensure `{{AUTOSKILLIT_TEMP}}/triage-issues/` exists.
 
-**7a. Triage report:** `.autoskillit/temp/triage-issues/triage_report_{ts}.md`
+**7a. Triage report:** `{{AUTOSKILLIT_TEMP}}/triage-issues/triage_report_{ts}.md`
 
 The report contains:
 - Ordered list of batches with issues, recipe assignments, and rationale
@@ -281,7 +274,7 @@ The report contains:
 - Summary statistics (total issues, batch count, recipe distribution)
 - Human decisions section (which issues were escalated, what was decided)
 
-**7b. Machine-readable manifest:** `.autoskillit/temp/triage-issues/triage_manifest_{ts}.json`
+**7b. Machine-readable manifest:** `{{AUTOSKILLIT_TEMP}}/triage-issues/triage_manifest_{ts}.json`
 
 ```json
 {
@@ -329,12 +322,13 @@ For each triaged issue, apply its recipe label:
 
 ```bash
 gh issue edit {number} --add-label "recipe:{recipe}"
+sleep 1  # Rate-limit discipline: 1s between mutating calls
 ```
 
 ## Output Location
 
 ```
-.autoskillit/temp/triage-issues/
+{{AUTOSKILLIT_TEMP}}/triage-issues/
   triage_report_{ts}.md       # Human-readable triage report
   triage_manifest_{ts}.json   # Machine-readable manifest for downstream pipelines
 ```
@@ -363,8 +357,8 @@ These emit lines are consumed by `capture:` in orchestrating recipes. The
 Example emit block:
 
 ```
-triage_report = .autoskillit/temp/triage-issues/triage_report_20260310_120000.md
-triage_manifest = .autoskillit/temp/triage-issues/triage_manifest_20260310_120000.json
+triage_report = {{AUTOSKILLIT_TEMP}}/triage-issues/triage_report_20260310_120000.md
+triage_manifest = {{AUTOSKILLIT_TEMP}}/triage-issues/triage_manifest_20260310_120000.json
 total_issues = 12
 batch_count = 3
 recipe_distribution = {"implementation": 8, "remediation": 4}

@@ -1,4 +1,4 @@
-"""execution/ L1 package: subprocess lifecycle, session parsing, headless runner, testing, DB.
+"""execution/ IL-1 package: subprocess lifecycle, session parsing, headless runner, testing, DB.
 
 Re-exports the full public surface of the six execution sub-modules.
 All sub-modules depend only on autoskillit.core.* at runtime;
@@ -6,6 +6,11 @@ execution/headless.py has TYPE_CHECKING-only references to pipeline/.
 """
 
 from autoskillit.core import SkillResult
+from autoskillit.execution._recording_skills import (
+    restore_skill_snapshot,
+    scan_skill_snapshots,
+    snapshot_skill_dir,
+)
 from autoskillit.execution.anomaly_detection import (
     AnomalyKind,
     AnomalySeverity,
@@ -13,9 +18,11 @@ from autoskillit.execution.anomaly_detection import (
 )
 from autoskillit.execution.ci import DefaultCIWatcher
 from autoskillit.execution.commands import (
+    _MAX_MCP_OUTPUT_TOKENS_VALUE,  # noqa: F401
     ClaudeHeadlessCmd,
     ClaudeInteractiveCmd,
     build_headless_cmd,
+    build_headless_resume_cmd,
     build_interactive_cmd,
 )
 from autoskillit.execution.db import (
@@ -25,12 +32,20 @@ from autoskillit.execution.db import (
     _execute_readonly_query as execute_readonly_query,
 )
 from autoskillit.execution.diff_annotator import (
+    DiffMetrics,
     FilterResult,
     annotate_diff,
+    compute_diff_metrics,
+    extract_code_region,
     filter_findings,
     parse_hunk_ranges,
+    select_review_agents,
 )
-from autoskillit.execution.github import DefaultGitHubFetcher
+from autoskillit.execution.github import (
+    DefaultGitHubFetcher,
+    github_headers,
+    parse_merge_queue_response,
+)
 from autoskillit.execution.headless import (
     DefaultHeadlessExecutor,
     run_headless_core,
@@ -43,7 +58,7 @@ from autoskillit.execution.linux_tracing import (
     read_starttime_ticks,
     start_linux_tracing,
 )
-from autoskillit.execution.merge_queue import DefaultMergeQueueWatcher
+from autoskillit.execution.merge_queue import DefaultMergeQueueWatcher, fetch_repo_merge_state
 from autoskillit.execution.pr_analysis import (
     DOMAIN_PATHS,
     extract_linked_issues,
@@ -52,16 +67,45 @@ from autoskillit.execution.pr_analysis import (
 )
 from autoskillit.execution.process import (
     DefaultSubprocessRunner,
+    async_kill_process_tree,
+    kill_process_tree,
     run_managed_async,
     run_managed_sync,
 )
-from autoskillit.execution.quota import QuotaStatus, check_and_sleep_if_needed
-from autoskillit.execution.remote_resolver import REMOTE_PRECEDENCE, resolve_remote_repo
+from autoskillit.execution.quota import (
+    QUOTA_CACHE_SCHEMA_VERSION,
+    QuotaStatus,
+    _refresh_quota_cache,  # noqa: F401 — re-exported for server consumers; not in __all__
+    check_and_sleep_if_needed,
+    invalidate_cache,
+)
+from autoskillit.execution.recording import (
+    RECORD_SCENARIO_DIR_ENV,
+    RECORD_SCENARIO_ENV,
+    RECORD_SCENARIO_RECIPE_ENV,
+    REPLAY_SCENARIO_DIR_ENV,
+    REPLAY_SCENARIO_ENV,
+    SCENARIO_STEP_NAME_ENV,
+    RecordingSubprocessRunner,
+    ReplayingSubprocessRunner,
+    ScenarioReplayError,
+    build_replay_runner,
+)
+from autoskillit.execution.remote_resolver import (
+    REMOTE_PRECEDENCE,
+    resolve_remote_name,
+    resolve_remote_repo,
+)
 from autoskillit.execution.session import (
     ClaudeSessionResult,
     ContentState,
+    SessionState,
+    classify_infra_exit,
+    clear_session_state,
     extract_token_usage,
     parse_session_result,
+    persist_session_state,
+    read_session_state,
 )
 from autoskillit.execution.session_log import (
     flush_session_log,
@@ -77,24 +121,49 @@ from autoskillit.execution.testing import (
 )
 
 __all__ = [
+    # _process_kill
+    "kill_process_tree",
+    "async_kill_process_tree",
     # commands
     "ClaudeInteractiveCmd",
     "ClaudeHeadlessCmd",
     "build_interactive_cmd",
     "build_headless_cmd",
+    "build_headless_resume_cmd",
     # process
     "DefaultSubprocessRunner",
     "run_managed_async",
     "run_managed_sync",
+    # recording
+    "RecordingSubprocessRunner",
+    "ReplayingSubprocessRunner",
+    "ScenarioReplayError",
+    "build_replay_runner",
+    "RECORD_SCENARIO_ENV",
+    "RECORD_SCENARIO_DIR_ENV",
+    "RECORD_SCENARIO_RECIPE_ENV",
+    "REPLAY_SCENARIO_ENV",
+    "REPLAY_SCENARIO_DIR_ENV",
+    "SCENARIO_STEP_NAME_ENV",
+    "restore_skill_snapshot",
+    "scan_skill_snapshots",
+    "snapshot_skill_dir",
     # quota
+    "QUOTA_CACHE_SCHEMA_VERSION",
     "QuotaStatus",
     "check_and_sleep_if_needed",
+    "invalidate_cache",
     # session
     "ClaudeSessionResult",
     "ContentState",
+    "SessionState",
     "SkillResult",
+    "classify_infra_exit",
+    "clear_session_state",
     "extract_token_usage",
     "parse_session_result",
+    "persist_session_state",
+    "read_session_state",
     # headless
     "run_headless_core",
     "DefaultHeadlessExecutor",
@@ -106,19 +175,27 @@ __all__ = [
     "DefaultCIWatcher",
     # merge_queue
     "DefaultMergeQueueWatcher",
+    "fetch_repo_merge_state",
     # remote_resolver
     "REMOTE_PRECEDENCE",
+    "resolve_remote_name",
     "resolve_remote_repo",
     # diff_annotator
+    "DiffMetrics",
     "FilterResult",
     "annotate_diff",
+    "compute_diff_metrics",
+    "extract_code_region",
     "filter_findings",
     "parse_hunk_ranges",
+    "select_review_agents",
     # db
     "execute_readonly_query",
     "DefaultDatabaseReader",
     # github
     "DefaultGitHubFetcher",
+    "github_headers",
+    "parse_merge_queue_response",
     # linux_tracing
     "LINUX_TRACING_AVAILABLE",
     "LinuxTracingHandle",

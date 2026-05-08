@@ -53,10 +53,11 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 
 **NEVER:**
 - Modify any source code files
-- Create files outside `.autoskillit/temp/make-groups/` directory
+- Create files outside `{{AUTOSKILLIT_TEMP}}/make-groups/` directory
 - Drop, split, or rewrite requirements — reference them by original ID
 - Create groups that cannot be independently planned
 - Include implementation steps or technical approach in the group descriptions
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use subagents to verify codebase structure before finalizing groups
@@ -64,15 +65,14 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 - Include every requirement from the source document in exactly one group
 - Assign each group a sequential suffix: groupA, groupB, ... groupZ
 - State dependencies between groups explicitly
-- Write to `.autoskillit/temp/make-groups/` directory (relative to the current working directory)
+- Write to `{{AUTOSKILLIT_TEMP}}/make-groups/` directory (relative to the current working directory)
 - After writing the groups file and manifest, emit the **absolute paths** as structured output
-  tokens immediately before `%%ORDER_UP%%`. Resolve the relative `.autoskillit/temp/make-groups/...`
+  tokens as your final output. Resolve the relative `{{AUTOSKILLIT_TEMP}}/make-groups/...`
   save paths to absolute by prepending the full CWD:
   ```
-  groups_path = /absolute/cwd/.autoskillit/temp/make-groups/{groups_filename}.md
-  manifest_path = /absolute/cwd/.autoskillit/temp/make-groups/{manifest_filename}.json
-  group_files = /absolute/cwd/.autoskillit/temp/make-groups/{groups_filename}.md
-  %%ORDER_UP%%
+  groups_path = /absolute/cwd/{{AUTOSKILLIT_TEMP}}/make-groups/{groups_filename}.md
+  manifest_path = /absolute/cwd/{{AUTOSKILLIT_TEMP}}/make-groups/{manifest_filename}.json
+  group_files = /absolute/cwd/{{AUTOSKILLIT_TEMP}}/make-groups/{groups_filename}.md
   ```
   These tokens are MANDATORY — the pipeline cannot proceed without them.
 
@@ -81,30 +81,6 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 ### Step 1: Read the Source Document
 
 Read the full document. Inventory every requirement (REQ-*), feature, and deliverable. Build a raw list with original IDs preserved.
-
-### Step 1.5 — Code-Index Initialization (required before any code-index tool call)
-
-Call `set_project_path` with the repo root where this skill was invoked (not a worktree path):
-
-```
-mcp__code-index__set_project_path(path="{PROJECT_ROOT}")
-```
-
-Code-index tools require **project-relative paths**. Always use paths like:
-
-    src/<your_package>/some_module.py
-
-NOT absolute paths like:
-
-    /absolute/path/to/src/<your_package>/some_module.py
-
-> **Note:** Code-index tools (`find_files`, `search_code_advanced`, `get_file_summary`,
-> `get_symbol_body`) are only available when the `code-index` MCP server is configured.
-> If `set_project_path` returns an error, fall back to native `Glob` and `Grep` tools
-> for the same searches — they provide equivalent results without the code-index server.
-
-Agents launched via `run_skill` inherit no code-index state from the parent session — this
-call is mandatory at the start of every headless session that uses code-index tools.
 
 ### Step 2: Verify Against Codebase
 
@@ -130,7 +106,7 @@ Sort groups so that each group's dependencies are satisfied by earlier groups. D
 
 ### Step 5: Write the Groups Documents
 
-Produce three outputs in `.autoskillit/temp/make-groups/`:
+Produce three outputs in `{{AUTOSKILLIT_TEMP}}/make-groups/`:
 
 **5a. Index file (consolidated):** `groups_{topic}_{YYYY-MM-DD_HHMMSS}.md`
 
@@ -274,7 +250,7 @@ orchestrating recipe). List every per-group file in implementation order.
 ## Output Location
 
 ```
-.autoskillit/temp/make-groups/
+{{AUTOSKILLIT_TEMP}}/make-groups/
 ├── groups_{topic}_{ts}.md           # Consolidated index (all groups)
 ├── manifest_{topic}_{ts}.json       # Machine-readable manifest
 ├── groupA_{topic}_{ts}.md           # Individual per-group file
@@ -296,7 +272,7 @@ git checkout -b feature/{topic}
 
 Then run each group through the pipeline using the feature branch as `base_branch` for all
 `merge_worktree` calls. The `/autoskillit:audit-impl` skill accepts the manifest as input
-and audits all groups at once as the final gate before merging the feature branch to `integration`.
+and audits all groups at once as the final gate before merging the feature branch to `develop`.
 
 Use the `group-implementation` bundled workflow to automate this — it creates the feature
 branch, runs the group loop, and gates on audit before signalling merge-ready.

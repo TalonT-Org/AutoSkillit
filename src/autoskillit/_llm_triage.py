@@ -16,6 +16,7 @@ from autoskillit.core import (
     OutputFormat,
     SubprocessResult,
     TerminationReason,
+    build_claude_env,
     get_logger,
 )
 from autoskillit.execution import parse_session_result, run_managed_async
@@ -122,12 +123,13 @@ async def _triage_batch(
             cmd=triage_cmd,
             cwd=Path.cwd(),
             timeout=30.0,
+            env=build_claude_env(),
             pty_mode=True,
         )
         if result.termination == TerminationReason.TIMED_OUT:
             raise TimeoutError("triage_staleness batch timed out")
         session = parse_session_result(result.stdout)
-        if session.is_error or not session.result:
+        if session.is_error or session.needs_retry or not session.result:
             logger.warning(
                 "triage_staleness batch parse failed; treating all as meaningful",
                 batch=[i.skill for i in triageable],

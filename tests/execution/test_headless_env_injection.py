@@ -8,17 +8,17 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core.types import SubprocessResult, TerminationReason
-from tests.conftest import MockSubprocessRunner
+from tests.fakes import MockSubprocessRunner
+
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 @pytest.mark.anyio
-async def test_headless_command_includes_headless_env_var(tmp_path: Path) -> None:
+async def test_headless_command_includes_headless_env_var(minimal_ctx, tmp_path: Path) -> None:
     """run_headless_core must inject AUTOSKILLIT_HEADLESS=1 into the subprocess command."""
-    from autoskillit.config import AutomationConfig
     from autoskillit.execution.headless import run_headless_core
-    from autoskillit.pipeline.gate import DefaultGateState
-    from autoskillit.server._factory import make_context
 
+    minimal_ctx.runner = MockSubprocessRunner()
     success_result = json.dumps(
         {
             "type": "result",
@@ -28,8 +28,7 @@ async def test_headless_command_includes_headless_env_var(tmp_path: Path) -> Non
             "is_error": False,
         }
     )
-    mock_runner = MockSubprocessRunner()
-    mock_runner.set_default(
+    minimal_ctx.runner.set_default(
         SubprocessResult(
             returncode=0,
             stdout=success_result,
@@ -39,15 +38,14 @@ async def test_headless_command_includes_headless_env_var(tmp_path: Path) -> Non
         )
     )
 
-    ctx = make_context(AutomationConfig(), runner=mock_runner, plugin_dir=str(tmp_path))
-    ctx.gate = DefaultGateState(enabled=True)
-    ctx.config.linux_tracing.log_dir = str(tmp_path / "logs")
+    await run_headless_core("/investigate foo", str(tmp_path), minimal_ctx)
 
-    await run_headless_core("/investigate foo", str(tmp_path), ctx)
-
-    assert mock_runner.call_args_list, "runner was never called"
-    cmd, *_ = mock_runner.call_args_list[0]
-    assert "AUTOSKILLIT_HEADLESS=1" in cmd, (
-        "run_headless_core must inject AUTOSKILLIT_HEADLESS=1 into the subprocess command "
+    assert minimal_ctx.runner.call_args_list, "runner was never called"
+    cmd, _cwd, _timeout, kwargs = minimal_ctx.runner.call_args_list[0]
+    env = kwargs.get("env")
+    assert env is not None
+    assert env["AUTOSKILLIT_HEADLESS"] == "1", (
+        "run_headless_core must inject AUTOSKILLIT_HEADLESS=1 via the env kwarg "
         "so PreToolUse hooks can identify headless sessions."
     )
+    assert cmd[0] != "env", "argv must no longer carry a leading ['env', ...] prefix"

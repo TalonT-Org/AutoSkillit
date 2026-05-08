@@ -5,13 +5,18 @@ from __future__ import annotations
 from pathlib import Path
 from typing import get_args, get_type_hints
 
+import pytest
+
 from autoskillit.config import AutomationConfig
 from autoskillit.core import GitHubFetcher
+from autoskillit.core.types._type_plugin_source import DirectInstall
 from autoskillit.pipeline.audit import DefaultAuditLog, FailureRecord
 from autoskillit.pipeline.context import ToolContext
 from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.pipeline.timings import DefaultTimingLog
 from autoskillit.pipeline.tokens import DefaultTokenLog
+
+pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]
 
 
 def test_tool_context_fields_accessible(tmp_path):
@@ -22,14 +27,17 @@ def test_tool_context_fields_accessible(tmp_path):
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=DefaultGateState(enabled=True),
-        plugin_dir=str(tmp_path),
+        plugin_source=DirectInstall(plugin_dir=tmp_path),
         runner=None,
+        temp_dir=tmp_path / ".autoskillit" / "temp",
+        project_dir=tmp_path,
     )
     assert ctx.gate.enabled is True
-    assert ctx.plugin_dir == str(tmp_path)
+    assert isinstance(ctx.plugin_source, DirectInstall)
+    assert ctx.plugin_source.plugin_dir == tmp_path
 
 
-def test_tool_context_audit_isolation():
+def test_tool_context_audit_isolation(tmp_path):
     """Two ToolContext instances have independent AuditLog instances."""
     ctx_a = ToolContext(
         config=AutomationConfig(),
@@ -37,8 +45,10 @@ def test_tool_context_audit_isolation():
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=DefaultGateState(),
-        plugin_dir="/a",
+        plugin_source=DirectInstall(plugin_dir=tmp_path / "a"),
         runner=None,
+        temp_dir=tmp_path / "a" / ".autoskillit" / "temp",
+        project_dir=tmp_path / "a",
     )
     ctx_b = ToolContext(
         config=AutomationConfig(),
@@ -46,8 +56,10 @@ def test_tool_context_audit_isolation():
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=DefaultGateState(),
-        plugin_dir="/b",
+        plugin_source=DirectInstall(plugin_dir=tmp_path / "b"),
         runner=None,
+        temp_dir=tmp_path / "b" / ".autoskillit" / "temp",
+        project_dir=tmp_path / "b",
     )
     ctx_a.audit.record_failure(
         FailureRecord(
@@ -64,7 +76,7 @@ def test_tool_context_audit_isolation():
     assert len(ctx_b.audit.get_report()) == 0
 
 
-def test_gate_state_replacement():
+def test_gate_state_replacement(tmp_path):
     """ToolContext allows gate field replacement via plain assignment."""
     ctx = ToolContext(
         config=AutomationConfig(),
@@ -72,8 +84,10 @@ def test_gate_state_replacement():
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=DefaultGateState(enabled=False),
-        plugin_dir="/x",
+        plugin_source=DirectInstall(plugin_dir=tmp_path),
         runner=None,
+        temp_dir=tmp_path / ".autoskillit" / "temp",
+        project_dir=tmp_path,
     )
     assert ctx.gate.enabled is False
     ctx.gate = DefaultGateState(enabled=True)
@@ -88,8 +102,10 @@ def test_toolcontext_new_optional_fields_default_none(tmp_path):
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=DefaultGateState(enabled=True),
-        plugin_dir=str(tmp_path),
+        plugin_source=DirectInstall(plugin_dir=tmp_path),
         runner=None,
+        temp_dir=tmp_path / ".autoskillit" / "temp",
+        project_dir=tmp_path,
     )
     assert ctx.executor is None
     assert ctx.tester is None
@@ -156,6 +172,20 @@ def test_headless_executor_protocol_accepts_timeout() -> None:
     assert params["stale_threshold"].default is None
 
 
+def test_headless_executor_protocol_accepts_idle_output_timeout() -> None:
+    """HeadlessExecutor.run() signature must include optional idle_output_timeout."""
+    import inspect
+
+    from autoskillit.core import HeadlessExecutor
+
+    sig = inspect.signature(HeadlessExecutor.run)
+    params = sig.parameters
+    assert "idle_output_timeout" in params, (
+        "HeadlessExecutor.run missing idle_output_timeout param"
+    )
+    assert params["idle_output_timeout"].default is None
+
+
 def test_recipe_repository_protocol_has_rich_methods() -> None:
     """RecipeRepository protocol must expose load_and_validate, validate_from_path, list_all."""
     from autoskillit.core import RecipeRepository
@@ -166,15 +196,16 @@ def test_recipe_repository_protocol_has_rich_methods() -> None:
 
 def _make_ctx(tmp_path: Path) -> ToolContext:
     """Helper: minimal ToolContext with no optional fields."""
-    plugin_dir = str(tmp_path)
     return ToolContext(
         config=AutomationConfig(),
         audit=DefaultAuditLog(),
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=DefaultGateState(enabled=True),
-        plugin_dir=plugin_dir,
+        plugin_source=DirectInstall(plugin_dir=tmp_path),
         runner=None,
+        temp_dir=tmp_path / ".autoskillit" / "temp",
+        project_dir=tmp_path,
     )
 
 
@@ -185,7 +216,7 @@ def test_toolcontext_github_client_annotated_with_protocol():
 
 
 def test_toolcontext_response_log_annotated_with_mcp_response_store_protocol() -> None:
-    """ToolContext.response_log must be annotated with the McpResponseStore protocol.
+    """ToolContext.response_log must be annotated with the McpResponseLog protocol.
 
     response_log uses default_factory (Null Object pattern) not field(default=None),
     so it is excluded from test_toolcontext_optional_fields_all_have_protocol_annotations.
@@ -193,20 +224,151 @@ def test_toolcontext_response_log_annotated_with_mcp_response_store_protocol() -
     """
     from typing import get_type_hints
 
-    from autoskillit.core import McpResponseStore
+    from autoskillit.core import McpResponseLog
 
     hints = get_type_hints(ToolContext)
     assert "response_log" in hints, "ToolContext must have a response_log field"
-    assert hints["response_log"] is McpResponseStore, (
-        f"ToolContext.response_log must be annotated with McpResponseStore protocol, "
+    assert hints["response_log"] is McpResponseLog, (
+        f"ToolContext.response_log must be annotated with McpResponseLog protocol, "
         f"got: {hints['response_log']!r}"
     )
 
 
 def test_tool_context_has_timing_log_field(tmp_path):
-    """ToolContext.timing_log is a non-None TimingStore instance."""
-    from autoskillit.core import TimingStore
+    """ToolContext.timing_log is a non-None TimingLog instance."""
+    from autoskillit.core import TimingLog
 
     ctx = _make_ctx(tmp_path)
     assert ctx.timing_log is not None
-    assert isinstance(ctx.timing_log, TimingStore)
+    assert isinstance(ctx.timing_log, TimingLog)
+
+
+@pytest.mark.anyio
+async def test_toolcontext_default_background_wired_with_audit(tmp_path):
+    """ToolContext background supervisor records failures to ctx.audit."""
+    from autoskillit.pipeline.background import DefaultBackgroundSupervisor
+
+    audit = DefaultAuditLog()
+    ctx = ToolContext(
+        config=AutomationConfig(),
+        audit=audit,
+        token_log=DefaultTokenLog(),
+        timing_log=DefaultTimingLog(),
+        gate=DefaultGateState(),
+        plugin_source=DirectInstall(plugin_dir=tmp_path),
+        runner=None,
+        temp_dir=tmp_path / ".autoskillit" / "temp",
+        project_dir=tmp_path,
+    )
+    assert isinstance(ctx.background, DefaultBackgroundSupervisor)
+
+    async def _fail() -> None:
+        raise RuntimeError("deliberate test failure")
+
+    ctx.background.submit(_fail(), label="test-task")
+    await ctx.background.drain()
+
+    records = audit.get_report()
+    assert any(r.subtype == "background_exception" for r in records)
+
+
+# ---------------------------------------------------------------------------
+# token_factory field
+# ---------------------------------------------------------------------------
+
+
+def test_tool_context_has_token_factory_field():
+    """ToolContext dataclass exposes token_factory as an optional callable Protocol field."""
+    import dataclasses
+    import typing
+
+    from autoskillit.core import TokenFactory
+    from autoskillit.pipeline.context import ToolContext
+
+    fields = {f.name: f for f in dataclasses.fields(ToolContext)}
+    assert "token_factory" in fields
+    assert fields["token_factory"].default is None
+
+    hints = typing.get_type_hints(ToolContext)
+    assert "token_factory" in hints
+    # Annotation must be a union that includes the TokenFactory Protocol (callable)
+    args = typing.get_args(hints["token_factory"])
+    assert TokenFactory in args, (
+        f"token_factory type hint {hints['token_factory']} does not include TokenFactory Protocol"
+    )
+
+
+def test_tool_context_has_fleet_lock_field():
+    """ToolContext has a fleet_lock field defaulting to None."""
+    from autoskillit.pipeline.context import ToolContext
+
+    field_info = ToolContext.__dataclass_fields__["fleet_lock"]
+    assert field_info.default is None
+
+
+def test_tool_context_recipe_identity_defaults(tmp_path):
+    ctx = _make_ctx(tmp_path)
+    assert ctx.recipe_name == ""
+    assert ctx.recipe_content_hash == ""
+    assert ctx.recipe_composite_hash == ""
+    assert ctx.recipe_version == ""
+
+
+# --- Group P-2: project_dir env inheritance ---
+
+
+def test_toolcontext_has_project_dir_field():
+    """ToolContext dataclass has a project_dir field of type Path."""
+    import dataclasses
+
+    from autoskillit.pipeline.context import ToolContext
+
+    field_names = {f.name for f in dataclasses.fields(ToolContext)}
+    assert "project_dir" in field_names
+
+
+# --- Sentinel guard tests ---
+
+
+def test_toolcontext_raises_typeerror_when_temp_dir_unset(tmp_path):
+    with pytest.raises(TypeError, match="temp_dir"):
+        ToolContext(
+            config=AutomationConfig(),
+            audit=DefaultAuditLog(),
+            token_log=DefaultTokenLog(),
+            timing_log=DefaultTimingLog(),
+            gate=DefaultGateState(),
+            plugin_source=DirectInstall(plugin_dir=tmp_path),
+            runner=None,
+            project_dir=tmp_path,
+        )
+
+
+def test_toolcontext_raises_typeerror_when_project_dir_unset(tmp_path):
+    with pytest.raises(TypeError, match="project_dir"):
+        ToolContext(
+            config=AutomationConfig(),
+            audit=DefaultAuditLog(),
+            token_log=DefaultTokenLog(),
+            timing_log=DefaultTimingLog(),
+            gate=DefaultGateState(),
+            plugin_source=DirectInstall(plugin_dir=tmp_path),
+            runner=None,
+            temp_dir=tmp_path / ".autoskillit" / "temp",
+        )
+
+
+def test_toolcontext_accepts_explicit_path_fields(tmp_path):
+    ctx = ToolContext(
+        config=AutomationConfig(),
+        audit=DefaultAuditLog(),
+        token_log=DefaultTokenLog(),
+        timing_log=DefaultTimingLog(),
+        gate=DefaultGateState(),
+        plugin_source=DirectInstall(plugin_dir=tmp_path),
+        runner=None,
+        temp_dir=tmp_path / ".autoskillit" / "temp",
+        project_dir=tmp_path,
+    )
+    assert ctx.temp_dir == tmp_path / ".autoskillit" / "temp"
+    assert ctx.project_dir == tmp_path

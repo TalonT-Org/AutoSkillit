@@ -1,0 +1,32 @@
+{
+  "name": "causal_inference",
+  "schema_version": "1.0",
+  "priority": 1,
+  "is_fallback": false,
+  "classification_triggers": [
+    "Explicit randomization, manipulation, or intervention assignment: 'randomly assigned', 'intervention applied', 'treatment group', 'control group', 'manipulated X', 'assigned to condition'",
+    "Causal claim ('test whether X causes Y') AND explicit confounder adjustment or treatment assignment described"
+  ],
+  "dimension_weights": {
+    "causal_structure": "H",
+    "variance_protocol": "L",
+    "statistical_corrections": "H",
+    "ecological_validity": "L",
+    "measurement_alignment": "M",
+    "resource_proportionality": "L",
+    "data_acquisition": "M",
+    "agent_implementability": "M"
+  },
+  "applicable_lenses": {
+    "primary": "exp-lens-estimand-clarity",
+    "secondary": null
+  },
+  "red_team_focus": {
+    "specific": "unblocked backdoor path",
+    "severity_cap": "critical"
+  },
+  "l1_severity": {
+    "estimand_clarity": "critical",
+    "hypothesis_falsifiability": "critical"
+  }
+}

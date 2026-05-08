@@ -1,6 +1,6 @@
 ---
 name: dry-walkthrough
-description: Validate an implementation plan by tracing through each change without implementing. Use when user says dry walkthrough, drywalkthrough, validate plan, or check plan. Identifies gaps, fixes the plan directly, and reports changes to terminal.
+description: Plan validation executor. ALWAYS invoke this skill when instructed to validate or dry-walkthrough a plan. Do not read the plan or trace changes directly — use this skill first to load the validation workflow.
 hooks:
   PreToolUse:
     - matcher: "*"
@@ -29,7 +29,7 @@ The plan file must remain a **clean, self-contained implementation instruction s
 
 ## Arguments
 
-`{plan_path}`   — Absolute path to the plan file to validate (optional: falls back to most recent .autoskillit/temp/ artifact if omitted)
+`{plan_path}`   — Absolute path to the plan file to validate (optional: falls back to most recent {{AUTOSKILLIT_TEMP}}/ artifact if omitted)
 
 ## Critical Constraints
 
@@ -45,6 +45,7 @@ The plan file must remain a **clean, self-contained implementation instruction s
 - Remove or defer goals or phases from the plan
 - Reduce the plan's scope to a "simpler fix" - the plan defines the problem scope, not you
 - Consider effort as a reason for choosing one approach over another
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Keep the plan as clean implementation instructions only (information/background helpful to implementation is okay)
@@ -56,6 +57,15 @@ The plan file must remain a **clean, self-contained implementation instruction s
 - Make sure the plan includes warning against using the codebase as a notepad with useless comments
 - Prefer the long term health of project over quick, easy, and minimal fixes
 
+## Context Limit Behavior
+
+When context is exhausted mid-execution, plan file edits may be partially applied.
+The recipe routes to `on_context_limit` (typically `register_clone_failure` or a
+restart step), abandoning the partial walkthrough.
+
+This skill modifies only the plan file (not source code), so partial edits have
+limited blast radius. The downstream step will restart the walkthrough on retry.
+
 ## Dry Walkthrough Workflow
 
 ### Step 1: Load the Plan
@@ -63,7 +73,7 @@ The plan file must remain a **clean, self-contained implementation instruction s
 Read the plan from:
 - Path provided by user
 - Plan content pasted directly
-- Most recent plan in .autoskillit/temp/ subdirectories
+- Most recent plan in {{AUTOSKILLIT_TEMP}}/ subdirectories
 
 ### Multi-Part Plan Detection
 
@@ -72,7 +82,7 @@ After resolving the plan path, check whether this is a part file of a multi-part
 1. **Detect the part suffix:** If the plan filename contains `_part_` (e.g., `_part_a`, `_part_b`, `_part_1`), this is one part of a multi-part plan. Extract the part identifier (A, B, C… or number) from the suffix.
 
 2. **⚠️ SCOPE BOUNDARY — CRITICAL:** If a part suffix is detected, immediately output to the terminal:
-   > "⚠️ MULTI-PART PLAN DETECTED: Validating PART {X} ONLY. This session MUST NOT read, open, reference, or validate any other part files. Sibling part files visible in .autoskillit/temp/ or any other directory are entirely out of scope and must be ignored."
+   > "⚠️ MULTI-PART PLAN DETECTED: Validating PART {X} ONLY. This session MUST NOT read, open, reference, or validate any other part files. Sibling part files visible in {{AUTOSKILLIT_TEMP}}/ or any other directory are entirely out of scope and must be ignored."
 
 3. **Verify the scope warning block:** Check that the plan file contains the mandatory scope warning block immediately after the title line. The block must match this form:
    ```
@@ -93,6 +103,13 @@ For each phase, verify using subagents:
 6. Does this violate any project rules?
 7. Does the implmentation make sense given the reality of the current state of code?
 8. Is every new component, class, or function actually wired into the call chain? Nothing should be created but left unconnected.
+9. If the plan adds tests that call mutating methods on shared objects (singletons, global
+   registries, server instances), does the plan account for state restoration? Scan the
+   plan text for method calls on module-scope objects (e.g., enable(...), disable(...),
+   register(...), connect(...)). If found, verify the plan specifies cleanup. Inspect
+   the target test directory's existing isolation pattern (conftest autouse fixtures,
+   setup/teardown) and confirm the plan's new tests comply. If the plan prescribes
+   mutating shared state without specifying cleanup, flag it.
 ```
 
 ### Step 3: Check Cross-Phase Dependencies
@@ -112,11 +129,11 @@ PROJECT RULES CHECKLIST:
 [ ] No PR breakdown sections
 [ ] Follows existing architectural patterns
 [ ] Uses existing utilities (not reinventing) unless refactoring is part of plan or provides major improvement
-[ ] Test command uses the project's configured `test_check.command` (from `.autoskillit/config.yaml`, default: `task test-check`) — no unconfigured direct test runner invocations (pytest, python -m pytest, etc.)
+[ ] Test command uses the project's configured `test_check.commands` (list of commands, if set) or `test_check.command` (from `.autoskillit/config.yaml`, default: `task test-check`) — no unconfigured direct test runner invocations (pytest, python -m pytest, etc.)
 [ ] Worktree setup uses `worktree_setup.command` or `task install-worktree` — no hardcoded `uv venv`, `pip install`, or direct package manager invocations
 ```
 
-**Test command enforcement:** Scan the entire plan for any test invocation. Read the project's configured test command from `test_check.command` in `.autoskillit/config.yaml` (default: `task test-check` if absent or unconfigured). If the plan contains `pytest`, `python -m pytest`, `make test`, or any other unconfigured test runner invocation, replace it with the config-driven command.
+**Test command enforcement:** Scan the entire plan for any test invocation. Read the project's configured test commands from `.autoskillit/config.yaml`: check `test_check.commands` first (list of ordered commands, if set); fall back to `test_check.command` (single command, default: `task test-check`). If the plan contains `pytest`, `python -m pytest`, `make test`, or any other unconfigured test runner invocation, replace it with the config-driven command(s).
 
 **Worktree setup enforcement:** Scan the plan for any worktree environment setup. The plan should reference the project's configured `worktree_setup.command` or `task install-worktree`. If the plan contains hardcoded `uv venv`, `uv pip install`, `pip install -e`, `npm install` (as worktree setup, not as a configured command), flag it and replace with the config-driven approach.
 
@@ -141,7 +158,7 @@ This is a quick cross-reference sanity check — not a deep audit.
 3. For each matching commit, determine signal strength:
    - **Strong signal:** The plan proposes to add a function or class name that appears
      in the commit's diff as a deletion — check with:
-     `git show {hash} | grep "^-def \|^-class \|^-async def "` and compare against
+     `git show {hash} | rg "^-def |^-class |^-async def "` and compare against
      function/class names the plan introduces.
    - **Weak signal:** Same file touched + fix/revert keyword in message, but no
      symbol-level match.
@@ -237,7 +254,7 @@ After updating the plan, output a summary to the terminal (your response text):
 
 ## Example
 
-**Input:** User says "dry walkthrough .autoskillit/temp/make-plan/api_retry_plan.md"
+**Input:** User says "dry walkthrough {{AUTOSKILLIT_TEMP}}/make-plan/api_retry_plan.md"
 
 **Process:**
 1. Read the plan
@@ -251,7 +268,7 @@ After updating the plan, output a summary to the terminal (your response text):
 ```
 ## Dry Walkthrough Complete
 
-**Plan:** .autoskillit/temp/make-plan/api_retry_plan.md
+**Plan:** {{AUTOSKILLIT_TEMP}}/make-plan/api_retry_plan.md
 **Status:** REVISED
 
 ### Changes Made

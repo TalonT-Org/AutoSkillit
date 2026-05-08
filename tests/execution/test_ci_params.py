@@ -7,12 +7,15 @@ immunity guards against the bug where workflow_id was silently absent.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
+import httpx
 import pytest
 
 from autoskillit.core import CIRunScope
-from autoskillit.execution.ci import DefaultCIWatcher
+from autoskillit.execution.ci import DefaultCIWatcher, _validate_run_matches_scope
+
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 def _now() -> str:
@@ -38,7 +41,7 @@ async def test_completed_runs_includes_workflow_id(httpx_mock):
             "owner/repo",
             "main",
             scope=CIRunScope(workflow="tests.yml"),
-            lookback_seconds=300,
+            cutoff_dt=datetime.now(UTC) - timedelta(seconds=300),
         )
     req = httpx_mock.get_requests()[0]
     assert httpx.URL(str(req.url)).params["workflow_id"] == "tests.yml"
@@ -58,7 +61,7 @@ async def test_completed_runs_omits_workflow_id_when_none(httpx_mock):
             "owner/repo",
             "main",
             scope=CIRunScope(),
-            lookback_seconds=300,
+            cutoff_dt=datetime.now(UTC) - timedelta(seconds=300),
         )
     req = httpx_mock.get_requests()[0]
     assert "workflow_id" not in str(req.url)
@@ -78,30 +81,51 @@ async def test_completed_runs_always_sends_branch(httpx_mock):
             "owner/repo",
             "main",
             scope=CIRunScope(),
-            lookback_seconds=300,
+            cutoff_dt=datetime.now(UTC) - timedelta(seconds=300),
         )
     req = httpx_mock.get_requests()[0]
     assert httpx.URL(str(req.url)).params["branch"] == "main"
 
 
 @pytest.mark.anyio
-async def test_completed_runs_sends_head_sha(httpx_mock):
-    """When scope.head_sha is set, head_sha must appear in API params."""
-    import httpx
-
-    httpx_mock.add_response(json={"workflow_runs": []})
+async def test_completed_runs_omits_head_sha_from_params(httpx_mock):
+    """_fetch_completed_runs must NOT include head_sha as a query param."""
+    httpx_mock.add_response(
+        json={"workflow_runs": []},
+        headers={"ETag": '"abc"'},
+    )
     watcher = DefaultCIWatcher(token="tok")
     async with httpx.AsyncClient() as client:
         await watcher._fetch_completed_runs(
             client,
             watcher._headers(),
             "owner/repo",
-            "main",
-            scope=CIRunScope(head_sha="abc123"),
-            lookback_seconds=300,
+            "feature-x",
+            CIRunScope(head_sha="abc123"),
+            cutoff_dt=None,
         )
     req = httpx_mock.get_requests()[0]
-    assert httpx.URL(str(req.url)).params["head_sha"] == "abc123"
+    assert "head_sha" not in req.url.params
+
+
+@pytest.mark.anyio
+async def test_active_runs_omits_head_sha_from_params(httpx_mock):
+    """_fetch_active_runs must NOT include head_sha as a query param."""
+    httpx_mock.add_response(
+        json={"workflow_runs": []},
+        headers={"ETag": '"xyz"'},
+    )
+    watcher = DefaultCIWatcher(token="tok")
+    async with httpx.AsyncClient() as client:
+        await watcher._fetch_active_runs(
+            client,
+            watcher._headers(),
+            "owner/repo",
+            "feature-x",
+            CIRunScope(head_sha="abc123"),
+        )
+    req = httpx_mock.get_requests()[0]
+    assert "head_sha" not in req.url.params
 
 
 # ---------------------------------------------------------------------------
@@ -231,3 +255,94 @@ async def test_wait_calls_fetch_jobs_for_timed_out_run(httpx_mock):
     result = await watcher.wait("main", repo="owner/repo", timeout_seconds=60)
     assert result["conclusion"] == "timed_out"
     assert "unit" in result["failed_jobs"]
+
+
+# ---------------------------------------------------------------------------
+# _fetch_completed_runs — event param
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_completed_runs_includes_event(httpx_mock):
+    """When scope.event='push', event must appear in API query params."""
+    httpx_mock.add_response(json={"workflow_runs": []})
+    watcher = DefaultCIWatcher(token="tok")
+    async with httpx.AsyncClient() as client:
+        await watcher._fetch_completed_runs(
+            client,
+            watcher._headers(),
+            "owner/repo",
+            "main",
+            scope=CIRunScope(event="push"),
+            cutoff_dt=datetime.now(UTC) - timedelta(seconds=300),
+        )
+    req = httpx_mock.get_requests()[0]
+    assert httpx.URL(str(req.url)).params["event"] == "push"
+
+
+@pytest.mark.anyio
+async def test_completed_runs_omits_event_when_none(httpx_mock):
+    """When scope.event is None, event must be absent from API params."""
+    httpx_mock.add_response(json={"workflow_runs": []})
+    watcher = DefaultCIWatcher(token="tok")
+    async with httpx.AsyncClient() as client:
+        await watcher._fetch_completed_runs(
+            client,
+            watcher._headers(),
+            "owner/repo",
+            "main",
+            scope=CIRunScope(),
+            cutoff_dt=datetime.now(UTC) - timedelta(seconds=300),
+        )
+    req = httpx_mock.get_requests()[0]
+    assert "event" not in httpx.URL(str(req.url)).params
+
+
+@pytest.mark.anyio
+async def test_active_runs_includes_event(httpx_mock):
+    """When scope.event='push', event must appear in active runs params."""
+    httpx_mock.add_response(json={"workflow_runs": []})
+    watcher = DefaultCIWatcher(token="tok")
+    async with httpx.AsyncClient() as client:
+        await watcher._fetch_active_runs(
+            client,
+            watcher._headers(),
+            "owner/repo",
+            "main",
+            scope=CIRunScope(event="push"),
+        )
+    req = httpx_mock.get_requests()[0]
+    assert httpx.URL(str(req.url)).params["event"] == "push"
+
+
+# ---------------------------------------------------------------------------
+# _validate_run_matches_scope
+# ---------------------------------------------------------------------------
+
+
+def test_validate_run_matches_scope_event_match():
+    """Run with matching event passes validation."""
+    run = {"event": "push", "head_sha": "abc123"}
+    scope = CIRunScope(event="push", head_sha="abc123")
+    assert _validate_run_matches_scope(run, scope) is True
+
+
+def test_validate_run_matches_scope_event_mismatch():
+    """Run with non-matching event fails validation."""
+    run = {"event": "pull_request", "head_sha": "abc123"}
+    scope = CIRunScope(event="push", head_sha="abc123")
+    assert _validate_run_matches_scope(run, scope) is False
+
+
+def test_validate_run_matches_scope_none_event_accepts_all():
+    """When scope.event is None, any event is accepted."""
+    run = {"event": "pull_request", "head_sha": "abc123"}
+    scope = CIRunScope(event=None)
+    assert _validate_run_matches_scope(run, scope) is True
+
+
+def test_validate_run_matches_scope_sha_mismatch():
+    """Run with non-matching head_sha fails validation."""
+    run = {"event": "push", "head_sha": "def456"}
+    scope = CIRunScope(head_sha="abc123")
+    assert _validate_run_matches_scope(run, scope) is False

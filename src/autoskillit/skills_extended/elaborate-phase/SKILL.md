@@ -1,5 +1,6 @@
 ---
 name: elaborate-phase
+activate_deps: [dry-walkthrough]
 description: Elaborate a migration plan phase into a complete self-contained implementation plan. Use when user says "elaborate phase", "elaborate phase N", or "phase elaboration". Assesses codebase, writes detailed phase plan, then validates with dry walkthrough.
 hooks:
   PreToolUse:
@@ -34,6 +35,7 @@ Elaborate a single phase from a high-level migration plan into a complete, self-
 - Elaborate multiple phases at once - one phase per invocation
 - Make assumptions about codebase state without verifying
 - Read previous `Phase#.md` files unless you have a specific question that requires looking up a detail
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Assess current codebase state with subagents FIRST

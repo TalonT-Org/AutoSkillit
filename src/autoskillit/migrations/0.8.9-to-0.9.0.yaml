@@ -1,0 +1,143 @@
+from_version: "0.8.9"
+to_version: "0.9.0"
+description: >
+  Verdict-gated CI recovery: auto-fix skills declare a typed verdict output,
+  recipes route via on_result instead of unconditional on_success, diagnose-ci
+  emits failure_subtype, and a new semantic rule prevents ungated push paths.
+changes:
+  - id: verdict-output-on-auto-fix-skills
+    description: >
+      resolve-failures, resolve-review, resolve-claims-review, and
+      resolve-research-review now declare a 'verdict' output
+      (allowed_values: real_fix, already_green, flake_suspected, ci_only_failure)
+      and 'fixes_applied' as typed outputs. write_expected_when migrated from
+      fixes_applied pattern to verdict=real_fix.
+    instruction: |
+      In skill_contracts.yaml, for each of the four auto-fix skills, replace:
+        outputs: []
+      with:
+        outputs:
+          - name: verdict
+            type: string
+            allowed_values: [real_fix, already_green, flake_suspected, ci_only_failure]
+          - name: fixes_applied
+            type: integer
+      And update write_expected_when to:
+        write_expected_when:
+          - "verdict\\s*=\\s*real_fix"
+    example_before: |
+      resolve-failures:
+        outputs: []
+        write_behavior: conditional
+        write_expected_when:
+          - "fixes_applied\\s*=\\s*[1-9][0-9]*"
+    example_after: |
+      resolve-failures:
+        outputs:
+          - name: verdict
+            type: string
+            allowed_values: [real_fix, already_green, flake_suspected, ci_only_failure]
+          - name: fixes_applied
+            type: integer
+        write_behavior: conditional
+        write_expected_when:
+          - "verdict\\s*=\\s*real_fix"
+
+  - id: diagnose-ci-failure-subtype-output
+    description: >
+      diagnose-ci now declares failure_subtype as a typed output with
+      allowed_values: flaky, timing_race, deterministic, fixture, import, env, unknown.
+    instruction: |
+      In skill_contracts.yaml under diagnose-ci, add to outputs:
+        - name: failure_subtype
+          type: string
+          allowed_values: [flaky, timing_race, deterministic, fixture, import, env, unknown]
+    example_before: |
+      diagnose-ci:
+        outputs:
+          - name: diagnosis_path
+            type: file_path
+          - name: failure_type
+            type: string
+          - name: is_fixable
+            type: boolean
+    example_after: |
+      diagnose-ci:
+        outputs:
+          - name: diagnosis_path
+            type: file_path
+          - name: failure_type
+            type: string
+            allowed_values: [test, lint, build, type_check, env, unknown]
+          - name: failure_subtype
+            type: string
+            allowed_values: [flaky, timing_race, deterministic, fixture, import, env, unknown]
+          - name: is_fixable
+            type: boolean
+
+  - id: recipe-verdict-gated-routing
+    description: >
+      resolve_ci and resolve_review steps in implementation.yaml,
+      implementation-groups.yaml, and remediation.yaml now use on_result:
+      with verdict dispatch instead of unconditional on_success: re_push.
+      A new pre_resolve_rebase step handles the already_green re-entry path.
+    instruction: |
+      In each pipeline recipe, replace:
+        resolve_ci:
+          ...
+          on_success: re_push
+      with:
+        resolve_ci:
+          ...
+          on_result:
+            - when: "${{ result.verdict }} == 'real_fix'"
+              route: re_push
+            - when: "${{ result.verdict }} == 'already_green'"
+              route: pre_resolve_rebase
+            - when: "${{ result.verdict }} == 'flake_suspected'"
+              route: release_issue_failure
+            - when: "${{ result.verdict }} == 'ci_only_failure'"
+              route: release_issue_failure
+      And add:
+        pre_resolve_rebase:
+          tool: run_cmd
+          with:
+            cmd: "git fetch origin && git rebase origin/${{ inputs.base_branch }}"
+            cwd: "${{ context.work_dir }}"
+            step_name: "pre_resolve_rebase"
+          retries: 1
+          on_success: diagnose_ci
+          on_failure: release_issue_failure
+      Apply the same pattern to resolve_review steps.
+    example_before: |
+      resolve_ci:
+        tool: run_skill
+        with:
+          skill_command: "/autoskillit:resolve-failures ..."
+        on_success: re_push
+        on_failure: release_issue_failure
+    example_after: |
+      resolve_ci:
+        tool: run_skill
+        with:
+          skill_command: "/autoskillit:resolve-failures ..."
+        on_result:
+          - when: "${{ result.verdict }} == 'real_fix'"
+            route: re_push
+          - when: "${{ result.verdict }} == 'already_green'"
+            route: pre_resolve_rebase
+          - when: "${{ result.verdict }} == 'flake_suspected'"
+            route: release_issue_failure
+          - when: "${{ result.verdict }} == 'ci_only_failure'"
+            route: release_issue_failure
+        on_failure: release_issue_failure
+
+  - id: conditional-skill-ungated-push-rule
+    description: >
+      New semantic rule 'conditional-skill-ungated-push' (ERROR severity) in
+      rules_fixing.py. Rejects any recipe where a write_behavior=conditional skill
+      step reaches push_to_remote without an on_result: gate on a declared output.
+    instruction: |
+      No user action required. The rule fires automatically during recipe validation.
+      If custom recipes route a conditional-write skill unconditionally to push,
+      add on_result: verdict dispatch before the push step.

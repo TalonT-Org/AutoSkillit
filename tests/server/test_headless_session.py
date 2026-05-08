@@ -4,29 +4,45 @@ from __future__ import annotations
 
 import pytest
 
+pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
+
 
 @pytest.mark.anyio
-async def test_headless_session_kitchen_visible_from_startup(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """When AUTOSKILLIT_HEADLESS=1, kitchen tools are pre-revealed.
+async def test_mcp_enable_kitchen_reveals_gated_tools(kitchen_enabled) -> None:
+    """mcp.enable(tags={'kitchen'}) reveals all GATED_TOOLS to the client.
 
-    Uses FastMCP Client to assert that GATED_TOOLS are visible after
-    mcp.enable(tags={'kitchen'}), which is the startup behavior for
-    headless sessions.
+    Uses FastMCP Client to assert that every tool in GATED_TOOLS is visible
+    after mcp.enable(tags={'kitchen'}), which is the manual reveal step used
+    in headless sessions.
     """
     from fastmcp.client import Client
 
     from autoskillit.pipeline.gate import GATED_TOOLS
     from autoskillit.server import mcp
 
-    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-    mcp.enable(tags={"kitchen"})
-    try:
-        async with Client(mcp) as client:
-            tool_names = {t.name for t in await client.list_tools()}
-        assert any(name in GATED_TOOLS for name in tool_names), (
-            "Kitchen tools must be enabled when AUTOSKILLIT_HEADLESS=1"
-        )
-    finally:
-        mcp.disable(tags={"kitchen"})
+    async with Client(mcp) as client:
+        tool_names = {t.name for t in await client.list_tools()}
+    from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_TOOLS
+
+    non_fleet_gated = GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS
+    assert non_fleet_gated.issubset(tool_names), (
+        f"Missing gated tools: {non_fleet_gated - tool_names}"
+    )
+
+
+@pytest.mark.anyio
+async def test_mcp_enable_kitchen_does_not_reveal_fleet_tools(kitchen_enabled) -> None:
+    """mcp.enable(tags={'kitchen'}) must NOT reveal fleet-only tools to the client.
+
+    Fleet tools carry kitchen-core (visible to L2/L3 via tag enable) but are NOT
+    revealed when only the 'kitchen' umbrella tag is enabled.
+    """
+    from fastmcp.client import Client
+
+    from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_TOOLS
+    from autoskillit.server import mcp
+
+    async with Client(mcp) as client:
+        tool_names = {t.name for t in await client.list_tools()}
+    fleet_visible = (FLEET_TOOLS | FLEET_DISPATCH_TOOLS) & tool_names
+    assert fleet_visible == set(), f"Fleet tools visible after kitchen enable: {fleet_visible}"

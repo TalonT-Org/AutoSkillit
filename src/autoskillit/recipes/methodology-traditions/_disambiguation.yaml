@@ -1,0 +1,75 @@
+schema_version: "1.0"
+
+disambiguation_rules:
+  - name: prisma_dominance
+    order: 1
+    description: "PRISMA dominates any primary design tradition"
+    trigger_mode: anchor_plus_any
+    anchor: systematic_synthesis
+    trigger_traditions: [systematic_synthesis]
+    primary_tradition: systematic_synthesis
+    applied_union_rules: []
+    exceptions:
+      - when_present: prediction_model_validation
+        add_union_rules: [TRIPOD_SRMA]
+
+  - name: rct_economic_union
+    order: 2
+    description: "RCT + Economic evaluation invoke both rule sets"
+    trigger_mode: all_present
+    trigger_traditions: [controlled_intervention, economic_evaluation]
+    primary_tradition: controlled_intervention
+    applied_union_rules: [CHEERS_union]
+
+  - name: arrive_supersedes_consort
+    order: 3
+    description: "ARRIVE supersedes CONSORT for animal studies"
+    trigger_mode: all_present
+    trigger_traditions: [animal_preclinical, controlled_intervention]
+    primary_tradition: animal_preclinical
+    applied_union_rules: []
+
+  - name: benchmarking_prediction_nested
+    order: 4
+    description: "Benchmarking with TRIPOD+AI calibration/discrimination nested"
+    trigger_mode: all_present
+    trigger_traditions: [method_comparison_benchmarking, prediction_model_validation]
+    primary_tradition: method_comparison_benchmarking
+    applied_union_rules: [TRIPOD_nested]
+
+cross_tradition_overlaps:
+  - name: tripod_consort_union
+    order: 5
+    description: "Model validated within an RCT"
+    trigger_traditions: [prediction_model_validation, controlled_intervention]
+    primary_tradition: controlled_intervention
+    applied_union_rules: [TRIPOD_union]
+
+  - name: strobe_prisma_moose
+    order: 6
+    description: "Meta-analysis of observational studies uses MOOSE"
+    trigger_traditions: [observational_correlational, systematic_synthesis]
+    primary_tradition: systematic_synthesis
+    applied_union_rules: [MOOSE_override]
+
+  - name: odd_controlled_nesting
+    order: 7
+    description: "Simulation calibrated against experimental data"
+    trigger_traditions: [simulation_modeling_tradition, controlled_intervention]
+    primary_tradition: simulation_modeling_tradition
+    applied_union_rules: [controlled_intervention_secondary]
+
+  - name: benchmarking_prisma_separation
+    order: 8
+    description: "Dataset curation via PRISMA; algorithm evaluation via Weber"
+    trigger_traditions: [method_comparison_benchmarking, systematic_synthesis]
+    primary_tradition: method_comparison_benchmarking
+    applied_union_rules: [PRISMA_curation_phase]
+    overrides_primary: true
+
+  - name: srqr_consort_parallel
+    order: 9
+    description: "Mixed-methods RCT qualitative component"
+    trigger_traditions: [qualitative_interpretive_tradition, controlled_intervention]
+    primary_tradition: controlled_intervention
+    applied_union_rules: [SRQR_parallel]

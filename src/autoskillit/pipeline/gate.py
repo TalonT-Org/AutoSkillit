@@ -1,10 +1,10 @@
 """Gate policy constants for AutoSkillit MCP tools.
 
-L1 pipeline module. Declares which tools are gated vs. ungated and provides
+IL-1 pipeline module. Declares which tools are gated vs. ungated and provides
 the canonical error response for a closed gate.
 
-GATED_TOOLS and UNGATED_TOOLS are sourced from autoskillit.core.types (L0)
-so that L2 modules (recipe, migration) can also reference the tool registry
+GATED_TOOLS and UNGATED_TOOLS are sourced from autoskillit.core.types (IL-0)
+so that IL-2 modules (recipe, migration) can also reference the tool registry
 without violating layer ordering.
 """
 
@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-from autoskillit.core import GATED_TOOLS, UNGATED_TOOLS  # noqa: F401
+from autoskillit.core import GATED_TOOLS, UNGATED_TOOLS, KillReason  # noqa: F401
 
 
 @dataclass(slots=True)
@@ -45,7 +45,7 @@ def gate_error_result(message: str | None = None) -> str:
     'tools not enabled' message for gate-closed errors.
 
     Hardcodes retry_reason as "none" (the StrEnum value of RetryReason.NONE)
-    to preserve the L0 zero-internal-imports constraint.
+    to preserve the IL-0 zero-internal-imports constraint.
     """
     return json.dumps(
         {
@@ -56,6 +56,7 @@ def gate_error_result(message: str | None = None) -> str:
             "cli_subtype": "",
             "is_error": True,
             "exit_code": -1,
+            "kill_reason": KillReason.NOT_APPLICABLE,
             "needs_retry": False,
             "retry_reason": "none",
             "stderr": "",
@@ -68,8 +69,9 @@ def gate_error_result(message: str | None = None) -> str:
 
 _DEFAULT_HEADLESS_MESSAGE = (
     "This tool cannot be called from headless sessions. "
-    "Headless workers (Tier 2) may only use native Claude Code tools and "
-    "HEADLESS_TOOLS. Orchestration tools are reserved for Tier 1 sessions."
+    "L1 headless workers may only use native Claude Code tools and "
+    "HEADLESS_TOOLS. Orchestration tools are reserved for L2+ sessions "
+    "(orchestrator or fleet)."
 )
 
 
@@ -89,6 +91,7 @@ def headless_error_result(message: str | None = None) -> str:
             "cli_subtype": "",
             "is_error": True,
             "exit_code": -1,
+            "kill_reason": KillReason.NOT_APPLICABLE,
             "needs_retry": False,
             "retry_reason": "none",
             "stderr": "",

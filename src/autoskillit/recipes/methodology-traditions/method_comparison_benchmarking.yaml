@@ -1,0 +1,165 @@
+name: method_comparison_benchmarking
+schema_version: "1.0"
+priority: 12
+display_name: "Method Comparison and Benchmarking"
+canonical_guideline:
+  name: "Weber et al. 2019"
+  governing_body: "community"
+  stable_for_decade: true
+  canonical: false
+fields_spanned:
+  - computer_science
+  - software_engineering
+  - machine_learning
+  - bioinformatics
+  - operations_research
+detection_keywords:
+  - benchmark
+  - method comparison
+  - baseline comparison
+  - state-of-the-art
+  - SOTA
+  - leaderboard
+  - ablation study
+  - performance comparison
+  - evaluation protocol
+mandatory_figures:
+  - figure: "Performance Comparison Table or Figure"
+    shows: "Quantitative metrics comparing all methods side-by-side"
+    citation: "Weber et al. 2019 Section 4"
+  - figure: "Statistical Significance Test Results"
+    shows: "Tests comparing method performance with p-values or confidence intervals"
+    citation: "Weber et al. 2019 Section 4"
+strongly_expected_figures:
+  - figure: "Critical Difference Diagram"
+    shows: "Post-hoc pairwise comparisons with statistical significance"
+    source: "Demšar 2006"
+  - figure: "Runtime-Accuracy Pareto Front"
+    shows: "Trade-off between computational cost and accuracy metrics"
+    source: "Weber et al. 2019"
+anti_patterns:
+  - pattern: "No statistical significance testing"
+    reason: "Performance differences must be tested for statistical significance"
+  - pattern: "Cherry-picked baselines"
+    reason: "All relevant competing methods should be included; omission of strong baselines biases conclusions"
+  - pattern: "Unreported hyperparameter tuning"
+    reason: "Methods must be fairly tuned before comparison to ensure valid assessment"
+  - pattern: "No ablation study"
+    reason: "Ablation studies isolate the contribution of individual components"
+venue_specific_appendices:
+  - sub_area: supervised_classification
+    trigger_keywords:
+      - confusion matrix
+      - precision
+      - recall
+      - ROC-AUC
+      - PR curve
+      - classification
+      - learning curve
+    expectations:
+      - figure: "Confusion Matrix"
+        source: "NeurIPS/ICML community norms"
+      - figure: "PR Curve"
+        source: "NeurIPS/ICML community norms"
+      - figure: "ROC-AUC Plot"
+        source: "NeurIPS/ICML community norms"
+      - figure: "Learning Curves"
+        source: "NeurIPS/ICML community norms"
+  - sub_area: nlp
+    trigger_keywords:
+      - accuracy
+      - F1
+      - GLUE
+      - SuperGLUE
+      - NLP
+      - language model
+      - token
+    expectations:
+      - figure: "Per-Task Accuracy Table"
+        source: "ACL norms"
+      - figure: "Error Analysis Examples"
+        source: "ACL norms"
+  - sub_area: computer_vision
+    trigger_keywords:
+      - mAP
+      - COCO
+      - detection
+      - segmentation
+      - object detection
+      - image classification
+    expectations:
+      - figure: "Sample Predictions Grid"
+        source: "CVPR/ECCV norms"
+      - figure: "Failure Gallery"
+        source: "CVPR/ECCV norms"
+      - figure: "Per-Class mAP Table"
+        source: "CVPR/ECCV norms"
+  - sub_area: reinforcement_learning
+    trigger_keywords:
+      - episode reward
+      - RL
+      - Atari
+      - agent
+      - policy gradient
+    expectations:
+      - figure: "Episode Reward Curve"
+        source: "NeurIPS RL norms"
+      - figure: "Sample Efficiency Curve"
+        source: "NeurIPS RL norms"
+  - sub_area: generative_models
+    trigger_keywords:
+      - GAN
+      - diffusion
+      - FID
+      - IS
+      - generative
+      - sample quality
+    expectations:
+      - figure: "Sample Grid"
+        source: "NeurIPS/ICLR norms"
+      - figure: "FID/IS Table"
+        source: "NeurIPS/ICLR norms"
+      - figure: "Failure Modes Gallery"
+        source: "NeurIPS/ICLR norms"
+  - sub_area: foundation_models
+    trigger_keywords:
+      - LLM
+      - few-shot
+      - scaling
+      - GPT
+      - foundation model
+      - zero-shot
+    expectations:
+      - figure: "Few-Shot Scaling Curve"
+        source: "LLM evaluation norms"
+      - figure: "Contamination Analysis"
+        source: "LLM evaluation norms"
+      - figure: "Ablation Table"
+        source: "LLM evaluation norms"
+  - sub_area: agentic_systems
+    trigger_keywords:
+      - agentic
+      - tool use
+      - multi-agent
+      - task success
+      - workflow
+    expectations:
+      - figure: "Task Success Rate Bar Chart"
+        source: "Emerging norms"
+      - figure: "Step-Level Execution Traces"
+        source: "Emerging norms"
+      - figure: "Tool Use Breakdown"
+        source: "Emerging norms"
+  - sub_area: time_series
+    trigger_keywords:
+      - forecasting
+      - time series
+      - temporal
+      - prediction interval
+    expectations:
+      - figure: "Forecasting Horizon Curve"
+        source: "ICLR/NeurIPS norms"
+      - figure: "Decomposition Plot"
+        source: "ICLR/NeurIPS norms"
+      - figure: "Residual ACF Plot"
+        source: "ICLR/NeurIPS norms"

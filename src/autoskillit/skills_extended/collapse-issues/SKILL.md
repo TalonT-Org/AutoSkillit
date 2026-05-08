@@ -7,6 +7,13 @@ description: >
   Closes originals with cross-reference comments. Inverse of issue-splitter.
 triggers:
   - /autoskillit:collapse-issues
+hooks:
+  PreToolUse:
+    - matcher: "*"
+      hooks:
+        - type: command
+          command: "echo '[SKILL: collapse-issues] Collapsing duplicate GitHub issues...'"
+          once: true
 ---
 
 # collapse-issues Skill
@@ -24,7 +31,7 @@ Grouping analysis is performed as in-context LLM reasoning. No parallel sessions
 - After `issue-splitter` has decomposed issues into focused sub-issues, to re-consolidate
   overly granular results
 - Invoked by `triage-issues` via the `--collapse` flag (Step 2c)
-- Directly by a user who wants to reduce issue count before an implementation sprint
+- Directly by a user who wants to reduce issue count before a batch implementation run
 - With `--dry-run` to preview what would be collapsed without mutating GitHub
 
 ## Arguments
@@ -47,12 +54,16 @@ Grouping analysis is performed as in-context LLM reasoning. No parallel sessions
 - Collapse issues with different `recipe:*` labels into one combined issue
 - Delegate grouping to parallel sessions — grouping analysis is in-context LLM reasoning only
 - Use parallel session spawning (Agent/Task) for grouping analysis — it is in-context LLM reasoning
-- Create files outside `.autoskillit/temp/collapse-issues/`
+- Create files outside `{{AUTOSKILLIT_TEMP}}/collapse-issues/`
 - Skip emitting the `---collapse-issues-result---` block (emit even on error or no-collapse)
 - Summarize, paraphrase, truncate, or abbreviate the body of a source issue
 - Substitute a hyperlink, URL reference, or cross-reference for inlined body content
 - Use angle-bracket placeholder syntax (`<...>`) in the combined issue body — always paste actual retrieved content from fetch_github_issue
 - Use the body field from `gh issue list` for body assembly — only fetched_content[N] from per-issue fetch is authoritative
+- Use `--body` inline for `gh issue create` when the body contains verbatim multi-issue content —
+  always write to `{{AUTOSKILLIT_TEMP}}/collapse-issues/combined_body_{timestamp}.md` and use
+  `--body-file` (the combined body can exceed shell arg limits and the inline form contradicts
+  the SWITCH TO COPY MODE verbatim guarantee)
 
 **ALWAYS:**
 - Include `--force` on all label creation calls (`gh label create --force`) for idempotency
@@ -149,8 +160,6 @@ For each issue in each qualifying group (not standalone issues), call:
 where `issue_url` is constructed as:
     https://github.com/{repo}/issues/{number}
 
-Do not output any prose between fetch calls — immediately proceed to the next issue.
-
 Store the returned `content` field from the response. If `fetch_github_issue` returns
 `success: false` for an issue, log the failure and proceed using the issue title
 and a note that full body content was unavailable (do not fabricate body content).
@@ -183,14 +192,22 @@ Emit result block with `"dry_run": true` and exit without any GitHub mutations:
 
 For each qualifying group (in-context LLM reasoning for title synthesis):
 
-Do not emit any prose or status text between groups — immediately proceed to create each combined issue.
-
 **7a. Synthesize title:**
 
 Write a title that describes the combined scope of all issues in the group.
 Format: `"Combined: <descriptive scope phrase>"`
 
 **7b. Build combined issue body:**
+
+Initialize the temp file:
+```bash
+ts=$(date +%Y-%m-%d_%H%M%S)
+COMBINED_BODY="{{AUTOSKILLIT_TEMP}}/collapse-issues/combined_body_${ts}.md"
+mkdir -p "{{AUTOSKILLIT_TEMP}}/collapse-issues"
+```
+
+Write the verbatim combined body to `${COMBINED_BODY}` using the Write tool (one section at a
+time via `>>` append). Write exactly this structure:
 
 ```
 <!-- Collapses: #N, #M, #P -->
@@ -199,7 +216,7 @@ This issue combines related work originally tracked in #N, #M, and #P.
 
 ## From #N: {original title of issue N}
 
-{Paste the complete, unmodified text of fetched_content[N].body here exactly
+{Write the complete, unmodified text of fetched_content[N].body here exactly
 as returned by fetch_github_issue. Do not summarize, paraphrase, truncate, or
 abbreviate any part of the body. Do not substitute a hyperlink, cross-reference,
 or descriptive sentence. Every heading, list item, code block, and paragraph
@@ -213,7 +230,7 @@ generate new prose. Copy only.}
 
 ## From #M: {original title of issue M}
 
-{Paste the complete, unmodified text of fetched_content[M].body here exactly
+{Write the complete, unmodified text of fetched_content[M].body here exactly
 as returned by fetch_github_issue. Do not summarize, paraphrase, truncate, or
 abbreviate any part of the body. Do not substitute a hyperlink, cross-reference,
 or descriptive sentence. Every heading, list item, code block, and paragraph
@@ -227,7 +244,7 @@ generate new prose. Copy only.}
 
 ## From #P: {original title of issue P}
 
-{Paste the complete, unmodified text of fetched_content[P].body here exactly
+{Write the complete, unmodified text of fetched_content[P].body here exactly
 as returned by fetch_github_issue. Do not summarize, paraphrase, truncate, or
 abbreviate any part of the body. Do not substitute a hyperlink, cross-reference,
 or descriptive sentence. Every heading, list item, code block, and paragraph
@@ -257,7 +274,7 @@ Repeat for each unique label in the collected set (e.g., `recipe:remediation`, `
 ```bash
 gh issue create \
   --title "Combined: <synthesized title>" \
-  --body "<combined body>" \
+  --body-file "${COMBINED_BODY}" \
   --label "recipe:implementation" \
   --label "enhancement" \
   [--repo {repo}]
@@ -269,18 +286,23 @@ Capture the new issue number from the URL in stdout output.
 
 For each original issue that was collapsed (one by one, in order):
 
-**8a. Post closing comment:**
+**8a. Append ## Superseded section and update body:**
 
 ```bash
-gh issue comment {orig_number} \
-  --body "Collapsed into #{combined_number}: {combined_url}" \
-  [--repo {repo}]
+COLLAPSE_BODY_FILE="{{AUTOSKILLIT_TEMP}}/collapse-issues/supersede_{orig_number}_{ts}.md"
+mkdir -p "$(dirname "$COLLAPSE_BODY_FILE")"
+gh issue view {orig_number} --json body --jq '.body' [--repo {repo}] > "$COLLAPSE_BODY_FILE"
+printf '\n\n---\n\n## Superseded\n\nCollapsed into #%s: %s' \
+  "{combined_number}" "{combined_url}" >> "$COLLAPSE_BODY_FILE"
+gh issue edit {orig_number} --body-file "$COLLAPSE_BODY_FILE" [--repo {repo}]
+sleep 1  # Rate-limit discipline: 1s between mutating calls
 ```
 
 **8b. Close the issue:**
 
 ```bash
 gh issue close {orig_number} [--repo {repo}]
+sleep 1  # Rate-limit discipline: 1s between mutating calls
 ```
 
 ### Step 9: Emit Result Block
@@ -310,7 +332,7 @@ On error, emit:
 
 ## Output Location
 
-Dry-run reports (if any): `.autoskillit/temp/collapse-issues/`
+Dry-run reports (if any): `{{AUTOSKILLIT_TEMP}}/collapse-issues/`
 
 ## Error Handling
 

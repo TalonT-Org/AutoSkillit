@@ -1,6 +1,6 @@
 ---
 name: retry-worktree
-description: Continue implementing a plan in an existing git worktree after context exhaustion. Use when a previous implement-worktree session hit context limits. Takes plan path and worktree path as arguments.
+description: Worktree retry executor. ALWAYS invoke this skill when instructed to continue or retry an implementation in an existing worktree. Do not resume editing files directly — use this skill first to load the retry workflow.
 hooks:
   PreToolUse:
     - matcher: "*"
@@ -42,6 +42,7 @@ Continue implementing a plan in an **existing** git worktree. This skill is used
 - Re-run tests just to see failures — grep the saved output file instead
 - Pipe test output through `tail`, `head`, or other truncation commands — `tail -N` buffers the entire stream and produces no output if the process is killed before EOF
 - Default to `main` as the base branch — always discover it from git's upstream structure or the explicit base-branch store file
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use the provided worktree path (do NOT create a new one)
@@ -50,6 +51,20 @@ Continue implementing a plan in an **existing** git worktree. This skill is used
 - Continue from where the previous session left off
 - Run the project's test suite from the worktree directory
 - Rebase onto base branch before completion (ready for squash-and-merge)
+- **Read files fully**: When reading a file to understand it in full, read it in a single call without a `limit` parameter. Do not paginate files with sequential offset reads — read once completely. Use `limit`/`offset` only for targeted section reads of files you have already read in full.
+
+## Context Limit Behavior
+
+When context is exhausted mid-execution, implementation changes may be on disk but
+not yet committed. The recipe routes to `on_context_limit`, preserving the worktree.
+
+**Before emitting structured output tokens:**
+1. Run `git -C {WORKTREE_PATH} status --porcelain`
+2. If any files are dirty: `git -C {WORKTREE_PATH} add -A && git -C {WORKTREE_PATH} commit -m "chore: commit pending changes before context limit"`
+3. Only then emit the `worktree_path`, `branch_name`, and `phases_implemented` tokens
+
+This ensures that all implementation progress is committed and the downstream
+merge gate receives a clean worktree when the recipe resumes.
 
 ## Workflow
 
@@ -60,7 +75,7 @@ Parse two positional arguments from the prompt:
 2. **Worktree path** — verify the directory exists and is a git worktree. Check that the development environment is set up (e.g. `.venv` exists for Python projects)
 
 **Path Detection:** Use path detection to locate both arguments. Scan all
-tokens after the skill name for those starting with `/`, `./`, `.autoskillit/temp/`, or
+tokens after the skill name for those starting with `/`, `./`, `{{AUTOSKILLIT_TEMP}}/`, or
 `.autoskillit/`. The first such token is `plan_path`; the second is
 `worktree_path`. Ignore any non-path tokens that appear before them (e.g.,
 extra descriptive text like "use this plan" or "from worktree"). If fewer than
@@ -98,17 +113,16 @@ if [ -z "$BASE_BRANCH" ]; then
     # Fallback: read explicit file store written by implement-worktree-no-merge
     MAIN_GIT_DIR=$(git rev-parse --git-common-dir)
     MAIN_REPO_ROOT=$(dirname "${MAIN_GIT_DIR}")
-    STORE_FILE="${MAIN_REPO_ROOT}/.autoskillit/temp/worktrees/${CURRENT_BRANCH}/base-branch"
+    WORKTREE_DIR_NAME=$(basename "$(pwd)")
+    STORE_FILE="${MAIN_REPO_ROOT}/{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_DIR_NAME}/base-branch"
     BASE_BRANCH=$(cat "${STORE_FILE}" 2>/dev/null)
 fi
 
 if [ -z "$BASE_BRANCH" ]; then
-    echo "ERROR: Cannot determine base branch from git structure."
-    echo "Both the upstream tracking ref and the explicit base-branch file at"
-    echo ".autoskillit/temp/worktrees/${CURRENT_BRANCH}/base-branch are missing."
-    echo "Ensure the worktree was created by implement-worktree-no-merge,"
-    echo "which writes both stores at worktree creation time."
-    exit 1
+    # Last resort: project-level default from config (always available)
+    BASE_BRANCH="{{DEFAULT_BASE_BRANCH}}"
+    echo "WARNING: Could not determine base branch from git upstream or sidecar file."
+    echo "Falling back to project default: ${BASE_BRANCH}"
 fi
 ```
 
@@ -125,16 +139,6 @@ Then assess what has been implemented:
    - Which phase is partially complete
    - Which phases haven't started
 
-### Step 1.5: Initialize Code Index for Worktree
-
-Set the MCP code-index project path to the worktree so code searches operate on the correct files:
-
-```
-mcp__code-index__set_project_path(path="{WORKTREE_PATH}")
-```
-
-This must happen before any code-index searches or Explore subagents.
-
 ### Step 2: Targeted Exploration (Only If Needed)
 
 Only explore systems related to the **remaining** phases. Do NOT re-explore already-completed work. Use Explore subagents for:
@@ -146,12 +150,16 @@ Only explore systems related to the **remaining** phases. Do NOT re-explore alre
 
 **All commands must run from `{WORKTREE_PATH}`.** Use absolute paths to avoid CWD drift across Bash tool calls.
 
-For each remaining/incomplete phase:
-1. Announce phase objective and files to modify
-2. Implement changes
-3. Run per-phase verification if plan specifies it
-4. Commit per phase if possible
-5. Report phase completion
+Initialize a counter before iterating: `PHASES_IMPLEMENTED=0`
+
+NEVER use AskUserQuestion between phase iterations. Each phase begins immediately
+after the previous phase completes.
+
+For each remaining/incomplete phase, begin implementation immediately (no announcement):
+1. Implement changes
+2. Run per-phase verification if plan specifies it
+3. Commit per phase if possible
+4. Increment the counter: `PHASES_IMPLEMENTED=$((PHASES_IMPLEMENTED + 1))`
 
 Where practical, delegate test updates to subagents to keep main conversation context lean.
 
@@ -161,7 +169,10 @@ Run the project's code quality checks and test suite from the worktree.
 
 ```bash
 cd {WORKTREE_PATH} && pre-commit run --all-files
-cd {WORKTREE_PATH} && task test-all
+cd {WORKTREE_PATH} && \
+  AUTOSKILLIT_TEST_FILTER="${AUTOSKILLIT_TEST_FILTER:-conservative}" \
+  AUTOSKILLIT_TEST_BASE_REF="${BASE_BRANCH:-}" \
+  task test-all
 ```
 
 If tests fail, fix the issue and re-run.
@@ -193,17 +204,11 @@ Then emit these structured output tokens on their own lines so recipe capture bl
 ```
 worktree_path = ${WORKTREE_PATH}
 branch_name = ${CURRENT_BRANCH}
+phases_implemented = ${PHASES_IMPLEMENTED}
 ```
 
-### Step 6.5: Reset Code Index to Original Project (REQUIRED)
-
-After worktree cleanup, reset the MCP code-index project path back to the original project directory:
-
-```
-mcp__code-index__set_project_path(path="{ORIGINAL_PROJECT_PATH}")
-```
-
-Failure to do this leaves code-index pointing at a deleted worktree path, breaking all subsequent code searches.
+Where `PHASES_IMPLEMENTED` is the count from Step 3. If Step 3 was skipped entirely
+(all phases already complete), emit `phases_implemented = 0`.
 
 ## Error Handling
 

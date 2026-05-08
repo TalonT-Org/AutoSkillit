@@ -15,7 +15,7 @@ repos:
 
       - id: mypy
         name: mypy
-        entry: mypy src/ --ignore-missing-imports
+        entry: mypy src/ tests/_test_filter.py --ignore-missing-imports
         language: system
         pass_filenames: false
 
@@ -37,6 +37,27 @@ repos:
         entry: python scripts/check_doc_counts.py
         language: system
         files: ^(docs/|README\.md|src/autoskillit/skills/|src/autoskillit/recipes/|src/autoskillit/core/_type_constants\.py)
+        pass_filenames: false
+
+      - id: check-version-consistency
+        name: Check version consistency across artifacts
+        language: system
+        entry: python scripts/sync_versions.py --check
+        files: '(pyproject\.toml|plugin\.json|recipes/.*\.yaml)$'
+        pass_filenames: false
+
+      - id: check-tool-annotations
+        name: Check MCP tool readOnlyHint annotations
+        language: system
+        entry: python scripts/check_tool_annotations.py
+        files: ^src/autoskillit/server/tools_
+        pass_filenames: false
+
+      - id: check-sub-claude-md
+        name: Check sub-CLAUDE.md file table completeness
+        language: system
+        entry: python scripts/check_sub_claude_md.py
+        files: ^(tests/|src/autoskillit/).*(\.py|CLAUDE\.md)$
         pass_filenames: false
 
   - repo: https://github.com/gitleaks/gitleaks

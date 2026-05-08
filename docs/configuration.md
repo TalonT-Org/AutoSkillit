@@ -8,8 +8,11 @@ Most projects only need one setting — the test command:
     autoskillit init
 
 This creates `.autoskillit/config.yaml` with the test command you provide.
-Everything else has sensible defaults. See [Getting Started](getting-started.md)
-for a full tutorial.
+Every other field falls back to the layered defaults loaded by
+`config/settings.py` (package `defaults.yaml` → user-level
+`~/.autoskillit/config.yaml` → project-level `.autoskillit/config.yaml` →
+`.autoskillit/.secrets.yaml` → `AUTOSKILLIT_*` environment variables, in that
+order). See [Getting Started](getting-started.md) for a full tutorial.
 
 ## Common Configurations
 
@@ -73,7 +76,7 @@ AUTOSKILLIT_QUOTA_GUARD__ENABLED=false        # disables quota guard
 
 This is useful for CI pipelines or per-session overrides without touching config files.
 
-Partial configs are fine. Unset fields keep their defaults. View the resolved config with [`autoskillit config show`](cli-reference.md#autoskillit-config-show).
+Partial configs are fine. Unset fields keep their defaults. View the resolved config with [`autoskillit config show`](cli.md#autoskillit-config-show).
 
 ## Test Command
 
@@ -136,9 +139,14 @@ Default: `command: null` (disabled), `preserve_dirs: []`.
 ```yaml
 quota_guard:
   enabled: true
-  threshold: 80.0          # block run_skill when 5-hour utilization exceeds this %
-  buffer_seconds: 60       # extra buffer after quota reset before resuming
-  cache_max_age: 60        # seconds before a live quota fetch is triggered
+  short_window_threshold: 85.0   # block at this % for short windows (e.g. five_hour)
+  long_window_threshold: 95.0    # block at this % for long windows (weekly, sonnet, opus)
+  long_window_patterns:          # substrings (case-insensitive) that classify a
+    - weekly                     # window name as long-window
+    - sonnet
+    - opus
+  buffer_seconds: 60             # extra buffer after quota reset before resuming
+  cache_max_age: 300             # seconds before a live quota fetch is triggered
 ```
 
 Check current quota: `autoskillit quota-status`.
@@ -165,11 +173,11 @@ branching:
   default_base_branch: main   # default base branch for recipes
 ```
 
-Default: `main`. Override if your project uses a different integration branch (e.g. `integration` or `develop`):
+Default: `main`. Override if your project uses a different integration branch (e.g. `develop`):
 
 ```yaml
 branching:
-  default_base_branch: integration
+  default_base_branch: develop
 ```
 
 ## Session Diagnostics (Linux)
@@ -182,7 +190,7 @@ linux_tracing:
   tmpfs_path: "/dev/shm"  # RAM-backed path for crash resilience
 ```
 
-See [Session Diagnostics](developer/session-diagnostics.md) for details on log output.
+See [Session Diagnostics](developer/diagnostics.md) for details on log output.
 
 ## Headless Sessions
 
@@ -263,7 +271,7 @@ read_db:
 
 ```yaml
 report_bug:
-  output_dir: null  # null = {cwd}/.autoskillit/temp/bug-reports/
+  report_dir: null  # null = {cwd}/.autoskillit/temp/bug-reports/
   timeout: 600
   github_filing: true
   github_labels: ["autoreported", "bug"]
@@ -305,7 +313,7 @@ skills:
 ```
 
 Any bundled skill can be promoted or demoted by adding it to the desired tier list. A skill
-in multiple tiers simultaneously is a validation error. See **[Skill Visibility](skill-visibility.md)**
+in multiple tiers simultaneously is a validation error. See **[Skill Visibility](skills/visibility.md)**
 for the full tier breakdown, session mode table, and override rules.
 
 ## Subset Categories
@@ -325,7 +333,7 @@ subsets:
 ```
 
 Disabling a subset hides its members from all session modes — even after `open_kitchen`.
-See **[Subset Categories](subset-categories.md)** for the complete category listing and
+See **[Subset Categories](skills/subsets.md)** for the complete category listing and
 FastMCP mechanics.
 
 ## Full Example
@@ -361,7 +369,7 @@ with GitHub's merge queue feature. For best results with automation use cases:
 ### `min_entries_to_merge_wait_minutes` = 0
 
 GitHub branch rulesets expose a `min_entries_to_merge_wait_minutes` setting that adds
-latency before a queued PR is eligible to merge. For the `integration` branch (or any
+latency before a queued PR is eligible to merge. For the `develop` branch (or any
 branch where AutoSkillit manages the PR queue), set this to `0`.
 
 **Why:** AutoSkillit enters PRs one at a time or in small batches. A non-zero wait
@@ -369,5 +377,37 @@ multiplier adds unnecessary latency per PR. Setting it to `0` lets PRs merge as 
 as their CI passes.
 
 **Location:** GitHub → Repository Settings → Branches → Branch protection rules →
-select the integration ruleset → Merge queue → "Minimum entries to merge — wait X minutes".
+select the develop ruleset → Merge queue → "Minimum entries to merge — wait X minutes".
 Set to `0`.
+
+## Feature Flags
+
+Features are gated by lifecycle state. The `features:` config section and
+`AUTOSKILLIT_FEATURES__*` env vars let you override individual features.
+
+### Lifecycle States
+
+| Lifecycle | Behavior | Can Override? |
+|-----------|----------|---------------|
+| STABLE | On everywhere | Yes — opt out via `features: {name: false}` |
+| EXPERIMENTAL | On when `experimental_enabled: true` (default on develop; off on main) | Yes — per-feature entry overrides blanket |
+| DEPRECATED | Follows `default_enabled`; may be removed without warning | Yes |
+| DISABLED | Always off; cannot be enabled | No — config entry setting `true` is rejected |
+
+### Blanket Toggle
+
+`experimental_enabled: true` in `defaults.yaml` means all `EXPERIMENTAL` features are
+active on develop, worktrees, and feature branches without any per-feature config.
+
+Main and stable branches commit `features: {experimental_enabled: false}` to opt out.
+
+### Per-Feature Override
+
+Any config layer can override an individual feature regardless of the blanket toggle:
+
+```yaml
+features:
+  planner: false    # disable planner even on develop
+```
+
+Env var takes highest priority: `AUTOSKILLIT_FEATURES__PLANNER=false`.

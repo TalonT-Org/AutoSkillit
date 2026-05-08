@@ -1,0 +1,606 @@
+"""MCP tool handlers: merge_worktree, classify_fix, create_and_publish_branch."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+import time
+from typing import Any
+
+import structlog
+from fastmcp import Context
+from fastmcp.dependencies import CurrentContext
+
+from autoskillit.core import RestartScope, get_logger
+from autoskillit.server import mcp
+from autoskillit.server._guards import _require_enabled
+from autoskillit.server._notify import _notify, track_response_size
+from autoskillit.server._subprocess import _run_subprocess
+
+_BRANCH_DATE_FORMAT = "%Y%m%d"
+
+
+def _compute_branch_name(issue_slug: str, run_name: str, issue_number: str) -> str:
+    """Compute branch name from slug + issue number or today's date."""
+    from datetime import date
+
+    prefix = issue_slug or run_name
+    if issue_number:
+        return f"{prefix}/{issue_number}"
+    return f"{prefix}/{date.today().strftime(_BRANCH_DATE_FORMAT)}"
+
+
+logger = get_logger(__name__)
+
+
+@mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
+@track_response_size("merge_worktree")
+async def merge_worktree(
+    worktree_path: str,
+    base_branch: str,
+    step_name: str = "",
+    ctx: Context = CurrentContext(),
+) -> str:
+    """Merge a worktree branch into the base branch after verifying tests pass.
+
+    Programmatic gate: runs the configured test command in the worktree before allowing merge.
+    If tests fail, returns error without merging.
+    On failure, consider using /resolve-failures via run_skill
+    for automated diagnosis and remediation.
+
+    Args:
+        worktree_path: Absolute path to the git worktree.
+        base_branch: Branch to merge into (e.g. "develop").
+        step_name: Optional YAML step key for wall-clock timing accumulation.
+
+    Never raises.
+    """
+    if (gate := _require_enabled()) is not None:
+        return gate
+    try:
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(tool="merge_worktree", cwd=worktree_path)
+        logger.info("merge_worktree", path=worktree_path, base=base_branch)
+        await _notify(
+            ctx,
+            "info",
+            f"merge_worktree: {worktree_path} -> {base_branch}",
+            "autoskillit.merge_worktree",
+            extra={"worktree": worktree_path, "base": base_branch},
+        )
+
+        from autoskillit.server import _get_config, _get_ctx
+        from autoskillit.server._misc import resolve_remote_name
+        from autoskillit.server.git import perform_merge
+
+        tool_ctx = _get_ctx()
+        runner = tool_ctx.runner
+        assert runner is not None, "No subprocess runner configured"
+        _start = time.monotonic()
+        remote = await resolve_remote_name(worktree_path)
+        try:
+            result = await perform_merge(
+                worktree_path,
+                base_branch,
+                remote=remote,
+                config=_get_config(),
+                runner=runner,
+                tester=tool_ctx.tester,
+            )
+
+            if "error" in result:
+                await _notify(
+                    ctx,
+                    "error",
+                    "merge_worktree failed",
+                    "autoskillit.merge_worktree",
+                    extra={"reason": result["error"]},
+                )
+
+            return json.dumps(result)
+        finally:
+            if step_name:
+                tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
+    except Exception as exc:
+        logger.error("merge_worktree unhandled exception", exc_info=True)
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+
+
+@mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
+@track_response_size("classify_fix")
+async def classify_fix(
+    worktree_path: str,
+    base_branch: str,
+    step_name: str = "",
+    ctx: Context = CurrentContext(),
+) -> str:
+    """Analyze a worktree's changes to determine if the fix requires restarting
+    from plan creation or just re-running the implementation.
+
+    Inspects git diff between the worktree HEAD and the base branch merge-base.
+    If any changed files are in critical paths, returns full_restart.
+    Otherwise returns partial_restart.
+
+    Routing guidance:
+    - full_restart: The fix touches critical paths. Re-run investigation and
+      plan creation (e.g. call /investigate via run_skill).
+    - partial_restart: The fix is localized. Re-run implementation only
+      (e.g. call /implement-worktree-no-merge via run_skill).
+
+    Args:
+        worktree_path: Path to the git worktree with the implemented fix.
+        base_branch: The branch the worktree was created from (for merge-base).
+        step_name: Optional YAML step key for wall-clock timing accumulation.
+
+    Never raises.
+    """
+    if (gate := _require_enabled()) is not None:
+        return gate
+    try:
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(tool="classify_fix", cwd=worktree_path)
+        logger.info("classify_fix", worktree=worktree_path, base=base_branch)
+        await _notify(
+            ctx,
+            "info",
+            f"classify_fix: {worktree_path}",
+            "autoskillit.classify_fix",
+            extra={"worktree": worktree_path, "base": base_branch},
+        )
+
+        if not os.path.isdir(worktree_path):
+            return json.dumps(
+                {
+                    "restart_scope": RestartScope.FULL_RESTART,
+                    "reason": (
+                        f"worktree_path does not exist or is not a directory: {worktree_path}"
+                    ),
+                    "critical_files": [],
+                    "all_changed_files": [],
+                }
+            )
+
+        from autoskillit.server import _get_config, _get_ctx
+        from autoskillit.server._misc import resolve_remote_name
+        from autoskillit.server.git import _filter_changed_files
+
+        tool_ctx = _get_ctx()
+        _start = time.monotonic()
+        remote = await resolve_remote_name(worktree_path)
+        try:
+            fetch_rc, _, fetch_stderr = await _run_subprocess(
+                ["git", "fetch", remote, base_branch],
+                cwd=worktree_path,
+                timeout=30,
+            )
+            if fetch_rc != 0:
+                return json.dumps(
+                    {
+                        "restart_scope": RestartScope.FULL_RESTART,
+                        "reason": (
+                            f"git fetch {remote} {base_branch} failed — "
+                            "remote-tracking ref may be stale. "
+                            f"git error: {(fetch_stderr or '').strip()[:200]}"
+                        ),
+                        "critical_files": [],
+                        "all_changed_files": [],
+                    }
+                )
+
+            returncode, stdout, stderr = await _run_subprocess(
+                ["git", "diff", "--name-only", f"{remote}/{base_branch}...HEAD"],
+                cwd=worktree_path,
+                timeout=30,
+            )
+
+            if returncode != 0:
+                await _notify(
+                    ctx,
+                    "error",
+                    "classify_fix: git diff failed (falling back to full_restart)",
+                    "autoskillit.classify_fix",
+                    extra={"worktree": worktree_path},
+                )
+                # A missing origin/<base_branch> ref (rc=128, "ambiguous argument" or
+                # "unknown revision") is treated as FULL_RESTART — conservative safe default.
+                # Any other git error also falls back to FULL_RESTART for the same reason:
+                # if we can't determine what changed, assume the worst.
+                return json.dumps(
+                    {
+                        "restart_scope": RestartScope.FULL_RESTART,
+                        "reason": (
+                            f"Cannot diff against {remote}/{base_branch}"
+                            f" — ref may not exist locally. "
+                            f"git error: {stderr.strip()[:200]}"
+                        ),
+                        "critical_files": [],
+                        "all_changed_files": [],
+                    }
+                )
+
+            prefixes = _get_config().classify_fix.path_prefixes
+            changed_files, critical_files = _filter_changed_files(stdout, prefixes)
+
+            if critical_files:
+                return json.dumps(
+                    {
+                        "restart_scope": RestartScope.FULL_RESTART,
+                        "reason": f"Fix touches critical paths: {', '.join(critical_files[:5])}",
+                        "critical_files": critical_files,
+                        "all_changed_files": changed_files,
+                    }
+                )
+
+            return json.dumps(
+                {
+                    "restart_scope": RestartScope.PARTIAL_RESTART,
+                    "reason": "Fix does not touch critical paths — partial restart is sufficient",
+                    "critical_files": [],
+                    "all_changed_files": changed_files,
+                }
+            )
+        finally:
+            if step_name:
+                tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
+    except Exception as exc:
+        logger.error("classify_fix unhandled exception", exc_info=True)
+        return json.dumps(
+            {
+                "restart_scope": RestartScope.FULL_RESTART,
+                "reason": f"{type(exc).__name__}: {exc}",
+                "critical_files": [],
+                "all_changed_files": [],
+            }
+        )
+
+
+@mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
+@track_response_size("create_unique_branch")
+async def create_unique_branch(
+    slug: str = "",
+    issue_number: int | None = None,
+    remote: str = "origin",
+    cwd: str = ".",
+    base_branch_name: str | None = None,
+    step_name: str = "",
+    ctx: Context = CurrentContext(),
+) -> str:
+    """Derive a unique branch name and create it locally.
+
+    Two invocation paths:
+
+    1. **base_branch_name path** (new): provide ``base_branch_name`` to use it
+       directly as the base name, bypassing slug+issue_number composition.
+       The ls-remote collision check and -2/-3 suffix logic still apply.
+
+    2. **slug+issue path** (legacy): provide ``slug`` (required) and optionally
+       ``issue_number``. Base name is ``{slug}-{issue_number}`` when
+       ``issue_number`` is set, or ``{slug}`` when ``None``.
+
+    Checks the remote for conflicts via git ls-remote; appends -2, -3, ...
+    until a unique name is found. On ls-remote auth failure or other non-zero
+    exit, proceeds with the base name without suffixing.
+
+    Returns JSON with:
+      - branch_name: the final branch name created
+      - was_unique: True if the base name was unused on remote, False if a
+                    suffix was appended
+
+    Args:
+        cwd: Working directory for git commands.
+        slug: Branch name prefix (e.g. "feat-my-feature"). Required when
+              base_branch_name is not provided.
+        issue_number: GitHub issue number appended to slug, or None.
+        remote: Git remote to check for existing branches (default: "origin").
+        base_branch_name: When provided, use this directly as the base name
+                          instead of composing from slug+issue_number.
+        step_name: Optional YAML step key for wall-clock timing accumulation.
+
+    Never raises.
+    """
+    if (gate := _require_enabled()) is not None:
+        return gate
+    try:
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(tool="create_unique_branch", cwd=cwd)
+        _display = base_branch_name if base_branch_name else slug
+        logger.info(
+            "create_unique_branch",
+            slug=slug,
+            issue_number=issue_number,
+            remote=remote,
+            base_branch_name=base_branch_name,
+        )
+        await _notify(
+            ctx,
+            "info",
+            f"create_unique_branch: {_display}",
+            "autoskillit.create_unique_branch",
+            extra={"remote": remote},
+        )
+
+        from autoskillit.server import _get_ctx
+
+        tool_ctx = _get_ctx()
+        _start = time.monotonic()
+
+        if base_branch_name:
+            base_name = base_branch_name
+        elif not slug:
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "create_unique_branch requires either base_branch_name or slug",
+                }
+            )
+        else:
+            base_name = f"{slug}-{issue_number}" if issue_number is not None else slug
+
+        try:
+            result = await _resolve_and_create_branch(base_name, remote, cwd)
+            return json.dumps(result)
+        finally:
+            if step_name:
+                tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
+    except Exception as exc:
+        logger.error("create_unique_branch unhandled exception", exc_info=True)
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+
+
+@mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
+@track_response_size("check_pr_mergeable")
+async def check_pr_mergeable(
+    pr_number: int,
+    cwd: str,
+    repo: str = "",
+    ctx: Context = CurrentContext(),
+) -> str:
+    """Check whether a GitHub PR is mergeable.
+
+    Wraps gh pr view --json mergeable,mergeStateStatus. Returns a structured
+    result without requiring the caller to parse gh JSON.
+
+    Returns JSON with:
+      - mergeable: True when gh reports "MERGEABLE", False otherwise
+      - merge_state_status: raw mergeStateStatus string (e.g. "CLEAN", "DIRTY")
+      - mergeable_status: raw GitHub mergeable string ("MERGEABLE" | "CONFLICTING" | "UNKNOWN")
+    On gh failure: {"success": false, "error": "..."}
+
+    Args:
+        pr_number: GitHub pull request number.
+        cwd: Working directory for gh commands.
+        repo: Repository as owner/repo. Passed as -R flag when provided.
+
+    Never raises.
+    """
+    if (gate := _require_enabled()) is not None:
+        return gate
+    try:
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(tool="check_pr_mergeable", cwd=cwd)
+        logger.info("check_pr_mergeable", pr_number=pr_number, repo=repo)
+        await _notify(
+            ctx,
+            "info",
+            f"check_pr_mergeable: #{pr_number}",
+            "autoskillit.check_pr_mergeable",
+            extra={"repo": repo},
+        )
+
+        cmd = ["gh", "pr", "view", str(pr_number), "--json", "mergeable,mergeStateStatus"]
+        if repo:
+            cmd.extend(["-R", repo])
+
+        rc, stdout, stderr = await _run_subprocess(cmd, cwd=cwd, timeout=30)
+        if rc != 0:
+            return json.dumps({"success": False, "error": stderr.strip() or "gh command failed"})
+
+        try:
+            data = json.loads(stdout)
+        except json.JSONDecodeError:
+            return json.dumps({"success": False, "error": "Failed to parse gh output"})
+
+        return json.dumps(
+            {
+                "mergeable": data.get("mergeable") == "MERGEABLE",
+                "merge_state_status": data.get("mergeStateStatus", ""),
+                "mergeable_status": data.get("mergeable", ""),
+            }
+        )
+    except Exception as exc:
+        logger.error("check_pr_mergeable unhandled exception", exc_info=True)
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+
+
+async def _resolve_and_create_branch(
+    base_name: str,
+    remote: str,
+    cwd: str,
+) -> dict[str, Any]:
+    """Core branch creation: ls-remote collision check + git checkout -b.
+
+    Returns {"branch_name": str, "was_unique": bool, "base_ref": str} on success,
+    or {"success": False, "error": str} on failure.
+    """
+    branch_name = base_name
+    was_unique = True
+
+    rc, stdout, _ = await _run_subprocess(
+        ["git", "ls-remote", remote, f"refs/heads/{branch_name}"],
+        cwd=cwd,
+        timeout=30,
+    )
+
+    if rc == 0 and stdout.strip():
+        was_unique = False
+        suffix = 2
+        _MAX_SUFFIX = 100
+        while suffix <= _MAX_SUFFIX:
+            candidate = f"{base_name}-{suffix}"
+            rc2, stdout2, _ = await _run_subprocess(
+                ["git", "ls-remote", remote, f"refs/heads/{candidate}"],
+                cwd=cwd,
+                timeout=30,
+            )
+            if rc2 != 0:
+                branch_name = candidate
+                break
+            if not stdout2.strip():
+                branch_name = candidate
+                break
+            suffix += 1
+        else:
+            return {
+                "success": False,
+                "error": f"All branch name candidates up to {base_name}-{_MAX_SUFFIX} are taken.",
+            }
+
+    rc_head, head_out, _ = await _run_subprocess(
+        ["git", "branch", "--show-current"],
+        cwd=cwd,
+        timeout=10,
+    )
+    base_ref = head_out.strip() if rc_head == 0 and head_out.strip() else "DETACHED_HEAD"
+
+    rc_checkout, _, _stderr_checkout = await _run_subprocess(
+        ["git", "checkout", "-b", branch_name],
+        cwd=cwd,
+        timeout=30,
+    )
+    if rc_checkout != 0:
+        return {
+            "success": False,
+            "error": f"git checkout -b {branch_name!r} failed: {_stderr_checkout.strip()}",
+        }
+
+    return {"branch_name": branch_name, "was_unique": was_unique, "base_ref": base_ref}
+
+
+@mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
+@track_response_size("create_and_publish_branch")
+async def create_and_publish_branch(
+    issue_slug: str,
+    run_name: str,
+    issue_number: str,
+    work_dir: str,
+    remote_url: str,
+    step_name: str = "",
+    ctx: Context = CurrentContext(),
+) -> str:
+    """Compute branch name, create it, and push to remote in one orchestrator turn.
+
+    Combines compute_branch + create_unique_branch + push_to_remote into a single call.
+
+    Returns {"merge_target": str, "was_unique": bool, "timings": {...}} on success.
+    Returns {"error": str, "error_type": str, "merge_target": str} on push failure —
+    merge_target is included so the orchestrator can reference it in release paths.
+
+    Args:
+        issue_slug: Descriptive slug from the issue title (e.g. "fix-bug").
+        run_name: Run name prefix (e.g. "impl"). Used as prefix when issue_slug is empty.
+        issue_number: GitHub issue number as a string. Empty string → date-based branch.
+        work_dir: Absolute path to the clone directory.
+        remote_url: Pre-resolved upstream remote URL for push isolation.
+        step_name: Optional YAML step key for wall-clock timing accumulation.
+
+    Never raises.
+    """
+    if (gate := _require_enabled()) is not None:
+        return gate
+    try:
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(
+            tool="create_and_publish_branch",
+            work_dir=work_dir,
+            issue_number=issue_number,
+        )
+        logger.info(
+            "create_and_publish_branch",
+            issue_slug=issue_slug,
+            run_name=run_name,
+            issue_number=issue_number,
+        )
+        await _notify(
+            ctx,
+            "info",
+            f"create_and_publish_branch: {issue_slug or run_name}/{issue_number or 'date'}",
+            "autoskillit.create_and_publish_branch",
+            extra={"run_name": run_name, "issue_number": issue_number},
+        )
+
+        from autoskillit.server import _get_ctx
+
+        tool_ctx = _get_ctx()
+        clone_mgr = tool_ctx.clone_mgr
+        if clone_mgr is None:
+            return json.dumps({"error": "Clone manager not configured"})
+
+        _total_start = time.monotonic()
+
+        _compute_start = time.monotonic()
+        base_name = _compute_branch_name(issue_slug, run_name, issue_number)
+        compute_ms = int((time.monotonic() - _compute_start) * 1000)
+
+        _branch_start = time.monotonic()
+        branch_result = await _resolve_and_create_branch(base_name, "origin", work_dir)
+        branch_create_ms = int((time.monotonic() - _branch_start) * 1000)
+
+        if "error" in branch_result:
+            return json.dumps(
+                {
+                    "error": branch_result["error"],
+                    "merge_target": base_name,
+                    "timings": {
+                        "compute_ms": compute_ms,
+                        "branch_create_ms": branch_create_ms,
+                        "push_ms": 0,
+                    },
+                }
+            )
+
+        branch_name: str = branch_result["branch_name"]
+        was_unique: bool = branch_result["was_unique"]
+
+        _push_start = time.monotonic()
+        push_result = await asyncio.to_thread(
+            lambda: clone_mgr.push_to_remote(
+                work_dir,
+                "",
+                branch_name,
+                remote_url=remote_url,
+                protected_branches=tool_ctx.config.safety.protected_branches,
+                force=False,
+            )
+        )
+        push_ms = int((time.monotonic() - _push_start) * 1000)
+
+        timings = {
+            "compute_ms": compute_ms,
+            "branch_create_ms": branch_create_ms,
+            "push_ms": push_ms,
+        }
+
+        if step_name:
+            tool_ctx.timing_log.record(step_name, time.monotonic() - _total_start)
+
+        if not push_result.get("success"):
+            return json.dumps(
+                {
+                    "error": push_result.get("stderr", "push failed"),
+                    "error_type": push_result.get("error_type", ""),
+                    "merge_target": branch_name,
+                    "timings": timings,
+                }
+            )
+
+        return json.dumps(
+            {
+                "merge_target": branch_name,
+                "was_unique": was_unique,
+                "timings": timings,
+            }
+        )
+    except Exception as exc:
+        logger.error("create_and_publish_branch unhandled exception", exc_info=True)
+        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})

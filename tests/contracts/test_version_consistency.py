@@ -9,6 +9,8 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
+import yaml
+
 import autoskillit
 
 
@@ -51,6 +53,20 @@ class TestVersionConsistency:
         assert result1 == result2
         assert read_count == 1, f"plugin.json should be read once (got {read_count})"
         version_info.cache_clear()
+
+    def test_bundled_recipes_do_not_have_autoskillit_version(self):
+        recipes_dir = Path(autoskillit.__file__).parent / "recipes"
+        has_field = {}
+        for recipe_path in sorted(recipes_dir.rglob("*.yaml")):
+            data = yaml.safe_load(recipe_path.read_text())
+            if not isinstance(data, dict):
+                continue
+            if "autoskillit_version" in data:
+                has_field[str(recipe_path.relative_to(recipes_dir))] = data["autoskillit_version"]
+        assert not has_field, (
+            f"Bundled recipes must NOT declare autoskillit_version "
+            f"(field is only for project-local recipes): {has_field}"
+        )
 
     def test_marketplace_json_version_field(self, tmp_path, monkeypatch):
         import importlib as _importlib

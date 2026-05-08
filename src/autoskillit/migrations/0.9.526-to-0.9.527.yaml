@@ -1,0 +1,30 @@
+from_version: "0.9.526"
+to_version: "0.9.527"
+description: >
+  Skill rename: vis-lens-domain-norms → vis-lens-methodology-norms.
+changes:
+  - id: vis-lens-methodology-norms-rename
+    description: "Skill renamed: vis-lens-domain-norms → vis-lens-methodology-norms"
+    instruction: |
+      If your .autoskillit/recipes/*.yaml files or custom Taskfile invoke
+      vis-lens-domain-norms explicitly:
+
+      1. Replace '/autoskillit:vis-lens-domain-norms' with
+         '/autoskillit:vis-lens-methodology-norms' in every skill_command step.
+      2. Update any downstream captures, routing references, or log greps that
+         hardcoded the old skill name.
+
+      The skill's input/output contract is unchanged; only the slug is different.
+      Most users with only bundled-recipe workflows will see no disruption — the
+      rename is transparent inside the bundled research.yaml.
+    detect:
+      tool: run_skill
+      skill_pattern: "vis-lens-domain-norms"
+    example_before: |
+      - tool: run_skill
+        with:
+          skill_command: "/autoskillit:vis-lens-domain-norms ${{ context.experiment_plan }}"
+    example_after: |
+      - tool: run_skill
+        with:
+          skill_command: "/autoskillit:vis-lens-methodology-norms ${{ context.experiment_plan }}"

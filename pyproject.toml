@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "autoskillit"
-version = "0.6.1"
+version = "0.10.0"
 description = "MCP server for orchestrating automated skill-driven workflows with Claude Code"
 readme = "README.md"
 license = {text = "MIT"}
@@ -25,15 +25,23 @@ classifiers = [
 requires-python = ">=3.11"
 dependencies = [
     "anyio>=4.6.0",
-    "dynaconf>=3.2.12,<4.0",
-    "fastmcp>=3.1.1,<4.0",
-    "httpx>=0.28,<0.29",
-    "igraph>=1.0",
+    "dynaconf>=3.2.13,<4.0",
+    "fastmcp>=3.2.0,<4.0",
+    "httpx>=0.28,<1.0",
+    "igraph>=1.0,<2.0",
+    "lazy-loader>=0.4",
+    "markdown-it-py>=3.0",
     "packaging>=23.0",
+    "pathspec>=1.0,<2.0",
+    "orjson>=3.11",
     "psutil>=7.2.0",
+    "pygments>=2.20.0",
+    "pyjwt>=2.12.0",
     "pyyaml>=6.0",
     "cyclopts>=4.0",
+    "regex>=2026.1",
     "structlog>=25.0,<26.0",
+    "uvloop>=0.21.0; sys_platform != 'win32'",
 ]
 
 [project.optional-dependencies]
@@ -42,10 +50,13 @@ dev = [
     "pytest-asyncio>=1.0.0",  # asyncio_default_fixture_loop_scope requires >=1.0.0
     "pytest-httpx>=0.36",
     "pytest-xdist>=3.5.0",
+    "pytest-cov>=7.0",
     "pytest-timeout>=2.3",
     "ruff>=0.15.0",
     "import-linter>=2.1",
     "packaging>=25.0",
+    "pytest-testmon>=2.2.0",
+    "api-simulator; sys_platform == 'linux'",
 ]
 
 [project.urls]
@@ -85,7 +96,18 @@ timeout = 60
 timeout_method = "signal"
 markers = [
     "smoke: end-to-end smoke tests requiring Claude API access (deselect with: -m 'not smoke')",
+    "integration: integration tests that spawn real subprocesses (deselect with: -m 'not integration')",
+    "canary: development-time filter verification tests (deselect with: -m 'not canary')",
+    "layer(name): source-layer marker for test file classification (core, config, pipeline, execution, workspace, recipe, migration, fleet, server, cli)",
+    "small: pure unit test — no persistent I/O, no network, no subprocess (RAM-backed tmpfs via tmp_path IS allowed)",
+    "medium: filesystem and subprocess allowed — no network, no external services",
+    "large: full integration — everything allowed (default for unannotated tests)",
+    "feature(name): marks tests requiring a specific feature gate to be enabled",
 ]
+
+[tool.coverage.run]
+parallel = true
+source = ["src/autoskillit"]
 
 [tool.ruff]
 target-version = "py311"
@@ -94,8 +116,21 @@ line-length = 99
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "TID251"]
 
+[tool.ruff.lint.per-file-ignores]
+"tests/execution/test_session_classification_e2e.py" = ["E402"]
+"tests/execution/test_process_channel_b.py" = ["E501"]
+"tests/test_test_filter_cascade.py" = ["E501"]
+"tests/execution/test_quota_io.py" = ["E501"]
+"tests/execution/test_merge_queue_ejection.py" = ["E501"]
+"tests/execution/test_quota_binding.py" = ["E501"]
+"tests/arch/test_layer_enforcement.py" = ["E501"]
+"tests/execution/test_quota_sleep.py" = ["E501"]
+"tests/execution/test_merge_queue_classifier.py" = ["E501"]
+"tests/skills/test_vis_lens_methodology_norms.py" = ["E501"]
+
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "logging.getLogger" = {msg = "Use get_logger() from autoskillit._logging instead."}
+"signal.signal" = {msg = "Use anyio.open_signal_receiver instead of signal.signal — see _serve_with_signal_guard in cli/app.py."}
 
 [tool.importlinter]
 root_packages = ["autoskillit"]
@@ -104,11 +139,15 @@ root_packages = ["autoskillit"]
 # inside TYPE_CHECKING blocks to avoid circular imports at runtime.
 exclude_type_checking_imports = true
 
+# Contract IDs below use IL-NNN (three-digit serial numbers, e.g. IL-001).
+# These are NOT import layer levels (IL-0 through IL-3).
+# IL-002 = config's contract; IL-2 = the recipe/migration/fleet import layer.
+
 # IL-001 | Lens: module-dependency | DS-001
-# Rationale: L0 (core) is the foundation layer; it must have zero upward imports to
+# Rationale: IL-0 (core) is the foundation layer; it must have zero upward imports to
 # remain independently testable and importable outside the autoskillit package.
 [[tool.importlinter.contracts]]
-name = "L0 core has no autoskillit upward imports"
+name = "IL-0 core has no autoskillit upward imports"
 type = "forbidden"
 source_modules = ["autoskillit.core"]
 forbidden_modules = [
@@ -123,11 +162,11 @@ forbidden_modules = [
 ]
 
 # IL-002 | Lens: module-dependency | DS-001
-# Rationale: L1 config resolves settings from layered sources; allowing it to import
+# Rationale: IL-1 config resolves settings from layered sources; allowing it to import
 # pipeline/execution/recipe would create hidden initialization-time coupling that
 # breaks independent layered testing.
 [[tool.importlinter.contracts]]
-name = "L1 config imports only L0"
+name = "IL-1 config imports only IL-0"
 type = "forbidden"
 source_modules = ["autoskillit.config"]
 forbidden_modules = [
@@ -141,13 +180,21 @@ forbidden_modules = [
 ]
 
 # IL-003 | Lens: module-dependency | DS-001
-# Rationale: pipeline/ holds cross-session gate and audit state; importing from L2
-# (recipe, migration) would create initialization-order coupling and prevent L1
-# packages from being tested in isolation without a full L2 import graph.
+# Rationale: pipeline/ holds cross-session gate and audit state; importing from IL-2
+# (recipe, migration) would create initialization-order coupling and prevent IL-1
+# packages from being tested in isolation without a full IL-2 import graph.
 [[tool.importlinter.contracts]]
-name = "L1 pipeline does not import L2 or L3"
+name = "IL-1 pipeline does not import IL-2 or IL-3"
 type = "forbidden"
 source_modules = ["autoskillit.pipeline"]
+# EXCEPTION: autoskillit.config is intentionally omitted from the
+# forbidden_modules list. pipeline.context.ToolContext owns
+# AutomationConfig as the DI wiring point — see the docstrings on
+# pipeline/context.py and pipeline/__init__.py. The coupling is safe
+# because config/ depends only on IL-0 (enforced by IL-002), so no
+# cycle is possible. This exception is asserted by
+# tests/arch/test_import_linter_contracts.py
+#     ::test_il003_pipeline_config_exception_documented.
 forbidden_modules = [
     "autoskillit.execution",
     "autoskillit.workspace",
@@ -159,10 +206,10 @@ forbidden_modules = [
 
 # IL-004 | Lens: module-dependency | DS-001
 # Rationale: execution/ manages subprocess lifecycle; it must not import config,
-# pipeline, workspace, recipe, migration, server, or cli to remain a leaf L1 service
+# pipeline, workspace, recipe, migration, server, or cli to remain a leaf IL-1 service
 # that can be tested without spinning up the full autoskillit stack.
 [[tool.importlinter.contracts]]
-name = "L1 execution imports only L0"
+name = "IL-1 execution imports only IL-0"
 type = "forbidden"
 source_modules = ["autoskillit.execution"]
 forbidden_modules = [
@@ -180,7 +227,7 @@ forbidden_modules = [
 # or pipeline would introduce a circular risk since config and pipeline both may
 # depend on workspace for path resolution.
 [[tool.importlinter.contracts]]
-name = "L1 workspace imports only L0"
+name = "IL-1 workspace imports only IL-0"
 type = "forbidden"
 source_modules = ["autoskillit.workspace"]
 forbidden_modules = [
@@ -194,11 +241,11 @@ forbidden_modules = [
 ]
 
 # IL-006 | Lens: module-dependency | DS-001
-# Rationale: recipe/ is an L2 service that orchestrates validation over workspace
+# Rationale: recipe/ is an IL-2 service that orchestrates validation over workspace
 # artifacts; importing config, pipeline, execution, migration, server, or cli
 # would conflate recipe semantics with runtime session management.
 [[tool.importlinter.contracts]]
-name = "L2 recipe imports only L0 and workspace"
+name = "IL-2 recipe imports only IL-0 and workspace"
 type = "forbidden"
 source_modules = ["autoskillit.recipe"]
 forbidden_modules = [
@@ -214,7 +261,7 @@ forbidden_modules = [
 # Rationale: migration/ must not import config or pipeline to stay independently
 # runnable as a schema-upgrade step without a live pipeline context.
 [[tool.importlinter.contracts]]
-name = "L2 migration does not import L3 or config"
+name = "IL-2 migration does not import IL-3 or config"
 type = "forbidden"
 source_modules = ["autoskillit.migration"]
 forbidden_modules = [
@@ -223,3 +270,49 @@ forbidden_modules = [
     "autoskillit.server",
     "autoskillit.cli",
 ]
+
+# IL-008 | Lens: module-dependency | DS-001
+# Rationale: The four IL-1 peers (config, pipeline, execution, workspace) form an
+# independent service tier. Lateral imports between them create hidden coupling
+# that prevents each package from being tested and deployed in isolation. The
+# independence contract makes this boundary machine-verifiable and surfaces any
+# future regression immediately via lint-imports.
+[[tool.importlinter.contracts]]
+name = "IL-1 siblings are independent of each other"
+type = "independence"
+modules = [
+    "autoskillit.config",
+    "autoskillit.pipeline",
+    "autoskillit.execution",
+    "autoskillit.workspace",
+]
+# EXCEPTION: autoskillit.pipeline.context may import autoskillit.config.
+# pipeline.context.ToolContext owns AutomationConfig as the DI wiring point.
+# config/ depends only on IL-0 (IL-002), so no cycle is introduced.
+# This exception mirrors the one already documented in IL-003.
+ignore_imports = [
+    "autoskillit.pipeline.context -> autoskillit.config",
+]
+
+# IL-009 | Lens: module-dependency | DS-001
+# Rationale: fleet is IL-2 — imports IL-0 (core) only; workspace allowed for path utilities
+[[tool.importlinter.contracts]]
+name = "IL-2 fleet does not import IL-3 or most IL-1 peers"
+type = "forbidden"
+source_modules = ["autoskillit.fleet"]
+forbidden_modules = [
+    # EXCEPTION: autoskillit.workspace is intentionally absent from this list.
+    # fleet may import workspace solely for path-lookup utilities (e.g., worktree paths).
+    # This is a deliberate, narrow allowance — do not expand workspace use in fleet
+    # beyond path utilities without updating this contract and the rationale comment above.
+    "autoskillit.config",
+    "autoskillit.pipeline",
+    "autoskillit.execution",
+    "autoskillit.migration",
+    "autoskillit.recipe",
+    "autoskillit.server",
+    "autoskillit.cli",
+]
+
+[tool.uv.sources]
+api-simulator = { git = "https://github.com/TalonT-Org/api-simulator", rev = "8f711f958d4d93a8e53a3c3b51279fb420870f3a", subdirectory = "crates/api-simulator-py" }

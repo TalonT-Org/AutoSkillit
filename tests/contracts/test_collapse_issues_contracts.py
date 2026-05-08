@@ -78,10 +78,18 @@ def test_max_group_flag_documented():
     assert "--max-group" in skill_text()
 
 
-def test_originals_closed_with_comment():
+def test_originals_superseded_body_edit():
     text = skill_text()
-    assert "gh issue comment" in text, "Must document closing comment on originals"
-    assert "gh issue close" in text, "Must document closing originals"
+    assert "## Superseded" in text, "Must append ## Superseded section to original body"
+    assert "gh issue edit" in text, "Must use gh issue edit to update original body"
+    assert "gh issue close" in text, "Must still close originals"
+
+
+def test_no_gh_issue_comment_in_collapse_issues():
+    text = skill_text()
+    assert "gh issue comment" not in text, (
+        "Must not post issue comments — all updates go to issue body"
+    )
 
 
 def test_combined_issue_references_originals():
@@ -154,4 +162,41 @@ def test_collapse_issues_no_angle_bracket_body_placeholder():
     assert not matches, (
         "collapse-issues must not use angle-bracket placeholder syntax for "
         "body-copy instructions — use explicit imperative language instead"
+    )
+
+
+def test_collapse_issues_gh_issue_create_uses_body_file():
+    """collapse-issues gh issue create must use --body-file, not inline --body."""
+    text = skill_text()
+    create_pos = text.find("gh issue create")
+    assert create_pos != -1, "Sanity: 'gh issue create' not found in collapse-issues"
+    create_context = text[create_pos : create_pos + 300]
+    assert "--body-file" in create_context, (
+        "collapse-issues 'gh issue create' must use --body-file for the combined body, "
+        "not inline --body — the combined body is large verbatim multi-issue content"
+    )
+
+
+def test_collapse_issues_body_file_uses_autoskillit_temp():
+    """collapse-issues must write combined body to AUTOSKILLIT_TEMP/collapse-issues/."""
+    text = skill_text()
+    assert "AUTOSKILLIT_TEMP" in text, (
+        "collapse-issues must write combined body to {{AUTOSKILLIT_TEMP}}/collapse-issues/ "
+        "before calling gh issue create --body-file"
+    )
+
+
+def test_collapse_issues_never_inline_body_for_create():
+    """collapse-issues CRITICAL CONSTRAINTS must prohibit inline --body for gh issue create."""
+    text = skill_text()
+    never_pos = text.find("**NEVER:**")
+    assert never_pos != -1, "Sanity: '**NEVER:**' block not found"
+    always_pos = text.find("**ALWAYS:**", never_pos)
+    never_block = (
+        text[never_pos:always_pos] if always_pos != -1 else text[never_pos : never_pos + 800]
+    )
+    lower = never_block.lower()
+    assert "--body" in never_block and "inline" in lower, (
+        "collapse-issues NEVER block must prohibit inline '--body' "
+        "for combined-body issue creation"
     )

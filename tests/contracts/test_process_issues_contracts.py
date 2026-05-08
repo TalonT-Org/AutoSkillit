@@ -64,8 +64,8 @@ def test_process_issues_documents_pr_title_prefix(skill_text: str) -> None:
 
 
 def test_process_issues_writes_to_temp_dir(skill_text: str) -> None:
-    """process-issues must document output to .autoskillit/temp/process-issues/."""
-    assert ".autoskillit/temp/process-issues/" in skill_text
+    """process-issues must document output to {{AUTOSKILLIT_TEMP}}/process-issues/."""
+    assert "{{AUTOSKILLIT_TEMP}}/process-issues/" in skill_text
 
 
 def test_process_issues_supports_merge_batch_flag(skill_text: str) -> None:
@@ -80,9 +80,25 @@ def test_process_issues_derives_issue_url(skill_text: str) -> None:
     assert github_url_ref in skill_text or "default_repo" in skill_text
 
 
-def test_open_pr_supports_run_name_title_prefix() -> None:
-    """open-pr must derive [FEATURE]/[FIX] PR title prefix from run_name convention."""
-    content = (bundled_skills_extended_dir() / "open-pr" / "SKILL.md").read_text()
+def test_process_issues_has_step_execution_discipline(skill_text: str) -> None:
+    assert "execute every step" in skill_text.lower() or "MUST execute" in skill_text
+    assert "never skip" in skill_text.lower() or "NEVER skip" in skill_text
+    assert "optional: true" in skill_text
+
+
+def test_process_issues_has_anti_improvisation_rule(skill_text: str) -> None:
+    assert "run_cmd" in skill_text and "gh pr create" in skill_text
+
+
+def test_process_issues_no_issue_comment(skill_text: str) -> None:
+    assert "gh issue comment" not in skill_text, (
+        "--comment flag must be removed; status updates go to issue body"
+    )
+
+
+def test_prepare_pr_supports_run_name_title_prefix() -> None:
+    """prepare-pr must derive [FEATURE]/[FIX] PR title prefix from run_name convention."""
+    content = (bundled_skills_extended_dir() / "prepare-pr" / "SKILL.md").read_text()
     assert "[FEATURE]" in content
     assert "[FIX]" in content
     # Must document the run_name-based convention

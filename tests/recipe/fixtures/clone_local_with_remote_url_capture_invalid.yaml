@@ -1,0 +1,23 @@
+name: clone-local-with-remote-url-capture-invalid
+description: >
+  Negative fixture: clone_repo with strategy=clone_local captures remote_url.
+  This is the dangerous combination rejected by the
+  clone-local-strategy-with-remote-url-capture rule.
+kitchen_rules: Use run_skill.
+
+steps:
+  clone:
+    tool: run_python
+    python: autoskillit.workspace.clone.clone_repo
+    with:
+      strategy: clone_local
+      run_name: test-run
+    capture:
+      remote_url: "${{ result.remote_url }}"
+      clone_path: "${{ result.clone_path }}"
+
+  push_final:
+    tool: push_to_remote
+    with:
+      remote_url: "${{ context.remote_url }}"
+      clone_path: "${{ context.clone_path }}"

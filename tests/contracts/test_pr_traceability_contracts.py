@@ -17,7 +17,8 @@ def _read(skill_name: str) -> str:
 def test_pipeline_summary_includes_requirements_from_issue():
     """pipeline-summary must document extracting and embedding requirements from linked issue."""
     text = _read("pipeline-summary")
-    has_req = "## Requirements" in text or "requirements" in text.lower()
+    normalized = text.lower()
+    has_req = "## requirements" in normalized or "# requirements" in normalized
     has_issue_fetch = "gh issue view" in text or "closing_issue" in text
     assert has_req, "pipeline-summary must reference requirements"
     assert has_issue_fetch, (

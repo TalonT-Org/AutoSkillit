@@ -27,24 +27,86 @@ responsible for enforcing this regardless of what the plan says.
 
 ---
 
+## SKILL_COMMAND FORMATTING — MANDATORY
+
+When calling `run_skill`, the `skill_command` argument MUST be a space-separated token
+string — never a structured document or markdown section list.
+
+- Substitute `${{ context.* }}` and `${{ inputs.* }}` placeholders with their resolved
+  values and pass the result **VERBATIM** to `run_skill`.
+- **Do NOT** add markdown headers (`##`), labels, notes, or explanatory prose to
+  `skill_command`. It is not a document — it is a command string.
+- Path arguments are single tokens: `/path/to/file.md` — not a labeled section.
+- Extra arguments from a step `note:` are appended as space-separated tokens.
+
+**Wrong:** `/autoskillit:implement-worktree-no-merge\n\n## Plan Path\n/path/plan.md\n\n## Branch\nimpl-926`
+**Right:** `/autoskillit:implement-worktree-no-merge /path/plan.md impl-926`
+
+This applies to ALL skills, including bare-placeholder steps where you supply values
+at runtime (`/autoskillit:arch-lens-{slug} {context_path}` → substitute, then pass verbatim).
+
+---
+
 ## CONTEXT LIMIT ROUTING — MANDATORY
 
 When `run_skill` returns `needs_retry=true` for **any step**:
 
-- **If `retry_reason: resume` AND the step defines `on_context_limit`** → follow `on_context_limit`.
+- **If `retry_reason: resume` AND `subtype: stale`** → re-execute the same step (decrement the
+  retries counter). A stale session was killed by the hung-process watchdog — this is NOT a
+  context limit. Do NOT follow `on_context_limit`. If retries are exhausted, follow `on_exhausted`.
+- **If `retry_reason: resume` AND `subtype≠stale` AND the step defines `on_context_limit`** → follow `on_context_limit`.
   The worktree or partial state is on disk; route to the designated recovery step
   (typically `test` or `retry_worktree`) to check whether partial work was sufficient.
-- **If `retry_reason: resume` AND the step has no `on_context_limit`** → fall through to `on_failure`.
+  API infrastructure errors (overload, 529, ECONNRESET) also produce `retry_reason=resume`
+  with `infra_exit_category="api_error"` — route them identically to context exhaustion.
+  The `infra_exit_category` field is informational only
+  (`"completed"`, `"context_exhausted"`, `"api_error"`, `"process_killed"`).
+- **If `retry_reason: resume` AND `subtype≠stale` AND the step has no `on_context_limit`** → fall through to `on_failure`.
 - **If `retry_reason: drain_race` AND the step defines `on_context_limit`** → follow `on_context_limit`.
   The channel signal confirmed session completion; stdout was not fully flushed before kill.
   Partial progress is confirmed — treat identically to `resume` for routing purposes.
 - **If `retry_reason: drain_race` AND the step has no `on_context_limit`** → fall through to `on_failure`.
+- **If `retry_reason: completed_no_flush` AND the step defines `on_context_limit`** → follow `on_context_limit`.
+  The session exited with empty stdout but write evidence confirms files were written to the worktree.
+  Partial progress is confirmed — treat identically to `resume` for routing purposes.
+- **If `retry_reason: completed_no_flush` AND the step has no `on_context_limit`** → fall through to `on_failure`.
 - **If `retry_reason: empty_output`** → fall through to `on_failure`. The session produced no
-  output; there is no partial state on disk. Do NOT route to `on_context_limit` even if defined.
+  output AND no write evidence (no Write/Edit calls, no filesystem writes). Do NOT route to `on_context_limit` even if defined.
 - **If `retry_reason: path_contamination`** → fall through to `on_failure`. The session wrote
   files outside its working directory. This is a CWD boundary violation, not a context limit.
   Do NOT route to `on_context_limit` even if defined.
-- **If `retry_reason: early_stop` or `zero_writes`** → fall through to `on_failure`.
+- **If `retry_reason: thinking_stall` AND `lifespan_started` is true AND the step defines
+  `on_context_limit`** → follow `on_context_limit`. The model consumed tokens (thinking
+  blocks) but produced no final output. Prior tool calls suggest partial progress on disk.
+- **If `retry_reason: thinking_stall` AND `lifespan_started` is false** → fall through to `on_failure`.
+  No progress was made.
+- **If `retry_reason: idle_stall` AND `lifespan_started` is true AND the step defines
+  `on_context_limit`** → follow `on_context_limit`. The idle watchdog killed the session,
+  but prior tool calls suggest partial progress on disk.
+- **If `retry_reason: idle_stall` AND `lifespan_started` is false** → fall through to `on_failure`.
+  No progress was made.
+- **If `retry_reason: early_stop` AND `has_progress_evidence` is true in the result AND the step
+  defines `on_context_limit`** → follow `on_context_limit`. The model made progress (wrote files
+  or created a worktree) but stopped before emitting the completion marker. Partial progress
+  exists on disk.
+- **If `retry_reason: early_stop` AND `has_progress_evidence` is false** → fall through to `on_failure`.
+- **If `retry_reason: zero_writes` AND `has_progress_evidence` is true in the result AND the step
+  defines `on_context_limit`** → follow `on_context_limit`. The model made filesystem contact
+  but made no Write/Edit tool calls. Partial progress may exist on disk.
+- **If `retry_reason: zero_writes` AND `has_progress_evidence` is false** → fall through to `on_failure`.
+- **If `retry_reason: stale`** → decrement the `retries` counter for this step.
+  Re-execute the same step if retries remain. If retries are exhausted, fall through
+  to `on_failure`. Do NOT route to `on_context_limit` — stale is a transient failure,
+  not a context limit. No partial progress is assumed.
+
+**Worktree-stale carve-out:** When a step that invokes a worktree-creating skill
+(`implement-worktree-no-merge`, `implement-worktree`, `implement-experiment`) returns
+`retry_reason: stale` (or `retry_reason: resume` with `subtype: stale`), re-execute the
+step **without consuming the retries budget**. Stale means the session produced nothing
+useful — the worktree orphan concern that motivates `retries: 0` does not apply.
+This is a one-shot retry: if the retry also goes stale, fall through to `on_failure`.
+Before re-executing, if the stale result captured `worktree_path`, remove the empty
+worktree (`git worktree remove --force <path>`) to prevent orphaned worktrees.
 
 **For `implement-worktree-no-merge` specifically:**
 - `on_context_limit` routes to `retry_worktree` in standard recipes.
@@ -57,9 +119,25 @@ When a completed worktree implementation needs to be redone (e.g., after a plan 
 - Call `implement-worktree-no-merge` on the revised plan (creates a fresh worktree).
 - Clean up the old worktree explicitly if needed.
 
-Summary: `needs_retry=true` + `retry_reason=resume` or `drain_race` + step has `on_context_limit` → follow `on_context_limit`.
-         `needs_retry=true` + `retry_reason=resume` or `drain_race` + no `on_context_limit` → `on_failure`.
-         `needs_retry=true` + any other `retry_reason` → `on_failure` (no partial progress).
+Summary: `needs_retry=true` + `retry_reason=resume` + `subtype=stale` → re-execute step (decrement retries; on_exhausted when budget gone).
+         `needs_retry=true` + `retry_reason=resume` + `subtype≠stale` + step has `on_context_limit` → follow `on_context_limit`.
+         `needs_retry=true` + `retry_reason=resume` + `subtype≠stale` + no `on_context_limit` → `on_failure`.
+         `needs_retry=true` + `retry_reason=drain_race` + step has `on_context_limit` → follow `on_context_limit`.
+         `needs_retry=true` + `retry_reason=drain_race` + no `on_context_limit` → `on_failure`.
+         `needs_retry=true` + `retry_reason=completed_no_flush` + step has `on_context_limit` → follow `on_context_limit`.
+         `needs_retry=true` + `retry_reason=completed_no_flush` + no `on_context_limit` → `on_failure`.
+         `needs_retry=true` + `retry_reason=empty_output` → `on_failure`.
+         `needs_retry=true` + `retry_reason=path_contamination` → `on_failure`.
+         `needs_retry=true` + `retry_reason=thinking_stall` + `lifespan_started=true` + step has `on_context_limit` → follow `on_context_limit`.
+         `needs_retry=true` + `retry_reason=thinking_stall` + `lifespan_started=false` → `on_failure`.
+         `needs_retry=true` + `retry_reason=idle_stall` + `lifespan_started=true` + step has `on_context_limit` → follow `on_context_limit`.
+         `needs_retry=true` + `retry_reason=idle_stall` + `lifespan_started=false` → `on_failure`.
+         `needs_retry=true` + `retry_reason=early_stop` + `has_progress_evidence=true` + step has `on_context_limit` → follow `on_context_limit`.
+         `needs_retry=true` + `retry_reason=early_stop` + `has_progress_evidence=false` → `on_failure`.
+         `needs_retry=true` + `retry_reason=zero_writes` + `has_progress_evidence=true` + step has `on_context_limit` → follow `on_context_limit`.
+         `needs_retry=true` + `retry_reason=zero_writes` + `has_progress_evidence=false` → `on_failure`.
+         `needs_retry=true` + `retry_reason=stale` → decrement retries counter → `on_failure` when exhausted (no partial progress, not a context limit).
+         `needs_retry=true` + `retry_reason=stale` + worktree-creating step → one-shot re-execute (bypasses retries budget; on_failure if repeated stale).
 
 ---
 
@@ -103,8 +181,28 @@ Act on this list as follows:
 When the user provides **more than one issue or task** in a single request:
 
 1. **If the user says "parallel"** (or "run in parallel", "simultaneously", "at the
-   same time", "concurrently") → launch N independent pipeline sessions **immediately**.
-   No questions, no pushback, no alternative suggestions.
+   same time", "concurrently"):
+
+   a. **Build execution map first.** Call `run_skill` with `/autoskillit:build-execution-map`
+      passing all issue numbers. This produces an `execution_map` JSON artifact at the
+      emitted path.
+
+   b. **Read the execution map.** Parse the JSON to extract `groups` and `merge_order`.
+
+   c. **Dispatch groups in order.** For each group in ascending `group` number:
+      - If `parallel: true` → launch all issues in the group as independent pipeline
+        sessions simultaneously, using the wavefront scheduling rule (defined in the section below).
+      - If `parallel: false` → run the group's issues one at a time in sequence.
+
+   d. **Merge-wait between groups.** Group N+1 must NOT begin cloning until ALL of
+      Group N's PRs have merged to the base branch. This ensures every group's clones
+      capture a base SHA that includes all prior groups' changes. Use the MERGE PHASE
+      rules to merge each group's PRs, following the `merge_order` from the map for
+      intra-group merge sequencing.
+
+   e. **Fallback.** If `build-execution-map` fails or returns an error, fall back to
+      launching all N pipelines immediately (current behavior). Do not block dispatch
+      on map failure.
 
 2. **If the user says "sequential"** (or "one at a time", "in order", "one by one") →
    run them one at a time without asking.
@@ -131,7 +229,8 @@ or user says "parallel"). Within each batched round, pipeline steps have two spe
 
 **Fast steps** — MCP tool calls that complete in seconds:
 `run_cmd`, `clone_repo`, `create_unique_branch`, `fetch_github_issue`,
-`claim_issue`, `merge_worktree`, `test_check`, `reset_test_dir`, `classify_fix`
+`claim_issue`, `merge_worktree`, `test_check`, `reset_test_dir`, `classify_fix`,
+`push_to_remote`
 
 **Slow steps** — headless sessions that take minutes:
 Any `run_skill` invocation (investigate, implement, audit, review, etc.)
@@ -151,6 +250,13 @@ Any `run_skill` invocation (investigate, implement, audit, review, etc.)
    the batch. A fast step launched alongside a slow step completes instantly but sits idle
    until the slow step finishes — wasting wall-clock time and blocking re-inspection.
 
+4. **Advance every active pipeline in every round.** A pipeline is "active" if it has not
+   reached `done` or `escalate_stop`. In every batched round, every active pipeline MUST
+   receive at least one step — either a fast step is drained or a slow step is launched.
+   Never leave an active pipeline idle for an entire round while sibling pipelines are
+   progressing. If a pipeline has completed all its `plan_parts` and only has finalization
+   steps remaining (push, merge, close), it is still active and must be advanced.
+
 ### Rationale
 
 Batched rounds wait for the **slowest step** in the batch. If a slow `run_skill` is launched
@@ -158,6 +264,132 @@ alongside a fast `run_cmd`, the fast step completes instantly but cannot trigger
 fast step for its pipeline until the entire batch (including the slow session) finishes.
 Draining all fast steps first ensures every pipeline arrives at the slow-step boundary
 simultaneously, after which all slow steps run in parallel and their wall-clock time overlaps.
+
+---
+
+## EXECUTION MAP — GROUP DISPATCH — MANDATORY
+
+When dispatching from an execution map:
+
+1. **Group iteration is outer loop.** The group number (1, 2, 3, ...) is the primary
+   ordering. Within each group, the wavefront scheduling rule governs step interleaving.
+
+2. **Merge-wait is mandatory between groups.** After all pipelines in Group N complete
+   (including their merge phase), verify all Group N PRs have merged to the base branch
+   before starting Group N+1. This prevents Group N+1 from cloning a stale base.
+
+3. **merge_order governs intra-group PR merge sequencing.** Within a parallel group,
+   merge PRs in the order specified by `merge_order` (not by completion time). This
+   minimizes merge conflicts by merging simpler changes first.
+
+4. **Single-issue groups skip wavefront.** If a group has `parallel: false` or contains
+   only one issue, run it as a single pipeline — no wavefront scheduling needed.
+
+5. **Do not pause for confirmation between groups.** Once merge-wait verifies all
+   Group N PRs have merged, dispatch Group N+1 immediately. NEVER use
+   AskUserQuestion to ask whether to proceed to the next group.
+
+6. **Handle deferred issues before dispatching any group.**
+
+   After reading the execution map, check for `has_deferred: true`.
+
+   **If `has_deferred` is false** (no deferrals): proceed directly to Group 1 dispatch.
+
+   **If `has_deferred` is true:**
+
+   **6a. Pre-dispatch freshness check.** Before presenting any escalation question,
+   re-query the current label state of ALL unique blocker issue numbers across all
+   `deferred_issues` entries in a single batched GraphQL request using aliases:
+
+   ```graphql
+   query {
+     i887: repository(owner:"<OWNER>", name:"<REPO>") {
+       issue(number:887) { labels(first:20) { nodes { name } } }
+     }
+     i912: repository(owner:"<OWNER>", name:"<REPO>") {
+       issue(number:912) { labels(first:20) { nodes { name } } }
+     }
+   }
+   ```
+
+   For each blocker, check whether the `in-progress` label is still present. If a
+   blocker's label has been removed since the map was built, remove it from that deferred
+   issue's `blocked_by` list. If all blockers for a given deferred issue have cleared,
+   that issue is no longer deferred — collect it in an "auto-cleared" list for the
+   supplementary map (step 6e). **Never issue individual `gh issue view` calls per blocker
+   — always batch into a single GraphQL request.**
+
+   **6b. Present AskUserQuestion for each still-deferred issue.** For each deferred issue
+   where at least one blocker's `in-progress` label is still present, call
+   `AskUserQuestion`:
+
+   > "Issue #N (title) cannot be dispatched safely. It conflicts with in-progress
+   > issue(s): #M1 (title1), #M2 (title2).
+   > Conflict: {reasoning}
+   >
+   > Choose:
+   > 1. **Wait** — Hold #N; retry after the blocking issues complete
+   > 2. **Proceed anyway** — Dispatch #N now, accepting conflict risk
+   > 3. **Drop** — Remove #N from this session entirely"
+
+   **Headless-mode rule (MANDATORY):** When `AskUserQuestion` is denied by the hook
+   (the deny message says "proceed without user confirmation" — this refers to general
+   tool behavior, NOT this decision), treat the response as **Wait**. Do NOT interpret
+   the deny message as permission to proceed. This is the explicit safe default for
+   unattended sessions.
+
+   **6c. Route based on user answer (or Wait default):**
+
+   - **Wait**: Hold the issue. At each group-completion barrier (after all `run_skill`
+     calls in a group return — the natural inter-group barrier in both queue-mode and
+     classic-mode), re-check ALL outstanding Wait-path blockers via a single batched
+     GraphQL aliases query. When all blockers for a Wait issue have cleared, move it to
+     the auto-cleared list for step 6e. After the final group completes, if any Wait
+     issues remain uncleared, report them as skipped in the session result.
+
+   - **Proceed**: Add the issue to a **new sequential group** inserted at the end of the
+     dispatch sequence (after all other groups). This is transparent in both merge modes:
+     in queue-mode (#1268), the pipeline self-merges; in classic mode, `merge-prs` handles
+     it. Do not create one group per Proceed issue — batch all Proceed issues into the
+     single final group together.
+
+   - **Drop**: If the issue has already been claimed (its `in-progress` label is set by
+     this session), call `release_issue` to remove it. Then exclude the issue from all
+     dispatch, merge, and reporting. Do not mark it as failed — it is not a failure.
+
+   **6d. Zero-non-deferred-groups edge case.** When all target issues are deferred and no
+   dispatch groups exist (group_count is 0 after removing deferred issues), skip group
+   dispatch entirely. Enter an explicit poll loop:
+
+   1. Wait `github.deferred_poll_interval_seconds` (default: 60 seconds between checks).
+   2. Re-query ALL outstanding blocker labels via a single batched GraphQL aliases query.
+   3. If at least one deferred issue becomes unblocked (all its blockers cleared), proceed
+      to step 6e for those issues.
+   4. Repeat until the first unblocked issue is found OR the elapsed time exceeds
+      `github.deferred_poll_timeout_seconds` (default: 1800 seconds / 30 minutes).
+   5. On timeout: report all deferred issues as skipped. Set session result
+      `success: false` with `failure_reason: "All target issues deferred due to
+      in-progress conflicts — human decision required"`. Exit.
+
+   **If in headless mode and all issues default to Wait with zero dispatch groups:**
+   skip the poll loop and immediately set `success: false` with the above
+   `failure_reason`. Do not poll indefinitely in unattended sessions.
+
+   **6e. Supplementary map for auto-cleared and freshness-cleared issues.** When one or
+   more Wait/freshness-cleared issues become eligible:
+
+   1. Re-run `build-execution-map` for the newly eligible issues **only** — pass their
+      issue numbers as arguments. This is a full analysis (pairwise + cross-assessment),
+      not a passthrough. The supplementary map may itself produce new deferrals if
+      remaining in-progress issues conflict with the eligible set.
+   2. If the supplementary map returns `has_deferred=true`, apply steps 6b and 6c to
+      the newly deferred issues before dispatching the supplementary groups. In headless
+      mode, treat all new deferrals as Wait (same rule as 6b). Issues that remain deferred
+      after this re-entry are skipped and reported in the session result.
+   3. Dispatch the resulting dispatch groups as additional sequential group(s) appended
+      after the last completed group.
+   4. Apply the same group-boundary merge-wait rule before dispatching the supplementary
+      groups.
 
 ---
 
@@ -187,6 +419,12 @@ parallel run of the same step reports under the same canonical step name.
 
 ---
 
+## MODEL PROPAGATION — MANDATORY
+
+**MODEL PROPAGATION** — When the user specifies a model (e.g. "use opus"), apply it to the `model` parameter of ALL `run_skill` calls for steps that declare a `model:` field — including follow-on steps (retry_worktree, fix, resolve_review, resolve_ci, conflict resolution). All `run_skill` steps in orchestrated recipes must declare a `model:` field; steps that omit it are ineligible for propagation and silently bypass user model selection.
+
+---
+
 ## MERGE PHASE — MANDATORY
 
 This rule applies whenever the orchestrator must merge **one or more open PRs**, whether
@@ -200,7 +438,7 @@ headless session):
 ```bash
 REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner) &&
 OWNER=${REPO%%/*} && REPO_NAME=${REPO##*/} &&
-BRANCH="<base_branch>" &&    # substitute the PR's target branch (e.g. "main", "integration")
+BRANCH="<base_branch>" &&    # substitute the PR's target branch (e.g. "main", "develop")
 gh api graphql -f query="query {
   repository(owner:\"$OWNER\", name:\"$REPO_NAME\") {
     mergeQueue(branch:\"$BRANCH\") { id }
@@ -230,38 +468,63 @@ Capture the result as `auto_merge_available`. If detection fails, default to `"f
 perform both detections automatically via `check_merge_queue` + `check_auto_merge` —
 **do not repeat them manually when following a recipe**.
 
-### 2. Route based on queue availability
+### 2. Route based on queue availability and auto-merge availability
 
-**When `queue_available == true`:**
-GitHub's merge queue serializes concurrent merges. Each pipeline's
-`enable_auto_merge → wait_for_queue` sequence is safe to proceed in parallel — the
-queue handles ordering. No additional sequencing is required from the orchestrator.
+The recipes route on the four-cell matrix `queue_available × auto_merge_available`:
 
-**When `queue_available == false` and `auto_merge_available == true`:**
-Use `gh pr merge --squash --auto` (direct_merge path). GitHub merges the PR once
-all required status checks pass. PRs must not be merged concurrently — never execute
-two `direct_merge` steps concurrently on a non-queue branch.
+| `queue_available` | `auto_merge_available` | Recipe path                                    |
+|-------------------|------------------------|------------------------------------------------|
+| `true`            | `true`                 | `enable_auto_merge` → `wait_for_queue`         |
+| `true`            | `false`                | `queue_enqueue_no_auto` → `wait_for_queue`     |
+| `false`           | `true`                 | `direct_merge` → `wait_for_direct_merge`       |
+| `false`           | `false`                | `immediate_merge` → `wait_for_immediate_merge` |
 
-**When `queue_available == false` and `auto_merge_available == false`:**
-Use `gh pr merge --squash` (immediate_merge path — no `--auto` flag). GitHub
-executes the merge synchronously without waiting for status checks (there are none
-to wait for when `autoMergeAllowed=false`). PRs MUST still be merged one at a time.
+**When `queue_available == true`:** GitHub's merge queue intercepts every merge
+request on the branch regardless of the `--auto` flag. Both queue cells route
+through `wait_for_queue` (the merge-queue-aware waiter). The
+`enable_auto_merge` cell uses `--auto` so the queue serializes via GitHub
+auto-merge; the `queue_enqueue_no_auto` cell (condition:
+`queue_available == true and auto_merge_available == false`) uses plain `--squash`
+because the repository's `autoMergeAllowed=false` setting causes `--auto` to be
+rejected by the API auto-merge gate **before** the queue interception.
 
-- If following a recipe: the recipe's `route_queue_mode` step routes to the correct
-  path automatically based on `context.auto_merge_available`.
-- **NEVER** use `gh pr merge --squash --auto` when `auto_merge_available == false` —
-  this command fails with "auto-merge is not allowed for this repository"; in recipe
-  context it silently routes to `confirm_cleanup`, leaving the PR unmerged.
+**When `queue_available == false`:** there is no queue, so behaviour matches
+the historical paths — `direct_merge` waits via auto-merge, `immediate_merge`
+executes synchronously.
+
+- If following a recipe: `route_queue_mode` selects the correct cell
+  automatically from `context.queue_available` and `context.auto_merge_available`.
+- **NEVER use** `gh pr merge --squash --auto` when `auto_merge_available == false`,
+  regardless of `queue_available`. The `--auto` flag is rejected by GitHub's API
+  auto-merge gate before the queue intercepts. Use plain `gh pr merge --squash`;
+  if a queue exists on the branch the queue still enqueues the call.
+- **NEVER** route a queue+no-auto enqueue call through `wait_for_immediate_merge`
+  — its 5-minute poll is too short for a busy queue and on timeout the recipe
+  reports `merge unconfirmed` even though the PR will eventually merge.
 
 For ad-hoc (off-recipe) merges:
-- If merging multiple PRs collected from parallel pipelines: route through the
-  `merge-prs` recipe for batch sequential merging.
+- When `queue_available=true` (and `sequential_queue` is not `"true"`): each pipeline's
+  implementation recipe handles its own enqueue via `route_queue_mode` →
+  `enqueue_to_queue` → `wait_for_queue`. Do NOT invoke `merge-prs`. The orchestrator's
+  natural parallel-batch join (waiting for all Group N `run_skill` invocations to
+  return) serves as the inter-group barrier — each pipeline only returns after
+  `wait_for_queue` reports `merged`, confirming its PR is in the base branch. Advance
+  to Group N+1 only after all Group N pipelines complete.
+- When `queue_available=false` OR `sequential_queue == "true"`: route through the
+  `merge-prs` recipe for batch sequential merging (unchanged behavior).
+
+**Hidden ingredient — `sequential_queue`** (default `"false"`): Force the centralized
+`merge-prs` path even when `queue_available=true`. Use when batch-level review via an
+integration PR is required, or when cross-PR `audit_impl` is needed as a quality gate.
+Each pipeline's per-PR review step before enqueue provides per-PR review coverage; the
+merge queue itself provides conflict safety. `sequential_queue` is only needed when
+consolidated batch-level review is explicitly required.
 
 ### 3. NEVER bypass recipe merge steps
 
 **NEVER use `run_cmd` with `gh pr merge` to merge a PR outside of a named recipe
 step.** All PR merges must flow through the recipe's `merge_pr`, `direct_merge`,
-`immediate_merge`, or `enable_auto_merge` steps. Bypassing these steps skips CI
+`immediate_merge`, `enable_auto_merge` or `queue_enqueue_no_auto` steps. Bypassing these steps skips CI
 enforcement, conflict detection, and conflict routing.
 
 ### 4. Merge conflict failure handling
@@ -276,3 +539,111 @@ closed due to a stale base):
   and `immediate_merge_conflict_fix` has full diagnostic access.
 - **NEVER abandon a pipeline** because merge failed — route through the conflict
   recovery cycle until the PR merges or escalation is required.
+
+---
+
+## QUOTA WAIT PROTOCOL — MANDATORY
+
+When quota-related events occur during pipeline execution:
+
+### PreToolUse Denial (run_skill blocked)
+
+When a `run_skill` call is DENIED by the quota guard hook:
+
+1. This is a **temporary** block — NOT a permanent error, NOT a pipeline failure.
+2. The deny message contains a `run_cmd` sleep command with the required duration.
+3. **MANDATORY**: Execute the sleep command via `run_cmd` immediately.
+4. After the sleep completes, retry the **exact same** `run_skill` call with
+   identical arguments (`skill_command`, `cwd`, `model`, `step_name`).
+5. Do NOT follow `on_failure`. Do NOT report to the user. Do NOT skip the step.
+6. Before executing, state aloud: "Quota denied. Sleeping N seconds, then retrying."
+
+### Post-Execution Warning (quota high after run_skill)
+
+When `run_skill` output contains `--- QUOTA WARNING ---`:
+
+1. The warning contains a `run_cmd` sleep command.
+2. **MANDATORY**: Execute the sleep command via `run_cmd` BEFORE calling the next
+   `run_skill` (whether it is the next pipeline step or a retry).
+3. After sleeping, proceed normally with the next step.
+4. Before executing, state aloud: "Quota warning. Sleeping N seconds before next step."
+
+### Budget-Exceeded Denial (quota sleep exceeds session wall-clock budget)
+
+When a `run_skill` call is DENIED with "QUOTA BUDGET EXCEEDED":
+
+1. The required quota sleep exceeds the session's remaining wall-clock budget.
+2. **MANDATORY**: Do NOT execute the sleep command.
+3. Instead, emit your result block immediately with:
+   - `"success": false`
+   - `"reason": "fleet_quota_exhausted"`
+   - `"wait_seconds": <seconds_until_reset>`
+   - `"summary": "Quota exceeded; session budget insufficient for sleep. Resume after window resets."`
+4. Then STOP — do not call any more tools.
+5. Do NOT follow `on_failure`. Do NOT report to the user.
+6. The fleet dispatcher will handle retry scheduling.
+
+### Key Rules
+
+- Quota denials are **always temporary**. The API enforces multiple rate-limit windows (e.g. one-minute, one-hour, five-hour, one-day). The guard waits for the most constrained window — the one that resets latest among all windows above the threshold — to reset before retrying.
+- A denied `run_skill` has **zero side effects** — no partial state, no worktree changes.
+  Retrying with the same arguments is always safe.
+- Multiple consecutive denials may occur if the sleep duration was underestimated.
+  Keep sleeping and retrying until the call succeeds.
+- NEVER use `AskUserQuestion` for quota events — they are fully automated.
+
+---
+
+## STEP EXECUTION IS NOT DISCRETIONARY — MANDATORY
+
+You MUST execute every step the pipeline routes you to. The recipe step graph is the
+sole authority on what executes and in what order.
+
+Context management is handled by the system via on_context_limit routing. Execute
+every step at full fidelity regardless of session length.
+
+### 1. Anti-skip rule
+
+- NEVER skip a step because the PR is small, the diff is trivial, the change looks
+  simple, or you judge the step unnecessary.
+- NEVER skip a step because you believe it has already been done or is redundant.
+- The ONLY mechanism for skipping a step is `skip_when_false` evaluating to false.
+  When `skip_when_false` evaluates to true (or is absent), the step MUST execute.
+- Consequence: skipping PR review steps results in unreviewed code, missing diff
+  annotations, and no architectural lens analysis — code reaches main without
+  quality gates. Skipping issue lifecycle steps breaks traceability.
+
+### 2. Anti-improvisation rule
+
+- NEVER replace recipe steps with manual tool calls. In particular, NEVER use `run_cmd`
+  with `gh pr create`, `gh pr review`, or `gh api` to substitute for recipe steps.
+- All PR creation and review must flow through the recipe's declared step chain
+  (`prepare_pr`, `run_arch_lenses`, `compose_pr`, `annotate_pr_diff`, `review_pr`).
+  Bypassing these steps skips diff annotation, architectural lens analysis, and
+  automated code review.
+
+### 3. The word "optional" in YAML
+
+`optional: true` on a recipe step does NOT mean the step is discretionary. It means:
+- The step is SKIPPED when its `skip_when_false` ingredient evaluates to false.
+- When the ingredient evaluates to true, the step is MANDATORY.
+- A running optional step that returns `success: false` MUST follow `on_failure`.
+
+### 4. Anti-shortcut rule
+
+- Do not generalize from prior step outcomes. A step that returned a non-branching
+  result in a previous iteration may return a different result in the next. Every step
+  must execute on every issue — observed patterns from earlier issues do not make later
+  executions redundant.
+
+---
+
+## NARRATION SUPPRESSION — MANDATORY
+
+Do NOT output prose status text, phase announcements, or progress summaries between
+tool calls. Every non-final assistant turn MUST invoke at least one tool.
+
+The only permitted text-only turn is a final response containing structured output
+tokens (`plan_path = ...`, `worktree_path = ...`, etc.).
+
+This applies to all skills invoked interactively within a cook session.

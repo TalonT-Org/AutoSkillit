@@ -18,17 +18,17 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SKILLS_DIR = PROJECT_ROOT / "src" / "autoskillit" / "skills"
 SKILLS_EXTENDED_DIR = PROJECT_ROOT / "src" / "autoskillit" / "skills_extended"
 RECIPES_DIR = PROJECT_ROOT / "src" / "autoskillit" / "recipes"
-TYPES_FILE = PROJECT_ROOT / "src" / "autoskillit" / "core" / "_type_constants.py"
+TYPES_FILE = PROJECT_ROOT / "src" / "autoskillit" / "core" / "types" / "_type_constants.py"
 
 
 def count_skills() -> int:
-    """Count directories in skills/ and skills_extended/ that contain a SKILL.md."""
+    """Count all bundled skill directories in skills/ and skills_extended/."""
     count = 0
     for skills_dir in (SKILLS_DIR, SKILLS_EXTENDED_DIR):
         if skills_dir.is_dir():
-            count += sum(
-                1 for d in skills_dir.iterdir() if d.is_dir() and (d / "SKILL.md").exists()
-            )
+            for d in skills_dir.iterdir():
+                if d.is_dir():
+                    count += 1
     return count
 
 
@@ -84,6 +84,16 @@ SELF_CORRECTING = re.compile(
     re.IGNORECASE,
 )
 
+# Patterns that indicate a sub-family count rather than a global skill total.
+# When any of these appear on the same line as an "X skills" claim, the
+# claim describes a sub-family (arch-lens, exp-lens, Tier 1/2/3, audit suite,
+# rectify doctrine, …) and is exempt from the global-total check.
+SUBFAMILY_CONTEXT = re.compile(
+    r"arch-lens|exp-lens|Tier\s+[123]|skills_extended"
+    r"|src/autoskillit/skills/|audit\s+suite|rectify\s+doctrine|sub-family",
+    re.IGNORECASE,
+)
+
 # Patterns to find numeric claims in docs
 SKILL_COUNT_PAT = re.compile(r"(\d+)\s+(?:bundled\s+)?skills")
 RECIPE_COUNT_PAT = re.compile(r"(\d+)\s+recipes")
@@ -122,13 +132,15 @@ def scan_docs() -> list[str]:
             if SELF_CORRECTING.search(line):
                 continue
 
-            # Check skill counts
-            for m in SKILL_COUNT_PAT.finditer(line):
-                claimed = int(m.group(1))
-                if claimed != actual_skills and claimed > 1:
-                    errors.append(
-                        f"{rel}:{lineno}: claims {claimed} skills, actual is {actual_skills}"
-                    )
+            # Check skill counts (skip sub-family contexts like Tier 1/2/3,
+            # arch-lens, exp-lens, audit suite — those are not global totals)
+            if not SUBFAMILY_CONTEXT.search(line):
+                for m in SKILL_COUNT_PAT.finditer(line):
+                    claimed = int(m.group(1))
+                    if claimed != actual_skills and claimed > 1:
+                        errors.append(
+                            f"{rel}:{lineno}: claims {claimed} skills, actual is {actual_skills}"
+                        )
 
             # Check recipe counts
             for m in RECIPE_COUNT_PAT.finditer(line):

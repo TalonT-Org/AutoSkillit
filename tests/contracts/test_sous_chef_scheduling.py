@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.contracts._anti_confirm_helpers import ANTI_CONFIRM_RE as _ANTI_CONFIRM_RE
+
 
 def _sous_chef_text() -> str:
     skill_md = (
@@ -29,6 +31,7 @@ REQUIRED_FAST_STEPS = [
     "test_check",
     "reset_test_dir",
     "classify_fix",
+    "push_to_remote",
 ]
 
 
@@ -119,6 +122,42 @@ def test_sous_chef_parallel_scheduling_explains_wall_clock_rationale() -> None:
     )
 
 
+def test_sous_chef_wavefront_has_positive_advancement_mandate() -> None:
+    """REQ-PROMPT-009: Wavefront must mandate advancing every active pipeline each round."""
+    text = _sous_chef_text()
+    section_start = text.find("PARALLEL STEP SCHEDULING")
+    assert section_start != -1
+    next_section = text.find("\n## ", section_start + 1)
+    section_text = text[section_start:next_section] if next_section != -1 else text[section_start:]
+    lower = section_text.lower()
+    has_advancement = (
+        ("every" in lower or "all" in lower)
+        and "active" in lower
+        and ("must" in lower or "advance" in lower or "idle" in lower)
+    )
+    assert has_advancement, (
+        "PARALLEL STEP SCHEDULING section must contain a positive advancement mandate "
+        "requiring every active pipeline to be advanced each round"
+    )
+
+
+def test_sous_chef_wavefront_has_four_rules() -> None:
+    """REQ-PROMPT-010: Wavefront Scheduling Rule must contain exactly 4 numbered rules."""
+    import re
+
+    text = _sous_chef_text()
+    section_start = text.find("### Wavefront Scheduling Rule")
+    assert section_start != -1, "Wavefront Scheduling Rule subsection must exist"
+    next_subsection = text.find("\n### ", section_start + 1)
+    subsection = (
+        text[section_start:next_subsection] if next_subsection != -1 else text[section_start:]
+    )
+    rules = re.findall(r"^\d+\.\s", subsection, re.MULTILINE)
+    assert len(rules) == 4, (
+        f"Wavefront Scheduling Rule must have exactly 4 numbered rules, found {len(rules)}"
+    )
+
+
 def test_sous_chef_scheduling_section_placement() -> None:
     """REQ-PROMPT-008: PARALLEL STEP SCHEDULING section must appear after MULTIPLE ISSUES."""
     text = _sous_chef_text()
@@ -128,4 +167,36 @@ def test_sous_chef_scheduling_section_placement() -> None:
     assert scheduling_pos != -1, "PARALLEL STEP SCHEDULING section must exist"
     assert scheduling_pos > multiple_issues_pos, (
         "PARALLEL STEP SCHEDULING section must appear after MULTIPLE ISSUES section"
+    )
+
+
+def test_sous_chef_execution_map_group_iteration() -> None:
+    """EXECUTION MAP section must contain instruction to iterate groups in topological order."""
+    text = _sous_chef_text()
+    assert "EXECUTION MAP" in text, (
+        "sous-chef SKILL.md must contain an EXECUTION MAP section for group dispatch"
+    )
+    # Find EXECUTION MAP section
+    exec_map_pos = text.find("EXECUTION MAP")
+    next_section = text.find("\n## ", exec_map_pos + 1)
+    section_text = text[exec_map_pos:next_section] if next_section != -1 else text[exec_map_pos:]
+    lower = section_text.lower()
+    assert "group" in lower and ("order" in lower or "iteration" in lower or "topolog" in lower), (
+        "EXECUTION MAP section must instruct iterating groups in topological order"
+    )
+    assert "merge" in lower and ("wait" in lower or "before" in lower or "mandatory" in lower), (
+        "EXECUTION MAP section must contain mandatory merge-wait rule between groups"
+    )
+
+
+def test_sous_chef_execution_map_has_anti_confirmation() -> None:
+    """EXECUTION MAP section must contain explicit anti-confirmation instruction between groups."""
+    text = _sous_chef_text()
+    exec_map_pos = text.find("EXECUTION MAP")
+    assert exec_map_pos != -1, "sous-chef SKILL.md must contain an EXECUTION MAP section"
+    next_section = text.find("\n## ", exec_map_pos + 1)
+    section_text = text[exec_map_pos:next_section] if next_section != -1 else text[exec_map_pos:]
+    assert _ANTI_CONFIRM_RE.search(section_text) is not None, (
+        "EXECUTION MAP section must contain an explicit anti-confirmation instruction "
+        "(e.g., 'NEVER use AskUserQuestion to ask whether to proceed to the next group')"
     )

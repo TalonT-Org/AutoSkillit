@@ -1,0 +1,44 @@
+name: observational_correlational
+schema_version: "1.0"
+priority: 3
+display_name: "Observational Correlational Study"
+canonical_guideline:
+  name: "STROBE"
+  governing_body: "EQUATOR"
+  stable_for_decade: true
+  canonical: true
+fields_spanned:
+  - medicine
+  - epidemiology
+  - psychology
+  - sociology
+  - public_health
+detection_keywords:
+  - observational study
+  - cohort
+  - case-control
+  - cross-sectional
+  - STROBE
+  - odds ratio
+  - hazard ratio
+  - incidence
+  - prevalence
+mandatory_figures:
+  - figure: "Participant Flow Diagram"
+    shows: "Enrollment, exposure status, and outcome assessment at each stage"
+    citation: "STROBE item 13"
+strongly_expected_figures:
+  - figure: "Directed Acyclic Graph (DAG)"
+    shows: "Causal structure and confounding variables"
+    source: "STROBE item 16"
+  - figure: "Adjusted Effect Estimates Table"
+    shows: "Multivariable regression results with confounders"
+    source: "STROBE item 16"
+anti_patterns:
+  - pattern: "Causal language without randomization"
+    reason: "Observational studies cannot establish causation; language must reflect association only"
+  - pattern: "No confounder adjustment"
+    reason: "Failure to adjust for measured confounders introduces omitted variable bias"
+  - pattern: "No DAG"
+    reason: "DAGs are essential for transparent confounding control in observational studies"
+venue_specific_appendices: []

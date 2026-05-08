@@ -1,5 +1,29 @@
 version: 0.1.0
+# Default semantics for 'required' when omitted from an input:
+#   skills section          → required=false (skills are permissive)
+#   callable_contracts section → required=true  (callables are strict)
+# Best practice: always declare 'required' explicitly on every input.
 skills:
+  troubleshoot-experiment:
+    inputs:
+    - name: worktree_path
+      type: string
+      required: true
+    - name: step_name
+      type: string
+      required: true
+    outputs:
+    - name: diagnosis_path
+      type: file_path
+    - name: failure_type
+      type: string
+    - name: is_fixable
+      type: string
+    expected_output_patterns:
+    - "is_fixable\\s*=\\s*(true|false)"
+    pattern_examples:
+    - "diagnosis_path = /tmp/diagnosis.md\nfailure_type = stale_timeout\nis_fixable = true\n%%ORDER_UP%%"
+    write_behavior: always
   diagnose-ci:
     inputs:
     - name: branch
@@ -16,12 +40,48 @@ skills:
       type: file_path
     - name: failure_type
       type: string
+      allowed_values: [test, lint, build, type_check, env, unknown]
+    - name: failure_subtype
+      type: string
+      allowed_values: [flaky, timing_race, deterministic, fixture, import, env, unknown]
     - name: is_fixable
       type: string
     expected_output_patterns:
-    - "diagnosis_path\\s*=\\s*/.+"
+    - "diagnosis_path\\s*=\\s*(?:/.+)?"
+    - "failure_subtype\\s*=\\s*(flaky|timing_race|deterministic|fixture|import|env|unknown)"
     pattern_examples:
-    - "diagnosis_path = /tmp/diagnosis.md\n%%ORDER_UP%%"
+    - "diagnosis_path = /tmp/diagnosis.md\nfailure_type = test\nfailure_subtype = deterministic\nis_fixable = true\n%%ORDER_UP%%"
+    - "diagnosis_path = /tmp/diagnosis.md\nfailure_type = test\nfailure_subtype = flaky\nis_fixable = false\n%%ORDER_UP%%"
+    - "diagnosis_path = \nfailure_type = test\nfailure_subtype = unknown\nis_fixable = false\n%%ORDER_UP%%"
+    - "diagnosis_path = /tmp/diagnosis.md\nfailure_type = test\nfailure_subtype = timing_race\nis_fixable = true\n%%ORDER_UP%%"
+    - "diagnosis_path = /tmp/diagnosis.md\nfailure_type = test\nfailure_subtype = fixture\nis_fixable = true\n%%ORDER_UP%%"
+    - "diagnosis_path = /tmp/diagnosis.md\nfailure_type = test\nfailure_subtype = import\nis_fixable = true\n%%ORDER_UP%%"
+    - "diagnosis_path = /tmp/diagnosis.md\nfailure_type = lint\nfailure_subtype = unknown\nis_fixable = true\n%%ORDER_UP%%"
+    - "diagnosis_path = /tmp/diagnosis.md\nfailure_type = build\nfailure_subtype = unknown\nis_fixable = true\n%%ORDER_UP%%"
+    - "diagnosis_path = /tmp/diagnosis.md\nfailure_type = type_check\nfailure_subtype = unknown\nis_fixable = true\n%%ORDER_UP%%"
+    - "diagnosis_path = /tmp/diagnosis.md\nfailure_type = env\nfailure_subtype = env\nis_fixable = false\n%%ORDER_UP%%"
+    - "diagnosis_path = /tmp/diagnosis.md\nfailure_type = unknown\nfailure_subtype = unknown\nis_fixable = false\n%%ORDER_UP%%"
+    write_behavior: always
+  resolve-design-review:
+    inputs:
+    - name: evaluation_dashboard
+      type: file_path
+      required: true
+    - name: experiment_plan
+      type: file_path
+      required: true
+    outputs:
+    - name: resolution
+      type: string
+      allowed_values: [revised, failed]
+    - name: revision_guidance
+      type: file_path
+    expected_output_patterns:
+    - "resolution\\s*=\\s*(revised|failed)"
+    - "(?:revision_guidance\\s*=\\s*/.+|resolution\\s*=\\s*failed)"
+    pattern_examples:
+    - "resolution = revised\nrevision_guidance = /tmp/guidance.md\n%%ORDER_UP%%"
+    - "resolution = failed\n%%ORDER_UP%%"
     write_behavior: always
   resolve-failures:
     inputs:
@@ -34,8 +94,22 @@ skills:
     - name: base_branch
       type: string
       required: true
-    outputs: []
-    write_behavior: always
+    - name: diagnosis_path
+      type: file_path
+      required: false
+    outputs:
+    - name: verdict
+      type: string
+      allowed_values:
+        - real_fix
+        - already_green
+        - flake_suspected
+        - ci_only_failure
+    - name: fixes_applied
+      type: integer
+    write_behavior: conditional
+    write_expected_when:
+    - "verdict\\s*=\\s*real_fix"
   resolve-merge-conflicts:
     inputs:
     - name: worktree_path
@@ -73,8 +147,30 @@ skills:
     - name: base_branch
       type: string
       required: true
-    outputs: []
-    write_behavior: always
+    - name: mode
+      type: string
+      required: false
+    outputs:
+    - name: verdict
+      type: string
+      allowed_values:
+        - real_fix
+        - already_green
+        - flake_suspected
+        - ci_only_failure
+    - name: fixes_applied
+      type: integer
+    - name: deferred_observations_path
+      type: string
+      description: "Written when mode=local (accumulated DISCUSS findings) or when mode=github (posted from prior local rounds)."
+      required: false
+    - name: reject_patterns_path
+      type: string
+      description: "Written in local mode (accumulating across rounds without timestamp) or github mode (timestamped, one-shot)."
+      required: false
+    write_behavior: conditional
+    write_expected_when:
+    - "verdict\\s*=\\s*real_fix"
   dry-walkthrough:
     inputs:
     - name: plan_path
@@ -124,6 +220,7 @@ skills:
     - "investigation_path\\s*=\\s*/.+"
     pattern_examples:
     - "investigation_path = /tmp/investigation.md\n%%ORDER_UP%%"
+    read_only: true
   make-groups:
     inputs:
     - name: source_doc
@@ -140,6 +237,7 @@ skills:
     - "groups_path\\s*=\\s*/.+"
     pattern_examples:
     - "groups_path = /tmp/groups.json\n%%ORDER_UP%%"
+    write_behavior: always
   make-plan:
     inputs:
     - name: task
@@ -164,6 +262,16 @@ skills:
     - "recipe_path\\s*=\\s*/.+"
     pattern_examples:
     - "recipe_path = /tmp/recipe.yaml\n%%ORDER_UP%%"
+    write_behavior: always
+  make-campaign:
+    inputs: []
+    outputs:
+    - name: campaign_path
+      type: file_path
+    expected_output_patterns:
+    - "campaign_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "campaign_path = /home/user/project/.autoskillit/recipes/campaigns/my-campaign.yaml\n%%ORDER_UP%%"
     write_behavior: always
   mermaid:
     inputs: []
@@ -213,11 +321,15 @@ skills:
       type: directory_path
     - name: branch_name
       type: string
+    - name: phases_implemented
+      type: integer
     expected_output_patterns:
     - "worktree_path\\s*=\\s*/.+"
     pattern_examples:
-    - "worktree_path = /tmp/worktrees/impl-foo-20260316\n%%ORDER_UP%%"
-    write_behavior: always
+    - "worktree_path = /tmp/worktrees/impl-foo-20260316\nbranch_name = feature/123\nphases_implemented = 2\n%%ORDER_UP%%"
+    write_behavior: conditional
+    write_expected_when:
+    - "phases_implemented\\s*=\\s*[1-9][0-9]*"
   review-approach:
     inputs:
     - name: plan_path
@@ -262,12 +374,15 @@ skills:
     - name: base_branch
       type: string
       required: true
+    - name: merge_queue_data_path
+      type: file_path
+      required: false
     outputs:
     - name: pr_order_file
       type: file_path
     - name: analysis_file
       type: file_path
-    - name: integration_branch
+    - name: batch_branch
       type: string
     - name: pr_count
       type: string
@@ -292,6 +407,9 @@ skills:
     outputs:
     - name: merged
       type: string
+      allowed_values:
+        - "true"
+        - "false"
     - name: needs_plan
       type: string
     - name: escalation_required
@@ -323,9 +441,6 @@ skills:
     - name: base_branch
       type: string
       required: true
-    - name: token_summary_path
-      type: file_path
-      required: false
     - name: closing_issue
       type: string
       required: false
@@ -335,9 +450,70 @@ skills:
     pattern_examples:
     - "https://github.com/owner/repo/pull/42\n%%ORDER_UP%%"
 
+  prepare-pr:
+    inputs:
+    - name: plan_paths
+      type: string
+      required: true
+    - name: run_name
+      type: string
+      required: true
+    - name: base_branch
+      type: string
+      required: true
+    - name: closing_issue
+      type: string
+      required: false
+    - name: conflict_report_path
+      type: file_path
+      required: false
+    outputs:
+    - name: prep_path
+      type: file_path
+    - name: selected_lenses
+      type: string
+    - name: lens_context_paths
+      type: string
+    expected_output_patterns:
+    - "prep_path\\s*=\\s*/.+"
+    - "selected_lenses\\s*=\\s*\\S+"
+    - "lens_context_paths\\s*=\\s*/.+"
+    pattern_examples:
+    - "prep_path = /abs/path/pr_prep_2026-04-07_120000.md\nselected_lenses = module-dependency,process-flow\nlens_context_paths = /abs/ctx1.md,/abs/ctx2.md\n%%ORDER_UP%%"
+    write_behavior: conditional
+    write_expected_when:
+    - "prep_path\\s*=\\s*/.+"
+
+  compose-pr:
+    inputs:
+    - name: prep_path
+      type: file_path
+      required: true
+    - name: all_diagram_paths
+      type: string
+      required: true
+    - name: work_dir
+      type: directory_path
+      required: true
+    - name: base_branch
+      type: string
+      required: true
+    - name: closing_issue
+      type: string
+      required: false
+    outputs:
+    - name: pr_url
+      type: string
+    expected_output_patterns:
+    - "pr_url\\s*=\\s*(https://github\\.com/.*/pull/\\d+)?"
+    pattern_examples:
+    - "pr_url = https://github.com/owner/repo/pull/42\n%%ORDER_UP%%"
+    - "pr_url = \n%%ORDER_UP%%"
+    write_behavior: always
+
   open-integration-pr:
     inputs:
-    - name: integration_branch
+    - name: batch_branch
       type: string
       required: true
     - name: base_branch
@@ -348,6 +524,9 @@ skills:
       required: true
     - name: audit_verdict
       type: string
+      required: false
+    - name: domain_partitions_path
+      type: file_path
       required: false
     outputs:
     - name: pr_url
@@ -383,22 +562,48 @@ skills:
     - name: base_branch
       type: string
       required: true
+    - name: annotated_diff_path
+      type: string
+      required: false
+      recommended: true
+    - name: hunk_ranges_path
+      type: string
+      required: false
+      recommended: true
+    - name: diff_metrics_path
+      type: string
+      required: false
+    - name: mode
+      type: string
+      required: false
     outputs:
     - name: verdict
       type: string
       allowed_values:
         - approved
+        - approved_with_comments
         - changes_requested
         - needs_human
+    - name: local_findings_path
+      type: string
+      description: "Written when mode=local. Path to local_findings_{pr_number}.json output."
     expected_output_patterns:
-    - "verdict\\s*=\\s*(approved|changes_requested|needs_human)"
+    - "verdict\\s*=\\s*(approved|approved_with_comments|changes_requested|needs_human)"
+    - "(?:%%REVIEW_GATE::(LOOP_REQUIRED|CLEAR)%%|verdict\\s*=\\s*approved_with_comments)"
     pattern_examples:
-    - "verdict = approved\n%%ORDER_UP%%"
-    - "verdict = changes_requested\n%%ORDER_UP%%"
-    - "verdict = needs_human\n%%ORDER_UP%%"
+    - "verdict = approved\n%%REVIEW_GATE::CLEAR%%\n%%ORDER_UP%%"
+    - "verdict = approved_with_comments\n%%ORDER_UP%%"
+    - "verdict = changes_requested\n%%REVIEW_GATE::LOOP_REQUIRED%%\n%%ORDER_UP%%"
+    - "verdict = needs_human\n%%REVIEW_GATE::CLEAR%%\n%%ORDER_UP%%"
 
   arch-lens-c4-container:
     inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
     - name: project_context
       type: string
       required: false
@@ -412,6 +617,12 @@ skills:
 
   arch-lens-concurrency:
     inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
     - name: project_context
       type: string
       required: false
@@ -425,6 +636,12 @@ skills:
 
   arch-lens-data-lineage:
     inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
     - name: project_context
       type: string
       required: false
@@ -438,6 +655,12 @@ skills:
 
   arch-lens-deployment:
     inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
     - name: project_context
       type: string
       required: false
@@ -451,6 +674,12 @@ skills:
 
   arch-lens-development:
     inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
     - name: project_context
       type: string
       required: false
@@ -464,6 +693,12 @@ skills:
 
   arch-lens-error-resilience:
     inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
     - name: project_context
       type: string
       required: false
@@ -477,6 +712,12 @@ skills:
 
   arch-lens-module-dependency:
     inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
     - name: project_context
       type: string
       required: false
@@ -490,6 +731,12 @@ skills:
 
   arch-lens-operational:
     inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
     - name: project_context
       type: string
       required: false
@@ -503,6 +750,12 @@ skills:
 
   arch-lens-process-flow:
     inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
     - name: project_context
       type: string
       required: false
@@ -516,6 +769,12 @@ skills:
 
   arch-lens-repository-access:
     inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
     - name: project_context
       type: string
       required: false
@@ -529,6 +788,12 @@ skills:
 
   arch-lens-scenarios:
     inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
     - name: project_context
       type: string
       required: false
@@ -542,6 +807,12 @@ skills:
 
   arch-lens-security:
     inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
     - name: project_context
       type: string
       required: false
@@ -555,6 +826,354 @@ skills:
 
   arch-lens-state-lifecycle:
     inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  exp-lens-estimand-clarity:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: true
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  exp-lens-causal-assumptions:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: true
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  exp-lens-comparator-construction:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: true
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  exp-lens-pipeline-integrity:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: true
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  exp-lens-variance-stability:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: true
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  exp-lens-fair-comparison:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: true
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  exp-lens-reproducibility-artifacts:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: true
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  exp-lens-measurement-validity:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: true
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  exp-lens-sensitivity-robustness:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: true
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  exp-lens-benchmark-representativeness:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: true
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  exp-lens-unit-interference:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: true
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  exp-lens-error-budget:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: true
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  exp-lens-severity-testing:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: true
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  exp-lens-randomization-blocking:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: true
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  exp-lens-validity-threats:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: true
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  exp-lens-iterative-learning:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: true
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  exp-lens-exploratory-confirmatory:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: true
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  exp-lens-governance-risk:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: true
     - name: project_context
       type: string
       required: false
@@ -568,7 +1187,9 @@ skills:
 
   prepare-issue:
     inputs: []
-    outputs: []
+    outputs:
+    - name: issue_url
+      type: str
     expected_output_patterns:
     - "---prepare-issue-result---"
     pattern_examples:
@@ -609,7 +1230,9 @@ skills:
 
   process-issues:
     inputs: []
-    outputs: []
+    outputs:
+    - name: dispatch_results
+      type: str
     expected_output_patterns:
     - "---process-issues-result---"
     pattern_examples:
@@ -622,3 +1245,1454 @@ skills:
       required: true
     outputs: []
     write_behavior: always
+
+  scope:
+    inputs:
+    - name: research_question
+      type: string
+      required: true
+    outputs:
+    - name: scope_report
+      type: file_path
+    expected_output_patterns:
+    - "scope_report\\s*=\\s*/.+"
+    pattern_examples:
+    - "scope_report = /tmp/scope_report.md\n%%ORDER_UP%%"
+    write_behavior: always
+
+  plan-experiment:
+    inputs:
+    - name: scope_report_path
+      type: file_path
+      required: true
+    - name: revision_guidance
+      type: file_path
+      required: false
+    outputs:
+    - name: experiment_plan
+      type: file_path
+    expected_output_patterns:
+    - "experiment_plan\\s*=\\s*/.+"
+    pattern_examples:
+    - "experiment_plan = /tmp/experiment_plan.md\n%%ORDER_UP%%"
+    write_behavior: always
+
+  plan-visualization:
+    inputs:
+    - name: source_dir
+      type: directory_path
+      required: true
+    - name: experiment_plan_path
+      type: file_path
+      required: true
+    - name: scope_report_path
+      type: string
+      required: false
+    outputs:
+    - name: visualization_plan_path
+      type: file_path
+    - name: report_plan_path
+      type: file_path
+    - name: disambiguation_rule_applied
+      type: string
+    - name: tier_c_lens
+      type: string
+    - name: methodology_tradition
+      type: string
+    - name: visualization_plan_trace_path
+      type: file_path
+    expected_output_patterns:
+    - "visualization_plan_path\\s*=\\s*/.+"
+    - "report_plan_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "visualization_plan_path = /tmp/plan-visualization/visualization-plan.md\nreport_plan_path = /tmp/plan-visualization/report-plan.md\n%%ORDER_UP%%"
+    write_behavior: always
+
+  stage-data:
+    inputs:
+    - name: experiment_plan
+      type: file_path
+      required: true
+    outputs:
+    - name: verdict
+      type: string
+    - name: resource_report
+      type: file_path
+    expected_output_patterns:
+    - "verdict\\s*=\\s*(PASS|WARN|FAIL)"
+    - "resource_report\\s*=\\s*/.+"
+    pattern_examples:
+    - "verdict = PASS\nresource_report = /tmp/stage-data/resource_feasibility_2026-04-13_120000.md\n%%ORDER_UP%%"
+    write_behavior: always
+
+  setup-environment:
+    inputs:
+    - name: worktree_path
+      type: directory_path
+      required: true
+    - name: experiment_plan
+      type: file_path
+      required: true
+    outputs:
+    - name: env_mode
+      type: string
+      allowed_values: [none, docker, micromamba-host, unavailable]
+    - name: env_report
+      type: file_path
+    - name: verdict
+      type: string
+    expected_output_patterns:
+    - "env_mode\\s*=\\s*(none|docker|micromamba-host|unavailable)"
+    - "env_report\\s*=\\s*/.+"
+    - "verdict\\s*=\\s*(PASS|WARN|FAIL)"
+    pattern_examples:
+    - "env_mode = none\nenv_report = /tmp/setup-environment/env_setup_report.md\nverdict = PASS\n%%ORDER_UP%%"
+    - "env_mode = docker\nenv_report = /tmp/setup-environment/env_setup_report.md\nverdict = PASS\n%%ORDER_UP%%"
+    - "env_mode = micromamba-host\nenv_report = /tmp/setup-environment/env_setup_report.md\nverdict = WARN\n%%ORDER_UP%%"
+    - "env_mode = unavailable\nenv_report = /tmp/setup-environment/env_setup_report.md\nverdict = FAIL\n%%ORDER_UP%%"
+    write_behavior: always
+
+  implement-experiment:
+    inputs:
+    - name: plan_path
+      type: file_path
+      required: true
+    outputs:
+    - name: worktree_path
+      type: directory_path
+    - name: branch_name
+      type: string
+    expected_output_patterns:
+    - "worktree_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "worktree_path = /tmp/worktrees/research-20260101-120000\n%%ORDER_UP%%"
+    write_behavior: always
+
+  run-experiment:
+    inputs:
+    - name: worktree_path
+      type: directory_path
+      required: true
+    outputs:
+    - name: results_path
+      type: file_path
+    expected_output_patterns:
+    - "results_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "results_path = /tmp/run-experiment/results.md\n%%ORDER_UP%%"
+    write_behavior: always
+
+  generate-report:
+    inputs:
+    - name: worktree_path
+      type: directory_path
+      required: true
+    - name: results_path
+      type: file_path
+      required: true
+    outputs:
+    - name: report_path
+      type: file_path
+    expected_output_patterns:
+    - "report_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "report_path = /tmp/research/report.md\n%%ORDER_UP%%"
+    write_behavior: always
+
+  prepare-research-pr:
+    inputs:
+    - name: report_path
+      type: file_path
+      required: true
+    - name: experiment_plan_path
+      type: file_path
+      required: true
+    - name: worktree_path
+      type: directory_path
+      required: true
+    - name: base_branch
+      type: string
+      required: true
+    outputs:
+    - name: prep_path
+      type: file_path
+    - name: selected_lenses
+      type: string
+    - name: lens_context_paths
+      type: string
+    expected_output_patterns:
+    - "prep_path\\s*=\\s*/.+"
+    - "selected_lenses\\s*=\\s*\\S+"
+    - "lens_context_paths\\s*=\\s*/.+"
+    pattern_examples:
+    - "prep_path = /abs/path/pr_prep_2026-04-07_101349.md\nselected_lenses = fair-comparison,estimand-clarity\nlens_context_paths = /abs/ctx1.md,/abs/ctx2.md\n%%ORDER_UP%%"
+    write_behavior: always
+
+  compose-research-pr:
+    inputs:
+    - name: prep_path
+      type: file_path
+      required: true
+    - name: all_diagram_paths
+      type: string
+      required: true
+    - name: worktree_path
+      type: directory_path
+      required: true
+    - name: base_branch
+      type: string
+      required: true
+    - name: closing_issue
+      type: string
+      required: false
+    outputs:
+    - name: pr_url
+      type: string
+    expected_output_patterns:
+    - "pr_url\\s*=\\s*(https://github\\.com/.*/pull/\\d+)?"
+    pattern_examples:
+    - "pr_url = https://github.com/owner/repo/pull/42\n%%ORDER_UP%%"
+    - "pr_url = \n%%ORDER_UP%%"
+    write_behavior: always
+
+  review-design:
+    inputs:
+    - name: experiment_plan
+      type: file_path
+      required: true
+    outputs:
+    - name: verdict
+      type: string
+      allowed_values: [GO, REVISE, STOP]
+    - name: experiment_type
+      type: string
+      allowed_values: [benchmark, configuration_study, causal_inference, robustness_audit, exploratory]
+    - name: evaluation_dashboard
+      type: file_path
+    - name: revision_guidance
+      type: file_path
+    - name: classification_timestamp
+      type: string
+    expected_output_patterns:
+    - "verdict\\s*=\\s*(GO|REVISE|STOP)"
+    - "(?:experiment_type\\s*=\\s*\\S+|verdict\\s*=\\s*STOP)"
+    pattern_examples:
+    - "verdict = GO\nexperiment_type = benchmark\nevaluation_dashboard = /tmp/eval.md\nrevision_guidance = /tmp/guidance.md\n%%ORDER_UP%%"
+    - "verdict = REVISE\nexperiment_type = benchmark\nrevision_guidance = /tmp/guidance.md\n%%ORDER_UP%%"
+    - "verdict = STOP\n%%ORDER_UP%%"
+    - "verdict = GO\nexperiment_type = causal_inference\nevaluation_dashboard = /tmp/eval.md\n%%ORDER_UP%%"
+    - "verdict = GO\nexperiment_type = configuration_study\nevaluation_dashboard = /tmp/eval.md\n%%ORDER_UP%%"
+    - "verdict = GO\nexperiment_type = robustness_audit\nevaluation_dashboard = /tmp/eval.md\n%%ORDER_UP%%"
+    - "verdict = GO\nexperiment_type = exploratory\nevaluation_dashboard = /tmp/eval.md\n%%ORDER_UP%%"
+    write_behavior: always
+
+  review-research-pr:
+    inputs:
+    - name: worktree_path
+      type: directory_path
+      required: true
+    - name: base_branch
+      type: string
+      required: true
+    - name: pr_url
+      type: string
+      required: true
+    outputs:
+    - name: verdict
+      type: string
+      allowed_values: [approved, changes_requested, needs_human]
+    expected_output_patterns:
+    - "verdict\\s*=\\s*(approved|changes_requested|needs_human)"
+    pattern_examples:
+    - "verdict = approved\n%%ORDER_UP%%"
+    - "verdict = changes_requested\n%%ORDER_UP%%"
+    - "verdict = needs_human\n%%ORDER_UP%%"
+
+  audit-claims:
+    inputs:
+    - name: worktree_path
+      type: directory_path
+      required: true
+    - name: base_branch
+      type: string
+      required: true
+    - name: pr_url
+      type: string
+      required: true
+    outputs:
+    - name: verdict
+      type: string
+      allowed_values: [approved, changes_requested, needs_human]
+    expected_output_patterns:
+    - "verdict\\s*=\\s*(approved|changes_requested|needs_human)"
+    pattern_examples:
+    - "verdict = approved\n%%ORDER_UP%%"
+    - "verdict = changes_requested\n%%ORDER_UP%%"
+    - "verdict = needs_human\n%%ORDER_UP%%"
+
+  resolve-claims-review:
+    inputs:
+    - name: worktree_path
+      type: directory_path
+      required: true
+    - name: base_branch
+      type: string
+      required: true
+    outputs:
+    - name: needs_rerun
+      type: string
+    - name: verdict
+      type: string
+      allowed_values:
+        - real_fix
+        - already_green
+        - flake_suspected
+        - ci_only_failure
+    - name: fixes_applied
+      type: integer
+    expected_output_patterns:
+    - "needs_rerun\\s*=\\s*(true|false)"
+    pattern_examples:
+    - "needs_rerun = true\nverdict = real_fix\nfixes_applied = 2\n%%ORDER_UP%%"
+    - "needs_rerun = false\nverdict = already_green\nfixes_applied = 0\n%%ORDER_UP%%"
+    - "needs_rerun = true\nverdict = flake_suspected\nfixes_applied = 0\n%%ORDER_UP%%"
+    - "needs_rerun = false\nverdict = ci_only_failure\nfixes_applied = 0\n%%ORDER_UP%%"
+    write_behavior: conditional
+    write_expected_when:
+    - "verdict\\s*=\\s*real_fix"
+
+  resolve-research-review:
+    inputs:
+    - name: worktree_path
+      type: directory_path
+      required: true
+    - name: base_branch
+      type: string
+      required: true
+    outputs:
+    - name: needs_rerun
+      type: string
+    - name: verdict
+      type: string
+      allowed_values:
+        - real_fix
+        - already_green
+        - flake_suspected
+        - ci_only_failure
+    - name: fixes_applied
+      type: integer
+    expected_output_patterns:
+    - "needs_rerun\\s*=\\s*(true|false)"
+    pattern_examples:
+    - "needs_rerun = true\nverdict = real_fix\nfixes_applied = 2\n%%ORDER_UP%%"
+    - "needs_rerun = false\nverdict = already_green\nfixes_applied = 0\n%%ORDER_UP%%"
+    - "needs_rerun = true\nverdict = flake_suspected\nfixes_applied = 0\n%%ORDER_UP%%"
+    - "needs_rerun = false\nverdict = ci_only_failure\nfixes_applied = 0\n%%ORDER_UP%%"
+    write_behavior: conditional
+    write_expected_when:
+    - "verdict\\s*=\\s*real_fix"
+
+  vis-lens-always-on:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  vis-lens-antipattern:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  vis-lens-chart-select:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  vis-lens-methodology-norms:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  vis-lens-uncertainty:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  vis-lens-multi-compare:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  vis-lens-temporal:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  vis-lens-color-access:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  vis-lens-figure-table:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+  vis-lens-caption-annot:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+  vis-lens-story-arc:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+  vis-lens-reproducibility:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+  build-execution-map:
+    inputs: []
+    outputs:
+    - name: execution_map
+      type: file_path
+    - name: execution_map_report
+      type: file_path
+    - name: group_count
+      type: string
+    - name: total_issues
+      type: string
+    - name: dispatched_count
+      type: string
+    - name: deferred_count
+      type: string
+    - name: has_deferred
+      type: string
+    - name: review_approach_candidates
+      type: string
+    expected_output_patterns:
+    - "execution_map\\s*=\\s*/.+"
+    pattern_examples:
+    - "execution_map = /tmp/build-execution-map/execution_map_2026-04-22_190000.json\nexecution_map_report = /tmp/build-execution-map/execution_map_report_2026-04-22_190000.md\ngroup_count = 3\ntotal_issues = 5\ndispatched_count = 4\ndeferred_count = 1\nhas_deferred = true"
+    write_behavior: always
+  bundle-local-report:
+    inputs:
+    - name: research_dir
+      type: directory_path
+      required: true
+    - name: report_path
+      type: file_path
+      required: true
+    - name: all_diagram_paths
+      type: string
+      required: false
+    - name: visualization_plan_path
+      type: file_path
+      required: false
+    outputs:
+    - name: html_path
+      type: file_path
+    expected_output_patterns:
+    - "html_path\\s*=\\s*\\S+"
+    pattern_examples:
+    - "html_path = /tmp/research/report.html\n%%ORDER_UP%%"
+    write_behavior: conditional
+    write_expected_when:
+    - "html_path\\s*=\\s*\\S+"
+  planner-analyze:
+    inputs: []
+    outputs: []
+  planner-extract-domain:
+    inputs: []
+    outputs: []
+  planner-generate-phases:
+    inputs: []
+    outputs:
+    - name: phase_manifest_path
+      type: file_path
+    - name: phase_ids
+      type: str
+    result_fields:
+    - name: id
+      type: str
+      required: true
+    - name: name
+      type: str
+      required: true
+    - name: ordering
+      type: int
+      required: true
+    expected_output_patterns:
+    - "phase_manifest_path\\s*=\\s*\\S+"
+    pattern_examples:
+    - "phase_manifest_path = /tmp/autoskillit/planner/run-20260101-120000/phases/phase_manifest.json\n%%ORDER_UP%%"
+    write_behavior: always
+  planner-elaborate-phase:
+    inputs:
+      - name: plan_snapshot_path
+        type: file_path
+        required: true
+      - name: target_phase_id
+        type: str
+        required: true
+      - name: output_dir
+        type: directory_path
+        required: true
+    outputs:
+      - name: elab_result_path
+        type: file_path
+    expected_output_patterns:
+      - "elab_result_path\\s*=\\s*\\S+"
+    pattern_examples:
+      - "elab_result_path = /tmp/autoskillit/planner/run-20260101-120000/phases/P1_result.json\n%%ORDER_UP%%"
+    write_behavior: always
+  planner-elaborate-assignments:
+    inputs:
+      - name: context_file
+        type: file_path
+        required: true
+      - name: planner_dir
+        type: directory_path
+        required: true
+    outputs:
+      - name: phase_assignments_result_dir
+        type: directory_path
+    expected_output_patterns:
+      - "phase_assignments_result_dir\\s*=\\s*\\S+"
+    pattern_examples:
+      - "phase_assignments_result_dir = /tmp/autoskillit/planner/run-20260101-120000/assignments\n%%ORDER_UP%%"
+    write_behavior: always
+  planner-elaborate-wps:
+    inputs:
+      - name: context_file
+        type: file_path
+        required: true
+      - name: planner_dir
+        type: directory_path
+        required: true
+    outputs:
+      - name: phase_wps_result_dir
+        type: directory_path
+    expected_output_patterns:
+      - "phase_wps_result_dir\\s*=\\s*\\S+"
+    pattern_examples:
+      - "phase_wps_result_dir = /tmp/autoskillit/planner/run-20260101-120000/work_packages\n%%ORDER_UP%%"
+    write_behavior: always
+  planner-reconcile-deps:
+    inputs: []
+    outputs: []
+  planner-refine:
+    inputs: []
+    outputs: []
+  planner-refine-phases:
+    inputs:
+      - name: combined_plan_path
+        type: file_path
+        required: true
+      - name: output_dir
+        type: directory_path
+        required: true
+    outputs:
+      - name: refined_plan_path
+        type: file_path
+    expected_output_patterns:
+      - "refined_plan_path\\s*=\\s*\\S+"
+    pattern_examples:
+      - "refined_plan_path = /tmp/autoskillit/planner/run-20260101-120000/refined_plan.json\n%%ORDER_UP%%"
+    write_behavior: always
+  planner-refine-assignments:
+    inputs:
+      - name: context_file
+        type: file_path
+        required: true
+      - name: refined_plan_path
+        type: file_path
+        required: true
+      - name: output_dir
+        type: directory_path
+        required: true
+    outputs:
+      - name: phase_refined_path
+        type: file_path
+    expected_output_patterns:
+      - "phase_refined_path\\s*=\\s*\\S+"
+    pattern_examples:
+      - "phase_refined_path = /tmp/autoskillit/planner/run-20260101-120000/refine_contexts/P1_result.json\n%%ORDER_UP%%"
+    write_behavior: always
+  planner-refine-wps:
+    inputs:
+      - name: combined_wps_path
+        type: file_path
+        required: true
+      - name: refined_plan_path
+        type: file_path
+        required: true
+      - name: refined_assignments_path
+        type: file_path
+        required: true
+      - name: output_dir
+        type: directory_path
+        required: true
+    outputs:
+      - name: refined_wps_path
+        type: file_path
+    expected_output_patterns:
+      - "refined_wps_path\\s*=\\s*\\S+"
+    pattern_examples:
+      - "refined_wps_path = /tmp/autoskillit/planner/run-20260101-120000/refined_wps.json\n%%ORDER_UP%%"
+    write_behavior: always
+  planner-consolidate-wps:
+    inputs:
+      - name: refined_wps_path
+        type: file_path
+        required: true
+      - name: planner_dir
+        type: directory_path
+        required: true
+    outputs: []
+    write_behavior: always
+  planner-validate-task-alignment:
+    inputs:
+      - name: refined_wps_path
+        type: file_path
+        required: true
+      - name: refined_plan_path
+        type: file_path
+        required: true
+      - name: output_dir
+        type: directory_path
+        required: true
+    outputs:
+      - name: alignment_findings_path
+        type: file_path
+      - name: alignment_finding_count
+        type: str
+    expected_output_patterns:
+      - "alignment_findings_path\\s*=\\s*\\S+"
+      - "alignment_finding_count\\s*=\\s*\\d+"
+    pattern_examples:
+      - "alignment_findings_path = /tmp/autoskillit/planner/run-20260101-120000/task_alignment.json\nalignment_finding_count = 0\n%%ORDER_UP%%"
+    write_behavior: always
+  planner-assess-review-approach:
+    inputs:
+      - name: refined_wps_path
+        type: file_path
+        required: true
+      - name: planner_dir
+        type: directory_path
+        required: true
+    outputs:
+      - name: review_approach_assessment_path
+        type: file_path
+    expected_output_patterns:
+      - "review_approach_assessment_path\\s*=\\s*\\S+"
+    pattern_examples:
+      - "review_approach_assessment_path = /tmp/autoskillit/planner/run-20260101-120000/review_approach_assessment.json\n%%ORDER_UP%%"
+    write_behavior: always
+  audit-tests:
+    inputs: []
+    outputs:
+      - name: audit_report_path
+        type: file_path
+    expected_output_patterns:
+      - "audit_report_path\\s*=\\s*\\S+"
+    pattern_examples:
+      - "audit_report_path = /tmp/autoskillit/audit-tests/test_audit_2026-04-28_120000.md\n%%ORDER_UP%%"
+    write_behavior: always
+  validate-audit:
+    inputs:
+      - name: audit_report_path
+        type: file_path
+        required: false
+    outputs:
+      - name: validated_report_path
+        type: file_path
+      - name: verdict
+        type: str
+    expected_output_patterns:
+      - "validated_report_path\\s*=\\s*\\S+"
+      - "verdict\\s*=\\s*\\S+"
+    pattern_examples:
+      - "validated_report_path = /tmp/autoskillit/validate-audit-2026-04-28_120000/validated_report_tests.md\nverdict = validated"
+    write_behavior: conditional
+    write_expected_when:
+      - "verdict\\s*=\\s*validated"
+  validate-test-audit:
+    inputs:
+      - name: audit_report_path
+        type: file_path
+        required: false
+    outputs:
+      - name: validated_report_path
+        type: file_path
+      - name: verdict
+        type: str
+    expected_output_patterns:
+      - "validated_report_path\\s*=\\s*\\S+"
+      - "verdict\\s*=\\s*\\S+"
+    pattern_examples:
+      - "validated_report_path = /tmp/autoskillit/validate-audit-2026-05-05_140000/validated_report_tests.md\nverdict = validated"
+    write_behavior: conditional
+    write_expected_when:
+      - "verdict\\s*=\\s*validated"
+  promote-to-main:
+    inputs:
+    - name: batch_branch
+      type: string
+      required: false
+    - name: base_branch
+      type: string
+      required: false
+    outputs:
+    - name: pr_url
+      type: string
+    - name: verdict
+      type: string
+      allowed_values: [created, dry_run, preflight_failed]
+    - name: category_summary
+      type: string
+    - name: pr_body_path
+      type: file_path
+    expected_output_patterns:
+    - "verdict\\s*=\\s*(created|dry_run|preflight_failed)"
+    pattern_examples:
+    - "pr_url = https://github.com/org/repo/pull/42\nverdict = created\ncategory_summary = 14 fixes, 3 features\n%%ORDER_UP%%"
+    - "pr_url = \nverdict = dry_run\ncategory_summary = 14 fixes, 3 features\n%%ORDER_UP%%"
+    - "pr_url = \nverdict = preflight_failed\ncategory_summary = \n%%ORDER_UP%%"
+    write_behavior: always
+callable_contracts:
+  autoskillit.smoke_utils.check_loop_iteration:
+    inputs:
+    - name: current_iteration
+      type: str
+      required: false
+    - name: max_iterations
+      type: str
+      required: false
+    outputs:
+    - name: next_iteration
+      type: str
+    - name: max_exceeded
+      type: str
+  autoskillit.smoke_utils.check_review_loop:
+    inputs:
+    - name: pr_number
+      type: str
+      required: true
+    - name: current_iteration
+      type: str
+      required: false
+    - name: max_iterations
+      type: str
+      required: false
+    - name: previous_verdict
+      type: str
+      required: false
+    outputs:
+    - name: next_iteration
+      type: str
+    - name: max_exceeded
+      type: str
+    - name: had_blocking
+      type: str
+  autoskillit.smoke_utils.check_bug_report_non_empty:
+    inputs:
+    - name: workspace
+      type: directory_path
+      required: true
+    outputs:
+    - name: non_empty
+      type: str
+  autoskillit.smoke_utils.annotate_pr_diff:
+    inputs:
+    - name: pr_number
+      type: str
+      required: true
+    - name: cwd
+      type: directory_path
+      required: true
+    - name: output_dir
+      type: directory_path
+      required: true
+    - name: loc_threshold
+      type: str
+      required: false
+    - name: file_threshold
+      type: str
+      required: false
+    outputs:
+    - name: annotated_diff_path
+      type: file_path
+    - name: hunk_ranges_path
+      type: file_path
+    - name: diff_metrics_path
+      type: file_path
+  autoskillit.smoke_utils.compute_domain_partitions:
+    inputs:
+    - name: batch_branch
+      type: str
+      required: true
+    - name: base_branch
+      type: str
+      required: true
+    - name: cwd
+      type: directory_path
+      required: true
+    - name: output_dir
+      type: directory_path
+      required: true
+    outputs:
+    - name: domain_partitions_path
+      type: file_path
+  autoskillit.smoke_utils.fetch_merge_queue_data:
+    inputs:
+    - name: base_branch
+      type: str
+      required: true
+    - name: cwd
+      type: directory_path
+      required: true
+    - name: output_dir
+      type: directory_path
+      required: true
+    outputs:
+    - name: merge_queue_data_path
+      type: file_path
+  autoskillit.planner.validate_plan:
+    inputs:
+    - name: output_dir
+      type: directory_path
+      required: true
+    outputs:
+    - name: verdict
+      type: str
+    - name: validation_path
+      type: file_path
+    - name: issue_count
+      type: str
+  autoskillit.planner.compile_plan:
+    inputs:
+    - name: output_dir
+      type: directory_path
+      required: true
+    - name: task_file_path
+      type: file_path
+      required: true
+    - name: source_dir
+      type: directory_path
+      required: true
+    outputs:
+    - name: plan_path
+      type: file_path
+    - name: plan_json_path
+      type: file_path
+    - name: plan_parts
+      type: str
+  autoskillit.planner.merge.merge_files:
+    inputs:
+    - name: file_paths
+      type: str
+      required: true
+    - name: output_path
+      type: file_path
+      required: true
+    - name: key
+      type: str
+      required: true
+    outputs:
+    - name: merged_path
+      type: file_path
+    - name: item_count
+      type: str
+  autoskillit.planner.merge.extract_item:
+    inputs:
+    - name: source_path
+      type: file_path
+      required: true
+    - name: item_id
+      type: str
+      required: true
+    - name: output_path
+      type: file_path
+      required: true
+    outputs:
+    - name: extracted_path
+      type: file_path
+  autoskillit.planner.merge.replace_item:
+    inputs:
+    - name: source_path
+      type: file_path
+      required: true
+    - name: item_id
+      type: str
+      required: true
+    - name: replacement_path
+      type: file_path
+      required: true
+    outputs:
+    - name: updated_path
+      type: file_path
+    - name: replaced_id
+      type: str
+  autoskillit.planner.merge.build_plan_snapshot:
+    inputs:
+    - name: phases_dir
+      type: directory_path
+      required: true
+    - name: output_path
+      type: file_path
+      required: true
+    outputs:
+    - name: snapshot_path
+      type: file_path
+    - name: phase_ids
+      type: str
+  autoskillit.planner.merge.merge_tier_results:
+    inputs:
+    - name: results_dir
+      type: directory_path
+      required: true
+    - name: output_path
+      type: file_path
+      required: true
+    - name: key
+      type: str
+      required: true
+    outputs:
+    - name: merged_path
+      type: file_path
+    - name: item_count
+      type: str
+    - name: refine_context_paths
+      type: str
+      when: "key == 'assignments'"
+  autoskillit.planner.create_run_dir:
+    inputs:
+    - name: temp_dir
+      type: directory_path
+      required: true
+    outputs:
+    - name: planner_dir
+      type: directory_path
+  autoskillit.planner.finalize_wp_manifest:
+    inputs:
+    - name: work_packages_dir
+      type: directory_path
+      required: true
+    - name: output_dir
+      type: directory_path
+      required: true
+    outputs:
+    - name: manifest_path
+      type: file_path
+    - name: total_count
+      type: str
+  autoskillit.planner.expand_assignments:
+    inputs:
+    - name: refined_plan_path
+      type: file_path
+      required: true
+    - name: output_dir
+      type: directory_path
+      required: true
+    outputs:
+    - name: manifest_path
+      type: file_path
+    - name: context_paths
+      type: str
+    - name: item_ids
+      type: str
+  autoskillit.planner.expand_wps:
+    inputs:
+    - name: refined_assignments_path
+      type: file_path
+      required: true
+    - name: output_dir
+      type: directory_path
+      required: true
+    outputs:
+    - name: manifest_path
+      type: file_path
+    - name: context_paths
+      type: str
+    - name: item_ids
+      type: str
+  autoskillit.recipe._cmd_rpc.compute_branch:
+    inputs:
+    - name: issue_slug
+      type: str
+      required: false
+    - name: run_name
+      type: str
+      required: false
+    - name: issue_number
+      type: str
+      required: false
+    outputs:
+    - name: branch_name
+      type: str
+  autoskillit.recipe._cmd_rpc.check_eject_limit:
+    inputs:
+    - name: counter_file
+      type: str
+      required: true
+    - name: max_ejects
+      type: str
+      required: false
+    outputs:
+    - name: status
+      type: str
+    - name: count
+      type: str
+  autoskillit.recipe._cmd_rpc.check_dropped_healthy_loop:
+    inputs:
+    - name: counter_file
+      type: str
+      required: true
+    - name: max_drops
+      type: str
+      required: false
+    outputs:
+    - name: status
+      type: str
+    - name: count
+      type: str
+  autoskillit.recipe._cmd_rpc.commit_guard:
+    inputs:
+    - name: worktree_path
+      type: str
+      required: true
+    outputs:
+    - name: committed
+      type: str
+  autoskillit.recipe._cmd_rpc.queue_ejected_fix:
+    inputs:
+    - name: work_dir
+      type: str
+      required: true
+    - name: base_branch
+      type: str
+      required: true
+    outputs:
+    - name: status
+      type: str
+  autoskillit.recipe._cmd_rpc.direct_merge_conflict_fix:
+    inputs:
+    - name: work_dir
+      type: str
+      required: true
+    - name: base_branch
+      type: str
+      required: true
+    outputs:
+    - name: status
+      type: str
+  autoskillit.recipe._cmd_rpc.immediate_merge_conflict_fix:
+    inputs:
+    - name: work_dir
+      type: str
+      required: true
+    - name: base_branch
+      type: str
+      required: true
+    outputs:
+    - name: status
+      type: str
+  autoskillit.recipe._cmd_rpc.wait_for_direct_merge:
+    inputs:
+    - name: pr_number
+      type: str
+      required: true
+    - name: max_polls
+      type: str
+      required: false
+    - name: poll_interval
+      type: str
+      required: false
+    outputs:
+    - name: state
+      type: str
+  autoskillit.recipe._cmd_rpc.wait_for_immediate_merge:
+    inputs:
+    - name: pr_number
+      type: str
+      required: true
+    - name: max_polls
+      type: str
+      required: false
+    - name: poll_interval
+      type: str
+      required: false
+    outputs:
+    - name: state
+      type: str
+  autoskillit.recipe._cmd_rpc.attempt_cheap_rebase:
+    inputs:
+    - name: work_dir
+      type: str
+      required: true
+    - name: ejected_pr_branch
+      type: str
+      required: true
+    - name: base_branch
+      type: str
+      required: true
+    outputs:
+    - name: status
+      type: str
+  autoskillit.recipe._cmd_rpc.wait_for_review_pr_mergeability:
+    inputs:
+    - name: pr_url
+      type: str
+      required: true
+    - name: max_polls
+      type: str
+      required: false
+    - name: poll_interval
+      type: str
+      required: false
+    outputs:
+    - name: pr_number
+      type: str
+  autoskillit.recipe._cmd_rpc.create_persistent_integration:
+    inputs:
+    - name: work_dir
+      type: str
+      required: true
+    - name: base_branch
+      type: str
+      required: true
+    outputs:
+    - name: ok
+      type: str
+  autoskillit.recipe._cmd_rpc.force_push_and_wait_mergeability:
+    inputs:
+    - name: work_dir
+      type: str
+      required: true
+    - name: batch_branch
+      type: str
+      required: true
+    - name: review_pr_number
+      type: str
+      required: true
+    - name: max_polls
+      type: str
+      required: false
+    - name: poll_interval
+      type: str
+      required: false
+    outputs:
+    - name: ok
+      type: str
+  autoskillit.recipe._cmd_rpc.advance_queue_pr:
+    inputs:
+    - name: current_pr_number
+      type: str
+      required: true
+      nullable: false
+    - name: pr_order_file
+      type: str
+      required: true
+    outputs:
+    - name: current_pr_number
+      type: str
+  autoskillit.recipe._cmd_rpc.proactive_rebase_next_pr:
+    inputs:
+    - name: work_dir
+      type: str
+      required: true
+    - name: next_pr_branch
+      type: str
+      required: true
+    - name: base_branch
+      type: str
+      required: true
+    outputs:
+    - name: status
+      type: str
+  autoskillit.recipe._cmd_rpc.refetch_issues:
+    inputs:
+    - name: issue_urls
+      type: str
+      required: true
+    outputs:
+    - name: issue_numbers
+      type: str
+  autoskillit.recipe._cmd_rpc.emit_fallback_map:
+    inputs:
+    - name: issue_urls
+      type: str
+      required: true
+    - name: temp_dir
+      type: str
+      required: true
+    outputs:
+    - name: execution_map
+      type: str
+  autoskillit.recipe._cmd_rpc.ensure_results:
+    inputs:
+    - name: experiment_results
+      type: str
+      required: true
+    - name: worktree_path
+      type: str
+      required: true
+    - name: temp_subdir
+      type: str
+      required: false
+    outputs:
+    - name: experiment_results
+      type: str
+  autoskillit.recipe._cmd_rpc.export_local_bundle:
+    inputs:
+    - name: source_dir
+      type: str
+      required: true
+    - name: research_dir
+      type: str
+      required: true
+    outputs:
+    - name: local_bundle_path
+      type: str
+  autoskillit.recipe._cmd_rpc.batch_create_issues:
+    inputs:
+    - name: workspace
+      type: str
+      required: true
+    - name: chunk_size
+      type: str
+      required: false
+    - name: audit_run_dir
+      type: directory_path
+      required: false
+    outputs:
+    - name: issue_urls
+      type: str
+    - name: issue_count
+      type: str
+  autoskillit.recipe._cmd_rpc.create_audit_run_dir:
+    inputs:
+    - name: temp_dir
+      type: directory_path
+      required: true
+    outputs:
+    - name: audit_run_dir
+      type: directory_path
+
+tool_output_contracts:
+  wait_for_ci:
+    result_field: conclusion
+    fields:
+      conclusion:
+        type: str
+        allowed_values:
+          - success
+          - failure
+          - cancelled
+          - action_required
+          - timed_out
+          - startup_failure
+          - stale
+          - no_runs
+          - error
+          - unknown
+        terminal_values:
+          - error
+          - unknown
+        recoverable_values:
+          - failure
+          - cancelled
+          - timed_out
+          - no_runs
+          - action_required
+  get_ci_status:
+    result_field: conclusion
+    fields:
+      conclusion:
+        type: str
+        allowed_values:
+          - success
+          - failure
+          - cancelled
+          - action_required
+          - timed_out
+          - startup_failure
+          - stale
+          - no_runs
+          - error
+          - unknown
+        terminal_values:
+          - error
+          - unknown
+        recoverable_values:
+          - failure
+          - cancelled
+          - timed_out
+          - no_runs
+          - action_required

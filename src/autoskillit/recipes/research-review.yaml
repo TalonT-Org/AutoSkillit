@@ -1,0 +1,470 @@
+name: research-review
+recipe_version: "1.0.0"
+categories: [research-family]
+requires_packs: [research, exp-lens, vis-lens]
+description: >
+  Review-phase sub-recipe extracted from research.yaml. Receives a pre-created
+  worktree and completed experiment outputs from a campaign dispatch, then runs
+  the 22-step PR/review pipeline: prepare PR, run experiment lenses, stage bundle,
+  compose PR, review, audit claims, resolve feedback, re-run if needed, finalize,
+  and export. Terminates with sentinel emission of output paths.
+summary: prepare > lenses > stage > [pr-compose > review? > audit? > resolve > re-run?] > finalize > export/complete
+
+ingredients:
+  # --- user-input ---
+  task:
+    description: Research question or topic to investigate
+    required: true
+  source_dir:
+    description: Path to the project root
+    required: true
+  base_branch:
+    description: Branch to target for the research PR
+    default: "main"
+  output_mode:
+    description: >
+      Where research outputs land. 'local' produces a self-contained bundle.
+      'pr' opens a GitHub PR alongside the bundle.
+    default: "local"
+  review_pr:
+    description: >
+      When 'true', run the review-research-pr skill after the research PR
+      is opened.
+    default: "false"
+  audit_claims:
+    description: >
+      When 'true', run audit-claims after review_research_pr to verify citation
+      integrity.
+    required: false
+    default: "false"
+  issue_url:
+    description: >
+      Optional URL to an existing GitHub issue describing the research goal.
+    required: false
+
+  # --- campaign-passed ---
+  worktree_path:
+    description: Path to the pre-created worktree (passed by campaign dispatch)
+    required: true
+  research_dir:
+    description: Path to the research/ directory in the worktree
+    required: true
+  report_path:
+    description: Path to the generated research report
+    required: true
+  experiment_plan:
+    description: Path to the experiment plan file
+    required: true
+  experiment_results:
+    description: Path to the experiment results file
+    required: true
+  experiment_type:
+    description: Type of experiment (e.g. benchmark, comparison)
+    required: true
+  scope_report:
+    description: Path to the scope report
+    required: true
+  visualization_plan_path:
+    description: Path to the visualization plan
+    required: true
+
+kitchen_rules:
+  - >
+    NEVER use native Claude Code tools from the orchestrator: Read, Grep, Glob,
+    Edit, Write, Bash, Agent, WebFetch, WebSearch, NotebookEdit are ALL forbidden.
+    All work is delegated through run_skill, run_cmd, run_python.
+  - "Do NOT auto-merge. The research PR is for human review only."
+  - "Route to on_failure when a step fails — do not investigate directly."
+  - >
+    LENS ITERATION: run_experiment_lenses iterates over context.selected_lenses
+    (comma-separated lens slugs, e.g. "fair-comparison,estimand-clarity") and
+    context.lens_context_paths (comma-separated context file paths). For each
+    lens slug, run /autoskillit:exp-lens-{slug} {matching_context_path} with the
+    matching context file path. Run all selected lenses in parallel (multiple
+    run_skill calls in a single assistant message). Accumulate each diagram_path
+    value into context.all_diagram_paths using comma separation via capture_list.
+    If a lens fails, continue with remaining lenses — partial diagrams are
+    acceptable (compose_research_pr handles empty lists).
+
+steps:
+  # --- LENS + STAGING PHASE ---
+  prepare_research_pr:
+    tool: run_skill
+    model: ""
+    optional_context_refs: [worktree_path, research_dir, report_path, experiment_plan, experiment_results, experiment_type, scope_report, visualization_plan_path]
+    with:
+      skill_command: "/autoskillit:prepare-research-pr ${{ context.report_path }} ${{ context.experiment_plan }} ${{ context.worktree_path }} ${{ inputs.base_branch }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: prepare_research_pr
+    capture:
+      prep_path: "${{ result.prep_path }}"
+      selected_lenses: "${{ result.selected_lenses }}"
+      lens_context_paths: "${{ result.lens_context_paths }}"
+    on_success: run_experiment_lenses
+    on_failure: escalate_stop
+
+  run_experiment_lenses:
+    tool: run_skill
+    model: ""
+    optional_context_refs: [worktree_path, experiment_plan]
+    with:
+      skill_command: "/autoskillit:exp-lens-{slug} {context_path} ${{ context.experiment_plan }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: run_experiment_lenses
+    capture_list:
+      all_diagram_paths: "${{ result.diagram_path }}"
+    on_success: stage_bundle
+    on_failure: stage_bundle
+
+  stage_bundle:
+    tool: run_cmd
+    optional_context_refs: [research_dir, worktree_path]
+    with:
+      cmd: "bash scripts/recipe/stage_bundle.sh '${{ context.research_dir }}' '${{ context.worktree_path }}' '{{AUTOSKILLIT_TEMP}}'"
+      cwd: "${{ context.worktree_path }}"
+      step_name: stage_bundle
+    on_success: route_pr_or_local
+    on_failure: route_pr_or_local
+    note: >
+      Idempotent file staging step. Copies phase-group, phase-plan, and exp-lens diagram
+      artifacts from the worktree temp directory into research/{slug}/artifacts/. Creates
+      images/ and scripts/ subdirectories. No compression, no rename, no commit. Safe to
+      run multiple times — cp overwrites are idempotent. Runs after run_experiment_lenses
+      to capture all exp-lens diagrams written to AUTOSKILLIT_TEMP/exp-lens-*/.
+
+  route_pr_or_local:
+    action: route
+    on_result:
+      - when: "${{ inputs.output_mode }} == local"
+        route: finalize_bundle
+      - route: compose_research_pr
+    note: >
+      Branches on output_mode after bundle staging. local → bypass PR pipeline entirely,
+      jump to finalize_bundle. pr (fall-through) → compose_research_pr to open PR and run
+      the full review/archival flow. Uses predicate route because skip_when_false only
+      accepts bare inputs.<name> with no expression evaluation.
+
+  # --- PR COMPOSE + REVIEW PHASE ---
+  compose_research_pr:
+    tool: run_skill
+    model: ""
+    optional_context_refs: [worktree_path]
+    with:
+      skill_command: "/autoskillit:compose-research-pr ${{ context.prep_path }} \"${{ context.all_diagram_paths }}\" ${{ context.worktree_path }} ${{ inputs.base_branch }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: compose_research_pr
+    capture:
+      pr_url: "${{ result.pr_url }}"
+    on_success: guard_pr_url
+    on_failure: escalate_stop
+
+  guard_pr_url:
+    action: route
+    on_result:
+      - when: "${{ context.pr_url }}"
+        route: review_research_pr
+      - route: review_pr_complete
+    note: Guard — skip review if pr_url is empty (graceful degradation from open_research_pr).
+
+  review_research_pr:
+    tool: run_skill
+    model: ""
+    optional_context_refs: [worktree_path]
+    with:
+      skill_command: "/autoskillit:review-research-pr ${{ context.worktree_path }} ${{ inputs.base_branch }} ${{ context.pr_url }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: review_research_pr
+    capture:
+      review_verdict: "${{ result.verdict }}"
+    skip_when_false: inputs.review_pr
+    on_context_limit: audit_claims
+    on_failure: audit_claims
+    on_result:
+      - route: audit_claims
+    note: >
+      Optional research PR review step, gated by the review_pr ingredient.
+      Verdict captured as review_verdict for deferred routing. All paths
+      (skip, success, failure, context-limit) route to audit_claims so both
+      gates complete before any resolution step begins. When on_context_limit
+      or on_failure fires, the capture block does not execute and
+      context.review_verdict remains absent; the recipe engine treats absent
+      context variables as empty string in comparisons, so downstream
+      route_review_resolve safely falls through to route_claims_resolve.
+
+  audit_claims:
+    tool: run_skill
+    model: ""
+    optional_context_refs: [worktree_path]
+    with:
+      skill_command: "/autoskillit:audit-claims ${{ context.worktree_path }} ${{ inputs.base_branch }} ${{ context.pr_url }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: audit_claims
+    capture:
+      audit_verdict: "${{ result.verdict }}"
+    skip_when_false: inputs.audit_claims
+    retries: 1
+    on_exhausted: route_review_resolve
+    on_context_limit: route_review_resolve
+    on_failure: route_review_resolve
+    on_result:
+      - route: route_review_resolve
+    note: >
+      Optional citation-integrity gate, gated by the audit_claims ingredient.
+      Runs after review_research_pr regardless of that step's verdict.
+      All paths (skip, success, failure) route to route_review_resolve so both
+      gates complete before resolution.
+
+  # --- RESOLUTION + ESCALATION PHASE ---
+  route_review_resolve:
+    action: route
+    on_result:
+      - when: "${{ context.review_verdict }} == changes_requested"
+        route: resolve_research_review
+      - route: route_claims_resolve
+    note: >
+      Routes to resolve_research_review only when the PR review found
+      changes_requested. All other verdicts (approved, needs_human, empty/skipped)
+      proceed directly to route_claims_resolve.
+
+  resolve_research_review:
+    tool: run_skill
+    model: ""
+    optional_context_refs: [worktree_path]
+    with:
+      skill_command: "/autoskillit:resolve-research-review ${{ context.worktree_path }} ${{ inputs.base_branch }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: resolve_research_review
+    capture:
+      review_needs_rerun: "${{ result.needs_rerun }}"
+    retries: 2
+    on_exhausted: route_claims_resolve
+    on_context_limit: route_claims_resolve
+    on_success: route_claims_resolve
+    on_failure: route_claims_resolve
+
+  route_claims_resolve:
+    action: route
+    on_result:
+      - when: "${{ context.audit_verdict }} == changes_requested"
+        route: resolve_claims_review
+      - route: merge_escalations
+    note: >
+      Routes to resolve_claims_review only when the claims audit found
+      changes_requested. All other verdicts (approved, needs_human, empty/skipped)
+      proceed directly to merge_escalations. When audit_claims is skipped
+      (inputs.audit_claims=false), context.audit_verdict is absent; the recipe
+      engine treats absent variables as empty string, so the condition evaluates
+      false and the fallback route to merge_escalations fires safely.
+
+  resolve_claims_review:
+    tool: run_skill
+    model: ""
+    optional_context_refs: [worktree_path]
+    with:
+      skill_command: "/autoskillit:resolve-claims-review ${{ context.worktree_path }} ${{ inputs.base_branch }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: resolve_claims_review
+    capture:
+      claims_needs_rerun: "${{ result.needs_rerun }}"
+    retries: 2
+    on_exhausted: merge_escalations
+    on_context_limit: merge_escalations
+    on_success: merge_escalations
+    on_failure: merge_escalations
+
+  merge_escalations:
+    action: route
+    on_result:
+      - when: "${{ context.review_needs_rerun }} == true"
+        route: re_run_experiment
+      - when: "${{ context.claims_needs_rerun }} == true"
+        route: re_run_experiment
+      - route: finalize_bundle
+    note: >
+      Merged escalation consumer replacing check_escalations. Triggers a single
+      re_run_experiment if either review resolution or claims resolution flagged
+      a rerun. When only design_flaw escalations exist (or none), routes directly
+      to finalize_bundle — design_flaw escalations are already posted as inline PR comments
+      by the resolve skills. Both context.review_needs_rerun and
+      context.claims_needs_rerun may be absent if their respective resolution
+      steps were never reached (e.g., no changes_requested verdict on that gate);
+      the recipe engine evaluates absent context variables as empty string, so
+      absent == true is always false and routes safely fall through to
+      finalize_bundle.
+
+  # --- RE-VALIDATION LOOP ---
+  re_run_experiment:
+    tool: run_skill
+    model: ""
+    stale_threshold: 2400
+    idle_output_timeout: 0
+    optional_context_refs: [worktree_path]
+    with:
+      skill_command: "/autoskillit:run-experiment ${{ context.worktree_path }} --adjust"
+      cwd: "${{ context.worktree_path }}"
+      step_name: re_run_experiment
+    capture:
+      experiment_results: "${{ result.results_path }}"
+    on_success: re_generate_report
+    on_failure: re_push_research
+    on_context_limit: re_push_research
+    note: >
+      Targeted re-run of affected benchmarks after review resolution applied
+      code fixes. Uses --adjust to read previous results and re-run only what
+      changed. Intentionally shadows the experiment_results ingredient (L58):
+      after this step, context.experiment_results holds the re-run results_path
+      so re_generate_report uses fresh data. on_failure falls through to push
+      as best-effort — the code fixes from resolve are already committed and
+      should still be pushed.
+
+  re_generate_report:
+    tool: run_skill
+    model: ""
+    optional_context_refs: [worktree_path, experiment_results]
+    with:
+      skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: re_generate_report
+    capture:
+      report_path: "${{ result.report_path }}"
+    on_success: re_stage_bundle
+    on_failure: re_push_research
+    on_context_limit: re_push_research
+    note: >
+      Re-generate the research report with updated benchmark results from the
+      re-validation run. Passes context.experiment_results which was updated
+      by re_run_experiment to point to the new results file. Intentionally
+      shadows the report_path ingredient (L52): after this step,
+      context.report_path holds the regenerated path so downstream steps
+      receive the updated report. Falls through to push on failure.
+
+  re_stage_bundle:
+    tool: run_cmd
+    optional_context_refs: [research_dir, worktree_path]
+    with:
+      cmd: "bash scripts/recipe/stage_bundle.sh '${{ context.research_dir }}' '${{ context.worktree_path }}' '{{AUTOSKILLIT_TEMP}}'"
+      cwd: "${{ context.worktree_path }}"
+      step_name: re_stage_bundle
+    on_success: re_test
+    on_failure: re_push_research
+    note: >
+      Idempotent re-staging after report rewrite. Same body as stage_bundle — updates
+      artifact directory with any newly written phase artifacts before re-testing. Falls
+      through to re_push_research on failure (best-effort).
+
+  re_test:
+    tool: test_check
+    optional_context_refs: [worktree_path]
+    with:
+      worktree_path: "${{ context.worktree_path }}"
+    on_success: re_push_research
+    on_failure: re_push_research
+    note: >
+      Post-revalidation test gate. Both pass and fail route to push —
+      the re-validation results should be pushed regardless so the PR
+      reflects the current state of the code and measurements.
+
+  re_push_research:
+    tool: run_cmd
+    optional_context_refs: [worktree_path]
+    with:
+      cmd: "git push"
+      cwd: "${{ context.worktree_path }}"
+      step_name: re_push_research
+    on_success: finalize_bundle
+    on_failure: escalate_stop
+
+  # --- FINALIZE + EXPORT PHASE ---
+  finalize_bundle:
+    tool: run_cmd
+    optional_context_refs: [research_dir, worktree_path]
+    with:
+      cmd: "bash scripts/recipe/finalize_bundle.sh '${{ inputs.output_mode }}' '${{ context.research_dir }}' '${{ context.worktree_path }}'"
+      cwd: "${{ context.worktree_path }}"
+      step_name: finalize_bundle
+    capture:
+      report_path_after_finalize: "${{ result.report_path_after_finalize }}"
+    on_success: finalize_bundle_render
+    on_failure: escalate_stop
+    note: >
+      Single compression point. Runs exactly once per recipe run. In pr mode: renames
+      report.md → README.md, archives supporting artifacts, appends Archive Manifest,
+      commits. In local mode: keeps report.md, excludes report.html/mermaid.min.js/images
+      from the tar (they stay for local browsing), skips git commit. finalize_bundle_render
+      always runs after this step regardless of mode.
+
+  finalize_bundle_render:
+    tool: run_skill
+    model: ""
+    optional_context_refs: [research_dir, worktree_path, all_diagram_paths, visualization_plan_path]
+    with:
+      skill_command: "/autoskillit:bundle-local-report ${{ context.research_dir }} ${{ context.report_path_after_finalize }} ${{ context.all_diagram_paths }} ${{ context.visualization_plan_path }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: finalize_bundle_render
+    capture:
+      html_path: "${{ result.html_path }}"
+    on_success: route_archive_or_export
+    on_failure: route_archive_or_export
+    note: >
+      HTML report rendering. Always runs after finalize_bundle on_success. Non-fatal:
+      routes to route_archive_or_export on both outcomes, which branches on output_mode
+      to either export_local_bundle (local) or review_pr_complete (pr).
+
+  route_archive_or_export:
+    action: route
+    on_result:
+      - when: "${{ inputs.output_mode }} == local"
+        route: export_local_bundle
+      - route: review_pr_complete
+    note: >
+      Branches after HTML bundle rendering. local → export_local_bundle (copy to
+      {source_dir}/research-bundles/). pr (fall-through) → review_pr_complete
+      to terminate the review pipeline.
+
+  export_local_bundle:
+    tool: run_python
+    optional_context_refs: [research_dir]
+    with:
+      callable: "autoskillit.recipe._cmd_rpc.export_local_bundle"
+      source_dir: "${{ inputs.source_dir }}"
+      research_dir: "${{ context.research_dir }}"
+    capture:
+      local_bundle_path: "${{ result.local_bundle_path }}"
+    on_success: review_local_complete
+    on_failure: review_local_complete
+    note: >
+      Local mode terminal export. Copies the finalized research_dir (containing
+      report.html, mermaid.min.js, images/, report.md, artifacts.tar.gz) to
+      {source_dir}/research-bundles/{slug}/. Non-fatal — routes to review_local_complete
+      on both outcomes.
+
+  # --- TERMINAL STOPS ---
+  review_pr_complete:
+    action: stop
+    message: >-
+      Review phase complete (PR mode). Emit the L3 result sentinel JSON block now.
+      The sentinel must include the following fields:
+      success=true, pr_url=${{ context.pr_url }},
+      report_path_after_finalize=${{ context.report_path_after_finalize }},
+      worktree_path=${{ context.worktree_path }},
+      research_dir=${{ context.research_dir }}.
+      Note: report_path_after_finalize is empty string when reached via the
+      guard_pr_url fallback (pr_url absent) — finalize_bundle is bypassed in
+      that path. Emit empty string for this field in that case.
+      Example sentinel:
+      {"success": true, "pr_url": "<url>", "report_path_after_finalize": "<path>",
+      "worktree_path": "<path>", "research_dir": "<path>"}
+
+  review_local_complete:
+    action: stop
+    message: >-
+      Review phase complete (local mode). Local bundle exported successfully.
+      Emit the L3 result sentinel JSON block now.
+      The sentinel must include: success=true,
+      local_bundle_path=${{ context.local_bundle_path }}.
+      Example sentinel:
+      {"success": true, "local_bundle_path": "<path>"}
+
+  escalate_stop:
+    action: stop
+    message: "Review pipeline failed — human intervention needed. Check the latest step output for details."

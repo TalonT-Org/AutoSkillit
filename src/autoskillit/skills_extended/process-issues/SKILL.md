@@ -19,25 +19,40 @@ issues upfront, load recipe, execute session, collect result, report.
 
 ## When to Use
 
-- After `/autoskillit:triage-issues` has produced a manifest in `.autoskillit/temp/triage-issues/`
+- After `/autoskillit:triage-issues` has produced a manifest in `{{AUTOSKILLIT_TEMP}}/triage-issues/`
 - User says "process issues", "run issues", "execute pipeline for issues"
 - When a triage manifest exists and batched issues need implementation sessions launched
 
 ## Critical Constraints
 
 **NEVER:**
-- Create files outside `.autoskillit/temp/process-issues/` directory
+- Create files outside `{{AUTOSKILLIT_TEMP}}/process-issues/` directory
 - Apply `batch:N` labels to GitHub issues (batch assignments are internal — they live only
   in the manifest JSON, not on GitHub objects)
 - Modify any source code files
 - Reimplement recipe steps inline — always use `load_recipe` to load the recipe YAML and
   follow it as an orchestrator
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Process batches in ascending order: batch 1 before batch 2 before batch 3
 - Use `load_recipe` to execute the recipe for each issue
+- After loading a recipe via `load_recipe`, execute every step in the recipe's step
+  graph in sequence. Never skip, replace, or improvise steps.
+- `optional: true` means the step is skipped ONLY when its `skip_when_false` ingredient
+  evaluates to false. When the ingredient is true, the step is mandatory.
+- Follow `on_success`, `on_failure`, `on_result`, and `on_context_limit` routing exactly
+  as declared in the recipe YAML.
+- NEVER replace recipe PR steps (`prepare_pr`, `run_arch_lenses`, `compose_pr`,
+  `annotate_pr_diff`, `review_pr`) with manual `run_cmd` calls such as `gh pr create`.
+- Between issues: immediately begin step 1 for the next issue after completing the
+  previous issue. Do not output prose status between issues — inter-issue text creates
+  end_turn windows that cause stochastic session termination.
+- NEVER use AskUserQuestion to confirm proceeding to the next issue or the next batch.
+  Once Step 2a's initial confirmation gate passes, all subsequent issue and batch
+  transitions are fully automated.
 - Emit `---process-issues-result---` result block on completion (success or failure)
-- Write the summary report to `.autoskillit/temp/process-issues/` (relative to the current working directory)
+- Write the summary report to `{{AUTOSKILLIT_TEMP}}/process-issues/` (relative to the current working directory)
 - Use `model: "sonnet"` when spawning subagents via the Task tool
 - Use `gh` CLI for all GitHub operations (not raw API calls)
 - Include `--force` in all `gh label create` calls
@@ -47,7 +62,7 @@ issues upfront, load recipe, execute session, collect result, report.
 - Positional (optional): path to triage manifest JSON
 - `--batch N` — only process batch N (default: process all batches in order)
 - `--dry-run` — print the processing plan and exit without launching any recipe sessions
-- `--comment` — post a GitHub comment on each issue at pickup and at completion
+- `--status-updates` — append body sections to each issue at pickup and at completion
 - `--merge-batch` — after each batch completes, run `analyze-prs` + `merge-pr` to merge
   the batch PRs into the integration branch before starting the next batch
 
@@ -59,7 +74,7 @@ Parse arguments:
 - If a positional path is given, use it as the manifest path.
 - `--batch N`: record the target batch number; process only that batch.
 - `--dry-run`: set dry_run flag; print plan then exit after Step 2.
-- `--comment`: set comment flag.
+- `--status-updates`: set status_updates flag.
 - `--merge-batch`: set merge_batch flag.
 
 ### Step 1: Locate and Read Manifest
@@ -69,7 +84,7 @@ Parse arguments:
 1. If a positional path argument was given, use it directly.
 2. Otherwise, auto-discover the most recently modified manifest:
    ```bash
-   ls -t .autoskillit/temp/triage-issues/triage_manifest_*.json 2>/dev/null | head -1
+   ls -t {{AUTOSKILLIT_TEMP}}/triage-issues/triage_manifest_*.json 2>/dev/null | head -1
    ```
 3. If no manifest is found, abort:
    > "No triage manifest found. Run `/autoskillit:triage-issues` first,
@@ -147,7 +162,7 @@ completed_urls   = []   # issues whose recipe fully returned
 Collect all issues from all batches that will be processed (respecting `--batch N` filtering).
 
 For each issue in the collected list:
-1. Call `claim_issue(issue_url=<url>)` — **no** `allow_reentry` (default `False`)
+1. Call `claim_issue(issue_url=<url>, label="queued")` — **no** `allow_reentry` (default `False`)
 2. If `result.claimed == true`:
    - append `issue_url` to `pre_claimed_urls`
 3. If `result.claimed == false`:
@@ -162,10 +177,6 @@ After this phase:
 
 For each batch in **ascending order** (batch 1, then batch 2, etc.):
 
-**CRITICAL:** Do NOT output any prose status text between batches. After
-completing one batch (all issues processed, optional merge cycle done),
-immediately begin the batch header (3a) for the next batch.
-
 - If `--batch N` was given, skip all batches with a different number.
 
 **3a. Log batch header:**
@@ -178,21 +189,33 @@ Processing X issues:
 
 **3b. For each issue in the batch (process sequentially):**
 
-**CRITICAL:** Do NOT output any prose status text between issues. After
-completing one issue's processing (step 6), immediately begin step 1
-(check pre_claimed_urls) for the next issue. Inter-issue announcements
-create end_turn windows that cause stochastic session termination.
-
 1. **Check pre_claimed_urls:** If `issue_url` is NOT in `pre_claimed_urls` → skip
    (excluded by upfront claim phase — another session holds it).
 
-2. **Optionally post pickup comment** (if `--comment` is active):
+2. **Pre-dispatch check:** Before executing the recipe for this issue, check if any
+   previously completed issue in the CURRENT batch has `status: failure`. If so, skip
+   this issue with `status: skipped` and continue to the next issue in the batch.
+   This prevents wasted compute on issues within the same batch after a failure.
+   Skipped issues are recorded as `status: skipped` (not `status: failure`), so the
+   batch failure gate below counts only the original failure(s) that triggered the skip.
+
+3. **Promote queued → in-progress for this issue:**
+   Call `claim_issue(issue_url=<url>, allow_reentry=true)`
+   (No label argument — defaults to in-progress; removes the "queued" label
+   and adds "in-progress".)
+
+4. **Optionally append pickup status to issue body** (if `--status-updates` is active):
    ```bash
-   gh issue comment {number} \
-     --body "Processing in batch {N} — recipe: \`{recipe}\`"
+   PROCESS_BODY_FILE="{{AUTOSKILLIT_TEMP}}/process-issues/status_{number}_$(date +%s).md"
+   mkdir -p "$(dirname "$PROCESS_BODY_FILE")"
+   gh issue view {number} --json body --jq '.body' > "$PROCESS_BODY_FILE"
+   printf '\n\n---\n\n## In Progress\n\nProcessing in batch %s — recipe: `%s`\n' \
+     "{N}" "{recipe}" >> "$PROCESS_BODY_FILE"
+   gh issue edit {number} --body-file "$PROCESS_BODY_FILE"
+   sleep 1
    ```
 
-3. **Determine recipe name and `run_name`:**
+4. **Determine recipe name and `run_name`:**
 
    | `recipe` field | Recipe to load | `run_name` | PR Title Prefix |
    |---------------|----------------|------------|-----------------|
@@ -205,7 +228,7 @@ create end_turn windows that cause stochastic session termination.
    The `run_name` encodes recipe origin for the `open-pr` skill, which derives
    the PR title prefix from it by convention (see `open-pr` SKILL.md).
 
-4. **Load the recipe:**
+5. **Load the recipe:**
    ```
    load_recipe("{recipe_name}")
    ```
@@ -213,12 +236,12 @@ create end_turn windows that cause stochastic session termination.
    follow each step in the recipe, calling the specified MCP tool with the
    specified `with:` arguments.
 
-5. **Execute the recipe** with these ingredient values:
+6. **Execute the recipe** with these ingredient values:
    - `task`: the issue title (the recipe's `make-plan` step detects `issue_url`
      and fetches full content internally)
    - `issue_url`: the constructed issue URL
    - `run_name`: `"feature"` (implementation) or `"fix"` (remediation)
-   - `base_branch`: `"integration"` (or read `git rev-parse --abbrev-ref HEAD`)
+   - `base_branch`: `"develop"` (or read `git rev-parse --abbrev-ref HEAD`)
    - `open_pr`: `"true"`
    - `audit`: `"true"`
    - `review_approach`: `"false"`
@@ -228,7 +251,7 @@ create end_turn windows that cause stochastic session termination.
    `upfront_claimed` ingredient) and recognize the pre-existing label as a
    valid reentry, returning `claimed=true` to proceed normally.
 
-6. **After recipe returns** (any outcome), append to completed_urls:
+7. **After recipe returns** (any outcome), append to completed_urls:
    ```
    completed_urls.append(issue_url)
    ```
@@ -236,9 +259,17 @@ create end_turn windows that cause stochastic session termination.
    - On success path (`done` step reached): `{issue_number, recipe, status: success, pr_url}`
    - On failure path (`escalate_stop` reached): `{issue_number, recipe, status: failure, error}`
 
-7. **Optionally post completion comment** (if `--comment` is active):
-   - Success: `"✅ Processing complete — PR: {pr_url}"`
-   - Failure: `"❌ Processing failed — manual intervention required"`
+8. **Optionally append completion status to issue body** (if `--status-updates` is active):
+   ```bash
+   PROCESS_BODY_FILE="{{AUTOSKILLIT_TEMP}}/process-issues/status_{number}_$(date +%s).md"
+   mkdir -p "$(dirname "$PROCESS_BODY_FILE")"
+   gh issue view {number} --json body --jq '.body' > "$PROCESS_BODY_FILE"
+   printf '\n\n---\n\n## Status\n\n%s\n' \
+     "{✅ Processing complete — PR: $pr_url | ❌ Processing failed — manual intervention required}" \
+     >> "$PROCESS_BODY_FILE"
+   gh issue edit {number} --body-file "$PROCESS_BODY_FILE"
+   sleep 1
+   ```
 
 **Fatal failure cleanup** — if any unrecoverable error occurs during recipe dispatch:
 ```
@@ -248,6 +279,15 @@ For each url in uncompleted:
 Log: "Released N upfront-claimed issues due to fatal failure"
 Propagate the error
 ```
+
+**Batch failure gate (mandatory):** After all issues in the current batch have been
+processed, count the number of issues with `status: failure`. If ANY issue in this
+batch has `status: failure`:
+  1. Log: "Batch {N} had {count} failure(s). Halting batch processing."
+  2. Skip all remaining batches.
+  3. Proceed directly to Step 4 (Summary Report), recording unprocessed issues
+     from remaining batches as `status: skipped`.
+  4. Call `release_issue()` for each pre-claimed but unprocessed issue URL.
 
 **3c. After all issues in batch complete** (if `--merge-batch` is active):
 
@@ -260,21 +300,38 @@ run_skill("/autoskillit:analyze-prs {base_branch}")
 Parse the `pr_order_file` from the skill output. For each PR in the recommended
 merge order:
 
-**CRITICAL:** Do NOT output any prose status text between PRs. After one
-merge-pr completes, immediately call run_skill for the next PR.
-
 ```
 run_skill("/autoskillit:merge-pr {pr_number} {complexity}")
 ```
 
 Log merge results and proceed to the next batch.
 
+**3d. Batch Clone Cleanup (always, after all batches complete):**
+
+After all batches finish (whether or not `--merge-batch` was used), call:
+
+```
+batch_cleanup_clones()
+```
+
+This reads the shared registry at `{{AUTOSKILLIT_TEMP}}/clone-cleanup-registry.json`,
+deletes all clones registered with `status=success` by the **current kitchen** (their
+pipelines completed cleanly), and leaves all `status=error` clones on disk for investigation.
+
+The call is scoped to the current kitchen's entries by default — entries registered by other
+parallel orchestrator sessions are not touched.
+
+**Operator escape hatch (recovery only):** `batch_cleanup_clones(all_owners="true")` ignores
+owner scoping and deletes all success-status entries, including legacy orphan entries from
+registries created before the owner field was introduced. Do not use this on the normal happy
+path — it is intended for manual recovery of stale registry files only.
+
 ### Step 4: Write Summary Report
 
 Compute timestamp: `YYYY-MM-DD_HHMMSS`.
-Create `.autoskillit/temp/process-issues/` if it does not exist.
+Create `{{AUTOSKILLIT_TEMP}}/process-issues/` if it does not exist.
 
-Write `.autoskillit/temp/process-issues/process_report_{ts}.md`:
+Write `{{AUTOSKILLIT_TEMP}}/process-issues/process_report_{ts}.md`:
 
 ```markdown
 # Process Issues Report — {ts}
@@ -313,7 +370,7 @@ Print the structured result for pipeline capture:
 ```
 ---process-issues-result---
 {
-    "report_path": ".autoskillit/temp/process-issues/process_report_{ts}.md",
+    "report_path": "{{AUTOSKILLIT_TEMP}}/process-issues/process_report_{ts}.md",
     "total_issues": N,
     "successes": X,
     "failures": Y,
@@ -327,10 +384,16 @@ Print the structured result for pipeline capture:
 ---end-process-issues-result---
 ```
 
+Also emit the report path as a standalone structured token for recipe capture:
+
+```
+dispatch_results = {{AUTOSKILLIT_TEMP}}/process-issues/process_report_{ts}.md
+```
+
 ## Output Location
 
 ```
-.autoskillit/temp/process-issues/
+{{AUTOSKILLIT_TEMP}}/process-issues/
   process_report_{ts}.md   # Human-readable summary (created per run)
 ```
 

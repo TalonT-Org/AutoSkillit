@@ -1,775 +1,26 @@
-"""Tests for the report_bug and fetch_github_issue MCP tool handlers."""
+"""Integration tests for issue lifecycle, headless tool diagnostics, and PR ops."""
 
 from __future__ import annotations
 
 import json
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
-import anyio
 import pytest
 
 from autoskillit.core import SkillResult
 from autoskillit.core.types import RetryReason
-from autoskillit.pipeline.gate import UNGATED_TOOLS
-from autoskillit.server.helpers import _extract_block
-from autoskillit.server.tools_github import (
-    _FINGERPRINT_END,
-    _FINGERPRINT_START,
-    _parse_fingerprint,
-    fetch_github_issue,
-    get_issue_title,
-    report_bug,
-)
-from autoskillit.server.tools_issue_lifecycle import (
-    _ENRICH_RESULT_END,
-    _ENRICH_RESULT_START,
+from autoskillit.server.tools.tools_issue_lifecycle import (
     _PREPARE_RESULT_END,
     _PREPARE_RESULT_START,
-    _parse_enrich_result,
-    _parse_prepare_result,
     claim_issue,
     enrich_issues,
     prepare_issue,
     release_issue,
 )
-from autoskillit.server.tools_pr_ops import bulk_close_issues, get_pr_reviews
+from autoskillit.server.tools.tools_pr_ops import bulk_close_issues, get_pr_reviews
 from tests.conftest import _make_result
 
-# ---------------------------------------------------------------------------
-# _parse_fingerprint unit tests
-# ---------------------------------------------------------------------------
-
-
-def test_parse_fingerprint_present():
-    report = (
-        "Some preamble\n"
-        f"{_FINGERPRINT_START}\n"
-        "KeyError in recipe/validator.py: missing ingredient ref\n"
-        f"{_FINGERPRINT_END}\n"
-        "Report written to /tmp/report.md"
-    )
-    assert _parse_fingerprint(report) == "KeyError in recipe/validator.py: missing ingredient ref"
-
-
-def test_parse_fingerprint_missing_returns_none():
-    assert _parse_fingerprint("No fingerprint block here") is None
-
-
-def test_parse_fingerprint_empty_block_returns_none():
-    report = f"{_FINGERPRINT_START}\n{_FINGERPRINT_END}\n"
-    assert _parse_fingerprint(report) is None
-
-
-def test_parse_fingerprint_first_nonempty_line():
-    """Only the first non-empty line inside the block is returned."""
-    report = (
-        f"{_FINGERPRINT_START}\n"
-        "\n"
-        "  TypeError in execution/headless.py: runner=None  \n"
-        "extra line\n"
-        f"{_FINGERPRINT_END}\n"
-    )
-    assert _parse_fingerprint(report) == "TypeError in execution/headless.py: runner=None"
-
-
-# ---------------------------------------------------------------------------
-# _extract_block unit tests
-# ---------------------------------------------------------------------------
-
-
-def test_extract_block_returns_lines_within_delimiters():
-    text = "preamble\n---start---\nline1\nline2\n---end---\npostamble"
-    assert _extract_block(text, "---start---", "---end---") == ["line1", "line2"]
-
-
-def test_extract_block_no_start_returns_empty():
-    assert _extract_block("no delimiters here", "---start---", "---end---") == []
-
-
-def test_extract_block_no_end_returns_empty():
-    # end delimiter absent — no complete block
-    text = "---start---\nline1\nline2"
-    assert _extract_block(text, "---start---", "---end---") == []
-
-
-def test_extract_block_empty_block_returns_empty_list():
-    text = "---start---\n---end---"
-    assert _extract_block(text, "---start---", "---end---") == []
-
-
-def test_extract_block_preserves_whitespace_in_lines():
-    text = "---start---\n  indented\n---end---"
-    assert _extract_block(text, "---start---", "---end---") == ["  indented"]
-
-
-# ---------------------------------------------------------------------------
-# _parse_prepare_result unit tests
-# ---------------------------------------------------------------------------
-
-
-def test_parse_prepare_result_valid_json():
-    payload = '{"success": true, "issue_url": "https://github.com/x/y/issues/1"}'
-    text = f"{_PREPARE_RESULT_START}\n{payload}\n{_PREPARE_RESULT_END}"
-    result = _parse_prepare_result(text)
-    assert result == {"success": True, "issue_url": "https://github.com/x/y/issues/1"}
-
-
-def test_parse_prepare_result_no_block():
-    result = _parse_prepare_result("no block here")
-    assert result == {"success": False, "error": "no result block found"}
-
-
-def test_parse_prepare_result_invalid_json():
-    text = f"{_PREPARE_RESULT_START}\nnot-json\n{_PREPARE_RESULT_END}"
-    result = _parse_prepare_result(text)
-    assert result == {"success": False, "error": "result block contained invalid JSON"}
-
-
-# ---------------------------------------------------------------------------
-# _parse_enrich_result unit tests
-# ---------------------------------------------------------------------------
-
-
-def test_parse_enrich_result_valid_json():
-    payload = '{"enriched": [42], "skipped_already_enriched": []}'
-    text = f"{_ENRICH_RESULT_START}\n{payload}\n{_ENRICH_RESULT_END}"
-    result = _parse_enrich_result(text)
-    assert result == {"enriched": [42], "skipped_already_enriched": []}
-
-
-def test_parse_enrich_result_no_block():
-    result = _parse_enrich_result("no block here")
-    assert result == {"success": False, "error": "no result block found"}
-
-
-def test_parse_enrich_result_invalid_json():
-    text = f"{_ENRICH_RESULT_START}\nnot-json\n{_ENRICH_RESULT_END}"
-    result = _parse_enrich_result(text)
-    assert result == {"success": False, "error": "result block contained invalid JSON"}
-
-
-# ---------------------------------------------------------------------------
-# report_bug gate tests
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.anyio
-async def test_report_bug_gate_closed(tool_ctx):
-    tool_ctx.gate.disable()
-    result = json.loads(await report_bug("some error", "/tmp"))
-    assert result["success"] is False
-    assert "not enabled" in result["result"].lower() or "gate" in result["result"].lower()
-
-
-@pytest.mark.anyio
-async def test_report_bug_no_executor(tool_ctx):
-    tool_ctx.executor = None
-    result = json.loads(await report_bug("error ctx", "/tmp"))
-    assert result["success"] is False
-    assert "executor" in result["error"].lower()
-
-
-# ---------------------------------------------------------------------------
-# Helpers: build a mock SkillResult
-# ---------------------------------------------------------------------------
-
-
-def _skill_ok(report_text: str = "## Bug Report\ndetails") -> SkillResult:
-    return SkillResult(
-        success=True,
-        result=report_text,
-        session_id="sid",
-        subtype="success",
-        is_error=False,
-        exit_code=0,
-        needs_retry=False,
-        retry_reason=RetryReason.NONE,
-        stderr="",
-    )
-
-
-def _skill_fail() -> SkillResult:
-    return SkillResult(
-        success=False,
-        result="",
-        session_id="",
-        subtype="error",
-        is_error=True,
-        exit_code=1,
-        needs_retry=False,
-        retry_reason=RetryReason.NONE,
-        stderr="something went wrong",
-    )
-
-
-# ---------------------------------------------------------------------------
-# Blocking mode
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.anyio
-async def test_report_bug_blocking_success(tool_ctx, tmp_path):
-    """Blocking mode awaits the session and returns status=complete."""
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = False
-
-    mock_executor = AsyncMock()
-    mock_executor.run.return_value = _skill_ok("## Report\nroot cause found")
-    tool_ctx.executor = mock_executor
-
-    result = json.loads(await report_bug("KeyError in foo", str(tmp_path), severity="blocking"))
-
-    assert result["success"] is True
-    assert result["status"] == "complete"
-    assert "report" in result
-    assert "report_path" in result
-    mock_executor.run.assert_awaited_once()
-
-
-@pytest.mark.anyio
-async def test_report_bug_blocking_failure_propagated(tool_ctx, tmp_path):
-    """If the headless session fails, status=failed is returned."""
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = False
-
-    mock_executor = AsyncMock()
-    mock_executor.run.return_value = _skill_fail()
-    tool_ctx.executor = mock_executor
-
-    result = json.loads(await report_bug("crash here", str(tmp_path), severity="blocking"))
-
-    assert result["success"] is False
-    assert result["status"] == "failed"
-
-
-@pytest.mark.anyio
-async def test_report_bug_blocking_writes_report_file(tool_ctx, tmp_path):
-    """The report text must be written to the resolved report_path."""
-    report_dir = tmp_path / "rpts"
-    tool_ctx.config.report_bug.report_dir = str(report_dir)
-    tool_ctx.config.report_bug.github_filing = False
-
-    mock_executor = AsyncMock()
-    mock_executor.run.return_value = _skill_ok("# Bug Report\nfoo bar")
-    tool_ctx.executor = mock_executor
-
-    result = json.loads(await report_bug("err", str(tmp_path), severity="blocking"))
-
-    report_path = Path(result["report_path"])
-    assert report_path.exists()
-    assert "Bug Report" in report_path.read_text()
-
-
-# ---------------------------------------------------------------------------
-# Non-blocking mode
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.anyio
-async def test_report_bug_non_blocking_returns_immediately(tool_ctx, tmp_path):
-    """Non-blocking mode must return dispatched before the session completes."""
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = False
-
-    ready = anyio.Event()
-
-    async def slow_run(*args, **kwargs):
-        await ready.wait()  # blocks until test signals
-        return _skill_ok()
-
-    mock_executor = MagicMock()
-    mock_executor.run = slow_run
-    tool_ctx.executor = mock_executor
-
-    result = json.loads(await report_bug("error ctx", str(tmp_path), severity="non_blocking"))
-
-    assert result["success"] is True
-    assert result["status"] == "dispatched"
-    assert "report_path" in result
-
-    # Let the background task finish cleanly.
-    ready.set()
-    await anyio.sleep(0)
-
-
-@pytest.mark.anyio
-async def test_report_bug_non_blocking_default_severity(tool_ctx, tmp_path):
-    """The default severity is non_blocking."""
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = False
-
-    mock_executor = AsyncMock()
-    mock_executor.run.return_value = _skill_ok()
-    tool_ctx.executor = mock_executor
-
-    result = json.loads(await report_bug("err", str(tmp_path)))
-    assert result["status"] == "dispatched"
-
-
-# ---------------------------------------------------------------------------
-# Non-blocking outcome tests (supervised background task)
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.anyio
-async def test_report_bug_non_blocking_outcome_writes_report_file(tool_ctx, tmp_path):
-    """After the background task completes, report_path must exist with content."""
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = False
-
-    mock_executor = AsyncMock()
-    mock_executor.run.return_value = _skill_ok("# Bug Report\nroot cause: missing guard")
-    tool_ctx.executor = mock_executor
-
-    result = json.loads(
-        await report_bug("KeyError in foo", str(tmp_path), severity="non_blocking")
-    )
-    assert result["status"] == "dispatched"
-
-    report_path = Path(result["report_path"])
-    await tool_ctx.background.drain()
-
-    assert report_path.exists(), "report_path must exist after background task completes"
-    assert "Bug Report" in report_path.read_text()
-
-
-@pytest.mark.anyio
-async def test_report_bug_non_blocking_writes_status_file_on_success(tool_ctx, tmp_path):
-    """A status.json file must be written with status='complete' after successful dispatch."""
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = False
-
-    mock_executor = AsyncMock()
-    mock_executor.run.return_value = _skill_ok("# Report\nfoo")
-    tool_ctx.executor = mock_executor
-
-    result = json.loads(await report_bug("err", str(tmp_path), severity="non_blocking"))
-    report_path = Path(result["report_path"])
-
-    # Before task runs: pending status file should exist
-    status_path = report_path.with_suffix(".status.json")
-    assert status_path.exists(), "status file must be written synchronously on dispatch"
-    pending = json.loads(status_path.read_text())
-    assert pending["status"] == "pending"
-
-    # After task completes: status should update to complete
-    await tool_ctx.background.drain()
-
-    data = json.loads(status_path.read_text())
-    assert data["status"] == "complete"
-    assert "completed_at" in data
-
-
-@pytest.mark.anyio
-async def test_report_bug_non_blocking_writes_status_file_on_failure(tool_ctx, tmp_path):
-    """When the headless session fails, status.json must reflect the failure."""
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = False
-
-    mock_executor = AsyncMock()
-    mock_executor.run.return_value = _skill_fail()
-    tool_ctx.executor = mock_executor
-
-    result = json.loads(await report_bug("crash here", str(tmp_path), severity="non_blocking"))
-    status_path = Path(result["report_path"]).with_suffix(".status.json")
-
-    await tool_ctx.background.drain()
-
-    data = json.loads(status_path.read_text())
-    assert data["status"] == "failed"
-    assert "completed_at" in data
-
-
-@pytest.mark.anyio
-async def test_report_bug_non_blocking_executor_raises_is_observed(tool_ctx, tmp_path):
-    """If executor.run() raises, the exception must be logged — not silently dropped."""
-
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = False
-
-    mock_executor = AsyncMock()
-    mock_executor.run.side_effect = RuntimeError("executor exploded")
-    tool_ctx.executor = mock_executor
-
-    result = json.loads(await report_bug("error ctx", str(tmp_path), severity="non_blocking"))
-    assert result["status"] == "dispatched"
-
-    await tool_ctx.background.drain()
-
-    # The exception must be captured and logged — not silently dropped
-    status_path = Path(result["report_path"]).with_suffix(".status.json")
-    assert status_path.exists(), "status file must exist even when executor raises"
-    data = json.loads(status_path.read_text())
-    assert data["status"] == "failed"
-    assert "executor exploded" in data.get("error", "")
-
-
-@pytest.mark.anyio
-async def test_report_bug_no_pending_tasks_after_completion(tool_ctx, tmp_path):
-    """After background task completes, no tasks remain in the supervisor's pending set."""
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = False
-
-    mock_executor = AsyncMock()
-    mock_executor.run.return_value = _skill_ok()
-    tool_ctx.executor = mock_executor
-
-    await report_bug("err", str(tmp_path), severity="non_blocking")
-
-    await tool_ctx.background.drain()
-
-    assert tool_ctx.background.pending_count == 0
-
-
-# ---------------------------------------------------------------------------
-# GitHub filing — blocking mode (easier to assert synchronously)
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.anyio
-async def test_report_bug_creates_github_issue_on_no_duplicate(tool_ctx, tmp_path):
-    """When no matching issue is found, create_issue is called."""
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = True
-    tool_ctx.config.github.default_repo = "owner/repo"
-
-    report_with_fp = (
-        f"{_FINGERPRINT_START}\n"
-        "KeyError in recipe/validator.py: missing ref\n"
-        f"{_FINGERPRINT_END}\n"
-        "## Bug Report\ndetails"
-    )
-    mock_executor = AsyncMock()
-    mock_executor.run.return_value = _skill_ok(report_with_fp)
-    tool_ctx.executor = mock_executor
-
-    mock_gh = AsyncMock()
-    mock_gh.has_token = True
-    mock_gh.search_issues.return_value = {"success": True, "total_count": 0, "items": []}
-    mock_gh.create_issue.return_value = {
-        "success": True,
-        "issue_number": 99,
-        "url": "https://github.com/owner/repo/issues/99",
-    }
-    tool_ctx.github_client = mock_gh
-
-    result = json.loads(await report_bug("KeyError crash", str(tmp_path), severity="blocking"))
-
-    assert result["success"] is True
-    mock_gh.search_issues.assert_awaited_once()
-    mock_gh.create_issue.assert_awaited_once()
-    assert result["github"]["duplicate"] is False
-    assert result["github"]["issue_url"] == "https://github.com/owner/repo/issues/99"
-
-
-@pytest.mark.anyio
-async def test_report_bug_comments_on_duplicate_issue(tool_ctx, tmp_path):
-    """When a matching issue exists and error_context is new, add_comment is called."""
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = True
-    tool_ctx.config.github.default_repo = "owner/repo"
-
-    mock_executor = AsyncMock()
-    mock_executor.run.return_value = _skill_ok(
-        "## Report\n" + _FINGERPRINT_START + "\nfp\n" + _FINGERPRINT_END
-    )
-    tool_ctx.executor = mock_executor
-
-    mock_gh = AsyncMock()
-    mock_gh.has_token = True
-    mock_gh.search_issues.return_value = {
-        "success": True,
-        "total_count": 1,
-        "items": [
-            {
-                "number": 7,
-                "title": "fp",
-                "html_url": "https://github.com/owner/repo/issues/7",
-                "body": "Original body — no error_context here",
-                "state": "open",
-            }
-        ],
-    }
-    mock_gh.add_comment.return_value = {"success": True, "comment_id": 55, "url": "u"}
-    tool_ctx.github_client = mock_gh
-
-    result = json.loads(
-        await report_bug("brand new error text", str(tmp_path), severity="blocking")
-    )
-
-    assert result["success"] is True
-    mock_gh.add_comment.assert_awaited_once()
-    assert result["github"]["duplicate"] is True
-    assert result["github"]["comment_added"] is True
-
-
-@pytest.mark.anyio
-async def test_report_bug_skips_comment_if_already_present(tool_ctx, tmp_path):
-    """If error_context is already in the issue body, no comment is posted."""
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = True
-    tool_ctx.config.github.default_repo = "owner/repo"
-
-    error_ctx = "exact error text already filed"
-    mock_executor = AsyncMock()
-    mock_executor.run.return_value = _skill_ok()
-    tool_ctx.executor = mock_executor
-
-    mock_gh = AsyncMock()
-    mock_gh.has_token = True
-    mock_gh.search_issues.return_value = {
-        "success": True,
-        "total_count": 1,
-        "items": [
-            {
-                "number": 3,
-                "title": "fp",
-                "html_url": "https://github.com/owner/repo/issues/3",
-                "body": f"body contains {error_ctx} already",
-                "state": "open",
-            }
-        ],
-    }
-    tool_ctx.github_client = mock_gh
-
-    result = json.loads(await report_bug(error_ctx, str(tmp_path), severity="blocking"))
-
-    mock_gh.add_comment.assert_not_awaited()
-    assert result["github"]["comment_added"] is False
-
-
-@pytest.mark.anyio
-async def test_report_bug_skips_github_if_no_token(tool_ctx, tmp_path):
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = True
-
-    mock_executor = AsyncMock()
-    mock_executor.run.return_value = _skill_ok()
-    tool_ctx.executor = mock_executor
-
-    mock_gh = AsyncMock()
-    mock_gh.has_token = False
-    tool_ctx.github_client = mock_gh
-
-    result = json.loads(await report_bug("err", str(tmp_path), severity="blocking"))
-
-    assert result["success"] is True
-    mock_gh.search_issues.assert_not_awaited()
-    assert result["github"]["skipped"] is True
-    assert result["github"]["reason"] == "no_token"
-
-
-@pytest.mark.anyio
-async def test_report_bug_skips_github_if_no_default_repo(tool_ctx, tmp_path):
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = True
-    tool_ctx.config.github.default_repo = None
-
-    mock_executor = AsyncMock()
-    mock_executor.run.return_value = _skill_ok()
-    tool_ctx.executor = mock_executor
-
-    mock_gh = AsyncMock()
-    mock_gh.has_token = True
-    tool_ctx.github_client = mock_gh
-
-    result = json.loads(await report_bug("err", str(tmp_path), severity="blocking"))
-
-    mock_gh.search_issues.assert_not_awaited()
-    assert result["github"]["skipped"] is True
-
-
-@pytest.mark.anyio
-async def test_report_bug_github_filing_disabled(tool_ctx, tmp_path):
-    """github_filing=false must skip all GitHub calls."""
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = False
-    tool_ctx.config.github.default_repo = "owner/repo"
-
-    mock_executor = AsyncMock()
-    mock_executor.run.return_value = _skill_ok()
-    tool_ctx.executor = mock_executor
-
-    mock_gh = AsyncMock()
-    mock_gh.has_token = True
-    tool_ctx.github_client = mock_gh
-
-    result = json.loads(await report_bug("err", str(tmp_path), severity="blocking"))
-
-    mock_gh.search_issues.assert_not_awaited()
-    assert result["github"] == {}
-
-
-@pytest.mark.anyio
-async def test_report_bug_blocking_github_client_raises_does_not_propagate(tool_ctx, tmp_path):
-    """If the GitHub client raises unexpectedly, the error must be captured in the github dict."""
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = True
-    tool_ctx.config.github.default_repo = "owner/repo"
-
-    mock_executor = AsyncMock()
-    mock_executor.run.return_value = _skill_ok(
-        "# Report\n" + _FINGERPRINT_START + "\nfp1\n" + _FINGERPRINT_END
-    )
-    tool_ctx.executor = mock_executor
-
-    mock_gh = MagicMock()
-    mock_gh.has_token = True
-    mock_gh.search_issues = AsyncMock(side_effect=RuntimeError("network failure"))
-    tool_ctx.github_client = mock_gh
-
-    # Must not raise — exception is captured in github dict
-    result = json.loads(await report_bug("err", str(tmp_path), severity="blocking"))
-    assert result["success"] is True  # session succeeded
-    assert result["github"].get("skipped") is True
-    assert "unexpected error" in result["github"].get("reason", "")
-    assert "network failure" in result["github"].get("reason", "")
-
-
-# ---------------------------------------------------------------------------
-# Config defaults
-# ---------------------------------------------------------------------------
-
-
-def test_report_bug_config_defaults():
-    from autoskillit.config import AutomationConfig
-
-    cfg = AutomationConfig()
-    assert cfg.report_bug.timeout == 600
-    assert cfg.report_bug.model is None
-    assert cfg.report_bug.report_dir is None
-    assert cfg.report_bug.github_filing is True
-    assert "autoreported" in cfg.report_bug.github_labels
-    assert "bug" in cfg.report_bug.github_labels
-
-
-@pytest.mark.anyio
-async def test_fetch_github_issue_no_client(tool_ctx):
-    tool_ctx.github_client = None
-    result = json.loads(await fetch_github_issue("owner/repo#1"))
-    assert result["success"] is False
-    assert "error" in result
-
-
-@pytest.mark.anyio
-async def test_fetch_github_issue_delegates_to_client(tool_ctx):
-    mock_client = AsyncMock()
-    mock_client.fetch_issue.return_value = {
-        "success": True,
-        "issue_number": 1,
-        "title": "T",
-        "url": "u",
-        "state": "open",
-        "labels": [],
-        "content": "# T",
-    }
-    tool_ctx.github_client = mock_client
-    result = json.loads(await fetch_github_issue("owner/repo#1"))
-    assert result["success"] is True
-    mock_client.fetch_issue.assert_called_once_with("owner/repo#1", include_comments=True)
-
-
-@pytest.mark.anyio
-async def test_fetch_github_issue_bare_number_with_default_repo(tool_ctx):
-    tool_ctx.config.github.default_repo = "owner/repo"
-    mock_client = AsyncMock()
-    mock_client.fetch_issue.return_value = {
-        "success": True,
-        "issue_number": 42,
-        "title": "T",
-        "url": "u",
-        "state": "open",
-        "labels": [],
-        "content": "# T",
-    }
-    tool_ctx.github_client = mock_client
-    result = json.loads(await fetch_github_issue("42"))
-    assert result["success"] is True
-    mock_client.fetch_issue.assert_called_once_with("owner/repo#42", include_comments=True)
-
-
-@pytest.mark.anyio
-async def test_fetch_github_issue_bare_number_no_default_repo(tool_ctx):
-    tool_ctx.config.github.default_repo = None
-    tool_ctx.github_client = AsyncMock()
-    result = json.loads(await fetch_github_issue("42"))
-    assert result["success"] is False
-    assert "default_repo" in result["error"]
-
-
-@pytest.mark.anyio
-async def test_fetch_github_issue_client_error_propagated(tool_ctx):
-    mock_client = AsyncMock()
-    mock_client.fetch_issue.return_value = {"success": False, "error": "Not Found"}
-    tool_ctx.github_client = mock_client
-    result = json.loads(await fetch_github_issue("owner/repo#404"))
-    assert result["success"] is False
-
-
-def test_fetch_github_issue_in_gated_tools():
-    from autoskillit.pipeline.gate import GATED_TOOLS
-
-    assert "fetch_github_issue" in GATED_TOOLS
-    assert "fetch_github_issue" not in UNGATED_TOOLS
-
-
-def test_github_config_defaults():
-    from autoskillit.config import AutomationConfig
-
-    config = AutomationConfig()
-    assert config.github.token is None
-    assert config.github.default_repo is None
-
-
-# ---------------------------------------------------------------------------
-# get_issue_title tool tests
-# ---------------------------------------------------------------------------
-
-
-class TestGetIssueTitleTool:
-    @pytest.mark.anyio
-    async def test_get_issue_title_success(self, tool_ctx):
-        """Delegates to github_client.fetch_title; returns JSON result."""
-        mock_client = AsyncMock()
-        mock_client.fetch_title.return_value = {
-            "success": True,
-            "number": 42,
-            "title": "Fix merge conflict triage",
-            "slug": "fix-merge-conflict-triage",
-        }
-        tool_ctx.github_client = mock_client
-        result = json.loads(await get_issue_title("https://github.com/owner/repo/issues/42"))
-        assert result["success"] is True
-        assert result["number"] == 42
-        assert result["title"] == "Fix merge conflict triage"
-        assert result["slug"] == "fix-merge-conflict-triage"
-        mock_client.fetch_title.assert_called_once_with("https://github.com/owner/repo/issues/42")
-
-    @pytest.mark.anyio
-    async def test_get_issue_title_no_github_client(self, tool_ctx):
-        """Returns error JSON when github_client is None."""
-        tool_ctx.github_client = None
-        result = json.loads(await get_issue_title("https://github.com/owner/repo/issues/1"))
-        assert result["success"] is False
-        assert "error" in result
-
-    @pytest.mark.anyio
-    async def test_get_issue_title_client_error_propagated(self, tool_ctx):
-        """Propagates {success: False, error: ...} from fetch_title."""
-        mock_client = AsyncMock()
-        mock_client.fetch_title.return_value = {"success": False, "error": "Not Found"}
-        tool_ctx.github_client = mock_client
-        result = json.loads(await get_issue_title("owner/repo#404"))
-        assert result["success"] is False
-
-    def test_get_issue_title_is_gated(self):
-        """'get_issue_title' in GATED_TOOLS."""
-        from autoskillit.pipeline.gate import GATED_TOOLS
-
-        assert "get_issue_title" in GATED_TOOLS
-        assert "get_issue_title" not in UNGATED_TOOLS
-
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 # ---------------------------------------------------------------------------
 # claim_issue / release_issue / prepare_issue / enrich_issues — gated tools
@@ -783,63 +34,51 @@ class TestClaimIssueTool:
         assert "claim_issue" in GATED_TOOLS
 
     @pytest.mark.anyio
-    async def test_claim_issue_returns_gate_error_when_kitchen_closed(self, tool_ctx):
-        from autoskillit.pipeline.gate import DefaultGateState
-
-        tool_ctx.gate = DefaultGateState(enabled=False)
-        result = json.loads(await claim_issue("https://github.com/owner/repo/issues/42"))
-        assert result["success"] is False
-        assert result["subtype"] == "gate_error"
-
-    @pytest.mark.anyio
-    async def test_claim_issue_returns_error_without_github_client(self, tool_ctx):
-        tool_ctx.github_client = None
+    async def test_claim_issue_returns_error_without_github_client(self, tool_ctx_kitchen_open):
+        tool_ctx_kitchen_open.github_client = None
         result = json.loads(await claim_issue("https://github.com/owner/repo/issues/42"))
         assert result["success"] is False
         assert "error" in result
 
     @pytest.mark.anyio
-    async def test_claim_issue_success(self, tool_ctx):
+    async def test_claim_issue_success(self, tool_ctx_kitchen_open):
         mock_client = AsyncMock()
         mock_client.fetch_issue.return_value = {"success": True, "labels": []}
         mock_client.ensure_label.return_value = {"success": True, "created": True}
         mock_client.add_labels.return_value = {"success": True, "labels": ["in-progress"]}
-        tool_ctx.github_client = mock_client
+        tool_ctx_kitchen_open.github_client = mock_client
         result = json.loads(await claim_issue("https://github.com/owner/repo/issues/42"))
         assert result["success"] is True
         assert result["claimed"] is True
         assert result["issue_number"] == 42
 
     @pytest.mark.anyio
-    async def test_claim_issue_already_claimed(self, tool_ctx):
+    async def test_claim_issue_already_claimed(self, tool_ctx_kitchen_open):
         mock_client = AsyncMock()
         mock_client.fetch_issue.return_value = {
             "success": True,
             "labels": [{"name": "in-progress"}],
         }
-        tool_ctx.github_client = mock_client
+        tool_ctx_kitchen_open.github_client = mock_client
         result = json.loads(await claim_issue("https://github.com/owner/repo/issues/42"))
         assert result["success"] is True
         assert result["claimed"] is False
 
     # P5F4-T1
     @pytest.mark.anyio
-    async def test_claim_issue_binds_structlog_context(self, tool_ctx, monkeypatch):
-        """claim_issue must bind structlog context vars via bound_contextvars."""
-        import contextlib
-
+    async def test_claim_issue_binds_structlog_context(self, tool_ctx_kitchen_open, monkeypatch):
+        """claim_issue must bind structlog context vars via bind_contextvars."""
         import structlog
 
         captured = {}
 
-        @contextlib.contextmanager
-        def fake_bound_contextvars(**kwargs):
+        def fake_bind_contextvars(**kwargs):
             captured.update(kwargs)
-            yield
 
-        monkeypatch.setattr(structlog.contextvars, "bound_contextvars", fake_bound_contextvars)
+        monkeypatch.setattr(structlog.contextvars, "bind_contextvars", fake_bind_contextvars)
+        monkeypatch.setattr(structlog.contextvars, "clear_contextvars", lambda: None)
 
-        tool_ctx.github_client = None  # triggers early return after bind
+        tool_ctx_kitchen_open.github_client = None  # triggers early return after bind
 
         await claim_issue(issue_url="https://github.com/owner/repo/issues/1")
         assert captured == {
@@ -849,7 +88,7 @@ class TestClaimIssueTool:
 
     @pytest.mark.anyio
     async def test_claim_issue_allow_reentry_true_returns_claimed_true_when_already_labeled(
-        self, tool_ctx
+        self, tool_ctx_kitchen_open
     ):
         """allow_reentry=True with label present: returns claimed=True and reentry=True."""
         mock_client = AsyncMock()
@@ -857,7 +96,7 @@ class TestClaimIssueTool:
             "success": True,
             "labels": [{"name": "in-progress"}],
         }
-        tool_ctx.github_client = mock_client
+        tool_ctx_kitchen_open.github_client = mock_client
         result = json.loads(
             await claim_issue("https://github.com/owner/repo/issues/42", allow_reentry=True)
         )
@@ -868,7 +107,7 @@ class TestClaimIssueTool:
 
     @pytest.mark.anyio
     async def test_claim_issue_allow_reentry_false_returns_claimed_false_when_already_labeled(
-        self, tool_ctx
+        self, tool_ctx_kitchen_open
     ):
         """Default allow_reentry=False: claimed=False when label already present."""
         mock_client = AsyncMock()
@@ -876,27 +115,77 @@ class TestClaimIssueTool:
             "success": True,
             "labels": [{"name": "in-progress"}],
         }
-        tool_ctx.github_client = mock_client
+        tool_ctx_kitchen_open.github_client = mock_client
         result = json.loads(await claim_issue("https://github.com/owner/repo/issues/42"))
         assert result["success"] is True
         assert result["claimed"] is False
         assert "reentry" not in result
 
     @pytest.mark.anyio
-    async def test_claim_issue_allow_reentry_true_still_claims_when_label_absent(self, tool_ctx):
+    async def test_claim_issue_allow_reentry_true_still_claims_when_label_absent(
+        self, tool_ctx_kitchen_open
+    ):
         """allow_reentry=True with no pre-existing label performs normal claim."""
         mock_client = AsyncMock()
         mock_client.fetch_issue.return_value = {"success": True, "labels": []}
         mock_client.ensure_label.return_value = {"success": True, "created": True}
-        mock_client.add_labels.return_value = {"success": True, "labels": ["in-progress"]}
-        tool_ctx.github_client = mock_client
+        mock_client.swap_labels.return_value = {"success": True, "labels": ["in-progress"]}
+        tool_ctx_kitchen_open.github_client = mock_client
         result = json.loads(
             await claim_issue("https://github.com/owner/repo/issues/42", allow_reentry=True)
         )
         assert result["success"] is True
         assert result["claimed"] is True
         assert result.get("reentry", False) is False
-        mock_client.add_labels.assert_called_once()
+        call_kwargs = mock_client.swap_labels.call_args.kwargs
+        assert set(call_kwargs["remove_labels"]) == {"queued", "fail"}
+        assert call_kwargs["add_labels"] == ["in-progress"]
+
+    @pytest.mark.anyio
+    async def test_claim_issue_with_queued_label(self, tool_ctx_kitchen_open):
+        """claim_issue with label=queued uses registry color/description and removes fail."""
+        mock_client = AsyncMock()
+        mock_client.fetch_issue.return_value = {"success": True, "labels": []}
+        mock_client.ensure_label.return_value = {"success": True, "created": True}
+        mock_client.swap_labels.return_value = {"success": True, "labels": ["queued"]}
+        tool_ctx_kitchen_open.github_client = mock_client
+        result = json.loads(
+            await claim_issue(issue_url="https://github.com/owner/repo/issues/1", label="queued")
+        )
+        assert result["success"] is True
+        assert result["claimed"] is True
+        mock_client.ensure_label.assert_called_once_with(
+            "owner",
+            "repo",
+            "queued",
+            color="c2e0c6",
+            description="Issue claimed by orchestrator, waiting for recipe pickup",
+        )
+        call_kwargs = mock_client.swap_labels.call_args.kwargs
+        assert set(call_kwargs["remove_labels"]) == {"fail"}
+        assert call_kwargs["add_labels"] == ["queued"]
+
+    @pytest.mark.anyio
+    async def test_claim_issue_default_removes_queued_and_fail(self, tool_ctx_kitchen_open):
+        """claim_issue with default label removes both queued and fail labels."""
+        mock_client = AsyncMock()
+        mock_client.fetch_issue.return_value = {"success": True, "labels": []}
+        mock_client.ensure_label.return_value = {"success": True, "created": True}
+        mock_client.swap_labels.return_value = {"success": True, "labels": ["in-progress"]}
+        tool_ctx_kitchen_open.github_client = mock_client
+        result = json.loads(await claim_issue(issue_url="https://github.com/owner/repo/issues/1"))
+        assert result["success"] is True
+        assert result["claimed"] is True
+        mock_client.ensure_label.assert_called_once_with(
+            "owner",
+            "repo",
+            "in-progress",
+            color="fbca04",
+            description="Issue is actively being processed by a pipeline session",
+        )
+        call_kwargs = mock_client.swap_labels.call_args.kwargs
+        assert set(call_kwargs["remove_labels"]) >= {"queued", "fail"}
+        assert call_kwargs["add_labels"] == ["in-progress"]
 
 
 class TestReleaseIssueTool:
@@ -906,48 +195,36 @@ class TestReleaseIssueTool:
         assert "release_issue" in GATED_TOOLS
 
     @pytest.mark.anyio
-    async def test_release_issue_returns_gate_error_when_kitchen_closed(self, tool_ctx):
-        from autoskillit.pipeline.gate import DefaultGateState
-
-        tool_ctx.gate = DefaultGateState(enabled=False)
-        result = json.loads(await release_issue("https://github.com/owner/repo/issues/42"))
-        assert result["success"] is False
-        assert result["subtype"] == "gate_error"
-
-    @pytest.mark.anyio
-    async def test_release_issue_returns_error_without_github_client(self, tool_ctx):
-        tool_ctx.github_client = None
+    async def test_release_issue_returns_error_without_github_client(self, tool_ctx_kitchen_open):
+        tool_ctx_kitchen_open.github_client = None
         result = json.loads(await release_issue("https://github.com/owner/repo/issues/42"))
         assert result["success"] is False
         assert "error" in result
 
     @pytest.mark.anyio
-    async def test_release_issue_success(self, tool_ctx):
+    async def test_release_issue_success(self, tool_ctx_kitchen_open):
         mock_client = AsyncMock()
         mock_client.remove_label.return_value = {"success": True}
-        tool_ctx.github_client = mock_client
+        tool_ctx_kitchen_open.github_client = mock_client
         result = json.loads(await release_issue("https://github.com/owner/repo/issues/42"))
         assert result["success"] is True
         assert result["issue_number"] == 42
 
     # P5F4-T2
     @pytest.mark.anyio
-    async def test_release_issue_binds_structlog_context(self, tool_ctx, monkeypatch):
-        """release_issue must bind structlog context vars via bound_contextvars."""
-        import contextlib
-
+    async def test_release_issue_binds_structlog_context(self, tool_ctx_kitchen_open, monkeypatch):
+        """release_issue must bind structlog context vars via bind_contextvars."""
         import structlog
 
         captured = {}
 
-        @contextlib.contextmanager
-        def fake_bound_contextvars(**kwargs):
+        def fake_bind_contextvars(**kwargs):
             captured.update(kwargs)
-            yield
 
-        monkeypatch.setattr(structlog.contextvars, "bound_contextvars", fake_bound_contextvars)
+        monkeypatch.setattr(structlog.contextvars, "bind_contextvars", fake_bind_contextvars)
+        monkeypatch.setattr(structlog.contextvars, "clear_contextvars", lambda: None)
 
-        tool_ctx.github_client = None  # triggers early return after bind
+        tool_ctx_kitchen_open.github_client = None  # triggers early return after bind
 
         await release_issue(issue_url="https://github.com/owner/repo/issues/1")
         assert captured == {
@@ -963,16 +240,7 @@ class TestPrepareIssueTool:
         assert "prepare_issue" in GATED_TOOLS
 
     @pytest.mark.anyio
-    async def test_prepare_issue_returns_gate_error_when_kitchen_closed(self, tool_ctx):
-        from autoskillit.pipeline.gate import DefaultGateState
-
-        tool_ctx.gate = DefaultGateState(enabled=False)
-        result = json.loads(await prepare_issue("Test title", "Test body"))
-        assert result["success"] is False
-        assert result["subtype"] == "gate_error"
-
-    @pytest.mark.anyio
-    async def test_prepare_issue_success_with_result_block(self, tool_ctx):
+    async def test_prepare_issue_success_with_result_block(self, tool_ctx_kitchen_open):
         """Happy path: executor returns success=True with a valid result block."""
         result_text = (
             f"{_PREPARE_RESULT_START}\n"
@@ -994,7 +262,7 @@ class TestPrepareIssueTool:
             retry_reason=RetryReason.NONE,
             stderr="",
         )
-        tool_ctx.executor = mock_executor
+        tool_ctx_kitchen_open.executor = mock_executor
 
         result = json.loads(await prepare_issue("Test title", "Test body"))
 
@@ -1004,7 +272,9 @@ class TestPrepareIssueTool:
         assert "error" not in result
 
     @pytest.mark.anyio
-    async def test_prepare_issue_success_empty_result_channel_b_drain_race(self, tool_ctx):
+    async def test_prepare_issue_success_empty_result_channel_b_drain_race(
+        self, tool_ctx_kitchen_open
+    ):
         """Channel B drain race: executor returns success=True but result is empty.
         Response must be success=False with diagnostics — THE KEY CONTRADICTION TEST.
         """
@@ -1020,7 +290,7 @@ class TestPrepareIssueTool:
             retry_reason=RetryReason.NONE,
             stderr="",
         )
-        tool_ctx.executor = mock_executor
+        tool_ctx_kitchen_open.executor = mock_executor
 
         result = json.loads(await prepare_issue("Test title", "Test body"))
 
@@ -1031,7 +301,7 @@ class TestPrepareIssueTool:
         assert result["status"] != "complete"  # contradiction must be impossible
 
     @pytest.mark.anyio
-    async def test_prepare_issue_failure_with_diagnostics(self, tool_ctx):
+    async def test_prepare_issue_failure_with_diagnostics(self, tool_ctx_kitchen_open):
         """Executor failure: response must surface session_id, stderr, subtype, exit_code."""
         mock_executor = AsyncMock()
         mock_executor.run.return_value = SkillResult(
@@ -1045,7 +315,7 @@ class TestPrepareIssueTool:
             retry_reason=RetryReason.NONE,
             stderr="Claude exited unexpectedly",
         )
-        tool_ctx.executor = mock_executor
+        tool_ctx_kitchen_open.executor = mock_executor
 
         result = json.loads(await prepare_issue("Test title", "Test body"))
 
@@ -1056,7 +326,9 @@ class TestPrepareIssueTool:
         assert result["exit_code"] == 1
 
     @pytest.mark.anyio
-    async def test_prepare_issue_passes_expected_output_patterns_to_executor(self, tool_ctx):
+    async def test_prepare_issue_passes_expected_output_patterns_to_executor(
+        self, tool_ctx_kitchen_open
+    ):
         """output_pattern_resolver is consulted and patterns are passed to executor.run()."""
         mock_executor = AsyncMock()
         mock_executor.run.return_value = SkillResult(
@@ -1070,8 +342,8 @@ class TestPrepareIssueTool:
             retry_reason=RetryReason.NONE,
             stderr="",
         )
-        tool_ctx.executor = mock_executor
-        tool_ctx.output_pattern_resolver = lambda cmd: ["---prepare-issue-result---"]
+        tool_ctx_kitchen_open.executor = mock_executor
+        tool_ctx_kitchen_open.output_pattern_resolver = lambda cmd: ["---prepare-issue-result---"]
 
         await prepare_issue("Title", "Body")
 
@@ -1080,7 +352,7 @@ class TestPrepareIssueTool:
 
     @pytest.mark.anyio
     async def test_prepare_issue_response_success_field_never_overwritten_by_parsed_spread(
-        self, tool_ctx
+        self, tool_ctx_kitchen_open
     ):
         """When parsed block contains 'success': false, the outer success=True is preserved."""
         result_text = (
@@ -1100,7 +372,7 @@ class TestPrepareIssueTool:
             retry_reason=RetryReason.NONE,
             stderr="",
         )
-        tool_ctx.executor = mock_executor
+        tool_ctx_kitchen_open.executor = mock_executor
 
         result = json.loads(await prepare_issue("Title", "Body"))
 
@@ -1116,7 +388,7 @@ class TestPrepareIssueTool:
         ],
     )
     async def test_prepare_issue_contradictory_state_is_impossible(
-        self, tool_ctx, skill_success, skill_result_text
+        self, tool_ctx_kitchen_open, skill_success, skill_result_text
     ):
         """status=complete and success=False must never co-exist in any response."""
         mock_executor = AsyncMock()
@@ -1131,7 +403,7 @@ class TestPrepareIssueTool:
             retry_reason=RetryReason.NONE,
             stderr="",
         )
-        tool_ctx.executor = mock_executor
+        tool_ctx_kitchen_open.executor = mock_executor
 
         result = json.loads(await prepare_issue("Title", "Body"))
 
@@ -1139,7 +411,7 @@ class TestPrepareIssueTool:
         assert result["status"] == "failed"
 
     @pytest.mark.anyio
-    async def test_prepare_issue_no_result_block_includes_stderr(self, tool_ctx):
+    async def test_prepare_issue_no_result_block_includes_stderr(self, tool_ctx_kitchen_open):
         """success=True + non-empty result + no delimiters → stderr surfaced."""
         mock_executor = AsyncMock()
         mock_executor.run.return_value = SkillResult(
@@ -1153,7 +425,7 @@ class TestPrepareIssueTool:
             needs_retry=False,
             retry_reason=RetryReason.NONE,
         )
-        tool_ctx.executor = mock_executor
+        tool_ctx_kitchen_open.executor = mock_executor
         response = json.loads(await prepare_issue("Test Issue", ""))
         assert response["success"] is False
         assert response["error"] == "no result block found"
@@ -1162,7 +434,7 @@ class TestPrepareIssueTool:
         assert response["session_id"] == "abc-123"
 
     @pytest.mark.anyio
-    async def test_prepare_issue_empty_output_includes_stderr(self, tool_ctx):
+    async def test_prepare_issue_empty_output_includes_stderr(self, tool_ctx_kitchen_open):
         """success=True + empty result (drain race) → stderr surfaced."""
         mock_executor = AsyncMock()
         mock_executor.run.return_value = SkillResult(
@@ -1176,7 +448,7 @@ class TestPrepareIssueTool:
             needs_retry=False,
             retry_reason=RetryReason.NONE,
         )
-        tool_ctx.executor = mock_executor
+        tool_ctx_kitchen_open.executor = mock_executor
         response = json.loads(await prepare_issue("Test Issue", ""))
         assert response["success"] is False
         assert "drain race" in response["error"]
@@ -1185,7 +457,9 @@ class TestPrepareIssueTool:
         assert response["session_id"] == "abc-456"
 
     @pytest.mark.anyio
-    async def test_prepare_issue_session_failure_uses_subtype_not_block_sentinel(self, tool_ctx):
+    async def test_prepare_issue_session_failure_uses_subtype_not_block_sentinel(
+        self, tool_ctx_kitchen_open
+    ):
         """success=False must NOT call _parse_prepare_result.
         The error must reflect actual failure reason, not 'no result block found'.
         """
@@ -1201,7 +475,7 @@ class TestPrepareIssueTool:
             needs_retry=True,
             retry_reason=RetryReason.RESUME,
         )
-        tool_ctx.executor = mock_executor
+        tool_ctx_kitchen_open.executor = mock_executor
         response = json.loads(await prepare_issue("Test Issue", ""))
         assert response["success"] is False
         assert response["error"] != "no result block found", (
@@ -1217,16 +491,9 @@ class TestEnrichIssuesTool:
         assert "enrich_issues" in GATED_TOOLS
 
     @pytest.mark.anyio
-    async def test_enrich_issues_returns_gate_error_when_kitchen_closed(self, tool_ctx):
-        from autoskillit.pipeline.gate import DefaultGateState
-
-        tool_ctx.gate = DefaultGateState(enabled=False)
-        result = json.loads(await enrich_issues())
-        assert result["success"] is False
-        assert result["subtype"] == "gate_error"
-
-    @pytest.mark.anyio
-    async def test_enrich_issues_success_empty_result_includes_diagnostics(self, tool_ctx):
+    async def test_enrich_issues_success_empty_result_includes_diagnostics(
+        self, tool_ctx_kitchen_open
+    ):
         """Drain race for enrich_issues: success=True with empty result must yield failure."""
         mock_executor = AsyncMock()
         mock_executor.run.return_value = SkillResult(
@@ -1240,7 +507,7 @@ class TestEnrichIssuesTool:
             retry_reason=RetryReason.NONE,
             stderr="",
         )
-        tool_ctx.executor = mock_executor
+        tool_ctx_kitchen_open.executor = mock_executor
 
         result = json.loads(await enrich_issues())
 
@@ -1248,7 +515,9 @@ class TestEnrichIssuesTool:
         assert result["session_id"] == "sid789"
 
     @pytest.mark.anyio
-    async def test_enrich_issues_failure_includes_session_id_and_stderr(self, tool_ctx):
+    async def test_enrich_issues_failure_includes_session_id_and_stderr(
+        self, tool_ctx_kitchen_open
+    ):
         """Executor failure: response includes session_id and stderr for diagnosis."""
         mock_executor = AsyncMock()
         mock_executor.run.return_value = SkillResult(
@@ -1262,7 +531,7 @@ class TestEnrichIssuesTool:
             retry_reason=RetryReason.NONE,
             stderr="Session timed out",
         )
-        tool_ctx.executor = mock_executor
+        tool_ctx_kitchen_open.executor = mock_executor
 
         result = json.loads(await enrich_issues())
 
@@ -1271,7 +540,9 @@ class TestEnrichIssuesTool:
         assert result["stderr"] == "Session timed out"
 
     @pytest.mark.anyio
-    async def test_enrich_issues_passes_expected_output_patterns_to_executor(self, tool_ctx):
+    async def test_enrich_issues_passes_expected_output_patterns_to_executor(
+        self, tool_ctx_kitchen_open
+    ):
         """output_pattern_resolver is consulted and patterns are passed to executor.run()."""
         mock_executor = AsyncMock()
         mock_executor.run.return_value = SkillResult(
@@ -1285,8 +556,8 @@ class TestEnrichIssuesTool:
             retry_reason=RetryReason.NONE,
             stderr="",
         )
-        tool_ctx.executor = mock_executor
-        tool_ctx.output_pattern_resolver = lambda cmd: ["---enrich-issues-result---"]
+        tool_ctx_kitchen_open.executor = mock_executor
+        tool_ctx_kitchen_open.output_pattern_resolver = lambda cmd: ["---enrich-issues-result---"]
 
         await enrich_issues()
 
@@ -1294,7 +565,7 @@ class TestEnrichIssuesTool:
         assert call_kwargs.get("expected_output_patterns") == ["---enrich-issues-result---"]
 
     @pytest.mark.anyio
-    async def test_enrich_issues_no_result_block_includes_stderr(self, tool_ctx):
+    async def test_enrich_issues_no_result_block_includes_stderr(self, tool_ctx_kitchen_open):
         """success=True + non-empty result + no delimiters → stderr surfaced."""
         mock_executor = AsyncMock()
         mock_executor.run.return_value = SkillResult(
@@ -1308,7 +579,7 @@ class TestEnrichIssuesTool:
             needs_retry=False,
             retry_reason=RetryReason.NONE,
         )
-        tool_ctx.executor = mock_executor
+        tool_ctx_kitchen_open.executor = mock_executor
         response = json.loads(await enrich_issues())
         assert response["success"] is False
         assert response["error"] == "no result block found"
@@ -1421,7 +692,7 @@ _HEADLESS_FAILURE_SCENARIOS = [
 @pytest.mark.anyio
 @pytest.mark.parametrize("tool_name,skill_result_kwargs", _HEADLESS_FAILURE_SCENARIOS)
 async def test_headless_tool_failure_paths_include_all_diagnostic_fields(
-    tool_name, skill_result_kwargs, tool_ctx
+    tool_name, skill_result_kwargs, tool_ctx_kitchen_open
 ):
     """Contract test: every failure path of every headless session tool
     must surface the full diagnostic set: success, error, session_id,
@@ -1430,7 +701,7 @@ async def test_headless_tool_failure_paths_include_all_diagnostic_fields(
     tool_fn = {"prepare_issue": prepare_issue, "enrich_issues": enrich_issues}[tool_name]
     mock_executor = AsyncMock()
     mock_executor.run.return_value = SkillResult(**skill_result_kwargs)
-    tool_ctx.executor = mock_executor
+    tool_ctx_kitchen_open.executor = mock_executor
 
     kwargs: dict = {}
     if tool_name == "prepare_issue":
@@ -1444,66 +715,10 @@ async def test_headless_tool_failure_paths_include_all_diagnostic_fields(
     assert response["session_id"] == skill_result_kwargs["session_id"]
 
 
-class TestReportBugTool:
-    @pytest.mark.anyio
-    async def test_report_bug_failure_includes_session_id_and_stderr(self, tool_ctx, tmp_path):
-        """Blocking failure response must include session_id and stderr for diagnosis."""
-        tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-        tool_ctx.config.report_bug.github_filing = False
-
-        mock_executor = AsyncMock()
-        mock_executor.run.return_value = SkillResult(
-            success=False,
-            result="",
-            session_id="fail-session-id",
-            subtype="missing_completion_marker",
-            is_error=True,
-            exit_code=1,
-            needs_retry=False,
-            retry_reason=RetryReason.NONE,
-            stderr="Claude crashed",
-        )
-        tool_ctx.executor = mock_executor
-
-        result = json.loads(await report_bug("some error", str(tmp_path), severity="blocking"))
-
-        assert result["success"] is False
-        assert result["session_id"] == "fail-session-id"
-        assert result["stderr"] == "Claude crashed"
-
-    @pytest.mark.anyio
-    async def test_report_bug_passes_expected_output_patterns_to_executor(
-        self, tool_ctx, tmp_path
-    ):
-        """output_pattern_resolver is consulted and patterns are passed to executor.run()."""
-        tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-        tool_ctx.config.report_bug.github_filing = False
-
-        mock_executor = AsyncMock()
-        mock_executor.run.return_value = SkillResult(
-            success=True,
-            result="## Report\nfindings",
-            session_id="sid",
-            subtype="success",
-            is_error=False,
-            exit_code=0,
-            needs_retry=False,
-            retry_reason=RetryReason.NONE,
-            stderr="",
-        )
-        tool_ctx.executor = mock_executor
-        tool_ctx.output_pattern_resolver = lambda cmd: ["---bug-fingerprint---"]
-
-        await report_bug("error ctx", str(tmp_path), severity="blocking")
-
-        call_kwargs = mock_executor.run.call_args.kwargs
-        assert call_kwargs.get("expected_output_patterns") == ["---bug-fingerprint---"]
-
-
 class TestGetPrReviews:
     @pytest.mark.anyio
-    async def test_returns_structured_reviews(self, tool_ctx):
-        tool_ctx.runner.push(
+    async def test_returns_structured_reviews(self, tool_ctx_kitchen_open):
+        tool_ctx_kitchen_open.runner.push(
             _make_result(
                 0,
                 json.dumps(
@@ -1524,8 +739,8 @@ class TestGetPrReviews:
         assert result["reviews"][0] == {"author": "reviewer1", "state": "APPROVED", "body": "LGTM"}
 
     @pytest.mark.anyio
-    async def test_empty_reviews(self, tool_ctx):
-        tool_ctx.runner.push(_make_result(0, json.dumps([]), ""))
+    async def test_empty_reviews(self, tool_ctx_kitchen_open):
+        tool_ctx_kitchen_open.runner.push(_make_result(0, json.dumps([]), ""))
         result = json.loads(await get_pr_reviews(42, ".", repo="owner/repo"))
         assert result["reviews"] == []
 
@@ -1536,8 +751,8 @@ class TestGetPrReviews:
         assert result["success"] is False
 
     @pytest.mark.anyio
-    async def test_without_repo_uses_pr_view(self, tool_ctx):
-        tool_ctx.runner.push(
+    async def test_without_repo_uses_pr_view(self, tool_ctx_kitchen_open):
+        tool_ctx_kitchen_open.runner.push(
             _make_result(
                 0,
                 json.dumps(
@@ -1562,34 +777,47 @@ class TestGetPrReviews:
 
 
 class TestBulkCloseIssues:
+    @pytest.fixture(autouse=True)
+    def _mock_rate_limit_sleep(self, monkeypatch):
+        monkeypatch.setattr(
+            "autoskillit.server.tools.tools_pr_ops.asyncio.sleep",
+            AsyncMock(),
+        )
+
     @pytest.mark.anyio
-    async def test_closes_all_issues_successfully(self, tool_ctx):
+    async def test_closes_all_issues_successfully(self, tool_ctx_kitchen_open):
         for _ in range(3):
-            tool_ctx.runner.push(_make_result(0, "", ""))
+            tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
         result = json.loads(await bulk_close_issues([1, 2, 3], "", "."))
         assert result["closed"] == [1, 2, 3]
         assert result["failed"] == []
 
     @pytest.mark.anyio
-    async def test_partial_failure_tracked_per_issue(self, tool_ctx):
-        tool_ctx.runner.push(_make_result(0, "", ""))
-        tool_ctx.runner.push(_make_result(1, "", "not found"))
-        tool_ctx.runner.push(_make_result(0, "", ""))
+    async def test_partial_failure_tracked_per_issue(self, tool_ctx_kitchen_open):
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
+        tool_ctx_kitchen_open.runner.push(_make_result(1, "", "not found"))
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
         result = json.loads(await bulk_close_issues([1, 2, 3], "", "."))
         assert result["closed"] == [1, 3]
         assert result["failed"] == [2]
 
     @pytest.mark.anyio
-    async def test_empty_numbers_list(self, tool_ctx):
+    async def test_empty_numbers_list(self, tool_ctx_kitchen_open):
         result = json.loads(await bulk_close_issues([], "", "."))
         assert result == {"closed": [], "failed": []}
 
     @pytest.mark.anyio
-    async def test_comment_flag_included_when_provided(self, tool_ctx):
-        tool_ctx.runner.push(_make_result(0, "", ""))
-        await bulk_close_issues([7], "Closed by pipeline.", ".")
-        call_cmd = tool_ctx.runner.call_args_list[-1][0]
-        assert "--comment" in call_cmd
+    async def test_comment_appended_to_body_when_provided(self, tool_ctx_kitchen_open):
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "existing body", ""))
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
+        result = json.loads(await bulk_close_issues([7], "Closed by pipeline.", "."))
+        all_cmds = [call[0] for call in tool_ctx_kitchen_open.runner.call_args_list]
+        edit_calls = [cmd for cmd in all_cmds if "edit" in cmd]
+        assert any("--body-file" in cmd for cmd in edit_calls), (
+            "Expected gh issue edit --body-file call"
+        )
+        assert result["closed"] == [7]
 
     @pytest.mark.anyio
     async def test_gate_closed_returns_gate_error(self, tool_ctx):

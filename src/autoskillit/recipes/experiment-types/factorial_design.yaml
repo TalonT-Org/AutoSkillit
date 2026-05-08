@@ -1,0 +1,31 @@
+name: factorial_design
+schema_version: "1.0"
+priority: 4
+is_fallback: false
+classification_triggers:
+  - "Multiple independent variables crossed to study main effects and interactions: 'factorial', '2x2', '2x3', 'interaction effect', 'factorial ANOVA', 'multi-factor', 'crossed design', 'full factorial', 'fractional factorial'"
+  - "Explicit interest in how one factor's effect depends on another: 'interaction between', 'moderation', 'effect of A depends on B', 'synergistic effect'"
+dimension_weights:
+  causal_structure: H
+  variance_protocol: L
+  statistical_corrections: H
+  ecological_validity: L
+  measurement_alignment: M
+  resource_proportionality: L
+  data_acquisition: M
+  agent_implementability: H
+applicable_lenses:
+  primary: exp-lens-estimand-clarity
+  secondary: exp-lens-error-budget
+red_team_focus:
+  specific: underpowered interaction tests treated as confirmatory
+  severity_cap: warning
+l1_severity:
+  estimand_clarity: warning
+  hypothesis_falsifiability: warning
+dimension_weight_rationale:
+  causal_structure: "Factorial designs include explicit manipulation and random assignment; interaction interpretation requires the correct causal model for each factor"
+  statistical_corrections: "All main effects and interaction terms inflate family-wise error rate; pre-specification of the primary interaction is required"
+  measurement_alignment: "Outcome metric must detect interaction effects, which are typically smaller than main effects"
+  data_acquisition: "Cell balance across factor combinations and counterbalancing affect interaction estimate validity"
+  agent_implementability: "Factorial ANOVA and regression with interaction terms are highly standardized and automatable"

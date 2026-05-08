@@ -4,21 +4,20 @@ from __future__ import annotations
 
 import json
 import os
-from unittest.mock import MagicMock
 
 import pytest
 
 from autoskillit.config import (
     AutomationConfig,
-    ReadDbConfig,
     ResetWorkspaceConfig,
     SafetyConfig,
 )
 from autoskillit.core.types import AUTOSKILLIT_PRIVATE_ENV_VARS
-from autoskillit.server.tools_status import read_db
-from autoskillit.server.tools_workspace import reset_test_dir, reset_workspace, test_check
+from autoskillit.server.tools.tools_workspace import reset_test_dir, reset_workspace, test_check
 from autoskillit.workspace import CleanupResult
 from tests.conftest import _make_result
+
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 test_check.__test__ = False  # type: ignore[attr-defined]
 
@@ -27,9 +26,9 @@ class TestResetWorkspace:
     """T6, T7: reset_workspace preserves configured dirs, requires marker."""
 
     @pytest.fixture(autouse=True)
-    def _set_reset_command(self, tool_ctx):
+    def _set_reset_command(self, tool_ctx_kitchen_open):
         """Configure reset_workspace with a command for these tests."""
-        tool_ctx.config = AutomationConfig(
+        tool_ctx_kitchen_open.config = AutomationConfig(
             reset_workspace=ResetWorkspaceConfig(
                 command=["make", "clean"],
                 preserve_dirs={".cache", "reports"},
@@ -52,7 +51,7 @@ class TestResetWorkspace:
         assert "does not exist" in result["error"]
 
     @pytest.mark.anyio
-    async def test_preserves_configured_dirs(self, tool_ctx, tmp_path):
+    async def test_preserves_configured_dirs(self, tool_ctx_kitchen_open, tmp_path):
         workspace = tmp_path / "workspace"
         workspace.mkdir(parents=True)
         (workspace / ".autoskillit-workspace").write_text("# marker\n")
@@ -65,7 +64,7 @@ class TestResetWorkspace:
         (workspace / "temp_dir").mkdir()
         (workspace / "temp_dir" / "file.txt").touch()
 
-        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
 
         result = json.loads(await reset_workspace(test_dir=str(workspace)))
 
@@ -81,12 +80,12 @@ class TestResetWorkspace:
         assert not (workspace / "temp_dir").exists()
 
     @pytest.mark.anyio
-    async def test_reset_command_failure(self, tool_ctx, tmp_path):
+    async def test_reset_command_failure(self, tool_ctx_kitchen_open, tmp_path):
         workspace = tmp_path / "workspace"
         workspace.mkdir(parents=True)
         (workspace / ".autoskillit-workspace").write_text("# marker\n")
 
-        tool_ctx.runner.push(_make_result(1, "", "command not found"))
+        tool_ctx_kitchen_open.runner.push(_make_result(1, "", "command not found"))
 
         result = json.loads(await reset_workspace(test_dir=str(workspace)))
 
@@ -95,16 +94,16 @@ class TestResetWorkspace:
         assert result["exit_code"] == 1
 
     @pytest.mark.anyio
-    async def test_runs_correct_reset_command(self, tool_ctx, tmp_path):
+    async def test_runs_correct_reset_command(self, tool_ctx_kitchen_open, tmp_path):
         workspace = tmp_path / "workspace"
         workspace.mkdir(parents=True)
         (workspace / ".autoskillit-workspace").write_text("# marker\n")
 
-        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
 
         await reset_workspace(test_dir=str(workspace))
 
-        call_args = tool_ctx.runner.call_args_list[0][0]
+        call_args = tool_ctx_kitchen_open.runner.call_args_list[0][0]
         assert call_args == [
             "make",
             "clean",
@@ -152,14 +151,17 @@ class TestTestCheck:
 
     @pytest.mark.anyio
     async def test_does_not_expose_summary(self, tool_ctx):
-        """test_check returns passed + output — no summary, no output_file."""
+        """test_check returns passed + stdout + stderr — no summary, no output_file."""
         tool_ctx.runner.push(
             _make_result(0, "= 100 passed =\nTest output saved to: /tmp/out.txt\n", "")
         )
         result = json.loads(await test_check(worktree_path="/tmp/wt"))
         assert "summary" not in result
         assert "output_file" not in result
-        assert set(result.keys()) == {"passed", "output"}
+        assert "passed" in result
+        assert "stdout" in result
+        assert "stderr" in result
+        assert "duration_seconds" in result
 
     @pytest.mark.anyio
     async def test_cross_validates_error_in_output(self, tool_ctx):
@@ -211,11 +213,11 @@ class TestTestCheck:
         assert result["passed"] is False
 
     @pytest.mark.anyio
-    async def test_cwa_empty_output_fails(self, tool_ctx):
-        """CWA: rc=0 but empty stdout -> passed=False (cannot confirm pass)."""
+    async def test_non_pytest_runner_empty_output_passes(self, tool_ctx):
+        """Non-pytest runner: rc=0, empty stdout, empty stderr -> passed=True (trust exit code)."""
         tool_ctx.runner.push(_make_result(0, "", ""))
         result = json.loads(await test_check(worktree_path="/tmp/wt"))
-        assert result["passed"] is False
+        assert result["passed"] is True
 
     @pytest.mark.anyio
     async def test_bare_q_clean_passes(self, tool_ctx):
@@ -261,12 +263,85 @@ class TestTestCheck:
                 f"{var} must not appear in env passed to subprocess by test_check"
             )
 
+    @pytest.mark.anyio
+    async def test_cargo_nextest_style_passes(self, tool_ctx):
+        """Non-pytest runner: rc=0, stderr-only output -> passed=True, stderr surfaced."""
+        tool_ctx.runner.push(_make_result(0, "", "PASS [0.5s] 5 tests"))
+        result = json.loads(await test_check(worktree_path="/tmp/wt"))
+        assert result["passed"] is True
+        assert "PASS [0.5s] 5 tests" in result["stderr"]
+
+    @pytest.mark.anyio
+    async def test_response_schema_includes_stderr(self, tool_ctx):
+        """test_check response contains passed, stdout, and stderr keys."""
+        tool_ctx.runner.push(_make_result(0, "= 10 passed =\n", ""))
+        result = json.loads(await test_check(worktree_path="/tmp/wt"))
+        assert set(result.keys()) == {"passed", "stdout", "stderr", "duration_seconds"}
+
+    @pytest.mark.anyio
+    async def test_pytest_failure_still_detected(self, tool_ctx):
+        """Regression guard: pytest failures are still detected after CWA removal."""
+        tool_ctx.runner.push(_make_result(0, "= 3 failed, 97 passed =\n", ""))
+        result = json.loads(await test_check(worktree_path="/tmp/wt"))
+        assert result["passed"] is False
+
+    @pytest.mark.anyio
+    async def test_test_check_response_includes_duration(self, tool_ctx):
+        """test_check JSON includes duration_seconds."""
+        tool_ctx.runner.push(_make_result(0, "= 10 passed =\n", ""))
+        raw = await test_check("/tmp/wt")
+        data = json.loads(raw)
+        assert "duration_seconds" in data
+        assert isinstance(data["duration_seconds"], float)
+        assert data["duration_seconds"] >= 0.0
+
+    @pytest.mark.anyio
+    async def test_test_check_response_includes_filter_stats(self, tool_ctx, monkeypatch):
+        """test_check JSON includes filter fields when sidecar is written."""
+        from pathlib import Path as _Path
+
+        from autoskillit.core.types import SubprocessResult, TerminationReason
+
+        sidecar_data = {
+            "filter_mode": "aggressive",
+            "tests_selected": 73,
+            "tests_deselected": 275,
+        }
+
+        async def fake_runner(command, *, cwd, timeout, env, **kwargs):
+            sidecar_path = env.get("AUTOSKILLIT_FILTER_STATS_FILE")
+            assert sidecar_path, "AUTOSKILLIT_FILTER_STATS_FILE must be injected into env"
+            _Path(sidecar_path).write_text(json.dumps(sidecar_data))
+            return SubprocessResult(
+                returncode=0,
+                stdout="= 73 passed =\n",
+                stderr="",
+                termination=TerminationReason.NATURAL_EXIT,
+                pid=12345,
+            )
+
+        monkeypatch.setattr(tool_ctx.tester, "_runner", fake_runner)
+        raw = await test_check("/tmp/wt")
+        data = json.loads(raw)
+        assert data["filter_mode"] == "aggressive"
+        assert data["tests_selected"] == 73
+        assert data["tests_deselected"] == 275
+
+    @pytest.mark.anyio
+    async def test_test_check_response_omits_filter_stats_when_absent(self, tool_ctx):
+        """Filter fields are absent (not null) from response when no filter active."""
+        tool_ctx.runner.push(_make_result(0, "= 10 passed =\n", ""))
+        raw = await test_check("/tmp/wt")
+        data = json.loads(raw)
+        assert "filter_mode" not in data
+        assert "tests_selected" not in data
+
 
 class TestResetGuard:
     """Marker-file-based reset guard for destructive operations."""
 
     @pytest.mark.anyio
-    async def test_reset_test_dir_refuses_without_marker(self, tool_ctx, tmp_path):
+    async def test_reset_test_dir_refuses_without_marker(self, tool_ctx_kitchen_open, tmp_path):
         """Directory without marker file is refused."""
         target = tmp_path / "workspace"
         target.mkdir()
@@ -276,7 +351,7 @@ class TestResetGuard:
         assert "marker" in result["error"].lower() or "reset guard" in result["error"].lower()
 
     @pytest.mark.anyio
-    async def test_reset_test_dir_allows_with_marker(self, tool_ctx, tmp_path):
+    async def test_reset_test_dir_allows_with_marker(self, tool_ctx_kitchen_open, tmp_path):
         """Directory with marker file is cleared."""
         target = tmp_path / "workspace"
         target.mkdir()
@@ -287,7 +362,7 @@ class TestResetGuard:
         assert not (target / "some_file.txt").exists()
 
     @pytest.mark.anyio
-    async def test_reset_test_dir_preserves_marker(self, tool_ctx, tmp_path):
+    async def test_reset_test_dir_preserves_marker(self, tool_ctx_kitchen_open, tmp_path):
         """Reset preserves the marker file so the workspace is reusable."""
         target = tmp_path / "workspace"
         target.mkdir()
@@ -298,30 +373,36 @@ class TestResetGuard:
         assert (target / ".autoskillit-workspace").is_file()
 
     @pytest.mark.anyio
-    async def test_reset_workspace_refuses_without_marker(self, tool_ctx, tmp_path):
+    async def test_reset_workspace_refuses_without_marker(self, tool_ctx_kitchen_open, tmp_path):
         """reset_workspace also checks for marker."""
-        tool_ctx.config = AutomationConfig(reset_workspace=ResetWorkspaceConfig(command=["true"]))
+        tool_ctx_kitchen_open.config = AutomationConfig(
+            reset_workspace=ResetWorkspaceConfig(command=["true"])
+        )
         target = tmp_path / "workspace"
         target.mkdir()
         result = json.loads(await reset_workspace(test_dir=str(target)))
         assert "error" in result
 
     @pytest.mark.anyio
-    async def test_reset_workspace_allows_with_marker(self, tool_ctx, tmp_path):
+    async def test_reset_workspace_allows_with_marker(self, tool_ctx_kitchen_open, tmp_path):
         """reset_workspace clears when marker is present."""
-        tool_ctx.config = AutomationConfig(reset_workspace=ResetWorkspaceConfig(command=["true"]))
+        tool_ctx_kitchen_open.config = AutomationConfig(
+            reset_workspace=ResetWorkspaceConfig(command=["true"])
+        )
         target = tmp_path / "workspace"
         target.mkdir()
         (target / ".autoskillit-workspace").write_text("# autoskillit workspace\n")
         (target / "file.txt").touch()
-        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
         result = json.loads(await reset_workspace(test_dir=str(target)))
         assert result["success"] is True
 
     @pytest.mark.anyio
-    async def test_custom_marker_name(self, tool_ctx, tmp_path):
+    async def test_custom_marker_name(self, tool_ctx_kitchen_open, tmp_path):
         """Config can override marker file name."""
-        tool_ctx.config = AutomationConfig(safety=SafetyConfig(reset_guard_marker=".my-workspace"))
+        tool_ctx_kitchen_open.config = AutomationConfig(
+            safety=SafetyConfig(reset_guard_marker=".my-workspace")
+        )
         target = tmp_path / "workspace"
         target.mkdir()
         (target / ".my-workspace").touch()
@@ -330,7 +411,7 @@ class TestResetGuard:
         assert result["success"] is True
 
     @pytest.mark.anyio
-    async def test_force_overrides_marker_check(self, tool_ctx, tmp_path):
+    async def test_force_overrides_marker_check(self, tool_ctx_kitchen_open, tmp_path):
         """force=True on reset_test_dir bypasses marker requirement."""
         target = tmp_path / "workspace"
         target.mkdir()
@@ -340,7 +421,7 @@ class TestResetGuard:
         assert result["success"] is True
 
     @pytest.mark.anyio
-    async def test_rejects_nonexistent(self, tool_ctx, tmp_path):
+    async def test_rejects_nonexistent(self, tool_ctx_kitchen_open, tmp_path):
         result = json.loads(await reset_test_dir(test_dir=str(tmp_path / "nope")))
         assert "does not exist" in result["error"]
 
@@ -366,226 +447,8 @@ class TestConfigDefaults:
         assert cfg.classify_fix.path_prefixes == []
 
 
-@pytest.mark.usefixtures("tool_ctx")
-class TestReadDb:
-    """Integration tests for read_db tool with real SQLite databases."""
-
-    @pytest.fixture
-    def sample_db(self, tmp_path):
-        """Create a sample SQLite database for testing."""
-        import sqlite3
-
-        db = tmp_path / "test.db"
-        conn = sqlite3.connect(str(db))
-        conn.execute("CREATE TABLE users (id INTEGER, name TEXT, age INTEGER)")
-        conn.execute("INSERT INTO users VALUES (1, 'Alice', 30)")
-        conn.execute("INSERT INTO users VALUES (2, 'Bob', 25)")
-        conn.execute("INSERT INTO users VALUES (3, 'Charlie', 35)")
-        conn.commit()
-        conn.close()
-        return db
-
-    @pytest.mark.anyio
-    async def test_simple_select(self, sample_db):
-        result = json.loads(await read_db(db_path=str(sample_db), query="SELECT * FROM users"))
-        assert result["row_count"] == 3
-        assert result["column_names"] == ["id", "name", "age"]
-        assert len(result["rows"]) == 3
-        assert result["truncated"] is False
-
-    @pytest.mark.anyio
-    async def test_parameterized_query(self, sample_db):
-        result = json.loads(
-            await read_db(
-                db_path=str(sample_db),
-                query="SELECT name FROM users WHERE age > ?",
-                params="[28]",
-            )
-        )
-        assert result["row_count"] == 2
-        names = [r["name"] for r in result["rows"]]
-        assert "Alice" in names
-        assert "Charlie" in names
-
-    @pytest.mark.anyio
-    async def test_named_params(self, sample_db):
-        result = json.loads(
-            await read_db(
-                db_path=str(sample_db),
-                query="SELECT name FROM users WHERE age = :age",
-                params='{"age": 25}',
-            )
-        )
-        assert result["row_count"] == 1
-        assert result["rows"][0]["name"] == "Bob"
-
-    @pytest.mark.anyio
-    async def test_empty_result(self, sample_db):
-        result = json.loads(
-            await read_db(
-                db_path=str(sample_db),
-                query="SELECT * FROM users WHERE age > 100",
-            )
-        )
-        assert result["row_count"] == 0
-        assert result["rows"] == []
-        assert result["column_names"] == ["id", "name", "age"]
-
-    @pytest.mark.anyio
-    async def test_rejects_insert(self, sample_db):
-        result = json.loads(
-            await read_db(
-                db_path=str(sample_db),
-                query="INSERT INTO users VALUES (4, 'Dave', 40)",
-            )
-        )
-        assert "error" in result
-        err_lower = result["error"].lower()
-        assert "forbidden" in err_lower or "select" in err_lower or "not authorized" in err_lower
-
-    @pytest.mark.anyio
-    async def test_rejects_drop(self, sample_db):
-        result = json.loads(
-            await read_db(
-                db_path=str(sample_db),
-                query="DROP TABLE users",
-            )
-        )
-        assert "error" in result
-
-    @pytest.mark.anyio
-    async def test_rejects_attach(self, sample_db):
-        result = json.loads(
-            await read_db(
-                db_path=str(sample_db),
-                query="ATTACH DATABASE ':memory:' AS other",
-            )
-        )
-        assert "error" in result
-
-    @pytest.mark.anyio
-    async def test_nonexistent_db(self, tmp_path):
-        result = json.loads(
-            await read_db(
-                db_path=str(tmp_path / "nonexistent.db"),
-                query="SELECT 1",
-            )
-        )
-        assert "error" in result
-        assert "does not exist" in result["error"] or "not found" in result["error"].lower()
-
-    @pytest.mark.anyio
-    async def test_not_a_file(self, tmp_path):
-        result = json.loads(
-            await read_db(
-                db_path=str(tmp_path),
-                query="SELECT 1",
-            )
-        )
-        assert "error" in result
-
-    @pytest.mark.anyio
-    async def test_invalid_params_json(self, sample_db):
-        result = json.loads(
-            await read_db(
-                db_path=str(sample_db),
-                query="SELECT * FROM users",
-                params="not json",
-            )
-        )
-        assert "error" in result
-        assert "params" in result["error"].lower()
-
-    @pytest.mark.anyio
-    async def test_gated_when_disabled(self, sample_db, tool_ctx):
-        from autoskillit.pipeline.gate import DefaultGateState
-
-        tool_ctx.gate = DefaultGateState(enabled=False)
-        result = json.loads(
-            await read_db(
-                db_path=str(sample_db),
-                query="SELECT 1",
-            )
-        )
-        assert result["success"] is False
-        assert result["is_error"] is True
-        assert "not enabled" in result["result"].lower()
-
-    @pytest.mark.anyio
-    async def test_max_rows_truncation(self, sample_db, tool_ctx):
-        tool_ctx.config = AutomationConfig(read_db=ReadDbConfig(max_rows=2))
-        result = json.loads(
-            await read_db(
-                db_path=str(sample_db),
-                query="SELECT * FROM users",
-            )
-        )
-        assert result["row_count"] == 2
-        assert result["truncated"] is True
-
-    @pytest.mark.anyio
-    async def test_blob_base64_encoding(self, tmp_path):
-        import base64
-        import sqlite3
-
-        db = tmp_path / "blob.db"
-        conn = sqlite3.connect(str(db))
-        conn.execute("CREATE TABLE data (id INTEGER, content BLOB)")
-        conn.execute("INSERT INTO data VALUES (1, ?)", (b"\x00\x01\x02\xff",))
-        conn.commit()
-        conn.close()
-        result = json.loads(
-            await read_db(
-                db_path=str(db),
-                query="SELECT * FROM data",
-            )
-        )
-        assert base64.b64decode(result["rows"][0]["content"]) == b"\x00\x01\x02\xff"
-
-    @pytest.mark.anyio
-    async def test_query_timeout(self, sample_db, tool_ctx):
-        tool_ctx.config = AutomationConfig(read_db=ReadDbConfig(timeout=1))
-        # Cross join 3 rows^18 = ~387 million rows — guaranteed to exceed 1s timeout
-        slow_query = "SELECT count(*) FROM " + ", ".join(f"users t{i}" for i in range(18))
-        result = json.loads(
-            await read_db(
-                db_path=str(sample_db),
-                query=slow_query,
-            )
-        )
-        assert "error" in result
-        assert "timeout" in result["error"].lower()
-
-    @pytest.mark.anyio
-    async def test_sql_error_returns_error(self, sample_db):
-        result = json.loads(
-            await read_db(
-                db_path=str(sample_db),
-                query="SELECT nonexistent_column FROM users",
-            )
-        )
-        assert "error" in result
-
-
 @pytest.mark.anyio
-async def test_tools_status_routes_through_db_reader(tool_ctx, tmp_path) -> None:
-    """read_db routes through ctx.db_reader.query()."""
-    import sqlite3 as _sqlite3
-
-    tool_ctx.db_reader = MagicMock()
-    tool_ctx.db_reader.query.return_value = {"rows": [], "count": 0}
-
-    db_path = str(tmp_path / "test.db")
-    # Create an empty sqlite db so path-exists check passes
-    _sqlite3.connect(db_path).close()
-    await read_db(db_path, "SELECT 1")
-    tool_ctx.db_reader.query.assert_called_once()
-    call_kwargs = tool_ctx.db_reader.query.call_args
-    assert "SELECT 1" in str(call_kwargs)
-
-
-@pytest.mark.anyio
-async def test_reset_test_dir_returns_partial_failure_json(tool_ctx, tmp_path):
+async def test_reset_test_dir_returns_partial_failure_json(tool_ctx_kitchen_open, tmp_path):
     """reset_test_dir returns structured JSON on partial failure."""
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -597,7 +460,7 @@ async def test_reset_test_dir_returns_partial_failure_json(tool_ctx, tmp_path):
         failed=[("bad_dir", "PermissionError: denied")],
         skipped=[],
     )
-    tool_ctx.workspace_mgr = type(
+    tool_ctx_kitchen_open.workspace_mgr = type(
         "MockWM", (), {"delete_contents": lambda self, d, preserve=None: mock_result}
     )()
     result = json.loads(await reset_test_dir(test_dir=str(workspace), force=False))
@@ -608,22 +471,24 @@ async def test_reset_test_dir_returns_partial_failure_json(tool_ctx, tmp_path):
 
 
 @pytest.mark.anyio
-async def test_reset_workspace_returns_partial_failure_json(tool_ctx, tmp_path):
+async def test_reset_workspace_returns_partial_failure_json(tool_ctx_kitchen_open, tmp_path):
     """reset_workspace returns structured JSON on partial failure."""
-    tool_ctx.config = AutomationConfig(reset_workspace=ResetWorkspaceConfig(command=["true"]))
+    tool_ctx_kitchen_open.config = AutomationConfig(
+        reset_workspace=ResetWorkspaceConfig(command=["true"])
+    )
 
     workspace = tmp_path / "workspace"
     workspace.mkdir(parents=True)
     (workspace / ".autoskillit-workspace").write_text("# marker\n")
 
-    tool_ctx.runner.push(_make_result(0, "", ""))
+    tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
 
     mock_result = CleanupResult(
         deleted=["ok_file"],
         failed=[("bad_dir", "PermissionError: denied")],
         skipped=[".cache"],
     )
-    tool_ctx.workspace_mgr = type(
+    tool_ctx_kitchen_open.workspace_mgr = type(
         "MockWM", (), {"delete_contents": lambda self, d, preserve=None: mock_result}
     )()
     result = json.loads(await reset_workspace(test_dir=str(workspace)))
@@ -653,15 +518,15 @@ class TestResetTestDirTiming:
     """reset_test_dir records wall-clock timing when step_name is provided."""
 
     @pytest.mark.anyio
-    async def test_reset_test_dir_step_name_records_timing(self, tool_ctx, tmp_path):
+    async def test_reset_test_dir_step_name_records_timing(self, tool_ctx_kitchen_open, tmp_path):
         marker = tmp_path / ".autoskillit-workspace"
         marker.write_text("")
         mock_result = CleanupResult(deleted=[], failed=[], skipped=[])
-        tool_ctx.workspace_mgr = type(
+        tool_ctx_kitchen_open.workspace_mgr = type(
             "MockWM", (), {"delete_contents": lambda self, d, preserve=None: mock_result}
         )()
         await reset_test_dir(str(tmp_path), step_name="reset")
-        report = tool_ctx.timing_log.get_report()
+        report = tool_ctx_kitchen_open.timing_log.get_report()
         assert any(e["step_name"] == "reset" for e in report)
 
     @pytest.mark.anyio

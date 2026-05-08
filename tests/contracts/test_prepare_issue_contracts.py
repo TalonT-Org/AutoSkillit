@@ -161,7 +161,8 @@ def test_prepare_issue_dedup_shows_all_candidates():
     dedup_start = text.find("### Step 4: Dedup Check")
     assert dedup_start != -1, "SKILL.md must contain Step 4 dedup section"
     dedup_end = text.find("### Step 4a:", dedup_start)
-    dedup_section = text[dedup_start:dedup_end] if dedup_end != -1 else text[dedup_start:]
+    assert dedup_end != -1, "Step 4a section not found"
+    dedup_section = text[dedup_start:dedup_end]
     # The option-menu block must use the [1]–[{N}] indexed format within the dedup section
     assert "[1]" in dedup_section and "[{N}]" in dedup_section, (
         "Dedup must display candidates in [1]–[{N}] indexed format within Step 4"
@@ -188,7 +189,8 @@ def test_prepare_issue_dedup_extend_runs_triage():
     dedup_start = text.find("### Step 4: Dedup Check")
     assert dedup_start != -1, "SKILL.md must contain Step 4 dedup section"
     dedup_end = text.find("### Step 4a:", dedup_start)
-    dedup_section = text[dedup_start:dedup_end] if dedup_end != -1 else text[dedup_start:]
+    assert dedup_end != -1, "Step 4a section not found"
+    dedup_section = text[dedup_start:dedup_end]
     assert "extend" in dedup_section.lower(), "Step 4 dedup section must document the extend path"
     # The extend path within the dedup section must reference continuing to Step 6
     has_triage_ref = (
@@ -208,3 +210,366 @@ def test_prepare_issue_dedup_bypass_with_issue_flag_still_documented():
     # Both the interface docs and the step header must reference the bypass
     assert "--issue N" in text and "issue_number" in text
     assert "skip" in text.lower() or "bypass" in text.lower() or "skip if" in text.lower()
+
+
+# ---------------------------------------------------------------------------
+# VALIDATED REPORT: Detection and handling tests
+# ---------------------------------------------------------------------------
+
+
+def test_prepare_issue_detects_validated_audit_report_input():
+    """Skill must document detection of 'validated: true' marker for validated report inputs."""
+    text = SKILL_MD.read_text()
+    assert "validated: true" in text, (
+        "prepare-issue SKILL.md must document detecting the 'validated: true' marker"
+    )
+    assert "is_validated_report" in text, (
+        "prepare-issue must use 'is_validated_report' flag to gate validated-report behavior"
+    )
+
+
+def test_prepare_issue_skips_requirements_for_validated_report():
+    """Step 7a must explicitly skip requirements generation when is_validated_report is true."""
+    text = SKILL_MD.read_text()
+    # Find the requirements generation step
+    req_step_pos = text.find("Step 7a")
+    assert req_step_pos != -1, "Step 7a must exist in the skill"
+    req_step_text = text[req_step_pos : req_step_pos + 600]
+    assert "is_validated_report" in req_step_text, (
+        "Step 7a must reference is_validated_report to gate requirements generation"
+    )
+    skip_keywords = ["skip", "Skip"]
+    assert any(kw in req_step_text for kw in skip_keywords), (
+        "Step 7a must document skipping requirements generation for validated reports"
+    )
+
+
+def test_prepare_issue_excludes_contested_refs_from_validated_report_body():
+    """Skill must document removing the contested findings reference line from the issue body."""
+    text = SKILL_MD.read_text()
+    assert "contested_findings_" in text, (
+        "Skill must reference 'contested_findings_' in the strip rules for validated report body"
+    )
+    # Anchor: strip rules must appear after validated report handling is introduced
+    validated_pos = text.find("is_validated_report")
+    assert validated_pos != -1
+    body_section = text[validated_pos:]
+    assert "contested" in body_section.lower(), (
+        "Contested findings exclusion must be documented within the validated report handling"
+        " section"
+    )
+
+
+def test_prepare_issue_strips_artifact_paths_from_validated_report_body():
+    """Skill must document stripping 'Original report:' and artifact paths from issue body."""
+    text = SKILL_MD.read_text()
+    validated_pos = text.find("is_validated_report")
+    assert validated_pos != -1
+    body_section = text[validated_pos:]
+    assert "Original report" in body_section, (
+        "Skill must document removing the 'Original report:' line (artifact path) from the body"
+    )
+
+
+# ---------------------------------------------------------------------------
+# DETERMINISTIC STRIP: New tests for validated-report strip completeness
+# ---------------------------------------------------------------------------
+
+
+def test_prepare_issue_does_not_keep_findings_with_exceptions():
+    """## Findings with Exceptions must be stripped, not kept."""
+    text = SKILL_MD.read_text()
+    # Confirm the section name is referenced (validates the test is meaningful)
+    assert "Findings with Exceptions" in text, (
+        "Sanity: 'Findings with Exceptions' not found at all in SKILL.md"
+    )
+    # No line in the file may simultaneously contain 'Keep' and 'Findings with Exceptions'
+    for line in text.splitlines():
+        assert not ("Keep" in line and "Findings with Exceptions" in line), (
+            f"prepare-issue must NOT Keep '## Findings with Exceptions'. Offending line: {line!r}"
+        )
+
+
+def test_prepare_issue_strips_contested_table_rows():
+    """prepare-issue must explicitly strip '| CONTESTED |' table rows."""
+    text = SKILL_MD.read_text()
+    validated_pos = text.find("is_validated_report")
+    assert validated_pos != -1, "Sanity: 'is_validated_report' not found"
+    body_section = text[validated_pos:]
+    assert "| CONTESTED |" in body_section, (
+        "prepare-issue validated-report section must reference '| CONTESTED |' "
+        "as a strip target (e.g. grep -v or Remove rule)"
+    )
+
+
+def test_prepare_issue_strips_exception_warranted_table_rows():
+    """prepare-issue must explicitly strip '| VALID BUT EXCEPTION WARRANTED |' rows."""
+    text = SKILL_MD.read_text()
+    validated_pos = text.find("is_validated_report")
+    assert validated_pos != -1, "Sanity: 'is_validated_report' not found"
+    body_section = text[validated_pos:]
+    assert (
+        "VALID BUT EXCEPTION WARRANTED" in body_section or "EXCEPTION WARRANTED" in body_section
+    ), (
+        "prepare-issue validated-report section must reference 'VALID BUT EXCEPTION WARRANTED' "
+        "as a strip target"
+    )
+
+
+def test_prepare_issue_validated_report_uses_body_file():
+    """prepare-issue must use --body-file (not inline --body) for validated report creation."""
+    text = SKILL_MD.read_text()
+    validated_pos = text.find("is_validated_report")
+    assert validated_pos != -1, "Sanity: 'is_validated_report' not found"
+    body_section = text[validated_pos:]
+    # --body-file must appear in the validated-report section
+    assert "--body-file" in body_section, (
+        "prepare-issue must use 'gh issue create --body-file' for validated-report input, "
+        "not inline '--body'"
+    )
+    # The temp file must live under AUTOSKILLIT_TEMP
+    assert "AUTOSKILLIT_TEMP" in body_section and "issue_body_" in body_section, (
+        "prepare-issue must write the issue body to "
+        "{{AUTOSKILLIT_TEMP}}/prepare-issue/issue_body_*.md before calling gh issue create"
+    )
+
+
+def test_prepare_issue_never_constraint_prohibits_inline_body():
+    """CRITICAL CONSTRAINTS must explicitly prohibit inline --body for validated-report path."""
+    text = SKILL_MD.read_text()
+    # Find the NEVER block within Critical Constraints
+    never_pos = text.find("**NEVER:**")
+    assert never_pos != -1, "Sanity: '**NEVER:**' block not found"
+    # Find end of NEVER block (next **ALWAYS:** or end of constraints section)
+    always_pos = text.find("**ALWAYS:**", never_pos)
+    never_block = (
+        text[never_pos:always_pos] if always_pos != -1 else text[never_pos : never_pos + 800]
+    )
+    lower = never_block.lower()
+    assert "--body" in never_block and "inline" in lower, (
+        "prepare-issue NEVER block must prohibit inline '--body' for validated-report "
+        "issue creation. Add: 'Use --body inline for the path — always use --body-file'"
+    )
+
+
+def test_prepare_issue_requirements_append_uses_body_file():
+    """prepare-issue Step 7a (requirements append via gh issue edit) must use --body-file."""
+    import re
+
+    text = SKILL_MD.read_text()
+    # Ensure no gh issue edit call uses inline --body with shell substitution ($(...))
+    inline_pattern = re.compile(r'gh issue edit[^\n]+--body\s+"\$\(')
+    matches = inline_pattern.findall(text)
+    assert not matches, (
+        "prepare-issue 'gh issue edit' (requirements append) must use --body-file, "
+        "not inline --body shell substitution"
+    )
+
+
+def test_prepare_issue_no_tmp_paths():
+    """prepare-issue must not use /tmp/ paths — all temp files go in {{AUTOSKILLIT_TEMP}}."""
+    text = SKILL_MD.read_text()
+    assert "/tmp/" not in text, (
+        "prepare-issue uses /tmp/ path(s). All temp files must live in "
+        "{{AUTOSKILLIT_TEMP}}/prepare-issue/ per project convention"
+    )
+
+
+def test_prepare_issue_no_issue_comment():
+    text = SKILL_MD.read_text()
+    assert "gh issue comment" not in text, (
+        "Comment option must be removed; always edit the issue body"
+    )
+
+
+# ---------------------------------------------------------------------------
+# STATE-AWARE DEDUP: Issue #402 — lifecycle-aware extend eligibility
+# ---------------------------------------------------------------------------
+
+
+def test_dedup_searches_all_states():
+    """Step 4 dedup must search all issue states, not only open."""
+    text = SKILL_MD.read_text()
+    dedup_start = text.find("### Step 4: Dedup Check")
+    assert dedup_start != -1, "Step 4 dedup section not found"
+    dedup_end = text.find("### Step 4a:", dedup_start)
+    assert dedup_end != -1, "Step 4a section not found"
+    dedup_section = text[dedup_start:dedup_end]
+    # --state open must not be the only state directive in the dedup section
+    assert "--state open" not in dedup_section, (
+        "Dedup search must not be limited to --state open; must use --state all "
+        "or a combined open+closed search to surface closed duplicate candidates"
+    )
+    assert "--state all" in dedup_section, (
+        "Dedup search must explicitly use --state all to surface closed duplicate candidates"
+    )
+
+
+def test_dedup_gh_issue_list_includes_labels_field():
+    """gh issue list in Step 4 must request the labels field."""
+    text = SKILL_MD.read_text()
+    dedup_start = text.find("### Step 4: Dedup Check")
+    assert dedup_start != -1, "Step 4 dedup section not found"
+    dedup_end = text.find("### Step 4a:", dedup_start)
+    assert dedup_end != -1, "Step 4a section not found"
+    dedup_section = text[dedup_start:dedup_end]
+    assert "labels" in dedup_section, (
+        "gh issue list in Step 4 must include 'labels' in --json fields to enable "
+        "extend-eligibility classification"
+    )
+
+
+def test_dedup_gh_issue_list_includes_state_field():
+    """gh issue list in Step 4 must request the state field."""
+    text = SKILL_MD.read_text()
+    dedup_start = text.find("### Step 4: Dedup Check")
+    assert dedup_start != -1, "Step 4 dedup section not found"
+    dedup_end = text.find("### Step 4a:", dedup_start)
+    assert dedup_end != -1, "Step 4a section not found"
+    dedup_section = text[dedup_start:dedup_end]
+    # 'state' must appear as a --json field (ordering-independent)
+    assert re.search(r"--json\s+[^\n]*\bstate\b", dedup_section), (
+        "gh issue list in Step 4 must include 'state' in --json fields"
+    )
+
+
+def test_dedup_informational_marker_documented():
+    """Step 4 dedup display must document the [—] marker for non-extend-eligible candidates."""
+    text = SKILL_MD.read_text()
+    dedup_start = text.find("### Step 4: Dedup Check")
+    assert dedup_start != -1, "Step 4 dedup section not found"
+    dedup_end = text.find("### Step 4a:", dedup_start)
+    assert dedup_end != -1, "Step 4a section not found"
+    dedup_section = text[dedup_start:dedup_end]
+    assert "[—]" in dedup_section, (
+        "Step 4 dedup display must include the [—] marker for informational-only "
+        "(non-extend-eligible) candidates"
+    )
+
+
+def test_dedup_extend_not_offered_for_in_progress():
+    """Step 4 must document that in-progress labeled issues are shown but not extend-eligible."""
+    text = SKILL_MD.read_text()
+    dedup_start = text.find("### Step 4: Dedup Check")
+    assert dedup_start != -1, "Step 4 dedup section not found"
+    dedup_end = text.find("### Step 4a:", dedup_start)
+    assert dedup_end != -1, "Step 4a section not found"
+    dedup_section = text[dedup_start:dedup_end]
+    assert "in-progress" in dedup_section, (
+        "Step 4 must document that issues with the in-progress label are shown "
+        "as dedup candidates but are not extend-eligible"
+    )
+
+
+def test_dedup_extend_not_offered_for_staged():
+    """Step 4 must document that staged labeled issues are shown but not extend-eligible."""
+    text = SKILL_MD.read_text()
+    dedup_start = text.find("### Step 4: Dedup Check")
+    assert dedup_start != -1, "Step 4 dedup section not found"
+    dedup_end = text.find("### Step 4a:", dedup_start)
+    assert dedup_end != -1, "Step 4a section not found"
+    dedup_section = text[dedup_start:dedup_end]
+    assert "staged" in dedup_section, (
+        "Step 4 must document that issues with the staged label are shown "
+        "as dedup candidates but are not extend-eligible"
+    )
+
+
+def test_dedup_extend_not_offered_for_closed():
+    """Step 4 must document that closed issues are shown but not extend-eligible."""
+    text = SKILL_MD.read_text()
+    dedup_start = text.find("### Step 4: Dedup Check")
+    assert dedup_start != -1, "Step 4 dedup section not found"
+    dedup_end = text.find("### Step 4a:", dedup_start)
+    assert dedup_end != -1, "Step 4a section not found"
+    dedup_section = text[dedup_start:dedup_end]
+    assert "closed" in dedup_section.lower(), (
+        "Step 4 must document that closed issues are shown as dedup candidates "
+        "but are not extend-eligible"
+    )
+
+
+def test_dedup_state_annotation_per_candidate():
+    """Step 4 candidate display must show a state annotation per candidate."""
+    text = SKILL_MD.read_text()
+    dedup_start = text.find("### Step 4: Dedup Check")
+    assert dedup_start != -1, "Step 4 dedup section not found"
+    dedup_end = text.find("### Step 4a:", dedup_start)
+    assert dedup_end != -1, "Step 4a section not found"
+    dedup_section = text[dedup_start:dedup_end]
+    # The display block must include state annotations like (open), (in-progress), etc.
+    has_annotation = (
+        "(open)" in dedup_section
+        or "(in-progress)" in dedup_section
+        or "(closed)" in dedup_section
+    )
+    assert has_annotation, (
+        "Step 4 candidate display must show per-candidate state annotations "
+        "such as (open), (in-progress), or (closed)"
+    )
+
+
+def test_dedup_closed_issues_stricter_relevance():
+    """Step 4 must document stricter relevance criteria for closed issue candidates."""
+    text = SKILL_MD.read_text()
+    dedup_start = text.find("### Step 4: Dedup Check")
+    assert dedup_start != -1, "Step 4 dedup section not found"
+    dedup_end = text.find("### Step 4a:", dedup_start)
+    assert dedup_end != -1, "Step 4a section not found"
+    dedup_section = text[dedup_start:dedup_end]
+    # Must reference stricter matching for closed issues
+    stricter_signals = ["stricter", "higher threshold", "multiple keyword", "2+", "two or more"]
+    assert any(s in dedup_section.lower() for s in stricter_signals), (
+        "Step 4 must document applying stricter relevance criteria for closed issue "
+        "candidates before showing them (e.g., require 2+ keyword set matches)"
+    )
+
+
+# ---------------------------------------------------------------------------
+# TRIAGE MISCLASSIFICATION: Gap 1a — validated report shortcut in Step 6
+# ---------------------------------------------------------------------------
+
+
+def test_step6_validated_report_shortcut_to_implementation():
+    """Step 6 must short-circuit to implementation when is_validated_report is true."""
+    text = SKILL_MD.read_text(encoding="utf-8")
+    step6_pos = text.find("### Step 6")
+    assert step6_pos != -1, "Step 6 not found"
+    step7_pos = text.find("### Step 7", step6_pos)
+    step6_section = (
+        text[step6_pos:step7_pos] if step7_pos != -1 else text[step6_pos : step6_pos + 2000]
+    )
+    assert "is_validated_report" in step6_section, (
+        "Step 6 must check is_validated_report and short-circuit to implementation route"
+    )
+    # Must reference implementation in the validated-report shortcut, not only remediation
+    shortcut_idx = step6_section.find("is_validated_report")
+    assert shortcut_idx != -1, "is_validated_report not found in Step 6 section"
+    next_heading = step6_section.find("###", shortcut_idx)
+    shortcut_block = (
+        step6_section[shortcut_idx:next_heading]
+        if next_heading != -1
+        else step6_section[shortcut_idx:]
+    )
+    assert "implementation" in shortcut_block, (
+        "Step 6 is_validated_report shortcut must assign route=implementation"
+    )
+
+
+def test_step6_heuristic_table_has_audit_signal_row():
+    """Step 6 heuristic table must include an explicit row for validated audit reports."""
+    text = SKILL_MD.read_text()
+    step6_pos = text.find("### Step 6")
+    assert step6_pos != -1, "Step 6 not found"
+    step7_pos = text.find("### Step 7", step6_pos)
+    step6_section = (
+        text[step6_pos:step7_pos] if step7_pos != -1 else text[step6_pos : step6_pos + 2000]
+    )
+    # Either the shortcut or an explicit audit row must map validated reports to implementation
+    has_audit_implementation_signal = (
+        "audit" in step6_section.lower() and "implementation" in step6_section
+    )
+    assert has_audit_implementation_signal, (
+        "Step 6 must document that validated audit reports (no tracebacks, structural scope) "
+        "route to implementation — not fall through to the large/ambiguous-scope remediation row"
+    )

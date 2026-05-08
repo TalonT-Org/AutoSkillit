@@ -6,11 +6,11 @@ from autoskillit.core.types import SubprocessResult, TerminationReason
 
 
 def test_tool_ctx_provides_isolated_gate(tool_ctx):
-    """tool_ctx fixture provides a ToolContext with gate enabled."""
+    """tool_ctx fixture provides a ToolContext with gate closed (matching production)."""
     from autoskillit.pipeline.gate import DefaultGateState
 
     assert isinstance(tool_ctx.gate, DefaultGateState)
-    assert tool_ctx.gate.enabled is True
+    assert tool_ctx.gate.enabled is False
 
 
 def test_tool_ctx_provides_isolated_audit(tool_ctx):
@@ -25,7 +25,7 @@ def test_tool_ctx_provides_isolated_token_log(tool_ctx):
 
 async def test_mock_subprocess_runner_push_and_pop(tmp_path: Path):
     """MockSubprocessRunner.push() queues results, __call__ pops in order."""
-    from tests.conftest import MockSubprocessRunner
+    from tests.fakes import MockSubprocessRunner
 
     runner = MockSubprocessRunner()
     r1 = SubprocessResult(0, "out1", "", TerminationReason.NATURAL_EXIT, 100)
@@ -41,7 +41,7 @@ async def test_mock_subprocess_runner_push_and_pop(tmp_path: Path):
 
 async def test_mock_subprocess_runner_default_when_empty(tmp_path: Path):
     """MockSubprocessRunner returns a zero-exit default when queue is empty."""
-    from tests.conftest import MockSubprocessRunner
+    from tests.fakes import MockSubprocessRunner
 
     runner = MockSubprocessRunner()
     result = await runner(["cmd"], cwd=tmp_path, timeout=30.0)
@@ -99,7 +99,7 @@ def test_structlog_does_not_write_to_stdout_in_tests(capsys):
     writes to sys.stdout. The autouse _structlog_to_null fixture must intercept
     all log output before it reaches stdout.
     """
-    from autoskillit.execution.quota import _log as quota_log
+    from autoskillit.execution.quota import logger as quota_log
 
     quota_log.warning("test_sentinel_should_not_reach_stdout", probe=True)
     captured = capsys.readouterr()
@@ -133,3 +133,210 @@ def test_tool_ctx_log_dir_is_isolated_from_production(tool_ctx):
     xdg = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
     production_path = os.path.join(xdg, "autoskillit", "logs")
     assert not os.path.abspath(log_dir).startswith(production_path)
+
+
+def test_minimal_ctx_imports_only_core_pipeline_and_config():
+    """minimal_ctx fixture must only import from autoskillit.core, .pipeline, and .config."""
+    import ast
+    from pathlib import Path
+
+    conftest_path = Path(__file__).parent / "conftest.py"
+    tree = ast.parse(conftest_path.read_text(), filename=str(conftest_path))
+
+    func = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "minimal_ctx":
+            func = node
+            break
+    assert func is not None, "minimal_ctx fixture not found in conftest.py"
+
+    ALLOWED_PREFIXES = ("autoskillit.core", "autoskillit.pipeline", "autoskillit.config")
+
+    violations = []
+    for node in ast.walk(func):
+        if (
+            isinstance(node, ast.ImportFrom)
+            and node.module
+            and node.module.startswith("autoskillit.")
+        ):
+            if not any(node.module.startswith(p) for p in ALLOWED_PREFIXES):
+                violations.append(node.module)
+
+    assert not violations, (
+        f"minimal_ctx imports from forbidden modules: {violations}. "
+        f"Only autoskillit.core, autoskillit.pipeline, and autoskillit.config are allowed."
+    )
+
+
+def test_minimal_ctx_has_no_server_factory_dependency():
+    """minimal_ctx must not import from autoskillit.server or reference make_context."""
+    import ast
+    from pathlib import Path
+
+    conftest_path = Path(__file__).parent / "conftest.py"
+    tree = ast.parse(conftest_path.read_text(), filename=str(conftest_path))
+
+    func = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "minimal_ctx":
+            func = node
+            break
+    assert func is not None, "minimal_ctx fixture not found in conftest.py"
+
+    for node in ast.walk(func):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            assert not node.module.startswith("autoskillit.server"), (
+                f"minimal_ctx imports from server module: {node.module}"
+            )
+            names = [alias.name for alias in node.names]
+            assert "make_context" not in names, (
+                "minimal_ctx imports make_context — use direct ToolContext construction"
+            )
+
+
+def test_clear_headless_env_no_server_import():
+    """_clear_headless_env must not import from autoskillit.server."""
+    import ast
+    from pathlib import Path
+
+    conftest_path = Path(__file__).parent / "conftest.py"
+    tree = ast.parse(conftest_path.read_text(), filename=str(conftest_path))
+
+    func = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "_clear_headless_env":
+            func = node
+            break
+    assert func is not None, "_clear_headless_env fixture not found in conftest.py"
+
+    for node in ast.walk(func):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            assert not node.module.startswith("autoskillit.server"), (
+                f"_clear_headless_env imports from server module: {node.module}. "
+                f"MCP tag resets belong in tests/server/conftest.py."
+            )
+
+
+def test_minimal_ctx_provides_isolated_gate(minimal_ctx):
+    """minimal_ctx fixture provides a ToolContext with gate closed (matching production)."""
+    from autoskillit.pipeline.gate import DefaultGateState
+
+    assert isinstance(minimal_ctx.gate, DefaultGateState)
+    assert minimal_ctx.gate.enabled is False
+
+
+def test_is_test_feature_enabled_reads_project_config(monkeypatch):
+    """When AUTOSKILLIT_TEST_FEATURES is unset, fleet resolves True via experimental_enabled."""
+    monkeypatch.delenv("AUTOSKILLIT_TEST_FEATURES", raising=False)
+    from tests.conftest import _is_test_feature_enabled, _resolve_test_config
+
+    _resolve_test_config.cache_clear()
+    try:
+        result = _is_test_feature_enabled("fleet", env_val=None)
+        assert result is True
+    finally:
+        _resolve_test_config.cache_clear()
+
+
+def test_is_test_feature_enabled_dynaconf_env_overrides(monkeypatch):
+    """AUTOSKILLIT_FEATURES__FLEET=false overrides experimental_enabled in test resolution."""
+    monkeypatch.delenv("AUTOSKILLIT_TEST_FEATURES", raising=False)
+    monkeypatch.setenv("AUTOSKILLIT_FEATURES__FLEET", "false")
+    from tests.conftest import _is_test_feature_enabled, _resolve_test_config
+
+    _resolve_test_config.cache_clear()
+    try:
+        result = _is_test_feature_enabled("fleet", env_val=None)
+        assert result is False
+    finally:
+        _resolve_test_config.cache_clear()
+
+
+def test_is_test_feature_enabled_respects_experimental_enabled(monkeypatch):
+    """EXPERIMENTAL feature resolves True via experimental_enabled=True in config."""
+    import autoskillit.core.types._type_constants as tc
+    from autoskillit.core.types._type_constants import FeatureDef
+    from autoskillit.core.types._type_enums import FeatureLifecycle
+    from tests.conftest import _is_test_feature_enabled, _resolve_test_config
+
+    monkeypatch.delenv("AUTOSKILLIT_TEST_FEATURES", raising=False)
+    exp_feat = FeatureDef(
+        lifecycle=FeatureLifecycle.EXPERIMENTAL,
+        description="test",
+        tool_tags=frozenset(),
+        skill_categories=frozenset(),
+        import_package=None,
+        default_enabled=False,
+    )
+    monkeypatch.setitem(tc.FEATURE_REGISTRY, "conftest_test_exp", exp_feat)
+    _resolve_test_config.cache_clear()
+    try:
+        # defaults.yaml has experimental_enabled=true, so EXPERIMENTAL features are enabled
+        result = _is_test_feature_enabled("conftest_test_exp", env_val=None)
+        assert result is True
+    finally:
+        _resolve_test_config.cache_clear()
+
+
+def test_is_test_feature_enabled_disabled_lifecycle_always_false(monkeypatch):
+    """_is_test_feature_enabled returns False for DISABLED feature regardless of config."""
+    import autoskillit.core.types._type_constants as tc
+    from autoskillit.core.types._type_constants import FeatureDef
+    from autoskillit.core.types._type_enums import FeatureLifecycle
+    from tests.conftest import _is_test_feature_enabled, _resolve_test_config
+
+    monkeypatch.delenv("AUTOSKILLIT_TEST_FEATURES", raising=False)
+    disabled_feat = FeatureDef(
+        lifecycle=FeatureLifecycle.DISABLED,
+        description="disabled test",
+        tool_tags=frozenset(),
+        skill_categories=frozenset(),
+        import_package=None,
+    )
+    monkeypatch.setitem(tc.FEATURE_REGISTRY, "conftest_test_disabled", disabled_feat)
+    _resolve_test_config.cache_clear()
+    try:
+        result = _is_test_feature_enabled("conftest_test_disabled", env_val=None)
+        assert result is False
+    finally:
+        _resolve_test_config.cache_clear()
+
+
+def test_no_per_test_config_cache_clear_fixture():
+    """The function-scoped autouse fixture that cleared _resolve_test_config cache
+    after every test has been removed. Verify it no longer exists in conftest."""
+    import ast
+    from pathlib import Path
+
+    import pytest
+
+    conftest_path = Path(__file__).resolve().parent / "conftest.py"
+    assert conftest_path.exists(), f"conftest.py not found at {conftest_path}"
+    tree = ast.parse(conftest_path.read_text())
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "_clear_resolve_test_config_cache":
+            for decorator in node.decorator_list:
+                if isinstance(decorator, ast.Call):
+                    for kw in decorator.keywords:
+                        if kw.arg == "scope" and isinstance(kw.value, ast.Constant):
+                            if kw.value.value == "session":
+                                return  # session-scoped is ok
+            pytest.fail(
+                "_clear_resolve_test_config_cache still exists as a non-session fixture. "
+                "It should be removed to stop per-test cache thrash."
+            )
+
+
+def test_resolve_test_config_cache_persists_across_calls():
+    """_resolve_test_config LRU cache should persist — calling it twice returns the same object."""
+    from tests.conftest import _resolve_test_config
+
+    _resolve_test_config.cache_clear()
+    try:
+        result1 = _resolve_test_config()
+        result2 = _resolve_test_config()
+        assert result1 is result2, "LRU cache should return the same object on repeated calls"
+        info = _resolve_test_config.cache_info()
+        assert info.hits >= 1, "Expected at least 1 cache hit"
+    finally:
+        _resolve_test_config.cache_clear()

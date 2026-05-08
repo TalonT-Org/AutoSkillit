@@ -1,0 +1,185 @@
+name: smoke-test
+autoskillit_version: "0.7.50"
+description: >-
+  Lightweight end-to-end sanity check — clones the repository, creates an
+  isolated branch, implements a trivial micro-task (smoke_canary), runs the
+  full project test suite, pushes to remote, opens a GitHub PR, and
+  immediately closes it without merging.
+summary: >-
+  clone > create_branch > setup > implement_task > run_tests >
+  push_branch > create_pr > close_pr > delete_remote_branch >
+  register_clone_success > done
+
+ingredients:
+  source_dir:
+    description: >-
+      Path to the git repository workspace. Must have a GitHub remote configured
+      and an authenticated gh CLI available.
+    required: false
+    default: ""
+  base_branch:
+    description: Base branch for the PR target
+    default: ""
+
+kitchen_rules:
+  - >-
+    NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
+    Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the orchestrator. All file
+    operations are delegated through run_skill or run_cmd.
+  - >-
+    Route to escalate or fail_delete_remote_branch on any failure — never investigate
+    or fix directly from the orchestrator. This is a sanity check, not a stress test:
+    no retries, no fix loops.
+  - >-
+    SOURCE ISOLATION: After clone_repo returns, the source_dir is strictly
+    off-limits. Never run any command in source_dir — no git checkout, git
+    fetch, git reset, git pull, run_cmd, run_skill, or any other operation.
+    All work — skill invocations, git operations, file reads — happens
+    exclusively in the clone (work_dir).
+
+steps:
+  clone:
+    tool: clone_repo
+    with:
+      source_dir: "${{ inputs.source_dir }}"
+      run_name: "smoke"
+      branch: "${{ inputs.base_branch }}"
+    capture:
+      work_dir: "${{ result.clone_path }}"
+      remote_url: "${{ result.remote_url }}"
+    on_success: create_branch
+    on_failure: escalate
+
+  create_branch:
+    tool: create_unique_branch
+    with:
+      base_branch_name: "smoke/canary"
+      cwd: "${{ context.work_dir }}"
+      step_name: "create_branch"
+    capture:
+      branch_name: "${{ result.branch_name }}"
+    on_success: setup
+    on_failure: register_clone_failure
+    note: >-
+      Creates a unique smoke/canary[-N] branch (collision-safe via ls-remote).
+
+  setup:
+    tool: run_cmd
+    with:
+      cmd: "task install-worktree"
+      cwd: "${{ context.work_dir }}"
+      step_name: "setup"
+    on_success: implement_task
+    on_failure: register_clone_failure
+
+  implement_task:
+    tool: run_skill
+    with:
+      skill_command: >-
+        /autoskillit:smoke-task In ${{ context.work_dir }}: (1) open
+        src/autoskillit/smoke_utils.py and append a blank line followed by the
+        function 'def smoke_canary() -> bool:' with body
+        '    """Smoke-test sentinel — always returns True."""' and '    return True';
+        (2) create tests/test_smoke_canary.py containing exactly:
+        'from autoskillit.smoke_utils import smoke_canary' blank line blank line
+        'def test_smoke_canary() -> None:' '    assert smoke_canary() is True';
+        (3) run git add src/autoskillit/smoke_utils.py tests/test_smoke_canary.py;
+        (4) run git commit -m 'smoke: add smoke_canary()'.
+      cwd: "${{ context.work_dir }}"
+    on_success: run_tests
+    on_failure: register_clone_failure
+
+  run_tests:
+    tool: run_cmd
+    with:
+      cmd: "task test-check"
+      cwd: "${{ context.work_dir }}"
+      step_name: "run_tests"
+    on_success: push_branch
+    on_failure: fail_delete_remote_branch
+    note: >-
+      Uses run_cmd instead of test_check because the smoke-test runs in the
+      clone root (not a sub-worktree). The clone-root-as-worktree semantic
+      rule correctly forbids passing clone_path as worktree_path.
+
+  push_branch:
+    tool: push_to_remote
+    with:
+      clone_path: "${{ context.work_dir }}"
+      branch: "${{ context.branch_name }}"
+      remote_url: "${{ context.remote_url }}"
+    on_success: create_pr
+    on_failure: fail_delete_remote_branch
+
+  create_pr:
+    tool: run_cmd
+    with:
+      cmd: >-
+        gh pr create
+          --title "smoke: add smoke_canary() [DO NOT MERGE]"
+          --body "Automated smoke-test PR — closed without merging. Safe to ignore."
+          --base "${{ inputs.base_branch }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "create_pr"
+    on_success: close_pr
+    on_failure: fail_delete_remote_branch
+
+  close_pr:
+    tool: run_cmd
+    with:
+      cmd: >-
+        PR_NUM=$(gh pr view --json number --jq .number) &&
+        [ -n "$PR_NUM" ] &&
+        gh pr close "$PR_NUM" --comment "Smoke test complete. Closing without merge."
+      cwd: "${{ context.work_dir }}"
+      step_name: "close_pr"
+    on_success: delete_remote_branch
+    on_failure: delete_remote_branch
+
+  delete_remote_branch:
+    tool: run_cmd
+    with:
+      cmd: >-
+        git push origin --delete "${{ context.branch_name }}" 2>/dev/null || true &&
+        git branch -D "${{ context.branch_name }}" 2>/dev/null || true
+      cwd: "${{ context.work_dir }}"
+      step_name: "delete_remote_branch"
+    on_success: register_clone_success
+    on_failure: register_clone_success
+
+  register_clone_success:
+    tool: register_clone_status
+    with:
+      clone_path: "${{ context.work_dir }}"
+      status: "success"
+      step_name: "register_clone_success"
+    on_success: done
+    on_failure: done
+
+  fail_delete_remote_branch:
+    tool: run_cmd
+    with:
+      cmd: >-
+        git push origin --delete "${{ context.branch_name }}" 2>/dev/null || true &&
+        git branch -D "${{ context.branch_name }}" 2>/dev/null || true
+      cwd: "${{ context.work_dir }}"
+      step_name: "fail_delete_remote_branch"
+    on_success: register_clone_failure
+    on_failure: register_clone_failure
+
+  register_clone_failure:
+    tool: register_clone_status
+    with:
+      clone_path: "${{ context.work_dir }}"
+      status: "error"
+      step_name: "register_clone_failure"
+    on_success: escalate
+    on_failure: escalate
+
+  done:
+    action: stop
+    message: "Smoke test completed successfully — PR created and closed without merging."
+
+  escalate:
+    action: stop
+    message: "Smoke test failed — check step output for details."

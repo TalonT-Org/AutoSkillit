@@ -1,0 +1,125 @@
+from_version: "0.7.77"
+to_version: "0.8.0"
+description: >
+  Research recipe: write-report renamed to generate-report, output_mode ingredient added
+  (default 'local'), bundle lifecycle refactored, plan-visualization step and vis-lens
+  pack requirement added.
+changes:
+  - id: research-rename-write-report
+    description: "write-report skill and steps renamed to generate-report"
+    instruction: |
+      In any research.yaml recipe:
+      1. Rename step 'write_report' → 'generate_report'.
+      2. Rename step 'write_report_inconclusive' → 'generate_report_inconclusive'.
+      3. Rename step 're_write_report' → 're_generate_report'.
+      4. In each step's skill_command, replace '/autoskillit:write-report' with
+         '/autoskillit:generate-report'.
+      5. Update all on_success, on_failure, on_result routes that reference the old names.
+    example_before: |
+      write_report:
+        tool: run_skill
+        with:
+          skill_command: "/autoskillit:write-report ${{ context.worktree_path }} ..."
+        on_success: test
+      retest:
+        on_failure: re_write_report
+    example_after: |
+      generate_report:
+        tool: run_skill
+        with:
+          skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ..."
+        on_success: test
+      retest:
+        on_failure: re_generate_report
+
+  - id: research-add-output-mode-ingredient
+    description: "Add output_mode ingredient (default 'local') — BREAKING: old default was implicit pr"
+    instruction: |
+      In any research.yaml recipe, add to the ingredients block (after audit_claims):
+
+        output_mode:
+          required: false
+          default: "local"
+          description: >
+            Where research outputs land. 'local' (default) produces a self-contained
+            report.html bundle under {source_dir}/research-bundles/{date-slug}/ with
+            no GitHub interaction. 'pr' opens a GitHub PR alongside the HTML bundle
+            and runs the full review/archival flow.
+
+      BREAKING CHANGE: Prior to 0.8.0 the recipe always opened a GitHub PR. The new
+      default is 'local'. To restore previous behavior, set output_mode: "pr" in your
+      recipe or pass it as an override to open_kitchen.
+    example_before: |
+      ingredients:
+        audit_claims:
+          required: false
+          default: "false"
+    example_after: |
+      ingredients:
+        audit_claims:
+          required: false
+          default: "false"
+        output_mode:
+          required: false
+          default: "local"
+          description: "..."
+
+  - id: research-replace-commit-with-stage-and-finalize
+    description: "commit_research_artifacts replaced by stage_bundle + finalize_bundle lifecycle"
+    instruction: |
+      In any research.yaml recipe:
+      1. Remove the 'commit_research_artifacts' step.
+      2. Add 'stage_bundle' after run_experiment_lenses (idempotent cp, no commit).
+      3. Add 're_stage_bundle' after 're_generate_report'.
+      4. Add 'finalize_bundle' in the archival phase (after re_push_research.on_success).
+         finalize_bundle conditionally renames/commits in pr mode and keeps browsable files
+         intact in local mode.
+      5. Update all route edges that referenced commit_research_artifacts.
+    example_before: |
+      run_experiment_lenses:
+        on_success: commit_research_artifacts
+      commit_research_artifacts:
+        tool: run_cmd
+        with:
+          cmd: "... git commit ..."
+        on_success: push_branch
+    example_after: |
+      run_experiment_lenses:
+        on_success: stage_bundle
+      stage_bundle:
+        tool: run_cmd
+        with:
+          cmd: "... cp (no commit) ..."
+        on_success: route_pr_or_local
+
+  - id: research-add-plan-visualization-step
+    description: "Add plan_visualization step after design review GO verdict"
+    instruction: |
+      In any research.yaml recipe, wire a 'plan_visualization' step between the design
+      review GO verdict and create_worktree. The step invokes
+      '/autoskillit:plan-visualization' and captures visualization_plan_path and
+      report_plan_path.
+    example_before: |
+      revise_design:
+        on_result:
+          - when: "${{ result.verdict }} == GO"
+            route: create_worktree
+    example_after: |
+      revise_design:
+        on_result:
+          - when: "${{ result.verdict }} == GO"
+            route: plan_visualization
+      plan_visualization:
+        tool: run_skill
+        with:
+          skill_command: "/autoskillit:plan-visualization ..."
+        on_success: create_worktree
+
+  - id: research-add-vis-lens-pack-requirement
+    description: "Add vis-lens to requires_packs"
+    instruction: |
+      In any research.yaml recipe, ensure 'vis-lens' appears in the requires_packs list.
+    example_before: |
+      requires_packs: [research, exp-lens]
+    example_after: |
+      requires_packs: [research, exp-lens, vis-lens]

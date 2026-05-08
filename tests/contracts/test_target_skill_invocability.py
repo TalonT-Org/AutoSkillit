@@ -1,6 +1,6 @@
 """Contract: the target skill of a run_skill call must be invocable after session setup.
 
-Verifies that the invocation chain (init_session → activate_tier2 → resolve namespace)
+Verifies that the invocation chain (init_session → activate_skill_deps → resolve namespace)
 leaves the target skill invocable and all other Tier 2 skills gated.
 """
 
@@ -16,7 +16,7 @@ from autoskillit.recipe import load_recipe
 from autoskillit.recipe.io import builtin_recipes_dir
 from autoskillit.workspace import (
     DefaultSessionSkillManager,
-    SkillResolver,
+    DefaultSkillResolver,
     SkillsDirectoryProvider,
 )
 
@@ -42,7 +42,7 @@ def _make_session(
     )
     tier2 = frozenset(config.skills.tier2)
     if target_skill in tier2:
-        mgr.activate_tier2(session_id, target_skill)
+        mgr.activate_skill_deps(session_id, target_skill)
     return mgr, session_id, str(tmp_path)
 
 
@@ -95,7 +95,7 @@ class TestResolvedNamespaceMatchesSkillLocation:
     """Namespace resolution must match physical skill location."""
 
     def test_bundled_extended_skill_uses_bare_namespace(self) -> None:
-        resolver = SkillResolver()
+        resolver = DefaultSkillResolver()
         info = resolver.resolve("make-plan")
         assert info is not None
         assert info.source == SkillSource.BUNDLED_EXTENDED
@@ -104,7 +104,7 @@ class TestResolvedNamespaceMatchesSkillLocation:
         assert resolved == "/make-plan arg1"
 
     def test_bundled_skill_uses_autoskillit_namespace(self) -> None:
-        resolver = SkillResolver()
+        resolver = DefaultSkillResolver()
         info = resolver.resolve("open-kitchen")
         assert info is not None
         assert info.source == SkillSource.BUNDLED
@@ -113,16 +113,50 @@ class TestResolvedNamespaceMatchesSkillLocation:
         assert resolved == "/autoskillit:open-kitchen"
 
     def test_already_correct_namespace_is_preserved(self) -> None:
-        resolver = SkillResolver()
+        resolver = DefaultSkillResolver()
         resolved, name = resolve_target_skill("/make-plan arg1 arg2", resolver)
         assert name == "make-plan"
         assert resolved == "/make-plan arg1 arg2"
 
     def test_non_slash_command_passes_through(self) -> None:
-        resolver = SkillResolver()
+        resolver = DefaultSkillResolver()
         resolved, name = resolve_target_skill("Fix the bug", resolver)
         assert name is None
         assert resolved == "Fix the bug"
+
+
+class TestDepSkillsNotGatedAfterActivation:
+    """After activating a target with activate_deps, dependency skills are also ungated."""
+
+    def test_dep_skills_not_gated_after_activation(self, tmp_path: Path) -> None:
+        """After activating make-plan, arch-lens-* and mermaid skills are ungated."""
+        config = load_config()
+        provider = SkillsDirectoryProvider()
+        mgr = DefaultSessionSkillManager(provider, tmp_path)
+        session_id = "test-dep-activation"
+        mgr.init_session(session_id, cook_session=False, config=config)
+        mgr.activate_skill_deps(session_id, "make-plan")
+
+        skills_base = tmp_path / session_id / ".claude" / "skills"
+        # Check arch-lens skills are ungated
+        for skill_dir in sorted(skills_base.iterdir()):
+            if not skill_dir.is_dir():
+                continue
+            name = skill_dir.name
+            if not name.startswith("arch-lens-"):
+                continue
+            content = (skill_dir / "SKILL.md").read_text()
+            assert "disable-model-invocation: true" not in content, (
+                f"arch-lens skill '{name}' should be ungated after activating make-plan"
+            )
+
+        # Check mermaid is ungated
+        mermaid_md = skills_base / "mermaid" / "SKILL.md"
+        assert mermaid_md.exists(), "mermaid skill dir should exist after init_session"
+        content = mermaid_md.read_text()
+        assert "disable-model-invocation: true" not in content, (
+            "mermaid should be ungated via transitive dependency from make-plan"
+        )
 
 
 class TestAllRecipeSkillCommandsInvocable:
@@ -133,7 +167,7 @@ class TestAllRecipeSkillCommandsInvocable:
     ) -> None:
         config = load_config()
         tier2 = frozenset(config.skills.tier2)
-        resolver = SkillResolver()
+        resolver = DefaultSkillResolver()
         provider = SkillsDirectoryProvider()
 
         for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):
@@ -168,12 +202,12 @@ class TestAllRecipeSkillCommandsInvocable:
                         f"'{resolved}' (should use /autoskillit: namespace)"
                     )
 
-                # Verify activation: after init_session + activate_tier2, target is invocable
+                # Verify activation: after init_session + activate_skill_deps, target is invocable
                 session_id = f"test-{yaml_path.stem}-{step_name}"
                 mgr = DefaultSessionSkillManager(provider, tmp_path)
                 mgr.init_session(session_id, cook_session=False, config=config)
                 if name in tier2:
-                    mgr.activate_tier2(session_id, name)
+                    mgr.activate_skill_deps(session_id, name)
                 skill_md_path = tmp_path / session_id / ".claude" / "skills" / name / "SKILL.md"
                 if skill_md_path.exists():
                     content = skill_md_path.read_text()

@@ -53,7 +53,7 @@ def get_logger(name: str | None = None) -> Any:
     record emitted through this logger — regardless of the configured
     renderer (JSON, ConsoleRenderer, or testing capture).
     """
-    proxy = structlog.get_logger()
+    logger = structlog.get_logger()
     if name is not None:
         # Why _initial_values instead of .bind(): .bind() resolves the lazy proxy
         # into a concrete BoundLoggerFilteringAtNotset, freezing the current config.
@@ -61,8 +61,8 @@ def get_logger(name: str | None = None) -> Any:
         # first log call (after configure_logging() runs).
         # Why not structlog.get_logger(logger=name): the "logger" kwarg collides with
         # wrap_logger()'s first positional parameter, raising TypeError.
-        proxy._initial_values["logger"] = name
-    return proxy
+        logger._initial_values["logger"] = name
+    return logger
 
 
 def configure_logging(

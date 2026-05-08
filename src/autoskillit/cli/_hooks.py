@@ -5,32 +5,23 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from autoskillit.core import atomic_write, pkg_root
+from autoskillit.core import atomic_write, is_git_worktree, pkg_root
+from autoskillit.hook_registry import (
+    _build_hook_command,
+    _build_hook_entry,
+    _claude_settings_path,  # noqa: F401 — re-exported; cli/__init__ + _stale_check + _init_helpers import from here
+    _load_settings_data,
+)
+from autoskillit.hook_registry import (
+    _is_own_hook as _is_autoskillit_hook_command,
+)
 from autoskillit.hooks import HOOK_REGISTRY
-
-
-def _load_settings_data(settings_path: Path) -> dict:
-    """Read and parse settings.json; return empty dict on any error."""
-    if settings_path.exists():
-        try:
-            return json.loads(settings_path.read_text())
-        except (OSError, json.JSONDecodeError):
-            pass
-    return {}
 
 
 def _write_settings_data(settings_path: Path, data: dict) -> None:
     """Write settings data back atomically, creating parent dirs if needed."""
     settings_path.parent.mkdir(parents=True, exist_ok=True)
     atomic_write(settings_path, json.dumps(data, indent=2))
-
-
-def _is_autoskillit_hook_command(command: str) -> bool:
-    """Check if a hook command belongs to autoskillit (any format)."""
-    if "autoskillit" in command:
-        return True
-    known_scripts = {s for h in HOOK_REGISTRY for s in h.scripts}
-    return any(command.endswith(script) or f"/{script}" in command for script in known_scripts)
 
 
 def _evict_stale_autoskillit_hooks(settings_path: Path) -> None:
@@ -64,20 +55,55 @@ def sync_hooks_to_settings(settings_path: Path) -> None:
     autoskillit entries are present when this function runs.
     Each HookDef becomes one entry under its event_type with all its scripts as ordered commands.
     """
-    hooks_dir = pkg_root() / "hooks"
+    from autoskillit.hook_registry import HOOK_REGISTRY_HASH
+
+    root = pkg_root()
+    if is_git_worktree(root):
+        raise RuntimeError(
+            f"Refusing to sync hooks: pkg_root() resolves to a git linked worktree "
+            f"({root}). Hook paths written from a transient worktree would become "
+            f"dangling after worktree deletion. Use 'task install-worktree' instead "
+            f"of 'autoskillit init' when working in a worktree."
+        )
+    hooks_dir = root / "hooks"
     data = _load_settings_data(settings_path)
+    # Consolidate HookDef entries sharing the same (event_type, matcher) into a
+    # single settings.json entry so Claude Code sees no duplicate matchers.
+    groups: dict[tuple[str, str], dict] = {}
     for hook_def in HOOK_REGISTRY:
-        event_list: list[dict] = data.setdefault("hooks", {}).setdefault(hook_def.event_type, [])
+        key = (hook_def.event_type, hook_def.matcher)
         hooks_list = [
-            {"type": "command", "command": f"python3 {hooks_dir / script}"}
+            _build_hook_command(hooks_dir, script, hook_def.timeout_seconds)
             for script in hook_def.scripts
         ]
-        event_list.append({"matcher": hook_def.matcher, "hooks": hooks_list})
+        if key not in groups:
+            groups[key] = _build_hook_entry(hook_def, hooks_list)
+        else:
+            groups[key]["hooks"].extend(hooks_list)
+    for (event_type, _), entry in groups.items():
+        event_list: list[dict] = data.setdefault("hooks", {}).setdefault(event_type, [])
+        event_list.append(entry)
+    data["_autoskillit_registry_hash"] = HOOK_REGISTRY_HASH
     _write_settings_data(settings_path, data)
 
 
-def _claude_settings_path(scope: str) -> Path:
-    """Return the Claude Code settings.json path for the given scope."""
-    if scope == "user":
-        return Path.home() / ".claude" / "settings.json"
-    return Path.cwd() / ".claude" / "settings.json"
+def sweep_all_scopes_for_orphans(project_root: Path | None = None) -> list[str]:
+    """Evict stale autoskillit hooks from every Claude Code settings scope.
+
+    Calls _evict_stale_autoskillit_hooks on user, project, and local scopes
+    (project and local only when project_root is given and .claude/ dir exists).
+
+    Returns a list of scope labels where evictions occurred.
+    """
+    from autoskillit.hook_registry import iter_all_scope_paths
+
+    evicted: list[str] = []
+    for scope_label, settings_path in iter_all_scope_paths(project_root):
+        before_data = _load_settings_data(settings_path)
+        before_str = json.dumps(before_data)
+        _evict_stale_autoskillit_hooks(settings_path)
+        after_data = _load_settings_data(settings_path)
+        after_str = json.dumps(after_data)
+        if before_str != after_str:
+            evicted.append(scope_label)
+    return evicted

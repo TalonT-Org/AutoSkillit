@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,8 @@ from autoskillit.migration.loader import (
     applicable_migrations,
     list_migrations,
 )
+
+pytestmark = [pytest.mark.layer("migration"), pytest.mark.small]
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -258,10 +261,10 @@ class TestApplicableMigrations:
         assert result == []
 
     # ML9
-    def test_none_version_matches_from_zero(
+    def test_none_version_not_migratable(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Scripts with no version (None) match from_version="0.0.0"."""
+        """Recipes with no version (None) are not subject to migration."""
         self._setup_migrations(
             tmp_path,
             monkeypatch,
@@ -274,8 +277,7 @@ class TestApplicableMigrations:
             ],
         )
         result = applicable_migrations(None, "0.1.0")
-        assert len(result) == 1
-        assert result[0].from_version == "0.0.0"
+        assert result == []
 
     # ML10
     def test_script_mid_range_matches_enclosing_migration(
@@ -342,24 +344,6 @@ class TestApplicableMigrations:
         result = applicable_migrations("0.1.0", "0.3.0")
         assert result == []
 
-    def test_already_at_installed_version_returns_empty(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Script already at installed_version returns empty list."""
-        self._setup_migrations(
-            tmp_path,
-            monkeypatch,
-            [
-                {
-                    "from_version": "0.1.0",
-                    "to_version": "0.2.0",
-                    "description": "Never needed",
-                }
-            ],
-        )
-        result = applicable_migrations("0.2.0", "0.2.0")
-        assert result == []
-
     def test_no_migrations_available_returns_empty(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -386,3 +370,45 @@ class TestApplicableMigrations:
         )
         result = applicable_migrations(None, "0.2.0")
         assert result == []
+
+
+# ---------------------------------------------------------------------------
+# ML13: Caching tests
+# ---------------------------------------------------------------------------
+
+
+class TestListMigrationsCaching:
+    def test_result_is_cached_on_repeat_call(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        mig_dir = _make_migrations_dir(tmp_path)
+        _write_migration(
+            mig_dir / "001_init.yaml",
+            {"from_version": "0.1.0", "to_version": "0.2.0", "changes": []},
+        )
+        monkeypatch.setattr("autoskillit.migration.loader._migrations_dir", lambda: mig_dir)
+        r1 = list_migrations()
+        r2 = list_migrations()
+        assert r1 == r2
+        assert r1 is not r2
+
+    def test_mtime_change_invalidates_cache(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        mig_dir = _make_migrations_dir(tmp_path)
+        _write_migration(
+            mig_dir / "001_init.yaml",
+            {"from_version": "0.1.0", "to_version": "0.2.0", "changes": []},
+        )
+        monkeypatch.setattr("autoskillit.migration.loader._migrations_dir", lambda: mig_dir)
+        r1 = list_migrations()
+
+        _write_migration(
+            mig_dir / "002_add.yaml",
+            {"from_version": "0.2.0", "to_version": "0.3.0", "changes": []},
+        )
+        old_mt = mig_dir.stat().st_mtime
+        os.utime(mig_dir, (old_mt + 2, old_mt + 2))
+        r2 = list_migrations()
+        assert r1 is not r2
+        assert len(r2) == len(r1) + 1

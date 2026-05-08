@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
 
 from autoskillit.core import CIRunScope, CIWatcher
@@ -12,6 +13,8 @@ from autoskillit.execution.ci import (
     DefaultCIWatcher,
     _jittered_sleep,
 )
+
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -25,6 +28,7 @@ def _run(
     status: str = "completed",
     conclusion: str = "success",
     head_sha: str = "abc123",
+    event: str = "push",
     updated_at: str | None = None,
 ) -> dict:
     """Build a mock workflow run dict."""
@@ -33,6 +37,7 @@ def _run(
         "status": status,
         "conclusion": conclusion,
         "head_sha": head_sha,
+        "event": event,
         "updated_at": updated_at or _NOW.isoformat(),
     }
 
@@ -51,16 +56,30 @@ def _jobs_response(*jobs: tuple[str, str]) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def test_jittered_sleep_bounded():
-    for attempt in range(10):
+@pytest.mark.parametrize(
+    ("attempt", "expected_floor", "expected_ceiling"),
+    [
+        (0, 5, 10),
+        (1, 10, 20),
+        (2, 15, 30),
+        (3, 15, 30),
+        (9, 15, 30),
+    ],
+)
+def test_jittered_sleep_bounded(
+    attempt: int, expected_floor: float, expected_ceiling: float
+) -> None:
+    for _ in range(50):
         val = _jittered_sleep(attempt)
-        assert 0 <= val <= 30  # cap is 30
+        assert expected_floor <= val <= expected_ceiling
 
 
 def test_jittered_sleep_variance():
     """Two calls should not produce identical results (statistical check)."""
-    values = {_jittered_sleep(2) for _ in range(20)}
-    assert len(values) > 1
+    values = [_jittered_sleep(2) for _ in range(20)]
+    assert max(values) - min(values) > 1.0, (
+        "Jitter variance is too low — values are nearly constant"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -116,7 +135,7 @@ async def test_lookback_finds_completed_failed_run():
 
 @pytest.mark.anyio
 async def test_lookback_filters_by_head_sha():
-    """When scope.head_sha is provided, the API filters server-side."""
+    """Client-side scope.head_sha still filters via _validate_run_matches_scope."""
     watcher = DefaultCIWatcher(token="tok")
     matching_run = _run(run_id=222, head_sha="abc123")
     watcher._fetch_completed_runs = AsyncMock(  # type: ignore[method-assign]
@@ -131,7 +150,6 @@ async def test_lookback_filters_by_head_sha():
         timeout_seconds=60,
     )
     assert result["run_id"] == 222
-    # Verify scope.head_sha was passed to the API call
     call_kwargs = watcher._fetch_completed_runs.call_args
     assert call_kwargs[0][4].head_sha == "abc123"  # positional arg: scope
 
@@ -151,8 +169,41 @@ async def test_lookback_without_head_sha_matches_any():
 
 
 @pytest.mark.anyio
-async def test_lookback_window_filters_old_runs():
-    """Runs older than lookback_seconds should be filtered by the service."""
+async def test_scope_mismatch_log_includes_found_shas():
+    """ci_watcher_scope_mismatch warning includes expected_sha and found_shas."""
+    watcher = DefaultCIWatcher(token="tok")
+    stale_run = _run(run_id=999, head_sha="old-sha", conclusion="success")
+    watcher._fetch_completed_runs = AsyncMock(  # type: ignore[method-assign]
+        return_value=[stale_run]
+    )
+    watcher._fetch_active_runs = AsyncMock(return_value=[])  # type: ignore[method-assign]
+
+    import structlog.testing
+
+    with structlog.testing.capture_logs() as cap:
+        await watcher.wait(
+            "feature-x",
+            repo="owner/repo",
+            scope=CIRunScope(head_sha="new-sha"),
+            timeout_seconds=1,
+        )
+
+    mismatch_events = [e for e in cap if e.get("event") == "ci_watcher_scope_mismatch"]
+    assert mismatch_events, "Expected ci_watcher_scope_mismatch warning to be logged"
+    evt = mismatch_events[0]
+    assert evt.get("expected_sha") == "new-sha"
+    assert "old-sha" in (evt.get("found_shas") or [])
+
+
+@pytest.mark.anyio
+async def test_wait_returns_no_runs_when_fetch_returns_empty():
+    """wait() returns no_runs or timed_out when _fetch_completed_runs returns [].
+
+    _fetch_completed_runs is mocked to return [] (no completed runs found).
+    asyncio.sleep is mocked to return immediately. With timeout_seconds=1 the
+    test may exit via either "no_runs" (poll exhausted) or "timed_out"
+    (wall-clock exceeded); both are valid outcomes for this empty-fetch scenario.
+    """
     watcher = DefaultCIWatcher(token="tok")
     # Look-back returns old run — will be filtered by cutoff time
     watcher._fetch_completed_runs = AsyncMock(  # type: ignore[method-assign]
@@ -215,6 +266,31 @@ async def test_no_runs_at_all_returns_no_runs():
 
 
 @pytest.mark.anyio
+async def test_no_runs_includes_diagnostic_fields():
+    """no_runs return must include scope_used, branch, and poll_duration_s."""
+    watcher = DefaultCIWatcher(token="tok")
+    watcher._fetch_completed_runs = AsyncMock(return_value=[])  # type: ignore[method-assign]
+    watcher._fetch_active_runs = AsyncMock(return_value=[])  # type: ignore[method-assign]
+    watcher._fetch_failed_jobs = AsyncMock(return_value=[])  # type: ignore[method-assign]
+
+    with patch("autoskillit.execution.ci.asyncio.sleep", new_callable=AsyncMock):
+        result = await watcher.wait(
+            "feature-branch",
+            repo="owner/repo",
+            scope=CIRunScope(event="push", workflow="tests.yml"),
+            timeout_seconds=1,
+        )
+
+    assert result["conclusion"] == "no_runs"
+    assert "scope_used" in result, "no_runs must include scope_used for diagnostics"
+    assert result["scope_used"]["event"] == "push"
+    assert result["scope_used"]["workflow"] == "tests.yml"
+    assert result["branch"] == "feature-branch"
+    assert "poll_duration_s" in result
+    assert isinstance(result["poll_duration_s"], float)
+
+
+@pytest.mark.anyio
 async def test_timeout_exceeded():
     watcher = DefaultCIWatcher(token="tok")
     watcher._fetch_completed_runs = AsyncMock(return_value=[])  # type: ignore[method-assign]
@@ -232,6 +308,9 @@ async def test_timeout_exceeded():
     assert result["run_id"] == 666
     assert result["conclusion"] == "timed_out"
     assert result["failed_jobs"] == []
+    assert result["run_status"] == "in_progress"
+    assert "still in progress" in result["hint"]
+    assert "666" in result["hint"]
 
 
 @pytest.mark.anyio
@@ -261,9 +340,9 @@ async def test_exponential_backoff_with_jitter():
         result = await watcher.wait("main", repo="owner/repo", timeout_seconds=600)
 
     assert result["conclusion"] == "success"
-    # All sleep durations should be bounded by [0, 30]
+    # All sleep durations should respect backoff band floors (min 5s)
     for d in sleep_durations:
-        assert 0 <= d <= 30
+        assert 5 <= d <= 30
 
 
 @pytest.mark.anyio
@@ -324,45 +403,6 @@ async def test_failed_run_fetches_jobs(httpx_mock):
     assert "/jobs" in str(requests[1].url)
 
 
-# ---------------------------------------------------------------------------
-# DefaultCIWatcher.status
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.anyio
-async def test_status_returns_runs():
-    watcher = DefaultCIWatcher(token="tok")
-    watcher._resolve_repo = AsyncMock(return_value="owner/repo")  # type: ignore[method-assign]
-    watcher._fetch_failed_jobs = AsyncMock(return_value=[])  # type: ignore[method-assign]
-
-    # Use httpx_mock-free approach: mock at lower level
-    with patch.object(
-        watcher,
-        "status",
-        new_callable=AsyncMock,
-        return_value={
-            "runs": [
-                {
-                    "id": 100,
-                    "status": "completed",
-                    "conclusion": "success",
-                    "failed_jobs": [],
-                },
-                {
-                    "id": 101,
-                    "status": "in_progress",
-                    "conclusion": None,
-                    "failed_jobs": [],
-                },
-            ]
-        },
-    ):
-        result = await watcher.status("main", repo="owner/repo")
-    assert len(result["runs"]) == 2
-    assert result["runs"][0]["id"] == 100
-    assert result["runs"][1]["status"] == "in_progress"
-
-
 @pytest.mark.anyio
 async def test_status_by_run_id(httpx_mock):
     # Response 1: run status
@@ -378,6 +418,36 @@ async def test_status_by_run_id(httpx_mock):
     assert len(result["runs"]) == 1
     assert result["runs"][0]["conclusion"] == "failure"
     assert result["runs"][0]["failed_jobs"] == ["deploy"]
+
+
+# ---------------------------------------------------------------------------
+# Event discrimination — regression test for issue #662
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_event_filtering_selects_correct_event():
+    """With scope.event='push', a passing pull_request run must not mask a failing push run.
+
+    This is the core regression test for GitHub issue #662.
+    """
+    watcher = DefaultCIWatcher(token="tok")
+    watcher._fetch_completed_runs = AsyncMock(  # type: ignore[method-assign]
+        return_value=[
+            _run(run_id=1, conclusion="success", event="pull_request"),
+            _run(run_id=2, conclusion="failure", event="push"),
+        ]
+    )
+    watcher._fetch_failed_jobs = AsyncMock(return_value=["test"])  # type: ignore[method-assign]
+
+    result = await watcher.wait(
+        "main",
+        repo="owner/repo",
+        scope=CIRunScope(event="push"),
+        timeout_seconds=60,
+    )
+    assert result["conclusion"] == "failure"  # push run, not pull_request
+    assert result["run_id"] == 2
 
 
 # ---------------------------------------------------------------------------
@@ -404,3 +474,174 @@ async def test_wait_billing_error_surfaced_distinctly(httpx_mock):
     requests = httpx_mock.get_requests()
     assert len(requests) == 1
     assert "/jobs" not in str(requests[0].url)
+
+
+# ---------------------------------------------------------------------------
+# Vocabulary contract
+# ---------------------------------------------------------------------------
+
+
+class TestCIVocabularyContract:
+    """FAILED_CONCLUSIONS and related sets must be declared as named constants,
+    and those constants must be consistent with each other."""
+
+    def test_failed_conclusions_constant_exists(self):
+        """FAILED_CONCLUSIONS must be exported as a module-level constant."""
+        from autoskillit.execution import ci
+
+        assert hasattr(ci, "FAILED_CONCLUSIONS")
+        assert isinstance(ci.FAILED_CONCLUSIONS, frozenset)
+        assert "failure" in ci.FAILED_CONCLUSIONS
+
+    def test_known_ci_conclusions_constant_exists(self):
+        """KNOWN_CI_CONCLUSIONS must be exported and cover all values ci.py tests for."""
+        from autoskillit.execution import ci
+
+        assert hasattr(ci, "KNOWN_CI_CONCLUSIONS")
+        assert isinstance(ci.KNOWN_CI_CONCLUSIONS, frozenset)
+        assert "success" in ci.KNOWN_CI_CONCLUSIONS
+
+    def test_failed_conclusions_subset_of_known(self):
+        """FAILED_CONCLUSIONS must be a subset of KNOWN_CI_CONCLUSIONS."""
+        from autoskillit.execution.ci import FAILED_CONCLUSIONS, KNOWN_CI_CONCLUSIONS
+
+        assert FAILED_CONCLUSIONS.issubset(KNOWN_CI_CONCLUSIONS), (
+            f"FAILED_CONCLUSIONS contains values not in KNOWN_CI_CONCLUSIONS: "
+            f"{FAILED_CONCLUSIONS - KNOWN_CI_CONCLUSIONS}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# T6 — CI ETag caching returns cached body on 304
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_ci_etag_returns_cached_on_304(httpx_mock):
+    """When server returns 304, _fetch_completed_runs returns previously cached body."""
+    httpx_mock.add_response(
+        json=_runs_response(_run(run_id=42, conclusion="success")),
+        headers={"ETag": '"abc123"'},
+    )
+    httpx_mock.add_response(status_code=304, content=b"")
+
+    watcher = DefaultCIWatcher(token="tok")
+    result1 = await watcher.wait("feature-x", repo="owner/repo", timeout_seconds=60)
+    result2 = await watcher.wait("feature-x", repo="owner/repo", timeout_seconds=60)
+
+    assert result1["run_id"] == 42
+    assert result2["run_id"] == 42
+    assert result1["conclusion"] == "success"
+    assert result2["conclusion"] == "success"
+
+    requests = httpx_mock.get_requests()
+    assert len(requests) == 2
+    assert requests[1].headers.get("if-none-match") == '"abc123"'
+
+
+# ---------------------------------------------------------------------------
+# T7 — CI ETag stores new ETag on 200
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_ci_etag_stores_on_200(httpx_mock):
+    """ETag from a 200 response is sent as If-None-Match on the next request."""
+    httpx_mock.add_response(
+        json=_runs_response(_run(run_id=99, conclusion="success")),
+        headers={"ETag": '"abc123"'},
+    )
+    httpx_mock.add_response(
+        json=_runs_response(_run(run_id=99, conclusion="success")),
+    )
+    watcher = DefaultCIWatcher(token="tok")
+    await watcher.wait("feature-x", repo="owner/repo", timeout_seconds=60)
+    await watcher.wait("feature-x", repo="owner/repo", timeout_seconds=60)
+
+    requests = httpx_mock.get_requests()
+    assert len(requests) == 2
+    assert requests[1].headers.get("if-none-match") == '"abc123"'
+
+
+@pytest.mark.anyio
+async def test_fetch_completed_runs_no_sha_rejects_stale(httpx_mock):
+    """When scope.head_sha is NOT set, stale runs are filtered out."""
+    stale_time = (datetime.now(UTC) - timedelta(minutes=30)).isoformat()
+    httpx_mock.add_response(
+        json=_runs_response(_run(run_id=42, updated_at=stale_time)),
+    )
+    watcher = DefaultCIWatcher(token="tok")
+
+    async with httpx.AsyncClient() as client:
+        runs = await watcher._fetch_completed_runs(
+            client,
+            watcher._headers(),
+            "owner/repo",
+            "main",
+            scope=CIRunScope(),
+            cutoff_dt=datetime.now(UTC) - timedelta(seconds=120),
+        )
+    assert len(runs) == 0
+
+
+@pytest.mark.anyio
+async def test_phase2_recheck_uses_anchored_cutoff():
+    """Phase 2 re-check uses anchored cutoff — clock advancing doesn't lose runs."""
+    watcher = DefaultCIWatcher(token="tok")
+    # Phase 1: no completed runs
+    call_count = [0]
+    borderline_time = (datetime.now(UTC) - timedelta(seconds=119)).isoformat()
+
+    async def mock_fetch_completed(client, headers, repo, branch, scope, cutoff_dt):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            return []
+        return [_run(run_id=99, conclusion="success", updated_at=borderline_time)]
+
+    watcher._fetch_completed_runs = mock_fetch_completed  # type: ignore[method-assign]
+    watcher._fetch_active_runs = AsyncMock(return_value=[])  # type: ignore[method-assign]
+
+    with patch("autoskillit.execution.ci.asyncio.sleep", new_callable=AsyncMock):
+        result = await watcher.wait(
+            "main", repo="owner/repo", timeout_seconds=60, lookback_seconds=120
+        )
+
+    assert result["run_id"] == 99
+    assert result["conclusion"] == "success"
+
+
+@pytest.mark.anyio
+async def test_phase2_recheck_finds_late_completing_run():
+    """Phase 2 re-check finds a run that completed between Phase 1 and Phase 2."""
+    watcher = DefaultCIWatcher(token="tok")
+    call_count = [0]
+
+    async def mock_fetch_completed(client, headers, repo, branch, scope, cutoff_dt):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            return []
+        return [_run(run_id=77, conclusion="failure")]
+
+    watcher._fetch_completed_runs = mock_fetch_completed  # type: ignore[method-assign]
+    watcher._fetch_active_runs = AsyncMock(return_value=[])  # type: ignore[method-assign]
+    watcher._fetch_failed_jobs = AsyncMock(return_value=["build"])  # type: ignore[method-assign]
+
+    with patch("autoskillit.execution.ci.asyncio.sleep", new_callable=AsyncMock):
+        result = await watcher.wait("main", repo="owner/repo", timeout_seconds=60)
+
+    assert result["run_id"] == 77
+    assert result["conclusion"] == "failure"
+    assert "build" in result["failed_jobs"]
+
+
+def test_known_ci_events_frozenset_exists() -> None:
+    from autoskillit.core.types._type_constants import KNOWN_CI_EVENTS
+
+    assert isinstance(KNOWN_CI_EVENTS, frozenset)
+    assert len(KNOWN_CI_EVENTS) >= 4
+    assert all(isinstance(e, str) for e in KNOWN_CI_EVENTS)
+    assert all(e == e.lower() for e in KNOWN_CI_EVENTS)
+    assert "push" in KNOWN_CI_EVENTS
+    assert "pull_request" in KNOWN_CI_EVENTS
+    assert "merge_group" in KNOWN_CI_EVENTS
+    assert "workflow_dispatch" in KNOWN_CI_EVENTS

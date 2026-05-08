@@ -38,7 +38,8 @@ conflicts from earlier merges in the queue.
 - Use `git merge` to merge the PR into the integration branch — always use `gh pr merge --squash --auto` (when `autoMergeAllowed=true`) or `gh pr merge --squash` (when `autoMergeAllowed=false`)
 - Close or comment on the PR
 - Leave the git working tree in a dirty state
-- Create files outside `.autoskillit/temp/merge-prs/` directory
+- Create files outside `{{AUTOSKILLIT_TEMP}}/merge-prs/` directory
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Run `git status` before any operation to verify clean state
@@ -73,7 +74,8 @@ Extract:
 
 Fetch the PR branch locally:
 ```bash
-git fetch origin {pr_branch}:{pr_branch} 2>/dev/null || git fetch origin pull/{pr_number}/head:{pr_branch}
+REMOTE=$(git remote get-url upstream >/dev/null 2>&1 && echo upstream || echo origin)
+git fetch "$REMOTE" {pr_branch}:{pr_branch} 2>/dev/null || git fetch "$REMOTE" pull/{pr_number}/head:{pr_branch}
 ```
 
 ### Step 1.5: Deletion Regression Scan
@@ -86,18 +88,18 @@ deliberately deleted from the base branch after the PR's branch point.
 ```bash
 BASE_BRANCH=$(gh pr view {pr_number} --json baseRefName --jq '.baseRefName')
 # 1. Find the divergence point between this PR and the base branch
-MERGE_BASE=$(git merge-base origin/${BASE_BRANCH} origin/{pr_branch})
+MERGE_BASE=$(git merge-base ${REMOTE}/${BASE_BRANCH} ${REMOTE}/{pr_branch})
 
 # 2. Files deleted from base since the branch point
-DELETED_FILES=$(git diff --name-only --diff-filter=D ${MERGE_BASE} origin/${BASE_BRANCH})
+DELETED_FILES=$(git diff --name-only --diff-filter=D ${MERGE_BASE} ${REMOTE}/${BASE_BRANCH})
 
 # 3. Symbols (functions/classes) removed from files this PR modifies,
 #    relative to base (catches deletions in files that still exist)
-PR_FILES=$(git diff --name-only ${MERGE_BASE}...origin/{pr_branch})
+PR_FILES=$(git diff --name-only ${MERGE_BASE}...${REMOTE}/{pr_branch})
 if [ -n "$PR_FILES" ]; then
   DELETED_SYMBOLS=$(
     echo "$PR_FILES" | \
-    git diff --diff-filter=M ${MERGE_BASE} origin/${BASE_BRANCH} --pathspecs-from-file=- \
+    git diff --diff-filter=M ${MERGE_BASE} ${REMOTE}/${BASE_BRANCH} --pathspecs-from-file=- \
       | grep '^-' \
       | grep -E '^-(def |class |async def )' \
       | sed 's/^-//' \
@@ -108,7 +110,7 @@ else
 fi
 
 # 4. What the PR adds (relative to the merge base)
-PR_ADDITIONS=$(git diff ${MERGE_BASE}...origin/{pr_branch} | grep '^+' | grep -v '^+++')
+PR_ADDITIONS=$(git diff ${MERGE_BASE}...${REMOTE}/{pr_branch} | grep '^+' | grep -v '^+++')
 ```
 
 **Detect regressions:**
@@ -135,12 +137,12 @@ items must NOT be reintroduced in the implementation.
 
 ```bash
 # For each regressed file: find the commit that deleted it on base
-git log --diff-filter=D --oneline --follow -- {file_path} origin/${BASE_BRANCH} | head -1
+git log --diff-filter=D --oneline --follow -- {file_path} ${REMOTE}/${BASE_BRANCH} | head -1
 
 # For each regressed symbol: find the commit that removed it
-git log --diff-filter=M --oneline -p -- {file_path} origin/${BASE_BRANCH} \
-  | grep -B20 "^-def {symbol_name}\|^-class {symbol_name}" \
-  | grep "^[0-9a-f]\{7,\}" \
+git log --diff-filter=M --oneline -p -- {file_path} ${REMOTE}/${BASE_BRANCH} \
+  | rg -B 20 "^-def {symbol_name}|^-class {symbol_name}" \
+  | rg "^[0-9a-f]{7,}" \
   | head -1
 ```
 
@@ -176,6 +178,14 @@ AUTO_MERGE_ALLOWED=$(gh api graphql -f query="query {
 
 Capture `AUTO_MERGE_ALLOWED` ("true" or "false"). On gh failure, default to "false"
 (the safe path: use plain `--squash`, not `--squash --auto`).
+
+### Step 1.9: Pre-flight Mergeability Check
+
+Run: `gh pr view {pr_number} --json mergeable --jq '.mergeable'`
+
+- If `MERGEABLE`: proceed to Step 2
+- If `CONFLICTING`: skip Step 2, set `needs_plan=true`, write a conflict report noting the PR has git-level conflicts, proceed to Step 5 output
+- If `UNKNOWN`: wait 10 seconds, retry up to 3 times. If still `UNKNOWN` after 3 retries, treat as `CONFLICTING` (sets `needs_plan=true`, same as git-level conflicts — distinct from the poll-loop timeout path which sets `needs_plan=false, timeout_error=true`)
 
 ### Step 2: Simple Path — gh pr merge
 
@@ -252,7 +262,7 @@ Before writing the conflict report, fetch the complete set of files changed on t
 
 ```bash
 # All files changed on the PR branch relative to the base
-git diff ${BASE_BRANCH}...origin/{pr_branch} --name-only
+git diff ${BASE_BRANCH}...${REMOTE}/{pr_branch} --name-only
 ```
 
 Classify each file into one of three categories:
@@ -279,7 +289,7 @@ Extract the `## Requirements` section if present — set `requirements_section =
 
 Compute timestamp: `YYYY-MM-DD_HHMMSS`.
 
-Write `.autoskillit/temp/merge-prs/conflict_pr{pr_number}_plan_{ts}.md`:
+Write `{{AUTOSKILLIT_TEMP}}/merge-prs/conflict_pr{pr_number}_plan_{ts}.md`:
 
 ```markdown
 # Conflict Resolution Plan: PR #{pr_number} — "{pr_title}"
@@ -291,7 +301,7 @@ semantic conflicts with previously merged PRs.
 
 **PR:** #{pr_number}
 **Branch:** {pr_branch}
-**Integration Branch:** {integration_branch (current HEAD)}
+**Integration Branch:** {batch_branch (current HEAD)}
 
 ## PR Changes Inventory
 
@@ -401,7 +411,7 @@ Print a JSON result block to stdout for recipe capture:
     "pr_number": 47,
     "pr_branch": "feature/db-refactor",
     "pr_title": "Refactor database layer",
-    "conflict_report_path": ".autoskillit/temp/merge-prs/conflict_pr47_plan_YYYY-MM-DD_HHMMSS.md"
+    "conflict_report_path": "{{AUTOSKILLIT_TEMP}}/merge-prs/conflict_pr47_plan_YYYY-MM-DD_HHMMSS.md"
 }
 ```
 
@@ -420,7 +430,7 @@ with `conflict_report_path` set. The pipeline then routes to make-plan → imple
     "pr_number": 47,
     "pr_branch": "feature/stale-branch",
     "pr_title": "Feature from stale branch",
-    "conflict_report_path": ".autoskillit/temp/merge-prs/conflict_pr47_plan_YYYY-MM-DD_HHMMSS.md"
+    "conflict_report_path": "{{AUTOSKILLIT_TEMP}}/merge-prs/conflict_pr47_plan_YYYY-MM-DD_HHMMSS.md"
 }
 ```
 
@@ -436,6 +446,20 @@ with `conflict_report_path` set. The pipeline then routes to make-plan → imple
     "pr_title": "Refactor database layer",
     "conflict_report_path": null,
     "escalation_reason": "Description of why the conflict cannot be resolved automatically"
+}
+```
+
+**On timeout (poll loop exceeded 600s):**
+```json
+{
+    "merged": false,
+    "needs_plan": false,
+    "deletion_regression": false,
+    "escalation_required": false,
+    "timeout_error": true,
+    "pr_number": 47,
+    "pr_branch": "feature/db-refactor",
+    "pr_title": "Refactor database layer"
 }
 ```
 
@@ -514,13 +538,25 @@ pr_branch = {pr_branch_name}
 pr_title = {pr_title}
 ```
 
+**On timeout:**
+```
+merged = false
+needs_plan = false
+deletion_regression = false
+escalation_required = false
+timeout_error = true
+pr_number = {pr_number}
+pr_branch = {branch_name}
+pr_title = {title}
+```
+
 Emit `conflict_report_path=` only when `needs_plan=true` and a conflict plan file was
 written. Omit the line entirely on a successful direct merge or when `escalation_required=true`.
 
 ## Output Location
 
 ```
-.autoskillit/temp/merge-prs/
+{{AUTOSKILLIT_TEMP}}/merge-prs/
 └── conflict_pr{N}_plan_{ts}.md    (written only when needs_plan=true)
 ```
 

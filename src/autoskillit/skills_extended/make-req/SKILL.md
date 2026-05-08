@@ -31,17 +31,18 @@ Decompose a task, plan, roadmap, or feature description into a structured set of
 
 **NEVER:**
 - Modify any source code files
-- Create files outside `.autoskillit/temp/make-req/` directory
+- Create files outside `{{AUTOSKILLIT_TEMP}}/make-req/` directory
 - Prescribe implementation approaches or libraries in requirements
 - Include implementation steps disguised as requirements ("Refactor X to use Y" is an instruction, not a requirement)
 - Write requirements that can only be verified by reading source code
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use subagents to understand the source material and relevant codebase context
 - Group requirements by what would be implemented together
 - Provide background and context for each group
 - State requirements as verifiable conditions
-- Write to `.autoskillit/temp/make-req/` directory (relative to the current working directory)
+- Write to `{{AUTOSKILLIT_TEMP}}/make-req/` directory (relative to the current working directory)
 
 ## Workflow
 
@@ -90,7 +91,7 @@ Keep context factual. Do not suggest solutions.
 
 ### Step 5: Write the Requirements Document
 
-Save to: `.autoskillit/temp/make-req/requirements_{topic}_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+Save to: `{{AUTOSKILLIT_TEMP}}/make-req/requirements_{topic}_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 ```markdown
 # Requirements: {Topic}

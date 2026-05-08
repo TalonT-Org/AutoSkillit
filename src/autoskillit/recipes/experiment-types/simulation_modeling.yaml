@@ -1,0 +1,32 @@
+name: simulation_modeling
+schema_version: "1.0"
+priority: 6
+is_fallback: false
+classification_triggers:
+  - "Generates synthetic data from a computational or theoretical model: 'simulation', 'agent-based model', 'ABM', 'Monte Carlo', 'computational model', 'synthetic data', 'stochastic simulation'"
+  - "System behavior studied by varying model parameters rather than real-world conditions: 'parameter sweep', 'sensitivity analysis on model parameters', 'simulated scenarios', 'model-generated outcomes'"
+dimension_weights:
+  causal_structure: M
+  variance_protocol: H
+  statistical_corrections: M
+  ecological_validity: H
+  measurement_alignment: M
+  resource_proportionality: L
+  data_acquisition: L
+  agent_implementability: H
+applicable_lenses:
+  primary: exp-lens-sensitivity-robustness
+  secondary: exp-lens-validity-threats
+red_team_focus:
+  specific: model misspecification masquerading as empirical finding
+  severity_cap: warning
+l1_severity:
+  estimand_clarity: warning
+  hypothesis_falsifiability: warning
+dimension_weight_rationale:
+  causal_structure: "Simulation encodes a causal model explicitly; bridging assumptions to real-world causal claims must be stated"
+  variance_protocol: "Stochastic simulations require adequate replication across random seeds with convergence diagnostics"
+  statistical_corrections: "Parameter sweep designs generate many output metrics with high multiple-comparison pressure"
+  ecological_validity: "Whether the simulation accurately represents the target real-world system is the central validity question"
+  measurement_alignment: "Simulation output metrics must be operationally linked to real-world constructs of interest"
+  agent_implementability: "Computational simulation pipelines are highly structured; parameter sweeps and seed management are automatable"

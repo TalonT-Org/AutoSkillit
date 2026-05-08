@@ -5,7 +5,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from autoskillit.core import atomic_write
+from autoskillit.core import atomic_write, resolve_temp_dir
 
 
 @dataclass
@@ -71,8 +71,9 @@ class FailureStore:
         return name in self._state
 
 
-def default_store_path(project_dir: Path) -> Path:
-    return project_dir / ".autoskillit" / "temp" / "migrations" / "failures.json"
+def default_store_path(project_dir: Path, temp_dir: Path | None = None) -> Path:
+    base = temp_dir if temp_dir is not None else resolve_temp_dir(project_dir, None)
+    return base / "migrations" / "failures.json"
 
 
 def record_from_skill(

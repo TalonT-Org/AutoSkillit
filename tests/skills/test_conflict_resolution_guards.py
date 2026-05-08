@@ -319,6 +319,16 @@ def test_merge_prs_captures_conflict_report_from_resolve_ejected(merge_prs_recip
     )
 
 
+def test_merge_prs_captures_conflict_report_from_resolve_proactive(
+    merge_prs_recipe: dict,
+) -> None:
+    step = merge_prs_recipe["steps"]["resolve_proactive_rebase_conflicts"]
+    capture_list = step.get("capture_list", {})
+    assert any("conflict_report_path" in v for v in capture_list.values()), (
+        "resolve_proactive_rebase_conflicts must accumulate conflict_report_path in capture_list"
+    )
+
+
 def test_open_integration_pr_embeds_conflict_resolution_decisions():
     """open-integration-pr SKILL.md must embed Conflict Resolution Decisions section."""
     skill_md_path = SKILLS_ROOT / "open-integration-pr" / "SKILL.md"
@@ -329,12 +339,12 @@ def test_open_integration_pr_embeds_conflict_resolution_decisions():
     )
 
 
-def test_open_pr_embeds_conflict_resolution_decisions():
-    """open-pr SKILL.md must embed Conflict Resolution Decisions section."""
-    skill_md_path = SKILLS_ROOT / "open-pr" / "SKILL.md"
+def test_compose_pr_embeds_conflict_resolution_decisions():
+    """compose-pr SKILL.md must embed Conflict Resolution Decisions section."""
+    skill_md_path = SKILLS_ROOT / "compose-pr" / "SKILL.md"
     text = skill_md_path.read_text()
     assert "Conflict Resolution Decisions" in text, (
-        "open-pr/SKILL.md must describe embedding a "
+        "compose-pr/SKILL.md must describe embedding a "
         "'Conflict Resolution Decisions' section per REQ-PIP-003"
     )
 
@@ -379,6 +389,54 @@ def test_resolve_merge_conflicts_remote_variable_is_defined(skill_md: str) -> No
     )
 
 
+def test_resolve_merge_conflicts_has_manifest_validation_step(skill_md: str) -> None:
+    """SKILL.md must document language-aware manifest validation after pre-commit (Step 5a)."""
+    assert "cargo metadata" in skill_md or "manifest validation" in skill_md.lower(), (
+        "resolve-merge-conflicts SKILL.md must include language-aware manifest validation "
+        "(Step 5a) covering at minimum 'cargo metadata --no-deps' for Rust projects"
+    )
+    assert "Step 5a" in skill_md, "Manifest validation must be documented as Step 5a in SKILL.md"
+
+
+def test_resolve_merge_conflicts_has_duplicate_key_scan(skill_md: str) -> None:
+    """SKILL.md must document duplicate key scanning in TOML/JSON manifests (Step 5b)."""
+    assert "Step 5b" in skill_md, (
+        "Duplicate key scanning must be documented as Step 5b in SKILL.md"
+    )
+    assert "duplicate" in skill_md.lower(), (
+        "SKILL.md must use the word 'duplicate' to describe the key scan"
+    )
+
+
+def test_resolve_merge_conflicts_manifest_failure_escalates(skill_md: str) -> None:
+    """SKILL.md must escalate (not auto-fix) when manifest validation fails."""
+    step_5a_idx = skill_md.find("Step 5a")
+    step_5b_idx = skill_md.find("Step 5b", step_5a_idx)
+    step_5a_section = (
+        skill_md[step_5a_idx:step_5b_idx] if step_5b_idx != -1 else skill_md[step_5a_idx:]
+    )
+    assert "escalation_required" in step_5a_section, (
+        "Step 5a must escalate (emit escalation_required=true) on manifest validation failure; "
+        "auto-fixing broken manifests is out of scope for this skill"
+    )
+
+
+def test_resolve_merge_conflicts_manifest_validation_covers_rust(skill_md: str) -> None:
+    """SKILL.md manifest validation must cover Rust (cargo metadata --no-deps)."""
+    assert "cargo metadata" in skill_md, (
+        "resolve-merge-conflicts Step 5a must include 'cargo metadata --no-deps' "
+        "as the Rust manifest validation command — this is a fast parse-only check (<1s)"
+    )
+
+
+def test_resolve_merge_conflicts_manifest_validation_covers_python(skill_md: str) -> None:
+    """SKILL.md manifest validation must cover Python (tomllib or uv lock --check)."""
+    assert "tomllib" in skill_md or "uv lock --check" in skill_md, (
+        "resolve-merge-conflicts Step 5a must include Python manifest validation "
+        "via tomllib.load() or 'uv lock --check'"
+    )
+
+
 def test_resolve_merge_conflicts_no_hardcoded_origin(skill_md: str) -> None:
     """SKILL.md must not use literal 'origin' as remote in git fetch/rebase/show/log/rev-parse."""
     bash_blocks = re.findall(r"```bash\s*\n(.*?)```", skill_md, re.DOTALL)
@@ -397,4 +455,40 @@ def test_resolve_merge_conflicts_no_hardcoded_origin(skill_md: str) -> None:
         "resolve-merge-conflicts SKILL.md bash blocks contain hardcoded 'origin' remote "
         "in git commands. Use $REMOTE (resolved via upstream || origin fallback) instead.\n"
         "Violations:\n" + "\n".join(f"  {v}" for v in violations)
+    )
+
+
+@pytest.fixture(scope="module")
+def step5_section(skill_md: str) -> str:
+    step5_idx = skill_md.find("### Step 5 —")
+    step5a_idx = skill_md.find("### Step 5a —", step5_idx)
+    assert step5_idx != -1, "Step 5 section must be present in SKILL.md"
+    assert step5a_idx != -1, "Step 5a section must follow Step 5"
+    return skill_md[step5_idx:step5a_idx]
+
+
+def test_resolve_merge_conflicts_step5_handles_version_consistency(step5_section: str) -> None:
+    """Step 5 must instruct running sync_versions.py when check-version-consistency fails."""
+    assert "sync_versions.py" in step5_section, (
+        "Step 5 must instruct running 'python3 scripts/sync_versions.py' "
+        "when check-version-consistency fails"
+    )
+
+
+def test_resolve_merge_conflicts_step5_handles_uv_lock(step5_section: str) -> None:
+    """Step 5 must instruct running 'uv lock' when uv-lock-check fails."""
+    # "uv lock --check" appears in Step 5a (manifest validation); require bare "uv lock"
+    # to appear in Step 5 as the fix command (not merely the check)
+    assert re.search(r"\buv lock\b(?!\s+--check)", step5_section), (
+        "Step 5 must instruct running 'uv lock' (without --check) "
+        "when uv-lock-check fails to regenerate the lock file"
+    )
+
+
+def test_resolve_merge_conflicts_step5_escalates_on_nonfixable_hooks(step5_section: str) -> None:
+    """Step 5 must escalate when pre-commit still fails after all auto-fixes are applied."""
+    assert "escalation_required" in step5_section, (
+        "Step 5 must escalate with escalation_required=true when pre-commit still fails "
+        "after all auto-fixes (ruff, sync_versions, uv lock) are applied — "
+        "remaining failures from non-fixable hooks (mypy, gitleaks) require manual remediation"
     )

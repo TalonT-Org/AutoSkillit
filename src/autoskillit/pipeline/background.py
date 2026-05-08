@@ -3,18 +3,18 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from collections.abc import Callable, Coroutine
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core import atomic_write, get_logger
+from autoskillit.core import AuditLog, SupportsLogger, atomic_write, get_logger
+from autoskillit.core import fast_dumps as _fast_dumps
 
 logger = get_logger(__name__)
 
 
-class BackgroundTaskSupervisor:
+class DefaultBackgroundSupervisor:
     """Single entry point for supervised background tasks.
 
     All tasks submitted here are wrapped in exception capture, audit
@@ -24,8 +24,8 @@ class BackgroundTaskSupervisor:
 
     def __init__(
         self,
-        audit: Any | None = None,
-        log: Any | None = None,
+        audit: AuditLog | None = None,
+        log: SupportsLogger | None = None,
     ) -> None:
         self._tasks: set[asyncio.Task[Any]] = set()
         self._audit = audit
@@ -105,6 +105,19 @@ class BackgroundTaskSupervisor:
             await asyncio.gather(*self._tasks, return_exceptions=True)
 
 
+def create_background_task(
+    coro: Coroutine[Any, Any, Any], *, label: str = ""
+) -> asyncio.Task[Any]:
+    """Create an asyncio.Task for a long-running background coroutine.
+
+    Unlike DefaultBackgroundSupervisor.submit(), this does NOT wrap the coroutine
+    in _supervise_task — the caller owns the task handle and is responsible for
+    cancellation. Used for kitchen-scoped lifecycle tasks (quota_refresh_loop) that
+    must be cancelled explicitly when the kitchen closes.
+    """
+    return asyncio.create_task(coro, name=label)
+
+
 def write_status(path: Path | None, status: str, *, error: str | None = None) -> None:
     """Write a status.json file atomically. Never raises."""
     try:
@@ -116,6 +129,6 @@ def write_status(path: Path | None, status: str, *, error: str | None = None) ->
         }
         if error is not None:
             payload["error"] = error
-        atomic_write(path, json.dumps(payload, indent=2))
+        atomic_write(path, _fast_dumps(payload, indent=True))
     except Exception:
         logger.debug("write_status failed", path=str(path), exc_info=True)

@@ -5,9 +5,10 @@ from __future__ import annotations
 import logging as _stdlib_logging
 from unittest.mock import patch
 
+import pytest
 import structlog.testing
 
-import autoskillit.server as server_mod
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 
 class TestServeLoggingPhases:
@@ -24,7 +25,7 @@ class TestServeLoggingPhases:
         (config_dir / "config.yaml").write_text("logging:\n  level: DEBUG\n")
 
         with (
-            patch.object(server_mod.mcp, "run"),
+            patch("anyio.run"),  # prevent actual event loop; serve() routes through anyio.run
             patch("autoskillit.core.configure_logging") as mock_configure,
             structlog.testing.capture_logs(),
         ):
@@ -51,7 +52,7 @@ class TestServeLoggingPhases:
         # No config file — defaults only
 
         with (
-            patch.object(server_mod.mcp, "run"),
+            patch("anyio.run"),  # prevent actual event loop; serve() routes through anyio.run
             patch("autoskillit.core.configure_logging") as mock_configure,
             structlog.testing.capture_logs(),
         ):
@@ -67,7 +68,7 @@ class TestServeLoggingPhases:
         monkeypatch.chdir(tmp_path)
 
         with (
-            patch.object(server_mod.mcp, "run"),
+            patch("anyio.run"),  # prevent actual event loop; serve() routes through anyio.run
             patch("autoskillit.core.configure_logging") as mock_configure,
             structlog.testing.capture_logs(),
         ):
@@ -88,7 +89,7 @@ class TestServeLoggingPhases:
         (config_dir / "config.yaml").write_text("logging:\n  json_output: true\n")
 
         with (
-            patch.object(server_mod.mcp, "run"),
+            patch("anyio.run"),  # prevent actual event loop; serve() routes through anyio.run
             patch("autoskillit.core.configure_logging") as mock_configure,
             structlog.testing.capture_logs(),
         ):

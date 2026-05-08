@@ -5,7 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from autoskillit.workspace import CleanupResult, _delete_directory_contents
+
+pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
 
 class TestCleanupResult:

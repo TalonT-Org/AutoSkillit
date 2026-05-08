@@ -155,3 +155,30 @@ def test_dry_walkthrough_step4_no_hardcoded_sole_test_command(skill_text: str) -
         "The check should be config-driven via test_check.command so the skill works "
         "for any project regardless of its test runner."
     )
+
+
+def test_dry_walkthrough_step4_pip_enforcement_clause_detects_editable(skill_text: str) -> None:
+    """Step 4 must identify pip install -e / uv pip install as unsafe worktree setup patterns."""
+    # The enforcement replacement rule must name the concrete dangerous patterns
+    assert "pip install -e" in skill_text, (
+        "Step 4 enforcement must name 'pip install -e' as a pattern to flag and replace. "
+        "This prevents silent degradation of the pre-implementation safety rule."
+    )
+    assert "uv pip install" in skill_text, (
+        "Step 4 enforcement must name 'uv pip install' as a pattern to flag and replace."
+    )
+
+
+def test_dry_walkthrough_step4_pip_enforcement_prescribes_install_worktree(
+    skill_text: str,
+) -> None:
+    """Step 4 must prescribe task install-worktree as the replacement for raw pip invocations."""
+    # The enforcement section must name the safe replacement
+    assert "install-worktree" in skill_text, (
+        "Step 4 enforcement must prescribe 'install-worktree' as the replacement. "
+        "Without this, the enforcement clause is incomplete."
+    )
+    # The enforcement must route to the config-driven worktree_setup.command
+    assert "worktree_setup.command" in skill_text, (
+        "Step 4 must reference worktree_setup.command as the config-driven alternative."
+    )

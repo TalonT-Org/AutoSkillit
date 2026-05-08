@@ -8,34 +8,46 @@ Replaces two mutable module-level singletons in server.py:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
-    AuditStore,
+    AuditLog,
     BackgroundSupervisor,
+    CampaignProtector,
     CIRunScope,
     CIWatcher,
     CloneManager,
     DatabaseReader,
-    GatePolicy,
+    FleetLock,
+    GateState,
+    GitHubApiLog,
     GitHubFetcher,
     HeadlessExecutor,
-    McpResponseStore,
+    McpResponseLog,
     MergeQueueWatcher,
     MigrationService,
     OutputPatternResolver,
+    PluginSource,
+    QuotaRefreshTask,
+    ReadOnlyResolver,
     RecipeRepository,
     SessionSkillManager,
+    SkillResolver,
     SubprocessRunner,
-    TargetSkillResolver,
     TestRunner,
-    TimingStore,
-    TokenStore,
+    TimingLog,
+    TokenFactory,
+    TokenLog,
     WorkspaceManager,
     WriteExpectedResolver,
 )
-from autoskillit.pipeline.background import BackgroundTaskSupervisor
+from autoskillit.pipeline.background import DefaultBackgroundSupervisor
 from autoskillit.pipeline.mcp_response import DefaultMcpResponseLog
+
+# Must-supply-or-raise: fields defaulting to _MISSING are required by __post_init__.
+_MISSING: Any = object()
 
 
 @dataclass
@@ -49,12 +61,13 @@ class ToolContext:
     Fields
     ------
     config:               AutomationConfig loaded from .autoskillit/config.yaml
-    audit:                AuditStore — records pipeline failures
-    token_log:            TokenStore — per-step token tracking
-    timing_log:           TimingStore — per-step wall-clock duration tracking
-    response_log:         McpResponseStore — per-tool MCP response size tracking
-    gate:                 GatePolicy — enables/disables gated tools
-    plugin_dir:           Absolute path string to the autoskillit package directory
+    audit:                AuditLog — records pipeline failures
+    token_log:            TokenLog — per-step token tracking
+    timing_log:           TimingLog — per-step wall-clock duration tracking
+    response_log:         McpResponseLog — per-tool MCP response size tracking
+    gate:                 GateState — enables/disables gated tools
+    plugin_source:        PluginSource — DirectInstall (dev/editable) or MarketplaceInstall.
+                          Encodes how autoskillit is loaded into Claude Code sessions.
     runner:               SubprocessRunner implementation (DefaultSubprocessRunner in production,
                           MockSubprocessRunner in tests)
     executor:             HeadlessExecutor — runs headless Claude Code sessions
@@ -68,17 +81,35 @@ class ToolContext:
     ci_watcher:           CIWatcher — watches GitHub Actions CI runs
     merge_queue_watcher:  MergeQueueWatcher — polls GitHub merge queue for a PR
     session_skill_manager: SessionSkillManager — manages per-session ephemeral skill dirs
-    skill_resolver:       TargetSkillResolver — resolves skill names to source tier
+    skill_resolver:       SkillResolver — resolves skill names to source tier
+    kitchen_id:           UUID string assigned when open_kitchen fires; scopes token telemetry
+                          to the current kitchen session lifetime.
+    active_recipe_packs:  frozenset[str] | None — pack names declared by the loaded recipe
+                          (frozenset() when kitchen open but no recipe loaded; None when closed)
+    active_recipe_features: frozenset[str] | None — feature names declared by the loaded recipe
+                          (frozenset() when kitchen open but no recipe loaded; None when closed)
+    temp_dir:             Resolved temp directory for this project. Sentinel-guarded: raises
+                          TypeError if not supplied explicitly. Use make_context() or pass
+                          temp_dir=<path>.
+    token_factory:        Optional callable that resolves a GitHub token via the
+                          config → GITHUB_TOKEN env → gh CLI fallback chain.
+                          Set by make_context(); None in test ToolContext instances
+                          unless explicitly provided.
+    project_dir:          Resolved project root directory. Sentinel-guarded: raises TypeError
+                          if not supplied explicitly. Use make_context() or pass
+                          project_dir=<path>.
     """
 
     config: AutomationConfig
-    audit: AuditStore
-    token_log: TokenStore
-    timing_log: TimingStore
-    gate: GatePolicy
-    plugin_dir: str
+    audit: AuditLog
+    token_log: TokenLog
+    timing_log: TimingLog
+    gate: GateState
+    plugin_source: PluginSource
     runner: SubprocessRunner | None
-    response_log: McpResponseStore = field(default_factory=DefaultMcpResponseLog)
+    temp_dir: Path = field(default=_MISSING)
+    project_dir: Path = field(default=_MISSING)
+    response_log: McpResponseLog = field(default_factory=DefaultMcpResponseLog)
     executor: HeadlessExecutor | None = field(default=None)
     tester: TestRunner | None = field(default=None)
     recipes: RecipeRepository | None = field(default=None)
@@ -89,14 +120,42 @@ class ToolContext:
     github_client: GitHubFetcher | None = field(default=None)
     ci_watcher: CIWatcher | None = field(default=None)
     merge_queue_watcher: MergeQueueWatcher | None = field(default=None)
-    background: BackgroundSupervisor = field(default_factory=BackgroundTaskSupervisor)
+    github_api_log: GitHubApiLog | None = field(default=None)
+    background: BackgroundSupervisor | None = field(default=None)
     output_pattern_resolver: OutputPatternResolver | None = field(default=None)
     write_expected_resolver: WriteExpectedResolver | None = field(default=None)
+    read_only_resolver: ReadOnlyResolver | None = field(default=None)
     session_skill_manager: SessionSkillManager | None = field(default=None)
-    skill_resolver: TargetSkillResolver | None = field(default=None)
+    skill_resolver: SkillResolver | None = field(default=None)
+    recipe_name: str = field(default="")
+    recipe_content_hash: str = field(default="")
+    recipe_composite_hash: str = field(default="")
+    recipe_version: str = field(default="")
+    kitchen_id: str = field(default="")
+    active_recipe_packs: frozenset[str] | None = field(default_factory=lambda: None)
+    active_recipe_features: frozenset[str] | None = field(default_factory=lambda: None)
+    quota_refresh_task: QuotaRefreshTask | None = field(default=None)
+    token_factory: TokenFactory | None = field(default=None)
+    fleet_lock: FleetLock | None = field(default=None)
+    build_protected_campaign_ids: CampaignProtector | None = field(default=None)
+    ephemeral_root: Path | None = field(default_factory=lambda: None)
+
+    def __post_init__(self) -> None:
+        if self.temp_dir is _MISSING:
+            raise TypeError(
+                "temp_dir must be supplied explicitly — do not rely on defaults. "
+                "Use make_context() or pass temp_dir=<path> directly."
+            )
+        if self.project_dir is _MISSING:
+            raise TypeError(
+                "project_dir must be supplied explicitly — do not rely on defaults. "
+                "Use make_context() or pass project_dir=<path> directly."
+            )
+        if self.background is None:
+            self.background = DefaultBackgroundSupervisor(audit=self.audit)
 
     @property
     def default_ci_scope(self) -> CIRunScope:
         """Build the default CI scope from config. Used by handlers as fallback when
         the caller does not supply a workflow argument."""
-        return CIRunScope(workflow=self.config.ci.workflow)
+        return CIRunScope(workflow=self.config.ci.workflow, event=self.config.ci.event)

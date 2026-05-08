@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from autoskillit.config import AutomationConfig
 from autoskillit.core.types import SkillResult, SubprocessResult, TerminationReason
 from autoskillit.execution.db import DefaultDatabaseReader
@@ -18,9 +20,12 @@ from autoskillit.recipe.contracts import (
     resolve_skill_name,
 )
 from autoskillit.recipe.repository import DefaultRecipeRepository
-from autoskillit.server._factory import _gh_cli_token, make_context
+from autoskillit.server._factory import _gh_cli_token, _LazyTokenFactory, make_context
+from autoskillit.workspace import DefaultCloneManager, SkillResolver
 from autoskillit.workspace.cleanup import DefaultWorkspaceManager
-from tests.conftest import MockSubprocessRunner
+from tests.fakes import MockSubprocessRunner
+
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 def _runner() -> MockSubprocessRunner:
@@ -40,6 +45,8 @@ def _runner() -> MockSubprocessRunner:
 def test_make_context_returns_toolcontext():
     ctx = make_context(AutomationConfig(), runner=_runner())
     assert isinstance(ctx, ToolContext)
+    assert ctx.gate is not None
+    assert ctx.runner is not None
 
 
 def test_make_context_gate_starts_closed(monkeypatch):
@@ -66,18 +73,11 @@ def test_make_context_tester_is_default_test_runner():
     assert isinstance(ctx.tester, DefaultTestRunner)
 
 
-def test_make_context_all_service_fields_populated_includes_github_client():
-    """All optional service fields must be populated, including github_client and clone_mgr."""
+def test_make_context_service_fields_are_typed_instances():
+    """Core service fields are typed instances (skill_resolver, clone_mgr, repositories)."""
     ctx = make_context(AutomationConfig(), runner=_runner())
-    assert ctx.executor is not None
-    assert ctx.tester is not None
-    assert ctx.recipes is not None
-    assert ctx.migrations is not None
-    assert ctx.db_reader is not None
-    assert ctx.workspace_mgr is not None
-    assert ctx.clone_mgr is not None
-    assert ctx.github_client is not None
-    assert ctx.skill_resolver is not None
+    assert isinstance(ctx.skill_resolver, SkillResolver)
+    assert isinstance(ctx.clone_mgr, DefaultCloneManager)
     assert isinstance(ctx.recipes, DefaultRecipeRepository)
     assert isinstance(ctx.migrations, DefaultMigrationService)
     assert isinstance(ctx.db_reader, DefaultDatabaseReader)
@@ -128,7 +128,8 @@ def test_make_context_github_client_config_token_takes_priority_over_gh_cli(monk
     config.github.token = "config-token"
     ctx = make_context(config, runner=None, plugin_dir=".")
     assert ctx.github_client.has_token is True
-    assert ctx.github_client._token == "config-token"
+    # After lazy resolution via has_token, verify the resolved value
+    assert ctx.github_client._resolve_token() == "config-token"
 
 
 def test_make_context_github_client_token_snapshot_is_immutable(monkeypatch):
@@ -159,6 +160,30 @@ def test_make_context_protocol_substitution():
             model: str = "",
             step_name: str = "",
             add_dirs=(),
+        ) -> SkillResult:
+            return SkillResult(
+                success=True,
+                result="",
+                session_id="",
+                subtype="",
+                is_error=False,
+                exit_code=0,
+                needs_retry=False,
+                retry_reason="none",
+                stderr="",
+                token_usage=None,
+            )
+
+        async def dispatch_food_truck(
+            self,
+            orchestrator_prompt: str,
+            cwd: str,
+            *,
+            completion_marker: str = "",
+            model: str = "",
+            step_name: str = "",
+            on_spawn=None,
+            **kwargs,
         ) -> SkillResult:
             return SkillResult(
                 success=True,
@@ -206,34 +231,62 @@ def test_output_patterns_nonempty_for_investigate() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
-# Write-expected resolver integration tests
-# ---------------------------------------------------------------------------
-
-
-def test_write_expected_resolver_wired_on_context() -> None:
-    """make_context() must wire a write_expected_resolver onto ToolContext."""
+@pytest.mark.parametrize(
+    "invocation,expected_mode,required_tokens",
+    [
+        (
+            "/autoskillit:resolve-failures /tmp/wt .autoskillit/temp/plan.md main",
+            "conditional",
+            ["verdict"],
+        ),
+        (
+            "/autoskillit:retry-worktree .autoskillit/temp/plan.md /tmp/wt",
+            "conditional",
+            ["phases_implemented"],
+        ),
+        (
+            "/autoskillit:resolve-review feature-branch main",
+            "conditional",
+            ["verdict"],
+        ),
+        (
+            "/autoskillit:audit-claims /tmp/wt main https://github.com/o/r/pull/1",
+            None,
+            [],
+        ),
+        (
+            "/autoskillit:review-research-pr /tmp/wt main https://github.com/o/r/pull/1",
+            None,
+            [],
+        ),
+        (
+            "/autoskillit:resolve-claims-review /tmp/wt main",
+            "conditional",
+            ["verdict"],
+        ),
+        (
+            "/autoskillit:resolve-research-review /tmp/wt main",
+            "conditional",
+            ["verdict"],
+        ),
+        ("/autoskillit:make-plan some task", "always", []),
+        ("/autoskillit:nonexistent-skill foo", None, []),
+        ("/autoskillit:resolve-merge-conflicts", "conditional", ["conflict_report_path"]),
+    ],
+)
+def test_write_expected_resolver_mode(
+    invocation: str, expected_mode: str | None, required_tokens: list[str]
+) -> None:
+    """write_expected_resolver returns the correct mode and token patterns per skill."""
     ctx = make_context(AutomationConfig(), runner=_runner())
     assert ctx.write_expected_resolver is not None
-    spec = ctx.write_expected_resolver("/autoskillit:make-plan some task")
-    assert spec.mode == "always"
-
-
-def test_write_expected_resolver_unknown_skill() -> None:
-    """Unknown skills produce a WriteBehaviorSpec with mode=None."""
-    ctx = make_context(AutomationConfig(), runner=_runner())
-    assert ctx.write_expected_resolver is not None
-    spec = ctx.write_expected_resolver("/autoskillit:nonexistent-skill foo")
-    assert spec.mode is None
-
-
-def test_write_expected_resolver_conditional_skill() -> None:
-    """resolve-merge-conflicts produces mode='conditional' with patterns."""
-    ctx = make_context(AutomationConfig(), runner=_runner())
-    assert ctx.write_expected_resolver is not None
-    spec = ctx.write_expected_resolver("/autoskillit:resolve-merge-conflicts")
-    assert spec.mode == "conditional"
-    assert len(spec.expected_when) > 0
+    spec = ctx.write_expected_resolver(invocation)
+    assert spec.mode == expected_mode
+    if expected_mode is None:
+        assert spec.expected_when == ()
+    else:
+        for token in required_tokens:
+            assert any(token in p for p in spec.expected_when)
 
 
 def test_cook_and_factory_session_skill_manager_ctor_args_in_sync() -> None:
@@ -261,7 +314,7 @@ def test_cook_and_factory_session_skill_manager_ctor_args_in_sync() -> None:
         return -1
 
     root = pkg_root()
-    cook_path = root / "cli" / "_cook.py"
+    cook_path = root / "cli" / "session" / "_cook.py"
     factory_path = root / "server" / "_factory.py"
 
     cook_count = _count_ctor_positional_args(cook_path)
@@ -312,3 +365,235 @@ def test_gh_cli_token_returns_none_when_gh_not_installed(monkeypatch):
 
     monkeypatch.setattr("autoskillit.server._factory.subprocess.run", fake_run)
     assert _gh_cli_token() is None
+
+
+# ---------------------------------------------------------------------------
+# TokenFactory unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_token_factory_resolves_lazily():
+    """TokenFactory must not resolve until first call, then cache."""
+    call_count = 0
+
+    def _resolver():
+        nonlocal call_count
+        call_count += 1
+        return "ghp_test_token"
+
+    factory = _LazyTokenFactory(_resolver)
+    assert call_count == 0, "TokenFactory resolved eagerly at construction"
+    assert not factory.is_resolved
+
+    token = factory()
+    assert token == "ghp_test_token"
+    assert call_count == 1
+    assert factory.is_resolved
+
+    # Second call uses cache
+    token2 = factory()
+    assert token2 == "ghp_test_token"
+    assert call_count == 1, "TokenFactory resolved twice instead of caching"
+
+
+def test_token_factory_caches_none():
+    """TokenFactory caches None results (gh CLI not available)."""
+    call_count = 0
+
+    def _resolver():
+        nonlocal call_count
+        call_count += 1
+        return None
+
+    factory = _LazyTokenFactory(_resolver)
+    assert factory() is None
+    assert call_count == 1
+    assert factory() is None
+    assert call_count == 1, "TokenFactory resolved twice for None result"
+
+
+def test_gh_cli_token_not_called_during_make_context(monkeypatch):
+    """make_context() must not call _gh_cli_token() — token resolves lazily."""
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+
+    calls: list[object] = []
+    original_run = __import__("subprocess").run
+
+    def tracking_run(*args, **kwargs):
+        calls.append(args)
+        return original_run(*args, **kwargs)
+
+    monkeypatch.setattr("autoskillit.server._factory.subprocess.run", tracking_run)
+
+    config = AutomationConfig()
+    make_context(config, runner=None, plugin_dir=".")
+
+    gh_calls = [c for c in calls if "gh" in str(c)]
+    assert gh_calls == [], f"_gh_cli_token() called during make_context: {gh_calls}"
+
+
+def test_make_context_marketplace_install_yields_marketplace_plugin_source(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """make_context() with a marketplace-detected install produces MarketplaceInstall."""
+    from autoskillit.core.types._type_plugin_source import MarketplaceInstall
+
+    fake_cache = tmp_path / "cache" / "autoskillit-local" / "autoskillit" / "1.0.0"
+    fake_cache.mkdir(parents=True)
+
+    monkeypatch.setattr("autoskillit.server._factory._check_plugin_installed", lambda: True)
+    monkeypatch.setattr(
+        "autoskillit.server._factory._resolve_marketplace_cache_path",
+        lambda: fake_cache,
+    )
+
+    ctx = make_context(AutomationConfig(), runner=None)
+    assert isinstance(ctx.plugin_source, MarketplaceInstall)
+    assert ctx.plugin_source.cache_path == fake_cache
+
+
+def test_make_context_direct_install_yields_direct_plugin_source(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """make_context() with a direct install produces DirectInstall with pkg_root."""
+    from autoskillit.core.types._type_plugin_source import DirectInstall
+
+    monkeypatch.setattr("autoskillit.server._factory._check_plugin_installed", lambda: False)
+
+    ctx = make_context(AutomationConfig(), runner=None, plugin_dir=str(tmp_path))
+    assert isinstance(ctx.plugin_source, DirectInstall)
+    assert ctx.plugin_source.plugin_dir == tmp_path
+
+
+def test_make_context_sets_token_factory(tmp_path):
+    """make_context() sets token_factory on the returned ToolContext."""
+    cfg = AutomationConfig()
+    ctx = make_context(cfg, runner=None, plugin_dir=str(tmp_path))
+    assert callable(ctx.token_factory)
+
+
+# --- Group P-2: project_dir env inheritance ---
+
+
+def test_make_context_reads_project_dir_env(tmp_path, monkeypatch):
+    """make_context reads AUTOSKILLIT_PROJECT_DIR and stores it on ctx.project_dir."""
+    monkeypatch.setenv("AUTOSKILLIT_PROJECT_DIR", str(tmp_path))
+    ctx = make_context(AutomationConfig(), runner=_runner())
+    assert ctx.project_dir == tmp_path
+
+
+def test_make_context_project_dir_git_root_fallback(monkeypatch):
+    """make_context resolves project_dir via git toplevel when env var is not set."""
+    monkeypatch.delenv("AUTOSKILLIT_PROJECT_DIR", raising=False)
+    ctx = make_context(AutomationConfig(), runner=_runner())
+    import subprocess as _sp
+
+    expected = Path(
+        _sp.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    )
+    assert ctx.project_dir == expected
+
+
+# --- _resolve_project_dir unit tests ---
+
+
+def test_resolve_project_dir_env_var(tmp_path, monkeypatch):
+    from autoskillit.server._factory import _resolve_project_dir
+
+    monkeypatch.setenv("AUTOSKILLIT_PROJECT_DIR", str(tmp_path))
+    assert _resolve_project_dir() == tmp_path
+
+
+def test_resolve_project_dir_git_root(monkeypatch):
+    import subprocess as _subprocess
+
+    from autoskillit.server._factory import _resolve_project_dir
+
+    monkeypatch.delenv("AUTOSKILLIT_PROJECT_DIR", raising=False)
+
+    def fake_run(cmd, *, capture_output, text, timeout):
+        return _subprocess.CompletedProcess(cmd, 0, stdout="/fake/git/root\n", stderr="")
+
+    monkeypatch.setattr("autoskillit.server._factory.subprocess.run", fake_run)
+    assert _resolve_project_dir() == Path("/fake/git/root")
+
+
+def test_resolve_project_dir_cwd_fallback(monkeypatch):
+    import subprocess as _subprocess
+
+    from autoskillit.server._factory import _resolve_project_dir
+
+    monkeypatch.delenv("AUTOSKILLIT_PROJECT_DIR", raising=False)
+
+    def fake_run(cmd, *, capture_output, text, timeout):
+        return _subprocess.CompletedProcess(cmd, 1, stdout="", stderr="not a git repo")
+
+    monkeypatch.setattr("autoskillit.server._factory.subprocess.run", fake_run)
+    assert _resolve_project_dir() == Path.cwd()
+
+
+def test_make_context_env_profile_overrides_default_provider(monkeypatch):
+    """AUTOSKILLIT_PROVIDER_PROFILE in env must set config.providers.default_provider."""
+    monkeypatch.setenv("AUTOSKILLIT_PROVIDER_PROFILE", "minimax")
+    config = AutomationConfig()
+    config.providers.default_provider = None
+    config.providers.profiles = {"minimax": {}}
+    ctx = make_context(config, runner=_runner())
+    assert ctx.config.providers.default_provider == "minimax"
+
+
+def test_make_context_env_profile_overrides_existing_default(monkeypatch):
+    """AUTOSKILLIT_PROVIDER_PROFILE overrides even a config-set default_provider."""
+    monkeypatch.setenv("AUTOSKILLIT_PROVIDER_PROFILE", "minimax")
+    config = AutomationConfig()
+    config.providers.default_provider = "openai"
+    config.providers.profiles = {"minimax": {}}
+    ctx = make_context(config, runner=_runner())
+    assert ctx.config.providers.default_provider == "minimax"
+
+
+def test_make_context_unknown_env_profile_is_ignored(monkeypatch):
+    """AUTOSKILLIT_PROVIDER_PROFILE not in profiles is ignored — no mutation."""
+    monkeypatch.setenv("AUTOSKILLIT_PROVIDER_PROFILE", "stale-unknown")
+    config = AutomationConfig()
+    config.providers.default_provider = "anthropic"
+    config.providers.profiles = {}
+    ctx = make_context(config, runner=_runner())
+    assert ctx.config.providers.default_provider == "anthropic"
+
+
+def test_make_context_no_env_profile_preserves_config_default(monkeypatch):
+    """Without AUTOSKILLIT_PROVIDER_PROFILE in env, default_provider is unchanged."""
+    monkeypatch.delenv("AUTOSKILLIT_PROVIDER_PROFILE", raising=False)
+    config = AutomationConfig()
+    config.providers.default_provider = "openai"
+    config.providers.profiles = {}
+    ctx = make_context(config, runner=_runner())
+    assert ctx.config.providers.default_provider == "openai"
+
+
+# ---------------------------------------------------------------------------
+# Fixture gate-default verification tests
+# ---------------------------------------------------------------------------
+
+
+def test_tool_ctx_fixture_gate_starts_closed(tool_ctx) -> None:
+    """tool_ctx must start with gate closed to match production."""
+    assert tool_ctx.gate.enabled is False, (
+        "tool_ctx must start with gate closed to match production. "
+        "Use tool_ctx_kitchen_open for tests that need an open gate."
+    )
+
+
+def test_minimal_ctx_fixture_gate_starts_closed(minimal_ctx) -> None:
+    """minimal_ctx must start with gate closed to match production."""
+    assert minimal_ctx.gate.enabled is False
+
+
+def test_tool_ctx_kitchen_open_fixture_gate_starts_open(tool_ctx_kitchen_open) -> None:
+    """tool_ctx_kitchen_open must start with gate open."""
+    assert tool_ctx_kitchen_open.gate.enabled is True

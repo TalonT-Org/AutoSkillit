@@ -1,0 +1,41 @@
+from_version: "0.9.483"
+to_version: "0.9.484"
+description: >
+  Rename L3 dispatch identifiers to dispatched_* in fleet state and summary.
+  The l3_* prefix reflected an internal chain perspective (L1→L2→L3)
+  that contradicts the user-facing L2/L3 terminology where L2=food-truck
+  and L3=orchestrator. Renaming clarifies ownership provenance.
+changes:
+  - id: fleet-dispatch-record-field-rename
+    description: >
+      DispatchRecord fields renamed from l3_* to dispatched_*.
+      read_state falls back through three generations: dispatched_* →
+      l3_* → l2_* for existing state files.
+    instruction: |
+      No manual action required — read_state auto-migrates on read.
+      After the first write-back, state files use new field names.
+      Old field names: l3_session_id, l3_session_log_dir, l3_pid,
+      l3_starttime_ticks, l3_boot_id.
+      New field names: dispatched_session_id, dispatched_session_log_dir,
+      dispatched_pid, dispatched_starttime_ticks, dispatched_boot_id.
+
+  - id: fleet-mark-dispatch-running-param-rename
+    description: >
+      mark_dispatch_running() parameter l3_pid renamed to dispatched_pid.
+    instruction: |
+      No manual action required — all call sites updated in same release.
+
+  - id: fleet-resume-decision-field-rename
+    description: >
+      ResumeDecision.l3_session_id renamed to dispatched_session_id.
+    instruction: |
+      No manual action required — all call sites updated in same release.
+
+  - id: fleet-summary-schema-rename
+    description: >
+      Campaign summary per_dispatch[*].l3_session_id and
+      error_records[*].l3_session_id renamed to dispatched_session_id.
+      parse_campaign_summary falls back through three generations.
+    instruction: |
+      No manual action required — parse_campaign_summary auto-migrates
+      on parse. Old summaries retain l3_session_id keys until rewritten.

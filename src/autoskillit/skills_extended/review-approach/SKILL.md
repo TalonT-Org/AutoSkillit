@@ -25,7 +25,8 @@ Research modern solutions, approaches, and strategies relevant to the issues or 
 
 **NEVER:**
 - Modify any source code files
-- Create files outside `.autoskillit/temp/review-approach/` directory
+- Create files outside `{{AUTOSKILLIT_TEMP}}/review-approach/` directory
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use subagents with web search for parallel research
@@ -36,11 +37,10 @@ Research modern solutions, approaches, and strategies relevant to the issues or 
 - Tie research back to the specific problem context
 - Include source URLs for all referenced material
 - After writing the review file, emit the **absolute path** as a structured output
-  token immediately before `%%ORDER_UP%%`. Resolve the relative `temp/review-approach/...`
+  token as your final output. Resolve the relative `temp/review-approach/...`
   save path to absolute by prepending the full CWD:
   ```
   review_path = /absolute/cwd/temp/review-approach/{filename}.md
-  %%ORDER_UP%%
   ```
   This token is MANDATORY — the pipeline cannot proceed without it.
 
@@ -73,7 +73,7 @@ Drop anything that doesn't meaningfully inform the decision.
 
 ### Step 4: Write Review
 
-Save to: `.autoskillit/temp/review-approach/review_approach_{topic}_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+Save to: `{{AUTOSKILLIT_TEMP}}/review-approach/review_approach_{topic}_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 ```markdown
 # Approach Review: {Topic}

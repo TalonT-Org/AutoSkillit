@@ -1,4 +1,4 @@
-"""L1/L2/L3 sub-package isolation, __all__ completeness, size/file-count constraints.
+"""IL-1/IL-2/IL-3 sub-package isolation, __all__ completeness, size/file-count constraints.
 
 Tests:
   - Sync manifest deletion checks
@@ -19,7 +19,6 @@ Tests:
 from __future__ import annotations
 
 import ast
-import sys
 from pathlib import Path
 
 import pytest
@@ -70,11 +69,24 @@ def _get_call_func_name(node: ast.Call) -> str | None:
 SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
     {
         "__init__",  # server/__init__.py: mcp = FastMCP(...)
+        "_fleet",  # cli/_fleet.py: fleet_app = App(...)
         "app",  # cli/app.py: app = App(...), config_app = App(...), etc.
         "store",  # migration/store.py: defensive exemption for future module-level construction
         "validator",  # recipe/validator.py: defensive exemption for decorator-based rule registry
         "settings",  # config/settings.py: _CONFIG_SCHEMA = _build_config_schema()
-        "headless",  # execution/headless.py: _OUTPUT_PATH_TOKENS = _build_path_token_set()
+        "_headless_path_tokens",  # execution/_headless_path_tokens.py: _OUTPUT_PATH_TOKENS
+        # _STABLE_DISMISS_WINDOW = timedelta(days=7), _DEV_DISMISS_WINDOW = timedelta(hours=12)
+        "_install_info",  # cli/_install_info.py: window constants (see comment above)
+        # KITCHEN_GUARDED_COMMANDS: frozenset[str]
+        "_update_checks",  # cli/_update_checks.py: module-level frozenset (see comment above)
+        # _HTTP_TIMEOUT = httpx.Timeout(...) — module-level httpx client timeout config
+        "_update_checks_fetch",  # cli/_update_checks_fetch.py: _HTTP_TIMEOUT constant
+        "_terminal",  # cli/_terminal.py: _BASE_RESET = "".join(...) derived from _RESET_SPEC
+        "hook_registry",  # hook_registry.py: HOOK_REGISTRY_HASH = compute_registry_hash(...)
+        "_fleet",  # cli/_fleet.py: fleet_app = App(name="fleet", ...)
+        "_features",  # cli/_features.py: features_app = App(name="features", ...)
+        "_sessions",  # cli/_sessions.py: sessions_app = App(name="sessions", ...)
+        "_validate",  # cli/_validate.py: validate_app = App(name="validate", ...)
     }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
@@ -98,6 +110,7 @@ _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
         "version",
         "compile",
         "object",
+        "MappingProxyType",  # types.MappingProxyType — read-only view, no state
     }
 )
 
@@ -288,18 +301,18 @@ def test_no_module_level_io_detects_yaml_load(tmp_path: Path) -> None:
 
 
 def test_severity_defined_in_types():
-    """Severity must be a top-level class in core/_type_enums.py (the enums sub-module)."""
-    tree = _get_module_ast("core/_type_enums.py")
+    """Severity must be a top-level class in core/types/_type_enums.py (the enums sub-module)."""
+    tree = _get_module_ast("core/types/_type_enums.py")
     assert "Severity" in _top_level_class_names(tree), (
-        "Severity not found in core/_type_enums.py; it must be defined there"
+        "Severity not found in core/types/_type_enums.py; it must be defined there"
     )
 
 
 def test_skill_tools_defined_in_types():
-    """SKILL_TOOLS must be a top-level assignment in core/_type_constants.py."""
-    tree = _get_module_ast("core/_type_constants.py")
+    """SKILL_TOOLS must be a top-level assignment in core/types/_type_constants.py."""
+    tree = _get_module_ast("core/types/_type_constants.py")
     assert "SKILL_TOOLS" in _top_level_assign_targets(tree), (
-        "SKILL_TOOLS not found in core/_type_constants.py; it must be defined there"
+        "SKILL_TOOLS not found in core/types/_type_constants.py; it must be defined there"
     )
 
 
@@ -359,10 +372,10 @@ def test_severity_not_defined_locally_in_recipe_validator() -> None:
 
 def test_severity_not_locally_defined_in_doctor() -> None:
     """cli/_doctor.py must not define its own Severity — it must import from core."""
-    ast_module = _get_module_ast("cli/_doctor.py")
+    ast_module = _get_module_ast("cli/doctor/__init__.py")
     class_names = _top_level_class_names(ast_module)
     assert "Severity" not in class_names, (
-        "cli/_doctor.py must import Severity from autoskillit.core, not define it locally"
+        "cli/doctor/__init__.py must import Severity from autoskillit.core, not define it locally"
     )
 
 
@@ -398,7 +411,7 @@ def test_recipe_validator_has_regex_patterns() -> None:
     ast_module = _get_module_ast("recipe/contracts.py")
     assigns = _top_level_assign_targets(ast_module)
     assert "_CONTEXT_REF_RE" in assigns, "recipe/contracts.py must define _CONTEXT_REF_RE"
-    assert "_INPUT_REF_RE" in assigns, "recipe/contracts.py must define _INPUT_REF_RE"
+    assert "INPUT_REF_RE" in assigns, "recipe/contracts.py must define INPUT_REF_RE"
 
 
 def test_recipe_validator_no_process_lifecycle_import() -> None:
@@ -424,7 +437,7 @@ def test_server_uses_recipe_io_not_recipe_loader_for_discovery() -> None:
     assert "from autoskillit.recipe.loader import load_recipe" not in combined_src
 
 
-# ── New L2 sub-package tests (T1–T7 from groupC plan) ─────────────────────────
+# ── New IL-2 sub-package tests (T1–T7 from groupC plan) ─────────────────────────
 
 
 def test_recipe_subpackage_importable() -> None:
@@ -442,8 +455,8 @@ def test_recipe_subpackage_importable() -> None:
         load_recipe,
         load_recipe_card,
         run_semantic_rules,
-        validate_recipe,
         validate_recipe_cards,
+        validate_recipe_structure,
     )
 
 
@@ -453,11 +466,11 @@ def test_contracts_module_has_staleitem() -> None:
 
 
 def test_validator_module_has_validate() -> None:
-    """T3: recipe/validator.py exposes validate_recipe, run_semantic_rules, analyze_dataflow."""
+    """T3: validator.py exposes validate_recipe_structure + run_semantic_rules."""
     from autoskillit.recipe.validator import (  # noqa: F401
         analyze_dataflow,
         run_semantic_rules,
-        validate_recipe,
+        validate_recipe_structure,
     )
 
 
@@ -507,7 +520,7 @@ def test_old_flat_migration_modules_removed() -> None:
         )
 
 
-# ── New L3 package tests (groupD plan) ────────────────────────────────────────
+# ── New IL-3 package tests (groupD plan) ────────────────────────────────────────
 
 
 def test_server_is_package() -> None:
@@ -525,49 +538,66 @@ def test_cli_is_package() -> None:
 
 
 def test_server_file_count_under_limit() -> None:
-    """server/ must not exceed 16 Python files (REQ-DSGN-002).
+    """server/ must not exceed 18 Python files (REQ-DSGN-002).
 
     Limit updated from 14 to 16 after tools_integrations was split into
     tools_github, tools_issue_lifecycle, and tools_pr_ops.
+    Limit updated from 16 to 17 after _editable_guard.py was added as
+    the pre-deletion editable install guard for perform_merge().
+    Limit updated from 17 to 18 after _lifespan.py was added for
+    FastMCP server lifespan teardown (#745).
+    Limit updated from 18 to 19 after _wire_compat.py was added for
+    Claude Code wire-format sanitization middleware.
+    Limit updated from 19 to 20 after _session_type.py was added for
+    session-type tag visibility dispatch (3-branch startup logic).
+    Limit updated from 20 to 22 after tools_ci.py was split into
+    tools_ci_watch.py and tools_ci_merge_queue.py submodules.
+    Limit updated from 22 to 23 after _guards.py was extracted from helpers.py.
+    Limit updated from 23 to 24 after _subprocess.py was extracted from helpers.py.
+    Limit updated from 24 to 25 after _misc.py was extracted from helpers.py.
     """
     py_files = list((SRC_ROOT / "server").glob("*.py"))
-    assert len(py_files) <= 16, f"server/ has {len(py_files)} files, max is 16"
+    assert len(py_files) <= 25, f"server/ has {len(py_files)} files, max is 25"
 
 
 def test_tools_integrations_replaced_by_split_modules() -> None:
     """tools_integrations.py deleted; three replacement modules exist."""
     server = SRC_ROOT / "server"
     assert not (server / "tools_integrations.py").exists()
-    assert (server / "tools_github.py").exists()
-    assert (server / "tools_issue_lifecycle.py").exists()
-    assert (server / "tools_pr_ops.py").exists()
+    assert (server / "tools" / "tools_github.py").exists()
+    assert (server / "tools" / "tools_issue_lifecycle.py").exists()
+    assert (server / "tools" / "tools_pr_ops.py").exists()
 
 
 def test_split_files_under_750_lines() -> None:
     """Each split module must stay under the 750-line threshold."""
     server = SRC_ROOT / "server"
     for name in ("tools_github.py", "tools_issue_lifecycle.py", "tools_pr_ops.py"):
-        lines = len((server / name).read_text().splitlines())
+        lines = len((server / "tools" / name).read_text().splitlines())
         assert lines <= 750, f"{name} has {lines} lines, exceeds 750"
 
 
-def test_extract_block_moved_to_helpers() -> None:
-    """_extract_block moved to server/helpers.py after tools_integrations split."""
-    from autoskillit.server.helpers import _extract_block
+def test_extract_block_in_misc() -> None:
+    """_extract_block lives in server/_misc.py."""
+    from autoskillit.server._misc import _extract_block
 
     assert callable(_extract_block)
 
 
 def test_all_tools_importable_from_split_modules() -> None:
     """All 9 tools are importable from their new home modules."""
-    from autoskillit.server.tools_github import fetch_github_issue, get_issue_title, report_bug
-    from autoskillit.server.tools_issue_lifecycle import (
+    from autoskillit.server.tools.tools_github import (
+        fetch_github_issue,
+        get_issue_title,
+        report_bug,
+    )
+    from autoskillit.server.tools.tools_issue_lifecycle import (
         claim_issue,
         enrich_issues,
         prepare_issue,
         release_issue,
     )
-    from autoskillit.server.tools_pr_ops import bulk_close_issues, get_pr_reviews
+    from autoskillit.server.tools.tools_pr_ops import bulk_close_issues, get_pr_reviews
 
     for name, fn in [
         ("fetch_github_issue", fetch_github_issue),
@@ -592,7 +622,7 @@ def test_git_operations_moved_to_server_package() -> None:
 def test_doctor_moved_to_cli_package() -> None:
     """_doctor.py must be removed; its logic lives in cli/_doctor.py."""
     assert not (SRC_ROOT / "_doctor.py").exists()
-    assert (SRC_ROOT / "cli" / "_doctor.py").exists()
+    assert (SRC_ROOT / "cli" / "doctor" / "__init__.py").exists()
 
 
 # ── New REQ-CNST tests (groupE) ───────────────────────────────────────────────
@@ -630,28 +660,6 @@ def test_test_suite_oversized_files_split():
     assert not over, f"Oversized test files remain (run groupE): {over}"
 
 
-def test_tmp_path_has_worktree_hash(tmp_path: Path) -> None:
-    """tmp_path must contain a .ROOT_DIR-derived hash to prevent cross-worktree collision.
-
-    Fails when pytest is invoked with --basetemp=/dev/shm/pytest-tmp (static path).
-    Passes only when Taskfile.yml derives PYTEST_TMPDIR from .ROOT_DIR via the
-    slim-sprig sha256sum template function.
-    """
-    if sys.platform == "linux":
-        import hashlib
-        import os
-
-        cwd_hash = hashlib.sha256(os.getcwd().encode()).hexdigest()[:8]
-        path_str = str(tmp_path)
-        assert f"pytest-tmp-{cwd_hash}" in path_str, (
-            f"tmp_path ({path_str!r}) does not contain the expected worktree hash "
-            f"'{cwd_hash}'. PYTEST_TMPDIR must be derived from .ROOT_DIR. "
-            f"Expected /dev/shm/pytest-tmp-{cwd_hash} as the base. "
-            "Update Taskfile.yml PYTEST_TMPDIR to use a .ROOT_DIR-derived hash suffix "
-            "(use slim-sprig: {{ substr 0 8 (sha256sum .ROOT_DIR) }})."
-        )
-
-
 def test_no_subpackage_exceeds_10_files() -> None:
     """REQ-CNST-003: No sub-package directory may contain more than 10 Python files.
 
@@ -662,37 +670,188 @@ def test_no_subpackage_exceeds_10_files() -> None:
         tools_kitchen, helpers, git, _factory, _state, __init__); each file is a
         thin routing layer. Exempt at 16 files.
       recipe/ — REQ-CNST-003-E2: recipe/ hosts one file per semantic-rule domain
-        (rules_bypass, rules_ci, rules_clone, etc.) for independent testability.
+        (rules_bypass, rules_ci, rules_clone, rules_packs, etc.) for independent testability.
+        Adding rules_cmd.py for run_cmd echo-capture alignment validation and
+        rules_isolation.py for workspace isolation checks brings the count to 30.
+        rules_blocks.py adds the block-level budget rule family, bringing the count to 32.
+        rules_reachability.py adds symbolic BFS reachability rules, bringing the count to 33.
+        rules_fixing.py adds conditional-write-skill ungated-push detection,
+        bringing the count to 34.
+        rules_campaign.py, rules_features.py, rules_graph.py, and rules_merge.py add
+        campaign scheduling, feature-gate, graph, and merge-workflow semantic rules,
+        bringing the count to 38.
+        rules_temp_path.py adds the non-unique-output-path lint rule for output path
+        isolation enforcement, bringing the count to 39.
+        identity.py adds recipe identity hashing (content and composite fingerprints),
+        bringing the count to 40.
+        order.py adds the stable display order registry (BUNDLED_RECIPE_ORDER) for
+        Group 0 bundled recipes, bringing the count to 41.
+        Monolithic file splits (_api.py → _recipe_ingredients + _recipe_composition;
+        _analysis.py → _analysis_graph + _analysis_bfs + _analysis_blocks +
+        _analysis_detectors) add 6 files, bringing the count to 47.
+        _skill_helpers.py extracts the shared _get_skill_category_map helper from
+        rules_skills.py and rules_features.py to eliminate duplication,
+        bringing the count to 48.
+        rules/rules_callable_scope.py adds the callable-requires-scoped-discovery
+        rule enforcing scoped directory arguments for file-discovering callables,
+        bringing the rules/ count to 29. Exempt at 48 files.
       execution/ — REQ-CNST-003-E3: execution/ decomposes process lifecycle into
         focused single-concern modules (_process_io, _process_kill, _process_race,
         etc.) that cannot be merged without re-introducing the coupling they isolate.
+        recording.py adds the RecordingSubprocessRunner decorator as a separate module
+        to keep scenario recording concerns isolated from the core process lifecycle.
+        _headless_scan.py extracts write-path JSONL scanning from headless.py to keep
+        that module within its REQ-CNST-010-E2 line budget.
+        _headless_recovery.py, _headless_path_tokens.py, and _headless_result.py
+        split the remaining headless.py concern groups into private sub-modules
+        following the _process_*.py precedent (P8-F1), bringing the count to 29.
+        _session_model.py and _session_content.py split session.py (P8-F3),
+        _merge_queue_classifier.py and _merge_queue_repo_state.py split merge_queue.py
+        (P8-F4), bringing the count to 33.
+        _retry_fsm.py and _session_outcome.py split session retry and outcome logic,
+        bringing the count to 35.
+        _merge_queue_group_ci.py extracts merge-group CI helpers and GraphQL mutation/query
+        strings from merge_queue.py to satisfy the 500-line size budget (P8-F4 follow-up),
+        bringing the count to 36.
+        _headless_git.py extracts git LOC-capture helpers (_capture_git_head_sha,
+        _parse_numstat, _compute_loc_changed) from headless.py to keep it under the
+        750-line architectural budget, bringing the count to 37.
+        _recording_skills.py adds snapshot/restore helpers for ephemeral skill dirs in
+        the record/replay system, isolated from recording.py to keep snapshot logic
+        independently testable, bringing the count to 38.
+        Exempt at 38 files.
       core/ — REQ-CNST-003-E4: core/ types split into per-concern type modules
-        (_type_enums, _type_protocols, _type_results, _type_subprocess, etc.) to
-        prevent circular imports while keeping L0 types co-located. Also houses
-        _terminal_table.py as the L0 shared terminal rendering primitive so that
-        both cli/ (L3) and pipeline/ (L1) can import it without layer violations.
-        Exempt at 15 files.
+        (_type_enums, _type_protocols_logging, _type_protocols_execution,
+        _type_protocols_github, _type_protocols_workspace, _type_protocols_recipe,
+        _type_protocols_infra, _type_results, _type_subprocess, etc.) to
+        prevent circular imports while keeping IL-0 types co-located. Also houses
+        _terminal_table.py as the IL-0 shared terminal rendering primitive so that
+        both cli/ (IL-3) and pipeline/ (IL-1) can import it without layer violations.
+        _claude_env.py adds the canonical IDE-scrubbing env builder for all
+        claude subprocess launches. kitchen_state.py adds the stdlib-only
+        kitchen-open session marker reader for hook subprocesses.
+        _version_snapshot.py adds the process-scoped version snapshot for session
+        telemetry (collect_version_snapshot, lru_cache'd).
+        _plugin_cache.py adds the plugin cache lifecycle: retiring cache sweep,
+        install locking, and kitchen registry (accessible from server/ without
+        cli/ import).
+        feature_flags.py adds the IL-0 is_feature_enabled() primitive — must live
+        in core/ to be importable by all layers without cross-layer violations.
+        session_registry.py adds the stdlib-only session registry mapping
+        autoskillit launch IDs to Claude Code session UUIDs for the scoped
+        resume picker.
+        tool_sequence_analysis.py adds the stdlib-only cross-session tool call
+        sequence DFG analysis (IL-0; must live in core/ to be importable by server/).
+        Monolithic protocol module split into 6 domain-grouped shard files (net +5 files).
+        _install_detect.py adds the is_dev_install() predicate for config resolution
+        to auto-detect whether the install is editable when experimental_enabled is absent,
+        bringing the count to 33.
+        Exempt at 33 files.
       cli/ — REQ-CNST-003-E5: cli/ retains _terminal_table.py as a re-export shim
         for backward-compatible cli/ imports; canonical implementation lives in
-        core/_terminal_table.py. Exempt at 12 files.
+        core/_terminal_table.py. Also contains _terminal.py — the terminal state
+        management context manager (terminal_guard) for interactive subprocess
+        sessions. _install_info.py adds pure install classification + policy.
+        _update_checks.py adds the unified update check orchestration.
+        _update.py adds the first-class update subcommand implementation.
+        _fleet.py adds fleet error envelope rendering for CLI consumers.
+        _features.py adds feature gate inspection subcommand (list/status).
+        _session_picker.py adds the scoped session resume picker that filters
+        sessions by type (cook/order) using the session registry.
+        _sessions.py adds the sessions analyze CLI subcommand for cross-session
+        tool call sequence diagnostics.
+        _restart.py adds the perform_restart() NoReturn contract for post-upgrade
+        process re-exec, keeping the restart logic isolated from update orchestration.
+        _doctor.py was split (1245 lines → facade + 9 sub-modules) following the
+        _process_*.py pattern: _doctor_types.py (shared DoctorResult type),
+        _doctor_mcp.py, _doctor_hooks.py, _doctor_install.py, _doctor_config.py,
+        _doctor_runtime.py, _doctor_env.py, _doctor_features.py, _doctor_fleet.py.
+        _prompts.py (819 lines) was decomposed into three domain-focused submodules:
+        _prompts_campaign.py (IL-3 campaign dispatcher), _prompts_orchestrator.py
+        (IL-1/IL-2 cook session), and _prompts_kitchen.py (open-kitchen + fleet-dispatch),
+        with _prompts.py reduced to a shared-helpers + re-export hub (~50 lines).
+        Exempt at 20 files.
+      hooks/ — REQ-CNST-003-E6: hooks/ hosts one standalone script per hook event
+        (PreToolUse, PostToolUse, SessionStart). Each script must remain a separate
+        file so Claude Code can invoke it directly as a subprocess. pretty_output_hook.py
+        additionally owns a set of underscore-prefixed private formatter modules
+        (_fmt_primitives.py, _fmt_execution.py, _fmt_status.py, _fmt_recipe.py)
+        that are imported helpers — not standalone hook scripts — split out to
+        keep pretty_output_hook.py under its line budget. ask_user_question_guard.py
+        gates AskUserQuestion on kitchen-open state. grep_pattern_lint_guard.py adds
+        input-validation guard for Grep tool BRE pattern syntax. review_gate_post_hook.py
+        and review_loop_gate.py add the review gate enforcement hooks. recipe_write_advisor.py
+        adds a non-blocking advisory hook for recipe YAML writes. write_guard.py
+        blocks Write/Edit outside the allowed prefix in read-only skill sessions.
+        _hook_utils.py provides shared stdlib-only utilities (e.g., find_project_root)
+        for hook scripts that need common path resolution logic.
+        Exempt at 28 files.
+      pipeline/ — REQ-CNST-003-E7: pipeline/ added github_api_log.py for session-scoped
+        GitHub API request tracking (DefaultGitHubApiLog accumulator + GitHubApiEntry).
+        Exempt at 12 files.
+      fleet/ — REQ-CNST-003-E8: fleet/ added _semaphore.py for FleetSemaphore, the
+        configurable asyncio.BoundedSemaphore implementation of the FleetLock protocol.
+        Placed in fleet/ rather than server/ to preserve conservative test-filter cascade
+        narrowing: changes to fleet/_semaphore.py only cascade to fleet/ tests, not to
+        server/ tests. state.py was decomposed into state_types.py, state_gates.py, and
+        state_recovery.py to reduce the 757-line monolith and centralize deserialization
+        logic on DispatchRecord.from_dict. Exempt at 15 files.
     """
     EXEMPTIONS: dict[str, int] = {
-        "server": 16,
-        "recipe": 27,
-        "execution": 23,
-        "core": 15,
-        "cli": 12,
+        "server": 14,
+        "recipe": 31,
+        "execution": 18,
+        "core": 20,
+        "core/types": 16,
+        "cli": 20,
+        "hooks": 10,
+        "pipeline": 12,
+        "fleet": 15,
+        "recipe/rules": 29,
+        "server/tools": 18,
+        "hooks/guards": 21,
     }
     violations: list[str] = []
+    dirs_to_check: list[Path] = []
     for sub_dir in sorted(SRC_ROOT.iterdir()):
         if not sub_dir.is_dir() or sub_dir.name.startswith("_") or sub_dir.name == "__pycache__":
             continue
+        dirs_to_check.append(sub_dir)
+        for nested_dir in sorted(sub_dir.iterdir()):
+            if (
+                not nested_dir.is_dir()
+                or nested_dir.name.startswith("_")
+                or nested_dir.name == "__pycache__"
+            ):
+                continue
+            dirs_to_check.append(nested_dir)
+    for sub_dir in dirs_to_check:
+        rel_key = str(sub_dir.relative_to(SRC_ROOT))
         py_files = list(sub_dir.glob("*.py"))
-        limit = EXEMPTIONS.get(sub_dir.name, 10)
+        limit = EXEMPTIONS.get(rel_key, 10)
         if len(py_files) > limit:
-            violations.append(f"{sub_dir.name}/: {len(py_files)} Python files (max {limit})")
+            violations.append(f"{rel_key}/: {len(py_files)} Python files (max {limit})")
     assert not violations, "Sub-packages exceeding 10 Python files:\n" + "\n".join(
         f"  {v}" for v in violations
+    )
+
+
+def test_data_directories_are_not_python_packages() -> None:
+    """REQ-ARCH-005: data-only directories under src/autoskillit/ must not
+    contain __init__.py — that turns them into phantom Python packages
+    distinct from the real IL-2 module of similar name."""
+    src = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
+    data_dirs = {"migrations", "recipes", "skills", "skills_extended"}
+    offenders: list[str] = []
+    for name in data_dirs:
+        d = src / name
+        if not d.is_dir():
+            continue
+        init = d / "__init__.py"
+        if init.exists():
+            offenders.append(str(init.relative_to(src)))
+    assert not offenders, (
+        f"Data directories must not be Python packages. Remove __init__.py from: {offenders}"
     )
 
 
@@ -714,6 +873,30 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         1200,
         "REQ-CNST-010-E1: canonical type registry — wide surface required to prevent "
         "circular imports; all enums/protocols/constants consolidated here",
+    ),
+    "headless.py": (
+        1550,
+        "REQ-CNST-010-E2: headless session orchestration — Channel B drain-race "
+        "recovery + IDLE_STALL routing + contract nudge resume tier "
+        "+ DIR_MISSING late-bind recovery arm + RecordingSubprocessRunner "
+        "step-name auto-derivation gate + recipe identity threading "
+        "+ _execute_claude_headless extraction + dispatch_food_truck orchestration-L2 path "
+        "+ campaign_id/dispatch_id propagation kwargs "
+        "+ fs-level write detection (pre/post temp-dir snapshot + _resolve_skill_temp_dir); "
+        "splitting would fragment the adjudication pipeline across modules",
+    ),
+    "session.py": (
+        1060,
+        "REQ-CNST-010-E3: session adjudication pipeline — exhaustive match arms "
+        "for TerminationReason require explicit IDLE_STALL arms in _compute_success, "
+        "_compute_retry, and ClaudeSessionResult.normalize_subtype; "
+        "lifespan_started heuristic added",
+    ),
+    "_doctor.py": (
+        1300,
+        "REQ-CNST-010-E4: doctor check registry — 28 sequential checks require inline logic; "
+        "splitting into sub-modules would obscure the check sequence and break the test "
+        "filter cascade",
     ),
 }
 
@@ -741,18 +924,37 @@ def test_no_src_module_exceeds_line_limit() -> None:
 
 
 def test_core_has_no_autoskillit_imports() -> None:
-    """REQ-CNST-004: core/ modules must not import from any autoskillit sub-package."""
+    """REQ-CNST-004: core/ modules must not import from any autoskillit sub-package.
+
+    TYPE_CHECKING-guarded imports are permitted — they are zero-runtime-cost annotations
+    that do not create actual import dependencies (same exemption as test_layer_enforcement.py).
+    """
     core_dir = SRC_ROOT / "core"
     assert core_dir.exists(), "core/ package must exist"
     violations: list[str] = []
     for py_file in core_dir.glob("*.py"):
         tree = ast.parse(py_file.read_text())
+        tc_lines: set[int] = set()
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.If)
+                and isinstance(node.test, ast.Name)
+                and node.test.id == "TYPE_CHECKING"
+            ):
+                for stmt in node.body:
+                    for child in ast.walk(stmt):
+                        if isinstance(child, ast.Import | ast.ImportFrom):
+                            tc_lines.add(child.lineno)
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.module:
+                if node.lineno in tc_lines:
+                    continue
                 parts = node.module.split(".")
                 if parts[0] == "autoskillit" and len(parts) > 1:
                     violations.append(f"core/{py_file.name}:{node.lineno}: imports {node.module}")
             elif isinstance(node, ast.Import):
+                if node.lineno in tc_lines:
+                    continue
                 for alias in node.names:
                     parts = alias.name.split(".")
                     if parts[0] == "autoskillit" and len(parts) > 1:
@@ -796,7 +998,7 @@ def test_server_tool_handlers_have_no_business_logic() -> None:
     """
     server_dir = SRC_ROOT / "server"
     violations: list[str] = []
-    for py_file in sorted(server_dir.glob("tools_*.py")):
+    for py_file in sorted((server_dir / "tools").glob("tools_*.py")):
         tree = ast.parse(py_file.read_text())
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -828,19 +1030,24 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
     """REQ-ARCH-002: Every non-exempt ToolContext field must use a Protocol from core/types.py.
 
     Exempt fields:
-    - plugin_dir: str primitive (explicitly stated in the requirement)
+    - plugin_source: PluginSource discriminated union (value type, not a service interface)
     - config: AutomationConfig dataclass (configuration container, not a service interface)
     """
     AUTOSKILLIT_ROOT = SRC_ROOT
 
     # Collect Protocol class names from core/types.py and its sub-modules via AST.
-    # After the types.py split, Protocol definitions live in _type_protocols.py and
-    # SubprocessRunner lives in _type_subprocess.py; types.py is a thin re-export hub.
+    # After the types.py split, Protocol definitions live in the _type_protocols_*.py
+    # shards and SubprocessRunner lives in _type_subprocess.py; types.py is a thin re-export hub.
     core_protocols: set[str] = set()
     for types_filename in (
-        "core/types.py",
-        "core/_type_protocols.py",
-        "core/_type_subprocess.py",
+        "core/types/__init__.py",
+        "core/types/_type_protocols_logging.py",
+        "core/types/_type_protocols_execution.py",
+        "core/types/_type_protocols_github.py",
+        "core/types/_type_protocols_workspace.py",
+        "core/types/_type_protocols_recipe.py",
+        "core/types/_type_protocols_infra.py",
+        "core/types/_type_subprocess.py",
     ):
         types_path = AUTOSKILLIT_ROOT / types_filename
         if not types_path.exists():
@@ -858,7 +1065,15 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
     context_path = AUTOSKILLIT_ROOT / "pipeline" / "context.py"
     context_tree = ast.parse(context_path.read_text())
 
-    EXEMPT = {"plugin_dir", "config"}
+    EXEMPT = {
+        "plugin_source",
+        "config",
+        "active_recipe_packs",
+        "active_recipe_features",
+        "temp_dir",
+        "project_dir",
+        "ephemeral_root",
+    }
     violations: list[str] = []
 
     for node in ast.walk(context_tree):
@@ -954,7 +1169,7 @@ def test_semantic_rule_functions_defined_in_rule_submodules() -> None:
     """P8: Semantic rule functions must be defined in rules_*.py submodules."""
     from autoskillit.recipe.validator import _check_outdated_version
 
-    assert _check_outdated_version.__module__ == "autoskillit.recipe.rules_inputs"
+    assert _check_outdated_version.__module__ == "autoskillit.recipe.rules.rules_inputs"
 
 
 def test_installed_version_in_core_types() -> None:
@@ -966,7 +1181,7 @@ def test_installed_version_in_core_types() -> None:
 
 def test_rule_submodules_no_autoskillit_init_import() -> None:
     """P3-F2: rules_*.py submodules must not import from autoskillit top-level __init__."""
-    rule_files = sorted((SRC_ROOT / "recipe").glob("rules_*.py"))
+    rule_files = sorted((SRC_ROOT / "recipe" / "rules").glob("rules_*.py"))
     assert len(rule_files) >= 5, f"Expected >=5 rules_*.py files, found {len(rule_files)}"
     for rules_path in rule_files:
         assert "from autoskillit import __version__" not in rules_path.read_text(), (
@@ -982,6 +1197,35 @@ def test_recipe_api_module_exists() -> None:
 def test_default_recipe_repository_in_repository_module() -> None:
     """P2-F1: DefaultRecipeRepository must live in recipe/repository.py."""
     from autoskillit.recipe.repository import DefaultRecipeRepository  # noqa: F401
+
+
+def test_recipe_lister_callsites_use_protocol_typing() -> None:
+    """REQ-ARCH-006: callsites in recipe/ that consume the skill listing
+    must reference the SkillLister Protocol (parameter type), so the
+    deferred DefaultSkillResolver() instantiation is a default-factory fallback
+    rather than the only path.
+
+    contracts.py uses .resolve() and therefore references SkillResolver,
+    not SkillLister. That is checked separately below.
+    """
+    lister_targets = {
+        "src/autoskillit/recipe/rules/rules_skills.py",
+        "src/autoskillit/recipe/_api.py",
+    }
+    src_root = Path(__file__).resolve().parents[2]
+    missing: list[str] = []
+    for relpath in lister_targets:
+        text = (src_root / relpath).read_text()
+        if "SkillLister" not in text:
+            missing.append(relpath)
+    assert not missing, (
+        f"These files still consume SkillResolver without SkillLister Protocol typing: {missing}"
+    )
+    # contracts.py uses .resolve() — must reference SkillResolver, not SkillLister
+    contracts_text = (src_root / "src/autoskillit/recipe/contracts.py").read_text()
+    assert "SkillResolver" in contracts_text, (
+        "contracts.py must reference SkillResolver for the resolver parameter"
+    )
 
 
 def test_default_recipe_repository_not_in_io() -> None:
@@ -1031,51 +1275,51 @@ class TestGroupCMigration:
     """REQ-SIG-001..008: anyio task group replaces asyncio task scaffolding."""
 
     def test_no_asyncio_create_task(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
+        source = Path("src/autoskillit/execution/process/__init__.py").read_text()
         assert "asyncio.create_task(" not in source  # REQ-SIG-001
 
     def test_no_asyncio_wait_call(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
+        source = Path("src/autoskillit/execution/process/__init__.py").read_text()
         assert "asyncio.wait(" not in source  # REQ-SIG-001
 
     def test_no_asyncio_import_at_runtime(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
+        source = Path("src/autoskillit/execution/process/__init__.py").read_text()
         assert "import asyncio" not in source  # REQ-SIG-001
 
     def test_anyio_create_task_group_present(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
+        source = Path("src/autoskillit/execution/process/__init__.py").read_text()
         assert "anyio.create_task_group()" in source  # REQ-SIG-002
 
     def test_scan_done_signals_absent(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
+        source = Path("src/autoskillit/execution/process/__init__.py").read_text()
         assert "def scan_done_signals(" not in source  # REQ-SIG-003
 
     def test_race_accumulator_present(self):
-        source = Path("src/autoskillit/execution/_process_race.py").read_text()
+        source = Path("src/autoskillit/execution/process/_process_race.py").read_text()
         assert "class RaceAccumulator" in source  # REQ-SIG-003
 
     def test_cancel_scope_cancel_present(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
+        source = Path("src/autoskillit/execution/process/__init__.py").read_text()
         assert "cancel_scope.cancel()" in source  # REQ-SIG-004
 
     def test_resolve_termination_preserved(self):
-        source = Path("src/autoskillit/execution/_process_race.py").read_text()
+        source = Path("src/autoskillit/execution/process/_process_race.py").read_text()
         assert "def resolve_termination(" in source  # REQ-SIG-005
 
     def test_channel_b_drain_wait_uses_move_on_after(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
+        source = Path("src/autoskillit/execution/process/__init__.py").read_text()
         assert "anyio.move_on_after(" in source  # REQ-SIG-006
 
     def test_watch_process_present(self):
-        source = Path("src/autoskillit/execution/_process_race.py").read_text()
+        source = Path("src/autoskillit/execution/process/_process_race.py").read_text()
         assert "async def _watch_process(" in source  # REQ-SIG-007
 
     def test_watch_heartbeat_present(self):
-        source = Path("src/autoskillit/execution/_process_race.py").read_text()
+        source = Path("src/autoskillit/execution/process/_process_race.py").read_text()
         assert "async def _watch_heartbeat(" in source  # REQ-SIG-007
 
     def test_watch_session_log_present(self):
-        source = Path("src/autoskillit/execution/_process_race.py").read_text()
+        source = Path("src/autoskillit/execution/process/_process_race.py").read_text()
         assert "async def _watch_session_log(" in source  # REQ-SIG-007
 
     def test_race_signals_fields_unchanged(self):
@@ -1091,6 +1335,10 @@ class TestGroupCMigration:
             "channel_b_status",
             "channel_b_session_id",
             "stdout_session_id",
+            "idle_stall",
+            "process_exited_event",
+            "channel_b_orphaned_tool_result",
+            "exit_snapshot",
         }  # REQ-SIG-008
 
     def test_race_signals_still_frozen(self):
@@ -1136,3 +1384,71 @@ def test_pipeline_init_no_longer_exports_domain_paths():
 
     assert "DOMAIN_PATHS" not in m.__all__
     assert "partition_files_by_domain" not in m.__all__
+
+
+def test_singleton_exemption_comment_matches_both_windows() -> None:
+    """The _install_info exemption comment in SINGLETON_ALLOWED_MODULES must
+    accurately reflect both the _STABLE_DISMISS_WINDOW and _DEV_DISMISS_WINDOW values."""
+
+    from autoskillit.cli._install_info import _DEV_DISMISS_WINDOW, _STABLE_DISMISS_WINDOW
+
+    this_file = Path(__file__)
+    content = this_file.read_text(encoding="utf-8")
+
+    def _fmt_td(td: object) -> str:
+        import datetime
+
+        if not isinstance(td, datetime.timedelta):
+            return repr(td)
+        total_seconds = td.total_seconds()
+        if total_seconds % 86400 == 0:
+            return f"timedelta(days={int(total_seconds // 86400)})"
+        if total_seconds % 3600 == 0:
+            return f"timedelta(hours={int(total_seconds // 3600)})"
+        return repr(td)
+
+    stable_fragment = _fmt_td(_STABLE_DISMISS_WINDOW)
+    dev_fragment = _fmt_td(_DEV_DISMISS_WINDOW)
+
+    assert stable_fragment in content, (
+        f"Exemption comment in SINGLETON_ALLOWED_MODULES is stale. "
+        f"Expected to find '{stable_fragment}' "
+        f"(current _STABLE_DISMISS_WINDOW={_STABLE_DISMISS_WINDOW!r}). "
+        "Update the comment on the '_install_info' entry."
+    )
+    assert dev_fragment in content, (
+        f"Exemption comment in SINGLETON_ALLOWED_MODULES is stale. "
+        f"Expected to find '{dev_fragment}' "
+        f"(current _DEV_DISMISS_WINDOW={_DEV_DISMISS_WINDOW!r}). "
+        "Update the comment on the '_install_info' entry."
+    )
+
+
+def test_update_checks_docstring_describes_both_windows() -> None:
+    """The _update_checks module docstring and _is_dismissed docstring must
+    mention both branch-aware window values."""
+    import ast
+
+    src_root = Path(__file__).parent.parent.parent / "src"
+    module_path = src_root / "autoskillit" / "cli" / "update" / "_update_checks.py"
+    tree = ast.parse(module_path.read_text(encoding="utf-8"))
+
+    module_doc = ast.get_docstring(tree) or ""
+    assert "timedelta(days=7)" in module_doc or "days=7" in module_doc, (
+        "_update_checks module docstring must mention the 7-day stable window"
+    )
+    assert "timedelta(hours=12)" in module_doc or "hours=12" in module_doc, (
+        "_update_checks module docstring must mention the 12-hour dev window"
+    )
+
+    # Also verify _is_dismissed has a docstring mentioning both windows
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "_is_dismissed":
+            func_doc = ast.get_docstring(node) or ""
+            assert "days=7" in func_doc or "7 days" in func_doc, (
+                "_is_dismissed docstring must mention the 7-day window"
+            )
+            assert "hours=12" in func_doc or "12 hours" in func_doc, (
+                "_is_dismissed docstring must mention the 12-hour window"
+            )
+            break

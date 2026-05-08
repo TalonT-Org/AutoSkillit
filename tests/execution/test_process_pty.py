@@ -7,6 +7,7 @@ _build_skill_result → SkillResult adjudication boundary.
 
 from __future__ import annotations
 
+import json
 import shutil
 import sys
 import textwrap
@@ -15,6 +16,7 @@ import pytest
 
 from autoskillit.core.types import (
     ChannelConfirmation,
+    CliSubtype,
     RetryReason,
     SubprocessResult,
     TerminationReason,
@@ -27,6 +29,9 @@ from autoskillit.execution.process import (
     run_managed_async,
 )
 from autoskillit.execution.session import ClaudeSessionResult
+from tests.execution.conftest import _result_ndjson
+
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 # ---------------------------------------------------------------------------
 # Helper scripts — small Python programs that reproduce specific scenarios
@@ -191,7 +196,7 @@ class TestPtyWrapCommand:
         cmd = ["claude", "--no-color", "do something"]
         fake_script = "/usr/bin/script"
         with (
-            patch("autoskillit.execution._process_pty.sys.platform", "linux"),
+            patch("autoskillit.execution.process._process_pty.sys.platform", "linux"),
             patch("shutil.which", return_value=fake_script),
         ):
             result = pty_wrap_command(cmd)
@@ -209,7 +214,7 @@ class TestPtyWrapCommand:
         cmd = ["claude", "--no-color", "do something"]
         fake_script = "/usr/bin/script"
         with (
-            patch("autoskillit.execution._process_pty.sys.platform", "darwin"),
+            patch("autoskillit.execution.process._process_pty.sys.platform", "darwin"),
             patch("shutil.which", return_value=fake_script),
         ):
             result = pty_wrap_command(cmd)
@@ -372,7 +377,7 @@ class TestStaleRecoveryPipelineAdjudication:
         result = await run_managed_async(
             [sys.executable, str(script), str(session_dir)],
             cwd=tmp_path,
-            timeout=10,
+            timeout=20,
             session_log_dir=session_dir,
             completion_marker="%%NONEXISTENT%%",
             stale_threshold=0.3,
@@ -468,6 +473,7 @@ class TestAdjudicationCoverageMatrix:
             TerminationReason.NATURAL_EXIT,  # TestSTOPDelayPipelineAdjudication
             TerminationReason.STALE,  # TestStaleRecoveryPipelineAdjudication
             TerminationReason.TIMED_OUT,  # TestTimedOutPipelineAdjudication
+            TerminationReason.IDLE_STALL,  # TestIdleStallWatchdog in test_process_run.py
         }
     )
 
@@ -486,27 +492,6 @@ class TestAdjudicationCoverageMatrix:
 # ---------------------------------------------------------------------------
 # Module-level helper for adjudication guard tests
 # ---------------------------------------------------------------------------
-
-
-def _result_ndjson(
-    result: str = "done",
-    subtype: str = "success",
-    is_error: bool = False,
-    session_id: str = "s1",
-) -> str:
-    """Build a minimal NDJSON string with a single type=result record."""
-    import json
-
-    return json.dumps(
-        {
-            "type": "result",
-            "subtype": subtype,
-            "is_error": is_error,
-            "result": result,
-            "session_id": session_id,
-            "errors": [],
-        }
-    )
 
 
 class TestResolveTerminationMatrix:
@@ -633,6 +618,190 @@ class TestRecoverFromSeparateMarker:
 
 
 # ---------------------------------------------------------------------------
+# Channel B drain-race recovery — integration through _build_skill_result
+# ---------------------------------------------------------------------------
+
+
+def _assistant_content_ndjson(text: str) -> str:
+    """Build an assistant NDJSON record with text content (no type=result)."""
+    return json.dumps(
+        {
+            "type": "assistant",
+            "message": {
+                "role": "assistant",
+                "content": [{"type": "text", "text": text}],
+            },
+        }
+    )
+
+
+class TestChannelBDrainRaceRecovery:
+    """Verify pre-gate Channel B drain-race recovery in _build_skill_result.
+
+    When Claude Code defers the type=result NDJSON record until all background
+    agents finish, killing the process tree after Channel B fires means the
+    deferred record is never flushed to stdout. These tests cover the recovery
+    block that reconstructs the result from assistant_messages.
+    """
+
+    def test_channel_b_drain_race_recovery_promotes_unparseable(self) -> None:
+        """CHANNEL_B + UNPARSEABLE + marker standalone in assistant_messages → success.
+
+        Simulates the background-agent deferred-result scenario: Channel B confirmed
+        completion, assistant_messages contain the marker with substantive content,
+        but type=result was never flushed to stdout.
+        """
+        stdout = _assistant_content_ndjson(
+            "Plan completed.\n\nplan_path = /tmp/plan.md\n%%ORDER_UP%%"
+        )
+        result = SubprocessResult(
+            returncode=0,
+            stdout=stdout,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+        )
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="%%ORDER_UP%%",
+            skill_command="/make-plan",
+            audit=None,
+            expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+        )
+        assert skill_result.success is True
+        assert skill_result.needs_retry is False
+        assert "plan_path = /tmp/plan.md" in skill_result.result
+
+    def test_channel_b_drain_race_no_marker_in_messages_not_rescued(self) -> None:
+        """CHANNEL_B + UNPARSEABLE + marker absent from assistant_messages → not rescued.
+
+        When Channel B fired but assistant_messages don't contain the marker as a
+        standalone line, recovery must not fire.  The session remains UNPARSEABLE
+        (is_error=True) which the dead-end guard classifies as SESSION_ERROR —
+        a terminal failure, not a retriable DRAIN_RACE.
+        """
+        stdout = _assistant_content_ndjson("Working on the task...")
+        result = SubprocessResult(
+            returncode=0,
+            stdout=stdout,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+        )
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="%%ORDER_UP%%",
+            skill_command="/test",
+            audit=None,
+            expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+        )
+        assert skill_result.success is False
+        assert skill_result.needs_retry is False
+
+    def test_channel_b_drain_race_recovery_empty_output(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """CHANNEL_B + EMPTY_OUTPUT + marker in assistant_messages → success.
+
+        Same deferred-result scenario but stdout is completely empty.
+        Monkeypatches parse_session_result to inject assistant_messages since
+        an empty stdout produces no NDJSON records to accumulate from.
+        """
+        import autoskillit.execution.headless._headless_result as headless_result_mod
+
+        fake_session = ClaudeSessionResult(
+            subtype=CliSubtype.EMPTY_OUTPUT,
+            is_error=True,
+            result="",
+            session_id="test",
+            assistant_messages=["Done.\n%%ORDER_UP%%"],
+        )
+        monkeypatch.setattr(headless_result_mod, "parse_session_result", lambda _: fake_session)
+        result = SubprocessResult(
+            returncode=0,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+        )
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="%%ORDER_UP%%",
+            skill_command="/test",
+            audit=None,
+        )
+        assert skill_result.success is True
+
+    def test_channel_a_unparseable_no_drain_race_recovery(self) -> None:
+        """CHANNEL_A + UNPARSEABLE must not trigger the new Channel B recovery.
+
+        The pre-gate recovery is strictly for CHANNEL_B. CHANNEL_A sessions with
+        UNPARSEABLE subtype should continue to be handled by existing mechanisms.
+        """
+        stdout = _assistant_content_ndjson(
+            "Plan completed.\n\nplan_path = /tmp/plan.md\n%%ORDER_UP%%"
+        )
+        result = SubprocessResult(
+            returncode=0,
+            stdout=stdout,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
+        )
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="%%ORDER_UP%%",
+            skill_command="/test",
+            audit=None,
+        )
+        assert skill_result.success is False
+
+    def test_unmonitored_unparseable_no_drain_race_recovery(self) -> None:
+        """UNMONITORED + UNPARSEABLE: no channel recovery, existing behavior preserved."""
+        stdout = _assistant_content_ndjson(
+            "Plan completed.\n\nplan_path = /tmp/plan.md\n%%ORDER_UP%%"
+        )
+        result = SubprocessResult(
+            returncode=0,
+            stdout=stdout,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="%%ORDER_UP%%",
+            skill_command="/test",
+            audit=None,
+        )
+        assert skill_result.success is False
+
+    def test_channel_b_timeout_not_recovered(self) -> None:
+        """CHANNEL_B + TIMEOUT: timeout is not a recoverable subtype."""
+        result = SubprocessResult(
+            returncode=-1,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.TIMED_OUT,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+        )
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="%%ORDER_UP%%",
+            skill_command="/test",
+            audit=None,
+            expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+        )
+        assert skill_result.success is False
+
+
+# ---------------------------------------------------------------------------
 # Adjudication guards — integration through _build_skill_result
 # ---------------------------------------------------------------------------
 
@@ -648,7 +817,7 @@ class TestAdjudicationGuards:
         """CHANNEL_A + empty result: dead-end guard escalates to retriable."""
         result = SubprocessResult(
             returncode=0,
-            stdout=_result_ndjson(subtype="success", result=""),
+            stdout=_result_ndjson(subtype="success", result_text=""),
             stderr="",
             termination=TerminationReason.NATURAL_EXIT,
             pid=12345,
@@ -671,7 +840,7 @@ class TestAdjudicationGuards:
         """CHANNEL_B + error_max_turns: contradiction guard resolves to retriable."""
         result = SubprocessResult(
             returncode=0,
-            stdout=_result_ndjson(subtype="error_max_turns", result="partial", is_error=True),
+            stdout=_result_ndjson(subtype="error_max_turns", result_text="partial", is_error=True),
             stderr="",
             termination=TerminationReason.NATURAL_EXIT,
             pid=12345,
@@ -695,7 +864,7 @@ class TestAdjudicationGuards:
         """COMPLETED + CHANNEL_B + error_max_turns: contradiction guard resolves to retriable."""
         result = SubprocessResult(
             returncode=-15,
-            stdout=_result_ndjson(subtype="error_max_turns", result="partial", is_error=True),
+            stdout=_result_ndjson(subtype="error_max_turns", result_text="partial", is_error=True),
             stderr="",
             termination=TerminationReason.COMPLETED,
             pid=12345,

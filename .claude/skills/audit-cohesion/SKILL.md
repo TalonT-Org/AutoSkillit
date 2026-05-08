@@ -1,5 +1,6 @@
 ---
 name: audit-cohesion
+categories: [audit]
 description: Audit codebase for internal cohesion - how well components fit together and maintain consistent patterns. Distinct from audit-arch (which checks rule violations); this checks integration fitness and convergence. Use when user says "audit cohesion", "check cohesion", "cohesion audit", or "alignment check".
 hooks:
   PreToolUse:
@@ -31,8 +32,8 @@ Audit the codebase for internal cohesion: how well components integrate and main
 
 **ALWAYS:**
 - Use subagents for parallel exploration (one per cohesion dimension)
-- All output goes under `temp/audit-cohesion/` (create if needed)
-- Final report: `temp/audit-cohesion/cohesion_audit_{YYYY-MM-DD_HHMMSS}.md` — always one file, never split
+- All output goes under `{{AUTOSKILLIT_TEMP}}/audit-cohesion/` (create if needed)
+- Final report: `{{AUTOSKILLIT_TEMP}}/audit-cohesion/cohesion_audit_{YYYY-MM-DD_HHMMSS}.md` — always one file, never split
 - Subagents must NOT create their own files — they return findings in their response text only
 - Score each dimension (STRONG, ADEQUATE, WEAK, FRACTURED)
 
@@ -451,9 +452,9 @@ After all subagents return:
 
 ### Step 3: Write Report
 
-Ensure `temp/audit-cohesion/` exists (`mkdir -p`).
+Ensure `{{AUTOSKILLIT_TEMP}}/audit-cohesion/` exists (`mkdir -p`).
 
-Write to `temp/audit-cohesion/cohesion_audit_{YYYY-MM-DD_HHMMSS}.md` — **always one file, never split**.
+Write to `{{AUTOSKILLIT_TEMP}}/audit-cohesion/cohesion_audit_{YYYY-MM-DD_HHMMSS}.md` — **always one file, never split**.
 
 The report WILL be long. This is expected and correct — thoroughness over brevity. Do not reduce content to stay under any line count.
 
@@ -510,6 +511,42 @@ Do NOT flag:
 - Test fixtures and cached LLM responses
 - Temporary/debug files in `temp/`
 - Configuration template files in `config/`
+
+---
+
+## Exception Whitelist
+
+### General Exceptions (GE)
+
+These exceptions apply to cohesion audit findings. Before reporting, verify the finding does not match any entry below.
+
+**GE-10** — Naming convention enforcement applies to exported/public symbols only. Module-private classes not in `__all__` are not naming violations.
+*Source: [C4-C-1], [C4-C-2] April cohesion round.*
+
+**GE-11** — `public_name = _private_name` in `__init__.py` is a standard re-export idiom — not "logic in `__init__`."
+*Source: [C1-E] April cohesion round.*
+
+**GE-12** — Modules with documented stdlib-only or early-boot constraints using bare `logging` are exempt from structured-logging conventions.
+*Source: April cohesion round.*
+
+**GE-13** — Grep `tests/` for imports before claiming no test coverage. Absence of `test_<module>.py` is not evidence of missing coverage.
+*Source: cohesion round 1 contest batches.*
+
+**GE-15** — Documented optional/empty-when-skipped recipe context variables are not phantom.
+*Source: [C7-3] April cohesion round.*
+
+### C10 File-Verification Rule
+
+Before claiming a documentation error, read the actual file at the cited path — don't rely on the CLAUDE.md ASCII tree representation.
+*Source: [C10-D] April cohesion round.*
+
+### Project-Specific Exceptions (PS)
+
+**PS-3** — `test_check` in `server/tools_workspace.py` omits the `_require_enabled()` guard by design: it uses the dual-tag headless detection path and must be callable from both interactive and headless sessions.
+
+**PS-5** — CLAUDE.md findings tracked in #713. Suppress cohesion findings related to CLAUDE.md accuracy until #713 closes.
+
+**PS-6** — `remove_clone` string booleans (`"true"`/`"false"`) are a domain contract baked into recipe YAMLs; converting to Python `bool` would break recipe compatibility.
 
 ---
 

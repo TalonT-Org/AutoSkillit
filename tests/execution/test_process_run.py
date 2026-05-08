@@ -15,6 +15,7 @@ import textwrap
 import time
 from pathlib import Path
 
+import anyio
 import psutil
 import pytest
 
@@ -24,6 +25,8 @@ from autoskillit.execution.process import (
     run_managed_async,
     run_managed_sync,
 )
+
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 # ---------------------------------------------------------------------------
 # Helper scripts — small Python programs that reproduce specific scenarios
@@ -220,8 +223,8 @@ class TestReadTempOutputLogging:
         """
         import structlog
 
-        import autoskillit.execution._process_io as io_mod
         import autoskillit.execution.process as proc_mod
+        import autoskillit.execution.process._process_io as io_mod
 
         structlog.reset_defaults()
         current_procs = structlog.get_config()["processors"]
@@ -293,8 +296,8 @@ class TestTracingStopOnException:
         """tracing_handle.stop() is called in except BaseException even when task group raises."""
         import subprocess
 
-        from autoskillit.config import LinuxTracingConfig
         from autoskillit.execution.linux_tracing import LinuxTracingHandle
+        from tests._helpers import make_tracing_config
 
         stop_called: list[bool] = []
         original_stop = LinuxTracingHandle.stop
@@ -307,7 +310,7 @@ class TestTracingStopOnException:
 
         # Use a real process with tracing enabled; cancel mid-run to trigger BaseException path
         proc = subprocess.Popen(["sleep", "2"])
-        cfg = LinuxTracingConfig(enabled=True, proc_interval=0.05, tmpfs_path=str(tmp_path))
+        cfg = make_tracing_config(enabled=True, proc_interval=0.05, tmpfs_path=str(tmp_path))
 
         import anyio
 
@@ -361,3 +364,40 @@ class TestOuterCancelRaceGuard:
         assert caught_exc is None or not isinstance(caught_exc, AttributeError), (
             f"timeout_scope None dereference — got AttributeError: {caught_exc}"
         )
+
+
+class TestIdleStallWatchdog:
+    """Integration test: idle_output_timeout kills a hanging process."""
+
+    @pytest.mark.anyio
+    async def test_run_managed_async_idle_stall_kills_hanging_process(self, tmp_path, monkeypatch):
+        """Process writes burst then stalls — IDLE_STALL kills it promptly."""
+        script = tmp_path / "burst_stall.py"
+        script.write_text(
+            textwrap.dedent("""\
+                import sys, time, json
+                for i in range(3):
+                    sys.stdout.write(json.dumps({"type": "assistant", "i": i}) + "\\n")
+                    sys.stdout.flush()
+                time.sleep(9999)
+            """)
+        )
+
+        monkeypatch.setattr(
+            "autoskillit.execution.process._process_monitor._has_active_api_connection",
+            lambda pid: True,
+        )
+
+        start = time.monotonic()
+        with anyio.fail_after(15.0):
+            result = await run_managed_async(
+                [sys.executable, str(script)],
+                cwd=tmp_path,
+                timeout=30,
+                idle_output_timeout=2.0,
+                stale_threshold=60,
+            )
+
+        elapsed = time.monotonic() - start
+        assert result.termination == TerminationReason.IDLE_STALL
+        assert elapsed < 12.0

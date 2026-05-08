@@ -18,6 +18,8 @@ from autoskillit.recipe.contracts import (
 )
 from autoskillit.workspace import bundled_skills_extended_dir
 
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+
 # ---------------------------------------------------------------------------
 # Bundled manifest tests
 # ---------------------------------------------------------------------------
@@ -47,6 +49,33 @@ def test_load_bundled_manifest_skill_inputs_typed() -> None:
             )
 
 
+def test_load_bundled_manifest_callable_inputs_have_explicit_required() -> None:
+    manifest = load_bundled_manifest()
+    for dotted_path, entry in manifest.get("callable_contracts", {}).items():
+        for inp in entry.get("inputs", []):
+            assert "required" in inp, f"{dotted_path}: input {inp['name']} missing 'required'"
+
+
+def test_get_skill_contract_defaults_required_false() -> None:
+    from autoskillit.recipe.contracts import get_skill_contract
+
+    manifest = {"skills": {"test-skill": {"inputs": [{"name": "x", "type": "string"}]}}}
+    contract = get_skill_contract("test-skill", manifest)
+    assert contract is not None
+    assert len(contract.inputs) == 1
+    assert contract.inputs[0].required is False
+
+
+def test_get_callable_contract_defaults_required_true() -> None:
+    from autoskillit.recipe.contracts import get_callable_contract
+
+    manifest = {"callable_contracts": {"mod.func": {"inputs": [{"name": "x", "type": "string"}]}}}
+    contract = get_callable_contract("mod.func", manifest)
+    assert contract is not None
+    assert len(contract.inputs) == 1
+    assert contract.inputs[0].required is True
+
+
 # ---------------------------------------------------------------------------
 # resolve_skill_name tests
 # ---------------------------------------------------------------------------
@@ -70,15 +99,24 @@ def test_resolve_skill_name_with_use_prefix() -> None:
 
 
 def test_resolve_skill_name_no_prefix() -> None:
-    from autoskillit.recipe.contracts import resolve_skill_name
+    from autoskillit.core import resolve_skill_name
 
-    assert resolve_skill_name("/do-stuff") is None
+    assert resolve_skill_name("/do-stuff") == "do-stuff"
 
 
 def test_resolve_skill_name_dynamic() -> None:
     from autoskillit.recipe.contracts import resolve_skill_name
 
     assert resolve_skill_name("/audit-${{ inputs.audit_type }}") is None
+
+
+def test_resolve_skill_name_bash_placeholder_truncation() -> None:
+    """Skill names truncated by a bash {placeholder} suffix must be treated as dynamic."""
+    from autoskillit.recipe.contracts import resolve_skill_name
+
+    # "/autoskillit:exp-lens-{slug}" — regex extracts "exp-lens-" (stops at {)
+    # but the true name is dynamic; must return None to skip contract validation.
+    assert resolve_skill_name("/autoskillit:exp-lens-{slug} {ctx} ${{ context.plan }}") is None
 
 
 # ---------------------------------------------------------------------------
@@ -440,10 +478,17 @@ def test_sc1_audit_impl_has_real_inputs_and_outputs() -> None:
     assert remediation_out["type"] == "file_path"
 
 
-def test_sc2_resolve_failures_has_empty_outputs() -> None:
-    """T_SC2: resolve-failures has outputs: []."""
+def test_sc2_resolve_failures_declares_verdict_output() -> None:
+    """T_SC2: resolve-failures declares a verdict output with allowed_values."""
     manifest = load_bundled_manifest()
-    assert manifest["skills"]["resolve-failures"]["outputs"] == []
+    outputs = manifest["skills"]["resolve-failures"]["outputs"]
+    output_names = {o["name"] for o in outputs}
+    assert "verdict" in output_names, (
+        "resolve-failures must declare a 'verdict' output after Part B implementation"
+    )
+    verdict_out = next(o for o in outputs if o["name"] == "verdict")
+    assert "allowed_values" in verdict_out, "verdict output must have allowed_values"
+    assert "real_fix" in verdict_out["allowed_values"]
 
 
 def test_sc3_dry_walkthrough_has_empty_outputs() -> None:
@@ -512,13 +557,15 @@ FILE_PRODUCING_SKILLS_WITH_CONTRACTS: list[str] = [
     "triage-issues",
     "analyze-prs",
     "merge-pr",
-    "open-pr",
+    "prepare-pr",
+    "compose-pr",
     "open-integration-pr",
     "implement-worktree",
     "implement-worktree-no-merge",
     "resolve-merge-conflicts",
     "retry-worktree",
     "review-pr",
+    "planner-generate-phases",
     "arch-lens-c4-container",
     "arch-lens-concurrency",
     "arch-lens-data-lineage",
@@ -552,9 +599,9 @@ def test_file_producing_skill_has_output_patterns(skill_name: str) -> None:
 def test_generate_recipe_card_includes_output_patterns(tmp_path: Path) -> None:
     """Recipe card serialization must preserve expected_output_patterns."""
     manifest = load_bundled_manifest()
-    contract = get_skill_contract("open-pr", manifest)
+    contract = get_skill_contract("compose-pr", manifest)
     assert contract is not None
-    assert contract.expected_output_patterns, "Precondition: open-pr must have patterns"
+    assert contract.expected_output_patterns, "Precondition: compose-pr must have patterns"
 
     from autoskillit.core.paths import pkg_root
 
@@ -566,14 +613,13 @@ def test_generate_recipe_card_includes_output_patterns(tmp_path: Path) -> None:
     recipes_dir.mkdir()
     card = generate_recipe_card(recipe_path, recipes_dir)
     card_skills = card.get("skills", {})
-    open_pr_card = card_skills.get("open-pr")
-    if open_pr_card is None:
-        pytest.skip("open-pr not used in implementation recipe")
+    compose_pr_card = card_skills.get("compose-pr")
+    assert compose_pr_card is not None, "compose-pr must be used in implementation recipe"
 
-    assert "expected_output_patterns" in open_pr_card, (
+    assert "expected_output_patterns" in compose_pr_card, (
         "generate_recipe_card() must include expected_output_patterns"
     )
-    assert open_pr_card["expected_output_patterns"], (
+    assert compose_pr_card["expected_output_patterns"], (
         "expected_output_patterns must be non-empty in the card"
     )
 
@@ -611,18 +657,44 @@ def test_write_behavior_defaults_to_none() -> None:
 
 
 ALWAYS_WRITE_SKILLS = {
+    "audit-tests",
+    "build-execution-map",
+    "compose-pr",
+    "compose-research-pr",
+    "design-guards",
+    "diagnose-ci",
     "dry-walkthrough",
+    "generate-report",
+    "implement-experiment",
     "implement-worktree",
     "implement-worktree-no-merge",
-    "resolve-failures",
-    "resolve-review",
-    "retry-worktree",
-    "rectify",
+    "make-campaign",
+    "make-groups",
     "make-plan",
+    "plan-experiment",
+    "plan-visualization",
+    "planner-consolidate-wps",
+    "planner-elaborate-assignments",
+    "planner-elaborate-phase",
+    "planner-elaborate-wps",
+    "planner-generate-phases",
+    "planner-refine-assignments",
+    "planner-refine-phases",
+    "planner-refine-wps",
+    "planner-assess-review-approach",
+    "planner-validate-task-alignment",
+    "prepare-research-pr",
+    "promote-to-main",
+    "rectify",
     "report-bug",
-    "design-guards",
+    "resolve-design-review",
+    "review-design",
+    "run-experiment",
+    "scope",
+    "setup-environment",
+    "stage-data",
+    "troubleshoot-experiment",
     "write-recipe",
-    "diagnose-ci",
 }
 
 
@@ -637,9 +709,80 @@ def test_every_always_write_skill_has_contract(skill_name: str) -> None:
     )
 
 
+def test_always_write_skills_matches_yaml() -> None:
+    """ALWAYS_WRITE_SKILLS test set must equal the set from skill_contracts.yaml."""
+    manifest = load_bundled_manifest()
+    yaml_always = {
+        name
+        for name, data in manifest.get("skills", {}).items()
+        if data.get("write_behavior") == "always"
+    }
+    assert ALWAYS_WRITE_SKILLS == yaml_always, (
+        f"ALWAYS_WRITE_SKILLS is out of sync with skill_contracts.yaml.\n"
+        f"In test but not YAML: {ALWAYS_WRITE_SKILLS - yaml_always}\n"
+        f"In YAML but not test: {yaml_always - ALWAYS_WRITE_SKILLS}"
+    )
+
+
+# Skills that write conditionally — write expected only when the completion
+# token indicates actual work was performed.
+CONDITIONAL_WRITE_SKILLS: dict[str, str] = {
+    # skill_name → substring that must appear in write_expected_when patterns
+    "resolve-failures": "verdict",
+    "resolve-merge-conflicts": "conflict_report_path",
+    "resolve-review": "verdict",
+    "retry-worktree": "phases_implemented",
+    "resolve-claims-review": "verdict",
+    "resolve-research-review": "verdict",
+}
+
+
+@pytest.mark.parametrize("skill_name,pattern_substring", sorted(CONDITIONAL_WRITE_SKILLS.items()))
+def test_every_conditional_write_skill_has_correct_contract(
+    skill_name: str, pattern_substring: str
+) -> None:
+    """Skills with legitimate no-write exits must declare write_behavior='conditional'.
+
+    Each conditional skill must have at least one write_expected_when pattern
+    containing the expected token substring. This prevents regression to 'always'.
+    """
+    manifest = load_bundled_manifest()
+    contract = get_skill_contract(skill_name, manifest)
+    assert contract is not None, f"Skill '{skill_name}' missing from skill_contracts.yaml"
+    assert contract.write_behavior == "conditional", (
+        f"Skill '{skill_name}' must use write_behavior='conditional'. "
+        f"It has a legitimate no-write success path. Got: '{contract.write_behavior}'"
+    )
+    assert len(contract.write_expected_when) > 0, (
+        f"Skill '{skill_name}': conditional mode requires non-empty write_expected_when"
+    )
+    assert any(pattern_substring in p for p in contract.write_expected_when), (
+        f"Skill '{skill_name}': write_expected_when must contain a pattern with "
+        f"'{pattern_substring}' (the structured completion token)"
+    )
+
+
 # ---------------------------------------------------------------------------
 # REQ-C4-02: DataFlowEntry rename
 # ---------------------------------------------------------------------------
+
+
+def test_prepare_pr_contract_is_conditional() -> None:
+    """prepare-pr must be conditional — it has a documented no-write exit path."""
+    manifest = load_bundled_manifest()
+    contract = get_skill_contract("prepare-pr", manifest)
+    assert contract is not None
+    assert contract.write_behavior == "conditional"
+    assert contract.write_expected_when
+
+
+def test_bundle_local_report_contract_is_conditional() -> None:
+    """bundle-local-report must be conditional — it has a documented no-write exit path."""
+    manifest = load_bundled_manifest()
+    contract = get_skill_contract("bundle-local-report", manifest)
+    assert contract is not None
+    assert contract.write_behavior == "conditional"
+    assert contract.write_expected_when
 
 
 def test_dataflow_entry_uppercase_f() -> None:
@@ -650,3 +793,189 @@ def test_dataflow_entry_uppercase_f() -> None:
     assert not hasattr(m, "DataflowEntry"), "DataflowEntry (lowercase f) must be removed"
     entry = DataFlowEntry(step="s", available=[], required=[], produced=[])
     assert entry.step == "s"
+
+
+def test_all_bundled_recipe_skills_in_master_manifest() -> None:
+    """T1d: every skill name used in a run_skill step across all bundled recipes must have
+    an entry in skill_contracts.yaml (dynamic/template skill names are excluded)."""
+    from autoskillit.recipe.contracts import resolve_skill_name
+    from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+
+    manifest = load_bundled_manifest()
+    registered_skills = set(manifest.get("skills", {}).keys())
+
+    recipes_dir = builtin_recipes_dir()
+    unregistered: list[str] = []
+
+    for recipe_path in sorted(recipes_dir.glob("*.yaml")):
+        recipe = load_recipe(recipe_path)
+        for step in recipe.steps.values():
+            if step.tool != "run_skill":
+                continue
+            skill_cmd = step.with_args.get("skill_command", "")
+            name = resolve_skill_name(skill_cmd)
+            if name is None:
+                continue  # dynamic skill name — can't validate statically
+            if name not in registered_skills:
+                unregistered.append(f"{recipe_path.name}:{name}")
+
+    assert not unregistered, (
+        f"Skills used in bundled recipes but missing from skill_contracts.yaml: "
+        f"{sorted(set(unregistered))}"
+    )
+
+
+def test_result_field_spec_roundtrip() -> None:
+    """ResultFieldSpec must be parseable from skill_contracts.yaml for planner-generate-phases."""
+    from autoskillit.recipe.contracts import ResultFieldSpec, get_skill_contract
+
+    manifest = load_bundled_manifest()
+    contract = get_skill_contract("planner-generate-phases", manifest)
+    assert contract is not None
+    required_names = {rf.name for rf in contract.result_fields if rf.required}
+    assert required_names == {"id", "name", "ordering"}, (
+        f"planner-generate-phases result_fields required names mismatch: {required_names}"
+    )
+    for rf in contract.result_fields:
+        assert isinstance(rf, ResultFieldSpec)
+        assert rf.required is True
+
+
+def test_callable_contract_nullable_field() -> None:
+    from autoskillit.recipe.contracts import get_callable_contract
+
+    manifest = load_bundled_manifest()
+    contracts = manifest.get("callable_contracts", {})
+    assert "autoskillit.recipe._cmd_rpc.advance_queue_pr" in contracts, (
+        "advance_queue_pr must be declared in callable_contracts"
+    )
+    aq_contract = contracts["autoskillit.recipe._cmd_rpc.advance_queue_pr"]
+    pr_input = next((i for i in aq_contract["inputs"] if i["name"] == "current_pr_number"), None)
+    assert pr_input is not None, "current_pr_number input must be declared"
+    assert pr_input.get("nullable") is False, (
+        "current_pr_number must be explicitly non-nullable (nullable: false)"
+    )
+    parsed = get_callable_contract("autoskillit.recipe._cmd_rpc.advance_queue_pr", manifest)
+    assert parsed is not None
+    pr_parsed = next((i for i in parsed.inputs if i.name == "current_pr_number"), None)
+    assert pr_parsed is not None
+    assert pr_parsed.nullable is False
+
+
+# ---------------------------------------------------------------------------
+# tool_output_contracts
+# ---------------------------------------------------------------------------
+
+
+def test_tool_output_contracts_section_exists() -> None:
+    """skill_contracts.yaml must have a tool_output_contracts section."""
+    manifest = load_bundled_manifest()
+    tool_contracts = manifest.get("tool_output_contracts", {})
+    assert "wait_for_ci" in tool_contracts
+    assert "allowed_values" in tool_contracts["wait_for_ci"]["fields"]["conclusion"]
+
+
+def test_wait_for_ci_conclusion_allowed_values() -> None:
+    manifest = load_bundled_manifest()
+    conclusion = manifest["tool_output_contracts"]["wait_for_ci"]["fields"]["conclusion"]
+    values = set(conclusion["allowed_values"])
+    assert {"success", "failure", "cancelled", "timed_out", "no_runs", "error"}.issubset(values)
+
+
+# ---------------------------------------------------------------------------
+# Research recipe contract card tests
+# ---------------------------------------------------------------------------
+
+
+def test_research_recipe_card_generated_at_is_iso8601() -> None:
+    """research.yaml card's generated_at is a parseable ISO-8601 timestamp."""
+    import datetime
+
+    from autoskillit.recipe.io import builtin_recipes_dir
+
+    card = load_recipe_card("research", builtin_recipes_dir())
+    assert card is not None
+    generated_at = card.get("generated_at", "")
+    assert isinstance(generated_at, str) and generated_at, (
+        "generated_at must be a non-empty string"
+    )
+    try:
+        datetime.datetime.fromisoformat(generated_at)
+    except ValueError as exc:
+        pytest.fail(f"generated_at is not a valid ISO-8601 datetime: {generated_at!r}: {exc}")
+
+
+def test_research_recipe_card_structure() -> None:
+    """Research contract card contains all required top-level keys."""
+    from autoskillit.recipe.io import builtin_recipes_dir
+
+    card = load_recipe_card("research", builtin_recipes_dir())
+    assert card is not None
+    for key in ("generated_at", "bundled_manifest_version", "skill_hashes", "skills", "dataflow"):
+        assert key in card, f"Missing key: {key}"
+    assert card["bundled_manifest_version"] == "0.1.0"
+    assert card["skill_hashes"] == {}
+
+
+def test_research_recipe_card_contains_research_skills() -> None:
+    """Research card captures contracts for statically-resolvable skills."""
+    from autoskillit.recipe.io import builtin_recipes_dir
+
+    card = load_recipe_card("research", builtin_recipes_dir())
+    assert card is not None
+    skills = card["skills"]
+    expected_subset = {
+        "scope",
+        "plan-experiment",
+        "review-design",
+        "run-experiment",
+        "generate-report",
+        "resolve-failures",
+        "prepare-research-pr",
+        "compose-research-pr",
+        "implement-experiment",
+        "make-groups",
+        "make-plan",
+        "bundle-local-report",
+    }
+    required_fields = {"inputs", "outputs", "expected_output_patterns", "write_behavior"}
+    for skill_name in expected_subset:
+        assert skill_name in skills, f"Missing skill: {skill_name}"
+        entry = skills[skill_name]
+        for field in required_fields:
+            assert field in entry, f"{skill_name} missing '{field}'"
+        assert isinstance(entry["inputs"], list), f"{skill_name} 'inputs' must be a list"
+        assert isinstance(entry["outputs"], list), f"{skill_name} 'outputs' must be a list"
+        assert isinstance(entry["expected_output_patterns"], list), (
+            f"{skill_name} 'expected_output_patterns' must be a list"
+        )
+        assert entry["write_behavior"] in {"always", "conditional", "never"}, (
+            f"{skill_name} 'write_behavior' has unexpected value: {entry['write_behavior']!r}"
+        )
+
+
+def test_research_recipe_card_dataflow() -> None:
+    """Research card dataflow section is populated and has expected steps."""
+    from autoskillit.recipe.io import builtin_recipes_dir
+
+    card = load_recipe_card("research", builtin_recipes_dir())
+    assert card is not None
+    dataflow = card["dataflow"]
+    step_names = [entry["step"] for entry in dataflow]
+    assert "scope" in step_names
+    assert "plan_experiment" in step_names
+    for entry in dataflow:
+        assert "step" in entry, f"Dataflow entry missing 'step': {entry}"
+        assert "available" in entry, f"Step '{entry.get('step')}' missing 'available'"
+        assert "required" in entry, f"Step '{entry.get('step')}' missing 'required'"
+        assert "produced" in entry, f"Step '{entry.get('step')}' missing 'produced'"
+
+
+def test_research_contract_card_not_stale() -> None:
+    """Freshly generated card has no staleness warnings."""
+    from autoskillit.recipe.io import builtin_recipes_dir
+
+    contract = load_recipe_card("research", builtin_recipes_dir())
+    assert contract is not None
+    stale = check_contract_staleness(contract)
+    assert stale == []

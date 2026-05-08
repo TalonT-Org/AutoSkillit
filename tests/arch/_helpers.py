@@ -20,10 +20,10 @@ from tests.arch._rules import (
 # ── Path constants ────────────────────────────────────────────────────────────
 # Must be absolute for xdist compatibility -- do not use relative paths.
 SRC_ROOT = Path(__file__).parent.parent.parent / "src" / "autoskillit"
-PROCESS_PY = SRC_ROOT / "execution" / "process.py"
-PROCESS_KILL_PY = SRC_ROOT / "execution" / "_process_kill.py"
-PROCESS_MONITOR_PY = SRC_ROOT / "execution" / "_process_monitor.py"
-PROCESS_RACE_PY = SRC_ROOT / "execution" / "_process_race.py"
+PROCESS_PY = SRC_ROOT / "execution" / "process" / "__init__.py"
+PROCESS_KILL_PY = SRC_ROOT / "execution" / "process" / "_process_kill.py"
+PROCESS_MONITOR_PY = SRC_ROOT / "execution" / "process" / "_process_monitor.py"
+PROCESS_RACE_PY = SRC_ROOT / "execution" / "process" / "_process_race.py"
 
 # ── Section A: AST visitor infrastructure ─────────────────────────────────────
 
@@ -132,6 +132,47 @@ class ArchitectureViolationVisitor(ast.NodeVisitor):
                                     f"'{var_name}' -- use structlog kwargs instead",
                                 )
 
+        # Rule ARCH-008 (visitor): start_linux_tracing must not receive a raw .pid Attribute
+        # Resolve function name: bare Name or trailing Attribute.attr
+        called_name: str | None = None
+        if isinstance(func, ast.Name):
+            called_name = func.id
+        elif isinstance(func, ast.Attribute):
+            called_name = func.attr
+        if called_name == "start_linux_tracing":
+            for kw in node.keywords:
+                if (
+                    kw.arg == "target"
+                    and isinstance(kw.value, ast.Attribute)
+                    and kw.value.attr == "pid"
+                ):
+                    self._add(
+                        node,
+                        _RULE["ARCH-008"],
+                        "start_linux_tracing(target=<expr>.pid) passes a raw .pid attribute; "
+                        "use resolve_trace_target() or trace_target_from_pid() to get a "
+                        "TraceTarget first (issue #806)",
+                    )
+
+        self.generic_visit(node)
+
+    def visit_Assign(self, node: ast.Assign) -> None:  # ARCH-009
+        """logger variable name: get_logger() result must be bound to 'logger'."""
+        if isinstance(node.value, ast.Call):
+            call = node.value
+            func_name: str | None = None
+            if isinstance(call.func, ast.Name):
+                func_name = call.func.id
+            elif isinstance(call.func, ast.Attribute):
+                func_name = call.func.attr
+            if func_name == "get_logger":
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and target.id != "logger":
+                        self._add(
+                            node,
+                            _RULE["ARCH-009"],
+                            f"get_logger() result bound to '{target.id}'; must be named 'logger'",
+                        )
         self.generic_visit(node)
 
     def visit_ExceptHandler(self, node: ast.ExceptHandler) -> None:
@@ -203,6 +244,54 @@ def _is_mcp_tool_decorator(node: ast.expr) -> bool:
         and node.func.attr == "tool"
     ):
         return True
+    return False
+
+
+def _has_toplevel_except_exception(func_node: ast.AsyncFunctionDef | ast.FunctionDef) -> bool:
+    """Return True if the function has a top-level try/except Exception.
+
+    A leading gate-check guard (if ... return/raise ...) before the try is permitted,
+    matching the canonical gated-tool pattern used across the server layer.
+    """
+    body = func_node.body
+    # Skip docstring
+    stmts = [
+        s for s in body if not isinstance(s, ast.Expr) or not isinstance(s.value, ast.Constant)
+    ]
+    if not stmts:
+        return False
+    # Skip leading guard `if ... return` statements (gate checks, early validation exits)
+    idx = 0
+    while idx < len(stmts):
+        s = stmts[idx]
+        if (
+            isinstance(s, ast.If)
+            and len(s.body) == 1
+            and isinstance(s.body[0], (ast.Return, ast.Raise))
+            and not s.orelse
+        ):
+            idx += 1
+        else:
+            break
+    if idx >= len(stmts):
+        return False
+    first = stmts[idx]
+    if not isinstance(first, ast.Try):
+        return False
+    # Check that at least one handler catches Exception or BaseException
+    for handler in first.handlers:
+        if handler.type is None:  # bare except:
+            return True
+        if isinstance(handler.type, ast.Name) and handler.type.id in (
+            "Exception",
+            "BaseException",
+        ):
+            return True
+        if isinstance(handler.type, ast.Attribute) and handler.type.attr in (
+            "Exception",
+            "BaseException",
+        ):
+            return True
     return False
 
 

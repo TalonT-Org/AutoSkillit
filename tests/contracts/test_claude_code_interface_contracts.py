@@ -240,7 +240,7 @@ class TestCookAddDirStructure:
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
         monkeypatch.setattr("sys.stdin.isatty", lambda: True)
 
-        from autoskillit.cli._cook import cook
+        from autoskillit.cli.session._cook import cook
 
         # Use a fixed ephemeral root so cleanup is deterministic
         from autoskillit.workspace.session_skills import (
@@ -330,7 +330,7 @@ class TestMultiChannelSkillUniqueness:
             SkillsDirectoryProvider,
         )
         from autoskillit.workspace.skills import (
-            SkillResolver,
+            DefaultSkillResolver,
             detect_project_local_overrides,
         )
 
@@ -345,7 +345,7 @@ class TestMultiChannelSkillUniqueness:
         )
 
         # Channel 1: BUNDLED skill names (served by --plugin-dir)
-        resolver = SkillResolver()
+        resolver = DefaultSkillResolver()
         channel_1 = {s.name for s in resolver.list_all() if s.source == SkillSource.BUNDLED}
 
         # Channel 2: skills written to ephemeral dir

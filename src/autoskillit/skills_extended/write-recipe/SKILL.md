@@ -1,6 +1,13 @@
 ---
 name: write-recipe
 description: Generate YAML recipes for .autoskillit/recipes/. Use when user says "make script skill", "generate script", "script a workflow", "write a script", "create a script", "new recipe", "write a pipeline", or when loaded by other skills for script formatting.
+hooks:
+  PreToolUse:
+    - matcher: "*"
+      hooks:
+        - type: command
+          command: "echo '[SKILL: write-recipe] Writing recipe...'"
+          once: true
 ---
 
 # Make Script Skill
@@ -10,7 +17,7 @@ Format a workflow into a YAML recipe following the workflow schema.
 ## When to Use
 
 - **Standalone**: User wants to create a new recipe from scratch
-- **Loaded by another skill**: Another skill (e.g., setup-project) loads this via the Skill tool to format a workflow it has already discovered
+- **Loaded by another skill**: Another skill (e.g., setup-project) loads this via the Skill tool to format a workflow it has already discovered.
 
 ## Arguments (standalone mode)
 
@@ -32,6 +39,25 @@ No positional arguments. The skill prompts interactively for workflow details.
 - Save the script to `.autoskillit/recipes/{name}.yaml` as the ONLY output
 - Call `validate_recipe` after saving and fix any errors
 - Use "recipe" terminology (not "skill script")
+
+## Output Path Isolation (Required)
+
+Every recipe that produces output files MUST scope its write destinations through a
+per-run context variable captured in the `init` step:
+
+- Use `init` to create a unique timestamped directory and capture its path as
+  `${{ context.work_dir }}`, `${{ context.planner_dir }}`, or similar.
+- All downstream steps reference their output directories via
+  `${{ context.<var> }}/subdir/` — never via bare `{{AUTOSKILLIT_TEMP}}/name/...`.
+- The `non-unique-output-path` lint rule (severity: ERROR) rejects any recipe step
+  that uses a bare `{{AUTOSKILLIT_TEMP}}/` path without a context-variable prefix.
+
+**Valid patterns:**
+- `${{ context.planner_dir }}/phases/` (run-scoped via captured unique dir)
+- `${{ context.work_dir }}/output/` (clone-scoped)
+
+**Invalid pattern (rejected by lint):**
+- `{{AUTOSKILLIT_TEMP}}/myrecipe/data/` (bare — shared across runs, causes stale artifacts)
 
 ## How Scripts Are Loaded
 
@@ -216,12 +242,23 @@ These skills ship with the autoskillit plugin and are invoked as `/autoskillit:<
 analyze-prs, arch-lens-c4-container, arch-lens-concurrency, arch-lens-data-lineage, arch-lens-deployment,
 arch-lens-development, arch-lens-error-resilience, arch-lens-module-dependency, arch-lens-operational,
 arch-lens-process-flow, arch-lens-repository-access, arch-lens-scenarios, arch-lens-security, arch-lens-state-lifecycle,
-audit-arch, audit-bugs, audit-cohesion, audit-defense-standards, audit-friction, audit-impl, audit-tests,
-close-kitchen, collapse-issues, design-guards, diagnose-ci, dry-walkthrough, elaborate-phase,
-enrich-issues, implement-worktree, implement-worktree-no-merge, investigate, issue-splitter, make-arch-diag,
-make-groups, make-plan, make-req, merge-pr, mermaid, migrate-recipes, open-integration-pr, open-kitchen, open-pr, pipeline-summary,
-prepare-issue, process-issues, rectify, report-bug, resolve-failures, resolve-merge-conflicts, resolve-review,
-retry-worktree, review-approach, review-pr, setup-project, smoke-task, sprint-planner, triage-issues, verify-diag, write-recipe
+audit-arch, audit-bugs, audit-claims, audit-cohesion, audit-defense-standards, audit-docs, audit-feature-gates, audit-friction, audit-impl, audit-review-decisions, audit-tests,
+build-execution-map, bundle-local-report, close-kitchen, collapse-issues, compose-pr, compose-research-pr, design-guards, diagnose-ci, dry-walkthrough, elaborate-phase,
+enrich-issues, exp-lens-benchmark-representativeness, exp-lens-causal-assumptions, exp-lens-comparator-construction,
+exp-lens-error-budget, exp-lens-estimand-clarity, exp-lens-exploratory-confirmatory, exp-lens-fair-comparison,
+exp-lens-governance-risk, exp-lens-iterative-learning, exp-lens-measurement-validity, exp-lens-pipeline-integrity,
+exp-lens-randomization-blocking, exp-lens-reproducibility-artifacts, exp-lens-sensitivity-robustness,
+exp-lens-severity-testing, exp-lens-unit-interference, exp-lens-validity-threats, exp-lens-variance-stability,
+implement-experiment, implement-worktree, implement-worktree-no-merge, investigate, issue-splitter, make-arch-diag,
+make-campaign, make-experiment-diag, make-groups, make-plan, make-req, merge-pr, mermaid, migrate-recipes, open-integration-pr,
+open-kitchen, pipeline-summary, plan-experiment, plan-visualization, planner-analyze, planner-assess-review-approach, planner-consolidate-wps, planner-elaborate-assignments, planner-elaborate-phase, planner-elaborate-wps, planner-extract-domain, planner-generate-phases, planner-reconcile-deps, planner-refine, planner-refine-assignments, planner-refine-phases, planner-refine-wps, planner-validate-task-alignment, prepare-issue, prepare-pr, prepare-research-pr, process-issues, promote-to-main, rectify, reload-session, report-bug,
+resolve-claims-review, resolve-design-review, resolve-failures, resolve-merge-conflicts, resolve-research-review, resolve-review, retry-worktree, review-approach, review-design, review-pr, review-research-pr, run-experiment,
+scope, setup-environment, setup-project, smoke-task, stage-data, triage-issues, troubleshoot-experiment,
+validate-audit, validate-review-decisions, validate-test-audit, verify-diag,
+vis-lens-always-on, vis-lens-antipattern, vis-lens-caption-annot, vis-lens-chart-select,
+vis-lens-color-access, vis-lens-methodology-norms, vis-lens-figure-table, vis-lens-multi-compare,
+vis-lens-reproducibility, vis-lens-story-arc, vis-lens-temporal, vis-lens-uncertainty,
+generate-report, write-recipe
 
 ## Skill Reference Disambiguation
 
@@ -277,7 +314,7 @@ ingredients:
     default: "."
   base_branch:
     description: Branch to merge into
-    default: integration
+    default: develop
 
 steps:
   plan:
@@ -363,7 +400,7 @@ ingredients:
     required: true
   base_branch:
     description: Branch to merge fixes into
-    default: integration
+    default: develop
   helper_dir:
     description: Directory for helper agent sessions
     required: true

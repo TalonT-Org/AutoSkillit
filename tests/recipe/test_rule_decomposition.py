@@ -5,11 +5,15 @@ from __future__ import annotations
 import ast
 import pathlib
 
+import pytest
+
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+
 
 def test_no_deferred_validator_imports_in_rule_modules() -> None:
     """T1: No rule sub-module should defer-import from validator.py inside a function body."""
     recipe_dir = pathlib.Path(__file__).resolve().parents[2] / "src/autoskillit/recipe"
-    rule_files = list(recipe_dir.glob("rules_*.py"))
+    rule_files = list((recipe_dir / "rules").glob("rules_*.py"))
     assert len(rule_files) >= 5, "Expected at least 5 rule sub-modules"
     for path in rule_files:
         tree = ast.parse(path.read_text())
@@ -24,7 +28,7 @@ def test_no_deferred_validator_imports_in_rule_modules() -> None:
 
 
 def test_all_rules_registered_across_submodules() -> None:
-    """T2: All 27 rules registered, distributed across sub-modules."""
+    """T2: All 28 rules registered, distributed across sub-modules."""
     import autoskillit.recipe  # noqa: F401 -- triggers rule registration
     from autoskillit.recipe.registry import _RULE_REGISTRY
 
@@ -35,7 +39,7 @@ def test_all_rules_registered_across_submodules() -> None:
         "shadowed-required-input",
         "unreachable-step",
         "model-on-non-skill-step",
-        "retries-on-worktree-creating-skill",
+        "retries-on-worktree-modifying-skill",
         "retry-worktree-cwd",
         "weak-constraint-text",
         "undeclared-capture-key",
@@ -57,6 +61,7 @@ def test_all_rules_registered_across_submodules() -> None:
         "unknown-skill-command",
         "missing-output-patterns",
         "ci-failure-missing-conflict-gate",
+        "unknown-required-pack",
     }
     assert expected <= rule_names
 
@@ -94,6 +99,6 @@ def test_validator_does_not_import_rules() -> None:
             assert not module.endswith(".rules"), (
                 "validator.py must not import from rules.py (cycle eliminated)"
             )
-            assert "rules_" not in module or module.startswith("autoskillit.recipe.rules_"), (
-                f"validator.py must not import rule sub-modules directly: {module}"
-            )
+            assert "rules_" not in module or module.startswith(
+                "autoskillit.recipe.rules.rules_"
+            ), f"validator.py must not import rule sub-modules directly: {module}"

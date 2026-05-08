@@ -1,0 +1,206 @@
+"""Tests that the FastMCP lifespan calls recorder.finalize() on server shutdown."""
+
+import asyncio
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from autoskillit.execution.recording import RecordingSubprocessRunner
+
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+
+
+@pytest.mark.asyncio
+async def test_lifespan_calls_finalize_on_recording_runner():
+    """lifespan __aexit__ calls recorder.finalize() when runner is RecordingSubprocessRunner."""
+    from autoskillit.server import _autoskillit_lifespan
+
+    mock_recorder = MagicMock()
+    mock_runner = MagicMock(spec=RecordingSubprocessRunner)
+    mock_runner.recorder = mock_recorder
+    mock_ctx = MagicMock()
+    mock_ctx.runner = mock_runner
+
+    with patch("autoskillit.server._lifespan._get_ctx_or_none", return_value=mock_ctx):
+        async with _autoskillit_lifespan(MagicMock()):
+            pass  # server running phase
+
+    mock_recorder.finalize.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_lifespan_skips_finalize_when_not_recording():
+    """lifespan __aexit__ does not error when runner is not RecordingSubprocessRunner."""
+    from autoskillit.server import _autoskillit_lifespan
+
+    mock_ctx = MagicMock()
+    mock_ctx.runner = MagicMock()  # plain runner, not RecordingSubprocessRunner
+
+    with patch("autoskillit.server._lifespan._get_ctx_or_none", return_value=mock_ctx):
+        async with _autoskillit_lifespan(MagicMock()):
+            pass  # must not raise
+
+
+@pytest.mark.asyncio
+async def test_lifespan_skips_finalize_when_ctx_is_none():
+    """lifespan __aexit__ is safe when _get_ctx_or_none() returns None (non-recording mode)."""
+    from autoskillit.server import _autoskillit_lifespan
+
+    with patch("autoskillit.server._lifespan._get_ctx_or_none", return_value=None):
+        async with _autoskillit_lifespan(MagicMock()):
+            pass  # must not raise
+
+
+@pytest.mark.asyncio
+async def test_lifespan_calls_finalize_on_cancellation():
+    """finalize() is called even when the lifespan task is cancelled (SIGTERM path).
+
+    Regression guard for issue #745: the try/finally in _autoskillit_lifespan must
+    ensure finalize() runs when CancelledError is thrown at the yield point, which
+    is exactly what anyio does when KeyboardInterrupt cancels the running task group.
+    """
+    from autoskillit.server import _autoskillit_lifespan
+
+    mock_recorder = MagicMock()
+    mock_runner = MagicMock(spec=RecordingSubprocessRunner)
+    mock_runner.recorder = mock_recorder
+    mock_ctx = MagicMock()
+    mock_ctx.runner = mock_runner
+
+    with patch("autoskillit.server._lifespan._get_ctx_or_none", return_value=mock_ctx):
+        with pytest.raises(asyncio.CancelledError):
+            async with _autoskillit_lifespan(MagicMock()):
+                raise asyncio.CancelledError
+
+    mock_recorder.finalize.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_lifespan_sets_startup_ready_event():
+    """_startup_ready must be set to a real Event and signalled after lifespan yield."""
+    from autoskillit.server import _autoskillit_lifespan, _state
+
+    mock_ctx = MagicMock()
+    mock_ctx.runner = MagicMock()
+    mock_ctx.config.linux_tracing.tmpfs_path = "/tmp"
+    mock_ctx.config.linux_tracing.log_dir = None
+    mock_ctx.audit = MagicMock()
+    mock_ctx.audit.load_from_log_dir = MagicMock(return_value=0)
+    mock_ctx.session_skill_manager = None
+
+    # Reset _startup_ready to None before test
+    original = _state._startup_ready
+    _state._startup_ready = None
+
+    try:
+        with patch("autoskillit.server._lifespan._get_ctx_or_none", return_value=mock_ctx):
+            async with _autoskillit_lifespan(MagicMock()):
+                # _startup_ready is assigned synchronously before yield
+                assert _state._startup_ready is not None, (
+                    "_startup_ready must be assigned an asyncio.Event during lifespan"
+                )
+                # Background task may not have completed yet — await the event
+                await asyncio.wait_for(_state._startup_ready.wait(), timeout=5.0)
+                assert _state._startup_ready.is_set(), (
+                    "_startup_ready event must be signalled after deferred_initialize completes"
+                )
+    finally:
+        _state._startup_ready = original
+
+
+# T-WT-4: MCP lifespan startup detects broken hooks
+def test_startup_broken_hook_detection(tmp_path: Path, monkeypatch) -> None:
+    """run_startup_hook_health_check must detect broken hook scripts across all scopes."""
+    import json as _json
+
+    from autoskillit.server._lifespan import run_startup_hook_health_check
+
+    user_settings = tmp_path / ".claude" / "settings.json"
+    user_settings.parent.mkdir(parents=True)
+    user_settings.write_text(
+        _json.dumps(
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "matcher": ".*",
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": "python3 /deleted/worktree/hooks/quota_guard.py",
+                                }
+                            ],
+                        }
+                    ]
+                }
+            }
+        )
+    )
+
+    monkeypatch.setattr(
+        "autoskillit.hook_registry.iter_all_scope_paths",
+        lambda project_root=None: iter([("user", user_settings)]),
+    )
+
+    broken = run_startup_hook_health_check()
+    assert broken  # must return non-empty list of broken hook paths
+
+
+def test_startup_hook_health_checks_plugin_cache(tmp_path: Path, monkeypatch) -> None:
+    """run_startup_hook_health_check must include broken plugin cache paths in the result."""
+    from autoskillit.server._lifespan import run_startup_hook_health_check
+
+    stale_commands = [
+        "python3 /stale/cache/path/hooks/quota_guard.py",
+        "python3 /stale/cache/path/hooks/write_guard.py",
+    ]
+
+    monkeypatch.setattr(
+        "autoskillit.hook_registry.iter_all_scope_paths",
+        lambda project_root=None: iter([]),
+    )
+    monkeypatch.setattr(
+        "autoskillit.hook_registry.validate_plugin_cache_hooks",
+        lambda cache_dir=None: stale_commands,
+    )
+
+    broken = run_startup_hook_health_check()
+
+    assert set(stale_commands).issubset(set(broken)), (
+        "run_startup_hook_health_check must include broken plugin cache paths in result"
+    )
+
+
+def test_serve_startup_regenerates_on_hash_mismatch(tmp_path: Path, monkeypatch) -> None:
+    """run_startup_drift_check() regenerates hooks.json when hash is mismatched."""
+    import json as _json
+
+    import autoskillit.core.paths as _paths
+    from autoskillit.hook_registry import HOOK_REGISTRY_HASH
+    from autoskillit.server._lifespan import run_startup_drift_check
+
+    fake_pkg_root = tmp_path / "pkg"
+    hooks_dir = fake_pkg_root / "hooks"
+    hooks_dir.mkdir(parents=True)
+    stale_json = {"_autoskillit_registry_hash": "deadbeef", "hooks": {}}
+    (hooks_dir / "hooks.json").write_text(_json.dumps(stale_json))
+
+    monkeypatch.setattr(_paths, "pkg_root", lambda: fake_pkg_root)
+
+    run_startup_drift_check()
+
+    updated = _json.loads((hooks_dir / "hooks.json").read_text())
+    assert updated.get("_autoskillit_registry_hash") == HOOK_REGISTRY_HASH
+
+
+def test_lifespan_boot_registry_covers_all_session_types() -> None:
+    """_LIFESPAN_BOOT_REGISTRY must have an entry for every SessionType value."""
+    from autoskillit.core import SessionType
+    from autoskillit.server._lifespan import _LIFESPAN_BOOT_REGISTRY
+
+    missing = set(SessionType) - set(_LIFESPAN_BOOT_REGISTRY)
+    assert not missing, (
+        f"SessionType values not in _LIFESPAN_BOOT_REGISTRY: {missing}. "
+        "Every SessionType must declare a boot function or None."
+    )

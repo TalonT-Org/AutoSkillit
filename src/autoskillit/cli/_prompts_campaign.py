@@ -315,7 +315,8 @@ NEVER retry the same dispatch_name on non-quota failures in v1.
 
 ## QUOTA RETRY
 
-Trigger: a dispatch returns reason=quota_exhausted with a wait_seconds field.
+Trigger: a dispatch returns reason=quota_exhausted OR
+  reason=fleet_quota_exhausted with a wait_seconds field.
 
 Action:
 1. Sleep min(wait_seconds, {max_quota_wait_sec}) seconds.

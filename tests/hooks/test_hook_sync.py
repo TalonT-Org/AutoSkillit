@@ -40,3 +40,14 @@ def test_hook_config_path_single_source_of_truth():
     assert (*HOOK_DIR_COMPONENTS, HOOK_CONFIG_FILENAME) == _HOOK_CONFIG_PATH_COMPONENTS, (
         "_hook_settings path constants must match _fmt_primitives._HOOK_CONFIG_PATH_COMPONENTS"
     )
+
+
+def test_quota_budget_exceeded_trigger_consistency():
+    """QUOTA_BUDGET_EXCEEDED_TRIGGER must be identical in quota_guard and autoskillit.hooks."""
+    from autoskillit.hooks import QUOTA_BUDGET_EXCEEDED_TRIGGER
+    from autoskillit.hooks.guards.quota_guard import QUOTA_BUDGET_EXCEEDED_TRIGGER as _DIRECT
+
+    assert QUOTA_BUDGET_EXCEEDED_TRIGGER == _DIRECT, (
+        f"QUOTA_BUDGET_EXCEEDED_TRIGGER mismatch: "
+        f"quota_guard={_DIRECT!r} vs hooks re-export={QUOTA_BUDGET_EXCEEDED_TRIGGER!r}"
+    )

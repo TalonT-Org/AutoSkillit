@@ -568,6 +568,21 @@ When `run_skill` output contains `--- QUOTA WARNING ---`:
 3. After sleeping, proceed normally with the next step.
 4. Before executing, state aloud: "Quota warning. Sleeping N seconds before next step."
 
+### Budget-Exceeded Denial (quota sleep exceeds session wall-clock budget)
+
+When a `run_skill` call is DENIED with "QUOTA BUDGET EXCEEDED":
+
+1. The required quota sleep exceeds the session's remaining wall-clock budget.
+2. **MANDATORY**: Do NOT execute the sleep command.
+3. Instead, emit your result block immediately with:
+   - `"success": false`
+   - `"reason": "fleet_quota_exhausted"`
+   - `"wait_seconds": <seconds_until_reset>`
+   - `"summary": "Quota exceeded; session budget insufficient for sleep. Resume after window resets."`
+4. Then STOP — do not call any more tools.
+5. Do NOT follow `on_failure`. Do NOT report to the user.
+6. The fleet dispatcher will handle retry scheduling.
+
 ### Key Rules
 
 - Quota denials are **always temporary**. The API enforces multiple rate-limit windows (e.g. one-minute, one-hour, five-hour, one-day). The guard waits for the most constrained window — the one that resets latest among all windows above the threshold — to reset before retrying.

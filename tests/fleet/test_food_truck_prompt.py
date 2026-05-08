@@ -37,3 +37,18 @@ def test_food_truck_prompt_contains_hook_denial_compliance():
         l3_timeout_sec=300,
     )
     assert "HOOK DENIAL" in prompt.upper()
+
+
+def test_fleet_prompt_contains_budget_exceeded_routing():
+    """L3 food truck prompt must contain QUOTA WAIT REQUIRED and QUOTA BUDGET EXCEEDED routing."""
+    prompt = _build_food_truck_prompt(
+        recipe="test-recipe",
+        task="Test task",
+        ingredients={},
+        mcp_prefix=DIRECT_PREFIX,
+        dispatch_id="test-dispatch",
+        campaign_id="test-campaign",
+        l3_timeout_sec=300,
+    )
+    assert "QUOTA WAIT REQUIRED" in prompt
+    assert "QUOTA BUDGET EXCEEDED" in prompt

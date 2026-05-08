@@ -15,6 +15,7 @@ requiring the autoskillit package to be importable.
 import json
 import os
 import sys
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -34,6 +35,10 @@ _AUTOSKILLIT_LOG_DIR_ENV = "AUTOSKILLIT_LOG_DIR"
 # Emitted in deny messages; also referenced by orchestrator prompt QUOTA DENIAL ROUTING.
 # Changing this value requires updating _prompts.py and sous-chef/SKILL.md in the same commit.
 QUOTA_GUARD_DENY_TRIGGER: str = "QUOTA WAIT REQUIRED"
+
+# Emitted when required sleep exceeds remaining session wall-clock budget.
+# Instructs the session to emit a clean sentinel and exit, rather than sleep-and-retry.
+QUOTA_BUDGET_EXCEEDED_TRIGGER: str = "QUOTA BUDGET EXCEEDED"
 
 
 def _read_quota_cache(cache_path_str: str, max_age: int) -> dict | None:
@@ -170,39 +175,76 @@ def main(*, cache_path_override: str | None = None) -> None:
         else:
             n = settings.buffer_seconds
 
+        session_deadline_str = os.environ.get("AUTOSKILLIT_SESSION_DEADLINE")
+        budget_exceeded = False
+        if session_deadline_str:
+            try:
+                session_deadline = float(session_deadline_str)
+                remaining_budget = max(0, session_deadline - time.time())
+                if n > remaining_budget:
+                    budget_exceeded = True
+            except (ValueError, TypeError):
+                pass  # malformed deadline — fall through to normal deny
+
         _write_quota_log_event(
             {
                 "ts": ts,
-                "event": "blocked",
+                "event": "blocked_budget_exceeded" if budget_exceeded else "blocked",
                 "effective_threshold": effective_threshold,
                 "window_name": window_name,
                 "utilization": utilization,
                 "sleep_seconds": n,
                 "resets_at": resets_at_str,
+                "budget_exceeded": budget_exceeded,
             },
             log_dir,
         )
-        print(
-            json.dumps(
-                {
-                    "hookSpecificOutput": {
-                        "hookEventName": "PreToolUse",
-                        "permissionDecision": "deny",
-                        "permissionDecisionReason": (
-                            f"{QUOTA_GUARD_DENY_TRIGGER} (temporary — NOT a permanent error). "
-                            f"Utilization: {utilization:.0f}% on window '{window_name}' "
-                            f"(threshold: {effective_threshold:.0f}%). "
-                            f"MANDATORY ACTION: Call run_cmd with: "
-                            f'python3 -c "import time; time.sleep({n})" timeout={n + 30} — '
-                            f"then retry the SAME run_skill call with identical arguments. "
-                            f"Before executing, state aloud: "
-                            f"'Quota exceeded at {utilization:.0f}%. "
-                            f"Sleeping {n}s, then retrying.'"
-                        ),
+
+        if budget_exceeded:
+            print(
+                json.dumps(
+                    {
+                        "hookSpecificOutput": {
+                            "hookEventName": "PreToolUse",
+                            "permissionDecision": "deny",
+                            "permissionDecisionReason": (
+                                f"{QUOTA_BUDGET_EXCEEDED_TRIGGER} — "
+                                f"Quota sleep ({n}s) exceeds session budget "
+                                f"({remaining_budget:.0f}s remaining). "
+                                f"MANDATORY ACTION: Emit your result block with "
+                                f'"success": false, '
+                                f'"reason": "fleet_quota_exhausted", '
+                                f'"wait_seconds": {n}, '
+                                f'"summary": "Quota exceeded; session budget insufficient '
+                                f'for sleep. Resume after window resets." '
+                                f"Then STOP — do not call any more tools."
+                            ),
+                        }
                     }
-                }
+                )
             )
-        )
+        else:
+            print(
+                json.dumps(
+                    {
+                        "hookSpecificOutput": {
+                            "hookEventName": "PreToolUse",
+                            "permissionDecision": "deny",
+                            "permissionDecisionReason": (
+                                f"{QUOTA_GUARD_DENY_TRIGGER} (temporary — NOT a permanent error). "
+                                f"Utilization: {utilization:.0f}% on window '{window_name}' "
+                                f"(threshold: {effective_threshold:.0f}%). "
+                                f"MANDATORY ACTION: Call run_cmd with: "
+                                f'python3 -c "import time; time.sleep({n})" timeout={n + 30} — '
+                                f"then retry the SAME run_skill call with identical arguments. "
+                                f"Before executing, state aloud: "
+                                f"'Quota exceeded at {utilization:.0f}%. "
+                                f"Sleeping {n}s, then retrying.'"
+                            ),
+                        }
+                    }
+                )
+            )
     else:
         _write_quota_log_event(
             {

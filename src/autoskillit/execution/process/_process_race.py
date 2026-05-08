@@ -11,7 +11,12 @@ import anyio.abc
 
 from autoskillit.core import ChannelBStatus, ChannelConfirmation, TerminationReason, get_logger
 from autoskillit.core import fast_loads as _fast_loads
-from autoskillit.execution.process._process_monitor import _heartbeat, _session_log_monitor
+from autoskillit.execution.process._process_monitor import (
+    _has_active_api_connection,
+    _has_active_child_processes,
+    _heartbeat,
+    _session_log_monitor,
+)
 
 logger = get_logger(__name__)
 
@@ -170,6 +175,57 @@ async def _watch_stdout_idle(
             )
             acc.idle_stall = True
             trigger.set()
+            return
+
+
+async def _watch_child_activity(
+    pid: int,
+    timeout_scope_ref: list[anyio.CancelScope | None],
+    max_extension_seconds: float,
+    trigger: anyio.Event,
+    _poll_interval: float = 30.0,
+) -> None:
+    """Extend the wall-clock CancelScope.deadline when child processes are active.
+
+    Polls _has_active_child_processes and _has_active_api_connection every
+    _poll_interval seconds. When either returns True, pushes
+    timeout_scope.deadline forward (up to max_extension_seconds beyond the
+    original deadline).
+
+    Terminates when trigger fires (session completed normally). Crash is
+    fail-closed — anyio propagates exceptions in the task group, cancelling
+    siblings.
+    """
+    original_deadline: float | None = None
+
+    while not trigger.is_set():
+        await anyio.sleep(_poll_interval)
+        if trigger.is_set():
+            return
+
+        scope = timeout_scope_ref[0]
+        if scope is None:
+            continue
+
+        if original_deadline is None:
+            original_deadline = scope.deadline
+
+        active = _has_active_child_processes(pid) or _has_active_api_connection(pid)
+        if not active:
+            continue
+
+        cap = original_deadline + max_extension_seconds
+        desired = original_deadline + _poll_interval * 2
+        new_deadline = min(desired, cap)
+        if new_deadline > scope.deadline:
+            logger.debug(
+                "deadline_extended",
+                extension=new_deadline - scope.deadline,
+                new_deadline=new_deadline,
+                cap=cap,
+            )
+            scope.deadline = new_deadline
+        if trigger.is_set():
             return
 
 

@@ -227,6 +227,8 @@ async def _execute_claude_headless(
     provider_fallback_env: dict[str, str] | None = None,
     provider_fallback_name: str = "",
     provider_extras: Mapping[str, str] | None = None,
+    enable_deadline_extension: bool = False,
+    max_extension_seconds: float = 7200,
 ) -> SkillResult:
     """Shared subprocess execution for headless Claude sessions.
 
@@ -314,6 +316,8 @@ async def _execute_claude_headless(
                 idle_output_timeout=effective_idle,
                 max_suppression_seconds=cfg.max_suppression_seconds,
                 on_pid_resolved=on_spawn,
+                enable_deadline_extension=enable_deadline_extension,
+                max_extension_seconds=max_extension_seconds,
             )
         except Exception as exc:
             logger.error("headless_runner_crashed", exc_info=True)
@@ -826,12 +830,6 @@ class DefaultHeadlessExecutor:
                 )
             merged_extras["AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS"] = ",".join(sorted(requires_packs))
 
-        idle_cfg_val = cfg.run_skill.idle_output_timeout
-        if idle_output_timeout is not None:
-            merged_extras["AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT"] = str(idle_output_timeout)
-        elif idle_cfg_val > 0:
-            merged_extras.setdefault("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(idle_cfg_val))
-
         spec = build_food_truck_cmd(
             orchestrator_prompt=orchestrator_prompt,
             plugin_source=self._ctx.plugin_source,
@@ -852,6 +850,26 @@ class DefaultHeadlessExecutor:
         effective_stale = (
             stale_threshold if stale_threshold is not None else cfg.run_skill.stale_threshold
         )
+        effective_deadline_ext = fleet_cfg.enable_deadline_extension
+        effective_max_ext = float(fleet_cfg.max_extension_seconds)
+
+        fleet_idle = fleet_cfg.idle_output_timeout
+        if idle_output_timeout is not None:
+            merged_extras["AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT"] = str(idle_output_timeout)
+        elif fleet_idle > 0:
+            merged_extras.setdefault("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(fleet_idle))
+        else:
+            idle_cfg_val = cfg.run_skill.idle_output_timeout
+            if idle_cfg_val > 0:
+                merged_extras.setdefault("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(idle_cfg_val))
+
+        effective_idle_out: float | None = (
+            idle_output_timeout
+            if idle_output_timeout is not None
+            else float(fleet_idle)
+            if fleet_idle > 0
+            else None
+        )
 
         return await _execute_claude_headless(
             spec,
@@ -867,11 +885,13 @@ class DefaultHeadlessExecutor:
             project_dir=project_dir,
             timeout=float(effective_timeout),
             stale_threshold=float(effective_stale),
-            idle_output_timeout=idle_output_timeout,
+            idle_output_timeout=effective_idle_out,
             completion_marker=completion_marker,
             on_spawn=on_spawn,
             skip_clone_guard=True,
             provider_name=provider_name,
             provider_fallback_env=provider_fallback_env,
             provider_fallback_name=provider_fallback_name,
+            enable_deadline_extension=effective_deadline_ext,
+            max_extension_seconds=effective_max_ext,
         )

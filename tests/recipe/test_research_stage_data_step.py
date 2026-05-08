@@ -6,6 +6,8 @@ import pytest
 
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+
 RESEARCH_RECIPE_PATH = builtin_recipes_dir() / "research.yaml"
 
 
@@ -53,18 +55,18 @@ def test_stage_data_captures_resource_report(recipe) -> None:
     assert "resource_report" in step.capture
 
 
-def test_stage_data_pass_routes_to_decompose_phases(recipe) -> None:
-    """stage_data PASS verdict must route to decompose_phases."""
+def test_stage_data_pass_routes_to_setup_environment(recipe) -> None:
+    """stage_data PASS verdict must route to setup_environment."""
     step = recipe.steps["stage_data"]
     assert step.on_result is not None
-    assert step.on_result.routes["PASS"] == "decompose_phases"
+    assert step.on_result.routes["PASS"] == "setup_environment"
 
 
-def test_stage_data_warn_routes_to_decompose_phases(recipe) -> None:
-    """stage_data WARN verdict must route to decompose_phases."""
+def test_stage_data_warn_routes_to_setup_environment(recipe) -> None:
+    """stage_data WARN verdict must route to setup_environment."""
     step = recipe.steps["stage_data"]
     assert step.on_result is not None
-    assert step.on_result.routes["WARN"] == "decompose_phases"
+    assert step.on_result.routes["WARN"] == "setup_environment"
 
 
 def test_stage_data_fail_does_not_route_to_decompose_phases(recipe) -> None:
@@ -82,7 +84,8 @@ def test_stage_data_on_failure_escalates(recipe) -> None:
 
 def test_research_recipe_still_validates(recipe) -> None:
     """research.yaml must pass structural validation after stage_data is added."""
-    from autoskillit.recipe.validator import validate_recipe
 
-    errors = validate_recipe(recipe)
+    from autoskillit.recipe.validator import validate_recipe_structure
+
+    errors = validate_recipe_structure(recipe)
     assert errors == [], f"Validation errors: {errors}"

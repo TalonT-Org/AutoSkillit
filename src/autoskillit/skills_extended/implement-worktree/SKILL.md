@@ -1,6 +1,7 @@
 ---
 name: implement-worktree
-description: Implement a plan in an isolated git worktree. Use when user says "implement in worktree", "worktree implement", or "isolated implementation". Creates a worktree from current branch, explores affected systems with subagents, then implements phase by phase.
+activate_deps: [write-recipe]
+description: Worktree implementation executor. ALWAYS invoke this skill when instructed to implement a plan in a worktree with testing and merging. Do not read the plan or edit files directly — use this skill first to load the full implementation workflow.
 hooks:
   PreToolUse:
     - matcher: "*"
@@ -32,6 +33,7 @@ Implement a provided plan in an isolated git worktree branched from the current 
 - Consider implementation complete if ANY test fails
 - Blame test failures on "pre-existing issues" — ALL tests must pass
 - Re-run tests just to see failures — grep the saved output file instead
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Create a new worktree from the current branch
@@ -40,6 +42,7 @@ Implement a provided plan in an isolated git worktree branched from the current 
 - Implement one phase at a time
 - Run the project's test suite after implementation
 - Rebase onto base branch before completion (ready for squash-and-merge)
+- **Read before editing**: Before issuing an `Edit` call on any file, ensure you have issued a `Read` on that file earlier in this session. Claude Code rejects `Edit` on unread files — the retry wastes a full API turn at current context size. If you are uncertain whether a file was read, issue a targeted `Read` (offset + limit to the region you plan to edit) rather than risk an error.
 
 ## Context Limit Behavior
 
@@ -90,16 +93,6 @@ mkdir -p "{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_NAME}"
 echo "${CURRENT_BRANCH}" > "{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_NAME}/base-branch"
 ```
 
-### Step 1.5: Initialize Code Index for Original Project
-
-Set the MCP code-index project path to the **original project directory** so Explore subagents can use code search tools:
-
-```
-mcp__code-index__set_project_path(path="{ORIGINAL_PROJECT_PATH}")
-```
-
-This must happen before Step 2 or any code-index search tools will fail with "Project path not set."
-
 ### Step 2: Deep System Understanding (Subagents)
 
 Before implementing ANY code, launch parallel Explore subagents to understand affected systems:
@@ -122,17 +115,10 @@ task install-worktree   # or equivalent for the project type
 
 **All commands in Steps 4–6 must run from `${WORKTREE_PATH}`.** Use absolute paths to avoid CWD drift across Bash tool calls.
 
-### Step 3.5: Re-point Code Index to Worktree (REQUIRED)
-
-**CRITICAL:** After setting up the worktree environment, you **MUST** update the MCP code-index project path to the worktree. This ensures all subsequent code searches operate on the worktree's files (which will diverge from the original as implementation proceeds):
-
-```
-mcp__code-index__set_project_path(path="${WORKTREE_PATH}")
-```
-
-**Failure to do this means code-index searches will return results from the original project, not your worktree — leading to confusion and incorrect file reads.**
-
 ### Step 4: Implement Phase by Phase
+
+NEVER pause for confirmation between phases. Once the plan is loaded, execute all
+phases sequentially without asking the user whether to proceed to the next phase.
 
 For each phase:
 1. Announce phase objective and files to modify
@@ -166,13 +152,16 @@ missed registration generates 5–30 cascading test failures that require a seco
 
 ### Step 5: Final Verification
 
-Read the configured test command from `.autoskillit/config.yaml` (key: `test_check.command`). Use this command wherever `{test_command}` appears below. If no config exists, use `task test-check` as the default.
+Read the configured test command(s) from `.autoskillit/config.yaml`: check `test_check.commands` (ordered list of commands, if set) or `test_check.command` (single command, default: `task test-check`). The `test_check` MCP tool runs all configured commands automatically.
 
 Run the project's code quality checks and test suite from the worktree.
 
 ```bash
 cd "${WORKTREE_PATH}" && pre-commit run --all-files
-cd "${WORKTREE_PATH}" && {test_command}
+cd "${WORKTREE_PATH}" && \
+  AUTOSKILLIT_TEST_FILTER="${AUTOSKILLIT_TEST_FILTER:-conservative}" \
+  AUTOSKILLIT_TEST_BASE_REF=$(cat "{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_NAME}/base-branch") \
+  {test_command}
 ```
 
 If tests fail, fix the issue and re-run.
@@ -211,16 +200,6 @@ worktree_path = ${WORKTREE_PATH}
 branch_name = ${WORKTREE_NAME}
 base_branch = ${CURRENT_BRANCH}
 ```
-
-### Step 7.5: Reset Code Index to Original Project (REQUIRED)
-
-**CRITICAL:** After worktree cleanup, you **MUST** reset the MCP code-index project path back to the original project directory:
-
-```
-mcp__code-index__set_project_path(path="{ORIGINAL_PROJECT_PATH}")
-```
-
-**Failure to do this leaves code-index pointing at a deleted worktree path, breaking all subsequent code searches in any session.**
 
 ## Error Handling
 

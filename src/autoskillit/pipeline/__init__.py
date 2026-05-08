@@ -1,11 +1,17 @@
-"""pipeline/ L1 package: audit log, token tracking, gate policy, and ToolContext.
+"""pipeline/ IL-1 package: audit log, token tracking, gate policy, and ToolContext.
 
 Re-exports the full public surface of the four pipeline sub-modules.
 Only pipeline/context.py imports from config/; the other three modules
 depend only on autoskillit.core.*.
 """
 
-from autoskillit.core import FailureRecord, is_protected_branch
+from autoskillit.core import (
+    GATED_TOOLS,
+    UNGATED_TOOLS,
+    FailureRecord,
+    fleet_error,
+    is_protected_branch,
+)
 from autoskillit.pipeline.audit import (
     COMMAND_MAX_LEN,
     STDERR_MAX_LEN,
@@ -18,12 +24,11 @@ from autoskillit.pipeline.background import (
 )
 from autoskillit.pipeline.context import ToolContext
 from autoskillit.pipeline.gate import (
-    GATED_TOOLS,
-    UNGATED_TOOLS,
     DefaultGateState,
     gate_error_result,
     headless_error_result,
 )
+from autoskillit.pipeline.github_api_log import DefaultGitHubApiLog
 from autoskillit.pipeline.mcp_response import DefaultMcpResponseLog, McpResponseEntry
 from autoskillit.pipeline.pr_gates import (
     is_ci_passing,
@@ -55,6 +60,7 @@ __all__ = [
     "DefaultGateState",
     "GATED_TOOLS",
     "UNGATED_TOOLS",
+    "fleet_error",
     "gate_error_result",
     "headless_error_result",
     # telemetry_fmt
@@ -65,6 +71,8 @@ __all__ = [
     "write_status",
     # context
     "ToolContext",
+    # github_api_log
+    "DefaultGitHubApiLog",
     # pr_gates
     "is_ci_passing",
     "is_review_passing",

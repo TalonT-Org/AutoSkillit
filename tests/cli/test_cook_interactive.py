@@ -11,6 +11,8 @@ import pytest
 from autoskillit import cli
 from autoskillit.workspace.session_skills import DefaultSessionSkillManager
 
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
+
 
 class TestCookInteractive:
     @pytest.fixture(autouse=True)
@@ -121,7 +123,7 @@ class TestCookInteractive:
             patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
             patch("subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
         ):
-            import autoskillit.cli._cook as module
+            import autoskillit.cli.session._cook as module
 
             module.cook()
 
@@ -149,7 +151,7 @@ class TestCookInteractive:
             patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
             patch("subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
         ):
-            import autoskillit.cli._cook as module
+            import autoskillit.cli.session._cook as module
 
             module.cook()
 
@@ -182,7 +184,7 @@ class TestCookInteractive:
             patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
             patch("subprocess.run", return_value=MagicMock(returncode=0)),
         ):
-            import autoskillit.cli._cook as module
+            import autoskillit.cli.session._cook as module
 
             module.cook()
 
@@ -212,7 +214,7 @@ class TestCookInteractive:
             patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
             patch("subprocess.run", return_value=MagicMock(returncode=0)),
         ):
-            import autoskillit.cli._cook as module
+            import autoskillit.cli.session._cook as module
 
             module.cook()
 
@@ -243,7 +245,7 @@ class TestCookInteractive:
             patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
             patch("subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
         ):
-            import autoskillit.cli._cook as module
+            import autoskillit.cli.session._cook as module
 
             module.cook()
 
@@ -279,7 +281,7 @@ class TestCookInteractive:
             patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
             patch("subprocess.run", return_value=MagicMock(returncode=0)),
         ):
-            import autoskillit.cli._cook as module
+            import autoskillit.cli.session._cook as module
 
             module.cook()
 
@@ -314,7 +316,7 @@ class TestCookInteractive:
             patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
             patch("subprocess.run", return_value=MagicMock(returncode=0)),
         ):
-            import autoskillit.cli._cook as module
+            import autoskillit.cli.session._cook as module
 
             module.cook()
 
@@ -346,21 +348,24 @@ class TestCookInteractive:
             patch("subprocess.run", return_value=MagicMock(returncode=0)),
             patch("shutil.rmtree", side_effect=tracking_rmtree),
         ):
-            import autoskillit.cli._cook as module
+            import autoskillit.cli.session._cook as module
 
             module.cook()
 
         assert not rmtree_calls, "cook() must not rmtree skills_dir on exit"
 
     # REQ-CLI-001 + REQ-CLI-002
-    def test_cook_resume_passes_resume_flag(self, monkeypatch, tmp_path):
-        """cook(resume=True) passes --resume <session_id> to subprocess."""
+    def test_cook_resume_bare_flag_produces_bare_resume_and_skips_discovery(
+        self, monkeypatch, tmp_path
+    ):
+        """cook(resume=True) invokes picker; UUID from picker passed as --resume; no discovery."""
         from unittest.mock import MagicMock, patch
 
         fake_skills_dir = tmp_path / "skills"
         fake_skills_dir.mkdir()
         mock_mgr = MagicMock()
         mock_mgr.init_session.return_value = fake_skills_dir
+        discovery_calls: list = []
 
         with (
             patch("shutil.which", return_value="/usr/bin/claude"),
@@ -369,17 +374,24 @@ class TestCookInteractive:
             patch("subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
             patch(
                 "autoskillit.core.find_latest_session_id",
-                return_value="session123",
+                side_effect=lambda *a, **kw: discovery_calls.append(1) or "latest",
+            ),
+            patch(
+                "autoskillit.cli.session._session_picker.pick_session",
+                return_value="picker-uuid-abc",
             ),
         ):
-            import autoskillit.cli._cook as module
+            import autoskillit.cli.session._cook as module
 
             module.cook(resume=True)
 
         args = mock_run.call_args[0][0]
         assert "--resume" in args
         idx = args.index("--resume")
-        assert args[idx + 1] == "session123"
+        assert args[idx + 1] == "picker-uuid-abc", (
+            "--resume must be followed by the UUID returned by pick_session"
+        )
+        assert not discovery_calls, "find_latest_session_id must not be called for bare --resume"
 
     # REQ-CLI-002
     def test_cook_resume_explicit_session_id(self, monkeypatch, tmp_path):
@@ -403,7 +415,7 @@ class TestCookInteractive:
             patch("subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
             patch("autoskillit.core.find_latest_session_id", side_effect=fake_discover),
         ):
-            import autoskillit.cli._cook as module
+            import autoskillit.cli.session._cook as module
 
             module.cook(resume=True, session_id="explicit-abc")
 
@@ -412,9 +424,9 @@ class TestCookInteractive:
         assert args[args.index("--resume") + 1] == "explicit-abc"
         assert not discovery_calls, "discovery must not be called when session_id is explicit"
 
-    # REQ-CLI-002 — fallback when no session exists
-    def test_cook_resume_falls_back_to_fresh_when_no_session(self, monkeypatch, tmp_path):
-        """cook(resume=True) with no prior session starts a fresh session."""
+    # REQ-CLI-002 — when picker returns None (no sessions), cook launches a fresh session
+    def test_cook_resume_bare_flag_no_sessions_starts_fresh(self, monkeypatch, tmp_path):
+        """cook(resume=True) with picker returning None starts a fresh session (no --resume)."""
         from unittest.mock import MagicMock, patch
 
         fake_skills_dir = tmp_path / "skills"
@@ -427,14 +439,16 @@ class TestCookInteractive:
             patch("builtins.input", return_value=""),
             patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
             patch("subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
-            patch("autoskillit.core.find_latest_session_id", return_value=None),
+            patch("autoskillit.cli.session._session_picker.pick_session", return_value=None),
         ):
-            import autoskillit.cli._cook as module
+            import autoskillit.cli.session._cook as module
 
             module.cook(resume=True)
 
         args = mock_run.call_args[0][0]
-        assert "--resume" not in args
+        assert "--resume" not in args, (
+            "when picker returns None (no sessions), cook must launch fresh (no --resume)"
+        )
 
     # REQ-CLI-003
     def test_cook_cmd_resume_with_session_id_no_error(
@@ -448,7 +462,9 @@ class TestCookInteractive:
 
         captured: dict = {}
 
-        def fake_cook(*, resume: bool = False, session_id: str | None = None) -> None:
+        def fake_cook(
+            *, resume: bool = False, session_id: str | None = None, profile: str | None = None
+        ) -> None:
             captured["resume"] = resume
             captured["session_id"] = session_id
 
@@ -473,7 +489,9 @@ class TestCookInteractive:
 
         captured: dict = {}
 
-        def fake_cook(*, resume: bool = False, session_id: str | None = None) -> None:
+        def fake_cook(
+            *, resume: bool = False, session_id: str | None = None, profile: str | None = None
+        ) -> None:
             captured["resume"] = resume
             captured["session_id"] = session_id
 
@@ -497,7 +515,9 @@ class TestCookInteractive:
 
         captured: dict = {}
 
-        def fake_cook(*, resume: bool = False, session_id: str | None = None) -> None:
+        def fake_cook(
+            *, resume: bool = False, session_id: str | None = None, profile: str | None = None
+        ) -> None:
             captured["resume"] = resume
             captured["session_id"] = session_id
 
@@ -508,3 +528,101 @@ class TestCookInteractive:
 
         assert captured["session_id"] == "fa910a41-d1ca-4cae-b878-01028a0c7c1c"
         assert captured["resume"] is True
+
+    def test_bare_resume_invokes_picker(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """cook(resume=True, session_id=None) intercepts BareResume via pick_session."""
+        from unittest.mock import MagicMock, patch
+
+        fake_skills_dir = tmp_path / "skills"
+        fake_skills_dir.mkdir()
+        mock_mgr = MagicMock()
+        mock_mgr.init_session.return_value = fake_skills_dir
+        picker_calls: list = []
+
+        def fake_pick_session(session_type: str, project_dir) -> None:
+            picker_calls.append((session_type, project_dir))
+            return None
+
+        with (
+            patch("shutil.which", return_value="/usr/bin/claude"),
+            patch("builtins.input", return_value=""),
+            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
+            patch("subprocess.run", return_value=MagicMock(returncode=0)),
+            patch("autoskillit.cli.session._session_picker.pick_session", fake_pick_session),
+            patch("autoskillit.core.write_registry_entry"),
+        ):
+            import autoskillit.cli.session._cook as module
+
+            module.cook(resume=True)
+
+        assert picker_calls, "pick_session must be called for BareResume"
+        assert picker_calls[0][0] == "cook", f"Expected 'cook', got {picker_calls[0][0]!r}"
+
+    def test_cook_launch_sets_session_type_env(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """cook() passes AUTOSKILLIT_SESSION_TYPE=cook in env_extras."""
+        from unittest.mock import MagicMock, patch
+
+        fake_skills_dir = tmp_path / "skills"
+        fake_skills_dir.mkdir()
+        mock_mgr = MagicMock()
+        mock_mgr.init_session.return_value = fake_skills_dir
+        captured_env_extras: list = []
+
+        from autoskillit.execution.commands import ClaudeInteractiveCmd
+
+        def fake_build_interactive_cmd(**kwargs):
+            captured_env_extras.append(kwargs.get("env_extras", {}))
+            return ClaudeInteractiveCmd(cmd=["claude", "--dangerously-skip-permissions"], env={})
+
+        with (
+            patch("shutil.which", return_value="/usr/bin/claude"),
+            patch("builtins.input", return_value=""),
+            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
+            patch("subprocess.run", return_value=MagicMock(returncode=0)),
+            patch("autoskillit.execution.build_interactive_cmd", fake_build_interactive_cmd),
+            patch("autoskillit.core.write_registry_entry"),
+        ):
+            import autoskillit.cli.session._cook as module
+
+            module.cook()
+
+        assert captured_env_extras, "build_interactive_cmd must have been called"
+        env_extras = captured_env_extras[0]
+        assert env_extras.get("AUTOSKILLIT_SESSION_TYPE") == "cook"
+
+    def test_cook_launch_sets_launch_id_env(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """cook() passes AUTOSKILLIT_LAUNCH_ID in env_extras."""
+        from unittest.mock import MagicMock, patch
+
+        fake_skills_dir = tmp_path / "skills"
+        fake_skills_dir.mkdir()
+        mock_mgr = MagicMock()
+        mock_mgr.init_session.return_value = fake_skills_dir
+        captured_env_extras: list = []
+
+        from autoskillit.execution.commands import ClaudeInteractiveCmd
+
+        def fake_build_interactive_cmd(**kwargs):
+            captured_env_extras.append(kwargs.get("env_extras", {}))
+            return ClaudeInteractiveCmd(cmd=["claude", "--dangerously-skip-permissions"], env={})
+
+        with (
+            patch("shutil.which", return_value="/usr/bin/claude"),
+            patch("builtins.input", return_value=""),
+            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
+            patch("subprocess.run", return_value=MagicMock(returncode=0)),
+            patch("autoskillit.execution.build_interactive_cmd", fake_build_interactive_cmd),
+            patch("autoskillit.core.write_registry_entry"),
+        ):
+            import autoskillit.cli.session._cook as module
+
+            module.cook()
+
+        assert captured_env_extras, "build_interactive_cmd must have been called"
+        assert "AUTOSKILLIT_LAUNCH_ID" in captured_env_extras[0]

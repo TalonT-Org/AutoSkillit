@@ -12,7 +12,7 @@ from autoskillit.core.paths import pkg_root
 
 
 def _run_guard(env_extra: dict, tool_input: dict) -> dict:
-    hook_path = pkg_root() / "hooks" / "open_kitchen_guard.py"
+    hook_path = pkg_root() / "hooks" / "guards" / "open_kitchen_guard.py"
     stdin_payload = json.dumps({"tool_input": tool_input})
     env = {**os.environ, **env_extra}
     result = subprocess.run(
@@ -25,15 +25,51 @@ def _run_guard(env_extra: dict, tool_input: dict) -> dict:
     return json.loads(result.stdout) if result.stdout.strip() else {}
 
 
-def test_open_kitchen_guard_denies_headless() -> None:
-    response = _run_guard({"AUTOSKILLIT_HEADLESS": "1"}, {})
+def test_open_kitchen_guard_denies_skill_tier() -> None:
+    response = _run_guard({"AUTOSKILLIT_HEADLESS": "1", "AUTOSKILLIT_SESSION_TYPE": "skill"}, {})
     assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "headless" in response["hookSpecificOutput"]["permissionDecisionReason"].lower()
+    assert "skill" in response["hookSpecificOutput"]["permissionDecisionReason"].lower()
+
+
+def test_open_kitchen_guard_denies_fleet_tier() -> None:
+    response = _run_guard({"AUTOSKILLIT_HEADLESS": "1", "AUTOSKILLIT_SESSION_TYPE": "fleet"}, {})
+    assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "fleet" in response["hookSpecificOutput"]["permissionDecisionReason"].lower()
+
+
+def test_open_kitchen_guard_permits_headless_orchestrator(tmp_path: Path) -> None:
+    hook_path = pkg_root() / "hooks" / "guards" / "open_kitchen_guard.py"
+    hook_input = {
+        "tool_name": "mcp__autoskillit__open_kitchen",
+        "tool_input": {"name": "my_recipe"},
+        "session_id": "session-orch",
+        "hook_event_name": "PreToolUse",
+    }
+    env = {
+        **os.environ,
+        "AUTOSKILLIT_HEADLESS": "1",
+        "AUTOSKILLIT_SESSION_TYPE": "orchestrator",
+        "AUTOSKILLIT_STATE_DIR": str(tmp_path),
+    }
+    result = subprocess.run(
+        [sys.executable, str(hook_path)],
+        input=json.dumps(hook_input),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 0
+    if result.stdout.strip():
+        payload = json.loads(result.stdout)
+        hook_out = payload.get("hookSpecificOutput", {})
+        assert hook_out.get("permissionDecision") != "deny"
+    marker_path = tmp_path / "kitchen_state" / "session-orch.json"
+    assert marker_path.exists(), f"Marker not written at {marker_path}"
 
 
 def test_open_kitchen_guard_allows_human_session() -> None:
     env_without_headless = {k: v for k, v in os.environ.items() if k != "AUTOSKILLIT_HEADLESS"}
-    hook_path = pkg_root() / "hooks" / "open_kitchen_guard.py"
+    hook_path = pkg_root() / "hooks" / "guards" / "open_kitchen_guard.py"
     stdin_payload = json.dumps({"tool_input": {}})
     result = subprocess.run(
         [sys.executable, str(hook_path)],
@@ -59,7 +95,7 @@ def test_open_kitchen_guard_writes_marker_on_permit(tmp_path: Path, monkeypatch)
         "session_id": "session-abc",
         "hook_event_name": "PreToolUse",
     }
-    hook_path = pkg_root() / "hooks" / "open_kitchen_guard.py"
+    hook_path = pkg_root() / "hooks" / "guards" / "open_kitchen_guard.py"
     env = {k: v for k, v in os.environ.items() if k != "AUTOSKILLIT_HEADLESS"}
     env["AUTOSKILLIT_STATE_DIR"] = str(tmp_path)
     result = subprocess.run(
@@ -85,8 +121,13 @@ def test_open_kitchen_guard_writes_marker_on_permit(tmp_path: Path, monkeypatch)
 def test_open_kitchen_guard_no_marker_on_deny(tmp_path: Path, monkeypatch) -> None:
     """When headless, the guard denies; no marker should be written."""
     monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
-    hook_path = pkg_root() / "hooks" / "open_kitchen_guard.py"
-    env = {**os.environ, "AUTOSKILLIT_HEADLESS": "1", "AUTOSKILLIT_STATE_DIR": str(tmp_path)}
+    hook_path = pkg_root() / "hooks" / "guards" / "open_kitchen_guard.py"
+    env = {
+        **os.environ,
+        "AUTOSKILLIT_HEADLESS": "1",
+        "AUTOSKILLIT_SESSION_TYPE": "skill",
+        "AUTOSKILLIT_STATE_DIR": str(tmp_path),
+    }
     result = subprocess.run(
         [sys.executable, str(hook_path)],
         input=json.dumps(
@@ -105,3 +146,92 @@ def test_open_kitchen_guard_no_marker_on_deny(tmp_path: Path, monkeypatch) -> No
     payload = json.loads(result.stdout)
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert not (tmp_path / "kitchen_state" / "session-abc.json").exists()
+
+
+# --- Group P-3: Hook namespacing ---
+
+
+def test_open_kitchen_guard_uses_campaign_namespace(tmp_path: Path, monkeypatch) -> None:
+    """open_kitchen_guard writes marker to campaign-namespaced directory."""
+    monkeypatch.delenv("AUTOSKILLIT_STATE_DIR", raising=False)
+    monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_ID", "camp-77")
+    monkeypatch.chdir(tmp_path)
+    from autoskillit.hooks.guards.open_kitchen_guard import _write_kitchen_marker
+
+    _write_kitchen_marker("sess-test", "my-recipe")
+    expected = tmp_path / ".autoskillit" / "temp" / "kitchen_state" / "camp-77" / "sess-test.json"
+    assert expected.exists()
+
+
+def test_open_kitchen_guard_denies_fleet_headless() -> None:
+    response = _run_guard({"AUTOSKILLIT_HEADLESS": "1", "AUTOSKILLIT_SESSION_TYPE": "fleet"}, {})
+    assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_open_kitchen_guard_fleet_denial_has_specific_message() -> None:
+    """Fleet denial message must mention fleet or franchise, not the generic skill message."""
+    response = _run_guard({"AUTOSKILLIT_HEADLESS": "1", "AUTOSKILLIT_SESSION_TYPE": "fleet"}, {})
+    reason = response["hookSpecificOutput"]["permissionDecisionReason"].lower()
+    assert "fleet" in reason or "franchise" in reason
+
+
+def test_guard_bridges_launch_id_to_registry(tmp_path: Path) -> None:
+    """open_kitchen_guard bridges AUTOSKILLIT_LAUNCH_ID to claude_session_id in registry."""
+    from autoskillit.core.runtime.session_registry import read_registry, write_registry_entry
+
+    project_dir = tmp_path
+    write_registry_entry(project_dir, "abc", "cook", None)
+    assert read_registry(project_dir)["abc"]["claude_session_id"] is None
+
+    hook_path = pkg_root() / "hooks" / "guards" / "open_kitchen_guard.py"
+    hook_input = {
+        "tool_name": "mcp__autoskillit__open_kitchen",
+        "tool_input": {},
+        "session_id": "claude-xyz",
+        "hook_event_name": "PreToolUse",
+    }
+    env_without_headless = {k: v for k, v in os.environ.items() if k != "AUTOSKILLIT_HEADLESS"}
+    env_without_headless["AUTOSKILLIT_LAUNCH_ID"] = "abc"
+    result = subprocess.run(
+        [sys.executable, str(hook_path)],
+        input=json.dumps(hook_input),
+        capture_output=True,
+        text=True,
+        env=env_without_headless,
+        cwd=str(project_dir),
+    )
+    assert result.returncode == 0, f"Hook failed: {result.stderr}"
+    registry = read_registry(project_dir)
+    assert registry["abc"]["claude_session_id"] == "claude-xyz"
+
+
+def test_guard_bridge_no_op_when_no_launch_id(tmp_path: Path) -> None:
+    """open_kitchen_guard bridge is a no-op when AUTOSKILLIT_LAUNCH_ID is not set."""
+    from autoskillit.core.runtime.session_registry import read_registry, write_registry_entry
+
+    project_dir = tmp_path
+    write_registry_entry(project_dir, "abc", "cook", None)
+
+    hook_path = pkg_root() / "hooks" / "guards" / "open_kitchen_guard.py"
+    hook_input = {
+        "tool_name": "mcp__autoskillit__open_kitchen",
+        "tool_input": {},
+        "session_id": "claude-xyz",
+        "hook_event_name": "PreToolUse",
+    }
+    env_without = {
+        k: v
+        for k, v in os.environ.items()
+        if k not in ("AUTOSKILLIT_HEADLESS", "AUTOSKILLIT_LAUNCH_ID")
+    }
+    result = subprocess.run(
+        [sys.executable, str(hook_path)],
+        input=json.dumps(hook_input),
+        capture_output=True,
+        text=True,
+        env=env_without,
+        cwd=str(project_dir),
+    )
+    assert result.returncode == 0, f"Hook failed: {result.stderr}"
+    registry = read_registry(project_dir)
+    assert registry["abc"]["claude_session_id"] is None

@@ -55,11 +55,14 @@ class TestValidateAuditContent:
         assert "contested_findings_" in text
 
     # T-VAL-012
-    def test_handles_all_three_audit_formats(self) -> None:
+    def test_handles_all_six_audit_formats(self) -> None:
         text = _skill_text()
         assert "audit-arch" in text
         assert "audit-tests" in text
         assert "audit-cohesion" in text
+        assert "audit-feature-gates" in text or "feature_gates" in text
+        assert "audit-docs" in text or "docs" in text
+        assert "audit-review-decisions" in text or "review_decisions" in text
 
     # T-VAL-013
     def test_interactive_headless_distinction(self) -> None:
@@ -67,8 +70,107 @@ class TestValidateAuditContent:
 
     # T-VAL-014
     def test_output_dir(self) -> None:
-        assert "{{AUTOSKILLIT_TEMP}}/validate-audit/" in _skill_text()
+        assert "{{AUTOSKILLIT_TEMP}}/validate-audit-" in _skill_text()
 
     # T-VAL-015
     def test_history_research_agent(self) -> None:
         assert "history research agent" in _skill_text().lower()
+
+    # T-VAL-026
+    def test_validate_audit_extended_filenames_have_no_timestamp_suffix(self) -> None:
+        """Extended validate-audit filenames must not carry timestamp suffixes."""
+        text = _skill_text()
+        assert "validated_report_{source}.md" in text, (
+            "Extended validate-audit/SKILL.md should use 'validated_report_{source}.md' "
+            "(no timestamp suffix)"
+        )
+
+
+class TestValidateAuditNewSteps:
+    # T-VAL-016
+    def test_cross_validation_subagent_is_read_only(self) -> None:
+        text = _skill_text().lower()
+        assert "cross-valid" in text  # "cross-validator" or "cross-validation"
+        assert "read-only" in text
+
+    # T-VAL-017
+    def test_ticket_grouping_manifest_with_finding_ids(self) -> None:
+        text = _skill_text().lower()
+        assert "grouping manifest" in text
+        assert "finding id" in text
+
+    # T-VAL-018
+    def test_validation_summary_separate_file(self) -> None:
+        assert "validation_summary_" in _skill_text()
+
+    # T-VAL-019
+    def test_validated_findings_contains_only_valid(self) -> None:
+        text = _skill_text()
+        assert (
+            "do NOT include VALID BUT EXCEPTION WARRANTED" in text
+            or "exception-warranted findings go exclusively" in text.lower()
+            or "exception-warranted findings must not appear" in text.lower()
+        )
+
+
+class TestValidateAuditFeatureGates:
+    # T-VAL-020
+    def test_feature_gates_severity_mapping_documented(self) -> None:
+        """validate-audit must document BLOCK->HIGH, WARN->MEDIUM, INFO->LOW severity mapping."""
+        text = _skill_text()
+        assert "BLOCK" in text and "HIGH" in text, (
+            "validate-audit must document severity normalization for feature-gates: BLOCK->HIGH"
+        )
+        block_idx = text.find("BLOCK")
+        assert block_idx != -1, "BLOCK not found in validate-audit SKILL.md"
+        high_idx = text.find("HIGH", block_idx)
+        assert high_idx != -1 and (high_idx - block_idx) < 300, (
+            "BLOCK->HIGH mapping must appear as a co-located severity mapping table, "
+            "not just incidental mentions"
+        )
+
+    # T-VAL-021
+    def test_feature_gates_d1_d5_table_handling_documented(self) -> None:
+        """validate-audit must document special handling for D1/D5 table-format findings."""
+        text = _skill_text()
+        has_d1_d5_handling = ("D1" in text and "D5" in text) and (
+            "table" in text.lower()
+            or "table-format" in text.lower()
+            or "cross-cutting" in text.lower()
+        )
+        assert has_d1_d5_handling, (
+            "validate-audit must document that D1 (Config Projection) and D5 (Boundary Coupling) "
+            "produce table-format findings without file:line and must be handled in the "
+            "cross-cutting batch with direct file verification"
+        )
+
+
+class TestValidateAuditReviewDecisions:
+    # T-VAL-022
+    def test_handles_review_decisions_audit_format(self) -> None:
+        """validate-audit must recognize 'Review Decisions Audit' as a source format."""
+        text = _skill_text()
+        assert "Review Decisions Audit" in text
+
+    # T-VAL-023
+    def test_review_decisions_source_name(self) -> None:
+        """validate-audit must use 'review_decisions' as the source name."""
+        text = _skill_text()
+        assert "review_decisions" in text
+
+    # T-VAL-024
+    def test_review_decisions_pr_provenance_preserved(self) -> None:
+        """validate-audit must preserve PR provenance metadata for review_decisions findings."""
+        text = _skill_text().lower()
+        assert "pr number" in text or "pr provenance" in text or "pr #" in text
+
+    # T-VAL-025
+    def test_error_message_lists_six_formats(self) -> None:
+        """Error message for unrecognized format must list all 6 recognized formats."""
+        text = _skill_text()
+        assert "Review Decisions Audit" in text
+        assert "Architectural Audit" in text
+        assert "Test Suite Audit" in text
+        assert "Cohesion Audit" in text
+        assert "Feature Gate Audit" in text
+        assert "Documentation Audit" in text

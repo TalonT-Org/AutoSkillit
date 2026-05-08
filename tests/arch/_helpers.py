@@ -20,10 +20,10 @@ from tests.arch._rules import (
 # ── Path constants ────────────────────────────────────────────────────────────
 # Must be absolute for xdist compatibility -- do not use relative paths.
 SRC_ROOT = Path(__file__).parent.parent.parent / "src" / "autoskillit"
-PROCESS_PY = SRC_ROOT / "execution" / "process.py"
-PROCESS_KILL_PY = SRC_ROOT / "execution" / "_process_kill.py"
-PROCESS_MONITOR_PY = SRC_ROOT / "execution" / "_process_monitor.py"
-PROCESS_RACE_PY = SRC_ROOT / "execution" / "_process_race.py"
+PROCESS_PY = SRC_ROOT / "execution" / "process" / "__init__.py"
+PROCESS_KILL_PY = SRC_ROOT / "execution" / "process" / "_process_kill.py"
+PROCESS_MONITOR_PY = SRC_ROOT / "execution" / "process" / "_process_monitor.py"
+PROCESS_RACE_PY = SRC_ROOT / "execution" / "process" / "_process_race.py"
 
 # ── Section A: AST visitor infrastructure ─────────────────────────────────────
 
@@ -154,6 +154,25 @@ class ArchitectureViolationVisitor(ast.NodeVisitor):
                         "TraceTarget first (issue #806)",
                     )
 
+        self.generic_visit(node)
+
+    def visit_Assign(self, node: ast.Assign) -> None:  # ARCH-009
+        """logger variable name: get_logger() result must be bound to 'logger'."""
+        if isinstance(node.value, ast.Call):
+            call = node.value
+            func_name: str | None = None
+            if isinstance(call.func, ast.Name):
+                func_name = call.func.id
+            elif isinstance(call.func, ast.Attribute):
+                func_name = call.func.attr
+            if func_name == "get_logger":
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and target.id != "logger":
+                        self._add(
+                            node,
+                            _RULE["ARCH-009"],
+                            f"get_logger() result bound to '{target.id}'; must be named 'logger'",
+                        )
         self.generic_visit(node)
 
     def visit_ExceptHandler(self, node: ast.ExceptHandler) -> None:

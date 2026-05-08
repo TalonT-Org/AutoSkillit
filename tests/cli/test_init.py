@@ -12,6 +12,8 @@ import yaml
 from autoskillit import cli
 from autoskillit.cli import _generate_config_yaml
 
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
+
 
 class TestCLIInit:
     @pytest.fixture(autouse=True)
@@ -236,7 +238,10 @@ class TestCLIInit:
         )
         for hdef in HOOK_REGISTRY:
             for script in hdef.scripts:
-                assert script in registered, f"Expected hook script {script!r} to be registered"
+                logical_name = script.removesuffix(".py")
+                assert logical_name in registered, (
+                    f"Expected hook script {script!r} to be registered"
+                )
 
     # CI-SCOPE-3
     def test_init_idempotent_no_duplicates(
@@ -801,6 +806,27 @@ def test_init_from_pkg_root_like_cwd_refuses(
 
     with pytest.raises(Exception, match="inside the autoskillit source tree"):
         _register_all(scope="user", project_dir=fake_pkg_root)
+
+
+# T-WT-2: _register_all rejects worktree pkg_root
+def test_register_all_rejects_worktree_pkg_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """_register_all must refuse when pkg_root() resolves to a git worktree."""
+    import autoskillit.core.paths as _paths
+    from autoskillit.cli._init_helpers import _register_all
+
+    fake_pkg = tmp_path / "worktree" / "src" / "autoskillit"
+    fake_pkg.mkdir(parents=True)
+
+    monkeypatch.setattr(_paths, "pkg_root", lambda: fake_pkg)
+    monkeypatch.setattr(_paths, "is_git_worktree", lambda path: True)
+
+    project_dir = tmp_path / "user_project"
+    project_dir.mkdir()
+
+    with pytest.raises(Exception, match="worktree"):
+        _register_all(scope="user", project_dir=project_dir)
 
 
 # --- evict_direct_mcp_entry unit tests ---

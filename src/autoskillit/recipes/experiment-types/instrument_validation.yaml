@@ -1,0 +1,32 @@
+name: instrument_validation
+schema_version: "1.0"
+priority: 7
+is_fallback: false
+classification_triggers:
+  - "Tests reliability, validity, or measurement properties of a scale, instrument, or test: 'construct validity', 'internal consistency', 'Cronbach alpha', 'confirmatory factor analysis', 'CFA', 'IRT', 'item response theory', 'convergent validity', 'discriminant validity'"
+  - "Scale development or validation study: 'measure development', 'instrument validation', 'psychometric properties', 'factor structure', 'test-retest reliability'"
+dimension_weights:
+  causal_structure: S
+  variance_protocol: H
+  statistical_corrections: M
+  ecological_validity: M
+  measurement_alignment: H
+  resource_proportionality: L
+  data_acquisition: M
+  agent_implementability: M
+applicable_lenses:
+  primary: exp-lens-measurement-validity
+  secondary: exp-lens-estimand-clarity
+red_team_focus:
+  specific: construct underrepresentation inflating reliability
+  severity_cap: warning
+l1_severity:
+  estimand_clarity: warning
+  hypothesis_falsifiability: warning
+dimension_weight_rationale:
+  variance_protocol: "Reliability decomposition is the primary deliverable; variance components must be explicitly estimated"
+  statistical_corrections: "Multiple fit index comparisons in CFA and competing factor models introduce multiplicity"
+  ecological_validity: "Measurement context affects generalizability of psychometric properties; cross-sample invariance is required"
+  measurement_alignment: "The entire study purpose is to establish that the instrument measures the intended construct"
+  data_acquisition: "Sample size for factor analysis and participant characteristics determine reliability estimate stability"
+  agent_implementability: "CFA and IRT pipelines are computationally defined but require psychometric expertise for interpretation"

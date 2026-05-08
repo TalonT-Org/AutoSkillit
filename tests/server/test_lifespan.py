@@ -8,6 +8,8 @@ import pytest
 
 from autoskillit.execution.recording import RecordingSubprocessRunner
 
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+
 
 @pytest.mark.asyncio
 async def test_lifespan_calls_finalize_on_recording_runner():
@@ -107,6 +109,69 @@ async def test_lifespan_sets_startup_ready_event():
         _state._startup_ready = original
 
 
+# T-WT-4: MCP lifespan startup detects broken hooks
+def test_startup_broken_hook_detection(tmp_path: Path, monkeypatch) -> None:
+    """run_startup_hook_health_check must detect broken hook scripts across all scopes."""
+    import json as _json
+
+    from autoskillit.server._lifespan import run_startup_hook_health_check
+
+    user_settings = tmp_path / ".claude" / "settings.json"
+    user_settings.parent.mkdir(parents=True)
+    user_settings.write_text(
+        _json.dumps(
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "matcher": ".*",
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": "python3 /deleted/worktree/hooks/quota_guard.py",
+                                }
+                            ],
+                        }
+                    ]
+                }
+            }
+        )
+    )
+
+    monkeypatch.setattr(
+        "autoskillit.hook_registry.iter_all_scope_paths",
+        lambda project_root=None: iter([("user", user_settings)]),
+    )
+
+    broken = run_startup_hook_health_check()
+    assert broken  # must return non-empty list of broken hook paths
+
+
+def test_startup_hook_health_checks_plugin_cache(tmp_path: Path, monkeypatch) -> None:
+    """run_startup_hook_health_check must include broken plugin cache paths in the result."""
+    from autoskillit.server._lifespan import run_startup_hook_health_check
+
+    stale_commands = [
+        "python3 /stale/cache/path/hooks/quota_guard.py",
+        "python3 /stale/cache/path/hooks/write_guard.py",
+    ]
+
+    monkeypatch.setattr(
+        "autoskillit.hook_registry.iter_all_scope_paths",
+        lambda project_root=None: iter([]),
+    )
+    monkeypatch.setattr(
+        "autoskillit.hook_registry.validate_plugin_cache_hooks",
+        lambda cache_dir=None: stale_commands,
+    )
+
+    broken = run_startup_hook_health_check()
+
+    assert set(stale_commands).issubset(set(broken)), (
+        "run_startup_hook_health_check must include broken plugin cache paths in result"
+    )
+
+
 def test_serve_startup_regenerates_on_hash_mismatch(tmp_path: Path, monkeypatch) -> None:
     """run_startup_drift_check() regenerates hooks.json when hash is mismatched."""
     import json as _json
@@ -127,3 +192,15 @@ def test_serve_startup_regenerates_on_hash_mismatch(tmp_path: Path, monkeypatch)
 
     updated = _json.loads((hooks_dir / "hooks.json").read_text())
     assert updated.get("_autoskillit_registry_hash") == HOOK_REGISTRY_HASH
+
+
+def test_lifespan_boot_registry_covers_all_session_types() -> None:
+    """_LIFESPAN_BOOT_REGISTRY must have an entry for every SessionType value."""
+    from autoskillit.core import SessionType
+    from autoskillit.server._lifespan import _LIFESPAN_BOOT_REGISTRY
+
+    missing = set(SessionType) - set(_LIFESPAN_BOOT_REGISTRY)
+    assert not missing, (
+        f"SessionType values not in _LIFESPAN_BOOT_REGISTRY: {missing}. "
+        "Every SessionType must declare a boot function or None."
+    )

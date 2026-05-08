@@ -7,13 +7,15 @@ immunity guards against the bug where workflow_id was silently absent.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
 
 from autoskillit.core import CIRunScope
 from autoskillit.execution.ci import DefaultCIWatcher, _validate_run_matches_scope
+
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 def _now() -> str:
@@ -39,7 +41,7 @@ async def test_completed_runs_includes_workflow_id(httpx_mock):
             "owner/repo",
             "main",
             scope=CIRunScope(workflow="tests.yml"),
-            lookback_seconds=300,
+            cutoff_dt=datetime.now(UTC) - timedelta(seconds=300),
         )
     req = httpx_mock.get_requests()[0]
     assert httpx.URL(str(req.url)).params["workflow_id"] == "tests.yml"
@@ -59,7 +61,7 @@ async def test_completed_runs_omits_workflow_id_when_none(httpx_mock):
             "owner/repo",
             "main",
             scope=CIRunScope(),
-            lookback_seconds=300,
+            cutoff_dt=datetime.now(UTC) - timedelta(seconds=300),
         )
     req = httpx_mock.get_requests()[0]
     assert "workflow_id" not in str(req.url)
@@ -79,30 +81,51 @@ async def test_completed_runs_always_sends_branch(httpx_mock):
             "owner/repo",
             "main",
             scope=CIRunScope(),
-            lookback_seconds=300,
+            cutoff_dt=datetime.now(UTC) - timedelta(seconds=300),
         )
     req = httpx_mock.get_requests()[0]
     assert httpx.URL(str(req.url)).params["branch"] == "main"
 
 
 @pytest.mark.anyio
-async def test_completed_runs_sends_head_sha(httpx_mock):
-    """When scope.head_sha is set, head_sha must appear in API params."""
-    import httpx
-
-    httpx_mock.add_response(json={"workflow_runs": []})
+async def test_completed_runs_omits_head_sha_from_params(httpx_mock):
+    """_fetch_completed_runs must NOT include head_sha as a query param."""
+    httpx_mock.add_response(
+        json={"workflow_runs": []},
+        headers={"ETag": '"abc"'},
+    )
     watcher = DefaultCIWatcher(token="tok")
     async with httpx.AsyncClient() as client:
         await watcher._fetch_completed_runs(
             client,
             watcher._headers(),
             "owner/repo",
-            "main",
-            scope=CIRunScope(head_sha="abc123"),
-            lookback_seconds=300,
+            "feature-x",
+            CIRunScope(head_sha="abc123"),
+            cutoff_dt=None,
         )
     req = httpx_mock.get_requests()[0]
-    assert httpx.URL(str(req.url)).params["head_sha"] == "abc123"
+    assert "head_sha" not in req.url.params
+
+
+@pytest.mark.anyio
+async def test_active_runs_omits_head_sha_from_params(httpx_mock):
+    """_fetch_active_runs must NOT include head_sha as a query param."""
+    httpx_mock.add_response(
+        json={"workflow_runs": []},
+        headers={"ETag": '"xyz"'},
+    )
+    watcher = DefaultCIWatcher(token="tok")
+    async with httpx.AsyncClient() as client:
+        await watcher._fetch_active_runs(
+            client,
+            watcher._headers(),
+            "owner/repo",
+            "feature-x",
+            CIRunScope(head_sha="abc123"),
+        )
+    req = httpx_mock.get_requests()[0]
+    assert "head_sha" not in req.url.params
 
 
 # ---------------------------------------------------------------------------
@@ -251,7 +274,7 @@ async def test_completed_runs_includes_event(httpx_mock):
             "owner/repo",
             "main",
             scope=CIRunScope(event="push"),
-            lookback_seconds=300,
+            cutoff_dt=datetime.now(UTC) - timedelta(seconds=300),
         )
     req = httpx_mock.get_requests()[0]
     assert httpx.URL(str(req.url)).params["event"] == "push"
@@ -269,7 +292,7 @@ async def test_completed_runs_omits_event_when_none(httpx_mock):
             "owner/repo",
             "main",
             scope=CIRunScope(),
-            lookback_seconds=300,
+            cutoff_dt=datetime.now(UTC) - timedelta(seconds=300),
         )
     req = httpx_mock.get_requests()[0]
     assert "event" not in httpx.URL(str(req.url)).params

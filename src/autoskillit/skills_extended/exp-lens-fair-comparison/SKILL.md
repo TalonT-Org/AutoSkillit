@@ -43,6 +43,7 @@ hooks:
 - Modify any source code files
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for themselves
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-fair-comparison/`
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Build the full symmetry matrix — every method against every resource dimension

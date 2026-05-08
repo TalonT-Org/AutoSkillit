@@ -23,8 +23,8 @@ from autoskillit.recipe.contracts import (
 from autoskillit.recipe.io import iter_steps_with_context
 from autoskillit.recipe.registry import (
     _RULE_REGISTRY,
+    RuleDef,
     RuleFinding,
-    RuleSpec,
     build_quality_dict,
     compute_recipe_validity,
     filter_version_rule,
@@ -32,7 +32,7 @@ from autoskillit.recipe.registry import (
     run_semantic_rules,
     semantic_rule,
 )
-from autoskillit.recipe.schema import _TERMINAL_TARGETS, Recipe
+from autoskillit.recipe.schema import _TERMINAL_TARGETS, Recipe, RecipeKind
 
 logger = get_logger(__name__)
 
@@ -42,7 +42,7 @@ logger = get_logger(__name__)
 # registry). Callers import from validator.py as the single public entry point.
 __all__ = [
     "RuleFinding",
-    "RuleSpec",
+    "RuleDef",
     "ValidationContext",
     "_RULE_REGISTRY",
     "_build_step_graph",
@@ -60,15 +60,27 @@ __all__ = [
 # Structural validation
 # ---------------------------------------------------------------------------
 
+_SKILL_HINT = " (Use /autoskillit:write-recipe for schema guidance)"
 
-def validate_recipe(recipe: Recipe) -> list[str]:
-    """Return a list of validation errors (empty if valid)."""
+
+def validate_recipe_structure(recipe: Recipe) -> list[str]:
+    """Return structural validation errors (empty if valid).
+
+    Does not run semantic rules or contract checks; use validate_from_path()
+    for complete validation.
+    """
     errors: list[str] = []
 
     if not recipe.name:
-        errors.append("Recipe must have a 'name'.")
+        errors.append("Recipe must have a 'name'." + _SKILL_HINT)
+
+    if recipe.kind == RecipeKind.CAMPAIGN:
+        if not recipe.dispatches:
+            errors.append("Campaign recipe must have at least one dispatch.")
+        return errors
+
     if not recipe.steps:
-        errors.append("Recipe must have at least one step.")
+        errors.append("Recipe must have at least one step." + _SKILL_HINT)
 
     step_names = set(recipe.steps.keys())
 
@@ -213,7 +225,7 @@ def validate_recipe(recipe: Recipe) -> list[str]:
             if not all_refs:
                 errors.append(
                     f"Step '{step_name}'.capture.{cap_key} must contain "
-                    f"a ${{{{ result.* }}}} expression."
+                    f"a ${{{{ result.* }}}} expression." + _SKILL_HINT
                 )
             for ref_match in all_refs:
                 inner = ref_match[3:-2].strip()
@@ -221,6 +233,7 @@ def validate_recipe(recipe: Recipe) -> list[str]:
                     errors.append(
                         f"Step '{step_name}'.capture.{cap_key} references "
                         f"'{inner}'; capture values must use the 'result.' namespace."
+                        + _SKILL_HINT
                     )
 
     # Validate input and context references in with_args using iter_steps_with_context
@@ -235,6 +248,7 @@ def validate_recipe(recipe: Recipe) -> list[str]:
                 if ref not in ingredient_names:
                     errors.append(
                         f"Step '{step_name}'.with.{arg_key} references undeclared input '{ref}'."
+                        + _SKILL_HINT
                     )
             for ref in _CONTEXT_REF_RE.findall(arg_val):
                 if ref not in available_context and ref not in step.optional_context_refs:
@@ -247,12 +261,12 @@ def validate_recipe(recipe: Recipe) -> list[str]:
     if not recipe.kitchen_rules:
         errors.append(
             "Recipe has no 'kitchen_rules' field. Recipes should include "
-            "orchestrator discipline constraints."
+            "orchestrator discipline constraints." + _SKILL_HINT
         )
 
     return errors
 
 
 # Re-export test-access symbols from their new locations.
-from autoskillit.recipe.rules_inputs import _check_outdated_version  # noqa: E402 F401
-from autoskillit.recipe.rules_worktree import _WORKTREE_MODIFYING_SKILLS  # noqa: E402 F401
+from autoskillit.recipe.rules.rules_inputs import _check_outdated_version  # noqa: E402 F401
+from autoskillit.recipe.rules.rules_worktree import _WORKTREE_MODIFYING_SKILLS  # noqa: E402 F401

@@ -1,0 +1,141 @@
+{
+  "name": "research-campaign",
+  "description": "Four-phase research campaign lifecycle: design the experiment, implement and run it, review the results, then archive artifacts. Dispatches to research-design, research-implement, research-review, and research-archive sub-recipes in sequence.",
+  "kind": "campaign",
+  "recipe_version": "1.0.0",
+  "categories": [
+    "research-family"
+  ],
+  "continue_on_failure": false,
+  "requires_recipe_packs": [
+    "research-family"
+  ],
+  "allowed_recipes": [
+    "research-design",
+    "research-implement",
+    "research-review",
+    "research-archive"
+  ],
+  "ingredients": {
+    "task": {
+      "description": "Research question or topic to investigate",
+      "required": true
+    },
+    "source_dir": {
+      "description": "Path to the project root",
+      "required": true
+    },
+    "issue_url": {
+      "description": "Optional URL to an existing GitHub issue describing the research goal. Provided as context to scope and plan_experiment.",
+      "required": false
+    },
+    "base_branch": {
+      "description": "Branch to target for the research PR",
+      "default": "main"
+    },
+    "review_design": {
+      "description": "When 'true' (the default), run the review-design skill after plan_experiment to validate the experiment plan before execution. When 'false', skip directly to create_worktree.",
+      "default": "true"
+    },
+    "review_pr": {
+      "description": "When 'true', run the review-research-pr skill after the research PR is opened. Defaults to 'false' — the research PR is for human review.",
+      "default": "false"
+    },
+    "audit_claims": {
+      "description": "When 'true', run audit-claims after review_research_pr to verify citation integrity and claim backing in the research report.",
+      "required": false,
+      "default": "false"
+    },
+    "output_mode": {
+      "description": "Where research outputs land. 'local' (default) produces a self-contained report bundle. 'pr' opens a GitHub PR and runs the full review/archival flow.",
+      "required": false,
+      "default": "local"
+    }
+  },
+  "dispatches": [
+    {
+      "name": "run-design",
+      "recipe": "research-design",
+      "task": "Run the research design phase: scope the question, plan the experiment, and optionally review the design.",
+      "ingredients": {
+        "task": "${{ inputs.task }}",
+        "issue_url": "${{ inputs.issue_url }}",
+        "source_dir": "${{ inputs.source_dir }}",
+        "base_branch": "${{ inputs.base_branch }}",
+        "review_design": "${{ inputs.review_design }}"
+      },
+      "capture": {
+        "worktree_path": "${{ result.worktree_path }}",
+        "research_dir": "${{ result.research_dir }}",
+        "experiment_plan": "${{ result.experiment_plan }}",
+        "visualization_plan_path": "${{ result.visualization_plan_path }}"
+      },
+      "depends_on": []
+    },
+    {
+      "name": "run-implement",
+      "recipe": "research-implement",
+      "task": "Implement the research experiment plan.",
+      "ingredients": {
+        "worktree_path": "${{ campaign.worktree_path }}",
+        "research_dir": "${{ campaign.research_dir }}",
+        "experiment_plan": "${{ campaign.experiment_plan }}",
+        "visualization_plan_path": "${{ campaign.visualization_plan_path }}",
+        "source_dir": "${{ inputs.source_dir }}",
+        "base_branch": "${{ inputs.base_branch }}",
+        "issue_url": "${{ inputs.issue_url }}",
+        "output_mode": "${{ inputs.output_mode }}"
+      },
+      "capture": {
+        "report_path": "${{ result.report_path }}"
+      },
+      "depends_on": [
+        "run-design"
+      ]
+    },
+    {
+      "name": "run-review",
+      "recipe": "research-review",
+      "task": "Review the research experiment and open PR.",
+      "ingredients": {
+        "worktree_path": "${{ campaign.worktree_path }}",
+        "research_dir": "${{ campaign.research_dir }}",
+        "experiment_plan": "${{ campaign.experiment_plan }}",
+        "visualization_plan_path": "${{ campaign.visualization_plan_path }}",
+        "report_path": "${{ campaign.report_path }}",
+        "source_dir": "${{ inputs.source_dir }}",
+        "base_branch": "${{ inputs.base_branch }}",
+        "issue_url": "${{ inputs.issue_url }}",
+        "output_mode": "${{ inputs.output_mode }}",
+        "review_pr": "${{ inputs.review_pr }}",
+        "audit_claims": "${{ inputs.audit_claims }}"
+      },
+      "capture": {
+        "pr_url": "${{ result.pr_url }}",
+        "all_diagram_paths": "${{ result.all_diagram_paths }}",
+        "report_path_after_finalize": "${{ result.report_path_after_finalize }}"
+      },
+      "depends_on": [
+        "run-implement"
+      ]
+    },
+    {
+      "name": "run-archive",
+      "recipe": "research-archive",
+      "task": "Archive research artifacts and close experiment PR.",
+      "ingredients": {
+        "base_branch": "${{ inputs.base_branch }}",
+        "worktree_path": "${{ campaign.worktree_path }}",
+        "research_dir": "${{ campaign.research_dir }}",
+        "pr_url": "${{ campaign.pr_url }}",
+        "all_diagram_paths": "${{ campaign.all_diagram_paths }}",
+        "report_path_after_finalize": "${{ campaign.report_path_after_finalize }}"
+      },
+      "capture": {},
+      "depends_on": [
+        "run-review"
+      ]
+    }
+  ],
+  "steps": {}
+}

@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import pytest
+
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
+
 
 # MK1
 def test_marketplace_module_exists():

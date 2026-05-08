@@ -48,6 +48,7 @@ text is supplementary context.
 - Create files outside `{{AUTOSKILLIT_TEMP}}/scope/` directory
 - Propose solutions or write implementation code
 - Skip the prior art survey — always check what already exists in the codebase
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool

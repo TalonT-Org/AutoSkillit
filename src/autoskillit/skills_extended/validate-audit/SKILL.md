@@ -1,7 +1,7 @@
 ---
 name: validate-audit
 categories: [audit]
-description: Validate audit findings from audit-arch, audit-tests, or audit-cohesion against actual code, git history, and design intent using 9–10 parallel subagents. Removes contested findings, documents exceptions, adjusts severities. Use when user says "validate audit", "validate findings", "validate report", or "check audit results".
+description: Validate audit findings from audit-arch, audit-tests, audit-cohesion, audit-feature-gates, audit-docs, or audit-review-decisions against actual code, git history, and design intent using 9–10 parallel subagents. Removes contested findings, documents exceptions, adjusts severities. Use when user says "validate audit", "validate findings", "validate report", or "check audit results".
 hooks:
   PreToolUse:
     - matcher: "*"
@@ -13,15 +13,15 @@ hooks:
 
 # Validate Audit Findings Skill
 
-Validate audit findings from `audit-arch`, `audit-tests`, or `audit-cohesion` against actual
-code, git history, and design intent using 9–10 parallel subagents. Contested findings are
-separated into their own file. The validated report carries a `validated: true` marker to
-signal downstream processing.
+Validate audit findings from `audit-arch`, `audit-tests`, `audit-cohesion`,
+`audit-feature-gates`, `audit-docs`, or `audit-review-decisions` against actual code, git history, and design
+intent using 9–10 parallel subagents. Contested findings are separated into their own file. The
+validated report carries a `validated: true` marker to signal downstream processing.
 
 ## When to Use
 
 - User says "validate audit", "validate findings", "validate report", "check audit results"
-- After running `audit-arch`, `audit-tests`, or `audit-cohesion` to filter noise before acting
+- After running `audit-arch`, `audit-tests`, `audit-cohesion`, `audit-feature-gates`, `audit-docs`, or `audit-review-decisions` to filter noise before acting
 
 ## Arguments
 
@@ -30,26 +30,39 @@ signal downstream processing.
 ```
 
 - `audit_report_path` — absolute path to an audit report produced by `audit-arch`,
-  `audit-tests`, or `audit-cohesion`. If omitted, use the most recent file under
-  `{{AUTOSKILLIT_TEMP}}/audit-arch/`, `{{AUTOSKILLIT_TEMP}}/audit-tests/`, or
-  `{{AUTOSKILLIT_TEMP}}/audit-cohesion/` (most recent mtime wins across all three).
+  `audit-tests`, `audit-cohesion`, `audit-feature-gates`, `audit-docs`, or `audit-review-decisions`. If
+  omitted, use the most recent file under `{{AUTOSKILLIT_TEMP}}/audit-arch/`,
+  `{{AUTOSKILLIT_TEMP}}/audit-tests/`, `{{AUTOSKILLIT_TEMP}}/audit-cohesion/`,
+  `{{AUTOSKILLIT_TEMP}}/audit-feature-gates/`, `{{AUTOSKILLIT_TEMP}}/audit-docs/`,
+  or `{{AUTOSKILLIT_TEMP}}/audit-review-decisions/`
+  (most recent mtime wins across all six).
   If no files exist under any of these directories, print an error message and exit
   with a non-zero status.
+
+- `AUTOSKILLIT_AUDIT_RUN_DIR` — optional environment variable. When set, all output
+  files are written directly under `$AUTOSKILLIT_AUDIT_RUN_DIR/` instead of
+  `{{AUTOSKILLIT_TEMP}}/validate-audit/`. The recipe sets this to the per-run
+  directory created by `init_audit_run` (which already includes the
+  `validate-audit/run-{stamp}-{hex}` path segments) to prevent cross-run file
+  accumulation.
 
 ## Critical Constraints
 
 **NEVER:**
 - Modify any source code files
-- Create files outside `{{AUTOSKILLIT_TEMP}}/validate-audit/`
+- Create files outside `$AUDIT_BASE_DIR/` (the per-run directory set in Step 5)
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message
 - Write output files before synthesizing ALL subagent results
 - Subagents must NOT create their own files — they return findings in response text only
+- Do NOT include VALID BUT EXCEPTION WARRANTED findings in the validated report body — they belong in the validation summary only
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
 - Issue all Task calls in a single message to maximize parallelism
 - Write `validated: true` as the **first line** of the validated report file
 - Respect interactive vs headless mode for the approval step (Step 6)
+- Emit: `validated_report_path = <absolute path to the validated report file>`
 
 ## Finding Verdicts
 
@@ -63,17 +76,6 @@ signal downstream processing.
 
 ## Workflow
 
-### Step 0 — Code-Index Initialization
-
-Call `set_project_path` with the repo root:
-
-```
-mcp__code-index__set_project_path(path="{PROJECT_ROOT}")
-```
-
-Use project-relative paths in all code-index queries (e.g., `src/autoskillit/pipeline/`).
-Fall back to native Grep/Glob if the code-index server is unavailable.
-
 ### Step 1 — Detect Audit Format and Parse Findings
 
 Read the audit report file. Detect its source by examining the document title or preamble:
@@ -81,21 +83,67 @@ Read the audit report file. Detect its source by examining the document title or
 - **audit-arch**: Title contains "Architectural Audit" or findings reference "Principle P{N}"
 - **audit-tests**: Title contains "Test Suite Audit" or findings reference issue categories
 - **audit-cohesion**: Title contains "Cohesion Audit" or findings reference "Dimension C{N}"
+- **audit-feature-gates**: Title contains "Feature Gate Audit" or findings reference
+  BLOCK/WARN/INFO severity badges. Normalize severities: BLOCK→HIGH, WARN→MEDIUM, INFO→LOW.
+  Use the normalized severity in the Validation Status table and severity adjustments.
 
-If none of the three patterns match, print:
-`"Error: unrecognized audit report format — expected title 'Architectural Audit', 'Test Suite Audit', or 'Cohesion Audit'. Aborting."`
+  | feature-gates severity | Normalized severity |
+  |----------------------|-------------------|
+  | BLOCK | HIGH |
+  | WARN | MEDIUM |
+  | INFO | LOW |
+
+  Verdict rules by finding type:
+  - **BLOCK (D2, D3, D4)**: require code verification at the cited `file:line` — confirm the
+    unguarded import, missing gate, or unguarded tool handler actually exists.
+  - **WARN (D2–D6)**: check for intentional design exceptions documented in comments or ADRs.
+  - **INFO (D1, D5 table rows)**: accepted as-is unless the table value contradicts the actual
+    code (verify by reading the config/constants file directly).
+  - **D1/D5 table rows**: always place in cross-cutting batch; validate by reading
+    the config source file named in the table row.
+
+- **audit-review-decisions**: Title contains "Review Decisions Audit" or "PR Review Decisions Audit".
+  Source = `review_decisions`. Findings carry PR provenance metadata: PR number, review thread
+  link, verbatim reviewer comment, deferral signal phrase, and optionally REVIEW-FLAG tag metadata
+  (severity, dimension). These fields are additional to the standard severity + file:line + category.
+
+  Verdict rules for review_decisions findings:
+  - **VALID**: The flagged code at `file:line` still exists in the current codebase and the concern
+    is still applicable — the exact code pattern persists unchanged.
+  - **CONTESTED**: The file or function has been substantially rewritten since the review PR.
+    The concern may no longer apply.
+  - **VALID BUT EXCEPTION WARRANTED**: The code pattern persists but a documented constraint,
+    ADR, or design decision justifies the current approach.
+
+- **audit-docs**: Title contains "Documentation Audit".
+  Source = `docs`. Findings describe documentation drift, staleness, or inconsistency against the
+  codebase. Apply standard VALID / CONTESTED / VALID BUT EXCEPTION WARRANTED verdicts.
+
+If none of the six patterns match, print:
+`"Error: unrecognized audit report format — expected title 'Architectural Audit', 'Test Suite Audit', 'Cohesion Audit', 'Feature Gate Audit', 'Documentation Audit', or 'Review Decisions Audit'. Aborting."`
 and exit with a non-zero status.
 
 For each finding, extract:
-- **ID** — principle/category/dimension label (e.g., P3, Category 1, C5) or a short slug
+- **ID** — principle/category/dimension label (e.g., P3, Category 1, C5, D2) or a short slug
 - **Text** — the full finding description
-- **Severity** — CRITICAL / HIGH / MEDIUM / LOW (arch, tests) or
-  STRONG/ADEQUATE/WEAK/FRACTURED (cohesion)
+- **Severity** — CRITICAL / HIGH / MEDIUM / LOW (arch, tests), STRONG/ADEQUATE/WEAK/FRACTURED
+  (cohesion), or BLOCK / WARN / INFO (feature-gates)
 - **Location** — `file:line` references, if present
-- **Category** — the principle, issue category, or dimension label
+- **Category** — the principle, issue category, dimension label, or gate dimension
 
-Collect all findings into a flat list. Record the source audit skill (`arch`, `tests`, or
-`cohesion`) for use in output filenames.
+For `review_decisions` findings, also extract:
+- **PR Number** — the source PR number (e.g., #1234)
+- **PR Link** — full URL to the PR review thread
+- **Reviewer Quote** — verbatim text of the original reviewer comment
+- **Deferral Signal** — the keyword phrase or marker type that triggered the match
+  (e.g., "REVIEW-FLAG", "KEYWORD: out of scope for this fix cycle")
+- **REVIEW-FLAG metadata** — severity and dimension from the structured tag, when present
+
+These additional fields must be preserved through validation and into ticket body files
+so that the PR provenance is traceable in the resulting GitHub issues.
+
+Collect all findings into a flat list. Record the source audit skill (`arch`, `tests`,
+`cohesion`, `feature_gates`, `docs`, or `review_decisions`) for use in output filenames.
 
 ### Step 2 — Group into Thematic Batches
 
@@ -108,6 +156,15 @@ by the top-level package touched (e.g., `pipeline/`, `execution/`, `server/`, `c
 - Fewer than 8 distinct areas: assign each area its own batch; use however many batches are available.
 - More than 9 distinct areas: merge smallest clusters until ≤ 9 groups remain.
 - The 10th slot is reserved for the history research agent (runs against ALL findings).
+
+**Feature-gates table-format findings (D1 and D5):**
+The Config Projection (D1) and Boundary Coupling (D5) dimensions produce inventory/coupling
+tables rather than single-finding lines. For these dimensions:
+- Treat each table row as an individual finding.
+- Place all D1 and D5 findings in the "cross-cutting" batch (their inventory tables span multiple files rather than single code locations).
+- Code validation agents for cross-cutting findings must verify D1/D5 rows by reading the
+  referenced config source or constants file directly (e.g., `_type_constants.py` for
+  FEATURE_REGISTRY entries, `config/defaults.yaml` for config projection values).
 
 ### Step 3 — Launch Parallel Subagents (SINGLE MESSAGE)
 
@@ -177,10 +234,21 @@ After all agents return:
 
 ### Step 5 — Generate Output Files
 
-Ensure `{{AUTOSKILLIT_TEMP}}/validate-audit/` exists (`mkdir -p`).
+Set the output base directory. When `AUTOSKILLIT_AUDIT_RUN_DIR` is set (by the
+recipe's `init_audit_run` step), files are written to the per-run directory to
+prevent cross-run accumulation:
+
+```bash
+if [ -n "$AUTOSKILLIT_AUDIT_RUN_DIR" ]; then
+    AUDIT_BASE_DIR="$AUTOSKILLIT_AUDIT_RUN_DIR"
+else
+    AUDIT_BASE_DIR="{{AUTOSKILLIT_TEMP}}/validate-audit-$(date -u +%Y-%m-%d_%H%M%S)"
+fi
+mkdir -p "$AUDIT_BASE_DIR"
+```
 
 **File 1 — Validated report**
-Path: `{{AUTOSKILLIT_TEMP}}/validate-audit/validated_report_{source}_{YYYY-MM-DD_HHMMSS}.md`
+Path: `$AUDIT_BASE_DIR/validated_report_{source}.md`
 
 Structure:
 
@@ -204,19 +272,17 @@ validated: true
 
 ## Validated Findings
 
-{Each VALID finding: original text, verdict badge, severity adjustment if any.}
-
-## Findings with Exceptions
-
-{Each VALID BUT EXCEPTION WARRANTED finding: original text + exception note.}
+{Each **VALID** finding only — do NOT include VALID BUT EXCEPTION WARRANTED findings here.
+Exception-warranted findings go exclusively in the validation summary file.
+Format: original finding text, VALID verdict badge, severity adjustment note if applicable.}
 
 ---
 
-*{N_contested} finding(s) contested and excluded — see contested_findings_{source}_{ts}.md*
+*{N_contested} finding(s) contested and excluded — see contested_findings_{source}.md*
 ```
 
 **File 2 — Contested findings** (write only when `N_contested > 0`)
-Path: `{{AUTOSKILLIT_TEMP}}/validate-audit/contested_findings_{source}_{YYYY-MM-DD_HHMMSS}.md`
+Path: `$AUDIT_BASE_DIR/contested_findings_{source}.md`
 
 Structure:
 
@@ -233,47 +299,236 @@ Structure:
 **Historical context:** {from history agent, if relevant; else omit}
 ```
 
-### Step 6 — Interactive vs Headless Approval
+### Step 5b — Write Validation Summary
+
+Write the full audit trail to a separate file. This file is NOT part of the issue body —
+it is posted as a comment after issue creation.
+
+Path: `$AUDIT_BASE_DIR/validation_summary_{source}.md`
+
+Structure:
+
+```markdown
+# Validation Summary — {source} ({YYYY-MM-DD})
+
+**Original report:** {audit_report_path}
+**Total findings:** {total} | **Valid:** {N_valid} | **Exception warranted:** {N_exception} | **Contested:** {N_contested}
+
+---
+
+## Per-Finding Verdicts
+
+| Finding ID | Verdict | Severity (adj.) | Reasoning summary |
+|------------|---------|-----------------|-------------------|
+| ... | ... | ... | ... |
+
+---
+
+## Exception-Warranted Findings
+
+{For each VALID BUT EXCEPTION WARRANTED finding:}
+
+### [{ID}] {short description}
+
+**Original severity:** {severity}
+**Exception note:** {constraint that warrants exception}
+**Code evidence:** {file:line + what code shows}
+**Historical context:** {from history agent, if relevant; else omit}
+
+---
+
+## Contested Findings (Removed)
+
+{For each CONTESTED finding: full text, contest rationale, code evidence.}
+
+---
+
+## Severity Adjustments
+
+{For each finding where severity was adjusted: original → adjusted, rationale.}
+```
+
+### Step 6 — Parallel Post-Validation (SINGLE MESSAGE, READ-ONLY)
+
+After both the validated report and validation summary are written, launch **two read-only
+subagents in a single message**. Neither subagent may use Write, Edit, or any file-creation
+tool — they return findings as response text only.
+
+**Subagent A — Cross-Validator**
+
+Receives paths to three files:
+1. Original audit report (`{audit_report_path}`)
+2. Validated report (`validated_report_{source}_{ts}.md`)
+3. Validation summary (`validation_summary_{source}_{ts}.md`)
+
+Instructions:
+> You are cross-validating three audit artifacts for consistency. Read all three files.
+> Check:
+> 1. **No accidental deletions** — every finding in the validated report traces to a finding in the original
+> 2. **No accidental survivors** — every CONTESTED finding in the summary is absent from the validated report
+> 3. **No exception-warranted leakage** — no VALID BUT EXCEPTION WARRANTED finding appears in the validated report's `## Validated Findings` section
+> 4. **Structural integrity** — valid markdown, Summary Table counts match actual finding count, finding IDs sequential, no orphaned references
+> 5. **Count reconciliation** — N_valid + N_exception + N_contested equals original total; consistent between summary and validated report
+> Return a structured discrepancy report. If no issues found, return "CROSS-VALIDATION PASSED".
+> Do NOT create any files. Return structured text only.
+
+Output format:
+```
+## Cross-Validation Report
+
+Status: PASSED | DISCREPANCIES FOUND
+
+### Discrepancy [{N}]: {type}
+- **Finding ID**: {id}
+- **Issue**: {what is wrong}
+- **Expected**: {what should be there}
+- **Actual**: {what is there}
+```
+
+**Subagent B — Ticket Grouper**
+
+Receives the validated report path.
+
+Instructions:
+> You are analyzing validated audit findings to propose ticket groupings. Read the validated report.
+> For each finding, assess scope: lines of code affected, complexity, criticality, file overlap.
+> Grouping rules:
+> - **Standalone ticket**: finding is large in scope (many files/lines), complex refactor, or touches a critical path
+> - **Grouped ticket**: finding is small, low-risk, non-conflicting. Group same-category small findings together.
+> - **Conflict awareness**: findings touching the same file(s) must be in the same ticket or explicitly sequenced
+> - No rigid severity-to-grouping rule: a HIGH can be grouped if small; a LOW can be standalone if complex
+>
+> Return a grouping manifest listing each proposed ticket with:
+> - Ticket title (descriptive, scoped)
+> - Finding IDs included (e.g., P1-F09, P1-F11, P3-F18)
+> - Rationale for grouping or standalone
+> - Estimated scope: small / medium / large
+> - File overlap notes (which findings touch the same files)
+> Do NOT create any files. Return structured text only.
+
+Output format:
+```
+## Grouping Manifest
+
+### Ticket Group 1: {title}
+- **Finding IDs**: {id1}, {id2}, ...
+- **Rationale**: {why grouped or standalone}
+- **Scope**: small | medium | large
+- **File overlap**: {files touched by multiple findings in this group, or "none"}
+
+### Ticket Group 2: {title}
+...
+```
+
+### Step 7 — Apply Cross-Validation Corrections
+
+After both parallel subagents return:
+
+**From Cross-Validator:**
+- If status is `CROSS-VALIDATION PASSED`: proceed directly to Step 8.
+- If discrepancies found: for each discrepancy, re-read the relevant section of the validated
+  report and validation summary, write the corrected content to a `.tmp` file first, then
+  atomically move it over the original (to prevent partial-write corruption), and note the
+  correction applied. Limit to at most 3 correction passes; after 3 passes, record any
+  remaining discrepancies and continue to Step 8.
+- Corrections are writes to existing output files only — no new findings are introduced.
+
+**From Ticket Grouper:**
+- Record the grouping manifest (it will be written to disk in Step 8).
+- If the grouper returned fewer than 1 group: treat the entire validated report as a single ticket.
+
+### Step 8 — Split Validated Report by Grouping Manifest
+
+Before writing any ticket body files, verify `$AUTOSKILLIT_TEMP` is non-empty
+(`test -n "${AUTOSKILLIT_TEMP}"`); abort with an error message if unset to prevent
+path collapse to filesystem root.
+
+For each ticket group in the grouping manifest:
+
+1. Extract the subset of findings assigned to this group from the validated report.
+2. Build a per-ticket body file with:
+   - The `validated: true` sentinel on line 1
+   - An H1 heading: `# {ticket title}` (from grouping manifest)
+   - A subset Summary Table (only the rows for included finding IDs)
+   - Only the `## Validated Findings` sub-sections for included finding IDs
+   - A footer: `*Part of validated {source} audit — see full report for remaining tickets.*`
+3. Write to: `$AUDIT_BASE_DIR/ticket_body_{source}_{N}.md`
+   where `{N}` is 1-indexed from the grouping manifest.
+
+Also write the grouping manifest itself to:
+`$AUDIT_BASE_DIR/grouping_manifest_{source}.md`
+
+The grouping manifest file is the structured text returned by the ticket grouper subagent,
+prefixed with:
+```markdown
+# Ticket Grouping Manifest — {source} ({YYYY-MM-DD})
+
+**Validated report:** {validated_report_path}
+**Total groups:** {N}
+
+---
+```
+
+### Step 9 — Interactive vs Headless Approval
 
 Detect headless mode: run `echo "${AUTOSKILLIT_HEADLESS:-0}"` via Bash. Output `1` means
 headless.
 
-**Headless mode:** Write both output files immediately without prompting. Print to terminal:
+**Headless mode:** Write all output files immediately without prompting. Print to terminal:
 
 ```
 [validate-audit] Done.
   Valid: {N_valid} | Exceptions: {N_exception} | Contested: {N_contested}
-  Report:    {{AUTOSKILLIT_TEMP}}/validate-audit/validated_report_{source}_{ts}.md
-  Contested: {{AUTOSKILLIT_TEMP}}/validate-audit/contested_findings_{source}_{ts}.md
+  Summary:   {validation_summary_path}
+  Manifest:  {grouping_manifest_path}
+  Tickets:   {ticket_body_1_path}
+             {ticket_body_2_path}  (one line per ticket group)
+  Contested: {contested_findings_path}  (omit if N_contested == 0)
+  Report:    {validated_report_path}
+validated_report_path = {validated_report_path}
+verdict = validated
 ```
-
-(Omit the "Contested:" line if `N_contested == 0`.)
 
 **Interactive mode:** Display the validation status table (verdict counts), then ask:
 
 > Write validated report and contested findings files? [Y/n]
 
-On Y or empty input, write both files. After writing, if `N_contested > 0`, offer:
+On Y or empty input, write all files. After writing, offer:
 
-> Run `/autoskillit:prepare-issue` for contested findings? [y/N]
+> Run `/autoskillit:prepare-issue` for each ticket group? [Y/n]
 
-If the user confirms, pass the contested findings file path to `prepare-issue`.
+On Y, call `prepare-issue` for each ticket body file (in parallel). After issue creation,
+append the validation summary to each created issue body using `gh issue edit --body-file`:
+fetch the current issue body, verify the fetched body is non-empty (abort the append for
+that issue if empty to avoid overwriting with summary-only content), append a horizontal
+rule and the validation summary content, write the combined text to a temp file, then run
+`gh issue edit {issue_number} --body-file` with that temp file. Do NOT use `gh issue comment`.
 
 ---
 
 ## Output Location
 
+All output files are written under `$AUDIT_BASE_DIR/` where `AUDIT_BASE_DIR` is determined as follows:
+- If `AUTOSKILLIT_AUDIT_RUN_DIR` is set (by the recipe's `init_audit_run` step): `$AUDIT_BASE_DIR = $AUTOSKILLIT_AUDIT_RUN_DIR`
+- Otherwise: `$AUDIT_BASE_DIR = {{AUTOSKILLIT_TEMP}}/validate-audit-$(date -u +%Y-%m-%d_%H%M%S)`:
+
 ```
-{{AUTOSKILLIT_TEMP}}/validate-audit/
-├── validated_report_{source}_{YYYY-MM-DD_HHMMSS}.md    (always written)
-└── contested_findings_{source}_{YYYY-MM-DD_HHMMSS}.md  (when N_contested > 0)
+$AUDIT_BASE_DIR/
+├── validated_report_{source}.md           (always written; VALID findings only)
+├── contested_findings_{source}.md         (when N_contested > 0)
+├── validation_summary_{source}.md         (always written; audit trail)
+├── grouping_manifest_{source}.md          (always written; ticket grouping)
+└── ticket_body_{source}_{N}.md            (one per ticket group, N ≥ 1)
 ```
 
-`{source}` is `arch`, `tests`, or `cohesion` based on the input report.
+`{source}` is `arch`, `tests`, `cohesion`, `feature_gates`, `docs`, or `review_decisions` based on the input report.
 
 ## Related Skills
 
 - `/autoskillit:audit-arch` — produces reports this skill validates
 - `/autoskillit:audit-tests` — produces reports this skill validates
 - `/autoskillit:audit-cohesion` — produces reports this skill validates
+- `/autoskillit:audit-feature-gates` — produces reports this skill validates
+- `/autoskillit:audit-docs` — produces reports this skill validates
+- `/autoskillit:audit-review-decisions` — produces reports this skill validates
 - `/autoskillit:prepare-issue` — offered interactively for contested findings

@@ -6,6 +6,10 @@ import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+
 
 def _make_mock_recipes(load_result: dict) -> MagicMock:
     """Create a mock recipe repository that returns the given load result."""
@@ -36,21 +40,25 @@ async def test_load_recipe_tool_accepts_overrides_param(tmp_path: Path) -> None:
     mock_tool_ctx = _make_mock_ctx(mock_recipes)
 
     with (
-        patch("autoskillit.server.tools_recipe._require_enabled", return_value=None),
-        patch("autoskillit.server.tools_recipe._get_ctx_or_none", return_value=mock_tool_ctx),
+        patch("autoskillit.server.tools.tools_recipe._require_enabled", return_value=None),
+        patch(
+            "autoskillit.server.tools.tools_recipe._get_ctx_or_none", return_value=mock_tool_ctx
+        ),
         patch(
             "autoskillit.config.resolve_ingredient_defaults",
             return_value={},
         ),
         patch(
-            "autoskillit.server.helpers._apply_triage_gate",
+            "autoskillit.server._misc._apply_triage_gate",
             new_callable=AsyncMock,
             return_value={"content": "test", "valid": True, "suggestions": []},
         ),
     ):
-        from autoskillit.server.tools_recipe import load_recipe as _load_recipe_tool
+        from autoskillit.server.tools.tools_recipe import load_recipe as _load_recipe_tool
 
-        result_str = await _load_recipe_tool(name="test-recipe", overrides={"sprint_mode": "true"})
+        result_str = await _load_recipe_tool(
+            name="test-recipe", overrides={"run_mode": "sequential"}
+        )
         result = json.loads(result_str)
         assert "error" not in result
         assert result.get("valid") is True
@@ -58,7 +66,7 @@ async def test_load_recipe_tool_accepts_overrides_param(tmp_path: Path) -> None:
         # Verify overrides were passed through to load_and_validate
         mock_recipes.load_and_validate.assert_called_once()
         call_kwargs = mock_recipes.load_and_validate.call_args
-        assert call_kwargs.kwargs.get("ingredient_overrides") == {"sprint_mode": "true"}
+        assert call_kwargs.kwargs.get("ingredient_overrides") == {"run_mode": "sequential"}
 
 
 async def test_open_kitchen_accepts_overrides_param(tmp_path: Path) -> None:
@@ -76,9 +84,11 @@ async def test_open_kitchen_accepts_overrides_param(tmp_path: Path) -> None:
     mock_mcp_ctx.enable_components = AsyncMock()
 
     with (
-        patch("autoskillit.server.tools_kitchen._require_not_headless", return_value=None),
         patch(
-            "autoskillit.server.tools_kitchen._open_kitchen_handler",
+            "autoskillit.server.tools.tools_kitchen._require_orchestrator_exact", return_value=None
+        ),
+        patch(
+            "autoskillit.server.tools.tools_kitchen._open_kitchen_handler",
             new_callable=AsyncMock,
             return_value=None,
         ),
@@ -88,17 +98,17 @@ async def test_open_kitchen_accepts_overrides_param(tmp_path: Path) -> None:
             return_value={},
         ),
         patch(
-            "autoskillit.server.helpers._apply_triage_gate",
+            "autoskillit.server._misc._apply_triage_gate",
             new_callable=AsyncMock,
             return_value={"content": "test", "valid": True, "suggestions": []},
         ),
-        patch("autoskillit.server.tools_kitchen.__version__", "0.0.0"),
+        patch("autoskillit.server.tools.tools_kitchen.__version__", "0.0.0"),
     ):
-        from autoskillit.server.tools_kitchen import open_kitchen as _open_kitchen_tool
+        from autoskillit.server.tools.tools_kitchen import open_kitchen as _open_kitchen_tool
 
         result_str = await _open_kitchen_tool(
             name="test-recipe",
-            overrides={"sprint_mode": "true"},
+            overrides={"run_mode": "sequential"},
             ctx=mock_mcp_ctx,
         )
         result = json.loads(result_str)
@@ -108,7 +118,7 @@ async def test_open_kitchen_accepts_overrides_param(tmp_path: Path) -> None:
         # Verify overrides were passed through to load_and_validate
         mock_recipes.load_and_validate.assert_called_once()
         call_kwargs = mock_recipes.load_and_validate.call_args
-        assert call_kwargs.kwargs.get("ingredient_overrides") == {"sprint_mode": "true"}
+        assert call_kwargs.kwargs.get("ingredient_overrides") == {"run_mode": "sequential"}
 
 
 async def test_unknown_override_key_ignored(tmp_path: Path) -> None:

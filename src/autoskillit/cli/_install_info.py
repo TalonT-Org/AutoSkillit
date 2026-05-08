@@ -7,18 +7,18 @@ that drive the unified update check.
 
 from __future__ import annotations
 
-import json
-import re
 from dataclasses import dataclass
 from datetime import timedelta
 from enum import StrEnum
 from pathlib import Path
 
-from autoskillit.core import get_logger
+from autoskillit.core import _is_stable_track, get_logger, parse_direct_url
 
 logger = get_logger(__name__)
 
-_INSTALL_FROM_INTEGRATION = "git+https://github.com/TalonT-Org/AutoSkillit.git@integration"
+_INSTALL_FROM_DEVELOP = "git+https://github.com/TalonT-Org/AutoSkillit.git@develop"
+_STABLE_DISMISS_WINDOW = timedelta(days=7)
+_DEV_DISMISS_WINDOW = timedelta(hours=12)
 
 
 class InstallType(StrEnum):
@@ -28,7 +28,13 @@ class InstallType(StrEnum):
     UNKNOWN = "unknown"
 
 
-@dataclass(frozen=True)
+class InstallTrack(StrEnum):
+    STABLE = "stable"
+    DEV = "dev"
+    LOCAL = "local"
+
+
+@dataclass(frozen=True, slots=True)
 class InstallInfo:
     install_type: InstallType
     commit_id: str | None
@@ -45,28 +51,17 @@ def detect_install() -> InstallInfo:
     """
     _unknown = InstallInfo(InstallType.UNKNOWN, None, None, None, None)
     try:
-        import importlib.metadata
-
-        dist = importlib.metadata.Distribution.from_name("autoskillit")
-        raw = dist.read_text("direct_url.json")
-        if not raw:
-            return _unknown
-
-        data = json.loads(raw)
-
-        vcs_info = data.get("vcs_info", {})
-        if isinstance(vcs_info, dict) and vcs_info.get("vcs") == "git":
+        info = parse_direct_url()
+        url = info["url"] or ""
+        if info["install_type"] == "git-vcs":
             return InstallInfo(
                 install_type=InstallType.GIT_VCS,
-                commit_id=vcs_info.get("commit_id") or None,
-                requested_revision=vcs_info.get("requested_revision") or None,
-                url=data.get("url") or None,
+                commit_id=info["commit_id"],
+                requested_revision=info["requested_revision"],
+                url=url or None,
                 editable_source=None,
             )
-
-        dir_info = data.get("dir_info", {})
-        url = data.get("url", "")
-        if isinstance(dir_info, dict) and dir_info.get("editable") is True:
+        if info["install_type"] == "local-editable":
             if isinstance(url, str) and url.startswith("file://"):
                 src_path = url[len("file://") :]
                 return InstallInfo(
@@ -76,40 +71,41 @@ def detect_install() -> InstallInfo:
                     url=url,
                     editable_source=Path(src_path),
                 )
-
-        if isinstance(url, str) and url.startswith("file://"):
+        if info["install_type"] == "local-path":
             return InstallInfo(
                 install_type=InstallType.LOCAL_PATH,
                 commit_id=None,
                 requested_revision=None,
-                url=url,
+                url=url or None,
                 editable_source=None,
             )
-
         return _unknown
-
     except Exception:
         logger.debug("install classification failed", exc_info=True)
         return _unknown
 
 
-def _is_release_tag(rev: str) -> bool:
-    """Return True if ``rev`` looks like a version tag (e.g. 'v0.7.75', '0.7.75')."""
-    return bool(re.fullmatch(r"v?\d+(\.\d+)*", rev))
+def classify_track(info: InstallInfo) -> InstallTrack:
+    if info.install_type in (InstallType.LOCAL_EDITABLE, InstallType.LOCAL_PATH):
+        return InstallTrack.LOCAL
+    rev = info.requested_revision or ""
+    if _is_stable_track(rev):
+        return InstallTrack.STABLE
+    return InstallTrack.DEV
 
 
 def comparison_branch(info: InstallInfo) -> str | None:
     """Return the GitHub branch/tag to compare for update availability.
 
-    - ``stable`` / ``main`` / release-tag / ``UNKNOWN`` → ``"releases/latest"``
-    - ``integration`` → ``"integration"``
+    - stable / main / release-tag / UNKNOWN → ``"releases/latest"``
+    - any other GIT_VCS revision (dev-track) → ``"develop"``
     - ``LOCAL_EDITABLE`` / ``LOCAL_PATH`` → ``None`` (not applicable)
     """
-    if info.install_type in (InstallType.LOCAL_EDITABLE, InstallType.LOCAL_PATH):
+    track = classify_track(info)
+    if track == InstallTrack.LOCAL:
         return None
-    rev = info.requested_revision or ""
-    if rev == "integration":
-        return "integration"
+    if track == InstallTrack.DEV:
+        return "develop"
     return "releases/latest"
 
 
@@ -118,28 +114,29 @@ def dismissal_window(info: InstallInfo) -> timedelta:
 
     Branch-aware windows:
 
-    - ``stable`` / ``main`` / release-tag / ``UNKNOWN`` → ``timedelta(days=7)``
-    - ``integration`` / ``LOCAL_EDITABLE`` → ``timedelta(hours=12)``
+    - stable / main / release-tag / UNKNOWN → ``timedelta(days=7)``
+    - dev-track / LOCAL → ``timedelta(hours=12)``
     """
-    rev = info.requested_revision or ""
-    if rev == "integration" or info.install_type == InstallType.LOCAL_EDITABLE:
-        return timedelta(hours=12)
-    return timedelta(days=7)
+    track = classify_track(info)
+    # LOCAL_EDITABLE is reachable only via AUTOSKILLIT_FORCE_UPDATE_CHECK; not dead code.
+    if track in (InstallTrack.DEV, InstallTrack.LOCAL):
+        return _DEV_DISMISS_WINDOW
+    return _STABLE_DISMISS_WINDOW
 
 
 def upgrade_command(info: InstallInfo) -> list[str] | None:
     """Return the subprocess command to upgrade autoskillit for this install.
 
-    - ``stable`` / ``main`` / release-tag → ``["uv", "tool", "upgrade", "autoskillit"]``
-    - ``integration`` → ``["uv", "tool", "install", "--force", <git URL>]``
+    - stable / main / release-tag → ``["uv", "tool", "upgrade", "autoskillit"]``
+    - dev-track → ``["uv", "tool", "install", "--force", <git URL>]``
     - ``LOCAL_EDITABLE`` → ``["uv", "pip", "install", "-e", str(info.editable_source)]``
     - ``UNKNOWN`` / ``LOCAL_PATH`` → ``None``
     """
-    if info.install_type == InstallType.GIT_VCS:
-        rev = info.requested_revision or ""
-        if rev == "integration":
-            return ["uv", "tool", "install", "--force", _INSTALL_FROM_INTEGRATION]
-        return ["uv", "tool", "upgrade", "autoskillit"]
     if info.install_type == InstallType.LOCAL_EDITABLE and info.editable_source is not None:
         return ["uv", "pip", "install", "-e", str(info.editable_source)]
-    return None
+    if info.install_type != InstallType.GIT_VCS:
+        return None
+    track = classify_track(info)
+    if track == InstallTrack.DEV:
+        return ["uv", "tool", "install", "--force", _INSTALL_FROM_DEVELOP]
+    return ["uv", "tool", "upgrade", "autoskillit"]

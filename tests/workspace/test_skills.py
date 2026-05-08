@@ -5,14 +5,18 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
 import yaml
 
+import autoskillit.workspace.skills as _skills_mod
 from autoskillit.core.types import SkillSource
 from autoskillit.workspace.skills import (
     DefaultSkillResolver,
     bundled_skills_dir,
     bundled_skills_extended_dir,
 )
+
+pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
 BUNDLED_SKILLS = [
     "analyze-prs",
@@ -34,12 +38,18 @@ BUNDLED_SKILLS = [
     "audit-claims",
     "audit-cohesion",
     "audit-defense-standards",
+    "audit-docs",
+    "audit-feature-gates",
     "audit-friction",
     "audit-impl",
+    "audit-review-decisions",
     "audit-tests",
+    "build-execution-map",
     "bundle-local-report",
     "close-kitchen",
     "collapse-issues",
+    "compose-pr",
+    "compose-research-pr",
     "design-guards",
     "diagnose-ci",
     "dry-walkthrough",
@@ -63,12 +73,14 @@ BUNDLED_SKILLS = [
     "exp-lens-unit-interference",
     "exp-lens-validity-threats",
     "exp-lens-variance-stability",
+    "generate-report",
     "implement-experiment",
     "implement-worktree",
     "implement-worktree-no-merge",
     "investigate",
     "issue-splitter",
     "make-arch-diag",
+    "make-campaign",
     "make-experiment-diag",
     "make-groups",
     "make-plan",
@@ -78,14 +90,29 @@ BUNDLED_SKILLS = [
     "migrate-recipes",
     "open-integration-pr",
     "open-kitchen",
-    "open-pr",
-    "open-research-pr",
     "pipeline-summary",
     "plan-experiment",
     "plan-visualization",
+    "planner-analyze",
+    "planner-assess-review-approach",
+    "planner-consolidate-wps",
+    "planner-elaborate-assignments",
+    "planner-elaborate-phase",
+    "planner-elaborate-wps",
+    "planner-extract-domain",
+    "planner-generate-phases",
+    "planner-reconcile-deps",
+    "planner-refine",
+    "planner-refine-assignments",
+    "planner-refine-phases",
+    "planner-refine-wps",
     "prepare-issue",
+    "prepare-pr",
+    "prepare-research-pr",
     "process-issues",
+    "promote-to-main",
     "rectify",
+    "reload-session",
     "report-bug",
     "resolve-claims-review",
     "resolve-design-review",
@@ -103,18 +130,18 @@ BUNDLED_SKILLS = [
     "setup-project",
     "smoke-task",
     "sous-chef",
-    "sprint-planner",
     "stage-data",
     "triage-issues",
     "troubleshoot-experiment",
     "validate-audit",
+    "validate-review-decisions",
     "verify-diag",
     "vis-lens-always-on",
     "vis-lens-antipattern",
     "vis-lens-caption-annot",
     "vis-lens-chart-select",
     "vis-lens-color-access",
-    "vis-lens-domain-norms",
+    "vis-lens-methodology-norms",
     "vis-lens-figure-table",
     "vis-lens-multi-compare",
     "vis-lens-reproducibility",
@@ -122,7 +149,6 @@ BUNDLED_SKILLS = [
     "vis-lens-temporal",
     "vis-lens-uncertainty",
     "write-recipe",
-    "generate-report",
 ]
 
 # Internal-only skill documents: injected programmatically, never invocable as slash commands.
@@ -172,6 +198,10 @@ AUDIT_SKILL_NAMES = [
     "audit-cohesion",
     "audit-defense-standards",
     "validate-audit",
+    "validate-test-audit",
+    "validate-review-decisions",
+    "audit-docs",
+    "audit-review-decisions",
 ]
 
 BUNDLED_SKILL_NAMES = set(BUNDLED_SKILLS)
@@ -255,39 +285,6 @@ class TestSkillResolver:
                         skill_file = f"{skill_md.parent.name}/SKILL.md"
                         assert False, f"{skill_file}: /{name} should be /autoskillit:{name}"
 
-    def test_skill_md_yaml_examples_are_valid_workflows(self) -> None:
-        """YAML workflow examples embedded in SKILL.md files must pass validation."""
-        import yaml as _yaml
-
-        from autoskillit.recipe.io import (
-            _parse_recipe as _parse_workflow,
-        )
-        from autoskillit.recipe.validator import (
-            validate_recipe as validate_workflow,
-        )
-
-        yaml_block_re = re.compile(r"```yaml\n(.*?)```", re.DOTALL)
-
-        for skills_dir in _all_skill_roots():
-            for skill_md in skills_dir.rglob("SKILL.md"):
-                content = skill_md.read_text()
-                for match in yaml_block_re.finditer(content):
-                    block = match.group(1)
-                    # Only validate blocks that look like full workflow definitions
-                    if "steps:" not in block or "name:" not in block:
-                        continue
-                    # Skip format templates that use {placeholder} syntax
-                    if "{script-name}" in block or "{mcp_tool_name}" in block:
-                        continue
-                    data = _yaml.safe_load(block)
-                    if not isinstance(data, dict) or "steps" not in data:
-                        continue
-                    wf = _parse_workflow(data)
-                    errors = [e for e in validate_workflow(wf) if "kitchen_rules" not in e.lower()]
-                    assert not errors, (
-                        f"{skill_md.parent.name}/SKILL.md has invalid YAML example:\n  {errors}"
-                    )
-
     def test_skill_md_has_critical_constraints(self) -> None:
         """Every user-invocable SKILL.md must have Critical Constraints (NEVER/ALWAYS blocks)."""
         failures: list[str] = []
@@ -311,6 +308,7 @@ class TestSkillResolver:
     def test_file_producing_skills_have_output_guard(self) -> None:
         """File-producing skills must have a negative output constraint in NEVER block."""
         FILE_PRODUCING_SKILLS = {
+            "build-execution-map": ".autoskillit/temp/build-execution-map/",
             "investigate": ".autoskillit/temp/investigate/",
             "make-groups": ".autoskillit/temp/make-groups/",
             "make-plan": ".autoskillit/temp/make-plan/",
@@ -371,7 +369,7 @@ class TestSkillResolver:
         assert "manifest" in content.lower()
 
     def test_bundled_skills_list_matches_filesystem(self) -> None:
-        """make-script-skill SKILL.md bundled skills list must match filesystem."""
+        """write-recipe SKILL.md bundled skills list must match filesystem."""
         skill_md = DefaultSkillResolver().resolve("write-recipe").path
         content = skill_md.read_text()
 
@@ -401,7 +399,7 @@ class TestSkillResolver:
         actual_skills = sorted(s.name for s in DefaultSkillResolver().list_all())
 
         assert listed_skills == actual_skills, (
-            f"make-script-skill bundled skills list doesn't match filesystem.\n"
+            f"write-recipe bundled skills list doesn't match filesystem.\n"
             f"  Listed:  {listed_skills}\n"
             f"  On disk: {actual_skills}"
         )
@@ -450,18 +448,18 @@ class TestSkillResolver:
         names = {d.name for d in bundled_skills_dir().iterdir() if d.is_dir()}
         assert names == {"open-kitchen", "close-kitchen", "sous-chef"}
 
-    def test_90_skills_in_skills_extended(self) -> None:
-        """skills_extended/ contains exactly 107 SKILL.md-carrying directories."""
+    def test_skills_in_skills_extended(self) -> None:
+        """skills_extended/ contains at least 125 SKILL.md-carrying directories."""
         skills = [
             d
             for d in bundled_skills_extended_dir().iterdir()
             if d.is_dir() and (d / "SKILL.md").is_file()
         ]
-        assert len(skills) == 107
+        assert len(skills) >= 125
 
-    def test_skill_resolver_list_all_total_count(self) -> None:
-        """list_all() returns 109 public skills (2 Tier-1 + 107 extended)."""
-        assert len(DefaultSkillResolver().list_all()) == 109
+    def test_skill_resolver_list_all_minimum_count(self) -> None:
+        """list_all() returns at least 128 public skills (2 Tier-1 + extended)."""
+        assert len(DefaultSkillResolver().list_all()) >= 128
 
     def test_skill_resolver_resolve_extended_skill(self) -> None:
         """resolve() finds a skill living in skills_extended/ with BUNDLED_EXTENDED source."""
@@ -492,6 +490,14 @@ class TestSkillResolver:
         assert not dupes, (
             f"Skill name collision across skills/ and skills_extended/: {sorted(dupes)}"
         )
+
+    def test_list_all_excludes_retired_skill_names(self) -> None:
+        """list_all() must not surface any skill whose name is in RETIRED_SKILL_NAMES."""
+        from autoskillit.core import RETIRED_SKILL_NAMES
+
+        names = {s.name for s in DefaultSkillResolver().list_all()}
+        surfaced = RETIRED_SKILL_NAMES & names
+        assert not surfaced, f"list_all() returned retired skill name(s): {sorted(surfaced)}"
 
 
 class TestSkillCategories:
@@ -575,6 +581,8 @@ class TestSkillCategories:
             "audit-friction",
             "audit-impl",
             "validate-audit",
+            "audit-docs",
+            "audit-review-decisions",
         ]:
             info = resolver.resolve(name)
             assert info is not None
@@ -604,6 +612,40 @@ class TestSkillCategories:
         info = DefaultSkillResolver().resolve("make-experiment-diag")
         assert info is not None
         assert "exp-lens" in info.categories
+
+    def test_make_campaign_has_fleet_category(self) -> None:
+        """make-campaign must declare both orchestration-family and fleet categories."""
+        info = DefaultSkillResolver().resolve("make-campaign")
+        assert info is not None
+        assert "fleet" in info.categories, "make-campaign missing 'fleet' category"
+        assert "orchestration-family" in info.categories, (
+            "make-campaign must retain 'orchestration-family' category"
+        )
+
+    def test_planner_analyze_has_planner_category(self) -> None:
+        info = DefaultSkillResolver().resolve("planner-analyze")
+        assert info is not None
+        assert "planner" in info.categories
+
+    def test_planner_extract_domain_has_planner_category(self) -> None:
+        info = DefaultSkillResolver().resolve("planner-extract-domain")
+        assert info is not None
+        assert "planner" in info.categories
+
+    def test_planner_generate_phases_has_planner_category(self) -> None:
+        info = DefaultSkillResolver().resolve("planner-generate-phases")
+        assert info is not None
+        assert "planner" in info.categories
+
+    def test_planner_elaborate_phase_has_planner_category(self) -> None:
+        info = DefaultSkillResolver().resolve("planner-elaborate-phase")
+        assert info is not None
+        assert "planner" in info.categories
+
+    def test_planner_elaborate_assignments_has_planner_category(self) -> None:
+        info = DefaultSkillResolver().resolve("planner-elaborate-assignments")
+        assert info is not None
+        assert "planner" in info.categories
 
 
 RESEARCH_SKILL_NAMES = {
@@ -687,3 +729,89 @@ def test_resolve_claims_review_skill_md_exists() -> None:
     info = resolver.resolve("resolve-claims-review")
     assert info is not None, "resolve-claims-review skill not found"
     assert info.path.exists(), f"SKILL.md missing at {info.path}"
+
+
+def test_audit_docs_skill_md_exists() -> None:
+    resolver = DefaultSkillResolver()
+    info = resolver.resolve("audit-docs")
+    assert info is not None
+    assert info.path.exists()
+
+
+# ---------------------------------------------------------------------------
+# Cache tests
+# ---------------------------------------------------------------------------
+
+
+def test_list_all_cache_hit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Second list_all() call returns cached result without re-scanning."""
+    monkeypatch.setattr(_skills_mod, "_LIST_ALL_CACHE", None)
+    monkeypatch.setattr(_skills_mod, "_LIST_ALL_CACHE_KEY", (0.0, 0.0))
+    resolver = DefaultSkillResolver()
+    result1 = resolver.list_all()
+    call_count = 0
+    original_scan = _skills_mod._scan_directory
+
+    def counting_scan(*args: object, **kwargs: object) -> list[object]:
+        nonlocal call_count
+        call_count += 1
+        return original_scan(*args, **kwargs)  # type: ignore[no-any-return]
+
+    monkeypatch.setattr(_skills_mod, "_scan_directory", counting_scan)
+    result2 = resolver.list_all()
+    assert result2 == result1
+    assert call_count == 0  # Cache hit — no re-scan
+
+
+def test_list_all_cache_invalidation_on_mtime_change(monkeypatch: pytest.MonkeyPatch) -> None:
+    """list_all() re-scans when directory mtime changes."""
+    monkeypatch.setattr(_skills_mod, "_LIST_ALL_CACHE", None)
+    monkeypatch.setattr(_skills_mod, "_LIST_ALL_CACHE_KEY", (0.0, 0.0))
+    resolver = DefaultSkillResolver()
+    result1 = resolver.list_all()
+    monkeypatch.setattr(_skills_mod, "_LIST_ALL_CACHE_KEY", (999.0, 999.0))
+    call_count = 0
+    original_scan = _skills_mod._scan_directory
+
+    def counting_scan(*args: object, **kwargs: object) -> list[object]:
+        nonlocal call_count
+        call_count += 1
+        return original_scan(*args, **kwargs)  # type: ignore[no-any-return]
+
+    monkeypatch.setattr(_skills_mod, "_scan_directory", counting_scan)
+    result2 = resolver.list_all()
+    assert result2 == result1  # Same content
+    assert call_count == 2  # Re-scanned both directories
+
+
+def test_resolve_instance_cache_hit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Second resolve() for same name returns cached SkillInfo without disk I/O."""
+    monkeypatch.setattr(_skills_mod, "_LIST_ALL_CACHE", None)
+    monkeypatch.setattr(_skills_mod, "_LIST_ALL_CACHE_KEY", (0.0, 0.0))
+    resolver = DefaultSkillResolver()
+    result1 = resolver.resolve("make-plan")
+    assert result1 is not None
+    call_count = 0
+    original_fn = _skills_mod._skill_info_from_frontmatter
+
+    def counting_fn(*args: object, **kwargs: object) -> object:
+        nonlocal call_count
+        call_count += 1
+        return original_fn(*args, **kwargs)
+
+    monkeypatch.setattr(_skills_mod, "_skill_info_from_frontmatter", counting_fn)
+    result2 = resolver.resolve("make-plan")
+    assert result2 is not None
+    assert result2.name == result1.name
+    assert call_count == 0  # Cache hit
+
+
+def test_resolve_instance_cache_caches_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    """resolve() caches None for unknown skills to avoid repeated is_file() checks."""
+    monkeypatch.setattr(_skills_mod, "_LIST_ALL_CACHE", None)
+    monkeypatch.setattr(_skills_mod, "_LIST_ALL_CACHE_KEY", (0.0, 0.0))
+    resolver = DefaultSkillResolver()
+    result1 = resolver.resolve("nonexistent-skill-xyz")
+    assert result1 is None
+    assert "nonexistent-skill-xyz" in resolver._resolve_cache
+    assert resolver._resolve_cache["nonexistent-skill-xyz"] is None

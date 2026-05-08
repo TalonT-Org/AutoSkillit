@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
+
 # Files that are *allowed* to contain raw input() calls.
 # _timed_input.py is the sole module that wraps input() with timeout/TTY/ANSI.
 _RAW_INPUT_EXEMPT_FILES: frozenset[str] = frozenset(
@@ -127,7 +129,7 @@ def test_prompt_recipe_choice_noninteractive_exits(
 
 def test_cook_noninteractive_exits(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """cook() launch-confirm prompt must raise SystemExit(1) when not interactive."""
-    from autoskillit.cli._cook import cook
+    from autoskillit.cli.session._cook import cook
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("sys.stdin.isatty", lambda: False)

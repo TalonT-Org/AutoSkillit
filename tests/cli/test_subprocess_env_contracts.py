@@ -27,6 +27,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
+
 CLI_ROOT = Path(__file__).parents[2] / "src" / "autoskillit" / "cli"
 SRC_ROOT = Path(__file__).parents[2] / "src" / "autoskillit"
 REQUIRED_GUARD = "AUTOSKILLIT_SKIP_STALE_CHECK"
@@ -35,7 +37,7 @@ _CLAUDE_BUILDER_NAMES = frozenset(
     {
         "build_interactive_cmd",
         "build_headless_cmd",
-        "build_full_headless_cmd",
+        "build_skill_session_cmd",
     }
 )
 
@@ -343,7 +345,7 @@ class _ClaudeLaunchWalker:
     kwarg and verifies the ``env=`` kwarg shape is one of:
 
     - ``Attribute(value=Name, attr="env")`` where Name was assigned from a
-      ``build_interactive_cmd``/``build_headless_cmd``/``build_full_headless_cmd``
+      ``build_interactive_cmd``/``build_headless_cmd``/``build_skill_session_cmd``
       call earlier in the same function body (spec.env pattern).
     - ``Call(func=Name("build_claude_env") | Attribute(..., "build_claude_env"))``
       (direct builder escape hatch).
@@ -497,6 +499,16 @@ _CLAUDE_ENV_RULE_ALLOWED: frozenset[tuple[str, str]] = frozenset(
         # marketplace registration + install: `claude plugin marketplace add` /
         # `claude plugin install`. Administrative ops invoked once during setup.
         ("_marketplace.py", "install"),
+        # run_headless_core and dispatch_food_truck pass `spec` (ClaudeHeadlessCmd)
+        # to _execute_claude_headless, which internally uses `spec.env` at the
+        # runner call site. The checker incorrectly treats _execute_claude_headless(spec, ...)
+        # as a direct subprocess call because `spec` resolves to a builder return value.
+        ("__init__.py", "run_headless_core"),
+        ("__init__.py", "dispatch_food_truck"),
+        # build_headless_resume_cmd constructs cmd = ["claude", ...] then calls
+        # _apply_output_format(cmd, ...) — an in-place list mutation, not a subprocess
+        # launch. The function returns ClaudeHeadlessCmd(cmd=cmd, env=build_claude_env(...)).
+        ("commands.py", "build_headless_resume_cmd"),
     }
 )
 

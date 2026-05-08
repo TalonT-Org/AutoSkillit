@@ -19,11 +19,11 @@ def test_format_ingredients_table_delegates_to_render_gfm_table():
     src = inspect.getsource(format_ingredients_table)
     assert "_render_gfm_table" in src, (
         "format_ingredients_table must delegate to _render_gfm_table. "
-        "Reverting to inline width math is prohibited — it bypasses the L0 cap contract."
+        "Reverting to inline width math is prohibited — it bypasses the IL-0 cap contract."
     )
     assert "max(len(" not in src, (
         "format_ingredients_table must not contain ad-hoc max(len(...)) width computation. "
-        "Width capping belongs in _render_gfm_table at L0."
+        "Width capping belongs in _render_gfm_table at IL-0."
     )
 
 
@@ -41,7 +41,7 @@ def test_gfm_ingredient_columns_all_have_bounded_max_width():
     overflow from long ingredient values.
     """
     from autoskillit.core import TerminalColumn
-    from autoskillit.recipe._api import _GFM_INGREDIENT_COLUMNS
+    from autoskillit.recipe._recipe_ingredients import _GFM_INGREDIENT_COLUMNS
 
     assert len(_GFM_INGREDIENT_COLUMNS) > 0, "_GFM_INGREDIENT_COLUMNS must not be empty"
     for col in _GFM_INGREDIENT_COLUMNS:

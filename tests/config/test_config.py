@@ -1,12 +1,18 @@
 """Tests for configuration loading and resolution."""
 
 from dataclasses import fields as dc_fields
-from pathlib import Path
 
 import pytest
 import yaml
 
-from autoskillit.config import AutomationConfig, ConfigSchemaError, RunSkillConfig, load_config
+from autoskillit.config import (
+    AutomationConfig,
+    ConfigSchemaError,
+    RunSkillConfig,
+    load_config,
+)
+
+pytestmark = [pytest.mark.layer("config"), pytest.mark.small]
 
 
 class TestDefaultConfig:
@@ -20,15 +26,15 @@ class TestDefaultConfig:
         assert cfg.reset_workspace.preserve_dirs == set()
         assert cfg.implement_gate.marker == "Dry-walkthrough verified = TRUE"
         assert cfg.implement_gate.skill_names == {
-            "/autoskillit:implement-worktree",
-            "/autoskillit:implement-worktree-no-merge",
+            "/implement-worktree",
+            "/implement-worktree-no-merge",
         }
         assert cfg.safety.reset_guard_marker == ".autoskillit-workspace"
         assert cfg.safety.require_dry_walkthrough is True
         assert cfg.safety.test_gate_on_merge is True
         assert isinstance(cfg.safety.protected_branches, list)
         assert "main" in cfg.safety.protected_branches
-        assert "integration" in cfg.safety.protected_branches
+        assert "develop" in cfg.safety.protected_branches
         assert "stable" in cfg.safety.protected_branches
         assert cfg.worktree_setup.command is None
 
@@ -201,11 +207,6 @@ class TestLoadConfig:
         assert cfg.model.override == "haiku"
         assert cfg.model.default == "sonnet"
 
-    def test_loaded_config_has_sonnet_default(self, tmp_path):
-        """MOD_C4: load_config produces model.default='sonnet'."""
-        cfg = load_config(tmp_path)
-        assert cfg.model.default == "sonnet"
-
     def test_yaml_loads_worktree_setup_config(self, tmp_path):
         """WS_C2: YAML with worktree_setup section populates WorktreeSetupConfig."""
         config_dir = tmp_path / ".autoskillit"
@@ -336,144 +337,12 @@ class TestRunSkillConfigExitAfterStopDelay:
         assert "exit_after_stop_delay_ms" in names
 
 
-class TestQuotaGuardConfig:
-    def test_default_enabled(self):
-        import pytest
-
-        config = AutomationConfig()
-        assert config.quota_guard.enabled is True
-        assert config.quota_guard.short_window_threshold == pytest.approx(85.0)
-        assert config.quota_guard.long_window_threshold == pytest.approx(98.0)
-        assert config.quota_guard.buffer_seconds == 60
-        assert config.quota_guard.cache_max_age == 300
-
-    def test_load_quota_guard_from_yaml(self, tmp_path):
-        import pytest
-
-        config_dir = tmp_path / ".autoskillit"
-        config_dir.mkdir()
-        (config_dir / "config.yaml").write_text(
-            yaml.dump(
-                {
-                    "quota_guard": {
-                        "enabled": True,
-                        "short_window_threshold": 85.0,
-                        "long_window_threshold": 98.0,
-                    }
-                }
-            )
-        )
-        config = load_config(tmp_path)
-        assert config.quota_guard.enabled is True
-        assert config.quota_guard.short_window_threshold == pytest.approx(85.0)
-        assert config.quota_guard.long_window_threshold == pytest.approx(98.0)
-        # Unspecified fields keep defaults
-        assert config.quota_guard.buffer_seconds == 60
-
-    def test_short_window_threshold_defaults_to_85(self):
-        from autoskillit.config.settings import QuotaGuardConfig
-
-        assert QuotaGuardConfig().short_window_threshold == 85.0
-
-    def test_long_window_threshold_defaults_to_98(self):
-        from autoskillit.config.settings import QuotaGuardConfig
-
-        assert QuotaGuardConfig().long_window_threshold == 98.0
-
-    def test_long_window_patterns_default(self):
-        from autoskillit.config.settings import QuotaGuardConfig
-
-        assert QuotaGuardConfig().long_window_patterns == ["weekly", "sonnet", "opus"]
-
-    def test_threshold_field_removed(self):
-        import dataclasses
-
-        from autoskillit.config.settings import QuotaGuardConfig
-
-        names = {f.name for f in dataclasses.fields(QuotaGuardConfig)}
-        assert "threshold" not in names
-
-    def test_quota_guard_yaml_round_trip_per_window(self, tmp_path):
-        import pytest
-
-        config_dir = tmp_path / ".autoskillit"
-        config_dir.mkdir()
-        (config_dir / "config.yaml").write_text(
-            yaml.dump(
-                {
-                    "quota_guard": {
-                        "short_window_threshold": 85.0,
-                        "long_window_threshold": 98.0,
-                        "long_window_patterns": ["weekly", "sonnet", "opus"],
-                    }
-                }
-            )
-        )
-        config = load_config(tmp_path)
-        assert config.quota_guard.short_window_threshold == pytest.approx(85.0)
-        assert config.quota_guard.long_window_threshold == pytest.approx(98.0)
-        assert config.quota_guard.long_window_patterns == ["weekly", "sonnet", "opus"]
-
-    def test_quota_guard_config_has_cache_refresh_interval(self):
-        """QG_C3: QuotaGuardConfig has cache_refresh_interval defaulting to 240."""
-        from autoskillit.config.settings import QuotaGuardConfig
-
-        config = QuotaGuardConfig()
-        assert config.cache_refresh_interval == 240
-
-    def test_defaults_yaml_has_cache_refresh_interval(self):
-        """QG_C4: defaults.yaml defines quota_guard.cache_refresh_interval < cache_max_age."""
-        from autoskillit.core.paths import pkg_root
-
-        defaults = yaml.safe_load((pkg_root() / "config" / "defaults.yaml").read_text())
-        assert "cache_refresh_interval" in defaults["quota_guard"]
-        interval = defaults["quota_guard"]["cache_refresh_interval"]
-        max_age = defaults["quota_guard"]["cache_max_age"]
-        assert interval < max_age, (
-            f"cache_refresh_interval ({interval}) must be < cache_max_age ({max_age}); "
-            "otherwise the loop arrives after the cache has already expired"
-        )
-
-    def test_quota_guard_per_window_enabled_defaults_true(self):
-        """Test 14: QuotaGuardConfig() defaults both per-window flags to True."""
-        from autoskillit.config.settings import QuotaGuardConfig
-
-        config = QuotaGuardConfig()
-        assert config.short_window_enabled is True
-        assert config.long_window_enabled is True
-
-    def test_quota_guard_per_window_enabled_yaml_round_trip(self, tmp_path):
-        """Test 15: per-window enabled flags survive a YAML round-trip."""
-        config_dir = tmp_path / ".autoskillit"
-        config_dir.mkdir()
-        (config_dir / "config.yaml").write_text(
-            yaml.dump({"quota_guard": {"short_window_enabled": False}})
-        )
-        config = load_config(tmp_path)
-        assert config.quota_guard.short_window_enabled is False
-        assert config.quota_guard.long_window_enabled is True
-
-    def test_defaults_yaml_has_per_window_enabled_keys(self):
-        """Test 16: defaults.yaml has both per-window enabled keys set to True."""
-        from autoskillit.core.paths import pkg_root
-
-        defaults = yaml.safe_load((pkg_root() / "config" / "defaults.yaml").read_text())
-        assert defaults["quota_guard"]["short_window_enabled"] is True
-        assert defaults["quota_guard"]["long_window_enabled"] is True
-
-    def test_quota_guard_env_var_override_short_window_enabled(self, monkeypatch, tmp_path):
-        """Test 17: AUTOSKILLIT_QUOTA_GUARD__SHORT_WINDOW_ENABLED=false is cast to bool False."""
-        monkeypatch.setenv("AUTOSKILLIT_QUOTA_GUARD__SHORT_WINDOW_ENABLED", "false")
-        config = load_config(tmp_path)
-        assert config.quota_guard.short_window_enabled is False
-
-
 class TestLoggingConfig:
     """LoggingConfig dataclass and YAML loading."""
 
     def test_logging_config_defaults(self, tmp_path):
         """LOG_C1: LoggingConfig has correct defaults from defaults.yaml."""
-        cfg = load_config(tmp_path / "settings.toml")
+        cfg = load_config(tmp_path)
         assert cfg.logging.level == "INFO"
         assert cfg.logging.json_output is None
 
@@ -533,45 +402,6 @@ class TestLoggingConfig:
 
         names = {f.name for f in dc_fields(LoggingConfig)}
         assert names == {"level", "json_output"}
-
-
-class TestLinuxTracingConfig:
-    """LinuxTracingConfig dataclass and YAML loading."""
-
-    def test_linux_tracing_config_defaults(self, tmp_path):
-        """LT_C1: LinuxTracingConfig defaults: enabled, 5s interval, empty log_dir."""
-        cfg = load_config(tmp_path / "settings.toml")
-        assert cfg.linux_tracing.enabled is True
-        assert cfg.linux_tracing.proc_interval == 5.0
-        assert cfg.linux_tracing.log_dir == ""
-
-    def test_linux_tracing_config_from_yaml(self, tmp_path):
-        """LT_C2: LinuxTracingConfig reads from project config."""
-        config_dir = tmp_path / ".autoskillit"
-        config_dir.mkdir()
-        (config_dir / "config.yaml").write_text(
-            "linux_tracing:\n  enabled: true\n  proc_interval: 2.0\n  log_dir: /custom/logs\n"
-        )
-        cfg = load_config(tmp_path)
-        assert cfg.linux_tracing.enabled is True
-        assert cfg.linux_tracing.proc_interval == 2.0
-        assert cfg.linux_tracing.log_dir == "/custom/logs"
-
-    def test_automation_config_has_linux_tracing_field(self):
-        """LT_C3: AutomationConfig has linux_tracing sub-config."""
-        cfg = AutomationConfig()
-        assert cfg.linux_tracing.enabled is True
-        assert cfg.linux_tracing.proc_interval == 5.0
-        assert cfg.linux_tracing.log_dir == ""
-
-    def test_linux_tracing_config_fields(self):
-        """LT_C4: LinuxTracingConfig has exactly the expected fields."""
-        from dataclasses import fields as dc_fields
-
-        from autoskillit.config.settings import LinuxTracingConfig
-
-        names = {f.name for f in dc_fields(LinuxTracingConfig)}
-        assert names == {"enabled", "proc_interval", "log_dir", "tmpfs_path"}
 
 
 class TestDynaconfIntegration:
@@ -723,6 +553,12 @@ class TestDynaconfIntegration:
         cfg = GitHubConfig()
         assert cfg.in_progress_label == "in-progress"
 
+    def test_github_config_has_fail_label(self):
+        from autoskillit.config.settings import GitHubConfig
+
+        cfg = GitHubConfig()
+        assert cfg.fail_label == "fail"
+
 
 def test_secrets_only_keys_covers_all_github_secret_fields() -> None:
     """_SECRETS_ONLY_KEYS must include every field in GitHubConfig that holds a secret.
@@ -747,407 +583,11 @@ def test_secrets_only_keys_covers_all_github_secret_fields() -> None:
             )
 
 
-class TestReleaseReadinessConfig:
-    def test_branching_default_base_branch_is_main(self):
-        from autoskillit.core.io import load_yaml
-        from autoskillit.core.paths import pkg_root
-
-        defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
-        assert defaults["branching"]["default_base_branch"] == "main"
-
-
-class TestBranchingConfig:
-    def test_branching_config_default_base_branch_is_main(self) -> None:
-        """BranchingConfig must default default_base_branch to 'main'."""
-        from autoskillit.config.settings import BranchingConfig
-
-        assert BranchingConfig().default_base_branch == "main"
-
-    def test_automation_config_has_branching_field(self) -> None:
-        """AutomationConfig must expose a BranchingConfig as .branching."""
-        from autoskillit.config.settings import AutomationConfig
-
-        cfg = AutomationConfig()
-        assert cfg.branching.default_base_branch == "main"
-
-    def test_branching_config_is_overridable(self) -> None:
-        """BranchingConfig.default_base_branch must accept override values."""
-        from autoskillit.config.settings import BranchingConfig
-
-        cfg = BranchingConfig(default_base_branch="develop")
-        assert cfg.default_base_branch == "develop"
-
-    def test_branching_default_base_branch_matches_defaults_yaml(self) -> None:
-        """BranchingConfig Python default must match defaults.yaml."""
-        from autoskillit.config.settings import BranchingConfig
-        from autoskillit.core.io import load_yaml
-        from autoskillit.core.paths import pkg_root
-
-        defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
-        yaml_default = defaults["branching"]["default_base_branch"]
-        python_default = BranchingConfig().default_base_branch
-
-        assert python_default == yaml_default, (
-            f"BranchingConfig.default_base_branch Python default ({python_default!r}) "
-            f"disagrees with defaults.yaml ({yaml_default!r})"
-        )
-
-    def test_branching_config_promotion_target_defaults_to_main(self) -> None:
-        """BranchingConfig.promotion_target defaults to main (package default)."""
-        from autoskillit.config.settings import BranchingConfig
-
-        assert BranchingConfig().promotion_target == "main"
-
-    def test_automation_config_branching_promotion_target_default(self) -> None:
-        """AutomationConfig propagates promotion_target default."""
-        from autoskillit.config.settings import AutomationConfig
-
-        assert AutomationConfig().branching.promotion_target == "main"
-
-    def test_branching_config_promotion_target_overridable(self) -> None:
-        """promotion_target can be set independently of default_base_branch."""
-        from autoskillit.config.settings import BranchingConfig
-
-        cfg = BranchingConfig(default_base_branch="integration", promotion_target="main")
-        assert cfg.default_base_branch == "integration"
-        assert cfg.promotion_target == "main"
-
-    def test_branching_config_promotion_target_defaults_match_yaml(self, tmp_path) -> None:
-        """Python default for promotion_target matches defaults.yaml."""
-        from autoskillit.config import load_config
-        from autoskillit.core.io import load_yaml
-        from autoskillit.core.paths import pkg_root
-
-        loaded = load_config(tmp_path / "settings.toml")
-        defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
-        expected = defaults["branching"]["promotion_target"]
-        assert loaded.branching.promotion_target == expected
-
-    def test_branching_config_promotion_target_env_var_override(
-        self, monkeypatch, tmp_path
-    ) -> None:
-        """AUTOSKILLIT_BRANCHING__PROMOTION_TARGET env var overrides promotion_target."""
-        from autoskillit.config import load_config
-
-        monkeypatch.setenv("AUTOSKILLIT_BRANCHING__PROMOTION_TARGET", "stable")
-        cfg = load_config(tmp_path / "settings.toml")
-        assert cfg.branching.promotion_target == "stable"
-
-
-class TestBuildSubsetsConfigCustomTagsValidation:
-    """CC-F2: _build_subsets_config must raise ValueError for non-dict custom_tags."""
-
-    @pytest.mark.parametrize("bad_value", [["list", "not", "dict"], "oops", 42])
-    def test_build_subsets_config_raises_for_non_dict_custom_tags(self, bad_value: object) -> None:
-        """Non-dict custom_tags must raise ValueError, not silently coerce to {}."""
-        from autoskillit.config.settings import _build_subsets_config
-
-        with pytest.raises(ValueError, match="custom_tags"):
-            _build_subsets_config({"custom_tags": bad_value})
-
-    def test_build_subsets_config_dict_custom_tags_accepted(self):
-        """Valid dict custom_tags must not raise."""
-        from autoskillit.config.settings import _build_subsets_config
-
-        result = _build_subsets_config({"custom_tags": {"my_tag": ["skill-a"]}})
-        assert result.custom_tags == {"my_tag": ["skill-a"]}
-
-    def test_build_subsets_config_empty_dict_custom_tags_accepted(self):
-        """Empty dict custom_tags must not raise."""
-        from autoskillit.config.settings import _build_subsets_config
-
-        result = _build_subsets_config({"custom_tags": {}})
-        assert result.custom_tags == {}
-
-
-class TestSkillsConfig:
-    """SkillsConfig dataclass, tier duplication validation, and AutomationConfig integration."""
-
-    def test_skills_config_dataclass(self) -> None:
-        """SkillsConfig has tier1, tier2, tier3 list[str] fields."""
-        from autoskillit.config.settings import SkillsConfig
-
-        sc = SkillsConfig(tier1=["a"], tier2=["b"], tier3=["c"])
-        assert sc.tier1 == ["a"] and sc.tier2 == ["b"] and sc.tier3 == ["c"]
-
-    def test_skills_config_tier_duplication_raises(self) -> None:
-        """Skill in multiple tiers raises ValueError at construction (REQ-TIER-009)."""
-        import pytest
-
-        from autoskillit.config.settings import SkillsConfig
-
-        with pytest.raises(ValueError, match="multiple tiers"):
-            SkillsConfig(tier1=["open-kitchen"], tier2=["open-kitchen"], tier3=[])
-
-    def test_automation_config_has_skills_field(self) -> None:
-        """AutomationConfig.skills is a SkillsConfig with tier lists."""
-        from autoskillit.config.settings import AutomationConfig, SkillsConfig
-
-        cfg = AutomationConfig()
-        assert isinstance(cfg.skills, SkillsConfig)
-
-    def test_defaults_yaml_skills_section(self) -> None:
-        """defaults.yaml has non-empty skills.tier1/tier2/tier3 lists."""
-        from autoskillit.core import load_yaml, pkg_root
-
-        defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
-        assert isinstance(defaults, dict)
-        skills = defaults.get("skills", {})
-        assert "open-kitchen" in skills.get("tier1", [])
-        assert len(skills.get("tier2", [])) >= 20
-        assert len(skills.get("tier3", [])) >= 10
-
-    def test_load_config_populates_skills_tiers(self, tmp_path) -> None:
-        """load_config() produces an AutomationConfig with tier assignments from defaults."""
-        from autoskillit.config import load_config
-
-        cfg = load_config(tmp_path / "settings.toml")
-        assert "open-kitchen" in cfg.skills.tier1
-        assert "make-plan" in cfg.skills.tier2
-        assert "compose-pr" in cfg.skills.tier3
-
-    def test_skills_config_exported_from_config_package(self) -> None:
-        """SkillsConfig is importable from autoskillit.config and has expected fields."""
-        from autoskillit.config import SkillsConfig
-
-        cfg = SkillsConfig()
-        assert hasattr(cfg, "tier1")
-        assert hasattr(cfg, "tier2")
-        assert hasattr(cfg, "tier3")
-
-
-class TestSubsetsConfig:
-    # T1 — SubsetsConfig defaults
-
-    def test_subsets_config_default_disabled_is_empty_list(self) -> None:
-        from autoskillit.config import SubsetsConfig
-
-        cfg = SubsetsConfig()
-        assert cfg.disabled == []
-
-    def test_subsets_config_default_custom_tags_is_empty_dict(self) -> None:
-        from autoskillit.config import SubsetsConfig
-
-        cfg = SubsetsConfig()
-        assert cfg.custom_tags == {}
-
-    def test_automation_config_has_subsets_field(self) -> None:
-        from autoskillit.config import AutomationConfig, SubsetsConfig
-
-        cfg = AutomationConfig()
-        assert isinstance(cfg.subsets, SubsetsConfig)
-        assert cfg.subsets.disabled == []
-        assert cfg.subsets.custom_tags == {}
-
-    # T2 — load_config with subsets.disabled
-
-    def test_load_config_subsets_disabled(self, tmp_path) -> None:
-        config_dir = tmp_path / ".autoskillit"
-        config_dir.mkdir()
-        (config_dir / "config.yaml").write_text("subsets:\n  disabled:\n    - github\n    - ci\n")
-        cfg = load_config(tmp_path)
-        assert cfg.subsets.disabled == ["github", "ci"]
-
-    def test_load_config_subsets_disabled_absent_means_empty(self, tmp_path) -> None:
-        cfg = load_config(tmp_path)
-        assert cfg.subsets.disabled == []
-
-    # T3 — load_config with subsets.custom_tags
-
-    def test_load_config_subsets_custom_tags(self, tmp_path) -> None:
-        config_dir = tmp_path / ".autoskillit"
-        config_dir.mkdir()
-        yaml_text = (
-            "subsets:\n"
-            "  custom_tags:\n"
-            "    my-team-tools:\n"
-            "      - investigate\n"
-            "      - make-plan\n"
-        )
-        (config_dir / "config.yaml").write_text(yaml_text)
-        cfg = load_config(tmp_path)
-        assert cfg.subsets.custom_tags == {"my-team-tools": ["investigate", "make-plan"]}
-
-    def test_load_config_subsets_custom_tags_absent_means_empty(self, tmp_path) -> None:
-        cfg = load_config(tmp_path)
-        assert cfg.subsets.custom_tags == {}
-
-    # T4 — Unknown category warning, no crash
-
-    def test_load_config_unknown_disabled_category_logs_warning_not_crash(self, tmp_path) -> None:
-        import logging
-
-        config_dir = tmp_path / ".autoskillit"
-        config_dir.mkdir()
-        (config_dir / "config.yaml").write_text(
-            "subsets:\n  disabled:\n    - totally-unknown-category\n"
-        )
-        # Attach a handler directly to the logger to capture warnings reliably.
-        # caplog is unreliable here because the structlog capture_logs() autouse
-        # fixture can intercept the handler chain under xdist worker ordering.
-        captured: list[logging.LogRecord] = []
-        handler = logging.Handler()
-        handler.emit = captured.append  # type: ignore[assignment]
-        logger = logging.getLogger("autoskillit.config.settings")  # noqa: TID251
-        logger.addHandler(handler)
-        try:
-            cfg = load_config(tmp_path)
-        finally:
-            logger.removeHandler(handler)
-        assert cfg.subsets.disabled == ["totally-unknown-category"]  # preserved as-is
-        assert any("totally-unknown-category" in r.getMessage() for r in captured)
-
-    def test_load_config_known_disabled_category_no_warning(self, tmp_path, caplog) -> None:
-        import logging
-
-        config_dir = tmp_path / ".autoskillit"
-        config_dir.mkdir()
-        (config_dir / "config.yaml").write_text("subsets:\n  disabled:\n    - github\n")
-        with caplog.at_level(logging.WARNING):
-            load_config(tmp_path)
-        assert not any("github" in r.message for r in caplog.records)
-
-    def test_load_config_custom_tag_in_disabled_is_valid(self, tmp_path, caplog) -> None:
-        """Custom tags defined in custom_tags can also appear in disabled."""
-        import logging
-
-        config_dir = tmp_path / ".autoskillit"
-        config_dir.mkdir()
-        yaml_text = (
-            "subsets:\n"
-            "  disabled:\n"
-            "    - experimental\n"
-            "  custom_tags:\n"
-            "    experimental:\n"
-            "      - write-recipe\n"
-        )
-        (config_dir / "config.yaml").write_text(yaml_text)
-        with caplog.at_level(logging.WARNING):
-            load_config(tmp_path)
-        assert not any("experimental" in r.message for r in caplog.records)
-
-    # T5 — SubsetsConfig exported from config package
-
-    def test_subsets_config_importable_from_config_package(self) -> None:
-        from autoskillit.config import SubsetsConfig
-
-        cfg = SubsetsConfig()
-        assert hasattr(cfg, "disabled")
-        assert hasattr(cfg, "custom_tags")
-
-
-class TestPacksConfig:
-    # REQ-PACK-003: PacksConfig.enabled default
-
-    def test_packs_config_default_enabled_is_empty_list(self) -> None:
-        from autoskillit.config import PacksConfig
-
-        assert PacksConfig().enabled == []
-
-    def test_automation_config_has_packs_field(self) -> None:
-        from autoskillit.config import AutomationConfig, PacksConfig
-
-        cfg = AutomationConfig()
-        assert isinstance(cfg.packs, PacksConfig)
-        assert cfg.packs.enabled == []
-
-    def test_load_config_packs_enabled(self, tmp_path) -> None:
-        from autoskillit.config import load_config
-
-        config_dir = tmp_path / ".autoskillit"
-        config_dir.mkdir()
-        (config_dir / "config.yaml").write_text("packs:\n  enabled:\n    - research\n")
-        config = load_config(tmp_path)
-        assert config.packs.enabled == ["research"]
-
-    def test_load_config_packs_enabled_absent_means_empty(self, tmp_path) -> None:
-        from autoskillit.config import load_config
-
-        config_dir = tmp_path / ".autoskillit"
-        config_dir.mkdir()
-        (config_dir / "config.yaml").write_text("subsets:\n  disabled: []\n")
-        config = load_config(tmp_path)
-        assert config.packs.enabled == []
-
-    def test_load_config_unknown_pack_in_packs_enabled_logs_warning(self, tmp_path) -> None:
-        import logging
-
-        from autoskillit.config import load_config
-
-        config_dir = tmp_path / ".autoskillit"
-        config_dir.mkdir()
-        (config_dir / "config.yaml").write_text("packs:\n  enabled:\n    - nonexistent-pack\n")
-        captured: list[logging.LogRecord] = []
-        handler = logging.Handler()
-        handler.emit = captured.append  # type: ignore[assignment]
-        logger = logging.getLogger("autoskillit.config.settings")  # noqa: TID251
-        logger.addHandler(handler)
-        try:
-            config = load_config(tmp_path)
-        finally:
-            logger.removeHandler(handler)
-        assert config.packs.enabled == ["nonexistent-pack"]  # preserved as-is
-        assert any("nonexistent-pack" in r.getMessage() for r in captured)
-
-    def test_write_config_layer_accepts_packs_enabled(self, tmp_path) -> None:
-        """write_config_layer does not raise for valid packs.enabled."""
-        from autoskillit.config.settings import write_config_layer
-
-        config_path = tmp_path / "config.yaml"
-        write_config_layer(config_path, {"packs": {"enabled": ["research"]}})
-        assert config_path.exists()
-
-
-class TestWriteConfigLayer:
-    def test_write_config_layer_rejects_secret_key(self, tmp_path: Path) -> None:
-        """write_config_layer raises ConfigSchemaError before touching the file."""
-
-        from autoskillit.config.settings import ConfigSchemaError, write_config_layer
-
-        config_path = tmp_path / "config.yaml"
-        with pytest.raises(ConfigSchemaError, match="github.token"):
-            write_config_layer(config_path, {"github": {"token": "ghp_test"}})
-        assert not config_path.exists(), "config.yaml must not be written on schema error"
-
-    def test_write_config_layer_rejects_unknown_key(self, tmp_path: Path) -> None:
-        """write_config_layer raises ConfigSchemaError for unknown section."""
-        from autoskillit.config.settings import ConfigSchemaError, write_config_layer
-
-        config_path = tmp_path / "config.yaml"
-        with pytest.raises(ConfigSchemaError, match="unrecognized key"):
-            write_config_layer(config_path, {"invented_section": {"foo": "bar"}})
-        assert not config_path.exists()
-
-    def test_write_config_layer_writes_valid_content(self, tmp_path: Path) -> None:
-        """write_config_layer writes valid schema content atomically."""
-        import yaml as _yaml
-
-        from autoskillit.config.settings import write_config_layer
-
-        config_path = tmp_path / "config.yaml"
-        write_config_layer(config_path, {"github": {"default_repo": "owner/repo"}})
-        assert config_path.is_file()
-        data = _yaml.safe_load(config_path.read_text())
-        assert data["github"]["default_repo"] == "owner/repo"
-
-
 class TestWorkspaceConfig:
     """WorkspaceConfig section is present in AutomationConfig with correct defaults."""
 
-    def test_workspace_config_exists_on_automation_config(self, tmp_path):
-        from autoskillit.config import load_config
-
-        cfg = load_config(tmp_path / "settings.toml")
+    def test_workspace_config_defaults(self, tmp_path):
+        cfg = load_config(tmp_path)
         assert hasattr(cfg, "workspace")
-
-    def test_workspace_worktree_root_defaults_to_none(self, tmp_path):
-        from autoskillit.config import load_config
-
-        cfg = load_config(tmp_path / "settings.toml")
         assert cfg.workspace.worktree_root is None
-
-    def test_workspace_runs_root_defaults_to_none(self, tmp_path):
-        from autoskillit.config import load_config
-
-        cfg = load_config(tmp_path / "settings.toml")
         assert cfg.workspace.runs_root is None

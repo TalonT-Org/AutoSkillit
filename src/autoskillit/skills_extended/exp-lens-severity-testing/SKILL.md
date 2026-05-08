@@ -42,6 +42,7 @@ hooks:
 - Modify any source code files
 - Accept a "pass" result without asking what a false result would have looked like under this design
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-severity-testing/`
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - For every positive claim, identify what error the test was capable of detecting

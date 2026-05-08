@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import pytest
+
 from autoskillit.core import PRState, Severity
 from autoskillit.recipe.io import _parse_step, builtin_recipes_dir, load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeStep, StepResultCondition, StepResultRoute
+
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
 def _make_recipe(steps: dict[str, RecipeStep]) -> Recipe:
@@ -243,8 +247,45 @@ def test_ci_failure_no_on_failure_skips_rule() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_wait_for_ci_without_event_is_warning() -> None:
-    """wait_for_ci step with no event param should trigger ci-missing-event-scope."""
+def test_ci_missing_event_scope_is_error_severity() -> None:
+    """ci-missing-event-scope must be ERROR to prevent unscoped CI watch steps."""
+    recipe = _make_workflow(
+        steps={
+            "my_ci_watch": {
+                "tool": "wait_for_ci",
+                "with": {"branch": "main", "timeout_seconds": 300},
+            }
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    scope_findings = [f for f in findings if f.rule == "ci-missing-event-scope"]
+    assert scope_findings, "expected ci-missing-event-scope finding"
+    assert all(f.severity == Severity.ERROR for f in scope_findings), (
+        "ci-missing-event-scope must be ERROR, not WARNING"
+    )
+
+
+def test_ci_watch_with_event_produces_no_scope_finding() -> None:
+    """wait_for_ci with event: present must not trigger ci-missing-event-scope."""
+    recipe = _make_workflow(
+        steps={
+            "my_ci_watch": {
+                "tool": "wait_for_ci",
+                "with": {
+                    "branch": "main",
+                    "event": "${{ context.ci_event }}",
+                    "timeout_seconds": 300,
+                },
+            }
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    scope_findings = [f for f in findings if f.rule == "ci-missing-event-scope"]
+    assert not scope_findings
+
+
+def test_wait_for_ci_without_event_is_error() -> None:
+    """wait_for_ci step with no event param should trigger ci-missing-event-scope at ERROR."""
     recipe = _make_recipe(
         {
             "ci": RecipeStep(
@@ -259,7 +300,7 @@ def test_wait_for_ci_without_event_is_warning() -> None:
     findings = run_semantic_rules(recipe)
     event_findings = [f for f in findings if f.rule == "ci-missing-event-scope"]
     assert len(event_findings) == 1
-    assert event_findings[0].severity == Severity.WARNING
+    assert event_findings[0].severity == Severity.ERROR
 
 
 def test_wait_for_ci_with_event_is_clean() -> None:
@@ -280,8 +321,8 @@ def test_wait_for_ci_with_event_is_clean() -> None:
     assert event_findings == []
 
 
-def test_get_ci_status_without_event_is_warning() -> None:
-    """get_ci_status step with no event param should trigger ci-missing-event-scope."""
+def test_get_ci_status_without_event_is_error() -> None:
+    """get_ci_status step with no event param should trigger ci-missing-event-scope at ERROR."""
     recipe = _make_recipe(
         {
             "ci": RecipeStep(
@@ -296,7 +337,7 @@ def test_get_ci_status_without_event_is_warning() -> None:
     findings = run_semantic_rules(recipe)
     event_findings = [f for f in findings if f.rule == "ci-missing-event-scope"]
     assert len(event_findings) == 1
-    assert event_findings[0].severity == Severity.WARNING
+    assert event_findings[0].severity == Severity.ERROR
     assert "get_ci_status" in event_findings[0].message
 
 
@@ -371,7 +412,7 @@ _CONFORMANCE_RULE = "wait-for-merge-queue-routing-conforms-to-expected-targets"
 def _make_mq_conditions(
     *,
     exclude: set[str] | None = None,
-    fallback_route: str = "release_issue_timeout",
+    fallback_route: str = "register_clone_unconfirmed",
 ) -> list[StepResultCondition]:
     """Build a complete wait_for_merge_queue on_result conditions list.
 
@@ -399,8 +440,8 @@ def _make_mq_conditions(
 def _make_mq_step(
     *,
     exclude: set[str] | None = None,
-    fallback_route: str = "release_issue_timeout",
-    on_failure: str = "release_issue_timeout",
+    fallback_route: str = "register_clone_unconfirmed",
+    on_failure: str = "register_clone_unconfirmed",
 ) -> RecipeStep:
     return RecipeStep(
         tool="wait_for_merge_queue",
@@ -414,16 +455,34 @@ def _make_mq_step(
 def _make_mq_recipe(
     *,
     exclude: set[str] | None = None,
-    fallback_route: str = "release_issue_timeout",
-    on_failure: str = "release_issue_timeout",
+    fallback_route: str = "register_clone_unconfirmed",
+    on_failure: str = "register_clone_unconfirmed",
 ) -> Recipe:
-    """Build a recipe that includes release_issue_timeout so the new rules activate."""
+    """Build a recipe with register_clone_unconfirmed (impl/remed family pattern)."""
     return _make_recipe(
         {
             "wait_for_queue": _make_mq_step(
                 exclude=exclude, fallback_route=fallback_route, on_failure=on_failure
             ),
-            "release_issue_timeout": RecipeStep(action="stop", message="timeout"),
+            "register_clone_unconfirmed": RecipeStep(action="stop", message="timeout"),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+
+
+def _make_mq_recipe_no_sentinel(
+    *,
+    exclude: set[str] | None = None,
+    fallback_route: str = "register_clone_failure",
+    on_failure: str = "register_clone_failure",
+) -> Recipe:
+    """Build a recipe WITHOUT register_clone_unconfirmed (e.g. merge-prs family pattern)."""
+    return _make_recipe(
+        {
+            "wait_for_queue": _make_mq_step(
+                exclude=exclude, fallback_route=fallback_route, on_failure=on_failure
+            ),
+            "register_clone_failure": RecipeStep(action="stop", message="failed"),
             "done": RecipeStep(action="stop", message="done"),
         }
     )
@@ -479,3 +538,431 @@ def test_conformance_rule_clean_when_targets_correct() -> None:
     assert conformance_findings == [], (
         f"Expected no conformance findings for correct targets, got: {conformance_findings}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Tool-presence scope gate tests (I7 fires without register_clone_unconfirmed sentinel)
+# ---------------------------------------------------------------------------
+
+
+def test_coverage_rule_fires_without_register_clone_unconfirmed_step() -> None:
+    """I7 must fire on recipes without register_clone_unconfirmed if they have mq routing."""
+    recipe = _make_mq_recipe_no_sentinel(exclude={"dropped_healthy", "stalled"})
+    findings = run_semantic_rules(recipe)
+    coverage_findings = [f for f in findings if f.rule == _COVERAGE_RULE]
+    assert len(coverage_findings) >= 1, (
+        f"Expected coverage finding (no sentinel step), got: {findings}"
+    )
+    assert coverage_findings[0].severity == Severity.ERROR
+    assert "dropped_healthy" in coverage_findings[0].message
+    assert "stalled" in coverage_findings[0].message
+
+
+def test_coverage_rule_clean_without_sentinel_when_all_states_present() -> None:
+    """I7 is silent for a non-sentinel recipe when all PRState values are present."""
+    recipe = _make_mq_recipe_no_sentinel()
+    findings = run_semantic_rules(recipe)
+    coverage_findings = [f for f in findings if f.rule == _COVERAGE_RULE]
+    assert coverage_findings == [], (
+        f"Expected no coverage findings for complete routing without sentinel, "
+        f"got: {coverage_findings}"
+    )
+
+
+def test_coverage_rule_silent_for_non_queue_recipe() -> None:
+    """I7 must not fire on recipes that have no wait_for_merge_queue step."""
+    recipe = _make_recipe(
+        {
+            "do_work": RecipeStep(tool="run_skill", on_success="done"),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    coverage_findings = [f for f in findings if f.rule == _COVERAGE_RULE]
+    assert coverage_findings == [], (
+        f"Non-queue recipe should produce no I7 findings, got: {coverage_findings}"
+    )
+
+
+def test_conformance_rule_silent_without_sentinel() -> None:
+    """I8 must NOT fire on recipes without register_clone_unconfirmed (family-specific rule)."""
+    recipe = _make_mq_recipe_no_sentinel(
+        fallback_route="register_clone_failure",
+        on_failure="register_clone_failure",
+    )
+    findings = run_semantic_rules(recipe)
+    conformance_findings = [f for f in findings if f.rule == _CONFORMANCE_RULE]
+    assert conformance_findings == [], (
+        f"I8 should be silent for non-sentinel recipes, got: {conformance_findings}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# ci-no-runs-unguarded rule tests
+# ---------------------------------------------------------------------------
+
+_NO_RUNS_RULE = "ci-no-runs-unguarded"
+
+
+def test_ci_no_runs_unguarded_detects_bare_on_success() -> None:
+    """ci_watch with on_success -> merge step must be flagged as unguarded."""
+    wf = _make_workflow(
+        {
+            "ci_watch": {
+                "tool": "wait_for_ci",
+                "on_success": "merge_step",
+                "on_failure": "handle_failure",
+                "with": {"event": "${{ context.ci_event }}", "branch": "main"},
+            },
+            "merge_step": {"tool": "enqueue_pr"},
+            "handle_failure": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:diagnose-ci b - -"},
+            },
+        }
+    )
+    findings = run_semantic_rules(wf)
+    no_runs_findings = [f for f in findings if f.rule == _NO_RUNS_RULE]
+    assert len(no_runs_findings) == 1
+    assert no_runs_findings[0].severity == Severity.ERROR
+    assert no_runs_findings[0].step_name == "ci_watch"
+
+
+def test_ci_no_runs_unguarded_passes_with_on_result() -> None:
+    """ci_watch with on_result routing on conclusion is not flagged."""
+    wf = _make_workflow(
+        {
+            "ci_watch": {
+                "tool": "wait_for_ci",
+                "on_result": [
+                    {"when": "${{ result.conclusion }} == 'no_runs'", "route": "handle_no_runs"},
+                    {"when": "${{ result.conclusion }} == 'success'", "route": "merge_step"},
+                    {"route": "handle_failure"},
+                ],
+                "with": {"event": "${{ context.ci_event }}", "branch": "main"},
+            },
+            "merge_step": {"tool": "enqueue_pr"},
+            "handle_no_runs": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:diagnose-ci b - -"},
+            },
+            "handle_failure": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:diagnose-ci b - -"},
+            },
+        }
+    )
+    findings = run_semantic_rules(wf)
+    no_runs_findings = [f for f in findings if f.rule == _NO_RUNS_RULE]
+    assert len(no_runs_findings) == 0
+
+
+def test_ci_no_runs_unguarded_flags_on_result_without_no_runs_guard() -> None:
+    """on_result with only explicit when-conditions (no catch-all) still flags."""
+    wf = _make_workflow(
+        {
+            "ci_watch": {
+                "tool": "wait_for_ci",
+                "on_success": "merge_step",
+                "on_result": [
+                    {"when": "${{ result.conclusion }} == 'success'", "route": "merge_step"},
+                    {"when": "${{ result.conclusion }} == 'failure'", "route": "handle_failure"},
+                ],
+                "with": {"event": "${{ context.ci_event }}", "branch": "main"},
+            },
+            "merge_step": {"tool": "enqueue_pr"},
+            "handle_failure": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:diagnose-ci b - -"},
+            },
+        }
+    )
+    findings = run_semantic_rules(wf)
+    no_runs_findings = [f for f in findings if f.rule == _NO_RUNS_RULE]
+    assert len(no_runs_findings) == 1
+
+
+def test_ci_no_runs_unguarded_silent_for_non_ci_tools() -> None:
+    """Non-wait_for_ci steps with on_success are not flagged."""
+    wf = _make_workflow(
+        {
+            "run_tests": {
+                "tool": "run_cmd",
+                "on_success": "merge_step",
+                "with": {"cmd": "echo ok"},
+            },
+            "merge_step": {"tool": "enqueue_pr"},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    no_runs_findings = [f for f in findings if f.rule == _NO_RUNS_RULE]
+    assert len(no_runs_findings) == 0
+
+
+def test_bundled_recipes_no_runs_guarded() -> None:
+    """All bundled recipes with wait_for_ci must guard against no_runs."""
+    for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):
+        recipe = load_recipe(yaml_path)
+        findings = run_semantic_rules(recipe)
+        no_runs_findings = [f for f in findings if f.rule == _NO_RUNS_RULE]
+        assert len(no_runs_findings) == 0, (
+            f"Recipe '{yaml_path.stem}' has unguarded no_runs paths: "
+            + ", ".join(f.message for f in no_runs_findings)
+        )
+
+
+# ---------------------------------------------------------------------------
+# ci-timed-out-unguarded rule tests
+# ---------------------------------------------------------------------------
+
+_TIMED_OUT_RULE = "ci-timed-out-unguarded"
+
+
+def test_ci_timed_out_unguarded_detects_bare_on_success() -> None:
+    """wait_for_ci with on_success but no on_result must be flagged."""
+    recipe = _make_workflow(
+        {
+            "ci_watch": {
+                "tool": "wait_for_ci",
+                "on_success": "merge_step",
+                "on_failure": "handle_failure",
+                "with": {"event": "${{ context.ci_event }}", "branch": "main"},
+            },
+            "merge_step": {"tool": "enqueue_pr"},
+            "handle_failure": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:diagnose-ci b - -"},
+            },
+        }
+    )
+    findings = [f for f in run_semantic_rules(recipe) if f.rule == _TIMED_OUT_RULE]
+    assert len(findings) == 1
+    assert findings[0].severity == Severity.ERROR
+    assert findings[0].step_name == "ci_watch"
+
+
+def test_ci_timed_out_unguarded_fires_with_only_catch_all() -> None:
+    recipe = _make_workflow(
+        {
+            "ci_watch": {
+                "tool": "wait_for_ci",
+                "with": {"branch": "main", "event": "push", "timeout_seconds": 300},
+                "on_result": [
+                    {"when": "${{ result.conclusion }} == 'success'", "route": "merge"},
+                    {"when": "${{ result.conclusion }} == 'no_runs'", "route": "handle_no_runs"},
+                    {"route": "detect_ci_conflict"},
+                ],
+            },
+            "merge": {"tool": "run_cmd", "with": {"cmd": "echo merge"}},
+            "handle_no_runs": {"tool": "run_cmd", "with": {"cmd": "echo no_runs"}},
+            "detect_ci_conflict": {"tool": "run_cmd", "with": {"cmd": "echo conflict"}},
+        }
+    )
+    findings = [f for f in run_semantic_rules(recipe) if f.rule == _TIMED_OUT_RULE]
+    assert len(findings) == 1
+    assert findings[0].severity == Severity.ERROR
+    assert findings[0].step_name == "ci_watch"
+
+
+def test_ci_timed_out_unguarded_passes_with_explicit_arm() -> None:
+    recipe = _make_workflow(
+        {
+            "ci_watch": {
+                "tool": "wait_for_ci",
+                "with": {"branch": "main", "event": "push", "timeout_seconds": 300},
+                "on_result": [
+                    {"when": "${{ result.conclusion }} == 'success'", "route": "merge"},
+                    {"when": "${{ result.conclusion }} == 'timed_out'", "route": "ci_watch"},
+                    {"route": "detect_ci_conflict"},
+                ],
+            },
+            "merge": {"tool": "run_cmd", "with": {"cmd": "echo merge"}},
+            "detect_ci_conflict": {"tool": "run_cmd", "with": {"cmd": "echo conflict"}},
+        }
+    )
+    findings = [f for f in run_semantic_rules(recipe) if f.rule == _TIMED_OUT_RULE]
+    assert len(findings) == 0
+
+
+def test_ci_timed_out_unguarded_silent_for_non_ci_tools() -> None:
+    recipe = _make_workflow(
+        {
+            "run_tests": {
+                "tool": "run_cmd",
+                "with": {"cmd": "pytest"},
+                "on_result": [{"route": "done"}],
+            },
+            "done": {"tool": "run_cmd", "with": {"cmd": "echo done"}},
+        }
+    )
+    findings = [f for f in run_semantic_rules(recipe) if f.rule == _TIMED_OUT_RULE]
+    assert len(findings) == 0
+
+
+def test_bundled_recipes_timed_out_guarded() -> None:
+    for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):
+        recipe = load_recipe(yaml_path)
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == _TIMED_OUT_RULE]
+        assert not findings, f"{yaml_path.name}: {[f.message for f in findings]}"
+
+
+def test_ci_watch_post_queue_fix_timeout_600s() -> None:
+    target_recipes = ["implementation.yaml", "remediation.yaml", "implementation-groups.yaml"]
+    for name in target_recipes:
+        recipe = load_recipe(builtin_recipes_dir() / name)
+        step = recipe.steps["ci_watch_post_queue_fix"]
+        assert step.with_args["timeout_seconds"] == 600, (
+            f"{name}: ci_watch_post_queue_fix timeout_seconds is "
+            f"{step.with_args['timeout_seconds']}, expected 600"
+        )
+
+
+# ---------------------------------------------------------------------------
+# ci-event-literal-merge-group rule tests
+# ---------------------------------------------------------------------------
+
+_CI_EVENT_MG_RULE = "ci-event-literal-merge-group"
+
+
+def test_wait_for_ci_with_literal_merge_group_event_is_flagged() -> None:
+    """wait_for_ci with event='merge_group' must trigger ci-event-literal-merge-group ERROR."""
+    steps = {
+        "ci_watch": RecipeStep(
+            tool="wait_for_ci",
+            with_args={"branch": "main", "event": "merge_group"},
+        ),
+    }
+    recipe = _make_recipe(steps)
+    findings = run_semantic_rules(recipe)
+    mg_findings = [f for f in findings if f.rule == _CI_EVENT_MG_RULE]
+    assert len(mg_findings) == 1
+    assert mg_findings[0].severity == Severity.ERROR
+    assert mg_findings[0].step_name == "ci_watch"
+    assert "merge_group" in mg_findings[0].message
+
+
+def test_wait_for_ci_with_push_event_not_flagged() -> None:
+    """wait_for_ci with event='push' must not trigger ci-event-literal-merge-group."""
+    steps = {
+        "ci_watch": RecipeStep(
+            tool="wait_for_ci",
+            with_args={"branch": "main", "event": "push"},
+        ),
+    }
+    recipe = _make_recipe(steps)
+    findings = run_semantic_rules(recipe)
+    mg_findings = [f for f in findings if f.rule == _CI_EVENT_MG_RULE]
+    assert len(mg_findings) == 0
+
+
+def test_wait_for_ci_without_event_not_flagged() -> None:
+    """wait_for_ci with no event arg must not trigger ci-event-literal-merge-group."""
+    steps = {
+        "ci_watch": RecipeStep(
+            tool="wait_for_ci",
+            with_args={"branch": "main"},
+        ),
+    }
+    recipe = _make_recipe(steps)
+    findings = run_semantic_rules(recipe)
+    mg_findings = [f for f in findings if f.rule == _CI_EVENT_MG_RULE]
+    assert len(mg_findings) == 0
+
+
+def test_bundled_recipes_no_literal_merge_group_event() -> None:
+    """No bundled recipe must hardcode event='merge_group' in a wait_for_ci step."""
+    for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):
+        recipe = load_recipe(yaml_path)
+        findings = run_semantic_rules(recipe)
+        mg_findings = [f for f in findings if f.rule == _CI_EVENT_MG_RULE]
+        assert len(mg_findings) == 0, (
+            f"Recipe '{yaml_path.stem}' hardcodes event='merge_group': "
+            + ", ".join(f.message for f in mg_findings)
+        )
+
+
+class TestCiTimeoutMinimum:
+    def test_timeout_below_minimum_fires_warning(self) -> None:
+        steps = {
+            "ci": RecipeStep(
+                tool="wait_for_ci",
+                with_args={"branch": "main", "event": "push", "timeout_seconds": "300"},
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="CI check complete."),
+        }
+        recipe = _make_recipe(steps)
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == "ci-timeout-minimum"]
+        assert len(findings) == 1
+        assert findings[0].severity == Severity.WARNING
+        assert "300" in findings[0].message
+
+    def test_timeout_at_boundary_is_clean(self) -> None:
+        steps = {
+            "ci": RecipeStep(
+                tool="wait_for_ci",
+                with_args={"branch": "main", "event": "push", "timeout_seconds": "600"},
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="CI check complete."),
+        }
+        recipe = _make_recipe(steps)
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == "ci-timeout-minimum"]
+        assert len(findings) == 0
+
+    def test_missing_timeout_key_is_clean(self) -> None:
+        steps = {
+            "ci": RecipeStep(
+                tool="wait_for_ci",
+                with_args={"branch": "main", "event": "push"},
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="CI check complete."),
+        }
+        recipe = _make_recipe(steps)
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == "ci-timeout-minimum"]
+        assert len(findings) == 0
+
+
+def test_ci_watch_post_queue_fix_has_auto_trigger() -> None:
+    """ci_watch_post_queue_fix steps using wait_for_ci must have auto_trigger."""
+    target_recipes = [
+        "implementation.yaml",
+        "remediation.yaml",
+        "implementation-groups.yaml",
+        "merge-prs.yaml",
+    ]
+    for name in target_recipes:
+        recipe = load_recipe(builtin_recipes_dir() / name)
+        for step_name in ("ci_watch", "ci_watch_post_queue_fix"):
+            if step_name not in recipe.steps:
+                continue
+            step = recipe.steps[step_name]
+            if step.tool != "wait_for_ci":
+                continue
+            assert step.with_args.get("auto_trigger") in ("true", True), (
+                f"{name}: {step_name} missing auto_trigger: true"
+            )
+
+
+def test_no_runs_re_is_module_level_constant():
+    import regex
+
+    import autoskillit.recipe.rules.rules_ci as rules_ci
+
+    assert hasattr(rules_ci, "_NO_RUNS_RE")
+    assert isinstance(rules_ci._NO_RUNS_RE, regex.Pattern)
+    assert rules_ci._NO_RUNS_RE.pattern == r"""==\s*['"]?no_runs['"]?"""
+
+
+def test_timed_out_re_is_module_level_constant():
+    import regex
+
+    import autoskillit.recipe.rules.rules_ci as rules_ci
+
+    assert hasattr(rules_ci, "_TIMED_OUT_RE")
+    assert isinstance(rules_ci._TIMED_OUT_RE, regex.Pattern)
+    assert rules_ci._TIMED_OUT_RE.pattern == r"""==\s*['"]?timed_out['"]?"""

@@ -6,7 +6,9 @@ import pytest
 import yaml
 
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
-from autoskillit.recipe.rules_blocks import _block_budgets  # re-use the cached loader
+from autoskillit.recipe.rules.rules_blocks import _block_budgets  # re-use the cached loader
+
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
 def _budget_for(block_name: str) -> dict:  # type: ignore[type-arg]
@@ -83,20 +85,20 @@ def test_implementation_groups_ci_failure_routes_to_diagnose_ci():
 
 
 def test_implementation_create_branch_uses_create_unique_branch_tool():
-    """AP3: create_branch step must use create_unique_branch MCP tool, not run_cmd."""
+    """AP3: create_and_publish step must use create_and_publish_branch MCP tool, not run_cmd."""
     recipe = load_recipe(builtin_recipes_dir() / "implementation.yaml")
-    step = recipe.steps["create_branch"]
-    assert step.tool == "create_unique_branch", (
-        "create_branch must use create_unique_branch tool (not run_cmd bash script)"
+    step = recipe.steps["create_and_publish"]
+    assert step.tool == "create_and_publish_branch", (
+        "create_and_publish must use create_and_publish_branch tool (not run_cmd bash script)"
     )
 
 
 def test_merge_prs_no_run_cmd_push():
-    """AP2: merge-prs.yaml push_integration_branch must use push_to_remote, not run_cmd."""
+    """AP2: merge-prs.yaml push_batch_branch must use push_to_remote, not run_cmd."""
     recipe = load_recipe(builtin_recipes_dir() / "merge-prs.yaml")
-    step = recipe.steps["push_integration_branch"]
+    step = recipe.steps["push_batch_branch"]
     assert step.tool == "push_to_remote", (
-        "push_integration_branch must use push_to_remote MCP tool, not run_cmd"
+        "push_batch_branch must use push_to_remote MCP tool, not run_cmd"
     )
 
 
@@ -106,10 +108,11 @@ def test_merge_prs_has_no_loop_push_kitchen_rule():
     steps = raw.get("steps", {})
     push_steps = {name for name, step in steps.items() if step.get("tool") == "push_to_remote"}
     unexpected = push_steps - {
-        "publish_integration_branch",
-        "push_integration_branch",
+        "publish_batch_branch",
+        "push_batch_branch",
         "re_push_review_integration",  # authorized: re-pushes after review fixes
         "push_ejected_fix",  # authorized: pushes conflict-resolved ejected PR branch back
+        "push_rebased_next_pr",  # authorized: proactive rebase push before enqueue
     }
     assert not unexpected, (
         f"push_to_remote found in unexpected steps (loop pushes are prohibited): {unexpected}"

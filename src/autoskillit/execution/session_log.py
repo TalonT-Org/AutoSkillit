@@ -13,14 +13,28 @@ import os
 import shutil
 import sys
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from autoskillit.core import ProviderOutcome, RecipeIdentity, SessionTelemetry
 
 import psutil
 
-from autoskillit.core import atomic_write, claude_code_log_path, get_logger
-from autoskillit.execution.anomaly_detection import detect_anomalies, detect_identity_drift
+from autoskillit.core import (
+    atomic_write,
+    claude_code_log_path,
+    get_logger,
+    iter_merged_assistant_turns,
+)
+from autoskillit.core import fast_dumps as _fast_dumps
+from autoskillit.execution.anomaly_detection import (
+    detect_anomalies,
+    detect_identity_drift,
+    detect_outcome_anomalies,
+)
 from autoskillit.execution.linux_tracing import (
     read_boot_id,
     read_enrollment,
@@ -29,7 +43,22 @@ from autoskillit.execution.linux_tracing import (
 
 logger = get_logger(__name__)
 
-_MAX_SESSIONS = 500
+_MAX_SESSIONS = 2000
+
+
+def _primary_model_identifier(token_usage: dict[str, Any] | None) -> str:
+    """Return the model name with the most total tokens from model_breakdown.
+
+    Returns "" when token_usage is absent or model_breakdown is empty.
+    """
+    if not token_usage:
+        return ""
+    mb = token_usage.get("model_breakdown", {})
+    if not isinstance(mb, dict) or not mb:
+        return ""
+    return max(mb, key=lambda m: sum(mb[m].values()) if isinstance(mb[m], dict) else 0)
+
+
 _CLEAR_MARKER_FILENAME = ".telemetry_cleared_at"
 
 
@@ -70,12 +99,30 @@ def read_telemetry_clear_marker(log_root: Path) -> datetime | None:
         return None
 
 
+def _resolve_session_label(step_name: str, dispatch_id: str) -> str:
+    """Derive a non-empty session label for telemetry file identification.
+
+    Recipe steps use step_name. Fleet dispatches use dispatch_id.
+    Ad-hoc sessions get a fallback label.
+    """
+    if step_name:
+        return step_name
+    if dispatch_id:
+        return f"dispatch:{dispatch_id}"
+    return "(ad-hoc)"
+
+
 def flush_session_log(
     *,
     log_dir: str,
     cwd: str,
     kitchen_id: str = "",
+    caller_session_id: str = "",
     order_id: str = "",
+    campaign_id: str = "",
+    dispatch_id: str = "",
+    project_dir: str = "",
+    build_protected_campaign_ids: Callable[[Path], frozenset[str]] | None = None,
     session_id: str,
     pid: int,
     skill_command: str,
@@ -88,28 +135,41 @@ def flush_session_log(
     elapsed_seconds: float | None = None,
     termination_reason: str = "",
     kill_reason: str = "",
+    provider_outcome: ProviderOutcome,
+    recipe_identity: RecipeIdentity,
     snapshot_interval_seconds: float = 0.0,
     step_name: str = "",
-    token_usage: dict[str, Any] | None = None,
-    timing_seconds: float | None = None,
-    audit_record: dict[str, Any] | None = None,
     cli_subtype: str = "",
     write_path_warnings: list[str] | None = None,
     write_call_count: int = 0,
     clone_contamination_reverted: bool = False,
     tracked_comm: str | None = None,
     exception_text: str = "",
+    orphaned_tool_result: bool = False,
+    raw_stdout: str = "",
+    last_stop_reason: str = "",
+    has_thinking_only_turn: bool = False,
+    versions: dict[str, Any] | None = None,
+    model_identifier: str = "",
+    max_sessions: int | None = None,
+    telemetry: SessionTelemetry,
 ) -> None:
     """Flush session diagnostics to disk.
 
     Writes proc_trace.jsonl, summary.json, anomalies.jsonl (if any),
     and appends to the global sessions.jsonl index. Applies retention
-    to keep at most 500 session directories.
+    to keep at most ``_MAX_SESSIONS`` session directories (default 2000,
+    configurable via ``linux_tracing.max_sessions``).
 
-    When step_name is provided along with telemetry kwargs, also writes
-    token_usage.json, step_timing.json, and (if audit_record) audit_log.json
-    to the session directory for recovery at next server startup.
+    When step_name is provided, also writes token_usage.json, step_timing.json,
+    and (if telemetry.audit_record is set) audit_log.json to the session directory
+    for recovery at next server startup.
     """
+    token_usage = telemetry.token_usage
+    timing_seconds = telemetry.timing_seconds
+    audit_record = telemetry.audit_record
+    loc_insertions = telemetry.loc_insertions
+    loc_deletions = telemetry.loc_deletions
     effective_write_path_warnings: list[str] = (
         write_path_warnings if write_path_warnings is not None else []
     )
@@ -121,6 +181,30 @@ def flush_session_log(
 
     if cc_log and not cc_log.exists():
         logger.warning("claude_code_log_not_found", path=cc_log_str, session_id=session_id)
+
+    silent_gap_seconds: float | None = None
+    if cc_log and cc_log.exists() and end_ts:
+        try:
+            cc_log_mtime = cc_log.stat().st_mtime
+            end_dt = datetime.fromisoformat(end_ts)
+            silent_gap_seconds = max(0.0, end_dt.timestamp() - cc_log_mtime)
+        except (OSError, ValueError):
+            pass
+
+    _cb_request_ids: list[str] = []
+    _cb_turn_timestamps: list[str] = []
+    _cb_turn_tool_calls: list[tuple[str, ...]] = []
+    if cc_log and cc_log.exists():
+        try:
+            _text = cc_log.read_text(encoding="utf-8", errors="replace")
+            for _turn in iter_merged_assistant_turns(_text):
+                if not _turn.request_id:
+                    continue
+                _cb_request_ids.append(_turn.request_id)
+                _cb_turn_timestamps.append(_turn.timestamp)
+                _cb_turn_tool_calls.append(_turn.tool_names)
+        except OSError:
+            logger.debug("channel_b_log_read_error", path=cc_log_str, exc_info=True)
 
     session_dir = log_root / "sessions" / dir_name
     session_dir.mkdir(parents=True, exist_ok=True)
@@ -142,11 +226,11 @@ def flush_session_log(
                 record = {
                     "ts": snap.get("captured_at") or start_ts,
                     "seq": seq,
-                    "event": "snapshot",
                     "pid": pid,
                     **snap,
+                    "event": snap.get("event", "snapshot"),
                 }
-                f.write(json.dumps(record, sort_keys=True) + "\n")
+                f.write(_fast_dumps(record, sort_keys=True) + "\n")
 
                 # Track peaks
                 rss = snap.get("vm_rss_kb", 0)
@@ -186,12 +270,19 @@ def flush_session_log(
             drift_anomalies = detect_identity_drift(proc_snapshots, _effective_tracked_comm)
             anomalies.extend(drift_anomalies)
 
+    # Outcome anomaly detection (correlates session result with token usage)
+    if token_usage:
+        outcome_anomalies = detect_outcome_anomalies(
+            token_usage, subtype, has_thinking_only_turn=has_thinking_only_turn
+        )
+        anomalies.extend(outcome_anomalies)
+
     # Write anomalies.jsonl (only if anomalies exist)
     if anomalies:
         anomalies_path = session_dir / "anomalies.jsonl"
         with anomalies_path.open("w") as f:
             for a in anomalies:
-                f.write(json.dumps(a, sort_keys=True) + "\n")
+                f.write(_fast_dumps(a, sort_keys=True) + "\n")
 
     anomaly_count = len(anomalies)
 
@@ -209,6 +300,14 @@ def flush_session_log(
         except ValueError:
             pass
 
+    # Write github_api_usage.json from pre-computed telemetry bundle
+    github_api_requests = telemetry.github_api_requests
+    if telemetry.github_api_usage is not None:
+        atomic_write(
+            session_dir / "github_api_usage.json",
+            _fast_dumps(telemetry.github_api_usage, sort_keys=True, indent=True) + "\n",
+        )
+
     # Write summary.json
     summary = {
         "session_id": session_id,
@@ -224,6 +323,7 @@ def flush_session_log(
         "start_ts": start_ts,
         "end_ts": end_ts,
         "duration_seconds": duration_seconds,
+        "silent_gap_seconds": silent_gap_seconds,
         "snapshot_interval_seconds": snapshot_interval_seconds,
         "snapshot_count": snapshot_count,
         "anomaly_count": anomaly_count,
@@ -232,6 +332,8 @@ def flush_session_log(
         "peak_fd_ratio": round(peak_fd_ratio, 3),
         "termination_reason": termination_reason,
         "kill_reason": kill_reason,
+        "provider_used": provider_outcome.provider_used,
+        "provider_fallback": provider_outcome.fallback_activated,
         "write_path_warnings": effective_write_path_warnings,
         "write_call_count": write_call_count,
         "clone_contamination_reverted": clone_contamination_reverted,
@@ -239,32 +341,74 @@ def flush_session_log(
         "tracked_comm": _effective_tracked_comm,
         "tracked_comm_drift": _tracked_comm_drift,
         "tracer_target_resolution_version": 2,
+        "orphaned_tool_result": orphaned_tool_result,
+        "last_stop_reason": last_stop_reason,
+        "request_ids": _cb_request_ids,
+        "turn_timestamps": _cb_turn_timestamps,
+        "turn_tool_calls": _cb_turn_tool_calls,
+        "campaign_id": campaign_id,
+        "dispatch_id": dispatch_id,
+        "github_api_requests": github_api_requests,
+        "caller_session_id": caller_session_id,
     }
+    if versions is not None:
+        effective_model_id = model_identifier or _primary_model_identifier(token_usage)
+        summary["versions"] = {
+            **versions,
+            "model_identifier": effective_model_id,
+        }
+    if recipe_identity.name or recipe_identity.content_hash:
+        summary["recipe_provenance"] = {
+            "schema_version": 1,
+            "name": recipe_identity.name,
+            "version": recipe_identity.version,
+            "content_hash": recipe_identity.content_hash,
+            "composite_hash": recipe_identity.composite_hash,
+        }
     summary_path = session_dir / "summary.json"
-    atomic_write(summary_path, json.dumps(summary, sort_keys=True, indent=2) + "\n")
+    atomic_write(summary_path, _fast_dumps(summary, sort_keys=True, indent=True) + "\n")
+
+    if campaign_id:
+        meta_path = session_dir / "meta.json"
+        atomic_write(
+            meta_path,
+            _fast_dumps({"campaign_id": campaign_id, "dispatch_id": dispatch_id}, sort_keys=True),
+        )
+
+    if not success and raw_stdout:
+        atomic_write(session_dir / "raw_stdout.jsonl", raw_stdout)
 
     if exception_text:
         atomic_write(session_dir / "crash_exception.txt", exception_text)
 
-    # Write per-session telemetry files when step_name is provided
-    if step_name and token_usage is not None:
+    # Write per-session telemetry files; gate on data presence, not session identity
+    label = _resolve_session_label(step_name, dispatch_id)
+    if token_usage is not None:
         tu_data = {
-            "step_name": step_name,
+            "session_label": label,
             "input_tokens": token_usage.get("input_tokens", 0),
             "output_tokens": token_usage.get("output_tokens", 0),
             "cache_creation_input_tokens": token_usage.get("cache_creation_input_tokens", 0),
             "cache_read_input_tokens": token_usage.get("cache_read_input_tokens", 0),
             "timing_seconds": timing_seconds if timing_seconds is not None else 0.0,
             "order_id": order_id,
+            "loc_insertions": loc_insertions,
+            "loc_deletions": loc_deletions,
+            "peak_context": token_usage.get("peak_context", 0),
+            "turn_count": token_usage.get("turn_count", 0),
+            "provider_used": provider_outcome.provider_used,
+            "model_identifier": model_identifier or _primary_model_identifier(token_usage),
+            "dispatch_id": dispatch_id,
+            "campaign_id": campaign_id,
         }
-        atomic_write(session_dir / "token_usage.json", json.dumps(tu_data))
+        atomic_write(session_dir / "token_usage.json", _fast_dumps(tu_data))
 
-    if step_name and timing_seconds is not None:
+    if timing_seconds is not None:
         atomic_write(
             session_dir / "step_timing.json",
-            json.dumps(
+            _fast_dumps(
                 {
-                    "step_name": step_name,
+                    "step_name": label,
                     "total_seconds": max(0.0, timing_seconds),
                     "order_id": order_id,
                 }
@@ -272,7 +416,7 @@ def flush_session_log(
         )
 
     if step_name and audit_record is not None:
-        atomic_write(session_dir / "audit_log.json", json.dumps([audit_record]))
+        atomic_write(session_dir / "audit_log.json", _fast_dumps([audit_record]))
 
     # Append to sessions.jsonl index
     index_entry = {
@@ -282,6 +426,8 @@ def flush_session_log(
         "cwd": cwd,
         "kitchen_id": kitchen_id,
         "order_id": order_id,
+        "campaign_id": campaign_id,
+        "dispatch_id": dispatch_id,
         "claude_code_log": cc_log_str,
         "skill_command": skill_command[:100],
         "success": success,
@@ -295,32 +441,97 @@ def flush_session_log(
         "step_name": step_name,
         "input_tokens": token_usage.get("input_tokens", 0) if token_usage else 0,
         "output_tokens": token_usage.get("output_tokens", 0) if token_usage else 0,
+        "cache_creation_input_tokens": token_usage.get("cache_creation_input_tokens", 0)
+        if token_usage
+        else 0,
+        "cache_read_input_tokens": token_usage.get("cache_read_input_tokens", 0)
+        if token_usage
+        else 0,
         "write_call_count": write_call_count,
         "tracked_comm": _effective_tracked_comm,
         "tracked_comm_drift": _tracked_comm_drift,
+        "autoskillit_version": versions.get("autoskillit_version", "") if versions else "",
+        "claude_code_version": versions.get("claude_code_version", "") if versions else "",
+        "recipe_name": recipe_identity.name,
+        "recipe_content_hash": recipe_identity.content_hash,
+        "recipe_composite_hash": recipe_identity.composite_hash,
+        "recipe_version": recipe_identity.version,
+        "duration_seconds": duration_seconds,
+        "github_api_requests": github_api_requests,
+        "provider_used": provider_outcome.provider_used,
+        "provider_fallback": provider_outcome.fallback_activated,
+        "caller_session_id": caller_session_id,
     }
     index_path = log_root / "sessions.jsonl"
     with index_path.open("a") as f:
-        f.write(json.dumps(index_entry, sort_keys=True) + "\n")
+        f.write(_fast_dumps(index_entry, sort_keys=True) + "\n")
+
+    # Co-write session provenance record
+    if cwd:
+        from autoskillit.core import ProvenanceRecord, write_provenance_record
+
+        write_provenance_record(
+            ProvenanceRecord(
+                session_id=session_id,
+                caller_session_id=caller_session_id,
+                kitchen_id=kitchen_id,
+                dispatch_id=dispatch_id,
+                recipe_name=recipe_identity.name,
+                step_name=step_name,
+                timestamp=start_ts or end_ts or "",
+            ),
+            project_dir=Path(cwd),
+        )
 
     # Retention: keep at most _MAX_SESSIONS session directories
-    _enforce_retention(log_root)
+    _enforce_retention(
+        log_root,
+        project_dir=project_dir,
+        build_protected_campaign_ids=build_protected_campaign_ids,
+        max_sessions=max_sessions if max_sessions is not None else _MAX_SESSIONS,
+    )
 
 
-def _enforce_retention(log_root: Path) -> None:
-    """Delete oldest session directories if count exceeds _MAX_SESSIONS."""
+def _enforce_retention(
+    log_root: Path,
+    project_dir: str | None = None,
+    build_protected_campaign_ids: Callable[[Path], frozenset[str]] | None = None,
+    *,
+    max_sessions: int = _MAX_SESSIONS,
+) -> None:
+    """Delete oldest session directories if count exceeds *max_sessions*.
+
+    When ``project_dir`` is provided, reads fleet state files and ``meta.json``
+    sidecars to skip deletion of sessions belonging to active campaigns.
+    """
     sessions_dir = log_root / "sessions"
     if not sessions_dir.is_dir():
         return
 
     dirs = sorted(sessions_dir.iterdir(), key=lambda p: p.stat().st_mtime)
-    if len(dirs) <= _MAX_SESSIONS:
+    if len(dirs) <= max_sessions:
         return
 
-    expired = dirs[: len(dirs) - _MAX_SESSIONS]
-    surviving_names = {d.name for d in dirs[len(dirs) - _MAX_SESSIONS :]}
+    expired = dirs[: len(dirs) - max_sessions]
+    surviving_names = {d.name for d in dirs[len(dirs) - max_sessions :]}
+
+    protected_ids = (
+        build_protected_campaign_ids(Path(project_dir))
+        if project_dir and build_protected_campaign_ids is not None
+        else frozenset()
+    )
 
     for d in expired:
+        if protected_ids:
+            meta_path = d / "meta.json"
+            if meta_path.is_file():
+                try:
+                    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                    if meta.get("campaign_id") in protected_ids:
+                        surviving_names.add(d.name)
+                        continue
+                except (json.JSONDecodeError, OSError):
+                    pass
         shutil.rmtree(d, ignore_errors=True)
 
     # Rewrite sessions.jsonl to remove expired entries
@@ -436,6 +647,8 @@ def recover_crashed_sessions(tmpfs_path: str = "/dev/shm", log_dir: str = "") ->
             continue
 
         try:
+            from autoskillit.core import ProviderOutcome, RecipeIdentity, SessionTelemetry
+
             flush_session_log(
                 log_dir=log_dir,
                 cwd="",
@@ -448,9 +661,14 @@ def recover_crashed_sessions(tmpfs_path: str = "/dev/shm", log_dir: str = "") ->
                 start_ts=mtime_ts,
                 proc_snapshots=snapshots if snapshots else None,
                 termination_reason="CRASHED",
+                provider_outcome=ProviderOutcome.none_used(),
+                recipe_identity=RecipeIdentity.empty(),
+                telemetry=SessionTelemetry.empty(),
             )
         except Exception:
-            logger.debug("recover_crashed_sessions: failed to finalize %s", trace_file)
+            logger.debug(
+                "recover_crashed_sessions: failed to finalize %s", trace_file, exc_info=True
+            )
             continue
 
         trace_file.unlink(missing_ok=True)

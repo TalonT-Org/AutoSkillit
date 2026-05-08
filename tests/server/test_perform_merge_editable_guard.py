@@ -12,7 +12,9 @@ from autoskillit.core.types import (
     TerminationReason,
     TestResult,
 )
-from tests.conftest import MockSubprocessRunner, StatefulMockTester
+from tests.fakes import InMemoryTestRunner, MockSubprocessRunner
+
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 def _make_result(returncode: int = 0, stdout: str = "", stderr: str = "") -> SubprocessResult:
@@ -46,7 +48,7 @@ async def test_perform_merge_aborts_before_cleanup_on_poisoned_install(
     )
 
     runner = MockSubprocessRunner()
-    tester = StatefulMockTester(
+    tester = InMemoryTestRunner(
         results=[TestResult(True, "= 10 passed =", ""), TestResult(True, "= 10 passed =", "")]
     )
     # Queue git calls in step order through merge (step 8); cleanup is never reached.
@@ -60,6 +62,7 @@ async def test_perform_merge_aborts_before_cleanup_on_poisoned_install(
     runner.push(_make_result(0, ""))  # git rebase (step 6)
     runner.push(_make_result(0, f"worktree {fake_wt}\n"))  # git worktree list (step 7)
     runner.push(_make_result(0, "dev\n"))  # git branch --show-current (step 7.5)
+    runner.push(_make_result(0, ""))  # git status --porcelain (step 7.6)
     runner.push(_make_result(0, ""))  # git merge (step 8)
     # Step 8.5: editable guard fires (mocked above) — cleanup steps never reached
 
@@ -104,7 +107,7 @@ async def test_perform_merge_proceeds_normally_when_guard_returns_empty(
     )
 
     runner = MockSubprocessRunner()
-    tester = StatefulMockTester(
+    tester = InMemoryTestRunner(
         results=[TestResult(True, "= 10 passed =", ""), TestResult(True, "= 10 passed =", "")]
     )
     runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt"))  # rev-parse (step 2)
@@ -117,6 +120,7 @@ async def test_perform_merge_proceeds_normally_when_guard_returns_empty(
     runner.push(_make_result(0, ""))  # git rebase (step 6)
     runner.push(_make_result(0, f"worktree {fake_wt}\n"))  # git worktree list (step 7)
     runner.push(_make_result(0, "dev\n"))  # git branch --show-current (step 7.5)
+    runner.push(_make_result(0, ""))  # git status --porcelain (step 7.6)
     runner.push(_make_result(0, ""))  # git merge (step 8)
     # Step 8.5: guard returns [] — cleanup proceeds
     # Steps 9-10 (wt remove, branch -D) use MockSubprocessRunner default (rc=0, stdout="")

@@ -31,6 +31,7 @@ hooks:
 - Modify any source code files
 - Include internal implementation details (that's for other lenses)
 - Show runtime behavior or state transitions
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Focus on CONTAINERS (deployable units, not classes)

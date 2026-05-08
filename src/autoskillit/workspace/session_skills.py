@@ -8,14 +8,16 @@ Provides three components:
 
 from __future__ import annotations
 
-import re
 import shutil
 import tempfile
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import regex as re
+
 from autoskillit.core import (
+    FEATURE_REGISTRY,
     PACK_REGISTRY,
     ClaudeDirectoryConventions,
     PackDef,
@@ -24,6 +26,7 @@ from autoskillit.core import (
     ValidatedAddDir,
     atomic_write,
     get_logger,
+    is_feature_enabled,
 )
 from autoskillit.workspace.skills import (
     DefaultSkillResolver,
@@ -149,19 +152,72 @@ def _is_skill_disabled(
     skill_info: SkillInfo,
     disabled: list[str],
     custom_tags: dict[str, list[str]],
+    features: dict[str, bool],
+    *,
+    experimental_enabled: bool = False,
+    allow_only: frozenset[str] | None = None,
 ) -> bool:
     """Return True if skill should be excluded due to a disabled subset.
 
     For each tag in disabled:
     - If the tag is a custom_tag key: check if skill.name is in custom_tags[tag]
     - Otherwise (built-in category): check if tag is in skill_info.categories
+
+    Feature-gate branch: for each feature in FEATURE_REGISTRY that is disabled
+    in `features`, suppress any skill whose categories intersect the feature's
+    skill_categories. An empty `features` dict uses each feature's default_enabled.
+
+    Policy layering: when `allow_only` is set and `skill_info.name` is in it, both
+    the FEATURE_REGISTRY branch and any feature-gate-derived tool tags in the
+    `disabled` list (injected via disabled_feature_tags) are bypassed. Explicit
+    `disabled` entries from user config and packs are never bypassed.
     """
+    _feature_tool_tags: frozenset[str] = (
+        frozenset(
+            tag
+            for feat_name, feat_def in FEATURE_REGISTRY.items()
+            for tag in feat_def.tool_tags
+            if not is_feature_enabled(
+                feat_name, features, experimental_enabled=experimental_enabled
+            )
+        )
+        if allow_only is not None and skill_info.name in allow_only
+        else frozenset()
+    )
     for tag in disabled:
         if tag in custom_tags:
             if skill_info.name in custom_tags[tag]:
                 return True
         elif tag in skill_info.categories:
+            if tag in _feature_tool_tags:
+                logger.info(
+                    "feature_gate_bypassed_by_allow_only",
+                    skill=skill_info.name,
+                    category=tag,
+                )
+                continue
             return True
+
+    # Union model: suppress a category only when ALL features that gate it are disabled.
+    _in_allow_only: bool = allow_only is not None and skill_info.name in allow_only
+    enabled_cats: set[str] = set()
+    disabled_cats: set[str] = set()
+    for feat_name, feat_def in FEATURE_REGISTRY.items():
+        if is_feature_enabled(feat_name, features, experimental_enabled=experimental_enabled):
+            enabled_cats |= feat_def.skill_categories
+        else:
+            disabled_cats |= feat_def.skill_categories
+    for cat in disabled_cats - enabled_cats:
+        if cat in skill_info.categories:
+            if _in_allow_only:
+                logger.info(
+                    "feature_gate_bypassed_by_allow_only",
+                    skill=skill_info.name,
+                    category=cat,
+                )
+                continue
+            return True
+
     return False
 
 
@@ -170,15 +226,16 @@ def _resolve_effective_disabled(
     pack_registry: dict[str, PackDef],
     packs_enabled: list[str],
     recipe_packs: frozenset[str] | None,
+    disabled_feature_tags: frozenset[str] | None = None,
 ) -> frozenset[str]:
     """Compute the merged effective disabled set from all visibility sources.
 
     Formula:
-      effective = (explicit_disabled ∪ default_disabled_packs)
+      effective = (explicit_disabled ∪ default_disabled_packs ∪ disabled_feature_tags)
                 − (packs_enabled ∪ recipe_packs)
 
-    Precedence: explicit_disabled always stays — it cannot be overridden by
-    packs_enabled or recipe_packs. Default-disabled packs CAN be overridden.
+    Precedence: explicit_disabled and disabled_feature_tags always stay.
+    Default-disabled packs CAN be overridden by packs_enabled/recipe_packs.
     """
     default_disabled = frozenset(
         tag for tag, pack_def in pack_registry.items() if not pack_def.default_enabled
@@ -186,8 +243,11 @@ def _resolve_effective_disabled(
     enabled = frozenset(packs_enabled) | (recipe_packs or frozenset())
     # Default-disabled packs that are not explicitly enabled
     default_disabled_effective = default_disabled - enabled
-    # Explicit disables always survive
-    return frozenset(explicit_disabled) | default_disabled_effective
+    return (
+        frozenset(explicit_disabled)
+        | default_disabled_effective
+        | (disabled_feature_tags or frozenset())
+    )
 
 
 def _should_inject_skill(
@@ -196,6 +256,9 @@ def _should_inject_skill(
     overrides: frozenset[str],
     effective_disabled: frozenset[str],
     effective_custom_tags: dict[str, list[str]],
+    features: dict[str, bool],
+    experimental_enabled: bool = False,
+    allow_only: frozenset[str] | None = None,
 ) -> bool:
     """Return True if this skill should be written to the ephemeral session dir.
 
@@ -210,7 +273,14 @@ def _should_inject_skill(
     if skill_info.name in overrides:
         return False
     # Apply effective filtering
-    if _is_skill_disabled(skill_info, list(effective_disabled), effective_custom_tags):
+    if _is_skill_disabled(
+        skill_info,
+        list(effective_disabled),
+        effective_custom_tags,
+        features,
+        experimental_enabled=experimental_enabled,
+        allow_only=allow_only,
+    ):
         return False
     return True
 
@@ -267,11 +337,18 @@ def compute_skill_closure(
 class SkillsDirectoryProvider:
     """Provides bundled skill content with tier-aware frontmatter injection."""
 
-    def __init__(self, temp_dir_relpath: str = ".autoskillit/temp") -> None:
+    def __init__(
+        self,
+        temp_dir_relpath: str = ".autoskillit/temp",
+        default_base_branch: str = "main",
+    ) -> None:
         if "\n" in temp_dir_relpath or ": " in temp_dir_relpath:
             raise ValueError(f"temp_dir_relpath is YAML-unsafe: {temp_dir_relpath!r}")
+        if "\n" in default_base_branch or ": " in default_base_branch:
+            raise ValueError(f"default_base_branch is YAML-unsafe: {default_base_branch!r}")
         self._resolver = DefaultSkillResolver()
         self._temp_dir_relpath = temp_dir_relpath
+        self._default_base_branch = default_base_branch
 
     @property
     def resolver(self) -> SkillResolver:
@@ -286,7 +363,7 @@ class SkillsDirectoryProvider:
         """Return SKILL.md content with gating frontmatter injected when required.
 
         - gated=True  → ensure disable-model-invocation: true is present
-        - gated=False → return unmodified content (cook session or Tier 1)
+        - gated=False → return unmodified content (cook session or Tier 1 skills)
 
         Substitutes ``{{AUTOSKILLIT_TEMP}}`` with the configured temp dir relpath.
         Tier 1 skills (which contain no placeholder) are unaffected.
@@ -297,7 +374,8 @@ class SkillsDirectoryProvider:
         content = skill_info.path.read_text()
         if gated:
             content = _inject_disable_model_invocation(content)
-        return content.replace("{{AUTOSKILLIT_TEMP}}", self._temp_dir_relpath)
+        content = content.replace("{{AUTOSKILLIT_TEMP}}", self._temp_dir_relpath)
+        return content.replace("{{DEFAULT_BASE_BRANCH}}", self._default_base_branch)
 
 
 class DefaultSessionSkillManager:
@@ -326,6 +404,7 @@ class DefaultSessionSkillManager:
         config: AutomationConfig | None = None,
         project_dir: Path | None = None,
         recipe_packs: frozenset[str] | None = None,
+        recipe_features: frozenset[str] | None = None,
         allow_only: frozenset[str] | None = None,
     ) -> ValidatedAddDir:
         """Create ephemeral skill dir for session_id.
@@ -368,12 +447,48 @@ class DefaultSessionSkillManager:
             effective_custom_tags = dict(config.subsets.custom_tags)
 
         packs_enabled: list[str] = [] if config is None else list(config.packs.enabled)
+        from autoskillit.core import FeatureLifecycle
+
+        session_features: dict[str, bool] = (
+            {
+                name: True
+                for name, defn in FEATURE_REGISTRY.items()
+                if defn.lifecycle != FeatureLifecycle.DISABLED
+            }
+            if cook_session
+            else (config.features if config is not None else {})
+        )
+
+        # Merge recipe-level feature requirements: features declared by the active recipe
+        # are injected into session_features when not already set by the user config.
+        # This allows recipes to enable feature-gated skill categories without requiring
+        # the user to configure each feature explicitly.
+        if recipe_features and not cook_session:
+            for feat_name in recipe_features:
+                if feat_name in FEATURE_REGISTRY and feat_name not in session_features:
+                    session_features = {**session_features, feat_name: True}
+
+        disabled_feature_tags: frozenset[str] = frozenset()
+        if config is not None and not cook_session:
+            enabled_tool_tags: set[str] = set()
+            disabled_tool_tags: set[str] = set()
+            for feature_name, feature_def in FEATURE_REGISTRY.items():
+                if is_feature_enabled(
+                    feature_name,
+                    session_features,
+                    experimental_enabled=config.experimental_enabled,
+                ):
+                    enabled_tool_tags |= feature_def.tool_tags
+                else:
+                    disabled_tool_tags |= feature_def.tool_tags
+            disabled_feature_tags = frozenset(disabled_tool_tags - enabled_tool_tags)
 
         effective_disabled = _resolve_effective_disabled(
             explicit_disabled=explicit_disabled,
             pack_registry=PACK_REGISTRY,
             packs_enabled=packs_enabled,
             recipe_packs=recipe_packs,
+            disabled_feature_tags=disabled_feature_tags,
         )
 
         # Compute project-local overrides (REQ-OVR-001..004)
@@ -394,6 +509,13 @@ class DefaultSessionSkillManager:
                 overrides=overrides,
                 effective_disabled=effective_disabled,
                 effective_custom_tags=effective_custom_tags,
+                features=session_features,
+                experimental_enabled=(
+                    config.experimental_enabled
+                    if config is not None and not cook_session
+                    else False
+                ),
+                allow_only=allow_only,
             ):
                 if skill_info.source == SkillSource.BUNDLED:
                     _log.debug("init_session_plugin_dir_skip", skill=skill_info.name)
@@ -407,6 +529,19 @@ class DefaultSessionSkillManager:
             gated = (not cook_session) and (skill_info.name in tier2_skills)
             content = self._provider.get_skill_content(skill_info.name, gated=gated)
             atomic_write(skill_dir / "SKILL.md", content)
+        if allow_only is not None and allow_only:
+            written = {p.name for p in skills_base.iterdir() if p.is_dir()}
+            bundled_names = {
+                s.name for s in self._provider.list_skills() if s.source == SkillSource.BUNDLED
+            }
+            achievable = allow_only - overrides - bundled_names
+            if achievable and not (written & achievable):
+                raise RuntimeError(
+                    f"init_session: allow_only={sorted(allow_only)!r} specified but "
+                    f"zero skills were written to {skills_base}. "
+                    f"This indicates a gating conflict — check feature gates, "
+                    f"disabled categories, or pack visibility."
+                )
         return ValidatedAddDir(path=str(session_skills_dir))
 
     def activate_skill_deps(self, session_id: str, skill_name: str) -> bool:
@@ -470,6 +605,17 @@ class DefaultSessionSkillManager:
             info = self._provider.resolver.resolve(name)
             if info and pack_name in info.categories:
                 self._activate_with_deps(session_id, name, activated, _is_root=False)
+
+    def cleanup_session(self, session_id: str) -> bool:
+        """Remove the session skill directory for a completed session.
+
+        Returns True if the directory was found and removed, False otherwise.
+        """
+        session_dir = self._root / session_id
+        if session_dir.is_dir():
+            shutil.rmtree(session_dir, ignore_errors=True)
+            return True
+        return False
 
     def cleanup_stale(self, max_age_seconds: int = 259200) -> int:
         """Remove session dirs not accessed within max_age_seconds.

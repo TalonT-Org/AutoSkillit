@@ -10,7 +10,6 @@ is detectable. Existing artifacts are tracked in
 
 from __future__ import annotations
 
-import json
 import os
 import tempfile
 from pathlib import Path
@@ -18,6 +17,18 @@ from typing import Any
 
 import yaml
 from yaml import YAMLError as YAMLError  # explicit re-export for callers and type checkers
+
+from ._json import fast_dumps as _fast_dumps
+
+try:
+    from yaml import CSafeLoader as _Loader
+except ImportError:
+    _Loader = yaml.SafeLoader  # type: ignore[misc,assignment]
+
+try:
+    from yaml import CDumper as _Dumper
+except ImportError:
+    from yaml import Dumper as _Dumper  # type: ignore[misc,assignment]
 
 __all__ = [
     "YAMLError",
@@ -115,15 +126,23 @@ def write_versioned_json(path: Path, payload: dict[str, Any], schema_version: in
     if not isinstance(payload, dict):
         raise TypeError("write_versioned_json requires a dict payload")
     enriched = {**payload, "schema_version": schema_version}
-    atomic_write(path, json.dumps(enriched))
+    atomic_write(path, _fast_dumps(enriched, indent=True))
 
 
-_AUTOSKILLIT_GITIGNORE_ENTRIES = ["temp/", ".secrets.yaml", ".onboarded", "sync_manifest.json"]
+_AUTOSKILLIT_GITIGNORE_ENTRIES = [
+    "temp/",
+    ".secrets.yaml",
+    ".onboarded",
+    "sync_manifest.json",
+    "test-filter-manifest.yaml",
+    "validation-errors/",
+]
 
 _COMMITTED_BY_DESIGN: frozenset[str] = frozenset(
     {
         "config.yaml",
         "recipes",
+        "test-source-map.json",
     }
 )
 
@@ -179,8 +198,8 @@ def load_yaml(source: os.PathLike[str] | str) -> Any:
     """
     if isinstance(source, os.PathLike):
         with open(source, "rb") as fh:
-            return yaml.safe_load(fh)
-    return yaml.safe_load(source)
+            return yaml.load(fh, Loader=_Loader)
+    return yaml.load(source, Loader=_Loader)
 
 
 def dump_yaml_str(data: Any, **kwargs: Any) -> str:
@@ -190,4 +209,5 @@ def dump_yaml_str(data: Any, **kwargs: Any) -> str:
     ``default_flow_style=False``). Distinct from the removed ``dump_yaml`` which wrote
     to disk.
     """
-    return yaml.dump(data, **kwargs)
+    kwargs.pop("Dumper", None)
+    return yaml.dump(data, Dumper=_Dumper, **kwargs)

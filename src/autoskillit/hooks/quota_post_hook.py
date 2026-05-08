@@ -28,6 +28,9 @@ from _hook_settings import resolve_quota_settings  # type: ignore[import-not-fou
 
 _AUTOSKILLIT_LOG_DIR_ENV = "AUTOSKILLIT_LOG_DIR"
 
+# Emitted in post-tool output; referenced by orchestrator prompt and sous-chef SKILL.md.
+QUOTA_POST_WARNING_TRIGGER: str = "--- QUOTA WARNING ---"
+
 
 def _read_quota_cache(cache_path_str: str, max_age: int) -> dict | None:
     """Read quota cache file. Returns parsed data or None if missing/stale/corrupt."""
@@ -57,7 +60,8 @@ def _resolve_quota_log_dir() -> Path | None:
         if xdg:
             return Path(xdg) / "autoskillit" / "logs"
         return Path.home() / ".local" / "share" / "autoskillit" / "logs"
-    except Exception:
+    except Exception as exc:
+        print(f"quota_post_hook: failed to resolve log directory: {exc}", file=sys.stderr)
         return None
 
 
@@ -70,8 +74,8 @@ def _write_quota_log_event(event: dict, log_dir: Path | None) -> None:
         line = json.dumps(event) + "\n"
         with open(log_dir / "quota_events.jsonl", "a", encoding="utf-8") as f:
             f.write(line)
-    except Exception:
-        pass
+    except Exception as exc:
+        print(f"quota_post_hook: failed to write quota log event: {exc}", file=sys.stderr)
 
 
 def _extract_run_skill_result(tool_response: str | dict) -> str:
@@ -117,6 +121,20 @@ def main(*, cache_path_override: str | None = None) -> None:
     cache_max_age = settings.cache_max_age
     log_dir = _resolve_quota_log_dir()
     ts = datetime.now(UTC).isoformat()
+
+    profile = os.environ.get("AUTOSKILLIT_PROVIDER_PROFILE", "").strip()
+    if profile and profile.casefold() != "anthropic":
+        _write_quota_log_event(
+            {
+                "ts": ts,
+                "event": "post_provider_bypass",
+                "profile": profile,
+                "tool_name": tool_name,
+                "cache_path": cache_path_str,
+            },
+            log_dir,
+        )
+        sys.exit(0)
 
     cache = _read_quota_cache(cache_path_str, cache_max_age)
     if cache is None:
@@ -165,7 +183,7 @@ def main(*, cache_path_override: str | None = None) -> None:
 
     warning_text = (
         f"{result_summary}\n\n"
-        f"--- QUOTA WARNING ---\n"
+        f"{QUOTA_POST_WARNING_TRIGGER}\n"
         f"Post-execution utilization: {utilization:.0f}% on window '{window_name}' "
         f"(threshold: {effective_threshold:.0f}%)\n"
         f"MANDATORY ACTION before next run_skill: Call run_cmd with: "

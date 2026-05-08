@@ -19,10 +19,14 @@ import pytest
 
 from tests.execution.conftest import _ALLOCATE_60MB_SCRIPT
 
-pytestmark = pytest.mark.skipif(
-    sys.platform != "linux",
-    reason="Linux only — tests PTY wrapping + /proc tracing",
-)
+pytestmark = [
+    pytest.mark.layer("execution"),
+    pytest.mark.medium,
+    pytest.mark.skipif(
+        sys.platform != "linux",
+        reason="Linux only — tests PTY wrapping + /proc tracing",
+    ),
+]
 
 # Skip the entire module when script(1) is absent; no stub needed.
 pytestmark_script = pytest.mark.skipif(
@@ -95,6 +99,11 @@ async def test_pty_wrapped_tracing_produces_no_script_snapshots_in_proc_trace_js
     Test 1.10 (partial): after the fix, every row in proc_trace.jsonl self-identifies
     the tracked process, and 'script' must never appear there.
     """
+    from autoskillit.core.types._type_results import ProviderOutcome
+    from autoskillit.core.types._type_results_execution import (
+        RecipeIdentity,
+        SessionTelemetry,
+    )
     from autoskillit.execution.process import run_managed_async
     from autoskillit.execution.session_log import flush_session_log
 
@@ -122,6 +131,9 @@ async def test_pty_wrapped_tracing_produces_no_script_snapshots_in_proc_trace_js
         exit_code=result.returncode if result.returncode is not None else -1,
         start_ts=result.start_ts or "2026-01-01T00:00:00+00:00",
         proc_snapshots=result.proc_snapshots,
+        telemetry=SessionTelemetry.empty(),
+        provider_outcome=ProviderOutcome.none_used(),
+        recipe_identity=RecipeIdentity.empty(),
     )
 
     trace_path = tmp_path / "logs" / "sessions" / "pty-trace-test-001" / "proc_trace.jsonl"

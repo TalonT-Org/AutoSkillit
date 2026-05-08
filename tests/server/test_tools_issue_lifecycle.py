@@ -9,7 +9,7 @@ import pytest
 
 from autoskillit.core import RetryReason, SkillResult
 from autoskillit.pipeline.gate import DefaultGateState
-from autoskillit.server.tools_issue_lifecycle import (
+from autoskillit.server.tools.tools_issue_lifecycle import (
     _build_enrich_skill_command,
     _build_headless_error_response,
     _build_prepare_skill_command,
@@ -23,6 +23,8 @@ from autoskillit.server.tools_issue_lifecycle import (
     prepare_issue,
     release_issue,
 )
+
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 def _make_skill_result(
@@ -96,9 +98,9 @@ def test_without_success_key_no_success_is_noop() -> None:
 
 
 def test_build_prepare_skill_command_basic() -> None:
-    """No labels, no dry_run → '/autoskillit:prepare-issue\\n\\nTitle: T\\n\\nBody:\\nB'."""
+    """No labels, no dry_run → '/prepare-issue\\n\\nTitle: T\\n\\nBody:\\nB'."""
     cmd = _build_prepare_skill_command("T", "B", "", None, False, False)
-    assert cmd == "/autoskillit:prepare-issue\n\nTitle: T\n\nBody:\nB"
+    assert cmd == "/prepare-issue\n\nTitle: T\n\nBody:\nB"
 
 
 def test_build_prepare_skill_command_with_flags() -> None:
@@ -135,7 +137,7 @@ def test_parse_prepare_result_invalid_json() -> None:
 def test_build_enrich_skill_command_with_all_args() -> None:
     """All args provided → assembled command includes all flags."""
     cmd = _build_enrich_skill_command(42, 3, True, "owner/repo")
-    assert "/autoskillit:enrich-issues" in cmd
+    assert "/enrich-issues" in cmd
     assert "--issue 42" in cmd
     assert "--batch 3" in cmd
     assert "--dry-run" in cmd
@@ -171,9 +173,9 @@ async def test_prepare_issue_gate_closed(tool_ctx) -> None:
 
 
 @pytest.mark.anyio
-async def test_prepare_issue_no_executor(tool_ctx) -> None:
+async def test_prepare_issue_no_executor(tool_ctx_kitchen_open) -> None:
     """executor=None → {"success": False, "error": "Executor not configured"}."""
-    tool_ctx.executor = None
+    tool_ctx_kitchen_open.executor = None
     result = json.loads(await prepare_issue("Title", "Body"))
     assert result["success"] is False
     assert "Executor not configured" in result["error"]
@@ -195,11 +197,11 @@ async def test_prepare_issue_session_failure(tool_ctx) -> None:
 
 
 @pytest.mark.anyio
-async def test_prepare_issue_empty_output(tool_ctx) -> None:
+async def test_prepare_issue_empty_output(tool_ctx_kitchen_open) -> None:
     """success=True but result="" → drain-race error."""
     skill_result = _make_skill_result(success=True, result="")
-    tool_ctx.executor = AsyncMock()
-    tool_ctx.executor.run = AsyncMock(return_value=skill_result)
+    tool_ctx_kitchen_open.executor = AsyncMock()
+    tool_ctx_kitchen_open.executor.run = AsyncMock(return_value=skill_result)
 
     result = json.loads(await prepare_issue("Title", "Body"))
     assert result["success"] is False
@@ -207,11 +209,11 @@ async def test_prepare_issue_empty_output(tool_ctx) -> None:
 
 
 @pytest.mark.anyio
-async def test_prepare_issue_block_parse_error(tool_ctx) -> None:
+async def test_prepare_issue_block_parse_error(tool_ctx_kitchen_open) -> None:
     """success=True, output present, but no delimiters → 'no result block found' error."""
     skill_result = _make_skill_result(success=True, result="some output without delimiters")
-    tool_ctx.executor = AsyncMock()
-    tool_ctx.executor.run = AsyncMock(return_value=skill_result)
+    tool_ctx_kitchen_open.executor = AsyncMock()
+    tool_ctx_kitchen_open.executor.run = AsyncMock(return_value=skill_result)
 
     result = json.loads(await prepare_issue("Title", "Body"))
     assert result["success"] is False
@@ -219,14 +221,14 @@ async def test_prepare_issue_block_parse_error(tool_ctx) -> None:
 
 
 @pytest.mark.anyio
-async def test_prepare_issue_success(tool_ctx) -> None:
+async def test_prepare_issue_success(tool_ctx_kitchen_open) -> None:
     """Complete success path → success=True, block fields merged without 'success' key conflict."""
     block_data = {"issue_url": "https://github.com/o/r/issues/1", "issue_number": 1}
     payload = json.dumps(block_data)
     output = f"---prepare-issue-result---\n{payload}\n---/prepare-issue-result---\n"
     skill_result = _make_skill_result(success=True, result=output)
-    tool_ctx.executor = AsyncMock()
-    tool_ctx.executor.run = AsyncMock(return_value=skill_result)
+    tool_ctx_kitchen_open.executor = AsyncMock()
+    tool_ctx_kitchen_open.executor.run = AsyncMock(return_value=skill_result)
 
     result = json.loads(await prepare_issue("Title", "Body"))
     assert result["success"] is True
@@ -244,14 +246,14 @@ async def test_enrich_issues_gate_closed(tool_ctx) -> None:
 
 
 @pytest.mark.anyio
-async def test_enrich_issues_success(tool_ctx) -> None:
+async def test_enrich_issues_success(tool_ctx_kitchen_open) -> None:
     """Successful enrich → success=True, enriched list in response."""
     block_data = {"enriched": [42], "skipped_already_enriched": []}
     payload = json.dumps(block_data)
     output = f"---enrich-issues-result---\n{payload}\n---/enrich-issues-result---\n"
     skill_result = _make_skill_result(success=True, result=output)
-    tool_ctx.executor = AsyncMock()
-    tool_ctx.executor.run = AsyncMock(return_value=skill_result)
+    tool_ctx_kitchen_open.executor = AsyncMock()
+    tool_ctx_kitchen_open.executor.run = AsyncMock(return_value=skill_result)
 
     result = json.loads(await enrich_issues())
     assert result["success"] is True
@@ -268,9 +270,9 @@ async def test_claim_issue_gate_closed(tool_ctx) -> None:
 
 
 @pytest.mark.anyio
-async def test_claim_issue_no_client(tool_ctx) -> None:
+async def test_claim_issue_no_client(tool_ctx_kitchen_open) -> None:
     """github_client=None → error response."""
-    tool_ctx.github_client = None
+    tool_ctx_kitchen_open.github_client = None
     result = json.loads(await claim_issue("https://github.com/owner/repo/issues/42"))
     assert result["success"] is False
     assert "token" in result["error"].lower() or "github" in result["error"].lower()
@@ -278,15 +280,15 @@ async def test_claim_issue_no_client(tool_ctx) -> None:
 
 @pytest.mark.anyio
 async def test_claim_issue_already_claimed_returns_not_claimed(
-    tool_ctx,
+    tool_ctx_kitchen_open,
 ) -> None:
     """Label already present, allow_reentry=False → claimed=False."""
     issue_data = {
         "success": True,
         "labels": [{"name": "autoskillit:in-progress"}],
     }
-    tool_ctx.github_client = AsyncMock()
-    tool_ctx.github_client.fetch_issue = AsyncMock(return_value=issue_data)
+    tool_ctx_kitchen_open.github_client = AsyncMock()
+    tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(return_value=issue_data)
 
     result = json.loads(
         await claim_issue(
@@ -300,14 +302,14 @@ async def test_claim_issue_already_claimed_returns_not_claimed(
 
 
 @pytest.mark.anyio
-async def test_claim_issue_reentry_allowed(tool_ctx) -> None:
+async def test_claim_issue_reentry_allowed(tool_ctx_kitchen_open) -> None:
     """Label already present, allow_reentry=True → claimed=True, reentry=True."""
     issue_data = {
         "success": True,
         "labels": [{"name": "autoskillit:in-progress"}],
     }
-    tool_ctx.github_client = AsyncMock()
-    tool_ctx.github_client.fetch_issue = AsyncMock(return_value=issue_data)
+    tool_ctx_kitchen_open.github_client = AsyncMock()
+    tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(return_value=issue_data)
 
     result = json.loads(
         await claim_issue(
@@ -322,13 +324,13 @@ async def test_claim_issue_reentry_allowed(tool_ctx) -> None:
 
 
 @pytest.mark.anyio
-async def test_claim_issue_success(tool_ctx) -> None:
+async def test_claim_issue_success(tool_ctx_kitchen_open) -> None:
     """Label not present → applies label, claimed=True."""
     issue_data = {"success": True, "labels": []}
-    tool_ctx.github_client = AsyncMock()
-    tool_ctx.github_client.fetch_issue = AsyncMock(return_value=issue_data)
-    tool_ctx.github_client.ensure_label = AsyncMock(return_value={"success": True})
-    tool_ctx.github_client.add_labels = AsyncMock(return_value={"success": True})
+    tool_ctx_kitchen_open.github_client = AsyncMock()
+    tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(return_value=issue_data)
+    tool_ctx_kitchen_open.github_client.ensure_label = AsyncMock(return_value={"success": True})
+    tool_ctx_kitchen_open.github_client.swap_labels = AsyncMock(return_value={"success": True})
 
     result = json.loads(
         await claim_issue(
@@ -352,12 +354,12 @@ async def test_release_issue_gate_closed(tool_ctx) -> None:
 
 @pytest.mark.anyio
 async def test_release_issue_no_staging_when_same_branch(
-    tool_ctx,
+    tool_ctx_kitchen_open,
 ) -> None:
     """target_branch == promotion_target → staged=False."""
-    tool_ctx.github_client = AsyncMock()
-    tool_ctx.github_client.remove_label = AsyncMock(return_value={"success": True})
-    promotion_target = tool_ctx.config.branching.promotion_target
+    tool_ctx_kitchen_open.github_client = AsyncMock()
+    tool_ctx_kitchen_open.github_client.remove_label = AsyncMock(return_value={"success": True})
+    promotion_target = tool_ctx_kitchen_open.config.branching.promotion_target
 
     result = json.loads(
         await release_issue(
@@ -372,13 +374,13 @@ async def test_release_issue_no_staging_when_same_branch(
 
 @pytest.mark.anyio
 async def test_release_issue_stages_when_different_branch(
-    tool_ctx,
+    tool_ctx_kitchen_open,
 ) -> None:
     """target_branch != promotion_target → staged=True, staged_label applied."""
-    tool_ctx.github_client = AsyncMock()
-    tool_ctx.github_client.remove_label = AsyncMock(return_value={"success": True})
-    tool_ctx.github_client.ensure_label = AsyncMock(return_value={"success": True})
-    tool_ctx.github_client.add_labels = AsyncMock(return_value={"success": True})
+    tool_ctx_kitchen_open.github_client = AsyncMock()
+    tool_ctx_kitchen_open.github_client.remove_label = AsyncMock(return_value={"success": True})
+    tool_ctx_kitchen_open.github_client.ensure_label = AsyncMock(return_value={"success": True})
+    tool_ctx_kitchen_open.github_client.swap_labels = AsyncMock(return_value={"success": True})
 
     result = json.loads(
         await release_issue(

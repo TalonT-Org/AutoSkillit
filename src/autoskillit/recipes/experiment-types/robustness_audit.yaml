@@ -1,4 +1,7 @@
 name: robustness_audit
+schema_version: "1.0"
+priority: 8
+is_fallback: false
 classification_triggers:
   - "Tests generalization/stability, deliberately varied conditions"
 dimension_weights:

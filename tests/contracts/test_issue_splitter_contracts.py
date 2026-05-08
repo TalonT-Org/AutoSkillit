@@ -98,6 +98,20 @@ def test_triage_issues_calls_issue_splitter() -> None:
     assert "issue-splitter" in text
 
 
+def test_issue_splitter_no_issue_comment() -> None:
+    text = skill_text("issue-splitter")
+    assert "gh issue comment" not in text, (
+        "Tracking info must be appended to parent body, not posted as a comment"
+    )
+
+
+def test_issue_splitter_decomposed_section() -> None:
+    text = skill_text("issue-splitter")
+    assert "## Decomposed" in text, (
+        "Must append ## Decomposed section listing sub-issues to parent body"
+    )
+
+
 # 13. Split step appears before classification step in triage-issues
 def test_split_step_before_classification_in_triage() -> None:
     text = skill_text("triage-issues")

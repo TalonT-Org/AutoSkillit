@@ -7,8 +7,9 @@ cardinality assertion.
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
+
+import regex as re
 
 _HUNK_HEADER = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 _FILE_HEADER = re.compile(r"^\+\+\+ b/(.+)$")
@@ -21,6 +22,72 @@ class FilterResult:
     filtered: list[dict] = field(default_factory=list)
     unpostable: list[dict] = field(default_factory=list)
     all_unpostable: bool = False
+
+
+@dataclass
+class DiffMetrics:
+    """Size metrics computed from a unified diff."""
+
+    added_lines: int
+    removed_lines: int
+    changed_files: int
+    file_paths: list[str] = field(default_factory=list)
+
+
+_STRUCTURAL_SUFFIXES = (
+    "/__init__.py",
+    "/setup.py",
+    "/setup.cfg",
+    "/pyproject.toml",
+    "/Makefile",
+    "/Taskfile.yml",
+    "/Dockerfile",
+    "/docker-compose.yml",
+    "/docker-compose.yaml",
+)
+
+_ALL_STANDARD_AGENTS = ("arch", "tests", "defense", "bugs", "cohesion", "slop")
+_SMALL_DIFF_CORE_AGENTS = ("tests", "cohesion")
+
+
+def compute_diff_metrics(diff_text: str) -> DiffMetrics:
+    added = 0
+    removed = 0
+    file_paths: list[str] = []
+
+    for line in diff_text.splitlines():
+        if line.startswith("+++ b/"):
+            file_paths.append(line[6:])
+            continue
+        if line.startswith("+++"):
+            continue
+        if line.startswith("---"):
+            continue
+        if line.startswith("+"):
+            added += 1
+        elif line.startswith("-"):
+            removed += 1
+
+    return DiffMetrics(
+        added_lines=added,
+        removed_lines=removed,
+        changed_files=len(file_paths),
+        file_paths=file_paths,
+    )
+
+
+def select_review_agents(
+    metrics: DiffMetrics,
+    *,
+    loc_threshold: int = 200,
+    file_threshold: int = 5,
+) -> list[str]:
+    if metrics.added_lines < loc_threshold and metrics.changed_files < file_threshold:
+        agents: list[str] = list(_SMALL_DIFF_CORE_AGENTS)
+        if any(("/" + fp).endswith(s) for fp in metrics.file_paths for s in _STRUCTURAL_SUFFIXES):
+            agents.insert(0, "arch")
+        return agents
+    return list(_ALL_STANDARD_AGENTS)
 
 
 def parse_hunk_ranges(diff_text: str) -> dict[str, list[tuple[int, int]]]:
@@ -122,3 +189,42 @@ def filter_findings(
         unpostable=unpostable,
         all_unpostable=len(findings) > 0 and len(filtered) == 0,
     )
+
+
+_LINE_MARKER = re.compile(r"^\[L(\d+)\]")
+
+
+def extract_code_region(
+    annotated_diff: str,
+    file_path: str,
+    line: int,
+    context_lines: int = 50,
+) -> str:
+    if not annotated_diff:
+        return ""
+
+    lines = annotated_diff.splitlines()
+    in_file = False
+    collected: list[str] = []
+    lo = line - context_lines
+    hi = line + context_lines
+
+    for raw_line in lines:
+        header_match = _FILE_HEADER.match(raw_line)
+        if header_match:
+            if in_file:
+                break
+            if header_match.group(1) == file_path:
+                in_file = True
+            continue
+
+        if not in_file:
+            continue
+
+        marker_match = _LINE_MARKER.match(raw_line)
+        if marker_match:
+            marker_line = int(marker_match.group(1))
+            if lo <= marker_line <= hi:
+                collected.append(raw_line)
+
+    return "\n".join(collected)

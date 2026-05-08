@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import pytest
+
 from autoskillit.core import Severity
+from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
-from autoskillit.recipe.rules_merge import _RECOVERABLE_FAILED_STEPS
+from autoskillit.recipe.rules.rules_merge import _RECOVERABLE_FAILED_STEPS
 from autoskillit.recipe.schema import Recipe, RecipeStep, StepResultCondition, StepResultRoute
+
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
 def _make_recipe(steps: dict[str, RecipeStep]) -> Recipe:
@@ -260,3 +265,400 @@ def test_multiple_merge_steps_each_checked_independently() -> None:
     flagged = [f for f in findings if f.rule == "merge-routing-incomplete"]
     assert len(flagged) == 1
     assert flagged[0].step_name == "merge_bad"
+
+
+# ---------------------------------------------------------------------------
+# merge-fix-cycle-without-iteration-guard rule tests
+# ---------------------------------------------------------------------------
+
+
+def test_merge_fix_cycle_without_guard_fires() -> None:
+    """merge→fix→test→merge cycle without check_loop_iteration → ERROR."""
+    recipe = _make_recipe(
+        {
+            "commit_guard": RecipeStep(
+                tool="run_cmd",
+                with_args={"cmd": "git commit -m 'x' || true"},
+                on_success="merge",
+                on_failure="merge",
+            ),
+            "merge": RecipeStep(
+                tool="merge_worktree",
+                with_args={"worktree_path": "/tmp/wt", "base_branch": "main"},
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(route="fix", when="result.failed_step == 'rebase'"),
+                    ]
+                ),
+                on_success="done",
+                on_failure="done",
+            ),
+            "fix": RecipeStep(
+                tool="run_skill",
+                with_args={
+                    "skill_command": "/autoskillit:resolve-failures /tmp/wt",
+                    "step_name": "fix",
+                },
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(route="test", when="result.verdict == 'real_fix'"),
+                    ]
+                ),
+                on_failure="done",
+            ),
+            "test": RecipeStep(
+                tool="test_check",
+                with_args={"worktree_path": "/tmp/wt"},
+                on_success="commit_guard",
+                on_failure="fix",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "merge-fix-cycle-without-iteration-guard"]
+    assert len(flagged) == 1, f"Expected 1 ERROR, got: {flagged}"
+    assert flagged[0].severity == Severity.ERROR
+
+
+def test_merge_fix_cycle_with_guard_is_clean() -> None:
+    """merge→fix→test→check_merge_fix_loop→commit_guard→merge → no finding."""
+    recipe = _make_recipe(
+        {
+            "commit_guard": RecipeStep(
+                tool="run_cmd",
+                with_args={"cmd": "git commit -m 'x' || true"},
+                on_success="merge",
+                on_failure="merge",
+            ),
+            "merge": RecipeStep(
+                tool="merge_worktree",
+                with_args={"worktree_path": "/tmp/wt", "base_branch": "main"},
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(route="fix", when="result.failed_step == 'rebase'"),
+                    ]
+                ),
+                on_success="done",
+                on_failure="done",
+            ),
+            "fix": RecipeStep(
+                tool="run_skill",
+                with_args={
+                    "skill_command": "/autoskillit:resolve-failures /tmp/wt",
+                    "step_name": "fix",
+                },
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(route="test", when="result.verdict == 'real_fix'"),
+                    ]
+                ),
+                on_failure="done",
+            ),
+            "test": RecipeStep(
+                tool="test_check",
+                with_args={"worktree_path": "/tmp/wt"},
+                on_success="check_merge_fix_loop",
+                on_failure="fix",
+            ),
+            "check_merge_fix_loop": RecipeStep(
+                tool="run_python",
+                with_args={
+                    "callable": "autoskillit.smoke_utils.check_loop_iteration",
+                    "current_iteration": "${{ context.merge_fix_count }}",
+                    "max_iterations": "3",
+                },
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(
+                            route="release_issue_failure",
+                            when="${{ result.max_exceeded }} == true",
+                        ),
+                    ]
+                ),
+                on_success="commit_guard",
+                on_failure="release_issue_failure",
+            ),
+            "release_issue_failure": RecipeStep(action="stop", message="failure"),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "merge-fix-cycle-without-iteration-guard"]
+    assert flagged == [], f"Unexpected finding: {flagged}"
+
+
+@pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "implementation-groups"])
+def test_bundled_recipes_merge_fix_cycle_guarded(recipe_name: str) -> None:
+    """All bundled recipes with merge→fix cycle must have check_merge_fix_loop guard."""
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "merge-fix-cycle-without-iteration-guard"]
+    assert flagged == [], f"{recipe_name}: {flagged}"
+
+
+# ---------------------------------------------------------------------------
+# gh-pr-merge-silent-success-routing rule tests
+# ---------------------------------------------------------------------------
+
+
+def _make_gh_pr_merge_recipe(*, on_failure: str) -> Recipe:
+    """Minimal recipe with a critical gh-pr-merge run_cmd step."""
+    return _make_recipe(
+        {
+            "merge_pr": RecipeStep(
+                tool="run_cmd",
+                with_args={"cmd": "gh pr merge '123' --squash --auto", "cwd": "/tmp/work"},
+                on_success="done",
+                on_failure=on_failure,
+            ),
+            "register_clone_success": RecipeStep(action="stop", message="success"),
+            "release_issue_failure": RecipeStep(action="stop", message="failure"),
+            "verify_queue_enrollment": RecipeStep(
+                tool="wait_for_merge_queue",
+                with_args={},
+                on_failure="release_issue_failure",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+
+
+def _make_cleanup_gh_pr_merge_recipe() -> Recipe:
+    """Recipe with an optional cleanup step that uses gh pr merge — exempt from the rule."""
+    return _make_recipe(
+        {
+            "cleanup_merge": RecipeStep(
+                tool="run_cmd",
+                with_args={"cmd": "gh pr merge '123' --squash", "cwd": "/tmp/work"},
+                on_success="register_clone_success",
+                on_failure="register_clone_success",
+                optional=True,
+            ),
+            "register_clone_success": RecipeStep(action="stop", message="success"),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+
+
+def test_rule_fires_on_merge_cmd_failure_to_success_terminal() -> None:
+    """A gh-pr-merge step with on_failure=register_clone_success must produce an ERROR finding."""
+    recipe = _make_gh_pr_merge_recipe(on_failure="register_clone_success")
+    findings = run_semantic_rules(recipe)
+    assert any(
+        f.rule == "gh-pr-merge-silent-success-routing" and f.severity == Severity.ERROR
+        for f in findings
+    )
+
+
+def test_rule_does_not_fire_on_optional_cleanup_step() -> None:
+    """Cleanup steps (optional=True) are exempt from the silent-success-degradation rule."""
+    recipe = _make_cleanup_gh_pr_merge_recipe()
+    findings = run_semantic_rules(recipe)
+    assert not any(f.rule == "gh-pr-merge-silent-success-routing" for f in findings)
+
+
+def test_rule_does_not_fire_on_correct_escalation_routing() -> None:
+    """A merge step routing on_failure to an escalation target produces no finding."""
+    recipe = _make_gh_pr_merge_recipe(on_failure="release_issue_failure")
+    findings = run_semantic_rules(recipe)
+    assert not any(f.rule == "gh-pr-merge-silent-success-routing" for f in findings)
+
+
+def test_rule_does_not_fire_on_verify_queue_enrollment_routing() -> None:
+    """A merge step routing on_failure to verify_queue_enrollment produces no finding."""
+    recipe = _make_gh_pr_merge_recipe(on_failure="verify_queue_enrollment")
+    findings = run_semantic_rules(recipe)
+    assert not any(f.rule == "gh-pr-merge-silent-success-routing" for f in findings)
+
+
+@pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "implementation-groups"])
+def test_bundled_recipes_have_no_silent_success_degradation(recipe_name: str) -> None:
+    """No bundled recipe may have a merge step whose on_failure reaches a success terminal."""
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    findings = run_semantic_rules(recipe)
+    silent_success = [f for f in findings if f.rule == "gh-pr-merge-silent-success-routing"]
+    assert silent_success == [], (
+        f"Silent success degradation found in {recipe_name}: {silent_success}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# release-issue-on-unconfirmed-merge rule tests
+# ---------------------------------------------------------------------------
+
+
+def test_rule_fires_when_release_issue_reachable_from_timeout() -> None:
+    """release_issue reachable from a merge-wait timeout exit → ERROR finding."""
+    recipe = _make_recipe(
+        {
+            "wait_queue": RecipeStep(
+                tool="wait_for_merge_queue",
+                with_args={},
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(
+                            route="release_timeout",
+                            when="result.pr_state == timeout",
+                        )
+                    ]
+                ),
+                on_success="done",
+                on_failure="release_timeout",
+            ),
+            "release_timeout": RecipeStep(
+                tool="release_issue",
+                with_args={"issue_url": "owner/repo#1"},
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    assert any(f.rule == "release-issue-on-unconfirmed-merge" for f in findings), (
+        f"Expected release-issue-on-unconfirmed-merge finding, got: {findings}"
+    )
+
+
+def test_rule_does_not_fire_when_register_clone_unconfirmed_used() -> None:
+    """Timeout routes to register_clone_status(status=unconfirmed) → no finding."""
+    recipe = _make_recipe(
+        {
+            "wait_queue": RecipeStep(
+                tool="wait_for_merge_queue",
+                with_args={},
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(
+                            route="register_unconf",
+                            when="result.pr_state == timeout",
+                        )
+                    ]
+                ),
+                on_success="done",
+                on_failure="register_unconf",
+            ),
+            "register_unconf": RecipeStep(
+                tool="register_clone_status",
+                with_args={"clone_path": "/some/path", "status": "unconfirmed"},
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    assert not any(f.rule == "release-issue-on-unconfirmed-merge" for f in findings), (
+        f"Unexpected release-issue-on-unconfirmed-merge finding: "
+        f"{[f for f in findings if f.rule == 'release-issue-on-unconfirmed-merge']}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# merge-enrollment-auto-consistency rule tests
+# ---------------------------------------------------------------------------
+
+
+def test_rule_flags_auto_step_reachable_from_no_auto_route() -> None:
+    """A gh pr merge --auto step reachable from an auto_merge_available=false
+    routing condition must emit a finding."""
+    recipe = _make_recipe(
+        {
+            "route_queue_mode": RecipeStep(
+                action="route",
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(
+                            route="enroll_with_auto",
+                            when="context.auto_merge_available == 'true'",
+                        ),
+                        StepResultCondition(
+                            route="enroll_no_auto",
+                            when="context.auto_merge_available == 'false'",
+                        ),
+                    ],
+                ),
+            ),
+            "enroll_with_auto": RecipeStep(
+                tool="run_cmd",
+                with_args={"cmd": "gh pr merge '42' --squash --auto", "cwd": "/tmp"},
+                on_success="wait_queue",
+            ),
+            "enroll_no_auto": RecipeStep(
+                tool="run_cmd",
+                with_args={"cmd": "gh pr merge '42' --squash", "cwd": "/tmp"},
+                on_success="wait_queue",
+                on_failure="reenter",
+            ),
+            "wait_queue": RecipeStep(
+                tool="wait_for_merge_queue",
+                with_args={},
+                on_success="done",
+                on_failure="reenter",
+            ),
+            "reenter": RecipeStep(
+                tool="run_cmd",
+                with_args={"cmd": "gh pr merge '42' --squash --auto", "cwd": "/tmp"},
+                on_success="wait_queue",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "merge-enrollment-auto-consistency"]
+    assert len(flagged) >= 1
+    flagged_steps = {f.step_name for f in flagged}
+    assert "reenter" in flagged_steps
+
+
+@pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "implementation-groups"])
+def test_merge_enrollment_auto_consistency_passes_after_migration(recipe_name: str) -> None:
+    """After migration, no recipe should have --auto steps reachable from
+    auto_merge_available=false routing arms."""
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    findings = run_semantic_rules(recipe)
+    auto_findings = [f for f in findings if f.rule == "merge-enrollment-auto-consistency"]
+    assert auto_findings == [], f"{recipe_name}: {auto_findings}"
+
+
+def test_rule_passes_when_auto_steps_only_reachable_from_auto_route() -> None:
+    """Steps using --auto that are only reachable from auto_merge_available=true
+    routing conditions should not emit findings."""
+    recipe = _make_recipe(
+        {
+            "route_queue_mode": RecipeStep(
+                action="route",
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(
+                            route="enroll_with_auto",
+                            when="context.auto_merge_available == 'true'",
+                        ),
+                        StepResultCondition(
+                            route="enroll_no_auto",
+                            when="context.auto_merge_available == 'false'",
+                        ),
+                    ],
+                ),
+            ),
+            "enroll_with_auto": RecipeStep(
+                tool="run_cmd",
+                with_args={"cmd": "gh pr merge '42' --squash --auto", "cwd": "/tmp"},
+                on_success="done",
+            ),
+            "enroll_no_auto": RecipeStep(
+                tool="enqueue_pr",
+                with_args={
+                    "pr_number": "42",
+                    "target_branch": "main",
+                    "auto_merge_available": "false",
+                },
+                on_success="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "merge-enrollment-auto-consistency"]
+    assert flagged == []

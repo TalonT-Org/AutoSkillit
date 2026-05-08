@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import dataclasses
 import hashlib
-import re
 from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+import regex as re
 
 if TYPE_CHECKING:
     from autoskillit.core import SkillResolver
@@ -21,6 +22,7 @@ from autoskillit.core import (
     get_logger,
     load_yaml,
     pkg_root,
+    resolve_skill_name,
 )
 from autoskillit.recipe.io import _parse_recipe
 from autoskillit.recipe.schema import Recipe, RecipeBlock
@@ -45,12 +47,20 @@ class SkillInput:
     type: str
     required: bool
     recommended: bool = False
+    nullable: bool = True
 
 
 @dataclasses.dataclass
 class SkillOutput:
     name: str
     type: str
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class ResultFieldSpec:
+    name: str
+    type: str
+    required: bool = True
 
 
 @dataclasses.dataclass
@@ -61,6 +71,21 @@ class SkillContract:
     pattern_examples: list[str] = dataclasses.field(default_factory=list)
     write_behavior: str | None = None
     write_expected_when: list[str] = dataclasses.field(default_factory=list)
+    read_only: bool = False
+    result_fields: list[ResultFieldSpec] = dataclasses.field(default_factory=list)
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class ToolOutputFieldSpec:
+    allowed_values: tuple[str, ...]
+    terminal_values: frozenset[str]
+    recoverable_values: frozenset[str]
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class ToolOutputContractSpec:
+    result_field: str
+    fields: dict[str, ToolOutputFieldSpec]
 
 
 @dataclasses.dataclass
@@ -79,7 +104,7 @@ class DataFlowEntry:
     produced: list[str]
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True, slots=True)
 class BlockFingerprint:
     """Structural fingerprint for a named recipe block.
 
@@ -113,7 +138,6 @@ class RecipeCard:
 # Regex patterns
 # ---------------------------------------------------------------------------
 
-_SKILL_NAME_RE = re.compile(r"/autoskillit:([\w-]+)")
 _CONTEXT_REF_RE = re.compile(r"\$\{\{\s*context\.(\w+)\s*\}\}")
 INPUT_REF_RE = re.compile(r"\$\{\{\s*inputs\.(\w+)\s*\}\}")
 _TEMPLATE_REF_RE = re.compile(r"\$\{\{[^}]+\}\}")
@@ -132,27 +156,6 @@ def load_bundled_manifest() -> dict[str, Any]:
     return load_yaml(manifest_path)
 
 
-def resolve_skill_name(skill_command: str) -> str | None:
-    """Extract the skill name from a command string.
-
-    Returns the skill name (e.g. "retry-worktree") or None if the command
-    does not reference an autoskillit skill or contains dynamic expressions.
-    """
-    match = _SKILL_NAME_RE.search(skill_command)
-    if not match:
-        return None
-    name = match.group(1)
-    # Reject dynamic names containing template expressions
-    if "${{" in name:
-        return None
-    # Reject names truncated by a bash-style {placeholder} token immediately
-    # following the match (e.g. "/autoskillit:exp-lens-{slug}" extracts
-    # "exp-lens-" but is dynamic — the true name is resolved at runtime).
-    if match.end() < len(skill_command) and skill_command[match.end()] == "{":
-        return None
-    return name
-
-
 def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContract | None:
     """Look up a skill in the manifest and return a SkillContract."""
     skills = manifest.get("skills", {})
@@ -163,6 +166,7 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
         SkillInput(
             name=inp["name"],
             type=inp["type"],
+            # Skill inputs default to optional — skills are permissive by design.
             required=inp.get("required", False),
             recommended=inp.get("recommended", False),
         )
@@ -175,6 +179,20 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
     examples = skill_data.get("pattern_examples", [])
     write_behavior = skill_data.get("write_behavior")
     write_expected_when = skill_data.get("write_expected_when", [])
+    read_only = bool(skill_data.get("read_only", False))
+    try:
+        result_fields = [
+            ResultFieldSpec(
+                name=rf["name"],
+                type=rf["type"],
+                required=rf.get("required", True),
+            )
+            for rf in skill_data.get("result_fields", [])
+        ]
+    except KeyError as exc:
+        raise KeyError(
+            f"Malformed result_fields entry for skill '{skill_name}': missing key {exc}"
+        ) from exc
     return SkillContract(
         inputs=inputs,
         outputs=outputs,
@@ -182,7 +200,67 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
         pattern_examples=examples,
         write_behavior=write_behavior,
         write_expected_when=write_expected_when,
+        read_only=read_only,
+        result_fields=result_fields,
     )
+
+
+def get_callable_contract(
+    dotted_path: str, manifest: dict[str, Any] | None = None
+) -> SkillContract | None:
+    """Look up a run_python callable in the manifest and return a SkillContract.
+
+    Callable contracts live under the ``callable_contracts`` top-level key in
+    skill_contracts.yaml, keyed by the fully-qualified dotted Python path
+    (e.g. ``autoskillit.smoke_utils.check_review_loop``).
+    """
+    if manifest is None:
+        manifest = load_bundled_manifest()
+    callables = manifest.get("callable_contracts", {})
+    entry = callables.get(dotted_path)
+    if entry is None:
+        return None
+    inputs = [
+        SkillInput(
+            name=inp["name"],
+            type=inp["type"],
+            # Callable inputs default to required — callables are strict by design.
+            required=inp.get("required", True),
+            nullable=inp.get("nullable", True),
+        )
+        for inp in entry.get("inputs", [])
+    ]
+    outputs = [SkillOutput(name=out["name"], type=out["type"]) for out in entry.get("outputs", [])]
+    return SkillContract(inputs=inputs, outputs=outputs)
+
+
+def get_tool_output_contract(
+    tool_name: str, manifest: dict[str, Any] | None = None
+) -> ToolOutputContractSpec | None:
+    """Return the ToolOutputContractSpec for a named MCP tool, or None if not declared."""
+    if manifest is None:
+        manifest = load_bundled_manifest()
+    entry = manifest.get("tool_output_contracts", {}).get(tool_name)
+    if entry is None:
+        return None
+    fields = {}
+    for field_name, field_data in entry.get("fields", {}).items():
+        if not isinstance(field_data, dict):
+            raise ValueError(
+                f"tool_output_contracts entry for {tool_name!r}: "
+                f"field {field_name!r} must be a mapping, got {type(field_data).__name__!r}"
+            )
+        fields[field_name] = ToolOutputFieldSpec(
+            allowed_values=tuple(field_data.get("allowed_values", [])),
+            terminal_values=frozenset(field_data.get("terminal_values", [])),
+            recoverable_values=frozenset(field_data.get("recoverable_values", [])),
+        )
+    result_field = entry.get("result_field")
+    if not result_field:
+        raise ValueError(
+            f"tool_output_contracts entry for {tool_name!r} is missing required 'result_field'"
+        )
+    return ToolOutputContractSpec(result_field=result_field, fields=fields)
 
 
 def compute_skill_hash(skill_name: str, *, skills_dir: Path) -> str:
@@ -230,13 +308,15 @@ def count_positional_args(skill_command: str) -> int:
 
     Returns 0 if there are no extra tokens after the skill name.
     """
-    match = _SKILL_NAME_RE.search(skill_command)
-    if not match:
+    name = resolve_skill_name(skill_command)
+    if not name:
         return 0
-    after_skill = skill_command[match.end() :].strip()
+    idx = skill_command.find(name)
+    if idx < 0:
+        return 0
+    after_skill = skill_command[idx + len(name) :].strip()
     if not after_skill:
         return 0
-    # Remove template references before counting
     without_templates = _TEMPLATE_REF_RE.sub("", after_skill).strip()
     if not without_templates:
         return 0
@@ -378,10 +458,15 @@ def generate_recipe_card(
                         skill_entry["write_behavior"] = contract.write_behavior
                     if contract.write_expected_when:
                         skill_entry["write_expected_when"] = contract.write_expected_when
+                    if contract.read_only:
+                        skill_entry["read_only"] = True
                     skills[skill_name] = skill_entry
-                    if count_positional_args(skill_cmd) > 0:
-                        # Positional args used — can't verify named inputs by ref
+                    pos_arg_count = count_positional_args(skill_cmd)
+                    if pos_arg_count > 0:
+                        # Positional args used — can't verify named inputs by ref.
+                        # Record the count so downstream rules know args were supplied.
                         entry["required"] = []
+                        entry["positional_args"] = pos_arg_count
                     else:
                         # Named template refs only — flag required inputs not referenced
                         ctx_refs = extract_context_refs(step)

@@ -8,13 +8,15 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from autoskillit.pipeline.gate import DefaultGateState
-from autoskillit.server.tools_pr_ops import (
+from autoskillit.server.tools.tools_pr_ops import (
     _close_issues_sequentially,
     _map_api_reviews,
     _map_pr_view_reviews,
     bulk_close_issues,
     get_pr_reviews,
 )
+
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 # ---------------------------------------------------------------------------
 # Pure helper functions
@@ -54,10 +56,14 @@ def test_map_pr_view_reviews_empty() -> None:
 async def test_close_issues_sequentially_all_succeed() -> None:
     """All gh calls return rc=0 → closed=[1,2], failed=[]."""
     with patch(
-        "autoskillit.server.tools_pr_ops._run_subprocess",
+        "autoskillit.server.tools.tools_pr_ops._run_subprocess",
         new=AsyncMock(return_value=(0, "", "")),
     ):
-        closed, failed = await _close_issues_sequentially([1, 2], "closing", "/tmp")
+        with patch(
+            "autoskillit.server.tools.tools_pr_ops.asyncio.sleep",
+            new_callable=AsyncMock,
+        ):
+            closed, failed = await _close_issues_sequentially([1, 2], "closing", "/tmp")
 
     assert closed == [1, 2]
     assert failed == []
@@ -74,13 +80,42 @@ async def test_close_issues_sequentially_partial_failure() -> None:
         return (0, "", "") if n == 0 else (1, "", "not found")
 
     with patch(
-        "autoskillit.server.tools_pr_ops._run_subprocess",
+        "autoskillit.server.tools.tools_pr_ops._run_subprocess",
         new=_mock_subprocess,
     ):
-        closed, failed = await _close_issues_sequentially([1, 2], "", "/tmp")
+        with patch(
+            "autoskillit.server.tools.tools_pr_ops.asyncio.sleep",
+            new_callable=AsyncMock,
+        ):
+            closed, failed = await _close_issues_sequentially([1, 2], "", "/tmp")
 
     assert closed == [1]
     assert failed == [2]
+
+
+# ---------------------------------------------------------------------------
+# T5 — _close_issues_sequentially inserts inter-call delay
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_close_issues_sequentially_delays_between_calls() -> None:
+    """Each gh issue close call is preceded by asyncio.sleep(1) after the first."""
+    with patch(
+        "autoskillit.server.tools.tools_pr_ops._run_subprocess",
+        new=AsyncMock(return_value=(0, "", "")),
+    ):
+        with patch(
+            "autoskillit.server.tools.tools_pr_ops.asyncio.sleep",
+            new_callable=AsyncMock,
+        ) as mock_sleep:
+            closed, failed = await _close_issues_sequentially([1, 2, 3], "", "/tmp")
+
+    assert closed == [1, 2, 3]
+    assert failed == []
+    assert mock_sleep.call_count == 2
+    for call in mock_sleep.call_args_list:
+        assert call[0][0] == 1
 
 
 # ---------------------------------------------------------------------------
@@ -98,11 +133,13 @@ async def test_get_pr_reviews_gate_closed(tool_ctx) -> None:
 
 
 @pytest.mark.anyio
-async def test_get_pr_reviews_with_repo_success(tool_ctx, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_get_pr_reviews_with_repo_success(
+    tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """repo provided → gh api repos/{repo}/pulls/123/reviews path used."""
     api_response = json.dumps([{"user": {"login": "alice"}, "state": "APPROVED", "body": ""}])
     with patch(
-        "autoskillit.server.tools_pr_ops._run_subprocess",
+        "autoskillit.server.tools.tools_pr_ops._run_subprocess",
         new=AsyncMock(return_value=(0, api_response, "")),
     ):
         result = json.loads(await get_pr_reviews(123, "/tmp", repo="owner/repo"))
@@ -113,14 +150,14 @@ async def test_get_pr_reviews_with_repo_success(tool_ctx, monkeypatch: pytest.Mo
 
 @pytest.mark.anyio
 async def test_get_pr_reviews_without_repo_success(
-    tool_ctx, monkeypatch: pytest.MonkeyPatch
+    tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """repo='' → gh pr view 123 --json reviews path used."""
     pr_view_response = json.dumps(
         {"reviews": [{"author": {"login": "bob"}, "state": "CHANGES_REQUESTED", "body": ""}]}
     )
     with patch(
-        "autoskillit.server.tools_pr_ops._run_subprocess",
+        "autoskillit.server.tools.tools_pr_ops._run_subprocess",
         new=AsyncMock(return_value=(0, pr_view_response, "")),
     ):
         result = json.loads(await get_pr_reviews(123, "/tmp", repo=""))
@@ -129,10 +166,12 @@ async def test_get_pr_reviews_without_repo_success(
 
 
 @pytest.mark.anyio
-async def test_get_pr_reviews_gh_failure(tool_ctx, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_get_pr_reviews_gh_failure(
+    tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """gh returns rc=1 → {"success": False, "error": ...}."""
     with patch(
-        "autoskillit.server.tools_pr_ops._run_subprocess",
+        "autoskillit.server.tools.tools_pr_ops._run_subprocess",
         new=AsyncMock(return_value=(1, "", "repository not found")),
     ):
         result = json.loads(await get_pr_reviews(123, "/tmp", repo="owner/repo"))
@@ -151,13 +190,19 @@ async def test_bulk_close_issues_gate_closed(tool_ctx) -> None:
 
 
 @pytest.mark.anyio
-async def test_bulk_close_issues_all_closed(tool_ctx, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_bulk_close_issues_all_closed(
+    tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """All succeed → {"closed": [1, 2, 3], "failed": []}."""
     with patch(
-        "autoskillit.server.tools_pr_ops._run_subprocess",
+        "autoskillit.server.tools.tools_pr_ops._run_subprocess",
         new=AsyncMock(return_value=(0, "", "")),
     ):
-        result = json.loads(await bulk_close_issues([1, 2, 3], "", "/tmp"))
+        with patch(
+            "autoskillit.server.tools.tools_pr_ops.asyncio.sleep",
+            new_callable=AsyncMock,
+        ):
+            result = json.loads(await bulk_close_issues([1, 2, 3], "", "/tmp"))
 
     assert result["closed"] == [1, 2, 3]
     assert result["failed"] == []
@@ -165,7 +210,7 @@ async def test_bulk_close_issues_all_closed(tool_ctx, monkeypatch: pytest.Monkey
 
 @pytest.mark.anyio
 async def test_bulk_close_issues_partial_failure(
-    tool_ctx, monkeypatch: pytest.MonkeyPatch
+    tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Mixed outcomes → correct closed/failed split."""
     call_count = {"n": 0}
@@ -176,10 +221,14 @@ async def test_bulk_close_issues_partial_failure(
         return (0, "", "") if n % 2 == 0 else (1, "", "error")
 
     with patch(
-        "autoskillit.server.tools_pr_ops._run_subprocess",
+        "autoskillit.server.tools.tools_pr_ops._run_subprocess",
         new=_mock_subprocess,
     ):
-        result = json.loads(await bulk_close_issues([1, 2, 3], "", "/tmp"))
+        with patch(
+            "autoskillit.server.tools.tools_pr_ops.asyncio.sleep",
+            new_callable=AsyncMock,
+        ):
+            result = json.loads(await bulk_close_issues([1, 2, 3], "", "/tmp"))
 
     assert 1 in result["closed"]
     assert 2 in result["failed"]

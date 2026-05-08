@@ -1,4 +1,7 @@
 name: exploratory
+schema_version: "1.0"
+priority: 999
+is_fallback: true
 classification_triggers:
   - "Default — no prior rule fires, or hypothesis absent"
 dimension_weights:

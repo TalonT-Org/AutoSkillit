@@ -38,19 +38,12 @@ Called by the `research` recipe on `implement_phase` failure before routing to
 - Abort when session data is missing — emit `failure_type=unknown`, `is_fixable=false` and exit cleanly
 
 **ALWAYS:**
-- Initialize code-index before any search
 - Write the diagnosis file before emitting output tokens
 - Emit the three output tokens (`diagnosis_path`, `failure_type`, `is_fixable`) at the end
 
 ## Workflow
 
-### Step 1: Initialize Code Index
-
-```
-mcp__code-index__set_project_path(path="{worktree_path}")
-```
-
-### Step 2: Locate the Most Recent Failed Session for this Worktree
+### Step 1: Locate the Most Recent Failed Session for this Worktree
 
 Query the global session index:
 ```bash
@@ -153,9 +146,9 @@ failure_type = {stale_timeout|context_exhaustion|build_failure|data_missing|envi
 is_fixable = {true|false}
 ```
 
-## Graceful Degradation
+## Degradation Handling
 
-If at any point session data is unavailable (missing `sessions.jsonl`, no matching
+When session data is not accessible (missing `sessions.jsonl`, no matching
 session, missing `summary.json`):
 - Set `failure_type = unknown`
 - Set `is_fixable = false`

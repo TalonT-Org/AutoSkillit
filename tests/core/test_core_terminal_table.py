@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import pytest
+
+pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
+
 
 def test_compute_col_widths_is_module_level() -> None:
     """_compute_col_widths must be importable as a module-level function.
@@ -63,14 +67,3 @@ def test_core_terminal_table_is_importable() -> None:
     col = TerminalColumn(label="STEP", max_width=40, align="<")
     result = _render_terminal_table([col], [("a very long step name " * 5,)])
     assert "…" in result, "Long values must be truncated with ellipsis"
-
-
-def test_cli_terminal_table_reexports_from_core() -> None:
-    """cli/_terminal_table.py must re-export from core, not define its own copy."""
-    from autoskillit.cli._terminal_table import TerminalColumn as CliTC
-    from autoskillit.core._terminal_table import TerminalColumn as CoreTC
-
-    assert CliTC is CoreTC, (
-        "cli._terminal_table.TerminalColumn must be the same object as "
-        "core._terminal_table.TerminalColumn (re-export, not a copy)"
-    )

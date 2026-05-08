@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from functools import partial
+
 import pytest
 
 from autoskillit.execution.anomaly_detection import (
@@ -10,39 +12,11 @@ from autoskillit.execution.anomaly_detection import (
     AnomalySeverity,
     detect_anomalies,
 )
+from tests.execution.conftest import _snap as _snap_full
 
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
-def _snap(
-    *,
-    state: str = "sleeping",
-    vm_rss_kb: int = 100000,
-    oom_score: int = 50,
-    fd_count: int = 10,
-    fd_soft_limit: int = 1024,
-    sig_pnd: str = "0000000000000000",
-    sig_blk: str = "0000000000000000",
-    sig_cgt: str = "0000000000000000",
-    threads: int = 4,
-    wchan: str = "",
-    ctx_switches_voluntary: int = 500,
-    ctx_switches_involuntary: int = 20,
-    cpu_percent: float = 0.0,
-) -> dict[str, object]:
-    return {
-        "state": state,
-        "vm_rss_kb": vm_rss_kb,
-        "oom_score": oom_score,
-        "fd_count": fd_count,
-        "fd_soft_limit": fd_soft_limit,
-        "sig_pnd": sig_pnd,
-        "sig_blk": sig_blk,
-        "sig_cgt": sig_cgt,
-        "threads": threads,
-        "wchan": wchan,
-        "ctx_switches_voluntary": ctx_switches_voluntary,
-        "ctx_switches_involuntary": ctx_switches_involuntary,
-        "cpu_percent": cpu_percent,
-    }
+_snap = partial(_snap_full, captured_at=None)
 
 
 def test_detect_oom_spike():
@@ -331,3 +305,98 @@ def test_identity_drift_kind_exists():
         "AnomalyKind must have IDENTITY_DRIFT member for PTY wrapper drift detection"
     )
     assert AnomalyKind.IDENTITY_DRIFT == "identity_drift"
+
+
+# ---------------------------------------------------------------------------
+# Outcome anomaly detection tests
+# ---------------------------------------------------------------------------
+
+
+def test_empty_result_with_tokens_kind_exists():
+    """AnomalyKind.EMPTY_RESULT_WITH_TOKENS is defined with the correct string value."""
+    assert AnomalyKind.EMPTY_RESULT_WITH_TOKENS == "empty_result_with_tokens"
+
+
+def test_detect_outcome_anomalies_fires_for_empty_result_with_tokens():
+    """output_tokens > 0 and subtype == 'empty_result' → EMPTY_RESULT_WITH_TOKENS anomaly."""
+    from autoskillit.execution.anomaly_detection import detect_outcome_anomalies
+
+    anomalies = detect_outcome_anomalies({"output_tokens": 945}, "empty_result")
+    kinds = [a["kind"] for a in anomalies]
+    assert "empty_result_with_tokens" in kinds
+
+
+def test_detect_outcome_anomalies_no_fire_when_zero_tokens():
+    """output_tokens == 0 must NOT fire even when subtype matches."""
+    from autoskillit.execution.anomaly_detection import detect_outcome_anomalies
+
+    assert detect_outcome_anomalies({"output_tokens": 0}, "empty_result") == []
+
+
+def test_detect_outcome_anomalies_no_fire_when_wrong_subtype():
+    """output_tokens > 0 but subtype != 'empty_result' must NOT fire."""
+    from autoskillit.execution.anomaly_detection import detect_outcome_anomalies
+
+    assert detect_outcome_anomalies({"output_tokens": 100}, "completed") == []
+
+
+def test_detect_outcome_anomalies_record_structure():
+    """Each outcome anomaly record has the required fields."""
+    from autoskillit.execution.anomaly_detection import detect_outcome_anomalies
+
+    anomalies = detect_outcome_anomalies({"output_tokens": 100}, "empty_result")
+    assert len(anomalies) == 1
+    a = anomalies[0]
+    assert a["event"] == "anomaly"
+    assert "ts" in a
+    assert "kind" in a
+    assert "severity" in a
+    assert "detail" in a
+    assert a["detail"]["output_tokens"] == 100
+
+
+def test_thinking_only_final_turn_kind_exists():
+    assert AnomalyKind.THINKING_ONLY_FINAL_TURN == "thinking_only_final_turn"
+
+
+def test_detect_outcome_anomalies_thinking_only_fires():
+    """THINKING_ONLY_FINAL_TURN anomaly fires when has_thinking_only_turn is True."""
+    from autoskillit.execution.anomaly_detection import detect_outcome_anomalies
+
+    anomalies = detect_outcome_anomalies(
+        {"output_tokens": 500}, "empty_result", has_thinking_only_turn=True
+    )
+    kinds = [a["kind"] for a in anomalies]
+    assert "thinking_only_final_turn" in kinds
+
+
+def test_detect_outcome_anomalies_thinking_only_not_empty_result_with_tokens():
+    """When has_thinking_only_turn=True, EMPTY_RESULT_WITH_TOKENS is suppressed."""
+    from autoskillit.execution.anomaly_detection import detect_outcome_anomalies
+
+    anomalies = detect_outcome_anomalies(
+        {"output_tokens": 500}, "empty_result", has_thinking_only_turn=True
+    )
+    kinds = [a["kind"] for a in anomalies]
+    assert "empty_result_with_tokens" not in kinds
+
+
+def test_detect_outcome_anomalies_thinking_only_no_fire_wrong_subtype():
+    """THINKING_ONLY_FINAL_TURN does not fire when subtype is not 'empty_result'."""
+    from autoskillit.execution.anomaly_detection import detect_outcome_anomalies
+
+    anomalies = detect_outcome_anomalies(
+        {"output_tokens": 100}, "success", has_thinking_only_turn=True
+    )
+    assert anomalies == []
+
+
+def test_detect_outcome_anomalies_thinking_only_false_falls_back_to_empty_result():
+    """When has_thinking_only_turn=False, EMPTY_RESULT_WITH_TOKENS still fires."""
+    from autoskillit.execution.anomaly_detection import detect_outcome_anomalies
+
+    anomalies = detect_outcome_anomalies(
+        {"output_tokens": 200}, "empty_result", has_thinking_only_turn=False
+    )
+    kinds = [a["kind"] for a in anomalies]
+    assert "empty_result_with_tokens" in kinds

@@ -1,18 +1,18 @@
 name: research
-autoskillit_version: "0.8.0"
+recipe_version: "1.0.0"
 requires_packs: [research, exp-lens, vis-lens]
 description: >
   Single-phase technical research recipe. Scopes a research question, plans an
   experiment, optionally reviews the design, then always decomposes into phases,
   implements, runs the experiment, writes a report to research/, and opens a PR.
-  Supports a skippable design review loop (bounded by retries: 2), review
+  Supports a skippable design review loop (bounded by check_design_review_loop at 3 iterations), review
   resolution routing after PR open, and a post-review re-validation loop that
   re-runs affected benchmarks when resolve-research-review produces rerun_required
   escalations. After the final push (or when review completes), an archival
   phase separates research artifacts from experimental code: opens a clean
   artifact-only PR, tags the experiment branch, and closes the original PR.
   No auto-merge.
-summary: scope > plan > [review?] > worktree > decompose > phases > experiment > report > open-pr > [review? > resolve > [re-run?] > push] > archive
+summary: scope > plan > [review?] > worktree > env-setup > decompose > phases > experiment > report > open-pr > [review? > resolve > [re-run?] > push] > archive
 
 ingredients:
   task:
@@ -34,9 +34,9 @@ ingredients:
       When 'true' (the default), run the review-design skill after plan_experiment
       to validate the experiment plan before execution. Emits a verdict: GO proceeds,
       REVISE loops back to plan_experiment with revision guidance (bounded by
-      retries: 2), STOP triggers resolve_design_review for triage — addressable
-      findings loop back, structural findings halt the pipeline. When 'false', skip
-      directly to create_worktree.
+      check_design_review_loop at 3 iterations), STOP triggers resolve_design_review
+      for triage — addressable findings loop back, structural findings halt the
+      pipeline. When 'false', skip directly to create_worktree.
     default: "true"
   review_pr:
     description: >
@@ -73,7 +73,7 @@ kitchen_rules:
   - >
     DESIGN REVIEW LOOP: review_design validates the plan and may
     route back to plan_experiment with revision guidance. Bounded by
-    retries: 2 (max 3 review cycles). On exhaustion or failure,
+    check_design_review_loop (max 3 iterations). On exhaustion or failure,
     proceed to execution with the best available plan — do not stop.
     Exception: a STOP verdict triggers resolve_design_review, which triages
     each stop-trigger finding as ADDRESSABLE/STRUCTURAL/DISCUSS. If any are
@@ -103,6 +103,7 @@ steps:
   # --- DESIGN PHASE ---
   scope:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:scope ${{ inputs.task }}"
       cwd: "${{ inputs.source_dir }}"
@@ -114,6 +115,7 @@ steps:
 
   plan_experiment:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:plan-experiment ${{ context.scope_report }} ${{ context.revision_guidance }}"
       cwd: "${{ inputs.source_dir }}"
@@ -126,6 +128,7 @@ steps:
 
   review_design:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:review-design ${{ context.experiment_plan }}"
       cwd: "${{ inputs.source_dir }}"
@@ -135,6 +138,7 @@ steps:
       experiment_type: "${{ result.experiment_type }}"
       evaluation_dashboard: "${{ result.evaluation_dashboard }}"
       revision_guidance: "${{ result.revision_guidance }}"
+      classification_timestamp: "${{ result.classification_timestamp }}"
     skip_when_false: inputs.review_design
     retries: 2
     on_exhausted: create_worktree
@@ -151,6 +155,7 @@ steps:
 
   plan_visualization:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:plan-visualization ${{ inputs.source_dir }} ${{ context.experiment_plan }} ${{ context.scope_report }}"
       cwd: "${{ inputs.source_dir }}"
@@ -158,6 +163,10 @@ steps:
     capture:
       visualization_plan_path: "${{ result.visualization_plan_path }}"
       report_plan_path: "${{ result.report_plan_path }}"
+      disambiguation_rule_applied: "${{ result.disambiguation_rule_applied }}"
+      tier_c_lens: "${{ result.tier_c_lens }}"
+      methodology_tradition: "${{ result.methodology_tradition }}"
+      visualization_plan_trace_path: "${{ result.visualization_plan_trace_path }}"
     on_success: create_worktree
     on_failure: escalate_stop
     note: >
@@ -168,10 +177,31 @@ steps:
   revise_design:
     action: route
     on_result:
+      - route: check_design_review_loop
+
+  check_design_review_loop:
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.check_loop_iteration"
+      current_iteration: "${{ context.design_review_count }}"
+      max_iterations: "3"
+    capture:
+      design_review_count: "${{ result.next_iteration }}"
+    on_result:
+      - when: "${{ result.max_exceeded }} == true"
+        route: create_worktree
       - route: plan_experiment
+    on_failure: create_worktree
+    optional_context_refs:
+      - design_review_count
+    note: >
+      Iteration guard for the review_design → revise_design → plan_experiment cycle.
+      Caps design revision loops at 3 iterations. On exhaustion, proceeds to
+      create_worktree with the best available design.
 
   resolve_design_review:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:resolve-design-review ${{ context.evaluation_dashboard }} ${{ context.experiment_plan }} ${{ context.revision_guidance }}"
       cwd: "${{ inputs.source_dir }}"
@@ -205,40 +235,7 @@ steps:
   create_worktree:
     tool: run_cmd
     with:
-      cmd: >
-        BRANCH="research-$(date +%Y%m%d-%H%M%S)" &&
-        WORKTREE_PATH="../worktrees/${BRANCH}" &&
-        git worktree add -b "${BRANCH}" "${WORKTREE_PATH}" &&
-        RESOLVED="$(cd "${WORKTREE_PATH}" && pwd)" &&
-        case "${RESOLVED}" in /*) ;; *) echo "error: resolved worktree path is not absolute: ${RESOLVED}" >&2; exit 1;; esac &&
-        mkdir -p "{{AUTOSKILLIT_TEMP}}/worktrees/${BRANCH}" &&
-        echo "$(git rev-parse --abbrev-ref HEAD)" > "{{AUTOSKILLIT_TEMP}}/worktrees/${BRANCH}/base-branch" &&
-        mkdir -p "${RESOLVED}/{{AUTOSKILLIT_TEMP}}" &&
-        EXPERIMENT_PLAN="${{ context.experiment_plan }}" &&
-        cp "${EXPERIMENT_PLAN}" "${RESOLVED}/{{AUTOSKILLIT_TEMP}}/experiment-plan.md" &&
-        TASK="${{ inputs.task }}" &&
-        SLUG=$(printf '%s' "${TASK}" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/--*/-/g;s/^-//;s/-$//' | cut -c1-30) &&
-        RESEARCH_DIR="${RESOLVED}/research/$(date +%Y-%m-%d)-${SLUG:-experiment}" &&
-        mkdir -p "${RESEARCH_DIR}/artifacts" &&
-        cp "${EXPERIMENT_PLAN}" "${RESEARCH_DIR}/experiment-plan.md" &&
-        SCOPE_REPORT="${{ context.scope_report }}" &&
-        EVAL_DASHBOARD="${{ context.evaluation_dashboard }}" &&
-        if [ -n "${SCOPE_REPORT}" ] && [ -f "${SCOPE_REPORT}" ]; then cp "${SCOPE_REPORT}" "${RESEARCH_DIR}/artifacts/scope-report.md"; fi &&
-        if [ -n "${EVAL_DASHBOARD}" ] && [ -f "${EVAL_DASHBOARD}" ]; then cp "${EVAL_DASHBOARD}" "${RESEARCH_DIR}/artifacts/design-evaluation.md"; fi &&
-        VISUALIZATION_PLAN="${{ context.visualization_plan_path }}" &&
-        REPORT_PLAN="${{ context.report_plan_path }}" &&
-        if [ -n "${VISUALIZATION_PLAN}" ] && [ -f "${VISUALIZATION_PLAN}" ]; then cp "${VISUALIZATION_PLAN}" "${RESEARCH_DIR}/visualization-plan.md"; fi &&
-        if [ -n "${REPORT_PLAN}" ] && [ -f "${REPORT_PLAN}" ]; then cp "${REPORT_PLAN}" "${RESEARCH_DIR}/report-plan.md"; fi &&
-        SRC_TEMP="${{ inputs.source_dir }}/{{AUTOSKILLIT_TEMP}}" &&
-        mkdir -p "${RESEARCH_DIR}/artifacts/review-cycles" &&
-        mkdir -p "${RESEARCH_DIR}/artifacts/plan-versions" &&
-        for f in "${SRC_TEMP}"/review-design/evaluation_dashboard_*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/review-cycles/"; done;
-        for f in "${SRC_TEMP}"/review-design/revision_guidance_*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/review-cycles/"; done;
-        for f in "${SRC_TEMP}"/plan-experiment/experiment_plan_*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/plan-versions/"; done;
-        for f in "${SRC_TEMP}"/resolve-design-review/*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/review-cycles/"; done;
-        cd "${RESOLVED}" && git add research/ && git commit -m "Add experiment plan and scope to research/" &&
-        echo "research_dir=${RESEARCH_DIR}" &&
-        echo "worktree_path=${RESOLVED}"
+      cmd: "bash scripts/recipe/create_worktree.sh '${{ inputs.source_dir }}' '${{ inputs.task }}' '${{ context.experiment_plan }}' '${{ context.scope_report }}' '${{ context.evaluation_dashboard }}' '${{ context.visualization_plan_path }}' '${{ context.report_plan_path }}' '{{AUTOSKILLIT_TEMP}}' '${{ context.visualization_plan_trace_path }}'"
       cwd: "${{ inputs.source_dir }}"
       step_name: create_worktree
     capture:
@@ -249,10 +246,12 @@ steps:
     note: >
       Creates the shared worktree and commits the experiment plan and scope report
       to research/ as permanent artifacts. All phases and experiment implementation
-      share this worktree.
+      share this worktree. Auto-initializes a git repo with an empty seed commit
+      when the source directory has no .git directory.
 
   stage_data:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:stage-data ${{ context.experiment_plan }}"
       cwd: "${{ context.worktree_path }}"
@@ -263,20 +262,48 @@ steps:
     on_result:
       field: verdict
       routes:
-        PASS: decompose_phases
-        WARN: decompose_phases
+        PASS: setup_environment
+        WARN: setup_environment
         FAIL: escalate_stop
     on_failure: escalate_stop
     note: >
       Pre-flight resource gate. Reads the experiment plan's data_manifest, checks
       available disk space and network connectivity for external/gitignored data
       entries, and creates the required directory structure in the worktree. PASS
-      and WARN proceed to decompose_phases. FAIL escalates immediately with a
+      and WARN proceed to setup_environment. FAIL escalates immediately with a
       detailed resource feasibility report rather than wasting compute on doomed
       downloads.
 
+  setup_environment:
+    tool: run_skill
+    model: ""
+    with:
+      skill_command: "/autoskillit:setup-environment ${{ context.worktree_path }} ${{ context.experiment_plan }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: setup_environment
+    capture:
+      verdict: "${{ result.verdict }}"
+    on_result:
+      field: verdict
+      routes:
+        PASS: decompose_phases
+        WARN: decompose_phases
+        FAIL: escalate_stop
+    on_failure: escalate_stop
+    stale_threshold: 600
+    retries: 1
+    on_exhausted: escalate_stop
+    note: >
+      Pre-flight environment gate. Reads the experiment plan to determine the
+      required environment type (standard, Docker, or micromamba-host). Probes
+      Docker availability, builds the image if possible, falls back to host
+      micromamba if Docker is unavailable and deps are pure conda-forge Python.
+      PASS (none or docker) and WARN (micromamba-host) proceed to decompose_phases.
+      FAIL (unavailable) escalates immediately.
+
   decompose_phases:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:make-groups ${{ context.experiment_plan }}"
       cwd: "${{ context.worktree_path }}"
@@ -295,6 +322,7 @@ steps:
 
   plan_phase:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:make-plan ${{ context.group_files }}"
       cwd: "${{ context.worktree_path }}"
@@ -316,6 +344,7 @@ steps:
 
   implement_phase:
     tool: run_skill
+    model: ""
     stale_threshold: 2400
     idle_output_timeout: 0
     with:
@@ -337,6 +366,7 @@ steps:
 
   troubleshoot_implement_failure:
     tool: run_skill
+    model: ""
     stale_threshold: 2400
     idle_output_timeout: 0
     with:
@@ -352,8 +382,28 @@ steps:
     action: route
     on_result:
       - when: "${{ context.is_fixable }} == true"
-        route: plan_phase
+        route: check_implement_fix_loop
       - route: escalate_stop
+
+  check_implement_fix_loop:
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.check_loop_iteration"
+      current_iteration: "${{ context.implement_fix_count }}"
+      max_iterations: "3"
+    capture:
+      implement_fix_count: "${{ result.next_iteration }}"
+    on_result:
+      - when: "${{ result.max_exceeded }} == true"
+        route: run_experiment
+      - route: plan_phase
+    on_failure: run_experiment
+    optional_context_refs:
+      - implement_fix_count
+    note: >
+      Iteration guard for implement_phase → troubleshoot → plan_phase cycle.
+      Caps fix-and-retry loops at 3 iterations. On exhaustion, skips to
+      run_experiment with whatever implementation is committed.
 
   next_phase_or_experiment:
     action: route
@@ -369,6 +419,7 @@ steps:
   # --- EXPERIMENT + REPORT PHASE ---
   run_experiment:
     tool: run_skill
+    model: ""
     stale_threshold: 2400
     idle_output_timeout: 0
     with:
@@ -379,11 +430,33 @@ steps:
       experiment_results: "${{ result.results_path }}"
     retries: 2
     on_success: generate_report
-    on_failure: adjust_experiment
+    on_failure: troubleshoot_run_failure
     on_exhausted: ensure_results
+
+  troubleshoot_run_failure:
+    tool: run_skill
+    model: ""
+    stale_threshold: 2400
+    idle_output_timeout: 0
+    with:
+      skill_command: "/autoskillit:troubleshoot-experiment ${{ context.worktree_path }} run_experiment"
+      cwd: "${{ inputs.source_dir }}"
+      step_name: troubleshoot_run_failure
+    capture:
+      run_is_fixable: "${{ result.is_fixable }}"
+    on_success: route_run_failure
+    on_failure: escalate_stop
+
+  route_run_failure:
+    action: route
+    on_result:
+      - when: "${{ context.run_is_fixable }} == true"
+        route: adjust_experiment
+      - route: escalate_stop
 
   adjust_experiment:
     tool: run_skill
+    model: ""
     stale_threshold: 2400
     idle_output_timeout: 0
     with:
@@ -392,22 +465,37 @@ steps:
       step_name: adjust
     capture:
       experiment_results: "${{ result.results_path }}"
-    on_success: run_experiment
+    on_success: check_run_fix_loop
     on_failure: ensure_results
+    on_context_limit: ensure_results
+
+  check_run_fix_loop:
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.check_loop_iteration"
+      current_iteration: "${{ context.run_fix_count }}"
+      max_iterations: "3"
+    capture:
+      run_fix_count: "${{ result.next_iteration }}"
+    on_result:
+      - when: "${{ result.max_exceeded }} == true"
+        route: ensure_results
+      - route: run_experiment
+    on_failure: ensure_results
+    optional_context_refs:
+      - run_fix_count
+    note: >
+      Iteration guard for run_experiment → troubleshoot → adjust_experiment cycle.
+      Caps experiment fix loops at 3 iterations. On exhaustion, proceeds to
+      ensure_results to salvage whatever data exists.
 
   ensure_results:
-    tool: run_cmd
+    tool: run_python
     with:
-      cmd: >
-        RESULTS="${{ context.experiment_results }}" &&
-        if [ -z "${RESULTS}" ]; then
-          RESULTS="${{ context.worktree_path }}/{{AUTOSKILLIT_TEMP}}/run-experiment/results-inconclusive.md" &&
-          mkdir -p "$(dirname "${RESULTS}")" &&
-          printf '# Experiment Results\n\n## Status\nINCONCLUSIVE\n\nExperiment did not produce results — retries exhausted or adjustment failed.\n' > "${RESULTS}"
-        fi &&
-        echo "experiment_results=${RESULTS}"
-      cwd: "${{ context.worktree_path }}"
-      step_name: ensure_results
+      callable: "autoskillit.recipe._cmd_rpc.ensure_results"
+      experiment_results: "${{ context.experiment_results }}"
+      worktree_path: "${{ context.worktree_path }}"
+      temp_subdir: "{{AUTOSKILLIT_TEMP}}"
     capture:
       experiment_results: "${{ result.experiment_results }}"
     on_success: generate_report_inconclusive
@@ -419,8 +507,9 @@ steps:
 
   generate_report:
     tool: run_skill
+    model: ""
     with:
-      skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }}"
+      skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }} --experiment-type '${{ context.experiment_type }}' --methodology-traditions '${{ context.methodology_tradition }}' --design-review-verdict '${{ context.verdict }}' --disambiguation-rule-applied '${{ context.disambiguation_rule_applied }}' --tier-c-lens '${{ context.tier_c_lens }}' --classification-timestamp '${{ context.classification_timestamp }}'"
       cwd: "${{ context.worktree_path }}"
       step_name: generate_report
     capture:
@@ -432,8 +521,9 @@ steps:
 
   generate_report_inconclusive:
     tool: run_skill
+    model: ""
     with:
-      skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --inconclusive --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }}"
+      skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --inconclusive --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }} --experiment-type '${{ context.experiment_type }}' --methodology-traditions '${{ context.methodology_tradition }}' --design-review-verdict '${{ context.verdict }}' --disambiguation-rule-applied '${{ context.disambiguation_rule_applied }}' --tier-c-lens '${{ context.tier_c_lens }}' --classification-timestamp '${{ context.classification_timestamp }}'"
       cwd: "${{ context.worktree_path }}"
       step_name: generate_report
     capture:
@@ -454,6 +544,7 @@ steps:
 
   fix_tests:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:resolve-failures ${{ context.worktree_path }} ${{ context.experiment_plan }} ${{ inputs.base_branch }}"
       cwd: "${{ inputs.source_dir }}"
@@ -483,7 +574,7 @@ steps:
   push_branch:
     tool: run_cmd
     with:
-      cmd: "cd '${{ context.worktree_path }}' && git push -u origin HEAD"
+      cmd: "bash scripts/recipe/push_branch.sh '${{ inputs.output_mode }}' '${{ context.worktree_path }}'"
       cwd: "${{ context.worktree_path }}"
       step_name: push_branch
     on_success: prepare_research_pr
@@ -492,6 +583,7 @@ steps:
   # --- PR + REVIEW PHASE ---
   prepare_research_pr:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:prepare-research-pr ${{ context.report_path }} ${{ context.experiment_plan }} ${{ context.worktree_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.worktree_path }}"
@@ -505,6 +597,7 @@ steps:
 
   run_experiment_lenses:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:exp-lens-{slug} {context_path} ${{ context.experiment_plan }}"
       cwd: "${{ context.worktree_path }}"
@@ -526,22 +619,7 @@ steps:
   stage_bundle:
     tool: run_cmd
     with:
-      cmd: >
-        RESEARCH_DIR="${{ context.research_dir }}" &&
-        if [ -n "${RESEARCH_DIR}" ] && [ -d "${RESEARCH_DIR}" ]; then
-          WT_TEMP="${{ context.worktree_path }}/{{AUTOSKILLIT_TEMP}}" &&
-          mkdir -p "${RESEARCH_DIR}/artifacts/phase-groups" &&
-          mkdir -p "${RESEARCH_DIR}/artifacts/phase-plans" &&
-          mkdir -p "${RESEARCH_DIR}/artifacts/images" &&
-          mkdir -p "${RESEARCH_DIR}/artifacts/scripts" &&
-          for f in "${WT_TEMP}"/make-groups/*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/phase-groups/"; done &&
-          for f in "${WT_TEMP}"/make-groups/*.yaml; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/phase-groups/"; done &&
-          for f in "${WT_TEMP}"/make-plan/*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/phase-plans/"; done &&
-          for f in "${WT_TEMP}"/exp-lens-*/*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/images/"; done &&
-          echo "stage_bundle=done";
-        else
-          echo "stage_bundle: no research directory found — skipped";
-        fi
+      cmd: "bash scripts/recipe/stage_bundle.sh '${{ context.research_dir }}' '${{ context.worktree_path }}' '{{AUTOSKILLIT_TEMP}}'"
       cwd: "${{ context.worktree_path }}"
       step_name: stage_bundle
     on_success: route_pr_or_local
@@ -567,6 +645,7 @@ steps:
 
   compose_research_pr:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:compose-research-pr ${{ context.prep_path }} \"${{ context.all_diagram_paths }}\" ${{ context.worktree_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.worktree_path }}"
@@ -581,11 +660,12 @@ steps:
     on_result:
       - when: "${{ context.pr_url }}"
         route: review_research_pr
-      - route: research_complete
+      - route: patch_token_summary
     note: Guard — skip review if pr_url is empty (graceful degradation from open_research_pr).
 
   review_research_pr:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:review-research-pr ${{ context.worktree_path }} ${{ inputs.base_branch }} ${{ context.pr_url }}"
       cwd: "${{ context.worktree_path }}"
@@ -609,6 +689,7 @@ steps:
 
   audit_claims:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:audit-claims ${{ context.worktree_path }} ${{ inputs.base_branch }} ${{ context.pr_url }}"
       cwd: "${{ context.worktree_path }}"
@@ -641,6 +722,7 @@ steps:
 
   resolve_research_review:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:resolve-research-review ${{ context.worktree_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.worktree_path }}"
@@ -669,6 +751,7 @@ steps:
 
   resolve_claims_review:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:resolve-claims-review ${{ context.worktree_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.worktree_path }}"
@@ -688,21 +771,22 @@ steps:
         route: re_run_experiment
       - when: "${{ context.claims_needs_rerun }} == true"
         route: re_run_experiment
-      - route: re_push_research
+      - route: finalize_bundle
     note: >
       Merged escalation consumer replacing check_escalations. Triggers a single
       re_run_experiment if either review resolution or claims resolution flagged
       a rerun. When only design_flaw escalations exist (or none), routes directly
-      to push — design_flaw escalations are already posted as inline PR comments
+      to finalize_bundle — design_flaw escalations are already posted as inline PR comments
       by the resolve skills. Both context.review_needs_rerun and
       context.claims_needs_rerun may be absent if their respective resolution
       steps were never reached (e.g., no changes_requested verdict on that gate);
       the recipe engine evaluates absent context variables as empty string, so
       absent == true is always false and routes safely fall through to
-      re_push_research.
+      finalize_bundle.
 
   re_run_experiment:
     tool: run_skill
+    model: ""
     stale_threshold: 2400
     idle_output_timeout: 0
     with:
@@ -723,8 +807,9 @@ steps:
 
   re_generate_report:
     tool: run_skill
+    model: ""
     with:
-      skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }}"
+      skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }} --experiment-type '${{ context.experiment_type }}' --methodology-traditions '${{ context.methodology_tradition }}' --design-review-verdict '${{ context.verdict }}' --disambiguation-rule-applied '${{ context.disambiguation_rule_applied }}' --tier-c-lens '${{ context.tier_c_lens }}' --classification-timestamp '${{ context.classification_timestamp }}'"
       cwd: "${{ context.worktree_path }}"
       step_name: re_generate_report
     capture:
@@ -741,22 +826,7 @@ steps:
   re_stage_bundle:
     tool: run_cmd
     with:
-      cmd: >
-        RESEARCH_DIR="${{ context.research_dir }}" &&
-        if [ -n "${RESEARCH_DIR}" ] && [ -d "${RESEARCH_DIR}" ]; then
-          WT_TEMP="${{ context.worktree_path }}/{{AUTOSKILLIT_TEMP}}" &&
-          mkdir -p "${RESEARCH_DIR}/artifacts/phase-groups" &&
-          mkdir -p "${RESEARCH_DIR}/artifacts/phase-plans" &&
-          mkdir -p "${RESEARCH_DIR}/artifacts/images" &&
-          mkdir -p "${RESEARCH_DIR}/artifacts/scripts" &&
-          for f in "${WT_TEMP}"/make-groups/*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/phase-groups/"; done &&
-          for f in "${WT_TEMP}"/make-groups/*.yaml; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/phase-groups/"; done &&
-          for f in "${WT_TEMP}"/make-plan/*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/phase-plans/"; done &&
-          for f in "${WT_TEMP}"/exp-lens-*/*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/images/"; done &&
-          echo "re_stage_bundle=done";
-        else
-          echo "re_stage_bundle: no research directory found — skipped";
-        fi
+      cmd: "bash scripts/recipe/stage_bundle.sh '${{ context.research_dir }}' '${{ context.worktree_path }}' '{{AUTOSKILLIT_TEMP}}'"
       cwd: "${{ context.worktree_path }}"
       step_name: re_stage_bundle
     on_success: re_test
@@ -783,63 +853,19 @@ steps:
       cmd: "cd '${{ context.worktree_path }}' && git push"
       cwd: "${{ context.worktree_path }}"
       step_name: re_push_research
-    on_success: finalize_bundle
+    on_success: finalize_bundle_render
     on_failure: begin_archival
 
   # --- ARCHIVAL PHASE ---
   finalize_bundle:
     tool: run_cmd
     with:
-      cmd: >
-        OUTPUT_MODE="${{ inputs.output_mode }}" &&
-        RESEARCH_DIR="${{ context.research_dir }}" &&
-        if [ -n "${RESEARCH_DIR}" ] && [ -d "${RESEARCH_DIR}" ]; then
-          if [ "${OUTPUT_MODE}" != "local" ]; then
-            if [ -f "${RESEARCH_DIR}/report.md" ]; then
-              cp "${RESEARCH_DIR}/report.md" "${RESEARCH_DIR}/README.md" &&
-              rm "${RESEARCH_DIR}/report.md";
-            fi;
-          fi &&
-          REPORT_FILE=$( [ "${OUTPUT_MODE}" = "local" ] && echo "report.md" || echo "README.md" ) &&
-          if [ "${OUTPUT_MODE}" = "local" ]; then
-            EXCLUDE_PATTERN='^(report\.html|mermaid\.min\.js|images|report\.md|artifacts\.tar\.gz)$';
-          else
-            EXCLUDE_PATTERN='^(README\.md|artifacts\.tar\.gz)$';
-          fi &&
-          mapfile -t TAR_ITEMS < <(ls -1 "${RESEARCH_DIR}" | grep -vE "${EXCLUDE_PATTERN}") &&
-          if [ ${#TAR_ITEMS[@]} -gt 0 ]; then
-            tar czf "${RESEARCH_DIR}/artifacts.tar.gz" -C "${RESEARCH_DIR}" "${TAR_ITEMS[@]}" &&
-            for item in "${TAR_ITEMS[@]}"; do rm -rf "${RESEARCH_DIR}/${item}"; done;
-          fi &&
-          if [ -f "${RESEARCH_DIR}/artifacts.tar.gz" ] && [ -f "${RESEARCH_DIR}/${REPORT_FILE}" ]; then
-            MANIFEST=$(tar tzf "${RESEARCH_DIR}/artifacts.tar.gz" | sort) &&
-            { echo ""; echo "## Archive Manifest"; echo ""; echo "Contents of \`artifacts.tar.gz\`:"; echo ""; echo '```'; echo "${MANIFEST}"; echo '```'; } >> "${RESEARCH_DIR}/${REPORT_FILE}";
-          fi &&
-          [ -f "${RESEARCH_DIR}/artifacts.tar.gz" ] || \
-            { echo "ERROR: artifacts.tar.gz not created in ${RESEARCH_DIR}"; exit 1; } &&
-          if [ "${OUTPUT_MODE}" = "local" ]; then
-            LEFTOVER_PATTERN='^(report\.md|report\.html|mermaid\.min\.js|images|artifacts\.tar\.gz)$';
-          else
-            LEFTOVER_PATTERN='^(README\.md|artifacts\.tar\.gz)$';
-          fi &&
-          LEFTOVERS=$(ls -1 "${RESEARCH_DIR}" | grep -vE "${LEFTOVER_PATTERN}") &&
-          [ -z "${LEFTOVERS}" ] || \
-            { echo "ERROR: uncompressed entries still present in ${RESEARCH_DIR}: ${LEFTOVERS}"; exit 1; } &&
-          [ -f "${RESEARCH_DIR}/${REPORT_FILE}" ] || \
-            { echo "ERROR: ${REPORT_FILE} not found in ${RESEARCH_DIR}"; exit 1; } &&
-          if [ "${OUTPUT_MODE}" != "local" ]; then
-            cd "${{ context.worktree_path }}" && git add "${RESEARCH_DIR}" && { git diff --cached --quiet || git commit -m "Add compressed research artifacts"; };
-          fi;
-          echo "report_path=${RESEARCH_DIR}/${REPORT_FILE}";
-          echo "report_path_after_finalize=${RESEARCH_DIR}/${REPORT_FILE}";
-        else
-          echo "finalize_bundle: no research directory found — artifact commit skipped";
-        fi
+      cmd: "bash scripts/recipe/finalize_bundle.sh '${{ inputs.output_mode }}' '${{ context.research_dir }}' '${{ context.worktree_path }}'"
       cwd: "${{ context.worktree_path }}"
       step_name: finalize_bundle
     capture:
       report_path_after_finalize: "${{ result.report_path_after_finalize }}"
-    on_success: finalize_bundle_render
+    on_success: re_push_research
     on_failure: begin_archival
     note: >
       Single compression point. Runs exactly once per recipe run. In pr mode: renames
@@ -850,6 +876,7 @@ steps:
 
   finalize_bundle_render:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:bundle-local-report ${{ context.research_dir }} ${{ context.report_path_after_finalize }} ${{ context.all_diagram_paths }} ${{ context.visualization_plan_path }}"
       cwd: "${{ context.worktree_path }}"
@@ -875,26 +902,19 @@ steps:
       the existing archival phase.
 
   export_local_bundle:
-    tool: run_cmd
+    tool: run_python
     with:
-      cmd: >
-        LOCAL_ROOT="${{ inputs.source_dir }}/research-bundles" &&
-        mkdir -p "${LOCAL_ROOT}" &&
-        SLUG=$(basename "${{ context.research_dir }}") &&
-        DEST="${LOCAL_ROOT}/${SLUG}" &&
-        rm -rf "${DEST}" &&
-        cp -a "${{ context.research_dir }}/." "${DEST}/" &&
-        echo "local_bundle_path=${DEST}"
-      cwd: "${{ context.worktree_path }}"
-      step_name: export_local_bundle
+      callable: "autoskillit.recipe._cmd_rpc.export_local_bundle"
+      source_dir: "${{ inputs.source_dir }}"
+      research_dir: "${{ context.research_dir }}"
     capture:
       local_bundle_path: "${{ result.local_bundle_path }}"
-    on_success: research_complete
-    on_failure: research_complete
+    on_success: patch_token_summary
+    on_failure: patch_token_summary
     note: >
       Local mode terminal export. Copies the finalized research_dir (containing
       report.html, mermaid.min.js, images/, report.md, artifacts.tar.gz) to
-      {source_dir}/research-bundles/{slug}/. Non-fatal — routes to research_complete
+      {source_dir}/research-bundles/{slug}/. Non-fatal — routes to patch_token_summary
       on both outcomes. The captured local_bundle_path is available to the orchestrator
       via research_complete.
 
@@ -903,11 +923,11 @@ steps:
     on_result:
       - when: "${{ context.pr_url }}"
         route: capture_experiment_branch
-      - route: research_complete
+      - route: patch_token_summary
     note: >
       Gate step for the archival phase. Routes to artifact extraction when
-      a research PR exists, otherwise skips directly to completion. All paths
-      from review/resolve/re-push converge here.
+      a research PR exists, otherwise skips directly to patch_token_summary.
+      All paths from review/resolve/re-push converge here.
 
   capture_experiment_branch:
     tool: run_cmd
@@ -918,35 +938,18 @@ steps:
     capture:
       experiment_branch: "${{ result.stdout | trim }}"
     on_success: create_artifact_branch
-    on_failure: research_complete
+    on_failure: patch_token_summary
 
   create_artifact_branch:
     tool: run_cmd
     with:
-      cmd: >
-        EXPERIMENT_BRANCH="${{ context.experiment_branch }}" &&
-        SLUG=$(printf '%s' "${EXPERIMENT_BRANCH}" | sed 's/^research-//') &&
-        ARTIFACT_BRANCH="research-artifacts-${SLUG}" &&
-        ARTIFACT_DIR="$(mktemp -d)" &&
-        trap 'git -C "${{ context.worktree_path }}" worktree remove "${ARTIFACT_DIR}" --force 2>/dev/null; rm -rf "${ARTIFACT_DIR}"' EXIT &&
-        git -C '${{ context.worktree_path }}' fetch origin '${{ inputs.base_branch }}' &&
-        (git -C '${{ context.worktree_path }}' branch -D "${ARTIFACT_BRANCH}" 2>/dev/null || true) &&
-        git -C '${{ context.worktree_path }}' worktree add "${ARTIFACT_DIR}" -b "${ARTIFACT_BRANCH}" "origin/${{ inputs.base_branch }}" &&
-        RESEARCH_SUBDIR="research/$(basename "${{ context.research_dir }}")" &&
-        git -C "${ARTIFACT_DIR}" checkout "${EXPERIMENT_BRANCH}" -- "${RESEARCH_SUBDIR}" &&
-        cd "${ARTIFACT_DIR}" &&
-        git add research/ &&
-        git commit -m "Add research artifacts: ${SLUG}" &&
-        git push -u origin "${ARTIFACT_BRANCH}" &&
-        cd - > /dev/null &&
-        git -C '${{ context.worktree_path }}' worktree remove "${ARTIFACT_DIR}" --force &&
-        echo "artifact_branch=${ARTIFACT_BRANCH}"
+      cmd: "bash scripts/recipe/create_artifact_branch.sh '${{ context.worktree_path }}' '${{ context.experiment_branch }}' '${{ inputs.base_branch }}' '${{ context.research_dir }}'"
       cwd: "${{ context.worktree_path }}"
       step_name: create_artifact_branch
     capture:
       artifact_branch: "${{ result.artifact_branch }}"
     on_success: open_artifact_pr
-    on_failure: research_complete
+    on_failure: patch_token_summary
     note: >
       Creates a temporary worktree from the base branch, checks out only the
       research/ directory from the experiment branch, commits and pushes, then
@@ -956,30 +959,13 @@ steps:
   open_artifact_pr:
     tool: run_cmd
     with:
-      cmd: >
-        EXPERIMENT="${{ context.experiment_branch }}" &&
-        ARTIFACT="${{ context.artifact_branch }}" &&
-        ORIG_PR="${{ context.pr_url }}" &&
-        RESEARCH_SUBDIR="research/$(basename "${{ context.research_dir }}")" &&
-        ARTIFACT_DIR="${{ context.worktree_path }}" &&
-        if [ -f "${ARTIFACT_DIR}/${RESEARCH_SUBDIR}/artifacts.tar.gz" ]; then
-          STRUCT_DETAIL=$'- `artifacts.tar.gz` \xe2\x80\x94 compressed artifact tree\n\nExtract:\n```bash\ntar xzf artifacts.tar.gz\n```';
-        else
-          STRUCT_DETAIL="- \`artifacts/\` — uncompressed artifact tree";
-        fi &&
-        PR_BODY=$(printf '## Research Artifacts\n\nFrom experiment branch `%s`.\n\nOriginal experiment PR: %s\n\n### Structure\n\n- **README.md** — Research conclusions (browsable on GitHub)\n%s\n\nContains only files under `research/` — zero production code changes.' "${EXPERIMENT}" "${ORIG_PR}" "${STRUCT_DETAIL}") &&
-        PR_URL=$(gh pr create
-        --head "${ARTIFACT}"
-        --base '${{ inputs.base_branch }}'
-        --title "Research artifacts: ${EXPERIMENT}"
-        --body "${PR_BODY}") &&
-        echo "artifact_pr_url=${PR_URL}"
+      cmd: "bash scripts/recipe/open_artifact_pr.sh '${{ context.worktree_path }}' '${{ context.experiment_branch }}' '${{ context.artifact_branch }}' '${{ context.pr_url }}' '${{ inputs.base_branch }}' '${{ context.research_dir }}'"
       cwd: "${{ context.worktree_path }}"
       step_name: open_artifact_pr
     capture:
       artifact_pr_url: "${{ result.artifact_pr_url }}"
     on_success: tag_experiment_branch
-    on_failure: research_complete
+    on_failure: patch_token_summary
     note: >
       Opens a PR containing only the research/ directory. The PR body documents
       the two-file structure (README.md + artifacts.tar.gz) and provides the
@@ -988,19 +974,13 @@ steps:
   tag_experiment_branch:
     tool: run_cmd
     with:
-      cmd: >
-        TAG="archive/research/${{ context.experiment_branch }}" &&
-        ARTIFACT_PR="${{ context.artifact_pr_url }}" &&
-        git -C '${{ context.worktree_path }}' tag -a "${TAG}" '${{ context.experiment_branch }}'
-        -m "Research experiment: ${{ context.experiment_branch }}. Report merged via artifact PR ${ARTIFACT_PR}. Variant code preserved here for reference." &&
-        git -C '${{ context.worktree_path }}' push origin "${TAG}" &&
-        echo "archive_tag=${TAG}"
+      cmd: "bash scripts/recipe/tag_experiment_branch.sh '${{ context.worktree_path }}' '${{ context.experiment_branch }}' '${{ context.artifact_pr_url }}'"
       cwd: "${{ context.worktree_path }}"
       step_name: tag_experiment_branch
     capture:
       archive_tag: "${{ result.archive_tag }}"
     on_success: close_experiment_pr
-    on_failure: research_complete
+    on_failure: patch_token_summary
     note: >
       Creates an annotated tag preserving the full experiment branch (including
       all variant code, benchmark scaffolding, etc.) under archive/research/.
@@ -1016,13 +996,26 @@ steps:
         gh pr close '${{ context.pr_url }}' --comment "${CLOSE_BODY}"
       cwd: "${{ context.worktree_path }}"
       step_name: close_experiment_pr
-    on_success: research_complete
-    on_failure: research_complete
+    on_success: patch_token_summary
+    on_failure: patch_token_summary
     note: >
       Closes the original experiment PR with a structured comment linking to
       the artifact PR (where research/ was merged) and the archive tag (where
       the full experiment branch is preserved). Both success and failure route
-      to research_complete — closing the PR is best-effort.
+      to patch_token_summary — closing the PR is best-effort.
+
+  patch_token_summary:
+    description: "Collect all pipeline token data and patch the PR body with complete summary"
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.patch_pr_token_summary"
+      timeout: 60
+      pr_url: "${{ context.pr_url }}"
+      cwd: "${{ context.worktree_path }}"
+    on_success: research_complete
+    on_failure: research_complete
+    note: >
+      Patches PR body with complete token summary; failure never blocks pipeline completion.
 
   research_complete:
     action: stop

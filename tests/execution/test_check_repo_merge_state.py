@@ -7,9 +7,13 @@ must come from a single HTTP round-trip to the GitHub GraphQL endpoint.
 
 from __future__ import annotations
 
+import textwrap
+
 import pytest
 
 from autoskillit.execution.merge_queue import fetch_repo_merge_state
+
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 # Reminder: fetch_repo_merge_state now returns ci_event in addition to the
 # three boolean fields. Tests below check for the ci_event field explicitly.
@@ -118,15 +122,14 @@ def test_repo_state_query_is_distinct_module_constant_from_pr_state_query():
 async def test_check_repo_merge_state_returns_merge_group_as_ci_event(
     httpx_mock, merge_group_only_repo_state
 ):
-    """check_repo_merge_state must derive ci_event='merge_group' when the only
-    workflow trigger is merge_group. This capture is what ci_watch reads to avoid
-    the event='push' timeout on repos that only trigger on merge_group."""
+    """merge_group-only repo: ci_event must be None (match-any via head_sha), not 'merge_group'.
+    merge_group_trigger remains True for queue routing."""
     httpx_mock.add_response(
         url="https://api.github.com/graphql",
         json=merge_group_only_repo_state["graphql_response"],
     )
     result = await fetch_repo_merge_state(owner="o", repo="r", branch="main", token=None)
-    assert result["ci_event"] == "merge_group"
+    assert result["ci_event"] is None
     assert result["merge_group_trigger"] is True
 
 
@@ -155,3 +158,182 @@ async def test_check_repo_merge_state_returns_null_ci_event_for_no_trigger(httpx
     )
     result = await fetch_repo_merge_state(owner="o", repo="r", branch="main", token=None)
     assert result["ci_event"] is None
+
+
+def _make_repo_state_response(workflow_entries):
+    """Helper: build a mock graphql response with given workflow YAML entries."""
+    return {
+        "data": {
+            "repository": {
+                "mergeQueue": None,
+                "autoMergeAllowed": True,
+                "object": {
+                    "entries": [
+                        {"name": name, "object": {"text": text}} for name, text in workflow_entries
+                    ]
+                },
+            }
+        }
+    }
+
+
+@pytest.mark.anyio
+async def test_push_trigger_branch_filter_excludes_feature_branch(httpx_mock):
+    """Feature branch not in push.branches must not produce ci_event='push'."""
+    workflow_text = textwrap.dedent("""\
+        on:
+          push:
+            branches:
+              - main
+              - stable
+          pull_request:
+            branches: [main, develop, stable]
+    """)
+    httpx_mock.add_response(
+        url="https://api.github.com/graphql",
+        json=_make_repo_state_response([("tests.yml", workflow_text)]),
+    )
+    result = await fetch_repo_merge_state(
+        owner="org",
+        repo="repo",
+        branch="feature/impl-20260401-123456",
+        token=None,
+    )
+    assert result["ci_event"] is None
+
+
+@pytest.mark.anyio
+async def test_push_excluded_with_merge_group_present_returns_none(httpx_mock):
+    """When push excludes the branch but merge_group exists, ci_event must be None (match-any)."""
+    workflow_text = textwrap.dedent("""\
+        on:
+          push:
+            branches:
+              - main
+              - stable
+          pull_request:
+            branches: [main, develop, stable]
+          merge_group:
+    """)
+    httpx_mock.add_response(
+        url="https://api.github.com/graphql",
+        json=_make_repo_state_response([("tests.yml", workflow_text)]),
+    )
+    result = await fetch_repo_merge_state(
+        owner="org",
+        repo="repo",
+        branch="feature/impl-20260401-123456",
+        token=None,
+    )
+    assert result["ci_event"] is None
+    assert result["merge_group_trigger"] is True
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "workflow_text, branch, expected_ci_event",
+    [
+        ("on: [push, merge_group]", "main", "push"),
+        ("on:\n  push:\n    branches: [main]\n  merge_group:", "main", "push"),
+        ("on:\n  push:\n    branches: [main]\n  merge_group:", "feature/x", None),
+        ("on: [merge_group]", "feature/x", None),
+        ("on: [pull_request]", "feature/x", None),
+        ("on:\n  schedule:\n    - cron: '0 0 * * *'", "main", None),
+        ("on: push", "any-branch", "push"),
+    ],
+    ids=[
+        "push_and_mg_push_applies",
+        "push_branches_match_with_mg",
+        "push_excluded_mg_present",
+        "mg_only",
+        "pr_only",
+        "schedule_only",
+        "push_no_filter",
+    ],
+)
+async def test_ci_event_is_always_push_or_none(
+    httpx_mock, workflow_text, branch, expected_ci_event
+):
+    """ci_event must only ever be 'push' or None — never 'merge_group' or any other value."""
+    httpx_mock.add_response(
+        url="https://api.github.com/graphql",
+        json=_make_repo_state_response([("tests.yml", workflow_text)]),
+    )
+    result = await fetch_repo_merge_state(owner="o", repo="r", branch=branch, token=None)
+    assert result["ci_event"] == expected_ci_event
+
+
+@pytest.mark.anyio
+async def test_merge_group_in_comment_is_not_detected(httpx_mock):
+    """A YAML comment containing 'merge_group' must not set merge_group_trigger."""
+    workflow_text = textwrap.dedent("""\
+        # merge_group is not enabled for this repo
+        on:
+          push:
+            branches: [main]
+    """)
+    httpx_mock.add_response(
+        url="https://api.github.com/graphql",
+        json=_make_repo_state_response([("tests.yml", workflow_text)]),
+    )
+    result = await fetch_repo_merge_state(owner="o", repo="r", branch="main", token=None)
+    assert result["merge_group_trigger"] is False
+
+
+@pytest.mark.anyio
+async def test_push_trigger_no_branch_filter_applies_to_all_branches(httpx_mock):
+    """push trigger with no branches: filter → ci_event='push' for any branch."""
+    workflow_text = "on:\n  push:\n  pull_request:\n    branches: [main]\n"
+    httpx_mock.add_response(
+        url="https://api.github.com/graphql",
+        json=_make_repo_state_response([("tests.yml", workflow_text)]),
+    )
+    result = await fetch_repo_merge_state(
+        owner="org",
+        repo="repo",
+        branch="feature/anything",
+        token=None,
+    )
+    assert result["ci_event"] == "push"
+
+
+@pytest.mark.anyio
+async def test_push_trigger_branch_filter_matches_target_branch(httpx_mock):
+    """When queried branch IS in push.branches → ci_event='push'."""
+    workflow_text = textwrap.dedent("""\
+        on:
+          push:
+            branches: [main, stable]
+    """)
+    httpx_mock.add_response(
+        url="https://api.github.com/graphql",
+        json=_make_repo_state_response([("tests.yml", workflow_text)]),
+    )
+    result = await fetch_repo_merge_state(
+        owner="org",
+        repo="repo",
+        branch="main",
+        token=None,
+    )
+    assert result["ci_event"] == "push"
+
+
+@pytest.mark.anyio
+async def test_push_trigger_branches_ignore_allows_feature_branch(httpx_mock):
+    """branches-ignore: [main, stable] → push fires on feature branches → ci_event='push'."""
+    workflow_text = textwrap.dedent("""\
+        on:
+          push:
+            branches-ignore: [main, stable]
+    """)
+    httpx_mock.add_response(
+        url="https://api.github.com/graphql",
+        json=_make_repo_state_response([("tests.yml", workflow_text)]),
+    )
+    result = await fetch_repo_merge_state(
+        owner="org",
+        repo="repo",
+        branch="feature/impl-20260401",
+        token=None,
+    )
+    assert result["ci_event"] == "push"

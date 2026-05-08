@@ -5,9 +5,90 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from autoskillit.core import get_logger
+from autoskillit.core import FLEET_MENU_TOOLS, get_logger, is_feature_enabled
 
 logger = get_logger(__name__)
+
+_DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("Execution", ("run_cmd", "run_python", "run_skill")),
+    ("Testing & Workspace", ("test_check", "reset_test_dir", "classify_fix", "reset_workspace")),
+    (
+        "Git Operations",
+        (
+            "merge_worktree",
+            "create_unique_branch",
+            "create_and_publish_branch",
+            "check_pr_mergeable",
+            "set_commit_status",
+        ),
+    ),
+    ("Recipes", ("migrate_recipe", "list_recipes", "load_recipe", "validate_recipe")),
+    (
+        "Clone & Remote",
+        (
+            "clone_repo",
+            "remove_clone",
+            "push_to_remote",
+            "register_clone_status",
+            "batch_cleanup_clones",
+            "bootstrap_clone",
+        ),
+    ),
+    (
+        "GitHub",
+        (
+            "fetch_github_issue",
+            "get_issue_title",
+            "report_bug",
+            "prepare_issue",
+            "enrich_issues",
+            "claim_issue",
+            "release_issue",
+            "get_pr_reviews",
+            "bulk_close_issues",
+            "claim_and_resolve_issue",
+        ),
+    ),
+    (
+        "CI & Automation",
+        (
+            "wait_for_ci",
+            "wait_for_merge_queue",
+            "check_repo_merge_state",
+            "toggle_auto_merge",
+            "enqueue_pr",
+            "get_ci_status",
+        ),
+    ),
+    (
+        "Telemetry & Diagnostics",
+        (
+            "read_db",
+            "write_telemetry_files",
+            "kitchen_status",
+            "get_pipeline_report",
+            "get_token_summary",
+            "get_timing_summary",
+            "get_quota_events",
+            "analyze_tool_sequences",
+        ),
+    ),
+    ("Fleet", FLEET_MENU_TOOLS),
+    ("Kitchen", ("open_kitchen", "close_kitchen", "disable_quota_guard", "reload_session")),
+)
+
+
+def iter_display_categories(
+    features: dict[str, bool],
+    *,
+    experimental_enabled: bool = False,
+) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    return tuple(
+        (name, tools)
+        for name, tools in _DISPLAY_CATEGORIES
+        if name != "Fleet"
+        or is_feature_enabled("fleet", features, experimental_enabled=experimental_enabled)
+    )
 
 
 _REMOTE_PRECEDENCE = ("upstream", "origin")
@@ -37,8 +118,10 @@ def resolve_ingredient_defaults(project_dir: Path) -> dict[str, str]:
     try:
         cfg = load_config(project_dir)
         resolved["base_branch"] = cfg.branching.default_base_branch
+        resolved["local_review_rounds"] = str(cfg.review.local_review_rounds)
     except Exception:
         logger.warning("resolve_base_branch_failed", exc_info=True)
         resolved["base_branch"] = "main"
+        resolved["local_review_rounds"] = "0"
 
     return resolved

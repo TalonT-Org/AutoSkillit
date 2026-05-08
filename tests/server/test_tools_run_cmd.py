@@ -8,39 +8,41 @@ from unittest.mock import MagicMock, patch
 import pytest
 import structlog.testing
 
-from autoskillit.server.helpers import _run_subprocess
-from autoskillit.server.tools_execution import run_cmd, run_python
+from autoskillit.server._subprocess import _run_subprocess
+from autoskillit.server.tools.tools_execution import run_cmd, run_python
 from tests.conftest import _make_result, _make_timeout_result
+
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 class TestRunCmd:
     """T1, T2: run_cmd executes commands and returns exit code semantics."""
 
     @pytest.mark.anyio
-    async def test_successful_command(self, tool_ctx):
-        tool_ctx.runner.push(_make_result(0, "hello\n", ""))
+    async def test_successful_command(self, tool_ctx_kitchen_open):
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "hello\n", ""))
         result = json.loads(await run_cmd(cmd="echo hello", cwd="/tmp"))
 
         assert result["success"] is True
         assert result["exit_code"] == 0
         assert "hello" in result["stdout"]
-        assert len(tool_ctx.runner.call_args_list) == 1
-        assert tool_ctx.runner.call_args_list[0][0] == ["bash", "-c", "echo hello"]
+        assert len(tool_ctx_kitchen_open.runner.call_args_list) == 1
+        assert tool_ctx_kitchen_open.runner.call_args_list[0][0] == ["bash", "-c", "echo hello"]
 
     @pytest.mark.anyio
-    async def test_failing_command(self, tool_ctx):
-        tool_ctx.runner.push(_make_result(1, "", "error"))
+    async def test_failing_command(self, tool_ctx_kitchen_open):
+        tool_ctx_kitchen_open.runner.push(_make_result(1, "", "error"))
         result = json.loads(await run_cmd(cmd="false", cwd="/tmp"))
 
         assert result["success"] is False
         assert result["exit_code"] == 1
 
     @pytest.mark.anyio
-    async def test_custom_timeout(self, tool_ctx):
-        tool_ctx.runner.push(_make_result(0, "", ""))
-        await run_cmd(cmd="sleep 1", cwd="/tmp", timeout=30)
+    async def test_custom_timeout(self, tool_ctx_kitchen_open):
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
+        await run_cmd(cmd="echo timeout_test", cwd="/tmp", timeout=30)
 
-        assert tool_ctx.runner.call_args_list[-1][2] == 30.0
+        assert tool_ctx_kitchen_open.runner.call_args_list[-1][2] == 30.0
 
 
 class TestRunSubprocessDelegatesToManaged:
@@ -63,12 +65,12 @@ class TestRunSubprocessDelegatesToManaged:
 
 
 class TestProcessRunnerResult:
-    """_process_runner_result shared helper lives in server.helpers."""
+    """_process_runner_result shared helper lives in server._subprocess."""
 
     def test_normal_exit_preserves_fields(self):
         from autoskillit.core import TerminationReason
         from autoskillit.execution.process import SubprocessResult
-        from autoskillit.server.helpers import _process_runner_result
+        from autoskillit.server._subprocess import _process_runner_result
 
         result = SubprocessResult(
             returncode=0,
@@ -85,7 +87,7 @@ class TestProcessRunnerResult:
     def test_timed_out_returns_minus_one_with_message(self):
         from autoskillit.core import TerminationReason
         from autoskillit.execution.process import SubprocessResult
-        from autoskillit.server.helpers import _process_runner_result
+        from autoskillit.server._subprocess import _process_runner_result
 
         result = SubprocessResult(
             returncode=-1,
@@ -101,7 +103,7 @@ class TestProcessRunnerResult:
         assert "5" in stderr
 
 
-@pytest.mark.usefixtures("tool_ctx")
+@pytest.mark.usefixtures("tool_ctx_kitchen_open")
 class TestRunPython:
     """run_python tool: import, call, timeout, async support."""
 
@@ -199,3 +201,218 @@ class TestRunPython:
         assert any("timed out" in log.get("event", "").lower() for log in logs), (
             f"Expected 'timed out' in warning event, got: {logs}"
         )
+
+
+class TestRunCmdSleepInterception:
+    """Sleep commands are intercepted and converted to asyncio.sleep."""
+
+    @pytest.mark.anyio
+    async def test_python_sleep_intercepted(self, tool_ctx_kitchen_open):
+        result = json.loads(
+            await run_cmd(cmd='python3 -c "import time; time.sleep(0)"', cwd="/tmp")
+        )
+        assert result == {"success": True, "exit_code": 0, "stdout": "", "stderr": ""}
+        assert len(tool_ctx_kitchen_open.runner.call_args_list) == 0
+
+    @pytest.mark.anyio
+    async def test_bare_sleep_intercepted(self, tool_ctx_kitchen_open):
+        result = json.loads(await run_cmd(cmd="sleep 0", cwd="/tmp"))
+        assert result["success"] is True
+        assert len(tool_ctx_kitchen_open.runner.call_args_list) == 0
+
+    @pytest.mark.anyio
+    async def test_python3_single_quotes_intercepted(self, tool_ctx_kitchen_open):
+        result = json.loads(
+            await run_cmd(cmd="python3 -c 'import time; time.sleep(0)'", cwd="/tmp")
+        )
+        assert result["success"] is True
+        assert len(tool_ctx_kitchen_open.runner.call_args_list) == 0
+
+    @pytest.mark.anyio
+    async def test_non_sleep_uses_subprocess(self, tool_ctx_kitchen_open):
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "hello", ""))
+        await run_cmd(cmd="echo hello", cwd="/tmp")
+        assert len(tool_ctx_kitchen_open.runner.call_args_list) == 1
+        assert tool_ctx_kitchen_open.runner.call_args_list[0][0] == ["bash", "-c", "echo hello"]
+
+    @pytest.mark.anyio
+    async def test_decimal_seconds_intercepted(self, tool_ctx_kitchen_open):
+        result = json.loads(
+            await run_cmd(cmd='python3 -c "import time; time.sleep(0.0)"', cwd="/tmp")
+        )
+        assert result["success"] is True
+        assert len(tool_ctx_kitchen_open.runner.call_args_list) == 0
+
+    @pytest.mark.anyio
+    async def test_compound_sleep_not_intercepted(self, tool_ctx_kitchen_open):
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
+        await run_cmd(cmd="echo before && sleep 10 && echo after", cwd="/tmp")
+        assert len(tool_ctx_kitchen_open.runner.call_args_list) == 1
+
+    @pytest.mark.anyio
+    async def test_step_name_timing_recorded(self, tool_ctx_kitchen_open):
+        await run_cmd(cmd="sleep 0", cwd="/tmp", step_name="quota_wait")
+        assert len(tool_ctx_kitchen_open.runner.call_args_list) == 0
+        assert any(
+            e["step_name"] == "quota_wait" for e in tool_ctx_kitchen_open.timing_log.get_report()
+        )
+
+
+# ─── Type coercion tests (Step 1a) ───────────────────────────────────────────
+
+
+@pytest.mark.usefixtures("tool_ctx_kitchen_open")
+class TestImportAndCallTypeCoercion:
+    """Test _import_and_call annotation-aware type coercion."""
+
+    @pytest.mark.anyio
+    async def test_int_coerced_to_str(self):
+        """int value for str-annotated param is coerced to str."""
+        result = json.loads(
+            await run_python(
+                callable="tests.server._type_coercion_fixtures._str_only_param",
+                args={"value": 42},
+                timeout=10,
+            )
+        )
+        assert result["success"] is True
+        assert result["result"]["value"] == "42"
+
+    @pytest.mark.anyio
+    async def test_str_coerced_to_int(self):
+        """str value for int-annotated param is coerced to int."""
+        result = json.loads(
+            await run_python(
+                callable="tests.server._type_coercion_fixtures._int_param",
+                args={"value": "7"},
+                timeout=10,
+            )
+        )
+        assert result["success"] is True
+        assert result["result"]["value"] == 7
+
+    @pytest.mark.anyio
+    async def test_str_coerced_to_float(self):
+        """str value for float-annotated param is coerced to float."""
+        result = json.loads(
+            await run_python(
+                callable="tests.server._type_coercion_fixtures._typed_callable",
+                args={"name": "test", "count": 1, "ratio": "3.14"},
+                timeout=10,
+            )
+        )
+        assert result["success"] is True
+        assert result["result"]["ratio"] == 3.14
+
+    @pytest.mark.anyio
+    async def test_int_coerced_to_float(self):
+        """int value for float-annotated param is coerced to float."""
+        result = json.loads(
+            await run_python(
+                callable="tests.server._type_coercion_fixtures._typed_callable",
+                args={"name": "test", "count": 1, "ratio": 5},
+                timeout=10,
+            )
+        )
+        assert result["success"] is True
+        assert result["result"]["ratio"] == 5.0
+
+    @pytest.mark.anyio
+    async def test_correct_types_unchanged(self):
+        """Correct types pass through without coercion."""
+        result = json.loads(
+            await run_python(
+                callable="tests.server._type_coercion_fixtures._typed_callable",
+                args={"name": "hello", "count": 7, "ratio": 2.5},
+                timeout=10,
+            )
+        )
+        assert result["success"] is True
+        assert result["result"] == {"name": "hello", "count": 7, "ratio": 2.5}
+
+    @pytest.mark.anyio
+    async def test_none_still_uses_default(self):
+        """None still triggers default substitution (existing behavior)."""
+        result = json.loads(
+            await run_python(
+                callable="tests.server._type_coercion_fixtures._str_optional_param",
+                args={"value": None},
+                timeout=10,
+            )
+        )
+        assert result["success"] is True
+        assert result["result"]["value"] == "default"
+
+    @pytest.mark.anyio
+    async def test_coercion_logs_warning(self):
+        """Coercion emits a structlog warning with type info."""
+        with structlog.testing.capture_logs() as logs:
+            result = json.loads(
+                await run_python(
+                    callable="tests.server._type_coercion_fixtures._str_only_param",
+                    args={"value": 99},
+                    timeout=10,
+                )
+            )
+        assert result["success"] is True
+        coercion_logs = [log for log in logs if log.get("event") == "run_python type coerced"]
+        assert len(coercion_logs) == 1
+        assert coercion_logs[0]["arg"] == "value"
+        assert coercion_logs[0]["from_type"] == "int"
+        assert coercion_logs[0]["to_type"] == "str"
+
+    @pytest.mark.anyio
+    async def test_unconvertible_value_not_coerced(self):
+        """Non-numeric str for int param is not coerced, callable fails."""
+        result = json.loads(
+            await run_python(
+                callable="tests.server._type_coercion_fixtures._int_param",
+                args={"value": "not_a_number"},
+                timeout=10,
+            )
+        )
+        assert result["success"] is False
+        assert "AssertionError" in result["error"]
+
+    @pytest.mark.anyio
+    async def test_sentinel_keys_stripped_from_args(self):
+        """run_python sentinel keys in args dict must be stripped before callable dispatch."""
+        result = json.loads(
+            await run_python(
+                callable="tests.server._type_coercion_fixtures._str_only_param",
+                args={"value": "x", "timeout": 60, "callable": "bogus.path"},
+                timeout=10,
+            )
+        )
+        assert result["success"] is True
+        assert result["result"]["value"] == "x"
+
+    @pytest.mark.anyio
+    async def test_unrecognized_args_dropped_with_warning(self):
+        """_import_and_call should log a warning and drop args not in the callable's signature."""
+        with structlog.testing.capture_logs() as logs:
+            result = json.loads(
+                await run_python(
+                    callable="tests.server._type_coercion_fixtures._str_only_param",
+                    args={"value": "x", "bogus": 42},
+                    timeout=10,
+                )
+            )
+        assert result["success"] is True
+        assert result["result"]["value"] == "x"
+        warning_logs = [log for log in logs if "bogus" in str(log.get("extra_args", []))]
+        assert len(warning_logs) >= 1
+
+    @pytest.mark.anyio
+    async def test_extra_args_forwarded_when_callable_accepts_kwargs(self):
+        """When the callable accepts **kwargs, extra args should be forwarded."""
+        result = json.loads(
+            await run_python(
+                callable="tests.server._type_coercion_fixtures._kwargs_callable",
+                args={"name": "test", "extra": "y"},
+                timeout=10,
+            )
+        )
+        assert result["success"] is True
+        assert result["result"]["name"] == "test"
+        assert result["result"]["extras"]["extra"] == "y"

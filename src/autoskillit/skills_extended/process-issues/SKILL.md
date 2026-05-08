@@ -32,10 +32,25 @@ issues upfront, load recipe, execute session, collect result, report.
 - Modify any source code files
 - Reimplement recipe steps inline — always use `load_recipe` to load the recipe YAML and
   follow it as an orchestrator
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Process batches in ascending order: batch 1 before batch 2 before batch 3
 - Use `load_recipe` to execute the recipe for each issue
+- After loading a recipe via `load_recipe`, execute every step in the recipe's step
+  graph in sequence. Never skip, replace, or improvise steps.
+- `optional: true` means the step is skipped ONLY when its `skip_when_false` ingredient
+  evaluates to false. When the ingredient is true, the step is mandatory.
+- Follow `on_success`, `on_failure`, `on_result`, and `on_context_limit` routing exactly
+  as declared in the recipe YAML.
+- NEVER replace recipe PR steps (`prepare_pr`, `run_arch_lenses`, `compose_pr`,
+  `annotate_pr_diff`, `review_pr`) with manual `run_cmd` calls such as `gh pr create`.
+- Between issues: immediately begin step 1 for the next issue after completing the
+  previous issue. Do not output prose status between issues — inter-issue text creates
+  end_turn windows that cause stochastic session termination.
+- NEVER use AskUserQuestion to confirm proceeding to the next issue or the next batch.
+  Once Step 2a's initial confirmation gate passes, all subsequent issue and batch
+  transitions are fully automated.
 - Emit `---process-issues-result---` result block on completion (success or failure)
 - Write the summary report to `{{AUTOSKILLIT_TEMP}}/process-issues/` (relative to the current working directory)
 - Use `model: "sonnet"` when spawning subagents via the Task tool
@@ -47,7 +62,7 @@ issues upfront, load recipe, execute session, collect result, report.
 - Positional (optional): path to triage manifest JSON
 - `--batch N` — only process batch N (default: process all batches in order)
 - `--dry-run` — print the processing plan and exit without launching any recipe sessions
-- `--comment` — post a GitHub comment on each issue at pickup and at completion
+- `--status-updates` — append body sections to each issue at pickup and at completion
 - `--merge-batch` — after each batch completes, run `analyze-prs` + `merge-pr` to merge
   the batch PRs into the integration branch before starting the next batch
 
@@ -59,7 +74,7 @@ Parse arguments:
 - If a positional path is given, use it as the manifest path.
 - `--batch N`: record the target batch number; process only that batch.
 - `--dry-run`: set dry_run flag; print plan then exit after Step 2.
-- `--comment`: set comment flag.
+- `--status-updates`: set status_updates flag.
 - `--merge-batch`: set merge_batch flag.
 
 ### Step 1: Locate and Read Manifest
@@ -147,7 +162,7 @@ completed_urls   = []   # issues whose recipe fully returned
 Collect all issues from all batches that will be processed (respecting `--batch N` filtering).
 
 For each issue in the collected list:
-1. Call `claim_issue(issue_url=<url>)` — **no** `allow_reentry` (default `False`)
+1. Call `claim_issue(issue_url=<url>, label="queued")` — **no** `allow_reentry` (default `False`)
 2. If `result.claimed == true`:
    - append `issue_url` to `pre_claimed_urls`
 3. If `result.claimed == false`:
@@ -177,13 +192,30 @@ Processing X issues:
 1. **Check pre_claimed_urls:** If `issue_url` is NOT in `pre_claimed_urls` → skip
    (excluded by upfront claim phase — another session holds it).
 
-2. **Optionally post pickup comment** (if `--comment` is active):
+2. **Pre-dispatch check:** Before executing the recipe for this issue, check if any
+   previously completed issue in the CURRENT batch has `status: failure`. If so, skip
+   this issue with `status: skipped` and continue to the next issue in the batch.
+   This prevents wasted compute on issues within the same batch after a failure.
+   Skipped issues are recorded as `status: skipped` (not `status: failure`), so the
+   batch failure gate below counts only the original failure(s) that triggered the skip.
+
+3. **Promote queued → in-progress for this issue:**
+   Call `claim_issue(issue_url=<url>, allow_reentry=true)`
+   (No label argument — defaults to in-progress; removes the "queued" label
+   and adds "in-progress".)
+
+4. **Optionally append pickup status to issue body** (if `--status-updates` is active):
    ```bash
-   gh issue comment {number} \
-     --body "Processing in batch {N} — recipe: \`{recipe}\`"
+   PROCESS_BODY_FILE="{{AUTOSKILLIT_TEMP}}/process-issues/status_{number}_$(date +%s).md"
+   mkdir -p "$(dirname "$PROCESS_BODY_FILE")"
+   gh issue view {number} --json body --jq '.body' > "$PROCESS_BODY_FILE"
+   printf '\n\n---\n\n## In Progress\n\nProcessing in batch %s — recipe: `%s`\n' \
+     "{N}" "{recipe}" >> "$PROCESS_BODY_FILE"
+   gh issue edit {number} --body-file "$PROCESS_BODY_FILE"
+   sleep 1
    ```
 
-3. **Determine recipe name and `run_name`:**
+4. **Determine recipe name and `run_name`:**
 
    | `recipe` field | Recipe to load | `run_name` | PR Title Prefix |
    |---------------|----------------|------------|-----------------|
@@ -196,7 +228,7 @@ Processing X issues:
    The `run_name` encodes recipe origin for the `open-pr` skill, which derives
    the PR title prefix from it by convention (see `open-pr` SKILL.md).
 
-4. **Load the recipe:**
+5. **Load the recipe:**
    ```
    load_recipe("{recipe_name}")
    ```
@@ -204,12 +236,12 @@ Processing X issues:
    follow each step in the recipe, calling the specified MCP tool with the
    specified `with:` arguments.
 
-5. **Execute the recipe** with these ingredient values:
+6. **Execute the recipe** with these ingredient values:
    - `task`: the issue title (the recipe's `make-plan` step detects `issue_url`
      and fetches full content internally)
    - `issue_url`: the constructed issue URL
    - `run_name`: `"feature"` (implementation) or `"fix"` (remediation)
-   - `base_branch`: `"integration"` (or read `git rev-parse --abbrev-ref HEAD`)
+   - `base_branch`: `"develop"` (or read `git rev-parse --abbrev-ref HEAD`)
    - `open_pr`: `"true"`
    - `audit`: `"true"`
    - `review_approach`: `"false"`
@@ -219,7 +251,7 @@ Processing X issues:
    `upfront_claimed` ingredient) and recognize the pre-existing label as a
    valid reentry, returning `claimed=true` to proceed normally.
 
-6. **After recipe returns** (any outcome), append to completed_urls:
+7. **After recipe returns** (any outcome), append to completed_urls:
    ```
    completed_urls.append(issue_url)
    ```
@@ -227,9 +259,17 @@ Processing X issues:
    - On success path (`done` step reached): `{issue_number, recipe, status: success, pr_url}`
    - On failure path (`escalate_stop` reached): `{issue_number, recipe, status: failure, error}`
 
-7. **Optionally post completion comment** (if `--comment` is active):
-   - Success: `"✅ Processing complete — PR: {pr_url}"`
-   - Failure: `"❌ Processing failed — manual intervention required"`
+8. **Optionally append completion status to issue body** (if `--status-updates` is active):
+   ```bash
+   PROCESS_BODY_FILE="{{AUTOSKILLIT_TEMP}}/process-issues/status_{number}_$(date +%s).md"
+   mkdir -p "$(dirname "$PROCESS_BODY_FILE")"
+   gh issue view {number} --json body --jq '.body' > "$PROCESS_BODY_FILE"
+   printf '\n\n---\n\n## Status\n\n%s\n' \
+     "{✅ Processing complete — PR: $pr_url | ❌ Processing failed — manual intervention required}" \
+     >> "$PROCESS_BODY_FILE"
+   gh issue edit {number} --body-file "$PROCESS_BODY_FILE"
+   sleep 1
+   ```
 
 **Fatal failure cleanup** — if any unrecoverable error occurs during recipe dispatch:
 ```
@@ -239,6 +279,15 @@ For each url in uncompleted:
 Log: "Released N upfront-claimed issues due to fatal failure"
 Propagate the error
 ```
+
+**Batch failure gate (mandatory):** After all issues in the current batch have been
+processed, count the number of issues with `status: failure`. If ANY issue in this
+batch has `status: failure`:
+  1. Log: "Batch {N} had {count} failure(s). Halting batch processing."
+  2. Skip all remaining batches.
+  3. Proceed directly to Step 4 (Summary Report), recording unprocessed issues
+     from remaining batches as `status: skipped`.
+  4. Call `release_issue()` for each pre-claimed but unprocessed issue URL.
 
 **3c. After all issues in batch complete** (if `--merge-batch` is active):
 
@@ -333,6 +382,12 @@ Print the structured result for pipeline capture:
     "skipped_foreign_claim": <count of issues skipped because another session owned them>
 }
 ---end-process-issues-result---
+```
+
+Also emit the report path as a standalone structured token for recipe capture:
+
+```
+dispatch_results = {{AUTOSKILLIT_TEMP}}/process-issues/process_report_{ts}.md
 ```
 
 ## Output Location

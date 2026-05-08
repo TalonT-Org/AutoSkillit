@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+import regex as re
 
 import autoskillit.cli._hooks as _hooks_mod
 from autoskillit.cli._hooks import (
@@ -16,11 +17,25 @@ from autoskillit.cli._hooks import (
     sync_hooks_to_settings,
 )
 from autoskillit.cli._init_helpers import _user_claude_json_path, evict_direct_mcp_entry
-from autoskillit.core import atomic_write, is_git_worktree, pkg_root
+from autoskillit.core import (
+    DIRECT_INSTALL_CACHE_SUBDIR,
+    atomic_write,
+    get_logger,
+    is_git_worktree,
+    pkg_root,
+)
 from autoskillit.hooks import generate_hooks_json
+
+logger = get_logger(__name__)
 
 _VALID_SCOPES = {"user", "project", "local"}
 _MARKETPLACE_NAME = "autoskillit-local"
+
+
+def _plugin_cache_dir() -> Path:
+    return (
+        Path.home() / ".claude" / "plugins" / "cache" / DIRECT_INSTALL_CACHE_SUBDIR / "autoskillit"
+    )
 
 
 def _clear_plugin_cache() -> None:
@@ -32,16 +47,16 @@ def _clear_plugin_cache() -> None:
     the cache beforehand ensures a single ``autoskillit install`` is always
     sufficient.
     """
-    cache_dir = Path.home() / ".claude" / "plugins" / "cache" / _MARKETPLACE_NAME / "autoskillit"
-    if cache_dir.is_dir():
-        shutil.rmtree(cache_dir)
+    _d = _plugin_cache_dir()
+    if _d.is_dir():
+        from autoskillit import __version__ as _new_version
+        from autoskillit.core import _retire_old_versions
 
-    from autoskillit.cli._installed_plugins import InstalledPluginsFile
+        _retire_old_versions(_d, _new_version)
+    else:
+        from autoskillit.core import sweep_retiring_cache
 
-    try:
-        InstalledPluginsFile().remove(f"autoskillit@{_MARKETPLACE_NAME}")
-    except OSError:
-        pass  # non-fatal — install will proceed regardless
+        sweep_retiring_cache()
 
 
 def _ensure_marketplace() -> Path:
@@ -154,38 +169,53 @@ def install(*, scope: str = "user") -> bool:
         sys.exit(1)
 
     _ensure_workspace_ready()
-    _clear_plugin_cache()
 
-    # Regenerate hooks.json from the canonical registry with absolute paths
-    hooks_json_path = pkg_root() / "hooks" / "hooks.json"
-    atomic_write(hooks_json_path, json.dumps(generate_hooks_json(), indent=2) + "\n")
+    _cache = _plugin_cache_dir()
 
-    # Register the marketplace (idempotent)
-    result = subprocess.run(
-        ["claude", "plugin", "marketplace", "add", str(marketplace_dir)],
-        capture_output=True,
-        text=True,
-        stdin=subprocess.DEVNULL,
-        timeout=30,
-    )
-    if result.returncode != 0:
-        print(f"Failed to register marketplace: {result.stderr.strip()}")
-        sys.exit(1)
-    print("Marketplace registered.")
+    from autoskillit.core import _InstallLock
 
-    # Install the plugin
-    result = subprocess.run(
-        ["claude", "plugin", "install", plugin_ref, "--scope", scope],
-        capture_output=True,
-        text=True,
-        stdin=subprocess.DEVNULL,
-        timeout=30,
-    )
-    if result.returncode != 0:
-        print(f"Failed to install plugin: {result.stderr.strip()}")
-        sys.exit(1)
+    with _InstallLock():
+        _clear_plugin_cache()
+
+        # Regenerate hooks.json from the canonical registry with absolute paths
+        hooks_json_path = pkg_root() / "hooks" / "hooks.json"
+        atomic_write(hooks_json_path, json.dumps(generate_hooks_json(), indent=2) + "\n")
+
+        # Register the marketplace (idempotent)
+        result = subprocess.run(
+            ["claude", "plugin", "marketplace", "add", str(marketplace_dir)],
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+            timeout=30,
+        )
+        if result.returncode != 0:
+            print(f"Failed to register marketplace: {result.stderr.strip()}")
+            sys.exit(1)
+        print("Marketplace registered.")
+
+        # Install the plugin
+        result = subprocess.run(
+            ["claude", "plugin", "install", plugin_ref, "--scope", scope],
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+            timeout=30,
+        )
+        if result.returncode != 0:
+            print(f"Failed to install plugin: {result.stderr.strip()}")
+            sys.exit(1)
 
     print(f"Plugin installed: {plugin_ref} (scope: {scope})")
+    from autoskillit.hook_registry import validate_plugin_cache_hooks
+
+    post_install_broken = validate_plugin_cache_hooks(cache_dir=_cache)
+    if post_install_broken:
+        logger.warning(
+            "broken_hook_paths_after_install",
+            count=len(post_install_broken),
+            paths=list(post_install_broken),
+        )
     if evict_direct_mcp_entry(_user_claude_json_path()):
         print("Removed stale direct MCP entry from ~/.claude.json")
     # Cross-scope sweep: evict orphaned autoskillit hooks from ALL scopes before
@@ -193,6 +223,9 @@ def install(*, scope: str = "user") -> bool:
     sweep_all_scopes_for_orphans(Path.cwd())
     settings_path = _hooks_mod._claude_settings_path(scope)
     sync_hooks_to_settings(settings_path)
+    from autoskillit.cli.update._update_checks import invalidate_fetch_cache
+
+    invalidate_fetch_cache(Path.home())
     return True
 
 

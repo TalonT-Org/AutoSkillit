@@ -11,7 +11,6 @@ from typing import NamedTuple
 
 from autoskillit.config import write_config_layer
 from autoskillit.core import YAMLError, atomic_write, dump_yaml_str, get_logger, load_yaml
-from autoskillit.recipe import list_recipes
 
 logger = get_logger(__name__)
 
@@ -23,7 +22,7 @@ class _ScanResult(NamedTuple):
 
 def _colors() -> tuple[str, str, str, str, str, str]:
     """Return (Bold, Cyan, Dim, Green, Yellow, Reset) respecting NO_COLOR."""
-    from autoskillit.cli._ansi import supports_color
+    from autoskillit.cli.ui._ansi import supports_color
 
     c = supports_color()
     return (
@@ -75,7 +74,8 @@ def _require_interactive_stdin(command_name: str) -> None:
 
 
 def _prompt_recipe_choice() -> str:
-    from autoskillit.cli._timed_input import timed_prompt
+    from autoskillit.cli.ui._timed_input import timed_prompt
+    from autoskillit.recipe import list_recipes
 
     available = list_recipes(Path.cwd()).items
     if not available:
@@ -88,7 +88,7 @@ def _prompt_recipe_choice() -> str:
 
 
 def _prompt_test_command() -> list[str]:
-    from autoskillit.cli._timed_input import timed_prompt
+    from autoskillit.cli.ui._timed_input import timed_prompt
 
     default = "task test-all"
     answer = timed_prompt(
@@ -122,7 +122,7 @@ def _prompt_github_repo() -> str | None:
     _B, _C, _D, _G, _Y, _R = _colors()
     detected = _detect_github_repo()
 
-    from autoskillit.cli._timed_input import timed_prompt
+    from autoskillit.cli.ui._timed_input import timed_prompt
 
     if detected:
         print(f"\n  {_Y}GitHub repo{_R}  {_G}{detected}{_R} {_D}(detected from git remote){_R}")
@@ -264,7 +264,7 @@ def _check_secret_scanning(project_dir: Path) -> _ScanResult:
         "  Recommended: add gitleaks to .pre-commit-config.yaml\n"
         "  before proceeding.\n"
     )
-    from autoskillit.cli._timed_input import timed_prompt
+    from autoskillit.cli.ui._timed_input import timed_prompt
 
     print("  To bypass, type exactly:\n")
     print(f"  {_D}{_SECRET_SCAN_BYPASS_PHRASE}{_R}\n")
@@ -320,7 +320,7 @@ safety:
 #
 # implement_gate:
 #   marker: "Dry-walkthrough verified = TRUE"
-#   skill_names: ["/autoskillit:implement-worktree", "/autoskillit:implement-worktree-no-merge"]
+#   skill_names: ["/implement-worktree", "/implement-worktree-no-merge"]
 #
 # run_skill:
 #   timeout: 7200
@@ -437,6 +437,15 @@ def _register_all(scope: str, project_dir: Path) -> None:
             "Refusing to run `autoskillit init` from inside the autoskillit source tree — "
             "this would plant source-tree absolute paths in your project scope. "
             "`cd` to a different directory first."
+        )
+
+    if _core_paths.is_git_worktree(_core_paths.pkg_root()):
+        from autoskillit.cli.app import CliError
+
+        raise CliError(
+            "Refusing to run `autoskillit init` from a git linked worktree — "
+            "hook paths would be written from a transient pkg_root(). "
+            "Use `task install-worktree` instead."
         )
 
     # Cross-scope sweep: evict stale hooks from all scopes before writing canonical entries.

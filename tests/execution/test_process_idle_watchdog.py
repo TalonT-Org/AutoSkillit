@@ -9,10 +9,12 @@ import time
 import anyio
 import pytest
 
-from autoskillit.execution._process_race import (
+from autoskillit.execution.process._process_race import (
     RaceAccumulator,
     _watch_stdout_idle,
 )
+
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 WRITE_BURST_THEN_STALL_SCRIPT = textwrap.dedent("""\
     import sys, time, json

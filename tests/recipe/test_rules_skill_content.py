@@ -9,9 +9,12 @@ from unittest.mock import patch
 
 import pytest
 
-import autoskillit.recipe.rules_skill_content as _rsc
+import autoskillit.recipe.rules.rules_skill_content as _rsc
+from autoskillit.core import Severity
 from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
+
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 # Minimal recipe YAML that calls a synthetic bad skill with an undefined placeholder.
 # The YAML key for skill arguments is `with:` (maps to `with_args` via _parse_recipe).
@@ -177,7 +180,7 @@ def test_output_section_no_markdown_rule_fires_when_directive_missing(tmp_path: 
     with (
         patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]),
         patch(
-            "autoskillit.recipe.rules_skill_content.load_bundled_manifest",
+            "autoskillit.recipe.rules.rules_skill_content.load_bundled_manifest",
             return_value=_MOCK_MANIFEST_WITH_PATTERNS,
         ),
     ):
@@ -218,7 +221,7 @@ def test_output_section_no_markdown_rule_passes_when_directive_present(tmp_path:
     with (
         patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]),
         patch(
-            "autoskillit.recipe.rules_skill_content.load_bundled_manifest",
+            "autoskillit.recipe.rules.rules_skill_content.load_bundled_manifest",
             return_value=_MOCK_MANIFEST_WITH_PATTERNS,
         ),
     ):
@@ -629,4 +632,254 @@ def test_no_autoskillit_import_zero_findings_on_bundled_recipes() -> None:
     assert len(pkg_findings) == 0, (
         f"Expected zero findings for {_PKG_RULE_ID!r}, got {len(pkg_findings)}: "
         + "; ".join(f.message for f in pkg_findings)
+    )
+
+
+# ---------------------------------------------------------------------------
+# grep-bre-alternation-in-skill tests
+# ---------------------------------------------------------------------------
+
+_BRE_RULE_ID = "grep-bre-alternation-in-skill"
+
+
+def test_grep_bre_alternation_is_flagged(tmp_path: Path) -> None:
+    """grep BRE \\| in a bash block must produce a rule finding."""
+    skill_dir = tmp_path / "test-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        textwrap.dedent(
+            """\
+            # test-skill
+
+            ### Step 1
+            ```bash
+            grep -in 'foo\\|bar' some_file.txt
+            ```
+            """
+        )
+    )
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(_make_recipe_for_skill("test-skill", {}))
+    recipe = load_recipe(recipe_path)
+    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+        findings = run_semantic_rules(recipe)
+    assert _BRE_RULE_ID in [f.rule for f in findings], (
+        "Expected rule to fire for grep BRE \\| pattern in bash block"
+    )
+
+
+def test_git_grep_bre_is_excluded(tmp_path: Path) -> None:
+    """git log --grep='foo\\|bar' must NOT produce a rule finding (BRE correct for git)."""
+    skill_dir = tmp_path / "test-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        textwrap.dedent(
+            """\
+            # test-skill
+
+            ### Step 1
+            ```bash
+            git log --oneline --grep="fix\\|revert" -- src/
+            ```
+            """
+        )
+    )
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(_make_recipe_for_skill("test-skill", {}))
+    recipe = load_recipe(recipe_path)
+    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+        findings = run_semantic_rules(recipe)
+    assert _BRE_RULE_ID not in [f.rule for f in findings], (
+        "Rule must not fire for --grep= BRE context (git uses BRE for --grep=)"
+    )
+
+
+def test_git_remote_command_re_imported_from_git_helpers() -> None:
+    """_GIT_REMOTE_COMMAND_RE must be imported from _git_helpers, not defined locally."""
+    import autoskillit.recipe._git_helpers as _gh
+    import autoskillit.recipe.rules.rules_skill_content as _rsc  # noqa: F401
+
+    # The regex object in rules_skill_content must be the same object as in _git_helpers
+    # (identity check confirms it's an import, not a re-definition).
+    assert _rsc._GIT_REMOTE_COMMAND_RE is _gh._GIT_REMOTE_COMMAND_RE
+    assert _rsc._LITERAL_ORIGIN_RE is _gh._LITERAL_ORIGIN_RE
+
+
+@pytest.mark.parametrize(
+    "skill_name,ingredients",
+    [
+        ("implement-worktree-no-merge", {"plan_path": "plan"}),
+        ("implement-experiment", {"plan_path": "plan"}),
+        ("merge-pr", {}),
+        ("review-pr", {}),
+        ("pipeline-summary", {}),
+    ],
+)
+def test_hardcoded_origin_does_not_fire_on_part_b_fixed_skills(
+    tmp_path: Path, skill_name: str, ingredients: dict
+) -> None:
+    """
+    Regression anchor: bundled skills fixed in Part B must NOT trigger hardcoded-origin-remote.
+
+    Uses SKILL_SEARCH_DIRS isolation so the test fails with a clear assertion error
+    (not an opaque ENOENT) if the skill is renamed.
+    """
+    from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
+
+    skill_info = DefaultSkillResolver().resolve(skill_name)
+    assert skill_info is not None, f"bundled {skill_name!r} skill not found"
+    skill_dir = tmp_path / skill_name
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_bytes(skill_info.path.read_bytes())
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(_make_recipe_for_skill(skill_name, ingredients))
+    recipe = load_recipe(recipe_path)
+    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+        findings = run_semantic_rules(recipe)
+    assert "hardcoded-origin-remote" not in [f.rule for f in findings], (
+        f"hardcoded-origin-remote fired on {skill_name!r} after Part B fix — "
+        "check that all literal 'origin' references in bash blocks have been replaced with $REMOTE"
+    )
+
+
+def test_skill_no_issue_comments_rule_registered() -> None:
+    import autoskillit.recipe.rules.rules_skill_content  # noqa: F401 — triggers decorator registration
+    from autoskillit.recipe.registry import _RULE_REGISTRY
+
+    rule_names = [r.name for r in _RULE_REGISTRY]
+    assert "skill-no-issue-comments" in rule_names
+
+
+# ---------------------------------------------------------------------------
+# transition-boundary-anti-confirmation tests
+# ---------------------------------------------------------------------------
+
+_BOUNDARY_RULE_ID = "transition-boundary-anti-confirmation"
+
+_SYNTHETIC_BOUNDARY_SKILL_FIRES = textwrap.dedent(
+    """\
+    # test-skill
+
+    ## EXECUTION MAP
+
+    Group iteration is outer loop. The group number (1, 2, 3, ...) is the
+    primary ordering within the dispatch plan.
+    Merge-wait is mandatory between groups. After all Group N pipelines
+    complete, verify all Group N PRs have merged before starting Group N+1.
+    """
+)
+
+_SYNTHETIC_BOUNDARY_SKILL_PASSES = textwrap.dedent(
+    """\
+    # test-skill
+
+    ## EXECUTION MAP
+
+    Group iteration is outer loop. The group number (1, 2, 3, ...) is the
+    primary ordering within the dispatch plan.
+    Merge-wait is mandatory between groups. After all Group N pipelines
+    complete, verify all Group N PRs have merged before starting Group N+1.
+    NEVER use AskUserQuestion to ask whether to proceed to the next group.
+    """
+)
+
+
+def test_transition_boundary_anti_confirmation_rule_fires(tmp_path: Path) -> None:
+    """Rule must emit a finding when a SKILL.md section describes a transition boundary
+    but contains no anti-confirmation instruction."""
+    skill_dir = tmp_path / "test-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(_SYNTHETIC_BOUNDARY_SKILL_FIRES)
+
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(_make_recipe_for_skill("test-skill", {}))
+    recipe = load_recipe(recipe_path)
+
+    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+        findings = run_semantic_rules(recipe)
+
+    rule_ids = [f.rule for f in findings]
+    assert _BOUNDARY_RULE_ID in rule_ids, (
+        f"Expected '{_BOUNDARY_RULE_ID}' finding for skill with unprotected group boundary, "
+        f"got: {rule_ids}"
+    )
+    matching = [f for f in findings if f.rule == _BOUNDARY_RULE_ID]
+    assert matching[0].severity == Severity.WARNING
+
+
+def test_transition_boundary_anti_confirmation_rule_passes(tmp_path: Path) -> None:
+    """Rule must NOT emit a finding when the transition boundary has an anti-confirmation
+    instruction in the same section."""
+    skill_dir = tmp_path / "test-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(_SYNTHETIC_BOUNDARY_SKILL_PASSES)
+
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(_make_recipe_for_skill("test-skill", {}))
+    recipe = load_recipe(recipe_path)
+
+    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+        findings = run_semantic_rules(recipe)
+
+    rule_ids = [f.rule for f in findings]
+    assert _BOUNDARY_RULE_ID not in rule_ids, (
+        f"Rule must not fire when anti-confirmation instruction is present, got: {rule_ids}"
+    )
+
+
+def test_rules_pass_ctx_skill_resolver_to_resolve_skill_md(tmp_path: Path) -> None:
+    """Rule functions thread ctx.skill_resolver through to _resolve_skill_md."""
+    from autoskillit.recipe._analysis import make_validation_context
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    # Build a minimal recipe with a run_skill step that triggers skill content rules
+    skill_dir = tmp_path / "test-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text("# test-skill\n## Arguments\nNone.\n")
+
+    recipe_yaml = tmp_path / "recipe.yaml"
+    recipe_yaml.write_text(
+        textwrap.dedent(
+            """\
+        name: test-recipe
+        kitchen_rules:
+          - "Use run_skill only."
+        steps:
+          run_impl:
+            tool: run_skill
+            with:
+              skill_command: "/autoskillit:test-skill"
+            on_success: done
+          done:
+            action: stop
+            message: "Done."
+        """
+        )
+    )
+    recipe = load_recipe(recipe_yaml)
+
+    # Track whether _resolve_skill_md received a non-None resolver
+    received_resolvers: list[object] = []
+    original_fn = _rsc._resolve_skill_md
+
+    def tracking_fn(skill_name: str, *, resolver: object = None) -> object:
+        received_resolvers.append(resolver)
+        return original_fn(skill_name, resolver=resolver)
+
+    resolver = DefaultSkillResolver()
+    ctx = make_validation_context(recipe, skill_resolver=resolver)
+
+    with (
+        patch.object(_rsc, "_resolve_skill_md", tracking_fn),
+        patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]),
+    ):
+        run_semantic_rules(ctx)
+
+    # At least one call should have received the resolver from ctx
+    non_none = [r for r in received_resolvers if r is not None]
+    assert len(non_none) > 0, (
+        "Expected rule functions to pass ctx.skill_resolver to _resolve_skill_md"
+    )
+    assert all(r is resolver for r in non_none), (
+        "Expected every non-None resolver to be the exact instance from ctx"
     )

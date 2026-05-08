@@ -5,11 +5,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from autoskillit.core import CleanupResult
-from autoskillit.workspace.worktree import (
+from autoskillit.workspace import (
     list_git_worktrees,
     remove_git_worktree,
     remove_worktree_sidecar,
+    write_worktree_sidecar,
 )
+
+pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
 
 class TestListGitWorktrees:
@@ -115,3 +118,42 @@ class TestRemoveWorktreeSidecar:
         assert any("impl-absent" in s for s in result.skipped), (
             f"Expected impl-absent path in skipped list; got: {result.skipped}"
         )
+
+
+class TestWriteWorktreeSidecar:
+    """write_worktree_sidecar creates .autoskillit/temp/worktrees/<name>/base-branch."""
+
+    def test_writes_base_branch_file(self, tmp_path) -> None:
+        """File is created at the correct path with correct content."""
+        path = write_worktree_sidecar(tmp_path, "impl-foo-20260101-120000", "develop")
+        assert path.exists()
+        assert path.read_text().strip() == "develop"
+
+    def test_creates_intermediate_directories(self, tmp_path) -> None:
+        """Intermediate directories are created if they don't exist."""
+        write_worktree_sidecar(tmp_path, "impl-bar-20260201-130000", "main")
+        expected = tmp_path / ".autoskillit" / "temp" / "worktrees" / "impl-bar-20260201-130000"
+        assert (expected / "base-branch").exists()
+
+    def test_overwrites_existing_sidecar(self, tmp_path) -> None:
+        """Writing again replaces the existing content."""
+        name = "impl-baz-20260301-140000"
+        write_worktree_sidecar(tmp_path, name, "main")
+        write_worktree_sidecar(tmp_path, name, "develop")
+        path = tmp_path / ".autoskillit" / "temp" / "worktrees" / name / "base-branch"
+        assert path.read_text().strip() == "develop"
+
+    def test_returns_written_path(self, tmp_path) -> None:
+        """Return value is the path to the sidecar file."""
+        path = write_worktree_sidecar(tmp_path, "impl-ret-20260401-150000", "main")
+        assert path.name == "base-branch"
+        assert "impl-ret-20260401-150000" in str(path)
+
+    def test_roundtrip_file_content(self, tmp_path) -> None:
+        """Write via write_worktree_sidecar, verify file readable with stdlib."""
+        name = "impl-rt-20260501-160000"
+        branch = "develop"
+        sidecar_path = write_worktree_sidecar(tmp_path, name, branch)
+
+        assert sidecar_path.is_file()
+        assert sidecar_path.read_text().strip() == branch

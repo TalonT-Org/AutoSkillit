@@ -1,10 +1,7 @@
 ---
 name: prepare-pr
 categories: [github]
-description: >
-  Reads plan(s), runs git diff, classifies changed files, selects 1–3 arch-lens slugs,
-  writes one context file per lens, and writes a PR prep file. Does NOT invoke arch-lens
-  skills. Part 1 of 3 in the decomposed PR flow.
+description: Preparation executor for pull-request metadata. ALWAYS invoke this skill when instructed to prepare PR metadata. Do not read plans or classify files directly — use this skill first to load the preparation workflow.
 hooks:
   PreToolUse:
     - matcher: "*"
@@ -39,6 +36,7 @@ in the decomposed PR flow (prepare → run_arch_lenses → compose).
 - Invoke arch-lens skills or any other sub-skills
 - Create files outside `{{AUTOSKILLIT_TEMP}}/prepare-pr/`
 - Fail if closing_issue is absent or gh is unavailable — degrade gracefully
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Emit all three output tokens (`prep_path`, `selected_lenses`, `lens_context_paths`)
@@ -149,6 +147,8 @@ Output: comma-separated slug list → `selected_lens_slugs`.
 
 ### Step 6: Write Context Files per Lens
 
+Use the Write tool (not Bash heredocs or cat) to create each context file.
+
 For each selected slug, write one context file to
 `{{AUTOSKILLIT_TEMP}}/prepare-pr/pr_arch_lens_context_{slug}_{ts}.md`:
 
@@ -179,6 +179,8 @@ Record absolute paths in `lens_context_paths` list (comma-separated).
 Read `## Summary` from each plan file. Store plan summaries for the prep file.
 
 ### Step 8: Write PR Prep File
+
+Use the Write tool (not Bash heredocs or cat) to create the prep file.
 
 Write PR prep file to `{{AUTOSKILLIT_TEMP}}/prepare-pr/pr_prep_{ts}.md`:
 

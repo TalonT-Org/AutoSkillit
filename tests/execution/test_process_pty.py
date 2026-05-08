@@ -29,6 +29,9 @@ from autoskillit.execution.process import (
     run_managed_async,
 )
 from autoskillit.execution.session import ClaudeSessionResult
+from tests.execution.conftest import _result_ndjson
+
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 # ---------------------------------------------------------------------------
 # Helper scripts — small Python programs that reproduce specific scenarios
@@ -193,7 +196,7 @@ class TestPtyWrapCommand:
         cmd = ["claude", "--no-color", "do something"]
         fake_script = "/usr/bin/script"
         with (
-            patch("autoskillit.execution._process_pty.sys.platform", "linux"),
+            patch("autoskillit.execution.process._process_pty.sys.platform", "linux"),
             patch("shutil.which", return_value=fake_script),
         ):
             result = pty_wrap_command(cmd)
@@ -211,7 +214,7 @@ class TestPtyWrapCommand:
         cmd = ["claude", "--no-color", "do something"]
         fake_script = "/usr/bin/script"
         with (
-            patch("autoskillit.execution._process_pty.sys.platform", "darwin"),
+            patch("autoskillit.execution.process._process_pty.sys.platform", "darwin"),
             patch("shutil.which", return_value=fake_script),
         ):
             result = pty_wrap_command(cmd)
@@ -374,7 +377,7 @@ class TestStaleRecoveryPipelineAdjudication:
         result = await run_managed_async(
             [sys.executable, str(script), str(session_dir)],
             cwd=tmp_path,
-            timeout=10,
+            timeout=20,
             session_log_dir=session_dir,
             completion_marker="%%NONEXISTENT%%",
             stale_threshold=0.3,
@@ -489,25 +492,6 @@ class TestAdjudicationCoverageMatrix:
 # ---------------------------------------------------------------------------
 # Module-level helper for adjudication guard tests
 # ---------------------------------------------------------------------------
-
-
-def _result_ndjson(
-    result: str = "done",
-    subtype: str = "success",
-    is_error: bool = False,
-    session_id: str = "s1",
-) -> str:
-    """Build a minimal NDJSON string with a single type=result record."""
-    return json.dumps(
-        {
-            "type": "result",
-            "subtype": subtype,
-            "is_error": is_error,
-            "result": result,
-            "session_id": session_id,
-            "errors": [],
-        }
-    )
 
 
 class TestResolveTerminationMatrix:
@@ -725,7 +709,7 @@ class TestChannelBDrainRaceRecovery:
         Monkeypatches parse_session_result to inject assistant_messages since
         an empty stdout produces no NDJSON records to accumulate from.
         """
-        from autoskillit.execution import headless as headless_mod
+        import autoskillit.execution.headless._headless_result as headless_result_mod
 
         fake_session = ClaudeSessionResult(
             subtype=CliSubtype.EMPTY_OUTPUT,
@@ -734,7 +718,7 @@ class TestChannelBDrainRaceRecovery:
             session_id="test",
             assistant_messages=["Done.\n%%ORDER_UP%%"],
         )
-        monkeypatch.setattr(headless_mod, "parse_session_result", lambda _: fake_session)
+        monkeypatch.setattr(headless_result_mod, "parse_session_result", lambda _: fake_session)
         result = SubprocessResult(
             returncode=0,
             stdout="",
@@ -833,7 +817,7 @@ class TestAdjudicationGuards:
         """CHANNEL_A + empty result: dead-end guard escalates to retriable."""
         result = SubprocessResult(
             returncode=0,
-            stdout=_result_ndjson(subtype="success", result=""),
+            stdout=_result_ndjson(subtype="success", result_text=""),
             stderr="",
             termination=TerminationReason.NATURAL_EXIT,
             pid=12345,
@@ -856,7 +840,7 @@ class TestAdjudicationGuards:
         """CHANNEL_B + error_max_turns: contradiction guard resolves to retriable."""
         result = SubprocessResult(
             returncode=0,
-            stdout=_result_ndjson(subtype="error_max_turns", result="partial", is_error=True),
+            stdout=_result_ndjson(subtype="error_max_turns", result_text="partial", is_error=True),
             stderr="",
             termination=TerminationReason.NATURAL_EXIT,
             pid=12345,
@@ -880,7 +864,7 @@ class TestAdjudicationGuards:
         """COMPLETED + CHANNEL_B + error_max_turns: contradiction guard resolves to retriable."""
         result = SubprocessResult(
             returncode=-15,
-            stdout=_result_ndjson(subtype="error_max_turns", result="partial", is_error=True),
+            stdout=_result_ndjson(subtype="error_max_turns", result_text="partial", is_error=True),
             stderr="",
             termination=TerminationReason.COMPLETED,
             pid=12345,

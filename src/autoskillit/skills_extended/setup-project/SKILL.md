@@ -40,6 +40,7 @@ Explore a target project and generate tailored recipes and AutoSkillit config th
 - Suggest `reset_guard_marker` config — that's a workspace concern, not project setup
 - Include install instructions or "Getting Started" sections — user is already running the skill
 - Hardcode `base_branch = main` — detect the current branch
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Read the target project using Glob, Read, and Grep — no shell commands against target
@@ -184,9 +185,9 @@ Interactive config suggestion flow:
 3. Track approvals — do NOT write to disk yet
 4. Do NOT suggest `reset_guard_marker` — that's a workspace concern, not project setup
 5. Ask the user for their preferred default base branch:
-   > "What is your default base branch? (e.g., 'integration' for the 3-tier model, 'main' for the classic model)"
-   > Default: `integration`
-   If the user selects a value different from the package default (`integration`), add it to the config diff as:
+   > "What is your default base branch? (e.g., 'develop' for the 3-tier model, 'main' for the classic model)"
+   > Default: `develop`
+   If the user selects a value different from the package default (`develop`), add it to the config diff as:
    ```yaml
    branching:
      default_base_branch: {user_choice}
@@ -203,7 +204,12 @@ If no config exists, present the suggested config in full. If config exists, onl
 Suggested config template:
 ```yaml
 test_check:
+  # Single command (most projects):
   command: {detected test command as list}
+  # Multi-surface projects (e.g. Rust + Python e2e):
+  # commands:
+  #   - [cargo, nextest, run]
+  #   - [task, e2e-check]
   # timeout: 600
 
 # classify_fix:

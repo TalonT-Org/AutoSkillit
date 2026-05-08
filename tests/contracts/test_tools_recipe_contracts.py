@@ -10,13 +10,29 @@ def test_load_recipe_instructs_step_name_exact_yaml_key():
     """
     import inspect
 
-    from autoskillit.server.tools_recipe import load_recipe
+    from autoskillit.server.tools.tools_recipe import load_recipe
 
     doc = inspect.getdoc(load_recipe) or ""
     assert "must match the yaml step key exactly" in doc.lower(), (
         "tools_recipe.load_recipe must instruct orchestrators that step_name "
         "must be the exact YAML key with no disambiguation suffixes appended"
     )
+
+
+def test_load_recipe_docstring_contains_optional_step_semantics():
+    import inspect
+
+    from autoskillit.server.tools.tools_recipe import load_recipe
+
+    doc = inspect.getdoc(load_recipe) or ""
+    assert "OPTIONAL STEP SEMANTICS" in doc
+
+
+def test_load_recipe_response_includes_orchestration_rules():
+    """load_and_validate result TypedDict must declare orchestration_rules."""
+    from autoskillit.recipe._api import LoadRecipeResult
+
+    assert "orchestration_rules" in LoadRecipeResult.__annotations__
 
 
 def test_load_recipe_does_not_instruct_get_token_summary_pre_staging():
@@ -29,7 +45,7 @@ def test_load_recipe_does_not_instruct_get_token_summary_pre_staging():
     """
     import inspect
 
-    from autoskillit.server.tools_recipe import load_recipe
+    from autoskillit.server.tools.tools_recipe import load_recipe
 
     doc = inspect.getdoc(load_recipe) or ""
     # Check that the active invocation form is absent. After Step 2b, the replacement

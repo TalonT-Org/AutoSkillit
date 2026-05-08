@@ -1,7 +1,12 @@
 """Tests for GitHubConfig.allowed_labels field and check_label_allowed validation."""
 
+import pytest
+
 from autoskillit.config import AutomationConfig
-from autoskillit.config.settings import GitHubConfig, _make_dynaconf
+from autoskillit.config._config_loader import _make_dynaconf
+from autoskillit.config.settings import GitHubConfig
+
+pytestmark = [pytest.mark.layer("config"), pytest.mark.small]
 
 
 class TestGitHubConfigAllowedLabelsField:
@@ -74,6 +79,7 @@ class TestDefaultsYamlAllowedLabels:
         expected = {
             "bug",
             "enhancement",
+            "queued",
             "in-progress",
             "staged",
             "autoreported",
@@ -81,3 +87,10 @@ class TestDefaultsYamlAllowedLabels:
             "recipe:remediation",
         }
         assert expected.issubset(set(cfg.github.allowed_labels))
+
+    def test_fail_label_in_allowed_labels_default(self, tmp_path):
+        """defaults.yaml whitelist includes 'fail' label for CI failure marking."""
+        from autoskillit.config import load_config
+
+        cfg = load_config(tmp_path)
+        assert "fail" in cfg.github.allowed_labels

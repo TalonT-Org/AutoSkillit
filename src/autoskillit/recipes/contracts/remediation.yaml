@@ -1,4 +1,4 @@
-generated_at: '2026-04-05T02:19:55.997695+00:00'
+generated_at: '2026-05-03T07:01:54.187185+00:00'
 bundled_manifest_version: 0.1.0
 skill_hashes: {}
 skills:
@@ -7,18 +7,23 @@ skills:
     - name: topic
       type: string
       required: true
+      recommended: false
     outputs:
     - name: investigation_path
       type: file_path
     expected_output_patterns:
     - investigation_path\s*=\s*/.+
     pattern_examples:
-    - 'investigation_path = /tmp/investigation.md'
+    - 'investigation_path = /tmp/investigation.md
+
+      %%ORDER_UP%%'
+    read_only: true
   rectify:
     inputs:
     - name: investigation_path
       type: file_path
       required: true
+      recommended: false
     outputs:
     - name: plan_path
       type: file_path
@@ -27,25 +32,31 @@ skills:
     expected_output_patterns:
     - plan_path\s*=\s*/.+
     pattern_examples:
-    - 'plan_path = /tmp/plan.md'
+    - 'plan_path = /tmp/plan.md
+
+      %%ORDER_UP%%'
     write_behavior: always
   review-approach:
     inputs:
     - name: plan_path
       type: file_path
       required: false
+      recommended: false
     outputs:
     - name: review_path
       type: file_path
     expected_output_patterns:
     - review_path\s*=\s*/.+
     pattern_examples:
-    - 'review_path = /tmp/review.md'
+    - 'review_path = /tmp/review.md
+
+      %%ORDER_UP%%'
   dry-walkthrough:
     inputs:
     - name: plan_path
       type: file_path
       required: true
+      recommended: false
     outputs: []
     expected_output_patterns: []
     pattern_examples: []
@@ -55,6 +66,7 @@ skills:
     - name: plan_path
       type: file_path
       required: true
+      recommended: false
     outputs:
     - name: worktree_path
       type: directory_path
@@ -63,52 +75,82 @@ skills:
     expected_output_patterns:
     - worktree_path\s*=\s*/.+
     pattern_examples:
-    - 'worktree_path = /tmp/worktrees/impl-foo-20260316'
+    - 'worktree_path = /tmp/worktrees/impl-foo-20260316
+
+      %%ORDER_UP%%'
     write_behavior: always
   retry-worktree:
     inputs:
     - name: plan_path
       type: file_path
       required: true
+      recommended: false
     - name: worktree_path
       type: directory_path
       required: true
+      recommended: false
     outputs:
     - name: worktree_path
       type: directory_path
     - name: branch_name
       type: string
+    - name: phases_implemented
+      type: integer
     expected_output_patterns:
     - worktree_path\s*=\s*/.+
     pattern_examples:
-    - 'worktree_path = /tmp/worktrees/impl-foo-20260316'
-    write_behavior: always
+    - 'worktree_path = /tmp/worktrees/impl-foo-20260316
+
+      branch_name = feature/123
+
+      phases_implemented = 2
+
+      %%ORDER_UP%%'
+    write_behavior: conditional
+    write_expected_when:
+    - phases_implemented\s*=\s*[1-9][0-9]*
   resolve-failures:
     inputs:
     - name: worktree_path
       type: directory_path
       required: true
+      recommended: false
     - name: plan_path
       type: file_path
       required: true
+      recommended: false
     - name: base_branch
       type: string
       required: true
-    outputs: []
+      recommended: false
+    - name: diagnosis_path
+      type: file_path
+      required: false
+      recommended: false
+    outputs:
+    - name: verdict
+      type: string
+    - name: fixes_applied
+      type: integer
     expected_output_patterns: []
     pattern_examples: []
-    write_behavior: always
+    write_behavior: conditional
+    write_expected_when:
+    - verdict\s*=\s*real_fix
   audit-impl:
     inputs:
     - name: plan_path
       type: file_path
       required: true
+      recommended: false
     - name: branch_name
       type: string
       required: false
+      recommended: false
     - name: base_branch
       type: string
       required: false
+      recommended: false
     outputs:
     - name: verdict
       type: string
@@ -117,15 +159,20 @@ skills:
     expected_output_patterns:
     - verdict\s*=\s*(GO|NO GO)
     pattern_examples:
-    - 'verdict = GO'
+    - 'verdict = GO
+
+      %%ORDER_UP%%'
     - 'verdict = NO GO
 
-      remediation_path = /tmp/remediation.md'
+      remediation_path = /tmp/remediation.md
+
+      %%ORDER_UP%%'
   make-plan:
     inputs:
     - name: task
       type: string
       required: true
+      recommended: false
     outputs:
     - name: plan_path
       type: file_path
@@ -134,73 +181,166 @@ skills:
     expected_output_patterns:
     - plan_path\s*=\s*/.+
     pattern_examples:
-    - 'plan_path = /tmp/plan.md'
+    - 'plan_path = /tmp/plan.md
+
+      %%ORDER_UP%%'
     write_behavior: always
-  open-pr:
+  prepare-pr:
     inputs:
     - name: plan_paths
       type: string
       required: true
-    - name: feature_branch
+      recommended: false
+    - name: run_name
       type: string
       required: true
+      recommended: false
     - name: base_branch
       type: string
       required: true
+      recommended: false
     - name: closing_issue
       type: string
       required: false
-    outputs: []
+      recommended: false
+    - name: conflict_report_path
+      type: file_path
+      required: false
+      recommended: false
+    outputs:
+    - name: prep_path
+      type: file_path
+    - name: selected_lenses
+      type: string
+    - name: lens_context_paths
+      type: string
     expected_output_patterns:
-    - https://github\.com/.*/pull/\d+
+    - prep_path\s*=\s*/.+
+    - selected_lenses\s*=\s*\S+
+    - lens_context_paths\s*=\s*/.+
     pattern_examples:
-    - 'https://github.com/owner/repo/pull/42'
+    - 'prep_path = /abs/path/pr_prep_2026-04-07_120000.md
+
+      selected_lenses = module-dependency,process-flow
+
+      lens_context_paths = /abs/ctx1.md,/abs/ctx2.md
+
+      %%ORDER_UP%%'
+    write_behavior: conditional
+    write_expected_when:
+    - prep_path\s*=\s*/.+
+  compose-pr:
+    inputs:
+    - name: prep_path
+      type: file_path
+      required: true
+      recommended: false
+    - name: all_diagram_paths
+      type: string
+      required: true
+      recommended: false
+    - name: work_dir
+      type: directory_path
+      required: true
+      recommended: false
+    - name: base_branch
+      type: string
+      required: true
+      recommended: false
+    - name: closing_issue
+      type: string
+      required: false
+      recommended: false
+    outputs:
+    - name: pr_url
+      type: string
+    expected_output_patterns:
+    - pr_url\s*=\s*(https://github\.com/.*/pull/\d+)?
+    pattern_examples:
+    - 'pr_url = https://github.com/owner/repo/pull/42
+
+      %%ORDER_UP%%'
+    - "pr_url = \n%%ORDER_UP%%"
+    write_behavior: always
   review-pr:
     inputs:
     - name: feature_branch
       type: string
       required: true
+      recommended: false
     - name: base_branch
       type: string
       required: true
+      recommended: false
     - name: annotated_diff_path
       type: string
       required: false
+      recommended: true
     - name: hunk_ranges_path
       type: string
       required: false
+      recommended: true
     outputs:
     - name: verdict
       type: string
     expected_output_patterns:
-    - verdict\s*=\s*(approved|changes_requested|needs_human)
+    - verdict\s*=\s*(approved|approved_with_comments|changes_requested|needs_human)
+    - '%%REVIEW_GATE::(LOOP_REQUIRED|CLEAR)%%'
     pattern_examples:
-    - 'verdict = approved'
-    - 'verdict = changes_requested'
-    - 'verdict = needs_human'
+    - 'verdict = approved
+
+      %%REVIEW_GATE::CLEAR%%
+
+      %%ORDER_UP%%'
+    - 'verdict = approved_with_comments
+
+      %%REVIEW_GATE::CLEAR%%
+
+      %%ORDER_UP%%'
+    - 'verdict = changes_requested
+
+      %%REVIEW_GATE::LOOP_REQUIRED%%
+
+      %%ORDER_UP%%'
+    - 'verdict = needs_human
+
+      %%REVIEW_GATE::CLEAR%%
+
+      %%ORDER_UP%%'
   resolve-review:
     inputs:
     - name: feature_branch
       type: string
       required: true
+      recommended: false
     - name: base_branch
       type: string
       required: true
-    outputs: []
+      recommended: false
+    outputs:
+    - name: verdict
+      type: string
+    - name: fixes_applied
+      type: integer
     expected_output_patterns: []
     pattern_examples: []
-    write_behavior: always
+    write_behavior: conditional
+    write_expected_when:
+    - verdict\s*=\s*real_fix
   resolve-merge-conflicts:
     inputs:
     - name: worktree_path
       type: directory_path
       required: true
+      recommended: false
     - name: plan_path
       type: file_path
       required: true
+      recommended: false
     - name: base_branch
       type: string
       required: true
+      recommended: false
     outputs:
     - name: worktree_path
       type: directory_path
@@ -215,7 +355,9 @@ skills:
     expected_output_patterns:
     - worktree_path\s*=\s*/.+
     pattern_examples:
-    - 'worktree_path = /tmp/worktrees/impl-foo-20260316'
+    - 'worktree_path = /tmp/worktrees/impl-foo-20260316
+
+      %%ORDER_UP%%'
     write_behavior: conditional
     write_expected_when:
     - conflict_report_path\s*=\s*/.+
@@ -224,53 +366,63 @@ skills:
     - name: branch
       type: string
       required: true
+      recommended: false
     - name: run_id
       type: string
       required: false
+      recommended: false
     - name: ci_failed_jobs
       type: string
       required: false
+      recommended: false
     outputs:
     - name: diagnosis_path
       type: file_path
     - name: failure_type
       type: string
+    - name: failure_subtype
+      type: string
     - name: is_fixable
       type: string
     expected_output_patterns:
     - diagnosis_path\s*=\s*/.+
+    - failure_subtype\s*=\s*(flaky|timing_race|deterministic|fixture|import|env|unknown)
     pattern_examples:
-    - 'diagnosis_path = /tmp/diagnosis.md'
+    - 'diagnosis_path = /tmp/diagnosis.md
+
+      failure_type = test
+
+      failure_subtype = deterministic
+
+      is_fixable = true
+
+      %%ORDER_UP%%'
+    - 'diagnosis_path = /tmp/diagnosis.md
+
+      failure_type = test
+
+      failure_subtype = flaky
+
+      is_fixable = false
+
+      %%ORDER_UP%%'
     write_behavior: always
 dataflow:
-- step: sprint_entry
-  available:
-  - audit
-  - auto_merge
-  - base_branch
-  - issue_url
-  - open_pr
-  - review_approach
-  - run_mode
-  - run_name
-  - source_dir
-  - sprint_mode
-  - task
-  - upfront_claimed
-  required: []
-  produced: []
 - step: clone
   available:
+  - arch_lenses
   - audit
   - auto_merge
   - base_branch
+  - depth
   - issue_url
+  - max_parallel
   - open_pr
   - review_approach
+  - review_max_retries
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   required: []
@@ -279,17 +431,20 @@ dataflow:
   - remote_url
 - step: set_merge_target
   available:
+  - arch_lenses
   - audit
   - auto_merge
   - base_branch
+  - depth
   - issue_url
+  - max_parallel
   - open_pr
   - remote_url
   - review_approach
+  - review_max_retries
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - work_dir
@@ -298,18 +453,21 @@ dataflow:
   - merge_target
 - step: get_issue_title
   available:
+  - arch_lenses
   - audit
   - auto_merge
   - base_branch
+  - depth
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - remote_url
   - review_approach
+  - review_max_retries
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - work_dir
@@ -320,21 +478,24 @@ dataflow:
   - issue_slug
 - step: claim_issue
   available:
+  - arch_lenses
   - audit
   - auto_merge
   - base_branch
+  - depth
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - remote_url
   - review_approach
+  - review_max_retries
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - work_dir
@@ -343,22 +504,25 @@ dataflow:
   - claimed
 - step: compute_branch
   available:
+  - arch_lenses
   - audit
   - auto_merge
   - base_branch
   - claimed
+  - depth
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - remote_url
   - review_approach
+  - review_max_retries
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - work_dir
@@ -367,23 +531,26 @@ dataflow:
   - proposed_branch
 - step: create_branch
   available:
+  - arch_lenses
   - audit
   - auto_merge
   - base_branch
   - claimed
+  - depth
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - proposed_branch
   - remote_url
   - review_approach
+  - review_max_retries
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - work_dir
@@ -392,23 +559,26 @@ dataflow:
   - merge_target
 - step: push_merge_target
   available:
+  - arch_lenses
   - audit
   - auto_merge
   - base_branch
   - claimed
+  - depth
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - proposed_branch
   - remote_url
   - review_approach
+  - review_max_retries
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - work_dir
@@ -416,23 +586,26 @@ dataflow:
   produced: []
 - step: investigate
   available:
+  - arch_lenses
   - audit
   - auto_merge
   - base_branch
   - claimed
+  - depth
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - proposed_branch
   - remote_url
   - review_approach
+  - review_max_retries
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - work_dir
@@ -442,24 +615,27 @@ dataflow:
   - investigation_path
 - step: rectify
   available:
+  - arch_lenses
   - audit
   - auto_merge
   - base_branch
   - claimed
+  - depth
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - proposed_branch
   - remote_url
   - review_approach
+  - review_max_retries
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - work_dir
@@ -468,25 +644,28 @@ dataflow:
   - plan_path
 - step: review
   available:
+  - arch_lenses
   - audit
   - auto_merge
   - base_branch
   - claimed
+  - depth
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - plan_path
   - proposed_branch
   - remote_url
   - review_approach
+  - review_max_retries
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - work_dir
@@ -495,26 +674,29 @@ dataflow:
   - review_path
 - step: dry_walkthrough
   available:
+  - arch_lenses
   - audit
   - auto_merge
   - base_branch
   - claimed
+  - depth
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - plan_path
   - proposed_branch
   - remote_url
   - review_approach
+  - review_max_retries
   - review_path
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - work_dir
@@ -522,26 +704,29 @@ dataflow:
   produced: []
 - step: implement
   available:
+  - arch_lenses
   - audit
   - auto_merge
   - base_branch
   - claimed
+  - depth
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - plan_path
   - proposed_branch
   - remote_url
   - review_approach
+  - review_max_retries
   - review_path
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - work_dir
@@ -552,28 +737,31 @@ dataflow:
   - branch_name
 - step: retry_worktree
   available:
+  - arch_lenses
   - audit
   - auto_merge
   - base_branch
   - branch_name
   - claimed
+  - depth
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - plan_path
   - proposed_branch
   - remote_url
   - review_approach
+  - review_max_retries
   - review_path
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - work_dir
@@ -583,30 +771,35 @@ dataflow:
   - implementation_ref
   - worktree_path
   - branch_name
+  - phases_implemented
 - step: test
   available:
+  - arch_lenses
   - audit
   - auto_merge
   - base_branch
   - branch_name
   - claimed
+  - depth
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - proposed_branch
   - remote_url
   - review_approach
+  - review_max_retries
   - review_path
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - work_dir
@@ -615,60 +808,72 @@ dataflow:
   produced: []
 - step: assess
   available:
+  - arch_lenses
   - audit
   - auto_merge
   - base_branch
   - branch_name
   - claimed
+  - depth
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - proposed_branch
   - remote_url
   - review_approach
+  - review_max_retries
   - review_path
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - work_dir
   - worktree_path
   required: []
-  produced: []
+  produced:
+  - verdict
+  - fixes_applied
 - step: audit_impl
   available:
+  - arch_lenses
   - audit
   - auto_merge
   - base_branch
   - branch_name
   - claimed
+  - depth
+  - fixes_applied
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - proposed_branch
   - remote_url
   - review_approach
+  - review_max_retries
   - review_path
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
+  - verdict
   - work_dir
   - worktree_path
   required: []
@@ -676,296 +881,724 @@ dataflow:
   - remediation_path
 - step: remediate
   available:
+  - arch_lenses
   - audit
   - auto_merge
   - base_branch
   - branch_name
   - claimed
+  - depth
+  - fixes_applied
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
+  - review_max_retries
   - review_path
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
+  - verdict
   - work_dir
   - worktree_path
   required: []
   produced: []
 - step: make_plan
   available:
+  - arch_lenses
   - audit
   - auto_merge
   - base_branch
   - branch_name
   - claimed
+  - depth
+  - fixes_applied
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
+  - review_max_retries
   - review_path
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
+  - verdict
   - work_dir
   - worktree_path
   required: []
   produced:
   - plan_path
+- step: commit_guard
+  available:
+  - arch_lenses
+  - audit
+  - auto_merge
+  - base_branch
+  - branch_name
+  - claimed
+  - depth
+  - fixes_applied
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - max_parallel
+  - merge_target
+  - open_pr
+  - phases_implemented
+  - plan_path
+  - proposed_branch
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_max_retries
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
 - step: merge
   available:
+  - arch_lenses
   - audit
   - auto_merge
   - base_branch
   - branch_name
   - claimed
+  - depth
+  - fixes_applied
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
+  - review_max_retries
   - review_path
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
+  - verdict
   - work_dir
   - worktree_path
   required: []
   produced:
   - cleanup_succeeded
   - worktree_path
-- step: push
+- step: next_or_done
   available:
+  - arch_lenses
   - audit
   - auto_merge
   - base_branch
   - branch_name
   - claimed
   - cleanup_succeeded
+  - depth
+  - fixes_applied
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
+  - review_max_retries
   - review_path
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: push
+  available:
+  - arch_lenses
+  - audit
+  - auto_merge
+  - base_branch
+  - branch_name
+  - claimed
+  - cleanup_succeeded
+  - depth
+  - fixes_applied
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - max_parallel
+  - merge_target
+  - open_pr
+  - phases_implemented
+  - plan_path
+  - proposed_branch
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_max_retries
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: prepare_pr
+  available:
+  - arch_lenses
+  - audit
+  - auto_merge
+  - base_branch
+  - branch_name
+  - claimed
+  - cleanup_succeeded
+  - depth
+  - fixes_applied
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - max_parallel
+  - merge_target
+  - open_pr
+  - phases_implemented
+  - plan_path
+  - proposed_branch
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_max_retries
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required:
+  - plan_paths
+  produced:
+  - prep_path
+  - selected_lenses
+  - lens_context_paths
+- step: run_arch_lenses
+  available:
+  - arch_lenses
+  - audit
+  - auto_merge
+  - base_branch
+  - branch_name
+  - claimed
+  - cleanup_succeeded
+  - depth
+  - fixes_applied
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - lens_context_paths
+  - max_parallel
+  - merge_target
+  - open_pr
+  - phases_implemented
+  - plan_path
+  - prep_path
+  - proposed_branch
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_max_retries
+  - review_path
+  - run_mode
+  - run_name
+  - selected_lenses
+  - source_dir
+  - task
+  - upfront_claimed
+  - verdict
   - work_dir
   - worktree_path
   required: []
   produced: []
 - step: compose_pr
   available:
+  - arch_lenses
   - audit
   - auto_merge
   - base_branch
   - branch_name
   - claimed
   - cleanup_succeeded
+  - depth
+  - fixes_applied
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - lens_context_paths
+  - max_parallel
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
+  - prep_path
   - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
+  - review_max_retries
   - review_path
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
+  - verdict
   - work_dir
   - worktree_path
-  required:
-  - plan_paths
-  - feature_branch
-  produced: []
+  required: []
+  produced:
+  - pr_url
+  positional_args: 1
 - step: extract_pr_number
   available:
+  - arch_lenses
   - audit
   - auto_merge
   - base_branch
   - branch_name
   - claimed
   - cleanup_succeeded
+  - depth
+  - fixes_applied
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - lens_context_paths
+  - max_parallel
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
+  - pr_url
+  - prep_path
   - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
+  - review_max_retries
   - review_path
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
+  - verdict
   - work_dir
   - worktree_path
   required: []
   produced:
   - pr_number
-- step: review_pr
+- step: annotate_pr_diff
   available:
+  - arch_lenses
   - audit
   - auto_merge
   - base_branch
   - branch_name
   - claimed
   - cleanup_succeeded
+  - depth
+  - fixes_applied
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - lens_context_paths
+  - max_parallel
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - pr_number
+  - pr_url
+  - prep_path
   - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
+  - review_max_retries
   - review_path
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced:
+  - annotated_diff_path
+  - diff_metrics_path
+  - hunk_ranges_path
+  - review_mode
+- step: review_pr
+  available:
+  - annotated_diff_path
+  - arch_lenses
+  - audit
+  - auto_merge
+  - base_branch
+  - branch_name
+  - claimed
+  - cleanup_succeeded
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - lens_context_paths
+  - max_parallel
+  - merge_target
+  - open_pr
+  - phases_implemented
+  - plan_path
+  - pr_number
+  - pr_url
+  - prep_path
+  - proposed_branch
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_max_retries
+  - review_path
+  - run_mode
+  - run_name
+  - selected_lenses
+  - source_dir
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced:
+  - review_verdict
+  positional_args: 2
+- step: resolve_review
+  available:
+  - annotated_diff_path
+  - arch_lenses
+  - audit
+  - auto_merge
+  - base_branch
+  - branch_name
+  - claimed
+  - cleanup_succeeded
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - lens_context_paths
+  - max_parallel
+  - merge_target
+  - open_pr
+  - phases_implemented
+  - plan_path
+  - pr_number
+  - pr_url
+  - prep_path
+  - proposed_branch
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_max_retries
+  - review_path
+  - review_verdict
+  - run_mode
+  - run_name
+  - selected_lenses
+  - source_dir
+  - task
+  - upfront_claimed
+  - verdict
   - work_dir
   - worktree_path
   required:
   - feature_branch
   produced:
   - verdict
-- step: resolve_review
+- step: re_push_review
   available:
+  - annotated_diff_path
+  - arch_lenses
   - audit
   - auto_merge
   - base_branch
   - branch_name
   - claimed
   - cleanup_succeeded
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - lens_context_paths
+  - max_parallel
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - pr_number
+  - pr_url
+  - prep_path
   - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
+  - review_max_retries
   - review_path
+  - review_verdict
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
   - work_dir
   - worktree_path
-  required:
-  - feature_branch
+  required: []
   produced: []
-- step: re_push_review
+- step: check_review_loop
   available:
+  - annotated_diff_path
+  - arch_lenses
   - audit
   - auto_merge
   - base_branch
   - branch_name
   - claimed
   - cleanup_succeeded
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - lens_context_paths
+  - max_parallel
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - pr_number
+  - pr_url
+  - prep_path
   - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
+  - review_max_retries
   - review_path
+  - review_verdict
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced:
+  - review_loop_count
+- step: check_repo_ci_event
+  available:
+  - annotated_diff_path
+  - arch_lenses
+  - audit
+  - auto_merge
+  - base_branch
+  - branch_name
+  - claimed
+  - cleanup_succeeded
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - lens_context_paths
+  - max_parallel
+  - merge_target
+  - open_pr
+  - phases_implemented
+  - plan_path
+  - pr_number
+  - pr_url
+  - prep_path
+  - proposed_branch
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_loop_count
+  - review_max_retries
+  - review_path
+  - review_verdict
+  - run_mode
+  - run_name
+  - selected_lenses
+  - source_dir
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced:
+  - ci_event
+- step: check_pr_state
+  available:
+  - annotated_diff_path
+  - arch_lenses
+  - audit
+  - auto_merge
+  - base_branch
+  - branch_name
+  - ci_event
+  - claimed
+  - cleanup_succeeded
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - lens_context_paths
+  - max_parallel
+  - merge_target
+  - open_pr
+  - phases_implemented
+  - plan_path
+  - pr_number
+  - pr_url
+  - prep_path
+  - proposed_branch
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_loop_count
+  - review_max_retries
+  - review_path
+  - review_verdict
+  - run_mode
+  - run_name
+  - selected_lenses
+  - source_dir
   - task
   - upfront_claimed
   - verdict
@@ -975,31 +1608,45 @@ dataflow:
   produced: []
 - step: ci_watch
   available:
+  - annotated_diff_path
+  - arch_lenses
   - audit
   - auto_merge
   - base_branch
   - branch_name
+  - ci_event
   - claimed
   - cleanup_succeeded
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - lens_context_paths
+  - max_parallel
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - pr_number
+  - pr_url
+  - prep_path
   - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
+  - review_loop_count
+  - review_max_retries
   - review_path
+  - review_verdict
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -1009,35 +1656,49 @@ dataflow:
   produced:
   - ci_conclusion
   - ci_failed_jobs
-- step: check_merge_queue
+- step: handle_no_ci_runs
   available:
+  - annotated_diff_path
+  - arch_lenses
   - audit
   - auto_merge
   - base_branch
   - branch_name
   - ci_conclusion
+  - ci_event
   - ci_failed_jobs
   - claimed
   - cleanup_succeeded
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - lens_context_paths
+  - max_parallel
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - pr_number
+  - pr_url
+  - prep_path
   - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
+  - review_loop_count
+  - review_max_retries
   - review_path
+  - review_verdict
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -1045,37 +1706,50 @@ dataflow:
   - worktree_path
   required: []
   produced:
-  - queue_available
-- step: check_merge_group_trigger
+  - ci_event
+- step: check_ci_loop
   available:
+  - annotated_diff_path
+  - arch_lenses
   - audit
   - auto_merge
   - base_branch
   - branch_name
   - ci_conclusion
+  - ci_event
   - ci_failed_jobs
   - claimed
   - cleanup_succeeded
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - lens_context_paths
+  - max_parallel
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - pr_number
+  - pr_url
+  - prep_path
   - proposed_branch
-  - queue_available
   - remediation_path
   - remote_url
   - review_approach
+  - review_loop_count
+  - review_max_retries
   - review_path
+  - review_verdict
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -1083,38 +1757,51 @@ dataflow:
   - worktree_path
   required: []
   produced:
-  - merge_group_trigger
-- step: check_auto_merge
+  - ci_loop_count
+- step: check_active_trigger_loop
   available:
+  - annotated_diff_path
+  - arch_lenses
   - audit
   - auto_merge
   - base_branch
   - branch_name
   - ci_conclusion
+  - ci_event
   - ci_failed_jobs
+  - ci_loop_count
   - claimed
   - cleanup_succeeded
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
-  - merge_group_trigger
+  - lens_context_paths
+  - max_parallel
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - pr_number
+  - pr_url
+  - prep_path
   - proposed_branch
-  - queue_available
   - remediation_path
   - remote_url
   - review_approach
+  - review_loop_count
+  - review_max_retries
   - review_path
+  - review_verdict
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -1122,39 +1809,52 @@ dataflow:
   - worktree_path
   required: []
   produced:
-  - auto_merge_available
-- step: route_queue_mode
+  - active_trigger_count
+- step: trigger_ci_actively
   available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
   - audit
   - auto_merge
-  - auto_merge_available
   - base_branch
   - branch_name
   - ci_conclusion
+  - ci_event
   - ci_failed_jobs
+  - ci_loop_count
   - claimed
   - cleanup_succeeded
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
-  - merge_group_trigger
+  - lens_context_paths
+  - max_parallel
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - pr_number
+  - pr_url
+  - prep_path
   - proposed_branch
-  - queue_available
   - remediation_path
   - remote_url
   - review_approach
+  - review_loop_count
+  - review_max_retries
   - review_path
+  - review_verdict
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -1162,38 +1862,428 @@ dataflow:
   - worktree_path
   required: []
   produced: []
-- step: enable_auto_merge
+- step: check_ci_already_passed
   available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
   - audit
   - auto_merge
-  - auto_merge_available
   - base_branch
   - branch_name
   - ci_conclusion
+  - ci_event
   - ci_failed_jobs
+  - ci_loop_count
   - claimed
   - cleanup_succeeded
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - lens_context_paths
+  - max_parallel
+  - merge_target
+  - open_pr
+  - phases_implemented
+  - plan_path
+  - pr_number
+  - pr_url
+  - prep_path
+  - proposed_branch
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_loop_count
+  - review_max_retries
+  - review_path
+  - review_verdict
+  - run_mode
+  - run_name
+  - selected_lenses
+  - source_dir
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: mark_issue_failed_no_ci
+  available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
+  - audit
+  - auto_merge
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_loop_count
+  - claimed
+  - cleanup_succeeded
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - lens_context_paths
+  - max_parallel
+  - merge_target
+  - open_pr
+  - phases_implemented
+  - plan_path
+  - pr_number
+  - pr_url
+  - prep_path
+  - proposed_branch
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_loop_count
+  - review_max_retries
+  - review_path
+  - review_verdict
+  - run_mode
+  - run_name
+  - selected_lenses
+  - source_dir
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: register_clone_no_ci
+  available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
+  - audit
+  - auto_merge
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_loop_count
+  - claimed
+  - cleanup_succeeded
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - lens_context_paths
+  - max_parallel
+  - merge_target
+  - open_pr
+  - phases_implemented
+  - plan_path
+  - pr_number
+  - pr_url
+  - prep_path
+  - proposed_branch
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_loop_count
+  - review_max_retries
+  - review_path
+  - review_verdict
+  - run_mode
+  - run_name
+  - selected_lenses
+  - source_dir
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: escalate_stop_no_ci
+  available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
+  - audit
+  - auto_merge
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_loop_count
+  - claimed
+  - cleanup_succeeded
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - lens_context_paths
+  - max_parallel
+  - merge_target
+  - open_pr
+  - phases_implemented
+  - plan_path
+  - pr_number
+  - pr_url
+  - prep_path
+  - proposed_branch
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_loop_count
+  - review_max_retries
+  - review_path
+  - review_verdict
+  - run_mode
+  - run_name
+  - selected_lenses
+  - source_dir
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: check_repo_merge_state
+  available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
+  - audit
+  - auto_merge
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_loop_count
+  - claimed
+  - cleanup_succeeded
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - lens_context_paths
+  - max_parallel
+  - merge_target
+  - open_pr
+  - phases_implemented
+  - plan_path
+  - pr_number
+  - pr_url
+  - prep_path
+  - proposed_branch
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_loop_count
+  - review_max_retries
+  - review_path
+  - review_verdict
+  - run_mode
+  - run_name
+  - selected_lenses
+  - source_dir
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced:
+  - queue_available
+  - merge_group_trigger
+  - auto_merge_available
+  - ci_event
+- step: route_queue_mode
+  available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_loop_count
+  - claimed
+  - cleanup_succeeded
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - lens_context_paths
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - pr_number
+  - pr_url
+  - prep_path
   - proposed_branch
   - queue_available
   - remediation_path
   - remote_url
   - review_approach
+  - review_loop_count
+  - review_max_retries
   - review_path
+  - review_verdict
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: enqueue_to_queue
+  available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_loop_count
+  - claimed
+  - cleanup_succeeded
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - lens_context_paths
+  - max_parallel
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - phases_implemented
+  - plan_path
+  - pr_number
+  - pr_url
+  - prep_path
+  - proposed_branch
+  - queue_available
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_loop_count
+  - review_max_retries
+  - review_path
+  - review_verdict
+  - run_mode
+  - run_name
+  - selected_lenses
+  - source_dir
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: verify_queue_enrollment
+  available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_loop_count
+  - claimed
+  - cleanup_succeeded
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - lens_context_paths
+  - max_parallel
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - phases_implemented
+  - plan_path
+  - pr_number
+  - pr_url
+  - prep_path
+  - proposed_branch
+  - queue_available
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_loop_count
+  - review_max_retries
+  - review_path
+  - review_verdict
+  - run_mode
+  - run_name
+  - selected_lenses
+  - source_dir
   - task
   - upfront_claimed
   - verdict
@@ -1203,36 +2293,52 @@ dataflow:
   produced: []
 - step: wait_for_queue
   available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
   - audit
   - auto_merge
   - auto_merge_available
   - base_branch
   - branch_name
   - ci_conclusion
+  - ci_event
   - ci_failed_jobs
+  - ci_loop_count
   - claimed
   - cleanup_succeeded
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - lens_context_paths
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - pr_number
+  - pr_url
+  - prep_path
   - proposed_branch
   - queue_available
   - remediation_path
   - remote_url
   - review_approach
+  - review_loop_count
+  - review_max_retries
   - review_path
+  - review_verdict
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -1243,37 +2349,224 @@ dataflow:
   - queue_pr_state
 - step: reenroll_stalled_pr
   available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
   - audit
   - auto_merge
   - auto_merge_available
   - base_branch
   - branch_name
   - ci_conclusion
+  - ci_event
   - ci_failed_jobs
+  - ci_loop_count
   - claimed
   - cleanup_succeeded
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - lens_context_paths
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - pr_number
+  - pr_url
+  - prep_path
   - proposed_branch
   - queue_available
   - queue_pr_state
   - remediation_path
   - remote_url
   - review_approach
+  - review_loop_count
+  - review_max_retries
   - review_path
+  - review_verdict
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: check_stall_loop
+  available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_loop_count
+  - claimed
+  - cleanup_succeeded
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - lens_context_paths
+  - max_parallel
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - phases_implemented
+  - plan_path
+  - pr_number
+  - pr_url
+  - prep_path
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_loop_count
+  - review_max_retries
+  - review_path
+  - review_verdict
+  - run_mode
+  - run_name
+  - selected_lenses
+  - source_dir
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced:
+  - stall_loop_count
+- step: check_eject_limit
+  available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_loop_count
+  - claimed
+  - cleanup_succeeded
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - lens_context_paths
+  - max_parallel
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - phases_implemented
+  - plan_path
+  - pr_number
+  - pr_url
+  - prep_path
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_loop_count
+  - review_max_retries
+  - review_path
+  - review_verdict
+  - run_mode
+  - run_name
+  - selected_lenses
+  - source_dir
+  - stall_loop_count
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: check_dropped_healthy_loop
+  available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_loop_count
+  - claimed
+  - cleanup_succeeded
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - lens_context_paths
+  - max_parallel
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - phases_implemented
+  - plan_path
+  - pr_number
+  - pr_url
+  - prep_path
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_loop_count
+  - review_max_retries
+  - review_path
+  - review_verdict
+  - run_mode
+  - run_name
+  - selected_lenses
+  - source_dir
+  - stall_loop_count
   - task
   - upfront_claimed
   - verdict
@@ -1283,37 +2576,111 @@ dataflow:
   produced: []
 - step: queue_ejected_fix
   available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
   - audit
   - auto_merge
   - auto_merge_available
   - base_branch
   - branch_name
   - ci_conclusion
+  - ci_event
   - ci_failed_jobs
+  - ci_loop_count
   - claimed
   - cleanup_succeeded
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - lens_context_paths
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - pr_number
+  - pr_url
+  - prep_path
   - proposed_branch
   - queue_available
   - queue_pr_state
   - remediation_path
   - remote_url
   - review_approach
+  - review_loop_count
+  - review_max_retries
   - review_path
+  - review_verdict
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
+  - stall_loop_count
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: resolve_queue_merge_conflicts
+  available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_loop_count
+  - claimed
+  - cleanup_succeeded
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - lens_context_paths
+  - max_parallel
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - phases_implemented
+  - plan_path
+  - pr_number
+  - pr_url
+  - prep_path
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_loop_count
+  - review_max_retries
+  - review_path
+  - review_verdict
+  - run_mode
+  - run_name
+  - selected_lenses
+  - source_dir
+  - stall_loop_count
   - task
   - upfront_claimed
   - verdict
@@ -1325,38 +2692,55 @@ dataflow:
   - conflict_escalation_required
 - step: re_push_queue_fix
   available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
   - audit
   - auto_merge
   - auto_merge_available
   - base_branch
   - branch_name
   - ci_conclusion
+  - ci_event
   - ci_failed_jobs
+  - ci_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - lens_context_paths
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - pr_number
+  - pr_url
+  - prep_path
   - proposed_branch
   - queue_available
   - queue_pr_state
   - remediation_path
   - remote_url
   - review_approach
+  - review_loop_count
+  - review_max_retries
   - review_path
+  - review_verdict
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
+  - stall_loop_count
   - task
   - upfront_claimed
   - verdict
@@ -1364,40 +2748,236 @@ dataflow:
   - worktree_path
   required: []
   produced: []
-- step: reenter_merge_queue
+- step: ci_watch_post_queue_fix
   available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
   - audit
   - auto_merge
   - auto_merge_available
   - base_branch
   - branch_name
   - ci_conclusion
+  - ci_event
   - ci_failed_jobs
+  - ci_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - lens_context_paths
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - pr_number
+  - pr_url
+  - prep_path
   - proposed_branch
   - queue_available
   - queue_pr_state
   - remediation_path
   - remote_url
   - review_approach
+  - review_loop_count
+  - review_max_retries
   - review_path
+  - review_verdict
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
+  - stall_loop_count
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced:
+  - ci_conclusion
+  - ci_failed_jobs
+- step: check_ci_post_queue_loop
+  available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_loop_count
+  - claimed
+  - cleanup_succeeded
+  - conflict_escalation_required
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - lens_context_paths
+  - max_parallel
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - phases_implemented
+  - plan_path
+  - pr_number
+  - pr_url
+  - prep_path
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_loop_count
+  - review_max_retries
+  - review_path
+  - review_verdict
+  - run_mode
+  - run_name
+  - selected_lenses
+  - source_dir
+  - stall_loop_count
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced:
+  - ci_post_queue_loop_count
+- step: reenter_merge_queue
+  available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_loop_count
+  - ci_post_queue_loop_count
+  - claimed
+  - cleanup_succeeded
+  - conflict_escalation_required
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - lens_context_paths
+  - max_parallel
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - phases_implemented
+  - plan_path
+  - pr_number
+  - pr_url
+  - prep_path
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_loop_count
+  - review_max_retries
+  - review_path
+  - review_verdict
+  - run_mode
+  - run_name
+  - selected_lenses
+  - source_dir
+  - stall_loop_count
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: reenter_merge_queue_cheap
+  available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_loop_count
+  - ci_post_queue_loop_count
+  - claimed
+  - cleanup_succeeded
+  - conflict_escalation_required
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - lens_context_paths
+  - max_parallel
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - phases_implemented
+  - plan_path
+  - pr_number
+  - pr_url
+  - prep_path
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_loop_count
+  - review_max_retries
+  - review_path
+  - review_verdict
+  - run_mode
+  - run_name
+  - selected_lenses
+  - source_dir
+  - stall_loop_count
   - task
   - upfront_claimed
   - verdict
@@ -1407,38 +2987,56 @@ dataflow:
   produced: []
 - step: direct_merge
   available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
   - audit
   - auto_merge
   - auto_merge_available
   - base_branch
   - branch_name
   - ci_conclusion
+  - ci_event
   - ci_failed_jobs
+  - ci_loop_count
+  - ci_post_queue_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - lens_context_paths
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - pr_number
+  - pr_url
+  - prep_path
   - proposed_branch
   - queue_available
   - queue_pr_state
   - remediation_path
   - remote_url
   - review_approach
+  - review_loop_count
+  - review_max_retries
   - review_path
+  - review_verdict
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
+  - stall_loop_count
   - task
   - upfront_claimed
   - verdict
@@ -1448,38 +3046,56 @@ dataflow:
   produced: []
 - step: wait_for_direct_merge
   available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
   - audit
   - auto_merge
   - auto_merge_available
   - base_branch
   - branch_name
   - ci_conclusion
+  - ci_event
   - ci_failed_jobs
+  - ci_loop_count
+  - ci_post_queue_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - lens_context_paths
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - pr_number
+  - pr_url
+  - prep_path
   - proposed_branch
   - queue_available
   - queue_pr_state
   - remediation_path
   - remote_url
   - review_approach
+  - review_loop_count
+  - review_max_retries
   - review_path
+  - review_verdict
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
+  - stall_loop_count
   - task
   - upfront_claimed
   - verdict
@@ -1489,38 +3105,115 @@ dataflow:
   produced: []
 - step: direct_merge_conflict_fix
   available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
   - audit
   - auto_merge
   - auto_merge_available
   - base_branch
   - branch_name
   - ci_conclusion
+  - ci_event
   - ci_failed_jobs
+  - ci_loop_count
+  - ci_post_queue_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - lens_context_paths
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - pr_number
+  - pr_url
+  - prep_path
   - proposed_branch
   - queue_available
   - queue_pr_state
   - remediation_path
   - remote_url
   - review_approach
+  - review_loop_count
+  - review_max_retries
   - review_path
+  - review_verdict
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
+  - stall_loop_count
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: resolve_direct_merge_conflicts
+  available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_loop_count
+  - ci_post_queue_loop_count
+  - claimed
+  - cleanup_succeeded
+  - conflict_escalation_required
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - lens_context_paths
+  - max_parallel
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - phases_implemented
+  - plan_path
+  - pr_number
+  - pr_url
+  - prep_path
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_loop_count
+  - review_max_retries
+  - review_path
+  - review_verdict
+  - run_mode
+  - run_name
+  - selected_lenses
+  - source_dir
+  - stall_loop_count
   - task
   - upfront_claimed
   - verdict
@@ -1532,38 +3225,56 @@ dataflow:
   - conflict_escalation_required
 - step: re_push_direct_fix
   available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
   - audit
   - auto_merge
   - auto_merge_available
   - base_branch
   - branch_name
   - ci_conclusion
+  - ci_event
   - ci_failed_jobs
+  - ci_loop_count
+  - ci_post_queue_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - lens_context_paths
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - pr_number
+  - pr_url
+  - prep_path
   - proposed_branch
   - queue_available
   - queue_pr_state
   - remediation_path
   - remote_url
   - review_approach
+  - review_loop_count
+  - review_max_retries
   - review_path
+  - review_verdict
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
+  - stall_loop_count
   - task
   - upfront_claimed
   - verdict
@@ -1573,38 +3284,56 @@ dataflow:
   produced: []
 - step: redirect_merge
   available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
   - audit
   - auto_merge
   - auto_merge_available
   - base_branch
   - branch_name
   - ci_conclusion
+  - ci_event
   - ci_failed_jobs
+  - ci_loop_count
+  - ci_post_queue_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - lens_context_paths
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - pr_number
+  - pr_url
+  - prep_path
   - proposed_branch
   - queue_available
   - queue_pr_state
   - remediation_path
   - remote_url
   - review_approach
+  - review_loop_count
+  - review_max_retries
   - review_path
+  - review_verdict
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
+  - stall_loop_count
   - task
   - upfront_claimed
   - verdict
@@ -1614,38 +3343,56 @@ dataflow:
   produced: []
 - step: immediate_merge
   available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
   - audit
   - auto_merge
   - auto_merge_available
   - base_branch
   - branch_name
   - ci_conclusion
+  - ci_event
   - ci_failed_jobs
+  - ci_loop_count
+  - ci_post_queue_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - lens_context_paths
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - pr_number
+  - pr_url
+  - prep_path
   - proposed_branch
   - queue_available
   - queue_pr_state
   - remediation_path
   - remote_url
   - review_approach
+  - review_loop_count
+  - review_max_retries
   - review_path
+  - review_verdict
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
+  - stall_loop_count
   - task
   - upfront_claimed
   - verdict
@@ -1655,38 +3402,56 @@ dataflow:
   produced: []
 - step: wait_for_immediate_merge
   available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
   - audit
   - auto_merge
   - auto_merge_available
   - base_branch
   - branch_name
   - ci_conclusion
+  - ci_event
   - ci_failed_jobs
+  - ci_loop_count
+  - ci_post_queue_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - lens_context_paths
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - pr_number
+  - pr_url
+  - prep_path
   - proposed_branch
   - queue_available
   - queue_pr_state
   - remediation_path
   - remote_url
   - review_approach
+  - review_loop_count
+  - review_max_retries
   - review_path
+  - review_verdict
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
+  - stall_loop_count
   - task
   - upfront_claimed
   - verdict
@@ -1696,38 +3461,115 @@ dataflow:
   produced: []
 - step: immediate_merge_conflict_fix
   available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
   - audit
   - auto_merge
   - auto_merge_available
   - base_branch
   - branch_name
   - ci_conclusion
+  - ci_event
   - ci_failed_jobs
+  - ci_loop_count
+  - ci_post_queue_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - lens_context_paths
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - pr_number
+  - pr_url
+  - prep_path
   - proposed_branch
   - queue_available
   - queue_pr_state
   - remediation_path
   - remote_url
   - review_approach
+  - review_loop_count
+  - review_max_retries
   - review_path
+  - review_verdict
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
+  - stall_loop_count
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: resolve_immediate_merge_conflicts
+  available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_loop_count
+  - ci_post_queue_loop_count
+  - claimed
+  - cleanup_succeeded
+  - conflict_escalation_required
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - lens_context_paths
+  - max_parallel
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - phases_implemented
+  - plan_path
+  - pr_number
+  - pr_url
+  - prep_path
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_loop_count
+  - review_max_retries
+  - review_path
+  - review_verdict
+  - run_mode
+  - run_name
+  - selected_lenses
+  - source_dir
+  - stall_loop_count
   - task
   - upfront_claimed
   - verdict
@@ -1739,38 +3581,56 @@ dataflow:
   - conflict_escalation_required
 - step: re_push_immediate_fix
   available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
   - audit
   - auto_merge
   - auto_merge_available
   - base_branch
   - branch_name
   - ci_conclusion
+  - ci_event
   - ci_failed_jobs
+  - ci_loop_count
+  - ci_post_queue_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - lens_context_paths
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - pr_number
+  - pr_url
+  - prep_path
   - proposed_branch
   - queue_available
   - queue_pr_state
   - remediation_path
   - remote_url
   - review_approach
+  - review_loop_count
+  - review_max_retries
   - review_path
+  - review_verdict
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
+  - stall_loop_count
   - task
   - upfront_claimed
   - verdict
@@ -1780,38 +3640,56 @@ dataflow:
   produced: []
 - step: remerge_immediate
   available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
   - audit
   - auto_merge
   - auto_merge_available
   - base_branch
   - branch_name
   - ci_conclusion
+  - ci_event
   - ci_failed_jobs
+  - ci_loop_count
+  - ci_post_queue_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - lens_context_paths
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - pr_number
+  - pr_url
+  - prep_path
   - proposed_branch
   - queue_available
   - queue_pr_state
   - remediation_path
   - remote_url
   - review_approach
+  - review_loop_count
+  - review_max_retries
   - review_path
+  - review_verdict
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
+  - stall_loop_count
   - task
   - upfront_claimed
   - verdict
@@ -1821,38 +3699,56 @@ dataflow:
   produced: []
 - step: diagnose_ci
   available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
   - audit
   - auto_merge
   - auto_merge_available
   - base_branch
   - branch_name
   - ci_conclusion
+  - ci_event
   - ci_failed_jobs
+  - ci_loop_count
+  - ci_post_queue_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - depth
+  - fixes_applied
+  - hunk_ranges_path
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - lens_context_paths
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - pr_number
+  - pr_url
+  - prep_path
   - proposed_branch
   - queue_available
   - queue_pr_state
   - remediation_path
   - remote_url
   - review_approach
+  - review_loop_count
+  - review_max_retries
   - review_path
+  - review_verdict
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
+  - stall_loop_count
   - task
   - upfront_claimed
   - verdict
@@ -1861,41 +3757,60 @@ dataflow:
   required: []
   produced:
   - diagnosis_path
+  positional_args: 3
 - step: resolve_ci
   available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
   - audit
   - auto_merge
   - auto_merge_available
   - base_branch
   - branch_name
   - ci_conclusion
+  - ci_event
   - ci_failed_jobs
+  - ci_loop_count
+  - ci_post_queue_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - depth
   - diagnosis_path
+  - fixes_applied
+  - hunk_ranges_path
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - lens_context_paths
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - pr_number
+  - pr_url
+  - prep_path
   - proposed_branch
   - queue_available
   - queue_pr_state
   - remediation_path
   - remote_url
   - review_approach
+  - review_loop_count
+  - review_max_retries
   - review_path
+  - review_verdict
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
+  - stall_loop_count
   - task
   - upfront_claimed
   - verdict
@@ -1903,42 +3818,121 @@ dataflow:
   - worktree_path
   required:
   - worktree_path
-  produced: []
-- step: re_push
+  produced:
+  - verdict
+- step: pre_resolve_rebase
   available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
   - audit
   - auto_merge
   - auto_merge_available
   - base_branch
   - branch_name
   - ci_conclusion
+  - ci_event
   - ci_failed_jobs
+  - ci_loop_count
+  - ci_post_queue_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - depth
   - diagnosis_path
+  - fixes_applied
+  - hunk_ranges_path
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - lens_context_paths
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - pr_number
+  - pr_url
+  - prep_path
   - proposed_branch
   - queue_available
   - queue_pr_state
   - remediation_path
   - remote_url
   - review_approach
+  - review_loop_count
+  - review_max_retries
   - review_path
+  - review_verdict
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
+  - stall_loop_count
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: re_push
+  available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_loop_count
+  - ci_post_queue_loop_count
+  - claimed
+  - cleanup_succeeded
+  - conflict_escalation_required
+  - depth
+  - diagnosis_path
+  - fixes_applied
+  - hunk_ranges_path
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - lens_context_paths
+  - max_parallel
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - phases_implemented
+  - plan_path
+  - pr_number
+  - pr_url
+  - prep_path
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_loop_count
+  - review_max_retries
+  - review_path
+  - review_verdict
+  - run_mode
+  - run_name
+  - selected_lenses
+  - source_dir
+  - stall_loop_count
   - task
   - upfront_claimed
   - verdict
@@ -1948,39 +3942,57 @@ dataflow:
   produced: []
 - step: detect_ci_conflict
   available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
   - audit
   - auto_merge
   - auto_merge_available
   - base_branch
   - branch_name
   - ci_conclusion
+  - ci_event
   - ci_failed_jobs
+  - ci_loop_count
+  - ci_post_queue_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - depth
   - diagnosis_path
+  - fixes_applied
+  - hunk_ranges_path
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - lens_context_paths
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - pr_number
+  - pr_url
+  - prep_path
   - proposed_branch
   - queue_available
   - queue_pr_state
   - remediation_path
   - remote_url
   - review_approach
+  - review_loop_count
+  - review_max_retries
   - review_path
+  - review_verdict
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
+  - stall_loop_count
   - task
   - upfront_claimed
   - verdict
@@ -1990,39 +4002,57 @@ dataflow:
   produced: []
 - step: ci_conflict_fix
   available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
   - audit
   - auto_merge
   - auto_merge_available
   - base_branch
   - branch_name
   - ci_conclusion
+  - ci_event
   - ci_failed_jobs
+  - ci_loop_count
+  - ci_post_queue_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - depth
   - diagnosis_path
+  - fixes_applied
+  - hunk_ranges_path
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - lens_context_paths
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - pr_number
+  - pr_url
+  - prep_path
   - proposed_branch
   - queue_available
   - queue_pr_state
   - remediation_path
   - remote_url
   - review_approach
+  - review_loop_count
+  - review_max_retries
   - review_path
+  - review_verdict
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
+  - stall_loop_count
   - task
   - upfront_claimed
   - verdict
@@ -2032,41 +4062,59 @@ dataflow:
   - worktree_path
   produced:
   - conflict_escalation_required
-- step: release_issue_timeout
+- step: register_clone_unconfirmed
   available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
   - audit
   - auto_merge
   - auto_merge_available
   - base_branch
   - branch_name
   - ci_conclusion
+  - ci_event
   - ci_failed_jobs
+  - ci_loop_count
+  - ci_post_queue_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - depth
   - diagnosis_path
+  - fixes_applied
+  - hunk_ranges_path
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - lens_context_paths
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - pr_number
+  - pr_url
+  - prep_path
   - proposed_branch
   - queue_available
   - queue_pr_state
   - remediation_path
   - remote_url
   - review_approach
+  - review_loop_count
+  - review_max_retries
   - review_path
+  - review_verdict
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
+  - stall_loop_count
   - task
   - upfront_claimed
   - verdict
@@ -2076,39 +4124,117 @@ dataflow:
   produced: []
 - step: release_issue_success
   available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
   - audit
   - auto_merge
   - auto_merge_available
   - base_branch
   - branch_name
   - ci_conclusion
+  - ci_event
   - ci_failed_jobs
+  - ci_loop_count
+  - ci_post_queue_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - depth
   - diagnosis_path
+  - fixes_applied
+  - hunk_ranges_path
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - lens_context_paths
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - pr_number
+  - pr_url
+  - prep_path
   - proposed_branch
   - queue_available
   - queue_pr_state
   - remediation_path
   - remote_url
   - review_approach
+  - review_loop_count
+  - review_max_retries
   - review_path
+  - review_verdict
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
+  - stall_loop_count
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: patch_token_summary
+  available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_loop_count
+  - ci_post_queue_loop_count
+  - claimed
+  - cleanup_succeeded
+  - conflict_escalation_required
+  - depth
+  - diagnosis_path
+  - fixes_applied
+  - hunk_ranges_path
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - lens_context_paths
+  - max_parallel
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - phases_implemented
+  - plan_path
+  - pr_number
+  - pr_url
+  - prep_path
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_loop_count
+  - review_max_retries
+  - review_path
+  - review_verdict
+  - run_mode
+  - run_name
+  - selected_lenses
+  - source_dir
+  - stall_loop_count
   - task
   - upfront_claimed
   - verdict
@@ -2118,39 +4244,57 @@ dataflow:
   produced: []
 - step: release_issue_failure
   available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
   - audit
   - auto_merge
   - auto_merge_available
   - base_branch
   - branch_name
   - ci_conclusion
+  - ci_event
   - ci_failed_jobs
+  - ci_loop_count
+  - ci_post_queue_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - depth
   - diagnosis_path
+  - fixes_applied
+  - hunk_ranges_path
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - lens_context_paths
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - pr_number
+  - pr_url
+  - prep_path
   - proposed_branch
   - queue_available
   - queue_pr_state
   - remediation_path
   - remote_url
   - review_approach
+  - review_loop_count
+  - review_max_retries
   - review_path
+  - review_verdict
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
+  - stall_loop_count
   - task
   - upfront_claimed
   - verdict
@@ -2160,39 +4304,57 @@ dataflow:
   produced: []
 - step: register_clone_success
   available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
   - audit
   - auto_merge
   - auto_merge_available
   - base_branch
   - branch_name
   - ci_conclusion
+  - ci_event
   - ci_failed_jobs
+  - ci_loop_count
+  - ci_post_queue_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - depth
   - diagnosis_path
+  - fixes_applied
+  - hunk_ranges_path
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - lens_context_paths
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - pr_number
+  - pr_url
+  - prep_path
   - proposed_branch
   - queue_available
   - queue_pr_state
   - remediation_path
   - remote_url
   - review_approach
+  - review_loop_count
+  - review_max_retries
   - review_path
+  - review_verdict
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
+  - stall_loop_count
   - task
   - upfront_claimed
   - verdict
@@ -2202,39 +4364,57 @@ dataflow:
   produced: []
 - step: register_clone_failure
   available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
   - audit
   - auto_merge
   - auto_merge_available
   - base_branch
   - branch_name
   - ci_conclusion
+  - ci_event
   - ci_failed_jobs
+  - ci_loop_count
+  - ci_post_queue_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - depth
   - diagnosis_path
+  - fixes_applied
+  - hunk_ranges_path
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - lens_context_paths
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - pr_number
+  - pr_url
+  - prep_path
   - proposed_branch
   - queue_available
   - queue_pr_state
   - remediation_path
   - remote_url
   - review_approach
+  - review_loop_count
+  - review_max_retries
   - review_path
+  - review_verdict
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
+  - stall_loop_count
   - task
   - upfront_claimed
   - verdict
@@ -2244,39 +4424,57 @@ dataflow:
   produced: []
 - step: done
   available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
   - audit
   - auto_merge
   - auto_merge_available
   - base_branch
   - branch_name
   - ci_conclusion
+  - ci_event
   - ci_failed_jobs
+  - ci_loop_count
+  - ci_post_queue_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - depth
   - diagnosis_path
+  - fixes_applied
+  - hunk_ranges_path
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - lens_context_paths
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - pr_number
+  - pr_url
+  - prep_path
   - proposed_branch
   - queue_available
   - queue_pr_state
   - remediation_path
   - remote_url
   - review_approach
+  - review_loop_count
+  - review_max_retries
   - review_path
+  - review_verdict
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
+  - stall_loop_count
   - task
   - upfront_claimed
   - verdict
@@ -2286,39 +4484,57 @@ dataflow:
   produced: []
 - step: escalate_stop
   available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
   - audit
   - auto_merge
   - auto_merge_available
   - base_branch
   - branch_name
   - ci_conclusion
+  - ci_event
   - ci_failed_jobs
+  - ci_loop_count
+  - ci_post_queue_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - depth
   - diagnosis_path
+  - fixes_applied
+  - hunk_ranges_path
   - implementation_ref
   - investigation_path
   - issue_number
   - issue_slug
   - issue_title
   - issue_url
+  - lens_context_paths
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
+  - phases_implemented
   - plan_path
   - pr_number
+  - pr_url
+  - prep_path
   - proposed_branch
   - queue_available
   - queue_pr_state
   - remediation_path
   - remote_url
   - review_approach
+  - review_loop_count
+  - review_max_retries
   - review_path
+  - review_verdict
   - run_mode
   - run_name
+  - selected_lenses
   - source_dir
-  - sprint_mode
+  - stall_loop_count
   - task
   - upfront_claimed
   - verdict

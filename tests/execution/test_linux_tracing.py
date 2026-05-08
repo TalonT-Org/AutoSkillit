@@ -10,10 +10,14 @@ from datetime import datetime
 import anyio
 import pytest
 
-pytestmark = pytest.mark.skipif(
-    sys.platform != "linux",
-    reason="Linux-only tracing tests",
-)
+pytestmark = [
+    pytest.mark.layer("execution"),
+    pytest.mark.medium,
+    pytest.mark.skipif(
+        sys.platform != "linux",
+        reason="Linux-only tracing tests",
+    ),
+]
 
 PROC_STATUS_FIXTURE = """\
 Name:\tclaude
@@ -84,11 +88,11 @@ async def test_tracing_handle_accumulates_snapshots(tmp_path):
 
     import anyio
 
-    from autoskillit.config import LinuxTracingConfig
     from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid
+    from tests._helpers import make_tracing_config
 
     proc = subprocess.Popen(["sleep", "2"])
-    cfg = LinuxTracingConfig(enabled=True, proc_interval=0.1, tmpfs_path=str(tmp_path))
+    cfg = make_tracing_config(enabled=True, proc_interval=0.1, tmpfs_path=str(tmp_path))
 
     async with anyio.create_task_group() as tg:
         handle = start_linux_tracing(target=trace_target_from_pid(proc.pid), config=cfg, tg=tg)
@@ -110,10 +114,10 @@ async def test_tracing_handle_stop_returns_snapshots(tmp_path):
 
     import anyio
 
-    from autoskillit.config import LinuxTracingConfig
     from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid
+    from tests._helpers import make_tracing_config
 
-    cfg = LinuxTracingConfig(enabled=True, proc_interval=0.1, tmpfs_path=str(tmp_path))
+    cfg = make_tracing_config(enabled=True, proc_interval=0.1, tmpfs_path=str(tmp_path))
 
     async with anyio.create_task_group() as tg:
         handle = start_linux_tracing(target=trace_target_from_pid(os.getpid()), config=cfg, tg=tg)
@@ -144,11 +148,11 @@ def test_noop_on_non_linux(monkeypatch, tmp_path):
     """start_linux_tracing is a no-op when LINUX_TRACING_AVAILABLE is False."""
     import os
 
-    from autoskillit.config import LinuxTracingConfig
     from autoskillit.execution import linux_tracing
+    from tests._helpers import make_tracing_config
 
     monkeypatch.setattr(linux_tracing, "LINUX_TRACING_AVAILABLE", False)
-    cfg = LinuxTracingConfig(enabled=True, proc_interval=1.0, tmpfs_path=str(tmp_path))
+    cfg = make_tracing_config(enabled=True, proc_interval=1.0, tmpfs_path=str(tmp_path))
     result = linux_tracing.start_linux_tracing(
         target=linux_tracing.trace_target_from_pid(os.getpid()), config=cfg, tg=None
     )
@@ -191,10 +195,10 @@ async def test_proc_monitor_stamps_unique_captured_at():
 @pytest.mark.anyio
 async def test_start_linux_tracing_creates_trace_file(tmp_path):
     """When tmpfs_path is configured, start_linux_tracing opens a trace file."""
-    from autoskillit.config import LinuxTracingConfig
     from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid
+    from tests._helpers import make_tracing_config
 
-    config = LinuxTracingConfig(enabled=True, proc_interval=0.01, tmpfs_path=str(tmp_path))
+    config = make_tracing_config(enabled=True, proc_interval=0.01, tmpfs_path=str(tmp_path))
     async with anyio.create_task_group() as tg:
         handle = start_linux_tracing(trace_target_from_pid(os.getpid()), config, tg)
         assert handle is not None
@@ -211,11 +215,11 @@ async def test_streaming_writes_each_snapshot_as_jsonl(tmp_path):
     """Each yielded snapshot appears as a JSONL line in the trace file."""
     import subprocess
 
-    from autoskillit.config import LinuxTracingConfig
     from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid
+    from tests._helpers import make_tracing_config
 
     proc = subprocess.Popen(["sleep", "2"])
-    config = LinuxTracingConfig(enabled=True, proc_interval=0.05, tmpfs_path=str(tmp_path))
+    config = make_tracing_config(enabled=True, proc_interval=0.05, tmpfs_path=str(tmp_path))
 
     async with anyio.create_task_group() as tg:
         handle = start_linux_tracing(trace_target_from_pid(proc.pid), config, tg)
@@ -271,10 +275,10 @@ def test_stop_idempotent(tmp_path):
 @pytest.mark.anyio
 async def test_streaming_graceful_when_tmpfs_missing(tmp_path):
     """If tmpfs_path does not exist, tracing still works in-memory."""
-    from autoskillit.config import LinuxTracingConfig
     from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid
+    from tests._helpers import make_tracing_config
 
-    config = LinuxTracingConfig(
+    config = make_tracing_config(
         enabled=True,
         proc_interval=0.01,
         tmpfs_path=str(tmp_path / "nonexistent"),
@@ -301,7 +305,6 @@ def test_proc_snapshot_has_captured_at_field():
     snap = read_proc_snapshot(os.getpid())
     assert snap is not None
     assert hasattr(snap, "captured_at")
-    assert snap.captured_at  # non-empty
     # Must be UTC-aware ISO 8601
     dt = datetime.fromisoformat(snap.captured_at)
     assert dt.tzinfo is not None
@@ -314,10 +317,10 @@ async def test_proc_monitor_snapshots_have_distinct_timestamps(tmp_path):
 
     import anyio
 
-    from autoskillit.config import LinuxTracingConfig
     from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid
+    from tests._helpers import make_tracing_config
 
-    config = LinuxTracingConfig(proc_interval=0.05, tmpfs_path=str(tmp_path))
+    config = make_tracing_config(proc_interval=0.05, tmpfs_path=str(tmp_path))
     async with anyio.create_task_group() as tg:
         handle = start_linux_tracing(trace_target_from_pid(os.getpid()), config, tg)
         await anyio.sleep(0.2)
@@ -359,15 +362,76 @@ async def test_proc_monitor_persists_psutil_process_for_cpu_percent():
         proc.wait()
 
 
+def test_parse_net_tcp_established_port_443():
+    """_parse_net_tcp counts ESTABLISHED connections to port 443."""
+    from autoskillit.execution.linux_tracing import _parse_net_tcp
+
+    fixture = (
+        "  sl  local_address rem_address   st tx_queue rx_queue tr...\n"
+        "   0: 0100007F:0035 0101A8C0:01BB 01 00000000:00000000 ...\n"  # ESTABLISHED to :443
+        "   1: 0100007F:0035 0101A8C0:0050 01 00000000:00000000 ...\n"  # :80 excluded
+    )
+    result = _parse_net_tcp(fixture)
+    assert result.get("ESTABLISHED") == 1
+
+
+def test_parse_net_tcp_empty_returns_empty_dict():
+    from autoskillit.execution.linux_tracing import _parse_net_tcp
+
+    assert _parse_net_tcp("") == {}
+    assert _parse_net_tcp("  sl  local_address rem_address   st\n") == {}
+
+
+def test_parse_proc_io_extracts_bytes():
+    from autoskillit.execution.linux_tracing import _parse_proc_io
+
+    fixture = "rchar: 1000\nwchar: 2000\nread_bytes: 4096\nwrite_bytes: 8192\n"
+    read_b, write_b = _parse_proc_io(fixture)
+    assert read_b == 4096
+    assert write_b == 8192
+
+
+def test_read_proc_snapshot_has_network_fields():
+    """read_proc_snapshot includes api_connection_established on Linux."""
+    from autoskillit.execution.linux_tracing import read_proc_snapshot
+
+    snap = read_proc_snapshot(os.getpid())
+    assert snap is not None
+    # Field exists and is either None (no port-443 connections from test process) or int >= 0
+    assert snap.api_connection_established is None or isinstance(
+        snap.api_connection_established, int
+    )
+
+
+def test_read_proc_snapshot_network_graceful_on_missing_proc_net(monkeypatch):
+    """Fields are None, no exception, when /proc/{pid}/net/tcp is unavailable."""
+    from pathlib import Path
+
+    from autoskillit.execution.linux_tracing import read_proc_snapshot
+
+    original_read_text = Path.read_text
+
+    def patched_read_text(self, *args, **kwargs):
+        if "net/tcp" in str(self):
+            raise FileNotFoundError("mocked")
+        return original_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", patched_read_text)
+    snap = read_proc_snapshot(os.getpid())
+    assert snap is not None
+    assert snap.api_connection_established is None
+    assert snap.api_connection_states is None
+
+
 @pytest.mark.anyio
 async def test_start_linux_tracing_writes_enrollment_sidecar(tmp_path):
     """start_linux_tracing must write autoskillit_enrollment_{pid}.json immediately."""
     import anyio
 
-    from autoskillit.config import LinuxTracingConfig
     from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid
+    from tests._helpers import make_tracing_config
 
-    cfg = LinuxTracingConfig(enabled=True, proc_interval=0.1, tmpfs_path=str(tmp_path))
+    cfg = make_tracing_config(enabled=True, proc_interval=0.1, tmpfs_path=str(tmp_path))
     async with anyio.create_task_group() as tg:
         proc = await anyio.open_process(["sleep", "2"])
         handle = start_linux_tracing(trace_target_from_pid(proc.pid), cfg, tg)
@@ -390,34 +454,34 @@ async def test_start_linux_tracing_writes_enrollment_sidecar(tmp_path):
 def test_tracing_config_rejects_dev_shm_in_test_env(monkeypatch):
     """LinuxTracingConfig.__post_init__ must raise when tmpfs_path is /dev/shm
     and PYTEST_CURRENT_TEST env var is set."""
-    from autoskillit.config import LinuxTracingConfig
+    from tests._helpers import make_tracing_config
 
     monkeypatch.setenv(
         "PYTEST_CURRENT_TEST",
         "tests/execution/test_linux_tracing.py::fake_test",
     )
     with pytest.raises(RuntimeError, match="tmpfs_path|PYTEST_CURRENT_TEST"):
-        LinuxTracingConfig(tmpfs_path="/dev/shm")
+        make_tracing_config(tmpfs_path="/dev/shm")
 
 
 def test_tracing_config_allows_custom_tmpfs_in_test_env(monkeypatch, tmp_path):
     """LinuxTracingConfig must not raise when a non-/dev/shm path is provided."""
-    from autoskillit.config import LinuxTracingConfig
+    from tests._helpers import make_tracing_config
 
     monkeypatch.setenv(
         "PYTEST_CURRENT_TEST",
         "tests/execution/test_linux_tracing.py::fake_test",
     )
-    cfg = LinuxTracingConfig(tmpfs_path=str(tmp_path))  # must not raise
+    cfg = make_tracing_config(tmpfs_path=str(tmp_path))  # must not raise
     assert cfg.tmpfs_path == str(tmp_path)
 
 
 def test_tracing_config_allows_dev_shm_outside_test_env(monkeypatch):
     """LinuxTracingConfig must not raise for /dev/shm when not running under pytest."""
-    from autoskillit.config import LinuxTracingConfig
+    from tests._helpers import make_tracing_config
 
     monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
-    cfg = LinuxTracingConfig(tmpfs_path="/dev/shm")  # production path — must not raise
+    cfg = make_tracing_config(tmpfs_path="/dev/shm")  # production path — must not raise
     assert cfg.tmpfs_path == "/dev/shm"
 
 
@@ -486,10 +550,10 @@ async def test_stop_unlinks_trace_and_enrollment(tmp_path):
     """stop() must delete both trace JSONL and enrollment sidecar on clean exit."""
     import anyio
 
-    from autoskillit.config import LinuxTracingConfig
     from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid
+    from tests._helpers import make_tracing_config
 
-    cfg = LinuxTracingConfig(enabled=True, proc_interval=0.1, tmpfs_path=str(tmp_path))
+    cfg = make_tracing_config(enabled=True, proc_interval=0.1, tmpfs_path=str(tmp_path))
     async with anyio.create_task_group() as tg:
         proc = await anyio.open_process(["sleep", "2"])
         handle = start_linux_tracing(trace_target_from_pid(proc.pid), cfg, tg)

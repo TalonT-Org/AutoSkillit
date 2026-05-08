@@ -143,15 +143,18 @@ For each concern (up to `max_sub_issues`):
 gh label create "split-from:#N" --force \
   --description "Sub-issue created from parent #N" \
   --color "e4e669" [--repo {repo}]
+sleep 1  # Rate-limit discipline: 1s between mutating calls
 
 # Ensure the recipe route label exists (idempotent)
 gh label create "recipe:implementation" --force \
   --description "Route through implementation recipe" \
   --color "0E8A16" [--repo {repo}]
+sleep 1  # Rate-limit discipline: 1s between mutating calls
 # or:
 gh label create "recipe:remediation" --force \
   --description "Route through remediation recipe" \
   --color "D93F0B" [--repo {repo}]
+sleep 1  # Rate-limit discipline: 1s between mutating calls
 
 # Create the sub-issue
 gh issue create \
@@ -160,6 +163,7 @@ gh issue create \
   --label "split-from:#N" \
   --label "recipe:{route}" \
   [--repo {repo}]
+sleep 1  # Rate-limit discipline: 1s between mutating calls
 ```
 
 Capture the new issue URL and number from stdout.
@@ -175,16 +179,18 @@ gh label create "split" --force \
 # Label the parent as split
 gh issue edit {N} --add-label "split" [--repo {repo}]
 
-# Add tracking comment with cross-references
-gh issue comment {N} \
-  --body "## Split into sub-issues
-
-This issue covers multiple concerns and has been decomposed into focused sub-issues:
-
-{bullet list of sub-issue links with route labels}
-
-This issue remains open as a tracking issue." \
-  [--repo {repo}]
+# Append ## Decomposed section to parent body
+SPLIT_BODY_FILE="{{AUTOSKILLIT_TEMP}}/issue-splitter/decomposed_{N}_$(date +%s).md"
+mkdir -p "$(dirname "$SPLIT_BODY_FILE")"
+gh issue view {N} --json body --jq '.body' [--repo {repo}] > "$SPLIT_BODY_FILE"
+printf '\n\n---\n\n## Decomposed\n\nThis issue covers multiple concerns and has been decomposed into focused sub-issues:\n\n' \
+  >> "$SPLIT_BODY_FILE"
+for sub in $sub_issue_links; do
+  printf '- %s\n' "$sub" >> "$SPLIT_BODY_FILE"
+done
+printf '\nThis issue remains open as a tracking issue.\n' >> "$SPLIT_BODY_FILE"
+gh issue edit {N} --body-file "$SPLIT_BODY_FILE" [--repo {repo}]
+sleep 1
 ```
 
 Do **not** close the parent — it serves as a tracking issue for all sub-issues.

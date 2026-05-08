@@ -17,6 +17,7 @@ from autoskillit.workspace.skills import DefaultSkillResolver
 FIXED_NAME_SKILLS: frozenset[str] = frozenset(
     {
         "write-recipe",  # .autoskillit/recipes/{name}.yaml — idempotent
+        "make-campaign",  # .autoskillit/recipes/campaigns/{name}.yaml — idempotent
         "migrate-recipes",  # .autoskillit/temp/migrations/{name}.yaml — idempotent
         "mermaid",  # edits existing files, no temp output
         "open-kitchen",  # singleton config file
@@ -65,9 +66,10 @@ UNSPACED_OUTPUT_TOKEN = re.compile(
     r"remediation_path|plan_parts|diagram_path|verdict|group_files|"
     r"pr_url|decision|needs_plan|deletion_regression|pr_number|"
     r"pr_branch|pr_title|total_issues|batch_count|recipe_distribution|"
-    r"integration_branch|pr_count|simple_count|needs_check_count|"
+    r"batch_branch|pr_count|simple_count|needs_check_count|"
     r"ci_blocked_count|review_blocked_count|queue_mode|"
     r"failure_type|is_fixable|escalation_required|escalation_reason|"
+    r"execution_map|execution_map_report|group_count|review_approach_candidates|"
     r"merged)=[^\s]",
     re.MULTILINE,
 )
@@ -98,9 +100,10 @@ def _get_skills_with_output_tokens() -> list[str]:
         r"remediation_path|plan_parts|diagram_path|verdict|group_files|"
         r"pr_url|decision|needs_plan|deletion_regression|pr_number|"
         r"pr_branch|pr_title|total_issues|batch_count|recipe_distribution|"
-        r"integration_branch|pr_count|simple_count|needs_check_count|"
+        r"batch_branch|pr_count|simple_count|needs_check_count|"
         r"ci_blocked_count|review_blocked_count|queue_mode|"
         r"failure_type|is_fixable|escalation_required|escalation_reason|"
+        r"execution_map|execution_map_report|group_count|review_approach_candidates|"
         r"merged)\s*=\s*",
         re.MULTILINE,
     )
@@ -236,11 +239,39 @@ def test_output_path_tokens_synchronized() -> None:
             "prep_path",
             # plan-visualization outputs (groupF Part A)
             "visualization_plan_path",
+            "visualization_plan_trace_path",
             "report_plan_path",
             # bundle-local-report output (groupG)
             "html_path",
             # stage-data skill output (resource feasibility report path)
             "resource_report",
+            # make-campaign skill output (campaign recipe manifest path)
+            "campaign_path",
+            # build-execution-map outputs (dependency-aware dispatch map)
+            "execution_map",
+            "execution_map_report",
+            # planner-generate-phases output (planner recipe)
+            "phase_manifest_path",
+            # planner-elaborate-phase output (parallel worker)
+            "elab_result_path",
+            # planner-refine-phases output
+            "refined_plan_path",
+            # planner-refine-assignments output
+            "phase_refined_path",
+            # planner-refine-wps output
+            "refined_wps_path",
+            # audit-tests output (bundled full-audit recipe)
+            "audit_report_path",
+            # validate-audit output (bundled full-audit recipe)
+            "validated_report_path",
+            # promote-to-main skill output (promote-to-main-wrapper recipe)
+            "pr_body_path",
+            # planner-validate-task-alignment output
+            "alignment_findings_path",
+            # planner-assess-review-approach output
+            "review_approach_assessment_path",
+            # setup-environment skill output (research recipe pre-flight gate)
+            "env_report",
         }
     )
 
@@ -248,23 +279,6 @@ def test_output_path_tokens_synchronized() -> None:
         f"_OUTPUT_PATH_TOKENS mismatch.\n"
         f"Missing: {expected_path_tokens - _OUTPUT_PATH_TOKENS}\n"
         f"Extra: {_OUTPUT_PATH_TOKENS - expected_path_tokens}"
-    )
-
-
-def test_resolve_failures_skill_switches_code_index_to_worktree():
-    """resolve-failures must set_project_path to worktree_path after env setup."""
-    skill_md = (pkg_root() / "skills_extended" / "resolve-failures" / "SKILL.md").read_text()
-    # Must contain a set_project_path call with worktree_path as the path argument.
-    # Use a regex so minor whitespace or quoting variations don't cause false failures.
-    worktree_switch = re.search(r"set_project_path\([^)]*worktree_path[^)]*\)", skill_md)
-    assert worktree_switch is not None, (
-        "resolve-failures SKILL.md must switch code-index to {worktree_path} after env setup"
-    )
-    # The worktree switch must come after the initial PROJECT_ROOT init.
-    project_root_idx = skill_md.find("PROJECT_ROOT")
-    assert project_root_idx != -1, "resolve-failures SKILL.md must reference PROJECT_ROOT"
-    assert worktree_switch.start() > project_root_idx, (
-        "worktree_path code-index switch must appear after initial PROJECT_ROOT init"
     )
 
 
@@ -277,6 +291,7 @@ SKILL_CONTRACTS_PATH = pkg_root() / "recipe" / "skill_contracts.yaml"
 # Skills with path-capture contracts that must have their token instruction
 # in ## Critical Constraints (not only in ## Output or a late workflow step).
 PATH_CAPTURE_SKILLS: dict[str, list[str]] = {
+    "build-execution-map": ["execution_map", "execution_map_report"],
     "make-plan": ["plan_path"],
     "rectify": ["plan_path"],
     "investigate": ["investigation_path"],
@@ -301,7 +316,7 @@ PATH_CAPTURE_SKILLS: dict[str, list[str]] = {
     "vis-lens-caption-annot": ["diagram_path"],
     "vis-lens-chart-select": ["diagram_path"],
     "vis-lens-color-access": ["diagram_path"],
-    "vis-lens-domain-norms": ["diagram_path"],
+    "vis-lens-methodology-norms": ["diagram_path"],
     "vis-lens-figure-table": ["diagram_path"],
     "vis-lens-multi-compare": ["diagram_path"],
     "vis-lens-reproducibility": ["diagram_path"],
@@ -309,6 +324,19 @@ PATH_CAPTURE_SKILLS: dict[str, list[str]] = {
     "vis-lens-temporal": ["diagram_path"],
     "vis-lens-uncertainty": ["diagram_path"],
     "review-design": ["evaluation_dashboard", "revision_guidance"],
+    "planner-assess-review-approach": ["review_approach_assessment_path"],
+    "planner-elaborate-assignments": ["phase_assignments_result_dir"],
+    "planner-elaborate-phase": ["elab_result_path"],
+    "planner-elaborate-wps": ["phase_wps_result_dir"],
+    "planner-generate-phases": ["phase_manifest_path"],
+    "planner-refine-assignments": ["phase_refined_path"],
+    "planner-refine-phases": ["refined_plan_path"],
+    "planner-refine-wps": ["refined_wps_path"],
+    "planner-validate-task-alignment": ["alignment_findings_path"],
+    "audit-tests": ["audit_report_path"],
+    "validate-audit": ["validated_report_path"],
+    "validate-review-decisions": ["validated_report_path"],
+    "bundle-local-report": ["html_path"],
 }
 
 ABSOLUTE_PATH_KEYWORDS = ("absolute", "/abs", "$(pwd)", "$(cd")
@@ -337,12 +365,19 @@ def _get_contracted_path_capture_skills() -> dict[str, list[str]]:
     for skill_name, contract in skills_data.items():
         if not isinstance(contract, dict):
             continue
+        path_token_names = {
+            out["name"]
+            for out in contract.get("outputs", [])
+            if isinstance(out, dict)
+            and (
+                out.get("type", "").startswith("file_path") or out.get("type") == "directory_path"
+            )
+        }
         patterns = contract.get("expected_output_patterns", [])
         tokens = []
         for pattern in patterns:
-            # Path-capture: token_name\s*=\s*/.+ (requires leading /)
-            m = re.match(r"^(\w+)\\s\*=\\s\*/.+", pattern)
-            if m:
+            m = re.match(r"^(\w+)", pattern)
+            if m and m.group(1) in path_token_names:
                 tokens.append(m.group(1))
         if tokens:
             result[skill_name] = tokens
@@ -390,6 +425,32 @@ def test_every_contracted_skill_has_emit_instruction() -> None:
     assert not missing, (
         "Skills with path-capture contracts but no emit instruction in SKILL.md:\n"
         + "\n".join(f"  - {m}" for m in missing)
+    )
+
+
+def test_contracted_path_capture_skills_includes_backslash_s_patterns() -> None:
+    """_get_contracted_path_capture_skills must return all skills with \\S+-terminated patterns."""
+    raw = yaml.safe_load(SKILL_CONTRACTS_PATH.read_text())
+    skills_data = raw.get("skills", {}) if isinstance(raw, dict) else {}
+
+    # Dynamically find skills whose contracts include \S+-terminated path-capture patterns.
+    backslash_s_pattern_re = re.compile(r"\\[Ss]\+\s*$")
+    expected: list[str] = []
+    for skill_name, contract in skills_data.items():
+        if not isinstance(contract, dict):
+            continue
+        for pattern in contract.get("expected_output_patterns", []):
+            if backslash_s_pattern_re.search(pattern):
+                expected.append(skill_name)
+                break
+
+    assert expected, "No skills with \\S+-terminated patterns found in contracts — test is vacuous"
+
+    contracted = _get_contracted_path_capture_skills()
+    missing = [s for s in expected if s not in contracted]
+    assert not missing, (
+        f"Skills with \\S+-terminated patterns not returned by "
+        f"_get_contracted_path_capture_skills: {missing}"
     )
 
 

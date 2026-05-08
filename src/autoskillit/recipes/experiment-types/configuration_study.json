@@ -1,0 +1,31 @@
+{
+  "name": "configuration_study",
+  "schema_version": "1.0",
+  "priority": 5,
+  "is_fallback": false,
+  "classification_triggers": [
+    "IVs are numeric parameters of one system, grid/sweep structure"
+  ],
+  "dimension_weights": {
+    "causal_structure": "S",
+    "variance_protocol": "H",
+    "statistical_corrections": "H",
+    "ecological_validity": "L",
+    "measurement_alignment": "M",
+    "resource_proportionality": "L",
+    "data_acquisition": "M",
+    "agent_implementability": "H"
+  },
+  "applicable_lenses": {
+    "primary": "exp-lens-estimand-clarity",
+    "secondary": null
+  },
+  "red_team_focus": {
+    "specific": "overfitting to held-out set",
+    "severity_cap": "warning"
+  },
+  "l1_severity": {
+    "estimand_clarity": "warning",
+    "hypothesis_falsifiability": "warning"
+  }
+}

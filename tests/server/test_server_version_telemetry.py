@@ -8,6 +8,8 @@ from unittest.mock import patch
 
 import pytest
 
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+
 
 class TestPluginMetadataExists:
     """T1: Plugin metadata files are shipped in the package."""
@@ -36,24 +38,24 @@ class TestPluginMetadataExists:
 
 
 class TestPluginDirConstant:
-    """T6: tool_ctx.plugin_dir defaults to the package root directory."""
+    """T6: tool_ctx.plugin_source defaults to a DirectInstall for the package root."""
 
-    def test_plugin_dir_assignment_is_visible_via_get_ctx(self, tool_ctx):
-        """By default tool_ctx.plugin_dir is set to tmp_path by the fixture.
+    def test_plugin_source_assignment_is_visible_via_get_plugin_dir(self, tool_ctx):
+        """By default tool_ctx.plugin_source is set to DirectInstall(tmp_path) by the fixture.
 
         The real package dir is what the server uses at runtime (set by cli.py serve()).
-        This test verifies that the fixture wires plugin_dir through _ctx correctly.
+        This test verifies that the fixture wires plugin_source through _ctx correctly.
         """
         import autoskillit
+        from autoskillit.core.types._type_plugin_source import DirectInstall
+        from autoskillit.server._state import _get_plugin_dir
 
         # The real package dir is what the server sets at startup.
-        # We verify the attribute path works (tool_ctx.plugin_dir is accessible).
-        real_pkg_dir = str(Path(autoskillit.__file__).parent)
+        real_pkg_dir = Path(autoskillit.__file__).parent
         # tool_ctx uses tmp_path; set it to verify end-to-end wiring
-        tool_ctx.plugin_dir = real_pkg_dir
-        from autoskillit.server import _get_ctx
+        tool_ctx.plugin_source = DirectInstall(plugin_dir=real_pkg_dir)
 
-        assert _get_ctx().plugin_dir == real_pkg_dir
+        assert _get_plugin_dir() == str(real_pkg_dir)
 
 
 class TestVersionInfo:
@@ -71,6 +73,7 @@ class TestVersionInfo:
         assert info["match"] is True
 
     def test_version_info_detects_mismatch(self, tmp_path, tool_ctx):
+        from autoskillit.core.types._type_plugin_source import DirectInstall
         from autoskillit.server import version_info
 
         plugin_dir = tmp_path / ".claude-plugin"
@@ -78,16 +81,17 @@ class TestVersionInfo:
         (plugin_dir / "plugin.json").write_text(
             json.dumps({"name": "autoskillit", "version": "0.0.0"})
         )
-        tool_ctx.plugin_dir = str(tmp_path)
+        tool_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
         info = version_info()
         assert info["match"] is False
         assert info["package_version"] != info["plugin_json_version"]
         assert info["plugin_json_version"] == "0.0.0"
 
     def test_version_info_handles_missing_plugin_json(self, tmp_path, tool_ctx):
+        from autoskillit.core.types._type_plugin_source import DirectInstall
         from autoskillit.server import version_info
 
-        tool_ctx.plugin_dir = str(tmp_path)
+        tool_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
         info = version_info()
         assert info["plugin_json_version"] is None
         assert info["match"] is False
@@ -145,6 +149,11 @@ class TestInitializeClearMarker:
     def test_initialize_uses_clear_marker_as_since_bound(self, tool_ctx, tmp_path, monkeypatch):
         from datetime import UTC, datetime, timedelta
 
+        from autoskillit.core.types._type_results import ProviderOutcome
+        from autoskillit.core.types._type_results_execution import (
+            RecipeIdentity,
+            SessionTelemetry,
+        )
         from autoskillit.execution.session_log import (
             flush_session_log,
         )
@@ -167,13 +176,22 @@ class TestInitializeClearMarker:
             start_ts=five_hours_ago.isoformat(),
             proc_snapshots=None,
             step_name="old-step",
-            token_usage={
-                "input_tokens": 1000,
-                "output_tokens": 500,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-            },
-            timing_seconds=10.0,
+            telemetry=SessionTelemetry(
+                token_usage={
+                    "input_tokens": 1000,
+                    "output_tokens": 500,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                },
+                timing_seconds=10.0,
+                audit_record=None,
+                github_api_usage=None,
+                github_api_requests=0,
+                loc_insertions=0,
+                loc_deletions=0,
+            ),
+            provider_outcome=ProviderOutcome.none_used(),
+            recipe_identity=RecipeIdentity.empty(),
         )
 
         # Write a clear marker 3 hours ago (after the session completed)

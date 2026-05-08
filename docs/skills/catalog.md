@@ -1,7 +1,7 @@
 # Skill catalog
 
-The complete list of bundled skills (109 total: 3 in `src/autoskillit/skills/`,
-106 in `src/autoskillit/skills_extended/`). Filesystem walk this directory if
+The complete list of bundled skills (133 total: 3 in `src/autoskillit/skills/`,
+130 in `src/autoskillit/skills_extended/`). Filesystem walk this directory if
 you need an exhaustive listing; this catalog groups by purpose.
 
 ## Tier 1 — free range (3)
@@ -19,31 +19,38 @@ Located under `src/autoskillit/skills_extended/`. Grouped by purpose:
 ### Plan and implementation
 `investigate`, `make-plan`, `dry-walkthrough`, `review-approach`,
 `implement-worktree`, `rectify`, `make-groups`, `mermaid`, `make-arch-diag`,
-`make-experiment-diag`
+`make-experiment-diag`, `build-execution-map`, `plan-visualization`
 
 ### Audit suite
 `audit-arch`, `audit-cohesion`, `audit-tests`, `audit-defense-standards`,
-`audit-bugs`, `audit-friction`, `validate-audit`
+`audit-bugs`, `audit-friction`, `validate-audit`, `validate-test-audit`, `validate-review-decisions`,
+`audit-claims`, `audit-docs`, `audit-feature-gates`, `audit-review-decisions`
 
 ### Requirements and planning
 `make-req`, `elaborate-phase`, `write-recipe`, `migrate-recipes`,
-`setup-project`, `sprint-planner`, `design-guards`, `triage-issues`,
+`setup-project`, `design-guards`, `triage-issues`,
 `collapse-issues`, `issue-splitter`, `enrich-issues`, `prepare-issue`,
-`process-issues`
+`process-issues`, `make-campaign`
 
 ### Experiment family
 `scope`, `plan-experiment`, `implement-experiment`, `run-experiment`,
 `generate-report`, `troubleshoot-experiment`
+
+### Research and review
+`review-design`, `stage-data`, `setup-environment`, `bundle-local-report`, `reload-session`
 
 ## Tier 3 — pipeline / automation
 
 Also under `src/autoskillit/skills_extended/`. Used by recipes for unattended
 runs:
 
-`open-pr`, `open-integration-pr`, `merge-pr`, `analyze-prs`, `review-pr`,
+`prepare-pr`, `compose-pr`, `open-integration-pr`, `merge-pr`, `analyze-prs`, `review-pr`,
 `resolve-review`, `implement-worktree-no-merge`, `resolve-failures`,
 `retry-worktree`, `resolve-merge-conflicts`, `audit-impl`, `smoke-task`,
-`report-bug`, `pipeline-summary`, `diagnose-ci`, `verify-diag`
+`report-bug`, `pipeline-summary`, `diagnose-ci`, `verify-diag`,
+`resolve-claims-review`, `resolve-design-review`, `resolve-research-review`,
+`compose-research-pr`, `prepare-research-pr`, `review-research-pr`,
+`promote-to-main`
 
 ## arch-lens family (13)
 
@@ -102,7 +109,7 @@ figure set:
 | 1 | `vis-lens-always-on` | Composite | Is everything correct by default? | P0 |
 | 2 | `vis-lens-antipattern` | Diagnostic | What visualization antipatterns are present? | P0 |
 | 3 | `vis-lens-chart-select` | Typological | What chart type fits this data shape? | P0 |
-| 4 | `vis-lens-domain-norms` | Normative | Does the figure follow domain conventions? | P0 |
+| 4 | `vis-lens-methodology-norms` | Normative | Does the figure follow methodology-tradition conventions? | P0 |
 | 5 | `vis-lens-uncertainty` | Probabilistic | Is uncertainty properly communicated? | P0 |
 | 6 | `vis-lens-color-access` | Chromatic | Is the color encoding accessible and perceptually uniform? | P1 |
 | 7 | `vis-lens-figure-table` | Decisional | Should this result be a figure or a table? | P1 |
@@ -111,6 +118,17 @@ figure set:
 | 10 | `vis-lens-caption-annot` | Annotative | Are figure captions and axis labels fully self-contained? | P2 |
 | 11 | `vis-lens-story-arc` | Narrative | Do the figures tell a coherent story across the report? | P2 |
 | 12 | `vis-lens-reproducibility` | Replicative | Can the figures be reproduced from the data and code? | P2 |
+
+## Planner family (14)
+
+14 progressive-decomposition sub-skills under `skills_extended/planner-*/`. Invoked
+internally by the `planner` recipe to break a roadmap into GitHub milestones and issues:
+
+`planner-analyze`, `planner-assess-review-approach`, `planner-consolidate-wps`,
+`planner-elaborate-assignments`, `planner-elaborate-phase`,
+`planner-elaborate-wps`, `planner-extract-domain`, `planner-generate-phases`,
+`planner-reconcile-deps`, `planner-refine`, `planner-refine-assignments`,
+`planner-refine-phases`, `planner-refine-wps`, `planner-validate-task-alignment`
 
 ## Rectify doctrine
 
@@ -121,8 +139,8 @@ symptom, and the audit suite is updated so the same class of bug cannot
 recur. Commit messages prefix with `Rectify:` for traceability; the count of
 `Rectify:` commits is reported in `docs/developer/contributing.md`.
 
-## Total: 109
+## Total: 132
 
-3 (Tier 1) + 106 (`skills_extended/`) = 109 bundled skills. The total is
+3 (Tier 1) + 129 (`skills_extended/`) = 132 bundled skills. The total is
 verified by `tests/docs/test_doc_counts.py` against a filesystem walk so any
 addition or removal is caught immediately.

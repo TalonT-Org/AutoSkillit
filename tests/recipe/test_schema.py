@@ -8,6 +8,8 @@ import pathlib
 
 import pytest
 
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+
 
 def test_all_dataclasses_importable() -> None:
     """All dataclasses are importable from recipe.schema."""
@@ -200,6 +202,18 @@ def test_recipe_step_has_constant_field() -> None:
     assert step.constant is None
 
 
+# ---------------------------------------------------------------------------
+# RecipeKind enum
+# ---------------------------------------------------------------------------
+
+
+def test_food_truck_kind_exists() -> None:
+    """RecipeKind.FOOD_TRUCK exists and equals 'food-truck'."""
+    from autoskillit.recipe.schema import RecipeKind
+
+    assert RecipeKind.FOOD_TRUCK == "food-truck"
+
+
 def test_constant_step_parse_from_yaml() -> None:
     """A constant step is parsed from YAML into RecipeStep.constant."""
     from autoskillit.recipe.io import _parse_step
@@ -297,3 +311,288 @@ def test_recipe_dataclass_has_requires_packs_field():
     assert "requires_packs" in fields
     r = Recipe(name="x", description="y")
     assert r.requires_packs == []
+
+
+def test_recipe_has_content_hash_field():
+    from autoskillit.recipe.schema import Recipe
+
+    r = Recipe(name="test", description="d")
+    assert r.content_hash == ""
+
+
+def test_recipe_has_composite_hash_field():
+    from autoskillit.recipe.schema import Recipe
+
+    r = Recipe(name="test", description="d")
+    assert r.composite_hash == ""
+
+
+def test_recipe_has_recipe_version_field():
+    from autoskillit.recipe.schema import Recipe
+
+    r = Recipe(name="test", description="d")
+    assert r.recipe_version is None
+
+
+def test_recipe_info_has_content_hash_field():
+    from autoskillit.core.types import RecipeSource
+    from autoskillit.recipe.schema import RecipeInfo
+
+    ri = RecipeInfo(
+        name="t", description="d", source=RecipeSource.BUILTIN, path=pathlib.Path("/x")
+    )
+    assert ri.content_hash == ""
+
+
+def test_recipe_info_has_recipe_version_field():
+    from autoskillit.core.types import RecipeSource
+    from autoskillit.recipe.schema import RecipeInfo
+
+    ri = RecipeInfo(
+        name="t", description="d", source=RecipeSource.BUILTIN, path=pathlib.Path("/x")
+    )
+    assert ri.recipe_version is None
+
+
+# ---------------------------------------------------------------------------
+# RecipeKind, CampaignDispatch, Recipe new fields (franchise schema extension)
+# ---------------------------------------------------------------------------
+
+
+def test_recipe_kind_enum_defined() -> None:
+    from enum import StrEnum
+
+    from autoskillit.recipe.schema import RecipeKind
+
+    assert issubclass(RecipeKind, StrEnum)
+    assert RecipeKind.STANDARD == "standard"
+    assert RecipeKind.CAMPAIGN == "campaign"
+    assert RecipeKind.FOOD_TRUCK == "food-truck"
+    assert len(RecipeKind) == 3
+
+
+def test_campaign_dispatch_dataclass() -> None:
+    from autoskillit.recipe.schema import CampaignDispatch
+
+    assert dataclasses.is_dataclass(CampaignDispatch)
+    d = CampaignDispatch(name="impl", recipe="implementation", task="build feature")
+    assert d.name == "impl"
+    assert d.recipe == "implementation"
+    assert d.task == "build feature"
+    assert d.ingredients == {}
+    assert d.depends_on == []
+
+
+def test_recipe_has_kind_field_defaulting_to_standard() -> None:
+    from autoskillit.recipe.schema import Recipe, RecipeKind
+
+    r = Recipe(name="x", description="y")
+    assert r.kind == RecipeKind.STANDARD
+
+
+def test_recipe_has_categories_field_defaulting_to_empty() -> None:
+    from autoskillit.recipe.schema import Recipe
+
+    r = Recipe(name="x", description="y")
+    assert r.categories == []
+
+
+def test_recipe_has_dispatches_field_defaulting_to_empty() -> None:
+    from autoskillit.recipe.schema import Recipe
+
+    r = Recipe(name="x", description="y")
+    assert r.dispatches == []
+
+
+def test_recipe_has_requires_recipe_packs_field_defaulting_to_empty() -> None:
+    from autoskillit.recipe.schema import Recipe
+
+    r = Recipe(name="x", description="y")
+    assert r.requires_recipe_packs == []
+
+
+def test_recipe_has_allowed_recipes_field_defaulting_to_empty() -> None:
+    from autoskillit.recipe.schema import Recipe
+
+    r = Recipe(name="x", description="y")
+    assert r.allowed_recipes == []
+
+
+def test_recipe_has_continue_on_failure_field_defaulting_to_false() -> None:
+    from autoskillit.recipe.schema import Recipe
+
+    r = Recipe(name="x", description="y")
+    assert r.continue_on_failure is False
+
+
+def test_existing_recipe_construction_unchanged() -> None:
+    """All pre-existing Recipe construction patterns still work."""
+    from autoskillit.recipe.schema import Recipe, RecipeKind, RecipeStep
+
+    r = Recipe(
+        name="test",
+        description="test recipe",
+        steps={"stop": RecipeStep(action="stop")},
+        requires_packs=["github"],
+    )
+    assert r.kind == RecipeKind.STANDARD
+    assert r.categories == []
+    assert r.dispatches == []
+    assert r.requires_recipe_packs == []
+    assert r.allowed_recipes == []
+    assert r.continue_on_failure is False
+
+
+def test_campaign_recipe_construction() -> None:
+    from autoskillit.recipe.schema import CampaignDispatch, Recipe, RecipeKind
+
+    r = Recipe(
+        name="multi-impl",
+        description="campaign",
+        kind=RecipeKind.CAMPAIGN,
+        dispatches=[
+            CampaignDispatch(
+                name="phase-1",
+                recipe="implementation",
+                task="Build feature A",
+                ingredients={"branch": "feature-a"},
+                depends_on=[],
+            ),
+            CampaignDispatch(
+                name="phase-2",
+                recipe="implementation",
+                task="Build feature B",
+                depends_on=["phase-1"],
+            ),
+        ],
+        requires_recipe_packs=["implementation-family"],
+        continue_on_failure=True,
+    )
+    assert r.kind == RecipeKind.CAMPAIGN
+    assert len(r.dispatches) == 2
+    assert r.dispatches[1].depends_on == ["phase-1"]
+    assert r.requires_recipe_packs == ["implementation-family"]
+    assert r.continue_on_failure is True
+    assert r.steps == {}
+    assert r.requires_packs == []
+    assert r.allowed_recipes == []
+    assert r.categories == []
+
+
+def test_recipe_info_has_experimental_field() -> None:
+    """RecipeInfo must have an experimental field defaulting to False."""
+    from pathlib import Path
+
+    from autoskillit.core import RecipeSource
+    from autoskillit.recipe.schema import RecipeInfo
+
+    r = RecipeInfo(name="x", description="d", source=RecipeSource.BUILTIN, path=Path("/x.yaml"))
+    assert hasattr(r, "experimental")
+    assert r.experimental is False
+
+
+def test_recipe_info_experimental_can_be_set_true() -> None:
+    """RecipeInfo.experimental must be settable to True."""
+    from pathlib import Path
+
+    from autoskillit.core import RecipeSource
+    from autoskillit.recipe.schema import RecipeInfo
+
+    r = RecipeInfo(
+        name="x",
+        description="d",
+        source=RecipeSource.BUILTIN,
+        path=Path("/x.yaml"),
+        experimental=True,
+    )
+    assert r.experimental is True
+
+
+# ---------------------------------------------------------------------------
+# T3: categories validation (Finding 5)
+# ---------------------------------------------------------------------------
+
+
+def test_recipe_rejects_unknown_category() -> None:
+    """Recipe.__post_init__ raises ValueError for unknown category values."""
+    from autoskillit.recipe.schema import Recipe
+
+    with pytest.raises(ValueError, match="Unknown categories"):
+        Recipe(name="x", description="d", categories=["no_such_category"])
+
+
+def test_recipe_accepts_valid_category() -> None:
+    """Recipe accepts a valid RECIPE_PACK_TAGS member in categories."""
+    from autoskillit.recipe.schema import Recipe
+
+    r = Recipe(name="x", description="d", categories=["implementation-family"])
+    assert r.categories == ["implementation-family"]
+
+
+def test_recipe_accepts_empty_categories() -> None:
+    """Recipe accepts an empty categories list."""
+    from autoskillit.recipe.schema import Recipe
+
+    r = Recipe(name="x", description="d", categories=[])
+    assert r.categories == []
+
+
+def test_recipe_requires_features_field() -> None:
+    """Recipe dataclass accepts requires_features list."""
+    from autoskillit.recipe.schema import Recipe
+
+    r = Recipe(name="x", description="d", requires_features=["planner"])
+    assert r.requires_features == ["planner"]
+
+
+def test_recipe_requires_features_defaults_to_empty() -> None:
+    """Recipe.requires_features defaults to empty list."""
+    from autoskillit.recipe.schema import Recipe
+
+    r = Recipe(name="x", description="d")
+    assert r.requires_features == []
+
+
+def test_recipe_requires_features_rejects_unknown_feature() -> None:
+    """Recipe raises ValueError for unknown feature names in requires_features."""
+    from autoskillit.recipe.schema import Recipe
+
+    with pytest.raises(ValueError, match="Unknown features"):
+        Recipe(name="x", description="d", requires_features=["nonexistent_feature_xyz"])
+
+
+# ---------------------------------------------------------------------------
+# T2: RecipeIngredient.type field (ingredient type enforcement)
+# ---------------------------------------------------------------------------
+
+
+def test_recipe_ingredient_type_field_exists() -> None:
+    """RecipeIngredient must have a type field."""
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    ing = RecipeIngredient(description="d", type="integer", default="3")
+    assert hasattr(ing, "type")
+
+
+def test_recipe_ingredient_type_stores_value() -> None:
+    """RecipeIngredient.type must store the provided type string."""
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    ing = RecipeIngredient(description="d", type="integer", default="3")
+    assert ing.type == "integer"
+
+
+def test_recipe_ingredient_type_defaults_to_none() -> None:
+    """RecipeIngredient.type must default to None when not provided."""
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    ing = RecipeIngredient(description="d")
+    assert ing.type is None
+
+
+def test_recipe_ingredient_type_can_be_explicitly_none() -> None:
+    """RecipeIngredient.type may be explicitly set to None."""
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    ing = RecipeIngredient(description="d", type=None)
+    assert ing.type is None

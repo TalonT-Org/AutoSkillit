@@ -5,7 +5,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from autoskillit.cli._installed_plugins import InstalledPluginsFile
+
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 REAL_STRUCTURE = {
     "version": 2,
@@ -79,3 +83,16 @@ def test_remove_is_noop_when_file_absent(tmp_path: Path) -> None:
     p = tmp_path / "no_file.json"
     InstalledPluginsFile(p).remove("autoskillit@autoskillit-local")  # should not raise
     assert not p.exists()
+
+
+def test_installed_plugins_read_logs_on_json_error(tmp_path: Path) -> None:
+    """_read() emits a WARNING log when installed_plugins.json contains invalid JSON."""
+    import structlog.testing
+
+    p = tmp_path / "installed_plugins.json"
+    p.write_text("{invalid json}")
+
+    with structlog.testing.capture_logs() as cap_logs:
+        result = InstalledPluginsFile(p).get_plugins()
+    assert result == {}
+    assert any("installed_plugins" in entry.get("event", "").lower() for entry in cap_logs)

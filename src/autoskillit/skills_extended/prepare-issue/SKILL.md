@@ -92,50 +92,66 @@ gh repo view --json owner,name
 ### Step 4: Dedup Check (skip if `--issue N` provided)
 
 Extract multiple keyword sets from the description — individual key terms and 2–3 phrase
-combinations that capture the core topic. For each keyword set, search open issues:
+combinations that capture the core topic. For each keyword set, search all issues:
 
 ```bash
-gh issue list --state open --search "{keyword-set}" \
-    --json number,title,url,body --limit 10
+gh issue list --state all --search "{keyword-set}" \
+    --json number,title,url,body,labels,state --limit 15
 ```
 
-Run searches for each keyword set and deduplicate results by issue number. Collect all unique
-candidates.
+> `labels` is returned as an array of objects `[{"name": "..."}]` by `gh`.
+> Extract label names as a flat list when classifying eligibility.
 
-If candidates are found, display them all in a numbered list with number, title, and URL:
+Run searches for each keyword set and deduplicate results by issue number, tracking the
+`match_count` (number of keyword sets that matched) per candidate.
+
+After deduplication, apply a relevance gate to closed issues: include a closed issue as
+a candidate only if it was matched by **two or more** keyword sets. Open issues are
+included regardless of match count (same threshold as before). Discard single-match
+closed results — they are likely false positives.
+
+Classify each surviving candidate as **extend-eligible** or **informational-only**:
+
+| Condition | Classification |
+|-----------|---------------|
+| `state == open` AND no `in-progress` label AND no `staged` label | extend-eligible |
+| `state == open` AND has `in-progress` label | informational-only |
+| `state == open` AND has `staged` label | informational-only |
+| `state == closed` | informational-only |
+
+Assign sequential numbers `[1]`, `[2]`, … only to extend-eligible candidates.
+Informational-only candidates receive a `[—]` marker.
+
+If candidates are found, display them with state annotations per candidate:
 
 ```
-━━━ Possible Duplicates Found ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Found {N} open issue(s) that may be related:
-
-  [1] #{number} — {title}
+━━━ Possible Duplicates Found ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  [1] #{number} — {title}           (open)
       {url}
 
-  [2] #{number} — {title}
+  [—] #{number} — {title}           (in-progress)
       {url}
 
-  ...
+  [—] #{number} — {title}           (closed)
+      {url}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Options:
-  [1]–[{N}]  Add to / extend an existing issue (enter a number)
+  [1]–[{N}]  Add to / extend an existing issue   (only shown if extend-eligible candidates exist)
   C          Create a new issue anyway
 
 Your choice [C]:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
+
+If no extend-eligible candidates exist (all are informational-only), omit the `[N]`
+option entirely — only `C` appears.
 
 **If the user enters C (or presses Enter):** Continue to Step 4a.
 
-**If the user enters a number [1]–[N] (extend existing):**
+**If the user enters a number corresponding to an extend-eligible candidate (extend existing):**
 
-1. Ask: *"Add your context as a comment or edit the issue body? [comment/edit, default: comment]"*
-2. If **comment** (default):
+1. Fetch current body and append new context using a temp file to avoid shell injection:
    ```bash
-   gh issue comment {selected_number} --body "{description as additional context}"
-   ```
-3. If **edit**:
-   ```bash
-   # Fetch current body and append new context using a temp file to avoid shell injection
    ts=$(date +%Y-%m-%d_%H%M%S)
    EDIT_BODY_FILE="{{AUTOSKILLIT_TEMP}}/prepare-issue/edit_body_${ts}.md"
    mkdir -p "{{AUTOSKILLIT_TEMP}}/prepare-issue"
@@ -143,12 +159,12 @@ Your choice [C]:
    printf '\n## Additional Context\n\n%s' "{description}" >> "${EDIT_BODY_FILE}"
    gh issue edit {selected_number} --body-file "${EDIT_BODY_FILE}"
    ```
-4. Set `issue_number = selected_number` (no new issue will be created).
-5. Fetch the updated issue for triage:
+2. Set `issue_number = selected_number` (no new issue will be created).
+3. Fetch the updated issue for triage:
    ```bash
    gh issue view {selected_number} --json number,title,body,labels,url
    ```
-6. **Continue to Step 6 (LLM Classification)** on this existing issue, then proceed through
+4. **Continue to Step 6 (LLM Classification)** on this existing issue, then proceed through
    Steps 7, 7a, 8, and 9 to apply labels and requirements. Emit the result block with the
    existing issue's number and URL, then exit.
 
@@ -204,6 +220,17 @@ provided (adopting an existing issue) or when `--dry-run` is active.
    awk '/^## Findings with Exceptions/{skip=1} skip && /^---/{skip=0; next} !skip' \
      "${ISSUE_BODY_FILE}" > "${ISSUE_BODY_FILE}.tmp" \
      && mv "${ISSUE_BODY_FILE}.tmp" "${ISSUE_BODY_FILE}"
+
+   # Defensive strip: remove any finding detail section that contains an exception note
+   # (guards against exception-warranted findings leaking inline into ## Validated Findings)
+   awk '
+     /^\*\*Exception note:\*\*/ { in_exception=1; next }
+     in_exception && /^---$/ { in_exception=0; next }
+     in_exception && /^## / { in_exception=0 }
+     !in_exception
+     END { in_exception=0 }
+   ' "${ISSUE_BODY_FILE}" > "${ISSUE_BODY_FILE}.tmp" \
+     && mv "${ISSUE_BODY_FILE}.tmp" "${ISSUE_BODY_FILE}"
    ```
 
    **What each transform removes:**
@@ -215,6 +242,7 @@ provided (adopting an existing issue) or when `--dry-run` is active.
    - `| **Contested:** N` and `| **Exception warranted:** N` — count segments from the
      `**Findings processed:**` summary line; leaves `**Findings processed:** {total} | **Valid:** {N}`
    - `## Findings with Exceptions` through next `---` — the entire exception-findings section
+   - `**Exception note:**` blocks — exception-warranted finding detail sections
 
 3. Call `gh issue create` using the temp file:
 
@@ -253,17 +281,29 @@ Use the fetched data as the issue context.
 
 ### Step 6: LLM Classification
 
-Analyze the issue title + body using in-context reasoning:
+**Shortcut — Validated audit report:** When `is_validated_report = true` (set in Step 1b),
+immediately assign:
+- `route = implementation`
+- `issue_type = enhancement`
+- `confidence = high`
+- `rationale = "Validated audit report — structural/quality improvement work, not broken behavior"`
+
+Skip the heuristic table below and proceed directly to Step 7.
+
+Analyze the issue title + body using in-context reasoning for all other inputs:
 
 | Signal | Route | Issue Type |
 |--------|-------|------------|
 | Existing behavior broken / error traceback present | `remediation` | `bug` |
 | New feature / enhancement with clear acceptance criteria | `implementation` | `enhancement` |
 | "X doesn't support Y" / clearly absent feature | `implementation` | `enhancement` |
+| Validated audit report with structural/quality findings (finding IDs present, no tracebacks, no crashes) | `implementation` | `enhancement` |
 | Large/ambiguous scope / unclear root cause | `remediation` | `enhancement` |
 
 Record: `route` (implementation|remediation), `issue_type` (bug|enhancement),
 `confidence` (high|low), `rationale` (one sentence).
+
+Note: The audit-signal table row is a secondary defense for `--issue N` adoption of pre-existing validated audit issues where `is_validated_report` may not be set.
 
 ### Step 7: Confidence Gate
 
@@ -342,20 +382,26 @@ Otherwise:
 gh label create "recipe:implementation" --force \
     --description "Route: proceed directly to implementation" \
     --color "0E8A16"
+sleep 1  # Rate-limit discipline: 1s between mutating calls
 gh label create "recipe:remediation" --force \
     --description "Route: investigate/decompose before implementation" \
     --color "D93F0B"
+sleep 1  # Rate-limit discipline: 1s between mutating calls
 gh label create "bug" --force \
     --description "Existing behavior is broken" \
     --color "d73a4a"
+sleep 1  # Rate-limit discipline: 1s between mutating calls
 gh label create "enhancement" --force \
     --description "New feature or request" \
     --color "a2eeef"
+sleep 1  # Rate-limit discipline: 1s between mutating calls
 
 # Apply triage labels (use the route determined in Step 6)
 gh issue edit {issue_number} --add-label "recipe:implementation"
+sleep 1  # Rate-limit discipline: 1s between mutating calls
 # or, for remediation route:
 gh issue edit {issue_number} --add-label "recipe:remediation"
+sleep 1  # Rate-limit discipline: 1s between mutating calls
 gh issue edit {issue_number} --add-label "{issue_type}"
 ```
 
@@ -400,4 +446,10 @@ Emit to stdout for recipe capture:
   "requirements_appended": true
 }
 ---/prepare-issue-result---
+```
+
+Also emit the issue URL as a standalone structured token for recipe capture:
+
+```
+issue_url = https://github.com/owner/repo/issues/N
 ```

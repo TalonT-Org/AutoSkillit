@@ -1,6 +1,6 @@
 """Canonical GitHub remote repository resolver.
 
-L1 module: resolves 'owner/repo' from a git working directory,
+IL-1 module: resolves 'owner/repo' from a git working directory,
 encoding the clone isolation contract (upstream > origin priority).
 """
 
@@ -10,7 +10,7 @@ import asyncio
 
 from autoskillit.core import get_logger, normalize_owner_repo, parse_github_repo
 
-_log = get_logger(__name__)
+logger = get_logger(__name__)
 
 # Canonical remote precedence order: upstream before origin encodes the clone
 # isolation contract (upstream = real GitHub URL; origin = file:// local path).
@@ -59,7 +59,7 @@ async def resolve_remote_repo(
                 proc.kill()
                 await proc.wait()
                 await asyncio.gather(io_task, return_exceptions=True)
-                _log.warning("Timed out getting URL for remote %r in %r", remote, cwd)
+                logger.warning("Timed out getting URL for remote %r in %r", remote, cwd)
                 continue
             stdout, _ = await io_task
             if proc.returncode == 0:
@@ -67,6 +67,47 @@ async def resolve_remote_repo(
                 if parsed:
                     return parsed
         except OSError:
-            _log.warning("Failed to get URL for remote %r in %r", remote, cwd, exc_info=True)
+            logger.warning("Failed to get URL for remote %r in %r", remote, cwd, exc_info=True)
 
     return None
+
+
+async def resolve_remote_name(
+    cwd: str,
+    remotes: tuple[str, ...] = REMOTE_PRECEDENCE,
+) -> str:
+    """Return the git remote name to use for fetch/rebase operations.
+
+    Tries remotes in precedence order (upstream before origin).
+    Rejects file:// URLs — those indicate a clone-isolation origin
+    that should not be used for real git operations.
+    Falls back to "origin" if no remote qualifies.
+    """
+    for name in remotes:
+        proc = None
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "git",
+                "remote",
+                "get-url",
+                name,
+                cwd=cwd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=15.0)
+            if proc.returncode != 0:
+                continue
+            url = stdout.decode().strip()
+            if url.startswith("file://"):
+                continue
+            return name
+        except (TimeoutError, OSError):
+            if proc is not None and proc.returncode is None:
+                try:
+                    proc.kill()
+                    await proc.wait()
+                except OSError:
+                    pass
+            continue
+    return "origin"

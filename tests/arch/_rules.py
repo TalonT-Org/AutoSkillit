@@ -57,8 +57,20 @@ _LOGGER_METHODS = frozenset({"debug", "info", "warning", "error", "critical", "e
 _PRINT_EXEMPT = frozenset(
     {
         "_cook.py",
+        "_preview.py",
+        "_features.py",
+        "_menu.py",
+        "_fleet_display.py",
+        "_fleet_lifecycle.py",
+        "_fleet_preview.py",
+        "_fleet_session.py",
+        "_session_picker.py",
+        "_fleet.py",
+        "__init__.py",
         "_init_helpers.py",
+        "_order.py",
         "_onboarding.py",
+        "_session_launch.py",
         "_timed_input.py",
         "_update.py",
         "_update_checks.py",
@@ -66,15 +78,21 @@ _PRINT_EXEMPT = frozenset(
         "_doctor.py",
         "_marketplace.py",
         "_prompts.py",
+        "_sessions.py",
+        "_validate.py",
         "_workspace.py",
         "branch_protection_guard.py",
+        "lint_after_edit_hook.py",
         "open_kitchen_guard.py",
         "pretty_output_hook.py",
         "quota_guard.py",
         "quota_post_hook.py",
         "remove_clone_guard.py",
+        "review_gate_post_hook.py",
+        "review_loop_gate.py",
         "skill_cmd_guard.py",
         "skill_command_guard.py",
+        "_dispatch.py",
     }
 )
 
@@ -88,10 +106,14 @@ _BROAD_EXCEPT_EXEMPT = frozenset(
         "quota_guard.py",
         "quota_post_hook.py",
         "remove_clone_guard.py",
+        "review_gate_post_hook.py",
+        "review_loop_gate.py",
         "session_start_hook.py",
         "skill_cmd_guard.py",
         "skill_command_guard.py",
         "token_summary_hook.py",
+        "skill_load_post_hook.py",
+        "skill_load_guard.py",
     }
 )
 
@@ -105,7 +127,7 @@ _DISPATCH_TABLE_EXEMPT_FUNCTIONS = frozenset(
     }
 )
 
-# ── RULES tuple — 8 entries ───────────────────────────────────────────────────
+# ── RULES tuple — 9 entries ───────────────────────────────────────────────────
 
 RULES: tuple[RuleDescriptor, ...] = (
     RuleDescriptor(
@@ -248,6 +270,20 @@ RULES: tuple[RuleDescriptor, ...] = (
         exemptions=frozenset(),
         severity="error",
         defense_standard="DS-008",
+    ),
+    RuleDescriptor(
+        rule_id="ARCH-009",
+        name="logger-variable-name",
+        lens="operational",
+        description="The variable receiving get_logger() must be named 'logger'.",
+        rationale=(
+            "A single canonical name eliminates the _log/_logger/logger split across 90+ files. "
+            "Consistent naming makes logger call sites instantly recognizable at a glance "
+            "and removes ambiguity about module-level binding conventions."
+        ),
+        exemptions=frozenset(),
+        severity="error",
+        defense_standard="DS-009",
     ),
 )
 

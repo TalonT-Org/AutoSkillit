@@ -42,31 +42,23 @@ def test_implement_worktree_uses_config_driven_test_command() -> None:
     )
 
 
+def test_implement_worktree_sets_filter_env() -> None:
+    """implement-worktree/SKILL.md must set filter env vars in Step 5."""
+    content = (SKILLS_EXTENDED_DIR / "implement-worktree" / "SKILL.md").read_text()
+    assert "AUTOSKILLIT_TEST_FILTER" in content, (
+        "implement-worktree/SKILL.md must set AUTOSKILLIT_TEST_FILTER before test command"
+    )
+    assert "AUTOSKILLIT_TEST_BASE_REF" in content, (
+        "implement-worktree/SKILL.md must set AUTOSKILLIT_TEST_BASE_REF before test command"
+    )
+
+
 def test_merge_pr_uses_generic_ci_check_name() -> None:
     """merge-pr/SKILL.md must not name project-specific CI checks."""
     content = _skill_content("merge-pr")
     assert "Preflight + Ubuntu" not in content, (
         "merge-pr/SKILL.md hardcodes 'Preflight + Ubuntu' CI check name. "
         "Use generic 'required status checks' language (REQ-GEN-003)."
-    )
-
-
-def test_code_index_examples_are_generic() -> None:
-    """No bundled SKILL.md may use src/autoskillit/ as a code-index path example."""
-    skills_with_violations: list[str] = []
-    for skill_dir in SKILLS_DIR.iterdir():
-        if not skill_dir.is_dir():
-            continue
-        skill_md = skill_dir / "SKILL.md"
-        if not skill_md.exists():
-            continue
-        content = skill_md.read_text()
-        # Check for the specific AutoSkillit path example in code-index instructions
-        if "src/autoskillit/execution/headless.py" in content:
-            skills_with_violations.append(skill_dir.name)
-    assert not skills_with_violations, (
-        f"These skills have AutoSkillit-specific code-index path examples: "
-        f"{skills_with_violations}. Replace with generic placeholders (REQ-GEN-004)."
     )
 
 
@@ -89,4 +81,13 @@ def test_plan_experiment_has_no_hardcoded_metrics_rs() -> None:
     assert "src/metrics.rs" not in content, (
         "plan-experiment/SKILL.md hardcodes 'src/metrics.rs'. "
         "Use generic evaluation framework language (REQ-GEN-005)."
+    )
+
+
+def test_make_plan_uses_generic_branch_terminology() -> None:
+    """make-plan/SKILL.md must not use 'integration branch' — project-specific terminology."""
+    content = (SKILLS_EXTENDED_DIR / "make-plan" / "SKILL.md").read_text()
+    assert "integration branch" not in content, (
+        "make-plan/SKILL.md uses 'integration branch' — project-specific terminology "
+        "from the merge-prs workflow. Use generic language instead (REQ-GEN-006)."
     )

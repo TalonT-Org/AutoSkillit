@@ -1,6 +1,6 @@
 ---
 name: resolve-failures
-description: Fix test failures in a worktree without merging. Leaves worktree green and unmerged for the orchestrator's merge gate. Use when tests fail after implementation. Takes worktree path, plan path, and base branch as positional arguments.
+description: Failure resolution executor. ALWAYS invoke this skill when instructed to fix test failures in a worktree. Do not read test output or edit code directly — use this skill first to load the failure resolution workflow.
 hooks:
   PreToolUse:
     - matcher: "*"
@@ -43,12 +43,30 @@ Fix test failures in a worktree implemented by `/autoskillit:implement-worktree-
 - Report iteration count and what was fixed
 - Leave worktree intact on failure for manual inspection
 - Treat CI as the source of truth: "passes locally" is not a resolution
+- **Read before editing**: Before issuing an `Edit` call on any file, ensure you have issued a `Read` on that file earlier in this session. Claude Code rejects `Edit` on unread files — the retry wastes a full API turn at current context size. If you are uncertain whether a file was read, issue a targeted `Read` (offset + limit to the region you plan to edit) rather than risk an error.
+- **CWD awareness**: Before running `python3` or other interpreters in the worktree, verify CWD is the worktree root. Use absolute paths or explicit `cd`. Wrong-CWD errors waste a full API turn at current context size.
+- **Read files fully**: When reading a file to understand it in full, read it in a single call without a `limit` parameter. Do not paginate files with sequential offset reads — read once completely. Use `limit`/`offset` only for targeted section reads of files you have already read in full.
+
+**Flaky tests must always be resolved.** A test that failed previously and now passes
+is flaky by definition. Investigate timing dependencies, race conditions, insufficient
+timeouts, resource contention under parallel execution (pytest-xdist), and
+non-deterministic setup/teardown. Apply a stabilizing fix. Never classify a flaky test
+as unfixable. Never emit `ci_only_failure` for a test that is merely non-deterministic.
+
+When a test passes in isolation but fails in the full suite, check whether the test's
+shared dependencies (service objects, registries, caches, middleware stacks) accumulate
+state across calls — growing lists, maps, or registries rather than toggling flags,
+unless accumulation is the intended behavior (e.g., event logs, audit trails). Calling
+an inverse method (e.g., `disable()` to undo `enable()`) does not reset
+accumulation-based state if the framework appends rather than toggles; every call to
+either method appends a new entry. The fix for accumulation-based leakage is full reset:
+clear the collection, then re-apply the baseline state — not inverse operations.
 
 ## Context Limit Behavior
 
 When context is exhausted mid-execution, edits may be on disk but not committed.
 The recipe routes to `on_context_limit` (typically `test`), bypassing the normal
-commit protocol in Step 3.
+commit protocol during the fix loop.
 
 **Before every test run and before emitting structured output tokens:**
 1. Run `git -C {worktree_path} status --porcelain`
@@ -60,7 +78,7 @@ edits are committed and the downstream merge gate receives a clean worktree.
 
 ## Workflow
 
-Read the configured test command from `.autoskillit/config.yaml` (key: `test_check.command`). Use this command wherever `{test_command}` appears in these instructions. If no config exists, use the `test_check` MCP tool (which resolves the command from the project's config automatically).
+Read the configured test command(s) from `.autoskillit/config.yaml`: check `test_check.commands` first (ordered list of commands); fall back to `test_check.command` (single command). Use the `test_check` MCP tool (which runs all configured commands automatically and returns a single pass/fail).
 
 ### Step 0: Validate Arguments
 1. Parse positional args using **path detection**: scan all tokens after the
@@ -93,30 +111,6 @@ Read the configured test command from `.autoskillit/config.yaml` (key: `test_che
    sibling parallel-call cancellations.
 4. Check for development environment in worktree, recreate if missing. Use the project's configured `worktree_setup.command`, or: `cd "${worktree_path}" && task install-worktree`
 
-### Step 0.3 — Code-Index Initialization (required before any code-index tool call)
-
-Call `set_project_path` with the repo root where this skill was invoked (not a worktree path):
-
-```
-mcp__code-index__set_project_path(path="{PROJECT_ROOT}")
-```
-
-Code-index tools require **project-relative paths**. Always use paths like:
-
-    src/<your_package>/some_module.py
-
-NOT absolute paths like:
-
-    /absolute/path/to/src/<your_package>/some_module.py
-
-> **Note:** Code-index tools (`find_files`, `search_code_advanced`, `get_file_summary`,
-> `get_symbol_body`) are only available when the `code-index` MCP server is configured.
-> If `set_project_path` returns an error, fall back to native `Glob` and `Grep` tools
-> for the same searches — they provide equivalent results without the code-index server.
-
-Agents launched via `run_skill` inherit no code-index state from the parent session — this
-call is mandatory at the start of every headless session that uses code-index tools.
-
 ### Step 0.5: Commit Uncommitted Files
 1. Run `git -C {worktree_path} status --porcelain`
 2. If output is non-empty (dirty tree):
@@ -124,20 +118,6 @@ call is mandatory at the start of every headless session that uses code-index to
    - Run `git -C {worktree_path} commit -m "chore: commit auto-generated files"`
    - Log: "Committed {N} uncommitted file(s) before test run"
 3. If output is empty: continue (worktree is clean)
-
-### Step 0.7: Switch Code-Index to Worktree
-
-Call `set_project_path` with the worktree path so all subsequent code-index
-queries (`find_files`, `search_code_advanced`, `get_file_summary`, `get_symbol_body`)
-return worktree-relative paths instead of source-repo paths:
-
-```
-mcp__code-index__set_project_path(path="{worktree_path}")
-```
-
-This prevents the model from being exposed to source-repo absolute paths during
-investigation and fixing. Note: code-index tools are read-only; this switch does not
-affect git operations, which always use `git -C {worktree_path}` explicitly.
 
 ### Step 1: Understand Context
 1. Read the plan file to understand what was implemented and why
@@ -150,7 +130,7 @@ If `diagnosis_path` was provided and the file exists:
 1. Open `diagnosis_path` and read its content
 2. Find the "Structured Output" section or scan for the line matching `failure_subtype = {value}`
 3. Extract the `failure_subtype` value (e.g., `flaky`, `deterministic`, `timing_race`, etc.)
-4. Store as `{failure_subtype}` for use in Step 2d
+4. Store as `{failure_subtype}` for use in the Verdict Decision Tree
 
 If `diagnosis_path` is absent or the file does not exist:
 - Set `{failure_subtype} = unknown`
@@ -174,18 +154,33 @@ This ensures local test results match CI behavior. Skip if no pre-test generatio
    `test_check` blocks synchronously and returns `passed: true/false` in a single call.
 2. Record the result as `{local_result}`: PASS (`passed: true`) or FAIL (`passed: false`)
 
-### Step 2d: Verdict Decision Tree
+### Step 2c: Verdict Override Rule
+
+**This rule takes precedence over the decision table below.**
+
+If at ANY point during this skill's execution a code change was committed
+(i.e., the fix loop was entered and produced at least one commit) AND the final
+`test_check` result is PASS:
+
+→ `verdict = real_fix` — unconditionally, regardless of `failure_subtype`.
+
+The decision table below applies ONLY when no fix was committed during this
+invocation. Once a fix is applied and tests pass, the verdict is `real_fix`
+and the table is never consulted.
+
+### Step 2d: No-Fix Verdict Decision Tree
+
+**Applies ONLY when no fix was applied (fixes_applied == 0).** If the fix loop was entered
+and a commit was made, skip this table — verdict is already `real_fix` per Step 2c.
 
 Using `{local_result}` from Step 2 and `{failure_subtype}` from Step 2a, determine `{verdict}`:
 
 | Local result | `failure_subtype` | Verdict |
 |---|---|---|
-| FAIL → (fix applied in Step 3) → PASS | any | `real_fix` |
-| FAIL → (no fix possible after 3 iterations) | any | proceed to Step 5 |
 | PASS | `flaky` or `timing_race` | `flake_suspected` |
 | PASS | `deterministic` | `ci_only_failure` |
-| PASS | `fixture` or `import` | `ci_only_failure` |
-| PASS | `env` or `unknown` | `ci_only_failure` (conservative) |
+| PASS | `fixture` or `import` | `flake_suspected` |
+| PASS | `env` or `unknown` | `flake_suspected` |
 
 **Note on `already_green`:** This verdict is reserved for the `pre_resolve_rebase`
 re-entry path — when a sibling pipeline's fix has already landed on integration and
@@ -195,10 +190,10 @@ resolve-failures will now emit `real_fix` or another verdict. `already_green` is
 not emitted by this skill's primary workflow.
 
 If local tests PASS (no fix needed): go to Step 2.5 (Validate CI Resolution) before
-proceeding to Step 4 — the CI-truth gate may redirect to Step 3 for flakiness
+proceeding to Step 4 — the CI-truth gate may redirect to the fix loop for flakiness
 investigation even when local tests pass.
 
-If local tests FAIL: enter Step 3.
+If local tests FAIL: enter the fix loop.
 
 ### Step 2.5: Validate CI Resolution
 
@@ -219,10 +214,13 @@ the failure could not be reproduced locally, which is a flaky-test signal.
       - Do **NOT** proceed to Step 4
       - Log: "CI failure on [test name] — local pass is not a resolution (flaky test
         signal). Entering fix loop to investigate and stabilize."
-      - Proceed to **Step 3 (Fix Loop)** to investigate the non-determinism, timing
+      - Proceed to **the Fix Loop** to investigate the non-determinism, timing
         dependencies, or race conditions that caused the test to pass locally but fail
         in CI. Apply a stabilizing fix (e.g., increase timeouts, remove timing
         dependencies, add retry guards, fix resource cleanup).
+      - When the fix loop applies a stabilizing fix and tests pass, emit `verdict = real_fix`
+        (per Step 2c override). Do NOT fall back to the Step 2d table — the fix
+        resolves the CI failure regardless of the original `failure_subtype`.
    d. If `failure_type` is not "test" (e.g., "lint", "build") and tests pass locally:
       - Proceed to Step 4 — local pass resolves non-test CI failures (lint/build
         failures are deterministic; they don't pass locally while failing remotely).
@@ -251,7 +249,7 @@ the failure could not be reproduced locally, which is a flaky-test signal.
    - The specific error message for each failure (first 10–15 lines)
    Discard the full pytest stdout — do not retain progress dots, install-worktree
    output, or timing lines. These accumulate across iterations and inflate context.
-6. Green → Step 4 (with `verdict = real_fix`); Red and < 3 iterations → repeat; Red and >= 3 → Step 5
+6. Green → `verdict = real_fix` (per Step 2c override — do not re-evaluate Step 2d) → Step 4; Red and < 3 iterations → repeat; Red and >= 3 → Step 5
 
 ### Step 4: Report
 
@@ -275,13 +273,16 @@ fixes_applied = {N}
 
 Where:
 - `{verdict}` is one of: `real_fix`, `flake_suspected`, `ci_only_failure`
-- `{N}` is the number of fix iterations performed (0 for non-real_fix verdicts, ≥1 for `real_fix`)
+- `{N}` is the number of fix iterations performed (0 for `flake_suspected` or `ci_only_failure` verdicts, ≥1 for `real_fix`)
 
 Return control to the orchestrator. The recipe's `on_result:` routing dispatches
 on `verdict`:
 - `real_fix` → `re_push` (fix landed, push to remote)
-- `flake_suspected` → `release_issue_failure` (human escalation)
+- `flake_suspected` → `re_push` (retry via CI, bounded by retries: 2 / on_exhausted: release_issue_failure)
 - `ci_only_failure` → `release_issue_failure` (human escalation)
+
+**Invariant:** `ci_only_failure` is NEVER emitted when `fixes_applied >= 1`. If a fix was
+committed during this invocation and tests pass, the verdict is always `real_fix`.
 
 ### Step 5: Report Failure
 - Total fix iterations attempted

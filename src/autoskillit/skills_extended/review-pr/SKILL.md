@@ -19,12 +19,16 @@ by the recipe pipeline after `open_pr_step` opens the PR.
 
 ## Arguments
 
-`/autoskillit:review-pr <feature-branch> <base-branch> [annotated_diff_path=<path>] [hunk_ranges_path=<path>]`
+`/autoskillit:review-pr <feature-branch> <base-branch> [annotated_diff_path=<path>] [hunk_ranges_path=<path>] [diff_metrics_path=<path>] [mode=<local|github>]`
 
 - **feature-branch** — The feature branch containing the changes to review
 - **base-branch** — The base branch the PR targets (e.g., "main")
 - **annotated_diff_path** (optional) — absolute path to a pre-computed annotated diff file (produced by `annotate_pr_diff` run_python step). When provided and present, read from file instead of running python3.
 - **hunk_ranges_path** (optional) — absolute path to a pre-computed hunk ranges JSON file (produced by `annotate_pr_diff` run_python step). When provided and present, read from file instead of running python3.
+- **diff_metrics_path** (optional) — absolute path to a pre-computed diff metrics JSON file (produced by `annotate_pr_diff` run_python step). Contains `dispatch_agents` list that determines which audit dimensions to spawn. When absent, all 6 standard agents are dispatched.
+- **mode** (optional, default: `github`) — Controls where findings are written:
+  - `mode=github` (or absent/unrecognized): current behavior — post findings as GitHub inline review comments via the GitHub Reviews API.
+  - `mode=local`: write findings to a local JSON file instead of posting to GitHub. Skips all GitHub API calls for comment posting. Still writes `diff_context_{pr_number}.json`, `raw_findings_{pr_number}.json`, and `summary_{pr_number}_{timestamp}.md` as normal. Gate tokens (`%%REVIEW_GATE::*%%`) are emitted identically in both modes.
 
 ## When to Use
 
@@ -39,6 +43,7 @@ by the recipe pipeline after `open_pr_step` opens the PR.
 - Post review comments when `gh` is unavailable — output `verdict=approved` and exit 0
 - Review files outside the PR diff — scope all audit to diff content only
 - Modify any source code
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Find the PR by feature branch at invocation time (not from a pre-captured URL)
@@ -64,24 +69,22 @@ escalation_user=$(gh api user -q .login 2>/dev/null || echo "")
 If `escalation_user` is non-empty, set `escalation_user_mention="@${escalation_user}"`.
 If empty (gh unavailable or not authenticated), set `escalation_user_mention=""`.
 
-### Step 0.5 — Code-Index Initialization (required before any code-index tool call)
+Parse the optional `mode` keyword argument:
 
-Call `set_project_path` with the repo root where this skill was invoked (not a worktree path):
-
+```bash
+# Extract mode from keyword arguments
+MODE="github"
+for arg in "$@"; do
+    case "$arg" in
+        mode=local)  MODE="local" ;;
+        mode=github) MODE="github" ;;
+    esac
+done
 ```
-mcp__code-index__set_project_path(path="{PROJECT_ROOT}")
-```
 
-Code-index tools require **project-relative paths**. Always use paths like:
-
-    src/mypackage/core/module.py
-
-NOT absolute paths like:
-
-    /path/to/project/src/mypackage/core/module.py
-
-Agents launched via `run_skill` inherit no code-index state from the parent session — this
-call is mandatory at the start of every headless session that uses code-index tools.
+If `mode` is absent or unrecognized, default to `"github"`. The mode controls where
+findings are written — `mode=local` skips all GitHub API posting and writes to a local
+JSON file instead.
 
 ### Step 1: Find the Open PR
 
@@ -94,6 +97,83 @@ If `gh` is unavailable or not authenticated, or no PR is found:
 - Log "No PR found or gh unavailable — skipping review"
 - Output `verdict=approved`
 - Exit 0 (graceful degradation)
+
+### Step 1.5: Fetch Prior Review Thread Context
+
+This step is always executed when a PR is found. It builds prior-thread context for
+suppressing already-resolved findings on re-reviews and for focusing subagents on
+known-unresolved items.
+
+Fetch all review threads using cursor-based pagination (same GraphQL query as
+resolve-review Step 2, but also fetching `comments(first:5)` to see the original
+finding and up to 4 replies):
+
+```graphql
+query($owner:String!, $repo:String!, $number:Int!, $after:String) {
+  repository(owner:$owner, name:$repo) {
+    pullRequest(number:$number) {
+      reviewThreads(first:100, after:$after) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          isResolved
+          path
+          line
+          originalLine
+          comments(first:5) {
+            nodes { databaseId body author { login } }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+Build two lists from the thread nodes. For each thread, resolve line via:
+`line = thread.get("line") or thread.get("originalLine")` — `line` is nullable for
+outdated threads where new commits have shifted the diff anchor; `originalLine` is
+the stable fallback.
+
+If both `line` and `originalLine` are null (file-level comment thread from a prior review),
+skip this thread — do not add it to `prior_resolved_findings` or `prior_unresolved_findings`.
+File-level threads have no line anchor and must not suppress line-anchored findings via the
+±5 proximity match.
+
+**`prior_resolved_findings`** — threads meeting EITHER condition, AND where the first comment body
+contains `[critical]` or `[warning]` (autoskillit-posted finding):
+- `isResolved=true` (ACCEPT/REJECT findings resolved by resolve-review), OR
+- Any reply comment (`comments[1:]`) contains `<!-- autoskillit:resolved` (DISCUSS/INFO findings
+  acknowledged by resolve-review but intentionally left unresolved)
+
+Check for the marker using:
+```python
+RESOLVED_MARKER_RE = re.compile(r"<!--\s*autoskillit:resolved\b")
+
+has_marker_reply = any(
+    RESOLVED_MARKER_RE.search(c.get("body", ""))
+    for c in thread_comments[1:]
+)
+
+if thread.get("isResolved") or has_marker_reply:
+    prior_resolved_findings.append({"file": path, "line": line, "body": first_body})
+else:
+    prior_unresolved_findings.append({"file": path, "line": line, "body": first_body})
+```
+
+```json
+[{"file": "src/foo.py", "line": 42, "body": "[critical] arch: ..."}]
+```
+
+**`prior_unresolved_findings`** — threads where `isResolved=false` AND no reply contains the
+`<!-- autoskillit:resolved` marker AND the first comment contains `[critical]` or `[warning]`:
+```json
+[{"file": "src/bar.py", "line": 17, "body": "[warning] tests: ..."}]
+```
+
+Save to: `{{AUTOSKILLIT_TEMP}}/review-pr/prior_threads_{pr_number}.json`
+
+If the GraphQL call fails (token scope, network): set both lists to `[]` and log a warning.
+Prior-thread context is best-effort — failure must not abort the review.
 
 ### Step 2: Get PR Diff and Metadata
 
@@ -145,11 +225,12 @@ MERGE_BASE=$(
 )
 
 # 3. Fetch the base branch locally to run git diff
-git fetch origin ${PR_BASE} 2>/dev/null
+REMOTE=$(git remote get-url upstream >/dev/null 2>&1 && echo upstream || echo origin)
+git fetch "$REMOTE" ${PR_BASE} 2>/dev/null
 
 # 4. Files deleted from base since branch point
 DELETED_FILES=$(
-  git diff --name-only --diff-filter=D ${MERGE_BASE} origin/${PR_BASE} 2>/dev/null
+  git diff --name-only --diff-filter=D ${MERGE_BASE} "$REMOTE"/${PR_BASE} 2>/dev/null
 )
 
 # 5. PR's changed files (from gh pr view, already available)
@@ -158,7 +239,7 @@ PR_FILES=$(gh pr view {pr_number} --json files -q '[.files[].path] | join(" ")' 
 # 6. Symbols removed from files this PR modifies
 if [ -n "$PR_FILES" ] && [ -n "$MERGE_BASE" ]; then
   DELETED_SYMBOLS=$(
-    git diff --diff-filter=M ${MERGE_BASE} origin/${PR_BASE} -- ${PR_FILES} 2>/dev/null \
+    git diff --diff-filter=M ${MERGE_BASE} "$REMOTE"/${PR_BASE} -- ${PR_FILES} 2>/dev/null \
       | grep '^-' \
       | grep -E '^-(def |class |async def )' \
       | sed 's/^-//' \
@@ -182,9 +263,40 @@ deletion_context = {
 If `MERGE_BASE` is empty or any git command fails, set `deletion_context = null`.
 The parallel deletion regression audit is skipped when `deletion_context` is null.
 
+### Step 2.9: Diff-Size Adaptive Agent Selection
+
+Read the pre-computed diff metrics when available:
+
+```bash
+DISPATCH_AGENTS=""
+if [ -n "${diff_metrics_path:-}" ] && [ -f "$diff_metrics_path" ]; then
+    DISPATCH_AGENTS=$(cat "$diff_metrics_path" | python3 -c "import sys,json; print(','.join(json.load(sys.stdin).get('dispatch_agents',[])))" 2>/dev/null || echo "")
+fi
+```
+
+`DISPATCH_AGENTS` is a comma-separated list of audit dimension names to spawn in Step 3
+(e.g., `"tests,cohesion"` for a small diff, or `"arch,tests,defense,bugs,cohesion,slop"`
+for a medium/large diff).
+
+When `DISPATCH_AGENTS` is empty (metrics file absent or unparseable), dispatch all 6
+standard agents — this is the graceful-degradation fallback that preserves current behavior.
+
+**Agent selection tiers:**
+- **Small diff** (<200 added LoC and <5 changed files): `tests`, `cohesion`, and optionally `arch` if structural files changed (e.g., `__init__.py`, `pyproject.toml`).
+- **Medium/large diff** (>= 200 added LoC or >= 5 changed files): All 6 standard agents (`arch`, `tests`, `defense`, `bugs`, `cohesion`, `slop`).
+
+Note: Dimension 7 (the deletion regression audit) is NOT part of the dispatch plan — it remains
+unconditionally gated on `deletion_context` being non-null (unchanged from current behavior).
+
 ### Step 3: Run Parallel Audit Subagents
 
-Spawn parallel subagents (Task tool, model: sonnet) for each audit dimension.
+Spawn parallel subagents (Task tool, model: sonnet) for each audit dimension listed in
+`DISPATCH_AGENTS`. If `DISPATCH_AGENTS` is non-empty, spawn ONLY the dimensions it lists.
+If `DISPATCH_AGENTS` is empty, spawn all 6 standard dimensions (1-6).
+
+Parse `DISPATCH_AGENTS` (comma-separated string) into a list. For each dimension name in
+the list, spawn the corresponding subagent using the prompt template below.
+
 Each subagent receives only the PR diff content (not the full codebase) and returns
 findings in JSON format:
 
@@ -253,6 +365,18 @@ Subagent prompt template (dimensions 1–6):
 > If no issues found, return an empty array [].
 > Annotated diff content (each line prefixed with [LNNN] markers):
 > {annotated_diff_content}
+>
+> Prior resolved findings (DO NOT RE-RAISE — these have been addressed by resolve-review):
+> {json_list_of_prior_resolved_findings or "[]"}
+>
+> Prior unresolved findings (FOCUS ON these persistent issues if they appear in the diff you are reviewing):
+> {json_list_of_prior_unresolved_findings or "[]"}
+>
+> When a finding matches a prior resolved entry by file and approximate line (within ±5 lines):
+> SKIP it entirely — do not include it in your findings array.
+
+Pass `prior_resolved_findings` and `prior_unresolved_findings` (both as JSON arrays) into each
+subagent prompt via template substitution, same as `annotated_diff_content`.
 
 Subagent prompt template (dimension 7 — deletion_regression, only when `deletion_context` is non-null):
 
@@ -285,16 +409,27 @@ Subagent prompt template (dimension 7 — deletion_regression, only when `deleti
 ### Step 4: Aggregate and Deduplicate Findings
 
 1. Collect all subagent JSON responses
-2. Deduplicate by `(file, line)` pairs — keep highest severity for each pair
-3. Partition findings against `VALID_LINE_RANGES` (built in Step 2.7):
+2. Suppression pass — filter out prior_resolved_findings matches: after collecting raw
+   findings and before deduplication, remove any finding that matches a
+   `prior_resolved_findings` entry by same `file` path AND `line` within ±5 of the
+   resolved finding's `line`. This handles line drift caused by fix commits shifting
+   context. Log each suppressed finding:
+   `"Suppressing finding at {file}:{line} — matches prior resolved thread"`.
+   The remaining findings proceed through deduplication and verdict logic unchanged.
+3. Deduplicate by `(file, line)` pairs — keep highest severity for each pair
+4. Partition findings against `VALID_LINE_RANGES` (built in Step 2.7):
    - `FILTERED_FINDINGS`: findings whose `(file, line)` falls within any hunk range for
      that file. These are in-hunk and safe to post as inline comments in Step 6.
    - `UNPOSTABLE_FINDINGS`: findings whose `line` is not in any hunk range for their file.
-     Log a warning for each. These are included in the summary fallback body only.
+     Log a warning for each. These findings are surfaced via:
+     - Step 6: Critical-severity unpostable findings are posted as file-level comments
+       (subject_type: "file") on the individual comments endpoint.
+     - Step 7: All unpostable findings appear in the "Outside Diff Range" section of the
+       review body.
    - If `VALID_LINE_RANGES` is empty, all findings are `FILTERED_FINDINGS`.
-4. Apply verdict logic (Step 5) to ALL findings (`FILTERED_FINDINGS` + `UNPOSTABLE_FINDINGS`
+5. Apply verdict logic (Step 5) to ALL findings (`FILTERED_FINDINGS` + `UNPOSTABLE_FINDINGS`
    combined), so unpostable findings still contribute to the `changes_requested` verdict.
-5. Bucket by actionability (applied to combined findings):
+6. Bucket by actionability (applied to combined findings):
    - `actionable_findings` — requires_decision=false AND severity in ("critical", "warning")
    - `decision_findings` — requires_decision=true (any severity)
    - `info_findings` — severity == "info" AND requires_decision=false
@@ -309,20 +444,27 @@ This is not optional. Do not proceed to Step 5 without stating this.
 
 ### Step 5: Determine Verdict
 
-- Any `actionable_findings` present → `verdict = "changes_requested"` (clear fix exists, automated resolver handles it)
-- No actionable findings, but `decision_findings` present → `verdict = "needs_human"` (`needs_human` fires only when one or more findings have `requires_decision=true` — meaning the correct path forward requires a human decision that the automated reviewer cannot make)
-- No actionable or decision findings → `verdict = "approved"`
+- Any `blocking_findings` (critical severity, non-decision) present → `verdict = "changes_requested"` (clear fix exists, automated resolver handles it)
+- No blocking findings, but `warning_findings` (warning severity, non-decision) present → `verdict = "approved_with_comments"` (recipe routes to `resolve_review` but does not require a re-review cycle)
+- No blocking or warning findings, but `decision_findings` present → `verdict = "needs_human"` (`needs_human` fires only when one or more findings have `requires_decision=true` — meaning the correct path forward requires a human decision that the automated reviewer cannot make)
+- No findings of any kind → `verdict = "approved"`
 
 **Verdict logic:**
 ```python
 decision_findings = [f for f in all_findings if f.get("requires_decision")]
-actionable_findings = [
+blocking_findings = [
     f for f in all_findings
-    if not f.get("requires_decision") and f["severity"] in ("critical", "warning")
+    if not f.get("requires_decision") and f["severity"] == "critical"
+]
+warning_findings = [
+    f for f in all_findings
+    if not f.get("requires_decision") and f["severity"] == "warning"
 ]
 
-if actionable_findings:
+if blocking_findings:
     verdict = "changes_requested"
+elif warning_findings:
+    verdict = "approved_with_comments"
 elif decision_findings:
     verdict = "needs_human"
 else:
@@ -330,6 +472,49 @@ else:
 ```
 
 ### Step 6: Post Inline Review Comments
+
+**MODE BRANCHING:**
+
+**When `mode=local`:**
+- Skip ALL GitHub API calls for posting comments (no batch review POST, no individual comment POSTs, no file-level comments, no summary review POST)
+- Instead, write findings to `{{AUTOSKILLIT_TEMP}}/review-pr/local_findings_{pr_number}.json`
+
+**Iteration tracking:** Before writing, check if `local_findings_{pr_number}.json` already exists. If so, read its `iteration` field and set the new value to `iteration + 1`. If the file does not exist, set `iteration` to `0`.
+
+Write the local findings JSON:
+```json
+{
+  "findings": [
+    {
+      "path": "src/foo.py",
+      "line": 42,
+      "body": "[critical] arch: finding text",
+      "severity": "critical",
+      "dimension": "arch",
+      "side": "RIGHT"
+    }
+  ],
+  "summary": "AutoSkillit PR Review — Verdict: {verdict}",
+  "verdict": "{verdict}",
+  "pr_number": "{pr_number}",
+  "iteration": {iteration_number}
+}
+```
+
+For `iteration_number`: read from existing file (`iteration + 1`) or start at `0`.
+
+Include all findings from `FILTERED_FINDINGS` + `UNPOSTABLE_FINDINGS` (same as what would have been posted to GitHub). Use `path` as the field name (not `file`) in the JSON output for consistency with resolve-review's expected format.
+
+**Still write mode-independent files:**
+- `{{AUTOSKILLIT_TEMP}}/review-pr/diff_context_{pr_number}.json` (Step 8)
+- `{{AUTOSKILLIT_TEMP}}/review-pr/raw_findings_{pr_number}.json` (Step 8)
+- `{{AUTOSKILLIT_TEMP}}/review-pr/summary_{pr_number}_{timestamp}.md` (Step 8)
+
+Then skip directly to Step 8 (verdict emission) — no GitHub API calls, no Step 6.5 confirmation, no Step 7 submission.
+
+**Gate token emission is mode-independent:** `%%REVIEW_GATE::LOOP_REQUIRED%%` on `changes_requested`, `%%REVIEW_GATE::CLEAR%%` on `approved`/`needs_human` — emitted identically in both modes.
+
+**When `mode=github`:** Execute Steps 6, 6.5, and 7 as documented below (current behavior unchanged).
 
 Build review comment bodies for each critical and warning finding. Use the `line` and `side`
 fields (modern GitHub Reviews API — not the deprecated `position` field) so that file line
@@ -370,8 +555,48 @@ gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \
 
 Event mapping:
 - `approved` → `APPROVE`
+- `approved_with_comments` → `COMMENT`
 - `needs_human` → `COMMENT`
 - `changes_requested` → `REQUEST_CHANGES`
+
+**Success signal:** If the batch POST returns HTTP 200, treat the review as successfully
+posted regardless of response body content. Do NOT inspect the response body for a
+`comments` array — GitHub's review API does not echo back the submitted comments, so any
+length check would always read 0 and falsely trigger Tier 1 fallback.
+
+**Own-PR guard:** If the batch POST returns HTTP 422 and the error message mentions
+"review" or "author", the PR is self-authored. Retry the same request with event
+`COMMENT` instead of `REQUEST_CHANGES`. GitHub does not allow a PR author to submit a
+`REQUEST_CHANGES` review on their own PR.
+
+**File-Level Comments for Critical Unpostable Findings:**
+
+After the batch review POST succeeds (or after Tier 1 individual posting completes),
+post file-level comments for each **critical-severity** finding in `UNPOSTABLE_FINDINGS`.
+These use the individual comments endpoint with `subject_type: "file"` — this parameter
+is NOT valid on the batch Reviews API `comments[]` array.
+
+```bash
+COMMIT_ID=$(gh pr view {pr_number} --json headRefOid -q .headRefOid)
+
+# For each CRITICAL finding in UNPOSTABLE_FINDINGS:
+# NOTE: Do NOT include a `line` field — `line` must be omitted (not set to null)
+# for subject_type: "file". The `gh api --field` syntax naturally omits unspecified
+# fields, so simply not including `--field line=...` is correct.
+gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments \
+  --method POST \
+  --field path="{finding.file}" \
+  --field subject_type="file" \
+  --field commit_id="$COMMIT_ID" \
+  --field body="[{finding.severity}] {finding.dimension} (L{finding.line} — outside diff hunk): {finding.message}"
+sleep 1  # Rate-limit discipline: 1s between mutating calls
+```
+
+Only critical-severity findings are posted as file-level comments to control API call volume.
+Warning and info unpostable findings appear in the Step 7 review body only.
+
+If a file-level POST fails, log the failure and continue — file-level comments are
+best-effort supplementary visibility. Do not fall through to Tier 1/Tier 2 for these.
 
 **Fallback Tier 1 — Individual Comments (if batch POST fails):**
 
@@ -388,6 +613,7 @@ gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments \
   --field side="RIGHT" \
   --field commit_id="$COMMIT_ID" \
   --field body="[{finding.severity}] {finding.dimension}: {finding.message}"
+sleep 1  # Rate-limit discipline: 1s between mutating calls
 ```
 
 Individual POSTs are not atomic — one failure does not block others.
@@ -444,11 +670,40 @@ Never reference local file paths (e.g., `{{AUTOSKILLIT_TEMP}}/...`, `summary_*.m
 # approved
 gh pr review {pr_number} --approve --body "AutoSkillit review passed. No blocking issues found."
 
-# changes_requested
-gh pr review {pr_number} --request-changes --body "AutoSkillit review found {N} blocking issues. See inline comments."
+# approved_with_comments (no UNPOSTABLE_FINDINGS)
+gh pr review {pr_number} --comment --body "AutoSkillit review: warning-only findings detected. See inline comments — no blocking changes required."
 
-# needs_human
-gh pr review {pr_number} --comment --body "AutoSkillit review: uncertain trade-offs detected. {escalation_user_mention} Please review. See inline comments."
+# approved_with_comments / changes_requested / needs_human (with UNPOSTABLE_FINDINGS)
+# When UNPOSTABLE_FINDINGS is non-empty, append the "Outside Diff Range" section
+# to the verdict body. Build the body string dynamically.
+# Then post with the appropriate event flag:
+gh pr review {pr_number} --approve|--comment|--request-changes --body "$BODY"
+```
+
+**Building the Outside Diff Range body section:**
+
+When `UNPOSTABLE_FINDINGS` is non-empty, construct the body by appending the following
+section after the verdict one-liner. Group unpostable findings by file, format as a
+bullet list reusing the Tier 2 format (120-char message truncation).
+
+**TRUNCATION GUARD:** Cap the Outside Diff Range section at ~40,000 characters.
+The GitHub review body has a hard 65,536-char limit (HTTP 422 on overflow,
+no graceful degradation). Reserve headroom for the verdict line and formatting.
+If truncated, append: "...and N more findings. See file-level comments for
+critical items."
+
+Template for the appended section:
+
+```
+### ⚠️ Outside Diff Range
+
+These findings target lines not in the diff and could not be posted as inline comments:
+
+**path/to/file.py**
+- **L42** [critical/arch]: Finding message truncated to 120 chars
+
+**path/to/other.py**
+- **L99** [warning/security]: Finding message truncated to 120 chars
 ```
 
 ### Step 8: Write Summary and Emit Verdict
@@ -456,6 +711,76 @@ gh pr review {pr_number} --comment --body "AutoSkillit review: uncertain trade-o
 **CRITICAL — Ordering:** Step 8 must execute after Steps 6 and 7. Do not write the summary file before posting inline comments and submitting the review verdict to GitHub. Writing the file first anchors you to treating it as the primary output rather than a local audit artifact.
 
 Save findings summary to `{{AUTOSKILLIT_TEMP}}/review-pr/summary_{pr_number}_{timestamp}.md`. (relative to the current working directory)
+
+**Write Diff-Scoped Context Handoff (before emitting verdict):**
+
+After writing the summary file and before emitting the verdict token, write the handoff
+file for resolve-review's pre-built context. This costs zero additional API calls or file
+reads — all data is already in the session's context.
+
+For each finding in `FILTERED_FINDINGS` + `UNPOSTABLE_FINDINGS` where severity is
+`"critical"` or `"warning"`, build a context entry:
+- `path` — the finding's `file` field (the finding schema uses `file`, not `path`;
+  map `finding.file` → `path` in the context entry for resolve-review compatibility)
+- `line` — the finding's line number
+- `severity` — `"critical"` or `"warning"`
+- `dimension` — the audit dimension (arch, tests, bugs, etc.)
+- `message` — the finding's message text
+- `code_region` — extract from `ANNOTATED_DIFF`: find the file's section in the
+  annotated diff (between its `diff --git` header and the next), then collect all
+  lines whose `[LX]` marker has X within ±50 of the finding's `line`. Include those
+  raw annotated-diff lines as-is. If ANNOTATED_DIFF is empty or the file section is
+  not found, set `code_region` to `""`.
+
+Write to `{{AUTOSKILLIT_TEMP}}/review-pr/diff_context_{pr_number}.json`:
+
+```json
+{
+  "pr_number": 1234,
+  "schema_version": 1,
+  "written_at": "{ISO-8601 timestamp}",
+  "context_entries": [
+    {
+      "path": "src/autoskillit/execution/headless.py",
+      "line": 42,
+      "severity": "critical",
+      "dimension": "arch",
+      "message": "...",
+      "code_region": "[L40] ...\n[L41] ...\n[L42] ..."
+    }
+  ]
+}
+```
+
+Log: `"Wrote diff-scoped context handoff: N entries → {path}"`. If the write fails
+(e.g., temp dir unavailable), log a warning and continue — the handoff file is
+best-effort and its absence is handled gracefully by resolve-review.
+
+**Write Raw Findings JSON (after diff-context handoff):**
+
+After writing the diff-context handoff file, also write the raw findings list for
+downstream enrichment. This is a separate file from the handoff — it captures only
+the finding dicts as produced by the subagents, without code_region extraction.
+
+Write to `{{AUTOSKILLIT_TEMP}}/review-pr/raw_findings_{pr_number}.json`:
+
+```json
+{
+  "pr_number": 1234,
+  "findings": [
+    {
+      "file": "src/autoskillit/execution/headless.py",
+      "line": 42,
+      "severity": "critical",
+      "dimension": "arch",
+      "message": "..."
+    }
+  ]
+}
+```
+
+Include all findings from `FILTERED_FINDINGS` + `UNPOSTABLE_FINDINGS` where severity
+is `"critical"` or `"warning"`. Log: `"Wrote raw findings: N entries → {path}"`.
 
 Output the verdict as the final line:
 
@@ -465,16 +790,32 @@ Output the verdict as the final line:
 > exact token name — decorators cause match failure.
 
 ```
-verdict = {approved|changes_requested|needs_human}
+verdict = {approved|approved_with_comments|changes_requested|needs_human}
 ```
+
+Immediately after the verdict line, emit the review gate tag on a new line:
+
+- If `verdict = changes_requested`: emit `%%REVIEW_GATE::LOOP_REQUIRED%%`
+- If `verdict = approved` or `verdict = needs_human`: emit `%%REVIEW_GATE::CLEAR%%`
+- If `verdict = approved_with_comments`: do NOT emit a gate tag
 
 Exit 0 in all normal cases (approved, needs_human, changes_requested).
 Exit 1 only for unrecoverable tool-level errors.
 
 ## Output
 
-- `verdict=approved` — No blocking issues; CI can proceed
-- `verdict=changes_requested` — Blocking issues found; recipe routes to `resolve_review`
-- `verdict=needs_human` — Uncertain trade-offs; human review requested via the authenticated GitHub user mention (derived at runtime)
+- `verdict=approved` → `%%REVIEW_GATE::CLEAR%%` — No blocking issues; CI can proceed
+- `verdict=approved_with_comments` — no gate tag — Warning-only findings; recipe routes to `resolve_review` but does not require a re-review cycle
+- `verdict=changes_requested` → `%%REVIEW_GATE::LOOP_REQUIRED%%` — Blocking issues found; recipe routes to `resolve_review`
+- `verdict=needs_human` → `%%REVIEW_GATE::CLEAR%%` — Uncertain trade-offs; human review requested via the authenticated GitHub user mention (derived at runtime)
 
 Summary written to: `{{AUTOSKILLIT_TEMP}}/review-pr/summary_{pr_number}_{timestamp}.md`
+
+**Mode-conditional path output:**
+
+When `mode=local`, the following token is emitted:
+```
+local_findings_path = {AUTOSKILLIT_TEMP}/review-pr/local_findings_{pr_number}.json
+```
+
+When `mode=github`, no local_findings_path token is emitted (findings are posted directly to GitHub).

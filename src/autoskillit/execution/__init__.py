@@ -1,4 +1,4 @@
-"""execution/ L1 package: subprocess lifecycle, session parsing, headless runner, testing, DB.
+"""execution/ IL-1 package: subprocess lifecycle, session parsing, headless runner, testing, DB.
 
 Re-exports the full public surface of the six execution sub-modules.
 All sub-modules depend only on autoskillit.core.* at runtime;
@@ -6,6 +6,11 @@ execution/headless.py has TYPE_CHECKING-only references to pipeline/.
 """
 
 from autoskillit.core import SkillResult
+from autoskillit.execution._recording_skills import (
+    restore_skill_snapshot,
+    scan_skill_snapshots,
+    snapshot_skill_dir,
+)
 from autoskillit.execution.anomaly_detection import (
     AnomalyKind,
     AnomalySeverity,
@@ -27,10 +32,14 @@ from autoskillit.execution.db import (
     _execute_readonly_query as execute_readonly_query,
 )
 from autoskillit.execution.diff_annotator import (
+    DiffMetrics,
     FilterResult,
     annotate_diff,
+    compute_diff_metrics,
+    extract_code_region,
     filter_findings,
     parse_hunk_ranges,
+    select_review_agents,
 )
 from autoskillit.execution.github import (
     DefaultGitHubFetcher,
@@ -58,14 +67,17 @@ from autoskillit.execution.pr_analysis import (
 )
 from autoskillit.execution.process import (
     DefaultSubprocessRunner,
+    async_kill_process_tree,
+    kill_process_tree,
     run_managed_async,
     run_managed_sync,
 )
 from autoskillit.execution.quota import (
     QUOTA_CACHE_SCHEMA_VERSION,
     QuotaStatus,
-    _refresh_quota_cache,  # noqa: F401 — imported for re-export via server.helpers; not in __all__
+    _refresh_quota_cache,  # noqa: F401 — re-exported for server consumers; not in __all__
     check_and_sleep_if_needed,
+    invalidate_cache,
 )
 from autoskillit.execution.recording import (
     RECORD_SCENARIO_DIR_ENV,
@@ -79,12 +91,21 @@ from autoskillit.execution.recording import (
     ScenarioReplayError,
     build_replay_runner,
 )
-from autoskillit.execution.remote_resolver import REMOTE_PRECEDENCE, resolve_remote_repo
+from autoskillit.execution.remote_resolver import (
+    REMOTE_PRECEDENCE,
+    resolve_remote_name,
+    resolve_remote_repo,
+)
 from autoskillit.execution.session import (
     ClaudeSessionResult,
     ContentState,
+    SessionState,
+    classify_infra_exit,
+    clear_session_state,
     extract_token_usage,
     parse_session_result,
+    persist_session_state,
+    read_session_state,
 )
 from autoskillit.execution.session_log import (
     flush_session_log,
@@ -100,6 +121,9 @@ from autoskillit.execution.testing import (
 )
 
 __all__ = [
+    # _process_kill
+    "kill_process_tree",
+    "async_kill_process_tree",
     # commands
     "ClaudeInteractiveCmd",
     "ClaudeHeadlessCmd",
@@ -121,16 +145,25 @@ __all__ = [
     "REPLAY_SCENARIO_ENV",
     "REPLAY_SCENARIO_DIR_ENV",
     "SCENARIO_STEP_NAME_ENV",
+    "restore_skill_snapshot",
+    "scan_skill_snapshots",
+    "snapshot_skill_dir",
     # quota
     "QUOTA_CACHE_SCHEMA_VERSION",
     "QuotaStatus",
     "check_and_sleep_if_needed",
+    "invalidate_cache",
     # session
     "ClaudeSessionResult",
     "ContentState",
+    "SessionState",
     "SkillResult",
+    "classify_infra_exit",
+    "clear_session_state",
     "extract_token_usage",
     "parse_session_result",
+    "persist_session_state",
+    "read_session_state",
     # headless
     "run_headless_core",
     "DefaultHeadlessExecutor",
@@ -145,12 +178,17 @@ __all__ = [
     "fetch_repo_merge_state",
     # remote_resolver
     "REMOTE_PRECEDENCE",
+    "resolve_remote_name",
     "resolve_remote_repo",
     # diff_annotator
+    "DiffMetrics",
     "FilterResult",
     "annotate_diff",
+    "compute_diff_metrics",
+    "extract_code_region",
     "filter_findings",
     "parse_hunk_ranges",
+    "select_review_agents",
     # db
     "execute_readonly_query",
     "DefaultDatabaseReader",

@@ -36,6 +36,7 @@ outputs, and synthesizes a complete visualization plan.
 - Run vis-lens calls across multiple assistant messages — all selected lens calls must
   appear in a SINGLE assistant message to execute in parallel
 - Write outputs outside `{{AUTOSKILLIT_TEMP}}/plan-visualization/`
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
@@ -86,13 +87,43 @@ Experiment-type table (use when no override fires or to fill second Tier-B slot)
 
 Cap Tier B at 2 lenses total (overrides count toward this cap).
 
-**Tier C (0–1 based on target_domain):**
-| target_domain | Lens |
-|---|---|
-| nlp | vis-lens-domain-norms |
-| cv | vis-lens-domain-norms |
-| rl | vis-lens-temporal |
-| (others / general) | — (skip Tier C) |
+**Tier C (0–1 based on methodology tradition detection):**
+
+Tier C selects `vis-lens-methodology-norms` when the experiment plan's research
+methodology is identifiable from the 12 bundled methodology traditions.
+
+**Stage 1 — Deterministic keyword match:**
+1. Load all methodology traditions from `recipes/methodology-traditions/*.yaml`
+2. For each tradition, count how many of its `detection_keywords` appear in the
+   experiment plan text (case-insensitive, word-boundary matching)
+3. Build `candidate_set` = traditions with ≥ 2 keyword matches
+4. Branch on `len(candidate_set)`:
+
+| Candidates | Action | `precedence_trace` |
+|---|---|---|
+| 0 | Skip Tier C entirely | `stage1_no_match_fallback` |
+| 1 | Use that tradition as `primary_tradition` | `stage1_single_match` |
+| ≥ 2 | Proceed to Stage 2 | — |
+
+**Stage 2 — LLM arbitration (only when ≥ 2 candidates):**
+1. If any registered `UnionRuleDef` covers the candidate set, apply it:
+   select `resolved_tradition`, record rule name in `applied_union_rules`,
+   set `precedence_trace = "stage2_tiebreak_by_rule_{rule_name}"`
+2. Otherwise, select among candidates by analyzing the plan's primary research
+   question and methodology at temperature 0. Prefer the tradition whose
+   mandatory figures are most relevant to the stated research design.
+   Set `precedence_trace = "stage2_tiebreak_by_methodology_fit"`
+
+**Emit routing triple** (include as a fenced yaml block in the vis-lens context file):
+```yaml
+primary_tradition: <tradition_slug>
+applied_union_rules: [<rule_name>, ...]
+precedence_trace: "<trace_value>"
+candidate_set: [<tradition_slugs>]
+```
+
+When `primary_tradition` is set, add `vis-lens-methodology-norms` to `selected_lenses`
+and write the `tradition_slug` and routing triple into its context file (Step 2).
 
 Only add Tier C lens if it is not already in Tier A or Tier B.
 
@@ -134,6 +165,19 @@ Template for each context file:
 data_manifest or results/ section if available}
 ```
 
+When the context file is for `vis-lens-methodology-norms`, append the following
+section to the template above:
+
+```
+## Methodology Tradition
+tradition_slug: {primary_tradition from Tier-C routing triple}
+routing_triple:
+  primary_tradition: {slug}
+  applied_union_rules: [{rules}]
+  precedence_trace: {trace}
+  candidate_set: [{candidates}]
+```
+
 ### Step 3 — Run Vis-Lens Skills in Parallel
 
 In a **single assistant message**, invoke all `selected_lenses` as slash commands:
@@ -156,14 +200,14 @@ For each figure-spec block where two lenses disagree on chart type, color encodi
 or layout, apply the conflict resolution hierarchy:
 
 ```
-accessibility > anti-pattern > domain-norms > chart-select
+accessibility > anti-pattern > methodology-norms > chart-select
 ```
 
 Resolution rules:
 - `accessibility` (from `vis-lens-always-on` or `vis-lens-color-access`) wins over all
 - `anti-pattern` findings (from `vis-lens-antipattern` or always-on pass 1) override
-  chart-select and domain-norms recommendations
-- `domain-norms` (from `vis-lens-domain-norms`) overrides `chart-select`
+  chart-select and methodology-norms recommendations
+- `methodology-norms` (from `vis-lens-methodology-norms`) overrides `chart-select`
 - `chart-select` (from `vis-lens-chart-select`) is the lowest priority
 
 Every resolution must be logged as a row in the Conflict Resolution Log table.
@@ -215,9 +259,39 @@ Content structure:
 | Appendix | all | full captions |
 ```
 
+### Step 6.5 — Write visualization-plan-trace.md
+
+After completing Tier-C routing, write a trace file capturing routing decisions:
+
+Path: `{{AUTOSKILLIT_TEMP}}/plan-visualization/visualization-plan-trace.md`
+
+Content structure:
+```markdown
+# Visualization Plan Trace
+
+## Tier-C Routing Decision
+
+- **tier_c_lens**: {selected_lens_name or null}
+- **primary_tradition**: {methodology_tradition_slug or null}
+- **disambiguation_rule_applied**: {rule_name or null}
+- **applied_union_rules**: [{list of union rules applied, or empty if none}]
+- **precedence_trace**: [{chain of precedence resolution, or null}]
+```
+
+Fill in the fields from the Tier-C routing performed in Step 1:
+- `tier_c_lens`: the lens selected by Tier-C (0-or-1), or `null` if target_domain was `general`/others
+- `primary_tradition`: the `target_domain` value that determined Tier-C selection (e.g., `nlp`, `cv`, `rl`, `general`)
+- `disambiguation_rule_applied`: `null` for now (disambiguation rules from #844 not yet implemented)
+- `applied_union_rules`: empty list `[]` for now
+- `precedence_trace`: `null` for now
+
 ### Step 7 — Emit Structured Tokens
 
 ```
 visualization_plan_path = {absolute_path_to_visualization-plan.md}
 report_plan_path = {absolute_path_to_report-plan.md}
+disambiguation_rule_applied = {disambiguation_rule_applied or null}
+tier_c_lens = {tier_c_lens or null}
+methodology_tradition = {primary_tradition or null}
+visualization_plan_trace_path = {absolute_path_to_visualization-plan-trace.md}
 ```

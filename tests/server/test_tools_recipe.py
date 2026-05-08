@@ -7,7 +7,10 @@ import re
 
 import pytest
 
-from autoskillit.server.tools_recipe import validate_recipe
+from autoskillit.server.tools.tools_recipe import list_recipes as list_recipes_tool
+from autoskillit.server.tools.tools_recipe import validate_recipe
+
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 def _extract_docstring_sections(desc: str) -> dict[str, str]:
@@ -96,8 +99,8 @@ class TestValidateRecipeTool:
     """Tests for kitchen-gated validate_recipe tool."""
 
     @pytest.fixture(autouse=True)
-    def _ensure_ctx(self, tool_ctx):
-        """Ensure server context is initialized (gate open by default)."""
+    def _ensure_ctx(self, tool_ctx_kitchen_open):
+        """Ensure server context is initialized with gate open."""
 
     # VS1
     @pytest.mark.anyio
@@ -249,15 +252,15 @@ class TestMigrationSuggestions:
     """MSUG2: validate_recipe surfaces migration warnings."""
 
     @pytest.fixture(autouse=True)
-    def _ensure_ctx(self, tool_ctx):
-        """Ensure server context is initialized (gate open by default)."""
+    def _ensure_ctx(self, tool_ctx_kitchen_open):
+        """Ensure server context is initialized with gate open."""
 
     # MSUG2
     @pytest.mark.anyio
     async def test_validate_always_includes_outdated_version(self, tmp_path):
         """MSUG2: validate_recipe always includes outdated-script-version in semantic results."""
         script = tmp_path / "test-script.yaml"
-        script.write_text(_MINIMAL_SCRIPT_YAML)
+        script.write_text(_MINIMAL_SCRIPT_YAML + 'autoskillit_version: "0.0.1"\n')
 
         result = json.loads(await validate_recipe(script_path=str(script)))
         assert "findings" in result
@@ -278,6 +281,9 @@ class TestDocstringSemantics:
         from fastmcp.client import Client
 
         from autoskillit.server import mcp
+
+        mcp.enable(tags={"fleet"})
+        mcp.enable(tags={"fleet-dispatch"})
 
         async with Client(mcp) as client:
             tools = await client.list_tools()
@@ -424,6 +430,9 @@ class TestLoadSkillScriptFailurePredicates:
 
         from autoskillit.server import mcp
 
+        mcp.enable(tags={"fleet"})
+        mcp.enable(tags={"fleet-dispatch"})
+
         async with Client(mcp) as client:
             tools = await client.list_tools()
         return {t.name: t for t in tools}
@@ -444,11 +453,46 @@ class TestLoadSkillScriptFailurePredicates:
 
 # P5F2-T3
 @pytest.mark.anyio
-async def test_validate_recipe_no_recipes_returns_error(tool_ctx, tmp_path):
+async def test_validate_recipe_no_recipes_returns_error(tool_ctx_kitchen_open, tmp_path):
     """validate_recipe returns invalid JSON when recipes is not configured."""
-    tool_ctx.recipes = None
+    tool_ctx_kitchen_open.recipes = None
     result = json.loads(await validate_recipe(script_path=str(tmp_path / "x.yaml")))
     assert result.get("valid") is False
+
+
+# T7: list_recipes MCP tool hides campaign when fleet disabled
+@pytest.mark.anyio
+@pytest.mark.feature("fleet")
+async def test_list_recipes_mcp_tool_hides_campaign_when_fleet_disabled(
+    tool_ctx, tmp_path, monkeypatch
+):
+    """list_recipes MCP tool must exclude campaign recipes when fleet feature is disabled."""
+    from pathlib import Path
+
+    recipe_dir = tmp_path / ".autoskillit" / "recipes"
+    recipe_dir.mkdir(parents=True)
+    (recipe_dir / "my-campaign.yaml").write_text(
+        "name: my-campaign\ndescription: test\nkind: campaign\nsteps: {}\n"
+    )
+    tool_ctx.config.features["fleet"] = False
+    monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+    raw = await list_recipes_tool()
+    result = json.loads(raw)
+    recipe_names = [r["name"] for r in result.get("recipes", [])]
+    assert "my-campaign" not in recipe_names, (
+        "Campaign recipe must not appear when fleet feature is disabled"
+    )
+
+
+@pytest.mark.anyio
+async def test_list_recipes_returns_error_string_when_context_missing() -> None:
+    """list_recipes must return an error message string (not []) when tool_ctx is None."""
+    from autoskillit.server.tools.tools_recipe import list_recipes
+
+    result = await list_recipes()
+    assert isinstance(result, str)
+    parsed = json.loads(result)
+    assert "error" in parsed or parsed.get("is_error") is True
 
 
 # P5F2-T4  (import hygiene check)
@@ -458,7 +502,7 @@ def test_tools_recipe_does_not_import_raw_ctx():
     import pathlib
 
     source = (
-        pathlib.Path(__file__).parents[2] / "src/autoskillit/server/tools_recipe.py"
+        pathlib.Path(__file__).parents[2] / "src/autoskillit/server/tools/tools_recipe.py"
     ).read_text()
     tree = ast.parse(source)
     for node in ast.walk(tree):

@@ -2,11 +2,15 @@
 
 from pathlib import Path
 
+import pytest
 import yaml
 
 from autoskillit.recipe._api import validate_from_path
 from autoskillit.recipe.io import load_recipe
-from tests.recipe.conftest import NO_AUTOSKILLIT_IMPORT as _NO_AUTOSKILLIT_IMPORT
+from autoskillit.recipe.registry import run_semantic_rules
+from tests.recipe.conftest import KNOWN_PART_B_VIOLATIONS as _KNOWN_PART_B_VIOLATIONS
+
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 RECIPES_DIR = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "recipes"
 
@@ -22,7 +26,7 @@ class TestImplementationPipelineIssueUrl:
         errors = [
             f
             for f in result.get("findings", [])
-            if f.get("severity") == "error" and f.get("rule") != _NO_AUTOSKILLIT_IMPORT
+            if f.get("severity") == "error" and f.get("rule") not in _KNOWN_PART_B_VIOLATIONS
         ]
         assert errors == [], f"Unexpected errors: {errors}"
 
@@ -40,30 +44,31 @@ class TestImplementationPipelineIssueUrl:
         assert "fetch_issue" not in data["steps"]
 
     def test_get_issue_title_step_present(self):
-        """get_issue_title step must exist with correct structure."""
+        """claim_and_resolve step must exist with correct structure."""
         data = yaml.safe_load(_recipe_path("implementation").read_text())
-        assert "get_issue_title" in data["steps"]
+        assert "claim_and_resolve" in data["steps"]
         assert "parse_issue_number" not in data["steps"]
-        step = data["steps"]["get_issue_title"]
-        assert step["tool"] == "get_issue_title"
+        step = data["steps"]["claim_and_resolve"]
+        assert step["tool"] == "claim_and_resolve_issue"
         assert step.get("optional") is True
         assert step.get("skip_when_false") == "inputs.issue_url"
         assert "issue_number" in step.get("capture", {})
         assert "issue_title" in step.get("capture", {})
         assert "issue_slug" in step.get("capture", {})
 
-    def test_get_issue_title_between_set_merge_target_and_create_branch(self):
-        """get_issue_title must be positioned after set_merge_target, before create_branch."""
+    def test_get_issue_title_between_capture_base_sha_and_create_branch(self):
+        """clone step must route to claim_and_resolve, which routes to create_and_publish."""
         data = yaml.safe_load(_recipe_path("implementation").read_text())
-        assert data["steps"]["set_merge_target"]["on_success"] == "get_issue_title"
-        assert data["steps"]["get_issue_title"]["on_success"] == "claim_issue"
+        assert data["steps"]["clone"]["on_success"] == "claim_and_resolve"
+        on_result = data["steps"]["claim_and_resolve"].get("on_result", [])
+        true_routes = [r["route"] for r in on_result if r.get("when", "").endswith("== true")]
+        assert "create_and_publish" in true_routes
 
-    def test_create_branch_uses_slug_fallback(self):
-        """create_branch shell uses ${SLUG:-$RUN} pattern."""
+    def test_create_branch_uses_callable(self):
+        """create_and_publish step must use create_and_publish_branch MCP tool."""
         data = yaml.safe_load(_recipe_path("implementation").read_text())
-        cmd = data["steps"]["compute_branch"]["with"]["cmd"]
-        assert "SLUG" in cmd
-        assert "${SLUG:-" in cmd
+        step = data["steps"]["create_and_publish"]
+        assert step["tool"] == "create_and_publish_branch"
 
     def test_issue_url_referenced_in_downstream_skill_step(self):
         """plan step must reference inputs.issue_url, not issue_content."""
@@ -113,7 +118,7 @@ class TestInvestigateFirstIssueUrl:
         errors = [
             f
             for f in result.get("findings", [])
-            if f.get("severity") == "error" and f.get("rule") != _NO_AUTOSKILLIT_IMPORT
+            if f.get("severity") == "error" and f.get("rule") not in _KNOWN_PART_B_VIOLATIONS
         ]
         assert errors == [], f"Unexpected errors: {errors}"
 
@@ -130,12 +135,12 @@ class TestInvestigateFirstIssueUrl:
         assert "fetch_issue" not in data["steps"]
 
     def test_get_issue_title_step_present(self):
-        """get_issue_title step must exist with correct structure."""
+        """claim_and_resolve step must exist with correct structure."""
         data = yaml.safe_load(_recipe_path("remediation").read_text())
-        assert "get_issue_title" in data["steps"]
+        assert "claim_and_resolve" in data["steps"]
         assert "parse_issue_number" not in data["steps"]
-        step = data["steps"]["get_issue_title"]
-        assert step["tool"] == "get_issue_title"
+        step = data["steps"]["claim_and_resolve"]
+        assert step["tool"] == "claim_and_resolve_issue"
         assert step.get("optional") is True
         assert step.get("skip_when_false") == "inputs.issue_url"
         assert "issue_number" in step.get("capture", {})
@@ -143,17 +148,18 @@ class TestInvestigateFirstIssueUrl:
         assert "issue_slug" in step.get("capture", {})
 
     def test_get_issue_title_between_set_merge_target_and_create_branch(self):
-        """get_issue_title must be positioned after set_merge_target, before create_branch."""
+        """clone step must route to claim_and_resolve (set_merge_target is now part of clone)."""
         data = yaml.safe_load(_recipe_path("remediation").read_text())
-        assert data["steps"]["set_merge_target"]["on_success"] == "get_issue_title"
-        assert data["steps"]["get_issue_title"]["on_success"] == "claim_issue"
+        assert data["steps"]["clone"]["on_success"] == "claim_and_resolve"
+        on_result = data["steps"]["claim_and_resolve"].get("on_result", [])
+        true_routes = [r["route"] for r in on_result if r.get("when", "").endswith("== true")]
+        assert "create_and_publish" in true_routes
 
-    def test_create_branch_uses_slug_fallback(self):
-        """create_branch shell uses ${SLUG:-$RUN} pattern."""
+    def test_create_branch_uses_callable(self):
+        """create_and_publish step must use create_and_publish_branch MCP tool."""
         data = yaml.safe_load(_recipe_path("remediation").read_text())
-        cmd = data["steps"]["compute_branch"]["with"]["cmd"]
-        assert "SLUG" in cmd
-        assert "${SLUG:-" in cmd
+        step = data["steps"]["create_and_publish"]
+        assert step["tool"] == "create_and_publish_branch"
 
     def test_issue_url_referenced_in_downstream_skill_step(self):
         """investigate step must reference inputs.issue_url, not issue_content."""
@@ -202,33 +208,32 @@ class TestImplementationGroupsIssueTitle:
         errors = [
             f
             for f in result.get("findings", [])
-            if f.get("severity") == "error" and f.get("rule") != _NO_AUTOSKILLIT_IMPORT
+            if f.get("severity") == "error" and f.get("rule") not in _KNOWN_PART_B_VIOLATIONS
         ]
         assert errors == [], f"Unexpected errors: {errors}"
 
     def test_fetch_issue_step_replaced(self):
         data = yaml.safe_load(_recipe_path("implementation-groups").read_text())
         assert "fetch_issue" not in data["steps"]
-        assert "get_issue_title" in data["steps"]
+        assert "claim_and_resolve" in data["steps"]
 
     def test_get_issue_title_captures_three_fields(self):
         data = yaml.safe_load(_recipe_path("implementation-groups").read_text())
-        step = data["steps"]["get_issue_title"]
+        step = data["steps"]["claim_and_resolve"]
         assert "issue_number" in step["capture"]
         assert "issue_title" in step["capture"]
         assert "issue_slug" in step["capture"]
 
     def test_get_issue_title_skips_when_no_url(self):
         data = yaml.safe_load(_recipe_path("implementation-groups").read_text())
-        step = data["steps"]["get_issue_title"]
+        step = data["steps"]["claim_and_resolve"]
         assert step.get("skip_when_false") == "inputs.issue_url"
         assert step.get("optional") is True
 
-    def test_create_branch_uses_slug_fallback(self):
+    def test_create_branch_uses_callable(self):
         data = yaml.safe_load(_recipe_path("implementation-groups").read_text())
-        cmd = data["steps"]["compute_branch"]["with"]["cmd"]
-        assert "SLUG" in cmd
-        assert "${SLUG:-" in cmd
+        step = data["steps"]["create_and_publish"]
+        assert step["tool"] == "create_and_publish_branch"
 
     def test_no_issue_content_capture(self):
         """issue_content must not be captured anywhere in the recipe."""
@@ -281,23 +286,25 @@ class TestClaimReleaseGates:
     def test_claim_issue_step_present(self):
         for name in self.RECIPES:
             data = yaml.safe_load(_recipe_path(name).read_text())
-            assert "claim_issue" in data["steps"], f"{name}: missing claim_issue step"
+            assert "claim_and_resolve" in data["steps"], (
+                f"{name}: missing claim_and_resolve step (claim_and_resolve_issue tool)"
+            )
 
     def test_get_issue_title_routes_to_claim_issue(self):
         for name in self.RECIPES:
             data = yaml.safe_load(_recipe_path(name).read_text())
-            assert data["steps"]["get_issue_title"]["on_success"] == "claim_issue", (
-                f"{name}: get_issue_title.on_success should be claim_issue"
+            assert data["steps"]["clone"]["on_success"] == "claim_and_resolve", (
+                f"{name}: clone.on_success should be claim_and_resolve"
             )
 
     def test_claim_issue_routes_to_create_branch_on_true(self):
         for name in self.RECIPES:
             data = yaml.safe_load(_recipe_path(name).read_text())
-            step = data["steps"]["claim_issue"]
+            step = data["steps"]["claim_and_resolve"]
             routes = step.get("on_result", [])
             true_routes = [r["route"] for r in routes if r.get("when", "").endswith("== true")]
-            assert "compute_branch" in true_routes, (
-                f"{name}: claim_issue should route to compute_branch when claimed==true"
+            assert "create_and_publish" in true_routes, (
+                f"{name}: claim_and_resolve should route to create_and_publish when claimed==true"
             )
 
     def test_release_issue_steps_present(self):
@@ -319,8 +326,8 @@ class TestClaimReleaseGates:
         for name in self.RECIPES_WITH_RELEASE_SUCCESS_STEP:
             data = yaml.safe_load(_recipe_path(name).read_text())
             step = data["steps"]["release_issue_success"]
-            assert step["on_success"] == "register_clone_success", (
-                f"{name}: release_issue_success.on_success should be register_clone_success"
+            assert step["on_success"] == "patch_token_summary", (
+                f"{name}: release_issue_success.on_success should be patch_token_summary"
             )
 
     def test_release_issue_failure_routes_to_register_clone_failure(self):
@@ -334,7 +341,7 @@ class TestClaimReleaseGates:
                 f"{name}: release_issue_failure.on_failure should be register_clone_failure"
             )
 
-    def test_ci_watch_on_success_routing(self):
+    def test_ci_watch_on_result_routing(self):
         expected = {
             **{name: "check_repo_merge_state" for name in self.RECIPES_WITHOUT_RELEASE_SUCCESS},
             **{name: "release_issue_success" for name in self.RECIPES_WITH_RELEASE_SUCCESS},
@@ -344,12 +351,22 @@ class TestClaimReleaseGates:
         )
         for name, expected_route in expected.items():
             data = yaml.safe_load(_recipe_path(name).read_text())
-            assert data["steps"]["ci_watch"]["on_success"] == expected_route, (
-                f"{name}: ci_watch.on_success should be {expected_route!r}"
-            )
+            ci_step = data["steps"]["ci_watch"]
+            on_result = ci_step.get("on_result")
+            if on_result:
+                success_routes = [
+                    r["route"] for r in on_result if r.get("when", "").endswith("== 'success'")
+                ]
+                assert expected_route in success_routes, (
+                    f"{name}: ci_watch on_result success should route to {expected_route!r}"
+                )
+            else:
+                assert ci_step.get("on_success") == expected_route, (
+                    f"{name}: ci_watch.on_success should be {expected_route!r}"
+                )
 
     def test_claim_issue_with_args_contains_issue_url(self):
-        """CC-F1: claim_issue.with_args must contain issue_url after parsing.
+        """CC-F1: claim_and_resolve.with_args must contain issue_url after parsing.
 
         Fails when the YAML uses `with_args:` key (bug) because _parse_step
         reads data.get("with", {}) and returns {} for that key.
@@ -357,9 +374,9 @@ class TestClaimReleaseGates:
         """
         for name in self.RECIPES:
             recipe = load_recipe(_recipe_path(name))
-            step = recipe.steps["claim_issue"]
+            step = recipe.steps["claim_and_resolve"]
             assert "issue_url" in step.with_args, (
-                f"{name}: claim_issue.with_args missing issue_url — "
+                f"{name}: claim_and_resolve.with_args missing issue_url — "
                 f"YAML likely uses 'with_args:' instead of 'with:'"
             )
 
@@ -382,11 +399,13 @@ class TestClaimReleaseGates:
             )
 
     def test_claim_issue_step_passes_allow_reentry_from_upfront_claimed(self):
-        """claim_issue with: block includes allow_reentry mapped from inputs.upfront_claimed."""
+        """claim_and_resolve with: block includes allow_reentry from inputs.upfront_claimed."""
         for name in self.RECIPES:
             data = yaml.safe_load(_recipe_path(name).read_text())
-            claim_with = data["steps"]["claim_issue"].get("with", {})
-            assert "allow_reentry" in claim_with, f"{name}: claim_issue.with missing allow_reentry"
+            claim_with = data["steps"]["claim_and_resolve"].get("with", {})
+            assert "allow_reentry" in claim_with, (
+                f"{name}: claim_and_resolve.with missing allow_reentry"
+            )
             assert claim_with["allow_reentry"] == "${{ inputs.upfront_claimed }}", (
                 f"{name}: allow_reentry must be exactly '${{{{ inputs.upfront_claimed }}}}'"
             )
@@ -402,12 +421,31 @@ class TestClaimReleaseGates:
             )
 
     def test_claim_issue_routes_escalate_stop_when_not_claimed(self):
-        """claim_issue fallthrough routes to escalate_stop (preserves single-issue defense)."""
+        """claim_and_resolve fallthrough routes to escalate_stop."""
         for name in self.RECIPES:
             data = yaml.safe_load(_recipe_path(name).read_text())
-            on_result = data["steps"]["claim_issue"].get("on_result", [])
+            on_result = data["steps"]["claim_and_resolve"].get("on_result", [])
             # The fallthrough route (no 'when' key) must route to escalate_stop
             fallthrough_routes = [r["route"] for r in on_result if "when" not in r]
             assert "escalate_stop" in fallthrough_routes, (
-                f"{name}: claim_issue must have escalate_stop as fallthrough on_result route"
+                f"{name}: claim_and_resolve must have escalate_stop as fallthrough on_result route"
             )
+
+
+def test_release_issue_failure_steps_include_fail_label():
+    """All release_issue_failure steps must pass fail_label for atomic failure marking."""
+    for recipe_name in ("remediation", "implementation", "implementation-groups"):
+        recipe = load_recipe(_recipe_path(recipe_name))
+        step = recipe.steps["release_issue_failure"]
+        assert "fail_label" in step.with_args, (
+            f"{recipe_name}: release_issue_failure missing fail_label"
+        )
+
+
+def test_bundled_recipes_pass_release_issue_disposition_rule():
+    """All bundled recipes pass the release-issue-requires-disposition rule."""
+    for recipe_name in ("remediation", "implementation", "implementation-groups"):
+        recipe = load_recipe(_recipe_path(recipe_name))
+        findings = run_semantic_rules(recipe)
+        hits = [f for f in findings if f.rule == "release-issue-requires-disposition"]
+        assert not hits, f"{recipe_name}: {hits}"

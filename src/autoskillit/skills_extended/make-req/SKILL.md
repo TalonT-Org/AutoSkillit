@@ -35,6 +35,7 @@ Decompose a task, plan, roadmap, or feature description into a structured set of
 - Prescribe implementation approaches or libraries in requirements
 - Include implementation steps disguised as requirements ("Refactor X to use Y" is an instruction, not a requirement)
 - Write requirements that can only be verified by reading source code
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use subagents to understand the source material and relevant codebase context

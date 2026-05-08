@@ -31,6 +31,7 @@ hooks:
 - Modify any source code files
 - Show business logic details
 - Focus on data content (focus on mutation rules)
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Focus on STATE MUTATION RULES

@@ -9,14 +9,16 @@ dry-walkthrough, worktree, test, and PR-review skills. See
 
 ### How many MCP tools does it expose?
 
-42. Two are free range (`open_kitchen`, `close_kitchen`) and 40 are
+52. Fifteen are free-range: four always-visible (`open_kitchen`, `close_kitchen`,
+`disable_quota_guard`, `reload_session`) plus eleven fleet tools revealed only in
+fleet sessions via the `fleet`/`fleet-dispatch` tags. The remaining 37 are
 kitchen-tagged (gated behind `open_kitchen`). One kitchen tool, `test_check`,
-also carries the `headless` tag and is revealed inside headless sessions.
+also carries the `headless` tag and is revealed only inside headless sessions.
 See [execution/tool-access.md](execution/tool-access.md).
 
 ### How many bundled skills are there?
 
-95: 3 in `src/autoskillit/skills/` (Tier 1) and 92 in
+125: 3 in `src/autoskillit/skills/` (Tier 1) and 122 in
 `src/autoskillit/skills_extended/` (Tier 2 and 3). See
 [skills/catalog.md](skills/catalog.md).
 
@@ -27,13 +29,12 @@ and `research`. See [recipes/overview.md](recipes/overview.md).
 
 ### What does the doctor command actually check?
 
-14 things: 12 numbered checks plus the lettered sub-checks `4b` (config
-secrets placement) and `7b` (hook registry drift). The full table lives in
+28+ things: base checks span 28 numbered slots (with sub-checks 2b/2c/2d, 4b, 7b) plus up to 5 additional fleet-specific checks. The full table lives in
 [installation.md](installation.md#post-install-verification).
 
 ### Why are some MCP tools hidden by default?
 
-To keep normal Claude Code sessions clean. The 40 kitchen-tagged tools only
+To keep normal Claude Code sessions clean. The 37 kitchen-tagged tools only
 appear after the orchestrator calls `open_kitchen`. See
 [execution/tool-access.md](execution/tool-access.md).
 
@@ -68,10 +69,9 @@ tree. See [safety/workspace.md](safety/workspace.md).
 ### How do I tune the API quota guard?
 
 Set `quota_guard.short_window_threshold` (default 85.0) for short windows
-(e.g. `five_hour`), `quota_guard.long_window_threshold` (default 98.0) for
+(e.g. `five_hour`), `quota_guard.long_window_threshold` (default 95.0) for
 long windows (weekly, sonnet, opus), and `quota_guard.buffer_seconds`
-(default 60) in `.autoskillit/config.yaml`. See
-[operations/sprint-guide.md](operations/sprint-guide.md).
+(default 60) in `.autoskillit/config.yaml`.
 
 ### Where do session diagnostics go?
 
@@ -100,5 +100,4 @@ contract card. See [recipes/authoring.md](recipes/authoring.md).
 Open an issue in the GitHub repository. AutoSkillit also has a built-in
 `report_bug` MCP tool that the `pipeline-summary` skill calls automatically
 when an overnight pipeline surfaces a bug. The tool deduplicates against
-existing open issues by fingerprint. See
-[operations/sprint-guide.md](operations/sprint-guide.md).
+existing open issues by fingerprint.

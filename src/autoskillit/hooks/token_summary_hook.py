@@ -22,9 +22,9 @@ from typing import Any
 
 # stdlib-only subprocess hook: import _fmt_primitives by bare name via sys.path
 # (test_hooks_are_stdlib_only). Venv tests use the autoskillit.hooks package path.
-_HOOKS_DIR = str(pathlib.Path(__file__).resolve().parent)
-if _HOOKS_DIR not in sys.path:
-    sys.path.insert(0, _HOOKS_DIR)
+_FORMATTERS_DIR = str(pathlib.Path(__file__).resolve().parent / "formatters")
+if _FORMATTERS_DIR not in sys.path:
+    sys.path.insert(0, _FORMATTERS_DIR)
 
 from _fmt_primitives import (  # type: ignore[import-not-found]  # noqa: E402
     _HOOK_CONFIG_PATH_COMPONENTS,
@@ -59,20 +59,25 @@ def _log_root() -> pathlib.Path:
     return base / "autoskillit/logs"
 
 
-def _extract_pr_url(tool_name: str, tool_response_raw: str) -> str | None:
-    """Extract a GitHub PR URL from a PostToolUse tool_response string.
+def _unwrap_mcp_response(tool_name: str, raw: str) -> dict | None:
+    """Parse and double-unwrap a PostToolUse tool_response string.
 
-    Replicates pretty_output._resolve_payload double-unwrap logic.
-    Returns the URL string or None if not found.
+    Returns the effective payload dict, or None if raw is not valid JSON or
+    not a dict.
+
+    For MCP tools (tool_name starts with 'mcp__'), if the outer dict has
+    exactly one key 'result' whose value is a JSON string, attempts to parse
+    that string as a nested dict and returns it. Falls back to returning the
+    outer dict when inner parsing fails or yields a non-dict. Non-MCP tools
+    return the outer dict directly.
     """
     try:
-        outer = json.loads(tool_response_raw)
+        outer = json.loads(raw)
     except (json.JSONDecodeError, ValueError):
         return None
     if not isinstance(outer, dict):
         return None
 
-    result_text: str | None = None
     if (
         tool_name.startswith("mcp__")
         and list(outer.keys()) == ["result"]
@@ -81,15 +86,24 @@ def _extract_pr_url(tool_name: str, tool_response_raw: str) -> str | None:
         try:
             inner = json.loads(outer["result"])
             if isinstance(inner, dict):
-                result_text = inner.get("result", "")
+                return inner
         except (json.JSONDecodeError, ValueError):
-            result_text = outer["result"]
-    else:
-        result_text = outer.get("result", "")
+            pass
 
+    return outer
+
+
+def _extract_pr_url(tool_name: str, tool_response_raw: str) -> str | None:
+    """Extract a GitHub PR URL from a PostToolUse tool_response string.
+
+    Returns the URL string or None if not found.
+    """
+    payload = _unwrap_mcp_response(tool_name, tool_response_raw)
+    if payload is None:
+        return None
+    result_text = payload.get("result", "")
     if not result_text or not isinstance(result_text, str):
         return None
-
     m = re.search(r"https://github\.com/[^/\s]+/[^/\s]+/pull/\d+", result_text)
     return m.group() if m else None
 
@@ -139,34 +153,12 @@ def _read_kitchen_id(base: pathlib.Path | None = None) -> str:
 def _extract_order_id(tool_name: str, tool_response_raw: str) -> str:
     """Extract order_id from a PostToolUse run_skill result JSON.
 
-    Replicates the same double-unwrap logic as _extract_pr_url.
     Returns '' if not found.
     """
-    try:
-        outer = json.loads(tool_response_raw)
-    except (json.JSONDecodeError, ValueError):
+    payload = _unwrap_mcp_response(tool_name, tool_response_raw)
+    if payload is None:
         return ""
-    if not isinstance(outer, dict):
-        return ""
-
-    inner_dict: dict | None = None
-    if (
-        tool_name.startswith("mcp__")
-        and list(outer.keys()) == ["result"]
-        and isinstance(outer["result"], str)
-    ):
-        try:
-            parsed = json.loads(outer["result"])
-            if isinstance(parsed, dict):
-                inner_dict = parsed
-        except (json.JSONDecodeError, ValueError):
-            pass
-    else:
-        inner_dict = outer
-
-    if inner_dict is None:
-        return ""
-    return str(inner_dict.get("order_id", ""))
+    return str(payload.get("order_id", ""))
 
 
 def _load_sessions(
@@ -221,7 +213,7 @@ def _load_sessions(
         except (json.JSONDecodeError, OSError):
             continue
 
-        raw_step = data.get("step_name", "")
+        raw_step = data.get("session_label", "")
         if not raw_step:
             continue
 
@@ -229,14 +221,22 @@ def _load_sessions(
         if key not in aggregated:
             aggregated[key] = {
                 "step_name": key,
+                "model": "",
                 "input_tokens": 0,
                 "output_tokens": 0,
                 "cache_creation_input_tokens": 0,
                 "cache_read_input_tokens": 0,
                 "elapsed_seconds": 0.0,
                 "invocation_count": 0,
+                "loc_insertions": 0,
+                "loc_deletions": 0,
+                "peak_context": 0,
+                "turn_count": 0,
             }
         entry = aggregated[key]
+        _model = data.get("model_identifier", "")
+        if _model and not entry["model"]:
+            entry["model"] = _model
         entry["input_tokens"] += data.get("input_tokens", 0)
         entry["output_tokens"] += data.get("output_tokens", 0)
         entry["cache_creation_input_tokens"] += data.get("cache_creation_input_tokens", 0)
@@ -244,6 +244,14 @@ def _load_sessions(
         _raw_timing = data.get("timing_seconds")
         entry["elapsed_seconds"] += float(_raw_timing) if _raw_timing is not None else 0.0
         entry["invocation_count"] += 1
+        entry["loc_insertions"] = entry.get("loc_insertions", 0) + data.get("loc_insertions", 0)
+        entry["loc_deletions"] = entry.get("loc_deletions", 0) + data.get("loc_deletions", 0)
+        _raw_peak = data.get("peak_context", 0)
+        if isinstance(_raw_peak, int) and _raw_peak > entry["peak_context"]:
+            entry["peak_context"] = _raw_peak
+        _raw_turns = data.get("turn_count", 0)
+        if isinstance(_raw_turns, int):
+            entry["turn_count"] = entry.get("turn_count", 0) + _raw_turns
 
     return aggregated
 
@@ -253,42 +261,152 @@ def _format_table(aggregated: dict[str, dict[str, Any]]) -> str:
     lines = [
         "## Token Usage Summary",
         "",
-        "| Step | uncached | output | cache_read | cache_write | count | time |",
-        "|------|----------|--------|------------|-------------|-------|------|",
+        "| Step | Model | count | uncached | output | cache_read | peak_ctx | turns | cache_write | time |",  # noqa: E501
+        "|------|-------|-------|----------|--------|------------|----------|-------|-------------|------|",
     ]
 
     total_input = 0
     total_output = 0
     total_cache_rd = 0
+    total_peak = 0
     total_cache_wr = 0
     total_time = 0.0
+    has_non_anthropic = False
 
     for entry in aggregated.values():
         name = entry["step_name"]
+        model = entry.get("model", "")
+        if model and not model.startswith("claude-"):
+            name = f"{name}*"
+            has_non_anthropic = True
+        count = entry.get("invocation_count", 1)
         inp = entry["input_tokens"]
         out = entry["output_tokens"]
         cache_rd = entry["cache_read_input_tokens"]
+        peak_ctx = entry.get("peak_context", 0)
+        turns = entry.get("turn_count", 0)
         cache_wr = entry["cache_creation_input_tokens"]
-        count = entry["invocation_count"]
         elapsed = entry["elapsed_seconds"]
 
         lines.append(
-            f"| {name} | {_humanize(inp)} | {_humanize(out)} | {_humanize(cache_rd)}"
-            f" | {_humanize(cache_wr)} | {count} | {_fmt_duration(elapsed)} |"
+            f"| {name} | {model} | {count} | {_humanize(inp)} | {_humanize(out)}"
+            f" | {_humanize(cache_rd)} | {_humanize(peak_ctx)} | {turns} | {_humanize(cache_wr)}"
+            f" | {_fmt_duration(elapsed)} |"
         )
 
         total_input += inp
         total_output += out
         total_cache_rd += cache_rd
+        if peak_ctx > total_peak:
+            total_peak = peak_ctx
         total_cache_wr += cache_wr
         total_time += elapsed
 
     lines.append(
-        f"| **Total** | {_humanize(total_input)} | {_humanize(total_output)}"
-        f" | {_humanize(total_cache_rd)} | {_humanize(total_cache_wr)}"
-        f" | | {_fmt_duration(total_time)} |"
+        f"| **Total** | | | {_humanize(total_input)} | {_humanize(total_output)}"
+        f" | {_humanize(total_cache_rd)} | {_humanize(total_peak)}"
+        f" | | {_humanize(total_cache_wr)} | {_fmt_duration(total_time)} |"
     )
+    if has_non_anthropic:
+        lines.append("")
+        lines.append(r"\* *Step used a non-Anthropic provider; caching behavior may differ.*")
 
+    return "\n".join(lines)
+
+
+def _format_efficiency_table(aggregated: dict[str, dict[str, Any]]) -> str:
+    """Format aggregated token data as a markdown ## Token Efficiency table.
+
+    Returns '' when no session has LoC data (all zero).
+    """
+    has_loc = any(
+        e.get("loc_insertions", 0) + e.get("loc_deletions", 0) > 0 for e in aggregated.values()
+    )
+    if not has_loc:
+        return ""
+
+    def _ratio(tokens: int, loc: int) -> str:
+        return f"{tokens / loc:.1f}" if loc > 0 else "—"
+
+    lines = [
+        "## Token Efficiency",
+        "",
+        "| Step | LoC Changed | cache_read/LoC | cache_write/LoC | output/LoC |",
+        "|------|-------------|----------------|-----------------|------------|",
+    ]
+    total_loc = total_cr = total_cw = total_out = 0
+    for entry in aggregated.values():
+        loc = entry.get("loc_insertions", 0) + entry.get("loc_deletions", 0)
+        cr = entry.get("cache_read_input_tokens", 0)
+        cw = entry.get("cache_creation_input_tokens", 0)
+        out = entry.get("output_tokens", 0)
+        lines.append(
+            f"| {entry['step_name']} | {loc}"
+            f" | {_ratio(cr, loc)}"
+            f" | {_ratio(cw, loc)} | {_ratio(out, loc)} |"
+        )
+        total_loc += loc
+        total_cr += cr
+        total_cw += cw
+        total_out += out
+
+    lines.append(
+        f"| **Total** | **{total_loc}**"
+        f" | {_ratio(total_cr, total_loc)}"
+        f" | {_ratio(total_cw, total_loc)} | {_ratio(total_out, total_loc)} |"
+    )
+    return "\n".join(lines)
+
+
+def _format_model_table(aggregated: dict[str, dict[str, Any]]) -> str:
+    """Format per-model aggregate breakdown as ## Model Usage Breakdown table.
+
+    Returns '' when all entries have no model data (legacy sessions).
+
+    Duplicates TelemetryFormatter.format_model_table by design: hook scripts are
+    stdlib-only and cannot import from autoskillit.*.
+    """
+    model_data: dict[str, dict[str, Any]] = {}
+    for entry in aggregated.values():
+        model = entry.get("model", "")
+        if not model or model == "unknown":
+            continue
+        if model not in model_data:
+            model_data[model] = {
+                "model": model,
+                "_steps": set(),
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "elapsed_seconds": 0.0,
+            }
+        md = model_data[model]
+        md["_steps"].add(entry.get("step_name", ""))
+        md["input_tokens"] += entry.get("input_tokens", 0)
+        md["output_tokens"] += entry.get("output_tokens", 0)
+        md["cache_creation_input_tokens"] += entry.get("cache_creation_input_tokens", 0)
+        md["cache_read_input_tokens"] += entry.get("cache_read_input_tokens", 0)
+        md["elapsed_seconds"] += entry.get("elapsed_seconds", 0.0)
+
+    if not model_data:
+        return ""
+
+    lines = [
+        "## Model Usage Breakdown",
+        "",
+        "| Model | steps | uncached | output | cache_read | cache_write | time |",
+        "|-------|-------|----------|--------|------------|-------------|------|",
+    ]
+    for md in model_data.values():
+        step_count = len(md.pop("_steps"))
+        lines.append(
+            f"| {md['model']} | {step_count}"
+            f" | {_humanize(md['input_tokens'])} | {_humanize(md['output_tokens'])}"
+            f" | {_humanize(md['cache_read_input_tokens'])}"
+            f" | {_humanize(md['cache_creation_input_tokens'])}"
+            f" | {_fmt_duration(md['elapsed_seconds'])} |"
+        )
     return "\n".join(lines)
 
 
@@ -338,7 +456,13 @@ def main() -> None:
             sys.exit(0)
 
         token_table = _format_table(aggregated)
+        efficiency_table = _format_efficiency_table(aggregated)
+        model_table = _format_model_table(aggregated)
         new_body = current_body + "\n\n" + token_table
+        if efficiency_table:
+            new_body += "\n\n" + efficiency_table
+        if model_table:
+            new_body += "\n\n" + model_table
 
         try:
             subprocess.run(

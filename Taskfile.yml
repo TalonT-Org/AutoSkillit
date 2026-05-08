@@ -38,7 +38,7 @@ tasks:
 
         set -o pipefail
         set +e
-        $PYTEST_CMD tests/ -q --tb=short -n 4 -m "not smoke" --disable-warnings -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
+        $PYTEST_CMD tests/ -q --tb=short -n 4 -m "not smoke and not canary" --disable-warnings -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
         PYTEST_EXIT=$?
         set +o pipefail
         set -e
@@ -67,7 +67,7 @@ tasks:
 
         set -o pipefail
         set +e
-        $PYTEST_CMD tests/ -q --tb=short -n 4 -m "not smoke" --disable-warnings -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
+        $PYTEST_CMD tests/ -q --tb=short -n 4 -m "not smoke and not canary" --disable-warnings -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
         PYTEST_EXIT=$?
         set +o pipefail
         set -e
@@ -85,6 +85,60 @@ tasks:
           echo "TEST_RESULT=PASS"
           exit 0
         fi
+
+  test-filtered:
+    desc: Run path-filtered tests (delegates to test-check with filter env passthrough)
+    cmds:
+      - |
+        export AUTOSKILLIT_TEST_FILTER="${AUTOSKILLIT_TEST_FILTER:-conservative}"
+        task test-check
+
+  coverage-audit:
+    desc: "Run pytest with coverage collection and compare against AST-derived function map"
+    deps: [install-worktree, _tmpdir-setup]
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      OMP_NUM_THREADS: "1"
+      TMPDIR: "{{.PYTEST_TMPDIR}}"
+    cmds:
+      - |
+        mkdir -p temp
+
+        if [[ -d ".venv" ]]; then
+          PYTEST_CMD=".venv/bin/python -m pytest"
+          PYTHON=".venv/bin/python"
+        else
+          PYTEST_CMD="pytest"
+          PYTHON="python"
+        fi
+
+        set +e
+        $PYTEST_CMD tests/ -q --tb=short \
+          -n 4 \
+          -m "not smoke and not canary" \
+          --disable-warnings \
+          -o "addopts=" \
+          --basetemp="{{.PYTEST_TMPDIR}}" \
+          -o "cache_dir={{.PYTEST_CACHEDIR}}" \
+          --cov=src/autoskillit \
+          --cov-context=test \
+          --cov-branch \
+          --cov-report=term-missing:skip-covered \
+          --cov-report=
+        set -e
+
+        echo ""
+        echo "--- Coverage AST Comparison ---"
+        $PYTHON scripts/compare-coverage-ast.py \
+          --coverage-db .coverage \
+          --output "temp/coverage-audit-$(date +%Y%m%d-%H%M%S).json"
+
+        echo ""
+        echo "--- Building test-source map ---"
+        $PYTHON scripts/compare-coverage-ast.py \
+          --mode build-test-source-map \
+          --coverage-db .coverage \
+          --output ".autoskillit/test-source-map.json"
 
   test-smoke:
     desc: Run smoke tests (requires ANTHROPIC_API_KEY)
@@ -109,13 +163,48 @@ tasks:
 
         set -o pipefail
         set +e
-        $PYTEST_CMD tests/recipe/test_smoke_pipeline.py -m smoke -v --tb=short -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
+        $PYTEST_CMD tests/server/test_smoke_pipeline.py -m smoke -v --tb=short -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
         PYTEST_EXIT=$?
         set +o pipefail
         set -e
 
         echo ""
         echo "Smoke test output saved to: $TEST_OUTPUT"
+        exit $PYTEST_EXIT
+
+  test-smoke-research:
+    desc: Run research recipe smoke tests (requires ANTHROPIC_API_KEY)
+    deps: [_tmpdir-setup]
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      OMP_NUM_THREADS: "1"
+      RESEARCH_SMOKE_TEST: "1"
+      TMPDIR: "{{.PYTEST_TMPDIR}}"
+    preconditions:
+      - sh: test -n "$ANTHROPIC_API_KEY"
+        msg: "ANTHROPIC_API_KEY must be set"
+    cmds:
+      - |
+        mkdir -p temp
+        TEST_OUTPUT="temp/smoke-research-$(date +%Y-%m-%d_%H%M%S).txt"
+        echo "Running research smoke tests"
+        echo "Output: $TEST_OUTPUT"
+
+        if [[ -d ".venv" ]]; then
+          PYTEST_CMD=".venv/bin/python -m pytest"
+        else
+          PYTEST_CMD="pytest"
+        fi
+
+        set -o pipefail
+        set +e
+        $PYTEST_CMD tests/server/test_research_smoke_pipeline.py -m smoke -v --tb=short -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
+        PYTEST_EXIT=$?
+        set +o pipefail
+        set -e
+
+        echo ""
+        echo "Research smoke test output saved to: $TEST_OUTPUT"
         exit $PYTEST_EXIT
 
   test-smoke-record:
@@ -137,18 +226,24 @@ tasks:
     cmds:
       - python scripts/check_doc_counts.py
 
-  sync-plugin-version:
-    desc: Sync plugin.json version from pyproject.toml
+  sync-versions:
+    desc: Sync all version-bearing files from pyproject.toml
     cmds:
-      - python scripts/sync_plugin_json.py
+      - python scripts/sync_versions.py
 
   sync-hooks-hash:
     desc: "Regenerate src/autoskillit/hooks/registry.sha256 from the live HOOK_REGISTRY"
     cmds:
       - uv run python -c "from autoskillit.hook_registry import HOOK_REGISTRY_HASH, HOOKS_DIR; (HOOKS_DIR / 'registry.sha256').write_text(HOOK_REGISTRY_HASH + '\n')"
 
+  compile-recipes:
+    desc: Pre-compile bundled recipe YAML files to JSON
+    cmds:
+      - uv run python scripts/compile_recipes.py
+
   install-worktree:
     desc: Set up development environment (isolated venv in worktrees, direct install in main)
+    deps: [compile-recipes]
     status:
       - test -x .venv/bin/python
       - uv sync --check --all-extras 2>/dev/null
@@ -167,12 +262,12 @@ tasks:
           uv venv --clear .venv
           uv pip install -e '.[dev]' --python .venv/bin/python
         fi
-        echo "Done: $(python --version 2>/dev/null || .venv/bin/python --version)"
+        echo "Done: $(.venv/bin/python --version)"
 
   install-dev:
-    desc: Install dev version of autoskillit from the integration branch
+    desc: Install dev version of autoskillit from the develop branch
     cmds:
-      - uv tool install --force "autoskillit[dev] @ git+https://github.com/TalonT-Org/AutoSkillit.git@integration"
+      - uv tool install --force "autoskillit[dev] @ git+https://github.com/TalonT-Org/AutoSkillit.git@develop"
       - "$(uv tool dir)/autoskillit/bin/autoskillit install"
 
   vendor-mermaid:
@@ -187,3 +282,107 @@ tasks:
           -o src/autoskillit/assets/mermaid/mermaid.min.js
         echo "${VERSION}" > src/autoskillit/assets/mermaid/VERSION
         echo "Vendored mermaid ${VERSION} ($(wc -c < src/autoskillit/assets/mermaid/mermaid.min.js) bytes)"
+
+  testmon-build:
+    desc: Build .testmondata DB by running full suite with testmon (serial, no xdist)
+    deps: [install-worktree, _tmpdir-setup]
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      OMP_NUM_THREADS: "1"
+      TMPDIR: "{{.PYTEST_TMPDIR}}"
+      AUTOSKILLIT_TEST_FILTER: "none"
+    cmds:
+      - |
+        mkdir -p temp
+        echo "Building .testmondata (serial run — this will take a while)"
+        if [[ -d ".venv" ]]; then
+          PYTEST_CMD=".venv/bin/python -m pytest"
+        else
+          PYTEST_CMD="pytest"
+        fi
+
+        set -o pipefail
+        set +e
+        $PYTEST_CMD tests/ -q --tb=short --testmon \
+          -m "not smoke and not canary" \
+          --disable-warnings -o "addopts=" \
+          --basetemp={{.PYTEST_TMPDIR}} \
+          -o "cache_dir={{.PYTEST_CACHEDIR}}" \
+          2>&1 | tee "temp/testmon-build-$(date +%Y-%m-%d_%H%M%S).txt"
+        PYTEST_EXIT=$?
+        set +o pipefail
+        set -e
+
+        if [ -f ".testmondata" ]; then
+          SIZE=$(du -h .testmondata | cut -f1)
+          echo ""
+          echo ".testmondata built successfully: $SIZE"
+        else
+          echo ""
+          echo "WARNING: .testmondata was not created"
+        fi
+        exit $PYTEST_EXIT
+
+  testmon-run:
+    desc: Run tests incrementally with testmon selection (requires prior testmon-build)
+    deps: [install-worktree, _tmpdir-setup]
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      OMP_NUM_THREADS: "1"
+      TMPDIR: "{{.PYTEST_TMPDIR}}"
+      AUTOSKILLIT_TEST_FILTER: "none"
+    cmds:
+      - |
+        mkdir -p temp
+        if [ ! -f ".testmondata" ]; then
+          echo "ERROR: .testmondata not found. Run 'task testmon-build' first."
+          exit 1
+        fi
+
+        if [[ -d ".venv" ]]; then
+          PYTEST_CMD=".venv/bin/python -m pytest"
+        else
+          PYTEST_CMD="pytest"
+        fi
+
+        XDIST_FLAGS=""
+        if [ "${TESTMON_XDIST:-0}" = "1" ]; then
+          XDIST_FLAGS="-n 4"
+          echo "Running testmon with xdist (-n 4)"
+        else
+          echo "Running testmon serial (set TESTMON_XDIST=1 for parallel)"
+        fi
+
+        set -o pipefail
+        set +e
+        $PYTEST_CMD tests/ -q --tb=short --testmon $XDIST_FLAGS \
+          -m "not smoke and not canary" \
+          --disable-warnings -o "addopts=" \
+          --basetemp={{.PYTEST_TMPDIR}} \
+          -o "cache_dir={{.PYTEST_CACHEDIR}}" \
+          2>&1 | tee "temp/testmon-run-$(date +%Y-%m-%d_%H%M%S).txt"
+        PYTEST_EXIT=$?
+        set +o pipefail
+        set -e
+
+        exit $PYTEST_EXIT
+
+  testmon-benchmark:
+    desc: Compare testmon selection vs cascade selection for changed files
+    deps: [install-worktree]
+    cmds:
+      - |
+        if [ ! -f ".testmondata" ]; then
+          echo "ERROR: .testmondata not found. Run 'task testmon-build' first."
+          exit 1
+        fi
+
+        if [[ -d ".venv" ]]; then
+          PYTHON=".venv/bin/python"
+        else
+          PYTHON="python"
+        fi
+
+        $PYTHON scripts/benchmark-testmon.py \
+          --mode="${TESTMON_BENCH_MODE:-compare}" \
+          ${TESTMON_CHANGED_FILES:+--changed-files="$TESTMON_CHANGED_FILES"}

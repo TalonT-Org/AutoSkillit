@@ -1,0 +1,902 @@
+"""Tests for dispatch_food_truck tool handler and execute_dispatch domain function."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+from pathlib import Path
+from unittest.mock import AsyncMock
+
+import pytest
+
+from autoskillit.fleet import FleetSemaphore
+from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
+from tests.server._helpers import _make_recipe_info, _make_standard_recipe
+
+pytestmark = [pytest.mark.layer("server"), pytest.mark.medium, pytest.mark.feature("fleet")]
+
+# ---------------------------------------------------------------------------
+# Shared test helpers
+# ---------------------------------------------------------------------------
+
+
+def _simple_prompt_builder(**kwargs) -> str:
+    """Minimal prompt builder for tests — avoids CLI imports."""
+    return f"prompt-for-{kwargs.get('recipe', 'unknown')}"
+
+
+async def _no_sleep_quota_checker(config, **kwargs) -> dict:
+    """Quota checker stub: always returns no-sleep result."""
+    return {
+        "should_sleep": False,
+        "sleep_seconds": 0,
+        "utilization": None,
+        "resets_at": None,
+        "window_name": None,
+    }
+
+
+async def _noop_quota_refresher(config, **kwargs) -> None:
+    """Quota refresher stub: no-op."""
+
+
+# ---------------------------------------------------------------------------
+# Class TestDispatchFoodTruckGates — headless refusal, kitchen gate, lock contention
+# ---------------------------------------------------------------------------
+
+
+class TestDispatchFoodTruckGates:
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_hard_refusal_headless(
+        self, tool_ctx_kitchen_open, monkeypatch
+    ):
+        """AUTOSKILLIT_HEADLESS=1 → fleet_hard_refusal_headless, regardless of SESSION_TYPE."""
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+
+        result = json.loads(await dispatch_food_truck(recipe="r", task="t"))
+        assert result["success"] is False
+        assert result["subtype"] == "headless_error"
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_requires_fleet_session_type(
+        self, tool_ctx_kitchen_open, monkeypatch
+    ):
+        """Non-fleet session type → headless_error, even for interactive callers."""
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
+        monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
+        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+
+        result = json.loads(await dispatch_food_truck(recipe="r", task="t"))
+        assert result["success"] is False
+        assert result["subtype"] == "headless_error"
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_requires_kitchen_open(self, tool_ctx, monkeypatch):
+        """Kitchen closed → gate_error_result JSON."""
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        result = json.loads(await dispatch_food_truck(recipe="r", task="t"))
+        assert result["success"] is False
+        assert result["subtype"] == "gate_error"
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_parallel_refused_when_locked(
+        self, tool_ctx, monkeypatch, tmp_path
+    ):
+        """fleet_lock.at_capacity() == True → fleet_parallel_refused error."""
+        from autoskillit.fleet._api import execute_dispatch
+
+        lock = FleetSemaphore(max_concurrent=1)
+        await lock.acquire()  # lock it
+        tool_ctx.fleet_lock = lock
+
+        result = json.loads(
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="r",
+                task="t",
+                ingredients=None,
+                dispatch_name=None,
+                timeout_sec=None,
+                prompt_builder=_simple_prompt_builder,
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
+            )
+        )
+        assert result["success"] is False
+        assert result["error"] == "fleet_parallel_refused"
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_refuses_when_fleet_feature_disabled(
+        self, tool_ctx_kitchen_open, monkeypatch
+    ):
+        """features.fleet: false in config → fleet_feature_disabled, regardless of gate state."""
+        import dataclasses
+
+        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+        # Gate is open (fleet session already booted), env var absent
+        # Only config file has fleet disabled
+        monkeypatch.delenv("AUTOSKILLIT_FEATURES__FLEET", raising=False)
+        tool_ctx_kitchen_open.config = dataclasses.replace(
+            tool_ctx_kitchen_open.config, features={"fleet": False}
+        )
+
+        result = json.loads(await dispatch_food_truck(recipe="r", task="t"))
+        assert result["success"] is False
+        assert result["error"] == "fleet_feature_disabled"
+
+
+# ---------------------------------------------------------------------------
+# Class TestDispatchFoodTruckValidation — recipe kind, ingredient keys, non-string values
+# ---------------------------------------------------------------------------
+
+
+class TestDispatchFoodTruckValidation:
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_rejects_non_standard_recipe(self, tool_ctx, monkeypatch):
+        """Campaign recipe → fleet_invalid_recipe_kind error."""
+        from autoskillit.fleet._api import execute_dispatch
+        from autoskillit.recipe.schema import Recipe, RecipeKind
+
+        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        repo = InMemoryRecipeRepository()
+        recipe_info = _make_recipe_info("campaign-recipe")
+        repo.add_recipe("campaign-recipe", recipe_info)
+        repo.add_full_recipe(
+            recipe_info.path,
+            Recipe(name="campaign-recipe", description="test", kind=RecipeKind.CAMPAIGN),
+        )
+        tool_ctx.recipes = repo
+
+        result = json.loads(
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="campaign-recipe",
+                task="t",
+                ingredients=None,
+                dispatch_name=None,
+                timeout_sec=None,
+                prompt_builder=_simple_prompt_builder,
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
+            )
+        )
+        assert result["success"] is False
+        assert result["error"] == "fleet_invalid_recipe_kind"
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_rejects_unknown_ingredients(self, tool_ctx, monkeypatch):
+        """Keys not in recipe.ingredients → fleet_unknown_ingredient error."""
+        from autoskillit.fleet._api import execute_dispatch
+
+        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        repo = InMemoryRecipeRepository()
+        recipe_info = _make_recipe_info("test-recipe")
+        repo.add_recipe("test-recipe", recipe_info)
+        repo.add_full_recipe(recipe_info.path, _make_standard_recipe("test-recipe", ["task"]))
+        tool_ctx.recipes = repo
+        tool_ctx.executor = InMemoryHeadlessExecutor()
+
+        result = json.loads(
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="t",
+                ingredients={"task": "v", "unknown_key": "bad"},
+                dispatch_name=None,
+                timeout_sec=None,
+                prompt_builder=_simple_prompt_builder,
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
+            )
+        )
+        assert result["success"] is False
+        assert result["error"] == "fleet_unknown_ingredient"
+        assert "unknown_key" in result["user_visible_message"]
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_rejects_non_string_values(self, tool_ctx, monkeypatch):
+        """Non-string ingredient values rejected before lock acquisition."""
+        from autoskillit.fleet._api import execute_dispatch
+
+        lock = FleetSemaphore(max_concurrent=1)
+        tool_ctx.fleet_lock = lock
+
+        result = json.loads(
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="r",
+                task="t",
+                ingredients={"key": 123},  # type: ignore[dict-item]
+                dispatch_name=None,
+                timeout_sec=None,
+                prompt_builder=_simple_prompt_builder,
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
+            )
+        )
+        assert result["success"] is False
+        assert result["error"] == "fleet_unknown_ingredient"
+        # Lock must not have been acquired
+        assert not lock.at_capacity()
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_no_recipes_configured(self, tool_ctx, monkeypatch):
+        """recipes=None → fleet_manifest_missing error."""
+        from autoskillit.fleet._api import execute_dispatch
+
+        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        tool_ctx.recipes = None
+
+        result = json.loads(
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="r",
+                task="t",
+                ingredients=None,
+                dispatch_name=None,
+                timeout_sec=None,
+                prompt_builder=_simple_prompt_builder,
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
+            )
+        )
+        assert result["success"] is False
+        assert result["error"] == "fleet_manifest_missing"
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_no_executor_configured(self, tool_ctx, monkeypatch):
+        """executor=None → fleet_manifest_missing error."""
+        from autoskillit.fleet._api import execute_dispatch
+
+        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        repo = InMemoryRecipeRepository()
+        recipe_info = _make_recipe_info("test-recipe")
+        repo.add_recipe("test-recipe", recipe_info)
+        repo.add_full_recipe(recipe_info.path, _make_standard_recipe("test-recipe"))
+        tool_ctx.recipes = repo
+        tool_ctx.executor = None
+
+        result = json.loads(
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="t",
+                ingredients=None,
+                dispatch_name=None,
+                timeout_sec=None,
+                prompt_builder=_simple_prompt_builder,
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
+            )
+        )
+        assert result["success"] is False
+        assert result["error"] == "fleet_manifest_missing"
+
+    @pytest.mark.anyio
+    async def test_dispatch_recipe_info_kind_attribute_error_is_fixed(self, tool_ctx):
+        """find() returns RecipeInfo in production; dispatch must not crash on .kind.
+
+        Previously all dispatch tests stored Recipe objects in the fake, masking the
+        AttributeError. This test uses RecipeInfo (the actual production return type).
+        Before fix: recipe_obj.kind raises AttributeError → L3_STARTUP_OR_CRASH.
+        After fix: load_recipe upgrades RecipeInfo → Recipe before kind check.
+        """
+        from autoskillit.fleet._api import execute_dispatch
+        from autoskillit.recipe.schema import Recipe, RecipeInfo, RecipeKind, RecipeSource
+
+        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        tool_ctx.executor = None
+        repo = InMemoryRecipeRepository()
+        recipe_info = RecipeInfo(
+            name="test-recipe",
+            description="test",
+            source=RecipeSource.PROJECT,
+            path=Path("/fake/recipes/test-recipe.yaml"),
+        )
+        repo.add_recipe("test-recipe", recipe_info)
+        repo.add_full_recipe(
+            recipe_info.path,
+            Recipe(name="test-recipe", description="test", kind=RecipeKind.STANDARD),
+        )
+        tool_ctx.recipes = repo
+
+        result = json.loads(
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="run task",
+                ingredients=None,
+                dispatch_name=None,
+                timeout_sec=None,
+                prompt_builder=_simple_prompt_builder,
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
+            )
+        )
+
+        assert result.get("error") != "fleet_l3_startup_or_crash", (
+            "Expected structured validation error, not FLEET_L3_STARTUP_OR_CRASH. "
+            "RecipeInfo.kind AttributeError is not fixed."
+        )
+
+    @pytest.mark.anyio
+    async def test_dispatch_recipe_info_ingredients_attribute_error_is_fixed(self, tool_ctx):
+        """find() returns RecipeInfo; ingredients validation must not crash on
+        recipe_obj.ingredients when non-empty ingredients are passed.
+
+        Before fix: recipe_obj.ingredients raises AttributeError → L3_STARTUP_OR_CRASH.
+        After fix: load_recipe upgrades RecipeInfo → Recipe; unknown ingredient detected.
+        """
+        from autoskillit.fleet._api import execute_dispatch
+        from autoskillit.recipe.schema import (
+            Recipe,
+            RecipeInfo,
+            RecipeIngredient,
+            RecipeKind,
+            RecipeSource,
+        )
+
+        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        tool_ctx.executor = None
+        repo = InMemoryRecipeRepository()
+        recipe_info = RecipeInfo(
+            name="test-recipe",
+            description="test",
+            source=RecipeSource.PROJECT,
+            path=Path("/fake/recipes/test-recipe.yaml"),
+        )
+        repo.add_recipe("test-recipe", recipe_info)
+        repo.add_full_recipe(
+            recipe_info.path,
+            Recipe(
+                name="test-recipe",
+                description="test",
+                kind=RecipeKind.STANDARD,
+                ingredients={"env": RecipeIngredient(description="env var")},
+            ),
+        )
+        tool_ctx.recipes = repo
+
+        result = json.loads(
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="run task",
+                ingredients={"unknown_key": "val"},
+                dispatch_name=None,
+                timeout_sec=None,
+                prompt_builder=_simple_prompt_builder,
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
+            )
+        )
+
+        assert result.get("error") == "fleet_unknown_ingredient", (
+            f"Expected fleet_unknown_ingredient error. Got: {result}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Class TestDispatchFoodTruckExecution — lock lifecycle, success, pid, quota, cleanup
+# ---------------------------------------------------------------------------
+
+
+class TestDispatchFoodTruckExecution:
+    def _setup_standard_dispatch(self, tool_ctx, monkeypatch):
+        """Wire tool_ctx for a successful standard dispatch."""
+        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        repo = InMemoryRecipeRepository()
+        recipe_info = _make_recipe_info("test-recipe")
+        repo.add_recipe("test-recipe", recipe_info)
+        repo.add_full_recipe(recipe_info.path, _make_standard_recipe("test-recipe", ["task"]))
+        tool_ctx.recipes = repo
+        tool_ctx.executor = InMemoryHeadlessExecutor()
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_releases_lock_on_success(self, tool_ctx, monkeypatch):
+        """Lock released after successful dispatch."""
+        from autoskillit.fleet._api import execute_dispatch
+
+        self._setup_standard_dispatch(tool_ctx, monkeypatch)
+
+        await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="t",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+        )
+        assert not tool_ctx.fleet_lock.at_capacity()
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_releases_lock_on_exception(self, tool_ctx, monkeypatch):
+        """Lock released when executor raises."""
+        from autoskillit.fleet._api import execute_dispatch
+
+        self._setup_standard_dispatch(tool_ctx, monkeypatch)
+        tool_ctx.executor.dispatch_food_truck = AsyncMock(
+            side_effect=RuntimeError("executor crashed")
+        )
+
+        result = json.loads(
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="t",
+                ingredients=None,
+                dispatch_name=None,
+                timeout_sec=None,
+                prompt_builder=_simple_prompt_builder,
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
+            )
+        )
+        assert result["success"] is False
+        assert not tool_ctx.fleet_lock.at_capacity()
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_releases_lock_on_cancellation(self, tool_ctx, monkeypatch):
+        """Lock released on asyncio.CancelledError."""
+        from autoskillit.fleet._api import execute_dispatch
+
+        self._setup_standard_dispatch(tool_ctx, monkeypatch)
+        tool_ctx.executor.dispatch_food_truck = AsyncMock(side_effect=asyncio.CancelledError())
+
+        with pytest.raises(asyncio.CancelledError):
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="t",
+                ingredients=None,
+                dispatch_name=None,
+                timeout_sec=None,
+                prompt_builder=_simple_prompt_builder,
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
+            )
+        assert not tool_ctx.fleet_lock.at_capacity()
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_success_envelope(self, tool_ctx, monkeypatch):
+        """Returns envelope with success, dispatch_id, l3_payload, token_usage, l3_parse_source."""
+        import dataclasses
+
+        from autoskillit.fleet._api import execute_dispatch
+        from autoskillit.fleet.result_parser import L3ParseResult
+        from tests.fakes import _DEFAULT_SKILL_RESULT
+
+        self._setup_standard_dispatch(tool_ctx, monkeypatch)
+        tool_ctx.executor = InMemoryHeadlessExecutor(
+            default_result=dataclasses.replace(
+                _DEFAULT_SKILL_RESULT,
+                success=True,
+                result="dispatch done",
+                session_id="sess-abc",
+                token_usage={"input_tokens": 100},
+            )
+        )
+
+        canned_payload = {"success": True, "data": "dispatch done"}
+        canned_result = L3ParseResult(
+            outcome="completed_clean",
+            payload=canned_payload,
+            raw_body=None,
+            parse_error=None,
+            source="stdout",
+        )
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.parse_l3_result_block",
+            lambda **_kwargs: canned_result,
+        )
+
+        raw = await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="complete the task",
+            ingredients={"task": "override-task"},
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+        )
+        result = json.loads(raw)
+        assert result["success"] is True
+        assert "dispatch_id" in result
+        assert result["dispatched_session_id"] == "sess-abc"
+        assert result["l3_payload"] == canned_payload
+        assert result["token_usage"] == {"input_tokens": 100}
+        assert result["l3_parse_source"] == "stdout"
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_on_spawn_writes_pid(self, tool_ctx, monkeypatch):
+        """on_spawn callback writes dispatched_pid into state.json via mark_dispatch_running."""
+        from autoskillit.fleet._api import _write_pid
+        from autoskillit.fleet.state import DispatchRecord, write_initial_state
+
+        state_path = tool_ctx.temp_dir / "dispatches" / "test-dispatch.json"
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        write_initial_state(
+            state_path,
+            campaign_id="kitchen-id",
+            campaign_name="test-dispatch-name",
+            manifest_path="",
+            dispatches=[DispatchRecord(name="test-dispatch-name")],
+        )
+
+        _write_pid(state_path, "test-dispatch-name", "dispatch-id-abc", 54321, 0)
+
+        state_data = json.loads(state_path.read_text())
+        dispatch_record = state_data["dispatches"][0]
+        assert dispatch_record["dispatched_pid"] == 54321
+        assert dispatch_record["status"] == "running"
+        assert dispatch_record["dispatch_id"] == "dispatch-id-abc"
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_passes_on_spawn_to_executor(self, tool_ctx, monkeypatch):
+        """execute_dispatch passes an on_spawn that writes the PID to the state file."""
+        from autoskillit.fleet._api import execute_dispatch
+        from autoskillit.fleet.state import read_state
+
+        self._setup_standard_dispatch(tool_ctx, monkeypatch)
+
+        # Wrap dispatch_food_truck to invoke on_spawn before returning,
+        # simulating the real headless executor calling the callback on process start.
+        original_dispatch = tool_ctx.executor.dispatch_food_truck
+
+        async def _dispatch_invoking_spawn(*args, on_spawn=None, **kwargs):
+            result = await original_dispatch(*args, on_spawn=on_spawn, **kwargs)
+            if on_spawn is not None:
+                on_spawn(99999, 0)
+            return result
+
+        monkeypatch.setattr(tool_ctx.executor, "dispatch_food_truck", _dispatch_invoking_spawn)
+
+        await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="t",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+        )
+        dispatch_id = tool_ctx.executor.dispatch_calls[0].order_id
+        state_path = tool_ctx.temp_dir / "dispatches" / f"{dispatch_id}.json"
+        state = read_state(state_path)
+        assert state is not None
+        assert any(d.dispatched_pid == 99999 for d in state.dispatches)
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_invalidates_quota_cache(self, tool_ctx, monkeypatch):
+        """After dispatch completes, quota cache is refreshed via background supervisor."""
+        from autoskillit.fleet._api import execute_dispatch
+
+        self._setup_standard_dispatch(tool_ctx, monkeypatch)
+
+        submitted_labels: list[str] = []
+
+        def _capture_submit(coro, label: str = "") -> None:
+            submitted_labels.append(label)
+            coro.close()
+
+        monkeypatch.setattr(tool_ctx.background, "submit", _capture_submit)
+
+        await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="t",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+        )
+        assert "quota_post_dispatch_refresh" in submitted_labels
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_cleans_session_skills(
+        self, tool_ctx, monkeypatch, tmp_path
+    ):
+        """Completed L3 session skill dir is cleaned up."""
+        from autoskillit.fleet._api import execute_dispatch
+
+        self._setup_standard_dispatch(tool_ctx, monkeypatch)
+        import dataclasses
+
+        from tests.fakes import _DEFAULT_SKILL_RESULT
+
+        tool_ctx.executor = InMemoryHeadlessExecutor(
+            default_result=dataclasses.replace(
+                _DEFAULT_SKILL_RESULT,
+                success=True,
+                session_id="l2-session-xyz",
+            )
+        )
+
+        cleanup_calls: list[str] = []
+
+        def _capture_cleanup(session_id: str) -> bool:
+            cleanup_calls.append(session_id)
+            return False
+
+        monkeypatch.setattr(tool_ctx.session_skill_manager, "cleanup_session", _capture_cleanup)
+
+        await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="t",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+        )
+        assert "l2-session-xyz" in cleanup_calls
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_invalidates_quota_cache_file(self, tool_ctx, monkeypatch):
+        """After dispatch, cache_invalidator is called with the configured cache path."""
+        from autoskillit.fleet._api import execute_dispatch
+
+        self._setup_standard_dispatch(tool_ctx, monkeypatch)
+
+        invalidate_calls: list[str] = []
+
+        def _capture_invalidate(cache_path: str) -> None:
+            invalidate_calls.append(cache_path)
+
+        await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="t",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+            cache_invalidator=_capture_invalidate,
+        )
+
+        assert tool_ctx.config.quota_guard.cache_path in invalidate_calls
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize("exc_cls", [RuntimeError, OSError])
+    async def test_dispatch_food_truck_succeeds_when_cleanup_session_raises(
+        self, tool_ctx, monkeypatch, exc_cls
+    ):
+        """Dispatch result is success even when cleanup_session raises an exception."""
+        import dataclasses
+        import json
+
+        from autoskillit.fleet._api import execute_dispatch
+        from autoskillit.fleet.result_parser import L3ParseResult
+        from tests.fakes import _DEFAULT_SKILL_RESULT
+
+        self._setup_standard_dispatch(tool_ctx, monkeypatch)
+        tool_ctx.executor = InMemoryHeadlessExecutor(
+            default_result=dataclasses.replace(
+                _DEFAULT_SKILL_RESULT,
+                success=True,
+                session_id="l2-session-err",
+            )
+        )
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.parse_l3_result_block",
+            lambda **_kwargs: L3ParseResult(
+                outcome="completed_clean",
+                payload={"success": True},
+                raw_body=None,
+                parse_error=None,
+                source="stdout",
+            ),
+        )
+
+        def _raise_error(session_id: str) -> bool:
+            raise exc_cls("simulated cleanup failure")
+
+        monkeypatch.setattr(tool_ctx.session_skill_manager, "cleanup_session", _raise_error)
+
+        result_json = await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="t",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+        )
+
+        result = json.loads(result_json)
+        assert result["success"] is True
+
+
+@pytest.mark.anyio
+async def test_dispatch_food_truck_tool_passes_resume_session_id_to_executor(
+    tool_ctx_kitchen_open, monkeypatch
+):
+    """dispatch_food_truck MCP tool forwards resume_session_id all the way to the executor."""
+    from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+    tool_ctx_kitchen_open.fleet_lock = FleetSemaphore(max_concurrent=1)
+    repo = InMemoryRecipeRepository()
+    recipe_info = _make_recipe_info("test-recipe")
+    repo.add_recipe("test-recipe", recipe_info)
+    repo.add_full_recipe(recipe_info.path, _make_standard_recipe("test-recipe"))
+    tool_ctx_kitchen_open.recipes = repo
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+
+    await dispatch_food_truck(
+        recipe="test-recipe",
+        task="do-work",
+        resume_session_id="sess-resume-123",
+    )
+
+    assert executor.dispatch_calls, "dispatch_food_truck executor was never called"
+    assert executor.dispatch_calls[0].resume_session_id == "sess-resume-123"
+
+
+@pytest.mark.anyio
+async def test_dispatch_food_truck_marketplace_install_succeeds(tool_ctx_marketplace, monkeypatch):
+    """dispatch_food_truck does not raise when plugin_source is MarketplaceInstall.
+
+    This test was impossible before the fix — it would raise ValueError.
+    """
+    from autoskillit.fleet._api import execute_dispatch
+    from autoskillit.fleet.result_parser import L3ParseResult
+
+    monkeypatch.setattr(
+        "autoskillit.fleet._api.parse_l3_result_block",
+        lambda **_kwargs: L3ParseResult(
+            outcome="completed_clean",
+            payload={"success": True},
+            raw_body=None,
+            parse_error=None,
+            source="stdout",
+        ),
+    )
+
+    tool_ctx_marketplace.fleet_lock = FleetSemaphore(max_concurrent=1)
+    repo = InMemoryRecipeRepository()
+    recipe_info = _make_recipe_info("test-recipe")
+    repo.add_recipe("test-recipe", recipe_info)
+    repo.add_full_recipe(recipe_info.path, _make_standard_recipe("test-recipe", ["task"]))
+    tool_ctx_marketplace.recipes = repo
+    tool_ctx_marketplace.executor = InMemoryHeadlessExecutor()
+
+    result = json.loads(
+        await execute_dispatch(
+            tool_ctx=tool_ctx_marketplace,
+            recipe="test-recipe",
+            task="t",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+        )
+    )
+    assert result["success"] is True
+
+
+class TestDispatchFoodTruckIdleTimeout:
+    """Tests for idle_output_timeout passthrough through the dispatch chain."""
+
+    @pytest.fixture(autouse=True)
+    def _set_fleet_session(self, monkeypatch):
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+
+    def _setup_dispatch(self, tool_ctx):
+        """Wire tool_ctx for a standard dispatch with InMemoryHeadlessExecutor."""
+        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        repo = InMemoryRecipeRepository()
+        recipe_info = _make_recipe_info("test-recipe")
+        repo.add_recipe("test-recipe", recipe_info)
+        repo.add_full_recipe(recipe_info.path, _make_standard_recipe("test-recipe"))
+        tool_ctx.recipes = repo
+        tool_ctx.executor = InMemoryHeadlessExecutor()
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_passes_idle_output_timeout_to_executor(
+        self, tool_ctx_kitchen_open, monkeypatch
+    ):
+        """dispatch_food_truck MCP tool forwards idle_output_timeout to executor."""
+        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+
+        self._setup_dispatch(tool_ctx_kitchen_open)
+
+        await dispatch_food_truck(
+            recipe="test-recipe",
+            task="do-work",
+            idle_output_timeout=0,
+        )
+
+        executor = tool_ctx_kitchen_open.executor
+        assert executor.dispatch_calls, "dispatch_food_truck executor was never called"
+        assert executor.dispatch_calls[0].idle_output_timeout == 0.0
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_idle_timeout_none_when_not_specified(
+        self, tool_ctx_kitchen_open, monkeypatch
+    ):
+        """When idle_output_timeout is not specified, executor receives None."""
+        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+
+        self._setup_dispatch(tool_ctx_kitchen_open)
+
+        await dispatch_food_truck(
+            recipe="test-recipe",
+            task="do-work",
+        )
+
+        executor = tool_ctx_kitchen_open.executor
+        assert executor.dispatch_calls, "dispatch_food_truck executor was never called"
+        assert executor.dispatch_calls[0].idle_output_timeout is None
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_idle_timeout_overrides_config_default(
+        self, tool_ctx_kitchen_open, monkeypatch
+    ):
+        """Explicit idle_output_timeout=0 overrides the config default of 1000."""
+        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+
+        self._setup_dispatch(tool_ctx_kitchen_open)
+        # Config idle_output_timeout is 1000 (default from RunSkillConfig)
+        assert tool_ctx_kitchen_open.config.run_skill.idle_output_timeout == 1000
+
+        await dispatch_food_truck(
+            recipe="test-recipe",
+            task="do-work",
+            idle_output_timeout=0,
+        )
+
+        executor = tool_ctx_kitchen_open.executor
+        assert executor.dispatch_calls, "dispatch_food_truck executor was never called"
+        # Executor receives 0.0, overriding the config default
+        assert executor.dispatch_calls[0].idle_output_timeout == 0.0
+
+    @pytest.mark.anyio
+    async def test_execute_dispatch_passes_idle_output_timeout_to_executor(
+        self, tool_ctx, monkeypatch
+    ):
+        """execute_dispatch forwards idle_output_timeout to executor.dispatch_food_truck."""
+        from autoskillit.fleet._api import execute_dispatch
+
+        self._setup_dispatch(tool_ctx)
+
+        await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="do-work",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+            idle_output_timeout=0,
+        )
+
+        executor = tool_ctx.executor
+        assert executor.dispatch_calls, "dispatch_food_truck was never called"
+        assert executor.dispatch_calls[0].idle_output_timeout == 0.0

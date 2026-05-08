@@ -12,12 +12,21 @@ These tests enforce the format-data contract that prevents the class of bug
 from __future__ import annotations
 
 import json
+from pathlib import Path
+
+import pytest
 
 from autoskillit.core.types import (
     ChannelConfirmation,
+    DirectInstall,
     OutputFormat,
     SubprocessResult,
     TerminationReason,
+)
+from autoskillit.execution.commands import (
+    build_food_truck_cmd,
+    build_headless_resume_cmd,
+    build_skill_session_cmd,
 )
 from autoskillit.execution.headless import _build_skill_result
 from autoskillit.execution.session import (
@@ -25,6 +34,8 @@ from autoskillit.execution.session import (
     _compute_success,
     parse_session_result,
 )
+
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 class TestOutputFormatDataContract:
@@ -180,16 +191,16 @@ class TestOutputFormatDerivation:
 
     def test_run_skill_config_derives_format(self):
         """RunSkillConfig.output_format derives STREAM_JSON for default config."""
-        from autoskillit.config.settings import RunSkillConfig
+        from tests._helpers import make_run_skill_config
 
-        cfg = RunSkillConfig()  # default completion_marker is set
+        cfg = make_run_skill_config()  # default completion_marker is set
         assert cfg.output_format == OutputFormat.STREAM_JSON
 
     def test_run_skill_config_derives_json_when_no_marker(self):
         """RunSkillConfig.output_format derives JSON when completion_marker is empty."""
-        from autoskillit.config.settings import RunSkillConfig
+        from tests._helpers import make_run_skill_config
 
-        cfg = RunSkillConfig(completion_marker="")
+        cfg = make_run_skill_config(completion_marker="")
         assert cfg.output_format == OutputFormat.JSON
 
 
@@ -211,22 +222,83 @@ class TestOutputFormatCliRequirements:
             assert isinstance(flags, tuple), f"{fmt.name} returned {type(flags)}, expected tuple"
 
     def test_command_assembly_satisfies_format_requirements(self):
-        """Assembled command must contain all flags required by the chosen format.
-
-        Builds a command the same way run_headless_core does, then asserts
-        every flag from the format's required_cli_flags is present.
-        """
-        from autoskillit.execution.commands import build_headless_cmd
-
+        """Actual builders must produce commands containing all required flags."""
         fmt = OutputFormat.STREAM_JSON
-        spec = build_headless_cmd("Use /investigate test", model=None)
-        cmd = spec.cmd + ["--plugin-dir", "/fake", "--output-format", fmt.value]
-        # Apply required flags (mirrors run_headless_core logic)
+        spec = build_skill_session_cmd(
+            "/investigate foo",
+            cwd="/tmp",
+            completion_marker="%%DONE%%",
+            model=None,
+            plugin_source=None,
+            output_format=fmt,
+        )
         for flag in fmt.required_cli_flags:
-            if flag not in cmd:
-                cmd.append(flag)
+            assert flag in spec.cmd, f"Missing required flag {flag} in skill builder"
+
+
+class TestAllBuildersEnforceOutputFormatFlags:
+    """Every cmd builder that accepts OutputFormat must self-apply required_cli_flags."""
+
+    @pytest.mark.parametrize("fmt", list(OutputFormat))
+    def test_skill_builder_satisfies_format_requirements(self, fmt: OutputFormat):
+        spec = build_skill_session_cmd(
+            "/investigate foo",
+            cwd="/tmp",
+            completion_marker="%%DONE%%",
+            model=None,
+            plugin_source=None,
+            output_format=fmt,
+        )
         for flag in fmt.required_cli_flags:
-            assert flag in cmd, f"Missing required flag {flag} in assembled command"
+            assert flag in spec.cmd
+
+    @pytest.mark.parametrize("fmt", list(OutputFormat))
+    def test_food_truck_builder_satisfies_format_requirements(self, fmt: OutputFormat):
+        spec = build_food_truck_cmd(
+            orchestrator_prompt="Orchestrator",
+            plugin_source=DirectInstall(plugin_dir=Path("/p")),
+            cwd="/tmp",
+            completion_marker="%%DONE%%",
+            output_format=fmt,
+        )
+        for flag in fmt.required_cli_flags:
+            assert flag in spec.cmd
+
+    @pytest.mark.parametrize("fmt", list(OutputFormat))
+    def test_resume_builder_satisfies_format_requirements(self, fmt: OutputFormat):
+        spec = build_headless_resume_cmd(
+            resume_session_id="abc",
+            prompt="Emit",
+            output_format=fmt,
+        )
+        for flag in fmt.required_cli_flags:
+            assert flag in spec.cmd
+
+
+def test_all_headless_builders_handle_output_format():
+    """Every build_*_cmd function accepting output_format must produce correct flags."""
+    import ast
+    import importlib
+    import inspect
+
+    mod = importlib.import_module("autoskillit.execution.commands")
+    source = inspect.getsource(mod)
+    tree = ast.parse(source)
+
+    builders_with_format = []
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.FunctionDef)
+            and node.name.startswith("build_")
+            and node.name.endswith("_cmd")
+        ):
+            params = [a.arg for a in node.args.args + node.args.kwonlyargs]
+            if "output_format" in params:
+                builders_with_format.append(node.name)
+
+    assert len(builders_with_format) >= 3, (
+        f"Expected at least 3 builders with output_format, found {builders_with_format}"
+    )
 
 
 class TestChannelDefaultCoverage:

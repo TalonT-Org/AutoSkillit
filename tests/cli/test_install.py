@@ -13,6 +13,8 @@ import pytest
 
 from autoskillit import cli
 
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
+
 
 class TestCLIInstall:
     def test_install_validates_scope(self, capsys: pytest.CaptureFixture) -> None:
@@ -375,8 +377,14 @@ class TestInstallCommand:
         """
         from autoskillit.core.paths import is_git_worktree, pkg_root
 
-        if is_git_worktree(pkg_root()):
-            pytest.skip("Cannot verify non-worktree install from a worktree environment")
+        # Check filesystem directly — the cli conftest patches is_git_worktree
+        # to return False, so we cannot rely on it for the skip guard.
+        pkg = pkg_root()
+        for ancestor in [pkg, *pkg.parents]:
+            if (ancestor / ".git").is_file():
+                pytest.skip("Cannot verify non-worktree install from a worktree environment")
+            if (ancestor / ".git").is_dir():
+                break
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         from autoskillit.cli._marketplace import _ensure_marketplace
@@ -443,7 +451,7 @@ class TestGroupFInstall:
         import autoskillit
 
         pkg_dir = Path(autoskillit.__file__).parent
-        hook_script = pkg_dir / "hooks" / "quota_guard.py"
+        hook_script = pkg_dir / "hooks" / "guards" / "quota_guard.py"
         assert hook_script.exists(), f"Expected hook script at {hook_script}"
 
     def test_generate_hooks_json_includes_quota_hook(self):
@@ -454,12 +462,12 @@ class TestGroupFInstall:
         pretooluse_commands = [
             hook["command"] for entry in data["hooks"]["PreToolUse"] for hook in entry["hooks"]
         ]
-        assert any(cmd.endswith("quota_guard.py") for cmd in pretooluse_commands)
+        assert any("quota_guard" in cmd for cmd in pretooluse_commands)
         assert "PostToolUse" in data["hooks"]
         posttooluse_commands = [
             hook["command"] for entry in data["hooks"]["PostToolUse"] for hook in entry["hooks"]
         ]
-        assert any(cmd.endswith("pretty_output_hook.py") for cmd in posttooluse_commands)
+        assert any("pretty_output_hook" in cmd for cmd in posttooluse_commands)
 
     def test_install_writes_pretooluse_hooks(self, tmp_path, monkeypatch):
         """install must register the quota PreToolUse hook in .claude/settings.json."""
@@ -497,7 +505,7 @@ class TestGroupFInstall:
         import autoskillit
 
         pkg_dir = Path(autoskillit.__file__).parent
-        hook_script = pkg_dir / "hooks" / "remove_clone_guard.py"
+        hook_script = pkg_dir / "hooks" / "guards" / "remove_clone_guard.py"
         assert hook_script.exists(), f"Expected hook script at {hook_script}"
 
     def test_install_registers_remove_clone_guard_hook(self, tmp_path, monkeypatch):
@@ -555,10 +563,14 @@ class TestGroupFInstall:
         )
 
 
-def test_clear_plugin_cache_removes_nested_entry(
+def test_clear_plugin_cache_preserves_plugins_entry(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """_clear_plugin_cache must remove the entry from data['plugins'], not top-level data."""
+    """_clear_plugin_cache retires old version dirs but preserves the plugins entry.
+
+    The installed_plugins.json entry is left intact — `claude plugin install`
+    overwrites it atomically. Old version directories survive under a grace period.
+    """
     from autoskillit.cli._marketplace import _clear_plugin_cache
 
     plugins_dir = tmp_path / ".claude" / "plugins"
@@ -572,11 +584,28 @@ def test_clear_plugin_cache_removes_nested_entry(
             }
         )
     )
+    # Simulate an old version directory in the plugin cache
+    cache_dir = tmp_path / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
+    old_version_dir = cache_dir / "0.9.0"
+    old_version_dir.mkdir(parents=True)
+    # Ensure the running __version__ differs from "0.9.0" so retirement applies
+    import autoskillit as _pkg
+
+    monkeypatch.setattr(_pkg, "__version__", "0.9.99-test")
+
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     _clear_plugin_cache()
+
     data = json.loads(installed_json.read_text())
-    assert "autoskillit@autoskillit-local" not in data.get("plugins", {})
-    assert data["version"] == 2  # other keys preserved
+    assert "autoskillit@autoskillit-local" in data.get("plugins", {})
+    assert data["version"] == 2
+    # Old version dir survives under grace period
+    assert old_version_dir.exists(), "Old version dir must survive under grace period"
+    # Retiring registry must record the old version
+    retiring_json = tmp_path / ".autoskillit" / "retiring_cache.json"
+    assert retiring_json.exists(), "retiring_cache.json must be created"
+    retiring_data = json.loads(retiring_json.read_text())
+    assert any(e["version"] == "0.9.0" for e in retiring_data["retiring"])
 
 
 def test_clear_plugin_cache_noop_when_entry_absent(

@@ -1,6 +1,7 @@
 ---
 name: implement-worktree-no-merge
-description: Implement a plan in an isolated git worktree without merging, testing, or cleaning up. For MCP orchestration use — the orchestrator handles testing and merging separately.
+activate_deps: [write-recipe]
+description: Implementation executor. ALWAYS invoke this skill when instructed to implement a plan in a worktree. Do not read the plan or edit files directly — use this skill first to load the full implementation workflow.
 hooks:
   PreToolUse:
     - matcher: "*"
@@ -38,6 +39,7 @@ The worktree is left intact for the orchestrator to test and merge separately.
 - Re-run tests just to see failures — grep the saved output file instead
 - Pipe test output through `tail`, `head`, or other truncation commands
 - **Execute `git merge` commands** (including `--no-ff`, `--no-commit`, or any variant). All branch content must be applied via `git cherry-pick <commit>` for individual commits or `git checkout <branch> -- <file>` for specific files. `merge_worktree` requires linear commit history — merge commits cannot be rebased and will cause `WORKTREE_INTACT_MERGE_COMMITS_DETECTED` failure.
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Create a new worktree from the current branch
@@ -46,6 +48,8 @@ The worktree is left intact for the orchestrator to test and merge separately.
 - Implement one phase at a time
 - Commit per phase with descriptive messages
 - Leave the worktree intact when done
+- **Read before editing**: Before issuing an `Edit` call on any file, ensure you have issued a `Read` on that file earlier in this session. Claude Code rejects `Edit` on unread files — the retry wastes a full API turn at current context size. If you are uncertain whether a file was read, issue a targeted `Read` (offset + limit to the region you plan to edit) rather than risk an error.
+- **Read files fully**: When reading a file to understand it in full, read it in a single call without a `limit` parameter. Do not paginate files with sequential offset reads — read once completely. Use `limit`/`offset` only for targeted section reads of files you have already read in full.
 
 ## Context Limit Behavior
 
@@ -71,7 +75,7 @@ Correct orchestration on `needs_retry=true`:
    after the skill name for the first one that starts with `/`, `./`, `{{AUTOSKILLIT_TEMP}}/`,
    or `.autoskillit/` — that token is the plan path. Ignore any non-path words
    that appear before it (orchestrators sometimes prepend descriptive text such
-   as "the verified plan"). If no path-like token is found, treat the entire
+   as "the verified plan"). When no path-like token is present, treat the entire
    argument string as pasted plan content. Verify the resolved file exists before
    proceeding; if it does not, abort with:
    `"Plan file not found: {path}. Correct format: /autoskillit:implement-worktree-no-merge <plan_path>"`
@@ -97,17 +101,28 @@ git worktree add -b "${WORKTREE_NAME}" "${WORKTREE_PATH}"
 WORKTREE_PATH="$(cd "${WORKTREE_PATH}" && pwd)"
 
 # Record the base branch in two ways for reliable discovery by retry-worktree:
-# 1) Write an explicit file store (works with any Git version, works offline)
-mkdir -p "{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_NAME}"
-echo "${CURRENT_BRANCH}" > "{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_NAME}/base-branch"
+# 1) Write an explicit file store (stdlib-only, works with any Git version, works offline)
+python3 -c "
+from pathlib import Path
+import tempfile, os
+project_root = Path('$(git rev-parse --show-toplevel)')
+sidecar_dir = project_root / '.autoskillit' / 'temp' / 'worktrees' / '${WORKTREE_NAME}'
+sidecar_dir.mkdir(parents=True, exist_ok=True)
+sidecar_file = sidecar_dir / 'base-branch'
+fd, tmp = tempfile.mkstemp(dir=str(sidecar_dir))
+os.write(fd, ('${CURRENT_BRANCH}' + '\n').encode())
+os.close(fd)
+os.replace(tmp, str(sidecar_file))
+"
 # 2) Set git upstream tracking (requires remote tracking ref in local fetch cache)
-if ! git fetch origin "${CURRENT_BRANCH}" 2>/dev/null; then
-    echo "NOTE: Branch '${CURRENT_BRANCH}' has no remote tracking ref on origin."
-    echo "      merge_worktree will fail unless you push first: git push -u origin ${CURRENT_BRANCH}"
+REMOTE=$(git remote get-url upstream 2>/dev/null | grep -qv "^file://" && echo upstream || echo origin)
+if ! git fetch "$REMOTE" "${CURRENT_BRANCH}" 2>/dev/null; then
+    echo "NOTE: Branch '${CURRENT_BRANCH}' has no remote tracking ref on $REMOTE."
+    echo "      merge_worktree will fail unless you push first: git push -u $REMOTE ${CURRENT_BRANCH}"
     echo "      Continuing — implementation will proceed, but the merge step will be blocked."
 fi
-if ! git -C "${WORKTREE_PATH}" branch --set-upstream-to="origin/${CURRENT_BRANCH}" "${WORKTREE_NAME}" 2>/dev/null; then
-    echo "NOTE: Could not set upstream tracking for '${WORKTREE_NAME}' → 'origin/${CURRENT_BRANCH}'."
+if ! git -C "${WORKTREE_PATH}" branch --set-upstream-to="${REMOTE}/${CURRENT_BRANCH}" "${WORKTREE_NAME}" 2>/dev/null; then
+    echo "NOTE: Could not set upstream tracking for '${WORKTREE_NAME}' → '$REMOTE/${CURRENT_BRANCH}'."
 fi
 ```
 
@@ -132,16 +147,6 @@ execution layer scans `assistant_messages` for `worktree_path=` and surfaces
 it as a top-level field in the `run_skill` JSON response. The orchestrator
 reads this field directly without filesystem discovery heuristics.
 
-### Step 1.5: Initialize Code Index for Original Project
-
-Set the MCP code-index project path to the **original project directory** so Explore subagents can use code search tools:
-
-```
-mcp__code-index__set_project_path(path="{ORIGINAL_PROJECT_PATH}")
-```
-
-This must happen before Step 2 or any code-index search tools will fail with "Project path not set."
-
 ### Step 2: Deep System Understanding (Subagents)
 
 Before implementing ANY code, launch parallel Explore subagents to understand affected systems:
@@ -163,16 +168,6 @@ task install-worktree   # or equivalent for the project type
 **Why isolated env matters:** Installing packages without isolation overwrites the global state. When the worktree is deleted, CLI commands break with import errors.
 
 **All commands in Steps 4–5 must run from `${WORKTREE_PATH}`.** Use absolute paths to avoid CWD drift across Bash tool calls.
-
-### Step 3.5: Re-point Code Index to Worktree (REQUIRED)
-
-**CRITICAL:** After setting up the worktree environment, you **MUST** update the MCP code-index project path to the worktree:
-
-```
-mcp__code-index__set_project_path(path="${WORKTREE_PATH}")
-```
-
-**Failure to do this means code-index searches will return results from the original project, not your worktree.**
 
 ### Step 4: Implement Phase by Phase
 
@@ -237,14 +232,6 @@ branch_name = ${WORKTREE_NAME}
 created from the post-merge state of the base branch, not from Part N's base
 commit. This is a global sequencing rule — it applies even when operating
 off-recipe.
-
-### Step 6.5: Reset Code Index to Original Project (REQUIRED)
-
-**CRITICAL:** After completion, you **MUST** reset the MCP code-index project path back to the original project directory:
-
-```
-mcp__code-index__set_project_path(path="{ORIGINAL_PROJECT_PATH}")
-```
 
 ## Error Handling
 

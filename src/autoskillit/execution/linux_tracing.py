@@ -23,7 +23,7 @@ import sys
 import tempfile
 import time
 from collections.abc import AsyncIterator
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import IO, TYPE_CHECKING
@@ -32,7 +32,10 @@ import anyio
 import anyio.abc
 import psutil
 
+from autoskillit.core import fast_dumps as _fast_dumps
 from autoskillit.core import get_logger
+from autoskillit.core import read_boot_id as read_boot_id
+from autoskillit.core import read_starttime_ticks as read_starttime_ticks
 
 if TYPE_CHECKING:
     from autoskillit.config import LinuxTracingConfig
@@ -40,35 +43,6 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 LINUX_TRACING_AVAILABLE = sys.platform == "linux"
-
-
-def read_boot_id() -> str | None:
-    """Read the system boot ID from /proc/sys/kernel/random/boot_id."""
-    try:
-        return Path("/proc/sys/kernel/random/boot_id").read_text().strip()
-    except OSError:
-        return None
-
-
-def read_starttime_ticks(pid: int) -> int | None:
-    """Read process starttime ticks from /proc/pid/stat.
-
-    Uses rfind(")") to correctly locate the field boundary even when the
-    process comm contains a ")" character. Matches psutil's own _parse_stat_file()
-    which uses rfind(b")") for the same reason.
-    """
-    try:
-        stat = Path(f"/proc/{pid}/stat").read_text()
-        # comm may contain ")" — use rfind to find the *last* ")" as the boundary
-        rpar = stat.rfind(")")
-        if rpar == -1:
-            return None
-        fields = stat[rpar + 2 :].split()
-        # starttime is field 22 (1-indexed per man page), offset 19 from the field after ")"
-        return int(fields[19])
-    except (OSError, ValueError, IndexError):
-        pass
-    return None
 
 
 # ---------------------------------------------------------------------------
@@ -95,7 +69,7 @@ class TraceTargetResolutionError(RuntimeError):
         )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TraceTarget:
     """Workload process identity with provenance — the correct target for the tracer.
 
@@ -117,7 +91,7 @@ class TraceTarget:
     resolved_at: datetime
 
 
-def resolve_trace_target(
+async def resolve_trace_target(
     root_pid: int,
     expected_basename: str,
     timeout: float = 2.0,
@@ -153,8 +127,10 @@ def resolve_trace_target(
             try:
                 name = child.name()
                 cmdline = child.cmdline()
+                if not cmdline:
+                    continue
                 basename_matches = name == expected_basename or (
-                    cmdline and Path(cmdline[0]).name == expected_basename
+                    Path(cmdline[0]).name == expected_basename
                 )
                 if not basename_matches:
                     continue
@@ -174,7 +150,7 @@ def resolve_trace_target(
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, OSError):
                 continue
 
-        time.sleep(0.05)
+        await anyio.sleep(0.05)
 
     raise TraceTargetResolutionError(root_pid=root_pid, expected_basename=expected_basename)
 
@@ -213,7 +189,7 @@ def trace_target_from_pid(pid: int) -> TraceTarget:
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TraceEnrollmentRecord:
     """Identity triple written atomically at trace-open time.
 
@@ -238,7 +214,7 @@ class TraceEnrollmentRecord:
 
 def _write_enrollment_atomic(path: Path, record: TraceEnrollmentRecord) -> None:
     """Write enrollment sidecar atomically using tempfile + os.replace."""
-    content = json.dumps(dataclasses.asdict(record))
+    content = _fast_dumps(dataclasses.asdict(record))
     fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
@@ -276,7 +252,7 @@ def read_enrollment(path: Path) -> TraceEnrollmentRecord | None:
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ProcSnapshot:
     """Point-in-time snapshot of process state.
 
@@ -305,6 +281,12 @@ class ProcSnapshot:
     wchan: str
     # CPU utilisation (0.0 when process arg is not supplied to read_proc_snapshot)
     cpu_percent: float
+    # Best-effort /proc/{pid}/net/tcp fields (Linux only; None when unavailable)
+    api_connection_established: int | None = None
+    api_connection_states: dict[str, int] | None = None
+    # Best-effort /proc/{pid}/io fields (Linux only; None when unavailable)
+    io_read_bytes: int | None = None
+    io_write_bytes: int | None = None
 
 
 def _parse_proc_status(content: str) -> dict[str, str]:
@@ -326,6 +308,68 @@ def _parse_proc_status(content: str) -> dict[str, str]:
         elif key == "SigCgt":
             fields["sig_cgt"] = value
     return fields
+
+
+_TCP_STATE_NAMES: dict[str, str] = {
+    "01": "ESTABLISHED",
+    "02": "SYN_SENT",
+    "03": "SYN_RECV",
+    "04": "FIN_WAIT1",
+    "05": "FIN_WAIT2",
+    "06": "TIME_WAIT",
+    "07": "CLOSE",
+    "08": "CLOSE_WAIT",
+    "09": "LAST_ACK",
+    "0A": "LISTEN",
+    "0B": "CLOSING",
+}
+_API_PORT_HEX: str = "01BB"  # port 443 in big-endian hex (Linux /proc/net/tcp format)
+
+
+def _parse_net_tcp(content: str) -> dict[str, int]:
+    """Parse /proc/{pid}/net/tcp content for connections to port 443.
+
+    Returns a dict mapping TCP state name to connection count.
+    Returns {} on empty or header-only content.
+    Lines with fewer than 4 fields are skipped silently.
+    """
+    counts: dict[str, int] = {}
+    for line in content.splitlines()[1:]:  # skip header
+        parts = line.split()
+        if len(parts) < 4:
+            continue
+        rem_addr = parts[2]
+        state_hex = parts[3].upper()
+        if ":" not in rem_addr:
+            continue
+        rem_port = rem_addr.split(":")[1].upper()
+        if rem_port != _API_PORT_HEX:
+            continue
+        state_name = _TCP_STATE_NAMES.get(state_hex, state_hex)
+        counts[state_name] = counts.get(state_name, 0) + 1
+    return counts
+
+
+def _parse_proc_io(content: str) -> tuple[int | None, int | None]:
+    """Parse /proc/{pid}/io content for read_bytes and write_bytes.
+
+    Returns (read_bytes, write_bytes). Either may be None if the field
+    is absent or unparseable.
+    """
+    read_b: int | None = None
+    write_b: int | None = None
+    for line in content.splitlines():
+        if line.startswith("read_bytes:"):
+            try:
+                read_b = int(line.split(":", 1)[1].strip())
+            except (ValueError, IndexError):
+                pass
+        elif line.startswith("write_bytes:"):
+            try:
+                write_b = int(line.split(":", 1)[1].strip())
+            except (ValueError, IndexError):
+                pass
+    return read_b, write_b
 
 
 def read_proc_snapshot(pid: int, *, process: psutil.Process | None = None) -> ProcSnapshot | None:
@@ -355,25 +399,53 @@ def read_proc_snapshot(pid: int, *, process: psutil.Process | None = None) -> Pr
     # Read process name from /proc/{pid}/comm (max 15 chars, kernel-truncated)
     try:
         comm = Path(f"/proc/{pid}/comm").read_text().strip()
-    except (FileNotFoundError, PermissionError):
+    except (FileNotFoundError, PermissionError, ProcessLookupError):
         comm = ""
 
     # Hand-rolled /proc reads for fields psutil doesn't expose
     try:
         status_content = Path(f"/proc/{pid}/status").read_text()
-    except (FileNotFoundError, PermissionError):
+    except (FileNotFoundError, PermissionError, ProcessLookupError):
         return None
     sig_fields = _parse_proc_status(status_content)
 
     try:
         oom = int(Path(f"/proc/{pid}/oom_score").read_text().strip())
-    except (FileNotFoundError, PermissionError, ValueError):
+    except (FileNotFoundError, PermissionError, ProcessLookupError, ValueError):
         oom = -1
 
     try:
         wchan = Path(f"/proc/{pid}/wchan").read_text().strip()
-    except (FileNotFoundError, PermissionError):
+    except (FileNotFoundError, PermissionError, ProcessLookupError):
         wchan = ""
+
+    # Best-effort: /proc/{pid}/net/tcp and tcp6 (Linux network namespace for this PID)
+    _api_conn_states: dict[str, int] | None = None
+    try:
+        _tcp_content = Path(f"/proc/{pid}/net/tcp").read_text()
+        _states = _parse_net_tcp(_tcp_content)
+        try:
+            _tcp6_content = Path(f"/proc/{pid}/net/tcp6").read_text()
+            for k, v in _parse_net_tcp(_tcp6_content).items():
+                _states[k] = _states.get(k, 0) + v
+        except (FileNotFoundError, PermissionError, OSError):
+            pass
+        _api_conn_states = _states if _states else {}
+    except (FileNotFoundError, PermissionError, OSError, ValueError):
+        pass
+
+    _api_conns_established: int | None = None
+    if _api_conn_states is not None:
+        _api_conns_established = _api_conn_states.get("ESTABLISHED", 0)
+
+    # Best-effort: /proc/{pid}/io
+    _io_read: int | None = None
+    _io_write: int | None = None
+    try:
+        _io_content = Path(f"/proc/{pid}/io").read_text()
+        _io_read, _io_write = _parse_proc_io(_io_content)
+    except (FileNotFoundError, PermissionError, OSError):
+        pass
 
     return ProcSnapshot(
         captured_at=captured_at,
@@ -391,6 +463,10 @@ def read_proc_snapshot(pid: int, *, process: psutil.Process | None = None) -> Pr
         oom_score=oom,
         wchan=wchan,
         cpu_percent=cpu_pct,
+        api_connection_established=_api_conns_established,
+        api_connection_states=_api_conn_states,
+        io_read_bytes=_io_read,
+        io_write_bytes=_io_write,
     )
 
 
@@ -526,7 +602,7 @@ def start_linux_tracing(
                 handle._snapshots.append(snap)
                 if handle._trace_file is not None:
                     try:
-                        handle._trace_file.write(json.dumps(snap.__dict__) + "\n")
+                        handle._trace_file.write(_fast_dumps(asdict(snap)) + "\n")
                     except OSError:
                         # Close broken file; degrade to in-memory only
                         try:

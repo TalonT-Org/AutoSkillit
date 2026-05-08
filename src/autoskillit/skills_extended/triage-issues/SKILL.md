@@ -18,7 +18,7 @@ Analyze open GitHub issues, classify each into a recipe route, group them into p
 ## When to Use
 
 - User says "triage issues", "prioritize issues", or "plan issue order"
-- Before starting a multi-issue implementation sprint
+- Before starting a multi-issue implementation batch
 - When a backlog needs sequencing into implementable batches
 - As input to a pipeline that processes issues in batch order
 
@@ -34,6 +34,7 @@ Analyze open GitHub issues, classify each into a recipe route, group them into p
 - Create files outside `{{AUTOSKILLIT_TEMP}}/triage-issues/` directory
 - Use `--body` shell substitution (`--body "$(...)`) for `gh issue edit` — always write to
   `{{AUTOSKILLIT_TEMP}}/triage-issues/edit_body_{timestamp}.md` and use `--body-file`
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
@@ -57,30 +58,6 @@ Parse optional arguments from the user's invocation:
                structured requirements (`REQ-{GRP}-NNN` format) to the issue body.
                Skips issues that already have a `## Requirements` section (idempotent).
                No effect on `recipe:remediation` issues.
-
-### Step 0.5 — Code-Index Initialization (required before any code-index tool call)
-
-Call `set_project_path` with the repo root where this skill was invoked (not a worktree path):
-
-```
-mcp__code-index__set_project_path(path="{PROJECT_ROOT}")
-```
-
-Code-index tools require **project-relative paths**. Always use paths like:
-
-    src/<your_package>/some_module.py
-
-NOT absolute paths like:
-
-    /absolute/path/to/src/<your_package>/some_module.py
-
-> **Note:** Code-index tools (`find_files`, `search_code_advanced`, `get_file_summary`,
-> `get_symbol_body`) are only available when the `code-index` MCP server is configured.
-> If `set_project_path` returns an error, fall back to native `Glob` and `Grep` tools
-> for the same searches — they provide equivalent results without the code-index server.
-
-Agents launched via `run_skill` inherit no code-index state from the parent session — this
-call is mandatory at the start of every headless session that uses code-index tools.
 
 ### Step 1: Authenticate and Fetch Issues
 
@@ -152,6 +129,13 @@ Use `model: "sonnet"` for all subagents.
 
 ### Step 3: Recipe Classification
 
+**Priority signal — Validated Audit Report:**
+If the issue title contains "Validated Audit Report" (the exact prefix set by `prepare-issue`
+when creating an issue from a validated audit output), classify as `recipe:implementation`
+with `high` confidence. Do NOT allow issue scope (number of findings / large scope) to override
+this signal — a 40-finding audit is structural quality improvement work, not broken behavior.
+Skip the "Is existing behavior broken?" analysis for these issues.
+
 Classify each issue into a recipe route using the primary behavioral criterion — is existing behavior broken?
 
 **Is existing behavior broken?**
@@ -175,6 +159,8 @@ Examples that route to `implementation`:
 - A plan/recipe that scoped too narrowly (gap in design, not a crash)
 - Improving error messages, refactoring, writing documentation
 - Adding support for a new file format — regardless of scope or complexity
+- A validated audit report with structural/quality findings (split oversized files, add missing
+  docstrings, naming consistency) — regardless of finding count
 
 **Common misclassification: "the orchestrator did the wrong thing"**
 When an LLM orchestrator bypasses routing, retries instead of escalating, or ignores a failure — that is almost always a **gap** (missing guardrail, missing discipline rule), not a runtime error. The orchestrator didn't crash; it made an unguarded choice. Route to `implementation` unless the orchestrator hit an actual exception.
@@ -336,6 +322,7 @@ For each triaged issue, apply its recipe label:
 
 ```bash
 gh issue edit {number} --add-label "recipe:{recipe}"
+sleep 1  # Rate-limit discipline: 1s between mutating calls
 ```
 
 ## Output Location

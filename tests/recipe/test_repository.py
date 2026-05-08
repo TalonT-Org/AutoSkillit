@@ -8,9 +8,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from autoskillit.core import RecipeSource
-from autoskillit.core._type_results import LoadResult
+from autoskillit.core.types._type_results import LoadResult
 from autoskillit.recipe.repository import DefaultRecipeRepository
 from autoskillit.recipe.schema import RecipeInfo
+
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
 def _make_recipe_info(name: str, path: Path) -> RecipeInfo:
@@ -181,4 +183,90 @@ def test_list_all_delegates_to_api() -> None:
         result = repo.list_all()
 
     assert result == expected
-    mock_api.assert_called_once_with(project_dir=None)
+    mock_api.assert_called_once_with(project_dir=None, features=None)
+
+
+# ---------------------------------------------------------------------------
+# Protocol boundary enforcement
+# ---------------------------------------------------------------------------
+
+
+def test_recipe_repository_protocol_find_return_type_is_recipe_info() -> None:
+    """RecipeRepository.find() must declare RecipeInfo | None.
+
+    If it returns Any, mypy cannot catch callers accessing Recipe-only attributes
+    on the result — exactly the bug class this guard is designed to prevent.
+
+    Uses string inspection because from __future__ import annotations stores
+    annotations as strings at runtime.
+    """
+    import inspect
+
+    from autoskillit.core.types._type_protocols_recipe import RecipeRepository
+
+    sig = inspect.signature(RecipeRepository.find)
+    ann = sig.return_annotation
+    assert "RecipeInfo" in str(ann), (
+        f"RecipeRepository.find() must return RecipeInfo | None. "
+        f"Got: {ann!r}. "
+        "Returning Any silences mypy on all callers and hides type boundary violations."
+    )
+
+
+def test_in_memory_recipe_repo_rejects_recipe_objects() -> None:
+    """InMemoryRecipeRepository.add_recipe must only accept RecipeInfo objects.
+
+    Accepting Recipe objects masks the production type mismatch in all dispatch tests.
+    """
+    from autoskillit.recipe.schema import Recipe
+    from tests.fakes import InMemoryRecipeRepository
+
+    repo = InMemoryRecipeRepository()
+    with pytest.raises(TypeError, match="RecipeInfo"):
+        repo.add_recipe("x", Recipe(name="x", description="x"))
+
+
+def test_load_and_validate_coerces_str_project_dir_to_path(tmp_path: Path) -> None:
+    mock_api = MagicMock(return_value={})
+    foo = _make_recipe_info("test-recipe", tmp_path / "test-recipe.yaml")
+    str_dir = str(tmp_path)
+
+    with patch("autoskillit.recipe._api.load_and_validate", mock_api):
+        with patch("autoskillit.recipe.repository.list_recipes", return_value=_load_result(foo)):
+            with patch("autoskillit.recipe.repository._dir_mtime", return_value=1.0):
+                repo = DefaultRecipeRepository()
+                repo.load_and_validate("test-recipe", str_dir)
+
+    call_kwargs = mock_api.call_args
+    assert isinstance(call_kwargs.kwargs["project_dir"], Path), (
+        f"Expected Path, got {type(call_kwargs.kwargs['project_dir'])}"
+    )
+    assert call_kwargs.kwargs["project_dir"] == tmp_path
+
+
+def test_repository_load_and_validate_passes_recipe_list_to_api(tmp_path: Path) -> None:
+    """DefaultRecipeRepository passes its cached recipe list to _api.load_and_validate."""
+    captured_kwargs = {}
+
+    def capturing_load_and_validate(*args, **kwargs):
+        captured_kwargs.update(kwargs)
+        return {}
+
+    foo = _make_recipe_info("foo", tmp_path / "foo.yaml")
+
+    with patch.object(
+        DefaultRecipeRepository,
+        "_get_list",
+        return_value=_load_result(foo),
+    ):
+        with patch(
+            "autoskillit.recipe._api.load_and_validate",
+            side_effect=capturing_load_and_validate,
+        ):
+            repo = DefaultRecipeRepository()
+            repo.load_and_validate("foo", tmp_path)
+
+    assert "recipe_list" in captured_kwargs
+    assert captured_kwargs["recipe_list"] is not None
+    assert isinstance(captured_kwargs["recipe_list"], list)
+    assert captured_kwargs["recipe_list"][0].name == "foo"

@@ -31,6 +31,7 @@ hooks:
 - Modify any source code files
 - Include runtime behavior details
 - Show external system integrations in detail
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Focus on IMPORT relationships between modules

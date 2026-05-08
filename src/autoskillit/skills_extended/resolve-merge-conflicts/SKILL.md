@@ -41,8 +41,11 @@ hooks:
 
 ## When to Use
 
-- Called by the `merge-prs` when `merge_worktree` fails with
-  `failed_step=rebase` and `state=worktree_intact_rebase_aborted`
+- Called by queue-ejection, direct-merge, immediate-merge, and CI-conflict paths
+  when `merge_worktree` fails with `failed_step=rebase` and `state=worktree_intact_rebase_aborted`
+- Called by the `rebase_conflict_fix` step in `implementation.yaml`,
+  `implementation-groups.yaml`, and `remediation.yaml` when `merge_worktree` returns
+  `failed_step == 'rebase'`
 - The worktree must still be intact (rebase aborted cleanly, no partial state)
 
 ## Workflow
@@ -248,8 +251,34 @@ After a successful `rebase --continue` (no more conflict rounds):
 cd {worktree_path} && pre-commit run --all-files
 ```
 
-Fix any auto-fixable violations (ruff format, ruff check). Re-stage fixed files and
-re-run `pre-commit run --all-files` to confirm clean.
+If pre-commit fails, apply all auto-fixable hooks in a single pass before re-running:
+
+1. **ruff format / ruff check**: These hooks auto-apply fixes when they run; check
+   for modified files after the failure.
+
+2. **check-version-consistency**: If this hook fails, run:
+   ```bash
+   python3 scripts/sync_versions.py
+   git -C {worktree_path} add -u
+   ```
+
+3. **uv-lock-check**: If this hook fails, run:
+   ```bash
+   uv lock
+   git -C {worktree_path} add -u
+   ```
+
+After applying all applicable fixes, re-stage any remaining modified files with
+`git -C {worktree_path} add -u` and re-run `pre-commit run --all-files`.
+
+If `pre-commit run --all-files` still fails after this second pass, the remaining
+failure is from a non-auto-fixable hook (e.g., `mypy`, `gitleaks`, `doc-counts`).
+Escalate immediately — do NOT loop:
+
+```
+escalation_required = true
+escalation_reason = pre-commit failed after applying all auto-fixes (ruff, sync_versions, uv lock). Remaining failure from non-fixable hook requires manual remediation: <hook name and output summary>
+```
 
 **Do NOT run the full test suite.** Testing is handled by the pipeline's `test` step,
 which already ran and passed before `merge_to_integration` was first attempted. Running
@@ -434,5 +463,5 @@ Omit `conflict_report_path=` line entirely when the rebase was clean (no conflic
 
 - **Validation failures**: Emit clear error message and abort before touching git state
 - **`rebase --continue` failure** (not a conflict): Abort with `git -C {worktree_path} rebase --abort` and escalate
-- **`pre-commit` failure**: Fix auto-fixable violations (ruff format/check) and re-run; do not escalate for formatting-only failures
+- **`pre-commit` failure**: Apply all auto-fixable hooks in order — ruff format/check (auto-applied by hooks), `check-version-consistency` (run `python3 scripts/sync_versions.py && git add -u`), `uv-lock-check` (run `uv lock && git add -u`) — re-stage, then re-run. If pre-commit still fails after this pass, escalate with `escalation_required=true`; non-fixable hooks (mypy, gitleaks, doc-counts) require manual remediation.
 - **Unexpected git state**: Run `git -C {worktree_path} rebase --abort` before exiting

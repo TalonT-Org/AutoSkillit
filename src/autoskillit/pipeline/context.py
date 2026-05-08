@@ -9,23 +9,29 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
     AuditLog,
     BackgroundSupervisor,
+    CampaignProtector,
     CIRunScope,
     CIWatcher,
     CloneManager,
     DatabaseReader,
+    FleetLock,
     GateState,
+    GitHubApiLog,
     GitHubFetcher,
     HeadlessExecutor,
     McpResponseLog,
     MergeQueueWatcher,
     MigrationService,
     OutputPatternResolver,
+    PluginSource,
     QuotaRefreshTask,
+    ReadOnlyResolver,
     RecipeRepository,
     SessionSkillManager,
     SkillResolver,
@@ -39,6 +45,9 @@ from autoskillit.core import (
 )
 from autoskillit.pipeline.background import DefaultBackgroundSupervisor
 from autoskillit.pipeline.mcp_response import DefaultMcpResponseLog
+
+# Must-supply-or-raise: fields defaulting to _MISSING are required by __post_init__.
+_MISSING: Any = object()
 
 
 @dataclass
@@ -57,8 +66,8 @@ class ToolContext:
     timing_log:           TimingLog — per-step wall-clock duration tracking
     response_log:         McpResponseLog — per-tool MCP response size tracking
     gate:                 GateState — enables/disables gated tools
-    plugin_dir:           Absolute path string to the autoskillit package directory, or None if
-                          the marketplace plugin is installed and `--plugin-dir` should be omitted.
+    plugin_source:        PluginSource — DirectInstall (dev/editable) or MarketplaceInstall.
+                          Encodes how autoskillit is loaded into Claude Code sessions.
     runner:               SubprocessRunner implementation (DefaultSubprocessRunner in production,
                           MockSubprocessRunner in tests)
     executor:             HeadlessExecutor — runs headless Claude Code sessions
@@ -77,14 +86,18 @@ class ToolContext:
                           to the current kitchen session lifetime.
     active_recipe_packs:  frozenset[str] | None — pack names declared by the loaded recipe
                           (frozenset() when kitchen open but no recipe loaded; None when closed)
-    temp_dir:             Resolved temp directory for this project. MUST be supplied explicitly
-                          by callers outside make_context(). The default_factory falls back to
-                          Path.cwd() / ".autoskillit" / "temp", which is cwd-dependent and
-                          ignores the configured workspace.temp_dir.
+    active_recipe_features: frozenset[str] | None — feature names declared by the loaded recipe
+                          (frozenset() when kitchen open but no recipe loaded; None when closed)
+    temp_dir:             Resolved temp directory for this project. Sentinel-guarded: raises
+                          TypeError if not supplied explicitly. Use make_context() or pass
+                          temp_dir=<path>.
     token_factory:        Optional callable that resolves a GitHub token via the
                           config → GITHUB_TOKEN env → gh CLI fallback chain.
                           Set by make_context(); None in test ToolContext instances
                           unless explicitly provided.
+    project_dir:          Resolved project root directory. Sentinel-guarded: raises TypeError
+                          if not supplied explicitly. Use make_context() or pass
+                          project_dir=<path>.
     """
 
     config: AutomationConfig
@@ -92,15 +105,10 @@ class ToolContext:
     token_log: TokenLog
     timing_log: TimingLog
     gate: GateState
-    plugin_dir: str | None
+    plugin_source: PluginSource
     runner: SubprocessRunner | None
-    # Always supply temp_dir explicitly when constructing ToolContext directly.
-    # The default captures Path.cwd() at field-instantiation time, which is
-    # cwd-dependent and will differ from the configured workspace.temp_dir.
-    # Production callers must use make_context() (server/_factory.py), which
-    # resolves temp_dir from config via resolve_temp_dir(). Direct construction
-    # (e.g. in tests) must override this field before any file I/O that uses it.
-    temp_dir: Path = field(default_factory=lambda: Path.cwd() / ".autoskillit" / "temp")
+    temp_dir: Path = field(default=_MISSING)
+    project_dir: Path = field(default=_MISSING)
     response_log: McpResponseLog = field(default_factory=DefaultMcpResponseLog)
     executor: HeadlessExecutor | None = field(default=None)
     tester: TestRunner | None = field(default=None)
@@ -112,17 +120,37 @@ class ToolContext:
     github_client: GitHubFetcher | None = field(default=None)
     ci_watcher: CIWatcher | None = field(default=None)
     merge_queue_watcher: MergeQueueWatcher | None = field(default=None)
+    github_api_log: GitHubApiLog | None = field(default=None)
     background: BackgroundSupervisor | None = field(default=None)
     output_pattern_resolver: OutputPatternResolver | None = field(default=None)
     write_expected_resolver: WriteExpectedResolver | None = field(default=None)
+    read_only_resolver: ReadOnlyResolver | None = field(default=None)
     session_skill_manager: SessionSkillManager | None = field(default=None)
     skill_resolver: SkillResolver | None = field(default=None)
+    recipe_name: str = field(default="")
+    recipe_content_hash: str = field(default="")
+    recipe_composite_hash: str = field(default="")
+    recipe_version: str = field(default="")
     kitchen_id: str = field(default="")
     active_recipe_packs: frozenset[str] | None = field(default_factory=lambda: None)
+    active_recipe_features: frozenset[str] | None = field(default_factory=lambda: None)
     quota_refresh_task: QuotaRefreshTask | None = field(default=None)
     token_factory: TokenFactory | None = field(default=None)
+    fleet_lock: FleetLock | None = field(default=None)
+    build_protected_campaign_ids: CampaignProtector | None = field(default=None)
+    ephemeral_root: Path | None = field(default_factory=lambda: None)
 
     def __post_init__(self) -> None:
+        if self.temp_dir is _MISSING:
+            raise TypeError(
+                "temp_dir must be supplied explicitly — do not rely on defaults. "
+                "Use make_context() or pass temp_dir=<path> directly."
+            )
+        if self.project_dir is _MISSING:
+            raise TypeError(
+                "project_dir must be supplied explicitly — do not rely on defaults. "
+                "Use make_context() or pass project_dir=<path> directly."
+            )
         if self.background is None:
             self.background = DefaultBackgroundSupervisor(audit=self.audit)
 

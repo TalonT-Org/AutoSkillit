@@ -1,4 +1,8 @@
-"""Version health utilities (Layer 0)."""
+"""Version health utilities (IL-0 — import layer 0).
+
+Zero autoskillit imports — this module is importable before any other
+autoskillit subpackage.
+"""
 
 from __future__ import annotations
 
@@ -20,11 +24,13 @@ def version_info(plugin_dir: Path | str | None = None) -> dict:
     package_version = importlib.metadata.version("autoskillit")
     if plugin_dir is None:
         plugin_dir = Path(str(ir.files("autoskillit")))
-    plugin_json_path = Path(plugin_dir) / ".claude-plugin" / "plugin.json"
+    plugin_dir = Path(plugin_dir)
+    plugin_json_path = plugin_dir / ".claude-plugin" / "plugin.json"
     plugin_version = None
     if plugin_json_path.is_file():
         data = json.loads(plugin_json_path.read_text())
         plugin_version = data.get("version")
+
     return {
         "package_version": package_version,
         "plugin_json_version": plugin_version,

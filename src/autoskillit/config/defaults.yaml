@@ -7,10 +7,10 @@
 #   5. AUTOSKILLIT_SECTION__KEY=value environment variables
 
 test_check:
-  command:
-    - task
-    - test-check
   timeout: 600
+  filter_mode: null
+  base_ref: null
+  commands: null
 
 classify_fix:
   path_prefixes: []
@@ -31,7 +31,7 @@ safety:
   test_gate_on_merge: true
   protected_branches:
     - main
-    - integration
+    - develop
     - stable
 
 read_db:
@@ -45,7 +45,7 @@ run_skill:
   completion_drain_timeout: 5.0
   exit_after_stop_delay_ms: 2000
   natural_exit_grace_seconds: 3.0
-  idle_output_timeout: 600
+  idle_output_timeout: 1000
   max_suppression_seconds: 1800
 
 model:
@@ -64,11 +64,11 @@ token_usage:
 quota_guard:
   enabled: true
   short_window_enabled: true   # Gates the 5-hour rolling window class.
-  long_window_enabled: true    # Gates the weekly / sonnet / opus class.
+  long_window_enabled: true    # Gates the seven_day / sonnet / opus class.
   short_window_threshold: 85.0
-  long_window_threshold: 98.0
+  long_window_threshold: 95.0
   long_window_patterns:
-    - weekly
+    - seven_day
     - sonnet
     - opus
   buffer_seconds: 60
@@ -82,11 +82,15 @@ github:
   default_repo: null
   in_progress_label: "in-progress"
   staged_label: "staged"
+  fail_label: "fail"
+  queued_label: "queued"
   allowed_labels:
     - "bug"
     - "enhancement"
+    - "queued"
     - "in-progress"
     - "staged"
+    - "fail"
     - "autoreported"
     - "recipe:implementation"
     - "recipe:remediation"
@@ -109,6 +113,7 @@ linux_tracing:
   proc_interval: 5.0
   log_dir: ""  # empty = platform default (~/.local/share/autoskillit/logs on Linux)
   tmpfs_path: "/dev/shm"  # RAM-backed tmpfs for crash-resilient streaming
+  max_sessions: 2000  # retention limit for session diagnostics directories
 
 mcp_response:
   alert_threshold_tokens: 2000
@@ -117,11 +122,14 @@ branching:
   default_base_branch: main
   promotion_target: main      # Canonical "done" branch for staged-label comparison.
                               # Override independently of default_base_branch when using
-                              # a multi-tier workflow (e.g. feature → integration → main).
+                              # a multi-tier workflow (e.g. feature → develop → main).
 
 ci:
   workflow: null  # Workflow filename to filter CI runs, e.g. "tests.yml"
   event: null     # Trigger event to filter CI runs, e.g. "push"
+
+review:
+  local_review_rounds: 3
 
 subsets:
   disabled: []
@@ -181,13 +189,16 @@ skills:
     - audit-tests
     - audit-defense-standards
     - audit-bugs
+    - audit-docs
+    - audit-feature-gates
+    - audit-review-decisions
     - audit-friction
     - make-req
     - elaborate-phase
     - write-recipe
+    - make-campaign
     - migrate-recipes
     - setup-project
-    - sprint-planner
     - design-guards
     - triage-issues
     - collapse-issues
@@ -201,11 +212,13 @@ skills:
     - run-experiment
     - generate-report
     - validate-audit
+    - validate-test-audit
+    - validate-review-decisions
     - vis-lens-always-on
     - vis-lens-antipattern
     - vis-lens-chart-select
     - vis-lens-color-access
-    - vis-lens-domain-norms
+    - vis-lens-methodology-norms
     - vis-lens-figure-table
     - vis-lens-multi-compare
     - vis-lens-temporal
@@ -215,7 +228,24 @@ skills:
     - vis-lens-story-arc
     - plan-visualization
     - stage-data
+    - setup-environment
     - bundle-local-report
+    # planner
+    - planner-analyze
+    - planner-extract-domain
+    - planner-generate-phases
+    - planner-elaborate-phase
+    - planner-elaborate-assignments
+    - planner-elaborate-wps
+    - planner-reconcile-deps
+    - planner-refine
+    - planner-refine-assignments
+    - planner-refine-phases
+    - planner-refine-wps
+    - planner-consolidate-wps
+    - planner-validate-task-alignment
+    - planner-assess-review-approach
+    - reload-session
   tier3:
     - prepare-pr
     - compose-pr
@@ -243,8 +273,26 @@ skills:
     - troubleshoot-experiment
     - audit-claims
     - resolve-claims-review
+    - build-execution-map
+    - promote-to-main
 
 workspace:
   worktree_root: null   # null = auto-resolve to ../worktrees/ relative to project root
   runs_root: null       # null = auto-resolve to ../autoskillit-runs/ relative to project root
   temp_dir: .autoskillit/temp  # canonical default; override per-project or via AUTOSKILLIT_WORKSPACE__TEMP_DIR
+
+fleet:
+  default_timeout_sec: 3600
+  max_concurrent_dispatches: 3
+  max_total_issues: 12
+  enable_deadline_extension: true
+  max_extension_seconds: 7200
+  idle_output_timeout: 1800
+
+providers:
+  default_provider: null
+  profiles: {}
+  step_overrides: {}
+  provider_retry_limit: 2
+
+features: {}

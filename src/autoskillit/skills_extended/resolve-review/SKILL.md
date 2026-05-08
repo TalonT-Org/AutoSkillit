@@ -18,10 +18,13 @@ for actionable findings, commit each fix, and verify tests still pass.
 
 ## Arguments
 
-`/autoskillit:resolve-review <feature_branch> <base_branch>`
+`/autoskillit:resolve-review <feature_branch> <base_branch> [mode=<local|github>]`
 
 - `feature_branch` — The PR's head branch (used to find the open PR)
 - `base_branch` — The PR's base branch (e.g., "main")
+- **mode** (optional, default: `github`) — Controls where findings are read from and how threads are handled:
+  - `mode=github` (or absent/unrecognized): current behavior — fetch findings from GitHub API, post deferred observations from prior local rounds, resolve threads and post inline replies.
+  - `mode=local`: read findings from local JSON (written by `review-pr` in `mode=local`), skip all GitHub API fetching, accumulate DISCUSS/REJECT to persistent local files, skip thread resolution and inline reply API calls, still run `task test-check`.
 
 The `cwd` is provided by the recipe step's `cwd:` field — the clone with the feature
 branch already checked out.
@@ -41,6 +44,7 @@ branch already checked out.
 - Exceed 3 fix-and-retest iterations
 - Delete or discard the working directory on failure
 - Modify tests to suppress failures introduced by reviewer fixes
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Find the PR by feature branch at invocation time (not a hardcoded number)
@@ -50,6 +54,8 @@ branch already checked out.
 - Run `{test_command}` (from config, default: `task test-check`) after applying all fixes to catch regressions
 - Gracefully degrade (exit 0, report skip) if `gh` is unavailable or no PR is found
 - Report a structured summary: findings fetched, fixes applied, fixes skipped (with reasons)
+- **Read before editing**: Before issuing an `Edit` call on any file, ensure you have issued a `Read` on that file earlier in this session. Claude Code rejects `Edit` on unread files — the retry wastes a full API turn at current context size. If you are uncertain whether a file was read, issue a targeted `Read` (offset + limit to the region you plan to edit) rather than risk an error.
+- **CWD awareness**: Before running `python3` or other interpreters, verify your current working directory is the worktree root (not the orchestrator's project root). Use absolute paths for imports or `cd` to the worktree first. A wrong-CWD import error wastes a full API turn.
 
 ## Context Limit Behavior
 
@@ -67,8 +73,8 @@ review fixes are committed and the downstream push step receives a clean branch.
 
 ## Workflow
 
-Read `test_check.command` from `.autoskillit/config.yaml` (default: `task test-check`).
-Store the resolved command as `{test_command}` for use in all test-running steps.
+Read test configuration from `.autoskillit/config.yaml`: check `test_check.commands` (ordered list, if set) or `test_check.command` (single command, default: `task test-check`).
+The `test_check` MCP tool runs all configured commands automatically.
 
 ### Step 0: Validate Arguments
 
@@ -76,6 +82,21 @@ Parse two positional arguments: `feature_branch` and `base_branch`.
 
 If either is missing, abort with:
 `"Usage: /autoskillit:resolve-review <feature_branch> <base_branch>"`
+
+Parse the optional `mode` keyword argument:
+
+```bash
+# Extract mode from keyword arguments
+MODE="github"
+for arg in "$@"; do
+    case "$arg" in
+        mode=local)  MODE="local" ;;
+        mode=github) MODE="github" ;;
+    esac
+done
+```
+
+If `mode` is absent or unrecognized, default to `"github"`.
 
 ### Step 1: Find the Open PR
 
@@ -95,7 +116,65 @@ If `gh` is unavailable or not authenticated, or no PR is found:
 - Log "No PR found or gh unavailable — skipping review resolution"
 - Exit 0 (graceful degradation — do not fail the pipeline)
 
+### Step 1.5: Post Accumulated Deferred Observations (github mode only)
+
+**When `mode=github`:**
+
+Before fetching current findings from GitHub, check for any deferred observations
+accumulated from prior local review rounds:
+
+```bash
+DEFERRED_FILE="{{AUTOSKILLIT_TEMP}}/resolve-review/deferred_observations_${PR_NUMBER}.json"
+```
+
+If the file exists and contains entries:
+1. Load the deferred observations array from the file
+2. Post ALL entries as a single batch review via `POST /repos/{owner}/{repo}/pulls/{pr_number}/reviews`:
+   - `event`: `"COMMENT"` (not requesting changes — these are observations for discussion)
+   - `body`: `"Observations accumulated from {N} local review rounds:"`
+   - `commit_id`: current HEAD commit SHA (from `gh pr view {pr_number} --json headRefOid -q .headRefOid`)
+   - `comments[]` array where each entry has:
+     - `path`: from the deferred entry
+     - `line`: from the deferred entry (if `line` is null, omit `line` and use `position: 1` as file-level comment)
+     - `side`: `"RIGHT"`
+     - `body`:
+       ```
+       **Observation from local review round {round}:**
+
+       {body}
+
+       **Evidence:** {evidence}
+
+       <!-- REVIEW-FLAG: severity={severity} dimension={dimension} -->
+       ```
+
+3. Use the batch review endpoint (never post individual comments unless the batch call fails)
+4. **Fallback:** If the batch POST returns HTTP 422 (e.g., stale line numbers), retry by posting each observation individually via `gh api repos/{owner}/{repo}/pulls/{pr_number}/comments --method POST` with 1s delay between calls
+5. After all deferred observations are posted successfully, rename the file to `deferred_observations_${PR_NUMBER}_posted.json` to prevent re-posting on retry
+6. These review threads are left UNRESOLVED (same behavior as DISCUSS in github mode)
+
+If the file does not exist or is empty, skip this step and proceed to Step 2.
+
+**`REVIEW-FLAG` marker format:** `<!-- REVIEW-FLAG: severity={severity} dimension={dimension} -->`
+Matches the regex `<!--\s*REVIEW-FLAG:\s*severity=(\w+)\s+dimension=(\w+)\s*>`.
+
+**When `mode=local`:** Skip this step entirely — there are no prior accumulated observations to post in local mode.
+
 ### Step 2: Fetch Review Comments
+
+**MODE BRANCHING:**
+
+**When `mode=local`:**
+- Skip ALL GitHub API calls for fetching comments (no `gh api repos/.../pulls/{N}/comments`, no `gh api repos/.../pulls/{N}/reviews`, no GraphQL `reviewThreads` query)
+- Instead, read findings from `{{AUTOSKILLIT_TEMP}}/review-pr/local_findings_{pr_number}.json`
+- Transform the local findings format into the same internal structure used by the GitHub-sourced flow: each finding maps to `path`, `line`, `body`, `severity`, `dimension`
+- Load `diff_context_{pr_number}.json` as normal (mode-independent — same handoff file written by review-pr)
+- Set `comment_id_to_thread_id = {}` (no thread IDs in local mode)
+- Set `already_replied_ids = set()` (no prior replies in local mode)
+- Skip writing `inline_comments_{pr_number}.json`, `reviews_{pr_number}.json`, `threads_{pr_number}.json` (GitHub-API-specific files)
+- Proceed to Step 3 with the transformed local findings
+
+**When `mode=github`:** Execute the following GitHub API fetching steps (current behavior unchanged).
 
 Fetch inline comments (anchored to specific file lines):
 ```bash
@@ -113,7 +192,7 @@ cursor-based pagination to handle PRs with more than 100 threads:
 ```bash
 # Fetch all pages; repeat with after=$endCursor while hasNextPage is true
 gh api graphql \
-  -f query='query($owner:String!,$repo:String!,$number:Int!,$after:String){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100,after:$after){pageInfo{hasNextPage endCursor}nodes{id isResolved comments(first:1){nodes{databaseId}}}}}}}' \
+  -f query='query($owner:String!,$repo:String!,$number:Int!,$after:String){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100,after:$after){pageInfo{hasNextPage endCursor}nodes{id isResolved comments(first:5){nodes{databaseId body}}}}}}}' \
   -F owner="$owner" \
   -F repo="$repo" \
   -F number=$number \
@@ -136,6 +215,56 @@ If the GraphQL call fails (e.g., token lacks `read:discussion` scope), log a war
 set `comment_id_to_thread_id = {}`. Thread resolution will be silently skipped in Step 6.
 Flag this in the Step 7 report for human review.
 
+**Build `already_replied_ids` (idempotency guard):**
+
+```python
+RESOLVED_MARKER_RE = re.compile(r"<!--\s*autoskillit:resolved\b")
+
+already_replied_ids: set[int] = set()
+for thread in all_thread_nodes:
+    if thread.get("isResolved"):
+        continue  # Already resolved — Step 3 will not see these comments anyway
+    comments_in_thread = thread.get("comments", {}).get("nodes", [])
+    if len(comments_in_thread) < 2:
+        continue  # No replies yet
+    first_comment_id = comments_in_thread[0].get("databaseId")
+    if first_comment_id is None:
+        continue
+    for reply in comments_in_thread[1:]:
+        if RESOLVED_MARKER_RE.search(reply.get("body", "")):
+            already_replied_ids.add(first_comment_id)
+            log(f"Skipping comment {first_comment_id} — already resolved by prior resolve-review run")
+            break
+```
+
+`already_replied_ids` is a set of original-comment `databaseId` integers for which a prior
+resolve-review invocation already posted a reply. Comments in this set are skipped in Step 3
+before classification.
+
+If the GraphQL call failed and `all_thread_nodes` is empty, `already_replied_ids` defaults to
+`set()` — no skipping occurs (safe degradation: worst case is a duplicate reply on the next
+run, same as the current behavior).
+
+**Load Pre-Built Context (if available):**
+
+After saving the raw review responses, check for the handoff file from review-pr:
+
+```bash
+DIFF_CONTEXT_PATH="{{AUTOSKILLIT_TEMP}}/review-pr/diff_context_${PR_NUMBER}.json"
+```
+
+If the file exists:
+- Parse it as JSON
+- Build `diff_context_map: dict[tuple[str, int], dict]` where key is `(entry.path, entry.line)`
+  and value is the full context entry dict (with fields: `path`, `line`, `severity`, `dimension`, `message`, `code_region`)
+- Log: `"Loaded pre-built context for N findings from review-pr handoff (schema_version: {v})"`
+
+If the file is absent or cannot be parsed:
+- Set `diff_context_map = {}`
+- Log: `"No pre-built context file found — will read files in Step 3.5 (fallback)"`
+
+This lookup is used in Steps 3.5 and 4 to avoid redundant file reads.
+
 ### Step 3: Parse and Classify Findings
 
 From **inline comments**, extract per comment:
@@ -146,6 +275,19 @@ From **inline comments**, extract per comment:
 - `id` — the comment's REST database ID (integer `id` field in the JSON)
 - `thread_node_id` — look up `comment_id_to_thread_id.get(id)` (may be `None` if lookup
   failed or thread was already resolved)
+
+**File-level comment guard:** If `line` is null (file-level comment posted by
+review-pr), skip this finding entirely — file-level comments have no code anchor and
+cannot be resolved by code changes. Record: `(path, null, reason="file-level comment — no
+line anchor")`. See the thread_node_id tracking table in Step 4 for the no-add disposition.
+
+**Idempotency guard — already-replied comments:**
+If `comment["id"]` (the REST `id` integer) is in `already_replied_ids`, skip this
+comment entirely. Do not classify it, do not apply fixes, do not post a reply.
+Record: `(path, line, reason="already replied in prior round — skipped")`.
+These skipped comments do not count toward `accept_count`, `reject_count`, or
+`discuss_count`, and must not appear in the Step 7 report's "Findings fetched" total
+(they were fetched but filtered before classification).
 
 From **top-level reviews**, extract:
 - `state` — APPROVED, CHANGES_REQUESTED, COMMENTED
@@ -160,26 +302,52 @@ From **top-level reviews**, extract:
 
 When a finding matches multiple tiers, use the highest severity.
 
-**Filter:** Include `critical` and `warning` only. Skip `info` findings entirely.
+Critical and warning findings proceed to intent validation (Step 3.5). Info findings are auto-classified as `DISCUSS` — they do not enter Step 3.5.
 
 ### Step 3.5: Intent Validation (Parallel Sub-Agents — BEFORE any code changes)
 
 Before applying any fix, validate every critical and warning finding against the actual
 codebase and git history. This analysis phase runs entirely before code changes are made.
 
-**Domain grouping:** Group all critical+warning findings by the top-level path segment of
+**Domain grouping:** Group all critical and warning findings by the top-level path segment of
 their `path` field:
 - `src/autoskillit/execution/headless.py` → group `execution`
 - `tests/skills/test_foo.py` → group `tests`
 - `src/autoskillit/server/tools_ci.py` → group `server`
 
+**Inline classification shortcut:** If there are 3 or fewer findings AND they all
+fall in a single domain group, classify them inline — use each finding's
+`diff_hunk` as the primary code context, run `git log` once per unique path, then
+emit a verdict for each finding — without spawning a Task sub-agent. Only read
+source files if a comment explicitly references code outside the hunk or the
+`diff_hunk` is missing. The classification criteria and output format are
+identical to the sub-agent path.
+
 This produces 3–6 groups on a typical PR. Launch one parallel sub-agent per group using
 the Task tool (`model: "sonnet"`).
 
+**Context resolution hierarchy** (applied per finding):
+1. **`diff_context_map` code_region** — richest context (±50 annotated diff lines); used when review-pr ran in the same pipeline and wrote the handoff file.
+2. **`diff_hunk` from the review comment** — the unified-diff snippet surrounding the commented line; always available from the GitHub API. Sufficient for most classification tasks (naming, patterns, style).
+3. **Source file read** — last resort (±30 lines); used only when the comment references code outside the hunk or the hunk is truncated/missing.
+
 **Sub-agent prompt template** — each sub-agent receives:
 - The list of comments in its domain group (with `path`, `line`, `body`, `diff_hunk`)
-- Instructions to read the actual code at each flagged line (±30 lines context)
-- Instructions to run `git log --follow -p --max-count=5 -- {path}` to trace original intent via git history
+- Instructions for reading code context: if a pre-built code_region for this finding's
+  `(path, line)` is available in `diff_context_map`, include it directly in the prompt
+  under "Pre-built code region (from review-pr, ±50 diff lines):" and instruct the
+  sub-agent to use it — do **not** instruct it to read the file for context. If
+  `diff_context_map` has no entry for this finding, use the comment's `diff_hunk`
+  as the primary code context — include it directly in the prompt under
+  "Code context (diff_hunk from review comment):" and instruct the sub-agent to
+  classify the finding using this hunk. Only instruct the sub-agent to read the
+  source file if: (a) the review comment body explicitly references code outside
+  the hunk (e.g., "see the function above", "this conflicts with the import at
+  line N", "look at the caller in X.py"), or (b) the `diff_hunk` is truncated
+  or missing (empty string). When a file read IS needed, read each unique file
+  once, spanning all flagged lines with ±30 lines margin — do not re-read per
+  finding.
+- Instructions to run `git log --follow -p --max-count=5 -- {path}` once per unique path (not once per finding) to trace original intent
 - Instructions to classify each comment as `ACCEPT`, `REJECT`, or `DISCUSS` with:
   - `verdict`: the classification (`ACCEPT` / `REJECT` / `DISCUSS`)
   - `evidence`: specific references (line numbers, function names, API docs, contracts)
@@ -194,26 +362,43 @@ the Task tool (`model: "sonnet"`).
 - `DISCUSS` — the comment raises a valid design question that requires a human decision;
   flag for human review, do NOT change the code automatically
 
-**Output from each sub-agent** — a JSON array:
-```json
-[
-  {
-    "comment_id": 123,
-    "path": "src/autoskillit/execution/headless.py",
-    "line": 42,
-    "verdict": "REJECT",
-    "evidence": "The method never raises — this is contractual (see docstring line 12 and callers in tools_execution.py:88)",
-    "category": "false_positive_intentional_pattern",
-    "commit_sha_hint": "abc1234"
-  }
-]
+**Output from each sub-agent** — a JSON array of objects with fields: `comment_id`, `path`, `line`, `verdict`, `evidence`, `category` (REJECT only), `commit_sha_hint`.
+
+**Building sub-agent prompts with pre-built context:**
+
+When `diff_context_map.get((comment.path, comment.line), {}).get("code_region")` returns a non-empty value:
 ```
+Pre-built code region (from review-pr, ±50 diff lines):
+{diff_context_map.get((comment.path, comment.line), {}).get("code_region", "")}
+
+Use the above region for context. Do NOT read the file — the region is already provided.
+Run `git log --follow -p --max-count=5 -- {path}` for history context as usual.
+```
+
+When `diff_context_map` has no entry but `diff_hunk` is present (non-empty):
+```
+Code context (diff_hunk from review comment):
+{comment.diff_hunk}
+
+Use the above hunk for classification context. Only read the source file if:
+(a) the comment body references code outside this hunk, or (b) you need
+additional context not visible in the hunk. Run `git log` for history as usual.
+```
+
+When `diff_context_map` has no entry AND `diff_hunk` is empty or missing:
+fall back to reading the file at `±30 lines` from the flagged line.
 
 **Fallback:** If a sub-agent fails or times out, classify all comments in that group as
 `DISCUSS` (safe fallback — no code is changed, human reviews). Log the failure including
 the error message, domain group name, and affected comment IDs.
 
 **Merge results** into a `classification_map: dict[comment_id, verdict_entry]`.
+
+Each entry must also carry two additional fields populated at merge time (not delegated to sub-agents):
+- `severity` — `diff_context_map.get((path, line), {}).get("severity", locally_classified_severity)` where `locally_classified_severity` is the severity computed in Step 3 (`critical`/`warning`/`info` from keyword matching). This ensures a meaningful value even when no review-pr handoff entry exists for this `(path, line)`.
+- `dimension` — `diff_context_map.get((path, line), {}).get("dimension", "unknown")` (`arch|tests|bugs|defense|cohesion|slop|deletion_regression|unknown`). `"unknown"` is the correct sentinel when `diff_context_map` has no entry.
+
+For auto-classified INFO findings (those classified as DISCUSS in Step 3 without entering Step 3.5): add them to `classification_map` with `severity="info"` and `dimension=diff_context_map.get((path, line), {}).get("dimension", "unknown")`.
 
 **Write analysis report** to `{{AUTOSKILLIT_TEMP}}/resolve-review/analysis_{pr_number}_{ts}.md` before
 any code changes are made. The report must include a summary banner:
@@ -226,6 +411,62 @@ Track: `accept_count`, `reject_count`, `discuss_count`.
 
 ---
 
+### Step 3.6: Accumulate DISCUSS Findings (local mode only)
+
+**When `mode=local`:**
+
+After intent validation (Step 3.5), accumulate all DISCUSS-classified findings to a
+persistent local file for later posting when mode switches to `github`.
+
+Read the `iteration` field from `{{AUTOSKILLIT_TEMP}}/review-pr/local_findings_{pr_number}.json`
+to get the round number. If that file is absent, use `iteration = 0`.
+
+```python
+import json, pathlib
+
+deferred_file = pathlib.Path("{{AUTOSKILLIT_TEMP}}/resolve-review/deferred_observations_${PR_NUMBER}.json")
+
+# Load existing entries if file exists
+existing = []
+if deferred_file.exists():
+    existing = json.loads(deferred_file.read_text())
+
+# Build new entries from classification_map (DISCUSS only)
+discuss_entries = []
+for c in classification_map.values():
+    if c.get("verdict") != "DISCUSS":
+        continue
+    entry = {
+        "round": iteration_number,
+        "path": c.get("path"),
+        "line": c.get("line"),
+        "body": c.get("body"),
+        "evidence": c.get("evidence", ""),
+        "severity": c.get("severity", "warning"),
+        "dimension": c.get("dimension", "unknown"),
+        "verdict": "DISCUSS",
+        "category": c.get("category", "design_decision"),
+    }
+    discuss_entries.append(entry)
+
+# Deduplicate: skip if (path, line, body) already in existing
+seen = {(e["path"], e["line"], e["body"]) for e in existing}
+new_entries = [e for e in discuss_entries if (e["path"], e["line"], e["body"]) not in seen]
+
+# Write atomically
+all_entries = existing + new_entries
+deferred_file.write_text(json.dumps(all_entries, indent=2))
+print(f"Accumulated {len(new_entries)} new DISCUSS findings ({len(all_entries)} total)")
+```
+
+The `round` value is the iteration number from `local_findings_{pr_number}.json` (written
+by review-pr with auto-incrementing logic).
+
+**When `mode=github`:** Skip this step. DISCUSS findings are handled by inline replies
+(with `REVIEW-FLAG` markers) in Step 6.5.
+
+---
+
 ### Step 4: Apply Fixes (max 3 iterations)
 
 Initialize `addressed_thread_ids: list[str] = []` before processing findings.
@@ -233,7 +474,12 @@ Initialize `addressed_thread_ids: list[str] = []` before processing findings.
 For each finding where the classification map shows `verdict = ACCEPT`
 (process critical findings first, then warnings):
 
-1. Read the referenced file and ±20 lines of context around the comment line
+1. **Context for understanding:** If `diff_context_map.get((path, line), {}).get("code_region")` returns a non-empty value,
+   use the pre-built code_region for initial understanding — skip the ±20 line read.
+   The pre-built region is already available from the review-pr handoff.
+   If `diff_context_map` has no entry, read the referenced file and ±20 lines of
+   context as before. In both cases, still read the file when actually applying
+   the edit — the pre-built context covers understanding only, not the write.
 2. Understand what the reviewer is requesting
 3. Apply the fix
 4. Stage and commit:
@@ -244,16 +490,23 @@ For each finding where the classification map shows `verdict = ACCEPT`
    git commit -m "fix(review): {brief description of reviewer's request}"
    ```
 
-**Apply the fix flow:** After committing the fix:
-- Append the finding's `thread_node_id` to `addressed_thread_ids` (if not `None`).
-
 **Classification gate — REJECT/DISCUSS bypass:**
 For findings where the classification map shows `verdict = REJECT` or `verdict = DISCUSS`:
-- For REJECT: no code changes are applied; record `(file, line, reason="classifier: REJECT — {evidence}")`
-- For DISCUSS: record `(file, line, reason="classifier: DISCUSS — {context}")`
-- Do NOT add these findings' `thread_node_id` to `addressed_thread_ids`
+- For REJECT: no code changes are applied; record `(file, line, reason="classifier: REJECT — {evidence}")`.
+- For DISCUSS: record `(file, line, reason="classifier: DISCUSS — {context}")`.
+
+**`thread_node_id` Tracking:**
+
+| Outcome | Append to `addressed_thread_ids`? |
+|---------|-----------------------------------|
+| ACCEPT — fix committed | Yes (if `thread_node_id` is not `None`) |
+| REJECT — no code change | Yes (if `thread_node_id` is not `None`) |
+| DISCUSS — awaiting human decision | No — do not add DISCUSS findings to `addressed_thread_ids` |
+| Skipped finding (stale, missing file, unclear) | No |
+| File-level comment (`line` is null) | No |
 
 **Skip a finding if:**
+- The comment is a file-level comment (`line` is null) — these have no code anchor
 - The referenced file does not exist in the current branch
 - The finding references a line number that no longer exists (stale comment)
 - The fix would require a design decision beyond the reviewer's explicit guidance
@@ -263,7 +516,6 @@ Record each skip with: `(file, line, reason)`.
 
 **Skip a finding flow:** When skipping a finding (stale comment, missing file, unclear guidance, contradiction):
 - Record `(file, line, reason)` as before.
-- Do NOT add the finding's `thread_node_id` to `addressed_thread_ids`.
 
 ### Step 5: Run Tests
 
@@ -278,45 +530,79 @@ Record each skip with: `(file, line, reason)`.
 
 ### Step 6: Resolve Addressed Review Threads
 
-For each `thread_id` in `addressed_thread_ids`:
+**MODE BRANCHING:**
+
+**When `mode=github`:** Execute the following thread resolution steps (current behavior unchanged).
+
+Batch all thread resolutions into a single GraphQL request using aliased mutations.
+This reduces N requests (5 pts each = 5N pts) to 1 request (5 pts total).
+If `addressed_thread_ids` has more than 50 threads, chunk into batches of 50.
 
 ```bash
-gh api graphql \
-  -f query='mutation($threadId:ID!){resolveReviewThread(input:{threadId:$threadId}){thread{isResolved}}}' \
-  -f threadId="$thread_id"
+# Build aliased mutation query for all addressed threads
+MUTATION_QUERY="mutation {"
+for i in $(seq 0 $((${#ADDRESSED_THREAD_IDS[@]} - 1))); do
+    tid="${ADDRESSED_THREAD_IDS[$i]}"
+    MUTATION_QUERY="${MUTATION_QUERY} resolve${i}: resolveReviewThread(input: {threadId: \"${tid}\"}) { thread { isResolved } }"
+done
+MUTATION_QUERY="${MUTATION_QUERY} }"
+
+gh api graphql -f query="${MUTATION_QUERY}"
 ```
 
-- **Success** (`isResolved: true` in response): increment `resolved_count`.
-- **Failure** (non-zero exit code, parse error, or `isResolved: false`): log a warning
-  `"Warning: could not resolve thread {thread_id}: {error}"`. Continue to the next thread.
+Parse the response: for each `resolve${i}` alias key, check `thread.isResolved`.
+- **Success** (`isResolved: true`): increment `resolved_count`.
+- **Failure** (non-zero exit code, parse error, or `isResolved: false` for any alias): log a warning
+  `"Warning: could not resolve thread ${tid}: {error}"`. Continue to the next thread.
   Do not modify exit code.
 
 Track:
 - `resolved_count: int` — successfully resolved threads
 - `resolve_failed_count: int` — threads that could not be resolved (permissions, network)
 
-This step is a best-effort operation. Failure to resolve any thread must never cause the
-overall skill to exit non-zero. Thread resolution failure does not affect the exit code of
-the overall skill.
+This step is best-effort — failure to resolve any thread never affects the exit code.
+The same applies to Step 6.5 (inline replies).
+
+**When `mode=local`:**
+- Skip all GitHub thread resolution API calls (no GraphQL mutation, no thread resolution)
+- Set `resolved_count = 0`, `resolve_failed_count = 0`
+- The `addressed_thread_ids` list is not populated (there are no thread IDs in local mode)
+- Proceed to Step 6.5 (inline replies — also skipped in local mode)
 
 ### Step 6.5: Post Inline Replies
 
-For every comment that was analyzed (i.e., every comment that passed the critical+warning
-filter in Step 3), post an inline reply using the GitHub comment reply API. Each analyzed
-comment receives exactly one reply based on its classification.
+**When `mode=local`:**
+- Skip all inline reply POST calls
+- Set `reply_posted_count = 0`, `reply_failed_count = 0`
+- Proceed to Step 6.6
+
+**When `mode=github`:** Execute the following inline reply steps (current behavior unchanged).
+
+For every finding (those classified via intent validation in Step 3.5 and info findings
+auto-classified as DISCUSS in Step 3), post an inline reply using the GitHub comment reply
+API. Each finding receives exactly one reply based on its classification.
 
 ```bash
 # Build reply body based on classification:
 # ACCEPT:
-BODY="Agreed — fixed in ${commit_sha}. ${evidence}"
+BODY="Agreed — fixed in ${commit_sha}. ${evidence}
+<!-- autoskillit:resolved comment_id=${comment_id} verdict=ACCEPT -->"
 # REJECT:
-BODY="Investigated — this is intentional. ${evidence}"
+BODY="Investigated — this is intentional. ${evidence}
+<!-- autoskillit:resolved comment_id=${comment_id} verdict=REJECT -->"
 # DISCUSS:
-BODY="Valid observation — flagged for design decision. ${evidence}"
+BODY="Valid observation — flagged for design decision. ${evidence}
+<!-- REVIEW-FLAG: severity=${severity} dimension=${dimension} -->
+<!-- autoskillit:resolved comment_id=${comment_id} verdict=DISCUSS -->"
+# INFO (auto-classified DISCUSS):
+BODY="Acknowledged — minor suggestion noted.
+<!-- REVIEW-FLAG: severity=info dimension=${dimension} -->
+<!-- autoskillit:resolved comment_id=${comment_id} verdict=INFO -->"
 
 gh api repos/{owner}/{repo}/pulls/{pr_number}/comments/{comment_id}/replies \
   --method POST \
   --field body="${BODY}"
+sleep 1  # Rate-limit discipline: 1s between mutating calls
 ```
 
 For ACCEPT replies, use the `commit_sha` from the most recent commit made in Step 4
@@ -332,11 +618,60 @@ Track:
 - `reply_posted_count: int` — successfully posted replies
 - `reply_failed_count: int` — replies that failed (log warning, continue)
 
-This step is best-effort: failure to post any reply must not affect the exit code.
-
 ### Step 6.6: Persist Reject Patterns
 
-After Step 6.5, save all REJECT-classified comments to a JSON file for future analysis:
+**MODE BRANCHING:**
+
+**When `mode=local`:**
+
+After Step 6.5, save all REJECT-classified comments to a **stable, accumulating** JSON file
+(without timestamp — the same file is reused across local rounds):
+
+```python
+import json, pathlib
+
+reject_file = pathlib.Path("{{AUTOSKILLIT_TEMP}}/resolve-review/reject_patterns_${PR_NUMBER}.json")
+
+# Load existing entries if file exists
+existing = []
+if reject_file.exists():
+    existing = json.loads(reject_file.read_text())
+
+# Build new entries — use synthetic comment_id for local-mode findings
+# Format: "local_{iteration}_{index}" derived from iteration in local_findings + index
+reject_entries = []
+for idx, c in enumerate(classification_map.values()):
+    if c.get("verdict") != "REJECT":
+        continue
+    # Build synthetic comment_id from local finding source
+    comment_id = c.get("comment_id", f"local_unknown_{idx}")
+    entry = {
+        "comment_id": comment_id,
+        "path": c.get("path"),
+        "line": c.get("line"),
+        "body": c.get("body"),
+        "evidence": c.get("evidence", ""),
+        "category": c.get("category", "other"),
+        "pr_number": ${PR_NUMBER},
+        "feature_branch": "${feature_branch}",
+    }
+    reject_entries.append(entry)
+
+# Deduplicate: skip if (path, line, body) already in existing
+seen = {(e["path"], e["line"], e["body"]) for e in existing}
+new_entries = [e for e in reject_entries if (e["path"], e["line"], e["body"]) not in seen]
+
+# Write atomically
+all_entries = existing + new_entries
+reject_file.write_text(json.dumps(all_entries, indent=2))
+print(f"Accumulated {len(new_entries)} new REJECT patterns ({len(all_entries)} total)")
+```
+
+**Note:** In local mode, `comment_id` may not be a GitHub database ID. Use whatever ID
+is in the classification_map entry. If the finding came from `local_findings_{pr_number}.json`
+and has no native ID, use `"local_{iteration}_{index}"` as a synthetic identifier.
+
+**When `mode=github`:** Execute the following current behavior (timestamped, one-shot write).
 
 ```bash
 ts=$(date +%Y%m%d-%H%M%S)
@@ -365,6 +700,9 @@ print(f'Saved {len(reject_entries)} reject patterns')
 
 ### Step 7: Report
 
+**MODE INDEPENDENCE:** `task test-check` (Step 5) runs identically in both modes.
+Gate token emission is mode-independent.
+
 Print a structured summary to terminal:
 
 ```
@@ -373,7 +711,7 @@ PR: #{pr_number} ({feature_branch} → {base_branch})
 Findings fetched: {total}
   - critical: {n}
   - warning: {n}
-  - info: {n} (skipped — below threshold)
+  - info: {n}
 Intent validation (before code changes):
   - ACCEPT: {accept_count}
   - REJECT: {reject_count}
@@ -431,6 +769,16 @@ Where `{N}` is the count of ACCEPT findings where code changes were committed.
 `verdict = real_fix` means fixes were applied; `verdict = already_green` means
 all review findings were already addressed and no code changes were needed.
 
-When no PR is found (graceful degradation), no structured tokens are emitted.
+**Mode-conditional path outputs:**
+
+When `mode=local`, the following additional tokens are emitted:
+```
+deferred_observations_path = {AUTOSKILLIT_TEMP}/resolve-review/deferred_observations_{pr_number}.json
+reject_patterns_path = {AUTOSKILLIT_TEMP}/resolve-review/reject_patterns_{pr_number}.json
+```
+
+When `mode=github` and prior local rounds accumulated observations, these are posted
+to GitHub and renamed to `deferred_observations_{pr_number}_posted.json` — no path token
+is emitted for the posted state.
 
 Summary written to: `{{AUTOSKILLIT_TEMP}}/resolve-review/report_{pr_number}_{ts}.md` (relative to the current working directory)

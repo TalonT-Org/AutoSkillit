@@ -7,7 +7,7 @@ MCP tool retrieves the accumulated data grouped by step.
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +27,11 @@ class TimingEntry:
     invocation_count: int = 0
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        return {
+            "step_name": self.step_name,
+            "total_seconds": self.total_seconds,
+            "invocation_count": self.invocation_count,
+        }
 
 
 __all__ = ["TimingEntry", "DefaultTimingLog"]
@@ -108,6 +112,9 @@ class DefaultTimingLog:
         since: str = "",
         cwd_filter: str = "",
         kitchen_id_filter: str = "",
+        campaign_id_filter: str = "",
+        order_id_filter: str = "",
+        dispatch_id_filter: str = "",
     ) -> int:
         """Reconstruct timing entries from persisted session logs.
 
@@ -118,12 +125,22 @@ class DefaultTimingLog:
         cwd_filter: if non-empty, only sessions whose cwd matches are loaded.
         kitchen_id_filter: if non-empty, only sessions whose kitchen_id matches are loaded.
             Falls back to pipeline_id for sessions written before the rename.
+        campaign_id_filter: if non-empty, only sessions whose campaign_id matches are loaded.
+        order_id_filter: if non-empty, only sessions whose order_id matches are loaded.
+        dispatch_id_filter: if non-empty, only sessions whose dispatch_id matches are loaded.
 
         Returns the count of session directories successfully loaded.
         """
         count = 0
         for st_path in _iter_session_log_entries(
-            log_root, since, "step_timing.json", cwd_filter, kitchen_id_filter
+            log_root,
+            since,
+            "step_timing.json",
+            cwd_filter,
+            kitchen_id_filter,
+            campaign_id_filter,
+            order_id_filter,
+            dispatch_id_filter,
         ):
             try:
                 data = json.loads(st_path.read_text(encoding="utf-8"))

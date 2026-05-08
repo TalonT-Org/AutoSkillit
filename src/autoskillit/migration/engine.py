@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
-import re
 import shutil
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+import regex as re
 
 from autoskillit import __version__
 from autoskillit.core import (
@@ -42,6 +43,13 @@ class MigrationResult:
     migrated_content: str | None = None
     error: str | None = None
     retries_attempted: int = 0
+    advisory: str | None = None
+
+
+@dataclass
+class AdvisoryResult:
+    name: str
+    suggestion: str
 
 
 class MigrationAdapter(ABC):
@@ -89,7 +97,18 @@ class DeterministicMigrationAdapter(MigrationAdapter):
         """Apply migration deterministically; write-back handled by MigrationEngine."""
 
 
-_AnyAdapter = HeadlessMigrationAdapter | DeterministicMigrationAdapter
+class AdvisoryMigrationAdapter(MigrationAdapter):
+    """Adapter for skill-crafted artifacts: detects staleness but never writes files.
+
+    Returns advisory results (warnings/suggestions) that surface in migration
+    reports. File regeneration is deferred to the appropriate skill invocation.
+    """
+
+    @abstractmethod
+    def check_staleness(self, file: MigrationFile) -> AdvisoryResult: ...
+
+
+_AnyAdapter = HeadlessMigrationAdapter | DeterministicMigrationAdapter | AdvisoryMigrationAdapter
 
 
 class MigrationEngine:
@@ -116,7 +135,10 @@ class MigrationEngine:
         if not adapter.needs_migration(file):
             return MigrationResult(success=True, name=file.name)
 
-        if isinstance(adapter, DeterministicMigrationAdapter):
+        if isinstance(adapter, AdvisoryMigrationAdapter):
+            advisory = adapter.check_staleness(file)
+            return MigrationResult(success=True, name=file.name, advisory=advisory.suggestion)
+        elif isinstance(adapter, DeterministicMigrationAdapter):
             result = await adapter.migrate(file, temp_dir=temp_dir)
         else:
             result = await adapter.migrate(file, run_headless=run_headless, temp_dir=temp_dir)
@@ -137,7 +159,7 @@ class RecipeMigrationAdapter(HeadlessMigrationAdapter):
     file_type = "recipe"
 
     def discover(self, project_dir: Path) -> list[MigrationFile]:
-        from autoskillit.recipe import parse_recipe_metadata
+        from autoskillit.recipe import parse_recipe_metadata  # noqa: PLC0415
 
         recipes_dir = project_dir / ".autoskillit" / "recipes"
         if not recipes_dir.exists():
@@ -230,12 +252,12 @@ class RecipeMigrationAdapter(HeadlessMigrationAdapter):
         return temp_dir / "migrations" / f"{file.path.stem}.yaml"
 
     def validate(self, path: Path) -> tuple[bool, str]:
-        from autoskillit.recipe import load_recipe as _parse_recipe
-        from autoskillit.recipe import validate_recipe
+        from autoskillit.recipe import load_recipe as _parse_recipe  # noqa: PLC0415
+        from autoskillit.recipe import validate_recipe_structure  # noqa: PLC0415
 
         try:
             recipe = _parse_recipe(path)
-            errors = validate_recipe(recipe)
+            errors = validate_recipe_structure(recipe)
             if errors:
                 return False, "; ".join(str(e) for e in errors)
             return True, ""
@@ -264,7 +286,7 @@ class ContractMigrationAdapter(DeterministicMigrationAdapter):
         return files
 
     def needs_migration(self, file: MigrationFile) -> bool:
-        from autoskillit.recipe import check_contract_staleness, load_recipe_card
+        from autoskillit.recipe import check_contract_staleness, load_recipe_card  # noqa: PLC0415
 
         recipes_dir = file.path.parent.parent
         contract = load_recipe_card(file.name, recipes_dir)
@@ -278,7 +300,7 @@ class ContractMigrationAdapter(DeterministicMigrationAdapter):
         *,
         temp_dir: Path,
     ) -> MigrationResult:
-        from autoskillit.recipe import generate_recipe_card
+        from autoskillit.recipe import generate_recipe_card  # noqa: PLC0415
 
         recipes_dir = file.path.parent.parent
         recipe_path = recipes_dir / f"{file.name}.yaml"
@@ -306,8 +328,12 @@ class ContractMigrationAdapter(DeterministicMigrationAdapter):
             return False, str(exc)
 
 
-class DiagramMigrationAdapter(DeterministicMigrationAdapter):
-    """Adapter that regenerates stale recipe flow diagram Markdown files."""
+class DiagramMigrationAdapter(AdvisoryMigrationAdapter):
+    """Advisory adapter for skill-crafted recipe flow diagrams.
+
+    Detects stale diagrams but never overwrites them — returns a suggestion
+    to run ``/render-recipe`` instead.
+    """
 
     file_type = "diagram"
 
@@ -321,21 +347,24 @@ class DiagramMigrationAdapter(DeterministicMigrationAdapter):
         ]
 
     def needs_migration(self, file: MigrationFile) -> bool:
-        from autoskillit.recipe import check_diagram_staleness
+        from autoskillit.recipe import check_diagram_staleness  # noqa: PLC0415
 
-        recipes_dir = file.path.parent.parent  # diagrams/ -> recipes/
+        if not file.path.exists():
+            return False
+        recipes_dir = file.path.parent.parent
         recipe_path = recipes_dir / f"{file.name}.yaml"
         if not recipe_path.exists():
             return False
         return check_diagram_staleness(file.name, recipes_dir, recipe_path)
 
-    async def migrate(
-        self,
-        file: MigrationFile,
-        *,
-        temp_dir: Path,
-    ) -> MigrationResult:
-        return MigrationResult(success=True, name=file.name)
+    def check_staleness(self, file: MigrationFile) -> AdvisoryResult:
+        from autoskillit.recipe import diagram_stale_to_suggestions  # noqa: PLC0415
+
+        suggestions = diagram_stale_to_suggestions(file.name)
+        return AdvisoryResult(
+            name=file.name,
+            suggestion=suggestions[0]["message"] if suggestions else "",
+        )
 
     def validate(self, path: Path) -> tuple[bool, str]:
         try:
@@ -388,7 +417,7 @@ class DefaultMigrationService:
         """
         from autoskillit.migration.loader import applicable_migrations as _applicable
         from autoskillit.migration.store import FailureStore, default_store_path
-        from autoskillit.recipe import parse_recipe_metadata
+        from autoskillit.recipe import parse_recipe_metadata  # noqa: PLC0415
 
         meta = parse_recipe_metadata(recipe_path)
         name = meta.name
@@ -451,6 +480,7 @@ class DefaultMigrationService:
                 )
                 return {"error": f"Migration failed: {migration_result.error}", "name": name}
 
+        advisories: list[str] = []
         contracts_regenerated: list[str] = []
         contract_adapter = self._engine.get_adapter("contract")
         if contract_adapter is not None:
@@ -489,7 +519,9 @@ class DefaultMigrationService:
                     run_headless=run_headless,
                     temp_dir=temp_dir,
                 )
-                if not diagram_result.success:
+                if diagram_result.advisory:
+                    advisories.append(diagram_result.advisory)
+                elif not diagram_result.success:
                     logger.warning(
                         "diagram.migration_failed",
                         name=name,
@@ -497,9 +529,15 @@ class DefaultMigrationService:
                     )
 
         if did_version_migrate or contracts_regenerated:
-            return {
+            result_dict: dict[str, object] = {
                 "status": "migrated",
                 "name": name,
                 "contracts_regenerated": contracts_regenerated,
             }
-        return {"status": "up_to_date", "name": name}
+            if advisories:
+                result_dict["advisories"] = advisories
+            return result_dict
+        result_dict = {"status": "up_to_date", "name": name}
+        if advisories:
+            result_dict["advisories"] = advisories
+        return result_dict

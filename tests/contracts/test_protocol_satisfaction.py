@@ -175,6 +175,39 @@ def test_default_recipe_repository_satisfies_recipe_repository():
     assert isinstance(DefaultRecipeRepository(), RecipeRepository)
 
 
+def test_recipe_repository_has_apply_triage_gate():
+    """RecipeRepository protocol defines apply_triage_gate as an async method."""
+    import inspect
+
+    from autoskillit.core import RecipeRepository
+
+    method = getattr(RecipeRepository, "apply_triage_gate", None)
+    assert method is not None, "RecipeRepository must define apply_triage_gate"
+    assert inspect.iscoroutinefunction(method), "apply_triage_gate must be async"
+    sig = inspect.signature(method)
+    expected_params = [
+        "self",
+        "result",
+        "recipe_name",
+        "recipe_info",
+        "temp_dir",
+        "logger",
+        "triage_fn",
+    ]
+    assert list(sig.parameters.keys()) == expected_params
+
+
+def test_default_recipe_repository_has_apply_triage_gate():
+    """DefaultRecipeRepository implements apply_triage_gate from the protocol."""
+    import inspect
+
+    from autoskillit.recipe.repository import DefaultRecipeRepository
+
+    method = getattr(DefaultRecipeRepository, "apply_triage_gate", None)
+    assert method is not None
+    assert inspect.iscoroutinefunction(method)
+
+
 def test_default_migration_service_satisfies_migration_service():
     from autoskillit.core import MigrationService
     from autoskillit.migration.engine import DefaultMigrationService, MigrationEngine
@@ -306,6 +339,9 @@ class TestGroupDApiContractPreservation:
             "linux_tracing_config",
             "idle_output_timeout",
             "max_suppression_seconds",
+            "on_pid_resolved",
+            "enable_deadline_extension",
+            "max_extension_seconds",
         }
         assert expected == public_params, (
             f"run_managed_async public params changed.\n"
@@ -367,6 +403,9 @@ class TestGroupDApiContractPreservation:
             "env",
             "idle_output_timeout",
             "max_suppression_seconds",
+            "on_pid_resolved",
+            "enable_deadline_extension",
+            "max_extension_seconds",
         }
         assert expected == actual, (
             f"DefaultSubprocessRunner.__call__ params changed.\n"
@@ -426,7 +465,7 @@ class TestGroupDApiContractPreservation:
 
     def test_req_api_004_headless_subprocess_result_under_type_checking(self):
         """execution/headless.py must import SubprocessResult only under TYPE_CHECKING."""
-        source = (self._pkg_root() / "execution" / "headless.py").read_text()
+        source = (self._pkg_root() / "execution" / "headless" / "__init__.py").read_text()
         assert "SubprocessResult" in source, (
             "SubprocessResult reference vanished from headless.py entirely"
         )
@@ -442,20 +481,20 @@ class TestGroupDApiContractPreservation:
             f"{runtime_import.group()!r}"
         )
 
-    def test_req_api_004_server_helpers_subprocess_result_under_type_checking(self):
-        """server/helpers.py must import SubprocessResult only under TYPE_CHECKING."""
-        source = (self._pkg_root() / "server" / "helpers.py").read_text()
+    def test_req_api_004_server_subprocess_result_under_type_checking(self):
+        """server/_subprocess.py must import SubprocessResult only under TYPE_CHECKING."""
+        source = (self._pkg_root() / "server" / "_subprocess.py").read_text()
         assert "SubprocessResult" in source, (
-            "SubprocessResult reference vanished from server/helpers.py entirely"
+            "SubprocessResult reference vanished from server/_subprocess.py entirely"
         )
-        assert "TYPE_CHECKING" in source, "TYPE_CHECKING guard removed from server/helpers.py"
+        assert "TYPE_CHECKING" in source, "TYPE_CHECKING guard removed from server/_subprocess.py"
         runtime_import = re.search(
             r"^from\s+\S+\s+import\s+.*SubprocessResult",
             source,
             re.MULTILINE,
         )
         assert runtime_import is None, (
-            f"SubprocessResult has a runtime import in server/helpers.py: "
+            f"SubprocessResult has a runtime import in server/_subprocess.py: "
             f"{runtime_import.group()!r}"
         )
 
@@ -464,7 +503,7 @@ class TestGroupDApiContractPreservation:
     # ------------------------------------------------------------------
 
     def test_req_api_005_subprocess_result_field_names(self):
-        """SubprocessResult must have exactly the 14 canonical fields."""
+        """SubprocessResult must have exactly the 15 canonical fields."""
         from autoskillit.core.types import SubprocessResult
 
         fields = {f.name for f in dataclasses.fields(SubprocessResult)}
@@ -483,6 +522,7 @@ class TestGroupDApiContractPreservation:
             "elapsed_seconds",
             "kill_reason",
             "tracked_comm",
+            "orphaned_tool_result",
         }
         assert fields == expected, (
             f"SubprocessResult fields changed.\n"
@@ -541,3 +581,9 @@ class TestGroupDApiContractPreservation:
         assert ChannelConfirmation.CHANNEL_A == "channel_a"
         assert ChannelConfirmation.CHANNEL_B == "channel_b"
         assert ChannelConfirmation.UNMONITORED == "unmonitored"
+
+
+# PROTO-1
+def test_supports_logger_importable_from_core():
+    """SupportsLogger protocol is exported from the autoskillit.core gateway."""
+    from autoskillit.core import SupportsLogger  # noqa: F401

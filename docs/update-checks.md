@@ -20,7 +20,7 @@ Dismissal windows vary by install type to balance convenience and safety:
 | Install | Window |
 |---------|--------|
 | stable / main / release-tag | 7 days |
-| integration / local-editable | 12 hours |
+| develop / local-editable | 12 hours |
 
 The window is determined at check time from the current `direct_url.json` —
 not from what was stored when you dismissed.
@@ -45,8 +45,9 @@ For unknown install types (e.g. installed from PyPI without a VCS reference),
 
 ## Escape hatches
 
-Set either env var to silence all update checks for a single invocation:
+Set any of these env vars to silence all update checks for a single invocation:
 
+    AUTOSKILLIT_SKIP_UPDATE_CHECK=1 autoskillit <command>
     AUTOSKILLIT_SKIP_STALE_CHECK=1 autoskillit <command>
     AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK=1 autoskillit <command>
 

@@ -10,11 +10,13 @@ import pytest
 
 from autoskillit.core import SkillResult
 from autoskillit.core.types import RetryReason
-from autoskillit.server.tools_github import (
+from autoskillit.server.tools.tools_github import (
     _format_diagnostics_section,
     _read_session_diagnostics,
     report_bug,
 )
+
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 # ---------------------------------------------------------------------------
 # _read_session_diagnostics unit tests
@@ -271,7 +273,9 @@ def _make_mock_github(search_total: int, existing_body: str = "") -> MagicMock:
     client.create_issue = AsyncMock(
         return_value={"success": True, "url": "https://github.com/o/r/issues/99"}
     )
-    client.add_comment = AsyncMock(return_value={"success": True})
+    client.update_issue_body = AsyncMock(
+        return_value={"success": True, "issue_url": "https://github.com/o/r/issues/7"}
+    )
     return client
 
 
@@ -310,23 +314,23 @@ def _make_session_dir(
 
 
 @pytest.mark.anyio
-async def test_report_bug_includes_diagnostics_in_new_issue_body(tool_ctx, tmp_path):
+async def test_report_bug_includes_diagnostics_in_new_issue_body(tool_ctx_kitchen_open, tmp_path):
     """New issue body includes the Session Diagnostics section when diagnostics are available."""
     session_id = "diag-session-001"
     _make_session_dir(tmp_path, session_id)
 
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = True
-    tool_ctx.config.github.default_repo = "owner/repo"
-    tool_ctx.config.linux_tracing.log_dir = str(tmp_path / "session_logs")
+    tool_ctx_kitchen_open.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx_kitchen_open.config.report_bug.github_filing = True
+    tool_ctx_kitchen_open.config.github.default_repo = "owner/repo"
+    tool_ctx_kitchen_open.config.linux_tracing.log_dir = str(tmp_path / "session_logs")
 
-    tool_ctx.executor = _make_mock_executor(
+    tool_ctx_kitchen_open.executor = _make_mock_executor(
         success=True,
         result="---bug-fingerprint---\nfp-001\n---/bug-fingerprint---\nReport text.",
         session_id=session_id,
     )
     github_mock = _make_mock_github(search_total=0)
-    tool_ctx.github_client = github_mock
+    tool_ctx_kitchen_open.github_client = github_mock
 
     result = json.loads(
         await report_bug(error_context="Test error", cwd=str(tmp_path), severity="blocking")
@@ -340,7 +344,9 @@ async def test_report_bug_includes_diagnostics_in_new_issue_body(tool_ctx, tmp_p
 
 
 @pytest.mark.anyio
-async def test_report_bug_includes_condensed_diagnostics_in_duplicate_comment(tool_ctx, tmp_path):
+async def test_report_bug_includes_condensed_diagnostics_in_duplicate_comment(
+    tool_ctx_kitchen_open, tmp_path
+):
     """Duplicate comment includes condensed metrics but no <details> blocks."""
     session_id = "diag-session-002"
     _make_session_dir(
@@ -349,44 +355,44 @@ async def test_report_bug_includes_condensed_diagnostics_in_duplicate_comment(to
         anomalies=[{"kind": "oom_spike", "severity": "warning", "detail": {}}],
     )
 
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = True
-    tool_ctx.config.github.default_repo = "owner/repo"
-    tool_ctx.config.linux_tracing.log_dir = str(tmp_path / "session_logs")
+    tool_ctx_kitchen_open.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx_kitchen_open.config.report_bug.github_filing = True
+    tool_ctx_kitchen_open.config.github.default_repo = "owner/repo"
+    tool_ctx_kitchen_open.config.linux_tracing.log_dir = str(tmp_path / "session_logs")
 
-    tool_ctx.executor = _make_mock_executor(
+    tool_ctx_kitchen_open.executor = _make_mock_executor(
         success=True,
         result="---bug-fingerprint---\nfp-002\n---/bug-fingerprint---\nReport text.",
         session_id=session_id,
     )
     github_mock = _make_mock_github(search_total=1, existing_body="different error")
-    tool_ctx.github_client = github_mock
+    tool_ctx_kitchen_open.github_client = github_mock
 
     await report_bug(error_context="Test error", cwd=str(tmp_path), severity="blocking")
 
-    _args = github_mock.add_comment.call_args
-    comment_body = _args.kwargs.get("body", _args.args[3])
-    assert "Session Diagnostics" in comment_body
-    assert "<details>" not in comment_body  # condensed — no details blocks
+    _args = github_mock.update_issue_body.call_args
+    new_body = _args.kwargs.get("new_body", _args.args[3])
+    assert "Session Diagnostics" in new_body
+    assert "<details>" not in new_body  # condensed — no details blocks
 
 
 @pytest.mark.anyio
 async def test_report_bug_proceeds_without_diagnostics_when_session_dir_missing(
-    tool_ctx, tmp_path
+    tool_ctx_kitchen_open, tmp_path
 ):
     """GitHub issue is still filed even when no session diagnostics directory exists."""
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = True
-    tool_ctx.config.github.default_repo = "owner/repo"
-    tool_ctx.config.linux_tracing.log_dir = str(tmp_path / "session_logs")
+    tool_ctx_kitchen_open.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx_kitchen_open.config.report_bug.github_filing = True
+    tool_ctx_kitchen_open.config.github.default_repo = "owner/repo"
+    tool_ctx_kitchen_open.config.linux_tracing.log_dir = str(tmp_path / "session_logs")
 
-    tool_ctx.executor = _make_mock_executor(
+    tool_ctx_kitchen_open.executor = _make_mock_executor(
         success=True,
         result="---bug-fingerprint---\nfp-003\n---/bug-fingerprint---\nReport text.",
         session_id="nonexistent-session-id",  # no directory on disk
     )
     github_mock = _make_mock_github(search_total=0)
-    tool_ctx.github_client = github_mock
+    tool_ctx_kitchen_open.github_client = github_mock
 
     result = json.loads(
         await report_bug(error_context="Test error", cwd=str(tmp_path), severity="blocking")
@@ -400,20 +406,22 @@ async def test_report_bug_proceeds_without_diagnostics_when_session_dir_missing(
 
 
 @pytest.mark.anyio
-async def test_report_bug_skips_diagnostics_for_fallback_session_id(tool_ctx, tmp_path):
+async def test_report_bug_skips_diagnostics_for_fallback_session_id(
+    tool_ctx_kitchen_open, tmp_path
+):
     """Fallback session IDs (no_session_*) never trigger diagnostics read."""
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = True
-    tool_ctx.config.github.default_repo = "owner/repo"
-    tool_ctx.config.linux_tracing.log_dir = str(tmp_path / "session_logs")
+    tool_ctx_kitchen_open.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx_kitchen_open.config.report_bug.github_filing = True
+    tool_ctx_kitchen_open.config.github.default_repo = "owner/repo"
+    tool_ctx_kitchen_open.config.linux_tracing.log_dir = str(tmp_path / "session_logs")
 
-    tool_ctx.executor = _make_mock_executor(
+    tool_ctx_kitchen_open.executor = _make_mock_executor(
         success=True,
         result="---bug-fingerprint---\nfp-004\n---/bug-fingerprint---\nReport.",
         session_id="no_session_2026-01-01T00-00-00",
     )
     github_mock = _make_mock_github(search_total=0)
-    tool_ctx.github_client = github_mock
+    tool_ctx_kitchen_open.github_client = github_mock
 
     result = json.loads(
         await report_bug(error_context="Test error", cwd=str(tmp_path), severity="blocking")

@@ -1,14 +1,15 @@
 # MCP Tool Access Control
 
-AutoSkillit provides 44 MCP tools organized into three access levels that control which
+AutoSkillit provides 52 MCP tools organized into three access levels that control which
 session types can see each tool.
 
 ## Three Access Levels
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  FREE RANGE  (3 tools, always visible)                  │
-│  open_kitchen, close_kitchen, disable_quota_guard       │
+│  FREE RANGE  (4 tools, always visible)                  │
+│  open_kitchen, close_kitchen, disable_quota_guard,      │
+│  reload_session                                         │
 │  Always visible — no gating, no headless restriction    │
 ├─────────────────────────────────────────────────────────┤
 │  HEADLESS-TAGGED  (1 tool)                              │
@@ -41,7 +42,7 @@ remain hidden even after `open_kitchen`.
 | Tag | Meaning |
 |-----|---------|
 | `autoskillit` | Identifies the tool as belonging to AutoSkillit. Present on every tool. |
-| `kitchen` | Tool is hidden at startup via `mcp.disable(tags={'kitchen'})`. 38 tools carry this tag. |
+| `kitchen` | Tool is hidden at startup via `mcp.disable(tags={'kitchen'})`. 37 tools carry this tag. |
 | `headless` | Tool is revealed in headless sessions via `mcp.enable(tags={'headless'})`. Additive — also carries `kitchen`. |
 | `github` | Functional category: GitHub-interacting tools. Can be disabled as a subset. |
 | `ci` | Functional category: CI/merge-queue polling tools. Can be disabled as a subset. |
@@ -54,7 +55,7 @@ Server startup sequence:
 
 ```
 1. mcp.disable(tags={"kitchen"})
-   → hides 38 kitchen-tagged tools (including the 1 headless-tagged tool)
+   → hides 37 kitchen-tagged tools (including the 1 headless-tagged tool)
 
 2. mcp.disable(tags={subset}) for each entry in config.subsets.disabled
    → e.g. hides all github-tagged tools if "github" is disabled
@@ -64,7 +65,7 @@ Server startup sequence:
    → reveals test_check only (the sole headless-tagged tool)
 
 4. When open_kitchen is called:
-   ctx.enable_components(tags={"kitchen"})   → reveals all 41 kitchen tools
+   ctx.enable_components(tags={"kitchen"})   → reveals kitchen-tagged tools (not fleet)
    ctx.disable_components(tags={subset})     → re-hides each disabled subset
    (session-level enable overwrites server-level disable, so re-disabling is required)
 ```
@@ -76,8 +77,8 @@ Three independent layers prevent headless sessions from calling orchestration to
 | Layer | Mechanism | What It Blocks |
 |-------|-----------|----------------|
 | 1. FastMCP | Kitchen tools remain hidden (`mcp.enable(headless)` does not reveal kitchen-only tools) | `run_skill`, `run_cmd`, `run_python`, `merge_worktree`, and all other kitchen-only tools |
-| 2. Hook | `headless_orchestration_guard.py` PreToolUse hook | `run_skill`, `run_cmd`, `run_python` |
-| 3. Code | `_require_not_headless()` guard in `tools_execution.py` | `run_skill`, `run_cmd`, `run_python` |
+| 2. Hook | `skill_orchestration_guard.py` PreToolUse hook | `run_skill`, `run_cmd`, `run_python` |
+| 3. Code | `_require_orchestrator_or_higher()` guard in `tools_execution.py` | `run_skill`, `run_cmd`, `run_python` |
 
 All three layers must independently agree before any orchestration tool can execute.
 A bypassed hook is caught by the code guard; a bypassed code guard is caught by the
@@ -85,10 +86,10 @@ missing kitchen visibility.
 
 ## Complete MCP Tool Access Control Map
 
-All 44 tools with their access level, tags, source file, and functional category.
+All 52 tools with their access level, tags, source file, and functional category.
 
 **Tag abbreviations**: AS = `autoskillit`, K = `kitchen`, HL = `headless`,
-GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`
+GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`, FL = `fleet`
 
 ---
 
@@ -99,6 +100,7 @@ GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`
 | `open_kitchen` | AS | `server/tools_kitchen.py` |
 | `close_kitchen` | AS | `server/tools_kitchen.py` |
 | `disable_quota_guard` | AS | `server/tools_kitchen.py` |
+| `reload_session` | AS | `server/tools_kitchen.py` |
 
 ---
 
@@ -127,6 +129,7 @@ GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`
 | `merge_worktree` | AS, K | `server/tools_git.py` |
 | `classify_fix` | AS, K | `server/tools_git.py` |
 | `create_unique_branch` | AS, K, GH | `server/tools_git.py` |
+| `create_and_publish_branch` | AS, K, GH | `server/tools_git.py` |
 | `check_pr_mergeable` | AS, K, GH | `server/tools_git.py` |
 | `reset_test_dir` | AS, K | `server/tools_workspace.py` |
 | `reset_workspace` | AS, K | `server/tools_workspace.py` |
@@ -141,7 +144,8 @@ GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`
 | `remove_clone` | AS, K, CL | `server/tools_clone.py` |
 | `push_to_remote` | AS, K, GH | `server/tools_clone.py` |
 | `register_clone_status` | AS, K, CL | `server/tools_clone.py` |
-| `batch_cleanup_clones` | AS, K, CL | `server/tools_clone.py` |
+| `batch_cleanup_clones` | AS, K, CL, FL | `server/tools_clone.py` |
+| `bootstrap_clone` | AS, K, CL | `server/tools_clone.py` |
 
 ---
 
@@ -154,6 +158,7 @@ GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`
 | `wait_for_merge_queue` | AS, K, CI | `server/tools_ci.py` |
 | `check_repo_merge_state` | AS, K, CI | `server/tools_ci.py` |
 | `toggle_auto_merge` | AS, K, CI | `server/tools_ci.py` |
+| `enqueue_pr` | AS, K, CI | `server/tools_ci.py` |
 | `set_commit_status` | AS, K, GH | `server/tools_ci.py` |
 
 ---
@@ -169,6 +174,7 @@ GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`
 | `enrich_issues` | AS, K, GH | `server/tools_issue_lifecycle.py` |
 | `claim_issue` | AS, K, GH | `server/tools_issue_lifecycle.py` |
 | `release_issue` | AS, K, GH | `server/tools_issue_lifecycle.py` |
+| `claim_and_resolve_issue` | AS, K, GH | `server/tools_issue_composite.py` |
 | `get_pr_reviews` | AS, K, GH | `server/tools_pr_ops.py` |
 | `bulk_close_issues` | AS, K, GH | `server/tools_pr_ops.py` |
 
@@ -185,6 +191,7 @@ GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`
 | `get_quota_events` | AS, K, TL | `server/tools_status.py` |
 | `write_telemetry_files` | AS, K, TL | `server/tools_status.py` |
 | `read_db` | AS, K | `server/tools_status.py` |
+| `analyze_tool_sequences` | AS, K, TL | `server/tools_status.py` |
 
 ---
 
@@ -199,7 +206,16 @@ GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`
 
 ---
 
-**Total: 43 tools** — 2 Free Range + 41 Kitchen-tagged (of which 1, `test_check`, additionally carries the `headless` tag and is revealed inside headless sessions)
+### KITCHEN — Fleet
+
+| Tool | Tags | Source File |
+|------|------|-------------|
+| `dispatch_food_truck` | AS, K, KC, fleet | `server/tools_execution.py` |
+| `record_gate_dispatch` | AS, K, KC, fleet | `server/tools_execution.py` |
+
+---
+
+**Total: 52 tools** — 4 Free Range + 11 Fleet + 37 Kitchen-tagged (of which 1, `test_check`, additionally carries the `headless` tag and is revealed inside headless sessions)
 
 For subset configuration that can hide functional-category tools, see
 [Subset Categories](../skills/subsets.md).

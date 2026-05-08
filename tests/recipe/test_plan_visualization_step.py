@@ -7,6 +7,8 @@ import pytest
 from autoskillit.core.paths import pkg_root
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+
 RESEARCH_RECIPE_PATH = builtin_recipes_dir() / "research.yaml"
 
 
@@ -45,18 +47,14 @@ def test_plan_visualization_step_captures_paths(recipe) -> None:
 
 
 def test_create_worktree_copies_viz_plan(recipe) -> None:
-    """create_worktree cmd must copy visualization-plan.md and report-plan.md."""
+    """create_worktree cmd must pass visualization_plan_path and report_plan_path."""
     step = recipe.steps["create_worktree"]
     cmd = step.with_args.get("cmd", "")
-    assert "VISUALIZATION_PLAN" in cmd, (
-        "create_worktree must reference VISUALIZATION_PLAN context variable"
+    assert "visualization_plan_path" in cmd, (
+        "create_worktree must pass context.visualization_plan_path to the script"
     )
-    assert "REPORT_PLAN" in cmd, "create_worktree must reference REPORT_PLAN context variable"
-    assert "visualization-plan.md" in cmd, (
-        "create_worktree must copy visualization-plan.md into the research dir"
-    )
-    assert "report-plan.md" in cmd, (
-        "create_worktree must copy report-plan.md into the research dir"
+    assert "report_plan_path" in cmd, (
+        "create_worktree must pass context.report_plan_path to the script"
     )
 
 
@@ -64,3 +62,25 @@ def test_plan_visualization_skill_dir_exists() -> None:
     """src/autoskillit/skills_extended/plan-visualization/SKILL.md must exist."""
     skill_path = pkg_root() / "skills_extended" / "plan-visualization" / "SKILL.md"
     assert skill_path.exists(), f"plan-visualization skill directory not found at {skill_path}"
+
+
+def test_tier_c_table_removed_from_skill_md() -> None:
+    """Old Tier-C target_domain routing table must be removed from SKILL.md."""
+    path = pkg_root() / "skills_extended" / "plan-visualization" / "SKILL.md"
+    content = path.read_text()
+    assert "| nlp | vis-lens-methodology-norms |" not in content
+    assert "| cv | vis-lens-methodology-norms |" not in content
+    assert "| rl | vis-lens-temporal |" not in content
+    assert "| target_domain |" not in content
+
+
+def test_tier_c_methodology_router_present() -> None:
+    """New two-stage methodology router keywords must be present in SKILL.md."""
+    path = pkg_root() / "skills_extended" / "plan-visualization" / "SKILL.md"
+    content = path.read_text()
+    assert "detection_keywords" in content
+    assert "candidate_set" in content
+    assert "precedence_trace" in content
+    assert "stage1_single_match" in content
+    assert "stage1_no_match_fallback" in content
+    assert "stage2_tiebreak" in content

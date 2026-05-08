@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from autoskillit.core.types import Severity
 from autoskillit.recipe.io import (
     _parse_recipe,
@@ -16,6 +18,8 @@ from autoskillit.recipe.validator import (
     run_semantic_rules,
 )
 from tests.recipe.conftest import _make_workflow
+
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 # ---------------------------------------------------------------------------
 # retry-worktree-cwd tests
@@ -545,7 +549,7 @@ def test_worktree_modifying_skills_includes_experiment() -> None:
     means recipes using it without on_context_limit silently bypass the
     missing-context-limit-on-worktree rule.
     """
-    from autoskillit.recipe.rules_worktree import _WORKTREE_MODIFYING_SKILLS
+    from autoskillit.recipe.rules.rules_worktree import _WORKTREE_MODIFYING_SKILLS
 
     assert "implement-experiment" in _WORKTREE_MODIFYING_SKILLS, (
         "_WORKTREE_MODIFYING_SKILLS must include implement-experiment so that the "

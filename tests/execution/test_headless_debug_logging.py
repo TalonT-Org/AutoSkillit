@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import json
 
+import pytest
 import structlog.testing
 
-from autoskillit.config import AutomationConfig, ModelConfig
 from autoskillit.core.types import SubprocessResult, TerminationReason
+
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 def _sr(returncode=0, stdout="", stderr="", termination=TerminationReason.NATURAL_EXIT):
@@ -85,8 +87,10 @@ class TestResolveModelLogging:
     """Verify _resolve_model logs which priority tier resolved the model."""
 
     def _make_config(self, *, override=None, default=None):
-        cfg = AutomationConfig()
-        cfg.model = ModelConfig(default=default, override=override)
+        from tests._helpers import make_model_config, make_test_config
+
+        cfg = make_test_config()
+        cfg.model = make_model_config(default=default, override=override)
         return cfg
 
     def test_logs_override_tier(self):

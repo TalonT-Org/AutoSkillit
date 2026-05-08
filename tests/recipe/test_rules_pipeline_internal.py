@@ -1,8 +1,12 @@
 """Tests for the pipeline-internal-not-hidden semantic rule."""
 
+import pytest
+
 from autoskillit.core import Severity
 from autoskillit.recipe.registry import _RULE_REGISTRY, run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeIngredient
+
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
 def _make_recipe_with_ingredients(ingredients: dict) -> Recipe:
@@ -53,9 +57,9 @@ def test_pipeline_internal_not_hidden_no_fire_when_hidden_true():
     """Pipeline-internal ingredient that already has hidden=True must not warn."""
     recipe = _make_recipe_with_ingredients(
         {
-            "sprint_mode": RecipeIngredient(
-                description="Set by process-issues to enable sprint mode.",
-                default="false",
+            "run_mode": RecipeIngredient(
+                description="Set by process-issues to control run mode.",
+                default="sequential",
                 hidden=True,
             )
         }

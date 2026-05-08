@@ -42,18 +42,29 @@ def _migrations_dir() -> Path:
     return pkg_root() / "migrations"
 
 
+_migrations_cache: dict[tuple[str, float], list[MigrationNote]] = {}
+
+
 def list_migrations() -> list[MigrationNote]:
     """Discover and parse all migration YAML files, sorted by filename."""
     mig_dir = _migrations_dir()
     if not mig_dir.is_dir():
         return []
-
+    try:
+        mt = mig_dir.stat().st_mtime
+    except OSError:
+        mt = -1.0
+    key = (str(mig_dir), mt)
+    cached = _migrations_cache.get(key)
+    if cached is not None:
+        return list(cached)
     notes: list[MigrationNote] = []
     for f in sorted(mig_dir.iterdir()):
         if f.suffix in (".yaml", ".yml") and f.is_file():
             note = _parse_migration(f)
             notes.append(note)
-    return notes
+    _migrations_cache[key] = notes
+    return list(notes)
 
 
 def applicable_migrations(
@@ -62,15 +73,20 @@ def applicable_migrations(
     """Return migration notes applicable to a script at the given version.
 
     Chains migrations from *script_version* up to *installed_version*.
+    Returns empty when script_version is None (bundled recipes have no version
+    and are not subject to migration).
 
     Algorithm:
-    1. current = Version(script_version) or Version("0.0.0") if None
-    2. Sort migrations by to_version ascending
-    3. For each migration: if from_version <= current < to_version, include it
+    1. If script_version is None, return [] (not migratable)
+    2. current = Version(script_version)
+    3. Sort migrations by to_version ascending
+    4. For each migration: if from_version <= current < to_version, include it
        and advance current = to_version
-    4. Stop when current >= installed_version or no more migrations
+    5. Stop when current >= installed_version or no more migrations
     """
-    current = Version(script_version) if script_version else Version("0.0.0")
+    if script_version is None:
+        return []
+    current = Version(script_version)
     target = Version(installed_version)
 
     if current >= target:

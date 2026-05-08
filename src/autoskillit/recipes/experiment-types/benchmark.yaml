@@ -1,4 +1,7 @@
 name: benchmark
+schema_version: "1.0"
+priority: 3
+is_fallback: false
 classification_triggers:
   - "IVs are system/method names, DVs are performance metrics, multiple comparators"
 dimension_weights:

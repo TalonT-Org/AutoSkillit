@@ -1,10 +1,7 @@
 ---
 name: compose-pr
 categories: [github]
-description: >
-  Reads the PR prep file and validated arch-lens diagrams, composes the PR body,
-  and creates the GitHub PR. Does NOT invoke sub-skills. Part 3 of 3 in the
-  decomposed PR flow.
+description: Composition executor for pull requests. ALWAYS invoke this skill when instructed to compose a PR. Do not read prep files or create PRs directly — use this skill first to load the composition workflow.
 hooks:
   PreToolUse:
     - matcher: "*"
@@ -37,10 +34,11 @@ decomposed PR flow (prepare → run_arch_lenses → compose).
 
 **NEVER:**
 - Invoke any sub-skills or slash commands
-- Fail the pipeline if `gh` is unavailable — emit `pr_url = ` (empty) and exit successfully
+- Fail the pipeline when `gh` is not accessible — emit `pr_url = ` (empty) and exit successfully
 - Create files outside `{{AUTOSKILLIT_TEMP}}/compose-pr/`
 - Invent mermaid classDef colors — when embedding validated diagrams, include them verbatim.
   Using ONLY classDef styles from the mermaid skill (no invented colors).
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Check `gh auth status` before attempting GitHub operations
@@ -150,6 +148,7 @@ Closes #{closing_issue}
 Plan file: `{plan_path}`
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code) via AutoSkillit
+<!-- autoskillit:pipeline-signature steps=prepare_pr,run_arch_lenses,compose_pr,annotate_pr_diff,review_pr -->
 ```
 
 #### Multiple plans format:
@@ -201,6 +200,7 @@ Plan files:
 - `{plan_path_2}`
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code) via AutoSkillit
+<!-- autoskillit:pipeline-signature steps=prepare_pr,run_arch_lenses,compose_pr,annotate_pr_diff,review_pr -->
 ```
 
 ### Step 4: Check GitHub Availability
@@ -236,7 +236,7 @@ On success:
 pr_url = https://github.com/owner/repo/pull/N
 ```
 
-On graceful degradation (no `gh` or not authenticated):
+When `gh` is not available or not authenticated:
 ```
 pr_url = 
 ```

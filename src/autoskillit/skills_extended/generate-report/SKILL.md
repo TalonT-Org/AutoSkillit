@@ -29,6 +29,8 @@ results are valid findings, not failures.
 
 ```
 /autoskillit:generate-report {worktree_path} {results_path} [--inconclusive]
+[--output-mode {local|pr}] [--issue-url {url}]
+[--experiment-type {type}] [--methodology-traditions {tradition}]
 ```
 
 - `{worktree_path}` — Absolute path to the worktree (required). First path-like
@@ -44,6 +46,15 @@ results are valid findings, not failures.
 - `--issue-url {url}` — Optional. GitHub issue URL. When output_mode=local and this is
   supplied, inject a blockquote reference at the top of report.md. In pr mode, skip —
   the PR body handles the issue link.
+- `--experiment-type {type}` — Optional. Experiment type classification (e.g., "benchmark",
+  "causal_inference"). When absent or "null", write `experiment_type: null` in frontmatter.
+- `--methodology-traditions {tradition}` — Optional. Methodology tradition slug from Tier-C
+  routing (e.g., "controlled_intervention"). When absent or "null", write
+  `methodology_traditions: []` in frontmatter; otherwise wrap in a YAML list.
+- `--design-review-verdict {verdict}` — Optional. GO/REVISE/STOP verdict from design review.
+- `--disambiguation-rule-applied {rule}` — Optional. Disambiguation rule applied during Tier-C routing.
+- `--tier-c-lens {lens}` — Optional. Tier-C vis-lens selected.
+- `--classification-timestamp {timestamp}` — Optional. UTC timestamp of design classification.
 
 ## Inputs
 
@@ -61,6 +72,7 @@ In addition to the arguments above, this skill reads from the worktree:
 - Omit the methodology section — reproducibility requires it
 - Frame inconclusive results as failures — they are valid findings
 - Create the report outside the worktree's `research/` directory
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
@@ -113,7 +125,7 @@ If `--output-mode local` AND `--issue-url {url}` is present:
    ```
    (Include a blank line after the blockquote before the title.)
 
-In pr mode: skip this step entirely — the PR body contains the issue link.
+In pr mode: omit this step entirely — the PR body contains the issue link.
 
 ### Step 2 — Determine Report Type
 
@@ -146,7 +158,7 @@ Based on the `--inconclusive` flag and the experiment results status:
 If `${RESEARCH_DIR}/visualization-plan.md` exists:
 
 1. Read `visualization-plan.md`. If it contains zero figure specs (empty plan),
-   skip all sub-steps and proceed to Step 3.
+   omit all sub-steps and proceed to Step 3.
 
 2. Identify the experiment's Docker image. The image tag is `research-{slug}` where
    `{slug}` is the experiment directory name. Verify the image exists:
@@ -215,9 +227,33 @@ research/YYYY-MM-DD-{slug}/
 
 The `{slug}` is a kebab-case summary of the research topic (max 40 chars).
 
+<<<<<<< HEAD
+=======
+Write a YAML frontmatter block (fenced with `---`) at the very top of report.md,
+before the title heading. Use the values from `--experiment-type` and
+`--methodology-traditions` flags. If a flag is absent or its value is the literal
+string `null`, write the key with value `null` (not omitted). Always include
+`generated_at`. If `--output-mode local` with `--issue-url`, the issue blockquote
+goes AFTER the frontmatter, before the title.
+
+>>>>>>> b64b32f7 (fix(review): align --methodology-tradition synopsis to plural form)
 The report structure:
 
 ```markdown
+---
+experiment_type: {value from --experiment-type, or null}
+methodology_traditions:
+  - {value from --methodology-traditions, or empty list if null}
+disambiguation_rule_applied: {value from --disambiguation-rule-applied, or null}
+tier_c_lens: {value from --tier-c-lens, or null}
+design_review_verdict: {value from --design-review-verdict, or null}
+classification_timestamp: {value from --classification-timestamp, or null}
+audit_trail_path:
+  design_review: research/{slug}/audit/design-review-dashboard.md
+  visualization_trace: research/{slug}/audit/visualization-plan-trace.md
+generated_at: {ISO 8601 timestamp}
+---
+
 # {Research Title}
 
 > Research report for [Issue #{N}]({issue_url}) — {date}
@@ -347,6 +383,19 @@ analysis if relevant to the experiment type.}
 ## Conclusions
 
 {Direct answer to the research question.}
+
+## Design Review Summary
+
+**Verdict:** {design_review_verdict}
+
+The design review evaluated the experiment plan against {experiment_type} criteria.
+The review confirmed the experimental design meets quality standards.
+
+For detailed evaluation dimensions, scorecard, and adversarial findings, see
+[`audit/design-review-dashboard.md`](audit/design-review-dashboard.md).
+
+For visualization tier routing decisions and methodology tradition analysis, see
+[`audit/visualization-plan-trace.md`](audit/visualization-plan-trace.md).
 
 ## Recommendations
 

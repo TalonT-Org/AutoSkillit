@@ -53,6 +53,7 @@ incorporate the feedback before writing the plan.
   environment is needed or not, and why
 - Omit YAML frontmatter unless a V1–V4 ERROR is triggered — every plan must have frontmatter
 - Write frontmatter after the `# Experiment Plan:` heading — it always goes BEFORE
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
@@ -81,7 +82,7 @@ Detect and read inputs:
 2. If a second path-like token is present and resolves to an existing file, read
    `{revision_guidance}`. Extract all revision instructions — these take priority over
    your initial analysis in Step 2. Note which sections of the plan need rework.
-   When absent or empty, skip this sub-step and proceed normally (first pass).
+   When absent or empty, omit this sub-step and proceed normally (first pass).
 
 ### Step 2 — Explore Feasibility
 
@@ -271,7 +272,7 @@ dependencies:
 - Run `pytest --collect-only` in the research directory to verify test discovery
 - Commit the test suite
 
-{Adapt phases as needed — not all experiments require all phases. Add or
+{Adapt phases as needed — experiments may not require every phase. Add or
 remove phases to match the specific experiment. Each phase should list the
 specific files to create and commands to run.}
 

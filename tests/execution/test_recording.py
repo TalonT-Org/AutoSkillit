@@ -9,15 +9,18 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from autoskillit.core.types import SubprocessRunner, TerminationReason
-from autoskillit.execution.commands import build_full_headless_cmd
+from autoskillit.core.types import DirectInstall, OutputFormat, SubprocessRunner, TerminationReason
+from autoskillit.execution.commands import build_skill_session_cmd
 from autoskillit.execution.recording import (
     RecordingSubprocessRunner,
     ReplayingSubprocessRunner,
     ScenarioReplayError,
     _extract_model,
 )
-from tests.conftest import MockSubprocessRunner, _make_result
+from tests.conftest import _make_result
+from tests.fakes import MockSubprocessRunner
+
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 @dataclass
@@ -166,19 +169,19 @@ def test_extract_model_missing():
     assert _extract_model(args) == ""
 
 
-# --- T7: SCENARIO_STEP_NAME in cmd from build_full_headless_cmd ---
+# --- T7: SCENARIO_STEP_NAME in cmd from build_skill_session_cmd ---
 
 _BASE_CMD_ARGS = dict(
     cwd="/tmp",
     completion_marker="DONE",
     model=None,
-    plugin_dir="/plugins",
-    output_format_value="stream-json",
+    plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
+    output_format=OutputFormat.STREAM_JSON,
 )
 
 
-def test_build_full_headless_cmd_injects_scenario_step_name():
-    spec = build_full_headless_cmd(
+def test_build_skill_session_cmd_injects_scenario_step_name():
+    spec = build_skill_session_cmd(
         "/investigate foo",
         scenario_step_name="investigate",
         **_BASE_CMD_ARGS,
@@ -187,41 +190,16 @@ def test_build_full_headless_cmd_injects_scenario_step_name():
     assert not any("SCENARIO_STEP_NAME" in tok for tok in spec.cmd)
 
 
-# --- T8: build_full_headless_cmd without scenario_step_name ---
+# --- T8: build_skill_session_cmd without scenario_step_name ---
 
 
-def test_build_full_headless_cmd_no_scenario_step_name():
-    spec = build_full_headless_cmd(
+def test_build_skill_session_cmd_no_scenario_step_name():
+    spec = build_skill_session_cmd(
         "/investigate foo",
         **_BASE_CMD_ARGS,
     )
     assert "SCENARIO_STEP_NAME" not in spec.env
     assert not any("SCENARIO_STEP_NAME" in tok for tok in spec.cmd)
-
-
-# --- T9: run_headless_core passes scenario_step_name through ---
-
-
-@pytest.mark.anyio
-async def test_run_headless_core_injects_scenario_step_name(tmp_path):
-    """run_headless_core passes step_name as scenario_step_name and routes it via env kwarg."""
-    from autoskillit.config import AutomationConfig
-    from autoskillit.execution.headless import run_headless_core
-    from autoskillit.pipeline import DefaultGateState
-    from autoskillit.server._factory import make_context
-
-    mock_runner = MockSubprocessRunner()
-    mock_runner.set_default(_make_result())
-    ctx = make_context(AutomationConfig(), runner=mock_runner, plugin_dir=str(tmp_path))
-    ctx.gate = DefaultGateState(enabled=True)
-
-    await run_headless_core("/investigate foo", str(tmp_path), ctx, step_name="investigate")
-
-    cmd, _cwd, _timeout, kwargs = mock_runner.call_args_list[0]
-    assert cmd[0] != "env"
-    env = kwargs.get("env")
-    assert env is not None
-    assert env["SCENARIO_STEP_NAME"] == "investigate"
 
 
 # --- T-DERIVE: _derive_step_name_from_skill_command ---
@@ -246,84 +224,6 @@ def test_derive_step_name_from_plain_skill():
     assert _derive_step_name_from_skill_command("/smoke-task") == "smoke-task"
     assert _derive_step_name_from_skill_command("plain text no slash") == "plain"
     assert _derive_step_name_from_skill_command("") == ""
-
-
-# --- T-AUTO-DERIVE: run_headless_core auto-derives step name ---
-
-
-@pytest.mark.anyio
-async def test_run_headless_core_auto_derives_step_name_when_recording(tmp_path):
-    """When runner is RecordingSubprocessRunner and step_name is empty,
-    run_headless_core auto-derives step_name from the skill command."""
-    from autoskillit.config import AutomationConfig
-    from autoskillit.execution.headless import run_headless_core
-    from autoskillit.pipeline import DefaultGateState
-    from autoskillit.server._factory import make_context
-
-    mock_recorder = Mock()
-    mock_recorder.record_step.return_value = FakeStepResult(
-        cassette_exit_code=0,
-        cassette_path="",
-        cassette_duration_ms=100,
-    )
-    inner = MockSubprocessRunner()
-    inner.set_default(_make_result())
-    recording_runner = RecordingSubprocessRunner(recorder=mock_recorder, inner=inner)
-
-    ctx = make_context(AutomationConfig(), runner=recording_runner, plugin_dir=str(tmp_path))
-    ctx.gate = DefaultGateState(enabled=True)
-    ctx.config.linux_tracing.log_dir = str(tmp_path / "logs")
-
-    # Call WITHOUT step_name — auto-derivation should kick in
-    await run_headless_core("/autoskillit:smoke-task", str(tmp_path), ctx)
-
-    # record_step must be called with the derived step name
-    mock_recorder.record_step.assert_called_once()
-    call_kwargs = mock_recorder.record_step.call_args.kwargs
-    assert call_kwargs["step_name"] == "smoke-task", (
-        f"Expected derived step_name 'smoke-task', got {call_kwargs['step_name']!r}"
-    )
-
-
-# --- T10: make_context wraps runner when RECORD_SCENARIO set ---
-
-
-def test_make_context_wraps_runner_when_record_scenario(monkeypatch, tmp_path):
-    scenario_dir = tmp_path / "scenario"
-    scenario_dir.mkdir()
-    monkeypatch.setenv("RECORD_SCENARIO", "1")
-    monkeypatch.setenv("RECORD_SCENARIO_DIR", str(scenario_dir))
-    monkeypatch.setenv("RECORD_SCENARIO_RECIPE", "smoke-test")
-    mock_recorder = Mock()
-    import api_simulator.claude as _api_sim_claude
-
-    monkeypatch.setattr(
-        _api_sim_claude, "make_scenario_recorder", Mock(return_value=mock_recorder), raising=False
-    )
-    mock_atexit = Mock()
-    monkeypatch.setattr("atexit.register", mock_atexit)
-
-    from autoskillit.config import AutomationConfig
-    from autoskillit.server._factory import make_context
-
-    ctx = make_context(AutomationConfig(), plugin_dir=str(tmp_path))
-    assert isinstance(ctx.runner, RecordingSubprocessRunner)
-    mock_atexit.assert_not_called()
-
-
-# --- T11: make_context default runner unchanged without env var ---
-
-
-def test_make_context_default_runner_without_record_scenario(monkeypatch, tmp_path):
-    monkeypatch.delenv("RECORD_SCENARIO", raising=False)
-    monkeypatch.delenv("REPLAY_SCENARIO", raising=False)
-
-    from autoskillit.config import AutomationConfig
-    from autoskillit.execution.process import DefaultSubprocessRunner
-    from autoskillit.server._factory import make_context
-
-    ctx = make_context(AutomationConfig(), plugin_dir=str(tmp_path))
-    assert isinstance(ctx.runner, DefaultSubprocessRunner)
 
 
 # --- T12: Protocol conformance ---
@@ -477,78 +377,6 @@ async def test_sequencing_exhausted_session_falls_to_non_session(tmp_path):
     assert result.stdout == "non-session result"
 
 
-# --- T20: make_context wires ReplayingSubprocessRunner when REPLAY_SCENARIO set ---
-
-
-def test_make_context_wires_sequencing_runner_when_replay_scenario(monkeypatch, tmp_path):
-    """REPLAY_SCENARIO=1 + valid dir → ctx.runner is ReplayingSubprocessRunner."""
-    replay_dir = tmp_path / "replay"
-    replay_dir.mkdir()
-    monkeypatch.setenv("REPLAY_SCENARIO", "1")
-    monkeypatch.setenv("REPLAY_SCENARIO_DIR", str(replay_dir))
-    monkeypatch.delenv("RECORD_SCENARIO", raising=False)
-
-    mock_scenario = Mock()
-    mock_scenario.step_sequence = []
-    mock_player = Mock()
-    mock_player.scenario.return_value = mock_scenario
-    mock_player.build_session_map.return_value = {}
-    mock_make_player = Mock(return_value=mock_player)
-
-    import api_simulator.claude as _api_sim_claude
-
-    monkeypatch.setattr(_api_sim_claude, "make_scenario_player", mock_make_player, raising=False)
-
-    from autoskillit.config import AutomationConfig
-    from autoskillit.server._factory import make_context
-
-    ctx = make_context(AutomationConfig(), plugin_dir=str(tmp_path))
-    assert isinstance(ctx.runner, ReplayingSubprocessRunner)
-    mock_make_player.assert_called_once()
-    call_kwargs = mock_make_player.call_args.kwargs
-    assert call_kwargs.get("scenario_dir") == str(replay_dir)
-
-
-# --- T21: REPLAY_SCENARIO takes precedence over RECORD_SCENARIO ---
-
-
-def test_replay_takes_precedence_over_record(monkeypatch, tmp_path):
-    """When both REPLAY and RECORD env vars set, REPLAY wins."""
-    replay_dir = tmp_path / "replay"
-    replay_dir.mkdir()
-    monkeypatch.setenv("REPLAY_SCENARIO", "1")
-    monkeypatch.setenv("REPLAY_SCENARIO_DIR", str(replay_dir))
-    monkeypatch.setenv("RECORD_SCENARIO", "1")
-    monkeypatch.setenv("RECORD_SCENARIO_DIR", str(replay_dir))
-
-    mock_scenario = Mock()
-    mock_scenario.step_sequence = []
-    mock_player = Mock()
-    mock_player.scenario.return_value = mock_scenario
-    mock_player.build_session_map.return_value = {}
-    mock_recorder = Mock()
-    mock_make_recorder = Mock(return_value=mock_recorder)
-
-    import api_simulator.claude as _api_sim_claude
-
-    monkeypatch.setattr(
-        _api_sim_claude, "make_scenario_player", Mock(return_value=mock_player), raising=False
-    )
-    monkeypatch.setattr(
-        _api_sim_claude, "make_scenario_recorder", mock_make_recorder, raising=False
-    )
-    mock_atexit = Mock()
-    monkeypatch.setattr("atexit.register", mock_atexit)
-
-    from autoskillit.config import AutomationConfig
-    from autoskillit.server._factory import make_context
-
-    ctx = make_context(AutomationConfig(), plugin_dir=str(tmp_path))
-    assert isinstance(ctx.runner, ReplayingSubprocessRunner)
-    mock_make_recorder.assert_not_called()  # REPLAY takes precedence over RECORD
-    mock_atexit.assert_not_called()
-
-
 # --- T22: Cross-scenario session override (integration, requires api-simulator) ---
 
 
@@ -619,9 +447,119 @@ def test_build_replay_runner_stores_player_on_runner(tmp_path, monkeypatch):
     monkeypatch.setattr(
         _api_sim_claude, "make_scenario_player", Mock(return_value=mock_player), raising=False
     )
+    import weakref
+
+    # weakref.finalize registers _exitfunc with atexit on first use in a process.
+    # Pre-set the class flag so that registration doesn't happen under the mock.
+    monkeypatch.setattr(weakref.finalize, "_registered_with_atexit", True)
     mock_atexit = Mock()
     monkeypatch.setattr("atexit.register", mock_atexit)
 
     result = build_replay_runner(str(tmp_path))
     assert result.player is mock_player
     mock_atexit.assert_not_called()
+
+
+# --- T-REC-SNAP: RecordingSubprocessRunner snapshots skill dir after recording ---
+
+
+@pytest.mark.anyio
+async def test_recording_runner_snapshots_skill_dir(tmp_path):
+    """After _record_session, skill-snapshots/{step_name}/ is written under scenario_dir."""
+    ephemeral_dir = tmp_path / "autoskillit-sessions" / "headless-snap01"
+    skill_file = ephemeral_dir / ".claude" / "skills" / "investigate" / "SKILL.md"
+    skill_file.parent.mkdir(parents=True)
+    skill_file.write_text("# investigate\n", encoding="utf-8")
+
+    cassette_path = tmp_path / "sessions" / "investigate"
+    cassette_path.mkdir(parents=True)
+
+    mock_recorder = Mock()
+    mock_recorder.record_step.return_value = FakeStepResult(
+        cassette_exit_code=0,
+        cassette_path=str(cassette_path),
+        cassette_duration_ms=1000,
+    )
+
+    runner = RecordingSubprocessRunner(recorder=mock_recorder, inner=Mock())
+    cmd = [
+        "claude",
+        "--add-dir",
+        str(ephemeral_dir),
+        "--model",
+        "sonnet",
+        "--print",
+        "go",
+    ]
+    env = {"SCENARIO_STEP_NAME": "investigate"}
+    await runner(cmd, cwd=tmp_path, timeout=60, env=env, pty_mode=True)
+
+    snapshot_dir = tmp_path / "skill-snapshots" / "investigate"
+    assert snapshot_dir.exists(), "skill-snapshots/investigate/ not created"
+    assert (snapshot_dir / ".claude" / "skills" / "investigate" / "SKILL.md").exists()
+    assert (snapshot_dir / "manifest.json").exists()
+
+
+# --- T-REC-SNAP-SKIP: no --add-dir → no skill_snapshots created ---
+
+
+@pytest.mark.anyio
+async def test_recording_runner_no_ephemeral_dir_skips_snapshot(tmp_path):
+    """When cmd has no --add-dir, no skill-snapshots/ directory is created."""
+    cassette_path = tmp_path / "sessions" / "investigate"
+    cassette_path.mkdir(parents=True)
+
+    mock_recorder = Mock()
+    mock_recorder.record_step.return_value = FakeStepResult(
+        cassette_exit_code=0,
+        cassette_path=str(cassette_path),
+        cassette_duration_ms=500,
+    )
+
+    runner = RecordingSubprocessRunner(recorder=mock_recorder, inner=Mock())
+    cmd = ["claude", "--model", "sonnet", "--print", "go"]
+    env = {"SCENARIO_STEP_NAME": "investigate"}
+    await runner(cmd, cwd=tmp_path, timeout=60, env=env, pty_mode=True)
+
+    assert not (tmp_path / "skill-snapshots").exists()
+
+
+# --- T-REPLAY-SNAP: ReplayingSubprocessRunner stores skill_snapshots ---
+
+
+def test_replaying_runner_stores_skill_snapshots(tmp_path):
+    """ReplayingSubprocessRunner.skill_snapshots is populated when provided."""
+    snap_path = tmp_path / "skill-snapshots" / "investigate"
+    snap_path.mkdir(parents=True)
+    skill_snapshots = {"investigate": snap_path}
+
+    runner = ReplayingSubprocessRunner({}, {}, skill_snapshots=skill_snapshots)
+
+    assert runner.skill_snapshots == {"investigate": snap_path}
+
+
+# --- T-REPLAY-RESTORE: ReplayingSubprocessRunner.restore_skill_snapshot delegates correctly ---
+
+
+def test_replaying_runner_restore_delegates_correctly(tmp_path):
+    """restore_skill_snapshot returns ValidatedAddDir when snapshot exists and files are copied."""
+    snap_dir = tmp_path / "snapshot"
+    skill_md = snap_dir / ".claude" / "skills" / "investigate" / "SKILL.md"
+    skill_md.parent.mkdir(parents=True)
+    skill_md.write_text("# investigate\n", encoding="utf-8")
+
+    runner = ReplayingSubprocessRunner({}, {}, skill_snapshots={"investigate": snap_dir})
+
+    ephemeral_root = tmp_path / "sessions"
+    result = runner.restore_skill_snapshot("investigate", ephemeral_root, "headless-xyz")
+
+    assert result is not None
+    session_dir = ephemeral_root / "headless-xyz"
+    assert (session_dir / ".claude" / "skills" / "investigate" / "SKILL.md").exists()
+
+
+def test_replaying_runner_restore_missing_step_returns_none(tmp_path):
+    """restore_skill_snapshot returns None when no snapshot for step_name."""
+    runner = ReplayingSubprocessRunner({}, {}, skill_snapshots={})
+    result = runner.restore_skill_snapshot("missing", tmp_path / "sessions", "headless-abc")
+    assert result is None

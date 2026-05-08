@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+
 # Minimal recipe YAML with kitchen_rules
 _RECIPE_WITH_RULES = """\
 name: test-recipe-with-rules
@@ -111,11 +115,12 @@ def test_load_and_validate_includes_requires_packs(tmp_path):
 
 
 # T4d
-def test_load_recipe_result_requires_packs_absent_for_standard_recipe():
-    """Standard recipes without requires_packs omit the key (matches kitchen_rules pattern)."""
+def test_load_recipe_result_requires_packs_absent_for_standard_recipe(tmp_path):
+    """Recipes without requires_packs omit the key (matches kitchen_rules pattern)."""
     from autoskillit.recipe._api import load_and_validate
 
-    result = load_and_validate(name="implementation", project_dir=None)
+    _setup_project_recipe(tmp_path, "test-recipe-no-rules", _RECIPE_NO_RULES)
+    result = load_and_validate(name="test-recipe-no-rules", project_dir=tmp_path)
     assert "requires_packs" not in result
 
 
@@ -153,13 +158,13 @@ def test_load_and_validate_returns_cached_result_on_second_call(tmp_path, monkey
     recipe_yaml.write_text(MINIMAL_RECIPE_YAML)
 
     calls = []
-    real_validate = api_mod.validate_recipe
+    real_validate = api_mod.validate_recipe_structure
 
     def counting_validate(recipe):
         calls.append(1)
         return real_validate(recipe)
 
-    monkeypatch.setattr(api_mod, "validate_recipe", counting_validate)
+    monkeypatch.setattr(api_mod, "validate_recipe_structure", counting_validate)
 
     api_mod.load_and_validate("myrecipe", tmp_path)
     api_mod.load_and_validate("myrecipe", tmp_path)
@@ -179,13 +184,13 @@ def test_load_and_validate_cache_invalidated_on_recipe_mtime_change(tmp_path, mo
     recipe_yaml.write_text(MINIMAL_RECIPE_YAML)
 
     calls = []
-    real_validate = api_mod.validate_recipe
+    real_validate = api_mod.validate_recipe_structure
 
     def counting_validate(recipe):
         calls.append(1)
         return real_validate(recipe)
 
-    monkeypatch.setattr(api_mod, "validate_recipe", counting_validate)
+    monkeypatch.setattr(api_mod, "validate_recipe_structure", counting_validate)
 
     api_mod.load_and_validate("myrecipe", tmp_path)
     recipe_yaml.touch()
@@ -205,13 +210,13 @@ def test_load_and_validate_cache_invalidated_on_pkg_version_change(tmp_path, mon
     (recipes_dir / "myrecipe.yaml").write_text(MINIMAL_RECIPE_YAML)
 
     calls = []
-    real_validate = api_mod.validate_recipe
+    real_validate = api_mod.validate_recipe_structure
 
     def counting_validate(recipe):
         calls.append(1)
         return real_validate(recipe)
 
-    monkeypatch.setattr(api_mod, "validate_recipe", counting_validate)
+    monkeypatch.setattr(api_mod, "validate_recipe_structure", counting_validate)
 
     api_mod.load_and_validate("myrecipe", tmp_path)
     monkeypatch.setattr(api_mod, "_get_pkg_version", lambda: "99.99.99")
@@ -231,13 +236,13 @@ def test_load_and_validate_cache_invalidated_on_dir_mtime_change(tmp_path, monke
     (recipes_dir / "myrecipe.yaml").write_text(MINIMAL_RECIPE_YAML)
 
     calls = []
-    real_validate = api_mod.validate_recipe
+    real_validate = api_mod.validate_recipe_structure
 
     def counting_validate(recipe):
         calls.append(1)
         return real_validate(recipe)
 
-    monkeypatch.setattr(api_mod, "validate_recipe", counting_validate)
+    monkeypatch.setattr(api_mod, "validate_recipe_structure", counting_validate)
 
     api_mod.load_and_validate("myrecipe", tmp_path)
     (recipes_dir / "newrecipe.yaml").write_text(
@@ -277,7 +282,7 @@ def test_load_and_validate_logs_stage_timing_at_debug(tmp_path, monkeypatch):
     assert len(stage_calls) >= 4
     assert "find_recipe" in stage_calls
     assert "yaml_parse" in stage_calls
-    assert "validate_recipe" in stage_calls
+    assert "validate_recipe_structure" in stage_calls
     assert "semantic_rules" in stage_calls
 
 
@@ -325,17 +330,20 @@ def test_repository_load_and_validate_passes_recipe_info_to_api(monkeypatch):
         *,
         suppressed=None,
         recipe_info=None,
+        recipe_list=None,
         resolved_defaults=None,
         ingredient_overrides=None,
         temp_dir=None,
         temp_dir_relpath=None,
     ):
         captured["recipe_info"] = recipe_info
+        captured["recipe_list"] = recipe_list
         return real_fn(
             name,
             project_dir,
             suppressed=suppressed,
             recipe_info=recipe_info,
+            recipe_list=recipe_list,
             resolved_defaults=resolved_defaults,
             ingredient_overrides=ingredient_overrides,
             temp_dir=temp_dir,
@@ -360,27 +368,27 @@ class TestIngredientSortOrder:
     """Ingredients must sort: required > auto-detect > flags > constants > optional."""
 
     def test_sort_key_required_is_highest_priority(self):
-        from autoskillit.recipe._api import _ingredient_sort_key
+        from autoskillit.recipe._recipe_ingredients import _ingredient_sort_key
 
         key = _ingredient_sort_key("task", required=True, default=None)
         assert key[0] == 0
 
     def test_sort_key_auto_detect_above_flags(self):
-        from autoskillit.recipe._api import _ingredient_sort_key
+        from autoskillit.recipe._recipe_ingredients import _ingredient_sort_key
 
         auto = _ingredient_sort_key("source_dir", required=False, default="")
         flag = _ingredient_sort_key("audit", required=False, default="true")
         assert auto[0] < flag[0], "auto-detect must sort above boolean flags"
 
     def test_sort_key_flags_above_optional(self):
-        from autoskillit.recipe._api import _ingredient_sort_key
+        from autoskillit.recipe._recipe_ingredients import _ingredient_sort_key
 
         flag = _ingredient_sort_key("audit", required=False, default="true")
         opt = _ingredient_sort_key("issue_url", required=False, default=None)
         assert flag[0] < opt[0], "boolean flags must sort above optional"
 
     def test_sort_key_optional_above_constants(self):
-        from autoskillit.recipe._api import _ingredient_sort_key
+        from autoskillit.recipe._recipe_ingredients import _ingredient_sort_key
 
         opt = _ingredient_sort_key("issue_url", required=False, default=None)
         const = _ingredient_sort_key("run_name", required=False, default="impl")
@@ -388,7 +396,7 @@ class TestIngredientSortOrder:
 
     def test_sort_key_full_tier_ordering(self):
         """All five tiers must be strictly ordered."""
-        from autoskillit.recipe._api import _ingredient_sort_key
+        from autoskillit.recipe._recipe_ingredients import _ingredient_sort_key
 
         tiers = [
             _ingredient_sort_key("task", required=True, default=None)[0],  # required
@@ -465,7 +473,10 @@ class TestFormatIngredientsTableGfmWidthCap:
         A 220-char description (as in implementation.yaml run_mode) must not produce a
         220-wide GFM column. Each data row's description cell must be <= the cap.
         """
-        from autoskillit.recipe._api import _GFM_DESC_MAX_WIDTH, format_ingredients_table
+        from autoskillit.recipe._recipe_ingredients import (
+            _GFM_DESC_MAX_WIDTH,
+            format_ingredients_table,
+        )
 
         recipe = self._recipe_with_long_desc("X" * 220)
         table = format_ingredients_table(recipe)
@@ -539,7 +550,10 @@ class TestFormatIngredientsTableGfmWidthCap:
         This is the regression test for GitHub Issue #489 (run_mode 220-char description).
         """
         from autoskillit.core import pkg_root
-        from autoskillit.recipe._api import _GFM_DESC_MAX_WIDTH, format_ingredients_table
+        from autoskillit.recipe._recipe_ingredients import (
+            _GFM_DESC_MAX_WIDTH,
+            format_ingredients_table,
+        )
         from autoskillit.recipe.io import find_recipe_by_name, load_recipe
 
         recipe_info = find_recipe_by_name("implementation", pkg_root() / "recipes")
@@ -559,6 +573,21 @@ class TestFormatIngredientsTableGfmWidthCap:
                 )
 
 
+def test_orchestration_rules_include_stop_step_semantics():
+    """orchestration_rules includes stop-step semantics when recipe has stop steps."""
+    from autoskillit.recipe._api import _build_orchestration_rules
+    from autoskillit.recipe.schema import Recipe, RecipeStep
+
+    recipe = Recipe(
+        name="test",
+        description="test",
+        steps={"done": RecipeStep(action="stop", message="Pipeline complete.")},
+    )
+    rules = _build_orchestration_rules(recipe)
+    assert "ACTION: STOP" in rules.upper() or "action: stop" in rules
+    assert "done" in rules
+
+
 def test_build_ingredient_rows_resolved_overrides_literal_default():
     """T1: config-resolved value wins over a non-empty YAML literal default."""
     from autoskillit.recipe._api import build_ingredient_rows
@@ -568,8 +597,8 @@ def test_build_ingredient_rows_resolved_overrides_literal_default():
         "base_branch",
         RecipeIngredient(description="Base branch", default="main"),
     )
-    rows = build_ingredient_rows(recipe, resolved_defaults={"base_branch": "integration"})
-    assert ("base_branch", "Base branch", "integration") in rows
+    rows = build_ingredient_rows(recipe, resolved_defaults={"base_branch": "develop"})
+    assert ("base_branch", "Base branch", "develop") in rows
 
 
 def test_build_ingredient_rows_literal_default_preserved_when_no_resolved():
@@ -594,8 +623,8 @@ def test_build_ingredient_rows_resolved_overrides_empty_sentinel():
         "base_branch",
         RecipeIngredient(description="Base branch", default=""),
     )
-    rows = build_ingredient_rows(recipe, resolved_defaults={"base_branch": "integration"})
-    assert ("base_branch", "Base branch", "integration") in rows
+    rows = build_ingredient_rows(recipe, resolved_defaults={"base_branch": "develop"})
+    assert ("base_branch", "Base branch", "develop") in rows
 
 
 def test_build_ingredient_rows_empty_sentinel_falls_back_to_auto_detect():
@@ -654,3 +683,157 @@ def test_build_ingredient_rows_returns_tuples():
     # Full descriptions must be present (not truncated at this layer)
     all_descs = [r[1] for r in rows]
     assert any(len(d) > 60 for d in all_descs), "Expected at least one long description"
+
+
+# ---------------------------------------------------------------------------
+# T5 — _drop_sub_recipe_step uses dataclasses.replace
+# ---------------------------------------------------------------------------
+
+
+def test_drop_sub_recipe_step_preserves_future_fields() -> None:
+    """_drop_sub_recipe_step round-trips all Recipe fields (catches future field additions)."""
+
+    from autoskillit.recipe._recipe_composition import _drop_sub_recipe_step
+    from autoskillit.recipe.schema import Recipe, RecipeStep
+
+    recipe = Recipe(
+        name="test",
+        description="desc",
+        summary="sum",
+        steps={"placeholder": RecipeStep(sub_recipe="sub"), "other": RecipeStep(action="stop")},
+        kitchen_rules=["rule1"],
+        version="0.2.0",
+        experimental=True,
+    )
+    result = _drop_sub_recipe_step(recipe, "placeholder")
+    assert result.name == "test"
+    assert result.summary == "sum"
+    assert result.experimental is True
+    assert result.kitchen_rules == ["rule1"]
+    assert "placeholder" not in result.steps
+    assert "other" in result.steps
+
+
+# ---------------------------------------------------------------------------
+# T2 — _path_mtime_ns replaces the two old helpers
+# (migrated from recipe/test_io.py — this test introspects recipe._api)
+# ---------------------------------------------------------------------------
+
+
+def test_path_mtime_ns_exists_and_old_helpers_removed() -> None:
+    """recipe/_api.py must expose _path_mtime_ns; _file_mtime_ns/_dir_mtime_ns removed."""
+    import autoskillit.recipe._api as api
+
+    assert hasattr(api, "_path_mtime_ns"), "_path_mtime_ns must exist"
+    assert not hasattr(api, "_file_mtime_ns"), "_file_mtime_ns must be removed"
+    assert not hasattr(api, "_dir_mtime_ns"), "_dir_mtime_ns must be removed"
+    assert callable(api._path_mtime_ns), "_path_mtime_ns must be callable"
+    assert isinstance(api._path_mtime_ns(Path(".")), int), "_path_mtime_ns must return int"
+
+
+def test_compute_registry_hash_changes_on_mtime(tmp_path: Path) -> None:
+    """Registry hash changes when a YAML file's mtime changes."""
+    import os
+
+    from autoskillit.recipe._api import _compute_registry_hash
+
+    d = tmp_path / "types"
+    d.mkdir()
+    f = d / "test.yaml"
+    f.write_text("name: test\n")
+    h1 = _compute_registry_hash(d)
+
+    f.write_text("name: test\n")  # same content
+    stat = f.stat()
+    os.utime(f, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))  # +1 second
+    h2 = _compute_registry_hash(d)
+
+    assert h1 != h2
+
+
+def test_load_and_validate_reuses_content_hash_from_recipe_info(tmp_path, monkeypatch):
+    """load_and_validate reuses match.content_hash for the result's content_hash field."""
+    import autoskillit.recipe._api as api_mod
+
+    monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
+
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    recipe_path = recipes_dir / "myrecipe.yaml"
+    recipe_path.write_text(MINIMAL_RECIPE_YAML)
+
+    # Create a RecipeInfo with content_hash pre-populated
+    from autoskillit.core import RecipeSource
+    from autoskillit.recipe.schema import RecipeInfo
+
+    info = RecipeInfo(
+        name="myrecipe",
+        description="test",
+        source=RecipeSource.PROJECT,
+        path=recipe_path,
+        content=None,
+        content_hash="sha256:abcd1234deadbeef",
+    )
+
+    result = api_mod.load_and_validate("myrecipe", tmp_path, recipe_info=info)
+
+    assert result.get("content_hash") == "sha256:abcd1234deadbeef"
+
+
+def test_load_and_validate_calls_list_recipes_once(tmp_path, monkeypatch):
+    """list_recipes is called exactly once when recipe_info is not provided."""
+    import autoskillit.recipe._api as api_mod
+
+    monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
+
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    recipe_path = recipes_dir / "myrecipe.yaml"
+    recipe_path.write_text(MINIMAL_RECIPE_YAML)
+
+    call_count = {"n": 0}
+    original_list_recipes = api_mod.list_recipes
+
+    def counting_list_recipes(*args, **kwargs):
+        call_count["n"] += 1
+        return original_list_recipes(*args, **kwargs)
+
+    monkeypatch.setattr(api_mod, "list_recipes", counting_list_recipes)
+
+    api_mod.load_and_validate("myrecipe", tmp_path)
+
+    assert call_count["n"] == 1
+
+
+def test_load_and_validate_skips_list_recipes_when_recipe_list_provided(tmp_path, monkeypatch):
+    """list_recipes is not called when recipe_list is provided alongside recipe_info."""
+    import autoskillit.recipe._api as api_mod
+
+    monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
+
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    recipe_path = recipes_dir / "myrecipe.yaml"
+    recipe_path.write_text(MINIMAL_RECIPE_YAML)
+
+    from autoskillit.core import RecipeSource
+    from autoskillit.recipe.schema import RecipeInfo
+
+    info = RecipeInfo(
+        name="myrecipe",
+        description="test",
+        source=RecipeSource.PROJECT,
+        path=recipe_path,
+        content=None,
+        content_hash=None,
+    )
+
+    def raising_list_recipes(*args, **kwargs):
+        raise AssertionError("list_recipes must not be called when recipe_list is provided")
+
+    monkeypatch.setattr(api_mod, "list_recipes", raising_list_recipes)
+
+    result = api_mod.load_and_validate("myrecipe", tmp_path, recipe_info=info, recipe_list=[info])
+
+    assert "error" not in result
+    assert result.get("content_hash") is not None

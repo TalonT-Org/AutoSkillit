@@ -50,6 +50,7 @@ tokens after the skill name for the first path-like token (starts with `/`,
 - Create experiment files outside the planned `research/` subfolder
 - Execute `git merge` commands (all branch content must be applied via
   `git cherry-pick` or `git checkout <branch> -- <file>`)
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Create a new worktree from the current branch
@@ -61,6 +62,7 @@ tokens after the skill name for the first path-like token (starts with `/`,
 - Leave the worktree intact when done
 - Write `tests/test_{script_name}.py` alongside each experiment script created in Step 4
 - Run `pytest --collect-only` after creating tests to verify discovery before committing
+- **Read before editing**: Before issuing an `Edit` call on any file, ensure you have issued a `Read` on that file earlier in this session. Claude Code rejects `Edit` on unread files — the retry wastes a full API turn at current context size. If you are uncertain whether a file was read, issue a targeted `Read` (offset + limit to the region you plan to edit) rather than risk an error.
 
 ## Context Limit Behavior
 
@@ -104,11 +106,12 @@ mkdir -p "{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_NAME}"
 echo "${CURRENT_BRANCH}" > "{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_NAME}/base-branch"
 
 # Set upstream tracking if possible:
-if ! git fetch origin "${CURRENT_BRANCH}" 2>/dev/null; then
-    echo "NOTE: Branch '${CURRENT_BRANCH}' has no remote tracking ref on origin."
+REMOTE=$(git remote get-url upstream >/dev/null 2>&1 && echo upstream || echo origin)
+if ! git fetch "$REMOTE" "${CURRENT_BRANCH}" 2>/dev/null; then
+    echo "NOTE: Branch '${CURRENT_BRANCH}' has no remote tracking ref on $REMOTE."
 fi
-if ! git -C "${WORKTREE_PATH}" branch --set-upstream-to="origin/${CURRENT_BRANCH}" "${WORKTREE_NAME}" 2>/dev/null; then
-    echo "NOTE: Could not set upstream tracking for '${WORKTREE_NAME}' → 'origin/${CURRENT_BRANCH}'."
+if ! git -C "${WORKTREE_PATH}" branch --set-upstream-to="${REMOTE}/${CURRENT_BRANCH}" "${WORKTREE_NAME}" 2>/dev/null; then
+    echo "NOTE: Could not set upstream tracking for '${WORKTREE_NAME}' → '$REMOTE/${CURRENT_BRANCH}'."
 fi
 ```
 
@@ -154,11 +157,13 @@ required** — launch as many additional subagents as needed.
 - Understanding specific APIs, types, or interfaces the scripts will use
 - Any other codebase investigation needed to write correct experiment code
 
-### Step 3 — Set Up Container Environment
+### Step 3 — Write Environment Artifacts
 
-The research worktree is isolated via Docker. All experiment code runs inside
-a container built from the experiment's `environment.yml`. Nothing is installed
-on the host.
+The environment is already prepared by `setup-environment` (upstream in the
+recipe). Read `env_mode` from context to understand what environment was
+provisioned (`docker`, `micromamba-host`, or `unavailable`). This step writes
+the Dockerfile template and `environment.yml` into the worktree as
+reproducibility artifacts — it does NOT build or install anything.
 
 **3a — Write the Dockerfile:**
 
@@ -205,12 +210,6 @@ vars:
     sh: pwd
 
 tasks:
-  build-env:
-    desc: Build Docker image for this experiment
-    cmds:
-      - docker build --build-arg MAMBA_ENV={{.SLUG}} -t {{.IMAGE}} .
-    dir: "{{.RESEARCH_DIR}}"
-
   run-experiment:
     desc: Run experiment inside container (volume-mounts research dir)
     cmds:
@@ -226,15 +225,20 @@ tasks:
 
 Adjust the `run-experiment` command to match the actual entry-point script from the experiment plan.
 
-**3c — Build the Docker image:**
+**3c — Write `environment.yml` and note `env_mode`:**
 
-```bash
-cd "${RESEARCH_DIR}"
-docker build --build-arg MAMBA_ENV={slug} -t "research-{slug}" .
-```
+If the experiment plan specifies an `environment.yml`, write it to
+`${RESEARCH_DIR}/environment.yml`. This file is committed to the worktree
+as a reproducibility artifact — reviewers can inspect exact dependency
+versions.
 
-Verify the build succeeds before proceeding. If the build fails due to missing
-system packages, add them to the `apt-get install` layer and rebuild.
+Note the `env_mode` from context (set by `setup-environment`):
+- `docker` — a container image was pre-built; `run-experiment` will execute inside it
+- `micromamba-host` — a host environment was created; `run-experiment` will use `micromamba run`
+- `unavailable` — no environment could be provisioned; `run-experiment` will emit `blocked_experiment`
+- `none` — standard environment, no special setup needed
+
+Do NOT invoke any container or environment construction commands. The environment is already ready.
 
 **All commands from this point must run from `${WORKTREE_PATH}`.** Use absolute
 paths to avoid CWD drift across Bash tool calls.

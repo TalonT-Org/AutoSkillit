@@ -18,17 +18,17 @@ and creates a comprehensive promotion PR.
 ## Arguments
 
 ```
-/autoskillit:promote-to-main [integration_branch] [base_branch] [--dry-run]
+/autoskillit:promote-to-main [batch_branch] [base_branch] [--dry-run]
 ```
 
-- `integration_branch` (optional) — source branch to promote. Defaults to `integration`.
+- `batch_branch` (optional) — source branch to promote. Defaults to `integration`.
 - `base_branch` (optional) — target branch. Defaults to `main`.
 - `--dry-run` — generate the full PR body without creating a PR.
 
 ## When to Use
 
-- When the integration branch is stable and ready to be promoted to main
-- After feature PRs, bug fixes, and cleanup work have been collected and tested on integration
+- When the develop branch is stable and ready to be promoted to main
+- After feature PRs, bug fixes, and cleanup work have been collected and tested on develop
 - This is the final gate before changes land on main
 
 ## Critical Constraints
@@ -49,20 +49,7 @@ and creates a comprehensive promotion PR.
 - Output `verdict = <value>` as a structured token
 - Carry forward ALL `Closes #N`, `Fixes #N`, and `Resolves #N` references from merged PR bodies
 - Use `gh pr create --body-file` (never inline body via `--body`)
-- Grant every subagent explicit permission to spawn their own sub-subagents
-- `report_path` must be an absolute path (prepend CWD)
-
-## Subagent Autonomy Grant
-
-Every subagent spawned by this skill receives this standing instruction:
-
-> You may spawn additional subagents (Task tool, model: sonnet) at your discretion
-> to parallelize your research, fill gaps you discover during analysis, or decompose
-> large tasks into focused sub-investigations. You do not need permission — use your
-> judgment about when deeper exploration would improve the quality of your findings.
-
-Include this grant verbatim in every Task tool prompt throughout this skill.
-
+- `pr_body_path` must be an absolute path (prepend CWD)
 ## Workflow
 
 ### Phase 0: Setup
@@ -70,13 +57,13 @@ Include this grant verbatim in every Task tool prompt throughout this skill.
 #### Step 0.1: Parse Arguments
 
 Parse optional positional arguments and flags:
-- `integration_branch` — default `"integration"` if absent or empty
+- `batch_branch` — default `"develop"` if absent or empty
 - `base_branch` — default `"main"` if absent or empty
 - `dry_run` — `true` if `--dry-run` present in ARGUMENTS
 
 Validate that both branches exist locally:
 ```bash
-git rev-parse --verify {integration_branch} 2>/dev/null
+git rev-parse --verify {batch_branch} 2>/dev/null
 git rev-parse --verify {base_branch} 2>/dev/null
 ```
 If either fails, try fetching:
@@ -88,14 +75,14 @@ If still missing, print error to stderr and exit 1.
 #### Step 0.2: Compute Divergence Point
 
 ```bash
-git merge-base {base_branch} {integration_branch}
+git merge-base {base_branch} {batch_branch}
 ```
 
 Store as `merge_base_sha`.
 
 Get commit count and timestamp:
 ```bash
-git rev-list --count {merge_base_sha}..{integration_branch}
+git rev-list --count {merge_base_sha}..{batch_branch}
 git show -s --format=%cI {merge_base_sha}
 ```
 Store as `commit_count` and `merge_base_date`.
@@ -142,17 +129,14 @@ EOF
 Spawn three parallel Task subagents (model: sonnet) to validate promotion readiness.
 All three must pass before analysis proceeds. If any fails, report the failure clearly
 and exit 1. Do NOT create a PR when pre-flight fails.
-
-**Include the Subagent Autonomy Grant in each prompt.**
-
 #### Subagent 1A: CI and Branch Status
 
 Check:
 1. CI is green on the integration branch — run `gh pr checks` for any open PR from
-   integration, or `gh run list --branch {integration_branch} --workflow tests.yml --limit 1 --json conclusion`
-2. The integration branch is not behind base — run `git rev-list --count {integration_branch}..{base_branch}`
+   integration, or `gh run list --branch {batch_branch} --workflow tests.yml --limit 1 --json conclusion`
+2. The integration branch is not behind base — run `git rev-list --count {batch_branch}..{base_branch}`
    to check if base has commits not in integration (if > 0, warn that a rebase may be needed)
-3. No open PRs targeting integration with failing CI — `gh pr list --base {integration_branch} --state open --json number,title,statusCheckRollup`
+3. No open PRs targeting integration with failing CI — `gh pr list --base {batch_branch} --state open --json number,title,statusCheckRollup`
 
 Return JSON:
 ```json
@@ -188,7 +172,7 @@ Return JSON:
 
 Check:
 1. No open PRs targeting integration with `CHANGES_REQUESTED` reviews —
-   `gh pr list --base {integration_branch} --state open --json number,title,reviews`
+   `gh pr list --base {batch_branch} --state open --json number,title,reviews`
 2. No `in-progress` labeled issues that might indicate incomplete work —
    `gh issue list --label in-progress --state open --json number,title`
 
@@ -207,14 +191,13 @@ treat as a warning (non-blocking) and note it in the report.
 
 ### Phase 2: Change Inventory (parallel subagents)
 
-Spawn four parallel Task subagents (model: sonnet). **Include the Subagent Autonomy Grant
-in each prompt.**
+Spawn four parallel Task subagents (model: sonnet).
 
 #### Subagent 2A: Commit Categorization
 
 Receive the output of:
 ```bash
-git log {merge_base_sha}..{integration_branch} --format="%H %s"
+git log {merge_base_sha}..{batch_branch} --format="%H %s"
 ```
 
 Categorize each commit into exactly one category based on its subject line:
@@ -245,13 +228,13 @@ Return JSON:
 
 Run:
 ```bash
-gh pr list --base {integration_branch} --state merged --limit 200 --json number,title,author,mergedAt,body,headRefName,additions,deletions,labels,url
+gh pr list --base {batch_branch} --state merged --limit 200 --json number,title,author,mergedAt,body,headRefName,additions,deletions,labels,url
 ```
 
 Filter to PRs merged after `merge_base_date`. If empty, fall back to commit-subject
 discovery:
 ```bash
-git log {merge_base_sha}..{integration_branch} --oneline --grep="(#" --format="%s"
+git log {merge_base_sha}..{batch_branch} --oneline --grep="(#" --format="%s"
 ```
 
 For each PR, extract `Closes|Fixes|Resolves #N` references (case-insensitive).
@@ -277,12 +260,12 @@ Return JSON:
 
 Run:
 ```bash
-git diff --name-only {base_branch}..{integration_branch}
-git diff --diff-filter=A --name-only {base_branch}..{integration_branch}
-git diff --diff-filter=M --name-only {base_branch}..{integration_branch}
-git diff --diff-filter=D --name-only {base_branch}..{integration_branch}
-git diff --diff-filter=R --name-only {base_branch}..{integration_branch}
-git diff --stat {base_branch}..{integration_branch} | tail -1
+git diff --name-only {base_branch}..{batch_branch}
+git diff --diff-filter=A --name-only {base_branch}..{batch_branch}
+git diff --diff-filter=M --name-only {base_branch}..{batch_branch}
+git diff --diff-filter=D --name-only {base_branch}..{batch_branch}
+git diff --diff-filter=R --name-only {base_branch}..{batch_branch}
+git diff --stat {base_branch}..{batch_branch} | tail -1
 ```
 
 Return JSON:
@@ -400,9 +383,6 @@ new/modified nodes, add to `validated_diagrams`. Otherwise discard.
 
 Spawn one Task subagent (model: sonnet) with results from Phase 2 ONLY (no domain
 analysis or quality assessment data).
-
-**Include the Subagent Autonomy Grant.**
-
 The subagent receives:
 - Commit categorization from Subagent 2A
 - PR and issue data from Subagent 2B
@@ -424,7 +404,7 @@ Write to `.autoskillit/temp/promote-to-main/pr_body_{YYYY-MM-DD_HHMMSS}.md`
 (relative to the current working directory).
 
 Sections in order:
-1. `## Promotion: {integration_branch} to {base_branch}` — executive summary + stats (`diff_stat_summary`, `commit_count`, PR count)
+1. `## Promotion: {batch_branch} to {base_branch}` — executive summary + stats (`diff_stat_summary`, `commit_count`, PR count)
 2. `### Highlights` — from synthesis
 3. `## Release Notes` — from synthesis
 4. `## Merged PRs` — table (PR, Title, Author, Labels) from Subagent 2B
@@ -446,12 +426,12 @@ gh auth status 2>/dev/null
 If exit code non-zero: output `pr_url = ` and exit successfully.
 
 Construct PR title using actual branch names:
-`Promote {integration_branch} to {base_branch} ({len(prs)} PRs, {len(linked_issue_numbers)} issues, {category_summary})`
+`Promote {batch_branch} to {base_branch} ({len(prs)} PRs, {len(linked_issue_numbers)} issues, {category_summary})`
 
 ```bash
 gh pr create \
   --base {base_branch} \
-  --head {integration_branch} \
+  --head {batch_branch} \
   --title "{pr_title}" \
   --body-file .autoskillit/temp/promote-to-main/pr_body_{timestamp}.md
 ```
@@ -468,7 +448,7 @@ gh pr edit {pr_url} --add-label "promotion" 2>/dev/null || true
 Always emit these structured output tokens as the final lines:
 
 ```
-report_path = {absolute path to .autoskillit/temp/promote-to-main/pr_body_{timestamp}.md}
+pr_body_path = {absolute path to .autoskillit/temp/promote-to-main/pr_body_{timestamp}.md}
 pr_url = {pr_url, empty if dry-run or gh unavailable}
 verdict = {created|dry_run|preflight_failed}
 category_summary = {e.g., "14 fixes, 13 features, 3 infra"}

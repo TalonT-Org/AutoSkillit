@@ -5,10 +5,11 @@ import inspect as _inspect
 
 import pytest
 
-from autoskillit.core import Severity
-from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
+from autoskillit.core import GATED_TOOLS, UNGATED_TOOLS, Severity
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeStep
+
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
 def _make_recipe(tool: str | None = None, action: str | None = None) -> Recipe:
@@ -264,7 +265,7 @@ def test_wait_for_ci_rejects_poll_interval() -> None:
 
 def test_rules_tools_batch_cleanup_clones_accepts_all_owners_param() -> None:
     """T20 — batch_cleanup_clones with all_owners param must not trigger dead-with-param."""
-    from autoskillit.recipe.rules_tools import _TOOL_PARAMS
+    from autoskillit.recipe.rules.rules_tools import _TOOL_PARAMS
 
     assert "all_owners" in _TOOL_PARAMS["batch_cleanup_clones"]
 
@@ -334,16 +335,18 @@ def test_rebase_then_push_with_force_true_passes_validation() -> None:
 # ---------------------------------------------------------------------------
 
 _SERVER_TOOL_MODULES = [
-    "autoskillit.server.tools_ci",
-    "autoskillit.server.tools_clone",
-    "autoskillit.server.tools_execution",
-    "autoskillit.server.tools_git",
-    "autoskillit.server.tools_recipe",
-    "autoskillit.server.tools_status",
-    "autoskillit.server.tools_github",
-    "autoskillit.server.tools_issue_lifecycle",
-    "autoskillit.server.tools_pr_ops",
-    "autoskillit.server.tools_workspace",
+    "autoskillit.server.tools.tools_ci",
+    "autoskillit.server.tools.tools_ci_watch",
+    "autoskillit.server.tools.tools_ci_merge_queue",
+    "autoskillit.server.tools.tools_clone",
+    "autoskillit.server.tools.tools_execution",
+    "autoskillit.server.tools.tools_git",
+    "autoskillit.server.tools.tools_recipe",
+    "autoskillit.server.tools.tools_status",
+    "autoskillit.server.tools.tools_github",
+    "autoskillit.server.tools.tools_issue_lifecycle",
+    "autoskillit.server.tools.tools_pr_ops",
+    "autoskillit.server.tools.tools_workspace",
 ]
 
 _FRAMEWORK_PARAMS = frozenset({"ctx"})
@@ -361,7 +364,7 @@ def _build_handler_map() -> dict[str, object]:
 
 def test_tool_params_matches_mcp_handler_signatures() -> None:
     """T8: _TOOL_PARAMS keys match actual MCP handler signatures — drift fails CI."""
-    from autoskillit.recipe.rules_tools import _TOOL_PARAMS
+    from autoskillit.recipe.rules.rules_tools import _TOOL_PARAMS
 
     handler_map = _build_handler_map()
     mismatches: list[str] = []
@@ -385,3 +388,85 @@ def test_tool_params_matches_mcp_handler_signatures() -> None:
     assert not mismatches, (
         "_TOOL_PARAMS is out of sync with MCP handler signatures:\n" + "\n".join(mismatches)
     )
+
+
+class TestConstantStepWithArgs:
+    def test_constant_with_args_fires_error(self):
+        recipe = Recipe(
+            name="test-recipe",
+            description="Test constant rule",
+            steps={
+                "s": RecipeStep(constant="val", with_args={"x": "1"}, on_success="done"),
+                "done": RecipeStep(action="stop", message="Done checking constant."),
+            },
+        )
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == "constant-step-with-args"]
+        assert len(findings) == 1
+        assert findings[0].severity == Severity.ERROR
+
+    def test_constant_only_is_clean(self):
+        recipe = Recipe(
+            name="test-recipe",
+            description="Test constant rule",
+            steps={
+                "s": RecipeStep(constant="val", on_success="done"),
+                "done": RecipeStep(action="stop", message="Done checking constant."),
+            },
+        )
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == "constant-step-with-args"]
+        assert len(findings) == 0
+
+    def test_with_args_only_is_clean(self):
+        recipe = Recipe(
+            name="test-recipe",
+            description="Test constant rule",
+            steps={
+                "s": RecipeStep(tool="run_cmd", with_args={"cmd": "echo hi"}, on_success="done"),
+                "done": RecipeStep(action="stop", message="Done checking constant."),
+            },
+        )
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == "constant-step-with-args"]
+        assert len(findings) == 0
+
+
+# ---------------------------------------------------------------------------
+# release-issue-requires-disposition rule tests
+# ---------------------------------------------------------------------------
+
+
+def test_release_issue_requires_disposition_fires_on_bare_call() -> None:
+    """Rule fires when release_issue step has neither fail_label nor target_branch."""
+    recipe = _make_recipe_with_args(
+        "release_issue",
+        {"issue_url": "https://github.com/o/r/issues/1"},
+    )
+    findings = run_semantic_rules(recipe)
+    hits = [f for f in findings if f.rule == "release-issue-requires-disposition"]
+    assert hits
+    assert hits[0].severity == Severity.ERROR
+    assert "run" in hits[0].step_name
+
+
+def test_release_issue_requires_disposition_passes_with_fail_label() -> None:
+    """Rule does NOT fire when fail_label is present."""
+    recipe = _make_recipe_with_args(
+        "release_issue",
+        {"issue_url": "https://github.com/o/r/issues/1", "fail_label": "fail"},
+    )
+    findings = run_semantic_rules(recipe)
+    hits = [f for f in findings if f.rule == "release-issue-requires-disposition"]
+    assert not hits
+
+
+def test_release_issue_requires_disposition_passes_with_target_branch() -> None:
+    """Rule does NOT fire when target_branch is present."""
+    recipe = _make_recipe_with_args(
+        "release_issue",
+        {
+            "issue_url": "https://github.com/o/r/issues/1",
+            "target_branch": "${{ inputs.base_branch }}",
+        },
+    )
+    findings = run_semantic_rules(recipe)
+    hits = [f for f in findings if f.rule == "release-issue-requires-disposition"]
+    assert not hits

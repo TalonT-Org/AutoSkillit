@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from collections.abc import Callable, Coroutine
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core import atomic_write, get_logger
+from autoskillit.core import AuditLog, SupportsLogger, atomic_write, get_logger
+from autoskillit.core import fast_dumps as _fast_dumps
 
 logger = get_logger(__name__)
 
@@ -24,8 +24,8 @@ class DefaultBackgroundSupervisor:
 
     def __init__(
         self,
-        audit: Any | None = None,
-        log: Any | None = None,
+        audit: AuditLog | None = None,
+        log: SupportsLogger | None = None,
     ) -> None:
         self._tasks: set[asyncio.Task[Any]] = set()
         self._audit = audit
@@ -129,6 +129,6 @@ def write_status(path: Path | None, status: str, *, error: str | None = None) ->
         }
         if error is not None:
             payload["error"] = error
-        atomic_write(path, json.dumps(payload, indent=2))
+        atomic_write(path, _fast_dumps(payload, indent=True))
     except Exception:
         logger.debug("write_status failed", path=str(path), exc_info=True)

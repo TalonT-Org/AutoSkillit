@@ -1,86 +1,75 @@
 """Shared test fixtures for autoskillit."""
 
-import sys
+import functools
+import os
 from pathlib import Path as _Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from autoskillit.config.settings import AutomationConfig
 
 from autoskillit.core.types import (
     ChannelConfirmation,
     SubprocessResult,
-    SubprocessRunner,
     TerminationReason,
-    TestResult,
 )
 from tests._helpers import _flush_structlog_proxy_caches
 
+_LAYER_DIRS: frozenset[str] = frozenset(
+    {
+        "core",
+        "config",
+        "pipeline",
+        "execution",
+        "workspace",
+        "recipe",
+        "migration",
+        "fleet",
+        "planner",
+        "server",
+        "cli",
+    }
+)
 
-class StatefulMockTester:
-    """Test double for TestRunner returning pre-configured results on successive calls.
+_SIZE_DIRS: frozenset[str] = frozenset(
+    {
+        "cli",
+        "config",
+        "core",
+        "execution",
+        "fleet",
+        "migration",
+        "pipeline",
+        "planner",
+        "recipe",
+        "server",
+        "workspace",
+    }
+)
 
-    Enables the scenario: pre-rebase tests pass, post-rebase tests fail.
-    Falls back to TestResult(passed=True, stdout="", stderr="") for any call beyond the
-    configured list.
+_scope_key = pytest.StashKey[set[_Path] | None]()
+_filter_mode_key = pytest.StashKey[str | None]()
+_selected_count_key = pytest.StashKey[int | None]()
+_deselected_count_key = pytest.StashKey[int | None]()
+_full_run_reason_key = pytest.StashKey[str | None]()
+
+# Module-level accumulator for xdist worker-to-controller IPC.
+# Populated by pytest_testnodedown (controller); cleared by pytest_configure
+# at session start so in-process pytester reruns don't leak stale data.
+_worker_filter_counts: dict[str, int | None] = {}
+
+
+class TimeoutTier:
+    """Centralized timeout tiers encoding xdist -n 4 budget math.
+
+    CHANNEL_B minimum: 1s preamble + _phase1_timeout (30s) + drain + jitter > 31.5s.
     """
 
-    def __init__(self, results: list[TestResult]) -> None:
-        self._results = list(results)
-        self._index = 0
-
-    async def run(self, cwd: _Path) -> TestResult:
-        if self._index < len(self._results):
-            result = self._results[self._index]
-        else:
-            result = TestResult(passed=True, stdout="", stderr="")
-        self._index += 1
-        return result
-
-    @property
-    def call_count(self) -> int:
-        return self._index
-
-
-class MockSubprocessRunner(SubprocessRunner):
-    """Test double for SubprocessRunner. Queues predetermined results.
-
-    Inherits from SubprocessRunner (Protocol) so mypy verifies the __call__
-    signature matches the protocol at class definition, not just at call sites.
-
-    call_args_list stores (cmd, cwd, timeout, kwargs) tuples.
-    IMPORTANT: Assert [N][1] (cwd) when testing cwd propagation.
-    """
-
-    def __init__(self) -> None:
-        self._queue: list[SubprocessResult] = []
-        self._default = SubprocessResult(
-            returncode=0,
-            stdout="",
-            stderr="",
-            termination=TerminationReason.NATURAL_EXIT,
-            pid=99999,
-        )
-        self.call_args_list: list[tuple] = []
-
-    def push(self, result: SubprocessResult) -> None:
-        """Queue a result to be returned by the next __call__."""
-        self._queue.append(result)
-
-    def set_default(self, result: SubprocessResult) -> None:
-        """Set the result returned when the queue is empty."""
-        self._default = result
-
-    async def __call__(
-        self,
-        cmd: list[str],
-        *,
-        cwd: _Path,
-        timeout: float,
-        **kwargs: object,
-    ) -> SubprocessResult:
-        self.call_args_list.append((cmd, cwd, timeout, kwargs))
-        if self._queue:
-            return self._queue.pop(0)
-        return self._default
+    UNIT = 10  # Pure logic, no I/O
+    INTEGRATION = 30  # Filesystem/subprocess, no Channel B
+    CHANNEL_B = 60  # Full session_log_dir + Channel B path
 
 
 @pytest.fixture(autouse=True)
@@ -213,20 +202,45 @@ def _clear_headless_env(monkeypatch):
     """Ensure AUTOSKILLIT_HEADLESS is unset at the start of every test.
 
     Tools check this env var to block calls from headless sessions.
-    Also resets mcp kitchen visibility transforms when the server module is
-    already imported.
+    MCP tag resets are handled by tests/server/conftest.py for server tests.
     """
-
     monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
-    if "autoskillit.server" in sys.modules:
-        from autoskillit.server import mcp
 
-        mcp.disable(tags={"kitchen"})
+
+@pytest.fixture(autouse=True)
+def _clear_session_type_env(monkeypatch):
+    """Prevent SESSION_TYPE leaking between tests."""
+    monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _clear_skill_name_env(monkeypatch):
+    """Prevent AUTOSKILLIT_SKILL_NAME leaking between tests."""
+    monkeypatch.delenv("AUTOSKILLIT_SKILL_NAME", raising=False)
 
 
 @pytest.fixture(autouse=True)
 def _clear_skip_stale_check_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("AUTOSKILLIT_SKIP_STALE_CHECK", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _reset_mcp_visibility():
+    import sys
+
+    def _clear_transforms():
+        from autoskillit.core import ALL_VISIBILITY_TAGS
+        from autoskillit.server import mcp
+
+        mcp._transforms.clear()
+        for tag in sorted(ALL_VISIBILITY_TAGS):
+            mcp.disable(tags={tag})
+
+    if "autoskillit.server" in sys.modules:
+        _clear_transforms()
+    yield
+    if "autoskillit.server" in sys.modules:
+        _clear_transforms()
 
 
 @pytest.fixture(scope="function")
@@ -236,24 +250,66 @@ def anyio_backend():
 
 
 @pytest.fixture
+def minimal_ctx(tmp_path):
+    """Lightweight ToolContext using only L0+L1 imports (core, pipeline, config).
+
+    Use for tests that only need gate, audit, token_log, timing_log, or config —
+    no server factory, no L2/L3 service wiring. Importing this fixture does NOT
+    pull in autoskillit.server, autoskillit.execution, autoskillit.recipe,
+    autoskillit.migration, or autoskillit.workspace.
+
+    Tests that need full service wiring (executor, tester, recipes, etc.) should
+    use tool_ctx instead.
+    """
+    from autoskillit.config import AutomationConfig
+    from autoskillit.core.types._type_plugin_source import DirectInstall
+    from autoskillit.pipeline.audit import DefaultAuditLog
+    from autoskillit.pipeline.context import ToolContext
+    from autoskillit.pipeline.gate import DefaultGateState
+    from autoskillit.pipeline.timings import DefaultTimingLog
+    from autoskillit.pipeline.tokens import DefaultTokenLog
+
+    ctx = ToolContext(
+        config=AutomationConfig(features={"fleet": True}),
+        audit=DefaultAuditLog(),
+        token_log=DefaultTokenLog(),
+        timing_log=DefaultTimingLog(),
+        gate=DefaultGateState(enabled=False),
+        plugin_source=DirectInstall(plugin_dir=tmp_path),
+        runner=None,
+        temp_dir=tmp_path / ".autoskillit" / "temp",
+        project_dir=tmp_path,
+    )
+    return ctx
+
+
+@pytest.fixture
 def tool_ctx(monkeypatch, tmp_path):
-    """Provide a fully isolated ToolContext for server tests.
+    """Provide a fully isolated ToolContext for server integration tests.
+
+    Full-stack fixture: calls make_context() from server/_factory.py, which
+    imports ALL production layers (L0–L3). Use minimal_ctx instead when the
+    test only needs gate, audit, token_log, timing_log, or config fields.
 
     Monkeypatches server._ctx so all server tool calls use this context.
-    Gate is enabled (open kitchen) by default — tests that need a closed
-    gate should do: tool_ctx.gate = DefaultGateState(enabled=False) locally.
+    Gate starts closed (matching production) — use tool_ctx_kitchen_open
+    when a test needs the gate open.
 
     All service fields (executor, tester, db_reader, workspace_mgr, recipes,
     migrations) are wired via make_context() so routing tests work correctly.
     """
     from autoskillit.config import AutomationConfig
-    from autoskillit.pipeline.gate import DefaultGateState
+    from autoskillit.core.types._type_plugin_source import DirectInstall
     from autoskillit.server import _state
     from autoskillit.server._factory import make_context
+    from tests.fakes import MockSubprocessRunner
 
     mock_runner = MockSubprocessRunner()
-    ctx = make_context(AutomationConfig(), runner=mock_runner, plugin_dir=str(tmp_path))
-    ctx.gate = DefaultGateState(enabled=True)
+    ctx = make_context(
+        AutomationConfig(features={"fleet": True}),
+        runner=mock_runner,
+        plugin_source=DirectInstall(plugin_dir=tmp_path),
+    )
     ctx.config.linux_tracing.log_dir = str(tmp_path / "session_logs")
     ctx.config.linux_tracing.tmpfs_path = str(tmp_path / "shm")
     # Anchor temp_dir to tmp_path so server tools that read from ctx.temp_dir
@@ -263,3 +319,415 @@ def tool_ctx(monkeypatch, tmp_path):
     monkeypatch.setattr(_state, "_ctx", ctx)
     monkeypatch.setattr(_state, "_startup_ready", None)
     return ctx
+
+
+@pytest.fixture
+def tool_ctx_marketplace(monkeypatch, tmp_path):
+    """ToolContext simulating a marketplace install: plugin_source = MarketplaceInstall."""
+    from autoskillit.config import AutomationConfig
+    from autoskillit.core.types._type_plugin_source import MarketplaceInstall
+    from autoskillit.pipeline.gate import DefaultGateState
+    from autoskillit.server import _state
+    from autoskillit.server._factory import make_context
+    from tests.fakes import MockSubprocessRunner
+
+    fake_cache = tmp_path / "marketplace_cache"
+    fake_cache.mkdir()
+
+    mock_runner = MockSubprocessRunner()
+    ctx = make_context(
+        AutomationConfig(features={"fleet": True}),
+        runner=mock_runner,
+        plugin_source=MarketplaceInstall(cache_path=fake_cache),
+    )
+    ctx.gate = DefaultGateState(enabled=False)
+    ctx.config.linux_tracing.log_dir = str(tmp_path / "session_logs")
+    ctx.config.linux_tracing.tmpfs_path = str(tmp_path / "shm")
+    ctx.temp_dir = tmp_path / ".autoskillit" / "temp"
+    monkeypatch.setattr(_state, "_ctx", ctx)
+    monkeypatch.setattr(_state, "_startup_ready", None)
+    return ctx
+
+
+@pytest.fixture
+def tool_ctx_kitchen_open(tool_ctx):
+    """tool_ctx variant with gate explicitly opened.
+
+    Use when the test requires a tool that calls _require_enabled() and
+    the test is not testing gate-boot behavior itself. This fixture
+    mirrors the post-lifespan-boot state for interactive sessions.
+    """
+    from autoskillit.pipeline.gate import DefaultGateState
+
+    tool_ctx.gate = DefaultGateState(enabled=True)
+    return tool_ctx
+
+
+# ---------------------------------------------------------------------------
+# Test filter hooks (opt-in via AUTOSKILLIT_TEST_FILTER env var)
+# ---------------------------------------------------------------------------
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--filter-mode",
+        default=None,
+        choices=("none", "conservative", "aggressive"),
+        help="Test filter mode (overrides AUTOSKILLIT_TEST_FILTER env var).",
+    )
+    parser.addoption(
+        "--filter-base-ref",
+        default=None,
+        help="Git base ref for changed-file detection (overrides AUTOSKILLIT_TEST_BASE_REF).",
+    )
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Compute test filter scope from env var + git diff + manifest.
+
+    Opt-in via AUTOSKILLIT_TEST_FILTER env var or --filter-mode CLI flag.
+    Fail-open: any error sets scope to None (full test run).
+    """
+    import warnings
+
+    # Reset xdist IPC accumulator so in-process pytester reruns don't leak counts.
+    _worker_filter_counts.clear()
+
+    config.stash[_scope_key] = None
+    config.stash[_filter_mode_key] = None
+    config.stash[_full_run_reason_key] = None
+
+    cli_mode = config.getoption("--filter-mode", default=None)
+    env_val = os.environ.get("AUTOSKILLIT_TEST_FILTER", "")
+
+    if not cli_mode and not env_val:
+        return
+    if not cli_mode and env_val.lower() in ("0", "false", "no"):
+        return
+
+    try:
+        from tests._test_filter import (
+            FilterMode,
+            FullRunReason,
+            build_test_scope,
+            git_changed_files,
+            load_manifest,
+        )
+
+        if cli_mode:
+            mode = FilterMode(cli_mode)
+        elif env_val.lower() in ("1", "true", "yes"):
+            mode = FilterMode.CONSERVATIVE
+        else:
+            mode = FilterMode(env_val)
+
+        if mode == FilterMode.NONE:
+            return
+
+        cli_base_ref = config.getoption("--filter-base-ref", default=None)
+        changed = git_changed_files(config.rootpath, base_ref=cli_base_ref)
+
+        # Resolve the actual base_ref used (env fallback mirrors git_changed_files logic)
+        resolved_base_ref = cli_base_ref or os.environ.get(
+            "AUTOSKILLIT_TEST_BASE_REF",
+            os.environ.get("GITHUB_BASE_REF"),
+        )
+
+        manifest = load_manifest(config.rootpath)
+        coverage_map_path = config.rootpath / ".autoskillit" / "test-source-map.json"
+
+        scope = build_test_scope(
+            changed_files=changed,
+            mode=mode,
+            manifest=manifest,
+            tests_root=config.rootpath / "tests",
+            coverage_map_path=coverage_map_path,
+            cwd=config.rootpath,
+            base_ref=resolved_base_ref,
+        )
+
+        if isinstance(scope, FullRunReason):
+            config.stash[_scope_key] = None
+            config.stash[_full_run_reason_key] = scope.value
+        else:
+            config.stash[_scope_key] = scope
+        config.stash[_filter_mode_key] = mode.value
+
+    except Exception as exc:
+        warnings.warn(
+            f"Test filter setup failed, running all tests: {exc}",
+            stacklevel=1,
+        )
+
+
+@functools.lru_cache(maxsize=1)
+def _resolve_test_config() -> "AutomationConfig | None":
+    """Resolve full config for test collection via full config resolution.
+
+    Uses the same dynaconf chain as production: defaults.yaml → project config → env vars.
+    Returns None on any failure (fail-open: individual features fall back to
+    FEATURE_REGISTRY[name].default_enabled).
+    """
+    try:
+        from pathlib import Path
+
+        from autoskillit.config.settings import AutomationConfig as _AutomationConfig
+        from autoskillit.config.settings import load_config
+
+        # Anchor to repo root via this file's known location (tests/conftest.py)
+        # rather than Path.cwd(), which varies across IDE runners and monkeypatch.chdir.
+        repo_root = Path(__file__).resolve().parent.parent
+        cfg = load_config(repo_root)
+        if not isinstance(cfg, _AutomationConfig):
+            raise TypeError(f"load_config returned {type(cfg)!r}, expected AutomationConfig")
+        return cfg
+    except Exception as exc:
+        import warnings
+
+        warnings.warn(
+            f"Feature flag config resolution failed, falling back to defaults: {exc}",
+            stacklevel=1,
+        )
+        return None
+
+
+def _is_test_feature_enabled(feature_name: str, *, env_val: str | None) -> bool:
+    """Return True if feature_name is enabled for this test run.
+
+    Resolution order:
+    1. If AUTOSKILLIT_TEST_FEATURES is set (including empty string), parse it
+       as a comma-separated whitelist.  Only listed names are enabled.
+    2. If unset, resolve via full config chain (defaults.yaml → project config
+       → env vars) using load_config().  This respects experimental_enabled and
+       per-feature config overrides.
+    3. If config resolution fails, fall back to FEATURE_REGISTRY[name].default_enabled.
+       Unknown feature names return True (fail-open).
+
+    Args:
+        feature_name: The feature name to check.
+        env_val: Pre-read value of AUTOSKILLIT_TEST_FEATURES (pass ``None`` when unset).
+    """
+    if env_val is not None:
+        enabled = {f.strip() for f in env_val.split(",") if f.strip()}
+        return feature_name in enabled
+
+    from autoskillit.core import FEATURE_REGISTRY
+    from autoskillit.core.feature_flags import is_feature_enabled
+
+    defn = FEATURE_REGISTRY.get(feature_name)
+    if defn is None:
+        import warnings
+
+        warnings.warn(
+            f"pytest.mark.feature({feature_name!r}) references an unknown feature; "
+            "fail-open assumed (test will run). Check for typos in the marker.",
+            stacklevel=4,
+        )
+        return True
+
+    cfg = _resolve_test_config()
+    if cfg is None:
+        return defn.default_enabled
+
+    return is_feature_enabled(
+        feature_name, cfg.features, experimental_enabled=cfg.experimental_enabled
+    )
+
+
+def pytest_collection_modifyitems(
+    items: list[pytest.Item],
+    config: pytest.Config,
+) -> None:
+    """Deselect test items outside the computed filter scope.
+
+    Fail-open: any error leaves all items selected.
+    """
+    import warnings
+
+    # Layer marker mismatch validation (controller-only under xdist)
+    if not hasattr(config, "workerinput"):
+        tests_root = config.rootpath / "tests"
+        for item in items:
+            try:
+                rel = item.path.relative_to(tests_root)
+            except (ValueError, TypeError):
+                continue
+            parts = rel.parts
+            if not parts or parts[0] not in _LAYER_DIRS:
+                continue
+            expected_dir = parts[0]
+
+            for mark in item.iter_markers("layer"):
+                if mark.args and mark.args[0] != expected_dir:
+                    warnings.warn(
+                        f"Layer marker mismatch: {item.nodeid} has layer('{mark.args[0]}') "
+                        f"but lives in tests/{expected_dir}/",
+                        stacklevel=1,
+                    )
+
+    # Feature gate pass — orthogonal to layer/size, runs on every worker
+    _test_features_env = os.environ.get("AUTOSKILLIT_TEST_FEATURES")
+    for item in items:
+        marker = item.get_closest_marker("feature")
+        if marker and marker.args:
+            feature_name = marker.args[0]
+            if not isinstance(feature_name, str):
+                warnings.warn(
+                    f"pytest.mark.feature() received a non-string argument {feature_name!r} "
+                    f"on {item.nodeid}; marker will be ignored.",
+                    stacklevel=1,
+                )
+                continue
+            if not _is_test_feature_enabled(feature_name, env_val=_test_features_env):
+                env_display = _test_features_env or ""
+                item.add_marker(
+                    pytest.mark.skip(
+                        reason=(
+                            f"feature '{feature_name}' disabled"
+                            f" (AUTOSKILLIT_TEST_FEATURES='{env_display}'"
+                            f" does not include '{feature_name}')"
+                        )
+                    )
+                )
+
+    scope: set[_Path] | None = config.stash.get(_scope_key, None)
+    if scope is None:
+        return
+
+    try:
+        root = config.rootpath
+        scope_abs: set[_Path] = set()
+        for p in scope:
+            scope_abs.add(p if p.is_absolute() else root / p)
+
+        selected: list[pytest.Item] = []
+        deselected: list[pytest.Item] = []
+
+        for item in items:
+            item_path = item.path
+            matched = False
+            for sp in scope_abs:
+                if sp.is_file():
+                    if item_path == sp:
+                        matched = True
+                        break
+                else:
+                    try:
+                        item_path.relative_to(sp)
+                        matched = True
+                        break
+                    except ValueError:
+                        continue
+            if matched:
+                selected.append(item)
+            else:
+                deselected.append(item)
+
+        if deselected:
+            config.hook.pytest_deselected(items=deselected)
+            items[:] = selected
+            warnings.warn(
+                f"Test filter: {len(selected)} selected, {len(deselected)} deselected "
+                f"({len(scope)} scope paths)",
+                stacklevel=1,
+            )
+
+        config.stash[_selected_count_key] = len(items)
+        config.stash[_deselected_count_key] = len(deselected)
+
+    except Exception as exc:
+        warnings.warn(
+            f"Test filter deselection failed, running all tests: {exc}",
+            stacklevel=1,
+        )
+
+    # --- Size-based deselection (aggressive mode only) ---
+    filter_mode = config.stash.get(_filter_mode_key, None)
+    if filter_mode == "aggressive":
+        _SIZE_MARKERS = {"small", "medium", "large"}
+        size_selected: list[pytest.Item] = []
+        size_deselected: list[pytest.Item] = []
+
+        for item in items:
+            size_marks = [m.name for m in item.iter_markers() if m.name in _SIZE_MARKERS]
+            effective_size = size_marks[0] if size_marks else "large"
+            if effective_size in ("small", "medium"):
+                size_selected.append(item)
+            else:
+                size_deselected.append(item)
+
+        if size_deselected:
+            config.hook.pytest_deselected(items=size_deselected)
+            items[:] = size_selected
+            warnings.warn(
+                f"Size filter (aggressive): {len(size_selected)} selected, "
+                f"{len(size_deselected)} large/unannotated deselected",
+                stacklevel=1,
+            )
+            prev_deselected = config.stash.get(_deselected_count_key, None) or 0
+            config.stash[_selected_count_key] = len(size_selected)
+            config.stash[_deselected_count_key] = prev_deselected + len(size_deselected)
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Write filter stats sidecar for DefaultTestRunner consumption."""
+    if hasattr(session.config, "workerinput"):
+        # xdist worker: propagate counts to controller via workeroutput IPC channel.
+        # config.stash is process-local; the controller never sees stash writes from
+        # workers, so we must transfer the counts explicitly here.
+        session.config.workeroutput["filter_selected"] = session.config.stash.get(
+            _selected_count_key, None
+        )
+        session.config.workeroutput["filter_deselected"] = session.config.stash.get(
+            _deselected_count_key, None
+        )
+        return
+    out_path = os.environ.get("AUTOSKILLIT_FILTER_STATS_FILE")
+    if not out_path:
+        return
+    filter_mode = session.config.stash.get(_filter_mode_key, None)
+    selected = session.config.stash.get(_selected_count_key, None)
+    deselected = session.config.stash.get(_deselected_count_key, None)
+    # Under xdist the controller never runs pytest_collection_modifyitems, so the
+    # stash keys are None there. Fall back to counts aggregated by pytest_testnodedown.
+    if selected is None and _worker_filter_counts:
+        selected = _worker_filter_counts.get("selected")
+    if deselected is None and _worker_filter_counts:
+        deselected = _worker_filter_counts.get("deselected")
+    if filter_mode is None:
+        return
+    import json
+
+    full_run_reason = session.config.stash.get(_full_run_reason_key, None)
+    _Path(out_path).write_text(
+        json.dumps(
+            {
+                "filter_mode": filter_mode,
+                "tests_selected": selected,
+                "tests_deselected": deselected,
+                "full_run_reason": full_run_reason,
+            }
+        )
+    )
+
+
+@pytest.hookimpl(optionalhook=True)
+def pytest_testnodedown(node, error):
+    """Aggregate filter counts from the first xdist worker that reports.
+
+    Called on the controller process by xdist after each worker finishes.
+    We capture the first worker that reports both counts as non-None; all workers
+    see the same test set under ``--dist load`` (collection and filtering happen
+    per-worker before distribution), so any single worker's counts are
+    representative of the full session.  Note: this assumption only holds under
+    ``--dist load``; under ``--dist loadscope`` or ``--dist loadfile`` different
+    workers process different subsets and counts may diverge.
+    """
+    if _worker_filter_counts:
+        return  # already captured from the first reporting worker
+    wo = getattr(node, "workeroutput", {})
+    selected = wo.get("filter_selected")
+    deselected = wo.get("filter_deselected")
+    if selected is not None and deselected is not None:
+        _worker_filter_counts["selected"] = selected
+        _worker_filter_counts["deselected"] = deselected

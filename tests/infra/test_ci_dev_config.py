@@ -48,6 +48,25 @@ class TestPreCommitConfig:
             "test_architecture.py relies on this rule being enforced by ruff at pre-commit time"
         )
 
+    def test_sub_claude_md_hook_present(self):
+        """pre-commit config must include a sub-CLAUDE.md completeness check hook.
+
+        Without this, agents can commit new .py files without updating the
+        directory's CLAUDE.md file table, causing CI test failures.
+        """
+        config = yaml.safe_load(PRECOMMIT_CONFIG.read_text())
+        hooks = [hook for repo in config.get("repos", []) for hook in repo.get("hooks", [])]
+        sub_claude_hooks = [h for h in hooks if "check_sub_claude_md" in h.get("entry", "")]
+        assert sub_claude_hooks, (
+            "Missing 'check-sub-claude-md' hook in .pre-commit-config.yaml — "
+            "add it to catch sub-CLAUDE.md coverage gaps before CI"
+        )
+        hook = sub_claude_hooks[0]
+        assert hook.get("pass_filenames") is False, (
+            "check-sub-claude-md hook must use pass_filenames: false — "
+            "the script does its own filesystem scan"
+        )
+
 
 class TestCIWorkflow:
     def test_lockfile_check_present_in_workflow(self):
@@ -123,14 +142,16 @@ class TestCIWorkflow:
         )
 
     def test_setup_uv_action_has_version_pin(self):
-        """All setup-uv action usages must specify a uv-version pin.
+        """All setup-uv action usages must specify a version pin.
 
-        Without uv-version, astral-sh/setup-uv calls the GitHub API to resolve the
+        Without version, astral-sh/setup-uv calls the GitHub API to resolve the
         latest release on every cache miss. On macOS runners, cache misses are frequent
         (the cache key includes the Python version), causing network timeout failures
         before any uv command runs.
 
-        If this test fails, add 'uv-version: "X.Y.Z"' to all setup-uv steps in tests.yml.
+        If this test fails, add 'version: "X.Y.Z"' to all setup-uv steps in tests.yml.
+        Note: the correct input parameter is 'version', not 'uv-version' — 'uv-version'
+        is an output of the action and is silently ignored as an input.
         """
         workflow = yaml.safe_load(CI_WORKFLOW.read_text())
         for job_name, job in workflow.get("jobs", {}).items():
@@ -138,9 +159,9 @@ class TestCIWorkflow:
                 uses = step.get("uses", "")
                 if "setup-uv" in uses:
                     with_block = step.get("with", {}) or {}
-                    assert "uv-version" in with_block, (
-                        f"CI job '{job_name}' uses {uses!r} without a uv-version pin — "
-                        "add 'uv-version: \"X.Y.Z\"' to prevent GitHub API network failures"
+                    assert "version" in with_block, (
+                        f"CI job '{job_name}' uses {uses!r} without a version pin — "
+                        "add 'version: \"X.Y.Z\"' to prevent GitHub API network failures"
                         " on macOS runner cache misses"
                     )
 
@@ -165,24 +186,24 @@ class TestCIWorkflow:
                         " from minor releases"
                     )
 
-    def test_ci_push_trigger_excludes_integration(self) -> None:
-        """Push trigger must NOT include integration — PRs from integration already
+    def test_ci_push_trigger_excludes_develop(self) -> None:
+        """Push trigger must NOT include develop — PRs from develop already
         get CI via pull_request trigger, and including it in push causes duplicate checks."""
         workflow = yaml.safe_load(CI_WORKFLOW.read_text())
         # PyYAML parses the YAML 'on:' key as Python True (boolean)
         triggers = workflow.get(True, workflow.get("on", {}))
         push_branches = triggers["push"]["branches"]
-        assert "integration" not in push_branches, (
-            "integration must not be in push branches — "
-            "it causes duplicate CI checks when a PR is open from integration"
+        assert "develop" not in push_branches, (
+            "develop must not be in push branches — "
+            "it causes duplicate CI checks when a PR is open from develop"
         )
 
-    def test_ci_pull_request_trigger_includes_integration(self) -> None:
-        """PR trigger must include integration so PRs targeting it get CI."""
+    def test_ci_pull_request_trigger_includes_develop(self) -> None:
+        """PR trigger must include develop so PRs targeting it get CI."""
         workflow = yaml.safe_load(CI_WORKFLOW.read_text())
         triggers = workflow.get(True, workflow.get("on", {}))
         pr_branches = triggers["pull_request"]["branches"]
-        assert "integration" in pr_branches, "CI must trigger on PRs targeting integration branch"
+        assert "develop" in pr_branches, "CI must trigger on PRs targeting develop branch"
 
     def test_ci_preflight_outputs_os_matrix(self) -> None:
         """preflight job must export an os-matrix output computed from base_ref."""

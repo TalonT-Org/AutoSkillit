@@ -19,6 +19,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
+
 
 def test_cook_session_ignores_ide_lock_file(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -36,15 +38,15 @@ def test_cook_session_ignores_ide_lock_file(
     monkeypatch.setenv("VSCODE_GIT_ASKPASS_MAIN", "/fake/vscode")
     monkeypatch.setenv("CLAUDE_CODE_IDE_HOST_OVERRIDE", "localhost")
 
-    from autoskillit.cli.app import _launch_cook_session
+    from autoskillit.cli.session._session_launch import _launch_cook_session
 
     with (
         patch("shutil.which", return_value="/usr/bin/claude"),
+        patch("autoskillit.cli._init_helpers._is_plugin_installed", return_value=False),
         patch(
-            "autoskillit.cli.app.subprocess.run",
+            "autoskillit.cli.session._session_launch.subprocess.run",
             return_value=MagicMock(returncode=0),
         ) as mock_run,
-        patch("autoskillit.cli.app.terminal_guard"),
     ):
         _launch_cook_session("system prompt", initial_message="hello")
 

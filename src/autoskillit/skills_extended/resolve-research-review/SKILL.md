@@ -44,6 +44,7 @@ Bounded by `retries: 2` — on exhaustion routes to `research_complete`.
 - Delete or discard the working directory on failure
 - Modify tests to suppress failures introduced by reviewer fixes
 - Use file-path-segment grouping — research comments are grouped by **dimension**, not by file path
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Find the PR by feature branch at invocation time (not a hardcoded number)
@@ -141,6 +142,11 @@ From **inline comments**, extract per comment:
 - `diff_hunk` — surrounding context
 - `id` — the comment's REST database ID
 - `thread_node_id` — look up `comment_id_to_thread_id.get(id)`
+
+**File-level comment guard:** If `line` is null (file-level comment posted by
+review-research-pr), skip this finding entirely — file-level comments have no code
+anchor and cannot be resolved by code changes. Record: `(path, null, reason="file-level
+comment — no line anchor")`. Do not add its `thread_node_id` to `addressed_thread_ids`.
 
 **Classify each finding by severity** (same as resolve-review):
 - `critical` — body contains: "must", "critical", "security", "data loss", "wrong",

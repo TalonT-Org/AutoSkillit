@@ -29,6 +29,7 @@ Audit the codebase for internal cohesion: how well components integrate and main
 - Modify any source code files
 - Update an existing report — always generate new
 - Duplicate findings that belong in audit-arch (rule violations)
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use subagents for parallel exploration (one per cohesion dimension)
@@ -368,12 +369,6 @@ Flag duplicates (same name in different agents).
 ---
 
 ## Audit Workflow
-
-### Step 0: Initialize Code Index
-
-```
-mcp__code-index__set_project_path(path="{PROJECT_ROOT}")
-```
 
 ### Step 1: Launch Parallel Subagents
 

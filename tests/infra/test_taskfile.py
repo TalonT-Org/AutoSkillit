@@ -54,12 +54,12 @@ class TestTaskfile:
         data = self._load()
         assert "install-dev" in data["tasks"], "install-dev task missing from Taskfile.yml"
 
-    def test_install_dev_task_uses_integration_branch(self):
-        """TF-7 — install-dev installs from @integration and runs autoskillit install."""
+    def test_install_dev_task_uses_develop_branch(self):
+        """TF-7 — install-dev installs from @develop and runs autoskillit install."""
         data = self._load()
         task = data["tasks"]["install-dev"]
         cmds = " ".join(str(c) for c in task.get("cmds", []))
-        assert "@integration" in cmds, "install-dev must install from @integration branch"
+        assert "@develop" in cmds, "install-dev must install from @develop branch"
         assert "autoskillit install" in cmds, "install-dev must run autoskillit install after uv"
 
     def test_vendor_mermaid_task_exists(self) -> None:
@@ -76,6 +76,33 @@ class TestTaskfile:
         assert "assets/mermaid/mermaid.min.js" in cmds, (
             "vendor-mermaid must write to src/autoskillit/assets/mermaid/mermaid.min.js"
         )
+
+    def test_test_filtered_task_exists(self):
+        """TF-8 — test-filtered task exists in Taskfile.yml."""
+        data = self._load()
+        assert "test-filtered" in data["tasks"], "test-filtered task missing from Taskfile.yml"
+
+    def test_test_filtered_delegates_to_test_check(self):
+        """TF-9 — test-filtered delegates to test-check."""
+        data = self._load()
+        cmds = " ".join(str(c) for c in data["tasks"]["test-filtered"].get("cmds", []))
+        assert "test-check" in cmds, "test-filtered must delegate to test-check"
+
+    def test_test_filtered_sets_filter_env_default(self):
+        """TF-10 — test-filtered defaults AUTOSKILLIT_TEST_FILTER to conservative."""
+        data = self._load()
+        cmds = " ".join(str(c) for c in data["tasks"]["test-filtered"].get("cmds", []))
+        assert "AUTOSKILLIT_TEST_FILTER" in cmds, (
+            "test-filtered must reference AUTOSKILLIT_TEST_FILTER"
+        )
+        assert "conservative" in cmds, (
+            "test-filtered must default AUTOSKILLIT_TEST_FILTER to conservative"
+        )
+
+    def test_coverage_audit_task_exists(self):
+        """TF-11 — coverage-audit task exists in Taskfile.yml."""
+        data = self._load()
+        assert "coverage-audit" in data["tasks"], "coverage-audit task missing from Taskfile.yml"
 
 
 def test_taskfile_pytest_paths_exist() -> None:

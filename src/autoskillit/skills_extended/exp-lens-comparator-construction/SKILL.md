@@ -44,6 +44,7 @@ hooks:
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for themselves
 - Accept at face value that baselines received symmetric treatment
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-comparator-construction/`
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Build a fairness matrix covering all treatment-vs-comparator pairs

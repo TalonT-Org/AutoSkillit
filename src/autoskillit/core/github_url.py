@@ -1,6 +1,6 @@
 """Canonical GitHub remote URL parser.
 
-L0 module: stdlib only, zero autoskillit imports.
+IL-0 module: stdlib only, zero autoskillit imports.
 """
 
 from __future__ import annotations

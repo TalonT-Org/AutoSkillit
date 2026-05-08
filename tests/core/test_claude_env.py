@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from types import MappingProxyType
 
 import pytest
@@ -12,6 +13,9 @@ from autoskillit.core._claude_env import (
     IDE_ENV_DENYLIST,
     IDE_ENV_PREFIX_DENYLIST,
 )
+from autoskillit.core.types._type_constants import AUTOSKILLIT_PRIVATE_ENV_VARS
+
+pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
 def test_build_claude_env_strips_sse_port() -> None:
@@ -130,3 +134,32 @@ def test_build_claude_env_strips_max_mcp_output_tokens() -> None:
     result = build_claude_env(base={"MAX_MCP_OUTPUT_TOKENS": "99999", "HOME": "/tmp"})
     assert "MAX_MCP_OUTPUT_TOKENS" not in result
     assert result["HOME"] == "/tmp"
+
+
+@pytest.mark.parametrize("var", sorted(AUTOSKILLIT_PRIVATE_ENV_VARS))
+def test_build_claude_env_scrubs_autoskillit_private_vars(var: str) -> None:
+    result = build_claude_env(base={var: "leaked", "HOME": "/tmp"})
+    assert var not in result
+    assert result["HOME"] == "/tmp"
+
+
+def test_build_claude_env_extras_override_scrubbed_private_vars() -> None:
+    result = build_claude_env(
+        base={"AUTOSKILLIT_SESSION_TYPE": "franchise", "HOME": "/tmp"},
+        extras={"AUTOSKILLIT_SESSION_TYPE": "skill"},
+    )
+    assert result["AUTOSKILLIT_SESSION_TYPE"] == "skill"
+
+
+def test_build_claude_env_subprocess_compatible() -> None:
+    """build_claude_env() result must be accepted by subprocess.Popen."""
+    env = build_claude_env()
+    proc = subprocess.Popen(
+        ["echo", "ok"],
+        env=dict(env),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    stdout, _ = proc.communicate(timeout=10)
+    assert proc.returncode == 0
+    assert b"ok" in stdout

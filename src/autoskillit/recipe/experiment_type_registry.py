@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from autoskillit.core import get_logger, load_yaml, pkg_root
+from autoskillit.recipe._registry_utils import _MISSING_MTIME, dir_mtime
 
-_log = get_logger(__name__)
+logger = get_logger(__name__)
 
 BUNDLED_EXPERIMENT_TYPES_DIR: Path = pkg_root() / "recipes" / "experiment-types"
 
@@ -22,16 +24,47 @@ class ExperimentTypeSpec:
     applicable_lenses: dict[str, str | None]
     red_team_focus: dict[str, str]
     l1_severity: dict[str, str]
+    schema_version: str = ""
+    priority: int = 999
+    is_fallback: bool = False
+    dimension_weight_rationale: dict[str, str] = field(default_factory=dict)
+
+
+def _parse_int_field(data: dict, field: str, default: int, source_path: Path) -> int:
+    val = data.get(field, default)
+    try:
+        return int(val)
+    except (ValueError, TypeError) as e:
+        name = data.get("name", "?")
+        raise TypeError(
+            f"Experiment type '{name}' field '{field}' must be an integer: {source_path}"
+        ) from e
+
+
+def _parse_bool_field(data: dict, field: str, default: bool, source_path: Path) -> bool:
+    val = data.get(field, default)
+    if not isinstance(val, bool):
+        name = data.get("name", "?")
+        raise TypeError(
+            f"Experiment type '{name}' field '{field}' must be a boolean: {source_path}"
+        )
+    return val
 
 
 def _parse_experiment_type(data: dict, source_path: Path) -> ExperimentTypeSpec:
     if "name" not in data:
         raise ValueError(f"Experiment type YAML missing 'name' field: {source_path}")
-    for field in ("dimension_weights", "applicable_lenses", "red_team_focus", "l1_severity"):
-        val = data.get(field)
+    for f in (
+        "dimension_weights",
+        "applicable_lenses",
+        "red_team_focus",
+        "l1_severity",
+        "dimension_weight_rationale",
+    ):
+        val = data.get(f)
         if val is not None and not isinstance(val, dict):
             raise TypeError(
-                f"Experiment type '{data['name']}' field '{field}' must be a dict, "
+                f"Experiment type '{data['name']}' field '{f}' must be a dict, "
                 f"got {type(val).__name__}: {source_path}"
             )
     return ExperimentTypeSpec(
@@ -41,6 +74,10 @@ def _parse_experiment_type(data: dict, source_path: Path) -> ExperimentTypeSpec:
         applicable_lenses=dict(data.get("applicable_lenses", {})),
         red_team_focus=dict(data.get("red_team_focus", {})),
         l1_severity=dict(data.get("l1_severity", {})),
+        schema_version=str(data.get("schema_version", "")),
+        priority=_parse_int_field(data, "priority", 999, source_path),
+        is_fallback=_parse_bool_field(data, "is_fallback", False, source_path),
+        dimension_weight_rationale=dict(data.get("dimension_weight_rationale", {})),
     )
 
 
@@ -55,18 +92,32 @@ def _load_types_from_dir(directory: Path) -> dict[str, ExperimentTypeSpec]:
                 spec = _parse_experiment_type(data, path)
                 result[spec.name] = spec
         except Exception:
-            _log.warning("Skipping malformed experiment type file: %s", path, exc_info=True)
+            logger.warning("Skipping malformed experiment type file: %s", path, exc_info=True)
     return result
+
+
+def parse_experiment_type(data: dict[str, Any], source_path: Path) -> ExperimentTypeSpec:
+    return _parse_experiment_type(data, source_path)
+
+
+def load_types_from_dir(directory: Path) -> dict[str, ExperimentTypeSpec]:
+    return _load_types_from_dir(directory)
+
+
+_exp_types_cache: dict[tuple[str | None, float, float], list[ExperimentTypeSpec]] = {}
 
 
 def load_all_experiment_types(
     project_dir: Path | None = None,
-) -> dict[str, ExperimentTypeSpec]:
+) -> list[ExperimentTypeSpec]:
     """Load experiment types: bundled types merged with user-defined overrides.
 
     User-defined types with the same name as a bundled type replace the bundled
     type entirely — no field merging. User-defined types with a new name are added
     alongside bundled types.
+
+    The returned list is sorted by ``(priority, name)`` with ``is_fallback=True``
+    entries always appended last.
 
     Args:
         project_dir: Project root containing optional user-defined overrides at
@@ -74,13 +125,68 @@ def load_all_experiment_types(
             are returned.
 
     Returns:
-        Mapping of experiment type name to ``ExperimentTypeSpec``.
+        Sorted list of ``ExperimentTypeSpec``, fallback entries last.
     """
+    bundled_mt = dir_mtime(BUNDLED_EXPERIMENT_TYPES_DIR)
+    if project_dir is not None:
+        user_dir = Path(project_dir) / ".autoskillit" / "experiment-types"
+        user_mt = dir_mtime(user_dir)
+    else:
+        user_mt = _MISSING_MTIME
+    key: tuple[str | None, float, float] = (
+        str(project_dir) if project_dir is not None else None,
+        bundled_mt,
+        user_mt,
+    )
+    cached = _exp_types_cache.get(key)
+    if cached is not None:
+        return list(cached)
+
     types = _load_types_from_dir(BUNDLED_EXPERIMENT_TYPES_DIR)
 
     if project_dir is not None:
         user_dir = Path(project_dir) / ".autoskillit" / "experiment-types"
         user_types = _load_types_from_dir(user_dir)
+        for spec in user_types.values():
+            if spec.schema_version and spec.schema_version != "1.0":
+                logger.warning(
+                    "User experiment type has schema_version mismatch; loading continues",
+                    type_name=spec.name,
+                    schema_version=spec.schema_version,
+                    expected_schema_version="1.0",
+                )
         types.update(user_types)
 
-    return types
+    non_fallback = [s for s in types.values() if not s.is_fallback]
+    fallback = [s for s in types.values() if s.is_fallback]
+    non_fallback.sort(key=lambda s: (s.priority, s.name))
+    fallback.sort(key=lambda s: (s.priority, s.name))
+    result = non_fallback + fallback
+    _exp_types_cache[key] = result
+    return list(result)
+
+
+def get_experiment_type_by_name(
+    name: str,
+    project_dir: Path | None = None,
+) -> ExperimentTypeSpec | None:
+    """Look up a single experiment type by name.
+
+    Returns the matching spec or None if not found.
+    """
+    for spec in load_all_experiment_types(project_dir):
+        if spec.name == name:
+            return spec
+    return None
+
+
+_SILENT_THRESHOLD = 6
+
+
+def is_silent_type(spec: ExperimentTypeSpec) -> bool:
+    """Return True when >=6 of 8 dimension_weights are 'S' (suppressed).
+
+    Silent experiment types lack dimensional signal strength for opinionated
+    design-review scoring. See docs/research/silent-type-convention.md.
+    """
+    return sum(1 for v in spec.dimension_weights.values() if v == "S") >= _SILENT_THRESHOLD

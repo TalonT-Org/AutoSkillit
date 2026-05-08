@@ -43,6 +43,7 @@ best available plan.
 - Exit non-zero — GO, REVISE, and STOP are all normal outcomes (exit 0 in all cases)
 - Include code snippets, shell commands, or specific tool invocations in findings or revision guidance — findings describe gaps and risks, not implementation instructions
 - Prescribe HOW to fix an issue — findings must describe WHAT is lacking or at risk; the fix is the plan author's responsibility
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
@@ -77,12 +78,12 @@ absent. The recipe routes to `on_context_limit`, abandoning the partial review.
 1. Create `{{AUTOSKILLIT_TEMP}}/review-design/` if absent.
 2. Extract `experiment_plan_path` from arguments (first path-like token starting with `/`,
    `./`, or `.autoskillit/`).
-   **Error handling:** If no path-like token is found in the arguments, emit
-   `verdict = STOP` with message "No experiment_plan_path provided" and exit 0 (per
+   **Error handling:** When no path-like token is present in the arguments, emit
+   `verdict = STOP` with message "No experiment_plan_path provided" and return (per
    the NEVER exit-non-zero constraint).
 3. Read the plan file.
    **Error handling:** If the file does not exist or is unreadable at the resolved path,
-   emit `verdict = STOP` with message "Plan file not found: {path}" and exit 0.
+   emit `verdict = STOP` with message "Plan file not found: {path}" and return.
 4. **Load the experiment type registry:**
    a. Locate bundled types dir: run
       `python -c "from autoskillit.core import pkg_root; print(pkg_root() / 'recipes' / 'experiment-types')"`
@@ -100,7 +101,7 @@ absent. The recipe routes to `on_context_limit`, abandoning the partial review.
      (zero LLM tokens). Return present fields and note which are missing.
      Record `source: frontmatter` for each extracted field.
      **Error handling:** If the YAML between `---` delimiters is malformed, treat all
-     fields as missing and fall through to Level 2 for all fields (graceful degradation).
+     fields as missing and fall through to Level 2 for all fields (fallback handling).
    - **Level 2 (LLM extraction)**: For each missing field, launch a targeted LLM
      extraction subagent against the corresponding prose section. All extractions are
      independent and run in parallel. Record `source: extracted` for each field from
@@ -156,6 +157,57 @@ Each key is a dimension name; each value is one of weight=H (High), weight=M (Me
 or weight=S (SILENT — dimension not spawned, not mentioned in output). Pass the full
 `dimension_weights` dict to the triage subagent so it can return the complete weight
 matrix for this plan.
+
+### Silent Type Handling (after Step 1)
+
+After Step 1 classification, check whether the experiment type is "silent" — an
+experiment type where quantitative-audit dimension scoring does not apply.
+
+**Detection rule:** An experiment type is silent when **>=6 of 8 `dimension_weights`**
+are equal to `S`. Use `is_silent_type(spec)` from `experiment_type_registry` (or count
+the `S` values directly from the loaded registry entry).
+
+**Reference:** `docs/research/silent-type-convention.md` defines the shared convention
+consumed by both review-design (this skill) and vis-lens-methodology-norms (#846).
+
+**When `is_silent_type` returns True:**
+
+1. **Skip Steps 2-7 entirely** — do not launch L1, L2, L3, L4, or red-team subagents.
+2. **Emit verdict = GO** with `requires_decision: false`.
+3. **Write evaluation_dashboard** with a "Scope Advisory" section containing:
+
+   ```yaml
+   verdict: GO
+   advisory_context:
+     subject_kind: experiment_type
+     subject_name: {experiment_type}
+     reasoning: "Quantitative audit framework does not apply to {experiment_type}. Design rigor is assessed via domain-appropriate criteria (e.g., trustworthiness, transferability, dependability, confirmability for qualitative research)."
+     reference_framework: "SRQR / COREQ"
+   requires_decision: false
+   ```
+
+4. **Write machine-readable YAML summary** in the dashboard:
+
+   ```yaml
+   # --- review-design machine summary ---
+   verdict: GO
+   experiment_type: {type}
+   critical_count: 0
+   warning_count: 0
+   blocking_count: 0
+   required_count: 0
+   advisory_count: 1
+   red_team_count: 0
+   active_dimensions: 0
+   warning_threshold: 0
+   ```
+
+5. **Proceed to Step 8** (Emit Output Tokens) — the recipe routes to `plan_visualization`.
+
+The advisory is appended to the evaluation dashboard file (which is later copied to
+`research/{slug}/audit/design-review-dashboard.md` by `create_worktree.sh`).
+
+**When `is_silent_type` returns False:** Continue with the standard path (Steps 2-7).
 
 ### Subagent Evaluation Scope (applies to ALL dimension subagents)
 
@@ -218,7 +270,7 @@ If ANY Level 1 subagent returns a finding with `"severity": "critical"`:
 - Collect these as `stop_triggers`
 - Do not proceed to Level 2, 3, or 4 analysis
 - Do not start the red-team agent
-- Skip directly to Step 7 (Synthesis) with only L1 findings
+- Proceed directly to Step 7 (Synthesis) with only L1 findings
 - The verdict logic will produce STOP; halt and emit tokens
 
 **Subagent parse failure:** If a Level 1 subagent returns unparseable output (malformed
@@ -459,6 +511,22 @@ One synthesis pass (no subagent — orchestrator synthesizes directly):
 5. **Write `evaluation_dashboard_{slug}_{YYYY-MM-DD_HHMMSS}.md`** — always written.
    Must include:
    - Verdict banner and classification summary
+   - **Dimension Rationale** subsection — renders a per-dimension rationale table sourced
+     from `spec.dimension_weight_rationale` (loaded in Step 0 registry). Table format:
+     ```markdown
+     ## Dimension Rationale (why these weights apply to {experiment_type})
+
+     | Dimension | Weight | Rationale |
+     |---|---|---|
+     | {dim} | {weight} | {rationale from spec.dimension_weight_rationale[dim]} |
+     ```
+     Include ALL non-SILENT dimensions (H, M, L). For each dimension:
+     - If `dimension_weight_rationale[dim]` exists and is non-empty: render the rationale string
+     - If no rationale entry exists (legacy types with empty `dimension_weight_rationale`):
+       render the Weight column only, leave Rationale blank
+     Omit SILENT (S) dimensions from the table (consistent with finding-count suppression).
+     If `dimension_weight_rationale` is entirely empty (no entries for any dimension),
+     omit the Dimension Rationale subsection entirely — do not render an empty table.
    - Dimension scorecard table (dimension → weight → findings count → severity summary)
    - Adversarial findings section (red-team findings, each marked `requires_decision: true`)
    - **Cannot Assess** section with at least 2 items (dimensions where evaluation was
@@ -502,9 +570,12 @@ Emit these lines as your final output:
 ```
 verdict = GO|REVISE|STOP
 experiment_type = {experiment_type}
+classification_timestamp = {ISO 8601 UTC timestamp}
 evaluation_dashboard = /absolute/path/{{AUTOSKILLIT_TEMP}}/review-design/evaluation_dashboard_{slug}_{YYYY-MM-DD_HHMMSS}.md
 revision_guidance = /absolute/path/{{AUTOSKILLIT_TEMP}}/review-design/revision_guidance_{slug}_{YYYY-MM-DD_HHMMSS}.md
 ```
+
+`classification_timestamp` is the UTC timestamp (e.g., `2026-04-13T15:32:00Z`) at the moment the experiment-type classification is finalized, before writing the evaluation dashboard.
 
 `revision_guidance` line is emitted ONLY when verdict = REVISE. When verdict is GO or STOP,
 omit the `revision_guidance` line entirely.

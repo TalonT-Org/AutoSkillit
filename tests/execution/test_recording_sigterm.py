@@ -15,8 +15,10 @@ import sys
 
 import pytest
 
-from autoskillit.core.readiness import readiness_sentinel_path
+from autoskillit.core.runtime.readiness import readiness_sentinel_path
 from tests._subprocess_ready import wait_for_subprocess_ready
+
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 
 @pytest.mark.integration

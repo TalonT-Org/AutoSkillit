@@ -13,7 +13,7 @@ VIS_LENS_SLUGS = [
     "chart-select",
     "uncertainty",
     "antipattern",
-    "domain-norms",
+    "methodology-norms",
     "always-on",
     "multi-compare",
     "temporal",
@@ -108,3 +108,17 @@ def test_frontmatter_activate_deps(slug: str) -> None:
     assert fm.get("activate_deps") == ["mermaid"], (
         f"vis-lens-{slug} frontmatter must have activate_deps: [mermaid]"
     )
+
+
+def test_methodology_norms_documents_tradition_slug() -> None:
+    """vis-lens-methodology-norms must document tradition_slug in context file handling."""
+    text = _read("methodology-norms")
+    assert "tradition_slug" in text
+
+
+def test_methodology_norms_documents_two_stage_matching() -> None:
+    """vis-lens-methodology-norms must document Stage A and Stage B two-stage matching."""
+    text = _read("methodology-norms")
+    assert "Stage A" in text or "stage A" in text
+    assert "Stage B" in text or "stage B" in text
+    assert "venue_specific_appendices" in text or "venue appendix" in text

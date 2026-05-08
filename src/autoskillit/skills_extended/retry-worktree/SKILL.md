@@ -1,6 +1,6 @@
 ---
 name: retry-worktree
-description: Continue implementing a plan in an existing git worktree after context exhaustion. Use when a previous implement-worktree session hit context limits. Takes plan path and worktree path as arguments.
+description: Worktree retry executor. ALWAYS invoke this skill when instructed to continue or retry an implementation in an existing worktree. Do not resume editing files directly — use this skill first to load the retry workflow.
 hooks:
   PreToolUse:
     - matcher: "*"
@@ -42,6 +42,7 @@ Continue implementing a plan in an **existing** git worktree. This skill is used
 - Re-run tests just to see failures — grep the saved output file instead
 - Pipe test output through `tail`, `head`, or other truncation commands — `tail -N` buffers the entire stream and produces no output if the process is killed before EOF
 - Default to `main` as the base branch — always discover it from git's upstream structure or the explicit base-branch store file
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use the provided worktree path (do NOT create a new one)
@@ -50,6 +51,7 @@ Continue implementing a plan in an **existing** git worktree. This skill is used
 - Continue from where the previous session left off
 - Run the project's test suite from the worktree directory
 - Rebase onto base branch before completion (ready for squash-and-merge)
+- **Read files fully**: When reading a file to understand it in full, read it in a single call without a `limit` parameter. Do not paginate files with sequential offset reads — read once completely. Use `limit`/`offset` only for targeted section reads of files you have already read in full.
 
 ## Context Limit Behavior
 
@@ -111,17 +113,16 @@ if [ -z "$BASE_BRANCH" ]; then
     # Fallback: read explicit file store written by implement-worktree-no-merge
     MAIN_GIT_DIR=$(git rev-parse --git-common-dir)
     MAIN_REPO_ROOT=$(dirname "${MAIN_GIT_DIR}")
-    STORE_FILE="${MAIN_REPO_ROOT}/{{AUTOSKILLIT_TEMP}}/worktrees/${CURRENT_BRANCH}/base-branch"
+    WORKTREE_DIR_NAME=$(basename "$(pwd)")
+    STORE_FILE="${MAIN_REPO_ROOT}/{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_DIR_NAME}/base-branch"
     BASE_BRANCH=$(cat "${STORE_FILE}" 2>/dev/null)
 fi
 
 if [ -z "$BASE_BRANCH" ]; then
-    echo "ERROR: Cannot determine base branch from git structure."
-    echo "Both the upstream tracking ref and the explicit base-branch file at"
-    echo "{{AUTOSKILLIT_TEMP}}/worktrees/${CURRENT_BRANCH}/base-branch are missing."
-    echo "Ensure the worktree was created by implement-worktree-no-merge,"
-    echo "which writes both stores at worktree creation time."
-    exit 1
+    # Last resort: project-level default from config (always available)
+    BASE_BRANCH="{{DEFAULT_BASE_BRANCH}}"
+    echo "WARNING: Could not determine base branch from git upstream or sidecar file."
+    echo "Falling back to project default: ${BASE_BRANCH}"
 fi
 ```
 
@@ -138,16 +139,6 @@ Then assess what has been implemented:
    - Which phase is partially complete
    - Which phases haven't started
 
-### Step 1.5: Initialize Code Index for Worktree
-
-Set the MCP code-index project path to the worktree so code searches operate on the correct files:
-
-```
-mcp__code-index__set_project_path(path="{WORKTREE_PATH}")
-```
-
-This must happen before any code-index searches or Explore subagents.
-
 ### Step 2: Targeted Exploration (Only If Needed)
 
 Only explore systems related to the **remaining** phases. Do NOT re-explore already-completed work. Use Explore subagents for:
@@ -160,6 +151,9 @@ Only explore systems related to the **remaining** phases. Do NOT re-explore alre
 **All commands must run from `{WORKTREE_PATH}`.** Use absolute paths to avoid CWD drift across Bash tool calls.
 
 Initialize a counter before iterating: `PHASES_IMPLEMENTED=0`
+
+NEVER use AskUserQuestion between phase iterations. Each phase begins immediately
+after the previous phase completes.
 
 For each remaining/incomplete phase, begin implementation immediately (no announcement):
 1. Implement changes
@@ -175,7 +169,10 @@ Run the project's code quality checks and test suite from the worktree.
 
 ```bash
 cd {WORKTREE_PATH} && pre-commit run --all-files
-cd {WORKTREE_PATH} && task test-all
+cd {WORKTREE_PATH} && \
+  AUTOSKILLIT_TEST_FILTER="${AUTOSKILLIT_TEST_FILTER:-conservative}" \
+  AUTOSKILLIT_TEST_BASE_REF="${BASE_BRANCH:-}" \
+  task test-all
 ```
 
 If tests fail, fix the issue and re-run.
@@ -212,16 +209,6 @@ phases_implemented = ${PHASES_IMPLEMENTED}
 
 Where `PHASES_IMPLEMENTED` is the count from Step 3. If Step 3 was skipped entirely
 (all phases already complete), emit `phases_implemented = 0`.
-
-### Step 6.5: Reset Code Index to Original Project (REQUIRED)
-
-After worktree cleanup, reset the MCP code-index project path back to the original project directory:
-
-```
-mcp__code-index__set_project_path(path="{ORIGINAL_PROJECT_PATH}")
-```
-
-Failure to do this leaves code-index pointing at a deleted worktree path, breaking all subsequent code searches.
 
 ## Error Handling
 

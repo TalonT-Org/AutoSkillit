@@ -38,6 +38,7 @@ Do not change any code.
 - Propose bandaid fixes, fallbacks, or direct-only fixes
 - Suggest backward compatibility shims
 - Create files outside `{{AUTOSKILLIT_TEMP}}/rectify/` directory
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use subagents for parallel exploration
@@ -70,30 +71,6 @@ Locate the most recent investigation report in `{{AUTOSKILLIT_TEMP}}/investigate
 exist (e.g., plan file arguments, `{{AUTOSKILLIT_TEMP}}/investigate/` reports, external file references), use
 `Glob` or `ls` to confirm the path exists first. This prevents ENOENT errors that cascade into
 sibling parallel-call cancellations.
-
-### Step 1.5 — Code-Index Initialization (required before any code-index tool call)
-
-Call `set_project_path` with the repo root where this skill was invoked (not a worktree path):
-
-```
-mcp__code-index__set_project_path(path="{PROJECT_ROOT}")
-```
-
-Code-index tools require **project-relative paths**. Always use paths like:
-
-    src/<your_package>/some_module.py
-
-NOT absolute paths like:
-
-    /absolute/path/to/src/<your_package>/some_module.py
-
-> **Note:** Code-index tools (`find_files`, `search_code_advanced`, `get_file_summary`,
-> `get_symbol_body`) are only available when the `code-index` MCP server is configured.
-> If `set_project_path` returns an error, fall back to native `Glob` and `Grep` tools
-> for the same searches — they provide equivalent results without the code-index server.
-
-Agents launched via `run_skill` inherit no code-index state from the parent session — this
-call is mandatory at the start of every headless session that uses code-index tools.
 
 ### Step 2: Deep Exploration with Subagents
 
@@ -173,7 +150,7 @@ After finalizing the plan, determine which architecture lens best illustrates th
 | State Lifecycle | `/autoskillit:arch-lens-state-lifecycle` |
 | Deployment | `/autoskillit:arch-lens-deployment` |
 
-If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, skip the diagram step and proceed without the architectural diagram.
+If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, omit the diagram and proceed without the architectural diagram.
 
 **4d. Create the diagram following the loaded skill's instructions:**
 - Focus on the PROPOSED changes (use `newComponent` class for new elements)

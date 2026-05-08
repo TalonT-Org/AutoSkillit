@@ -7,6 +7,7 @@ REQ-IMP-003: server/tools_*.py imports from at most autoskillit.core and autoski
 REQ-IMP-004: cli/app.py imports from at most autoskillit.core, .config, .pipeline, and .execution.
 REQ-IMP-005: server/git.py only imports autoskillit.core at runtime (TYPE_CHECKING excluded).
 REQ-IMP-006: server/tools_kitchen.py has no direct import of DefaultGateState or pipeline.gate.
+REQ-IMP-010: cli/_init_helpers.py must not import autoskillit.recipe at module level.
 """
 
 import ast
@@ -21,8 +22,10 @@ PACKAGES = frozenset(
         "pipeline",
         "execution",
         "workspace",
+        "planner",
         "recipe",
         "migration",
+        "fleet",
         "config",
         "server",
         "cli",
@@ -126,14 +129,20 @@ def test_req_imp_001_no_cross_package_submodule_imports() -> None:
 # REQ-IMP-003: server/tools_*.py imports only core and pipeline (+ intra-server)
 # ---------------------------------------------------------------------------
 
-TOOLS_FILES = list((SRC / "server").glob("tools_*.py"))
+TOOLS_FILES = list((SRC / "server" / "tools").glob("tools_*.py"))
 
 
 @pytest.mark.parametrize("path", TOOLS_FILES, ids=lambda p: p.name)
 def test_req_imp_003_tools_import_namespace(path: Path) -> None:
     """tools_*.py may import from core, pipeline, config, and server."""
     allowed = frozenset(
-        {"autoskillit.core", "autoskillit.pipeline", "autoskillit.server", "autoskillit.config"}
+        {
+            "autoskillit.core",
+            "autoskillit.pipeline",
+            "autoskillit.server",
+            "autoskillit.config",
+            "autoskillit.fleet",
+        }
     )
     violations: list[str] = []
     for mod, _in_tc in _parse_imports(path):
@@ -198,8 +207,11 @@ def test_req_imp_005_git_only_core_at_runtime() -> None:
     _ALLOWED = frozenset(
         {
             "autoskillit.server._editable_guard",
-            # workspace is L1; git.py delegates worktree removal to the
-            # single L1 implementation rather than inlining subprocess calls.
+            # _subprocess is a same-package helper with no upward layer imports;
+            # git.py delegates timeout result processing to _process_runner_result.
+            "autoskillit.server._subprocess",
+            # workspace is IL-1; git.py delegates worktree removal to the
+            # single IL-1 implementation rather than inlining subprocess calls.
             "autoskillit.workspace",
         }
     )
@@ -223,7 +235,7 @@ def test_req_imp_005_git_only_core_at_runtime() -> None:
 
 def test_req_imp_006_prompts_no_gate_state_import() -> None:
     """server/tools_kitchen.py must not directly import DefaultGateState or pipeline.gate."""
-    path = SRC / "server" / "tools_kitchen.py"
+    path = SRC / "server" / "tools" / "tools_kitchen.py"
     tree = ast.parse(path.read_text())
     violations: list[str] = []
     for node in ast.walk(tree):
@@ -244,7 +256,7 @@ def test_req_imp_007_pretty_output_no_private_recipe_api_import() -> None:
     ListRecipesResult and LoadRecipeResult are re-exported via autoskillit.recipe.__all__.
     Importing from the private recipe._api sub-module bypasses the canonical surface (P14-1).
     """
-    path = SRC / "hooks" / "pretty_output_hook.py"
+    path = SRC / "hooks" / "formatters" / "pretty_output_hook.py"
     for mod, in_tc in _parse_imports(path):
         if in_tc and mod == "autoskillit.recipe._api":
             pytest.fail(
@@ -255,22 +267,29 @@ def test_req_imp_007_pretty_output_no_private_recipe_api_import() -> None:
             )
 
 
-def test_req_imp_008_server_helpers_no_execution_process_import() -> None:
-    """server/helpers.py TYPE_CHECKING must import SubprocessResult from autoskillit.core.
+def test_server_helpers_module_deleted():
+    """helpers.py should be fully removed after extraction."""
+    import importlib
 
-    SubprocessResult originates in core._type_subprocess and is re-exported via
-    autoskillit.core.__all__ (line 201). Importing from execution.process bypasses the
-    canonical L0 surface (P14-3).
-    """
-    path = SRC / "server" / "helpers.py"
-    for mod, in_tc in _parse_imports(path):
-        if in_tc and mod == "autoskillit.execution.process":
-            pytest.fail(
-                "server/helpers.py TYPE_CHECKING must use "
-                "'from autoskillit.core import SubprocessResult' "
-                "instead of 'from autoskillit.execution.process import SubprocessResult' "
-                "(P14-3). SubprocessResult is available via autoskillit.core.__all__."
-            )
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("autoskillit.server.helpers")
+
+
+def test_no_server_helpers_imports_in_src():
+    """Verify zero references to the deleted helpers module in production code."""
+    import subprocess
+
+    result = subprocess.run(
+        ["grep", "-r", "server.helpers", str(SRC.parent)],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode in (0, 1), (
+        f"grep failed with exit code {result.returncode}: {result.stderr}"
+    )
+    assert result.stdout == "", (
+        f"Found references to deleted server.helpers module:\n{result.stdout}"
+    )
 
 
 def test_req_imp_009_session_skills_no_config_settings_import() -> None:
@@ -293,21 +312,22 @@ def test_req_imp_009_session_skills_no_config_settings_import() -> None:
 
 # ---------------------------------------------------------------------------
 # REQ-IMP-007: server/ and cli/ files must not import cross-package sub-modules
-# (Finding 13.3) — extends REQ-IMP-001 coverage to L3 layers
+# (Finding 13.3) — extends REQ-IMP-001 coverage to IL-3 layers
 # ---------------------------------------------------------------------------
 
 
 def test_req_imp_007_server_cli_no_unauthorized_cross_submodule_imports() -> None:
     """REQ-IMP-007: every file in server/ and cli/ must obey the same
-    cross-package submodule rule that REQ-IMP-001 enforces for the L0–L2
+    cross-package submodule rule that REQ-IMP-001 enforces for the IL-0–IL-2
     layers, with a small explicit allowlist:
 
-      server/_factory.py     — Composition Root, may import any layer
-      server/git.py          — REQ-IMP-005 exemption
-      server/tools_kitchen.py — REQ-IMP-006 ban (covered separately)
-      cli/app.py             — REQ-IMP-004 exemption (Typer composition)
-      cli/_cook.py           — allowlisted composition boundary
-      cli/_workspace.py      — allowlisted composition boundary
+      server/_factory.py       — Composition Root, may import any layer
+      server/git.py            — REQ-IMP-005 exemption
+      server/tools/tools_kitchen.py — REQ-IMP-006 ban (covered separately)
+      cli/app.py               — REQ-IMP-004 exemption (Typer composition)
+      cli/session/_cook.py     — REQ-IMP-011: session cook orchestrates recipe +
+                                 workspace + execution
+      cli/_workspace.py        — REQ-IMP-012: workspace CLI wires execution + workspace packages
 
     Every other file in server/ and cli/ must import only:
       autoskillit.core, autoskillit.config, autoskillit.pipeline,
@@ -317,10 +337,10 @@ def test_req_imp_007_server_cli_no_unauthorized_cross_submodule_imports() -> Non
     allowlist = {
         Path("server/_factory.py"),
         Path("server/git.py"),
-        Path("server/tools_kitchen.py"),
+        Path("server/tools/tools_kitchen.py"),
         Path("cli/app.py"),
-        Path("cli/_cook.py"),
-        Path("cli/_workspace.py"),
+        Path("cli/session/_cook.py"),  # REQ-IMP-011
+        Path("cli/_workspace.py"),  # REQ-IMP-012
     }
     forbidden_pkgs = {"execution", "workspace", "recipe", "migration"}
     violations: list[str] = []
@@ -338,3 +358,66 @@ def test_req_imp_007_server_cli_no_unauthorized_cross_submodule_imports() -> Non
                     if other_pkg in forbidden_pkgs and other_pkg != pkg:
                         violations.append(f"{rel} → {mod}")
     assert not violations, "REQ-IMP-007 violations:\n" + "\n".join(violations)
+
+
+def test_req_imp_010_init_helpers_no_toplevel_recipe_imports() -> None:
+    """cli/_init_helpers.py must not import autoskillit.recipe at module level.
+
+    list_recipes is an IL-2 dependency; deferring it to the function body
+    (_prompt_recipe_choice) keeps _init_helpers.py importable without
+    pulling in the recipe subpackage at startup (issue #930).
+    """
+    path = SRC / "cli" / "_init_helpers.py"
+    tree = ast.parse(path.read_text(), filename=str(path))
+    violations: list[str] = []
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom) and node.module:
+            if node.module.startswith("autoskillit.recipe"):
+                violations.append(f"line {node.lineno}: from {node.module} import ...")
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name.startswith("autoskillit.recipe"):
+                    violations.append(f"line {node.lineno}: import {alias.name}")
+    assert not violations, (
+        "cli/_init_helpers.py has top-level recipe imports "
+        "(must be deferred to function body):\n" + "\n".join(violations)
+    )
+
+
+# ---------------------------------------------------------------------------
+# IL-008: IL-1 sibling packages must not import from each other at runtime
+# ---------------------------------------------------------------------------
+
+
+def test_il008_il1_independence() -> None:
+    """IL-008: IL-1 sibling packages (config, pipeline, execution, workspace) must
+    not import from each other at runtime.
+
+    Exception: autoskillit.pipeline.context may import autoskillit.config.
+    pipeline.context.ToolContext owns AutomationConfig as the DI wiring point
+    (see pipeline/context.py and the IL-003 inline EXCEPTION comment).
+    config/ depends only on IL-0 (IL-002), so no cycle is introduced.
+
+    TYPE_CHECKING imports are excluded — pyproject.toml sets
+    exclude_type_checking_imports = true and _parse_imports() respects
+    the in_tc flag.
+    """
+    L1_PKGS = frozenset({"config", "pipeline", "execution", "workspace"})
+    # (importer_pkg, imported_pkg) tuples that are explicitly allowed
+    ALLOWED: frozenset[tuple[str, str]] = frozenset({("pipeline", "config")})
+
+    violations: list[str] = []
+    for path in _src_files():
+        pkg = _pkg_of(path)
+        if pkg not in L1_PKGS:
+            continue
+        for mod, in_tc in _parse_imports(path):
+            if in_tc:
+                continue  # TYPE_CHECKING imports are excluded from IL-008 scope
+            parts = mod.split(".")
+            if len(parts) >= 2 and parts[1] in L1_PKGS and parts[1] != pkg:
+                if (pkg, parts[1]) not in ALLOWED:
+                    violations.append(f"{path.relative_to(SRC)}: {mod}")
+    assert not violations, (
+        "IL-008 violations (unauthorized IL-1 sibling runtime imports):\n" + "\n".join(violations)
+    )

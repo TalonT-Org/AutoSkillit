@@ -1,0 +1,187 @@
+"""Tests for fleet._api module (Group J)."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+from pathlib import Path
+
+import pytest
+import structlog.testing
+
+from autoskillit.fleet import (
+    DispatchRecord,
+    _write_pid,
+    write_initial_state,
+)
+from tests.fleet._helpers import _setup_dispatch
+
+pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
+
+
+def _state_path(tmp_path: Path) -> Path:
+    return tmp_path / "campaign" / "state.json"
+
+
+def _make_dispatches(*names: str) -> list[DispatchRecord]:
+    return [DispatchRecord(name=n) for n in names]
+
+
+class TestWritePidExceptionSwallow:
+    def test_nonexistent_state_logs_warning(self, tmp_path: Path) -> None:
+        bogus = tmp_path / "nope" / "state.json"
+        with structlog.testing.capture_logs() as logs:
+            _write_pid(bogus, "d1", "id1", 123, 0)
+        assert any(
+            "_write_pid" in entry.get("event", "")
+            for entry in logs
+            if entry.get("log_level") == "warning"
+        )
+
+    def test_runtime_error_logs_warning(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("d1"))
+        monkeypatch.setattr(
+            "autoskillit.fleet.mark_dispatch_running",
+            lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom")),
+        )
+        with structlog.testing.capture_logs() as logs:
+            _write_pid(sp, "d1", "id1", 123, 0)
+        assert any(
+            "_write_pid" in entry.get("event", "")
+            for entry in logs
+            if entry.get("log_level") == "warning"
+        )
+
+
+class TestExecuteDispatchCancelledErrorLockRelease:
+    @pytest.mark.anyio
+    async def test_cancelled_error_propagates_and_releases_lock(
+        self, tool_ctx, monkeypatch
+    ) -> None:
+        from tests.fleet._helpers import _setup_dispatch
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+        fleet_lock = tool_ctx.fleet_lock
+        active_count_at_cancel: list[int] = []
+
+        async def _raise_cancelled(**_kwargs):
+            active_count_at_cancel.append(fleet_lock.active_count)
+            raise asyncio.CancelledError
+
+        monkeypatch.setattr("autoskillit.fleet._api._run_dispatch", _raise_cancelled)
+
+        with pytest.raises(asyncio.CancelledError):
+            from autoskillit.fleet import execute_dispatch
+
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="do something",
+                ingredients=None,
+                dispatch_name="test-dispatch",
+                timeout_sec=None,
+                prompt_builder=lambda *a, **kw: "prompt",
+                quota_checker=lambda *a, **kw: None,
+                quota_refresher=lambda *a, **kw: None,
+            )
+
+        assert active_count_at_cancel == [1], "lock must be held when _run_dispatch is called"
+        assert fleet_lock.active_count == 0
+
+    @pytest.mark.anyio
+    async def test_execute_dispatch_passes_resume_session_id_to_run_dispatch(
+        self, tool_ctx, monkeypatch
+    ) -> None:
+        """Verify resume_session_id is forwarded to _run_dispatch.
+
+        Raises CancelledError from the _run_dispatch mock intentionally: this
+        short-circuits execute_dispatch after kwarg capture, avoiding the need
+        to wire a full dispatch chain while still asserting kwarg forwarding.
+        """
+        from tests.fleet._helpers import _setup_dispatch
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+
+        captured_kwargs: list[dict] = []
+
+        async def _capture(**kwargs):
+            captured_kwargs.append(kwargs)
+            raise asyncio.CancelledError
+
+        monkeypatch.setattr("autoskillit.fleet._api._run_dispatch", _capture)
+
+        with pytest.raises(asyncio.CancelledError):
+            from autoskillit.fleet import execute_dispatch
+
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="do something",
+                ingredients=None,
+                dispatch_name="test-dispatch",
+                timeout_sec=None,
+                prompt_builder=lambda *a, **kw: "prompt",
+                quota_checker=lambda *a, **kw: None,
+                quota_refresher=lambda *a, **kw: None,
+                resume_session_id="abc-123",
+            )
+
+        assert captured_kwargs, "_run_dispatch was never called"
+        assert captured_kwargs[0].get("resume_session_id") == "abc-123"
+
+
+# ---------------------------------------------------------------------------
+# requires_packs forwarding helpers
+# ---------------------------------------------------------------------------
+
+
+async def _no_sleep_quota_checker(config, **kwargs) -> dict:
+    return {
+        "should_sleep": False,
+        "sleep_seconds": 0,
+        "utilization": None,
+        "resets_at": None,
+        "window_name": None,
+    }
+
+
+async def _noop_quota_refresher(config, **kwargs) -> None:
+    pass
+
+
+async def _run(tool_ctx, recipe="test-recipe", ingredients=None):
+    from autoskillit.fleet._api import execute_dispatch
+
+    raw = await execute_dispatch(
+        tool_ctx=tool_ctx,
+        recipe=recipe,
+        task="t",
+        ingredients=ingredients,
+        dispatch_name=None,
+        timeout_sec=None,
+        prompt_builder=lambda **kwargs: f"prompt-for-{kwargs.get('recipe', 'unknown')}",
+        quota_checker=_no_sleep_quota_checker,
+        quota_refresher=_noop_quota_refresher,
+    )
+    return json.loads(raw)
+
+
+class TestRequiresPacksForwarding:
+    @pytest.mark.anyio
+    async def test_run_dispatch_forwards_requires_packs_to_executor(self, tool_ctx, monkeypatch):
+        _setup_dispatch(tool_ctx, monkeypatch, requires_packs=["github", "ci"])
+        await _run(tool_ctx)
+        call = tool_ctx.executor.dispatch_calls[0]
+        assert list(call.requires_packs) == ["github", "ci"]
+
+    @pytest.mark.anyio
+    async def test_run_dispatch_defaults_kitchen_core_when_requires_packs_empty(
+        self, tool_ctx, monkeypatch
+    ):
+        _setup_dispatch(tool_ctx, monkeypatch)
+        await _run(tool_ctx)
+        call = tool_ctx.executor.dispatch_calls[0]
+        assert list(call.requires_packs) == ["kitchen-core"]

@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import pytest
+
 from autoskillit.recipe._api import format_ingredients_table
 from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeStep
+
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
 def _make_recipe(**ingredients: RecipeIngredient) -> Recipe:
@@ -33,8 +37,8 @@ def test_hidden_ingredient_parsed() -> None:
         "description": "test",
         "kitchen_rules": ["no native tools"],
         "ingredients": {
-            "sprint_mode": {
-                "description": "Enable sprint mode",
+            "secret_flag": {
+                "description": "Enable secret flag",
                 "default": "false",
                 "hidden": True,
             }
@@ -42,7 +46,7 @@ def test_hidden_ingredient_parsed() -> None:
         "steps": {"do_it": {"tool": "run_cmd", "with": {"cmd": "echo hi"}, "on_success": "done"}},
     }
     recipe = _parse_recipe(data)
-    assert recipe.ingredients["sprint_mode"].hidden is True
+    assert recipe.ingredients["secret_flag"].hidden is True
 
 
 def test_hidden_ingredient_default_false() -> None:
@@ -68,8 +72,8 @@ def test_hidden_ingredient_default_false() -> None:
 def test_hidden_ingredient_excluded_from_table() -> None:
     """format_ingredients_table omits hidden ingredients."""
     recipe = _make_recipe(
-        sprint_mode=RecipeIngredient(
-            description="Enable sprint mode",
+        secret_flag=RecipeIngredient(
+            description="Enable secret flag",
             default="false",
             hidden=True,
         ),
@@ -80,14 +84,14 @@ def test_hidden_ingredient_excluded_from_table() -> None:
     )
     table = format_ingredients_table(recipe)
     assert table is not None
-    assert "sprint_mode" not in table
+    assert "secret_flag" not in table
 
 
 def test_non_hidden_ingredient_included_in_table() -> None:
     """Non-hidden ingredients still appear in the table."""
     recipe = _make_recipe(
-        sprint_mode=RecipeIngredient(
-            description="Enable sprint mode",
+        secret_flag=RecipeIngredient(
+            description="Enable secret flag",
             default="false",
             hidden=True,
         ),
@@ -104,7 +108,7 @@ def test_non_hidden_ingredient_included_in_table() -> None:
 def test_all_hidden_ingredients_returns_none() -> None:
     """format_ingredients_table returns None when all ingredients are hidden."""
     recipe = _make_recipe(
-        sprint_mode=RecipeIngredient(
+        secret_flag=RecipeIngredient(
             description="Hidden flag",
             default="false",
             hidden=True,

@@ -1,8 +1,8 @@
 # AutoSkillit documentation
 
 AutoSkillit is a Claude Code plugin that runs YAML recipes through a
-two-tier orchestrator. The bundled recipes implement issue → plan → worktree
-→ tests → PR → merge pipelines using 44 MCP tools and 109 bundled skills.
+multi-level orchestrator. The bundled recipes implement issue → plan → worktree
+→ tests → PR → merge pipelines using 52 MCP tools and 133 bundled skills.
 
 ## Start here
 
@@ -16,6 +16,8 @@ two-tier orchestrator. The bundled recipes implement issue → plan → worktree
 - [update-checks.md](update-checks.md) — update checks, dismissal windows, `autoskillit update`
 - [faq.md](faq.md) — common questions
 - [glossary.md](glossary.md) — canonical terms
+- [orchestration-levels.md](orchestration-levels.md) — L0–L3 orchestration hierarchy
+- [version-pipeline.md](version-pipeline.md) — CI versioning pipeline, sync_versions.py, workflow reference
 
 ## Topic-based subdirectories
 
@@ -23,6 +25,11 @@ two-tier orchestrator. The bundled recipes implement issue → plan → worktree
 - [skills/](skills/README.md) — Tier model, catalog, subsets, overrides
 - [execution/](execution/README.md) — architecture, tool access, orchestration
 - [safety/](safety/README.md) — hooks, workspace isolation
-- [operations/](operations/README.md) — sprint guide, observability
+- [operations/](operations/README.md) — observability
 - [developer/](developer/README.md) — contributing, diagnostics, end-turn hazards
 - [examples/](examples/README.md) — end-to-end pipeline runs
+- [decisions/](decisions/README.md) — architecture decision records
+- [design/](design/README.md) — design specifications for planned features and skills
+- [research/experiment-type-rationale.md](research/experiment-type-rationale.md) — dimension-weight rationale for experiment types
+- [research/silent-type-convention.md](research/silent-type-convention.md) — silent type detection and advisory convention
+- [research/audit-trail-format.md](research/audit-trail-format.md) — audit/ artifact structure and lifecycle

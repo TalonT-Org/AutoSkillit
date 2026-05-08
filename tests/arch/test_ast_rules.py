@@ -1,4 +1,4 @@
-"""Architectural enforcement: AST-based visitor rules (ARCH-001 through ARCH-007).
+"""Architectural enforcement: AST-based visitor rules (ARCH-001 through ARCH-009).
 
 Rules enforced here (compile-time, no execution required):
   1. No print() calls in production code
@@ -8,6 +8,8 @@ Rules enforced here (compile-time, no execution required):
   5. get_logger() must be called with __name__
   6. No f-string interpolation of sensitive variables in logger positional args
   7. Exhaustive TerminationReason dispatch (match/case + assert_never)
+  8. No raw .pid attribute passed to start_linux_tracing()
+  9. get_logger() result must be bound to variable named 'logger'
 
 Note: `import logging` and `logging.getLogger()` are enforced by ruff TID251
 at pre-commit time (see pyproject.toml [tool.ruff.lint.flake8-tidy-imports]).
@@ -416,7 +418,7 @@ def test_no_raw_claude_list_construction() -> None:
         ("commands.py", "build_headless_cmd"),
         ("commands.py", "build_headless_resume_cmd"),
         ("_init_helpers.py", "_is_plugin_installed"),
-        ("_doctor.py", "_check_mcp_server_registered"),
+        ("_doctor_mcp.py", "_check_mcp_server_registered"),
     }
     violations: list[str] = []
     for path in SRC_ROOT.rglob("*.py"):
@@ -491,7 +493,7 @@ def test_hooks_are_stdlib_only() -> None:
     """
     hooks_dir = SRC_ROOT / "hooks"
     violations: list[str] = []
-    for py_file in sorted(hooks_dir.glob("*.py")):
+    for py_file in sorted(hooks_dir.rglob("*.py")):
         if py_file.name == "__init__.py":
             continue
         tree = ast.parse(py_file.read_text())
@@ -530,6 +532,9 @@ def test_init_files_are_pure_facades() -> None:
         tree = ast.parse(source, filename=str(init_file))
         for node in tree.body:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                # PEP 562 protocol functions are allowed in lazy-loading facades
+                if node.name in ("__getattr__", "__dir__"):
+                    continue
                 violations.append(
                     f"  {_rel(init_file)}:{node.lineno}: defines {node.name!r} at module scope"
                 )
@@ -574,6 +579,28 @@ def test_get_logger_no_bind() -> None:
     pytest.fail("get_logger() function not found in core/logging.py")
 
 
+def test_logger_variable_name_violation_underscore_log(tmp_path: Path) -> None:
+    f = tmp_path / "bad.py"
+    f.write_text("from autoskillit.core import get_logger\n_log = get_logger(__name__)\n")
+    violations = _scan(f)
+    assert any(v.rule_id == "ARCH-009" for v in violations)
+
+
+def test_logger_variable_name_violation_underscore_logger(tmp_path: Path) -> None:
+    f = tmp_path / "bad.py"
+    f.write_text("from autoskillit.core import get_logger\n_logger = get_logger(__name__)\n")
+    violations = _scan(f)
+    assert any(v.rule_id == "ARCH-009" for v in violations)
+
+
+def test_logger_variable_name_accepts_logger(tmp_path: Path) -> None:
+    f = tmp_path / "good.py"
+    f.write_text("from autoskillit.core import get_logger\nlogger = get_logger(__name__)\n")
+    violations = _scan(f)
+    arch009_violations = [v for v in violations if v.rule_id == "ARCH-009"]
+    assert not arch009_violations
+
+
 # ── Kill-path structural guards (1f) ─────────────────────────────────────────
 
 
@@ -588,8 +615,13 @@ def test_no_direct_async_kill_process_tree_outside_executor() -> None:
     - run_managed_sync in process.py (sync cleanup path)
     """
     allowed_files = {
-        SRC_ROOT / "execution" / "_process_kill.py",
-        SRC_ROOT / "execution" / "process.py",
+        SRC_ROOT / "execution" / "process" / "_process_kill.py",
+        SRC_ROOT / "execution" / "process" / "__init__.py",
+        SRC_ROOT
+        / "cli"
+        / "fleet"
+        / "__init__.py",  # signal guard + reap CLI commands (facade re-export)
+        SRC_ROOT / "cli" / "fleet" / "_fleet_lifecycle.py",  # signal guard + reap implementation
     }
     violations: list[str] = []
 
@@ -633,7 +665,7 @@ def test_no_direct_termination_dispatch_ifelse_in_run_managed() -> None:
 
     The dispatch must be delegated to decide_termination_action.
     """
-    process_py = SRC_ROOT / "execution" / "process.py"
+    process_py = SRC_ROOT / "execution" / "process" / "__init__.py"
     tree = ast.parse(process_py.read_text())
 
     # Find run_managed_async function body
@@ -768,3 +800,74 @@ def test_no_raw_pid_attr_to_start_linux_tracing() -> None:
         "Use resolve_trace_target() (PTY mode) or trace_target_from_pid() (direct mode) "
         "to get a TraceTarget first (issue #806):\n" + "\n".join(f"  {v}" for v in violations)
     )
+
+
+# ── ARCH-009: _is_plugin_installed banned from session launch path ──────────
+
+
+def test_no_is_plugin_installed_in_session_launch() -> None:
+    """_run_interactive_session must not call _is_plugin_installed.
+
+    _is_plugin_installed runs 'claude plugin list' as a subprocess (up to 10s).
+    This pre-launch delay widens the MCP first-call race window.
+    Replacement: detect_autoskillit_mcp_prefix() == MARKETPLACE_PREFIX (µs filesystem read).
+    """
+    source = Path("src/autoskillit/cli/session/_session_launch.py").read_text()
+    tree = ast.parse(source)
+    calls = [
+        n.func.id
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+    ]
+    assert "_is_plugin_installed" not in calls, (
+        "_session_launch.py calls _is_plugin_installed — replace with "
+        "detect_autoskillit_mcp_prefix() == MARKETPLACE_PREFIX"
+    )
+
+
+def test_no_is_plugin_installed_in_cook() -> None:
+    """cook() must not call _is_plugin_installed.
+
+    Same rationale as test_no_is_plugin_installed_in_session_launch.
+    """
+    source = Path("src/autoskillit/cli/session/_cook.py").read_text()
+    tree = ast.parse(source)
+    calls = [
+        n.func.id
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+    ]
+    assert "_is_plugin_installed" not in calls, (
+        "_cook.py calls _is_plugin_installed — replace with "
+        "detect_autoskillit_mcp_prefix() == MARKETPLACE_PREFIX"
+    )
+
+
+def test_expand_functions_call_validators() -> None:
+    """expand_wps and expand_assignments must call their respective validators (ARCH-010)."""
+    src = Path("src/autoskillit/planner/manifests.py").read_text()
+    tree = ast.parse(src)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "expand_wps":
+            body_source = ast.dump(node)
+            assert "validate_refined_assignments" in body_source
+        if isinstance(node, ast.FunctionDef) and node.name == "expand_assignments":
+            body_source = ast.dump(node)
+            assert "validate_refined_plan" in body_source
+
+
+def test_no_build_cmd_accepts_output_format_value_string() -> None:
+    """No cmd builder should accept output_format_value: str — use OutputFormat enum (ARCH-011)."""
+    source = (SRC_ROOT / "execution" / "commands.py").read_text()
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.FunctionDef)
+            and node.name.startswith("build_")
+            and node.name.endswith("_cmd")
+        ):
+            param_names = [a.arg for a in node.args.args + node.args.kwonlyargs]
+            assert "output_format_value" not in param_names, (
+                f"{node.name} still accepts 'output_format_value' (raw string). "
+                f"Use 'output_format: OutputFormat' instead."
+            )

@@ -1,24 +1,28 @@
 # Orchestration
 
-How AutoSkillit routes work between the Tier 1 orchestrator and the Tier 2/3
+> **See also:** [`docs/orchestration-levels.md`](../orchestration-levels.md) for
+> the formal definition of the L0–L3 orchestration hierarchy.
+
+How AutoSkillit routes work between the **L2** orchestrator and the **L1**
 worker sessions, what the orchestrator does on every retry verdict, and how
 the merge pipeline decides whether a worktree is ready to land.
 
-## Two-tier model
+## Multi-level orchestration model
 
-AutoSkillit splits agent execution into two layers:
+AutoSkillit defines four orchestration levels (L0–L3). The recipe execution
+pipeline primarily connects the L2 orchestrator and L1 workers:
 
-- **Tier 1 — orchestrator.** A Claude Code session running the
+- **L2 — orchestrator.** A Claude Code session running the
   `autoskillit order` CLI command, with the kitchen pre-opened. Sees all 42
   MCP tools, spawns headless workers, and routes verdicts. Never reads or
   writes code itself.
-- **Tier 2/3 — worker.** A headless Claude session launched by `run_skill`.
+- **L1 — worker.** A headless Claude session launched by `run_skill`.
   Sees the 2 free range tools plus `test_check` (the only `headless`-tagged
   tool). Cannot call `run_skill`, `run_cmd`, or `run_python`.
 
 The boundary is enforced three ways: FastMCP visibility, the
-`headless_orchestration_guard.py` PreToolUse hook, and the
-`_require_not_headless()` runtime guard inside `tools_execution.py`. All
+`skill_orchestration_guard.py` PreToolUse hook, and the
+`_require_orchestrator_or_higher()` runtime guard inside `tools_execution.py`. All
 three must independently agree before any orchestration tool can fire.
 
 ## Recipe as a program
@@ -43,10 +47,10 @@ tool result. The routing rules per tool:
 - `clone_repo` / `remove_clone` — read `clone_id` and stash for later
   cleanup via `register_clone_status` and `batch_cleanup_clones`.
 
-## The 11 `retry_reason` values
+## The 13 `retry_reason` values
 
 `RetryReason` is a `StrEnum` in `src/autoskillit/core/_type_enums.py` with
-11 distinct values. Each value triggers a different recovery route:
+13 distinct values. Each value triggers a different recovery route:
 
 | Value | When the orchestrator sets it | Recovery |
 |-------|-------------------------------|----------|
@@ -56,11 +60,13 @@ tool result. The routing rules per tool:
 | `budget_exhausted` | Token-budget cap reached for the step | Re-plan or escalate; do not auto-retry |
 | `early_stop` | Worker emitted a structured `early_stop` token | Skip remaining sub-steps and route to a fallback |
 | `zero_writes` | Worker exited cleanly but produced no file writes | Re-spawn once, then escalate |
-| `empty_output` | Natural exit with rc=0 and no stdout, no partial progress | Treat as a transient failure; one retry then escalate |
+| `empty_output` | Natural exit with rc=0, no stdout, and no write evidence | Treat as a transient failure; one retry then escalate |
+| `completed_no_flush` | Natural exit with rc=0 and no stdout, but write evidence confirms work was performed | Route to on_context_limit (same as drain_race/resume); partial progress exists on disk |
 | `drain_race` | Channel-confirmed completion but stdout was not flushed before kill | Replay the captured channel record; do not re-spawn |
 | `path_contamination` | Worker wrote outside its CWD boundary | Hard-fail; do not retry — this is an isolation breach |
 | `contract_recovery` | Marker present and write evidence on disk, but the structured contract token was missing | Treat as success and synthesise the contract from disk |
 | `clone_contamination` | Worker mutated the source clone instead of the worktree | Hard-fail; abort the entire `order` |
+| `thinking_stall` | Thinking-only final turn: model consumed tokens (thinking blocks present) but produced no text or tool output | If lifespan_started, route to on_context_limit; else route to on_failure |
 
 `recipe/rules_isolation.py` enforces matching `clone_contamination` and
 `path_contamination` defenses at recipe-validation time.

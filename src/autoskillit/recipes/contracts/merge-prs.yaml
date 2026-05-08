@@ -1,4 +1,4 @@
-generated_at: '2026-04-05T02:19:56.074977+00:00'
+generated_at: '2026-04-25T21:57:00.000000+00:00'
 bundled_manifest_version: 0.1.0
 skill_hashes: {}
 skills:
@@ -15,7 +15,7 @@ skills:
       type: file_path
     - name: analysis_file
       type: file_path
-    - name: integration_branch
+    - name: batch_branch
       type: string
     - name: pr_count
       type: string
@@ -69,6 +69,9 @@ skills:
     outputs:
     - name: merged
       type: string
+      allowed_values:
+        - "true"
+        - "false"
     - name: needs_plan
       type: string
     - name: escalation_required
@@ -185,7 +188,7 @@ skills:
       remediation_path = /tmp/remediation.md'
   open-integration-pr:
     inputs:
-    - name: integration_branch
+    - name: batch_branch
       type: string
       required: true
     - name: base_branch
@@ -346,28 +349,13 @@ dataflow:
   required: []
   produced:
   - pr_order_file
-  - integration_branch
+  - batch_branch
   - queue_mode
 - step: route_by_queue_mode
   available:
   - audit
   - base_branch
-  - integration_branch
-  - merge_queue_data_path
-  - plans_dir
-  - pr_order_file
-  - queue_mode
-  - remote_url
-  - run_name
-  - source_dir
-  - work_dir
-  required: []
-  produced: []
-- step: enqueue_all_prs
-  available:
-  - audit
-  - base_branch
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - plans_dir
   - pr_order_file
@@ -382,7 +370,7 @@ dataflow:
   available:
   - audit
   - base_branch
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - plans_dir
   - pr_order_file
@@ -394,12 +382,28 @@ dataflow:
   required: []
   produced:
   - current_pr_number
+- step: enqueue_current_pr
+  available:
+  - audit
+  - base_branch
+  - current_pr_number
+  - batch_branch
+  - merge_queue_data_path
+  - plans_dir
+  - pr_order_file
+  - queue_mode
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced: []
 - step: wait_queue_pr
   available:
   - audit
   - base_branch
   - current_pr_number
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - plans_dir
   - pr_order_file
@@ -416,7 +420,7 @@ dataflow:
   - audit
   - base_branch
   - current_pr_number
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - plans_dir
   - pr_order_file
@@ -429,13 +433,13 @@ dataflow:
   required: []
   produced:
   - ejected_pr_branch
-- step: checkout_ejected_pr
+- step: attempt_cheap_rebase
   available:
   - audit
   - base_branch
   - current_pr_number
   - ejected_pr_branch
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - plans_dir
   - pr_order_file
@@ -453,7 +457,7 @@ dataflow:
   - base_branch
   - current_pr_number
   - ejected_pr_branch
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - plans_dir
   - pr_order_file
@@ -473,7 +477,26 @@ dataflow:
   - conflict_escalation_required
   - current_pr_number
   - ejected_pr_branch
-  - integration_branch
+  - batch_branch
+  - merge_queue_data_path
+  - plans_dir
+  - pr_order_file
+  - queue_mode
+  - queue_pr_state
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced: []
+- step: ci_watch_post_queue_fix
+  available:
+  - audit
+  - base_branch
+  - conflict_escalation_required
+  - current_pr_number
+  - ejected_pr_branch
+  - batch_branch
   - merge_queue_data_path
   - plans_dir
   - pr_order_file
@@ -492,7 +515,7 @@ dataflow:
   - conflict_escalation_required
   - current_pr_number
   - ejected_pr_branch
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - plans_dir
   - pr_order_file
@@ -504,14 +527,136 @@ dataflow:
   - work_dir
   required: []
   produced: []
-- step: next_queue_pr_or_done
+- step: advance_queue_pr
   available:
   - audit
   - base_branch
   - conflict_escalation_required
   - current_pr_number
   - ejected_pr_branch
-  - integration_branch
+  - batch_branch
+  - merge_queue_data_path
+  - plans_dir
+  - pr_order_file
+  - queue_mode
+  - queue_pr_state
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced:
+  - current_pr_number
+- step: get_next_pr_branch
+  available:
+  - audit
+  - base_branch
+  - conflict_escalation_required
+  - current_pr_number
+  - ejected_pr_branch
+  - batch_branch
+  - merge_queue_data_path
+  - plans_dir
+  - pr_order_file
+  - queue_mode
+  - queue_pr_state
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced:
+  - next_pr_branch
+- step: proactive_rebase_next_pr
+  available:
+  - audit
+  - base_branch
+  - conflict_escalation_required
+  - current_pr_number
+  - ejected_pr_branch
+  - batch_branch
+  - merge_queue_data_path
+  - next_pr_branch
+  - plans_dir
+  - pr_order_file
+  - queue_mode
+  - queue_pr_state
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced: []
+- step: resolve_proactive_rebase_conflicts
+  available:
+  - audit
+  - base_branch
+  - conflict_escalation_required
+  - current_pr_number
+  - ejected_pr_branch
+  - batch_branch
+  - merge_queue_data_path
+  - next_pr_branch
+  - plans_dir
+  - pr_order_file
+  - queue_mode
+  - queue_pr_state
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced:
+  - conflict_escalation_reason
+- step: push_rebased_next_pr
+  available:
+  - audit
+  - base_branch
+  - conflict_escalation_reason
+  - conflict_escalation_required
+  - current_pr_number
+  - ejected_pr_branch
+  - batch_branch
+  - merge_queue_data_path
+  - next_pr_branch
+  - plans_dir
+  - pr_order_file
+  - queue_mode
+  - queue_pr_state
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced: []
+- step: diagnose_queue_ci
+  available:
+  - audit
+  - base_branch
+  - conflict_escalation_required
+  - current_pr_number
+  - ejected_pr_branch
+  - batch_branch
+  - merge_queue_data_path
+  - plans_dir
+  - pr_order_file
+  - queue_mode
+  - queue_pr_state
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced:
+  - diagnosis_path
+- step: reenroll_stalled_queue_pr
+  available:
+  - audit
+  - base_branch
+  - conflict_escalation_required
+  - current_pr_number
+  - ejected_pr_branch
+  - batch_branch
   - merge_queue_data_path
   - plans_dir
   - pr_order_file
@@ -523,14 +668,14 @@ dataflow:
   - work_dir
   required: []
   produced: []
-- step: create_integration_branch
+- step: create_batch_branch
   available:
   - audit
   - base_branch
   - conflict_escalation_required
   - current_pr_number
   - ejected_pr_branch
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - plans_dir
   - pr_order_file
@@ -542,14 +687,14 @@ dataflow:
   - work_dir
   required: []
   produced: []
-- step: publish_integration_branch
+- step: publish_batch_branch
   available:
   - audit
   - base_branch
   - conflict_escalation_required
   - current_pr_number
   - ejected_pr_branch
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - plans_dir
   - pr_order_file
@@ -568,7 +713,7 @@ dataflow:
   - conflict_escalation_required
   - current_pr_number
   - ejected_pr_branch
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - plans_dir
   - pr_order_file
@@ -594,7 +739,7 @@ dataflow:
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - needs_plan
   - plans_dir
@@ -618,7 +763,7 @@ dataflow:
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - needs_plan
   - plans_dir
@@ -643,7 +788,7 @@ dataflow:
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - needs_plan
   - plans_dir
@@ -670,7 +815,7 @@ dataflow:
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - needs_plan
   - plans_dir
@@ -699,7 +844,7 @@ dataflow:
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - needs_plan
   - plans_dir
@@ -725,7 +870,7 @@ dataflow:
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - needs_plan
   - plans_dir
@@ -751,7 +896,7 @@ dataflow:
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - needs_plan
   - plans_dir
@@ -779,7 +924,7 @@ dataflow:
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - needs_plan
   - plans_dir
@@ -806,7 +951,7 @@ dataflow:
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - needs_plan
   - plans_dir
@@ -833,7 +978,7 @@ dataflow:
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - needs_plan
   - plans_dir
@@ -861,7 +1006,7 @@ dataflow:
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - needs_plan
   - plans_dir
@@ -878,7 +1023,7 @@ dataflow:
   - worktree_path
   required: []
   produced: []
-- step: push_integration_branch
+- step: push_batch_branch
   available:
   - audit
   - base_branch
@@ -888,7 +1033,7 @@ dataflow:
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - needs_plan
   - plans_dir
@@ -915,7 +1060,7 @@ dataflow:
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - needs_plan
   - plans_dir
@@ -942,7 +1087,7 @@ dataflow:
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - needs_plan
   - plans_dir
@@ -969,7 +1114,7 @@ dataflow:
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - needs_plan
   - plans_dir
@@ -998,7 +1143,7 @@ dataflow:
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - needs_plan
   - plans_dir
@@ -1027,7 +1172,7 @@ dataflow:
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - needs_plan
   - plans_dir
@@ -1058,7 +1203,7 @@ dataflow:
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - needs_plan
   - plans_dir
@@ -1089,7 +1234,7 @@ dataflow:
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - needs_plan
   - plans_dir
@@ -1121,7 +1266,7 @@ dataflow:
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - needs_plan
   - plans_dir
@@ -1153,7 +1298,7 @@ dataflow:
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - needs_plan
   - plans_dir
@@ -1190,7 +1335,7 @@ dataflow:
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - needs_plan
   - plans_dir
@@ -1223,7 +1368,7 @@ dataflow:
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - needs_plan
   - plans_dir
@@ -1256,7 +1401,7 @@ dataflow:
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - needs_plan
   - plans_dir
@@ -1289,7 +1434,7 @@ dataflow:
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - needs_plan
   - plans_dir
@@ -1311,7 +1456,9 @@ dataflow:
   required: []
   produced:
   - annotated_diff_path
+  - diff_metrics_path
   - hunk_ranges_path
+  - review_mode
 - step: review_pr_integration
   available:
   - annotated_diff_path
@@ -1326,7 +1473,7 @@ dataflow:
   - escalation_reason
   - escalation_required
   - hunk_ranges_path
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - needs_plan
   - plans_dir
@@ -1362,7 +1509,7 @@ dataflow:
   - escalation_reason
   - escalation_required
   - hunk_ranges_path
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - needs_plan
   - plans_dir
@@ -1399,7 +1546,7 @@ dataflow:
   - escalation_reason
   - escalation_required
   - hunk_ranges_path
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - needs_plan
   - plans_dir
@@ -1435,7 +1582,7 @@ dataflow:
   - escalation_reason
   - escalation_required
   - hunk_ranges_path
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - needs_plan
   - plans_dir
@@ -1471,7 +1618,7 @@ dataflow:
   - escalation_reason
   - escalation_required
   - hunk_ranges_path
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - needs_plan
   - plans_dir
@@ -1509,7 +1656,7 @@ dataflow:
   - escalation_reason
   - escalation_required
   - hunk_ranges_path
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - needs_plan
   - plans_dir
@@ -1546,7 +1693,7 @@ dataflow:
   - escalation_reason
   - escalation_required
   - hunk_ranges_path
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - needs_plan
   - plans_dir
@@ -1583,7 +1730,7 @@ dataflow:
   - escalation_reason
   - escalation_required
   - hunk_ranges_path
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - needs_plan
   - plans_dir
@@ -1620,7 +1767,7 @@ dataflow:
   - escalation_reason
   - escalation_required
   - hunk_ranges_path
-  - integration_branch
+  - batch_branch
   - merge_queue_data_path
   - needs_plan
   - plans_dir

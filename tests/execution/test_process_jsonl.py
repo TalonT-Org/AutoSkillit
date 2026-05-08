@@ -9,11 +9,16 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from autoskillit.execution.process import (
     _jsonl_contains_marker,
     _jsonl_has_record_type,
+    _jsonl_last_record_type,
     _marker_is_standalone,
 )
+
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 class TestJsonlContainsMarker:
@@ -361,3 +366,71 @@ class TestMarkerDiscrimination:
             + "\n"
         )
         assert not _jsonl_contains_marker(content, "%%ORDER_UP::bbb%%", frozenset({"assistant"}))
+
+
+class TestJsonlLastRecordType:
+    """_jsonl_last_record_type returns the type of the last parseable JSONL record."""
+
+    def test_returns_last_type_in_content(self):
+        content = '{"type": "assistant", "message": {}}\n{"type": "user", "message": {}}\n'
+        assert _jsonl_last_record_type(content) == "user"
+
+    def test_returns_none_for_empty_content(self):
+        assert _jsonl_last_record_type("") is None
+
+    def test_skips_unparseable_lines(self):
+        content = '{"type": "assistant"}\nnot-json\n'
+        assert _jsonl_last_record_type(content) == "assistant"
+
+    def test_ignores_records_without_type_field(self):
+        content = '{"other": "field"}\n{"type": "result"}\n'
+        assert _jsonl_last_record_type(content) == "result"
+
+
+class TestJsonlContainsMarkerThinkingBlocks:
+    """_jsonl_contains_marker must not match markers inside thinking blocks."""
+
+    def test_marker_in_thinking_block_not_detected(self):
+        import json
+
+        marker = "%%COMPLETE%%"
+        content = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [
+                        {"type": "thinking", "thinking": f"I will emit {marker} when done."}
+                    ]
+                },
+            }
+        )
+        assert not _jsonl_contains_marker(content, marker, frozenset({"assistant"}))
+
+    def test_marker_in_text_block_is_detected(self):
+        import json
+
+        marker = "%%COMPLETE%%"
+        content = json.dumps(
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "text", "text": marker}]},
+            }
+        )
+        assert _jsonl_contains_marker(content, marker, frozenset({"assistant"}))
+
+    def test_marker_in_text_block_despite_thinking_block_present(self):
+        import json
+
+        marker = "%%COMPLETE%%"
+        content = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [
+                        {"type": "thinking", "thinking": "Internal reasoning."},
+                        {"type": "text", "text": marker},
+                    ]
+                },
+            }
+        )
+        assert _jsonl_contains_marker(content, marker, frozenset({"assistant"}))

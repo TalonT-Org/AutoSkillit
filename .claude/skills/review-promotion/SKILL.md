@@ -18,10 +18,10 @@ posts the review report as a PR comment.
 ## Arguments
 
 ```
-/autoskillit:review-promotion [integration_branch] [base_branch] [--post-to-pr]
+/autoskillit:review-promotion [batch_branch] [base_branch] [--post-to-pr]
 ```
 
-- `integration_branch` (optional) — source branch to analyze. Defaults to `integration`.
+- `batch_branch` (optional) — source branch to analyze. Defaults to `develop`.
 - `base_branch` (optional) — target branch. Defaults to `main`.
 - `--post-to-pr` — if present, post the review report as a comment on the open promotion PR.
 
@@ -42,20 +42,6 @@ posts the review report as a PR comment.
 **ALWAYS:**
 - Output `report_path = <absolute path>` as a structured token (absolute path, prepend CWD)
 - Output `verdict = <value>` as a structured token
-- Include Subagent Autonomy Grant in every Task tool prompt
-- Grant every subagent explicit permission to spawn their own sub-subagents
-
-## Subagent Autonomy Grant
-
-Every subagent spawned by this skill receives this standing instruction:
-
-> You may spawn additional subagents (Task tool, model: sonnet) at your discretion
-> to parallelize your research, fill gaps you discover during analysis, or decompose
-> large tasks into focused sub-investigations. You do not need permission — use your
-> judgment about when deeper exploration would improve the quality of your findings.
-
-Include this grant verbatim in every Task tool prompt throughout this skill.
-
 ## Workflow
 
 ### Phase 0: Setup
@@ -63,17 +49,17 @@ Include this grant verbatim in every Task tool prompt throughout this skill.
 #### Step 0.1: Parse Arguments
 
 Parse optional positional arguments and flags:
-- `integration_branch` — default `"integration"` if absent or empty
+- `batch_branch` — default `"develop"` if absent or empty
 - `base_branch` — default `"main"` if absent or empty
 - `post_to_pr` — `true` if `--post-to-pr` present in ARGUMENTS
 
 #### Step 0.2: Compute Divergence Point
 
 ```bash
-git merge-base {base_branch} {integration_branch}
-git diff --name-only {base_branch}..{integration_branch}
-git diff --name-only --diff-filter=A {base_branch}..{integration_branch}
-git diff --name-only --diff-filter=M {base_branch}..{integration_branch}
+git merge-base {base_branch} {batch_branch}
+git diff --name-only {base_branch}..{batch_branch}
+git diff --name-only --diff-filter=A {base_branch}..{batch_branch}
+git diff --name-only --diff-filter=M {base_branch}..{batch_branch}
 ```
 
 Store as `merge_base_sha`, `changed_files`, `new_files` (added files), and
@@ -83,14 +69,14 @@ If the `git merge-base` or `git diff` command exits non-zero (e.g., unknown bran
 emit a clear error and exit 1:
 
 ```
-Error: could not compute divergence point between '{base_branch}' and '{integration_branch}'.
+Error: could not compute divergence point between '{base_branch}' and '{batch_branch}'.
 Check that both branches exist locally or are fetchable.
 ```
 
 If `changed_files` is empty after a successful `git diff`, emit:
 
 ```
-Error: no changed files found between '{base_branch}' and '{integration_branch}'.
+Error: no changed files found between '{base_branch}' and '{batch_branch}'.
 Verify the branches are not identical and that the correct branch names were supplied.
 ```
 
@@ -99,7 +85,7 @@ Then exit 1.
 #### Step 0.3: Find PR (only if --post-to-pr)
 
 ```bash
-gh pr list --base {base_branch} --head {integration_branch} --state open --json number,url --limit 1
+gh pr list --base {base_branch} --head {batch_branch} --state open --json number,url --limit 1
 ```
 
 Store `pr_number` and `pr_url`. If none found, warn and continue — the review report will
@@ -126,7 +112,7 @@ Store as `domain_partitions`. Skip if `changed_files` is empty.
 For each domain `D` in `domain_partitions` with a non-empty file list, run in parallel:
 
 ```bash
-git diff {base_branch}..{integration_branch} -- {space-separated files in domain D}
+git diff {base_branch}..{batch_branch} -- {space-separated files in domain D}
 ```
 
 Truncate diffs exceeding 12,000 characters. Drop domains with empty diffs.
@@ -136,7 +122,7 @@ Truncate diffs exceeding 12,000 characters. Drop domains with empty diffs.
 For each domain in `domain_diffs`, run in parallel:
 
 ```bash
-git log {base_branch}..{integration_branch} --oneline -- {space-separated files in domain D}
+git log {base_branch}..{batch_branch} --oneline -- {space-separated files in domain D}
 ```
 
 #### Step 1.4: Identify PRs per Domain
@@ -152,7 +138,7 @@ Store as `domain_pr_numbers`.
 #### Step 1.5: Parallel Domain Analysis Subagents
 
 For each domain `D` in `domain_diffs`, spawn a Task subagent (model: sonnet) in a
-single parallel message. **Include the Subagent Autonomy Grant in each prompt.**
+single parallel message.
 
 Each subagent receives:
 - Domain name and file list
@@ -179,7 +165,6 @@ Each subagent returns ONLY a JSON object:
 #### Step 1.6: Cross-Domain Dependency Analysis
 
 Spawn one Task subagent (model: sonnet) with ALL domain summaries from Step 1.5.
-**Include the Subagent Autonomy Grant.**
 
 Analyze cross-domain dependencies:
 - Do recipe schema changes require corresponding server tool updates?
@@ -198,8 +183,7 @@ Return JSON:
 
 ### Phase 2: Quality Assessment (parallel subagents)
 
-Spawn three parallel Task subagents (model: sonnet). **Include the Subagent Autonomy
-Grant in each prompt.**
+Spawn three parallel Task subagents (model: sonnet).
 
 #### Subagent 2A: Test Coverage Delta
 
@@ -282,7 +266,6 @@ Return JSON:
 ### Phase 3: Review Summary Synthesis
 
 Spawn one Task subagent (model: sonnet) with ALL results from Phases 1–2.
-**Include the Subagent Autonomy Grant.**
 
 The subagent synthesizes a reviewer-focused verdict based on:
 - Domain risk scores from Phase 1
@@ -319,7 +302,7 @@ Write to `.autoskillit/temp/review-promotion/review_report_{YYYY-MM-DD_HHMMSS}.m
 (relative to the current working directory):
 
 ```markdown
-# Promotion Review: {integration_branch} → {base_branch}
+# Promotion Review: {batch_branch} → {base_branch}
 
 ## Verdict: {verdict}
 

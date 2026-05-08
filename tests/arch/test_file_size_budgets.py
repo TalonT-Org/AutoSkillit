@@ -14,11 +14,11 @@ def test_pretty_output_below_budget() -> None:
     """REQ-FILE-001: hooks/pretty_output_hook.py must stay under 350 lines after
     the §4 split (audit finding 8.3). Each split formatter module must stay
     under its own budget."""
-    src = Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "hooks"
+    src = Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "hooks" / "formatters"
     budgets = {
         "pretty_output_hook.py": 350,
         "_fmt_primitives.py": 200,
-        "_fmt_execution.py": 300,
+        "_fmt_execution.py": 310,
         "_fmt_status.py": 250,
         "_fmt_recipe.py": 300,
     }

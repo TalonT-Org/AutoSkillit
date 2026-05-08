@@ -105,53 +105,55 @@ def _is_yaml_dump(node: ast.expr) -> bool:
 
 
 # Hard-curated allowlist of existing atomic_write + json.dumps sites detected by AST scan.
-# Quota cache is NOT here because it's migrated to write_versioned_json in Phase 4.
 # Any new site that writes a dict payload SHOULD use write_versioned_json.
 _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
-    # core/io.py — write_versioned_json itself (the blessed helper) uses atomic_write+json.dumps
-    ("src/autoskillit/core/io.py", 118),
-    # session_log.py — summary dict, token_usage list, audit_log list
-    ("src/autoskillit/execution/session_log.py", 244),
-    ("src/autoskillit/execution/session_log.py", 260),
-    ("src/autoskillit/execution/session_log.py", 263),
     # migration/store.py — failure store dicts
     ("src/autoskillit/migration/store.py", 54),
     ("src/autoskillit/migration/store.py", 64),
     # clone_registry.py — clones dict (CloneRegistry.__exit__ atomic write-back)
-    ("src/autoskillit/workspace/clone_registry.py", 82),
+    ("src/autoskillit/workspace/clone_registry.py", 89),
     # staleness_cache.py — cache dict
     ("src/autoskillit/recipe/staleness_cache.py", 67),
-    # background.py — payload dict
-    ("src/autoskillit/pipeline/background.py", 132),
     # _lifespan.py — hooks.json self-heal on startup drift (co-owned with Claude plugin system)
-    ("src/autoskillit/server/_lifespan.py", 55),
+    ("src/autoskillit/server/_lifespan.py", 62),
     # tools_kitchen.py — hook config dict
-    ("src/autoskillit/server/tools_kitchen.py", 142),
-    ("src/autoskillit/server/tools_kitchen.py", 471),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 112),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 552),
     # tools_status.py — mcp_data dict
-    ("src/autoskillit/server/tools_status.py", 385),
+    ("src/autoskillit/server/tools/tools_status.py", 495),
     # tools_github.py — bug report dict
-    ("src/autoskillit/server/tools_github.py", 268),
+    ("src/autoskillit/server/tools/tools_github.py", 304),
     # _hooks.py — settings.json dict (co-owned with Claude CLI)
-    ("src/autoskillit/cli/_hooks.py", 23),
+    ("src/autoskillit/cli/_hooks.py", 24),
     # _init_helpers.py — ~/.claude.json (co-owned)
     ("src/autoskillit/cli/_init_helpers.py", 376),
     # _init_helpers.py — evict_direct_mcp_entry write-back to ~/.claude.json (co-owned)
     ("src/autoskillit/cli/_init_helpers.py", 395),
     # _installed_plugins.py — installed_plugins.json (co-owned with Claude plugin system)
-    ("src/autoskillit/cli/_installed_plugins.py", 65),
+    ("src/autoskillit/cli/_installed_plugins.py", 71),
     # _marketplace.py — marketplace.json (co-owned)
-    ("src/autoskillit/cli/_marketplace.py", 85),
+    ("src/autoskillit/cli/_marketplace.py", 100),
     # _marketplace.py — hooks.json (co-owned)
-    ("src/autoskillit/cli/_marketplace.py", 161),
+    ("src/autoskillit/cli/_marketplace.py", 182),
     # _update_checks.py — dismissal state file
-    ("src/autoskillit/cli/_update_checks.py", 102),
-    # _update_checks.py — fetch cache
-    ("src/autoskillit/cli/_update_checks.py", 129),
-    # smoke_utils.py — domain partitions dict, hunk ranges list, merge queue list
-    ("src/autoskillit/smoke_utils.py", 53),
-    ("src/autoskillit/smoke_utils.py", 83),
-    ("src/autoskillit/smoke_utils.py", 138),
+    ("src/autoskillit/cli/update/_update_checks.py", 77),
+    # _update_checks_fetch.py — fetch cache (extracted from _update_checks.py)
+    ("src/autoskillit/cli/update/_update_checks_fetch.py", 58),
+    # smoke_utils.py — partitions, ranges, diff metrics, queue, enriched handoff
+    ("src/autoskillit/smoke_utils.py", 57),
+    ("src/autoskillit/smoke_utils.py", 126),
+    # Lines 143 and 378 are list-payload write sites (dual membership: also in list_sites
+    # in test_allowlist_includes_list_payloads_as_documented). The AST scanner catches
+    # them because it cannot distinguish list vs dict return types — intentional.
+    ("src/autoskillit/smoke_utils.py", 143),
+    ("src/autoskillit/smoke_utils.py", 378),
+    ("src/autoskillit/smoke_utils.py", 426),
+    # planner/consolidation.py — write-back of merged WP dicts to per-file results
+    ("src/autoskillit/planner/consolidation.py", 308),
+    # planner/manifests.py — finalize_wp_manifest: wp_index.json rebuild (list payload)
+    ("src/autoskillit/planner/manifests.py", 255),
+    # _cmd_rpc.py — emit_fallback_map: BEM fallback execution map (recipe-internal)
+    ("src/autoskillit/recipe/_cmd_rpc.py", 445),
 }
 
 
@@ -212,10 +214,8 @@ class TestSchemaVersionConvention:
         """List-payload sites are included since the AST scanner can't distinguish return types."""
         # These sites write list payloads through function calls but are caught by the scanner
         list_sites = [
-            ("src/autoskillit/execution/session_log.py", 260),
-            ("src/autoskillit/execution/session_log.py", 263),
-            ("src/autoskillit/smoke_utils.py", 83),
-            ("src/autoskillit/smoke_utils.py", 138),
+            ("src/autoskillit/smoke_utils.py", 143),
+            ("src/autoskillit/smoke_utils.py", 378),
         ]
         for site in list_sites:
             assert site in _LEGACY_JSON_WRITES, (

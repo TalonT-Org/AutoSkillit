@@ -1,0 +1,35 @@
+{
+  "name": "qualitative_interpretive",
+  "schema_version": "1.0",
+  "priority": 11,
+  "is_fallback": false,
+  "classification_triggers": [
+    "Non-numerical data or interpretive epistemology: 'qualitative', 'thematic analysis', 'grounded theory', 'phenomenology', 'discourse analysis', 'ethnography', 'interpretive', 'narrative inquiry'",
+    "Meaning, experience, or process as the research target rather than a quantitative estimand: 'lived experience', 'meaning-making', 'thick description', 'saturation', 'purposive sampling', 'inductive'"
+  ],
+  "dimension_weights": {
+    "causal_structure": "S",
+    "variance_protocol": "S",
+    "statistical_corrections": "S",
+    "ecological_validity": "S",
+    "measurement_alignment": "S",
+    "resource_proportionality": "S",
+    "data_acquisition": "L",
+    "agent_implementability": "L"
+  },
+  "applicable_lenses": {
+    "primary": "exp-lens-estimand-clarity",
+    "secondary": "exp-lens-validity-threats"
+  },
+  "red_team_focus": {
+    "specific": "researcher positionality and reflexivity undocumented",
+    "severity_cap": "warning"
+  },
+  "l1_severity": {
+    "estimand_clarity": "warning",
+    "hypothesis_falsifiability": "info"
+  },
+  "dimension_weight_rationale": {
+    "data_acquisition": "Purposive sampling strategy remains assessable at reduced rigor; saturation criteria are checked but qualitative validity is outside the quantitative audit framework"
+  }
+}

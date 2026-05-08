@@ -162,9 +162,10 @@ skills:
     - name: verdict
       type: string
     expected_output_patterns:
-    - verdict\s*=\s*(approved|changes_requested|needs_human)
+    - verdict\s*=\s*(approved|approved_with_comments|changes_requested|needs_human)
     pattern_examples:
     - 'verdict = approved'
+    - 'verdict = approved_with_comments'
     - 'verdict = changes_requested'
     - 'verdict = needs_human'
   resolve-review:
@@ -1853,7 +1854,7 @@ dataflow:
   - worktree_path
   required: []
   produced: []
-- step: release_issue_timeout
+- step: register_clone_unconfirmed
   available:
   - all_plan_paths
   - audit

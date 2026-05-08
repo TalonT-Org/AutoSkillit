@@ -69,6 +69,9 @@ def _iter_session_log_entries(
     filename: str,
     cwd_filter: str = "",
     kitchen_id_filter: str = "",
+    campaign_id_filter: str = "",
+    order_id_filter: str = "",
+    dispatch_id_filter: str = "",
 ) -> Iterator[Path]:
     """Yield per-session file paths from sessions.jsonl that pass the filters.
 
@@ -91,6 +94,17 @@ def _iter_session_log_entries(
                             sessions written before the rename. Empty string disables
                             kitchen_id filtering. When both cwd_filter and kitchen_id_filter
                             are provided, both must match (AND logic).
+        campaign_id_filter: If non-empty, only yield sessions whose ``campaign_id`` field
+                            matches this string exactly. Uses ``.get()`` for backward
+                            compatibility with pre-existing index entries lacking the field.
+                            All active filters apply as AND logic.
+        order_id_filter:    If non-empty, only yield sessions whose ``order_id`` field
+                            matches this string exactly. Supersedes cwd_filter for fleet
+                            sessions where a single order spans multiple clone directories.
+                            All active filters apply as AND logic.
+        dispatch_id_filter: If non-empty, only yield sessions whose ``dispatch_id`` field
+                            matches this string exactly.
+                            All active filters apply as AND logic.
 
     Yields:
         Path to each matching per-session file that exists.
@@ -134,6 +148,15 @@ def _iter_session_log_entries(
             entry_kitchen_id = idx.get("kitchen_id") or idx.get("pipeline_id", "")
             if entry_kitchen_id != kitchen_id_filter:
                 continue
+
+        if campaign_id_filter and idx.get("campaign_id") != campaign_id_filter:
+            continue
+
+        if order_id_filter and idx.get("order_id") != order_id_filter:
+            continue
+
+        if dispatch_id_filter and idx.get("dispatch_id") != dispatch_id_filter:
+            continue
 
         dir_name = idx.get("dir_name", "")
         if not dir_name:
@@ -234,6 +257,9 @@ class DefaultAuditLog:
         since: str = "",
         cwd_filter: str = "",
         kitchen_id_filter: str = "",
+        campaign_id_filter: str = "",
+        order_id_filter: str = "",
+        dispatch_id_filter: str = "",
     ) -> int:
         """Reconstruct failure records from persisted session logs.
 
@@ -244,12 +270,22 @@ class DefaultAuditLog:
         cwd_filter: if non-empty, only sessions whose cwd matches are loaded.
         kitchen_id_filter: if non-empty, only sessions whose kitchen_id matches are loaded.
             Falls back to pipeline_id for sessions written before the rename.
+        campaign_id_filter: if non-empty, only sessions whose campaign_id matches are loaded.
+        order_id_filter: if non-empty, only sessions whose order_id matches are loaded.
+        dispatch_id_filter: if non-empty, only sessions whose dispatch_id matches are loaded.
 
         Returns the count of session directories successfully loaded.
         """
         count = 0
         for al_path in _iter_session_log_entries(
-            log_root, since, "audit_log.json", cwd_filter, kitchen_id_filter
+            log_root,
+            since,
+            "audit_log.json",
+            cwd_filter,
+            kitchen_id_filter,
+            campaign_id_filter,
+            order_id_filter,
+            dispatch_id_filter,
         ):
             try:
                 data = json.loads(al_path.read_text(encoding="utf-8"))

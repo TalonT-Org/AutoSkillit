@@ -140,13 +140,13 @@ Default: `command: null` (disabled), `preserve_dirs: []`.
 quota_guard:
   enabled: true
   short_window_threshold: 85.0   # block at this % for short windows (e.g. five_hour)
-  long_window_threshold: 98.0    # block at this % for long windows (weekly, sonnet, opus)
+  long_window_threshold: 95.0    # block at this % for long windows (weekly, sonnet, opus)
   long_window_patterns:          # substrings (case-insensitive) that classify a
     - weekly                     # window name as long-window
     - sonnet
     - opus
   buffer_seconds: 60             # extra buffer after quota reset before resuming
-  cache_max_age: 60              # seconds before a live quota fetch is triggered
+  cache_max_age: 300             # seconds before a live quota fetch is triggered
 ```
 
 Check current quota: `autoskillit quota-status`.
@@ -173,11 +173,11 @@ branching:
   default_base_branch: main   # default base branch for recipes
 ```
 
-Default: `main`. Override if your project uses a different integration branch (e.g. `integration` or `develop`):
+Default: `main`. Override if your project uses a different integration branch (e.g. `develop`):
 
 ```yaml
 branching:
-  default_base_branch: integration
+  default_base_branch: develop
 ```
 
 ## Session Diagnostics (Linux)
@@ -271,7 +271,7 @@ read_db:
 
 ```yaml
 report_bug:
-  output_dir: null  # null = {cwd}/.autoskillit/temp/bug-reports/
+  report_dir: null  # null = {cwd}/.autoskillit/temp/bug-reports/
   timeout: 600
   github_filing: true
   github_labels: ["autoreported", "bug"]
@@ -369,7 +369,7 @@ with GitHub's merge queue feature. For best results with automation use cases:
 ### `min_entries_to_merge_wait_minutes` = 0
 
 GitHub branch rulesets expose a `min_entries_to_merge_wait_minutes` setting that adds
-latency before a queued PR is eligible to merge. For the `integration` branch (or any
+latency before a queued PR is eligible to merge. For the `develop` branch (or any
 branch where AutoSkillit manages the PR queue), set this to `0`.
 
 **Why:** AutoSkillit enters PRs one at a time or in small batches. A non-zero wait
@@ -377,5 +377,37 @@ multiplier adds unnecessary latency per PR. Setting it to `0` lets PRs merge as 
 as their CI passes.
 
 **Location:** GitHub → Repository Settings → Branches → Branch protection rules →
-select the integration ruleset → Merge queue → "Minimum entries to merge — wait X minutes".
+select the develop ruleset → Merge queue → "Minimum entries to merge — wait X minutes".
 Set to `0`.
+
+## Feature Flags
+
+Features are gated by lifecycle state. The `features:` config section and
+`AUTOSKILLIT_FEATURES__*` env vars let you override individual features.
+
+### Lifecycle States
+
+| Lifecycle | Behavior | Can Override? |
+|-----------|----------|---------------|
+| STABLE | On everywhere | Yes — opt out via `features: {name: false}` |
+| EXPERIMENTAL | On when `experimental_enabled: true` (default on develop; off on main) | Yes — per-feature entry overrides blanket |
+| DEPRECATED | Follows `default_enabled`; may be removed without warning | Yes |
+| DISABLED | Always off; cannot be enabled | No — config entry setting `true` is rejected |
+
+### Blanket Toggle
+
+`experimental_enabled: true` in `defaults.yaml` means all `EXPERIMENTAL` features are
+active on develop, worktrees, and feature branches without any per-feature config.
+
+Main and stable branches commit `features: {experimental_enabled: false}` to opt out.
+
+### Per-Feature Override
+
+Any config layer can override an individual feature regardless of the blanket toggle:
+
+```yaml
+features:
+  planner: false    # disable planner even on develop
+```
+
+Env var takes highest priority: `AUTOSKILLIT_FEATURES__PLANNER=false`.

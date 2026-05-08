@@ -45,6 +45,7 @@ Called by the research recipe when `audit_claims` routes `changes_requested` via
 - Delete or discard the working directory on failure
 - Modify tests to suppress failures introduced by reviewer fixes
 - Use file-path-segment grouping — claim comments are grouped by **dimension**, not by file path
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Find the PR by feature branch at invocation time (not a hardcoded number)
@@ -95,25 +96,6 @@ validation_timeout = cr_cfg.get("validation_timeout", 120)
 
 If either positional arg is missing, abort with:
 `"Usage: /autoskillit:resolve-claims-review <worktree_path> <base_branch>"`
-
-### Step 0.5 — Code-Index Initialization (required before any code-index tool call)
-
-Call `set_project_path` with the repo root where this skill was invoked (not a worktree path):
-
-```
-mcp__code-index__set_project_path(path="{PROJECT_ROOT}")
-```
-
-Code-index tools require **project-relative paths**. Always use paths like:
-
-    src/mypackage/core/module.py
-
-NOT absolute paths like:
-
-    /path/to/project/src/mypackage/core/module.py
-
-Agents launched via `run_skill` inherit no code-index state from the parent session — this
-call is mandatory at the start of every headless session that uses code-index tools.
 
 ### Step 1: Find the Open PR
 

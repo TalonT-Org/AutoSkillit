@@ -1,6 +1,7 @@
 ---
 name: diagnose-ci
 categories: [ci]
+description: Diagnostic executor for CI failures. ALWAYS invoke this skill when instructed to diagnose CI failures. Do not fetch CI logs directly — use this skill first to load the diagnosis workflow.
 hooks:
   PreToolUse:
     - matcher: "*"
@@ -38,7 +39,6 @@ before routing to `resolve-failures`.
 - Block on missing `gh` CLI — write a minimal `failure_type=unknown` diagnosis instead
 
 **ALWAYS:**
-- Initialize code-index: call `set_project_path` to current cwd before any search
 - Write the diagnosis file before emitting output tokens
 - Emit the four output tokens (`diagnosis_path`, `failure_type`, `failure_subtype`, `is_fixable`) at the end of the response on their own lines
 
@@ -55,13 +55,7 @@ best-effort with whatever diagnosis was written (or none).
 
 ## Workflow
 
-### Step 1: Initialize Code Index
-
-```
-mcp__code-index__set_project_path(path=<cwd>)
-```
-
-### Step 2: Discover Run ID (if not provided)
+### Step 1: Discover Run ID (if not provided)
 
 If `run_id` is not provided as an argument (or is `-`), construct the `gh run list` command
 with any provided filters:
@@ -84,16 +78,16 @@ gh run list --branch {branch} --workflow {workflow} --event {event} --limit 1 --
 
 Parse the JSON to extract `databaseId` as `run_id`.
 
-If `gh` is unavailable or the command fails, skip to Step 5 (write minimal diagnosis).
+When `gh` is not accessible or the command fails, proceed to Step 5 (write diagnosis report).
 
-### Step 3: Fetch Failure Summary
+### Step 2: Fetch Failure Summary
 
 ```bash
 gh run view {run_id} --log-failed
 ```
 Capture the output (stdout). This is the primary failure log.
 
-### Step 4: Fetch Per-Job Logs
+### Step 3: Fetch Per-Job Logs
 
 For each failing job in `ci_failed_jobs` (or all failed jobs from `gh run view` if not provided):
 ```bash
@@ -106,7 +100,7 @@ gh api repos/{owner}/{repo}/actions/jobs/{job_id}/logs
 
 Use `gh repo view --json nameWithOwner` to resolve `{owner}/{repo}` if needed.
 
-### Step 5: Classify Failure
+### Step 4: Classify Failure
 
 Analyze the log output to classify `failure_type` as one of:
 - `test` — pytest/jest/unit test failures
@@ -116,7 +110,7 @@ Analyze the log output to classify `failure_type` as one of:
 - `env` — missing environment variables, secrets, or infrastructure issues
 - `unknown` — cannot determine from logs
 
-#### Step 5a: Subtype Classification
+#### Step 4a: Subtype Classification
 
 After determining `failure_type`, classify `failure_subtype` using the following error-pattern decision tree (first match wins):
 
@@ -139,15 +133,15 @@ local test result):
 |---|---|
 | `flaky` or `timing_race` | `flake_suspected` |
 | `deterministic` | `ci_only_failure` (if local tests pass) or `real_fix` (if fixable locally) |
-| `fixture` or `import` | `ci_only_failure` (if local tests pass) |
-| `env` | `ci_only_failure` (conservative) |
-| `unknown` | `ci_only_failure` (conservative) |
+| `fixture` or `import` | `flake_suspected` (if local tests pass) |
+| `env` | `flake_suspected` |
+| `unknown` | `flake_suspected` |
 
 Determine `is_fixable`:
 - `true` for `test`, `lint`, `build`, `type_check`
 - `false` for `env`, `unknown`
 
-### Step 6: Write Diagnosis Report
+### Step 5: Write Diagnosis Report
 
 Create directory `{{AUTOSKILLIT_TEMP}}/diagnose-ci/` if it doesn't exist. Write the diagnosis file:
 
@@ -179,7 +173,7 @@ failure_subtype = {failure_subtype}
 
 Save to `{{AUTOSKILLIT_TEMP}}/diagnose-ci/diagnosis_{timestamp}.md`. (relative to the current working directory)
 
-### Step 7: Emit Output Tokens
+### Step 6: Emit Output Tokens
 
 Emit these tokens on their own lines at the end of your response:
 
@@ -197,7 +191,7 @@ is_fixable = true|false
 
 ## gh Unavailable Fallback
 
-If `gh` is unavailable at any step, write a minimal diagnosis:
+When `gh` is not accessible at any step, write a minimal diagnosis:
 - `failure_type = unknown`
 - `failure_subtype = unknown`
 - `is_fixable = false`

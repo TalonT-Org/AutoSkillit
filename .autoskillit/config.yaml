@@ -1,5 +1,7 @@
 test_check:
   command: ["task", "test-all"]
+  filter_mode: "conservative"
+  base_ref: "develop"
   # timeout: 600
 
 safety:
@@ -21,7 +23,7 @@ safety:
 #   skill_names: ["/autoskillit:implement-worktree", "/autoskillit:implement-worktree-no-merge"]
 
 branching:
-  default_base_branch: "integration"
+  default_base_branch: "develop"
 
 ci:
   workflow: "tests.yml"
@@ -29,6 +31,20 @@ ci:
 github:
   default_repo: "TalonT-Org/AutoSkillit"
 
-quota_guard:
-  enabled: false
-  short_window_threshold: 95.0
+features:
+  providers: true
+
+providers:
+  profiles:
+    minimax:
+      ANTHROPIC_BASE_URL: "https://api.minimax.io/anthropic"
+      ANTHROPIC_MODEL: "MiniMax-M2.7-highspeed"
+      ANTHROPIC_TIMEOUT: "3000000"
+      ENABLE_TOOL_SEARCH: "false"
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
+  step_overrides:
+    retry_worktree: minimax
+    compose_pr: minimax
+    diagnose_ci: minimax
+    prepare_pr: minimax
+

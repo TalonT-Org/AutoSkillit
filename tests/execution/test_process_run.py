@@ -26,6 +26,8 @@ from autoskillit.execution.process import (
     run_managed_sync,
 )
 
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
+
 # ---------------------------------------------------------------------------
 # Helper scripts — small Python programs that reproduce specific scenarios
 # ---------------------------------------------------------------------------
@@ -221,8 +223,8 @@ class TestReadTempOutputLogging:
         """
         import structlog
 
-        import autoskillit.execution._process_io as io_mod
         import autoskillit.execution.process as proc_mod
+        import autoskillit.execution.process._process_io as io_mod
 
         structlog.reset_defaults()
         current_procs = structlog.get_config()["processors"]
@@ -294,8 +296,8 @@ class TestTracingStopOnException:
         """tracing_handle.stop() is called in except BaseException even when task group raises."""
         import subprocess
 
-        from autoskillit.config import LinuxTracingConfig
         from autoskillit.execution.linux_tracing import LinuxTracingHandle
+        from tests._helpers import make_tracing_config
 
         stop_called: list[bool] = []
         original_stop = LinuxTracingHandle.stop
@@ -308,7 +310,7 @@ class TestTracingStopOnException:
 
         # Use a real process with tracing enabled; cancel mid-run to trigger BaseException path
         proc = subprocess.Popen(["sleep", "2"])
-        cfg = LinuxTracingConfig(enabled=True, proc_interval=0.05, tmpfs_path=str(tmp_path))
+        cfg = make_tracing_config(enabled=True, proc_interval=0.05, tmpfs_path=str(tmp_path))
 
         import anyio
 
@@ -382,7 +384,7 @@ class TestIdleStallWatchdog:
         )
 
         monkeypatch.setattr(
-            "autoskillit.execution._process_monitor._has_active_api_connection",
+            "autoskillit.execution.process._process_monitor._has_active_api_connection",
             lambda pid: True,
         )
 

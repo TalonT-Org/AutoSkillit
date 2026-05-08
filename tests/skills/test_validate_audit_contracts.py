@@ -76,6 +76,15 @@ class TestValidateAuditContent:
     def test_history_research_agent(self) -> None:
         assert "history research agent" in _skill_text().lower()
 
+    # T-VAL-026
+    def test_validate_audit_extended_filenames_have_no_timestamp_suffix(self) -> None:
+        """Extended validate-audit filenames must not carry timestamp suffixes."""
+        text = _skill_text()
+        assert "validated_report_{source}.md" in text, (
+            "Extended validate-audit/SKILL.md should use 'validated_report_{source}.md' "
+            "(no timestamp suffix)"
+        )
+
 
 class TestValidateAuditNewSteps:
     # T-VAL-016
@@ -165,12 +174,3 @@ class TestValidateAuditReviewDecisions:
         assert "Cohesion Audit" in text
         assert "Feature Gate Audit" in text
         assert "Documentation Audit" in text
-
-    # T-VAL-026
-    def test_validate_audit_extended_filenames_have_no_timestamp_suffix(self) -> None:
-        """Extended validate-audit filenames must not carry timestamp suffixes."""
-        text = _skill_text()
-        assert "validated_report_{source}.md" in text, (
-            "Extended validate-audit/SKILL.md should use 'validated_report_{source}.md' "
-            "(no timestamp suffix)"
-        )

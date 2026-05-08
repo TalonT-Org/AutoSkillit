@@ -146,6 +146,7 @@ class TestReloadLoopRefreshesMetadata:
             extra_env: dict,
             resume_spec: object,
             project_dir: Path,
+            **kwargs: object,
         ) -> str | None:
             return next(call_sequence)
 
@@ -197,6 +198,7 @@ class TestReloadLoopRefreshesMetadata:
             extra_env: dict,
             resume_spec: object,
             project_dir: Path,
+            **kwargs: object,
         ) -> str | None:
             return next(call_sequence)
 
@@ -267,6 +269,7 @@ class TestReloadLoopSentinelGuard:
             extra_env: dict,
             resume_spec: object,
             project_dir: Path,
+            **kwargs: object,
         ) -> str | None:
             session_call_count["n"] += 1
             return "reload-id-sentinel"
@@ -319,6 +322,7 @@ class TestReloadLoopSafetyGuards:
             extra_env: dict,
             resume_spec: object,
             project_dir: Path,
+            **kwargs: object,
         ) -> str:
             counter["n"] += 1
             return f"unique-reload-id-{counter['n']}"
@@ -370,6 +374,7 @@ class TestReloadLoopSafetyGuards:
             extra_env: dict,
             resume_spec: object,
             project_dir: Path,
+            **kwargs: object,
         ) -> str:
             return "repeated-reload-id"
 
@@ -422,6 +427,7 @@ class TestReloadLoopUsesNamedResume:
             extra_env: dict,
             resume_spec: object,
             project_dir: Path,
+            **kwargs: object,
         ) -> str | None:
             captured_specs.append(resume_spec)
             return next(call_sequence)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import shutil
 import sys
 from datetime import UTC, datetime
@@ -26,6 +27,7 @@ from autoskillit.cli.fleet._fleet_lifecycle import (
     _reap_stale_dispatches,
 )
 from autoskillit.cli.fleet._fleet_preview import (
+    _FLEET_CAMPAIGN_GREETINGS,
     _FLEET_DISPATCH_GREETINGS,
     _print_dispatch_preview,
 )
@@ -94,10 +96,7 @@ def fleet_dispatch() -> None:
     if confirm.lower() in ("n", "no"):
         return
 
-    import random
-
     greeting = random.choice(_FLEET_DISPATCH_GREETINGS).format(recipe_table=recipe_table)
-
     _launch_fleet_session(
         None,
         None,
@@ -224,6 +223,7 @@ def fleet_campaign(
     if not proceed:
         return
 
+    greeting = random.choice(_FLEET_CAMPAIGN_GREETINGS).format(campaign_name=campaign_name)
     _launch_fleet_session(
         parsed,
         campaign_id,
@@ -231,6 +231,7 @@ def fleet_campaign(
         resume_metadata,
         fleet_mode="campaign",
         ingredients_table=_itable,
+        initial_message=greeting,
     )
 
 

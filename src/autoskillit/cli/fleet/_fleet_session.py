@@ -6,7 +6,7 @@ import dataclasses
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
-from autoskillit.core import NamedResume, NoResume, get_logger
+from autoskillit.core import NamedResume, NoResume, dump_yaml_str, get_logger
 
 logger = get_logger(__name__)
 
@@ -92,7 +92,6 @@ def _launch_fleet_session(
         if state_path is None:
             raise ValueError("state_path must not be None in campaign-driven mode")
         from autoskillit.cli._prompts import _build_fleet_campaign_prompt
-        from autoskillit.core import dump_yaml_str
         from autoskillit.fleet import FLEET_HALTED_SENTINEL, resume_campaign_from_state
 
         manifest_yaml = dump_yaml_str(
@@ -141,10 +140,12 @@ def _launch_fleet_session(
         seen_reload_ids = set[str]()
         current_resume_spec = NoResume()
         infra_resume_count = 0
+        current_initial_message = initial_message
 
         while True:
             session_signal = _run_interactive_session(
                 prompt,
+                initial_message=current_initial_message,
                 extra_env=extra_env,
                 resume_spec=current_resume_spec,
                 project_dir=project_dir,
@@ -162,6 +163,8 @@ def _launch_fleet_session(
             else:
                 _check_reload_guard(session_signal, seen_reload_ids)
                 current_resume_spec = NamedResume(session_id=session_signal)
+
+            current_initial_message = None
 
             fresh_metadata = resume_campaign_from_state(
                 state_path, campaign_recipe.continue_on_failure

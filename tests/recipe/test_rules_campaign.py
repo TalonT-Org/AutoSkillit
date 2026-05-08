@@ -1055,7 +1055,7 @@ def test_dispatch_required_ingredient_provided_ignores_defaulted(tmp_path: Path)
             "kitchen_rules": ["NEVER"],
             "ingredients": {
                 "task": {"description": "The task", "required": True},
-                "base_branch": {"description": "Base branch", "default": "main"},
+                "base_branch": {"description": "Base branch", "required": True, "default": "main"},
             },
             "steps": {"stop": {"action": "stop", "message": "done"}},
         },

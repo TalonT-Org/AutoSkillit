@@ -152,7 +152,7 @@ def read_state(state_path: Path) -> CampaignState | None:
             orchestrator_session_id=data.get("orchestrator_session_id") or "",
         )
     except (KeyError, ValueError, TypeError) as exc:
-        logger.warning("read_state: corrupt payload in %s: %s", state_path, exc)
+        logger.warning("read_state_corrupt_payload", path=str(state_path), exc=str(exc))
         return None
 
 

@@ -708,6 +708,25 @@ class TestStderrEnvelopeForwarding:
         assert result["details"]["stderr"] == "timeout stderr"
 
     @pytest.mark.anyio
+    async def test_timeout_envelope_stderr_truncated_to_envelope_max(self, tool_ctx, monkeypatch):
+        """Timeout fleet_error details["stderr"] is truncated when stderr exceeds ENVELOPE_STDERR_MAX."""  # noqa: E501
+        import dataclasses
+
+        from tests.fakes import _DEFAULT_SKILL_RESULT
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+        long_stderr = "x" * 3000
+        tool_ctx.executor = InMemoryHeadlessExecutor(
+            default_result=dataclasses.replace(
+                _DEFAULT_SKILL_RESULT, subtype="timeout", stderr=long_stderr
+            )
+        )
+
+        result = await _run(tool_ctx)
+        assert len(result["details"]["stderr"]) < 3000
+        assert "truncated" in result["details"]["stderr"]
+
+    @pytest.mark.anyio
     async def test_envelope_stderr_truncated_to_envelope_max(self, tool_ctx, monkeypatch):
         """When skill_result.stderr exceeds ENVELOPE_STDERR_MAX, envelope truncates it."""
         import dataclasses
@@ -724,6 +743,31 @@ class TestStderrEnvelopeForwarding:
         monkeypatch.setattr(
             "autoskillit.fleet._api.parse_l3_result_block",
             lambda **_: _make_completed_clean(success=False),
+        )
+
+        result = await _run(tool_ctx)
+        assert len(result["stderr"]) < 3000
+        assert "truncated" in result["stderr"]
+
+    @pytest.mark.anyio
+    async def test_completed_dirty_envelope_stderr_truncated_to_envelope_max(
+        self, tool_ctx, monkeypatch
+    ):
+        """completed_dirty envelope stderr is truncated when stderr exceeds ENVELOPE_STDERR_MAX."""
+        import dataclasses
+
+        from tests.fakes import _DEFAULT_SKILL_RESULT
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+        long_stderr = "x" * 3000
+        tool_ctx.executor = InMemoryHeadlessExecutor(
+            default_result=dataclasses.replace(
+                _DEFAULT_SKILL_RESULT, stderr=long_stderr, success=False
+            )
+        )
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.parse_l3_result_block",
+            lambda **_: _make_completed_dirty(),
         )
 
         result = await _run(tool_ctx)

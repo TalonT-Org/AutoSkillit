@@ -160,10 +160,10 @@ def read_versioned_json(
             _SCHEMA_DRIFT_LOGGED.add(cache_key)
             if logger is not None:
                 logger.warning(
-                    "schema_drift: path=%s expected=%s observed=%s",
-                    path,
-                    expected_version,
-                    observed,
+                    "schema_drift",
+                    path=str(path),
+                    expected=expected_version,
+                    observed=observed,
                 )
             else:
                 warnings.warn(

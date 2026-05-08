@@ -1,4 +1,5 @@
-"""Read-side ratchet: enforce that write_versioned_json callers have corresponding read-side validation.
+"""Read-side ratchet: enforce that write_versioned_json callers have corresponding read-side
+validation.
 
 AST-scans src/autoskillit/ for modules that call write_versioned_json.
 Each such module must also call read_versioned_json (or be in the exception list),
@@ -74,12 +75,12 @@ def _scan_read_versioned_json_callers() -> set[str]:
 # Documented exceptions: modules that write versioned JSON but do not read it back.
 # Rationale for each is in the comment.
 _READ_SIDE_EXCEPTIONS: dict[str, str] = {
-    "src/autoskillit/planner/manifests.py": "Transient single-pipeline-run artifacts — writer and reader are always same code version",
+    "src/autoskillit/planner/manifests.py": "Transient artifacts — always same code version",
     "src/autoskillit/planner/compiler.py": "Transient single-pipeline-run artifacts",
     "src/autoskillit/planner/merge.py": "Transient single-pipeline-run artifacts",
     "src/autoskillit/planner/consolidation.py": "Transient single-pipeline-run artifacts",
     "src/autoskillit/planner/validation.py": "Transient single-pipeline-run artifacts",
-    "src/autoskillit/execution/_recording_skills.py": "Informational manifest — never read back by autoskillit",
+    "src/autoskillit/execution/_recording_skills.py": "Informational manifest — never read back",
 }
 
 
@@ -95,7 +96,7 @@ class TestSchemaReadConvention:
             if module not in readers and module not in _READ_SIDE_EXCEPTIONS:
                 missing_read[module] = (
                     f"{module} calls write_versioned_json but not read_versioned_json. "
-                    f"Add read_versioned_json to reads, or add an exception in _READ_SIDE_EXCEPTIONS."
+                    f"Add read_versioned_json to reads, or add to _READ_SIDE_EXCEPTIONS."
                 )
 
         assert not missing_read, "\n".join(

@@ -1,4 +1,5 @@
-"""Tests for core/_plugin_cache.py — retiring cache, kitchen registry, and schema version validation."""
+"""Tests for core/_plugin_cache.py — retiring cache, kitchen registry, and schema version
+validation."""
 
 from __future__ import annotations
 
@@ -54,6 +55,7 @@ class TestRetiringCacheSchemaValidation:
         When the file has a stale schema version, it must be discarded and only
         the new entry must be written.
         """
+        monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
         cache = tmp_path / ".autoskillit" / "retiring_cache.json"
         _make_retiring_file(
             cache, schema_version=99, retiring=[{"version": "old", "path": "/old/path"}]
@@ -63,10 +65,10 @@ class TestRetiringCacheSchemaValidation:
         written: list[str] = []
 
         def spy_write(path, data, schema_version):
-            written.append(json.loads(Path(path).read_text()))
             from autoskillit.core.io import write_versioned_json as real
 
             real(path, data, schema_version)
+            written.append(json.loads(Path(path).read_text()))
 
         monkeypatch.setattr("autoskillit.core._plugin_cache.write_versioned_json", spy_write)
 
@@ -119,6 +121,7 @@ class TestRetiringCacheSchemaValidation:
         When the file has a stale schema version, it must be treated as empty
         and the newly registered kitchen must be the only entry.
         """
+        monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
         kitchens_path = tmp_path / ".autoskillit" / "active_kitchens.json"
         _make_kitchen_file(
             kitchens_path,
@@ -136,10 +139,10 @@ class TestRetiringCacheSchemaValidation:
         written: list[str] = []
 
         def spy_write(path, data, schema_version):
-            written.append(json.loads(Path(path).read_text()))
             from autoskillit.core.io import write_versioned_json as real
 
             real(path, data, schema_version)
+            written.append(json.loads(Path(path).read_text()))
 
         monkeypatch.setattr("autoskillit.core._plugin_cache.write_versioned_json", spy_write)
 
@@ -185,6 +188,7 @@ class TestActiveKitchensSchemaValidation:
 
     def test_unregister_active_kitchen_ignores_stale_version(self, monkeypatch, tmp_path):
         """Stale active_kitchens.json must be treated as empty during unregister."""
+        monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
         kitchens_path = tmp_path / ".autoskillit" / "active_kitchens.json"
         _make_kitchen_file(
             kitchens_path,
@@ -202,10 +206,10 @@ class TestActiveKitchensSchemaValidation:
         written: list[str] = []
 
         def spy_write(path, data, schema_version):
-            written.append(json.loads(Path(path).read_text()))
             from autoskillit.core.io import write_versioned_json as real
 
             real(path, data, schema_version)
+            written.append(json.loads(Path(path).read_text()))
 
         monkeypatch.setattr("autoskillit.core._plugin_cache.write_versioned_json", spy_write)
 
@@ -217,6 +221,7 @@ class TestActiveKitchensSchemaValidation:
 
     def test_clear_kitchens_for_pid_ignores_stale_version(self, monkeypatch, tmp_path):
         """Stale active_kitchens.json must be treated as empty during clear_kitchens_for_pid."""
+        monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
         kitchens_path = tmp_path / ".autoskillit" / "active_kitchens.json"
         _make_kitchen_file(
             kitchens_path,
@@ -234,10 +239,10 @@ class TestActiveKitchensSchemaValidation:
         written: list[str] = []
 
         def spy_write(path, data, schema_version):
-            written.append(json.loads(Path(path).read_text()))
             from autoskillit.core.io import write_versioned_json as real
 
             real(path, data, schema_version)
+            written.append(json.loads(Path(path).read_text()))
 
         monkeypatch.setattr("autoskillit.core._plugin_cache.write_versioned_json", spy_write)
 

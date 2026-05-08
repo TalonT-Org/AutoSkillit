@@ -15,8 +15,7 @@ from typing import Any
 
 import httpx
 
-from autoskillit.core import get_logger
-from autoskillit.core.io import read_versioned_json, write_versioned_json
+from autoskillit.core import get_logger, read_versioned_json, write_versioned_json
 
 logger = get_logger(__name__)
 

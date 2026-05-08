@@ -215,7 +215,7 @@ async def _watch_child_activity(
             continue
 
         cap = _first_observed_deadline + max_extension_seconds
-        desired = _first_observed_deadline + _poll_interval * 2
+        desired = anyio.current_time() + _poll_interval * 2
         new_deadline = min(desired, cap)
         if new_deadline > scope.deadline:
             logger.debug(

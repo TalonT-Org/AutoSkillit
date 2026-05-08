@@ -27,7 +27,7 @@ async def test_extends_deadline_when_children_active(monkeypatch) -> None:
 
     async with anyio.create_task_group() as tg:
         tg.start_soon(_watch_child_activity, 1, scope_ref, 7200.0, trigger, 0.05)
-        with anyio.move_on_after(2.0) as scope:
+        with anyio.move_on_after(0.1) as scope:
             scope_ref[0] = scope
             original_deadline_ref.append(scope.deadline)
             await anyio.sleep(0.3)
@@ -83,7 +83,7 @@ async def test_max_extension_cap_enforced(monkeypatch) -> None:
 
     async with anyio.create_task_group() as tg:
         tg.start_soon(_watch_child_activity, 1, scope_ref, 0.2, trigger, 0.05)
-        with anyio.move_on_after(2.0) as scope:
+        with anyio.move_on_after(0.1) as scope:
             scope_ref[0] = scope
             original_deadline_ref.append(scope.deadline)
             await anyio.sleep(0.8)
@@ -91,8 +91,7 @@ async def test_max_extension_cap_enforced(monkeypatch) -> None:
         tg.cancel_scope.cancel()
 
     assert scope_ref[0] is not None
-    # Cap is original_deadline + 0.2 (max_extension_seconds)
-    assert scope_ref[0].deadline <= original_deadline_ref[0] + 0.2 + 0.05
+    assert scope_ref[0].deadline <= original_deadline_ref[0] + 0.2
 
 
 @pytest.mark.anyio
@@ -132,7 +131,7 @@ async def test_api_connection_also_extends(monkeypatch) -> None:
 
     async with anyio.create_task_group() as tg:
         tg.start_soon(_watch_child_activity, 1, scope_ref, 7200.0, trigger, 0.05)
-        with anyio.move_on_after(2.0) as scope:
+        with anyio.move_on_after(0.1) as scope:
             scope_ref[0] = scope
             original_deadline_ref.append(scope.deadline)
             await anyio.sleep(0.3)

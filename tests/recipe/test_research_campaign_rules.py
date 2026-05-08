@@ -93,7 +93,6 @@ def test_campaign_dangling_ingredient_passes(validation_ctx) -> None:
     assert not matched, "; ".join(f"{f.rule}: {f.message}" for f in matched)
 
 
-# T4: Campaign run-design captures scope_report and experiment_type
 def test_run_design_captures_scope_report_and_experiment_type(campaign_recipe: Recipe) -> None:
     run_design = _get_dispatch(campaign_recipe, "run-design")
     assert run_design is not None
@@ -101,7 +100,6 @@ def test_run_design_captures_scope_report_and_experiment_type(campaign_recipe: R
     assert "experiment_type" in run_design.capture
 
 
-# T5: Campaign run-implement captures experiment_results and forwards task
 def test_run_implement_captures_experiment_results(campaign_recipe: Recipe) -> None:
     run_impl = _get_dispatch(campaign_recipe, "run-implement")
     assert run_impl is not None
@@ -114,7 +112,6 @@ def test_run_implement_forwards_task(campaign_recipe: Recipe) -> None:
     assert "task" in run_impl.ingredients
 
 
-# T6: Campaign run-review forwards all required ingredients
 def test_run_review_forwards_required_research_ingredients(campaign_recipe: Recipe) -> None:
     run_rev = _get_dispatch(campaign_recipe, "run-review")
     assert run_rev is not None
@@ -122,14 +119,12 @@ def test_run_review_forwards_required_research_ingredients(campaign_recipe: Reci
         assert key in run_rev.ingredients, f"run-review missing ingredient: {key}"
 
 
-# T7: Campaign run-review does NOT capture all_diagram_paths
 def test_run_review_no_phantom_all_diagram_paths_capture(campaign_recipe: Recipe) -> None:
     run_rev = _get_dispatch(campaign_recipe, "run-review")
     assert run_rev is not None
     assert "all_diagram_paths" not in run_rev.capture
 
 
-# T9: Campaign run-archive does not forward dead ingredients
 def test_run_archive_no_dead_ingredient_forwarding(campaign_recipe: Recipe) -> None:
     run_arc = _get_dispatch(campaign_recipe, "run-archive")
     assert run_arc is not None

@@ -231,7 +231,6 @@ class TestResearchDesignRecipeStructure:
                 f"design_complete message must mention sentinel field: {field}"
             )
 
-    # T2: Design recipe has create_worktree step with correct captures
     def test_design_recipe_has_create_worktree_step(self, recipe) -> None:
         step = recipe.steps["create_worktree"]
         assert step.tool == "run_cmd"
@@ -239,7 +238,6 @@ class TestResearchDesignRecipeStructure:
         assert "research_dir" in step.capture
         assert step.on_success == "design_complete"
 
-    # T3: Design sentinel message includes worktree fields
     def test_design_sentinel_emits_worktree_fields(self, recipe) -> None:
         sentinel = recipe.steps["design_complete"]
         assert "worktree_path" in sentinel.message

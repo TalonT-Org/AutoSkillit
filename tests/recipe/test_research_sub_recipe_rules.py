@@ -53,7 +53,6 @@ def test_research_sub_recipe_has_clean_dataflow(path: Path) -> None:
     )
 
 
-# T1: All four research sub-recipes declare kind: food-truck
 @pytest.mark.parametrize(
     "recipe_name",
     [
@@ -68,7 +67,6 @@ def test_research_sub_recipes_declare_food_truck_kind(recipe_name: str) -> None:
     assert recipe.kind == RecipeKind.FOOD_TRUCK
 
 
-# T8: Archive recipe has no dead ingredient declarations
 def test_archive_recipe_no_dead_required_ingredients() -> None:
     recipe = load_recipe(RECIPE_DIR / "research-archive.yaml")
     ingredient_names = set(recipe.ingredients.keys())

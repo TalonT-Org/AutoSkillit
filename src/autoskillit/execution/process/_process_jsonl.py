@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-
 from autoskillit.core import ClaudeContentBlockType, get_logger
 from autoskillit.core import fast_loads as _fast_loads
 
@@ -41,7 +39,7 @@ def _jsonl_contains_marker(
             continue
         try:
             obj = _fast_loads(line)
-        except (ValueError, json.JSONDecodeError):
+        except ValueError:
             continue
         if not isinstance(obj, dict):
             continue
@@ -96,7 +94,7 @@ def _jsonl_has_record_type(
             continue
         try:
             obj = _fast_loads(line)
-        except (ValueError, json.JSONDecodeError):
+        except ValueError:
             continue
         if not isinstance(obj, dict):
             continue
@@ -122,7 +120,7 @@ def _jsonl_last_record_type(content: str) -> str | None:
             continue
         try:
             obj = _fast_loads(line)
-        except (ValueError, json.JSONDecodeError):
+        except ValueError:
             continue
         if isinstance(obj, dict):
             t = obj.get("type")

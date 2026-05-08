@@ -7,7 +7,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from autoskillit.core._json import fast_dumps as _fast_dumps
+from autoskillit.core import fast_dumps as _fast_dumps
 
 
 @dataclass(frozen=True)

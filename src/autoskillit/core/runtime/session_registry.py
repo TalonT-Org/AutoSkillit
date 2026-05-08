@@ -2,8 +2,6 @@
 
 Written at interactive session launch; bridged on open_kitchen hook fire.
 Read by the scoped resume picker to classify sessions by type.
-
-Stdlib-only — no autoskillit imports.
 """
 
 from __future__ import annotations
@@ -14,7 +12,7 @@ import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
-from autoskillit.core._json import fast_dumps as _fast_dumps
+from autoskillit.core import fast_dumps as _fast_dumps
 
 __all__ = [
     "registry_path",

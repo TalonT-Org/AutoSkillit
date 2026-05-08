@@ -1,5 +1,6 @@
 name: research-implement
 recipe_version: "1.0.0"
+kind: food-truck
 categories: [research-family]
 requires_packs: [research]
 description: >

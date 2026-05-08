@@ -1,6 +1,7 @@
 {
   "name": "research-review",
   "recipe_version": "1.0.0",
+  "kind": "food-truck",
   "categories": [
     "research-family"
   ],

@@ -68,7 +68,9 @@
         "worktree_path": "${{ result.worktree_path }}",
         "research_dir": "${{ result.research_dir }}",
         "experiment_plan": "${{ result.experiment_plan }}",
-        "visualization_plan_path": "${{ result.visualization_plan_path }}"
+        "visualization_plan_path": "${{ result.visualization_plan_path }}",
+        "scope_report": "${{ result.scope_report }}",
+        "experiment_type": "${{ result.experiment_type }}"
       },
       "depends_on": []
     },
@@ -77,6 +79,7 @@
       "recipe": "research-implement",
       "task": "Implement the research experiment plan.",
       "ingredients": {
+        "task": "${{ inputs.task }}",
         "worktree_path": "${{ campaign.worktree_path }}",
         "research_dir": "${{ campaign.research_dir }}",
         "experiment_plan": "${{ campaign.experiment_plan }}",
@@ -87,7 +90,8 @@
         "output_mode": "${{ inputs.output_mode }}"
       },
       "capture": {
-        "report_path": "${{ result.report_path }}"
+        "report_path": "${{ result.report_path }}",
+        "experiment_results": "${{ result.experiment_results }}"
       },
       "depends_on": [
         "run-design"
@@ -98,6 +102,10 @@
       "recipe": "research-review",
       "task": "Review the research experiment and open PR.",
       "ingredients": {
+        "task": "${{ inputs.task }}",
+        "experiment_results": "${{ campaign.experiment_results }}",
+        "experiment_type": "${{ campaign.experiment_type }}",
+        "scope_report": "${{ campaign.scope_report }}",
         "worktree_path": "${{ campaign.worktree_path }}",
         "research_dir": "${{ campaign.research_dir }}",
         "experiment_plan": "${{ campaign.experiment_plan }}",
@@ -112,7 +120,6 @@
       },
       "capture": {
         "pr_url": "${{ result.pr_url }}",
-        "all_diagram_paths": "${{ result.all_diagram_paths }}",
         "report_path_after_finalize": "${{ result.report_path_after_finalize }}"
       },
       "depends_on": [
@@ -127,9 +134,7 @@
         "base_branch": "${{ inputs.base_branch }}",
         "worktree_path": "${{ campaign.worktree_path }}",
         "research_dir": "${{ campaign.research_dir }}",
-        "pr_url": "${{ campaign.pr_url }}",
-        "all_diagram_paths": "${{ campaign.all_diagram_paths }}",
-        "report_path_after_finalize": "${{ campaign.report_path_after_finalize }}"
+        "pr_url": "${{ campaign.pr_url }}"
       },
       "capture": {},
       "depends_on": [

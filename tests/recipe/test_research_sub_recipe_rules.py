@@ -8,11 +8,13 @@ import pytest
 
 import autoskillit.recipe  # noqa: F401 -- pyright: ignore[reportUnusedImport] -- triggers rule registration
 from autoskillit.core import Severity
-from autoskillit.recipe.io import builtin_sub_recipes_dir, load_recipe
-from autoskillit.recipe.schema import DataFlowReport
+from autoskillit.recipe.io import builtin_recipes_dir, builtin_sub_recipes_dir, load_recipe
+from autoskillit.recipe.schema import DataFlowReport, RecipeKind
 from autoskillit.recipe.validator import analyze_dataflow, run_semantic_rules
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+
+RECIPE_DIR = builtin_recipes_dir()
 
 _RESEARCH_SUB_RECIPE_PATHS: list[Path] = sorted(
     builtin_sub_recipes_dir().glob("research-*.yaml"),
@@ -49,3 +51,24 @@ def test_research_sub_recipe_has_clean_dataflow(path: Path) -> None:
         f"{path.stem}: {len(report.warnings)} dataflow warning(s): "
         + "; ".join(f"{w.code}@{w.step_name}: {w.message}" for w in report.warnings)
     )
+
+
+@pytest.mark.parametrize(
+    "recipe_name",
+    [
+        "research-design",
+        "research-implement",
+        "research-review",
+        "research-archive",
+    ],
+)
+def test_research_sub_recipes_declare_food_truck_kind(recipe_name: str) -> None:
+    recipe = load_recipe(RECIPE_DIR / f"{recipe_name}.yaml")
+    assert recipe.kind == RecipeKind.FOOD_TRUCK
+
+
+def test_archive_recipe_no_dead_required_ingredients() -> None:
+    recipe = load_recipe(RECIPE_DIR / "research-archive.yaml")
+    ingredient_names = set(recipe.ingredients.keys())
+    assert "all_diagram_paths" not in ingredient_names
+    assert "report_path_after_finalize" not in ingredient_names

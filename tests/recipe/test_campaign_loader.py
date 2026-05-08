@@ -414,6 +414,8 @@ def test_research_campaign_run_design_capture():
         "research_dir",
         "experiment_plan",
         "visualization_plan_path",
+        "scope_report",
+        "experiment_type",
     }
     for key, val in d.capture.items():
         assert val == f"${{{{ result.{key} }}}}"
@@ -425,6 +427,7 @@ def test_research_campaign_run_implement_ingredients():
     d = recipe.dispatches[1]
     assert d.name == "run-implement"
     assert set(d.ingredients.keys()) == {
+        "task",
         "worktree_path",
         "research_dir",
         "experiment_plan",
@@ -434,6 +437,7 @@ def test_research_campaign_run_implement_ingredients():
         "issue_url",
         "output_mode",
     }
+    assert d.ingredients["task"] == "${{ inputs.task }}"
     assert d.ingredients["worktree_path"] == "${{ campaign.worktree_path }}"
     assert d.ingredients["research_dir"] == "${{ campaign.research_dir }}"
     assert d.ingredients["experiment_plan"] == "${{ campaign.experiment_plan }}"
@@ -449,8 +453,9 @@ def test_research_campaign_run_implement_capture():
     recipe = load_recipe(path)
     d = recipe.dispatches[1]
     assert d.name == "run-implement"
-    assert set(d.capture.keys()) == {"report_path"}
+    assert set(d.capture.keys()) == {"report_path", "experiment_results"}
     assert d.capture["report_path"] == "${{ result.report_path }}"
+    assert d.capture["experiment_results"] == "${{ result.experiment_results }}"
 
 
 def test_research_campaign_run_review_ingredients():
@@ -459,6 +464,10 @@ def test_research_campaign_run_review_ingredients():
     d = recipe.dispatches[2]
     assert d.name == "run-review"
     assert set(d.ingredients.keys()) == {
+        "task",
+        "experiment_results",
+        "experiment_type",
+        "scope_report",
         "worktree_path",
         "research_dir",
         "experiment_plan",
@@ -471,6 +480,7 @@ def test_research_campaign_run_review_ingredients():
         "review_pr",
         "audit_claims",
     }
+    assert d.ingredients["task"] == "${{ inputs.task }}"
     assert d.ingredients["source_dir"] == "${{ inputs.source_dir }}"
     assert d.ingredients["base_branch"] == "${{ inputs.base_branch }}"
     assert d.ingredients["issue_url"] == "${{ inputs.issue_url }}"
@@ -478,6 +488,9 @@ def test_research_campaign_run_review_ingredients():
     assert d.ingredients["review_pr"] == "${{ inputs.review_pr }}"
     assert d.ingredients["audit_claims"] == "${{ inputs.audit_claims }}"
     for key in [
+        "experiment_results",
+        "experiment_type",
+        "scope_report",
         "worktree_path",
         "research_dir",
         "experiment_plan",
@@ -492,9 +505,8 @@ def test_research_campaign_run_review_capture():
     recipe = load_recipe(path)
     d = recipe.dispatches[2]
     assert d.name == "run-review"
-    assert set(d.capture.keys()) == {"pr_url", "all_diagram_paths", "report_path_after_finalize"}
+    assert set(d.capture.keys()) == {"pr_url", "report_path_after_finalize"}
     assert d.capture["pr_url"] == "${{ result.pr_url }}"
-    assert d.capture["all_diagram_paths"] == "${{ result.all_diagram_paths }}"
     assert d.capture["report_path_after_finalize"] == "${{ result.report_path_after_finalize }}"
 
 
@@ -508,8 +520,6 @@ def test_research_campaign_run_archive_ingredients():
         "worktree_path",
         "research_dir",
         "pr_url",
-        "all_diagram_paths",
-        "report_path_after_finalize",
     }
     assert d.ingredients["base_branch"] == "${{ inputs.base_branch }}"
     for key in d.ingredients:

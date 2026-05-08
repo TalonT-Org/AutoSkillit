@@ -56,7 +56,7 @@ class TestResearchDesignRecipeStructure:
         assert recipe.ingredients["issue_url"].required is False
 
     def test_step_count(self, recipe) -> None:
-        assert len(recipe.steps) == 10
+        assert len(recipe.steps) == 11
 
     def test_step_names(self, recipe) -> None:
         expected = {
@@ -64,6 +64,7 @@ class TestResearchDesignRecipeStructure:
             "plan_experiment",
             "review_design",
             "plan_visualization",
+            "create_worktree",
             "revise_design",
             "check_design_review_loop",
             "resolve_design_review",
@@ -148,7 +149,7 @@ class TestResearchDesignRecipeStructure:
             assert key in capture, f"Missing capture key: {key}"
 
     def test_plan_visualization_on_success(self, recipe) -> None:
-        assert recipe.steps["plan_visualization"].on_success == "design_complete"
+        assert recipe.steps["plan_visualization"].on_success == "create_worktree"
 
     def test_plan_visualization_on_failure(self, recipe) -> None:
         assert recipe.steps["plan_visualization"].on_failure == "escalate_stop"
@@ -223,34 +224,29 @@ class TestResearchDesignRecipeStructure:
             "visualization_plan_path",
             "report_plan_path",
             "experiment_type",
+            "worktree_path",
+            "research_dir",
         ):
             assert field in message, (
                 f"design_complete message must mention sentinel field: {field}"
             )
 
+    def test_design_recipe_has_create_worktree_step(self, recipe) -> None:
+        step = recipe.steps["create_worktree"]
+        assert step.tool == "run_cmd"
+        assert "worktree_path" in step.capture
+        assert "research_dir" in step.capture
+        assert step.on_success == "design_complete"
+
+    def test_design_sentinel_emits_worktree_fields(self, recipe) -> None:
+        sentinel = recipe.steps["design_complete"]
+        assert "worktree_path" in sentinel.message
+        assert "research_dir" in sentinel.message
+
     def test_escalate_stop_is_stop(self, recipe) -> None:
         step = recipe.steps["escalate_stop"]
         assert step.action == "stop"
         assert step.message, "escalate_stop must have a non-empty message"
-
-    def test_no_dangling_create_worktree(self, recipe) -> None:
-        for name, step in recipe.steps.items():
-            assert "create_worktree" not in name, f"Step name '{name}' references create_worktree"
-            for attr in (
-                step.on_success,
-                step.on_failure,
-                step.on_exhausted,
-                step.on_context_limit,
-            ):
-                if attr:
-                    assert "create_worktree" not in attr, (
-                        f"Step '{name}' routes to create_worktree via {attr!r}"
-                    )
-            if step.on_result:
-                for cond in step.on_result.conditions:
-                    assert "create_worktree" not in cond.route, (
-                        f"Step '{name}' on_result routes to create_worktree"
-                    )
 
     def test_kitchen_rules_count(self, recipe) -> None:
         assert len(recipe.kitchen_rules) == 2

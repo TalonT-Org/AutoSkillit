@@ -304,8 +304,8 @@ class FleetConfig:
     max_concurrent_dispatches: int = _MAX_CONCURRENT_DISPATCHES
     max_total_issues: int = 12
     enable_deadline_extension: bool = True
-    max_extension_seconds: int = 7200
-    idle_output_timeout: int = 1800
+    max_extension_seconds: float = 7200
+    idle_output_timeout: float = 1800
 
     def validate(self, feature_enabled: bool) -> None:
         """Validate only when the feature is active."""

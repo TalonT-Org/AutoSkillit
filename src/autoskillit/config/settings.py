@@ -503,10 +503,10 @@ class AutomationConfig:
                 enable_deadline_extension=bool(
                     val(fr, "enable_deadline_extension", _fr["enable_deadline_extension"])
                 ),
-                max_extension_seconds=int(
+                max_extension_seconds=float(
                     val(fr, "max_extension_seconds", _fr["max_extension_seconds"])
                 ),
-                idle_output_timeout=int(
+                idle_output_timeout=float(
                     val(fr, "idle_output_timeout", _fr["idle_output_timeout"])
                 ),
             ),

@@ -61,7 +61,7 @@ def test_cycle_with_only_on_failure_exit_is_warning() -> None:
     assert cycle_findings[0].severity == Severity.WARNING
 
 
-def test_cycle_with_retry_exit_is_clean() -> None:
+def test_cycle_with_retry_exit_is_error() -> None:
     """Cycle where retrying step's success path stays in cycle → ERROR (outer loop unbounded)."""
     recipe = _make_recipe(
         {

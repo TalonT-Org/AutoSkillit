@@ -120,6 +120,7 @@ class TestValidateRecipeTool:
             "      cmd: echo hello\n"
             "      cwd: .\n"
             "    on_success: done\n"
+            "    on_failure: escalate\n"
             "  done:\n"
             "    action: stop\n"
             '    message: "Done."\n'
@@ -237,6 +238,7 @@ class TestValidateRecipeTool:
             "    tool: test_check\n"
             "    model: sonnet\n"
             "    on_success: done\n"
+            "    on_failure: escalate\n"
             "  done:\n"
             "    action: stop\n"
             '    message: "Done."\n'

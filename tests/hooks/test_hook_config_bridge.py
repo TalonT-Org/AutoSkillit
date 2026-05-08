@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import io
 import json
+import time
 from contextlib import redirect_stdout
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -230,3 +231,97 @@ def test_write_hook_config_round_trip_via_resolve_quota_settings(tmp_path, monke
     assert settings.buffer_seconds == 42
     assert settings.cache_path == "/round/trip.json"
     assert settings.disabled is False  # enabled=True → disabled=False
+
+
+# T-BUDGET-1
+def test_quota_guard_budget_exceeded_exit(tmp_path, monkeypatch):
+    """When sleep exceeds remaining budget, deny message instructs clean exit."""
+    cache = tmp_path / "quota_cache.json"
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_DEADLINE", str(time.time() + 60))
+    _write_blocking_cache(
+        cache,
+        fetched_at=datetime.now(UTC).isoformat(),
+    )
+    _write_hook_config(
+        tmp_path,
+        {
+            "cache_path": str(cache),
+            "cache_max_age": 300,
+            "buffer_seconds": 3600,
+            "disabled": False,
+        },
+    )
+    monkeypatch.chdir(tmp_path)
+    _clear_env(monkeypatch)
+
+    out, _ = _run_hook(event={"tool_name": "run_skill"})
+
+    assert out != "", "hook failed-open unexpectedly (empty output)"
+    data = json.loads(out)
+    assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
+    reason = data["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "QUOTA BUDGET EXCEEDED" in reason
+    assert "fleet_quota_exhausted" in reason
+    assert "run_cmd" not in reason  # no sleep command
+
+
+# T-BUDGET-2
+def test_quota_guard_normal_deny_when_budget_sufficient(tmp_path, monkeypatch):
+    """Normal deny when deadline is far in the future (sleep fits in budget)."""
+    cache = tmp_path / "quota_cache.json"
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_DEADLINE", str(time.time() + 7200))
+    _write_blocking_cache(
+        cache,
+        fetched_at=datetime.now(UTC).isoformat(),
+    )
+    _write_hook_config(
+        tmp_path,
+        {
+            "cache_path": str(cache),
+            "cache_max_age": 300,
+            "buffer_seconds": 300,
+            "disabled": False,
+        },
+    )
+    monkeypatch.chdir(tmp_path)
+    _clear_env(monkeypatch)
+
+    out, _ = _run_hook(event={"tool_name": "run_skill"})
+
+    assert out != "", "hook failed-open unexpectedly (empty output)"
+    data = json.loads(out)
+    assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
+    reason = data["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "QUOTA WAIT REQUIRED" in reason
+    assert "run_cmd" in reason or "time.sleep" in reason  # contains sleep command
+
+
+# T-BUDGET-3
+def test_quota_guard_normal_deny_when_no_deadline(tmp_path, monkeypatch):
+    """Normal deny when AUTOSKILLIT_SESSION_DEADLINE is not set (backward compatible)."""
+    cache = tmp_path / "quota_cache.json"
+    _write_blocking_cache(
+        cache,
+        fetched_at=datetime.now(UTC).isoformat(),
+    )
+    _write_hook_config(
+        tmp_path,
+        {
+            "cache_path": str(cache),
+            "cache_max_age": 300,
+            "buffer_seconds": 300,
+            "disabled": False,
+        },
+    )
+    monkeypatch.chdir(tmp_path)
+    _clear_env(monkeypatch)
+    monkeypatch.delenv("AUTOSKILLIT_SESSION_DEADLINE", raising=False)
+
+    out, _ = _run_hook(event={"tool_name": "run_skill"})
+
+    assert out != "", "hook failed-open unexpectedly (empty output)"
+    data = json.loads(out)
+    assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
+    reason = data["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "QUOTA WAIT REQUIRED" in reason
+    assert "run_cmd" in reason or "time.sleep" in reason

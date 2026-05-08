@@ -144,4 +144,6 @@ class SubprocessRunner(Protocol):
         idle_output_timeout: float | None = None,
         max_suppression_seconds: float | None = None,
         on_pid_resolved: Callable[[int, int], None] | None = None,
+        enable_deadline_extension: bool = False,
+        max_extension_seconds: float = 7200,
     ) -> Awaitable[SubprocessResult]: ...

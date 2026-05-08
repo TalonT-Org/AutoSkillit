@@ -176,6 +176,7 @@ def _validate_transition(current: str, new: str, dispatch_name: str) -> None:
 _INFRASTRUCTURE_FAILURE_REASONS: frozenset[str] = frozenset(
     {
         FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK,
+        FleetErrorCode.FLEET_QUOTA_EXHAUSTED,
     }
 )
 

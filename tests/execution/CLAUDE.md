@@ -51,6 +51,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_pr_analysis.py` | Tests for execution/pr_analysis.py |
 | `test_process_channel_b.py` | Integration tests for Channel B drain-race and COMPLETED pipeline adjudication |
 | `test_process_debug_logging.py` | Tests for debug logging instrumentation in process.py |
+| `test_process_deadline_extension.py` | Tests for _watch_child_activity coroutine and deadline extension behavior |
 | `test_process_heartbeat.py` | Unit tests for _heartbeat, _has_active_api_connection, _has_active_child_processes, orphaned tool result detection |
 | `test_process_idle_watchdog.py` | Tests for the stdout idle watchdog coroutine (_watch_stdout_idle) |
 | `test_process_jsonl.py` | Tests for JSONL marker detection utilities |

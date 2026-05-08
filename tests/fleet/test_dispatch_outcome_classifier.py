@@ -87,6 +87,49 @@ class TestClassifyDispatchOutcomeCompletedClean:
         assert reason == "my-error"
 
 
+class TestQuotaExhaustedOutcome:
+    def test_quota_exhausted_is_failure(self):
+        """completed_clean + success=false + reason=fleet_quota_exhausted → FAILURE."""
+        parsed = L3ParseResult(
+            outcome="completed_clean",
+            payload={"success": False, "reason": FleetErrorCode.FLEET_QUOTA_EXHAUSTED},
+            raw_body=None,
+            parse_error=None,
+            source="stdout",
+        )
+        skill_result = dataclasses.replace(_DEFAULT_SKILL_RESULT)
+        status, reason = classify_dispatch_outcome(parsed, skill_result, sidecar_exists=False)
+        assert status == DispatchStatus.FAILURE
+        assert reason == FleetErrorCode.FLEET_QUOTA_EXHAUSTED
+
+
+class TestInfrastructureFailureReasons:
+    def test_has_failed_dispatch_returns_false_for_quota_exhaustion(self, tmp_path):
+        """Quota exhaustion is infrastructure failure — does not halt campaign."""
+        from autoskillit.core import FleetErrorCode as FEC
+        from autoskillit.fleet.state import _write_state as write_state
+        from autoskillit.fleet.state_recovery import has_failed_dispatch
+        from autoskillit.fleet.state_types import CampaignState, DispatchRecord
+
+        dispatches = [
+            DispatchRecord(
+                name="step_1",
+                status=DispatchStatus.FAILURE,
+                reason=FEC.FLEET_QUOTA_EXHAUSTED,
+            ),
+        ]
+        state = CampaignState(
+            schema_version=4,
+            campaign_id="test-id",
+            campaign_name="test",
+            manifest_path="manifest.yaml",
+            started_at=0.0,
+            dispatches=dispatches,
+        )
+        write_state(tmp_path / "state.json", state)
+        assert not has_failed_dispatch(tmp_path / "state.json")
+
+
 class TestClassifyDispatchOutcomeCompletedDirty:
     def test_completed_dirty_is_failure(self):
         parsed = L3ParseResult(

@@ -12,7 +12,11 @@ import json
 import regex as re
 
 from autoskillit.core import ADMIRAL_DISPATCH_SECTIONS, get_logger, pkg_root
-from autoskillit.hooks import QUOTA_GUARD_DENY_TRIGGER, QUOTA_POST_WARNING_TRIGGER
+from autoskillit.hooks import (
+    QUOTA_BUDGET_EXCEEDED_TRIGGER,
+    QUOTA_GUARD_DENY_TRIGGER,
+    QUOTA_POST_WARNING_TRIGGER,
+)
 
 logger = get_logger(__name__)
 
@@ -187,6 +191,12 @@ QUOTA DENIAL ROUTING — run_skill only (check BEFORE on_failure):
   - The deny message contains a run_cmd sleep command. Execute it immediately.
   - After the sleep completes, retry the EXACT same run_skill call (same arguments).
   - NEVER treat a quota denial as a permanent failure or pipeline-stopping error.
+- When a PreToolUse hook DENIES run_skill with "{QUOTA_BUDGET_EXCEEDED_TRIGGER}":
+  - The required quota sleep EXCEEDS the session's remaining wall-clock budget.
+  - Do NOT sleep. Instead, emit the sentinel block immediately with the fields
+    specified in the deny message (success=false, reason=fleet_quota_exhausted,
+    wait_seconds, summary).
+  - Then STOP — do not call any more tools after emitting the sentinel.
 - When run_skill output contains "{QUOTA_POST_WARNING_TRIGGER}":
   - A post-execution quota check detected high utilization.
   - The warning contains a run_cmd sleep command. Execute it BEFORE the next run_skill call.

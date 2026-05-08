@@ -340,6 +340,8 @@ class TestGroupDApiContractPreservation:
             "idle_output_timeout",
             "max_suppression_seconds",
             "on_pid_resolved",
+            "enable_deadline_extension",
+            "max_extension_seconds",
         }
         assert expected == public_params, (
             f"run_managed_async public params changed.\n"
@@ -402,6 +404,8 @@ class TestGroupDApiContractPreservation:
             "idle_output_timeout",
             "max_suppression_seconds",
             "on_pid_resolved",
+            "enable_deadline_extension",
+            "max_extension_seconds",
         }
         assert expected == actual, (
             f"DefaultSubprocessRunner.__call__ params changed.\n"

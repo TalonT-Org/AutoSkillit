@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import tempfile
 from collections import deque
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -101,7 +101,9 @@ class RecordingSubprocessRunner(SubprocessRunner):
         linux_tracing_config: Any | None = None,
         idle_output_timeout: float | None = None,
         max_suppression_seconds: float | None = None,
-        on_pid_resolved: Any | None = None,
+        on_pid_resolved: Callable[[int, int], None] | None = None,
+        enable_deadline_extension: bool = False,
+        max_extension_seconds: float = 7200,
     ) -> SubprocessResult:
         step_name = (env or {}).get(SCENARIO_STEP_NAME_ENV, "")
 
@@ -128,6 +130,8 @@ class RecordingSubprocessRunner(SubprocessRunner):
             idle_output_timeout=idle_output_timeout,
             max_suppression_seconds=max_suppression_seconds,
             on_pid_resolved=on_pid_resolved,
+            enable_deadline_extension=enable_deadline_extension,
+            max_extension_seconds=max_extension_seconds,
         )
 
         if step_name:
@@ -242,7 +246,9 @@ class ReplayingSubprocessRunner(SubprocessRunner):
         linux_tracing_config: Any | None = None,
         idle_output_timeout: float | None = None,
         max_suppression_seconds: float | None = None,
-        on_pid_resolved: Any | None = None,
+        on_pid_resolved: Callable[[int, int], None] | None = None,
+        enable_deadline_extension: bool = False,
+        max_extension_seconds: float = 7200,
     ) -> SubprocessResult:
         step_name = (env or {}).get(SCENARIO_STEP_NAME_ENV, "")
 

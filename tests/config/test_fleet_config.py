@@ -177,6 +177,45 @@ class TestFleetConfig:
         cfg = load_config(tmp_path)
         assert cfg.fleet.max_concurrent_dispatches == 3
 
+    def test_fleet_config_enable_deadline_extension_defaults_true(self) -> None:
+        """FleetConfig.enable_deadline_extension defaults to True."""
+        from autoskillit.config.settings import FleetConfig
+
+        assert FleetConfig().enable_deadline_extension is True
+
+    def test_fleet_config_max_extension_seconds_defaults_7200(self) -> None:
+        """FleetConfig.max_extension_seconds defaults to 7200."""
+        from autoskillit.config.settings import FleetConfig
+
+        assert FleetConfig().max_extension_seconds == 7200
+
+    def test_fleet_config_idle_output_timeout_defaults_1800(self) -> None:
+        """FleetConfig.idle_output_timeout defaults to 1800."""
+        from autoskillit.config.settings import FleetConfig
+
+        assert FleetConfig().idle_output_timeout == 1800
+
+    def test_fleet_config_rejects_zero_max_extension_seconds(self) -> None:
+        """FleetConfig raises ValueError when max_extension_seconds is zero."""
+        from autoskillit.config.settings import FleetConfig
+
+        with pytest.raises(ValueError, match="max_extension_seconds must be positive"):
+            FleetConfig(max_extension_seconds=0).validate(feature_enabled=True)
+
+    def test_fleet_config_rejects_negative_max_extension_seconds(self) -> None:
+        """FleetConfig raises ValueError when max_extension_seconds is negative."""
+        from autoskillit.config.settings import FleetConfig
+
+        with pytest.raises(ValueError, match="max_extension_seconds must be positive"):
+            FleetConfig(max_extension_seconds=-1).validate(feature_enabled=True)
+
+    def test_fleet_config_rejects_negative_idle_output_timeout(self) -> None:
+        """FleetConfig raises ValueError when idle_output_timeout is negative."""
+        from autoskillit.config.settings import FleetConfig
+
+        with pytest.raises(ValueError, match="idle_output_timeout must be non-negative"):
+            FleetConfig(idle_output_timeout=-1).validate(feature_enabled=True)
+
 
 def test_config_resolution_fleet_enabled_via_experimental(tmp_path) -> None:
     """Full config resolution enables fleet when experimental_enabled=True in project config."""

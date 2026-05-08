@@ -52,6 +52,7 @@ from autoskillit.execution.process._process_race import (
     RaceAccumulator,
     RaceSignals,
     _extract_stdout_session_id,
+    _watch_child_activity,
     _watch_heartbeat,
     _watch_process,
     _watch_session_log,
@@ -197,6 +198,8 @@ async def run_managed_async(
     idle_output_timeout: float | None = None,
     max_suppression_seconds: float | None = None,
     on_pid_resolved: Callable[[int, int], None] | None = None,
+    enable_deadline_extension: bool = False,
+    max_extension_seconds: float = 7200,
     _phase1_poll: float = 1.0,
     _phase2_poll: float = 2.0,
     _heartbeat_poll: float = 0.5,
@@ -296,7 +299,7 @@ async def run_managed_async(
             trigger = anyio.Event()
             channel_b_ready = anyio.Event()
             stdout_session_id_ready = anyio.Event()
-            timeout_scope = None  # bound inside task group body; initialized for safety
+            timeout_scope_ref: list[anyio.CancelScope | None] = [None]
 
             async with anyio.create_task_group() as tg:
                 tg.start_soon(_watch_process, proc, acc, trigger)
@@ -352,8 +355,19 @@ async def run_managed_async(
                         config=linux_tracing_config,
                         tg=tg,
                     )
-                with anyio.move_on_after(timeout) as timeout_scope:
+                if enable_deadline_extension and _observed_pid is not None:
+                    tg.start_soon(
+                        _watch_child_activity,
+                        _observed_pid,
+                        timeout_scope_ref,
+                        max_extension_seconds,
+                        trigger,
+                    )
+                timeout_scope: anyio.CancelScope | None
+                with anyio.move_on_after(timeout) as _ts:
+                    timeout_scope_ref[0] = _ts
                     await trigger.wait()
+                timeout_scope = timeout_scope_ref[0]
                 # Symmetric drain: if the process exited before Channel B deposited,
                 # give the session monitor a bounded window to complete its current
                 # poll cycle and deposit its signal.
@@ -556,6 +570,8 @@ class DefaultSubprocessRunner:
         idle_output_timeout: float | None = None,
         max_suppression_seconds: float | None = None,
         on_pid_resolved: Callable[[int, int], None] | None = None,
+        enable_deadline_extension: bool = False,
+        max_extension_seconds: float = 7200,
     ) -> SubprocessResult:
         return await run_managed_async(
             cmd,
@@ -572,4 +588,6 @@ class DefaultSubprocessRunner:
             idle_output_timeout=idle_output_timeout,
             max_suppression_seconds=max_suppression_seconds,
             on_pid_resolved=on_pid_resolved,
+            enable_deadline_extension=enable_deadline_extension,
+            max_extension_seconds=max_extension_seconds,
         )

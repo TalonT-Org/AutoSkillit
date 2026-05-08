@@ -691,6 +691,29 @@ class TestStderrEnvelopeForwarding:
         assert result["stderr"] == "missing sentinel trace"
 
     @pytest.mark.anyio
+    async def test_no_sentinel_envelope_stderr_truncated_to_envelope_max(
+        self, tool_ctx, monkeypatch
+    ):
+        """no_sentinel envelope stderr is truncated when stderr exceeds ENVELOPE_STDERR_MAX."""
+        import dataclasses
+
+        from tests.fakes import _DEFAULT_SKILL_RESULT
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+        long_stderr = "x" * 3000
+        tool_ctx.executor = InMemoryHeadlessExecutor(
+            default_result=dataclasses.replace(_DEFAULT_SKILL_RESULT, stderr=long_stderr)
+        )
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.parse_l3_result_block",
+            lambda **_: _make_no_sentinel(),
+        )
+
+        result = await _run(tool_ctx)
+        assert len(result["stderr"]) < 3000
+        assert "truncated" in result["stderr"]
+
+    @pytest.mark.anyio
     async def test_timeout_envelope_includes_stderr_in_details(self, tool_ctx, monkeypatch):
         """Timeout fleet_error envelope includes stderr in details dict."""
         import dataclasses

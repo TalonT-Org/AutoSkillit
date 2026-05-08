@@ -602,7 +602,7 @@ def start_linux_tracing(
                 handle._snapshots.append(snap)
                 if handle._trace_file is not None:
                     try:
-                        handle._trace_file.write(_fast_dumps(snap.__dict__) + "\n")
+                        handle._trace_file.write(_fast_dumps(dataclasses.asdict(snap)) + "\n")
                     except OSError:
                         # Close broken file; degrade to in-memory only
                         try:

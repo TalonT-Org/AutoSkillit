@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from .._json import fast_dumps as _fast_dumps
@@ -52,7 +52,7 @@ def write_provenance_record(record: ProvenanceRecord, project_dir: Path | None =
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8") as fh:
-            fh.write(_fast_dumps(record.__dict__, sort_keys=True) + "\n")
+            fh.write(_fast_dumps(asdict(record), sort_keys=True) + "\n")
     except OSError:
         pass
 

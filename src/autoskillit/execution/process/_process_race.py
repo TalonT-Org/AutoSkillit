@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import assert_never
 
@@ -110,7 +110,7 @@ async def _watch_process(
 
         snap = read_proc_snapshot(proc.pid)
         if snap is not None:
-            acc.exit_snapshot = {**snap.__dict__, "event": "exit_snapshot"}
+            acc.exit_snapshot = {**asdict(snap), "event": "exit_snapshot"}
     except Exception:
         logger.debug("exit_snapshot_failed", pid=proc.pid, exc_info=True)
     acc.process_exited = True

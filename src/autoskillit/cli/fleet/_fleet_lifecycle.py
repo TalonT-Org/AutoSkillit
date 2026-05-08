@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import fcntl
 import signal
 import sys
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -19,20 +19,7 @@ from autoskillit.core import get_logger
 logger = get_logger(__name__)
 
 if TYPE_CHECKING:
-    from autoskillit.fleet import DispatchRecord, DispatchStatus
-
-
-def _transition_dead_dispatch(
-    state_path: Path, record: DispatchRecord, reason: str
-) -> DispatchStatus | None:
-    """Transition a confirmed-dead RUNNING dispatch to RESUMABLE or INTERRUPTED.
-
-    Delegates sidecar decision logic to the fleet layer. Returns the new status,
-    or None if both write attempts failed. Never raises.
-    """
-    from autoskillit.fleet import crash_recover_dispatch  # noqa: PLC0415
-
-    return crash_recover_dispatch(state_path, record, reason=reason)
+    pass
 
 
 @asynccontextmanager
@@ -71,56 +58,70 @@ async def _fleet_signal_guard(
                 # operations (kill, state write) are not interrupted.
                 with anyio.CancelScope(shield=True):
                     from autoskillit.execution import async_kill_process_tree, read_starttime_ticks
-                    from autoskillit.fleet import DispatchStatus, read_state  # noqa: PLC0415
+                    from autoskillit.fleet import (  # noqa: PLC0415
+                        CampaignStateMutator,
+                        DispatchStatus,
+                    )
+                    from autoskillit.fleet.state_recovery import (
+                        classify_stale_dispatch,  # noqa: PLC0415
+                    )
 
-                    state = read_state(state_path)
-                    if state is not None:
-                        for dispatch in state.dispatches:
-                            if dispatch.status != DispatchStatus.RUNNING:
-                                continue
-                            if dispatch.dispatched_pid == 0:
-                                _transition_dead_dispatch(
-                                    state_path, dispatch, reason=f"signal_{signame}"
-                                )
-                                continue
+                    with CampaignStateMutator(state_path) as m:
+                        if m.state is not None:
+                            for dispatch in m.state.dispatches:
+                                if dispatch.status != DispatchStatus.RUNNING:
+                                    continue
+                                if dispatch.dispatched_pid == 0:
+                                    new_status, sidecar = classify_stale_dispatch(dispatch)
+                                    dispatch.status = new_status
+                                    dispatch.reason = f"signal_{signame}"
+                                    if sidecar:
+                                        dispatch.sidecar_path = sidecar
+                                    dispatch.ended_at = time.time()
+                                    m.mark_dirty()
+                                    continue
 
-                            # Verify PID identity before killing
-                            current_ticks = read_starttime_ticks(dispatch.dispatched_pid)
-                            if current_ticks is not None:
-                                if (
-                                    dispatch.dispatched_starttime_ticks > 0
-                                    and current_ticks == dispatch.dispatched_starttime_ticks
-                                ):
-                                    try:
-                                        await async_kill_process_tree(
-                                            dispatch.dispatched_pid, timeout=5.0
-                                        )
-                                    except Exception:
+                                # Verify PID identity before killing
+                                current_ticks = read_starttime_ticks(dispatch.dispatched_pid)
+                                if current_ticks is not None:
+                                    if (
+                                        dispatch.dispatched_starttime_ticks > 0
+                                        and current_ticks == dispatch.dispatched_starttime_ticks
+                                    ):
+                                        try:
+                                            await async_kill_process_tree(
+                                                dispatch.dispatched_pid, timeout=5.0
+                                            )
+                                        except Exception:
+                                            logger.warning(
+                                                "signal_guard: kill_process_tree failed",
+                                                exc_info=True,
+                                            )
+                                    else:
                                         logger.warning(
-                                            "signal_guard: kill_process_tree failed",
-                                            exc_info=True,
+                                            "signal_guard: PID %d recycled (ticks mismatch)",
+                                            dispatch.dispatched_pid,
                                         )
                                 else:
-                                    logger.warning(
-                                        "signal_guard: PID %d recycled (ticks mismatch)",
-                                        dispatch.dispatched_pid,
-                                    )
-                            else:
-                                # Non-Linux fallback: psutil.pid_exists without identity check
-                                if psutil.pid_exists(dispatch.dispatched_pid):
-                                    try:
-                                        await async_kill_process_tree(
-                                            dispatch.dispatched_pid, timeout=5.0
-                                        )
-                                    except Exception:
-                                        logger.warning(
-                                            "signal_guard: kill_process_tree failed (non-linux)",
-                                            exc_info=True,
-                                        )
+                                    # Non-Linux fallback: psutil.pid_exists without identity check
+                                    if psutil.pid_exists(dispatch.dispatched_pid):
+                                        try:
+                                            await async_kill_process_tree(
+                                                dispatch.dispatched_pid, timeout=5.0
+                                            )
+                                        except Exception:
+                                            logger.warning(
+                                                "signal_guard: kill_process_tree failed (non-linux fallback)",
+                                                exc_info=True,
+                                            )
 
-                            _transition_dead_dispatch(
-                                state_path, dispatch, reason=f"signal_{signame}"
-                            )
+                                new_status, sidecar = classify_stale_dispatch(dispatch)
+                                dispatch.status = new_status
+                                dispatch.reason = f"signal_{signame}"
+                                if sidecar:
+                                    dispatch.sidecar_path = sidecar
+                                dispatch.ended_at = time.time()
+                                m.mark_dirty()
 
                     if cleanup_on_interrupt:
                         try:
@@ -153,7 +154,8 @@ async def _fleet_signal_guard(
 def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
     """Reap stale RUNNING dispatches with PID-recycling-safe identity checks.
 
-    Uses fcntl.flock() to protect against concurrent reap invocations.
+    Uses CampaignStateMutator (which holds _resume_lock + flock on .lock sidecar)
+    to protect against concurrent reap and resume invocations.
     For each RUNNING dispatch:
     - Boot-ID mismatch → reaped_pid_recycled (no kill)
     - Process dead → reaped_dead_pid
@@ -161,7 +163,8 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
     - Process alive + ticks mismatch → reaped_pid_recycled (no kill)
     """
     from autoskillit.execution import kill_process_tree, read_boot_id, read_starttime_ticks
-    from autoskillit.fleet import DispatchStatus, read_state  # noqa: PLC0415
+    from autoskillit.fleet import CampaignStateMutator, DispatchStatus  # noqa: PLC0415
+    from autoskillit.fleet.state_recovery import classify_stale_dispatch  # noqa: PLC0415
 
     current_boot_id = read_boot_id()
 
@@ -169,104 +172,117 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
         logger.info("reap: state file not found, nothing to reap: %s", state_path)
         return
 
-    with open(state_path, "r+") as _lock_fh:
-        fcntl.flock(_lock_fh, fcntl.LOCK_EX)
-        try:
-            state = read_state(state_path)
-            if state is None:
-                logger.warning("reap: cannot read state file: %s", state_path)
-                return
+    with CampaignStateMutator(state_path) as m:
+        if m.state is None:
+            logger.warning("reap: cannot read state file: %s", state_path)
+            return
 
-            running = [d for d in state.dispatches if d.status == DispatchStatus.RUNNING]
-            if not running:
-                logger.info("reap: no running dispatches in campaign %s", state.campaign_id)
-                return
+        running = [d for d in m.state.dispatches if d.status == DispatchStatus.RUNNING]
+        if not running:
+            logger.info("reap: no running dispatches in campaign %s", m.state.campaign_id)
+            return
 
-            logger.info(
-                "reap: scanning %d dispatches in campaign %s", len(running), state.campaign_id
-            )
+        logger.info(
+            "reap: scanning %d dispatches in campaign %s", len(running), m.state.campaign_id
+        )
 
-            for dispatch in running:
-                name = dispatch.name
-                pid = dispatch.dispatched_pid
+        for dispatch in running:
+            name = dispatch.name
+            pid = dispatch.dispatched_pid
 
-                if pid == 0:
-                    if dry_run:
-                        logger.info("reap: [WOULD MARK]  %s  pid=0  (no PID recorded)", name)
-                    else:
-                        new_status = _transition_dead_dispatch(
-                            state_path, dispatch, reason="reaped_dead_pid"
-                        )
-                        if new_status is not None:
-                            logger.info("reap: [MARKED]      %s  (no PID recorded)", name)
-                        else:
-                            logger.warning("reap: [MARK_FAILED] %s  (no PID recorded)", name)
-                    continue
-
-                # Boot ID check: if machine rebooted, all PIDs are recycled
-                if (
-                    dispatch.dispatched_boot_id != ""
-                    and current_boot_id is not None
-                    and dispatch.dispatched_boot_id != current_boot_id
-                ):
-                    if dry_run:
-                        logger.info(
-                            "reap: [WOULD MARK]  %s  pid=%d  (rebooted, pid_recycled)", name, pid
-                        )
-                    else:
-                        _transition_dead_dispatch(
-                            state_path, dispatch, reason="reaped_pid_recycled"
-                        )
-                        logger.info(
-                            "reap: [MARKED]      %s  pid=%d  (rebooted, pid_recycled)",
-                            name,
-                            pid,
-                        )
-                    continue
-
-                if not psutil.pid_exists(pid):
-                    if dry_run:
-                        logger.info("reap: [WOULD MARK]  %s  pid=%d  (process dead)", name, pid)
-                    else:
-                        _transition_dead_dispatch(state_path, dispatch, reason="reaped_dead_pid")
-                        logger.info("reap: [MARKED]      %s  pid=%d  (process dead)", name, pid)
-                    continue
-
-                # Process is alive — check identity
-                current_ticks = read_starttime_ticks(pid)
-                if (
-                    current_ticks is not None
-                    and current_ticks == dispatch.dispatched_starttime_ticks
-                ):
-                    if dry_run:
-                        logger.info(
-                            "reap: [WOULD KILL]  %s  pid=%d  (orphan, identity match)", name, pid
-                        )
-                    else:
-                        try:
-                            kill_process_tree(pid)
-                        except Exception:
-                            logger.warning(
-                                "reap: kill_process_tree failed for pid=%d", pid, exc_info=True
-                            )
-                        _transition_dead_dispatch(state_path, dispatch, reason="reaped_orphan")
-                        logger.info("reap: [KILLED]      %s  pid=%d  (orphan reaped)", name, pid)
+            if pid == 0:
+                if dry_run:
+                    logger.info("reap: [WOULD MARK]  %s  pid=0  (no PID recorded)", name)
                 else:
-                    if dry_run:
-                        logger.info(
-                            "reap: [WOULD MARK]  %s  pid=%d  (PID recycled, no kill)", name, pid
+                    new_status, sidecar = classify_stale_dispatch(dispatch)
+                    dispatch.status = new_status
+                    dispatch.reason = "reaped_dead_pid"
+                    if sidecar:
+                        dispatch.sidecar_path = sidecar
+                    dispatch.ended_at = time.time()
+                    m.mark_dirty()
+                    logger.info("reap: [MARKED]      %s  (no PID recorded)", name)
+                continue
+
+            # Boot ID check: if machine rebooted, all PIDs are recycled
+            if (
+                dispatch.dispatched_boot_id != ""
+                and current_boot_id is not None
+                and dispatch.dispatched_boot_id != current_boot_id
+            ):
+                if dry_run:
+                    logger.info(
+                        "reap: [WOULD MARK]  %s  pid=%d  (rebooted, pid_recycled)", name, pid
+                    )
+                else:
+                    new_status, sidecar = classify_stale_dispatch(dispatch)
+                    dispatch.status = new_status
+                    dispatch.reason = "reaped_pid_recycled"
+                    if sidecar:
+                        dispatch.sidecar_path = sidecar
+                    dispatch.ended_at = time.time()
+                    m.mark_dirty()
+                    logger.info(
+                        "reap: [MARKED]      %s  pid=%d  (rebooted, pid_recycled)",
+                        name,
+                        pid,
+                    )
+                continue
+
+            if not psutil.pid_exists(pid):
+                if dry_run:
+                    logger.info("reap: [WOULD MARK]  %s  pid=%d  (process dead)", name, pid)
+                else:
+                    new_status, sidecar = classify_stale_dispatch(dispatch)
+                    dispatch.status = new_status
+                    dispatch.reason = "reaped_dead_pid"
+                    if sidecar:
+                        dispatch.sidecar_path = sidecar
+                    dispatch.ended_at = time.time()
+                    m.mark_dirty()
+                    logger.info("reap: [MARKED]      %s  pid=%d  (process dead)", name, pid)
+                continue
+
+            # Process is alive — check identity
+            current_ticks = read_starttime_ticks(pid)
+            if current_ticks is not None and current_ticks == dispatch.dispatched_starttime_ticks:
+                if dry_run:
+                    logger.info(
+                        "reap: [WOULD KILL]  %s  pid=%d  (orphan, identity match)", name, pid
+                    )
+                else:
+                    try:
+                        kill_process_tree(pid)
+                    except Exception:
+                        logger.warning(
+                            "reap: kill_process_tree failed for pid=%d", pid, exc_info=True
                         )
-                    else:
-                        _transition_dead_dispatch(
-                            state_path, dispatch, reason="reaped_pid_recycled"
-                        )
-                        logger.info(
-                            "reap: [MARKED]      %s  pid=%d  (PID recycled, no kill)",
-                            name,
-                            pid,
-                        )
-        finally:
-            fcntl.flock(_lock_fh, fcntl.LOCK_UN)
+                    new_status, sidecar = classify_stale_dispatch(dispatch)
+                    dispatch.status = new_status
+                    dispatch.reason = "reaped_orphan"
+                    if sidecar:
+                        dispatch.sidecar_path = sidecar
+                    dispatch.ended_at = time.time()
+                    m.mark_dirty()
+                    logger.info("reap: [KILLED]      %s  pid=%d  (orphan reaped)", name, pid)
+            else:
+                if dry_run:
+                    logger.info(
+                        "reap: [WOULD MARK]  %s  pid=%d  (PID recycled, no kill)", name, pid
+                    )
+                else:
+                    new_status, sidecar = classify_stale_dispatch(dispatch)
+                    dispatch.status = new_status
+                    dispatch.reason = "reaped_pid_recycled"
+                    if sidecar:
+                        dispatch.sidecar_path = sidecar
+                    dispatch.ended_at = time.time()
+                    m.mark_dirty()
+                    logger.info(
+                        "reap: [MARKED]      %s  pid=%d  (PID recycled, no kill)",
+                        name,
+                        pid,
+                    )
 
 
 def _pick_resume_campaign(project_dir: Path) -> tuple[str, str]:

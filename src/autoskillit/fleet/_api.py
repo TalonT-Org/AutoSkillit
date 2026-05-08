@@ -281,9 +281,9 @@ async def _run_dispatch(
 ) -> str:
     """Inner dispatch body — called after lock acquisition."""
     from autoskillit.fleet.state import (
+        CampaignStateMutator,
         DispatchRecord,
         DispatchStatus,
-        append_dispatch_record,
         normalize_dispatch_token_usage,
         write_initial_state,
     )
@@ -445,24 +445,31 @@ async def _run_dispatch(
 
     # --- Timeout pre-check: short-circuit before result-block parsing ---
     if skill_result.subtype == "timeout":
-        append_dispatch_record(
-            state_path,
-            DispatchRecord(
-                name=effective_name,
-                status=DispatchStatus.FAILURE,
-                dispatch_id=dispatch_id,
-                campaign_id=campaign_id,
-                caller_session_id=caller_session_id,
-                dispatched_session_id=skill_result.session_id,
-                dispatched_pid=_dispatched_pid[0] if _dispatched_pid else 0,
-                reason=FleetErrorCode.FLEET_L3_TIMEOUT,
-                kill_reason=skill_result.retry_reason or "",
-                infra_exit_category=skill_result.infra.exit_category or "",
-                token_usage=normalize_dispatch_token_usage(skill_result.token_usage or {}),
-                started_at=started_at,
-                ended_at=ended_at,
-            ),
+        record = DispatchRecord(
+            name=effective_name,
+            status=DispatchStatus.FAILURE,
+            dispatch_id=dispatch_id,
+            campaign_id=campaign_id,
+            caller_session_id=caller_session_id,
+            dispatched_session_id=skill_result.session_id,
+            dispatched_pid=_dispatched_pid[0] if _dispatched_pid else 0,
+            reason=FleetErrorCode.FLEET_L3_TIMEOUT,
+            kill_reason=skill_result.retry_reason or "",
+            infra_exit_category=skill_result.infra.exit_category or "",
+            token_usage=normalize_dispatch_token_usage(skill_result.token_usage or {}),
+            started_at=started_at,
+            ended_at=ended_at,
         )
+        with CampaignStateMutator(state_path) as m:
+            if m.state is not None:
+                for i, d in enumerate(m.state.dispatches):
+                    if d.name == effective_name:
+                        m.state.dispatches[i] = record
+                        m.mark_dirty()
+                        break
+                else:
+                    m.state.dispatches.append(record)
+                    m.mark_dirty()
         _post_dispatch_cleanup(tool_ctx, skill_result, cache_invalidator, quota_refresher)
         return fleet_error(
             FleetErrorCode.FLEET_L3_TIMEOUT,
@@ -499,31 +506,39 @@ async def _run_dispatch(
         checkpoint=dispatch_checkpoint,
     )
 
-    append_dispatch_record(
-        state_path,
-        DispatchRecord(
-            name=effective_name,
-            status=final_status,
-            dispatch_id=dispatch_id,
-            campaign_id=campaign_id,
-            caller_session_id=caller_session_id,
-            dispatched_session_id=skill_result.session_id,
-            dispatched_pid=_dispatched_pid[0] if _dispatched_pid else 0,
-            reason=reason,
-            kill_reason=skill_result.retry_reason or "",
-            infra_exit_category=skill_result.infra.exit_category or "",
-            token_usage=normalize_dispatch_token_usage(skill_result.token_usage or {}),
-            started_at=started_at,
-            ended_at=ended_at,
-        ),
+    record = DispatchRecord(
+        name=effective_name,
+        status=final_status,
+        dispatch_id=dispatch_id,
+        campaign_id=campaign_id,
+        caller_session_id=caller_session_id,
+        dispatched_session_id=skill_result.session_id,
+        dispatched_pid=_dispatched_pid[0] if _dispatched_pid else 0,
+        reason=reason,
+        kill_reason=skill_result.retry_reason or "",
+        infra_exit_category=skill_result.infra.exit_category or "",
+        token_usage=normalize_dispatch_token_usage(skill_result.token_usage or {}),
+        started_at=started_at,
+        ended_at=ended_at,
     )
 
+    extracted: dict[str, str] = {}
     if final_status == DispatchStatus.SUCCESS and capture and parsed.payload:
-        from autoskillit.fleet.state import write_captured_values  # noqa: PLC0415
+        extracted = _extract_captures(capture, parsed.payload) if parsed.payload else {}
 
-        extracted = _extract_captures(capture, parsed.payload)
-        if extracted:
-            write_captured_values(state_path, extracted)
+    with CampaignStateMutator(state_path) as m:
+        if m.state is not None:
+            for i, d in enumerate(m.state.dispatches):
+                if d.name == effective_name:
+                    m.state.dispatches[i] = record
+                    m.mark_dirty()
+                    break
+            else:
+                m.state.dispatches.append(record)
+                m.mark_dirty()
+            if extracted:
+                m.state.captured_values = {**m.state.captured_values, **extracted}
+                m.mark_dirty()
 
     _post_dispatch_cleanup(tool_ctx, skill_result, cache_invalidator, quota_refresher)
 

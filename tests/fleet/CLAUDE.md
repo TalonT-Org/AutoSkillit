@@ -32,6 +32,7 @@ Fleet campaign dispatch, state persistence, and sidecar tests.
 | `test_retry_failed_dispatch.py` | Tests for explicit retry of failed campaign dispatches via FAILURE → PENDING state transition |
 | `test_sidecar.py` | Sidecar tests |
 | `test_state.py` | Tests for fleet state module (Group J) |
+| `test_state_lock_contract.py` | Locking contract tests — AST scan for flock targets, flock acquisition per mutation, cross-caller concurrency |
 | `test_state_protection.py` | Tests for fleet.state.build_protected_campaign_ids (PROT_1–PROT_9) |
 | `test_state_recovery.py` | Tests for derive_orchestrator_resume_spec in state_recovery module |
 | `test_state_schema.py` | Tests for DispatchRecord schema v2 fields and backward compatibility (Group J) |

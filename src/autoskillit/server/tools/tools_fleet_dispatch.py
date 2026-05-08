@@ -142,40 +142,6 @@ async def dispatch_food_truck(
             caller_session_id=caller_session_id,
         )
 
-        campaign_state_path_str = os.environ.get("AUTOSKILLIT_CAMPAIGN_STATE_PATH")
-        if campaign_state_path_str and dispatch_name:
-            try:
-                if not isinstance(result, str):
-                    raise TypeError(
-                        f"execute_dispatch returned {type(result).__name__}, expected str"
-                    )
-                envelope = json.loads(result)
-                campaign_state_path = Path(campaign_state_path_str)
-                if campaign_state_path.exists():
-                    from autoskillit.fleet import (
-                        DispatchRecord,
-                        DispatchStatus,
-                        append_dispatch_record,
-                    )
-
-                    raw_status = envelope.get("dispatch_status")
-                    if raw_status is None:
-                        raise KeyError("dispatch_status missing from dispatch envelope")
-                    status = DispatchStatus(raw_status)
-                    append_dispatch_record(
-                        campaign_state_path,
-                        DispatchRecord(
-                            name=dispatch_name,
-                            status=status,
-                            dispatch_id=envelope.get("dispatch_id", ""),
-                            dispatched_session_id=envelope.get("dispatched_session_id", ""),
-                            reason=envelope.get("reason", ""),
-                            token_usage=envelope.get("token_usage") or {},
-                        ),
-                    )
-            except (json.JSONDecodeError, KeyError):
-                logger.warning("campaign state update failed", exc_info=True)
-
         return result
     except Exception as exc:
         logger.error("dispatch_food_truck unhandled exception", exc_info=True)

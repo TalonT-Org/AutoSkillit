@@ -813,38 +813,18 @@ class TestBuildFoodTruckCmdResume:
         spec = build_food_truck_cmd(**self.BASE, resume_session_id=None)
         assert "--resume" not in spec.cmd
 
-    def test_resume_prompt_contains_sentinel_open_marker(self):
-        """Resume prompt must contain l3-result sentinel open marker."""
+    @pytest.mark.parametrize(
+        "attr",
+        ["sentinel_open", "sentinel_close", "completion_marker"],
+    )
+    def test_resume_prompt_contains_sentinel_markers(self, attr: str):
+        """Resume prompt must contain all sentinel markers from DispatchIdentity."""
         identity = DispatchIdentity.from_dispatch_id("aaaabbbb-cccc-dddd-eeee-ffffffffffff")
         spec = build_food_truck_cmd(
             **self.BASE, resume_session_id="abc-123", sentinel_contract=identity.sentinel_contract
         )
-        cmd = spec.cmd
-        prompt_idx = cmd.index("-p") + 1
-        prompt = cmd[prompt_idx]
-        assert identity.sentinel_open in prompt
-
-    def test_resume_prompt_contains_sentinel_close_marker(self):
-        """Resume prompt must contain end-l3-result sentinel close marker."""
-        identity = DispatchIdentity.from_dispatch_id("aaaabbbb-cccc-dddd-eeee-ffffffffffff")
-        spec = build_food_truck_cmd(
-            **self.BASE, resume_session_id="abc-123", sentinel_contract=identity.sentinel_contract
-        )
-        cmd = spec.cmd
-        prompt_idx = cmd.index("-p") + 1
-        prompt = cmd[prompt_idx]
-        assert identity.sentinel_close in prompt
-
-    def test_resume_prompt_contains_completion_marker(self):
-        """Resume prompt must contain L3_DONE completion marker."""
-        identity = DispatchIdentity.from_dispatch_id("aaaabbbb-cccc-dddd-eeee-ffffffffffff")
-        spec = build_food_truck_cmd(
-            **self.BASE, resume_session_id="abc-123", sentinel_contract=identity.sentinel_contract
-        )
-        cmd = spec.cmd
-        prompt_idx = cmd.index("-p") + 1
-        prompt = cmd[prompt_idx]
-        assert identity.completion_marker in prompt
+        prompt = spec.cmd[spec.cmd.index("-p") + 1]
+        assert getattr(identity, attr) in prompt
 
 
 def test_headless_exclusive_vars_contains_max_mcp_output_tokens() -> None:

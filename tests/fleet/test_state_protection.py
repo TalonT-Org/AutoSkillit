@@ -146,4 +146,4 @@ def test_build_protected_ids_stale_schema_version_skipped(tmp_path: Path) -> Non
     }
     (dispatches_dir / "stale.json").write_text(json.dumps(stale_payload), encoding="utf-8")
     result = build_protected_campaign_ids(tmp_path)
-    assert "stale-campaign" not in result
+    assert result == frozenset()

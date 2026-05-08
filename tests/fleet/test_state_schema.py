@@ -116,7 +116,7 @@ class TestDispatchRecordSchemaV2:
             state = read_state(state_path)
         assert state is None
         drift_logs = [r for r in cap if "schema_drift" in r.get("event", "")]
-        assert len(drift_logs) >= 1
+        assert len(drift_logs) == 1
 
     def test_read_state_succeeds_on_current_version(self, tmp_path: Path) -> None:
         """read_state succeeds when schema_version matches _SCHEMA_VERSION."""

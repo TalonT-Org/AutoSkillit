@@ -10,12 +10,15 @@ import fcntl
 import json
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from types import TracebackType
+    from typing import IO
 
 from autoskillit.core import get_logger, write_versioned_json
 from autoskillit.fleet.state_gates import record_gate_outcome
 from autoskillit.fleet.state_recovery import (
-    crash_recover_dispatch,
     has_failed_dispatch,
     resume_campaign_from_state,
 )
@@ -41,7 +44,6 @@ __all__ = [
     # re-exported from state_gates
     "record_gate_outcome",
     # re-exported from state_recovery
-    "crash_recover_dispatch",
     "has_failed_dispatch",
     "resume_campaign_from_state",
     # re-exported from state_types
@@ -53,6 +55,7 @@ __all__ = [
     "GateRecordResult",
     "ResumeDecision",
     # local
+    "CampaignStateMutator",
     "write_initial_state",
     "read_state",
     "mark_dispatch_running",
@@ -60,6 +63,7 @@ __all__ = [
     "mark_dispatch_resumable",
     "reset_failed_dispatch",
     "append_dispatch_record",
+    "upsert_dispatch_record_by_name",
     "build_protected_campaign_ids",
     "write_captured_values",
     "read_all_campaign_captures",
@@ -116,27 +120,16 @@ def reset_failed_dispatch(state_path: Path, dispatch_name: str) -> bool:
     False if the dispatch was not found, not in FAILURE, or the state file
     is missing/corrupted. OSError raised by _write_state propagates to
     the caller — write failures are not silently converted to False.
-
-    Thread-safe: uses _resume_lock + fcntl.LOCK_EX.
     """
-    with _resume_lock:
-        if not state_path.exists():
+    with CampaignStateMutator(state_path) as m:
+        if m.state is None:
             return False
-        lock_path = state_path.with_suffix(".lock")
-        with open(lock_path, "wb") as _flock_handle:
-            fcntl.flock(_flock_handle, fcntl.LOCK_EX)
-
-            state = read_state(state_path)
-            if state is None:
-                return False
-
-            for d in state.dispatches:
-                if d.name == dispatch_name and d.status == DispatchStatus.FAILURE:
-                    _clear_dispatch_for_retry(d)
-                    _write_state(state_path, state)
-                    return True
-
-            return False
+        for d in m.state.dispatches:
+            if d.name == dispatch_name and d.status == DispatchStatus.FAILURE:
+                _clear_dispatch_for_retry(d)
+                m.mark_dirty()
+                return True
+        return False
 
 
 def read_state(state_path: Path) -> CampaignState | None:
@@ -166,6 +159,75 @@ def read_state(state_path: Path) -> CampaignState | None:
         return None
 
 
+class CampaignStateMutator:
+    """Context manager for exclusive fleet state mutation.
+
+    Dual-layer lock: _resume_lock (intra-process threading) + fcntl.LOCK_EX
+    on state_path.with_suffix(".lock") (cross-process). Reads state on enter,
+    writes atomically on exit if dirty.
+    """
+
+    def __init__(self, state_path: Path) -> None:
+        self._state_path = state_path
+        self._lock_path = state_path.with_suffix(".lock")
+        self._state: CampaignState | None = None
+        self._flock_handle: IO[bytes] | None = None
+        self._dirty: bool = False
+
+    def __enter__(self) -> CampaignStateMutator:
+        _resume_lock.acquire()
+        try:
+            self._lock_path.parent.mkdir(parents=True, exist_ok=True)
+            fh = open(self._lock_path, "wb")
+            try:
+                fcntl.flock(fh, fcntl.LOCK_EX)
+            except BaseException:
+                fh.close()
+                raise
+            self._flock_handle = fh
+            self._state = read_state(self._state_path)
+            return self
+        except BaseException:
+            _resume_lock.release()
+            raise
+
+    @property
+    def state(self) -> CampaignState | None:
+        return self._state
+
+    def mark_dirty(self) -> None:
+        self._dirty = True
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        try:
+            if self._dirty and self._state is not None and exc_type is None:
+                try:
+                    _write_state(self._state_path, self._state)
+                except Exception:
+                    logger.error(
+                        "CampaignStateMutator.__exit__: _write_state failed for %s",
+                        self._state_path,
+                        exc_info=True,
+                    )
+                    raise
+        finally:
+            try:
+                if self._flock_handle is not None:
+                    try:
+                        self._flock_handle.close()
+                    except Exception:
+                        logger.debug(
+                            "CampaignStateMutator.__exit__: flock close failed", exc_info=True
+                        )
+            finally:
+                _resume_lock.release()
+
+
 def _write_state(state_path: Path, state: CampaignState) -> None:
     """Internal: atomic write of full state to disk."""
     payload = {
@@ -191,23 +253,23 @@ def mark_dispatch_running(
     sidecar_path: str | None = None,
 ) -> None:
     """Atomically mark a dispatch as running with its dispatch_id and dispatched_pid."""
-    state = read_state(state_path)
-    if state is None:
-        raise FileNotFoundError(f"State file not found or corrupted: {state_path}")
-    for d in state.dispatches:
-        if d.name == dispatch_name:
-            _validate_transition(d.status, DispatchStatus.RUNNING, d.name)
-            d.status = DispatchStatus.RUNNING
-            d.dispatch_id = dispatch_id
-            d.dispatched_pid = dispatched_pid
-            d.dispatched_starttime_ticks = starttime_ticks
-            d.dispatched_boot_id = boot_id
-            d.started_at = time.time()
-            d.sidecar_path = sidecar_path
-            break
-    else:
-        raise ValueError(f"Dispatch '{dispatch_name}' not found in state")
-    _write_state(state_path, state)
+    with CampaignStateMutator(state_path) as m:
+        if m.state is None:
+            raise FileNotFoundError(f"State file not found or corrupted: {state_path}")
+        for d in m.state.dispatches:
+            if d.name == dispatch_name:
+                _validate_transition(d.status, DispatchStatus.RUNNING, d.name)
+                d.status = DispatchStatus.RUNNING
+                d.dispatch_id = dispatch_id
+                d.dispatched_pid = dispatched_pid
+                d.dispatched_starttime_ticks = starttime_ticks
+                d.dispatched_boot_id = boot_id
+                d.started_at = time.time()
+                d.sidecar_path = sidecar_path
+                m.mark_dirty()
+                return
+        else:
+            raise ValueError(f"Dispatch '{dispatch_name}' not found in state")
 
 
 def mark_dispatch_interrupted(
@@ -217,19 +279,19 @@ def mark_dispatch_interrupted(
     reason: str,
 ) -> None:
     """Atomically mark a dispatch as interrupted with a reason."""
-    state = read_state(state_path)
-    if state is None:
-        raise FileNotFoundError(f"State file not found or corrupted: {state_path}")
-    for d in state.dispatches:
-        if d.name == dispatch_name:
-            _validate_transition(d.status, DispatchStatus.INTERRUPTED, d.name)
-            d.status = DispatchStatus.INTERRUPTED
-            d.reason = reason
-            d.ended_at = time.time()
-            break
-    else:
-        raise ValueError(f"Dispatch '{dispatch_name}' not found in state")
-    _write_state(state_path, state)
+    with CampaignStateMutator(state_path) as m:
+        if m.state is None:
+            raise FileNotFoundError(f"State file not found or corrupted: {state_path}")
+        for d in m.state.dispatches:
+            if d.name == dispatch_name:
+                _validate_transition(d.status, DispatchStatus.INTERRUPTED, d.name)
+                d.status = DispatchStatus.INTERRUPTED
+                d.reason = reason
+                d.ended_at = time.time()
+                m.mark_dirty()
+                return
+        else:
+            raise ValueError(f"Dispatch '{dispatch_name}' not found in state")
 
 
 def mark_dispatch_resumable(
@@ -239,19 +301,19 @@ def mark_dispatch_resumable(
     sidecar_path: str,
 ) -> None:
     """Atomically transition a RUNNING dispatch to RESUMABLE, preserving the sidecar path."""
-    state = read_state(state_path)
-    if state is None:
-        raise FileNotFoundError(f"State file not found or corrupted: {state_path}")
-    for d in state.dispatches:
-        if d.name == dispatch_name:
-            _validate_transition(d.status, DispatchStatus.RESUMABLE, d.name)
-            d.status = DispatchStatus.RESUMABLE
-            d.sidecar_path = sidecar_path
-            d.ended_at = time.time()
-            break
-    else:
-        raise ValueError(f"Dispatch '{dispatch_name}' not found in state")
-    _write_state(state_path, state)
+    with CampaignStateMutator(state_path) as m:
+        if m.state is None:
+            raise FileNotFoundError(f"State file not found or corrupted: {state_path}")
+        for d in m.state.dispatches:
+            if d.name == dispatch_name:
+                _validate_transition(d.status, DispatchStatus.RESUMABLE, d.name)
+                d.status = DispatchStatus.RESUMABLE
+                d.sidecar_path = sidecar_path
+                d.ended_at = time.time()
+                m.mark_dirty()
+                return
+        else:
+            raise ValueError(f"Dispatch '{dispatch_name}' not found in state")
 
 
 def append_dispatch_record(
@@ -263,17 +325,36 @@ def append_dispatch_record(
     If a dispatch with the same name exists, it is replaced in-place.
     Otherwise the record is appended to the end.
     """
-    state = read_state(state_path)
-    if state is None:
-        raise FileNotFoundError(f"State file not found or corrupted: {state_path}")
-    for i, d in enumerate(state.dispatches):
-        if d.name == record.name:
-            _validate_transition(d.status, record.status, d.name)
-            state.dispatches[i] = record
-            _write_state(state_path, state)
+    with CampaignStateMutator(state_path) as m:
+        if m.state is None:
+            raise FileNotFoundError(f"State file not found or corrupted: {state_path}")
+        for i, d in enumerate(m.state.dispatches):
+            if d.name == record.name:
+                _validate_transition(d.status, record.status, d.name)
+                m.state.dispatches[i] = record
+                m.mark_dirty()
+                return
+        m.state.dispatches.append(record)
+        m.mark_dirty()
+
+
+def upsert_dispatch_record_by_name(state_path: Path, record: DispatchRecord) -> None:
+    """Upsert a dispatch record by name without transition validation.
+
+    Intended for external writes (e.g. from result envelopes) where the prior
+    state is unknown and _validate_transition enforcement is not appropriate.
+    If the state file is missing or corrupted, this is a no-op.
+    """
+    with CampaignStateMutator(state_path) as m:
+        if m.state is None:
             return
-    state.dispatches.append(record)
-    _write_state(state_path, state)
+        for i, d in enumerate(m.state.dispatches):
+            if d.name == record.name:
+                m.state.dispatches[i] = record
+                m.mark_dirty()
+                return
+        m.state.dispatches.append(record)
+        m.mark_dirty()
 
 
 def build_protected_campaign_ids(project_dir: Path) -> frozenset[str]:
@@ -319,34 +400,27 @@ def write_captured_values(state_path: Path, captures: dict[str, str]) -> None:
     Merges `captures` into the existing `captured_values` dict (new keys win).
     No-op if state file is missing or corrupted (logs a warning).
     """
-    state = read_state(state_path)
-    if state is None:
-        logger.warning("write_captured_values: state not found at %s", state_path)
-        return
-    state.captured_values = {**state.captured_values, **captures}
-    _write_state(state_path, state)
+    with CampaignStateMutator(state_path) as m:
+        if m.state is None:
+            logger.warning("write_captured_values: state not found at %s", state_path)
+            return
+        m.state.captured_values = {**m.state.captured_values, **captures}
+        m.mark_dirty()
 
 
 def update_orchestrator_session_id(state_path: Path, session_id: str) -> None:
-    """Persist the L3 orchestrator's Claude Code session ID to campaign state.
-
-    Thread-safe: uses fcntl.LOCK_EX on state.lock.
-    """
+    """Persist the L3 orchestrator's Claude Code session ID to campaign state."""
     if not session_id:
         return
-    with _resume_lock:
-        lock_path = state_path.with_suffix(".lock")
-        with open(lock_path, "ab") as _flock_handle:
-            fcntl.flock(_flock_handle, fcntl.LOCK_EX)
-            state = read_state(state_path)
-            if state is None:
-                logger.warning(
-                    "update_orchestrator_session_id: state not found at %s",
-                    state_path,
-                )
-                return
-            state.orchestrator_session_id = session_id
-            _write_state(state_path, state)
+    with CampaignStateMutator(state_path) as m:
+        if m.state is None:
+            logger.warning(
+                "update_orchestrator_session_id: state not found at %s",
+                state_path,
+            )
+            return
+        m.state.orchestrator_session_id = session_id
+        m.mark_dirty()
 
 
 def read_all_campaign_captures(

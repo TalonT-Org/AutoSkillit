@@ -19,6 +19,57 @@ from autoskillit.server._notify import track_response_size
 logger = get_logger(__name__)
 
 
+def _write_dispatch_to_campaign_state(
+    campaign_state_path_str: str,
+    effective_name: str,
+    result_envelope: str,
+) -> None:
+    """Write the dispatch outcome from the result envelope to the campaign state file.
+
+    Parses the JSON envelope returned by execute_dispatch and persists the dispatch
+    record to AUTOSKILLIT_CAMPAIGN_STATE_PATH so fleet status commands reflect the
+    outcome. Never raises — state write failures are non-fatal.
+    """
+    try:
+        try:
+            envelope = json.loads(result_envelope)
+        except json.JSONDecodeError:
+            logger.warning(
+                "_write_dispatch_to_campaign_state: result_envelope is not valid JSON for %s",
+                effective_name,
+                exc_info=True,
+            )
+            return
+
+        dispatch_status_str = envelope.get("dispatch_status")
+        if not dispatch_status_str:
+            return
+
+        from autoskillit.fleet import (  # noqa: PLC0415
+            DispatchRecord,
+            DispatchStatus,
+            normalize_dispatch_token_usage,
+            upsert_dispatch_record_by_name,
+        )
+
+        try:
+            final_status = DispatchStatus(dispatch_status_str)
+        except ValueError:
+            final_status = DispatchStatus.FAILURE
+
+        record = DispatchRecord(
+            name=effective_name,
+            status=final_status,
+            dispatch_id=envelope.get("dispatch_id", ""),
+            dispatched_session_id=envelope.get("dispatched_session_id") or "",
+            reason=envelope.get("reason") or "",
+            token_usage=normalize_dispatch_token_usage(envelope.get("token_usage") or {}),
+        )
+        upsert_dispatch_record_by_name(Path(campaign_state_path_str), record)
+    except Exception:
+        logger.warning("_write_dispatch_to_campaign_state: failed", exc_info=True)
+
+
 def _get_food_truck_prompt_builder() -> Callable[..., str]:
     """Return the food truck prompt builder with mcp_prefix pre-bound."""
     from autoskillit.core import detect_autoskillit_mcp_prefix
@@ -142,39 +193,12 @@ async def dispatch_food_truck(
             caller_session_id=caller_session_id,
         )
 
-        campaign_state_path_str = os.environ.get("AUTOSKILLIT_CAMPAIGN_STATE_PATH")
-        if campaign_state_path_str and dispatch_name:
-            try:
-                if not isinstance(result, str):
-                    raise TypeError(
-                        f"execute_dispatch returned {type(result).__name__}, expected str"
-                    )
-                envelope = json.loads(result)
-                campaign_state_path = Path(campaign_state_path_str)
-                if campaign_state_path.exists():
-                    from autoskillit.fleet import (
-                        DispatchRecord,
-                        DispatchStatus,
-                        append_dispatch_record,
-                    )
-
-                    raw_status = envelope.get("dispatch_status")
-                    if raw_status is None:
-                        raise KeyError("dispatch_status missing from dispatch envelope")
-                    status = DispatchStatus(raw_status)
-                    append_dispatch_record(
-                        campaign_state_path,
-                        DispatchRecord(
-                            name=dispatch_name,
-                            status=status,
-                            dispatch_id=envelope.get("dispatch_id", ""),
-                            dispatched_session_id=envelope.get("dispatched_session_id", ""),
-                            reason=envelope.get("reason", ""),
-                            token_usage=envelope.get("token_usage") or {},
-                        ),
-                    )
-            except (json.JSONDecodeError, KeyError):
-                logger.warning("campaign state update failed", exc_info=True)
+        if campaign_state_path_str:
+            _write_dispatch_to_campaign_state(
+                campaign_state_path_str,
+                dispatch_name or recipe,
+                result,
+            )
 
         return result
     except Exception as exc:

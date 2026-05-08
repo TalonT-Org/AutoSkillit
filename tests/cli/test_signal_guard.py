@@ -229,13 +229,15 @@ class TestSignalGuard:
 
         events: list[str] = []
 
-        from autoskillit.fleet import mark_dispatch_interrupted as _real_mark
+        import autoskillit.fleet.state as _state_mod
 
-        def tracking_mark(sp: Path, name: str, *, reason: str) -> None:
+        _real_write_state = _state_mod._write_state
+
+        def tracking_write_state(sp: Path, state: object) -> None:
             events.append("state_written")
-            _real_mark(sp, name, reason=reason)
+            _real_write_state(sp, state)  # type: ignore[arg-type]
 
-        with patch("autoskillit.fleet.state.mark_dispatch_interrupted", tracking_mark):
+        with patch("autoskillit.fleet.state._write_state", tracking_write_state):
             await _run_signal_guard(state_path, campaign_id, _signal.SIGTERM)
             events.append("guard_exited")
 

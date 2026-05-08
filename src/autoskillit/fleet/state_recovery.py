@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import fcntl
 from pathlib import Path
 
 from autoskillit.core import InfraExitCategory, NamedResume, NoResume, RetryReason, get_logger
@@ -15,11 +14,10 @@ from autoskillit.fleet.state_types import (
     DispatchRecord,
     DispatchStatus,
     ResumeDecision,
-    _resume_lock,
 )
 
 __all__ = [
-    "crash_recover_dispatch",
+    "classify_stale_dispatch",
     "derive_orchestrator_resume_spec",
     "has_failed_dispatch",
     "resume_campaign_from_state",
@@ -62,56 +60,47 @@ def _is_abandon_kill_reason(kill_reason: str, infra_exit_category: str) -> bool:
     return False
 
 
-def crash_recover_dispatch(
-    state_path: Path,
-    record: DispatchRecord,
-    reason: str = "stale_running_on_resume",
-) -> DispatchStatus | None:
-    """Recover a stale RUNNING dispatch to RESUMABLE or INTERRUPTED; None if both writes fail."""
-    from autoskillit.fleet.sidecar import read_sidecar_from_path  # noqa: PLC0415
-    from autoskillit.fleet.state import (  # noqa: PLC0415
-        mark_dispatch_interrupted,
-        mark_dispatch_resumable,
-    )
+def classify_stale_dispatch(
+    dispatch: DispatchRecord,
+) -> tuple[DispatchStatus, str]:
+    """Determine the recovery status for a stale RUNNING dispatch.
 
-    sidecar = Path(record.sidecar_path) if record.sidecar_path else None
+    Performs sidecar I/O (existence check, read) but does NOT mutate campaign
+    state. The caller applies the returned status to their in-memory
+    CampaignState within a CampaignStateMutator block.
+
+    Returns (new_status, sidecar_path_or_empty).
+    """
+    from autoskillit.fleet.sidecar import read_sidecar_from_path  # noqa: PLC0415
+
+    sidecar = Path(dispatch.sidecar_path) if dispatch.sidecar_path else None
+    sidecar_path_str = ""
     if sidecar is not None and sidecar.exists():
         try:
             raw_lines = [ln.strip() for ln in sidecar.read_text().splitlines() if ln.strip()]
         except OSError:
-            logger.warning("crash_recover_dispatch: sidecar vanished during read", exc_info=True)
+            logger.warning("classify_stale_dispatch: sidecar vanished during read", exc_info=True)
         else:
-            if not raw_lines or read_sidecar_from_path(sidecar):
-                if _is_abandon_kill_reason(record.kill_reason, record.infra_exit_category):
-                    try:
-                        mark_dispatch_interrupted(state_path, record.name, reason=reason)
-                        return DispatchStatus.INTERRUPTED
-                    except Exception:
-                        logger.warning(
-                            "crash_recover_dispatch: failed to mark dispatch interrupted",
-                            exc_info=True,
-                        )
-                        return None
-                try:
-                    mark_dispatch_resumable(state_path, record.name, sidecar_path=str(sidecar))
-                    return DispatchStatus.RESUMABLE
-                except Exception:
-                    logger.warning(
-                        "crash_recover_dispatch: failed to mark dispatch resumable",
-                        exc_info=True,
-                    )
+            sidecar_path_str = str(sidecar)
+            try:
+                has_entries = bool(read_sidecar_from_path(sidecar))
+            except Exception:
+                logger.warning(
+                    "classify_stale_dispatch: read_sidecar_from_path failed for %s",
+                    sidecar,
+                    exc_info=True,
+                )
+                # Sidecar has non-empty raw content but failed to parse — conservatively
+                # treat as having entries to avoid conflating parse errors with 'no entries'.
+                has_entries = bool(raw_lines)
+            if not raw_lines or has_entries:
+                if _is_abandon_kill_reason(dispatch.kill_reason, dispatch.infra_exit_category):
+                    return (DispatchStatus.INTERRUPTED, "")
+                return (DispatchStatus.RESUMABLE, sidecar_path_str)
     logger.debug(
-        "crash_recover_dispatch: no sidecar for %s — falling back to interrupted",
-        record.name,
+        "classify_stale_dispatch: no sidecar for %s — falling back to interrupted", dispatch.name
     )
-    try:
-        mark_dispatch_interrupted(state_path, record.name, reason=reason)
-        return DispatchStatus.INTERRUPTED
-    except Exception:
-        logger.warning(
-            "crash_recover_dispatch: failed to mark dispatch interrupted", exc_info=True
-        )
-        return None
+    return (DispatchStatus.INTERRUPTED, "")
 
 
 def resume_campaign_from_state(
@@ -134,85 +123,75 @@ def resume_campaign_from_state(
     Returns None if the state file is missing/corrupted. Returns a
     ResumeDecision with next_dispatch_name="" if all dispatches are
     complete or the campaign is halted.
-
-    Thread-safe: _resume_lock (intra-process) + fcntl.flock(LOCK_EX)
-    (cross-process) prevent concurrent callers from corrupting state.
     """
     from autoskillit.fleet import is_dispatch_session_alive  # noqa: PLC0415
-    from autoskillit.fleet.state import (  # noqa: PLC0415
-        _clear_dispatch_for_retry,
-        _write_state,
-        read_state,
+    from autoskillit.fleet.state import (
+        CampaignStateMutator,  # noqa: PLC0415
+        _clear_dispatch_for_retry,  # noqa: PLC0415
     )
 
-    with _resume_lock:
-        lock_path = state_path.with_suffix(".lock")
-        with open(lock_path, "wb") as _flock_handle:
-            fcntl.flock(_flock_handle, fcntl.LOCK_EX)
+    with CampaignStateMutator(state_path) as m:
+        if m.state is None:
+            return None
 
-            state = read_state(state_path)
-            if state is None:
-                return None
+        for d in m.state.dispatches:
+            if d.status == DispatchStatus.RUNNING:
+                if is_dispatch_session_alive(d):
+                    continue
+                new_status, sidecar_path = classify_stale_dispatch(d)
+                d.status = new_status
+                d.reason = "stale_running_on_resume"
+                if sidecar_path:
+                    d.sidecar_path = sidecar_path
+                m.mark_dirty()
 
-            for d in state.dispatches:
-                if d.status == DispatchStatus.RUNNING:
-                    if is_dispatch_session_alive(d):
-                        continue
-                    new_status = crash_recover_dispatch(state_path, d)
-                    if new_status is not None:
-                        d.status = new_status
-                        d.reason = "stale_running_on_resume"
+        for d in m.state.dispatches:
+            if d.status == DispatchStatus.FAILURE and not continue_on_failure:
+                if reset_on_retry:
+                    _clear_dispatch_for_retry(d)
+                    m.mark_dirty()
+                else:
+                    return ResumeDecision(
+                        next_dispatch_name="",
+                        completed_dispatches_block=FLEET_HALTED_SENTINEL,
+                    )
 
-            did_reset = False
-            for d in state.dispatches:
-                if d.status == DispatchStatus.FAILURE and not continue_on_failure:
-                    if reset_on_retry:
-                        _clear_dispatch_for_retry(d)
-                        did_reset = True
-                    else:
-                        return ResumeDecision(
-                            next_dispatch_name="",
-                            completed_dispatches_block=FLEET_HALTED_SENTINEL,
-                        )
-            if did_reset:
-                _write_state(state_path, state)
+        completed_lines: list[str] = []
+        next_name = ""
+        is_resumable = False
+        resumable_dispatched_session_id = ""
+        resumable_kill_reason = ""
+        for d in m.state.dispatches:
+            if d.status in _VISIBLE_IN_BLOCK_STATUSES:
+                completed_lines.append(f"- {d.name}: {d.status}")
+            elif d.status == DispatchStatus.RESUMABLE and not next_name:
+                next_name = d.name
+                is_resumable = True
+                resumable_dispatched_session_id = d.dispatched_session_id
+                resumable_kill_reason = d.kill_reason
+            elif (
+                d.status
+                not in {
+                    DispatchStatus.INTERRUPTED,
+                    DispatchStatus.RUNNING,
+                    DispatchStatus.REFUSED,
+                    DispatchStatus.RELEASED,
+                    DispatchStatus.FAILURE,
+                    DispatchStatus.RESUMABLE,
+                }
+                and not next_name
+            ):
+                next_name = d.name
 
-            completed_lines: list[str] = []
-            next_name = ""
-            is_resumable = False
-            resumable_dispatched_session_id = ""
-            resumable_kill_reason = ""
-            for d in state.dispatches:
-                if d.status in _VISIBLE_IN_BLOCK_STATUSES:
-                    completed_lines.append(f"- {d.name}: {d.status}")
-                elif d.status == DispatchStatus.RESUMABLE and not next_name:
-                    next_name = d.name
-                    is_resumable = True
-                    resumable_dispatched_session_id = d.dispatched_session_id
-                    resumable_kill_reason = d.kill_reason
-                elif (
-                    d.status
-                    not in {
-                        DispatchStatus.INTERRUPTED,
-                        DispatchStatus.RUNNING,
-                        DispatchStatus.REFUSED,
-                        DispatchStatus.RELEASED,
-                        DispatchStatus.FAILURE,
-                        DispatchStatus.RESUMABLE,
-                    }
-                    and not next_name
-                ):
-                    next_name = d.name
+        completed_block = "\n".join(completed_lines) if completed_lines else ""
 
-            completed_block = "\n".join(completed_lines) if completed_lines else ""
-
-            return ResumeDecision(
-                next_dispatch_name=next_name,
-                completed_dispatches_block=completed_block,
-                is_resumable=is_resumable,
-                dispatched_session_id=resumable_dispatched_session_id,
-                kill_reason=resumable_kill_reason,
-            )
+        return ResumeDecision(
+            next_dispatch_name=next_name,
+            completed_dispatches_block=completed_block,
+            is_resumable=is_resumable,
+            dispatched_session_id=resumable_dispatched_session_id,
+            kill_reason=resumable_kill_reason,
+        )
 
 
 def derive_orchestrator_resume_spec(state: CampaignState) -> NamedResume | NoResume:

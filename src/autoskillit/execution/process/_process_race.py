@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import assert_never
@@ -11,6 +10,7 @@ import anyio
 import anyio.abc
 
 from autoskillit.core import ChannelBStatus, ChannelConfirmation, TerminationReason, get_logger
+from autoskillit.core import fast_loads as _fast_loads
 from autoskillit.execution.process._process_monitor import _heartbeat, _session_log_monitor
 
 logger = get_logger(__name__)
@@ -206,8 +206,8 @@ async def _extract_stdout_session_id(
             if not line:
                 continue
             try:
-                obj = json.loads(line)
-            except (json.JSONDecodeError, ValueError):
+                obj = _fast_loads(line)
+            except ValueError:
                 continue
             if isinstance(obj, dict) and obj.get("type") == "system":
                 sid = obj.get("session_id")

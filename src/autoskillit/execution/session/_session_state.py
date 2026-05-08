@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from autoskillit.core import atomic_write, get_logger
+from autoskillit.core import fast_dumps as _fast_dumps
 
 logger = get_logger(__name__)
 
@@ -62,7 +63,7 @@ class SessionState:
 def persist_session_state(state: SessionState, state_dir: Path) -> Path:
     state_dir.mkdir(parents=True, exist_ok=True)
     path = state_dir / _STATE_FILENAME
-    atomic_write(path, json.dumps(state.to_dict(), indent=2))
+    atomic_write(path, _fast_dumps(state.to_dict(), indent=True))
     return path
 
 

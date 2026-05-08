@@ -20,6 +20,11 @@ logger = get_logger(__name__)
 
 _KEBAB_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 
+# _run_dispatch() auto-injects these from dispatch-level fields (e.g. task: from the
+# dispatch task: field), so campaigns that rely on this injection pattern should not
+# be flagged for not explicitly forwarding them in the ingredients block.
+_AUTO_INJECTED_CAMPAIGN_INGREDIENTS: frozenset[str] = frozenset({"task"})
+
 
 def _load_dispatch_target(dispatch: CampaignDispatch, project_dir: Path | None) -> Recipe | None:
     """Load the target recipe for a dispatch. Returns None if not loadable."""
@@ -298,6 +303,8 @@ def _check_campaign_dangling_ingredient(ctx: ValidationContext) -> list[RuleFind
         return []
     findings: list[RuleFinding] = []
     for d in ctx.recipe.dispatches:
+        # Gated dispatches are conditional — they may not run at all, so requiring
+        # them to forward every campaign ingredient would produce false positives.
         if d.gate:
             continue
         target = _load_dispatch_target(d, ctx.project_dir)
@@ -305,10 +312,7 @@ def _check_campaign_dangling_ingredient(ctx: ValidationContext) -> list[RuleFind
             continue
         forwarded_keys = set(d.ingredients.keys())
         for ing_name in campaign_ingredients:
-            if ing_name == "task":
-                # _run_dispatch() auto-injects task from the dispatch-level
-                # task: field when the ingredient block omits it. Skip to
-                # avoid false positives on campaigns that rely on this.
+            if ing_name in _AUTO_INJECTED_CAMPAIGN_INGREDIENTS:
                 continue
             if ing_name in target.ingredients and ing_name not in forwarded_keys:
                 findings.append(

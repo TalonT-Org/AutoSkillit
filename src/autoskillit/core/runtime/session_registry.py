@@ -12,7 +12,7 @@ import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
-from autoskillit.core import fast_dumps as _fast_dumps
+from .._json import fast_dumps as _fast_dumps
 
 __all__ = [
     "registry_path",

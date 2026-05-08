@@ -157,7 +157,7 @@ def read_state(state_path: Path) -> CampaignState | None:
             started_at=data["started_at"],
             dispatches=dispatches,
             captured_values=data.get("captured_values", {}),
-            orchestrator_session_id=data.get("orchestrator_session_id", ""),
+            orchestrator_session_id=data.get("orchestrator_session_id") or "",
         )
     except (KeyError, ValueError, TypeError) as exc:
         logger.warning("read_state: schema mismatch or corrupt payload in %s: %s", state_path, exc)
@@ -334,7 +334,7 @@ def update_orchestrator_session_id(state_path: Path, session_id: str) -> None:
         return
     with _resume_lock:
         lock_path = state_path.with_suffix(".lock")
-        with open(lock_path, "wb") as _flock_handle:
+        with open(lock_path, "ab") as _flock_handle:
             fcntl.flock(_flock_handle, fcntl.LOCK_EX)
             state = read_state(state_path)
             if state is None:

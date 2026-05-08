@@ -506,7 +506,9 @@ class TestDispatchFoodTruckExecution:
         assert "dispatch_id" in result
         assert result["dispatched_session_id"] == "sess-abc"
         assert result["l3_payload"] == canned_payload
-        assert result["token_usage"] == {"input_tokens": 100}
+        from autoskillit.fleet.state import normalize_dispatch_token_usage
+
+        assert result["token_usage"] == normalize_dispatch_token_usage({"input_tokens": 100})
         assert result["l3_parse_source"] == "stdout"
 
     @pytest.mark.anyio

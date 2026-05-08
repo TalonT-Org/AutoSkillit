@@ -90,7 +90,9 @@ def classify_stale_dispatch(
                     sidecar,
                     exc_info=True,
                 )
-                has_entries = False
+                # Sidecar has non-empty raw content but failed to parse — conservatively
+                # treat as having entries to avoid conflating parse errors with 'no entries'.
+                has_entries = bool(raw_lines)
             if not raw_lines or has_entries:
                 if _is_abandon_kill_reason(dispatch.kill_reason, dispatch.infra_exit_category):
                     return (DispatchStatus.INTERRUPTED, "")

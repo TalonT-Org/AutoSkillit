@@ -63,7 +63,7 @@ class TestValidateTestAuditContent:
 
     # T-VTA-008
     def test_output_dir_matches_validate_audit(self) -> None:
-        assert "{{AUTOSKILLIT_TEMP}}/validate-audit-" in _skill_text()
+        assert "{{AUTOSKILLIT_TEMP}}/validate-audit-{YYYY-MM-DD_HHMMSS}/" in _skill_text()
 
     # T-VTA-009
     def test_history_research_agent(self) -> None:

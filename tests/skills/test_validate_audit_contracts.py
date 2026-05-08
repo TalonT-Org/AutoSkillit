@@ -70,7 +70,7 @@ class TestValidateAuditContent:
 
     # T-VAL-014
     def test_output_dir(self) -> None:
-        assert "{{AUTOSKILLIT_TEMP}}/validate-audit-" in _skill_text()
+        assert "validate-audit-{YYYY-MM-DD_HHMMSS}/" in _skill_text()
 
     # T-VAL-015
     def test_history_research_agent(self) -> None:

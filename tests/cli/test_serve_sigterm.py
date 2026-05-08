@@ -56,7 +56,9 @@ def test_serve_uses_anyio_run_not_mcp_run(monkeypatch, tmp_path):
 
 
 def test_serve_passes_uvloop_backend_options(monkeypatch, tmp_path):
-    """serve() must pass backend='asyncio' and use_uvloop=True to anyio.run()."""
+    """serve() must pass backend='asyncio' and use_uvloop=True (non-Windows) to anyio.run()."""
+    import sys
+
     anyio_run_calls: list[dict] = []
 
     monkeypatch.chdir(tmp_path)
@@ -70,6 +72,7 @@ def test_serve_passes_uvloop_backend_options(monkeypatch, tmp_path):
     monkeypatch.setattr("autoskillit.core.configure_logging", lambda **kw: None)
     monkeypatch.setattr("autoskillit.server.make_context", lambda *a, **kw: MagicMock())
     monkeypatch.setattr("autoskillit.server._initialize", lambda ctx: None)
+    monkeypatch.setattr(sys, "platform", "linux")
 
     def capture_anyio_run(coro_fn, *args, **kwargs):
         anyio_run_calls.append({"fn": coro_fn, "kwargs": kwargs})

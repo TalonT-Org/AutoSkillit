@@ -283,23 +283,29 @@ class TestClearDispatchFieldCoverage:
         """Every non-identity field must be reset to its default by _clear_dispatch_for_retry."""
         dirty_values: dict[str, Any] = {
             "name": "test",
-            "status": DispatchStatus.FAILURE,
-            "dispatch_id": "dirty-id",
             "campaign_id": "cid",
             "caller_session_id": "csid",
-            "dispatched_session_id": "dirty-sess",
-            "dispatched_session_log_dir": "/dirty/log",
-            "dispatched_pid": 99999,
-            "dispatched_starttime_ticks": 12345,
-            "dispatched_boot_id": "dirty-boot",
-            "reason": "dirty-reason",
-            "kill_reason": "stale",
-            "infra_exit_category": "timeout",
-            "token_usage": {"prompt_tokens": 500},
-            "started_at": 1000.0,
-            "ended_at": 2000.0,
-            "sidecar_path": "/dirty/sidecar",
         }
+        for f in dataclasses.fields(DispatchRecord):
+            if f.name in dirty_values:
+                continue
+            default = (
+                f.default_factory() if f.default_factory is not dataclasses.MISSING else f.default
+            )
+            if isinstance(default, str):
+                dirty_values[f.name] = f"dirty-{f.name}"
+            elif isinstance(default, int):
+                dirty_values[f.name] = 99999
+            elif isinstance(default, float):
+                dirty_values[f.name] = 9999.0
+            elif isinstance(default, dict):
+                dirty_values[f.name] = {"prompt_tokens": 500}
+            elif default is None:
+                dirty_values[f.name] = "/dirty/path"
+            elif isinstance(default, DispatchStatus):
+                dirty_values[f.name] = DispatchStatus.FAILURE
+            else:
+                raise AssertionError(f"Unhandled default type for {f.name!r}: {type(default)}")
         d = DispatchRecord(**dirty_values)
         _clear_dispatch_for_retry(d)
 

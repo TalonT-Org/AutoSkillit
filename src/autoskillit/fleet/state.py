@@ -59,6 +59,7 @@ __all__ = [
     "mark_dispatch_resumable",
     "reset_failed_dispatch",
     "append_dispatch_record",
+    "upsert_dispatch_record_by_name",
     "build_protected_campaign_ids",
     "write_captured_values",
     "read_all_campaign_captures",
@@ -115,7 +116,7 @@ def reset_failed_dispatch(state_path: Path, dispatch_name: str) -> bool:
     the caller — write failures are not silently converted to False.
     """
     with CampaignStateMutator(state_path) as m:
-        if m.state is None or not state_path.exists():
+        if m.state is None:
             return False
         for d in m.state.dispatches:
             if d.name == dispatch_name and d.status == DispatchStatus.FAILURE:
@@ -198,7 +199,10 @@ class CampaignStateMutator:
         finally:
             try:
                 if self._flock_handle is not None:
-                    self._flock_handle.close()
+                    try:
+                        self._flock_handle.close()
+                    except Exception:
+                        pass
             finally:
                 _resume_lock.release()
 
@@ -306,6 +310,25 @@ def append_dispatch_record(
         for i, d in enumerate(m.state.dispatches):
             if d.name == record.name:
                 _validate_transition(d.status, record.status, d.name)
+                m.state.dispatches[i] = record
+                m.mark_dirty()
+                return
+        m.state.dispatches.append(record)
+        m.mark_dirty()
+
+
+def upsert_dispatch_record_by_name(state_path: Path, record: DispatchRecord) -> None:
+    """Upsert a dispatch record by name without transition validation.
+
+    Intended for external writes (e.g. from result envelopes) where the prior
+    state is unknown and _validate_transition enforcement is not appropriate.
+    If the state file is missing or corrupted, this is a no-op.
+    """
+    with CampaignStateMutator(state_path) as m:
+        if m.state is None:
+            return
+        for i, d in enumerate(m.state.dispatches):
+            if d.name == record.name:
                 m.state.dispatches[i] = record
                 m.mark_dirty()
                 return

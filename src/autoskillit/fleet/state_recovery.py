@@ -92,58 +92,6 @@ def classify_stale_dispatch(
     return (DispatchStatus.INTERRUPTED, "")
 
 
-def crash_recover_dispatch(
-    state_path: Path,
-    record: DispatchRecord,
-    reason: str = "stale_running_on_resume",
-) -> DispatchStatus | None:
-    """Recover a stale RUNNING dispatch to RESUMABLE or INTERRUPTED; None if both writes fail."""
-    from autoskillit.fleet.sidecar import read_sidecar_from_path  # noqa: PLC0415
-    from autoskillit.fleet.state import (  # noqa: PLC0415
-        mark_dispatch_interrupted,
-        mark_dispatch_resumable,
-    )
-
-    sidecar = Path(record.sidecar_path) if record.sidecar_path else None
-    if sidecar is not None and sidecar.exists():
-        try:
-            raw_lines = [ln.strip() for ln in sidecar.read_text().splitlines() if ln.strip()]
-        except OSError:
-            logger.warning("crash_recover_dispatch: sidecar vanished during read", exc_info=True)
-        else:
-            if not raw_lines or read_sidecar_from_path(sidecar):
-                if _is_abandon_kill_reason(record.kill_reason, record.infra_exit_category):
-                    try:
-                        mark_dispatch_interrupted(state_path, record.name, reason=reason)
-                        return DispatchStatus.INTERRUPTED
-                    except Exception:
-                        logger.warning(
-                            "crash_recover_dispatch: failed to mark dispatch interrupted",
-                            exc_info=True,
-                        )
-                        return None
-                try:
-                    mark_dispatch_resumable(state_path, record.name, sidecar_path=str(sidecar))
-                    return DispatchStatus.RESUMABLE
-                except Exception:
-                    logger.warning(
-                        "crash_recover_dispatch: failed to mark dispatch resumable",
-                        exc_info=True,
-                    )
-    logger.debug(
-        "crash_recover_dispatch: no sidecar for %s — falling back to interrupted",
-        record.name,
-    )
-    try:
-        mark_dispatch_interrupted(state_path, record.name, reason=reason)
-        return DispatchStatus.INTERRUPTED
-    except Exception:
-        logger.warning(
-            "crash_recover_dispatch: failed to mark dispatch interrupted", exc_info=True
-        )
-        return None
-
-
 def resume_campaign_from_state(
     state_path: Path,
     continue_on_failure: bool,
@@ -165,8 +113,11 @@ def resume_campaign_from_state(
     ResumeDecision with next_dispatch_name="" if all dispatches are
     complete or the campaign is halted.
     """
-    from autoskillit.fleet import CampaignStateMutator, is_dispatch_session_alive  # noqa: PLC0415
-    from autoskillit.fleet.state import _clear_dispatch_for_retry  # noqa: PLC0415
+    from autoskillit.fleet._liveness import is_dispatch_session_alive  # noqa: PLC0415
+    from autoskillit.fleet.state import (
+        CampaignStateMutator,  # noqa: PLC0415
+        _clear_dispatch_for_retry,  # noqa: PLC0415
+    )
 
     with CampaignStateMutator(state_path) as m:
         if m.state is None:

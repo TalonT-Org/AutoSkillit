@@ -42,6 +42,7 @@ from .state import (
     reset_failed_dispatch,
     resume_campaign_from_state,
     update_orchestrator_session_id,
+    upsert_dispatch_record_by_name,
     write_captured_values,
     write_initial_state,
 )
@@ -102,6 +103,7 @@ __all__ = [
     "reset_failed_dispatch",
     "resume_campaign_from_state",
     "update_orchestrator_session_id",
+    "upsert_dispatch_record_by_name",
     "write_captured_values",
     "write_initial_state",
     "normalize_dispatch_token_usage",

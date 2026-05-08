@@ -30,7 +30,7 @@ from autoskillit.fleet import (
 )
 from autoskillit.fleet.state_recovery import resume_campaign_from_state
 
-pytestmark = [pytest.mark.small, pytest.mark.feature("fleet")]
+pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
 _MUTATION_FUNCTIONS: dict[str, object] = {
     "mark_dispatch_running": mark_dispatch_running,
@@ -85,7 +85,7 @@ class TestFlockLockTarget:
                         ):
                             continue
                         arg_src = ast.unparse(call.args[0])
-                        if ".lock" in arg_src or "with_suffix" in arg_src:
+                        if ".lock" in arg_src or "with_suffix('.lock')" in arg_src:
                             continue
                         # Non-.lock file opened — check for fcntl.flock inside
                         for child in ast.walk(node):
@@ -242,9 +242,11 @@ class TestAppendAndCaptureAtomic:
         write_initial_state(sp, "cid", "camp", "/m.yaml", [DispatchRecord(name="d1")])
 
         observed_intermediate: list[bool] = []
+        start_barrier = threading.Barrier(2)
 
         def reader() -> None:
-            for _ in range(50):
+            start_barrier.wait()
+            for _ in range(500):
                 state = read_state(sp)
                 if state is None:
                     continue
@@ -255,6 +257,7 @@ class TestAppendAndCaptureAtomic:
         from autoskillit.fleet import CampaignStateMutator
 
         def writer() -> None:
+            start_barrier.wait()
             with CampaignStateMutator(sp) as m:
                 if m.state is not None:
                     for i, d in enumerate(m.state.dispatches):

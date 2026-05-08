@@ -22,7 +22,7 @@ def record_gate_outcome(
 
     Returns a GateRecordResult with success/failure and error details.
     """
-    from autoskillit.fleet import CampaignStateMutator  # noqa: PLC0415
+    from autoskillit.fleet.state import CampaignStateMutator  # noqa: PLC0415
 
     with CampaignStateMutator(state_path) as m:
         if m.state is None:

@@ -126,28 +126,14 @@ class TestSchemaReadConvention:
             self.test_write_versioned_json_callers_have_read_side_validation()
 
     def test_exception_list_does_not_include_nonexistent_modules(self):
-        """Entries in _READ_SIDE_EXCEPTIONS must actually be writer modules."""
-        writers = _scan_write_versioned_json_callers()
-        for module in _READ_SIDE_EXCEPTIONS:
-            # Exception list can include modules that no longer exist (graceful stale entries)
-            # but they should not appear as writers in the current scan
-            if module in writers:
-                # An exception that is also a current writer — this is valid (transient artifact)
-                pass
+        """Entries in _READ_SIDE_EXCEPTIONS must be current writer modules.
 
-    def test_all_current_readers_are_also_writers_or_exceptions(self):
-        """Every module that calls read_versioned_json must either also write or be exempt.
-
-        (A module can read versioned JSON without writing it — e.g. consumers of fleet/state.py.
-        This is not an error; this test just documents the expectation that reader-only modules
-        do not need to be in the exceptions list.)
+        Stale exception entries for modules that no longer call write_versioned_json
+        indicate dead exception list entries that should be removed.
         """
-        # This is a documentation test — it always passes but asserts invariants
-        readers = _scan_read_versioned_json_callers()
         writers = _scan_write_versioned_json_callers()
-
-        # Readers that are not writers and not exceptions are fine (downstream consumers)
-        # This test mainly serves as documentation that the ratchet only requires
-        # writers to also be readers, not vice versa.
-        assert isinstance(readers, set)
-        assert isinstance(writers, set)
+        stale = {m for m in _READ_SIDE_EXCEPTIONS if m not in writers}
+        assert not stale, (
+            "These modules are in _READ_SIDE_EXCEPTIONS but no longer call "
+            "write_versioned_json — remove stale entries: " + ", ".join(sorted(stale))
+        )

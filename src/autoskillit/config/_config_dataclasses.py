@@ -295,10 +295,14 @@ class WorkspaceConfig:
     temp_dir: str | None = None  # null = canonical default (see resolve_temp_dir)
 
 
+_MAX_CONCURRENT_DISPATCHES = 3
+
+
 @dataclass
 class FleetConfig:
     default_timeout_sec: int = 3600
-    max_concurrent_dispatches: int = 1
+    max_concurrent_dispatches: int = _MAX_CONCURRENT_DISPATCHES
+    max_total_issues: int = 12
 
     def validate(self, feature_enabled: bool) -> None:
         """Validate only when the feature is active."""
@@ -312,6 +316,13 @@ class FleetConfig:
             raise ValueError(
                 f"max_concurrent_dispatches must be >= 1, got {self.max_concurrent_dispatches}"
             )
+        if self.max_concurrent_dispatches > _MAX_CONCURRENT_DISPATCHES:
+            raise ValueError(
+                f"max_concurrent_dispatches must be <= {_MAX_CONCURRENT_DISPATCHES},"
+                f" got {self.max_concurrent_dispatches}"
+            )
+        if self.max_total_issues < 1:
+            raise ValueError(f"max_total_issues must be >= 1, got {self.max_total_issues}")
 
 
 @dataclass

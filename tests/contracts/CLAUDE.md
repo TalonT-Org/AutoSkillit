@@ -15,6 +15,7 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_claim_issue_contracts.py` | Contract tests for claim_issue and release_issue MCP tools |
 | `test_claude_code_interface_contracts.py` | Contract tests for Claude Code external interface conventions |
 | `test_collapse_issues_contracts.py` | Contract tests for the collapse-issues skill SKILL.md |
+| `test_campaign_prompt_accuracy.py` | Contract: campaign prompt does not contain inaccurate semaphore language |
 | `test_config_field_coverage.py` | REQ-CONFIG-001: every sub-config dataclass field must be referenced in from_dynaconf |
 | `test_core_public_api_surface.py` | Validates that every symbol in autoskillit.core.__all__ is importable via the public gateway |
 | `test_diagnose_ci_steps.py` | Contract tests for diagnose-ci SKILL.md step numbering and cross-reference integrity |
@@ -24,6 +25,7 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_execution_map_contracts.py` | Contract tests for the build-execution-map skill SKILL.md |
 | `test_exogenous_string_coupling.py` | Exogenous string coupling tests: orchestrator prompt triggers coupled to emitting module |
 | `test_filter_env_var_coverage.py` | Tests that retry-worktree and audit-impl skills set filter env vars for test runs |
+| `test_fleet_dispatch_bem_gate.py` | Contract: fleet dispatcher prompt contains BEM pre-step gate instructions |
 | `test_generate_report_contracts.py` | Contract tests for generate-report SKILL.md — data provenance lifecycle |
 | `test_github_ops.py` | Contract tests: GitHub operation semantics in SKILL.md files |
 | `test_hook_bridge_coverage.py` | REQ-BRIDGE-001: quota guard hook config bridge must produce exactly the keys that resolve_quota_settings() reads |

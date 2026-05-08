@@ -19,11 +19,11 @@ from autoskillit.core import (
     SessionCheckpoint,  # noqa: F401, TC001
     SkillResult,
     claude_code_log_path,
-    fleet_error,
     get_logger,
 )
 from autoskillit.fleet.result_parser import L3ParseResult, parse_l3_result_block
 from autoskillit.fleet.state import DispatchStatus
+from autoskillit.fleet.state_types import DispatchCompleted, DispatchOutcome, DispatchRejected
 
 if TYPE_CHECKING:
     from autoskillit.pipeline.context import ToolContext
@@ -151,30 +151,33 @@ async def execute_dispatch(
     resume_checkpoint: SessionCheckpoint | None = None,
     idle_output_timeout: int | None = None,
     caller_session_id: str = "",
-) -> str:
+) -> DispatchOutcome:
     """Execute a single food truck dispatch.
 
     Orchestrates: lock → validate → quota → prompt → dispatch → parse → state → cleanup.
-    Returns JSON envelope string.
+    Returns DispatchOutcome (DispatchCompleted | DispatchRejected).
     """
     if ingredients is not None:
         bad_vals = [k for k, v in ingredients.items() if not isinstance(v, str)]
         if bad_vals:
-            return fleet_error(
-                FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
-                f"Ingredient values must be strings. Non-string keys: {bad_vals}",
+            return DispatchRejected(
+                error_code=FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
+                message=f"Ingredient values must be strings. Non-string keys: {bad_vals}",
             )
 
     lock = tool_ctx.fleet_lock
     if lock is None:
-        return fleet_error(
-            FleetErrorCode.FLEET_LOCK_NOT_INITIALIZED,
-            "Fleet lock not initialized — open_kitchen with fleet mode.",
+        return DispatchRejected(
+            error_code=FleetErrorCode.FLEET_LOCK_NOT_INITIALIZED,
+            message="Fleet lock not initialized — open_kitchen with fleet mode.",
         )
     if lock.at_capacity():
-        return fleet_error(
-            FleetErrorCode.FLEET_PARALLEL_REFUSED,
-            f"Fleet at capacity ({lock.active_count}/{lock.max_concurrent} dispatches running).",
+        return DispatchRejected(
+            error_code=FleetErrorCode.FLEET_PARALLEL_REFUSED,
+            message=(
+                f"Fleet at capacity ({lock.active_count}/{lock.max_concurrent}"
+                " dispatches running)."
+            ),
         )
 
     await lock.acquire()
@@ -200,9 +203,9 @@ async def execute_dispatch(
         raise
     except Exception as exc:
         logger.error("execute_dispatch failed", exc_info=True)
-        return fleet_error(
-            FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
-            f"{type(exc).__name__}: {exc}",
+        return DispatchRejected(
+            error_code=FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
+            message=f"{type(exc).__name__}: {exc}",
         )
     finally:
         lock.release()
@@ -278,7 +281,7 @@ async def _run_dispatch(
     resume_checkpoint: SessionCheckpoint | None = None,
     idle_output_timeout: int | None = None,
     caller_session_id: str = "",
-) -> str:
+) -> DispatchOutcome:
     """Inner dispatch body — called after lock acquisition."""
     from autoskillit.fleet.state import (
         DispatchRecord,
@@ -290,33 +293,33 @@ async def _run_dispatch(
     )
 
     if tool_ctx.recipes is None:
-        return fleet_error(
-            FleetErrorCode.FLEET_MANIFEST_MISSING,
-            "Recipe repository not configured.",
+        return DispatchRejected(
+            error_code=FleetErrorCode.FLEET_MANIFEST_MISSING,
+            message="Recipe repository not configured.",
         )
 
     recipe_obj = tool_ctx.recipes.find(recipe, tool_ctx.project_dir)
     if recipe_obj is None:
-        return fleet_error(
-            FleetErrorCode.FLEET_RECIPE_NOT_FOUND,
-            f"Recipe '{recipe}' not found.",
+        return DispatchRejected(
+            error_code=FleetErrorCode.FLEET_RECIPE_NOT_FOUND,
+            message=f"Recipe '{recipe}' not found.",
         )
 
     try:
         full_recipe = tool_ctx.recipes.load(recipe_obj.path)
     except Exception as exc:
         logger.warning("load_recipe failed for '%s'", recipe, exc_info=True)
-        return fleet_error(
-            FleetErrorCode.FLEET_RECIPE_NOT_FOUND,
-            f"Recipe '{recipe}' could not be loaded: {exc}",
+        return DispatchRejected(
+            error_code=FleetErrorCode.FLEET_RECIPE_NOT_FOUND,
+            message=f"Recipe '{recipe}' could not be loaded: {exc}",
         )
 
     _DISPATCHABLE_KINDS = frozenset({"standard", "food-truck"})
 
     if full_recipe.kind not in _DISPATCHABLE_KINDS:
-        return fleet_error(
-            FleetErrorCode.FLEET_INVALID_RECIPE_KIND,
-            f"Recipe '{recipe}' has kind '{full_recipe.kind}'. "
+        return DispatchRejected(
+            error_code=FleetErrorCode.FLEET_INVALID_RECIPE_KIND,
+            message=f"Recipe '{recipe}' has kind '{full_recipe.kind}'. "
             "Only standard and food-truck recipes can be dispatched.",
         )
 
@@ -326,9 +329,9 @@ async def _run_dispatch(
     if effective_ingredients:
         unknown = set(effective_ingredients.keys()) - set(full_recipe.ingredients.keys())
         if unknown:
-            return fleet_error(
-                FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
-                f"Unknown ingredient keys: {sorted(unknown)}. "
+            return DispatchRejected(
+                error_code=FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
+                message=f"Unknown ingredient keys: {sorted(unknown)}. "
                 f"Valid keys: {sorted(full_recipe.ingredients.keys())}",
             )
 
@@ -340,9 +343,9 @@ async def _run_dispatch(
         and key not in effective_ingredients
     ]
     if missing_required:
-        return fleet_error(
-            FleetErrorCode.FLEET_MISSING_INGREDIENT,
-            f"Missing required ingredients: {sorted(missing_required)}. "
+        return DispatchRejected(
+            error_code=FleetErrorCode.FLEET_MISSING_INGREDIENT,
+            message=f"Missing required ingredients: {sorted(missing_required)}. "
             f"These have no default and must be supplied.",
         )
 
@@ -358,9 +361,9 @@ async def _run_dispatch(
                 effective_ingredients, accumulated_captures
             )
         except ValueError as exc:
-            return fleet_error(
-                FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
-                str(exc),
+            return DispatchRejected(
+                error_code=FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
+                message=str(exc),
             )
 
     quota_result = await quota_checker(tool_ctx.config.quota_guard)
@@ -397,9 +400,17 @@ async def _run_dispatch(
     )
 
     if tool_ctx.executor is None:
-        return fleet_error(
-            FleetErrorCode.FLEET_MANIFEST_MISSING,
-            "Executor not configured.",
+        append_dispatch_record(
+            state_path,
+            DispatchRecord(
+                name=effective_name,
+                status=DispatchStatus.REFUSED,
+                reason=FleetErrorCode.FLEET_MANIFEST_MISSING,
+            ),
+        )
+        return DispatchRejected(
+            error_code=FleetErrorCode.FLEET_MANIFEST_MISSING,
+            message="Executor not configured.",
         )
 
     started_at = time.time()
@@ -463,15 +474,14 @@ async def _run_dispatch(
         )
         upsert_dispatch_record_by_name(state_path, record)
         _post_dispatch_cleanup(tool_ctx, skill_result, cache_invalidator, quota_refresher)
-        return fleet_error(
-            FleetErrorCode.FLEET_L3_TIMEOUT,
-            f"L3 dispatch '{effective_name}' timed out",
-            details={
-                "dispatch_id": dispatch_id,
-                "dispatched_session_id": skill_result.session_id,
-                "lifespan_started": skill_result.lifespan_started,
-                "token_usage": skill_result.token_usage,
-            },
+        return DispatchCompleted(
+            success=False,
+            dispatch_status=DispatchStatus.FAILURE,
+            dispatch_id=dispatch_id,
+            dispatched_session_id=skill_result.session_id or "",
+            reason=FleetErrorCode.FLEET_L3_TIMEOUT,
+            token_usage=normalize_dispatch_token_usage(skill_result.token_usage or {}),
+            lifespan_started=skill_result.lifespan_started,
         )
 
     jsonl_path = claude_code_log_path(str(tool_ctx.project_dir), skill_result.session_id or "")
@@ -525,49 +535,41 @@ async def _run_dispatch(
 
     if parsed.outcome == "completed_clean":
         envelope_success = bool(parsed.payload and parsed.payload.get("success", False))
-        return json.dumps(
-            {
-                "success": envelope_success,
-                "dispatch_status": final_status.value,
-                "dispatch_id": dispatch_id,
-                "dispatched_session_id": skill_result.session_id,
-                "l3_payload": parsed.payload,
-                "reason": reason,
-                "token_usage": skill_result.token_usage,
-                "l3_parse_source": parsed.source,
-                "lifespan_started": skill_result.lifespan_started,
-            }
+        return DispatchCompleted(
+            success=envelope_success,
+            dispatch_status=final_status,
+            dispatch_id=dispatch_id,
+            dispatched_session_id=skill_result.session_id or "",
+            reason=reason,
+            token_usage=skill_result.token_usage or {},
+            l3_payload=parsed.payload,
+            l3_parse_source=parsed.source,
+            lifespan_started=skill_result.lifespan_started,
         )
     elif parsed.outcome == "completed_dirty":
-        return json.dumps(
-            {
-                "success": False,
-                "dispatch_status": final_status.value,
-                "dispatch_id": dispatch_id,
-                "dispatched_session_id": skill_result.session_id,
-                "l3_payload": None,
-                "reason": FleetErrorCode.FLEET_L3_PARSE_FAILED,
-                "l3_raw_body": parsed.raw_body,
-                "l3_parse_error": parsed.parse_error,
-                "token_usage": skill_result.token_usage,
-                "l3_parse_source": parsed.source,
-                "lifespan_started": skill_result.lifespan_started,
-            }
+        return DispatchCompleted(
+            success=False,
+            dispatch_status=final_status,
+            dispatch_id=dispatch_id,
+            dispatched_session_id=skill_result.session_id or "",
+            reason=FleetErrorCode.FLEET_L3_PARSE_FAILED,
+            token_usage=skill_result.token_usage or {},
+            l3_payload=None,
+            l3_raw_body=parsed.raw_body,
+            l3_parse_error=parsed.parse_error,
+            l3_parse_source=parsed.source,
+            lifespan_started=skill_result.lifespan_started,
         )
     else:
-        return json.dumps(
-            {
-                "success": False,
-                "dispatch_status": final_status.value,
-                "dispatch_id": dispatch_id,
-                "dispatched_session_id": skill_result.session_id,
-                "l3_payload": None,
-                "reason": FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK,
-                "l3_parse_source": parsed.source,
-                "token_usage": skill_result.token_usage,
-                "lifespan_started": skill_result.lifespan_started,
-                "resume_checkpoint": dispatch_checkpoint.to_dict()
-                if dispatch_checkpoint
-                else None,
-            }
+        return DispatchCompleted(
+            success=False,
+            dispatch_status=final_status,
+            dispatch_id=dispatch_id,
+            dispatched_session_id=skill_result.session_id or "",
+            reason=FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK,
+            token_usage=skill_result.token_usage or {},
+            l3_payload=None,
+            l3_parse_source=parsed.source,
+            lifespan_started=skill_result.lifespan_started,
+            resume_checkpoint=dispatch_checkpoint.to_dict() if dispatch_checkpoint else None,
         )

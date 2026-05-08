@@ -22,50 +22,46 @@ logger = get_logger(__name__)
 def _write_dispatch_to_campaign_state(
     campaign_state_path_str: str,
     effective_name: str,
-    result_envelope: str,
+    outcome: object,
 ) -> None:
-    """Write the dispatch outcome from the result envelope to the campaign state file.
+    """Write the dispatch outcome to the campaign state file.
 
-    Parses the JSON envelope returned by execute_dispatch and persists the dispatch
-    record to AUTOSKILLIT_CAMPAIGN_STATE_PATH so fleet status commands reflect the
-    outcome. Never raises — state write failures are non-fatal.
+    Accepts a DispatchOutcome (DispatchCompleted or DispatchRejected) and persists
+    the dispatch record to AUTOSKILLIT_CAMPAIGN_STATE_PATH. Never raises — state
+    write failures are non-fatal.
     """
     try:
-        try:
-            envelope = json.loads(result_envelope)
-        except json.JSONDecodeError:
-            logger.warning(
-                "_write_dispatch_to_campaign_state: result_envelope is not valid JSON for %s",
-                effective_name,
-                exc_info=True,
-            )
-            return
-
-        dispatch_status_str = envelope.get("dispatch_status")
-        if not dispatch_status_str:
-            return
-
         from autoskillit.fleet import (  # noqa: PLC0415
+            DispatchCompleted,
             DispatchRecord,
+            DispatchRejected,
             DispatchStatus,
             normalize_dispatch_token_usage,
             upsert_dispatch_record_by_name,
         )
 
-        try:
-            final_status = DispatchStatus(dispatch_status_str)
-        except ValueError:
-            final_status = DispatchStatus.FAILURE
-
-        record = DispatchRecord(
-            name=effective_name,
-            status=final_status,
-            dispatch_id=envelope.get("dispatch_id", ""),
-            dispatched_session_id=envelope.get("dispatched_session_id") or "",
-            reason=envelope.get("reason") or "",
-            token_usage=normalize_dispatch_token_usage(envelope.get("token_usage") or {}),
-        )
-        upsert_dispatch_record_by_name(Path(campaign_state_path_str), record)
+        match outcome:
+            case DispatchRejected(error_code=code):
+                upsert_dispatch_record_by_name(
+                    Path(campaign_state_path_str),
+                    DispatchRecord(
+                        name=effective_name,
+                        status=DispatchStatus.REFUSED,
+                        reason=code,
+                    ),
+                )
+            case DispatchCompleted() as completed:
+                upsert_dispatch_record_by_name(
+                    Path(campaign_state_path_str),
+                    DispatchRecord(
+                        name=effective_name,
+                        status=completed.dispatch_status,
+                        dispatch_id=completed.dispatch_id,
+                        dispatched_session_id=completed.dispatched_session_id,
+                        reason=completed.reason,
+                        token_usage=normalize_dispatch_token_usage(completed.token_usage),
+                    ),
+                )
     except Exception:
         logger.warning("_write_dispatch_to_campaign_state: failed", exc_info=True)
 
@@ -200,7 +196,7 @@ async def dispatch_food_truck(
                 result,
             )
 
-        return result
+        return result.to_envelope()
     except Exception as exc:
         logger.error("dispatch_food_truck unhandled exception", exc_info=True)
         from autoskillit.core import FleetErrorCode, fleet_error

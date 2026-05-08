@@ -5,7 +5,7 @@ description: >
   Single-phase technical research recipe. Scopes a research question, plans an
   experiment, optionally reviews the design, then always decomposes into phases,
   implements, runs the experiment, writes a report to research/, and opens a PR.
-  Supports a skippable design review loop (bounded by retries: 2), review
+  Supports a skippable design review loop (bounded by check_design_review_loop at 3 iterations), review
   resolution routing after PR open, and a post-review re-validation loop that
   re-runs affected benchmarks when resolve-research-review produces rerun_required
   escalations. After the final push (or when review completes), an archival
@@ -34,9 +34,9 @@ ingredients:
       When 'true' (the default), run the review-design skill after plan_experiment
       to validate the experiment plan before execution. Emits a verdict: GO proceeds,
       REVISE loops back to plan_experiment with revision guidance (bounded by
-      retries: 2), STOP triggers resolve_design_review for triage — addressable
-      findings loop back, structural findings halt the pipeline. When 'false', skip
-      directly to create_worktree.
+      check_design_review_loop at 3 iterations), STOP triggers resolve_design_review
+      for triage — addressable findings loop back, structural findings halt the
+      pipeline. When 'false', skip directly to create_worktree.
     default: "true"
   review_pr:
     description: >
@@ -73,7 +73,7 @@ kitchen_rules:
   - >
     DESIGN REVIEW LOOP: review_design validates the plan and may
     route back to plan_experiment with revision guidance. Bounded by
-    retries: 2 (max 3 review cycles). On exhaustion or failure,
+    check_design_review_loop (max 3 iterations). On exhaustion or failure,
     proceed to execution with the best available plan — do not stop.
     Exception: a STOP verdict triggers resolve_design_review, which triages
     each stop-trigger finding as ADDRESSABLE/STRUCTURAL/DISCUSS. If any are
@@ -177,7 +177,27 @@ steps:
   revise_design:
     action: route
     on_result:
+      - route: check_design_review_loop
+
+  check_design_review_loop:
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.check_loop_iteration"
+      current_iteration: "${{ context.design_review_count }}"
+      max_iterations: "3"
+    capture:
+      design_review_count: "${{ result.next_iteration }}"
+    on_result:
+      - when: "${{ result.max_exceeded }} == true"
+        route: create_worktree
       - route: plan_experiment
+    on_failure: create_worktree
+    optional_context_refs:
+      - design_review_count
+    note: >
+      Iteration guard for the review_design → revise_design → plan_experiment cycle.
+      Caps design revision loops at 3 iterations. On exhaustion, proceeds to
+      create_worktree with the best available design.
 
   resolve_design_review:
     tool: run_skill
@@ -362,8 +382,28 @@ steps:
     action: route
     on_result:
       - when: "${{ context.is_fixable }} == true"
-        route: plan_phase
+        route: check_implement_fix_loop
       - route: escalate_stop
+
+  check_implement_fix_loop:
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.check_loop_iteration"
+      current_iteration: "${{ context.implement_fix_count }}"
+      max_iterations: "3"
+    capture:
+      implement_fix_count: "${{ result.next_iteration }}"
+    on_result:
+      - when: "${{ result.max_exceeded }} == true"
+        route: run_experiment
+      - route: plan_phase
+    on_failure: run_experiment
+    optional_context_refs:
+      - implement_fix_count
+    note: >
+      Iteration guard for implement_phase → troubleshoot → plan_phase cycle.
+      Caps fix-and-retry loops at 3 iterations. On exhaustion, skips to
+      run_experiment with whatever implementation is committed.
 
   next_phase_or_experiment:
     action: route
@@ -425,8 +465,29 @@ steps:
       step_name: adjust
     capture:
       experiment_results: "${{ result.results_path }}"
-    on_success: run_experiment
+    on_success: check_run_fix_loop
     on_failure: ensure_results
+    on_context_limit: ensure_results
+
+  check_run_fix_loop:
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.check_loop_iteration"
+      current_iteration: "${{ context.run_fix_count }}"
+      max_iterations: "3"
+    capture:
+      run_fix_count: "${{ result.next_iteration }}"
+    on_result:
+      - when: "${{ result.max_exceeded }} == true"
+        route: ensure_results
+      - route: run_experiment
+    on_failure: ensure_results
+    optional_context_refs:
+      - run_fix_count
+    note: >
+      Iteration guard for run_experiment → troubleshoot → adjust_experiment cycle.
+      Caps experiment fix loops at 3 iterations. On exhaustion, proceeds to
+      ensure_results to salvage whatever data exists.
 
   ensure_results:
     tool: run_python

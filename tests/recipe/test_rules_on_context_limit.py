@@ -177,11 +177,11 @@ class TestOnContextLimitField:
             },
         )
         findings = run_semantic_rules(recipe)
-        cycle_warnings = [
+        cycle_findings = [
             f for f in findings if "cycle" in f.message.lower() or "unbounded" in f.message.lower()
         ]
-        assert len(cycle_warnings) >= 1, "Expected a cycle WARNING but got none"
-        assert any(f.severity == Severity.WARNING for f in cycle_warnings)
+        assert len(cycle_findings) >= 1, "Expected a cycle ERROR but got none"
+        assert any(f.severity == Severity.ERROR for f in cycle_findings)
 
     def test_truly_trapped_cycle_without_exit_produces_error(self) -> None:
         """A cycle where every step's edges stay inside the cycle must produce an ERROR."""

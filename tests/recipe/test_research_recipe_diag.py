@@ -164,9 +164,9 @@ def test_route_run_failure_default_escalates(recipe):
 
 
 def test_adjust_experiment_routing_unchanged(recipe):
-    """adjust_experiment routing must remain unchanged after run_failure routing is added."""
+    """adjust_experiment routes through check_run_fix_loop guard before run_experiment."""
     step = recipe.steps["adjust_experiment"]
-    assert step.on_success == "run_experiment"
+    assert step.on_success == "check_run_fix_loop"
     assert step.on_failure == "ensure_results"
 
 

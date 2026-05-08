@@ -14,7 +14,7 @@ from autoskillit.fleet import (
     DispatchStatus,
     append_dispatch_record,
     read_state,
-    reset_failed_dispatch,
+    reset_blocking_dispatch,
     resume_campaign_from_state,
     write_initial_state,
 )
@@ -46,10 +46,10 @@ class TestFailureToPendingTransition:
             _validate_transition(DispatchStatus.FAILURE, DispatchStatus.RUNNING, "d1")
 
 
-# --- reset_failed_dispatch ---
+# --- reset_blocking_dispatch ---
 
 
-class TestResetFailedDispatch:
+class TestResetBlockingDispatch:
     def test_resets_failure_to_pending(self, tmp_path: Path):
         """FAILURE dispatch is reset to PENDING with cleared metadata."""
         sp = _state_path(tmp_path)
@@ -81,7 +81,7 @@ class TestResetFailedDispatch:
             ),
         )
 
-        result = reset_failed_dispatch(sp, "d2")
+        result = reset_blocking_dispatch(sp, "d2")
 
         assert result is True
         state = read_state(sp)
@@ -108,7 +108,7 @@ class TestResetFailedDispatch:
         write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("d1"))
         append_dispatch_record(sp, DispatchRecord(name="d1", status=DispatchStatus.FAILURE))
 
-        result = reset_failed_dispatch(sp, "d1")
+        result = reset_blocking_dispatch(sp, "d1")
 
         assert result is True
 
@@ -118,7 +118,7 @@ class TestResetFailedDispatch:
         write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("d1"))
         append_dispatch_record(sp, DispatchRecord(name="d1", status=DispatchStatus.SUCCESS))
 
-        result = reset_failed_dispatch(sp, "d1")
+        result = reset_blocking_dispatch(sp, "d1")
 
         assert result is False
 
@@ -128,7 +128,7 @@ class TestResetFailedDispatch:
         write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("d1"))
         append_dispatch_record(sp, DispatchRecord(name="d1", status=DispatchStatus.FAILURE))
 
-        result = reset_failed_dispatch(sp, "nonexistent")
+        result = reset_blocking_dispatch(sp, "nonexistent")
 
         assert result is False
 
@@ -136,7 +136,7 @@ class TestResetFailedDispatch:
         """Returns False when state file does not exist (fail-safe)."""
         sp = tmp_path / "nonexistent" / "state.json"
 
-        result = reset_failed_dispatch(sp, "d1")
+        result = reset_blocking_dispatch(sp, "d1")
 
         assert result is False
 
@@ -162,7 +162,7 @@ class TestResetFailedDispatch:
             ),
         )
 
-        reset_failed_dispatch(sp, "d2")
+        reset_blocking_dispatch(sp, "d2")
 
         state = read_state(sp)
         assert state is not None

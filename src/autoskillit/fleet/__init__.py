@@ -41,7 +41,7 @@ from .state import (
     read_all_campaign_captures,
     read_state,
     record_gate_outcome,
-    reset_failed_dispatch,
+    reset_blocking_dispatch,
     resume_campaign_from_state,
     update_orchestrator_session_id,
     upsert_dispatch_record_by_name,
@@ -51,6 +51,7 @@ from .state import (
 from .state_recovery import (
     classify_stale_dispatch,
     derive_orchestrator_resume_spec,
+    has_blocking_dispatch,
 )
 from .state_types import FLEET_STATE_SCHEMA_VERSION, DispatchOutcome
 from .summary import (
@@ -99,6 +100,7 @@ __all__ = [
     "GateRecordResult",
     "append_dispatch_record",
     "build_protected_campaign_ids",
+    "has_blocking_dispatch",
     "has_failed_dispatch",
     "record_gate_outcome",
     "mark_dispatch_interrupted",
@@ -106,7 +108,7 @@ __all__ = [
     "mark_dispatch_running",
     "read_all_campaign_captures",
     "read_state",
-    "reset_failed_dispatch",
+    "reset_blocking_dispatch",
     "resume_campaign_from_state",
     "update_orchestrator_session_id",
     "upsert_dispatch_record_by_name",

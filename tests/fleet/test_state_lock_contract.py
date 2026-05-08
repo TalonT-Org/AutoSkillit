@@ -23,7 +23,7 @@ from autoskillit.fleet import (
     mark_dispatch_resumable,
     mark_dispatch_running,
     read_state,
-    reset_failed_dispatch,
+    reset_blocking_dispatch,
     update_orchestrator_session_id,
     upsert_dispatch_record_by_name,
     write_captured_values,
@@ -38,7 +38,7 @@ _MUTATION_FUNCTIONS: dict[str, object] = {
     "mark_dispatch_resumable": mark_dispatch_resumable,
     "append_dispatch_record": append_dispatch_record,
     "write_captured_values": write_captured_values,
-    "reset_failed_dispatch": reset_failed_dispatch,
+    "reset_blocking_dispatch": reset_blocking_dispatch,
     "update_orchestrator_session_id": update_orchestrator_session_id,
     "upsert_dispatch_record_by_name": upsert_dispatch_record_by_name,
 }
@@ -145,7 +145,7 @@ class TestAllMutationsAcquireLock:
                 fn(sp, DispatchRecord(name="d1", status=DispatchStatus.SUCCESS))  # type: ignore[operator]
             elif fn_name == "write_captured_values":
                 fn(sp, {"key": "val"})  # type: ignore[operator]
-            elif fn_name == "reset_failed_dispatch":
+            elif fn_name == "reset_blocking_dispatch":
                 append_dispatch_record(
                     sp, DispatchRecord(name="d1", status=DispatchStatus.FAILURE)
                 )

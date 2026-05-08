@@ -771,15 +771,16 @@ class TestAppendDispatchRecordIllegalTransition:
 
 
 class TestResumeShowsRefusedInBlock:
-    def test_refused_dispatch_visible_next_is_b(self, tmp_path: Path) -> None:
+    def test_refused_dispatch_skipped_next_is_b(self, tmp_path: Path) -> None:
         sp = _state_path(tmp_path)
         write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("A", "B"))
-        append_dispatch_record(sp, DispatchRecord(name="A", status=DispatchStatus.REFUSED))
+        from autoskillit.fleet import upsert_dispatch_record_by_name
+
+        upsert_dispatch_record_by_name(sp, DispatchRecord(name="A", status=DispatchStatus.REFUSED))
         decision = resume_campaign_from_state(sp, continue_on_failure=True)
         assert decision is not None
         assert decision.next_dispatch_name == "B"
-        assert "A" in decision.completed_dispatches_block
-        assert "refused" in decision.completed_dispatches_block.lower()
+        assert "A" not in decision.completed_dispatches_block
 
 
 class TestResumeShowsReleasedInBlock:
@@ -795,16 +796,17 @@ class TestResumeShowsReleasedInBlock:
 
 
 class TestResumeIncludesInterruptedInBlock:
-    def test_interrupted_dispatch_visible_in_completed_block(self, tmp_path: Path) -> None:
+    def test_interrupted_dispatch_skipped_next_is_c(self, tmp_path: Path) -> None:
         sp = _state_path(tmp_path)
         write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("A", "B", "C"))
         append_dispatch_record(sp, DispatchRecord(name="A", status=DispatchStatus.SUCCESS))
-        mark_dispatch_running(sp, "B", dispatch_id="d-b", dispatched_pid=99)
-        append_dispatch_record(sp, DispatchRecord(name="B", status=DispatchStatus.INTERRUPTED))
+        from autoskillit.fleet import upsert_dispatch_record_by_name
+
+        upsert_dispatch_record_by_name(
+            sp, DispatchRecord(name="B", status=DispatchStatus.INTERRUPTED)
+        )
         decision = resume_campaign_from_state(sp, continue_on_failure=True)
         assert decision is not None
-        assert "B" in decision.completed_dispatches_block
-        assert "interrupted" in decision.completed_dispatches_block.lower()
         assert decision.next_dispatch_name == "C"
 
 
@@ -1304,3 +1306,195 @@ class TestV4BackwardCompat:
         assert state.ended_at == 0.0
         assert state.recipe_snapshot == {}
         assert state.dispatches[0].attempt_history == []
+
+
+class TestDispatchStatusStateMachineInvariants:
+    """Structural immunity tests for the DispatchStatus state machine.
+
+    These tests verify that _ALLOWED_TRANSITIONS and TERMINAL_DISPATCH_STATUSES
+    are consistent by construction, preventing the class of bugs where a status
+    has empty transitions but is not marked terminal (causing silent campaign stalls).
+    """
+
+    def test_every_dispatch_status_in_allowed_transitions(self) -> None:
+        """Every DispatchStatus member must appear as a key in _ALLOWED_TRANSITIONS."""
+        from autoskillit.fleet.state_types import _ALLOWED_TRANSITIONS
+
+        for status in DispatchStatus:
+            assert status in _ALLOWED_TRANSITIONS, (
+                f"DispatchStatus.{status.name} missing from _ALLOWED_TRANSITIONS"
+            )
+
+    def test_nonterminal_status_has_outgoing_transitions(self) -> None:
+        """Every non-terminal status must have at least one outgoing transition."""
+        from autoskillit.fleet.state_types import (
+            _ALLOWED_TRANSITIONS,
+            TERMINAL_DISPATCH_STATUSES,
+        )
+
+        for status in DispatchStatus:
+            if status not in TERMINAL_DISPATCH_STATUSES:
+                assert len(_ALLOWED_TRANSITIONS[status]) > 0, (
+                    f"Non-terminal status {status!r} has no outgoing transitions"
+                )
+
+    def test_terminal_set_matches_empty_transitions(self) -> None:
+        """TERMINAL_DISPATCH_STATUSES must equal the set of statuses with empty transitions."""
+        from autoskillit.fleet.state_types import (
+            _ALLOWED_TRANSITIONS,
+            TERMINAL_DISPATCH_STATUSES,
+        )
+
+        empty_transition_statuses = frozenset(s for s, t in _ALLOWED_TRANSITIONS.items() if not t)
+        assert TERMINAL_DISPATCH_STATUSES == empty_transition_statuses, (
+            f"TERMINAL_DISPATCH_STATUSES {TERMINAL_DISPATCH_STATUSES!r} != "
+            f"derived empty-transition set {empty_transition_statuses!r}"
+        )
+
+
+class TestAllInterruptedCampaignDoesNotSilentlyComplete:
+    """A campaign where every dispatch is INTERRUPTED must halt or retry, not silently complete."""
+
+    def test_all_interrupted_continue_on_failure_false_halts(self, tmp_path: Path) -> None:
+        """resume_campaign_from_state must not return next_dispatch_name='' for all-INTERRUPTED."""
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("A"))
+        from autoskillit.fleet import upsert_dispatch_record_by_name
+
+        upsert_dispatch_record_by_name(
+            sp, DispatchRecord(name="A", status=DispatchStatus.INTERRUPTED)
+        )
+
+        decision = resume_campaign_from_state(sp, continue_on_failure=False)
+
+        assert decision is not None
+        assert (
+            decision.next_dispatch_name != ""
+            or decision.completed_dispatches_block == FLEET_HALTED_SENTINEL
+        ), "All-INTERRUPTED campaign returned empty next_name with no halt sentinel — silent stall"
+
+    def test_all_interrupted_continue_on_failure_true_resets_to_pending(
+        self, tmp_path: Path
+    ) -> None:
+        """resume_campaign_from_state with continue_on_failure=True resets INTERRUPTED to PENDING."""
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("A"))
+        from autoskillit.fleet import upsert_dispatch_record_by_name
+
+        upsert_dispatch_record_by_name(
+            sp,
+            DispatchRecord(name="A", status=DispatchStatus.INTERRUPTED, kill_reason="stale"),
+        )
+
+        decision = resume_campaign_from_state(sp, continue_on_failure=True, reset_on_retry=True)
+
+        state = read_state(sp)
+        assert state is not None
+        assert state.dispatches[0].status == DispatchStatus.PENDING
+        assert decision is not None
+        assert decision.next_dispatch_name == "A"
+
+
+class TestAllRefusedCampaignDoesNotSilentlyComplete:
+    """A campaign where every dispatch is REFUSED must halt or retry, not silently complete."""
+
+    def test_all_refused_continue_on_failure_false_halts(self, tmp_path: Path) -> None:
+        """resume_campaign_from_state must not return next_dispatch_name='' for all-REFUSED."""
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("A"))
+        from autoskillit.fleet import upsert_dispatch_record_by_name
+
+        upsert_dispatch_record_by_name(sp, DispatchRecord(name="A", status=DispatchStatus.REFUSED))
+
+        decision = resume_campaign_from_state(sp, continue_on_failure=False)
+
+        assert decision is not None
+        assert (
+            decision.next_dispatch_name != ""
+            or decision.completed_dispatches_block == FLEET_HALTED_SENTINEL
+        ), "All-REFUSED campaign returned empty next_name with no halt sentinel — silent stall"
+
+    def test_all_refused_continue_on_failure_true_resets_to_pending(self, tmp_path: Path) -> None:
+        """resume_campaign_from_state with continue_on_failure=True resets REFUSED to PENDING."""
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("A"))
+        from autoskillit.fleet import upsert_dispatch_record_by_name
+
+        upsert_dispatch_record_by_name(
+            sp,
+            DispatchRecord(name="A", status=DispatchStatus.REFUSED),
+        )
+
+        decision = resume_campaign_from_state(sp, continue_on_failure=True, reset_on_retry=True)
+
+        state = read_state(sp)
+        assert state is not None
+        assert state.dispatches[0].status == DispatchStatus.PENDING
+        assert decision is not None
+        assert decision.next_dispatch_name == "A"
+
+
+class TestKillReasonNotStaleAfterResumableRedispatch:
+    """kill_reason must be cleared when a RESUMABLE dispatch is redispatched to RUNNING."""
+
+    def test_kill_reason_cleared_on_resumable_to_running(self, tmp_path: Path) -> None:
+        """mark_dispatch_running clears kill_reason when re-dispatching a RESUMABLE dispatch."""
+        sp = _state_path(tmp_path)
+        sidecar = tmp_path / "sidecar.jsonl"
+        sidecar.write_text("")
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("A"))
+        mark_dispatch_running(sp, "A", dispatch_id="d1", dispatched_pid=42)
+        mark_dispatch_resumable(sp, "A", sidecar_path=str(sidecar))
+        data = json.loads(sp.read_text())
+        for d in data["dispatches"]:
+            if d["name"] == "A":
+                d["kill_reason"] = "idle_stall"
+                d["infra_exit_category"] = "something"
+        sp.write_text(json.dumps(data))
+
+        mark_dispatch_running(sp, "A", dispatch_id="d2", dispatched_pid=43)
+
+        state = read_state(sp)
+        assert state is not None
+        a = next(d for d in state.dispatches if d.name == "A")
+        assert a.kill_reason == "", "kill_reason was not cleared on RESUMABLE→RUNNING transition"
+        assert a.infra_exit_category == "", (
+            "infra_exit_category was not cleared on RESUMABLE→RUNNING transition"
+        )
+
+
+class TestL3GateBlocksOnInterruptedDispatch:
+    """The L3 dispatch gate must block on INTERRUPTED and REFUSED dispatches."""
+
+    def test_has_blocking_dispatch_detects_interrupted(self, tmp_path: Path) -> None:
+        """A campaign with an INTERRUPTED dispatch must be detected by has_blocking_dispatch."""
+        from autoskillit.fleet import has_blocking_dispatch, upsert_dispatch_record_by_name
+
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("A"))
+        upsert_dispatch_record_by_name(
+            sp, DispatchRecord(name="A", status=DispatchStatus.INTERRUPTED)
+        )
+
+        assert has_blocking_dispatch(sp) is True
+
+    def test_has_blocking_dispatch_detects_refused(self, tmp_path: Path) -> None:
+        """A campaign with a REFUSED dispatch must be detected by has_blocking_dispatch."""
+        from autoskillit.fleet import has_blocking_dispatch, upsert_dispatch_record_by_name
+
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("A"))
+        upsert_dispatch_record_by_name(sp, DispatchRecord(name="A", status=DispatchStatus.REFUSED))
+
+        assert has_blocking_dispatch(sp) is True
+
+    def test_has_blocking_dispatch_allows_success_only(self, tmp_path: Path) -> None:
+        """A campaign with only SUCCESS dispatches must not be blocked."""
+        from autoskillit.fleet import has_blocking_dispatch
+
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("A", "B"))
+        append_dispatch_record(sp, DispatchRecord(name="A", status=DispatchStatus.SUCCESS))
+        append_dispatch_record(sp, DispatchRecord(name="B", status=DispatchStatus.SUCCESS))
+
+        assert has_blocking_dispatch(sp) is False

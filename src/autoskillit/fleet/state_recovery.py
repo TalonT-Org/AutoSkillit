@@ -19,6 +19,7 @@ from autoskillit.fleet.state_types import (
 __all__ = [
     "classify_stale_dispatch",
     "derive_orchestrator_resume_spec",
+    "has_blocking_dispatch",
     "has_failed_dispatch",
     "resume_campaign_from_state",
 ]
@@ -46,6 +47,29 @@ def has_failed_dispatch(state_path: Path) -> bool:
         d.status == DispatchStatus.FAILURE and d.reason not in _INFRASTRUCTURE_FAILURE_REASONS
         for d in state.dispatches
     )
+
+
+def has_blocking_dispatch(state_path: Path) -> bool:
+    """Check whether any dispatch should block further campaign dispatches.
+
+    INTERRUPTED and REFUSED dispatches always block (they are retriable but not
+    terminal). FAILURE blocks only when it is a logic failure (not infrastructure).
+
+    Returns False when the file is missing or corrupted (fail-open).
+    """
+    from autoskillit.fleet.state import read_state  # noqa: PLC0415
+
+    if not state_path.exists():
+        return False
+    state = read_state(state_path)
+    if state is None:
+        return False
+    for d in state.dispatches:
+        if d.status in {DispatchStatus.INTERRUPTED, DispatchStatus.REFUSED}:
+            return True
+        if d.status == DispatchStatus.FAILURE and d.reason not in _INFRASTRUCTURE_FAILURE_REASONS:
+            return True
+    return False
 
 
 def _is_abandon_kill_metadata(kill_reason: str, infra_exit_category: str) -> bool:
@@ -134,6 +158,12 @@ def resume_campaign_from_state(
         if m.state is None:
             return None
 
+        was_blocked = frozenset(
+            d.name
+            for d in m.state.dispatches
+            if d.status in {DispatchStatus.INTERRUPTED, DispatchStatus.REFUSED}
+        )
+
         for d in m.state.dispatches:
             if d.status == DispatchStatus.RUNNING:
                 if is_dispatch_session_alive(d):
@@ -145,8 +175,22 @@ def resume_campaign_from_state(
                     d.sidecar_path = sidecar_path
                 m.mark_dirty()
 
+        _RETRIABLE_NON_SUCCESS = frozenset(
+            {
+                DispatchStatus.FAILURE,
+                DispatchStatus.INTERRUPTED,
+                DispatchStatus.REFUSED,
+            }
+        )
+
+        if continue_on_failure and reset_on_retry:
+            for d in m.state.dispatches:
+                if d.status in {DispatchStatus.INTERRUPTED, DispatchStatus.REFUSED}:
+                    _clear_dispatch_for_retry(d)
+                    m.mark_dirty()
+
         for d in m.state.dispatches:
-            if d.status == DispatchStatus.FAILURE and not continue_on_failure:
+            if d.status in _RETRIABLE_NON_SUCCESS and not continue_on_failure:
                 if reset_on_retry:
                     _clear_dispatch_for_retry(d)
                     m.mark_dirty()
@@ -173,8 +217,8 @@ def resume_campaign_from_state(
                 d.status
                 not in {
                     DispatchStatus.INTERRUPTED,
-                    DispatchStatus.RUNNING,
                     DispatchStatus.REFUSED,
+                    DispatchStatus.RUNNING,
                     DispatchStatus.RELEASED,
                     DispatchStatus.FAILURE,
                     DispatchStatus.RESUMABLE,

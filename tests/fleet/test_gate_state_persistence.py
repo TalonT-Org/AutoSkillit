@@ -314,4 +314,4 @@ def test_refused_gate_resume_selects_next(tmp_path):
     decision = resume_campaign_from_state(sp, continue_on_failure=True)
     assert decision is not None
     assert decision.next_dispatch_name == "phase-one"
-    assert "refused" in decision.completed_dispatches_block.lower()
+    assert "- gate-check: refused" in decision.completed_dispatches_block

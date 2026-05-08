@@ -622,7 +622,7 @@ class TestFoodTruckAutoGateBoot:
 
     @pytest.mark.anyio
     async def test_run_skill_gate_error_when_food_truck_gate_closed(
-        self, tool_ctx, monkeypatch, tmp_path
+        self, tool_ctx, monkeypatch
     ) -> None:
         import json
 
@@ -631,13 +631,13 @@ class TestFoodTruckAutoGateBoot:
 
         tool_ctx.gate = DefaultGateState(enabled=False)
 
-        result = json.loads(await run_skill("/some-skill", str(tmp_path)))
+        result = json.loads(await run_skill("/some-skill", "/tmp"))
         assert result["subtype"] == "gate_error"
         assert result["success"] is False
 
     @pytest.mark.anyio
     async def test_run_skill_succeeds_after_food_truck_auto_gate_boot(
-        self, tool_ctx, monkeypatch, tmp_path
+        self, tool_ctx, monkeypatch
     ) -> None:
         import json
         from unittest.mock import AsyncMock, MagicMock, patch
@@ -662,7 +662,7 @@ class TestFoodTruckAutoGateBoot:
                     with patch("autoskillit.core.register_active_kitchen"):
                         await _food_truck_auto_gate_boot(tool_ctx)
 
-        result = json.loads(await run_skill("/some-skill", str(tmp_path)))
+        result = json.loads(await run_skill("/some-skill", "/tmp"))
         assert result.get("success") is True
 
 

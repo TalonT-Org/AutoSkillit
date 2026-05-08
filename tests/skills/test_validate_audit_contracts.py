@@ -70,11 +70,20 @@ class TestValidateAuditContent:
 
     # T-VAL-014
     def test_output_dir(self) -> None:
-        assert "{{AUTOSKILLIT_TEMP}}/validate-audit/" in _skill_text()
+        assert "{{AUTOSKILLIT_TEMP}}/validate-audit-" in _skill_text()
 
     # T-VAL-015
     def test_history_research_agent(self) -> None:
         assert "history research agent" in _skill_text().lower()
+
+    # T-VAL-026
+    def test_validate_audit_extended_filenames_have_no_timestamp_suffix(self) -> None:
+        """Extended validate-audit filenames must not carry timestamp suffixes."""
+        text = _skill_text()
+        assert "validated_report_{source}.md" in text, (
+            "Extended validate-audit/SKILL.md should use 'validated_report_{source}.md' "
+            "(no timestamp suffix)"
+        )
 
 
 class TestValidateAuditNewSteps:

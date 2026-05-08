@@ -249,6 +249,35 @@ def test_validate_audit_uses_autoskillit_temp_placeholder() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Test 11a: Per-run directory pattern in project-local validate-audit
+# ---------------------------------------------------------------------------
+
+
+def test_validate_audit_uses_per_run_subdirectory_pattern() -> None:
+    """Project-local validate-audit must use per-run subdirectory pattern."""
+    path = SKILLS_DIR / "validate-audit" / "SKILL.md"
+    content = path.read_text(encoding="utf-8")
+    assert "validate-audit-{YYYY-MM-DD_HHMMSS}/" in content, (
+        "validate-audit/SKILL.md missing per-run subdirectory pattern "
+        "'validate-audit-{YYYY-MM-DD_HHMMSS}/'"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 11b: Timestamp-free filenames in project-local validate-audit
+# ---------------------------------------------------------------------------
+
+
+def test_validate_audit_filenames_have_no_timestamp_suffix() -> None:
+    """Individual filenames must not carry timestamp suffixes (the run dir has the timestamp)."""
+    path = SKILLS_DIR / "validate-audit" / "SKILL.md"
+    content = path.read_text(encoding="utf-8")
+    assert "validated_report_{source}.md" in content, (
+        "validate-audit/SKILL.md should use 'validated_report_{source}.md' (no timestamp suffix)"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Test 12: C11 heading exists in project-local SKILL.md
 # ---------------------------------------------------------------------------
 

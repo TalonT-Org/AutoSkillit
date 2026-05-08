@@ -144,6 +144,11 @@ class TestUndeclaredPackRequirement:
 
     def test_skill_needing_only_enabled_packs_passes(self):
         """A recipe that uses only default-enabled pack skills emits no finding."""
+        from autoskillit.core import PACK_REGISTRY
+
+        assert PACK_REGISTRY["github"].default_enabled, (
+            "precondition: github must be default-enabled"
+        )
         recipe = _make_recipe_with_run_skill(
             requires_packs=["github"],
             skill_command="/autoskillit:github-issue",

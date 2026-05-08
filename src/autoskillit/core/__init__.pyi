@@ -160,6 +160,9 @@ from .types import CloneSuccessResult as CloneSuccessResult
 from .types import DatabaseReader as DatabaseReader
 from .types import DirectInstall as DirectInstall
 from .types import DispatchGateType as DispatchGateType
+from .types import DispatchIdentity as DispatchIdentity
+from .types import PromptContractError as PromptContractError
+from .types import assert_prompt_sentinel as assert_prompt_sentinel
 from .types import FailureRecord as FailureRecord
 from .types import FeatureDef as FeatureDef
 from .types import FeatureLifecycle as FeatureLifecycle

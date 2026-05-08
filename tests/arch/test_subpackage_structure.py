@@ -14,6 +14,7 @@ class TestCoreSubpackages:
     def test_core_types_has_all_type_modules(self):
         expected = {
             "_type_checkpoint",
+            "_type_dispatch_identity",
             "_type_enums",
             "_type_constants",
             "_type_results",

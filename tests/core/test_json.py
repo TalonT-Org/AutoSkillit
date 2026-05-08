@@ -67,7 +67,12 @@ def test_fast_dumps_roundtrip_with_fast_loads() -> None:
 
 @pytest.fixture()
 def stdlib_json_mod(monkeypatch: pytest.MonkeyPatch):
-    """Provides _json reimported with orjson blocked to exercise the stdlib fallback."""
+    """Provides _json reimported with orjson blocked to exercise the stdlib fallback.
+
+    Scope note: this patch only affects the re-imported module object returned here.
+    Other modules that already imported `from autoskillit.core._json import fast_dumps`
+    at collection time retain the orjson-backed callable; those callables are not patched.
+    """
     monkeypatch.setitem(sys.modules, "orjson", None)  # type: ignore[arg-type]
     monkeypatch.delitem(sys.modules, "autoskillit.core._json", raising=False)
     return importlib.import_module("autoskillit.core._json")

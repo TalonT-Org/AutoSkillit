@@ -830,6 +830,16 @@ class DefaultHeadlessExecutor:
                 )
             merged_extras["AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS"] = ",".join(sorted(requires_packs))
 
+        fleet_idle = fleet_cfg.idle_output_timeout
+        if idle_output_timeout is not None:
+            merged_extras["AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT"] = str(idle_output_timeout)
+        elif fleet_idle > 0:
+            merged_extras.setdefault("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(fleet_idle))
+        else:
+            idle_cfg_val = cfg.run_skill.idle_output_timeout
+            if idle_cfg_val > 0:
+                merged_extras.setdefault("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(idle_cfg_val))
+
         spec = build_food_truck_cmd(
             orchestrator_prompt=orchestrator_prompt,
             plugin_source=self._ctx.plugin_source,
@@ -852,16 +862,6 @@ class DefaultHeadlessExecutor:
         )
         effective_deadline_ext = fleet_cfg.enable_deadline_extension
         effective_max_ext = float(fleet_cfg.max_extension_seconds)
-
-        fleet_idle = fleet_cfg.idle_output_timeout
-        if idle_output_timeout is not None:
-            merged_extras["AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT"] = str(idle_output_timeout)
-        elif fleet_idle > 0:
-            merged_extras.setdefault("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(fleet_idle))
-        else:
-            idle_cfg_val = cfg.run_skill.idle_output_timeout
-            if idle_cfg_val > 0:
-                merged_extras.setdefault("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(idle_cfg_val))
 
         effective_idle_out: float | None = (
             idle_output_timeout

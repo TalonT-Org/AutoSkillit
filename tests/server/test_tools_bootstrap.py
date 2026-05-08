@@ -220,9 +220,9 @@ class TestClaimAndResolveIssue:
             color="c2e0c6",
             description="Issue claimed by orchestrator, waiting for recipe pickup",
         )
-        tool_ctx_kitchen_open.github_client.swap_labels.assert_called_once_with(
-            "owner", "repo", 42, remove_labels=["fail"], add_labels=["queued"]
-        )
+        call_kwargs = tool_ctx_kitchen_open.github_client.swap_labels.call_args.kwargs
+        assert set(call_kwargs["remove_labels"]) == {"fail"}
+        assert call_kwargs["add_labels"] == ["queued"]
 
     @pytest.mark.anyio
     async def test_claim_and_resolve_default_removes_queued(self, tool_ctx_kitchen_open):

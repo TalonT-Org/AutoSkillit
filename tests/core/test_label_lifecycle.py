@@ -77,14 +77,14 @@ class TestLabelDef:
             {IssueLabelState.FAIL}
         )
 
-    def test_staged_removes_in_progress_and_fail(self):
+    def test_staged_removes_in_progress_fail_and_queued(self):
         assert LABEL_LIFECYCLE_REGISTRY[IssueLabelState.STAGED].removes_on_entry == frozenset(
-            {IssueLabelState.IN_PROGRESS, IssueLabelState.FAIL}
+            {IssueLabelState.IN_PROGRESS, IssueLabelState.FAIL, IssueLabelState.QUEUED}
         )
 
-    def test_fail_removes_in_progress(self):
+    def test_fail_removes_in_progress_and_queued(self):
         assert LABEL_LIFECYCLE_REGISTRY[IssueLabelState.FAIL].removes_on_entry == frozenset(
-            {IssueLabelState.IN_PROGRESS}
+            {IssueLabelState.IN_PROGRESS, IssueLabelState.QUEUED}
         )
 
 

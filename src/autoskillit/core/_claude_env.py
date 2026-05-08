@@ -86,10 +86,10 @@ def build_claude_env(
     Returns
     -------
     Mapping[str, str]
-        A ``MappingProxyType`` over the resolved env. Both
-        ``subprocess.run(env=...)`` and ``anyio.open_process(env=...)``
-        accept any ``Mapping``, so this is a drop-in for the underlying
-        runners. The read-only view prevents post-build mutation.
+        A ``MappingProxyType`` over the resolved env. The read-only view
+        prevents post-build mutation. Callers that pass the result to
+        external subprocess APIs must coerce to ``dict`` at the boundary
+        (uvloop requires ``type(env) is dict``).
     """
     src = os.environ if base is None else base
     out: dict[str, str] = {

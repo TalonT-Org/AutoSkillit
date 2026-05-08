@@ -234,13 +234,16 @@ async def run_managed_async(
             stdin_handle = open(stdin_path)  # noqa: SIM115
 
         try:
+            # uvloop's Cython layer requires type(env) is dict — coerce at
+            # the external API boundary to preserve MappingProxyType internally.
+            _env: dict[str, str] | None = dict(env) if env is not None else None
             proc = await anyio.open_process(
                 cmd,
                 stdout=stdout_file,
                 stderr=stderr_file,
                 stdin=stdin_handle if stdin_handle is not None else subprocess.DEVNULL,
                 cwd=cwd,
-                env=env,
+                env=_env,
                 start_new_session=True,
             )
 
@@ -502,13 +505,14 @@ def run_managed_sync(
 
         process = None
         try:
+            _env: dict[str, str] | None = dict(env) if env is not None else None
             process = subprocess.Popen(
                 cmd,
                 stdout=stdout_file,
                 stderr=stderr_file,
                 stdin=stdin_handle if stdin_handle is not None else subprocess.DEVNULL,
                 cwd=cwd,
-                env=env,
+                env=_env,
                 start_new_session=True,
             )
 

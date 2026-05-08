@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from types import MappingProxyType
 
 import pytest
@@ -148,3 +149,17 @@ def test_build_claude_env_extras_override_scrubbed_private_vars() -> None:
         extras={"AUTOSKILLIT_SESSION_TYPE": "skill"},
     )
     assert result["AUTOSKILLIT_SESSION_TYPE"] == "skill"
+
+
+def test_build_claude_env_subprocess_compatible() -> None:
+    """build_claude_env() result must be accepted by subprocess.Popen."""
+    env = build_claude_env()
+    proc = subprocess.Popen(
+        ["echo", "ok"],
+        env=dict(env),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    stdout, _ = proc.communicate(timeout=10)
+    assert proc.returncode == 0
+    assert b"ok" in stdout

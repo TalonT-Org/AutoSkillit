@@ -330,6 +330,8 @@ def update_orchestrator_session_id(state_path: Path, session_id: str) -> None:
 
     Thread-safe: uses fcntl.LOCK_EX on state.lock.
     """
+    if not session_id:
+        return
     with _resume_lock:
         lock_path = state_path.with_suffix(".lock")
         with open(lock_path, "wb") as _flock_handle:

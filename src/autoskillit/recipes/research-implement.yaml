@@ -166,8 +166,28 @@ steps:
     action: route
     on_result:
       - when: "${{ context.is_fixable }} == true"
-        route: plan_phase
+        route: check_implement_fix_loop
       - route: escalate_stop
+
+  check_implement_fix_loop:
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.check_loop_iteration"
+      current_iteration: "${{ context.implement_fix_count }}"
+      max_iterations: "3"
+    capture:
+      implement_fix_count: "${{ result.next_iteration }}"
+    on_result:
+      - when: "${{ result.max_exceeded }} == true"
+        route: run_experiment
+      - route: plan_phase
+    on_failure: run_experiment
+    optional_context_refs:
+      - implement_fix_count
+    note: >
+      Iteration guard for implement_phase → troubleshoot → plan_phase cycle.
+      Caps fix-and-retry loops at 3 iterations. On exhaustion, skips to
+      run_experiment with whatever implementation is committed.
 
   next_phase_or_experiment:
     action: route
@@ -230,9 +250,30 @@ steps:
       step_name: adjust
     capture:
       experiment_results: "${{ result.results_path }}"
-    on_success: run_experiment
+    on_success: check_run_fix_loop
     on_failure: ensure_results
     on_context_limit: ensure_results
+
+  check_run_fix_loop:
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.check_loop_iteration"
+      current_iteration: "${{ context.run_fix_count }}"
+      max_iterations: "3"
+    capture:
+      run_fix_count: "${{ result.next_iteration }}"
+    on_result:
+      - when: "${{ result.max_exceeded }} == true"
+        route: ensure_results
+      - route: run_experiment
+    on_failure: ensure_results
+    optional_context_refs:
+      - run_fix_count
+    note: >
+      Iteration guard for the adjust_experiment → check_run_fix_loop → run_experiment
+      sub-loop (entered via troubleshoot_run_failure → route_run_failure → adjust_experiment).
+      Caps experiment fix loops at 3 iterations. On exhaustion, proceeds to
+      ensure_results to salvage whatever data exists.
 
   ensure_results:
     tool: run_python

@@ -56,7 +56,7 @@ class TestResearchDesignRecipeStructure:
         assert recipe.ingredients["issue_url"].required is False
 
     def test_step_count(self, recipe) -> None:
-        assert len(recipe.steps) == 9
+        assert len(recipe.steps) == 10
 
     def test_step_names(self, recipe) -> None:
         expected = {
@@ -65,6 +65,7 @@ class TestResearchDesignRecipeStructure:
             "review_design",
             "plan_visualization",
             "revise_design",
+            "check_design_review_loop",
             "resolve_design_review",
             "design_rejected",
             "design_complete",
@@ -160,12 +161,12 @@ class TestResearchDesignRecipeStructure:
     def test_revise_design_is_route_action(self, recipe) -> None:
         assert recipe.steps["revise_design"].action == "route"
 
-    def test_revise_design_routes_to_plan_experiment(self, recipe) -> None:
+    def test_revise_design_routes_to_check_design_review_loop(self, recipe) -> None:
         step = recipe.steps["revise_design"]
         assert step.on_result is not None
         default = next((c for c in step.on_result.conditions if c.when is None), None)
         assert default is not None
-        assert default.route == "plan_experiment"
+        assert default.route == "check_design_review_loop"
 
     def test_resolve_design_review_retries(self, recipe) -> None:
         assert recipe.steps["resolve_design_review"].retries == 1

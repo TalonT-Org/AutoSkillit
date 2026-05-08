@@ -159,19 +159,19 @@ def _check_unbounded_cycles(ctx: ValidationContext) -> list[RuleFinding]:
                             return
 
                     # Success path re-enters the cycle — retry exit only bounds
-                    # individual step visits, not the outer loop. Emit WARNING.
+                    # individual step visits, not the outer loop. Emit ERROR.
                     findings.append(
                         RuleFinding(
                             rule="unbounded-cycle",
-                            severity=Severity.WARNING,
+                            severity=Severity.ERROR,
                             step_name=node,
                             message=(
                                 f"Routing cycle detected: {' → '.join(cycle_steps)} → {neighbor}. "
                                 f"Step(s) {', '.join(retrying_steps)} have retry exits, but their "
                                 f"success paths re-enter the cycle. The inner retry budget resets "
                                 f"on each loop iteration, so the outer loop is unbounded. "
-                                "Add a global iteration counter or route success outside the "
-                                "cycle."
+                                "Add a check_loop_iteration guard step to enforce a hard "
+                                "iteration cap, or route the success path outside the cycle."
                             ),
                         )
                     )

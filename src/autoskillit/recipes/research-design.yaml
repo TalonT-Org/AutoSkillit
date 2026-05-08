@@ -198,8 +198,8 @@ steps:
       visualization_plan_path=<context.visualization_plan_path>,
       report_plan_path=<context.report_plan_path>,
       experiment_type=<context.experiment_type>,
-      worktree_path=<context.worktree_path>,
-      research_dir=<context.research_dir>.
+      worktree_path=${{ context.worktree_path }},
+      research_dir=${{ context.research_dir }}.
       Example sentinel:
       {"success": true, "scope_report": "<path>", "experiment_plan": "<path>",
       "visualization_plan_path": "<path>", "report_plan_path": "<path>",

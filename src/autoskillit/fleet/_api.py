@@ -427,7 +427,12 @@ async def _run_dispatch(
             "AUTOSKILLIT_CAMPAIGN_ID": campaign_id,
             "AUTOSKILLIT_DISPATCH_ID": dispatch_id,
             "AUTOSKILLIT_SESSION_DEADLINE": str(
-                started_at + (float(timeout_sec) if timeout_sec else 3600.0)
+                started_at
+                + (
+                    float(timeout_sec)
+                    if timeout_sec
+                    else float(tool_ctx.config.fleet.default_timeout_sec)
+                )
             ),
         },
         requires_packs=list(full_recipe.requires_packs) or ["kitchen-core"],

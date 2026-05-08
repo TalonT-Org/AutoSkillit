@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import regex as _re
+import regex as re
 
 from autoskillit.core import Severity, get_logger, pkg_root
 from autoskillit.recipe._analysis import ValidationContext
@@ -96,8 +96,8 @@ def _check_pattern_examples_match(ctx: ValidationContext) -> list[RuleFinding]:
             continue
         for pattern in contract.expected_output_patterns:
             try:
-                matched = any(_re.search(pattern, ex) for ex in contract.pattern_examples)
-            except _re.error:
+                matched = any(re.search(pattern, ex) for ex in contract.pattern_examples)
+            except re.error:
                 findings.append(
                     RuleFinding(
                         rule="pattern-examples-match",
@@ -225,8 +225,8 @@ def _check_write_behavior_consistency(ctx: ValidationContext) -> list[RuleFindin
             )
         for pattern in wew:
             try:
-                _re.compile(pattern)
-            except _re.error as exc:
+                re.compile(pattern)
+            except re.error as exc:
                 findings.append(
                     RuleFinding(
                         rule="write-behavior-consistency",
@@ -318,7 +318,7 @@ def _check_always_has_no_write_exit(ctx: ValidationContext) -> list[RuleFinding]
                     )
                     break
                 for phrase in _ALWAYS_WITH_NO_WRITE_EXIT_PHRASES:
-                    if _re.search(phrase, content):
+                    if re.search(phrase, content):
                         findings.append(
                             RuleFinding(
                                 rule="always-has-no-write-exit",
@@ -451,7 +451,7 @@ def _check_example_covers_all_allowed_values(ctx: ValidationContext) -> list[Rul
                 continue
             output_name: str = output["name"]
             for value in output["allowed_values"]:
-                pattern = _re.compile(_re.escape(output_name) + r"\s*=\s*" + _re.escape(value))
+                pattern = re.compile(re.escape(output_name) + r"\s*=\s*" + re.escape(value))
                 if not any(pattern.search(ex) for ex in contract.pattern_examples):
                     findings.append(
                         RuleFinding(
@@ -510,8 +510,8 @@ def _check_all_examples_match_all_patterns(ctx: ValidationContext) -> list[RuleF
         for example in contract.pattern_examples:
             for pattern in contract.expected_output_patterns:
                 try:
-                    matched = bool(_re.search(pattern, example))
-                except _re.error:
+                    matched = bool(re.search(pattern, example))
+                except re.error:
                     continue  # invalid regex — covered by pattern-examples-match
                 if not matched:
                     preview = repr(example[:60])
@@ -577,7 +577,7 @@ def _check_path_output_recovery_coverage(ctx: ValidationContext) -> list[RuleFin
 
         for output in path_outputs:
             matched = any(
-                _re.match(rf"^{_re.escape(output.name)}\s*=", p)
+                re.match(rf"^{re.escape(output.name)}\s*=", p)
                 for p in contract.expected_output_patterns
             )
             if not matched:

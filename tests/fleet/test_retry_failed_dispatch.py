@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -16,6 +18,7 @@ from autoskillit.fleet import (
     resume_campaign_from_state,
     write_initial_state,
 )
+from autoskillit.fleet.state import _clear_dispatch_for_retry
 from autoskillit.fleet.state_types import _validate_transition
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
@@ -73,6 +76,8 @@ class TestResetFailedDispatch:
                 started_at=1000.0,
                 ended_at=2000.0,
                 sidecar_path="/old/sidecar",
+                kill_reason="stale",
+                infra_exit_category="timeout",
             ),
         )
 
@@ -94,6 +99,8 @@ class TestResetFailedDispatch:
         assert d2.started_at == 0.0
         assert d2.ended_at == 0.0
         assert d2.sidecar_path is None
+        assert d2.kill_reason == ""
+        assert d2.infra_exit_category == ""
 
     def test_returns_true_on_success(self, tmp_path: Path):
         """Returns True when the dispatch was actually reset."""
@@ -239,3 +246,70 @@ class TestResumeResetOnRetry:
 
         assert decision is not None
         assert decision.completed_dispatches_block == "- d1: success"
+
+    def test_stale_kill_reason_does_not_survive_retry(self, tmp_path: Path):
+        """Stale kill_reason from prior failure must not leak through retry reset."""
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("d1", "d2"))
+        append_dispatch_record(sp, DispatchRecord(name="d1", status=DispatchStatus.SUCCESS))
+        append_dispatch_record(
+            sp,
+            DispatchRecord(
+                name="d2",
+                status=DispatchStatus.FAILURE,
+                kill_reason="stale",
+                infra_exit_category="timeout",
+            ),
+        )
+
+        resume_campaign_from_state(sp, continue_on_failure=False, reset_on_retry=True)
+
+        state = read_state(sp)
+        assert state is not None
+        d2 = next(d for d in state.dispatches if d.name == "d2")
+        assert d2.kill_reason == ""
+        assert d2.infra_exit_category == ""
+
+
+# --- structural guard: field coverage ---
+
+
+class TestClearDispatchFieldCoverage:
+    """Structural guard: _clear_dispatch_for_retry must reset all execution-metadata fields."""
+
+    _IDENTITY_FIELDS = frozenset({"name", "campaign_id", "caller_session_id"})
+
+    def test_clear_covers_all_execution_metadata_fields(self):
+        """Every non-identity field must be reset to its default by _clear_dispatch_for_retry."""
+        dirty_values: dict[str, Any] = {
+            "name": "test",
+            "status": DispatchStatus.FAILURE,
+            "dispatch_id": "dirty-id",
+            "campaign_id": "cid",
+            "caller_session_id": "csid",
+            "dispatched_session_id": "dirty-sess",
+            "dispatched_session_log_dir": "/dirty/log",
+            "dispatched_pid": 99999,
+            "dispatched_starttime_ticks": 12345,
+            "dispatched_boot_id": "dirty-boot",
+            "reason": "dirty-reason",
+            "kill_reason": "stale",
+            "infra_exit_category": "timeout",
+            "token_usage": {"prompt_tokens": 500},
+            "started_at": 1000.0,
+            "ended_at": 2000.0,
+            "sidecar_path": "/dirty/sidecar",
+        }
+        d = DispatchRecord(**dirty_values)
+        _clear_dispatch_for_retry(d)
+
+        for f in dataclasses.fields(d):
+            if f.name in self._IDENTITY_FIELDS:
+                continue
+            default = (
+                f.default_factory() if f.default_factory is not dataclasses.MISSING else f.default
+            )
+            assert getattr(d, f.name) == default, (
+                f"_clear_dispatch_for_retry did not reset {f.name!r} to its default "
+                f"({default!r}); got {getattr(d, f.name)!r}"
+            )

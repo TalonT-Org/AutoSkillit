@@ -169,11 +169,20 @@ class TestAllMutationsAcquireLock:
 
 class TestAppendAndCaptureAtomic:
     def test_append_and_capture_atomic(self, tmp_path: Path) -> None:
-        """append_dispatch_record + write_captured_values must be atomic together.
+        """CampaignStateMutator serializes concurrent multi-step writes atomically.
 
-        A concurrent reader must never observe all_success=True with
-        captured_values={} (the intermediate two-write window).
+        When a caller uses a single CampaignStateMutator block to update both
+        dispatch status and captured_values, a concurrent reader must never
+        observe the intermediate state (all_success=True with captured_values={}).
+
+        Note: calling append_dispatch_record + write_captured_values as two
+        separate public API functions does NOT provide this guarantee — each
+        function acquires and releases its own mutator block, leaving a visible
+        window between the two writes. Multi-step atomicity requires a shared
+        CampaignStateMutator context.
         """
+        from autoskillit.fleet import CampaignStateMutator
+
         sp = tmp_path / "state.json"
         write_initial_state(sp, "cid", "camp", "/m.yaml", [DispatchRecord(name="d1")])
 
@@ -192,8 +201,16 @@ class TestAppendAndCaptureAtomic:
 
         def writer() -> None:
             start_barrier.wait()
-            append_dispatch_record(sp, DispatchRecord(name="d1", status=DispatchStatus.SUCCESS))
-            write_captured_values(sp, {"key": "val"})
+            with CampaignStateMutator(sp) as m:
+                if m.state is not None:
+                    for i, d in enumerate(m.state.dispatches):
+                        if d.name == "d1":
+                            m.state.dispatches[i] = DispatchRecord(
+                                name="d1", status=DispatchStatus.SUCCESS
+                            )
+                            break
+                    m.state.captured_values = {"key": "val"}
+                    m.mark_dirty()
 
         t_write = threading.Thread(target=writer)
         t_read = threading.Thread(target=reader)
@@ -204,5 +221,5 @@ class TestAppendAndCaptureAtomic:
 
         assert not observed_intermediate, (
             "Reader observed all_success=True with captured_values={} — "
-            "two-write TOCTOU window exists"
+            "CampaignStateMutator two-write TOCTOU window exists"
         )

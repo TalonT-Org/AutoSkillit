@@ -19,5 +19,12 @@ def test_fleet_session_importable():
     from autoskillit.cli.fleet._fleet_session import _launch_fleet_session  # noqa: F401
 
 
+def test_fleet_signal_guard_removed():
+    import importlib
+
+    module = importlib.import_module("autoskillit.cli.fleet._fleet_lifecycle")
+    assert not hasattr(module, "_fleet_signal_guard")
+
+
 def test_fleet_facade_exports_fleet_app():
     from autoskillit.cli.fleet import fleet_app, render_fleet_error  # noqa: F401

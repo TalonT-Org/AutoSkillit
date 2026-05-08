@@ -46,6 +46,7 @@ from .state import (
     write_initial_state,
 )
 from .state_recovery import (
+    classify_stale_dispatch,
     derive_orchestrator_resume_spec,
 )
 from .summary import (
@@ -104,6 +105,7 @@ __all__ = [
     "write_captured_values",
     "write_initial_state",
     "normalize_dispatch_token_usage",
+    "classify_stale_dispatch",
     "derive_orchestrator_resume_spec",
     "checkpoint_from_sidecar",
     "is_dispatch_session_alive",

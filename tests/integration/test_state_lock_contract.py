@@ -252,9 +252,19 @@ class TestAppendAndCaptureAtomic:
                 if all_success and not state.captured_values:
                     observed_intermediate.append(True)
 
+        from autoskillit.fleet import CampaignStateMutator
+
         def writer() -> None:
-            append_dispatch_record(sp, DispatchRecord(name="d1", status=DispatchStatus.SUCCESS))
-            write_captured_values(sp, {"key": "val"})
+            with CampaignStateMutator(sp) as m:
+                if m.state is not None:
+                    for i, d in enumerate(m.state.dispatches):
+                        if d.name == "d1":
+                            m.state.dispatches[i] = DispatchRecord(
+                                name="d1", status=DispatchStatus.SUCCESS
+                            )
+                            break
+                    m.state.captured_values = {"key": "val"}
+                    m.mark_dirty()
 
         t_write = threading.Thread(target=writer)
         t_read = threading.Thread(target=reader)

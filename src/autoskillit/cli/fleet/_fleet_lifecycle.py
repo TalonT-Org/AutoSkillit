@@ -61,9 +61,7 @@ async def _fleet_signal_guard(
                     from autoskillit.fleet import (  # noqa: PLC0415
                         CampaignStateMutator,
                         DispatchStatus,
-                    )
-                    from autoskillit.fleet.state_recovery import (
-                        classify_stale_dispatch,  # noqa: PLC0415
+                        classify_stale_dispatch,
                     )
 
                     with CampaignStateMutator(state_path) as m:
@@ -111,7 +109,8 @@ async def _fleet_signal_guard(
                                             )
                                         except Exception:
                                             logger.warning(
-                                                "signal_guard: kill_process_tree failed (non-linux fallback)",
+                                                "signal_guard: kill_process_tree failed"
+                                                " (non-linux fallback)",
                                                 exc_info=True,
                                             )
 
@@ -163,8 +162,11 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
     - Process alive + ticks mismatch → reaped_pid_recycled (no kill)
     """
     from autoskillit.execution import kill_process_tree, read_boot_id, read_starttime_ticks
-    from autoskillit.fleet import CampaignStateMutator, DispatchStatus  # noqa: PLC0415
-    from autoskillit.fleet.state_recovery import classify_stale_dispatch  # noqa: PLC0415
+    from autoskillit.fleet import (  # noqa: PLC0415
+        CampaignStateMutator,
+        DispatchStatus,
+        classify_stale_dispatch,
+    )
 
     current_boot_id = read_boot_id()
 

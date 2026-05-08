@@ -19,6 +19,55 @@ from autoskillit.server._notify import track_response_size
 logger = get_logger(__name__)
 
 
+def _write_dispatch_to_campaign_state(
+    campaign_state_path_str: str,
+    effective_name: str,
+    result_envelope: str,
+) -> None:
+    """Write the dispatch outcome from the result envelope to the campaign state file.
+
+    Parses the JSON envelope returned by execute_dispatch and persists the dispatch
+    record to AUTOSKILLIT_CAMPAIGN_STATE_PATH so fleet status commands reflect the
+    outcome. Never raises — state write failures are non-fatal.
+    """
+    try:
+        envelope = json.loads(result_envelope)
+        dispatch_status_str = envelope.get("dispatch_status")
+        if not dispatch_status_str:
+            return
+        from autoskillit.fleet import (  # noqa: PLC0415
+            CampaignStateMutator,
+            DispatchRecord,
+            DispatchStatus,
+        )
+
+        try:
+            final_status = DispatchStatus(dispatch_status_str)
+        except ValueError:
+            final_status = DispatchStatus.FAILURE
+
+        record = DispatchRecord(
+            name=effective_name,
+            status=final_status,
+            dispatch_id=envelope.get("dispatch_id", ""),
+            dispatched_session_id=envelope.get("dispatched_session_id") or "",
+            reason=envelope.get("reason") or "",
+        )
+        campaign_sp = Path(campaign_state_path_str)
+        with CampaignStateMutator(campaign_sp) as m:
+            if m.state is not None:
+                for i, d in enumerate(m.state.dispatches):
+                    if d.name == effective_name:
+                        m.state.dispatches[i] = record
+                        m.mark_dirty()
+                        break
+                else:
+                    m.state.dispatches.append(record)
+                    m.mark_dirty()
+    except Exception:
+        logger.warning("_write_dispatch_to_campaign_state: failed", exc_info=True)
+
+
 def _get_food_truck_prompt_builder() -> Callable[..., str]:
     """Return the food truck prompt builder with mcp_prefix pre-bound."""
     from autoskillit.core import detect_autoskillit_mcp_prefix
@@ -141,6 +190,13 @@ async def dispatch_food_truck(
             idle_output_timeout=idle_output_timeout,
             caller_session_id=caller_session_id,
         )
+
+        if campaign_state_path_str:
+            _write_dispatch_to_campaign_state(
+                campaign_state_path_str,
+                dispatch_name or recipe,
+                result,
+            )
 
         return result
     except Exception as exc:

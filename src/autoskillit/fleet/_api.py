@@ -430,7 +430,7 @@ async def _run_dispatch(
                 started_at
                 + (
                     float(timeout_sec)
-                    if timeout_sec
+                    if timeout_sec is not None
                     else float(tool_ctx.config.fleet.default_timeout_sec)
                 )
             ),

@@ -217,7 +217,7 @@ def _check_campaign_manifest_clone_dests(project_dir: Path | None = None) -> Doc
 
 def _check_fleet_state_schema(dispatches_dir: Path | None = None) -> DoctorResult:
     """Check fleet state files for schema version drift."""
-    from autoskillit.fleet.state_types import _SCHEMA_VERSION
+    from autoskillit.fleet import FLEET_STATE_SCHEMA_VERSION as _SCHEMA_VERSION
 
     check_name = "fleet_state_schema"
     if dispatches_dir is None:

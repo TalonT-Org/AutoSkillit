@@ -89,12 +89,13 @@ class TestRetiringCacheSchemaValidation:
             }
         ]
 
-    def test_sweep_retiring_cache_ignores_stale_version(self, tmp_path):
+    def test_sweep_retiring_cache_ignores_stale_version(self, monkeypatch, tmp_path):
         """sweep_retiring_cache must treat a stale retiring_cache.json as empty.
 
         When the file has schema_version != _SCHEMA_VERSION, the function must
         return 0 (nothing to sweep) rather than crashing or sweeping stale data.
         """
+        monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
         cache = tmp_path / ".autoskillit" / "retiring_cache.json"
         _make_retiring_file(
             cache,
@@ -155,12 +156,13 @@ class TestRetiringCacheSchemaValidation:
         # New kitchen must be present
         assert "new-kitchen" in ids
 
-    def test_any_kitchen_open_returns_false_on_stale_version(self, tmp_path):
+    def test_any_kitchen_open_returns_false_on_stale_version(self, monkeypatch, tmp_path):
         """any_kitchen_open must return False when active_kitchens.json has stale schema version.
 
         Even if the stale file contains kitchen entries, the stale version causes
         it to be treated as absent, so the function returns False.
         """
+        monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
         kitchens_path = tmp_path / ".autoskillit" / "active_kitchens.json"
         _make_kitchen_file(
             kitchens_path,

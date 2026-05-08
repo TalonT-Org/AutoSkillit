@@ -13,7 +13,7 @@ from __future__ import annotations
 import os
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import yaml
 from yaml import YAMLError as YAMLError  # explicit re-export for callers and type checkers
@@ -42,7 +42,12 @@ __all__ = [
     "read_versioned_json",
 ]
 
-_SCHEMA_DRIFT_LOGGED: set[str] = set()
+
+class _WarningLogger(Protocol):
+    def warning(self, event: str, /, **kw: Any) -> None: ...
+
+
+_SCHEMA_DRIFT_LOGGED: set[tuple[str, int]] = set()
 
 
 def resolve_temp_dir(project_dir: Path, override: str | None = None) -> Path:
@@ -136,7 +141,7 @@ def read_versioned_json(
     path: Path,
     expected_version: int,
     *,
-    logger: Any = None,
+    logger: _WarningLogger | None = None,
 ) -> dict[str, Any] | None:
     """Read a versioned JSON artifact and validate its schema_version.
 
@@ -155,7 +160,7 @@ def read_versioned_json(
         return None
     observed = raw.get("schema_version")
     if observed != expected_version:
-        cache_key = str(path.resolve())
+        cache_key = (str(path.resolve()), expected_version)
         if cache_key not in _SCHEMA_DRIFT_LOGGED:
             _SCHEMA_DRIFT_LOGGED.add(cache_key)
             if logger is not None:

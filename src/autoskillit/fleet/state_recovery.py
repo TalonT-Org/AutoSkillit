@@ -5,13 +5,6 @@ from __future__ import annotations
 import fcntl
 from pathlib import Path
 
-__all__ = [
-    "crash_recover_dispatch",
-    "derive_orchestrator_resume_spec",
-    "has_failed_dispatch",
-    "resume_campaign_from_state",
-]
-
 from autoskillit.core import InfraExitCategory, NamedResume, NoResume, RetryReason, get_logger
 from autoskillit.fleet.state_types import (
     _ABANDON_KILL_REASONS,
@@ -24,6 +17,13 @@ from autoskillit.fleet.state_types import (
     ResumeDecision,
     _resume_lock,
 )
+
+__all__ = [
+    "crash_recover_dispatch",
+    "derive_orchestrator_resume_spec",
+    "has_failed_dispatch",
+    "resume_campaign_from_state",
+]
 
 logger = get_logger(__name__)
 

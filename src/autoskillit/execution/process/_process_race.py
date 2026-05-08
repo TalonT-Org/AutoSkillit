@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import assert_never
@@ -208,7 +207,7 @@ async def _extract_stdout_session_id(
                 continue
             try:
                 obj = _fast_loads(line)
-            except (json.JSONDecodeError, ValueError):
+            except ValueError:
                 continue
             if isinstance(obj, dict) and obj.get("type") == "system":
                 sid = obj.get("session_id")

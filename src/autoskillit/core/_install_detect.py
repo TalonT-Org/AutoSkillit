@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import TypedDict
-
-import regex as re
 
 logger = logging.getLogger(__name__)  # noqa: TID251 — IL-0 module, no autoskillit imports allowed
 

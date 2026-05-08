@@ -5,7 +5,7 @@ IL-0 module: stdlib only, zero autoskillit imports.
 
 from __future__ import annotations
 
-import regex as re
+import re
 
 _GITHUB_REPO_RE = re.compile(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?$")
 _OWNER_REPO_RE = re.compile(r"^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$")

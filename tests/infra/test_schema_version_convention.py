@@ -105,7 +105,6 @@ def _is_yaml_dump(node: ast.expr) -> bool:
 
 
 # Hard-curated allowlist of existing atomic_write + json.dumps sites detected by AST scan.
-# Quota cache is NOT here because it's migrated to write_versioned_json in Phase 4.
 # Any new site that writes a dict payload SHOULD use write_versioned_json.
 _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # migration/store.py — failure store dicts

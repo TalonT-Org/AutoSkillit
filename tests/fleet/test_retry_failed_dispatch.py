@@ -271,13 +271,83 @@ class TestResumeResetOnRetry:
         assert d2.infra_exit_category == ""
 
 
+class TestAttemptHistoryOnRetry:
+    def test_clear_dispatch_for_retry_populates_attempt_history(self):
+        """_clear_dispatch_for_retry snapshots execution metadata into attempt_history."""
+        d = DispatchRecord(
+            name="d1",
+            status=DispatchStatus.FAILURE,
+            campaign_id="cid",
+            dispatch_id="old-id",
+            dispatched_session_id="old-sess",
+            dispatched_pid=12345,
+            reason="task_failed",
+            kill_reason="stale",
+            infra_exit_category="timeout",
+            started_at=1000.0,
+            ended_at=2000.0,
+            token_usage={"input": 100},
+        )
+        _clear_dispatch_for_retry(d)
+        assert len(d.attempt_history) == 1
+        attempt = d.attempt_history[0]
+        assert attempt["dispatch_id"] == "old-id"
+        assert attempt["status"] == "failure"
+        assert attempt["kill_reason"] == "stale"
+        assert attempt["started_at"] == 1000.0
+        assert attempt["ended_at"] == 2000.0
+
+    def test_attempt_history_grows_on_successive_retries(self):
+        """Each retry appends a new entry to attempt_history."""
+        d = DispatchRecord(
+            name="d1",
+            status=DispatchStatus.FAILURE,
+            campaign_id="cid",
+            dispatch_id="attempt-1",
+            started_at=100.0,
+            ended_at=200.0,
+        )
+        _clear_dispatch_for_retry(d)
+        assert len(d.attempt_history) == 1
+
+        d.status = DispatchStatus.FAILURE
+        d.dispatch_id = "attempt-2"
+        d.started_at = 300.0
+        d.ended_at = 400.0
+        _clear_dispatch_for_retry(d)
+        assert len(d.attempt_history) == 2
+        assert d.attempt_history[0]["dispatch_id"] == "attempt-1"
+        assert d.attempt_history[1]["dispatch_id"] == "attempt-2"
+
+    def test_attempt_history_persists_through_round_trip(self, tmp_path: Path):
+        """attempt_history survives write/read cycle."""
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("d1"))
+        append_dispatch_record(
+            sp,
+            DispatchRecord(
+                name="d1",
+                status=DispatchStatus.FAILURE,
+                dispatch_id="old",
+                started_at=100.0,
+                ended_at=200.0,
+            ),
+        )
+        reset_failed_dispatch(sp, "d1")
+        state = read_state(sp)
+        assert state is not None
+        d1 = next(d for d in state.dispatches if d.name == "d1")
+        assert len(d1.attempt_history) == 1
+        assert d1.attempt_history[0]["dispatch_id"] == "old"
+
+
 # --- structural guard: field coverage ---
 
 
 class TestClearDispatchFieldCoverage:
     """Structural guard: _clear_dispatch_for_retry must reset all execution-metadata fields."""
 
-    _IDENTITY_FIELDS = frozenset({"name", "campaign_id", "caller_session_id"})
+    _IDENTITY_FIELDS = frozenset({"name", "campaign_id", "caller_session_id", "attempt_history"})
 
     def test_clear_covers_all_execution_metadata_fields(self):
         """Every non-identity field must be reset to its default by _clear_dispatch_for_retry."""
@@ -285,6 +355,7 @@ class TestClearDispatchFieldCoverage:
             "name": "test",
             "campaign_id": "cid",
             "caller_session_id": "csid",
+            "attempt_history": [{"dispatch_id": "dirty"}],
         }
         for f in dataclasses.fields(DispatchRecord):
             if f.name in dirty_values:

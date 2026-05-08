@@ -354,6 +354,7 @@ class FleetConfig:
     enable_deadline_extension: bool = True
     max_extension_seconds: float = 7200
     idle_output_timeout: float = 1800
+    acquire_timeout_sec: float = 300.0
 
     def validate(self, feature_enabled: bool) -> None:
         """Validate only when the feature is active."""
@@ -381,6 +382,10 @@ class FleetConfig:
         if self.idle_output_timeout < 0:
             raise ValueError(
                 f"idle_output_timeout must be non-negative, got {self.idle_output_timeout}"
+            )
+        if self.acquire_timeout_sec <= 0:
+            raise ValueError(
+                f"acquire_timeout_sec must be positive, got {self.acquire_timeout_sec}"
             )
 
 

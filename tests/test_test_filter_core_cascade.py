@@ -96,7 +96,9 @@ class TestModuleCascadeCore:
         assert set(MODULE_CASCADE_CORE.keys()) == expected_stems
 
     def test_type_resume_cascade(self) -> None:
-        assert MODULE_CASCADE_CORE["_type_resume"] == frozenset({"core", "cli", "execution"})
+        assert MODULE_CASCADE_CORE["_type_resume"] == frozenset(
+            {"core", "cli", "execution", "fleet"}
+        )
 
     def test_type_helpers_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["_type_helpers"] == frozenset(
@@ -308,13 +310,12 @@ class TestBuildTestScopeCoreCascade:
         )
         assert result is not None
         dir_names = {p.name for p in result}
-        for pkg in ["core", "cli", "execution"]:
+        for pkg in ["core", "cli", "execution", "fleet"]:
             assert pkg in dir_names, f"_type_resume cascade should include {pkg}"
         for excluded in [
             "server",
             "recipe",
             "pipeline",
-            "fleet",
             "workspace",
             "migration",
             "hooks",

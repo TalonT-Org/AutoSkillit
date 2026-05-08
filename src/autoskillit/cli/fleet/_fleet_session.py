@@ -92,7 +92,13 @@ def _launch_fleet_session(
         if state_path is None:
             raise ValueError("state_path must not be None in campaign-driven mode")
         from autoskillit.cli._prompts import _build_fleet_campaign_prompt
-        from autoskillit.fleet import FLEET_HALTED_SENTINEL, resume_campaign_from_state
+        from autoskillit.fleet import (
+            FLEET_HALTED_SENTINEL,
+            derive_orchestrator_resume_spec,
+            read_state,
+            resume_campaign_from_state,
+            update_orchestrator_session_id,
+        )
 
         manifest_yaml = dump_yaml_str(
             [dataclasses.asdict(d) for d in campaign_recipe.dispatches],
@@ -138,7 +144,13 @@ def _launch_fleet_session(
         }
 
         seen_reload_ids = set[str]()
-        current_resume_spec = NoResume()
+        if resume_metadata is not None:
+            state = read_state(state_path)
+            current_resume_spec = (
+                derive_orchestrator_resume_spec(state) if state is not None else NoResume()
+            )
+        else:
+            current_resume_spec = NoResume()
         infra_resume_count = 0
         current_initial_message = initial_message
 
@@ -160,9 +172,11 @@ def _launch_fleet_session(
                         f"Last exit: {session_signal.category}"
                     )
                 current_resume_spec = NamedResume(session_id=session_signal.session_id)
+                update_orchestrator_session_id(state_path, session_signal.session_id)
             else:
                 _check_reload_guard(session_signal, seen_reload_ids)
                 current_resume_spec = NamedResume(session_id=session_signal)
+                update_orchestrator_session_id(state_path, session_signal)
 
             current_initial_message = None
 

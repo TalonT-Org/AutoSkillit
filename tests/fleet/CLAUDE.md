@@ -33,6 +33,7 @@ Fleet campaign dispatch, state persistence, and sidecar tests.
 | `test_sidecar.py` | Sidecar tests |
 | `test_state.py` | Tests for fleet state module (Group J) |
 | `test_state_protection.py` | Tests for fleet.state.build_protected_campaign_ids (PROT_1–PROT_9) |
+| `test_state_recovery.py` | Tests for derive_orchestrator_resume_spec in state_recovery module |
 | `test_state_schema.py` | Tests for DispatchRecord schema v2 fields and backward compatibility (Group J) |
 | `test_summary.py` | Tests for fleet campaign summary schema v1 (Group S) |
 

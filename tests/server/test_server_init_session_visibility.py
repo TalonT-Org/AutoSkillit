@@ -528,7 +528,7 @@ class TestFleetAutoGateBoot:
         )
 
 
-@pytest.mark.feature("fleet")
+@pytest.mark.feature("orchestrator")
 class TestFoodTruckAutoGateBoot:
     """Food truck lifespan auto-gate: _food_truck_auto_gate_boot opens gate."""
 
@@ -538,13 +538,14 @@ class TestFoodTruckAutoGateBoot:
     ) -> None:
         from unittest.mock import AsyncMock, MagicMock, patch
 
+        from autoskillit.core import FOOD_TRUCK_TOOL_TAGS_ENV_VAR
         from autoskillit.pipeline.gate import DefaultGateState
         from autoskillit.server._lifespan import _food_truck_auto_gate_boot
 
         tool_ctx.gate = DefaultGateState(enabled=False)
         tool_ctx.quota_refresh_task = None
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-        monkeypatch.setenv("AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS", "kitchen-core,rectify")
+        monkeypatch.setenv(FOOD_TRUCK_TOOL_TAGS_ENV_VAR, "kitchen-core,rectify")
 
         with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
             with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
@@ -562,13 +563,14 @@ class TestFoodTruckAutoGateBoot:
     ) -> None:
         from unittest.mock import AsyncMock, MagicMock, patch
 
+        from autoskillit.core import FOOD_TRUCK_TOOL_TAGS_ENV_VAR
         from autoskillit.pipeline.gate import DefaultGateState
         from autoskillit.server._lifespan import _food_truck_auto_gate_boot
 
         tool_ctx.gate = DefaultGateState(enabled=False)
         tool_ctx.quota_refresh_task = None
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-        monkeypatch.setenv("AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS", "kitchen-core,rectify")
+        monkeypatch.setenv(FOOD_TRUCK_TOOL_TAGS_ENV_VAR, "kitchen-core,rectify")
 
         with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
             with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
@@ -585,12 +587,13 @@ class TestFoodTruckAutoGateBoot:
     async def test_food_truck_auto_gate_boot_skips_non_headless_orchestrator(
         self, tool_ctx, monkeypatch
     ) -> None:
+        from autoskillit.core import FOOD_TRUCK_TOOL_TAGS_ENV_VAR
         from autoskillit.pipeline.gate import DefaultGateState
         from autoskillit.server._lifespan import _food_truck_auto_gate_boot
 
         tool_ctx.gate = DefaultGateState(enabled=False)
         monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
-        monkeypatch.setenv("AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS", "kitchen-core")
+        monkeypatch.setenv(FOOD_TRUCK_TOOL_TAGS_ENV_VAR, "kitchen-core")
 
         await _food_truck_auto_gate_boot(tool_ctx)
 
@@ -600,12 +603,13 @@ class TestFoodTruckAutoGateBoot:
     async def test_food_truck_auto_gate_boot_skips_when_no_tool_tags(
         self, tool_ctx, monkeypatch
     ) -> None:
+        from autoskillit.core import FOOD_TRUCK_TOOL_TAGS_ENV_VAR
         from autoskillit.pipeline.gate import DefaultGateState
         from autoskillit.server._lifespan import _food_truck_auto_gate_boot
 
         tool_ctx.gate = DefaultGateState(enabled=False)
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-        monkeypatch.delenv("AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS", raising=False)
+        monkeypatch.delenv(FOOD_TRUCK_TOOL_TAGS_ENV_VAR, raising=False)
 
         await _food_truck_auto_gate_boot(tool_ctx)
 
@@ -638,6 +642,7 @@ class TestFoodTruckAutoGateBoot:
         import json
         from unittest.mock import AsyncMock, MagicMock, patch
 
+        from autoskillit.core import FOOD_TRUCK_TOOL_TAGS_ENV_VAR
         from autoskillit.pipeline.gate import DefaultGateState
         from autoskillit.server._lifespan import _food_truck_auto_gate_boot
         from autoskillit.server.tools.tools_execution import run_skill
@@ -647,7 +652,7 @@ class TestFoodTruckAutoGateBoot:
         tool_ctx.executor = InMemoryHeadlessExecutor()
         tool_ctx.quota_refresh_task = None
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-        monkeypatch.setenv("AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS", "kitchen-core")
+        monkeypatch.setenv(FOOD_TRUCK_TOOL_TAGS_ENV_VAR, "kitchen-core")
 
         with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
             with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
@@ -658,7 +663,7 @@ class TestFoodTruckAutoGateBoot:
                         await _food_truck_auto_gate_boot(tool_ctx)
 
         result = json.loads(await run_skill("/some-skill", "/tmp"))
-        assert result.get("subtype") != "gate_error"
+        assert result.get("success") is True
 
 
 @pytest.mark.feature("fleet")

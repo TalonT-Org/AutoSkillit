@@ -275,7 +275,7 @@ class TestNormalizeDispatchTokenUsage:
 
 class TestDispatchRecordToDict:
     def test_dispatch_record_to_dict_all_fields(self) -> None:
-        """DispatchRecord.to_dict() must return all 17 keys."""
+        """DispatchRecord.to_dict() must return all expected keys."""
         from autoskillit.fleet import DispatchRecord
 
         record = DispatchRecord(name="test-job")

@@ -371,3 +371,16 @@ class TestReadVersionedJson:
             _warnings.simplefilter("always")
             read_versioned_json(target, expected_version=3)
         assert len(w2) == 1
+
+    def test_read_versioned_json_deduplicates_per_path_and_version(self, tmp_path: Path) -> None:
+        import warnings as _warnings
+
+        from autoskillit.core.io import write_versioned_json
+
+        target = tmp_path / "v1.json"
+        write_versioned_json(target, {"a": 1}, schema_version=1)
+        with _warnings.catch_warnings(record=True) as w:
+            _warnings.simplefilter("always")
+            read_versioned_json(target, expected_version=3)
+            read_versioned_json(target, expected_version=5)
+        assert len(w) == 2

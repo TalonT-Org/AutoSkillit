@@ -345,6 +345,8 @@ def append_dispatch_record(
 
     If a dispatch with the same name exists, it is replaced in-place.
     Otherwise the record is appended to the end.
+
+    Thread-safe: uses _resume_lock + fcntl.LOCK_EX.
     """
     with CampaignStateMutator(state_path) as m:
         if m.state is None:

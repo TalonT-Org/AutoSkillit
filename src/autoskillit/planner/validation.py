@@ -10,10 +10,11 @@ and are never consumed here.
 from __future__ import annotations
 
 import json
-import re
 from collections import deque
 from collections.abc import Iterator
 from pathlib import Path
+
+import regex as re
 
 from autoskillit.core import get_logger, write_versioned_json
 from autoskillit.planner.schema import (

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import re
 from typing import TYPE_CHECKING
+
+import regex as re
 
 from autoskillit.core import InfraExitCategory, get_logger
 

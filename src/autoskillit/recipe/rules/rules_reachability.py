@@ -19,7 +19,7 @@ Both rules fire at severity ERROR and are registered via ``@semantic_rule``.
 
 from __future__ import annotations
 
-import re
+import regex as re
 
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import (

@@ -7,10 +7,11 @@ emitted by L3 fleet sessions before exit.
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
+
+import regex as re
 
 from autoskillit.core import FleetErrorCode
 

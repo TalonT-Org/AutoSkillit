@@ -144,9 +144,9 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # _installed_plugins.py — installed_plugins.json (co-owned with Claude plugin system)
     ("src/autoskillit/cli/_installed_plugins.py", 71),
     # _marketplace.py — marketplace.json (co-owned)
-    ("src/autoskillit/cli/_marketplace.py", 99),
+    ("src/autoskillit/cli/_marketplace.py", 100),
     # _marketplace.py — hooks.json (co-owned)
-    ("src/autoskillit/cli/_marketplace.py", 181),
+    ("src/autoskillit/cli/_marketplace.py", 182),
     # _update_checks.py — dismissal state file
     ("src/autoskillit/cli/update/_update_checks.py", 77),
     # _update_checks_fetch.py — fetch cache (extracted from _update_checks.py)
@@ -154,18 +154,18 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # smoke_utils.py — partitions, ranges, diff metrics, queue, enriched handoff
     ("src/autoskillit/smoke_utils.py", 57),
     ("src/autoskillit/smoke_utils.py", 126),
-    # Lines 143 and 377 are list-payload write sites (dual membership: also in list_sites
+    # Lines 143 and 378 are list-payload write sites (dual membership: also in list_sites
     # in test_allowlist_includes_list_payloads_as_documented). The AST scanner catches
     # them because it cannot distinguish list vs dict return types — intentional.
     ("src/autoskillit/smoke_utils.py", 143),
-    ("src/autoskillit/smoke_utils.py", 377),
-    ("src/autoskillit/smoke_utils.py", 425),
+    ("src/autoskillit/smoke_utils.py", 378),
+    ("src/autoskillit/smoke_utils.py", 426),
     # planner/consolidation.py — write-back of merged WP dicts to per-file results
-    ("src/autoskillit/planner/consolidation.py", 307),
+    ("src/autoskillit/planner/consolidation.py", 308),
     # planner/manifests.py — finalize_wp_manifest: wp_index.json rebuild (list payload)
     ("src/autoskillit/planner/manifests.py", 255),
     # _cmd_rpc.py — emit_fallback_map: BEM fallback execution map (recipe-internal)
-    ("src/autoskillit/recipe/_cmd_rpc.py", 444),
+    ("src/autoskillit/recipe/_cmd_rpc.py", 445),
     # _session_state.py — session state persistence (ephemeral process-scoped state)
     ("src/autoskillit/execution/session/_session_state.py", 65),
 }
@@ -229,7 +229,7 @@ class TestSchemaVersionConvention:
         # These sites write list payloads through function calls but are caught by the scanner
         list_sites = [
             ("src/autoskillit/smoke_utils.py", 143),
-            ("src/autoskillit/smoke_utils.py", 377),
+            ("src/autoskillit/smoke_utils.py", 378),
         ]
         for site in list_sites:
             assert site in _LEGACY_JSON_WRITES, (

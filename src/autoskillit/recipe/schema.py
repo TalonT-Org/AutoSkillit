@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import dataclasses
-import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 from typing import Final
+
+import regex as re
 
 from autoskillit.core import FEATURE_REGISTRY, RECIPE_PACK_TAGS, DispatchGateType, RecipeSource
 

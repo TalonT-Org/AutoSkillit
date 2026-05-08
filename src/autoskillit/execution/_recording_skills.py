@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import hashlib
-import re
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+import regex as re
 
 from autoskillit.core import ValidatedAddDir, write_versioned_json
 

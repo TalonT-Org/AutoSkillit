@@ -5,10 +5,10 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import re
 import time
 from pathlib import Path
 
+import regex as re
 import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext

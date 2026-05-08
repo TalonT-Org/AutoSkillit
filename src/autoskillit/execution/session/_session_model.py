@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, assert_never
+
+import regex as re
 
 from autoskillit.core import (
     CONTEXT_EXHAUSTION_MARKER,

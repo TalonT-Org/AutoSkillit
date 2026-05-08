@@ -10,7 +10,7 @@ to the same outcome category (continuation vs escalation).
 
 from __future__ import annotations
 
-import re
+import regex as re
 
 from autoskillit.core import Severity, get_logger, resolve_skill_name
 from autoskillit.recipe._analysis import ValidationContext

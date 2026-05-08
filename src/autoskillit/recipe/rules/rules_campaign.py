@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-import re
 from collections import Counter
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+import regex as re
 
 from autoskillit.core import RECIPE_PACK_REGISTRY, DispatchGateType, Severity, get_logger
 from autoskillit.recipe._analysis import ValidationContext

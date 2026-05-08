@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import json
 import os
-import re
+
+import regex as re
 
 _WRITE_TOOL_NAMES: frozenset[str] = frozenset({"Write", "Edit"})
 _BASH_TOOL_NAME: str = "Bash"

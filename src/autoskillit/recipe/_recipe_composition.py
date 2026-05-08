@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import dataclasses
-import re
 from pathlib import Path
 from typing import Any
+
+import regex as re
 
 from autoskillit.core import YAMLError
 from autoskillit.recipe.io import find_sub_recipe_by_name

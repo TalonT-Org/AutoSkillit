@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import fcntl
 import json
-import re
 from pathlib import Path
 from typing import Any
+
+import regex as re
 
 from autoskillit.core import get_logger, write_versioned_json
 from autoskillit.planner.schema import (

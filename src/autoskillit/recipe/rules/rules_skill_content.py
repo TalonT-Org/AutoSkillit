@@ -7,9 +7,10 @@ Validates that every {placeholder} in a SKILL.md bash block is either:
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+import regex as re
 
 from autoskillit.core import Severity
 

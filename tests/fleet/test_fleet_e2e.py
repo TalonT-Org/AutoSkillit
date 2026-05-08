@@ -16,7 +16,7 @@ import threading
 import time
 from collections.abc import Generator
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 import anyio
@@ -266,7 +266,7 @@ class FleetRuntime:
             quota_checker=quota_checker if quota_checker is not None else _no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
-        return json.loads(raw.to_envelope())  # type: ignore[no-any-return]
+        return cast(dict[str, Any], json.loads(raw.to_envelope()))
 
     def dispatch_state_path(self, dispatch_id: str) -> Path:
         """Path to per-dispatch state file created by execute_dispatch."""

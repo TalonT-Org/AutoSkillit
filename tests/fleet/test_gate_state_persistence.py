@@ -307,6 +307,10 @@ def test_refused_gate_resume_selects_next(tmp_path):
     from autoskillit.fleet.state_gates import record_gate_outcome
 
     record_gate_outcome(sp, "gate-check", approved=False)
+    state = read_state(sp)
+    assert state is not None
+    gate_dispatch = next(d for d in state.dispatches if d.name == "gate-check")
+    assert gate_dispatch.status == DispatchStatus.REFUSED
     decision = resume_campaign_from_state(sp, continue_on_failure=True)
     assert decision is not None
     assert decision.next_dispatch_name == "phase-one"

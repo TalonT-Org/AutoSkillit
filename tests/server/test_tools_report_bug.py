@@ -96,10 +96,12 @@ def test_github_config_defaults():
 
 class TestReportBugTool:
     @pytest.mark.anyio
-    async def test_report_bug_failure_includes_session_id_and_stderr(self, tool_ctx, tmp_path):
+    async def test_report_bug_failure_includes_session_id_and_stderr(
+        self, tool_ctx_kitchen_open, tmp_path
+    ):
         """Blocking failure response must include session_id and stderr for diagnosis."""
-        tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-        tool_ctx.config.report_bug.github_filing = False
+        tool_ctx_kitchen_open.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+        tool_ctx_kitchen_open.config.report_bug.github_filing = False
 
         mock_executor = AsyncMock()
         mock_executor.run.return_value = SkillResult(
@@ -113,7 +115,7 @@ class TestReportBugTool:
             retry_reason=RetryReason.NONE,
             stderr="Claude crashed",
         )
-        tool_ctx.executor = mock_executor
+        tool_ctx_kitchen_open.executor = mock_executor
 
         result = json.loads(await report_bug("some error", str(tmp_path), severity="blocking"))
 
@@ -123,11 +125,11 @@ class TestReportBugTool:
 
     @pytest.mark.anyio
     async def test_report_bug_passes_expected_output_patterns_to_executor(
-        self, tool_ctx, tmp_path
+        self, tool_ctx_kitchen_open, tmp_path
     ):
         """output_pattern_resolver is consulted and patterns are passed to executor.run()."""
-        tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-        tool_ctx.config.report_bug.github_filing = False
+        tool_ctx_kitchen_open.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+        tool_ctx_kitchen_open.config.report_bug.github_filing = False
 
         mock_executor = AsyncMock()
         mock_executor.run.return_value = SkillResult(
@@ -141,8 +143,8 @@ class TestReportBugTool:
             retry_reason=RetryReason.NONE,
             stderr="",
         )
-        tool_ctx.executor = mock_executor
-        tool_ctx.output_pattern_resolver = lambda cmd: ["---bug-fingerprint---"]
+        tool_ctx_kitchen_open.executor = mock_executor
+        tool_ctx_kitchen_open.output_pattern_resolver = lambda cmd: ["---bug-fingerprint---"]
 
         await report_bug("error ctx", str(tmp_path), severity="blocking")
 
@@ -240,8 +242,8 @@ async def test_report_bug_gate_closed(tool_ctx, tmp_path):
 
 
 @pytest.mark.anyio
-async def test_report_bug_no_executor(tool_ctx, tmp_path):
-    tool_ctx.executor = None
+async def test_report_bug_no_executor(tool_ctx_kitchen_open, tmp_path):
+    tool_ctx_kitchen_open.executor = None
     result = json.loads(await report_bug("error ctx", str(tmp_path)))
     assert result["success"] is False
     assert "executor" in result["error"].lower()
@@ -253,14 +255,14 @@ async def test_report_bug_no_executor(tool_ctx, tmp_path):
 
 
 @pytest.mark.anyio
-async def test_report_bug_blocking_success(tool_ctx, tmp_path):
+async def test_report_bug_blocking_success(tool_ctx_kitchen_open, tmp_path):
     """Blocking mode awaits the session and returns status=complete."""
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = False
+    tool_ctx_kitchen_open.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx_kitchen_open.config.report_bug.github_filing = False
 
     mock_executor = AsyncMock()
     mock_executor.run.return_value = _skill_ok("## Report\nroot cause found")
-    tool_ctx.executor = mock_executor
+    tool_ctx_kitchen_open.executor = mock_executor
 
     result = json.loads(await report_bug("KeyError in foo", str(tmp_path), severity="blocking"))
 
@@ -272,14 +274,14 @@ async def test_report_bug_blocking_success(tool_ctx, tmp_path):
 
 
 @pytest.mark.anyio
-async def test_report_bug_blocking_failure_propagated(tool_ctx, tmp_path):
+async def test_report_bug_blocking_failure_propagated(tool_ctx_kitchen_open, tmp_path):
     """If the headless session fails, status=failed is returned."""
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = False
+    tool_ctx_kitchen_open.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx_kitchen_open.config.report_bug.github_filing = False
 
     mock_executor = AsyncMock()
     mock_executor.run.return_value = _skill_fail()
-    tool_ctx.executor = mock_executor
+    tool_ctx_kitchen_open.executor = mock_executor
 
     result = json.loads(await report_bug("crash here", str(tmp_path), severity="blocking"))
 
@@ -288,15 +290,15 @@ async def test_report_bug_blocking_failure_propagated(tool_ctx, tmp_path):
 
 
 @pytest.mark.anyio
-async def test_report_bug_blocking_writes_report_file(tool_ctx, tmp_path):
+async def test_report_bug_blocking_writes_report_file(tool_ctx_kitchen_open, tmp_path):
     """The report text must be written to the resolved report_path."""
     report_dir = tmp_path / "rpts"
-    tool_ctx.config.report_bug.report_dir = str(report_dir)
-    tool_ctx.config.report_bug.github_filing = False
+    tool_ctx_kitchen_open.config.report_bug.report_dir = str(report_dir)
+    tool_ctx_kitchen_open.config.report_bug.github_filing = False
 
     mock_executor = AsyncMock()
     mock_executor.run.return_value = _skill_ok("# Bug Report\nfoo bar")
-    tool_ctx.executor = mock_executor
+    tool_ctx_kitchen_open.executor = mock_executor
 
     result = json.loads(await report_bug("err", str(tmp_path), severity="blocking"))
 
@@ -311,10 +313,10 @@ async def test_report_bug_blocking_writes_report_file(tool_ctx, tmp_path):
 
 
 @pytest.mark.anyio
-async def test_report_bug_non_blocking_returns_immediately(tool_ctx, tmp_path):
+async def test_report_bug_non_blocking_returns_immediately(tool_ctx_kitchen_open, tmp_path):
     """Non-blocking mode must return dispatched before the session completes."""
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = False
+    tool_ctx_kitchen_open.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx_kitchen_open.config.report_bug.github_filing = False
 
     ready = anyio.Event()
 
@@ -324,7 +326,7 @@ async def test_report_bug_non_blocking_returns_immediately(tool_ctx, tmp_path):
 
     mock_executor = MagicMock()
     mock_executor.run = slow_run
-    tool_ctx.executor = mock_executor
+    tool_ctx_kitchen_open.executor = mock_executor
 
     result = json.loads(await report_bug("error ctx", str(tmp_path), severity="non_blocking"))
 
@@ -338,14 +340,14 @@ async def test_report_bug_non_blocking_returns_immediately(tool_ctx, tmp_path):
 
 
 @pytest.mark.anyio
-async def test_report_bug_non_blocking_default_severity(tool_ctx, tmp_path):
+async def test_report_bug_non_blocking_default_severity(tool_ctx_kitchen_open, tmp_path):
     """The default severity is non_blocking."""
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = False
+    tool_ctx_kitchen_open.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx_kitchen_open.config.report_bug.github_filing = False
 
     mock_executor = AsyncMock()
     mock_executor.run.return_value = _skill_ok()
-    tool_ctx.executor = mock_executor
+    tool_ctx_kitchen_open.executor = mock_executor
 
     result = json.loads(await report_bug("err", str(tmp_path)))
     assert result["status"] == "dispatched"
@@ -357,14 +359,14 @@ async def test_report_bug_non_blocking_default_severity(tool_ctx, tmp_path):
 
 
 @pytest.mark.anyio
-async def test_report_bug_non_blocking_outcome_writes_report_file(tool_ctx, tmp_path):
+async def test_report_bug_non_blocking_outcome_writes_report_file(tool_ctx_kitchen_open, tmp_path):
     """After the background task completes, report_path must exist with content."""
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = False
+    tool_ctx_kitchen_open.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx_kitchen_open.config.report_bug.github_filing = False
 
     mock_executor = AsyncMock()
     mock_executor.run.return_value = _skill_ok("# Bug Report\nroot cause: missing guard")
-    tool_ctx.executor = mock_executor
+    tool_ctx_kitchen_open.executor = mock_executor
 
     result = json.loads(
         await report_bug("KeyError in foo", str(tmp_path), severity="non_blocking")
@@ -372,21 +374,23 @@ async def test_report_bug_non_blocking_outcome_writes_report_file(tool_ctx, tmp_
     assert result["status"] == "dispatched"
 
     report_path = Path(result["report_path"])
-    await tool_ctx.background.drain()
+    await tool_ctx_kitchen_open.background.drain()
 
     assert report_path.exists(), "report_path must exist after background task completes"
     assert "Bug Report" in report_path.read_text()
 
 
 @pytest.mark.anyio
-async def test_report_bug_non_blocking_writes_status_file_on_success(tool_ctx, tmp_path):
+async def test_report_bug_non_blocking_writes_status_file_on_success(
+    tool_ctx_kitchen_open, tmp_path
+):
     """A status.json file must be written with status='complete' after successful dispatch."""
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = False
+    tool_ctx_kitchen_open.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx_kitchen_open.config.report_bug.github_filing = False
 
     mock_executor = AsyncMock()
     mock_executor.run.return_value = _skill_ok("# Report\nfoo")
-    tool_ctx.executor = mock_executor
+    tool_ctx_kitchen_open.executor = mock_executor
 
     result = json.loads(await report_bug("err", str(tmp_path), severity="non_blocking"))
     report_path = Path(result["report_path"])
@@ -398,7 +402,7 @@ async def test_report_bug_non_blocking_writes_status_file_on_success(tool_ctx, t
     assert pending["status"] == "pending"
 
     # After task completes: status should update to complete
-    await tool_ctx.background.drain()
+    await tool_ctx_kitchen_open.background.drain()
 
     data = json.loads(status_path.read_text())
     assert data["status"] == "complete"
@@ -406,19 +410,21 @@ async def test_report_bug_non_blocking_writes_status_file_on_success(tool_ctx, t
 
 
 @pytest.mark.anyio
-async def test_report_bug_non_blocking_writes_status_file_on_failure(tool_ctx, tmp_path):
+async def test_report_bug_non_blocking_writes_status_file_on_failure(
+    tool_ctx_kitchen_open, tmp_path
+):
     """When the headless session fails, status.json must reflect the failure."""
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = False
+    tool_ctx_kitchen_open.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx_kitchen_open.config.report_bug.github_filing = False
 
     mock_executor = AsyncMock()
     mock_executor.run.return_value = _skill_fail()
-    tool_ctx.executor = mock_executor
+    tool_ctx_kitchen_open.executor = mock_executor
 
     result = json.loads(await report_bug("crash here", str(tmp_path), severity="non_blocking"))
     status_path = Path(result["report_path"]).with_suffix(".status.json")
 
-    await tool_ctx.background.drain()
+    await tool_ctx_kitchen_open.background.drain()
 
     data = json.loads(status_path.read_text())
     assert data["status"] == "failed"
@@ -426,20 +432,22 @@ async def test_report_bug_non_blocking_writes_status_file_on_failure(tool_ctx, t
 
 
 @pytest.mark.anyio
-async def test_report_bug_non_blocking_executor_raises_is_observed(tool_ctx, tmp_path):
+async def test_report_bug_non_blocking_executor_raises_is_observed(
+    tool_ctx_kitchen_open, tmp_path
+):
     """If executor.run() raises, the exception must be logged — not silently dropped."""
 
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = False
+    tool_ctx_kitchen_open.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx_kitchen_open.config.report_bug.github_filing = False
 
     mock_executor = AsyncMock()
     mock_executor.run.side_effect = RuntimeError("executor exploded")
-    tool_ctx.executor = mock_executor
+    tool_ctx_kitchen_open.executor = mock_executor
 
     result = json.loads(await report_bug("error ctx", str(tmp_path), severity="non_blocking"))
     assert result["status"] == "dispatched"
 
-    await tool_ctx.background.drain()
+    await tool_ctx_kitchen_open.background.drain()
 
     # The exception must be captured and logged — not silently dropped
     status_path = Path(result["report_path"]).with_suffix(".status.json")
@@ -472,11 +480,11 @@ async def test_report_bug_no_pending_tasks_after_completion(tool_ctx, tmp_path):
 
 
 @pytest.mark.anyio
-async def test_report_bug_creates_github_issue_on_no_duplicate(tool_ctx, tmp_path):
+async def test_report_bug_creates_github_issue_on_no_duplicate(tool_ctx_kitchen_open, tmp_path):
     """When no matching issue is found, create_issue is called."""
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = True
-    tool_ctx.config.github.default_repo = "owner/repo"
+    tool_ctx_kitchen_open.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx_kitchen_open.config.report_bug.github_filing = True
+    tool_ctx_kitchen_open.config.github.default_repo = "owner/repo"
 
     report_with_fp = (
         f"{_FINGERPRINT_START}\n"
@@ -486,7 +494,7 @@ async def test_report_bug_creates_github_issue_on_no_duplicate(tool_ctx, tmp_pat
     )
     mock_executor = AsyncMock()
     mock_executor.run.return_value = _skill_ok(report_with_fp)
-    tool_ctx.executor = mock_executor
+    tool_ctx_kitchen_open.executor = mock_executor
 
     mock_gh = AsyncMock()
     mock_gh.has_token = True
@@ -496,7 +504,7 @@ async def test_report_bug_creates_github_issue_on_no_duplicate(tool_ctx, tmp_pat
         "issue_number": 99,
         "url": "https://github.com/owner/repo/issues/99",
     }
-    tool_ctx.github_client = mock_gh
+    tool_ctx_kitchen_open.github_client = mock_gh
 
     result = json.loads(await report_bug("KeyError crash", str(tmp_path), severity="blocking"))
 
@@ -508,17 +516,17 @@ async def test_report_bug_creates_github_issue_on_no_duplicate(tool_ctx, tmp_pat
 
 
 @pytest.mark.anyio
-async def test_report_bug_updates_duplicate_issue_body(tool_ctx, tmp_path):
+async def test_report_bug_updates_duplicate_issue_body(tool_ctx_kitchen_open, tmp_path):
     """When a matching issue exists and error_context is new, update_issue_body is called."""
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = True
-    tool_ctx.config.github.default_repo = "owner/repo"
+    tool_ctx_kitchen_open.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx_kitchen_open.config.report_bug.github_filing = True
+    tool_ctx_kitchen_open.config.github.default_repo = "owner/repo"
 
     mock_executor = AsyncMock()
     mock_executor.run.return_value = _skill_ok(
         "## Report\n" + _FINGERPRINT_START + "\nfp\n" + _FINGERPRINT_END
     )
-    tool_ctx.executor = mock_executor
+    tool_ctx_kitchen_open.executor = mock_executor
 
     mock_gh = AsyncMock()
     mock_gh.has_token = True
@@ -539,7 +547,7 @@ async def test_report_bug_updates_duplicate_issue_body(tool_ctx, tmp_path):
         "success": True,
         "issue_url": "https://github.com/owner/repo/issues/7",
     }
-    tool_ctx.github_client = mock_gh
+    tool_ctx_kitchen_open.github_client = mock_gh
 
     result = json.loads(
         await report_bug("brand new error text", str(tmp_path), severity="blocking")
@@ -552,16 +560,16 @@ async def test_report_bug_updates_duplicate_issue_body(tool_ctx, tmp_path):
 
 
 @pytest.mark.anyio
-async def test_report_bug_skips_comment_if_already_present(tool_ctx, tmp_path):
+async def test_report_bug_skips_comment_if_already_present(tool_ctx_kitchen_open, tmp_path):
     """If error_context is already in the issue body, no comment is posted."""
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = True
-    tool_ctx.config.github.default_repo = "owner/repo"
+    tool_ctx_kitchen_open.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx_kitchen_open.config.report_bug.github_filing = True
+    tool_ctx_kitchen_open.config.github.default_repo = "owner/repo"
 
     error_ctx = "exact error text already filed"
     mock_executor = AsyncMock()
     mock_executor.run.return_value = _skill_ok()
-    tool_ctx.executor = mock_executor
+    tool_ctx_kitchen_open.executor = mock_executor
 
     mock_gh = AsyncMock()
     mock_gh.has_token = True
@@ -578,7 +586,7 @@ async def test_report_bug_skips_comment_if_already_present(tool_ctx, tmp_path):
             }
         ],
     }
-    tool_ctx.github_client = mock_gh
+    tool_ctx_kitchen_open.github_client = mock_gh
 
     result = json.loads(await report_bug(error_ctx, str(tmp_path), severity="blocking"))
 
@@ -587,17 +595,17 @@ async def test_report_bug_skips_comment_if_already_present(tool_ctx, tmp_path):
 
 
 @pytest.mark.anyio
-async def test_report_bug_skips_github_if_no_token(tool_ctx, tmp_path):
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = True
+async def test_report_bug_skips_github_if_no_token(tool_ctx_kitchen_open, tmp_path):
+    tool_ctx_kitchen_open.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx_kitchen_open.config.report_bug.github_filing = True
 
     mock_executor = AsyncMock()
     mock_executor.run.return_value = _skill_ok()
-    tool_ctx.executor = mock_executor
+    tool_ctx_kitchen_open.executor = mock_executor
 
     mock_gh = AsyncMock()
     mock_gh.has_token = False
-    tool_ctx.github_client = mock_gh
+    tool_ctx_kitchen_open.github_client = mock_gh
 
     result = json.loads(await report_bug("err", str(tmp_path), severity="blocking"))
 
@@ -608,18 +616,18 @@ async def test_report_bug_skips_github_if_no_token(tool_ctx, tmp_path):
 
 
 @pytest.mark.anyio
-async def test_report_bug_skips_github_if_no_default_repo(tool_ctx, tmp_path):
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = True
-    tool_ctx.config.github.default_repo = None
+async def test_report_bug_skips_github_if_no_default_repo(tool_ctx_kitchen_open, tmp_path):
+    tool_ctx_kitchen_open.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx_kitchen_open.config.report_bug.github_filing = True
+    tool_ctx_kitchen_open.config.github.default_repo = None
 
     mock_executor = AsyncMock()
     mock_executor.run.return_value = _skill_ok()
-    tool_ctx.executor = mock_executor
+    tool_ctx_kitchen_open.executor = mock_executor
 
     mock_gh = AsyncMock()
     mock_gh.has_token = True
-    tool_ctx.github_client = mock_gh
+    tool_ctx_kitchen_open.github_client = mock_gh
 
     result = json.loads(await report_bug("err", str(tmp_path), severity="blocking"))
 
@@ -628,19 +636,19 @@ async def test_report_bug_skips_github_if_no_default_repo(tool_ctx, tmp_path):
 
 
 @pytest.mark.anyio
-async def test_report_bug_github_filing_disabled(tool_ctx, tmp_path):
+async def test_report_bug_github_filing_disabled(tool_ctx_kitchen_open, tmp_path):
     """github_filing=false must skip all GitHub calls."""
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = False
-    tool_ctx.config.github.default_repo = "owner/repo"
+    tool_ctx_kitchen_open.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx_kitchen_open.config.report_bug.github_filing = False
+    tool_ctx_kitchen_open.config.github.default_repo = "owner/repo"
 
     mock_executor = AsyncMock()
     mock_executor.run.return_value = _skill_ok()
-    tool_ctx.executor = mock_executor
+    tool_ctx_kitchen_open.executor = mock_executor
 
     mock_gh = AsyncMock()
     mock_gh.has_token = True
-    tool_ctx.github_client = mock_gh
+    tool_ctx_kitchen_open.github_client = mock_gh
 
     result = json.loads(await report_bug("err", str(tmp_path), severity="blocking"))
 
@@ -649,22 +657,24 @@ async def test_report_bug_github_filing_disabled(tool_ctx, tmp_path):
 
 
 @pytest.mark.anyio
-async def test_report_bug_blocking_github_client_raises_does_not_propagate(tool_ctx, tmp_path):
+async def test_report_bug_blocking_github_client_raises_does_not_propagate(
+    tool_ctx_kitchen_open, tmp_path
+):
     """If the GitHub client raises unexpectedly, the error must be captured in the github dict."""
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = True
-    tool_ctx.config.github.default_repo = "owner/repo"
+    tool_ctx_kitchen_open.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx_kitchen_open.config.report_bug.github_filing = True
+    tool_ctx_kitchen_open.config.github.default_repo = "owner/repo"
 
     mock_executor = AsyncMock()
     mock_executor.run.return_value = _skill_ok(
         "# Report\n" + _FINGERPRINT_START + "\nfp1\n" + _FINGERPRINT_END
     )
-    tool_ctx.executor = mock_executor
+    tool_ctx_kitchen_open.executor = mock_executor
 
     mock_gh = MagicMock()
     mock_gh.has_token = True
     mock_gh.search_issues = AsyncMock(side_effect=RuntimeError("network failure"))
-    tool_ctx.github_client = mock_gh
+    tool_ctx_kitchen_open.github_client = mock_gh
 
     # Must not raise — exception is captured in github dict
     result = json.loads(await report_bug("err", str(tmp_path), severity="blocking"))
@@ -680,9 +690,11 @@ async def test_report_bug_blocking_github_client_raises_does_not_propagate(tool_
 
 
 @pytest.mark.anyio
-async def test_report_bug_model_as_profile_resolves_provider(tool_ctx, tmp_path, monkeypatch):
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = False
+async def test_report_bug_model_as_profile_resolves_provider(
+    tool_ctx_kitchen_open, tmp_path, monkeypatch
+):
+    tool_ctx_kitchen_open.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx_kitchen_open.config.report_bug.github_filing = False
 
     monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: True)
     monkeypatch.setattr(
@@ -696,7 +708,7 @@ async def test_report_bug_model_as_profile_resolves_provider(tool_ctx, tmp_path,
 
     mock_executor = AsyncMock()
     mock_executor.run.return_value = _skill_ok("report text")
-    tool_ctx.executor = mock_executor
+    tool_ctx_kitchen_open.executor = mock_executor
 
     result = json.loads(
         await report_bug("error ctx", str(tmp_path), model="minimax", severity="blocking")
@@ -713,16 +725,16 @@ async def test_report_bug_model_as_profile_resolves_provider(tool_ctx, tmp_path,
 
 @pytest.mark.anyio
 async def test_report_bug_model_as_profile_disabled_when_feature_off(
-    tool_ctx, tmp_path, monkeypatch
+    tool_ctx_kitchen_open, tmp_path, monkeypatch
 ):
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = False
+    tool_ctx_kitchen_open.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx_kitchen_open.config.report_bug.github_filing = False
 
     monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: False)
 
     mock_executor = AsyncMock()
     mock_executor.run.return_value = _skill_ok("report text")
-    tool_ctx.executor = mock_executor
+    tool_ctx_kitchen_open.executor = mock_executor
 
     result = json.loads(
         await report_bug("error ctx", str(tmp_path), model="minimax", severity="blocking")
@@ -735,10 +747,10 @@ async def test_report_bug_model_as_profile_disabled_when_feature_off(
 
 
 @pytest.mark.anyio
-async def test_report_bug_config_model_as_profile(tool_ctx, tmp_path, monkeypatch):
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = False
-    tool_ctx.config.report_bug.model = "minimax"
+async def test_report_bug_config_model_as_profile(tool_ctx_kitchen_open, tmp_path, monkeypatch):
+    tool_ctx_kitchen_open.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx_kitchen_open.config.report_bug.github_filing = False
+    tool_ctx_kitchen_open.config.report_bug.model = "minimax"
 
     map_calls: list[str] = []
 
@@ -751,7 +763,7 @@ async def test_report_bug_config_model_as_profile(tool_ctx, tmp_path, monkeypatc
 
     mock_executor = AsyncMock()
     mock_executor.run.return_value = _skill_ok("report text")
-    tool_ctx.executor = mock_executor
+    tool_ctx_kitchen_open.executor = mock_executor
 
     result = json.loads(await report_bug("error ctx", str(tmp_path), severity="blocking"))
 

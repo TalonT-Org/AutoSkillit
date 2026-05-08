@@ -266,68 +266,76 @@ class TestConfigDrivenBehavior:
         assert tool_ctx.runner.call_args_list[0][2] == pytest.approx(300.0, abs=1.0)
 
     @pytest.mark.anyio
-    async def test_classify_fix_uses_config_prefixes(self, tool_ctx, tmp_path):
+    async def test_classify_fix_uses_config_prefixes(self, tool_ctx_kitchen_open, tmp_path):
         """S2: classify_fix uses config.classify_fix.path_prefixes."""
         from autoskillit.config import ClassifyFixConfig
         from autoskillit.core.types import RestartScope
         from autoskillit.server.tools.tools_git import classify_fix
         from tests.conftest import _make_result
 
-        tool_ctx.config = AutomationConfig(
+        tool_ctx_kitchen_open.config = AutomationConfig(
             classify_fix=ClassifyFixConfig(path_prefixes=["src/custom/"])
         )
 
         changed = "src/custom/handler.py\nsrc/other/util.py\n"
-        tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch succeeds
-        tool_ctx.runner.push(_make_result(0, changed, ""))
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # git fetch succeeds
+        tool_ctx_kitchen_open.runner.push(_make_result(0, changed, ""))
         result = json.loads(await classify_fix(worktree_path=str(tmp_path), base_branch="main"))
 
         assert result["restart_scope"] == RestartScope.FULL_RESTART
         assert "src/custom/handler.py" in result["critical_files"]
 
     @pytest.mark.anyio
-    async def test_classify_fix_empty_prefixes_always_partial(self, tool_ctx, tmp_path):
+    async def test_classify_fix_empty_prefixes_always_partial(
+        self, tool_ctx_kitchen_open, tmp_path
+    ):
         """S3: Empty prefix list -> always returns partial_restart."""
         from autoskillit.config import ClassifyFixConfig
         from autoskillit.core.types import RestartScope
         from autoskillit.server.tools.tools_git import classify_fix
         from tests.conftest import _make_result
 
-        tool_ctx.config = AutomationConfig(classify_fix=ClassifyFixConfig(path_prefixes=[]))
+        tool_ctx_kitchen_open.config = AutomationConfig(
+            classify_fix=ClassifyFixConfig(path_prefixes=[])
+        )
 
         changed = "src/core/handler.py\n"
-        tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch succeeds
-        tool_ctx.runner.push(_make_result(0, changed, ""))
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # git fetch succeeds
+        tool_ctx_kitchen_open.runner.push(_make_result(0, changed, ""))
         result = json.loads(await classify_fix(worktree_path=str(tmp_path), base_branch="main"))
 
         assert result["restart_scope"] == RestartScope.PARTIAL_RESTART
 
     @pytest.mark.anyio
-    async def test_reset_workspace_uses_config_command(self, tool_ctx, tmp_path):
+    async def test_reset_workspace_uses_config_command(self, tool_ctx_kitchen_open, tmp_path):
         """S4: reset_workspace runs config.reset_workspace.command."""
         from autoskillit.config import ResetWorkspaceConfig
         from autoskillit.server.tools.tools_workspace import reset_workspace
         from tests.conftest import _make_result
 
-        tool_ctx.config = AutomationConfig(
+        tool_ctx_kitchen_open.config = AutomationConfig(
             reset_workspace=ResetWorkspaceConfig(command=["make", "reset"])
         )
 
         workspace = tmp_path / "workspace"
         workspace.mkdir(parents=True)
         (workspace / ".autoskillit-workspace").write_text("# marker\n")
-        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
 
         await reset_workspace(test_dir=str(workspace))
-        assert tool_ctx.runner.call_args_list[0][0] == ["make", "reset"]
+        assert tool_ctx_kitchen_open.runner.call_args_list[0][0] == ["make", "reset"]
 
     @pytest.mark.anyio
-    async def test_reset_workspace_not_configured_returns_error(self, tool_ctx, tmp_path):
+    async def test_reset_workspace_not_configured_returns_error(
+        self, tool_ctx_kitchen_open, tmp_path
+    ):
         """S5: command=None -> returns not-configured error."""
         from autoskillit.config import ResetWorkspaceConfig
         from autoskillit.server.tools.tools_workspace import reset_workspace
 
-        tool_ctx.config = AutomationConfig(reset_workspace=ResetWorkspaceConfig(command=None))
+        tool_ctx_kitchen_open.config = AutomationConfig(
+            reset_workspace=ResetWorkspaceConfig(command=None)
+        )
 
         workspace = tmp_path / "workspace"
         workspace.mkdir(parents=True)
@@ -337,13 +345,15 @@ class TestConfigDrivenBehavior:
         assert result["error"] == "reset_workspace not configured for this project"
 
     @pytest.mark.anyio
-    async def test_reset_workspace_uses_config_preserve_dirs(self, tool_ctx, tmp_path):
+    async def test_reset_workspace_uses_config_preserve_dirs(
+        self, tool_ctx_kitchen_open, tmp_path
+    ):
         """S6: Preserves config.reset_workspace.preserve_dirs."""
         from autoskillit.config import ResetWorkspaceConfig
         from autoskillit.server.tools.tools_workspace import reset_workspace
         from tests.conftest import _make_result
 
-        tool_ctx.config = AutomationConfig(
+        tool_ctx_kitchen_open.config = AutomationConfig(
             reset_workspace=ResetWorkspaceConfig(
                 command=["true"],
                 preserve_dirs={"keep_me"},
@@ -355,7 +365,7 @@ class TestConfigDrivenBehavior:
         (workspace / ".autoskillit-workspace").write_text("# marker\n")
         (workspace / "keep_me").mkdir()
         (workspace / "delete_me").touch()
-        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
 
         result = json.loads(await reset_workspace(test_dir=str(workspace)))
 
@@ -401,7 +411,7 @@ class TestConfigDrivenBehavior:
         assert result is None  # /autoskillit:implement-worktree is NOT gated (not in skill_names)
 
     @pytest.mark.anyio
-    async def test_merge_worktree_uses_config_test_command(self, tool_ctx, tmp_path):
+    async def test_merge_worktree_uses_config_test_command(self, tool_ctx_kitchen_open, tmp_path):
         """S9: Merge's test gate runs config.test_check.command."""
         from autoskillit.config import TestCheckConfig
         from autoskillit.core.types import MergeFailedStep
@@ -409,26 +419,34 @@ class TestConfigDrivenBehavior:
         from autoskillit.server.tools.tools_git import merge_worktree
         from tests.conftest import _make_result
 
-        tool_ctx.config = AutomationConfig(
+        tool_ctx_kitchen_open.config = AutomationConfig(
             test_check=TestCheckConfig(command=["make", "test"], timeout=120)
         )
         # Re-create tester with updated config so it reads the new command
-        tool_ctx.tester = DefaultTestRunner(config=tool_ctx.config, runner=tool_ctx.runner)
+        tool_ctx_kitchen_open.tester = DefaultTestRunner(
+            config=tool_ctx_kitchen_open.config, runner=tool_ctx_kitchen_open.runner
+        )
 
         wt = tmp_path / "worktree"
         wt.mkdir()
         (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
 
-        tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))  # rev-parse
-        tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
-        tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (pre-dirty-tree check)
-        tool_ctx.runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
-        tool_ctx.runner.push(_make_result(1, "FAIL", ""))  # test gate fails
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "/repo/.git/worktrees/wt\n", "")
+        )  # rev-parse
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "", "")
+        )  # git ls-files (pre-dirty-tree check)
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "", "")
+        )  # git status --porcelain (clean)
+        tool_ctx_kitchen_open.runner.push(_make_result(1, "FAIL", ""))  # test gate fails
         result = json.loads(await merge_worktree(str(wt), "dev"))
         assert result["failed_step"] == MergeFailedStep.TEST_GATE
 
         # Verify the test command was ["make", "test"] (5th call, after ls-files + porcelain)
-        test_call = tool_ctx.runner.call_args_list[4]
+        test_call = tool_ctx_kitchen_open.runner.call_args_list[4]
         assert test_call[0] == ["make", "test"]
 
     @pytest.mark.anyio
@@ -447,7 +465,7 @@ class TestSafetyConfigWiring:
     """Safety config fields are read at the point of enforcement."""
 
     @pytest.mark.anyio
-    async def test_reset_test_dir_allows_with_marker(self, tool_ctx, tmp_path):
+    async def test_reset_test_dir_allows_with_marker(self, tool_ctx_kitchen_open, tmp_path):
         """2a: Directory with marker passes the reset guard."""
         from autoskillit.server.tools.tools_workspace import reset_test_dir
 
@@ -460,7 +478,9 @@ class TestSafetyConfigWiring:
         assert result["success"] is True
 
     @pytest.mark.anyio
-    async def test_reset_test_dir_enforces_marker_when_missing(self, tool_ctx, tmp_path):
+    async def test_reset_test_dir_enforces_marker_when_missing(
+        self, tool_ctx_kitchen_open, tmp_path
+    ):
         """2b: Missing marker blocks reset_test_dir."""
         from autoskillit.server.tools.tools_workspace import reset_test_dir
 
@@ -471,12 +491,14 @@ class TestSafetyConfigWiring:
         assert "marker" in result["error"].lower()
 
     @pytest.mark.anyio
-    async def test_reset_workspace_enforces_marker(self, tool_ctx, tmp_path):
+    async def test_reset_workspace_enforces_marker(self, tool_ctx_kitchen_open, tmp_path):
         """2c: reset_workspace requires marker, then checks command config."""
         from autoskillit.config import ResetWorkspaceConfig
         from autoskillit.server.tools.tools_workspace import reset_workspace
 
-        tool_ctx.config = AutomationConfig(reset_workspace=ResetWorkspaceConfig(command=None))
+        tool_ctx_kitchen_open.config = AutomationConfig(
+            reset_workspace=ResetWorkspaceConfig(command=None)
+        )
 
         target = tmp_path / "my_project"
         target.mkdir()
@@ -487,58 +509,76 @@ class TestSafetyConfigWiring:
         assert result["error"] == "reset_workspace not configured for this project"
 
     @pytest.mark.anyio
-    async def test_merge_worktree_skips_test_gate_when_disabled(self, tool_ctx, tmp_path):
+    async def test_merge_worktree_skips_test_gate_when_disabled(
+        self, tool_ctx_kitchen_open, tmp_path
+    ):
         """2d: test_gate_on_merge=False skips test execution."""
         from autoskillit.server.tools.tools_git import merge_worktree
         from tests.conftest import _make_result
 
-        tool_ctx.config = AutomationConfig(safety=SafetyConfig(test_gate_on_merge=False))
+        tool_ctx_kitchen_open.config = AutomationConfig(
+            safety=SafetyConfig(test_gate_on_merge=False)
+        )
 
         wt = tmp_path / "worktree"
         wt.mkdir()
         (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
 
-        tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))  # rev-parse
-        tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
-        tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (pre-dirty-tree check)
-        tool_ctx.runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "/repo/.git/worktrees/wt\n", "")
+        )  # rev-parse
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "", "")
+        )  # git ls-files (pre-dirty-tree check)
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "", "")
+        )  # git status --porcelain (clean)
         # NO test-check call — skipped
-        tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch
-        tool_ctx.runner.push(_make_result(0, "abc123\n", ""))  # rev-parse --verify (step 5.5)
-        tool_ctx.runner.push(
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # git fetch
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "abc123\n", "")
+        )  # rev-parse --verify (step 5.5)
+        tool_ctx_kitchen_open.runner.push(
             _make_result(0, "", "")
         )  # git log --merges (step 5.6 — no merge commits)
-        tool_ctx.runner.push(_make_result(0, "", ""))  # git rebase
-        tool_ctx.runner.push(
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # git rebase
+        tool_ctx_kitchen_open.runner.push(
             _make_result(
                 0,
                 "worktree /repo\nHEAD abc\nbranch refs/heads/dev\n\n",
                 "",
             )
         )  # worktree list
-        tool_ctx.runner.push(_make_result(0, "dev\n", ""))  # git branch --show-current (step 7.5)
-        tool_ctx.runner.push(_make_result(0, "", ""))  # git merge
-        tool_ctx.runner.push(_make_result(0, "", ""))  # worktree remove
-        tool_ctx.runner.push(_make_result(0, "", ""))  # branch -D
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "dev\n", "")
+        )  # git branch --show-current (step 7.5)
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # git merge
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # worktree remove
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # branch -D
         result = json.loads(await merge_worktree(str(wt), "dev"))
         assert result["merge_succeeded"] is True
 
         # Verify no test command was called — the 5th call should be git fetch, not test
-        fifth_call_cmd = tool_ctx.runner.call_args_list[4][0]
+        fifth_call_cmd = tool_ctx_kitchen_open.runner.call_args_list[4][0]
         assert fifth_call_cmd == ["git", "fetch", "origin"]
 
     @pytest.mark.anyio
-    async def test_run_skill_2e_skips_dry_walkthrough_when_disabled(self, tool_ctx, tmp_path):
+    async def test_run_skill_2e_skips_dry_walkthrough_when_disabled(
+        self, tool_ctx_kitchen_open, tmp_path
+    ):
         """2e: require_dry_walkthrough=False bypasses dry-walkthrough gate (using run_skill)."""
         from autoskillit.server.tools.tools_execution import run_skill
         from tests.conftest import _make_result
 
-        tool_ctx.config = AutomationConfig(safety=SafetyConfig(require_dry_walkthrough=False))
+        tool_ctx_kitchen_open.config = AutomationConfig(
+            safety=SafetyConfig(require_dry_walkthrough=False)
+        )
 
         plan = tmp_path / "plan.md"
         plan.write_text("# No marker plan")
 
-        tool_ctx.runner.push(_make_result(0, '{"result": "done"}', ""))
+        tool_ctx_kitchen_open.runner.push(_make_result(0, '{"result": "done"}', ""))
         result = json.loads(
             await run_skill(f"/autoskillit:implement-worktree {plan}", str(tmp_path))
         )
@@ -546,7 +586,9 @@ class TestSafetyConfigWiring:
         assert result["exit_code"] == 0
 
     @pytest.mark.anyio
-    async def test_run_skill_enforces_dry_walkthrough_when_enabled(self, tool_ctx, tmp_path):
+    async def test_run_skill_enforces_dry_walkthrough_when_enabled(
+        self, tool_ctx_kitchen_open, tmp_path
+    ):
         """2f: run_skill enforces dry-walkthrough gate when enabled (default)."""
         from autoskillit.server.tools.tools_execution import run_skill
 

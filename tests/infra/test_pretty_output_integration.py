@@ -41,7 +41,7 @@ class TestFormatterSchemaConsistency:
             )
 
     @pytest.mark.anyio
-    async def test_kitchen_status_tool_output_through_hook(self, tool_ctx):
+    async def test_kitchen_status_tool_output_through_hook(self, tool_ctx_kitchen_open):
         """PHK-E2: kitchen_status real output contains all key fields through hook."""
         from autoskillit.hooks.formatters.pretty_output_hook import _format_response
         from autoskillit.server.tools.tools_status import kitchen_status

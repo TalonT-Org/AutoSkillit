@@ -453,9 +453,9 @@ class TestLoadSkillScriptFailurePredicates:
 
 # P5F2-T3
 @pytest.mark.anyio
-async def test_validate_recipe_no_recipes_returns_error(tool_ctx, tmp_path):
+async def test_validate_recipe_no_recipes_returns_error(tool_ctx_kitchen_open, tmp_path):
     """validate_recipe returns invalid JSON when recipes is not configured."""
-    tool_ctx.recipes = None
+    tool_ctx_kitchen_open.recipes = None
     result = json.loads(await validate_recipe(script_path=str(tmp_path / "x.yaml")))
     assert result.get("valid") is False
 

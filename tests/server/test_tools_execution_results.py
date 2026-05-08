@@ -56,7 +56,7 @@ class TestRunSkillFailurePaths:
     """run_skill surfaces session outcome on failure."""
 
     @pytest.mark.anyio
-    async def test_returns_subtype_on_incomplete_session(self, tool_ctx):
+    async def test_returns_subtype_on_incomplete_session(self, tool_ctx_kitchen_open):
         """run_skill includes subtype when session didn't finish."""
         stdout = json.dumps(
             {
@@ -66,14 +66,14 @@ class TestRunSkillFailurePaths:
                 "session_id": "s1",
             }
         )
-        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot
-        tool_ctx.runner.push(_make_result(1, stdout, ""))
+        tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))  # clone guard snapshot
+        tool_ctx_kitchen_open.runner.push(_make_result(1, stdout, ""))
         result = json.loads(await run_skill("/investigate error", "/tmp"))
         assert result["session_id"] == "s1"
         assert result["subtype"] == "error_max_turns"
 
     @pytest.mark.anyio
-    async def test_returns_is_error_on_context_limit(self, tool_ctx):
+    async def test_returns_is_error_on_context_limit(self, tool_ctx_kitchen_open):
         """run_skill includes is_error when context limit is hit."""
         stdout = json.dumps(
             {
@@ -84,18 +84,18 @@ class TestRunSkillFailurePaths:
                 "session_id": "s1",
             }
         )
-        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot
-        tool_ctx.runner.push(_make_result(1, stdout, ""))
+        tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))  # clone guard snapshot
+        tool_ctx_kitchen_open.runner.push(_make_result(1, stdout, ""))
         result = json.loads(await run_skill("/investigate error", "/tmp"))
         assert result["is_error"] is True
         assert result["subtype"] == "context_exhausted"
         assert result["cli_subtype"] == "success"
 
     @pytest.mark.anyio
-    async def test_handles_empty_stdout(self, tool_ctx):
+    async def test_handles_empty_stdout(self, tool_ctx_kitchen_open):
         """run_skill returns error result when stdout is empty."""
-        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot
-        tool_ctx.runner.push(
+        tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))  # clone guard snapshot
+        tool_ctx_kitchen_open.runner.push(
             _make_result(1, "", "segfault", channel_confirmation=ChannelConfirmation.UNMONITORED)
         )
         result = json.loads(await run_skill("/investigate error", "/tmp"))
@@ -105,10 +105,10 @@ class TestRunSkillFailurePaths:
         assert result["success"] is False
 
     @pytest.mark.anyio
-    async def test_empty_stdout_exit_zero_is_retriable(self, tool_ctx):
+    async def test_empty_stdout_exit_zero_is_retriable(self, tool_ctx_kitchen_open):
         """Infrastructure failure (empty stdout, exit 0) is retriable with stderr."""
-        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot
-        tool_ctx.runner.push(
+        tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))  # clone guard snapshot
+        tool_ctx_kitchen_open.runner.push(
             _make_result(
                 0, "", "session dropped", channel_confirmation=ChannelConfirmation.UNMONITORED
             )
@@ -143,35 +143,43 @@ class TestRunSkillStepName:
         return result_rec
 
     @pytest.mark.anyio
-    async def test_step_name_records_token_usage(self, tool_ctx):
-        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot (not a git repo)
-        tool_ctx.runner.push(_make_result(returncode=0, stdout=self._make_ndjson()))
+    async def test_step_name_records_token_usage(self, tool_ctx_kitchen_open):
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(returncode=1)
+        )  # clone guard snapshot (not a git repo)
+        tool_ctx_kitchen_open.runner.push(_make_result(returncode=0, stdout=self._make_ndjson()))
         await run_skill(
             skill_command="/autoskillit:investigate topic", cwd="/tmp", step_name="plan"
         )
-        report = tool_ctx.token_log.get_report()
+        report = tool_ctx_kitchen_open.token_log.get_report()
         assert len(report) == 1
         assert report[0]["step_name"] == "plan"
         assert report[0]["input_tokens"] == 200
 
     @pytest.mark.anyio
-    async def test_no_step_name_records_with_ad_hoc_label(self, tool_ctx):
-        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot (not a git repo)
-        tool_ctx.runner.push(_make_result(returncode=0, stdout=self._make_ndjson()))
+    async def test_no_step_name_records_with_ad_hoc_label(self, tool_ctx_kitchen_open):
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(returncode=1)
+        )  # clone guard snapshot (not a git repo)
+        tool_ctx_kitchen_open.runner.push(_make_result(returncode=0, stdout=self._make_ndjson()))
         await run_skill(skill_command="/autoskillit:investigate topic", cwd="/tmp", step_name="")
-        report = tool_ctx.token_log.get_report()
+        report = tool_ctx_kitchen_open.token_log.get_report()
         assert len(report) == 1
         assert report[0]["step_name"] == "(ad-hoc)"
         assert report[0]["input_tokens"] == 200
 
     @pytest.mark.anyio
-    async def test_dispatch_id_env_records_with_dispatch_label(self, tool_ctx, monkeypatch):
+    async def test_dispatch_id_env_records_with_dispatch_label(
+        self, tool_ctx_kitchen_open, monkeypatch
+    ):
         """step_name='' with AUTOSKILLIT_DISPATCH_ID set records under dispatch:{id} label."""
         monkeypatch.setenv("AUTOSKILLIT_DISPATCH_ID", "abc-123")
-        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot (not a git repo)
-        tool_ctx.runner.push(_make_result(returncode=0, stdout=self._make_ndjson()))
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(returncode=1)
+        )  # clone guard snapshot (not a git repo)
+        tool_ctx_kitchen_open.runner.push(_make_result(returncode=0, stdout=self._make_ndjson()))
         await run_skill(skill_command="/autoskillit:investigate topic", cwd="/tmp", step_name="")
-        report = tool_ctx.token_log.get_report()
+        report = tool_ctx_kitchen_open.token_log.get_report()
         assert len(report) == 1
         assert report[0]["step_name"] == "dispatch:abc-123"
         assert report[0]["input_tokens"] == 200
@@ -196,16 +204,18 @@ class TestRunSkillStepName:
         assert tool_ctx.token_log.get_report() == []
 
     @pytest.mark.anyio
-    async def test_step_name_run_skill_long_running(self, tool_ctx):
+    async def test_step_name_run_skill_long_running(self, tool_ctx_kitchen_open):
         """run_skill accumulates token usage by step_name (run_skill_retry test replacement)."""
-        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot (not a git repo)
-        tool_ctx.runner.push(_make_result(returncode=0, stdout=self._make_ndjson()))
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(returncode=1)
+        )  # clone guard snapshot (not a git repo)
+        tool_ctx_kitchen_open.runner.push(_make_result(returncode=0, stdout=self._make_ndjson()))
         await run_skill(
             skill_command="/autoskillit:investigate the test failures",
             cwd="/tmp",
             step_name="implement",
         )
-        report = tool_ctx.token_log.get_report()
+        report = tool_ctx_kitchen_open.token_log.get_report()
         assert len(report) == 1
         assert report[0]["step_name"] == "implement"
         assert report[0]["input_tokens"] == 200
@@ -223,9 +233,11 @@ class TestGatedToolObservability:
         return ctx
 
     @pytest.mark.anyio
-    async def test_run_skill_binds_tool_contextvar_and_calls_ctx_info(self, tool_ctx, mock_ctx):
+    async def test_run_skill_binds_tool_contextvar_and_calls_ctx_info(
+        self, tool_ctx_kitchen_open, mock_ctx
+    ):
         """run_skill binds tool='run_skill' contextvar and calls ctx.info on success."""
-        tool_ctx.runner.push(
+        tool_ctx_kitchen_open.runner.push(
             _make_result(
                 0,
                 '{"type": "result", "subtype": "success", "is_error": false,'
@@ -401,12 +413,16 @@ class TestTierAwareGateEnforcement:
     """T_TAGE: tier-aware guard permits orchestrator, denies skill and fleet as appropriate."""
 
     @pytest.mark.anyio
-    async def test_run_skill_permitted_for_orchestrator_tier(self, tool_ctx, monkeypatch):
+    async def test_run_skill_permitted_for_orchestrator_tier(
+        self, tool_ctx_kitchen_open, monkeypatch
+    ):
         """run_skill does NOT return headless_error for orchestrator-tier headless sessions."""
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
-        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot (not a git repo)
-        tool_ctx.runner.push(
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(returncode=1)
+        )  # clone guard snapshot (not a git repo)
+        tool_ctx_kitchen_open.runner.push(
             _make_result(
                 returncode=0,
                 stdout=json.dumps({"type": "result", "subtype": "success", "is_error": False}),
@@ -486,10 +502,10 @@ class TestRunSkillTiming:
     """run_skill accumulates wall-clock timing when step_name is provided."""
 
     @pytest.mark.anyio
-    async def test_run_skill_records_timing_via_step_name(self, tool_ctx):
-        tool_ctx.runner.push(_make_result(0, _SUCCESS_JSON, ""))
+    async def test_run_skill_records_timing_via_step_name(self, tool_ctx_kitchen_open):
+        tool_ctx_kitchen_open.runner.push(_make_result(0, _SUCCESS_JSON, ""))
         await run_skill("/investigate foo", "/tmp", step_name="implement")
-        assert_step_timed(tool_ctx.timing_log, "implement")
+        assert_step_timed(tool_ctx_kitchen_open.timing_log, "implement")
 
     @pytest.mark.anyio
     async def test_run_skill_empty_step_name_skips_timing(self, tool_ctx):
@@ -534,7 +550,7 @@ class TestRunHeadlessCoreFlushTelemetry:
         return asst + "\n" + result
 
     @pytest.mark.anyio
-    async def test_passes_step_telemetry_to_flush(self, tool_ctx, monkeypatch):
+    async def test_passes_step_telemetry_to_flush(self, tool_ctx_kitchen_open, monkeypatch):
         """flush_session_log is called with step_name, token_usage, and timing_seconds."""
         import autoskillit.execution.session_log as sl_mod
 
@@ -544,8 +560,10 @@ class TestRunHeadlessCoreFlushTelemetry:
             calls.append(kwargs)
 
         monkeypatch.setattr(sl_mod, "flush_session_log", mock_flush)
-        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot
-        tool_ctx.runner.push(_make_result(returncode=0, stdout=self._make_ndjson_with_usage()))
+        tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))  # clone guard snapshot
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(returncode=0, stdout=self._make_ndjson_with_usage())
+        )
         await run_skill("/investigate foo", "/tmp", step_name="implement")
         assert len(calls) == 1
         assert calls[0]["step_name"] == "implement"
@@ -554,7 +572,7 @@ class TestRunHeadlessCoreFlushTelemetry:
 
     @pytest.mark.anyio
     async def test_flush_session_log_session_id_matches_returned_skill_result(
-        self, tool_ctx, monkeypatch
+        self, tool_ctx_kitchen_open, monkeypatch
     ):
         """flush_session_log receives the same session_id as the returned SkillResult."""
         import autoskillit.execution.session_log as sl_mod
@@ -566,7 +584,7 @@ class TestRunHeadlessCoreFlushTelemetry:
             calls.append(kwargs)
 
         monkeypatch.setattr(sl_mod, "flush_session_log", mock_flush)
-        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot
+        tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))  # clone guard snapshot
         # Stale result with session_id resolved from Channel B
         stale_result = SubprocessResult(
             returncode=-1,
@@ -576,7 +594,7 @@ class TestRunHeadlessCoreFlushTelemetry:
             pid=12345,
             session_id="test-uuid-coherence-check",
         )
-        tool_ctx.runner.push(stale_result)
+        tool_ctx_kitchen_open.runner.push(stale_result)
         result_json = json.loads(
             await run_skill("/investigate foo", "/tmp", step_name="implement")
         )
@@ -586,7 +604,7 @@ class TestRunHeadlessCoreFlushTelemetry:
         assert result_json["session_id"] != ""
 
     @pytest.mark.anyio
-    async def test_flushes_on_success_when_step_name_set(self, tool_ctx, monkeypatch):
+    async def test_flushes_on_success_when_step_name_set(self, tool_ctx_kitchen_open, monkeypatch):
         """Successful sessions without proc_snapshots still flush when step_name is provided."""
         import autoskillit.execution.session_log as sl_mod
 
@@ -596,22 +614,22 @@ class TestRunHeadlessCoreFlushTelemetry:
             calls.append(kwargs)
 
         monkeypatch.setattr(sl_mod, "flush_session_log", mock_flush)
-        tool_ctx.runner.push(_make_result(returncode=0, stdout=_SUCCESS_JSON))
+        tool_ctx_kitchen_open.runner.push(_make_result(returncode=0, stdout=_SUCCESS_JSON))
         await run_skill("/investigate foo", "/tmp", step_name="plan")
         assert len(calls) == 1
 
     @pytest.mark.anyio
-    async def test_records_timing_in_timing_log(self, tool_ctx):
+    async def test_records_timing_in_timing_log(self, tool_ctx_kitchen_open):
         """ctx.timing_log.record() is called with step_name and computed timing_seconds."""
-        tool_ctx.runner.push(_make_result(returncode=0, stdout=_SUCCESS_JSON))
+        tool_ctx_kitchen_open.runner.push(_make_result(returncode=0, stdout=_SUCCESS_JSON))
         await run_skill("/investigate foo", "/tmp", step_name="plan")
-        report = tool_ctx.timing_log.get_report()
+        report = tool_ctx_kitchen_open.timing_log.get_report()
         assert len(report) == 1
         assert report[0]["step_name"] == "plan"
         assert report[0]["total_seconds"] >= 0.0
 
     @pytest.mark.anyio
-    async def test_passes_github_api_log_to_flush(self, tool_ctx, monkeypatch):
+    async def test_passes_github_api_log_to_flush(self, tool_ctx_kitchen_open, monkeypatch):
         """headless.py drains github_api_log into telemetry.github_api_usage."""
         import autoskillit.execution.session_log as sl_mod
         from autoskillit.pipeline.github_api_log import DefaultGitHubApiLog
@@ -623,7 +641,7 @@ class TestRunHeadlessCoreFlushTelemetry:
             latency_ms=50.0,
             timestamp="2026-05-02T10:00:00Z",
         )
-        tool_ctx.github_api_log = log
+        tool_ctx_kitchen_open.github_api_log = log
 
         calls = []
 
@@ -631,14 +649,16 @@ class TestRunHeadlessCoreFlushTelemetry:
             calls.append(kwargs)
 
         monkeypatch.setattr(sl_mod, "flush_session_log", mock_flush)
-        tool_ctx.runner.push(_make_result(returncode=0, stdout=self._make_ndjson_with_usage()))
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(returncode=0, stdout=self._make_ndjson_with_usage())
+        )
         await run_skill("/investigate foo", "/tmp", step_name="implement")
         assert len(calls) == 1
         assert calls[0]["telemetry"].github_api_usage is not None
         assert calls[0]["telemetry"].github_api_requests > 0
 
     @pytest.mark.anyio
-    async def test_flush_telemetry_kwargs_exhaustive(self, tool_ctx, monkeypatch):
+    async def test_flush_telemetry_kwargs_exhaustive(self, tool_ctx_kitchen_open, monkeypatch):
         """headless.py passes a SessionTelemetry bundle covering all telemetry fields."""
         import autoskillit.execution.session_log as sl_mod
         from autoskillit.core.types._type_results_execution import SessionTelemetry
@@ -649,7 +669,9 @@ class TestRunHeadlessCoreFlushTelemetry:
             calls.append(kwargs)
 
         monkeypatch.setattr(sl_mod, "flush_session_log", mock_flush)
-        tool_ctx.runner.push(_make_result(returncode=0, stdout=self._make_ndjson_with_usage()))
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(returncode=0, stdout=self._make_ndjson_with_usage())
+        )
         await run_skill("/investigate foo", "/tmp", step_name="implement")
         assert len(calls) == 1
         assert "telemetry" in calls[0], "flush_session_log must receive telemetry= kwarg"
@@ -660,7 +682,7 @@ class TestRunHeadlessCoreFlushTelemetry:
 
 @pytest.mark.anyio
 async def test_run_skill_returns_structured_error_when_executor_raises(
-    tool_ctx, monkeypatch, tmp_path
+    tool_ctx_kitchen_open, monkeypatch, tmp_path
 ) -> None:
     """run_skill returns SkillResult-shaped JSON even if executor.run() raises unexpectedly."""
     from autoskillit.core import SkillResult
@@ -669,8 +691,8 @@ async def test_run_skill_returns_structured_error_when_executor_raises(
         async def run(self, *args, **kwargs) -> SkillResult:
             raise RuntimeError("unexpected executor failure")
 
-    tool_ctx.executor = ExplodingExecutor()
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+    tool_ctx_kitchen_open.executor = ExplodingExecutor()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
     from autoskillit.server.tools.tools_execution import run_skill
 

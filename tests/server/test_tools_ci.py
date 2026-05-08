@@ -50,12 +50,12 @@ async def test_wait_for_ci_gate_check(tool_ctx):
 
 
 @pytest.mark.anyio
-async def test_wait_for_ci_success_response(tool_ctx):
+async def test_wait_for_ci_success_response(tool_ctx_kitchen_open):
     watcher = InMemoryCIWatcher(
         wait_result={"run_id": 12345, "conclusion": "success", "failed_jobs": []}
     )
-    tool_ctx.ci_watcher = watcher
-    tool_ctx.runner.push(
+    tool_ctx_kitchen_open.ci_watcher = watcher
+    tool_ctx_kitchen_open.runner.push(
         SubprocessResult(
             returncode=0,
             stdout="abc123\n",
@@ -73,7 +73,7 @@ async def test_wait_for_ci_success_response(tool_ctx):
 
 
 @pytest.mark.anyio
-async def test_wait_for_ci_failure_response(tool_ctx):
+async def test_wait_for_ci_failure_response(tool_ctx_kitchen_open):
     watcher = InMemoryCIWatcher(
         wait_result={
             "run_id": 12345,
@@ -81,8 +81,8 @@ async def test_wait_for_ci_failure_response(tool_ctx):
             "failed_jobs": ["test", "lint"],
         }
     )
-    tool_ctx.ci_watcher = watcher
-    tool_ctx.runner.push(
+    tool_ctx_kitchen_open.ci_watcher = watcher
+    tool_ctx_kitchen_open.runner.push(
         SubprocessResult(
             returncode=0,
             stdout="abc123\n",
@@ -104,13 +104,13 @@ async def test_wait_for_ci_failure_response(tool_ctx):
 
 
 @pytest.mark.anyio
-async def test_wait_for_ci_infers_head_sha(tool_ctx):
+async def test_wait_for_ci_infers_head_sha(tool_ctx_kitchen_open):
     """When head_sha is not provided, it's inferred via git rev-parse HEAD."""
     watcher = InMemoryCIWatcher(
         wait_result={"run_id": 1, "conclusion": "success", "failed_jobs": []}
     )
-    tool_ctx.ci_watcher = watcher
-    tool_ctx.runner.push(
+    tool_ctx_kitchen_open.ci_watcher = watcher
+    tool_ctx_kitchen_open.runner.push(
         SubprocessResult(
             returncode=0,
             stdout="abc123\n",
@@ -127,15 +127,15 @@ async def test_wait_for_ci_infers_head_sha(tool_ctx):
 
 
 @pytest.mark.anyio
-async def test_wait_for_ci_head_sha_uses_runner(tool_ctx):
+async def test_wait_for_ci_head_sha_uses_runner(tool_ctx_kitchen_open):
     """git rev-parse HEAD must flow through MockSubprocessRunner, not raw asyncio."""
     watcher = InMemoryCIWatcher(
         wait_result={"run_id": 1, "conclusion": "success", "failed_jobs": []}
     )
-    tool_ctx.ci_watcher = watcher
+    tool_ctx_kitchen_open.ci_watcher = watcher
 
     # Pre-configure runner to return a valid SHA when git rev-parse is called
-    tool_ctx.runner.push(
+    tool_ctx_kitchen_open.runner.push(
         SubprocessResult(
             returncode=0,
             stdout="deadbeef\n",
@@ -148,8 +148,8 @@ async def test_wait_for_ci_head_sha_uses_runner(tool_ctx):
     await wait_for_ci("main", cwd="/some/repo")
 
     # Runner must have been called with the git command
-    assert tool_ctx.runner.call_args_list, "runner was never called"
-    cmd = tool_ctx.runner.call_args_list[0][0]
+    assert tool_ctx_kitchen_open.runner.call_args_list, "runner was never called"
+    cmd = tool_ctx_kitchen_open.runner.call_args_list[0][0]
     assert cmd == ["git", "rev-parse", "HEAD"], f"Unexpected runner call: {cmd}"
 
     # SHA extracted from runner output must have been passed to the CI watcher
@@ -162,8 +162,8 @@ async def test_wait_for_ci_head_sha_uses_runner(tool_ctx):
 
 
 @pytest.mark.anyio
-async def test_wait_for_ci_no_watcher(tool_ctx):
-    tool_ctx.ci_watcher = None
+async def test_wait_for_ci_no_watcher(tool_ctx_kitchen_open):
+    tool_ctx_kitchen_open.ci_watcher = None
     result = json.loads(await wait_for_ci("main"))
     assert result["conclusion"] == "error"
     assert "not configured" in result["error"]
@@ -183,9 +183,9 @@ async def test_get_ci_status_gate_check(tool_ctx):
 
 
 @pytest.mark.anyio
-async def test_get_ci_status_missing_branch_and_run_id(tool_ctx):
+async def test_get_ci_status_missing_branch_and_run_id(tool_ctx_kitchen_open):
     watcher = InMemoryCIWatcher()
-    tool_ctx.ci_watcher = watcher
+    tool_ctx_kitchen_open.ci_watcher = watcher
 
     result = json.loads(await get_ci_status())
     assert result["runs"] == []
@@ -193,8 +193,8 @@ async def test_get_ci_status_missing_branch_and_run_id(tool_ctx):
 
 
 @pytest.mark.anyio
-async def test_get_ci_status_no_watcher(tool_ctx):
-    tool_ctx.ci_watcher = None
+async def test_get_ci_status_no_watcher(tool_ctx_kitchen_open):
+    tool_ctx_kitchen_open.ci_watcher = None
     result = json.loads(await get_ci_status(branch="main"))
     assert result["runs"] == []
     assert "not configured" in result["error"]
@@ -206,12 +206,12 @@ async def test_get_ci_status_no_watcher(tool_ctx):
 
 
 @pytest.mark.anyio
-async def test_wait_for_ci_passes_event_to_scope(tool_ctx):
+async def test_wait_for_ci_passes_event_to_scope(tool_ctx_kitchen_open):
     """wait_for_ci must propagate event param into CIRunScope."""
     watcher = InMemoryCIWatcher(
         wait_result={"run_id": 1, "conclusion": "success", "failed_jobs": []}
     )
-    tool_ctx.ci_watcher = watcher
+    tool_ctx_kitchen_open.ci_watcher = watcher
     await wait_for_ci(branch="main", event="push", cwd="/tmp")
     assert len(watcher.wait_calls) == 1
     assert watcher.wait_calls[-1]["scope"].event == "push"
@@ -223,23 +223,23 @@ async def test_wait_for_ci_passes_event_to_scope(tool_ctx):
 
 
 @pytest.mark.anyio
-async def test_wait_for_ci_forwards_lookback_seconds(tool_ctx):
+async def test_wait_for_ci_forwards_lookback_seconds(tool_ctx_kitchen_open):
     """wait_for_ci must propagate lookback_seconds to ci_watcher.wait()."""
     watcher = InMemoryCIWatcher(
         wait_result={"run_id": 1, "conclusion": "success", "failed_jobs": []}
     )
-    tool_ctx.ci_watcher = watcher
+    tool_ctx_kitchen_open.ci_watcher = watcher
     await wait_for_ci(branch="main", lookback_seconds=7200, cwd="/tmp")
     assert watcher.wait_calls[-1]["lookback_seconds"] == 7200
 
 
 @pytest.mark.anyio
-async def test_wait_for_ci_lookback_defaults_to_3600(tool_ctx):
+async def test_wait_for_ci_lookback_defaults_to_3600(tool_ctx_kitchen_open):
     """wait_for_ci default lookback_seconds is 3600 (1 hour)."""
     watcher = InMemoryCIWatcher(
         wait_result={"run_id": 1, "conclusion": "success", "failed_jobs": []}
     )
-    tool_ctx.ci_watcher = watcher
+    tool_ctx_kitchen_open.ci_watcher = watcher
     await wait_for_ci(branch="main", cwd="/tmp")
     assert watcher.wait_calls[-1]["lookback_seconds"] == 3600
 
@@ -263,11 +263,11 @@ async def test_gate_closed_returns_gate_error(tool_ctx):
 
 
 @pytest.mark.anyio
-async def test_delegates_to_merge_queue_watcher(tool_ctx):
+async def test_delegates_to_merge_queue_watcher(tool_ctx_kitchen_open):
     watcher = InMemoryMergeQueueWatcher(
         wait_result={"success": True, "pr_state": "merged", "reason": "PR merged"}
     )
-    tool_ctx.merge_queue_watcher = watcher
+    tool_ctx_kitchen_open.merge_queue_watcher = watcher
 
     with patch(
         "autoskillit.execution.remote_resolver.asyncio.create_subprocess_exec",
@@ -291,11 +291,11 @@ async def test_delegates_to_merge_queue_watcher(tool_ctx):
 
 
 @pytest.mark.anyio
-async def test_infers_repo_from_git_remote_when_repo_empty(tool_ctx):
+async def test_infers_repo_from_git_remote_when_repo_empty(tool_ctx_kitchen_open):
     watcher = InMemoryMergeQueueWatcher(
         wait_result={"success": True, "pr_state": "merged", "reason": "PR merged"}
     )
-    tool_ctx.merge_queue_watcher = watcher
+    tool_ctx_kitchen_open.merge_queue_watcher = watcher
 
     with patch(
         "autoskillit.execution.remote_resolver.asyncio.create_subprocess_exec",
@@ -314,11 +314,11 @@ async def test_infers_repo_from_git_remote_when_repo_empty(tool_ctx):
 
 
 @pytest.mark.anyio
-async def test_explicit_repo_skips_subprocess(tool_ctx):
+async def test_explicit_repo_skips_subprocess(tool_ctx_kitchen_open):
     watcher = InMemoryMergeQueueWatcher(
         wait_result={"success": True, "pr_state": "merged", "reason": "PR merged"}
     )
-    tool_ctx.merge_queue_watcher = watcher
+    tool_ctx_kitchen_open.merge_queue_watcher = watcher
 
     with patch(
         "autoskillit.execution.remote_resolver.asyncio.create_subprocess_exec",
@@ -336,8 +336,8 @@ async def test_explicit_repo_skips_subprocess(tool_ctx):
 
 
 @pytest.mark.anyio
-async def test_watcher_none_returns_error(tool_ctx):
-    tool_ctx.merge_queue_watcher = None
+async def test_watcher_none_returns_error(tool_ctx_kitchen_open):
+    tool_ctx_kitchen_open.merge_queue_watcher = None
     result = json.loads(await wait_for_merge_queue(pr_number=42, target_branch="main", cwd="."))
     assert result["success"] is False
     assert "pr_state" in result
@@ -350,7 +350,7 @@ async def test_watcher_none_returns_error(tool_ctx):
 
 
 @pytest.mark.anyio
-async def test_wait_for_ci_parses_remote_url_to_resolve_repo(tool_ctx):
+async def test_wait_for_ci_parses_remote_url_to_resolve_repo(tool_ctx_kitchen_open):
     """When remote_url is provided, wait_for_ci must parse it to owner/repo
     and pass that to the watcher without calling any subprocess."""
     watcher = InMemoryCIWatcher(
@@ -361,7 +361,7 @@ async def test_wait_for_ci_parses_remote_url_to_resolve_repo(tool_ctx):
             "head_sha": "abc123",
         }
     )
-    tool_ctx.ci_watcher = watcher
+    tool_ctx_kitchen_open.ci_watcher = watcher
 
     result = json.loads(
         await wait_for_ci(
@@ -375,7 +375,7 @@ async def test_wait_for_ci_parses_remote_url_to_resolve_repo(tool_ctx):
 
 
 @pytest.mark.anyio
-async def test_wait_for_ci_remote_url_wins_over_empty_repo(tool_ctx):
+async def test_wait_for_ci_remote_url_wins_over_empty_repo(tool_ctx_kitchen_open):
     """remote_url= supersedes repo='' — hint priority in resolve_remote_repo."""
     watcher = InMemoryCIWatcher(
         wait_result={
@@ -385,7 +385,7 @@ async def test_wait_for_ci_remote_url_wins_over_empty_repo(tool_ctx):
             "head_sha": "abc",
         }
     )
-    tool_ctx.ci_watcher = watcher
+    tool_ctx_kitchen_open.ci_watcher = watcher
     await wait_for_ci(
         branch="main",
         remote_url="https://github.com/owner/repo.git",
@@ -401,13 +401,13 @@ async def test_wait_for_ci_remote_url_wins_over_empty_repo(tool_ctx):
 
 
 @pytest.mark.anyio
-async def test_wait_for_merge_queue_parses_remote_url_to_resolve_repo(tool_ctx):
+async def test_wait_for_merge_queue_parses_remote_url_to_resolve_repo(tool_ctx_kitchen_open):
     """When remote_url is provided, wait_for_merge_queue parses it to owner/repo
     without calling any subprocess."""
     watcher = InMemoryMergeQueueWatcher(
         wait_result={"success": True, "pr_state": "merged", "pr_number": 42}
     )
-    tool_ctx.merge_queue_watcher = watcher
+    tool_ctx_kitchen_open.merge_queue_watcher = watcher
 
     result = json.loads(
         await wait_for_merge_queue(
@@ -425,13 +425,13 @@ class TestWaitForCiTiming:
     """wait_for_ci records wall-clock timing when step_name is provided."""
 
     @pytest.mark.anyio
-    async def test_wait_for_ci_step_name_records_timing(self, tool_ctx):
+    async def test_wait_for_ci_step_name_records_timing(self, tool_ctx_kitchen_open):
         watcher = InMemoryCIWatcher(
             wait_result={"run_id": 1, "conclusion": "success", "failed_jobs": []}
         )
-        tool_ctx.ci_watcher = watcher
+        tool_ctx_kitchen_open.ci_watcher = watcher
         await wait_for_ci("main", step_name="ci_wait")
-        assert_step_timed(tool_ctx.timing_log, "ci_wait")
+        assert_step_timed(tool_ctx_kitchen_open.timing_log, "ci_wait")
 
     @pytest.mark.anyio
     async def test_wait_for_ci_empty_step_name_skips_timing(self, tool_ctx):
@@ -447,11 +447,11 @@ class TestWaitForMergeQueueTiming:
     """wait_for_merge_queue records wall-clock timing when step_name is provided."""
 
     @pytest.mark.anyio
-    async def test_wait_for_merge_queue_step_name_records_timing(self, tool_ctx):
+    async def test_wait_for_merge_queue_step_name_records_timing(self, tool_ctx_kitchen_open):
         watcher = InMemoryMergeQueueWatcher(
             wait_result={"success": True, "pr_state": "merged", "reason": "PR merged"}
         )
-        tool_ctx.merge_queue_watcher = watcher
+        tool_ctx_kitchen_open.merge_queue_watcher = watcher
         with patch(
             "autoskillit.execution.remote_resolver.asyncio.create_subprocess_exec",
             new_callable=AsyncMock,
@@ -465,7 +465,7 @@ class TestWaitForMergeQueueTiming:
             await wait_for_merge_queue(
                 pr_number=1, target_branch="main", cwd=".", step_name="mq_wait"
             )
-        assert_step_timed(tool_ctx.timing_log, "mq_wait")
+        assert_step_timed(tool_ctx_kitchen_open.timing_log, "mq_wait")
 
     @pytest.mark.anyio
     async def test_wait_for_merge_queue_empty_step_name_skips_timing(self, tool_ctx):
@@ -489,7 +489,7 @@ class TestWaitForMergeQueueTiming:
 
 @pytest.mark.anyio
 async def test_wait_for_merge_queue_invalid_remote_url_falls_through_to_inference(
-    tool_ctx, tmp_path
+    tool_ctx_kitchen_open, tmp_path
 ):
     """
     remote_url that parses to None (e.g. file://) does NOT short-circuit;
@@ -502,7 +502,7 @@ async def test_wait_for_merge_queue_invalid_remote_url_falls_through_to_inferenc
             "reason": "Invalid repo format: None",
         }
     )
-    tool_ctx.merge_queue_watcher = watcher
+    tool_ctx_kitchen_open.merge_queue_watcher = watcher
 
     # provide a file:// remote_url — should fall through, eventually fail gracefully
     result = json.loads(
@@ -524,12 +524,12 @@ async def test_wait_for_merge_queue_invalid_remote_url_falls_through_to_inferenc
 
 
 @pytest.mark.anyio
-async def test_wait_for_ci_handler_passes_workflow(tool_ctx):
+async def test_wait_for_ci_handler_passes_workflow(tool_ctx_kitchen_open):
     """wait_for_ci MCP handler must forward workflow to watcher via scope."""
     watcher = InMemoryCIWatcher(
         wait_result={"conclusion": "success", "failed_jobs": [], "run_id": 1}
     )
-    tool_ctx.ci_watcher = watcher
+    tool_ctx_kitchen_open.ci_watcher = watcher
 
     # cwd="" → head_sha inference skipped (empty string is falsy)
     json.loads(await wait_for_ci(branch="main", workflow="tests.yml", cwd=""))
@@ -539,10 +539,10 @@ async def test_wait_for_ci_handler_passes_workflow(tool_ctx):
 
 
 @pytest.mark.anyio
-async def test_get_ci_status_handler_passes_workflow(tool_ctx):
+async def test_get_ci_status_handler_passes_workflow(tool_ctx_kitchen_open):
     """get_ci_status MCP handler must forward workflow to watcher via scope."""
     watcher = InMemoryCIWatcher(status_result={"runs": []})
-    tool_ctx.ci_watcher = watcher
+    tool_ctx_kitchen_open.ci_watcher = watcher
 
     await get_ci_status(branch="main", workflow="tests.yml")
 
@@ -555,7 +555,7 @@ async def test_get_ci_status_handler_passes_workflow(tool_ctx):
 
 
 @pytest.mark.anyio
-async def test_wait_for_ci_watcher_exception_returns_structured_json(tool_ctx):
+async def test_wait_for_ci_watcher_exception_returns_structured_json(tool_ctx_kitchen_open):
     """wait_for_ci returns structured JSON with conclusion='error' when watcher.wait() raises.
 
     BEFORE fix: bare raise propagates to track_response_size which adds
@@ -563,7 +563,7 @@ async def test_wait_for_ci_watcher_exception_returns_structured_json(tool_ctx):
     """
     watcher = InMemoryCIWatcher()
     watcher.wait_side_effect = RuntimeError("network timeout")
-    tool_ctx.ci_watcher = watcher
+    tool_ctx_kitchen_open.ci_watcher = watcher
 
     with patch(
         "autoskillit.execution.remote_resolver.asyncio.create_subprocess_exec",
@@ -583,7 +583,9 @@ async def test_wait_for_ci_watcher_exception_returns_structured_json(tool_ctx):
 
 
 @pytest.mark.anyio
-async def test_wait_for_merge_queue_watcher_exception_returns_structured_json(tool_ctx):
+async def test_wait_for_merge_queue_watcher_exception_returns_structured_json(
+    tool_ctx_kitchen_open,
+):
     """wait_for_merge_queue returns {success: false, error: ...} when watcher.wait() raises.
 
     BEFORE fix: bare raise propagates to track_response_size decorator.
@@ -591,7 +593,7 @@ async def test_wait_for_merge_queue_watcher_exception_returns_structured_json(to
     """
     watcher = InMemoryMergeQueueWatcher()
     watcher.wait_side_effect = RuntimeError("connection refused")
-    tool_ctx.merge_queue_watcher = watcher
+    tool_ctx_kitchen_open.merge_queue_watcher = watcher
 
     with patch(
         "autoskillit.execution.remote_resolver.asyncio.create_subprocess_exec",
@@ -617,13 +619,13 @@ async def test_wait_for_merge_queue_watcher_exception_returns_structured_json(to
 
 
 @pytest.mark.anyio
-async def test_wait_for_ci_includes_head_sha_in_result(tool_ctx):
+async def test_wait_for_ci_includes_head_sha_in_result(tool_ctx_kitchen_open):
     """wait_for_ci result includes head_sha when git rev-parse HEAD succeeds."""
     watcher = InMemoryCIWatcher(
         wait_result={"run_id": 1, "conclusion": "success", "failed_jobs": []}
     )
-    tool_ctx.ci_watcher = watcher
-    tool_ctx.runner.push(
+    tool_ctx_kitchen_open.ci_watcher = watcher
+    tool_ctx_kitchen_open.runner.push(
         SubprocessResult(
             returncode=0,
             stdout="deadbeef1234\n",
@@ -639,13 +641,13 @@ async def test_wait_for_ci_includes_head_sha_in_result(tool_ctx):
 
 
 @pytest.mark.anyio
-async def test_wait_for_ci_omits_head_sha_when_git_fails(tool_ctx):
+async def test_wait_for_ci_omits_head_sha_when_git_fails(tool_ctx_kitchen_open):
     """wait_for_ci result omits head_sha when git rev-parse fails."""
     watcher = InMemoryCIWatcher(
         wait_result={"run_id": 1, "conclusion": "success", "failed_jobs": []}
     )
-    tool_ctx.ci_watcher = watcher
-    tool_ctx.runner.push(
+    tool_ctx_kitchen_open.ci_watcher = watcher
+    tool_ctx_kitchen_open.runner.push(
         SubprocessResult(
             returncode=128,
             stdout="",
@@ -668,7 +670,7 @@ async def test_wait_for_ci_omits_head_sha_when_git_fails(tool_ctx):
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("pr_state", list(PRState))
-async def test_wait_for_merge_queue_serializes_every_pr_state(pr_state, tool_ctx):
+async def test_wait_for_merge_queue_serializes_every_pr_state(pr_state, tool_ctx_kitchen_open):
     """Every PRState value round-trips faithfully through the MCP handler.
 
     Adding a new PRState member without a handler test fails this parametrized suite.
@@ -680,7 +682,7 @@ async def test_wait_for_merge_queue_serializes_every_pr_state(pr_state, tool_ctx
             "reason": f"test reason for {pr_state.value}",
         }
     )
-    tool_ctx.merge_queue_watcher = watcher
+    tool_ctx_kitchen_open.merge_queue_watcher = watcher
 
     with patch(
         "autoskillit.execution.remote_resolver.asyncio.create_subprocess_exec",
@@ -724,13 +726,13 @@ def test_pr_state_docstring_documents_all_members():
 
 
 @pytest.mark.anyio
-async def test_wait_for_ci_exception_returns_conclusion_key(tool_ctx, monkeypatch):
+async def test_wait_for_ci_exception_returns_conclusion_key(tool_ctx_kitchen_open, monkeypatch):
     """Inner exception path must return conclusion='error' for recipe on_result routing."""
 
     async def _exploding_wait(*a, **kw):
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(tool_ctx.ci_watcher, "wait", _exploding_wait)
+    monkeypatch.setattr(tool_ctx_kitchen_open.ci_watcher, "wait", _exploding_wait)
     raw = await wait_for_ci(branch="main", cwd="/tmp")
     result = json.loads(raw)
     assert "conclusion" in result, "Exception path must include conclusion key"

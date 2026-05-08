@@ -147,9 +147,9 @@ class TestListRecipeTools:
 
 # P5F2-T1
 @pytest.mark.anyio
-async def test_list_recipes_no_recipes_returns_empty(tool_ctx):
+async def test_list_recipes_no_recipes_returns_empty(tool_ctx_kitchen_open):
     """list_recipes returns error JSON when recipes is not configured."""
-    tool_ctx.recipes = None
+    tool_ctx_kitchen_open.recipes = None
     result = json.loads(await list_recipes())
     assert isinstance(result, dict) and "error" in result
 

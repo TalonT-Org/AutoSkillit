@@ -10,13 +10,13 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 @pytest.mark.anyio
-async def test_tools_execution_routes_through_executor(tool_ctx, monkeypatch) -> None:
+async def test_tools_execution_routes_through_executor(tool_ctx_kitchen_open, monkeypatch) -> None:
     """run_skill routes through ctx.executor.run(), not run_headless_core directly."""
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
-    tool_ctx.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+    tool_ctx_kitchen_open.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
     await run_skill("/test skill", "/tmp")
     assert len(executor.calls) == 1
@@ -25,14 +25,14 @@ async def test_tools_execution_routes_through_executor(tool_ctx, monkeypatch) ->
 
 
 @pytest.mark.anyio
-async def test_run_skill_passes_validated_add_dirs(tool_ctx, monkeypatch) -> None:
+async def test_run_skill_passes_validated_add_dirs(tool_ctx_kitchen_open, monkeypatch) -> None:
     """run_skill passes ValidatedAddDir instances (not raw strings) as add_dirs."""
     from autoskillit.core import ValidatedAddDir
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
-    tool_ctx.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+    tool_ctx_kitchen_open.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
     await run_skill("/test skill", "/tmp")
     # All add_dirs must be ValidatedAddDir instances
@@ -47,7 +47,9 @@ async def test_run_skill_passes_validated_add_dirs(tool_ctx, monkeypatch) -> Non
 
 
 @pytest.mark.anyio
-async def test_run_skill_calls_session_skill_manager_init_session(tool_ctx, monkeypatch) -> None:
+async def test_run_skill_calls_session_skill_manager_init_session(
+    tool_ctx_kitchen_open, monkeypatch
+) -> None:
     """run_skill routes through session_skill_manager.init_session() for add_dirs."""
     from unittest.mock import MagicMock
 
@@ -57,13 +59,13 @@ async def test_run_skill_calls_session_skill_manager_init_session(tool_ctx, monk
     fake_validated = ValidatedAddDir(path="/fake/session/dir")
     mock_ssm = MagicMock()
     mock_ssm.init_session.return_value = fake_validated
-    tool_ctx.session_skill_manager = mock_ssm
+    tool_ctx_kitchen_open.session_skill_manager = mock_ssm
 
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
-    tool_ctx.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+    tool_ctx_kitchen_open.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
     await run_skill("/test skill", "/tmp")
 
@@ -77,7 +79,9 @@ async def test_run_skill_calls_session_skill_manager_init_session(tool_ctx, monk
 
 
 @pytest.mark.anyio
-async def test_run_skill_activates_deps_for_tier3_target(tool_ctx, monkeypatch) -> None:
+async def test_run_skill_activates_deps_for_tier3_target(
+    tool_ctx_kitchen_open, monkeypatch
+) -> None:
     """run_skill calls activate_skill_deps even when target is tier3 (not in tier2 list)."""
     from unittest.mock import MagicMock
 
@@ -86,17 +90,17 @@ async def test_run_skill_activates_deps_for_tier3_target(tool_ctx, monkeypatch) 
     fake_validated = ValidatedAddDir(path="/fake/session/dir")
     mock_ssm = MagicMock()
     mock_ssm.init_session.return_value = fake_validated
-    tool_ctx.session_skill_manager = mock_ssm
+    tool_ctx_kitchen_open.session_skill_manager = mock_ssm
 
     # Set up skill_resolver to produce a resolved name
     mock_resolver = MagicMock()
     mock_resolver.resolve.return_value = MagicMock(source=MagicMock(value="bundled_extended"))
-    tool_ctx.skill_resolver = mock_resolver
+    tool_ctx_kitchen_open.skill_resolver = mock_resolver
 
     from tests.fakes import InMemoryHeadlessExecutor
 
-    tool_ctx.executor = InMemoryHeadlessExecutor()
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+    tool_ctx_kitchen_open.executor = InMemoryHeadlessExecutor()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
     # Use a tier3 skill name
     await run_skill("/open-pr", "/tmp")
@@ -106,14 +110,16 @@ async def test_run_skill_activates_deps_for_tier3_target(tool_ctx, monkeypatch) 
 
 
 @pytest.mark.anyio
-async def test_run_skill_result_includes_order_id_when_passed(tool_ctx, monkeypatch) -> None:
+async def test_run_skill_result_includes_order_id_when_passed(
+    tool_ctx_kitchen_open, monkeypatch
+) -> None:
     """run_skill injects order_id into the result JSON when order_id is non-empty."""
     import json as _json
 
     from tests.fakes import InMemoryHeadlessExecutor
 
-    tool_ctx.executor = InMemoryHeadlessExecutor()
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+    tool_ctx_kitchen_open.executor = InMemoryHeadlessExecutor()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
     result_json = await run_skill("/test skill", "/tmp", order_id="issue-185")
     data = _json.loads(result_json)
@@ -122,15 +128,15 @@ async def test_run_skill_result_includes_order_id_when_passed(tool_ctx, monkeypa
 
 @pytest.mark.anyio
 async def test_run_skill_result_order_id_empty_string_when_not_passed(
-    tool_ctx, monkeypatch
+    tool_ctx_kitchen_open, monkeypatch
 ) -> None:
     """run_skill emits order_id as empty string in result JSON when none provided."""
     import json as _json
 
     from tests.fakes import InMemoryHeadlessExecutor
 
-    tool_ctx.executor = InMemoryHeadlessExecutor()
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+    tool_ctx_kitchen_open.executor = InMemoryHeadlessExecutor()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
     result_json = await run_skill("/test skill", "/tmp")  # no order_id
     data = _json.loads(result_json)
@@ -138,7 +144,9 @@ async def test_run_skill_result_order_id_empty_string_when_not_passed(
 
 
 @pytest.mark.anyio
-async def test_run_skill_passes_allow_only_to_init_session(tool_ctx, monkeypatch) -> None:
+async def test_run_skill_passes_allow_only_to_init_session(
+    tool_ctx_kitchen_open, monkeypatch
+) -> None:
     """run_skill computes the closure for the resolved target and forwards it as allow_only."""
     from unittest.mock import MagicMock
 
@@ -151,14 +159,14 @@ async def test_run_skill_passes_allow_only_to_init_session(tool_ctx, monkeypatch
     mock_ssm = MagicMock()
     mock_ssm.init_session.return_value = fake_validated
     mock_ssm.compute_skill_closure.return_value = expected_closure
-    tool_ctx.session_skill_manager = mock_ssm
+    tool_ctx_kitchen_open.session_skill_manager = mock_ssm
 
     mock_resolver = MagicMock()
     mock_resolver.resolve.return_value = MagicMock(source=MagicMock(value="bundled_extended"))
-    tool_ctx.skill_resolver = mock_resolver
+    tool_ctx_kitchen_open.skill_resolver = mock_resolver
 
-    tool_ctx.executor = InMemoryHeadlessExecutor()
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+    tool_ctx_kitchen_open.executor = InMemoryHeadlessExecutor()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
     await run_skill("/autoskillit:investigate the bug", "/tmp")
 
@@ -168,7 +176,9 @@ async def test_run_skill_passes_allow_only_to_init_session(tool_ctx, monkeypatch
 
 
 @pytest.mark.anyio
-async def test_run_skill_no_target_skill_passes_none_allow_only(tool_ctx, monkeypatch) -> None:
+async def test_run_skill_no_target_skill_passes_none_allow_only(
+    tool_ctx_kitchen_open, monkeypatch
+) -> None:
     """When skill_resolver is unset, target_name is None and allow_only stays None."""
     from unittest.mock import MagicMock
 
@@ -178,11 +188,11 @@ async def test_run_skill_no_target_skill_passes_none_allow_only(tool_ctx, monkey
     fake_validated = ValidatedAddDir(path="/fake/session/dir")
     mock_ssm = MagicMock()
     mock_ssm.init_session.return_value = fake_validated
-    tool_ctx.session_skill_manager = mock_ssm
-    tool_ctx.skill_resolver = None  # disables resolve_target_skill
+    tool_ctx_kitchen_open.session_skill_manager = mock_ssm
+    tool_ctx_kitchen_open.skill_resolver = None  # disables resolve_target_skill
 
-    tool_ctx.executor = InMemoryHeadlessExecutor()
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+    tool_ctx_kitchen_open.executor = InMemoryHeadlessExecutor()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
     await run_skill("/test skill", "/tmp")
 
@@ -192,7 +202,9 @@ async def test_run_skill_no_target_skill_passes_none_allow_only(tool_ctx, monkey
 
 
 @pytest.mark.anyio
-async def test_run_skill_make_plan_closure_includes_arch_lens_pack(tool_ctx, monkeypatch) -> None:
+async def test_run_skill_make_plan_closure_includes_arch_lens_pack(
+    tool_ctx_kitchen_open, monkeypatch
+) -> None:
     """End-to-end: /make-plan resolves a closure containing the entire arch-lens pack."""
     from unittest.mock import MagicMock
 
@@ -204,7 +216,9 @@ async def test_run_skill_make_plan_closure_includes_arch_lens_pack(tool_ctx, mon
     from tests.fakes import InMemoryHeadlessExecutor
 
     real_provider = SkillsDirectoryProvider()
-    real_mgr = DefaultSessionSkillManager(provider=real_provider, ephemeral_root=tool_ctx.temp_dir)
+    real_mgr = DefaultSessionSkillManager(
+        provider=real_provider, ephemeral_root=tool_ctx_kitchen_open.temp_dir
+    )
 
     captured: dict = {}
 
@@ -225,14 +239,14 @@ async def test_run_skill_make_plan_closure_includes_arch_lens_pack(tool_ctx, mon
         def cleanup_stale(self, max_age_seconds=86400):
             return 0
 
-    tool_ctx.session_skill_manager = _RecordingManager(real_mgr)
+    tool_ctx_kitchen_open.session_skill_manager = _RecordingManager(real_mgr)
 
     mock_resolver = MagicMock()
     mock_resolver.resolve.return_value = MagicMock(source=MagicMock(value="bundled_extended"))
-    tool_ctx.skill_resolver = mock_resolver
+    tool_ctx_kitchen_open.skill_resolver = mock_resolver
 
-    tool_ctx.executor = InMemoryHeadlessExecutor()
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+    tool_ctx_kitchen_open.executor = InMemoryHeadlessExecutor()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
     await run_skill("/autoskillit:make-plan refactor", "/tmp")
 
@@ -245,26 +259,28 @@ async def test_run_skill_make_plan_closure_includes_arch_lens_pack(tool_ctx, mon
 
 
 @pytest.mark.anyio
-async def test_run_skill_passes_idle_output_timeout(tool_ctx, monkeypatch) -> None:
+async def test_run_skill_passes_idle_output_timeout(tool_ctx_kitchen_open, monkeypatch) -> None:
     """run_skill passes idle_output_timeout (as float) to executor.run()."""
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
-    tool_ctx.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+    tool_ctx_kitchen_open.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
     await run_skill("/test skill", "/tmp", idle_output_timeout=120)
     assert executor.calls[0].idle_output_timeout == 120.0  # int→float conversion
 
 
 @pytest.mark.anyio
-async def test_run_skill_idle_output_timeout_defaults_to_none(tool_ctx, monkeypatch) -> None:
+async def test_run_skill_idle_output_timeout_defaults_to_none(
+    tool_ctx_kitchen_open, monkeypatch
+) -> None:
     """run_skill passes None to executor.run() when idle_output_timeout is not set."""
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
-    tool_ctx.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+    tool_ctx_kitchen_open.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
     await run_skill("/test skill", "/tmp")
     assert executor.calls[0].idle_output_timeout is None
@@ -284,7 +300,7 @@ class TestOutputDirParameter:
 
     @pytest.mark.anyio
     async def test_run_skill_forwards_output_dir_to_write_watch_dirs(
-        self, tool_ctx, monkeypatch, tmp_path
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path
     ) -> None:
         """output_dir is resolved and forwarded to executor.run() as write_watch_dirs."""
         from pathlib import Path
@@ -292,8 +308,8 @@ class TestOutputDirParameter:
         from tests.fakes import InMemoryHeadlessExecutor
 
         executor = InMemoryHeadlessExecutor()
-        tool_ctx.executor = executor
-        monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+        tool_ctx_kitchen_open.executor = executor
+        monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
         output_dir = str(tmp_path / "output")
         await run_skill("/test skill", str(tmp_path), output_dir=output_dir)
@@ -304,14 +320,14 @@ class TestOutputDirParameter:
 
 @pytest.mark.anyio
 async def test_run_skill_injects_provider_extras_when_feature_enabled(
-    tool_ctx, monkeypatch, tmp_path
+    tool_ctx_kitchen_open, monkeypatch, tmp_path
 ) -> None:
     """run_skill records provider_extras and profile_name when feature is enabled."""
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
-    tool_ctx.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+    tool_ctx_kitchen_open.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
     monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: True)
     monkeypatch.setattr(
         "autoskillit.server._guards._resolve_provider_profile",
@@ -326,14 +342,14 @@ async def test_run_skill_injects_provider_extras_when_feature_enabled(
 
 @pytest.mark.anyio
 async def test_run_skill_provider_extras_none_when_feature_disabled(
-    tool_ctx, monkeypatch, tmp_path
+    tool_ctx_kitchen_open, monkeypatch, tmp_path
 ) -> None:
     """run_skill records None provider_extras and empty profile_name when feature is disabled."""
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
-    tool_ctx.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+    tool_ctx_kitchen_open.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
     monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: False)
 
     await run_skill("/autoskillit:probe", str(tmp_path))
@@ -344,14 +360,14 @@ async def test_run_skill_provider_extras_none_when_feature_disabled(
 
 @pytest.mark.anyio
 async def test_run_skill_provider_extras_none_when_default_profile(
-    tool_ctx, monkeypatch, tmp_path
+    tool_ctx_kitchen_open, monkeypatch, tmp_path
 ) -> None:
     """run_skill records None provider_extras when profile resolves to default anthropic."""
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
-    tool_ctx.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+    tool_ctx_kitchen_open.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
     monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: True)
     monkeypatch.setattr(
         "autoskillit.server._guards._resolve_provider_profile",

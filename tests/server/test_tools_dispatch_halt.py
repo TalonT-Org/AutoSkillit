@@ -41,7 +41,7 @@ class TestDispatchFoodTruckHaltEnforcement:
 
     @pytest.mark.anyio
     async def test_dispatch_refuses_after_failure_when_halt_enabled(
-        self, tool_ctx, monkeypatch, tmp_path
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path
     ):
         """Prior FAILURE + continue_on_failure=false → FLEET_CAMPAIGN_HALTED."""
         state_path = tmp_path / "state.json"
@@ -57,7 +57,7 @@ class TestDispatchFoodTruckHaltEnforcement:
 
     @pytest.mark.anyio
     async def test_dispatch_proceeds_after_failure_when_continue_enabled(
-        self, tool_ctx, monkeypatch, tmp_path
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path
     ):
         """dispatch_food_truck proceeds when continue_on_failure=true even with prior failure."""
         state_path = tmp_path / "state.json"
@@ -65,18 +65,20 @@ class TestDispatchFoodTruckHaltEnforcement:
         monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(state_path))
         monkeypatch.setenv("AUTOSKILLIT_CONTINUE_ON_FAILURE", "true")
 
-        self._setup_standard_dispatch(tool_ctx, monkeypatch)
+        self._setup_standard_dispatch(tool_ctx_kitchen_open, monkeypatch)
         from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
         result = json.loads(await dispatch_food_truck(recipe="test-recipe", task="t"))
         assert "dispatch_id" in result
 
     @pytest.mark.anyio
-    async def test_dispatch_proceeds_when_no_campaign_state_path(self, tool_ctx, monkeypatch):
+    async def test_dispatch_proceeds_when_no_campaign_state_path(
+        self, tool_ctx_kitchen_open, monkeypatch
+    ):
         """Without AUTOSKILLIT_CAMPAIGN_STATE_PATH, halt check is skipped."""
         monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", raising=False)
 
-        self._setup_standard_dispatch(tool_ctx, monkeypatch)
+        self._setup_standard_dispatch(tool_ctx_kitchen_open, monkeypatch)
         from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
         result = json.loads(await dispatch_food_truck(recipe="test-recipe", task="t"))
@@ -84,7 +86,7 @@ class TestDispatchFoodTruckHaltEnforcement:
 
     @pytest.mark.anyio
     async def test_dispatch_proceeds_when_no_failures_in_state(
-        self, tool_ctx, monkeypatch, tmp_path
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path
     ):
         """dispatch_food_truck proceeds when all prior dispatches are SUCCESS."""
         state_path = tmp_path / "state.json"
@@ -92,7 +94,7 @@ class TestDispatchFoodTruckHaltEnforcement:
         monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(state_path))
         monkeypatch.setenv("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false")
 
-        self._setup_standard_dispatch(tool_ctx, monkeypatch)
+        self._setup_standard_dispatch(tool_ctx_kitchen_open, monkeypatch)
         from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
         result = json.loads(await dispatch_food_truck(recipe="test-recipe", task="t"))
@@ -100,13 +102,13 @@ class TestDispatchFoodTruckHaltEnforcement:
 
     @pytest.mark.anyio
     async def test_dispatch_proceeds_when_state_file_missing(
-        self, tool_ctx, monkeypatch, tmp_path
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path
     ):
         """If state file doesn't exist, halt check is skipped (fail-open)."""
         monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(tmp_path / "nonexistent.json"))
         monkeypatch.setenv("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false")
 
-        self._setup_standard_dispatch(tool_ctx, monkeypatch)
+        self._setup_standard_dispatch(tool_ctx_kitchen_open, monkeypatch)
         from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
         result = json.loads(await dispatch_food_truck(recipe="test-recipe", task="t"))
@@ -114,7 +116,7 @@ class TestDispatchFoodTruckHaltEnforcement:
 
     @pytest.mark.anyio
     async def test_campaign_state_write_uses_envelope_dispatch_status(
-        self, tool_ctx, monkeypatch, tmp_path
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path
     ):
         """Campaign-state write reads dispatch_status from envelope, not success flag.
 
@@ -151,7 +153,7 @@ class TestDispatchFoodTruckHaltEnforcement:
 
         from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
-        self._setup_standard_dispatch(tool_ctx, monkeypatch)
+        self._setup_standard_dispatch(tool_ctx_kitchen_open, monkeypatch)
         await dispatch_food_truck(recipe="test-recipe", task="t", dispatch_name="d1")
 
         state = read_state(state_path)
@@ -167,7 +169,7 @@ class TestDispatchFoodTruckHaltEnforcement:
 
     @pytest.mark.anyio
     async def test_no_result_block_failure_does_not_halt_campaign(
-        self, tool_ctx, monkeypatch, tmp_path
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path
     ):
         """dispatch_food_truck proceeds when prior FAILURE has fleet_l3_no_result_block reason."""
         state_path = tmp_path / "state.json"
@@ -178,7 +180,7 @@ class TestDispatchFoodTruckHaltEnforcement:
         monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(state_path))
         monkeypatch.setenv("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false")
 
-        self._setup_standard_dispatch(tool_ctx, monkeypatch)
+        self._setup_standard_dispatch(tool_ctx_kitchen_open, monkeypatch)
         from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
         result = json.loads(await dispatch_food_truck(recipe="test-recipe", task="t"))
@@ -202,7 +204,7 @@ class TestDispatchFoodTruckRetryOnFailure:
 
     @pytest.mark.anyio
     async def test_dispatch_resets_and_proceeds_when_retrying_failed_dispatch(
-        self, tool_ctx, monkeypatch, tmp_path
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path
     ):
         """dispatch_name matches failed dispatch → reset to PENDING, proceed."""
         state_path = tmp_path / "state.json"
@@ -212,7 +214,7 @@ class TestDispatchFoodTruckRetryOnFailure:
         monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(state_path))
         monkeypatch.setenv("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false")
 
-        self._setup_standard_dispatch(tool_ctx, monkeypatch)
+        self._setup_standard_dispatch(tool_ctx_kitchen_open, monkeypatch)
         from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
         result = json.loads(
@@ -222,7 +224,7 @@ class TestDispatchFoodTruckRetryOnFailure:
 
     @pytest.mark.anyio
     async def test_dispatch_halts_when_different_dispatch_has_failure(
-        self, tool_ctx, monkeypatch, tmp_path
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path
     ):
         """dispatch_name does NOT match failed dispatch → still halts."""
         state_path = tmp_path / "state.json"
@@ -232,7 +234,7 @@ class TestDispatchFoodTruckRetryOnFailure:
         monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(state_path))
         monkeypatch.setenv("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false")
 
-        self._setup_standard_dispatch(tool_ctx, monkeypatch)
+        self._setup_standard_dispatch(tool_ctx_kitchen_open, monkeypatch)
         from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
         result = json.loads(
@@ -243,7 +245,7 @@ class TestDispatchFoodTruckRetryOnFailure:
 
     @pytest.mark.anyio
     async def test_dispatch_halts_when_no_dispatch_name_provided(
-        self, tool_ctx, monkeypatch, tmp_path
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path
     ):
         """No dispatch_name + prior failure → halts (current behavior)."""
         state_path = tmp_path / "state.json"
@@ -253,7 +255,7 @@ class TestDispatchFoodTruckRetryOnFailure:
         monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(state_path))
         monkeypatch.setenv("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false")
 
-        self._setup_standard_dispatch(tool_ctx, monkeypatch)
+        self._setup_standard_dispatch(tool_ctx_kitchen_open, monkeypatch)
         from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
         result = json.loads(await dispatch_food_truck(recipe="test-recipe", task="t"))

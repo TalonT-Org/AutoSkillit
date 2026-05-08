@@ -19,7 +19,7 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 class TestBootstrapClone:
     @pytest.mark.anyio
-    async def test_bootstrap_clone_success(self, tool_ctx, tmp_path):
+    async def test_bootstrap_clone_success(self, tool_ctx_kitchen_open, tmp_path):
         """bootstrap_clone returns work_dir, remote_url, base_sha, merge_target."""
         mock_mgr = MagicMock()
         mock_mgr.clone_repo.return_value = {
@@ -27,8 +27,8 @@ class TestBootstrapClone:
             "source_dir": "/src",
             "remote_url": "https://github.com/o/r.git",
         }
-        tool_ctx.clone_mgr = mock_mgr
-        tool_ctx.runner.push(_make_result(0, "abc123def\n", ""))
+        tool_ctx_kitchen_open.clone_mgr = mock_mgr
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "abc123def\n", ""))
         result = json.loads(
             await bootstrap_clone(source_dir="/src", run_name="impl", base_branch="main")
         )
@@ -46,10 +46,10 @@ class TestBootstrapClone:
         assert result["subtype"] == "gate_error"
 
     @pytest.mark.anyio
-    async def test_bootstrap_clone_clone_failure(self, tool_ctx):
+    async def test_bootstrap_clone_clone_failure(self, tool_ctx_kitchen_open):
         mock_mgr = MagicMock()
         mock_mgr.clone_repo.side_effect = RuntimeError("disk full")
-        tool_ctx.clone_mgr = mock_mgr
+        tool_ctx_kitchen_open.clone_mgr = mock_mgr
         result = json.loads(
             await bootstrap_clone(source_dir="/src", run_name="impl", base_branch="main")
         )
@@ -57,15 +57,15 @@ class TestBootstrapClone:
         assert "disk full" in result["error"]
 
     @pytest.mark.anyio
-    async def test_bootstrap_clone_revparse_failure(self, tool_ctx, tmp_path):
+    async def test_bootstrap_clone_revparse_failure(self, tool_ctx_kitchen_open, tmp_path):
         mock_mgr = MagicMock()
         mock_mgr.clone_repo.return_value = {
             "clone_path": str(tmp_path),
             "source_dir": "/src",
             "remote_url": "url",
         }
-        tool_ctx.clone_mgr = mock_mgr
-        tool_ctx.runner.push(_make_result(128, "", "fatal: not a git repo\n"))
+        tool_ctx_kitchen_open.clone_mgr = mock_mgr
+        tool_ctx_kitchen_open.runner.push(_make_result(128, "", "fatal: not a git repo\n"))
         result = json.loads(
             await bootstrap_clone(source_dir="/src", run_name="impl", base_branch="main")
         )
@@ -73,30 +73,30 @@ class TestBootstrapClone:
         assert "rev-parse" in result["error"]
 
     @pytest.mark.anyio
-    async def test_bootstrap_clone_timing(self, tool_ctx, tmp_path):
+    async def test_bootstrap_clone_timing(self, tool_ctx_kitchen_open, tmp_path):
         mock_mgr = MagicMock()
         mock_mgr.clone_repo.return_value = {
             "clone_path": str(tmp_path),
             "source_dir": "/src",
             "remote_url": "url",
         }
-        tool_ctx.clone_mgr = mock_mgr
-        tool_ctx.runner.push(_make_result(0, "sha\n", ""))
+        tool_ctx_kitchen_open.clone_mgr = mock_mgr
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "sha\n", ""))
         await bootstrap_clone(
             source_dir="/src", run_name="impl", base_branch="main", step_name="bootstrap"
         )
-        assert_step_timed(tool_ctx.timing_log, "bootstrap")
+        assert_step_timed(tool_ctx_kitchen_open.timing_log, "bootstrap")
 
     @pytest.mark.anyio
-    async def test_bootstrap_clone_sub_timings(self, tool_ctx, tmp_path):
+    async def test_bootstrap_clone_sub_timings(self, tool_ctx_kitchen_open, tmp_path):
         mock_mgr = MagicMock()
         mock_mgr.clone_repo.return_value = {
             "clone_path": str(tmp_path),
             "source_dir": "/src",
             "remote_url": "url",
         }
-        tool_ctx.clone_mgr = mock_mgr
-        tool_ctx.runner.push(_make_result(0, "sha\n", ""))
+        tool_ctx_kitchen_open.clone_mgr = mock_mgr
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "sha\n", ""))
         result = json.loads(
             await bootstrap_clone(source_dir="/src", run_name="impl", base_branch="main")
         )
@@ -107,16 +107,18 @@ class TestBootstrapClone:
 
 class TestClaimAndResolveIssue:
     @pytest.mark.anyio
-    async def test_claim_and_resolve_issue_claimed(self, tool_ctx):
-        tool_ctx.github_client = AsyncMock()
-        tool_ctx.github_client.fetch_title = AsyncMock(
+    async def test_claim_and_resolve_issue_claimed(self, tool_ctx_kitchen_open):
+        tool_ctx_kitchen_open.github_client = AsyncMock()
+        tool_ctx_kitchen_open.github_client.fetch_title = AsyncMock(
             return_value={"success": True, "number": 42, "title": "Fix bug", "slug": "fix-bug"}
         )
-        tool_ctx.github_client.fetch_issue = AsyncMock(
+        tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(
             return_value={"success": True, "labels": []}
         )
-        tool_ctx.github_client.ensure_label = AsyncMock(return_value={"success": True})
-        tool_ctx.github_client.swap_labels = AsyncMock(return_value={"success": True})
+        tool_ctx_kitchen_open.github_client.ensure_label = AsyncMock(
+            return_value={"success": True}
+        )
+        tool_ctx_kitchen_open.github_client.swap_labels = AsyncMock(return_value={"success": True})
         result = json.loads(await claim_and_resolve_issue(issue_url="owner/repo#42"))
         assert result["claimed"] is True
         assert result["issue_number"] == 42
@@ -124,12 +126,12 @@ class TestClaimAndResolveIssue:
         assert result["issue_slug"] == "fix-bug"
 
     @pytest.mark.anyio
-    async def test_claim_and_resolve_issue_already_claimed(self, tool_ctx):
-        tool_ctx.github_client = AsyncMock()
-        tool_ctx.github_client.fetch_title = AsyncMock(
+    async def test_claim_and_resolve_issue_already_claimed(self, tool_ctx_kitchen_open):
+        tool_ctx_kitchen_open.github_client = AsyncMock()
+        tool_ctx_kitchen_open.github_client.fetch_title = AsyncMock(
             return_value={"success": True, "number": 42, "title": "Fix bug", "slug": "fix-bug"}
         )
-        tool_ctx.github_client.fetch_issue = AsyncMock(
+        tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(
             return_value={
                 "success": True,
                 "labels": [{"name": "in-progress"}],
@@ -142,12 +144,12 @@ class TestClaimAndResolveIssue:
         assert result["issue_slug"] == "fix-bug"
 
     @pytest.mark.anyio
-    async def test_claim_and_resolve_issue_reentry(self, tool_ctx):
-        tool_ctx.github_client = AsyncMock()
-        tool_ctx.github_client.fetch_title = AsyncMock(
+    async def test_claim_and_resolve_issue_reentry(self, tool_ctx_kitchen_open):
+        tool_ctx_kitchen_open.github_client = AsyncMock()
+        tool_ctx_kitchen_open.github_client.fetch_title = AsyncMock(
             return_value={"success": True, "number": 42, "title": "Fix bug", "slug": "fix-bug"}
         )
-        tool_ctx.github_client.fetch_issue = AsyncMock(
+        tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(
             return_value={
                 "success": True,
                 "labels": [{"name": "in-progress"}],
@@ -160,9 +162,9 @@ class TestClaimAndResolveIssue:
         assert result["reentry"] is True
 
     @pytest.mark.anyio
-    async def test_claim_and_resolve_issue_title_failure(self, tool_ctx):
-        tool_ctx.github_client = AsyncMock()
-        tool_ctx.github_client.fetch_title = AsyncMock(
+    async def test_claim_and_resolve_issue_title_failure(self, tool_ctx_kitchen_open):
+        tool_ctx_kitchen_open.github_client = AsyncMock()
+        tool_ctx_kitchen_open.github_client.fetch_title = AsyncMock(
             return_value={"success": False, "error": "not found"}
         )
         result = json.loads(await claim_and_resolve_issue(issue_url="owner/repo#42"))
@@ -176,16 +178,18 @@ class TestClaimAndResolveIssue:
         assert result["subtype"] == "gate_error"
 
     @pytest.mark.anyio
-    async def test_claim_and_resolve_issue_timings(self, tool_ctx):
-        tool_ctx.github_client = AsyncMock()
-        tool_ctx.github_client.fetch_title = AsyncMock(
+    async def test_claim_and_resolve_issue_timings(self, tool_ctx_kitchen_open):
+        tool_ctx_kitchen_open.github_client = AsyncMock()
+        tool_ctx_kitchen_open.github_client.fetch_title = AsyncMock(
             return_value={"success": True, "number": 42, "title": "X", "slug": "x"}
         )
-        tool_ctx.github_client.fetch_issue = AsyncMock(
+        tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(
             return_value={"success": True, "labels": []}
         )
-        tool_ctx.github_client.ensure_label = AsyncMock(return_value={"success": True})
-        tool_ctx.github_client.swap_labels = AsyncMock(return_value={"success": True})
+        tool_ctx_kitchen_open.github_client.ensure_label = AsyncMock(
+            return_value={"success": True}
+        )
+        tool_ctx_kitchen_open.github_client.swap_labels = AsyncMock(return_value={"success": True})
         result = json.loads(await claim_and_resolve_issue(issue_url="owner/repo#42"))
         assert "timings" in result
         assert "fetch_title_ms" in result["timings"]
@@ -194,16 +198,16 @@ class TestClaimAndResolveIssue:
 
 class TestCreateAndPublishBranch:
     @pytest.mark.anyio
-    async def test_create_and_publish_branch_success(self, tool_ctx, tmp_path):
+    async def test_create_and_publish_branch_success(self, tool_ctx_kitchen_open, tmp_path):
         # ls-remote: empty (branch available)
-        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
         # branch --show-current
-        tool_ctx.runner.push(_make_result(0, "main\n", ""))
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "main\n", ""))
         # git checkout -b
-        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
         mock_mgr = MagicMock()
         mock_mgr.push_to_remote.return_value = {"success": True, "stderr": ""}
-        tool_ctx.clone_mgr = mock_mgr
+        tool_ctx_kitchen_open.clone_mgr = mock_mgr
         result = json.loads(
             await create_and_publish_branch(
                 issue_slug="fix-bug",
@@ -216,18 +220,18 @@ class TestCreateAndPublishBranch:
         assert result["merge_target"] == "fix-bug/42"
 
     @pytest.mark.anyio
-    async def test_create_and_publish_branch_collision(self, tool_ctx, tmp_path):
+    async def test_create_and_publish_branch_collision(self, tool_ctx_kitchen_open, tmp_path):
         # ls-remote: branch exists
-        tool_ctx.runner.push(_make_result(0, "abc123\trefs/heads/fix-bug/42\n", ""))
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "abc123\trefs/heads/fix-bug/42\n", ""))
         # ls-remote: suffix -2 is free
-        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
         # branch --show-current
-        tool_ctx.runner.push(_make_result(0, "main\n", ""))
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "main\n", ""))
         # git checkout -b
-        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
         mock_mgr = MagicMock()
         mock_mgr.push_to_remote.return_value = {"success": True, "stderr": ""}
-        tool_ctx.clone_mgr = mock_mgr
+        tool_ctx_kitchen_open.clone_mgr = mock_mgr
         result = json.loads(
             await create_and_publish_branch(
                 issue_slug="fix-bug",
@@ -240,17 +244,17 @@ class TestCreateAndPublishBranch:
         assert result["merge_target"] == "fix-bug/42-2"
 
     @pytest.mark.anyio
-    async def test_create_and_publish_branch_push_failure(self, tool_ctx, tmp_path):
-        tool_ctx.runner.push(_make_result(0, "", ""))
-        tool_ctx.runner.push(_make_result(0, "main\n", ""))
-        tool_ctx.runner.push(_make_result(0, "", ""))
+    async def test_create_and_publish_branch_push_failure(self, tool_ctx_kitchen_open, tmp_path):
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "main\n", ""))
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
         mock_mgr = MagicMock()
         mock_mgr.push_to_remote.return_value = {
             "success": False,
             "stderr": "rejected",
             "error_type": "",
         }
-        tool_ctx.clone_mgr = mock_mgr
+        tool_ctx_kitchen_open.clone_mgr = mock_mgr
         result = json.loads(
             await create_and_publish_branch(
                 issue_slug="fix-bug",
@@ -277,13 +281,13 @@ class TestCreateAndPublishBranch:
         assert result["subtype"] == "gate_error"
 
     @pytest.mark.anyio
-    async def test_create_and_publish_branch_no_issue(self, tool_ctx, tmp_path):
-        tool_ctx.runner.push(_make_result(0, "", ""))
-        tool_ctx.runner.push(_make_result(0, "main\n", ""))
-        tool_ctx.runner.push(_make_result(0, "", ""))
+    async def test_create_and_publish_branch_no_issue(self, tool_ctx_kitchen_open, tmp_path):
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "main\n", ""))
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
         mock_mgr = MagicMock()
         mock_mgr.push_to_remote.return_value = {"success": True, "stderr": ""}
-        tool_ctx.clone_mgr = mock_mgr
+        tool_ctx_kitchen_open.clone_mgr = mock_mgr
         result = json.loads(
             await create_and_publish_branch(
                 issue_slug="",
@@ -297,13 +301,13 @@ class TestCreateAndPublishBranch:
         assert result["merge_target"].startswith("impl/")
 
     @pytest.mark.anyio
-    async def test_create_and_publish_branch_timings(self, tool_ctx, tmp_path):
-        tool_ctx.runner.push(_make_result(0, "", ""))
-        tool_ctx.runner.push(_make_result(0, "main\n", ""))
-        tool_ctx.runner.push(_make_result(0, "", ""))
+    async def test_create_and_publish_branch_timings(self, tool_ctx_kitchen_open, tmp_path):
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "main\n", ""))
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
         mock_mgr = MagicMock()
         mock_mgr.push_to_remote.return_value = {"success": True, "stderr": ""}
-        tool_ctx.clone_mgr = mock_mgr
+        tool_ctx_kitchen_open.clone_mgr = mock_mgr
         result = json.loads(
             await create_and_publish_branch(
                 issue_slug="x",

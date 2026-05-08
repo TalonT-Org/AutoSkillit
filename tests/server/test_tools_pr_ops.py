@@ -133,7 +133,9 @@ async def test_get_pr_reviews_gate_closed(tool_ctx) -> None:
 
 
 @pytest.mark.anyio
-async def test_get_pr_reviews_with_repo_success(tool_ctx, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_get_pr_reviews_with_repo_success(
+    tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """repo provided → gh api repos/{repo}/pulls/123/reviews path used."""
     api_response = json.dumps([{"user": {"login": "alice"}, "state": "APPROVED", "body": ""}])
     with patch(
@@ -148,7 +150,7 @@ async def test_get_pr_reviews_with_repo_success(tool_ctx, monkeypatch: pytest.Mo
 
 @pytest.mark.anyio
 async def test_get_pr_reviews_without_repo_success(
-    tool_ctx, monkeypatch: pytest.MonkeyPatch
+    tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """repo='' → gh pr view 123 --json reviews path used."""
     pr_view_response = json.dumps(
@@ -164,7 +166,9 @@ async def test_get_pr_reviews_without_repo_success(
 
 
 @pytest.mark.anyio
-async def test_get_pr_reviews_gh_failure(tool_ctx, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_get_pr_reviews_gh_failure(
+    tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """gh returns rc=1 → {"success": False, "error": ...}."""
     with patch(
         "autoskillit.server.tools.tools_pr_ops._run_subprocess",
@@ -186,7 +190,9 @@ async def test_bulk_close_issues_gate_closed(tool_ctx) -> None:
 
 
 @pytest.mark.anyio
-async def test_bulk_close_issues_all_closed(tool_ctx, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_bulk_close_issues_all_closed(
+    tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """All succeed → {"closed": [1, 2, 3], "failed": []}."""
     with patch(
         "autoskillit.server.tools.tools_pr_ops._run_subprocess",
@@ -204,7 +210,7 @@ async def test_bulk_close_issues_all_closed(tool_ctx, monkeypatch: pytest.Monkey
 
 @pytest.mark.anyio
 async def test_bulk_close_issues_partial_failure(
-    tool_ctx, monkeypatch: pytest.MonkeyPatch
+    tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Mixed outcomes → correct closed/failed split."""
     call_count = {"n": 0}

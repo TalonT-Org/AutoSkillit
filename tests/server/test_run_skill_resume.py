@@ -12,13 +12,13 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 @pytest.mark.anyio
-async def test_resume_session_id_threaded_to_executor(tool_ctx, monkeypatch) -> None:
+async def test_resume_session_id_threaded_to_executor(tool_ctx_kitchen_open, monkeypatch) -> None:
     """resume_session_id flows from run_skill → executor.run()."""
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
-    tool_ctx.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+    tool_ctx_kitchen_open.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
     await run_skill("/implement foo", "/tmp", resume_session_id="sess-123")
 
@@ -27,13 +27,13 @@ async def test_resume_session_id_threaded_to_executor(tool_ctx, monkeypatch) -> 
 
 
 @pytest.mark.anyio
-async def test_resume_skips_skill_command_validation(tool_ctx, monkeypatch) -> None:
+async def test_resume_skips_skill_command_validation(tool_ctx_kitchen_open, monkeypatch) -> None:
     """When resume_session_id is set, non-slash skill_command is allowed."""
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
-    tool_ctx.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+    tool_ctx_kitchen_open.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
     result = await run_skill(
         "Continue from where you left off",
@@ -45,9 +45,9 @@ async def test_resume_skips_skill_command_validation(tool_ctx, monkeypatch) -> N
 
 
 @pytest.mark.anyio
-async def test_no_resume_still_validates_skill_command(tool_ctx, monkeypatch) -> None:
+async def test_no_resume_still_validates_skill_command(tool_ctx_kitchen_open, monkeypatch) -> None:
     """Without resume_session_id, non-slash skill_command is still rejected."""
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
     result = await run_skill("Continue from where you left off", "/tmp")
     data = json.loads(result)

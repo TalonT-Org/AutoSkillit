@@ -14,12 +14,12 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 class TestReleaseIssueFailLabel:
     @pytest.mark.anyio
-    async def test_release_issue_fail_label_swap(self, tool_ctx, monkeypatch):
+    async def test_release_issue_fail_label_swap(self, tool_ctx_kitchen_open, monkeypatch):
         """fail_label swaps in-progress for fail label."""
         mock_client = AsyncMock()
         mock_client.ensure_label.return_value = {"success": True, "created": True}
         mock_client.swap_labels.return_value = {"success": True, "labels": ["fail"]}
-        monkeypatch.setattr(tool_ctx, "github_client", mock_client)
+        monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", mock_client)
 
         result = json.loads(
             await release_issue(
@@ -41,12 +41,14 @@ class TestReleaseIssueFailLabel:
         )
 
     @pytest.mark.anyio
-    async def test_release_issue_success_removes_fail_label(self, tool_ctx, monkeypatch):
+    async def test_release_issue_success_removes_fail_label(
+        self, tool_ctx_kitchen_open, monkeypatch
+    ):
         """Staging path includes fail label in remove_labels for cleanup."""
         mock_client = AsyncMock()
         mock_client.ensure_label.return_value = {"success": True, "created": True}
         mock_client.swap_labels.return_value = {"success": True, "labels": ["staged"]}
-        monkeypatch.setattr(tool_ctx, "github_client", mock_client)
+        monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", mock_client)
 
         result = json.loads(
             await release_issue(
@@ -63,11 +65,13 @@ class TestReleaseIssueFailLabel:
         assert "staged" in swap_call.kwargs["add_labels"]
 
     @pytest.mark.anyio
-    async def test_release_issue_simple_remove_cleans_fail_label(self, tool_ctx, monkeypatch):
+    async def test_release_issue_simple_remove_cleans_fail_label(
+        self, tool_ctx_kitchen_open, monkeypatch
+    ):
         """Simple release (no staging, no fail_label) also removes fail label."""
         mock_client = AsyncMock()
         mock_client.swap_labels.return_value = {"success": True, "labels": []}
-        monkeypatch.setattr(tool_ctx, "github_client", mock_client)
+        monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", mock_client)
 
         result = json.loads(
             await release_issue(
@@ -83,7 +87,9 @@ class TestReleaseIssueFailLabel:
 
 class TestClaimIssueFailLabelCleanup:
     @pytest.mark.anyio
-    async def test_claim_issue_removes_fail_label_on_claim(self, tool_ctx, monkeypatch):
+    async def test_claim_issue_removes_fail_label_on_claim(
+        self, tool_ctx_kitchen_open, monkeypatch
+    ):
         """claim_issue uses swap_labels to remove fail label while adding in-progress."""
         mock_client = AsyncMock()
         mock_client.fetch_issue.return_value = {
@@ -95,7 +101,7 @@ class TestClaimIssueFailLabelCleanup:
             "success": True,
             "labels": ["in-progress"],
         }
-        monkeypatch.setattr(tool_ctx, "github_client", mock_client)
+        monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", mock_client)
 
         result = json.loads(
             await claim_issue(

@@ -19,7 +19,7 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 @pytest.mark.anyio
-async def test_check_repo_merge_state_uses_token_factory(tool_ctx, monkeypatch):
+async def test_check_repo_merge_state_uses_token_factory(tool_ctx_kitchen_open, monkeypatch):
     """check_repo_merge_state calls token_factory() when set, not config.github.token."""
     resolved_calls = []
 
@@ -27,8 +27,8 @@ async def test_check_repo_merge_state_uses_token_factory(tool_ctx, monkeypatch):
         resolved_calls.append(1)
         return "factory-token"
 
-    tool_ctx.token_factory = factory
-    tool_ctx.config.github.token = "config-token"
+    tool_ctx_kitchen_open.token_factory = factory
+    tool_ctx_kitchen_open.config.github.token = "config-token"
 
     captured_tokens = []
 
@@ -54,11 +54,11 @@ async def test_check_repo_merge_state_uses_token_factory(tool_ctx, monkeypatch):
 
 @pytest.mark.anyio
 async def test_check_repo_merge_state_falls_back_to_config_token_when_no_factory(
-    tool_ctx, monkeypatch
+    tool_ctx_kitchen_open, monkeypatch
 ):
     """When token_factory is None, config.github.token is used."""
-    tool_ctx.token_factory = None
-    tool_ctx.config.github.token = "config-token"
+    tool_ctx_kitchen_open.token_factory = None
+    tool_ctx_kitchen_open.config.github.token = "config-token"
 
     captured_tokens = []
 
@@ -82,7 +82,9 @@ async def test_check_repo_merge_state_falls_back_to_config_token_when_no_factory
 
 
 @pytest.mark.anyio
-async def test_check_repo_merge_state_error_includes_http_status(tool_ctx, monkeypatch):
+async def test_check_repo_merge_state_error_includes_http_status(
+    tool_ctx_kitchen_open, monkeypatch
+):
     """HTTP error response envelope contains http_status field."""
 
     async def fake_fetch(owner, repo, branch, token):

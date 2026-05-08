@@ -26,15 +26,15 @@ Never rely on inverse method calls for cleanup.
   `make_context()` — a full-stack L3 fixture that imports all production layers. Use for
   server integration tests that need executor, tester, recipes, or other service fields.
   It monkeypatches `server._ctx` so all server tool handler calls use the test context
-  without global state leakage.
+  without global state leakage. Gate starts closed (matching production) — use
+  `tool_ctx_kitchen_open` when a test needs the gate open.
 - The `minimal_ctx` fixture (conftest.py) provides a lightweight `ToolContext` using only
   L0+L1 imports (core, pipeline, config). Use for tests that only need gate, audit,
   token_log, timing_log, or config — no server factory, no L2/L3 service wiring. Does NOT
-  monkeypatch `server._state._ctx`. Guard tests in `test_conftest.py` enforce the import
-  boundary via AST analysis.
-- To test with the kitchen closed, set `ctx.gate = DefaultGateState(enabled=False)` at
-  the start of the test or in a class-level autouse fixture (see `_close_kitchen` in
-  `test_instruction_surface.py` for an example).
+  monkeypatch `server._state._ctx`. Gate starts closed (matching production). Guard tests
+  in `test_conftest.py` enforce the import boundary via AST analysis.
+- Both `tool_ctx` and `minimal_ctx` start with gate closed to match production behavior.
+  Use `tool_ctx_kitchen_open` or `build_ctx_open` for tests that need an open gate.
 - Never use bare assignment or `try/finally` to restore server state — use `monkeypatch` or
   rely on the fixture's teardown.
 

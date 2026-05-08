@@ -142,7 +142,7 @@ def build_ctx(tmp_path):
             audit=DefaultAuditLog(),
             token_log=DefaultTokenLog(),
             timing_log=DefaultTimingLog(),
-            gate=DefaultGateState(enabled=True),
+            gate=DefaultGateState(enabled=False),
             plugin_source=DirectInstall(plugin_dir=tmp_path),
             runner=None,
             temp_dir=tmp_path / ".autoskillit" / "temp",
@@ -153,3 +153,13 @@ def build_ctx(tmp_path):
         return ctx
 
     return _factory
+
+
+@pytest.fixture
+def build_ctx_open(build_ctx):
+    """build_ctx variant with gate open."""
+    from autoskillit.pipeline.gate import DefaultGateState
+
+    ctx = build_ctx()
+    ctx.gate = DefaultGateState(enabled=True)
+    return ctx

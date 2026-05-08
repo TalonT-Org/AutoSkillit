@@ -216,7 +216,7 @@ class GateRecordResult:
 class DispatchRejected:
     """Pre-validation or infrastructure rejection — no subprocess was launched."""
 
-    error_code: str
+    error_code: FleetErrorCode
     message: str
     details: dict[str, Any] | None = None
 

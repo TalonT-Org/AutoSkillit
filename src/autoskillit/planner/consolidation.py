@@ -18,7 +18,7 @@ _FALLBACK_MIN_WPS = 5
 _FALLBACK_MAX_GROUP_SIZE = 5
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _ConsolidationGroup:
     merged_id: str
     source_wp_ids: list[str]

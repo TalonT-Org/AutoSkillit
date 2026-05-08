@@ -11,14 +11,14 @@ from pathlib import Path
 __all__ = ["DirectInstall", "MarketplaceInstall", "PluginSource"]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DirectInstall:
     """Plugin loaded via --plugin-dir. plugin_dir is the package root (pkg_root())."""
 
     plugin_dir: Path
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class MarketplaceInstall:
     """Plugin loaded via Claude marketplace.
 

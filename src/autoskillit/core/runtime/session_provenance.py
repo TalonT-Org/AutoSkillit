@@ -10,7 +10,7 @@ from pathlib import Path
 from .._json import fast_dumps as _fast_dumps
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ProvenanceRecord:
     """Immutable ownership tuple written when a food truck session is dispatched."""
 

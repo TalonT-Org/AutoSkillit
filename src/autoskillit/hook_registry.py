@@ -16,7 +16,7 @@ from typing import Literal, NamedTuple
 from autoskillit.core import DIRECT_INSTALL_CACHE_SUBDIR, pkg_root
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class HookDef:
     """A single hook group: event type, matcher pattern, and ordered script list."""
 

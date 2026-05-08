@@ -104,7 +104,7 @@ def _ensure_origin_isolated(clone_path: Path, known_url: str) -> None:
         _add_or_set_upstream(clone_path, known_url)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CloneSourceResolution:
     """Result of probing a source directory for its clone-source remote URL.
 

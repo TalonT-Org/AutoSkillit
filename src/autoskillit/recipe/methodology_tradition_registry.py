@@ -14,7 +14,7 @@ logger = get_logger(__name__)
 BUNDLED_METHODOLOGY_TRADITIONS_DIR: Path = pkg_root() / "recipes" / "methodology-traditions"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class VenueAppendixDef:
     """A venue-specific appendix entry for an ML sub-area within a tradition."""
 
@@ -23,7 +23,7 @@ class VenueAppendixDef:
     expectations: tuple[dict[str, str], ...]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class MethodologyTraditionSpec:
     """Specification for a single methodology tradition."""
 

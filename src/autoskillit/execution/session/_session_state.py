@@ -23,7 +23,7 @@ _LOCK_FILENAME = "dispatch_session_state.lock"
 _FD_CLOSED = -1
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SessionState:
     session_id: str
     pid: int

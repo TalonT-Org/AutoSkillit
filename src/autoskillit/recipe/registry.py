@@ -37,7 +37,7 @@ class RuleFinding:
         }
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RuleDef:
     """Static definition of a registered semantic rule."""
 
@@ -50,7 +50,7 @@ class RuleDef:
 _RULE_REGISTRY: list[RuleDef] = []
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class BlockContext:
     """Per-block dispatch context for block-level semantic rules.
 
@@ -63,7 +63,7 @@ class BlockContext:
     parent: ValidationContext
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class BlockRuleDef:
     """Static definition of a registered block-level semantic rule."""
 

@@ -65,7 +65,7 @@ if set(_QUERY_FIELD_MAP) != _ALL_FETCH_STATE_KEYS:
     )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ClassificationResult:
     """Positive-signal classification outcome from _classify_pr_state."""
 

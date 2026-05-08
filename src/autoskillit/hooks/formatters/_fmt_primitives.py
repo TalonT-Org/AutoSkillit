@@ -16,12 +16,12 @@ from typing import Any
 _HOOK_CONFIG_PATH_COMPONENTS = (".autoskillit", "temp", ".hook_config.json")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _DictPayload:
     data: dict[str, Any]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _PlainTextPayload:
     text: str
 

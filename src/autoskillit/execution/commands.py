@@ -30,7 +30,7 @@ from autoskillit.core import (
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ClaudeInteractiveCmd:
     """Resolved argv + env for a claude interactive subprocess.
 
@@ -44,7 +44,7 @@ class ClaudeInteractiveCmd:
     env: Mapping[str, str] = field(default_factory=dict)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ClaudeHeadlessCmd:
     """Resolved argv + env for a claude headless subprocess.
 

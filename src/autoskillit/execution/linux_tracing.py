@@ -69,7 +69,7 @@ class TraceTargetResolutionError(RuntimeError):
         )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TraceTarget:
     """Workload process identity with provenance — the correct target for the tracer.
 
@@ -189,7 +189,7 @@ def trace_target_from_pid(pid: int) -> TraceTarget:
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TraceEnrollmentRecord:
     """Identity triple written atomically at trace-open time.
 
@@ -252,7 +252,7 @@ def read_enrollment(path: Path) -> TraceEnrollmentRecord | None:
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ProcSnapshot:
     """Point-in-time snapshot of process state.
 

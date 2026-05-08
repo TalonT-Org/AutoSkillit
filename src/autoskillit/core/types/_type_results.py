@@ -69,7 +69,7 @@ class LoadResult(Generic[T]):
     errors: list[LoadReport] = field(default_factory=list)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ValidatedAddDir:
     """An --add-dir path validated for Claude Code convention compliance.
 
@@ -103,7 +103,7 @@ class ValidatedAddDir:
         return list(Path(self.path).glob(pattern))
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class WriteBehaviorSpec:
     """Write-expectation metadata resolved from skill contracts.
 
@@ -141,7 +141,7 @@ class FailureRecord:
         return asdict(self)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ProviderOutcome:
     """Typed bundle of provider execution outcome fields.
 
@@ -158,7 +158,7 @@ class ProviderOutcome:
         return cls(provider_used="", fallback_activated=False)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class InfraOutcome:
     """Infrastructure exit classification bundle."""
 

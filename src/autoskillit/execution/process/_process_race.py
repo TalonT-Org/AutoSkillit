@@ -21,7 +21,7 @@ from autoskillit.execution.process._process_monitor import (
 logger = get_logger(__name__)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RaceSignals:
     """Accumulated signals produced by the anyio task group race in run_managed_async.
 

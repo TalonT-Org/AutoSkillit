@@ -14,7 +14,7 @@ from autoskillit.recipe.methodology_tradition_registry import (
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class UnionRuleDef:
     """Resolves multi-match ambiguity when candidate_set ⊆ member_traditions."""
 
@@ -31,7 +31,7 @@ class UnionRuleDef:
             )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TraditionRouterResult:
     """Result from two-stage methodology classification."""
 

@@ -52,7 +52,7 @@ class TestFailureRecord:
         d = record.to_dict()
         assert json.loads(json.dumps(d)) == d
 
-    def test_to_dict_contains_all_fields(self):
+    def test_to_dict_contains_all_fields(self) -> None:
         record = _make_record(
             timestamp="2026-01-01T00:00:00",
             skill_command="/foo",

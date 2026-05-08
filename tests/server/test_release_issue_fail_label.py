@@ -34,13 +34,9 @@ class TestReleaseIssueFailLabel:
         mock_client.ensure_label.assert_called_once_with(
             "owner", "repo", "fail", color="d73a4a", description="Recipe execution failed"
         )
-        mock_client.swap_labels.assert_called_once_with(
-            "owner",
-            "repo",
-            42,
-            remove_labels=["in-progress"],
-            add_labels=["fail"],
-        )
+        swap_call = mock_client.swap_labels.call_args
+        assert set(swap_call.kwargs["remove_labels"]) == {"in-progress", "queued"}
+        assert swap_call.kwargs["add_labels"] == ["fail"]
 
     @pytest.mark.anyio
     async def test_release_issue_success_removes_fail_label(

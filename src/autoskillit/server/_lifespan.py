@@ -216,7 +216,6 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
     AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS is set. No-ops for interactive
     ORCHESTRATOR sessions (open_kitchen handles the gate there).
     """
-    import os as _os
     from pathlib import Path
     from uuid import uuid4
 
@@ -233,14 +232,14 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
     )
     from autoskillit.server.tools.tools_kitchen import _write_hook_config
 
-    if _os.environ.get(HEADLESS_ENV_VAR) != "1":
+    if os.environ.get(HEADLESS_ENV_VAR) != "1":
         return
-    _raw_tags = _os.environ.get(FOOD_TRUCK_TOOL_TAGS_ENV_VAR, "")
+    _raw_tags = os.environ.get(FOOD_TRUCK_TOOL_TAGS_ENV_VAR, "")
     if not _raw_tags:
         return
 
     _packs = frozenset(p.strip() for p in _raw_tags.split(",") if p.strip())
-    ctx.kitchen_id = _os.environ.get(CAMPAIGN_ID_ENV_VAR) or str(uuid4())
+    ctx.kitchen_id = os.environ.get(CAMPAIGN_ID_ENV_VAR) or str(uuid4())
     ctx.active_recipe_packs = _packs
     ctx.active_recipe_features = frozenset()
 
@@ -278,15 +277,16 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
         logger.warning("food_truck_auto_gate_boot_quota_cache_failed", exc_info=True)
 
     try:
-        ctx.quota_refresh_task = create_background_task(
-            _quota_refresh_loop(ctx.config.quota_guard),
-            label="quota_refresh_loop",
-        )
+        if ctx.config is not None:
+            ctx.quota_refresh_task = create_background_task(
+                _quota_refresh_loop(ctx.config.quota_guard),
+                label="quota_refresh_loop",
+            )
     except Exception:
         logger.warning("food_truck_auto_gate_boot_refresh_loop_failed", exc_info=True)
 
     try:
-        register_active_kitchen(ctx.kitchen_id, _os.getpid(), str(Path.cwd()))
+        register_active_kitchen(ctx.kitchen_id, os.getpid(), str(Path.cwd()))
     except Exception:
         logger.warning("food_truck_auto_gate_boot_registry_failed", exc_info=True)
 

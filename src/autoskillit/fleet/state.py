@@ -105,6 +105,8 @@ def _clear_dispatch_for_retry(d: DispatchRecord) -> None:
     d.started_at = 0.0
     d.ended_at = 0.0
     d.sidecar_path = None
+    d.kill_reason = ""
+    d.infra_exit_category = ""
 
 
 def reset_failed_dispatch(state_path: Path, dispatch_name: str) -> bool:

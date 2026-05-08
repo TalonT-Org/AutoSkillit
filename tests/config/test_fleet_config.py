@@ -209,6 +209,13 @@ class TestFleetConfig:
         with pytest.raises(ValueError, match="max_extension_seconds must be positive"):
             FleetConfig(max_extension_seconds=-1).validate(feature_enabled=True)
 
+    def test_fleet_config_rejects_negative_idle_output_timeout(self) -> None:
+        """FleetConfig raises ValueError when idle_output_timeout is negative."""
+        from autoskillit.config.settings import FleetConfig
+
+        with pytest.raises(ValueError, match="idle_output_timeout must be non-negative"):
+            FleetConfig(idle_output_timeout=-1).validate(feature_enabled=True)
+
 
 def test_config_resolution_fleet_enabled_via_experimental(tmp_path) -> None:
     """Full config resolution enables fleet when experimental_enabled=True in project config."""

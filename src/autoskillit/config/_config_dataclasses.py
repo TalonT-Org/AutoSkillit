@@ -330,6 +330,10 @@ class FleetConfig:
             raise ValueError(
                 f"max_extension_seconds must be positive, got {self.max_extension_seconds}"
             )
+        if self.idle_output_timeout < 0:
+            raise ValueError(
+                f"idle_output_timeout must be non-negative, got {self.idle_output_timeout}"
+            )
 
 
 @dataclass

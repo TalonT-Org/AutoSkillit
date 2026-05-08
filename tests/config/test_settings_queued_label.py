@@ -18,7 +18,7 @@ class TestQueuedLabelField:
         cfg = GitHubConfig()
         assert cfg.queued_label == "queued"
 
-    def test_loads_from_env_var(self, monkeypatch, tmp_path):
+    def test_loads_from_env_var(self, monkeypatch):
         """queued_label is loaded from AUTOSKILLIT_GITHUB__QUEUED_LABEL env var."""
         monkeypatch.setenv("AUTOSKILLIT_GITHUB__QUEUED_LABEL", "waiting")
         d = _make_dynaconf()

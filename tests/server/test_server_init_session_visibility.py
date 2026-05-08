@@ -652,6 +652,7 @@ class TestFoodTruckAutoGateBoot:
         tool_ctx.executor = InMemoryHeadlessExecutor()
         tool_ctx.quota_refresh_task = None
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
         monkeypatch.setenv(FOOD_TRUCK_TOOL_TAGS_ENV_VAR, "kitchen-core")
 
         with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):

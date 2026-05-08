@@ -134,6 +134,7 @@ BUNDLED_SKILLS = [
     "triage-issues",
     "troubleshoot-experiment",
     "validate-audit",
+    "validate-review-decisions",
     "verify-diag",
     "vis-lens-always-on",
     "vis-lens-antipattern",
@@ -198,6 +199,7 @@ AUDIT_SKILL_NAMES = [
     "audit-defense-standards",
     "validate-audit",
     "validate-test-audit",
+    "validate-review-decisions",
     "audit-docs",
     "audit-review-decisions",
 ]

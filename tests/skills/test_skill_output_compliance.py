@@ -335,6 +335,7 @@ PATH_CAPTURE_SKILLS: dict[str, list[str]] = {
     "planner-validate-task-alignment": ["alignment_findings_path"],
     "audit-tests": ["audit_report_path"],
     "validate-audit": ["validated_report_path"],
+    "validate-review-decisions": ["validated_report_path"],
     "bundle-local-report": ["html_path"],
 }
 

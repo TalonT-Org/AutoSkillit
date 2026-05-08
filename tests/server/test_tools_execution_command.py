@@ -24,7 +24,7 @@ class TestRunSkillPluginDir:
 
     @pytest.mark.anyio
     async def test_run_skill_passes_plugin_dir(self, tool_ctx_kitchen_open):
-        """run_skill includes --plugin-dir and the plugin_dir from tool_ctx_kitchen_open in the command."""
+        """T2: run_skill passes --plugin-dir to the claude command."""
         tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx_kitchen_open.runner.push(
             _make_result(

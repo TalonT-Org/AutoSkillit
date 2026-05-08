@@ -136,7 +136,7 @@ steps:
         3. run_skill(skill_command="/autoskillit:validate-audit {arch_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_arch")
         4. run_skill(skill_command="/autoskillit:validate-audit {feature_gates_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_feature_gates")
         5. run_skill(skill_command="/autoskillit:validate-audit {docs_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_docs")
-        6. run_skill(skill_command="/autoskillit:validate-audit {review_decisions_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_review_decisions")
+        6. run_skill(skill_command="/autoskillit:validate-review-decisions {review_decisions_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_review_decisions")
 
       Apply the same prefer-completion scheduling as run_audits — maintain up
       to ${{ inputs.max_parallel }} concurrent slots across validations. As each

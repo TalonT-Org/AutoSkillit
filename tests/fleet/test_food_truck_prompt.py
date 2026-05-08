@@ -65,5 +65,5 @@ def test_fleet_prompt_contains_missing_on_failure_sentinel():
         campaign_id="test-campaign",
         l3_timeout_sec=300,
     )
-    assert "missing_on_failure" in prompt
-    assert "recipe authoring error" in prompt
+    assert "recipe authoring error. Emit the sentinel block with success=false" in prompt
+    assert 'reason="missing_on_failure"' in prompt

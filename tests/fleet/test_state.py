@@ -1033,26 +1033,6 @@ class TestUpdateOrchestratorSessionId:
 class TestClassifyStaleDispatch:
     """Tests for classify_stale_dispatch covering OSError and kill_reason branches."""
 
-    def test_sidecar_vanished_during_read_returns_interrupted(self, tmp_path: Path) -> None:
-        """OSError while reading sidecar causes fallback to INTERRUPTED."""
-        sidecar = tmp_path / "sidecar.jsonl"
-        sidecar.write_text("")
-        record = DispatchRecord(
-            name="d1",
-            status=DispatchStatus.RUNNING,
-            sidecar_path=str(sidecar),
-        )
-        with patch("builtins.open", side_effect=OSError("vanished")):
-            with patch.object(sidecar, "exists", return_value=True):
-                with patch("autoskillit.fleet.state_recovery.Path.exists", return_value=True):
-                    with patch(
-                        "autoskillit.fleet.state_recovery.Path.read_text",
-                        side_effect=OSError("vanished"),
-                    ):
-                        status, sidecar_path_out = classify_stale_dispatch(record)
-        assert status == DispatchStatus.INTERRUPTED
-        assert sidecar_path_out == ""
-
     def test_sidecar_oserror_falls_back_to_interrupted(self, tmp_path: Path) -> None:
         """classify_stale_dispatch returns INTERRUPTED when sidecar.read_text raises OSError."""
         sidecar = tmp_path / "sidecar.jsonl"
@@ -1063,7 +1043,7 @@ class TestClassifyStaleDispatch:
             sidecar_path=str(sidecar),
             kill_reason="idle_stall",
         )
-        with patch("pathlib.Path.read_text", side_effect=OSError("io error")):
+        with patch("pathlib.Path.read_text", side_effect=OSError("vanished")):
             status, sidecar_path_out = classify_stale_dispatch(record)
         assert status == DispatchStatus.INTERRUPTED
         assert sidecar_path_out == ""
@@ -1071,7 +1051,7 @@ class TestClassifyStaleDispatch:
     def test_context_exhausted_kill_reason_returns_interrupted(self, tmp_path: Path) -> None:
         """kill_reason=resume + infra_exit_category=context_exhausted → INTERRUPTED."""
         sidecar = tmp_path / "sidecar.jsonl"
-        sidecar.write_text("")
+        sidecar.write_text("")  # empty sidecar → raw_lines=[] → not raw_lines=True
         record = DispatchRecord(
             name="d1",
             status=DispatchStatus.RUNNING,
@@ -1079,15 +1059,14 @@ class TestClassifyStaleDispatch:
             kill_reason="resume",
             infra_exit_category="context_exhausted",
         )
-        with patch("autoskillit.fleet.sidecar.read_sidecar_from_path", return_value=None):
-            status, sidecar_path_out = classify_stale_dispatch(record)
+        status, sidecar_path_out = classify_stale_dispatch(record)
         assert status == DispatchStatus.INTERRUPTED
         assert sidecar_path_out == ""
 
     def test_idle_stall_kill_reason_returns_resumable(self, tmp_path: Path) -> None:
-        """kill_reason=idle_stall (non-abandon) → RESUMABLE when sidecar has content."""
+        """kill_reason=idle_stall (non-abandon) + empty sidecar → RESUMABLE."""
         sidecar = tmp_path / "sidecar.jsonl"
-        sidecar.write_text("some entry\n")
+        sidecar.write_text("")  # empty sidecar → raw_lines=[] → not raw_lines=True
         record = DispatchRecord(
             name="d1",
             status=DispatchStatus.RUNNING,
@@ -1095,8 +1074,7 @@ class TestClassifyStaleDispatch:
             kill_reason="idle_stall",
             infra_exit_category="",
         )
-        with patch("autoskillit.fleet.sidecar.read_sidecar_from_path", return_value=None):
-            status, sidecar_path_out = classify_stale_dispatch(record)
+        status, sidecar_path_out = classify_stale_dispatch(record)
         assert status == DispatchStatus.RESUMABLE
         assert sidecar_path_out == str(sidecar)
 

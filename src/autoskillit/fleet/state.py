@@ -202,7 +202,9 @@ class CampaignStateMutator:
                     try:
                         self._flock_handle.close()
                     except Exception:
-                        pass
+                        logger.debug(
+                            "CampaignStateMutator.__exit__: flock close failed", exc_info=True
+                        )
             finally:
                 _resume_lock.release()
 

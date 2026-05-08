@@ -32,38 +32,33 @@ def _write_dispatch_to_campaign_state(
     """
     try:
         envelope = json.loads(result_envelope)
-    except (json.JSONDecodeError, ValueError):
-        logger.warning("_write_dispatch_to_campaign_state: invalid JSON", exc_info=True)
-        return
+        dispatch_status_str = envelope.get("dispatch_status")
+        if not dispatch_status_str:
+            return
 
-    dispatch_status_str = envelope.get("dispatch_status")
-    if not dispatch_status_str:
-        return
+        from autoskillit.fleet import (  # noqa: PLC0415
+            DispatchRecord,
+            DispatchStatus,
+            normalize_dispatch_token_usage,
+            upsert_dispatch_record_by_name,
+        )
 
-    from autoskillit.fleet import (  # noqa: PLC0415
-        DispatchRecord,
-        DispatchStatus,
-        normalize_dispatch_token_usage,
-        upsert_dispatch_record_by_name,
-    )
+        try:
+            final_status = DispatchStatus(dispatch_status_str)
+        except ValueError:
+            final_status = DispatchStatus.FAILURE
 
-    try:
-        final_status = DispatchStatus(dispatch_status_str)
-    except ValueError:
-        final_status = DispatchStatus.FAILURE
-
-    record = DispatchRecord(
-        name=effective_name,
-        status=final_status,
-        dispatch_id=envelope.get("dispatch_id", ""),
-        dispatched_session_id=envelope.get("dispatched_session_id") or "",
-        reason=envelope.get("reason") or "",
-        token_usage=normalize_dispatch_token_usage(envelope.get("token_usage") or {}),
-    )
-    try:
+        record = DispatchRecord(
+            name=effective_name,
+            status=final_status,
+            dispatch_id=envelope.get("dispatch_id", ""),
+            dispatched_session_id=envelope.get("dispatched_session_id") or "",
+            reason=envelope.get("reason") or "",
+            token_usage=normalize_dispatch_token_usage(envelope.get("token_usage") or {}),
+        )
         upsert_dispatch_record_by_name(Path(campaign_state_path_str), record)
     except Exception:
-        logger.warning("_write_dispatch_to_campaign_state: state write failed", exc_info=True)
+        logger.warning("_write_dispatch_to_campaign_state: failed", exc_info=True)
 
 
 def _get_food_truck_prompt_builder() -> Callable[..., str]:

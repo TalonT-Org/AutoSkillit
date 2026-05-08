@@ -113,7 +113,7 @@ def resume_campaign_from_state(
     ResumeDecision with next_dispatch_name="" if all dispatches are
     complete or the campaign is halted.
     """
-    from autoskillit.fleet._liveness import is_dispatch_session_alive  # noqa: PLC0415
+    from autoskillit.fleet import is_dispatch_session_alive  # noqa: PLC0415
     from autoskillit.fleet.state import (
         CampaignStateMutator,  # noqa: PLC0415
         _clear_dispatch_for_retry,  # noqa: PLC0415

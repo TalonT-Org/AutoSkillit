@@ -1181,7 +1181,7 @@ def test_dispatch_required_ingredient_provided_skips_non_campaign(tmp_path: Path
 
 
 # ---------------------------------------------------------------------------
-# T-S1: dispatch-capture-field-in-sentinel
+# T-S2: dispatch-capture-field-in-sentinel
 # ---------------------------------------------------------------------------
 
 
@@ -1397,7 +1397,7 @@ def test_dispatch_capture_field_in_sentinel_skips_non_campaign(tmp_path: Path):
 
 
 # ---------------------------------------------------------------------------
-# T-S2: _extract_sentinel_fields
+# T-S3: _extract_sentinel_fields
 # ---------------------------------------------------------------------------
 
 

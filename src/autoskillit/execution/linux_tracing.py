@@ -32,6 +32,7 @@ import anyio
 import anyio.abc
 import psutil
 
+from autoskillit.core import fast_dumps as _fast_dumps
 from autoskillit.core import get_logger
 from autoskillit.core import read_boot_id as read_boot_id
 from autoskillit.core import read_starttime_ticks as read_starttime_ticks
@@ -213,7 +214,7 @@ class TraceEnrollmentRecord:
 
 def _write_enrollment_atomic(path: Path, record: TraceEnrollmentRecord) -> None:
     """Write enrollment sidecar atomically using tempfile + os.replace."""
-    content = json.dumps(dataclasses.asdict(record))
+    content = _fast_dumps(dataclasses.asdict(record))
     fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
@@ -601,7 +602,7 @@ def start_linux_tracing(
                 handle._snapshots.append(snap)
                 if handle._trace_file is not None:
                     try:
-                        handle._trace_file.write(json.dumps(snap.__dict__) + "\n")
+                        handle._trace_file.write(_fast_dumps(snap.__dict__) + "\n")
                     except OSError:
                         # Close broken file; degrade to in-memory only
                         try:

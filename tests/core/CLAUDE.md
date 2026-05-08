@@ -18,6 +18,7 @@ Core layer (IL-0) unit tests — paths, IO, types, feature flags.
 | `test_import_isolation.py` | Fleet package must not be imported at server startup via lazy-import structure |
 | `test_install_detect.py` | Tests for core/_install_detect.py — install-type detection |
 | `test_io.py` | Extended YAML I/O tests for core/io.py consolidation |
+| `test_json.py` | Tests for autoskillit.core._json — fast_loads and fast_dumps |
 | `test_kitchen_state.py` | Tests for KitchenMarker hash field support |
 | `test_logging.py` | Tests for autoskillit.core.logging — centralized structlog configuration |
 | `test_paths.py` | Tests for autoskillit.core.paths — is_git_worktree and pkg_root |

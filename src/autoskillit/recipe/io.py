@@ -17,6 +17,7 @@ from autoskillit.core import (
     load_yaml,
     pkg_root,
 )
+from autoskillit.core import fast_loads as _fast_loads
 from autoskillit.recipe.order import BUNDLED_RECIPE_ORDER
 from autoskillit.recipe.schema import (
     AUTOSKILLIT_VERSION_KEY,
@@ -70,7 +71,7 @@ def _load_recipe_dict(
             text = json_path.read_text(encoding="utf-8")
             if temp_dir_relpath is not None:
                 text = substitute_temp_placeholder(text, temp_dir_relpath)
-            data = _json.loads(text)
+            data = _fast_loads(text)
             if isinstance(data, dict):
                 return data
             logger.warning(

@@ -2,8 +2,6 @@
 
 Written at interactive session launch; bridged on open_kitchen hook fire.
 Read by the scoped resume picker to classify sessions by type.
-
-Stdlib-only — no autoskillit imports.
 """
 
 from __future__ import annotations
@@ -13,6 +11,8 @@ import os
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
+
+from .._json import fast_dumps as _fast_dumps
 
 __all__ = [
     "registry_path",
@@ -60,7 +60,7 @@ def write_registry_entry(
         "claude_session_id": None,
     }
 
-    _atomic_write(path, json.dumps(existing))
+    _atomic_write(path, _fast_dumps(existing))
 
 
 def bridge_claude_session_id(
@@ -82,7 +82,7 @@ def bridge_claude_session_id(
         return
 
     registry[launch_id]["claude_session_id"] = claude_session_id
-    _atomic_write(path, json.dumps(registry))
+    _atomic_write(path, _fast_dumps(registry))
 
 
 def _atomic_write(path: Path, content: str) -> None:

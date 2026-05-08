@@ -26,6 +26,7 @@ from autoskillit.cli.fleet._fleet_lifecycle import (
     _reap_stale_dispatches,
 )
 from autoskillit.cli.fleet._fleet_preview import (
+    _FLEET_CAMPAIGN_GREETINGS,
     _FLEET_DISPATCH_GREETINGS,
     _print_dispatch_preview,
 )
@@ -224,6 +225,10 @@ def fleet_campaign(
     if not proceed:
         return
 
+    import random
+
+    greeting = random.choice(_FLEET_CAMPAIGN_GREETINGS).format(campaign_name=campaign_name)
+
     _launch_fleet_session(
         parsed,
         campaign_id,
@@ -231,6 +236,7 @@ def fleet_campaign(
         resume_metadata,
         fleet_mode="campaign",
         ingredients_table=_itable,
+        initial_message=greeting,
     )
 
 

@@ -34,6 +34,12 @@ _FLEET_DISPATCH_GREETINGS: list[str] = [
     ),
 ]
 
+_FLEET_CAMPAIGN_GREETINGS: list[str] = [
+    "Campaign ready: {campaign_name}. Let me display the ingredients and get started.",
+    "Launching campaign: {campaign_name}. Reviewing ingredients now.",
+    "Campaign {campaign_name} loaded. Checking ingredients before dispatch.",
+]
+
 
 def _print_dispatch_preview() -> str:
     """Print the pre-launch summary for fleet dispatch (mirrors cook's pre-launch display).

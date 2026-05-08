@@ -264,3 +264,25 @@ class TestFleetCampaignResumeHaltedExits:
         with pytest.raises(SystemExit):
             _fleet_campaign("test-campaign", resume_campaign=campaign_id)
         assert not launch_called
+
+
+def test_fleet_campaign_passes_initial_message(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """fleet_campaign() passes a non-None initial_message containing the campaign name."""
+    _stub_guards(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    _stub_campaign_resolution(monkeypatch, tmp_path, "test-campaign")
+    captured_kwargs: dict = {}
+
+    def mock_launch_session(*a: object, **kw: object) -> None:
+        captured_kwargs.update(kw)
+
+    monkeypatch.setattr("autoskillit.cli.fleet._launch_fleet_session", mock_launch_session)
+    monkeypatch.setattr(
+        "autoskillit.cli._preview._pre_launch_campaign",
+        lambda *a, **kw: ("", True),
+    )
+    _fleet_campaign("test-campaign")
+    assert captured_kwargs.get("initial_message") is not None
+    assert "test-campaign" in captured_kwargs["initial_message"]

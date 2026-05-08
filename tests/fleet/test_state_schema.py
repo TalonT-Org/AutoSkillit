@@ -307,9 +307,7 @@ class TestDispatchRecordToDict:
         inner = {"nested": "value"}
         record = DispatchRecord(name="test-job", token_usage={"key": inner})
         d = record.to_dict()
-        # Outer dict must be a new object (not the same reference)
         assert d["token_usage"] is not record.token_usage
-        # Inner dict value must be the SAME reference (shallow, not deep copy)
         assert d["token_usage"]["key"] is inner
 
     def test_dispatch_record_to_dict_is_json_serializable(self) -> None:

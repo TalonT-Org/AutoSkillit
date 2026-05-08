@@ -497,7 +497,8 @@ async def test_get_token_summary_not_contaminated_by_prior_pipeline(
         },
     )
 
-    # get_token_summary uses _get_ctx() internally — tool_ctx_kitchen_open fixture wires _ctx correctly
+    # get_token_summary uses _get_ctx() internally —
+    # tool_ctx_kitchen_open fixture wires _ctx correctly
     result_json = await get_token_summary(clear=False, format="json")
     result = json.loads(result_json)
     step_names = [s["step_name"] for s in result["steps"]]

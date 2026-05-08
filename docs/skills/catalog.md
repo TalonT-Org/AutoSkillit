@@ -1,7 +1,7 @@
 # Skill catalog
 
-The complete list of bundled skills (132 total: 3 in `src/autoskillit/skills/`,
-129 in `src/autoskillit/skills_extended/`). Filesystem walk this directory if
+The complete list of bundled skills (133 total: 3 in `src/autoskillit/skills/`,
+130 in `src/autoskillit/skills_extended/`). Filesystem walk this directory if
 you need an exhaustive listing; this catalog groups by purpose.
 
 ## Tier 1 — free range (3)
@@ -23,7 +23,7 @@ Located under `src/autoskillit/skills_extended/`. Grouped by purpose:
 
 ### Audit suite
 `audit-arch`, `audit-cohesion`, `audit-tests`, `audit-defense-standards`,
-`audit-bugs`, `audit-friction`, `validate-audit`, `validate-test-audit`,
+`audit-bugs`, `audit-friction`, `validate-audit`, `validate-test-audit`, `validate-review-decisions`,
 `audit-claims`, `audit-docs`, `audit-feature-gates`, `audit-review-decisions`
 
 ### Requirements and planning

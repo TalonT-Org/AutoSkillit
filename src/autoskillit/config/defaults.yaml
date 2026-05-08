@@ -211,6 +211,7 @@ skills:
     - generate-report
     - validate-audit
     - validate-test-audit
+    - validate-review-decisions
     - vis-lens-always-on
     - vis-lens-antipattern
     - vis-lens-chart-select

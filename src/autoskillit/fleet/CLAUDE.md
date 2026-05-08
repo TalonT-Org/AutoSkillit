@@ -19,8 +19,14 @@ IL-2 fleet campaign layer — parallel issue dispatch, semaphore, sidecar, liven
 | `state.py` | Campaign state I/O and mutations — `read_state`, `_write_state`, `mark_dispatch_*`, re-exports from `state_types`, `state_gates`, `state_recovery` |
 | `state_types.py` | Campaign state types — `DispatchStatus`, `DispatchRecord`, `CampaignState`, `ResumeDecision`, `GateRecordResult`, constants |
 | `state_gates.py` | Gate dispatch recording — `record_gate_outcome` |
-| `state_recovery.py` | Crash recovery + resume — `has_failed_dispatch`, `crash_recover_dispatch`, `resume_campaign_from_state` |
+| `state_recovery.py` | Crash recovery + resume — `has_failed_dispatch`, `crash_recover_dispatch`, `resume_campaign_from_state`, `derive_orchestrator_resume_spec` |
 | `summary.py` | Campaign summary schema v1: frozen dataclasses, sentinel parser, validator |
+
+## Test Files
+
+| File | Purpose |
+|------|---------|
+| `tests/fleet/test_state_recovery.py` | Tests for `derive_orchestrator_resume_spec` |
 
 ## Architecture Notes
 

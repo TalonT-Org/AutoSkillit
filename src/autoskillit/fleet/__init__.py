@@ -41,8 +41,12 @@ from .state import (
     record_gate_outcome,
     reset_failed_dispatch,
     resume_campaign_from_state,
+    update_orchestrator_session_id,
     write_captured_values,
     write_initial_state,
+)
+from .state_recovery import (
+    derive_orchestrator_resume_spec,
 )
 from .summary import (
     CampaignParseResult,
@@ -96,6 +100,8 @@ __all__ = [
     "read_state",
     "reset_failed_dispatch",
     "resume_campaign_from_state",
+    "derive_orchestrator_resume_spec",
+    "update_orchestrator_session_id",
     "write_captured_values",
     "write_initial_state",
     "normalize_dispatch_token_usage",

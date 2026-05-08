@@ -134,6 +134,7 @@ class CampaignState:
     started_at: float
     dispatches: list[DispatchRecord] = field(default_factory=list)
     captured_values: dict[str, str] = field(default_factory=dict)
+    orchestrator_session_id: str = ""
 
 
 @dataclass(frozen=True, slots=True)

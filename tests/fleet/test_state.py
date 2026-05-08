@@ -1025,3 +1025,73 @@ class TestKillReasonPropagation:
         assert decision is not None
         assert decision.is_resumable is True
         assert decision.kill_reason == "idle_stall"
+
+
+class TestOrchestratorSessionIdRoundTrip:
+    def test_orchestrator_session_id_round_trip(self, tmp_path: Path) -> None:
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("a"))
+        from autoskillit.fleet import update_orchestrator_session_id
+
+        update_orchestrator_session_id(sp, "prior-session-abc")
+
+        state = read_state(sp)
+        assert state is not None
+        assert state.orchestrator_session_id == "prior-session-abc"
+
+    def test_orchestrator_session_id_defaults_empty_on_v4_state(self, tmp_path: Path) -> None:
+        sp = _state_path(tmp_path)
+        sp.parent.mkdir(parents=True, exist_ok=True)
+        v4_data = {
+            "schema_version": 4,
+            "campaign_id": "cid",
+            "campaign_name": "camp",
+            "manifest_path": "/m.yaml",
+            "started_at": 0.0,
+            "dispatches": [],
+        }
+        sp.write_text(json.dumps(v4_data), encoding="utf-8")
+
+        state = read_state(sp)
+        assert state is not None
+        assert state.orchestrator_session_id == ""
+
+    def test_orchestrator_session_id_written_to_state_file(self, tmp_path: Path) -> None:
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("a"))
+        from autoskillit.fleet import update_orchestrator_session_id
+
+        update_orchestrator_session_id(sp, "sess-xyz-789")
+
+        raw = json.loads(sp.read_text(encoding="utf-8"))
+        assert raw.get("orchestrator_session_id") == "sess-xyz-789"
+
+
+class TestUpdateOrchestratorSessionId:
+    def test_update_orchestrator_session_id_writes_atomically(self, tmp_path: Path) -> None:
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("a"))
+
+        original = sp.read_text(encoding="utf-8")
+        real_replace = os.replace
+        call_count = 0
+
+        def failing_replace(src, dst):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise OSError("simulated crash")
+            return real_replace(src, dst)
+
+        from autoskillit.fleet import update_orchestrator_session_id
+
+        with patch("autoskillit.core.io.os.replace", side_effect=failing_replace):
+            with pytest.raises(OSError, match="simulated crash"):
+                update_orchestrator_session_id(sp, "new-session-id")
+
+        assert sp.read_text(encoding="utf-8") == original
+
+        update_orchestrator_session_id(sp, "new-session-id")
+        state = read_state(sp)
+        assert state is not None
+        assert state.orchestrator_session_id == "new-session-id"

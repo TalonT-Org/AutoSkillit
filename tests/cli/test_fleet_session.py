@@ -463,3 +463,261 @@ class TestReloadLoopUsesNamedResume:
         assert len(captured_specs) == 2
         assert captured_specs[0] == NoResume()
         assert captured_specs[1] == NamedResume(session_id="reload-id-abc")
+
+
+class TestCrossInvocationResume:
+    """T3e: Cross-invocation resume uses NamedResume from persisted orchestrator_session_id."""
+
+    def test_cross_invocation_resume_uses_named_resume(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """When CampaignState has orchestrator_session_id, first call uses NamedResume."""
+        from autoskillit.core import NamedResume
+        from autoskillit.fleet import DispatchRecord, write_initial_state
+
+        monkeypatch.chdir(tmp_path)
+        state_dir = tmp_path / "fleet" / "test-id"
+        state_dir.mkdir(parents=True)
+        state_path = state_dir / "state.json"
+
+        dispatches = [DispatchRecord(name="dispatch-1")]
+        write_initial_state(state_path, "test-id", "test-campaign", "manifest.yaml", dispatches)
+
+        captured_specs: list[object] = []
+
+        def _fake_run_session(
+            prompt: str,
+            *,
+            extra_env: dict,
+            resume_spec: object,
+            project_dir: Path,
+            **kwargs: object,
+        ) -> None:
+            captured_specs.append(resume_spec)
+            return None
+
+        monkeypatch.setattr(
+            "autoskillit.cli.session._session_launch._run_interactive_session",
+            _fake_run_session,
+        )
+        monkeypatch.setattr(
+            "autoskillit.cli._prompts._build_fleet_campaign_prompt",
+            lambda *a, **kw: "fake-prompt",
+        )
+
+        fresh_meta = MagicMock()
+        fresh_meta.completed_dispatches_block = ""
+        fresh_meta.next_dispatch_name = "dispatch-1"
+        fresh_meta.is_resumable = False
+
+        monkeypatch.setattr(
+            "autoskillit.fleet.resume_campaign_from_state",
+            lambda *a, **kw: fresh_meta,
+        )
+
+        from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
+        from autoskillit.fleet.state import update_orchestrator_session_id
+
+        update_orchestrator_session_id(state_path, "prior-session-abc")
+
+        _launch_fleet_session(
+            _make_campaign_recipe(),
+            "test-id",
+            state_path,
+            fresh_meta,
+            fleet_mode="campaign",
+        )
+
+        assert len(captured_specs) == 1
+        assert captured_specs[0] == NamedResume(session_id="prior-session-abc")
+
+    def test_fresh_campaign_still_uses_no_resume(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """When CampaignState has no orchestrator_session_id, first call uses NoResume."""
+        from autoskillit.core import NoResume
+        from autoskillit.fleet import DispatchRecord, write_initial_state
+
+        monkeypatch.chdir(tmp_path)
+        state_dir = tmp_path / "fleet" / "test-id"
+        state_dir.mkdir(parents=True)
+        state_path = state_dir / "state.json"
+
+        dispatches = [DispatchRecord(name="dispatch-1")]
+        write_initial_state(state_path, "test-id", "test-campaign", "manifest.yaml", dispatches)
+
+        captured_specs: list[object] = []
+
+        def _fake_run_session(
+            prompt: str,
+            *,
+            extra_env: dict,
+            resume_spec: object,
+            project_dir: Path,
+            **kwargs: object,
+        ) -> None:
+            captured_specs.append(resume_spec)
+            return None
+
+        monkeypatch.setattr(
+            "autoskillit.cli.session._session_launch._run_interactive_session",
+            _fake_run_session,
+        )
+        monkeypatch.setattr(
+            "autoskillit.cli._prompts._build_fleet_campaign_prompt",
+            lambda *a, **kw: "fake-prompt",
+        )
+
+        fresh_meta = MagicMock()
+        fresh_meta.completed_dispatches_block = ""
+        fresh_meta.next_dispatch_name = "dispatch-1"
+        fresh_meta.is_resumable = False
+
+        monkeypatch.setattr(
+            "autoskillit.fleet.resume_campaign_from_state",
+            lambda *a, **kw: fresh_meta,
+        )
+
+        from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
+
+        _launch_fleet_session(
+            _make_campaign_recipe(),
+            "test-id",
+            state_path,
+            fresh_meta,
+            fleet_mode="campaign",
+        )
+
+        assert len(captured_specs) == 1
+        assert captured_specs[0] == NoResume()
+
+
+class TestSessionIdPersistence:
+    """T3f: orchestrator_session_id is persisted on infra-resume and reload."""
+
+    def test_session_id_written_to_state_on_infra_resume(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """InfraExitSignal session_id is persisted to CampaignState."""
+        from autoskillit.core import InfraExitCategory
+        from autoskillit.fleet import DispatchRecord, read_state, write_initial_state
+
+        monkeypatch.chdir(tmp_path)
+        state_dir = tmp_path / "fleet" / "test-id"
+        state_dir.mkdir(parents=True)
+        state_path = state_dir / "state.json"
+
+        dispatches = [DispatchRecord(name="dispatch-1")]
+        write_initial_state(state_path, "test-id", "test-campaign", "manifest.yaml", dispatches)
+
+        call_sequence = iter(
+            [
+                InfraExitCategory.CONTEXT_EXHAUSTED,
+                None,
+            ]
+        )
+
+        def _fake_run_session(
+            prompt: str,
+            *,
+            extra_env: dict,
+            resume_spec: object,
+            project_dir: Path,
+            **kwargs: object,
+        ):
+            sig = next(call_sequence)
+            if sig is None:
+                return None
+            from autoskillit.core import _InfraExitSignal
+
+            return _InfraExitSignal(session_id="captured-id-xyz", category=sig)
+
+        fresh_meta = MagicMock()
+        fresh_meta.completed_dispatches_block = ""
+        fresh_meta.next_dispatch_name = "dispatch-1"
+        fresh_meta.is_resumable = False
+
+        monkeypatch.setattr(
+            "autoskillit.cli.session._session_launch._run_interactive_session",
+            _fake_run_session,
+        )
+        monkeypatch.setattr(
+            "autoskillit.fleet.resume_campaign_from_state",
+            lambda *a, **kw: fresh_meta,
+        )
+        monkeypatch.setattr(
+            "autoskillit.cli._prompts._build_fleet_campaign_prompt",
+            lambda *a, **kw: "fake-prompt",
+        )
+
+        from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
+
+        _launch_fleet_session(
+            _make_campaign_recipe(),
+            "test-id",
+            state_path,
+            fresh_meta,
+            fleet_mode="campaign",
+        )
+
+        state = read_state(state_path)
+        assert state is not None
+        assert state.orchestrator_session_id == "captured-id-xyz"
+
+    def test_session_id_written_to_state_on_reload(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Reload session_id is written to CampaignState via update_orchestrator_session_id."""
+        from autoskillit.fleet import DispatchRecord, read_state, write_initial_state
+
+        monkeypatch.chdir(tmp_path)
+        state_dir = tmp_path / "fleet" / "test-id"
+        state_dir.mkdir(parents=True)
+        state_path = state_dir / "state.json"
+
+        dispatches = [DispatchRecord(name="dispatch-1")]
+        write_initial_state(state_path, "test-id", "test-campaign", "manifest.yaml", dispatches)
+
+        call_sequence = iter(["reload-id-persist-xyz", None])
+
+        def _fake_run_session(
+            prompt: str,
+            *,
+            extra_env: dict,
+            resume_spec: object,
+            project_dir: Path,
+            **kwargs: object,
+        ):
+            return next(call_sequence)
+
+        fresh_meta = MagicMock()
+        fresh_meta.completed_dispatches_block = ""
+        fresh_meta.next_dispatch_name = "dispatch-1"
+        fresh_meta.is_resumable = False
+
+        monkeypatch.setattr(
+            "autoskillit.cli.session._session_launch._run_interactive_session",
+            _fake_run_session,
+        )
+        monkeypatch.setattr(
+            "autoskillit.fleet.resume_campaign_from_state",
+            lambda *a, **kw: fresh_meta,
+        )
+        monkeypatch.setattr(
+            "autoskillit.cli._prompts._build_fleet_campaign_prompt",
+            lambda *a, **kw: "fake-prompt",
+        )
+
+        from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
+
+        _launch_fleet_session(
+            _make_campaign_recipe(),
+            "test-id",
+            state_path,
+            fresh_meta,
+            fleet_mode="campaign",
+        )
+
+        state = read_state(state_path)
+        assert state is not None
+        assert state.orchestrator_session_id == "reload-id-persist-xyz"

@@ -5,12 +5,20 @@ from __future__ import annotations
 import fcntl
 from pathlib import Path
 
-from autoskillit.core import InfraExitCategory, RetryReason, get_logger
+__all__ = [
+    "crash_recover_dispatch",
+    "derive_orchestrator_resume_spec",
+    "has_failed_dispatch",
+    "resume_campaign_from_state",
+]
+
+from autoskillit.core import InfraExitCategory, NamedResume, NoResume, RetryReason, get_logger
 from autoskillit.fleet.state_types import (
     _ABANDON_KILL_REASONS,
     _INFRASTRUCTURE_FAILURE_REASONS,
     _VISIBLE_IN_BLOCK_STATUSES,
     FLEET_HALTED_SENTINEL,
+    CampaignState,
     DispatchRecord,
     DispatchStatus,
     ResumeDecision,
@@ -205,3 +213,19 @@ def resume_campaign_from_state(
                 dispatched_session_id=resumable_dispatched_session_id,
                 kill_reason=resumable_kill_reason,
             )
+
+
+def derive_orchestrator_resume_spec(state: CampaignState) -> NamedResume | NoResume:
+    """Derive the correct ResumeSpec for the L3 orchestrator from campaign state.
+
+    Priority:
+    1. state.orchestrator_session_id (if non-empty) → NamedResume
+    2. Latest dispatch's caller_session_id (fallback) → NamedResume
+    3. No session ID available → NoResume
+    """
+    if state.orchestrator_session_id:
+        return NamedResume(session_id=state.orchestrator_session_id)
+    for d in reversed(state.dispatches):
+        if d.caller_session_id:
+            return NamedResume(session_id=d.caller_session_id)
+    return NoResume()

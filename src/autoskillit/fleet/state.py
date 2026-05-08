@@ -63,6 +63,7 @@ __all__ = [
     "build_protected_campaign_ids",
     "write_captured_values",
     "read_all_campaign_captures",
+    "update_orchestrator_session_id",
 ]
 
 logger = get_logger(__name__)
@@ -156,6 +157,7 @@ def read_state(state_path: Path) -> CampaignState | None:
             started_at=data["started_at"],
             dispatches=dispatches,
             captured_values=data.get("captured_values", {}),
+            orchestrator_session_id=data.get("orchestrator_session_id", ""),
         )
     except (KeyError, ValueError, TypeError) as exc:
         logger.warning("read_state: schema mismatch or corrupt payload in %s: %s", state_path, exc)
@@ -171,6 +173,7 @@ def _write_state(state_path: Path, state: CampaignState) -> None:
         "started_at": state.started_at,
         "dispatches": [d.to_dict() for d in state.dispatches],
         "captured_values": state.captured_values,
+        "orchestrator_session_id": state.orchestrator_session_id,
     }
     write_versioned_json(state_path, payload, schema_version=state.schema_version)
 
@@ -320,6 +323,26 @@ def write_captured_values(state_path: Path, captures: dict[str, str]) -> None:
         return
     state.captured_values = {**state.captured_values, **captures}
     _write_state(state_path, state)
+
+
+def update_orchestrator_session_id(state_path: Path, session_id: str) -> None:
+    """Persist the L3 orchestrator's Claude Code session ID to campaign state.
+
+    Thread-safe: uses fcntl.LOCK_EX on state.lock.
+    """
+    with _resume_lock:
+        lock_path = state_path.with_suffix(".lock")
+        with open(lock_path, "wb") as _flock_handle:
+            fcntl.flock(_flock_handle, fcntl.LOCK_EX)
+            state = read_state(state_path)
+            if state is None:
+                logger.warning(
+                    "update_orchestrator_session_id: state not found at %s",
+                    state_path,
+                )
+                return
+            state.orchestrator_session_id = session_id
+            _write_state(state_path, state)
 
 
 def read_all_campaign_captures(

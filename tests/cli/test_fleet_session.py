@@ -7,6 +7,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from autoskillit.fleet.state_types import ResumeDecision
+
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small, pytest.mark.feature("fleet")]
 
 
@@ -505,7 +507,7 @@ class TestCrossInvocationResume:
             lambda *a, **kw: "fake-prompt",
         )
 
-        fresh_meta = MagicMock()
+        fresh_meta = MagicMock(spec=ResumeDecision)
         fresh_meta.completed_dispatches_block = ""
         fresh_meta.next_dispatch_name = "dispatch-1"
         fresh_meta.is_resumable = False
@@ -568,7 +570,7 @@ class TestCrossInvocationResume:
             lambda *a, **kw: "fake-prompt",
         )
 
-        fresh_meta = MagicMock()
+        fresh_meta = MagicMock(spec=ResumeDecision)
         fresh_meta.completed_dispatches_block = ""
         fresh_meta.next_dispatch_name = "dispatch-1"
         fresh_meta.is_resumable = False

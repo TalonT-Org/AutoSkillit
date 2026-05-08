@@ -170,10 +170,12 @@ class TestTimeoutPath:
             )
         )
 
+        from autoskillit.fleet.state import normalize_dispatch_token_usage
+
         result = await _run(tool_ctx)
         assert "dispatch_id" in result
         assert result["dispatched_session_id"] == "sess-timeout-123"
-        assert result["token_usage"] == {"input_tokens": 50}
+        assert result["token_usage"] == normalize_dispatch_token_usage({"input_tokens": 50})
 
     @pytest.mark.anyio
     async def test_idle_stall_falls_through_to_parse(self, tool_ctx, monkeypatch):

@@ -8,7 +8,7 @@ import autoskillit.recipe  # noqa: F401 -- pyright: ignore[reportUnusedImport] -
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import make_validation_context
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
-from autoskillit.recipe.registry import _RULE_REGISTRY, run_semantic_rules
+from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import CampaignDispatch, Recipe
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
@@ -78,12 +78,15 @@ def test_depends_on_acyclic_passes(validation_ctx) -> None:
 
 
 def test_dispatch_capture_fields_in_sentinel_contract_passes(validation_ctx) -> None:
-    rule_name = "dispatch-capture-fields-in-sentinel-contract"
-    registered_names = {r.name for r in _RULE_REGISTRY}
-    if rule_name not in registered_names:
-        pytest.skip(f"Rule {rule_name!r} not yet registered")
+    rule_name = "dispatch-capture-field-in-sentinel"
     findings = run_semantic_rules(validation_ctx)
     matched = [f for f in findings if f.rule == rule_name]
+    assert not matched, "; ".join(f"{f.rule}: {f.message}" for f in matched)
+
+
+def test_dispatch_required_ingredient_provided_passes(validation_ctx) -> None:
+    findings = run_semantic_rules(validation_ctx)
+    matched = [f for f in findings if f.rule == "dispatch-required-ingredient-provided"]
     assert not matched, "; ".join(f"{f.rule}: {f.message}" for f in matched)
 
 

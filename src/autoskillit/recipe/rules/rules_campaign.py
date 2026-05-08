@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections import Counter
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -24,6 +25,27 @@ _KEBAB_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 # dispatch task: field), so campaigns that rely on this injection pattern should not
 # be flagged for not explicitly forwarding them in the ingredients block.
 _AUTO_INJECTED_CAMPAIGN_INGREDIENTS: frozenset[str] = frozenset({"task"})
+
+
+_SENTINEL_JSON_RE = re.compile(r"[Ee]xample\s+sentinel:\s*(\{[^}]+\})", re.DOTALL)
+
+
+def _extract_sentinel_fields(recipe: Recipe) -> frozenset[str]:
+    """Extract declared field names from all sentinel stop step JSON examples."""
+    fields: set[str] = set()
+    for step in recipe.steps.values():
+        if step.action != "stop" or not step.message:
+            continue
+        if "sentinel" not in step.message.lower():
+            continue
+        for match in _SENTINEL_JSON_RE.finditer(step.message):
+            try:
+                parsed = json.loads(match.group(1))
+                if isinstance(parsed, dict):
+                    fields.update(parsed.keys())
+            except (json.JSONDecodeError, ValueError):
+                continue
+    return frozenset(fields)
 
 
 def _load_dispatch_target(dispatch: CampaignDispatch, project_dir: Path | None) -> Recipe | None:
@@ -332,6 +354,46 @@ def _check_campaign_dangling_ingredient(ctx: ValidationContext) -> list[RuleFind
 
 
 @semantic_rule(
+    name="dispatch-required-ingredient-provided",
+    description=(
+        "Target recipe required ingredients (no default) must be provided by the dispatch"
+    ),
+    severity=Severity.ERROR,
+)
+def _check_dispatch_required_ingredient_provided(
+    ctx: ValidationContext,
+) -> list[RuleFinding]:
+    if ctx.recipe.kind != RecipeKind.CAMPAIGN:
+        return []
+    findings: list[RuleFinding] = []
+    for d in ctx.recipe.dispatches:
+        if d.gate:
+            continue
+        target = _load_dispatch_target(d, ctx.project_dir)
+        if target is None:
+            continue
+        effective_ingredients = set(d.ingredients.keys())
+        for auto in _AUTO_INJECTED_CAMPAIGN_INGREDIENTS:
+            effective_ingredients.add(auto)
+        for key, ing in target.ingredients.items():
+            if ing.required and ing.default is None and key not in effective_ingredients:
+                findings.append(
+                    RuleFinding(
+                        rule="dispatch-required-ingredient-provided",
+                        severity=Severity.ERROR,
+                        step_name="(top-level)",
+                        message=(
+                            f"Dispatch {d.name!r} targets recipe {d.recipe!r} which "
+                            f"declares ingredient {key!r} as required (no default), "
+                            f"but the dispatch does not provide it. "
+                            f"Provided: {sorted(d.ingredients)}."
+                        ),
+                    )
+                )
+    return findings
+
+
+@semantic_rule(
     name="dispatch-ingredient-values-are-strings",
     description="All dispatch ingredient values must be strings",
     severity=Severity.ERROR,
@@ -480,6 +542,7 @@ def _check_campaign_task_non_empty(ctx: ValidationContext) -> list[RuleFinding]:
 
 _IDENT_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 _RESULT_TEMPLATE_RE = re.compile(r"^\$\{\{\s*result\.[\w-]+\s*\}\}$")
+_RESULT_FIELD_RE = re.compile(r"^\$\{\{\s*result\.([\w-]+)\s*\}\}$")
 
 
 @semantic_rule(
@@ -529,6 +592,47 @@ def _check_dispatch_capture_value_references_result(ctx: ValidationContext) -> l
                         message=(
                             f"Dispatch {d.name!r} capture[{key!r}] value {val!r} must use "
                             "${{ result.<field_name> }} syntax."
+                        ),
+                    )
+                )
+    return findings
+
+
+@semantic_rule(
+    name="dispatch-capture-field-in-sentinel",
+    description="Captured result fields should appear in target recipe's sentinel message",
+    severity=Severity.WARNING,
+)
+def _check_dispatch_capture_field_in_sentinel(ctx: ValidationContext) -> list[RuleFinding]:
+    if ctx.recipe.kind != RecipeKind.CAMPAIGN:
+        return []
+    findings: list[RuleFinding] = []
+    for d in ctx.recipe.dispatches:
+        if d.gate or not d.capture:
+            continue
+        target = _load_dispatch_target(d, ctx.project_dir)
+        if target is None:
+            continue
+        sentinel_fields = _extract_sentinel_fields(target)
+        if not sentinel_fields:
+            continue
+        for cap_key, cap_val in d.capture.items():
+            match = _RESULT_FIELD_RE.match(cap_val.strip())
+            if not match:
+                continue
+            field_name = match.group(1)
+            if field_name not in sentinel_fields:
+                findings.append(
+                    RuleFinding(
+                        rule="dispatch-capture-field-in-sentinel",
+                        severity=Severity.WARNING,
+                        step_name="(top-level)",
+                        message=(
+                            f"Dispatch {d.name!r} captures {cap_key!r} as "
+                            f"${{{{ result.{field_name} }}}} but target recipe "
+                            f"{d.recipe!r} has no sentinel stop step listing "
+                            f"field {field_name!r}. "
+                            f"Known sentinel fields: {sorted(sentinel_fields)}."
                         ),
                     )
                 )

@@ -129,7 +129,7 @@ class TestValidateReviewDecisionsIntentAnalysis:
     # T-VRD-021
     def test_intent_analysis_test_coverage(self) -> None:
         text = _skill_text().lower()
-        assert "test coverage" in text or "test" in text
+        assert "test coverage" in text
 
     # T-VRD-022
     def test_intent_analysis_contract_analysis(self) -> None:
@@ -163,9 +163,7 @@ class TestValidateReviewDecisionsEvidenceGatheringRules:
     # T-VRD-027
     def test_rule_test_as_intent_signal(self) -> None:
         text = _skill_text().lower()
-        assert "test" in text
-        assert "intent" in text
-        assert "signal" in text
+        assert "test-as-intent-signal" in text
 
     # T-VRD-028
     def test_rule_consumer_impact_verification(self) -> None:

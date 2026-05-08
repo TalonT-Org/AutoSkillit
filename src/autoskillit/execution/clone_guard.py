@@ -42,14 +42,14 @@ WORKTREE_SKILLS: frozenset[str] = frozenset(
 _GIT_TIMEOUT: float = 10.0
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CloneSnapshot:
     """Pre-session state of the clone directory."""
 
     head_sha: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ContaminationReport:
     """Details of detected clone contamination."""
 

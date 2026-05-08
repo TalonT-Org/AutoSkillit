@@ -32,7 +32,7 @@ class ParseFailureKind(StrEnum):
     FIELD_ERROR = "field_error"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ParseFailure:
     kind: ParseFailureKind
     message: str
@@ -42,7 +42,7 @@ class ParseFailure:
             raise ValueError("ParseFailure.message must not be empty")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DispatchTokenUsage:
     """Per-dispatch token usage — exactly 4 fields, no extras."""
 
@@ -52,7 +52,7 @@ class DispatchTokenUsage:
     cache_creation: int
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PerDispatchEntry:
     """One entry per dispatch in execution order."""
 
@@ -64,7 +64,7 @@ class PerDispatchEntry:
     dispatch_id: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SummaryErrorRecord:
     """One entry per failed dispatch."""
 
@@ -74,7 +74,7 @@ class SummaryErrorRecord:
     dispatched_session_id: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CampaignSummary:
     """Campaign summary schema v1 — top-level contract."""
 

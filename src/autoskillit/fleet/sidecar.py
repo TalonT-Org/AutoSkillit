@@ -10,7 +10,7 @@ from autoskillit.core import ensure_project_temp, get_logger
 logger = get_logger()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class IssueSidecarEntry:
     issue_url: str
     status: Literal["completed", "failed"]

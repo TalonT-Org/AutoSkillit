@@ -11,13 +11,13 @@ from autoskillit.core import load_yaml, pkg_root
 BUNDLED_METHODOLOGY_TRADITIONS_DIR: Path = pkg_root() / "recipes" / "methodology-traditions"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DisambiguationExceptionDef:
     when_present: str
     add_union_rules: tuple[str, ...]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DisambiguationRuleDef:
     name: str
     order: int
@@ -30,7 +30,7 @@ class DisambiguationRuleDef:
     exceptions: tuple[DisambiguationExceptionDef, ...]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CrossTraditionOverlapDef:
     name: str
     order: int
@@ -41,7 +41,7 @@ class CrossTraditionOverlapDef:
     overrides_primary: bool = False
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DisambiguationResult:
     primary_tradition: str | None
     applied_union_rules: tuple[str, ...]

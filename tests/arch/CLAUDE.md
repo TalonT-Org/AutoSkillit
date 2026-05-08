@@ -18,6 +18,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_bundled_recipes_split.py` | Enforcement: test_bundled_recipes.py split structure guard |
 | `test_cascade_map_guard.py` | REQ-GUARD-001..003, 005: CI guard validating cascade maps against AST-derived reverse import graph |
 | `test_channel_b_timeout_guard.py` | AST guard: Channel B tests must use timeout >= TimeoutTier.CHANNEL_B |
+| `test_dataclass_slots.py` | Architectural invariant: every @dataclass(frozen=True) must also have slots=True |
 | `test_cli_decomposition.py` | AST-level tests enforcing CLI decomposition and hook security hardening |
 | `test_doctor_readonly.py` | AST guard: run_doctor() must not perform filesystem mutations (REQ-DOCTOR-READONLY) |
 | `test_execution_source_split.py` | Arch guards for execution layer source splits (P8-F1, F3, F4 audit fixes) |

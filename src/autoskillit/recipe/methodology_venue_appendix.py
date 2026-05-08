@@ -18,14 +18,14 @@ from autoskillit.recipe.methodology_tradition_registry import (
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class AlternateParentDef:
     parent: str
     trigger_keywords: tuple[str, ...]
     constraint: str | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class MLSubAreaFoldingDef:
     sub_area: str
     display_name: str
@@ -33,7 +33,7 @@ class MLSubAreaFoldingDef:
     alternate_parents: tuple[AlternateParentDef, ...]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class VenueAppendixMatch:
     sub_area: str
     resolved_parent: str

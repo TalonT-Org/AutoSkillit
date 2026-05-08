@@ -23,7 +23,7 @@ __all__ = [
 ]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SessionTelemetry:
     """Typed bundle of all per-session telemetry fields passed to flush_session_log.
 
@@ -54,7 +54,7 @@ class SessionTelemetry:
         )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RecipeIdentity:
     """Typed bundle of recipe identification fields for session logging.
 
@@ -73,7 +73,7 @@ class RecipeIdentity:
         return cls(name="", content_hash="", composite_hash="", version="")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CIRunScope:
     """Immutable scope parameters that uniquely identify which CI workflow runs are relevant.
 

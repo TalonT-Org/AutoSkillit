@@ -74,7 +74,7 @@ async def _run_git(
     return _process_runner_result(result, timeout)
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True, slots=True)
 class GitMergeTarget:
     """Verified merge target — proof that main_repo's branch was checked."""
 

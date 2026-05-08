@@ -113,7 +113,7 @@ class RecipeStep:
     block: str | None = None  # Named block anchor this step belongs to (e.g. "pre_queue_gate")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RecipeBlock:
     """A named contiguous region of the step routing graph with budget constraints.
 

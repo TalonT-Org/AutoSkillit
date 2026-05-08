@@ -385,7 +385,7 @@ if not _non_category_tool_tags <= ALL_VISIBILITY_TAGS:
     )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class FeatureDef:
     """Definition of a named feature gate."""
 

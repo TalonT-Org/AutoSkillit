@@ -176,7 +176,7 @@ def _recursive_snapshot(directory: Path) -> set[str]:
     }
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True, slots=True)
 class PostSessionMetrics:
     loc_insertions: int
     loc_deletions: int

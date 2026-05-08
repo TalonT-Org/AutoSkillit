@@ -19,17 +19,17 @@ __all__ = [
 ]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class NoResume:
     """No resume: start a fresh session."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class BareResume:
     """Bare --resume: delegate session selection to Claude Code's picker."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class NamedResume:
     """--resume <id>: resume a specific named session."""
 

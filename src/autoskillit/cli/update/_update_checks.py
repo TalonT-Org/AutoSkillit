@@ -48,7 +48,7 @@ logger = get_logger(__name__)
 _DISMISS_FILE = "update_check.json"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Signal:
     """A single firing update condition."""
 

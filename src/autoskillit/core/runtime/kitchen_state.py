@@ -15,7 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class KitchenMarker:
     """Immutable record written when open_kitchen is called."""
 

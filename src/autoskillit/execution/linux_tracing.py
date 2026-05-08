@@ -23,7 +23,7 @@ import sys
 import tempfile
 import time
 from collections.abc import AsyncIterator
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import IO, TYPE_CHECKING
@@ -69,7 +69,7 @@ class TraceTargetResolutionError(RuntimeError):
         )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TraceTarget:
     """Workload process identity with provenance — the correct target for the tracer.
 
@@ -189,7 +189,7 @@ def trace_target_from_pid(pid: int) -> TraceTarget:
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TraceEnrollmentRecord:
     """Identity triple written atomically at trace-open time.
 
@@ -252,7 +252,7 @@ def read_enrollment(path: Path) -> TraceEnrollmentRecord | None:
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ProcSnapshot:
     """Point-in-time snapshot of process state.
 
@@ -602,7 +602,7 @@ def start_linux_tracing(
                 handle._snapshots.append(snap)
                 if handle._trace_file is not None:
                     try:
-                        handle._trace_file.write(_fast_dumps(snap.__dict__) + "\n")
+                        handle._trace_file.write(_fast_dumps(asdict(snap)) + "\n")
                     except OSError:
                         # Close broken file; degrade to in-memory only
                         try:

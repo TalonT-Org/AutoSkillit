@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from autoskillit.core import ResumeSpec
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _InfraExitSignal:
     session_id: str
     category: str

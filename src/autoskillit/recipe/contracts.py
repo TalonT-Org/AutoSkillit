@@ -56,7 +56,7 @@ class SkillOutput:
     type: str
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True, slots=True)
 class ResultFieldSpec:
     name: str
     type: str
@@ -75,14 +75,14 @@ class SkillContract:
     result_fields: list[ResultFieldSpec] = dataclasses.field(default_factory=list)
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True, slots=True)
 class ToolOutputFieldSpec:
     allowed_values: tuple[str, ...]
     terminal_values: frozenset[str]
     recoverable_values: frozenset[str]
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True, slots=True)
 class ToolOutputContractSpec:
     result_field: str
     fields: dict[str, ToolOutputFieldSpec]
@@ -104,7 +104,7 @@ class DataFlowEntry:
     produced: list[str]
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True, slots=True)
 class BlockFingerprint:
     """Structural fingerprint for a named recipe block.
 

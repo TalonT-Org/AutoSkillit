@@ -6,6 +6,7 @@ import json
 import os
 import sys
 import time
+from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
 
 import anyio
@@ -46,7 +47,7 @@ async def test_full_tracing_pipeline_writes_distinct_timestamps(tmp_path):
     elapsed = time.monotonic() - start_mono
     end_ts = (datetime.fromisoformat(start_ts) + timedelta(seconds=elapsed)).isoformat()
     assert len(snaps) >= 2, "Need at least 2 snapshots for timestamp variance test"
-    snap_dicts = [s.__dict__ for s in snaps]
+    snap_dicts = [asdict(s) for s in snaps]
 
     flush_session_log(
         log_dir=str(tmp_path),

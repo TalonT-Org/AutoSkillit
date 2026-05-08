@@ -14,6 +14,7 @@ from __future__ import annotations
 import subprocess
 import time
 from collections.abc import Callable, Mapping
+from dataclasses import asdict
 from pathlib import Path
 from typing import TYPE_CHECKING, assert_never
 
@@ -399,7 +400,7 @@ async def run_managed_async(
             snapshots_data: list[dict[str, object]] | None = None
             if tracing_handle is not None:
                 accumulated = tracing_handle.stop()
-                snapshots_data = [s.__dict__ for s in accumulated]
+                snapshots_data = [asdict(s) for s in accumulated]
                 if signals.exit_snapshot is not None:
                     snapshots_data.append(signals.exit_snapshot)
             elif signals.exit_snapshot is not None:

@@ -34,7 +34,7 @@ class InstallTrack(StrEnum):
     LOCAL = "local"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class InstallInfo:
     install_type: InstallType
     commit_id: str | None

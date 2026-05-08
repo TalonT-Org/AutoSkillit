@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SessionCheckpoint:
     completed_items: list[str] = field(default_factory=list)
     step_name: str = ""

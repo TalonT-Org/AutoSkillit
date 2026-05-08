@@ -118,7 +118,7 @@ class CampaignState:
     captured_values: dict[str, str] = field(default_factory=dict)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ResumeDecision:
     """Result of the resume algorithm."""
 
@@ -181,7 +181,7 @@ _INFRASTRUCTURE_FAILURE_REASONS: frozenset[str] = frozenset(
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class GateRecordResult:
     """Result of a gate dispatch recording attempt."""
 

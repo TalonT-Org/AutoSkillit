@@ -44,7 +44,7 @@ def _make_recipe_with_run_skill(
 
 
 # ----------------------------------------------------------------------
-# unknown-required-pack tests (severity upgraded to ERROR in Step 2c)
+# unknown-required-pack tests
 # ----------------------------------------------------------------------
 
 
@@ -98,7 +98,7 @@ def test_all_builtin_packs_pass():
 
 
 # ----------------------------------------------------------------------
-# undeclared-pack-requirement tests (Step 1a)
+# undeclared-pack-requirement tests
 # ----------------------------------------------------------------------
 
 

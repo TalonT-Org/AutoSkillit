@@ -284,6 +284,50 @@ def _check_dispatch_ingredients_keys_in_target_schema(ctx: ValidationContext) ->
 
 
 @semantic_rule(
+    name="campaign-dangling-ingredient",
+    description=(
+        "Campaign ingredients should be forwarded to dispatches whose target recipe declares them"
+    ),
+    severity=Severity.WARNING,
+)
+def _check_campaign_dangling_ingredient(ctx: ValidationContext) -> list[RuleFinding]:
+    if ctx.recipe.kind != RecipeKind.CAMPAIGN:
+        return []
+    campaign_ingredients = set(ctx.recipe.ingredients.keys())
+    if not campaign_ingredients:
+        return []
+    findings: list[RuleFinding] = []
+    for d in ctx.recipe.dispatches:
+        if d.gate:
+            continue
+        target = _load_dispatch_target(d, ctx.project_dir)
+        if target is None:
+            continue
+        forwarded_keys = set(d.ingredients.keys())
+        for ing_name in campaign_ingredients:
+            if ing_name == "task":
+                # _run_dispatch() auto-injects task from the dispatch-level
+                # task: field when the ingredient block omits it. Skip to
+                # avoid false positives on campaigns that rely on this.
+                continue
+            if ing_name in target.ingredients and ing_name not in forwarded_keys:
+                findings.append(
+                    RuleFinding(
+                        rule="campaign-dangling-ingredient",
+                        severity=Severity.WARNING,
+                        step_name="(top-level)",
+                        message=(
+                            f"Campaign ingredient {ing_name!r} is declared by target "
+                            f"recipe {d.recipe!r} (dispatch {d.name!r}) but is not "
+                            f"forwarded in the dispatch's ingredients block. The sub-recipe "
+                            f"will use its own default instead of the campaign-level value."
+                        ),
+                    )
+                )
+    return findings
+
+
+@semantic_rule(
     name="dispatch-ingredient-values-are-strings",
     description="All dispatch ingredient values must be strings",
     severity=Severity.ERROR,

@@ -100,7 +100,7 @@ async def test_design_captured_values_propagate_to_implement_dispatch(tool_ctx, 
         quota_refresher=_noop_quota_refresher,
     )
 
-    result = json.loads(raw)
+    result = json.loads(raw.to_envelope())
     assert result["success"] is True
 
     state_data = _read_state_file(tool_ctx)
@@ -169,7 +169,7 @@ async def test_missing_campaign_ref_returns_fleet_error(tool_ctx):
         quota_refresher=_noop_quota_refresher,
     )
 
-    result = json.loads(raw)
+    result = json.loads(raw.to_envelope())
     assert result["success"] is False
     assert result["error"] == "fleet_unknown_ingredient"
     assert "campaign.worktree_path" in result["user_visible_message"]
@@ -207,7 +207,7 @@ async def test_partial_capture_propagates_only_captured_keys(tool_ctx, monkeypat
         quota_refresher=_noop_quota_refresher,
     )
 
-    result = json.loads(raw)
+    result = json.loads(raw.to_envelope())
     assert result["success"] is True
 
     raw = await execute_dispatch(
@@ -226,7 +226,7 @@ async def test_partial_capture_propagates_only_captured_keys(tool_ctx, monkeypat
         quota_refresher=_noop_quota_refresher,
     )
 
-    result = json.loads(raw)
+    result = json.loads(raw.to_envelope())
     assert result["success"] is False
     assert "error" in result
     assert "campaign.research_dir" in result["user_visible_message"]

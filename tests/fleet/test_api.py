@@ -166,7 +166,7 @@ async def _run(tool_ctx, recipe="test-recipe", ingredients=None):
         quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
-    return json.loads(raw)
+    return json.loads(raw.to_envelope())
 
 
 class TestRequiresPacksForwarding:

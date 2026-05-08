@@ -135,22 +135,24 @@ class TestDispatchFoodTruckHaltEnforcement:
 
         write_initial_state(state_path, "cid", "camp", "/m.yaml", [])
 
-        resumable_envelope = json.dumps(
-            {
-                "success": False,
-                "dispatch_status": "resumable",
-                "dispatch_id": "test-dispatch-id",
-                "dispatched_session_id": "sess-abc",
-                "reason": "fleet_l3_no_result_block",
-                "token_usage": None,
-                "l3_parse_source": "stdout",
-                "lifespan_started": True,
-                "l3_payload": None,
-            }
-        )
+        from autoskillit.fleet import DispatchCompleted
+        from autoskillit.fleet import DispatchStatus as _DS
+
         monkeypatch.setattr(
             "autoskillit.fleet.execute_dispatch",
-            AsyncMock(return_value=resumable_envelope),
+            AsyncMock(
+                return_value=DispatchCompleted(
+                    success=False,
+                    dispatch_status=_DS.RESUMABLE,
+                    dispatch_id="test-dispatch-id",
+                    dispatched_session_id="sess-abc",
+                    reason="fleet_l3_no_result_block",
+                    token_usage={},
+                    l3_parse_source="stdout",
+                    lifespan_started=True,
+                    l3_payload=None,
+                )
+            ),
         )
 
         from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck

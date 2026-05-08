@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.fleet import (
+    DispatchCompleted,
     DispatchRecord,
     DispatchStatus,
     read_state,
@@ -148,19 +149,15 @@ class TestDispatchFoodTruckCampaignState:
         monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(sp))
         monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
 
-        success_envelope = json.dumps(
-            {
-                "success": True,
-                "dispatch_status": "success",
-                "dispatch_id": "d1",
-                "dispatched_session_id": "s1",
-                "reason": "",
-                "token_usage": {},
-            }
-        )
-
         async def _fake_execute(**kwargs):
-            return success_envelope
+            return DispatchCompleted(
+                success=True,
+                dispatch_status=DispatchStatus.SUCCESS,
+                dispatch_id="d1",
+                dispatched_session_id="s1",
+                reason="",
+                token_usage={},
+            )
 
         import autoskillit.fleet
 
@@ -183,19 +180,15 @@ class TestDispatchFoodTruckCampaignState:
         monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(sp))
         monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
 
-        failure_envelope = json.dumps(
-            {
-                "success": False,
-                "dispatch_status": "failure",
-                "dispatch_id": "d1",
-                "dispatched_session_id": "s1",
-                "reason": "l2_crashed",
-                "token_usage": {},
-            }
-        )
-
         async def _fake_execute(**kwargs):
-            return failure_envelope
+            return DispatchCompleted(
+                success=False,
+                dispatch_status=DispatchStatus.FAILURE,
+                dispatch_id="d1",
+                dispatched_session_id="s1",
+                reason="l2_crashed",
+                token_usage={},
+            )
 
         import autoskillit.fleet
 
@@ -218,14 +211,13 @@ class TestDispatchFoodTruckCampaignState:
         monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
 
         async def _fake_execute(**kwargs):
-            return json.dumps(
-                {
-                    "success": True,
-                    "dispatch_id": "d1",
-                    "dispatched_session_id": "s1",
-                    "reason": "",
-                    "token_usage": {},
-                }
+            return DispatchCompleted(
+                success=True,
+                dispatch_status=DispatchStatus.SUCCESS,
+                dispatch_id="d1",
+                dispatched_session_id="s1",
+                reason="",
+                token_usage={},
             )
 
         import autoskillit.fleet
@@ -251,14 +243,13 @@ class TestDispatchFoodTruckCampaignState:
         monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
 
         async def _fake_execute(**kwargs):
-            return json.dumps(
-                {
-                    "success": True,
-                    "dispatch_id": "d1",
-                    "dispatched_session_id": "s1",
-                    "reason": "",
-                    "token_usage": {},
-                }
+            return DispatchCompleted(
+                success=True,
+                dispatch_status=DispatchStatus.SUCCESS,
+                dispatch_id="d1",
+                dispatched_session_id="s1",
+                reason="",
+                token_usage={},
             )
 
         import autoskillit.fleet

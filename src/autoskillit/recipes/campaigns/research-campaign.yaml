@@ -64,8 +64,11 @@ dispatches:
     recipe: research-design
     task: "Run the research design phase: scope the question, plan the experiment, and optionally review the design."
     ingredients:
+      task: "${{ inputs.task }}"
       issue_url: "${{ inputs.issue_url }}"
       source_dir: "${{ inputs.source_dir }}"
+      base_branch: "${{ inputs.base_branch }}"
+      review_design: "${{ inputs.review_design }}"
     capture:
       worktree_path: "${{ result.worktree_path }}"
       research_dir: "${{ result.research_dir }}"
@@ -82,6 +85,9 @@ dispatches:
       experiment_plan: "${{ campaign.experiment_plan }}"
       visualization_plan_path: "${{ campaign.visualization_plan_path }}"
       source_dir: "${{ inputs.source_dir }}"
+      base_branch: "${{ inputs.base_branch }}"
+      issue_url: "${{ inputs.issue_url }}"
+      output_mode: "${{ inputs.output_mode }}"
     capture:
       report_path: "${{ result.report_path }}"
     depends_on:
@@ -97,6 +103,11 @@ dispatches:
       visualization_plan_path: "${{ campaign.visualization_plan_path }}"
       report_path: "${{ campaign.report_path }}"
       source_dir: "${{ inputs.source_dir }}"
+      base_branch: "${{ inputs.base_branch }}"
+      issue_url: "${{ inputs.issue_url }}"
+      output_mode: "${{ inputs.output_mode }}"
+      review_pr: "${{ inputs.review_pr }}"
+      audit_claims: "${{ inputs.audit_claims }}"
     capture:
       pr_url: "${{ result.pr_url }}"
       all_diagram_paths: "${{ result.all_diagram_paths }}"

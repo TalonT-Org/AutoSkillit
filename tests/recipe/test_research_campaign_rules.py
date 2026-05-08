@@ -25,6 +25,7 @@ def validation_ctx():
         available_recipes=frozenset(
             {"research-design", "research-implement", "research-review", "research-archive"}
         ),
+        project_dir=RECIPE_PATH.parent.parent.parent,
     )
 
 
@@ -71,4 +72,10 @@ def test_dispatch_capture_fields_in_sentinel_contract_passes(validation_ctx) -> 
         pytest.skip(f"Rule {rule_name!r} not yet registered")
     findings = run_semantic_rules(validation_ctx)
     matched = [f for f in findings if f.rule == rule_name]
+    assert not matched, "; ".join(f"{f.rule}: {f.message}" for f in matched)
+
+
+def test_campaign_dangling_ingredient_passes(validation_ctx) -> None:
+    findings = run_semantic_rules(validation_ctx)
+    matched = [f for f in findings if f.rule == "campaign-dangling-ingredient"]
     assert not matched, "; ".join(f"{f.rule}: {f.message}" for f in matched)

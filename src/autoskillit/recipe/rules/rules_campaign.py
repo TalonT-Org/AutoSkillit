@@ -20,6 +20,11 @@ logger = get_logger(__name__)
 
 _KEBAB_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 
+# _run_dispatch() auto-injects these from dispatch-level fields (e.g. task: from the
+# dispatch task: field), so campaigns that rely on this injection pattern should not
+# be flagged for not explicitly forwarding them in the ingredients block.
+_AUTO_INJECTED_CAMPAIGN_INGREDIENTS: frozenset[str] = frozenset({"task"})
+
 
 def _load_dispatch_target(dispatch: CampaignDispatch, project_dir: Path | None) -> Recipe | None:
     """Load the target recipe for a dispatch. Returns None if not loadable."""
@@ -277,6 +282,49 @@ def _check_dispatch_ingredients_keys_in_target_schema(ctx: ValidationContext) ->
                             f"Dispatch {d.name!r} passes ingredient {key!r} to recipe "
                             f"{d.recipe!r}, but that recipe does not declare ingredient {key!r}. "
                             f"Known ingredients: {sorted(target.ingredients)}"
+                        ),
+                    )
+                )
+    return findings
+
+
+@semantic_rule(
+    name="campaign-dangling-ingredient",
+    description=(
+        "Campaign ingredients should be forwarded to dispatches whose target recipe declares them"
+    ),
+    severity=Severity.WARNING,
+)
+def _check_campaign_dangling_ingredient(ctx: ValidationContext) -> list[RuleFinding]:
+    if ctx.recipe.kind != RecipeKind.CAMPAIGN:
+        return []
+    campaign_ingredients = set(ctx.recipe.ingredients.keys())
+    if not campaign_ingredients:
+        return []
+    findings: list[RuleFinding] = []
+    for d in ctx.recipe.dispatches:
+        # Gated dispatches are conditional — they may not run at all, so requiring
+        # them to forward every campaign ingredient would produce false positives.
+        if d.gate:
+            continue
+        target = _load_dispatch_target(d, ctx.project_dir)
+        if target is None:
+            continue
+        forwarded_keys = set(d.ingredients.keys())
+        for ing_name in campaign_ingredients:
+            if ing_name in _AUTO_INJECTED_CAMPAIGN_INGREDIENTS:
+                continue
+            if ing_name in target.ingredients and ing_name not in forwarded_keys:
+                findings.append(
+                    RuleFinding(
+                        rule="campaign-dangling-ingredient",
+                        severity=Severity.WARNING,
+                        step_name="(top-level)",
+                        message=(
+                            f"Campaign ingredient {ing_name!r} is declared by target "
+                            f"recipe {d.recipe!r} (dispatch {d.name!r}) but is not "
+                            f"forwarded in the dispatch's ingredients block. The sub-recipe "
+                            f"will use its own default instead of the campaign-level value."
                         ),
                     )
                 )

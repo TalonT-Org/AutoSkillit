@@ -743,3 +743,227 @@ def test_dispatch_ingredients_keys_exempts_gate_dispatches():
     )
     found = _findings(recipe, "dispatch-ingredients-keys-in-target-schema")
     assert found == []
+
+
+# ---------------------------------------------------------------------------
+# T-D1: campaign-dangling-ingredient
+# ---------------------------------------------------------------------------
+
+
+def test_campaign_dangling_ingredient_fires_on_missing_forwarding(tmp_path: Path):
+    """Rule fires when campaign ingredient is declared by target but dispatch omits it."""
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    _write_recipe_yaml(
+        recipes_dir / "target-recipe.yaml",
+        {
+            "name": "target-recipe",
+            "description": "target",
+            "kind": "standard",
+            "kitchen_rules": ["NEVER"],
+            "ingredients": {
+                "review_pr": {"description": "Review PR", "default": "false"},
+            },
+            "steps": {"stop": {"action": "stop", "message": "done"}},
+        },
+    )
+    recipe = _campaign(
+        ingredients={"review_pr": {"description": "Review PR", "default": "false"}},
+        dispatches=[
+            CampaignDispatch(
+                name="phase-one",
+                recipe="target-recipe",
+                task="do it",
+                ingredients={},
+            ),
+        ],
+    )
+    found = _findings(recipe, "campaign-dangling-ingredient", project_dir=tmp_path)
+    assert len(found) == 1
+    assert found[0].severity == Severity.WARNING
+    assert "review_pr" in found[0].message
+
+
+def test_campaign_dangling_ingredient_passes_when_forwarded(tmp_path: Path):
+    """Rule passes when ingredient is forwarded."""
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    _write_recipe_yaml(
+        recipes_dir / "target-recipe.yaml",
+        {
+            "name": "target-recipe",
+            "description": "target",
+            "kind": "standard",
+            "kitchen_rules": ["NEVER"],
+            "ingredients": {
+                "review_pr": {"description": "Review PR", "default": "false"},
+            },
+            "steps": {"stop": {"action": "stop", "message": "done"}},
+        },
+    )
+    recipe = _campaign(
+        ingredients={"review_pr": {"description": "Review PR", "default": "false"}},
+        dispatches=[
+            CampaignDispatch(
+                name="phase-one",
+                recipe="target-recipe",
+                task="do it",
+                ingredients={"review_pr": "${{ inputs.review_pr }}"},
+            ),
+        ],
+    )
+    found = _findings(recipe, "campaign-dangling-ingredient", project_dir=tmp_path)
+    assert found == []
+
+
+def test_campaign_dangling_ingredient_passes_when_target_does_not_declare(tmp_path: Path):
+    """Rule passes when target sub-recipe does not declare the ingredient."""
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    _write_recipe_yaml(
+        recipes_dir / "target-recipe.yaml",
+        {
+            "name": "target-recipe",
+            "description": "target",
+            "kind": "standard",
+            "kitchen_rules": ["NEVER"],
+            "ingredients": {
+                "other_ing": {"description": "Other", "default": "x"},
+            },
+            "steps": {"stop": {"action": "stop", "message": "done"}},
+        },
+    )
+    recipe = _campaign(
+        ingredients={"output_mode": {"description": "Output mode", "default": "local"}},
+        dispatches=[
+            CampaignDispatch(
+                name="phase-one",
+                recipe="target-recipe",
+                task="do it",
+                ingredients={},
+            ),
+        ],
+    )
+    found = _findings(recipe, "campaign-dangling-ingredient", project_dir=tmp_path)
+    assert found == []
+
+
+def test_campaign_dangling_ingredient_skips_unloadable_target(tmp_path: Path):
+    """Rule skips when target recipe is not loadable."""
+    recipe = _campaign(
+        ingredients={"review_pr": {"description": "Review PR", "default": "false"}},
+        dispatches=[
+            CampaignDispatch(
+                name="phase-one",
+                recipe="nonexistent-recipe",
+                task="do it",
+                ingredients={},
+            ),
+        ],
+    )
+    found = _findings(recipe, "campaign-dangling-ingredient", project_dir=tmp_path)
+    assert found == []
+
+
+def test_campaign_dangling_ingredient_fires_per_dispatch(tmp_path: Path):
+    """Rule fires per-dispatch for multi-dispatch campaigns."""
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    _write_recipe_yaml(
+        recipes_dir / "target-forwarding.yaml",
+        {
+            "name": "target-forwarding",
+            "description": "target",
+            "kind": "standard",
+            "kitchen_rules": ["NEVER"],
+            "ingredients": {
+                "output_mode": {"description": "Output mode", "default": "local"},
+            },
+            "steps": {"stop": {"action": "stop", "message": "done"}},
+        },
+    )
+    _write_recipe_yaml(
+        recipes_dir / "target-omitting.yaml",
+        {
+            "name": "target-omitting",
+            "description": "target",
+            "kind": "standard",
+            "kitchen_rules": ["NEVER"],
+            "ingredients": {
+                "output_mode": {"description": "Output mode", "default": "local"},
+            },
+            "steps": {"stop": {"action": "stop", "message": "done"}},
+        },
+    )
+    recipe = _campaign(
+        ingredients={"output_mode": {"description": "Output mode", "default": "local"}},
+        dispatches=[
+            CampaignDispatch(
+                name="phase-forward",
+                recipe="target-forwarding",
+                task="do it",
+                ingredients={"output_mode": "${{ inputs.output_mode }}"},
+            ),
+            CampaignDispatch(
+                name="phase-omit",
+                recipe="target-omitting",
+                task="do it",
+                ingredients={},
+            ),
+        ],
+    )
+    found = _findings(recipe, "campaign-dangling-ingredient", project_dir=tmp_path)
+    assert len(found) == 1
+    assert "phase-omit" in found[0].message
+    assert "phase-forward" not in found[0].message
+
+
+def test_campaign_dangling_ingredient_ignores_gate_dispatches(tmp_path: Path):
+    """Rule ignores gate dispatches."""
+    recipe = _campaign(
+        ingredients={"review_pr": {"description": "Review PR", "default": "false"}},
+        dispatches=[
+            CampaignDispatch(name="gate-check", gate="confirm", message="Proceed?"),
+        ],
+    )
+    found = _findings(recipe, "campaign-dangling-ingredient", project_dir=tmp_path)
+    assert found == []
+
+
+def test_campaign_dangling_ingredient_ignores_non_campaign_recipes(tmp_path: Path):
+    """Rule ignores non-campaign recipes."""
+    recipe = _standard_recipe()
+    found = _findings(recipe, "campaign-dangling-ingredient", project_dir=tmp_path)
+    assert found == []
+
+
+def test_campaign_dangling_ingredient_exempts_task(tmp_path: Path):
+    """Rule accounts for task auto-injection and should not fire for it."""
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    _write_recipe_yaml(
+        recipes_dir / "target-recipe.yaml",
+        {
+            "name": "target-recipe",
+            "description": "target",
+            "kind": "standard",
+            "kitchen_rules": ["NEVER"],
+            "ingredients": {
+                "task": {"description": "The task", "required": True},
+            },
+            "steps": {"stop": {"action": "stop", "message": "done"}},
+        },
+    )
+    recipe = _campaign(
+        ingredients={"task": {"description": "The task", "required": True}},
+        dispatches=[
+            CampaignDispatch(
+                name="phase-one",
+                recipe="target-recipe",
+                task="Do the thing",  # task field set, but not forwarded in ingredients
+                ingredients={},
+            ),
+        ],
+    )
+    found = _findings(recipe, "campaign-dangling-ingredient", project_dir=tmp_path)
+    assert found == []

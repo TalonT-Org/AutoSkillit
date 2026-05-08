@@ -113,7 +113,7 @@ def _clear_dispatch_for_retry(d: DispatchRecord) -> None:
             "infra_exit_category": d.infra_exit_category,
             "started_at": d.started_at,
             "ended_at": d.ended_at,
-            "token_usage": dict(d.token_usage),
+            "token_usage": dict(d.token_usage) if d.token_usage is not None else {},
         }
     )
     d.status = DispatchStatus.PENDING
@@ -197,6 +197,10 @@ class CampaignStateMutator:
         _resume_lock.acquire()
         try:
             self._lock_path.parent.mkdir(parents=True, exist_ok=True)
+            # Lock files are intentionally not deleted after use. Safe cleanup after
+            # fcntl release requires inode-comparison to avoid a TOCTOU race; the
+            # files are empty and bounded to one per state file, so accumulation cost
+            # is negligible compared to the complexity of safe deletion.
             fh = open(self._lock_path, "wb")
             try:
                 fcntl.flock(fh, fcntl.LOCK_EX)

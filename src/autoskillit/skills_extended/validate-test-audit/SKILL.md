@@ -454,7 +454,7 @@ For each ticket group in the grouping manifest:
    - A subset Summary Table (only the rows for included finding IDs)
    - Only the `## Validated Findings` sub-sections for included finding IDs
    - A footer: `*Part of validated tests audit — see full report for remaining tickets.*`
-3. Write to: `{{AUTOSKILLIT_TEMP}}/validate-audit-{YYYY-MM-DD_HHMMSS}/ticket_body_tests_{N}.md` (relative to the current working directory)
+3. Write to: `{{AUTOSKILLIT_TEMP}}/validate-audit-{YYYY-MM-DD_HHMMSS}/ticket_body_tests_{N}.md`
    where `{N}` is 1-indexed from the grouping manifest.
 
 Also write the grouping manifest itself to:

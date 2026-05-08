@@ -45,6 +45,7 @@ CI/CD configuration, security, guard coverage, and release sanity tests.
 | `test_release_workflows.py` | Structural contract tests for the release CI workflows |
 | `test_remove_clone_guard.py` | Tests for the remove_clone_guard PreToolUse hook |
 | `test_schema_version_convention.py` | Allowlist ratchet: enforce that new JSON dict write sites use write_versioned_json |
+| `test_schema_read_convention.py` | Read-side ratchet: enforce that write_versioned_json callers have corresponding read-side validation |
 | `test_security_config.py` | Structural tests for security configuration integrity |
 | `test_session_scope_enforcement.py` | Structural enforcement tests: session-scope metadata on HookDef |
 | `test_skill_cmd_check.py` | Unit tests for the skill_cmd_check PreToolUse hook |

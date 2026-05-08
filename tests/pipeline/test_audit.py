@@ -53,10 +53,27 @@ class TestFailureRecord:
         assert json.loads(json.dumps(d)) == d
 
     def test_to_dict_contains_all_fields(self):
-        record = _make_record(skill_command="/test:cmd", exit_code=42)
+        record = _make_record(
+            timestamp="2026-01-01T00:00:00",
+            skill_command="/foo",
+            exit_code=1,
+            subtype="timeout",
+            needs_retry=False,
+            retry_reason="",
+            stderr="err",
+        )
         d = record.to_dict()
-        assert d["skill_command"] == "/test:cmd"
-        assert d["exit_code"] == 42
+        assert set(d.keys()) == {
+            "timestamp",
+            "skill_command",
+            "exit_code",
+            "subtype",
+            "needs_retry",
+            "retry_reason",
+            "stderr",
+        }
+        assert d["skill_command"] == "/foo"
+        assert d["exit_code"] == 1
 
 
 class TestDefaultAuditLog:

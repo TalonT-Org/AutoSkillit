@@ -11,6 +11,7 @@ import anyio
 import anyio.abc
 
 from autoskillit.core import ChannelBStatus, ChannelConfirmation, TerminationReason, get_logger
+from autoskillit.core._json import fast_loads as _fast_loads
 from autoskillit.execution.process._process_monitor import _heartbeat, _session_log_monitor
 
 logger = get_logger(__name__)
@@ -206,7 +207,7 @@ async def _extract_stdout_session_id(
             if not line:
                 continue
             try:
-                obj = json.loads(line)
+                obj = _fast_loads(line)
             except (json.JSONDecodeError, ValueError):
                 continue
             if isinstance(obj, dict) and obj.get("type") == "system":

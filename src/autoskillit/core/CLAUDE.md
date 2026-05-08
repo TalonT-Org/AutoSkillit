@@ -9,6 +9,7 @@ Sub-packages: types/ (see types/CLAUDE.md) and runtime/ (see runtime/CLAUDE.md).
 |------|---------|
 | `__init__.py` | Re-exports public surface |
 | `io.py` | `atomic_write`, `ensure_project_temp`, YAML helpers |
+| `_json.py` | Fast JSON via orjson (with stdlib fallback) — `fast_loads`, `fast_dumps` |
 | `logging.py` | Logging configuration |
 | `paths.py` | `pkg_root()`, `is_git_worktree()` |
 | `_claude_env.py` | IDE-scrubbing canonical env builder for claude subprocesses |

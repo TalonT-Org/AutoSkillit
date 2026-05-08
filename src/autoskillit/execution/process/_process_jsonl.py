@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
+
 from autoskillit.core import ClaudeContentBlockType, get_logger
+from autoskillit.core._json import fast_loads as _fast_loads
 
 logger = get_logger(__name__)
 
@@ -32,15 +35,13 @@ def _jsonl_contains_marker(
     Thinking blocks are excluded — a marker inside a thinking block is internal
     reasoning, not a structural completion signal.
     """
-    import json as _json
-
     for line in content.splitlines():
         line = line.strip()
         if not line:
             continue
         try:
-            obj = _json.loads(line)
-        except (ValueError, _json.JSONDecodeError):
+            obj = _fast_loads(line)
+        except (ValueError, json.JSONDecodeError):
             continue
         if not isinstance(obj, dict):
             continue
@@ -89,15 +90,13 @@ def _jsonl_has_record_type(
     This prevents Channel A from confirming on premature exits where the model
     produced output but did not complete its task.
     """
-    import json as _json
-
     for line in content.splitlines():
         line = line.strip()
         if not line:
             continue
         try:
-            obj = _json.loads(line)
-        except (ValueError, _json.JSONDecodeError):
+            obj = _fast_loads(line)
+        except (ValueError, json.JSONDecodeError):
             continue
         if not isinstance(obj, dict):
             continue
@@ -116,16 +115,14 @@ def _jsonl_has_record_type(
 
 def _jsonl_last_record_type(content: str) -> str | None:
     """Return the type field of the last parseable JSONL record in content, or None."""
-    import json as _json
-
     last_type: str | None = None
     for line in content.splitlines():
         line = line.strip()
         if not line:
             continue
         try:
-            obj = _json.loads(line)
-        except (ValueError, _json.JSONDecodeError):
+            obj = _fast_loads(line)
+        except (ValueError, json.JSONDecodeError):
             continue
         if isinstance(obj, dict):
             t = obj.get("type")

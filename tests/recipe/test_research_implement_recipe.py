@@ -18,7 +18,7 @@ class TestResearchImplementRecipe:
         assert errors == [], f"Validation errors: {errors}"
 
     def test_research_implement_step_count(self, recipe) -> None:
-        assert len(recipe.steps) == 20
+        assert len(recipe.steps) == 22
 
     def test_research_implement_header(self, recipe) -> None:
         assert recipe.name == "research-implement"

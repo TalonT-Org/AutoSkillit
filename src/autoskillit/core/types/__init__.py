@@ -41,8 +41,8 @@ from ._type_subprocess import __all__ as _subprocess_all
 
 __all__ = (
     _checkpoint_all
-    + _dispatch_identity_all
     + _constants_all
+    + _dispatch_identity_all
     + _enums_all
     + _helpers_all
     + _plugin_source_all

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from autoskillit.core import Severity
@@ -124,7 +126,8 @@ class TestUndeclaredPackRequirement:
             requires_packs=["research"],  # missing vis-lens
             skill_command="/autoskillit:plan-visualization",
         )
-        findings = self._run_rule(recipe)
+        mock_map = {"plan-visualization": frozenset({"vis-lens"})}
+        findings = self._run_rule(recipe, skill_category_map=mock_map)
         assert len(findings) == 1
         assert findings[0].severity == Severity.ERROR
         assert "vis-lens" in findings[0].message
@@ -135,7 +138,8 @@ class TestUndeclaredPackRequirement:
             requires_packs=["research", "vis-lens"],
             skill_command="/autoskillit:plan-visualization",
         )
-        findings = self._run_rule(recipe)
+        mock_map = {"plan-visualization": frozenset({"vis-lens"})}
+        findings = self._run_rule(recipe, skill_category_map=mock_map)
         assert not findings
 
     def test_skill_needing_only_enabled_packs_passes(self):
@@ -144,7 +148,8 @@ class TestUndeclaredPackRequirement:
             requires_packs=["github"],
             skill_command="/autoskillit:github-issue",
         )
-        findings = self._run_rule(recipe)
+        mock_map = {"github-issue": frozenset({"github"})}
+        findings = self._run_rule(recipe, skill_category_map=mock_map)
         assert not findings
 
     def test_multiple_missing_packs_emits_multiple_errors(self):
@@ -189,17 +194,12 @@ class TestUndeclaredPackRequirement:
         """research-design.yaml with only [research] triggers vis-lens ERROR."""
         import autoskillit.recipe  # noqa: F401 -- triggers rule registration
 
-        recipe = load_recipe(builtin_recipes_dir() / "research-design.yaml")
-        # Simulate the broken state before the YAML fix
-        original_packs = recipe.requires_packs
-        recipe.requires_packs = ["research"]
-        try:
-            findings = [
-                f for f in run_semantic_rules(recipe) if f.rule == "undeclared-pack-requirement"
-            ]
-            assert len(findings) >= 1, "Expected vis-lens to be flagged as missing"
-            vis_lens_findings = [f for f in findings if "vis-lens" in f.message]
-            assert len(vis_lens_findings) == 1
-            assert vis_lens_findings[0].severity == Severity.ERROR
-        finally:
-            recipe.requires_packs = original_packs
+        base_recipe = load_recipe(builtin_recipes_dir() / "research-design.yaml")
+        recipe = replace(base_recipe, requires_packs=["research"])
+        findings = [
+            f for f in run_semantic_rules(recipe) if f.rule == "undeclared-pack-requirement"
+        ]
+        assert len(findings) >= 1, "Expected vis-lens to be flagged as missing"
+        vis_lens_findings = [f for f in findings if "vis-lens" in f.message]
+        assert len(vis_lens_findings) == 1
+        assert vis_lens_findings[0].severity == Severity.ERROR

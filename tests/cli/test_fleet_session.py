@@ -628,7 +628,7 @@ class TestSessionIdPersistence:
             sig = next(call_sequence)
             if sig is None:
                 return None
-            from autoskillit.core import _InfraExitSignal
+            from autoskillit.cli.session._session_launch import _InfraExitSignal
 
             return _InfraExitSignal(session_id="captured-id-xyz", category=sig)
 

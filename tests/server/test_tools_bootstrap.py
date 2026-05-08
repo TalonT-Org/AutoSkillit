@@ -195,6 +195,55 @@ class TestClaimAndResolveIssue:
         assert "fetch_title_ms" in result["timings"]
         assert "claim_ms" in result["timings"]
 
+    @pytest.mark.anyio
+    async def test_claim_and_resolve_with_queued_label(self, tool_ctx_kitchen_open):
+        """claim_and_resolve_issue with label=queued uses registry color and removes fail."""
+        tool_ctx_kitchen_open.github_client = AsyncMock()
+        tool_ctx_kitchen_open.github_client.fetch_title = AsyncMock(
+            return_value={"success": True, "number": 42, "title": "Fix bug", "slug": "fix-bug"}
+        )
+        tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(
+            return_value={"success": True, "labels": []}
+        )
+        tool_ctx_kitchen_open.github_client.ensure_label = AsyncMock(
+            return_value={"success": True}
+        )
+        tool_ctx_kitchen_open.github_client.swap_labels = AsyncMock(return_value={"success": True})
+        result = json.loads(
+            await claim_and_resolve_issue(issue_url="owner/repo#42", label="queued")
+        )
+        assert result["claimed"] is True
+        tool_ctx_kitchen_open.github_client.ensure_label.assert_called_once_with(
+            "owner",
+            "repo",
+            "queued",
+            color="c2e0c6",
+            description="Issue claimed by orchestrator, waiting for recipe pickup",
+        )
+        call_kwargs = tool_ctx_kitchen_open.github_client.swap_labels.call_args.kwargs
+        assert set(call_kwargs["remove_labels"]) == {"fail"}
+        assert call_kwargs["add_labels"] == ["queued"]
+
+    @pytest.mark.anyio
+    async def test_claim_and_resolve_default_removes_queued(self, tool_ctx_kitchen_open):
+        """claim_and_resolve_issue with default label removes both queued and fail."""
+        tool_ctx_kitchen_open.github_client = AsyncMock()
+        tool_ctx_kitchen_open.github_client.fetch_title = AsyncMock(
+            return_value={"success": True, "number": 42, "title": "Fix bug", "slug": "fix-bug"}
+        )
+        tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(
+            return_value={"success": True, "labels": []}
+        )
+        tool_ctx_kitchen_open.github_client.ensure_label = AsyncMock(
+            return_value={"success": True}
+        )
+        tool_ctx_kitchen_open.github_client.swap_labels = AsyncMock(return_value={"success": True})
+        result = json.loads(await claim_and_resolve_issue(issue_url="owner/repo#42"))
+        assert result["claimed"] is True
+        call_kwargs = tool_ctx_kitchen_open.github_client.swap_labels.call_args.kwargs
+        assert set(call_kwargs["remove_labels"]) >= {"queued", "fail"}
+        assert call_kwargs["add_labels"] == ["in-progress"]
+
 
 class TestCreateAndPublishBranch:
     @pytest.mark.anyio

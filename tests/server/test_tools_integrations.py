@@ -137,9 +137,55 @@ class TestClaimIssueTool:
         assert result["success"] is True
         assert result["claimed"] is True
         assert result.get("reentry", False) is False
-        mock_client.swap_labels.assert_called_once_with(
-            "owner", "repo", 42, remove_labels=["fail"], add_labels=["in-progress"]
+        call_kwargs = mock_client.swap_labels.call_args.kwargs
+        assert set(call_kwargs["remove_labels"]) == {"queued", "fail"}
+        assert call_kwargs["add_labels"] == ["in-progress"]
+
+    @pytest.mark.anyio
+    async def test_claim_issue_with_queued_label(self, tool_ctx_kitchen_open):
+        """claim_issue with label=queued uses registry color/description and removes fail."""
+        mock_client = AsyncMock()
+        mock_client.fetch_issue.return_value = {"success": True, "labels": []}
+        mock_client.ensure_label.return_value = {"success": True, "created": True}
+        mock_client.swap_labels.return_value = {"success": True, "labels": ["queued"]}
+        tool_ctx_kitchen_open.github_client = mock_client
+        result = json.loads(
+            await claim_issue(issue_url="https://github.com/owner/repo/issues/1", label="queued")
         )
+        assert result["success"] is True
+        assert result["claimed"] is True
+        mock_client.ensure_label.assert_called_once_with(
+            "owner",
+            "repo",
+            "queued",
+            color="c2e0c6",
+            description="Issue claimed by orchestrator, waiting for recipe pickup",
+        )
+        call_kwargs = mock_client.swap_labels.call_args.kwargs
+        assert set(call_kwargs["remove_labels"]) == {"fail"}
+        assert call_kwargs["add_labels"] == ["queued"]
+
+    @pytest.mark.anyio
+    async def test_claim_issue_default_removes_queued_and_fail(self, tool_ctx_kitchen_open):
+        """claim_issue with default label removes both queued and fail labels."""
+        mock_client = AsyncMock()
+        mock_client.fetch_issue.return_value = {"success": True, "labels": []}
+        mock_client.ensure_label.return_value = {"success": True, "created": True}
+        mock_client.swap_labels.return_value = {"success": True, "labels": ["in-progress"]}
+        tool_ctx_kitchen_open.github_client = mock_client
+        result = json.loads(await claim_issue(issue_url="https://github.com/owner/repo/issues/1"))
+        assert result["success"] is True
+        assert result["claimed"] is True
+        mock_client.ensure_label.assert_called_once_with(
+            "owner",
+            "repo",
+            "in-progress",
+            color="fbca04",
+            description="Issue is actively being processed by a pipeline session",
+        )
+        call_kwargs = mock_client.swap_labels.call_args.kwargs
+        assert set(call_kwargs["remove_labels"]) >= {"queued", "fail"}
+        assert call_kwargs["add_labels"] == ["in-progress"]
 
 
 class TestReleaseIssueTool:

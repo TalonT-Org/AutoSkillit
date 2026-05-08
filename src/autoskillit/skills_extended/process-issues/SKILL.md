@@ -162,7 +162,7 @@ completed_urls   = []   # issues whose recipe fully returned
 Collect all issues from all batches that will be processed (respecting `--batch N` filtering).
 
 For each issue in the collected list:
-1. Call `claim_issue(issue_url=<url>)` — **no** `allow_reentry` (default `False`)
+1. Call `claim_issue(issue_url=<url>, label="queued")` — **no** `allow_reentry` (default `False`)
 2. If `result.claimed == true`:
    - append `issue_url` to `pre_claimed_urls`
 3. If `result.claimed == false`:
@@ -199,7 +199,12 @@ Processing X issues:
    Skipped issues are recorded as `status: skipped` (not `status: failure`), so the
    batch failure gate below counts only the original failure(s) that triggered the skip.
 
-3. **Optionally append pickup status to issue body** (if `--status-updates` is active):
+3. **Promote queued → in-progress for this issue:**
+   Call `claim_issue(issue_url=<url>, allow_reentry=true)`
+   (No label argument — defaults to in-progress; removes the "queued" label
+   and adds "in-progress".)
+
+4. **Optionally append pickup status to issue body** (if `--status-updates` is active):
    ```bash
    PROCESS_BODY_FILE="{{AUTOSKILLIT_TEMP}}/process-issues/status_{number}_$(date +%s).md"
    mkdir -p "$(dirname "$PROCESS_BODY_FILE")"

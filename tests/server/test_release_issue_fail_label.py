@@ -31,14 +31,12 @@ class TestReleaseIssueFailLabel:
         assert result["success"] is True
         assert result["failed"] is True
         assert result["fail_label"] == "fail"
-        mock_client.ensure_label.assert_called_once_with("owner", "repo", "fail", color="d73a4a")
-        mock_client.swap_labels.assert_called_once_with(
-            "owner",
-            "repo",
-            42,
-            remove_labels=["in-progress"],
-            add_labels=["fail"],
+        mock_client.ensure_label.assert_called_once_with(
+            "owner", "repo", "fail", color="d73a4a", description="Recipe execution failed"
         )
+        swap_call = mock_client.swap_labels.call_args
+        assert set(swap_call.kwargs["remove_labels"]) == {"in-progress", "queued"}
+        assert swap_call.kwargs["add_labels"] == ["fail"]
 
     @pytest.mark.anyio
     async def test_release_issue_success_removes_fail_label(
@@ -62,6 +60,7 @@ class TestReleaseIssueFailLabel:
         swap_call = mock_client.swap_labels.call_args
         assert "in-progress" in swap_call.kwargs["remove_labels"]
         assert "fail" in swap_call.kwargs["remove_labels"]
+        assert "queued" in swap_call.kwargs["remove_labels"]
         assert "staged" in swap_call.kwargs["add_labels"]
 
     @pytest.mark.anyio
@@ -83,6 +82,7 @@ class TestReleaseIssueFailLabel:
         swap_call = mock_client.swap_labels.call_args
         assert "in-progress" in swap_call.kwargs["remove_labels"]
         assert "fail" in swap_call.kwargs["remove_labels"]
+        assert "queued" in swap_call.kwargs["remove_labels"]
 
 
 class TestClaimIssueFailLabelCleanup:
@@ -111,11 +111,7 @@ class TestClaimIssueFailLabelCleanup:
 
         assert result["success"] is True
         assert result["claimed"] is True
-        mock_client.swap_labels.assert_called_once_with(
-            "owner",
-            "repo",
-            42,
-            remove_labels=["fail"],
-            add_labels=["in-progress"],
-        )
+        call_kwargs = mock_client.swap_labels.call_args.kwargs
+        assert set(call_kwargs["remove_labels"]) == {"queued", "fail"}
+        assert call_kwargs["add_labels"] == ["in-progress"]
         mock_client.add_labels.assert_not_called()

@@ -28,6 +28,7 @@ __all__ = [
     "SessionType",
     "FleetErrorCode",
     "FeatureLifecycle",
+    "IssueLabelState",
     "DispatchGateType",
     "ClaudeContentBlockType",
     "InfraExitCategory",
@@ -424,6 +425,15 @@ class FeatureLifecycle(StrEnum):
     STABLE = "stable"
     DEPRECATED = "deprecated"
     DISABLED = "disabled"
+
+
+class IssueLabelState(StrEnum):
+    """Lifecycle state of a GitHub issue managed by the label state machine."""
+
+    QUEUED = "queued"
+    IN_PROGRESS = "in-progress"
+    STAGED = "staged"
+    FAIL = "fail"
 
 
 @unique

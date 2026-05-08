@@ -38,7 +38,7 @@ class TestReleaseIssueStagedLifecycle:
             "repo",
             "staged",
             color="0075ca",
-            description="Implementation staged and waiting for promotion to main",
+            description="Issue resolved, PR staged for promotion",
         )
         mock_client.swap_labels.assert_called_once()
 

@@ -80,20 +80,26 @@ Launch up to 8 parallel `sonnet` subagents, one per issue. Each subagent:
    `affected_files` or `depends_on`. The issue body is read directly by the parent in Step 2.
 
 In the same parallel wave, launch **one additional task** to fetch the ambient in-progress
-context:
+and queued context:
 
 ```bash
 gh issue list --state open --label "{{github.in_progress_label}}" \
   --json number,title,body,labels,updatedAt --limit 50
+
+gh issue list --state open --label "{{github.queued_label}}" \
+  --json number,title,body,labels,updatedAt --limit 50
 ```
 
-Use the config value `github.in_progress_label` (default: `"in-progress"`) as the label
-name. From the returned list:
+Use the config value `github.in_progress_label` (default: `"in-progress"`) and
+`github.queued_label` (default: `"queued"`) as the label names. Merge both result sets
+(deduplicate by issue number) into the ambient context. From the combined list:
 - **Exclude** any issue whose number appears in the current target set — those are being
   handled by this session and are already represented in the pairwise assessment.
 - **Exclude** any issue whose labels contain the staged label (`github.staged_label`,
   default: `"staged"`) — staged issues have already landed on the integration branch.
-- The remaining issues form the **in-progress context** set.
+- Treat queued issues with lower default conflict severity than in-progress issues
+  since they haven't started file modifications yet.
+- The remaining issues form the **ambient context** set.
 
 If the `gh issue list` call fails (auth error, network failure), log the error and set the
 in-progress context to an empty list — do not abort the skill. An empty in-progress context

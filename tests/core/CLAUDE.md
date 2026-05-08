@@ -20,6 +20,7 @@ Core layer (IL-0) unit tests — paths, IO, types, feature flags.
 | `test_io.py` | Extended YAML I/O tests for core/io.py consolidation |
 | `test_json.py` | Tests for autoskillit.core._json — fast_loads and fast_dumps |
 | `test_kitchen_state.py` | Tests for KitchenMarker hash field support |
+| `test_label_lifecycle.py` | Tests for IssueLabelState, LabelDef, LABEL_LIFECYCLE_REGISTRY, LABEL_TRANSITIONS, and validate_label_transition |
 | `test_logging.py` | Tests for autoskillit.core.logging — centralized structlog configuration |
 | `test_paths.py` | Tests for autoskillit.core.paths — is_git_worktree and pkg_root |
 | `test_resolve_temp_dir.py` | Tests for autoskillit.core.io.resolve_temp_dir |

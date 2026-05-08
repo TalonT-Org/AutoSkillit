@@ -11,7 +11,6 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import (
-    LABEL_LIFECYCLE_REGISTRY,
     RetryReason,
     _parse_issue_ref,
     get_logger,
@@ -451,16 +450,9 @@ async def claim_issue(
                 }
             )
 
-        target_state = tool_ctx.config.github.state_for_label(effective_label)
-        if target_state is not None:
-            label_def = LABEL_LIFECYCLE_REGISTRY[target_state]
-            ensure_color = label_def.color
-            ensure_description = label_def.description
-            remove_labels = tool_ctx.config.github.labels_for_states(label_def.removes_on_entry)
-        else:
-            ensure_color = "fbca04"
-            ensure_description = "Issue is actively being processed by a pipeline session"
-            remove_labels = [tool_ctx.config.github.fail_label]
+        ensure_color, ensure_description, remove_labels = (
+            tool_ctx.config.github.resolve_label_metadata(effective_label)
+        )
 
         await tool_ctx.github_client.ensure_label(
             owner,
@@ -568,17 +560,10 @@ async def release_issue(
                     }
                 )
 
-            staged_state = tool_ctx.config.github.state_for_label(effective_staged_label)
-            if staged_state is not None:
-                staged_def = LABEL_LIFECYCLE_REGISTRY[staged_state]
-                staged_color = staged_def.color
-                staged_description = staged_def.description
-                remove_labels = tool_ctx.config.github.labels_for_states(
-                    staged_def.removes_on_entry
+            if tool_ctx.config.github.state_for_label(effective_staged_label) is not None:
+                staged_color, staged_description, remove_labels = (
+                    tool_ctx.config.github.resolve_label_metadata(effective_staged_label)
                 )
-                queued_lbl = tool_ctx.config.github.queued_label
-                if queued_lbl not in remove_labels:
-                    remove_labels.append(queued_lbl)
             else:
                 staged_color = "0075ca"
                 staged_description = (
@@ -637,15 +622,10 @@ async def release_issue(
                     }
                 )
 
-            fail_state = tool_ctx.config.github.state_for_label(fail_label)
-            if fail_state is not None:
-                fail_def = LABEL_LIFECYCLE_REGISTRY[fail_state]
-                fail_color = fail_def.color
-                fail_description = fail_def.description
-                remove_labels = tool_ctx.config.github.labels_for_states(fail_def.removes_on_entry)
-                queued_lbl = tool_ctx.config.github.queued_label
-                if queued_lbl not in remove_labels:
-                    remove_labels.append(queued_lbl)
+            if tool_ctx.config.github.state_for_label(fail_label) is not None:
+                fail_color, fail_description, remove_labels = (
+                    tool_ctx.config.github.resolve_label_metadata(fail_label)
+                )
             else:
                 fail_color = "d73a4a"
                 fail_description = "Recipe execution failed"

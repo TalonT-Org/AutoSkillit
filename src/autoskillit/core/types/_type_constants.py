@@ -472,13 +472,15 @@ LABEL_LIFECYCLE_REGISTRY: dict[IssueLabelState, LabelDef] = {
         state=IssueLabelState.STAGED,
         color="0075ca",
         description="Issue resolved, PR staged for promotion",
-        removes_on_entry=frozenset({IssueLabelState.IN_PROGRESS, IssueLabelState.FAIL}),
+        removes_on_entry=frozenset(
+            {IssueLabelState.IN_PROGRESS, IssueLabelState.FAIL, IssueLabelState.QUEUED}
+        ),
     ),
     IssueLabelState.FAIL: LabelDef(
         state=IssueLabelState.FAIL,
         color="d73a4a",
         description="Recipe execution failed",
-        removes_on_entry=frozenset({IssueLabelState.IN_PROGRESS}),
+        removes_on_entry=frozenset({IssueLabelState.IN_PROGRESS, IssueLabelState.QUEUED}),
     ),
 }
 

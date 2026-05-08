@@ -193,6 +193,8 @@ class GitHubConfig:
             IssueLabelState.STAGED: self.staged_label,
             IssueLabelState.FAIL: self.fail_label,
         }
+        if state not in _map:
+            raise ValueError(f"No label configured for state {state!r}")
         return _map[state]
 
     def state_for_label(self, label: str) -> IssueLabelState | None:
@@ -203,6 +205,28 @@ class GitHubConfig:
 
     def labels_for_states(self, states: frozenset[IssueLabelState]) -> list[str]:
         return [self.label_for_state(s) for s in states]
+
+    def resolve_label_metadata(self, label: str) -> tuple[str, str, list[str]]:
+        """Return (color, description, remove_labels) for a lifecycle label.
+
+        Uses the registry when label maps to a lifecycle state; falls back to
+        IN_PROGRESS defaults for custom labels not in the registry.
+        """
+        from autoskillit.core import LABEL_LIFECYCLE_REGISTRY  # noqa: PLC0415
+
+        state = self.state_for_label(label)
+        if state is not None:
+            label_def = LABEL_LIFECYCLE_REGISTRY[state]
+            return (
+                label_def.color,
+                label_def.description,
+                self.labels_for_states(label_def.removes_on_entry),
+            )
+        return (
+            "fbca04",
+            "Issue is actively being processed by a pipeline session",
+            [self.fail_label],
+        )
 
     def all_lifecycle_labels(self) -> list[str]:
         return [self.label_for_state(s) for s in IssueLabelState]

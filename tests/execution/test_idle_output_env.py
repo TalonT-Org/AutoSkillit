@@ -161,11 +161,11 @@ class TestDispatchFoodTruckIdleEnvInjection:
         self, minimal_ctx, tmp_path: Path, monkeypatch
     ) -> None:
         """dispatch_food_truck adds AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT to env_extras
-        based on cfg.run_skill.idle_output_timeout when it is > 0."""
+        based on fleet config idle_output_timeout (priority: caller > fleet > run_skill)."""
         from autoskillit.core.types import SkillResult as _SkillResult
         from autoskillit.execution.headless import DefaultHeadlessExecutor
 
-        minimal_ctx.config.run_skill.idle_output_timeout = 120
+        minimal_ctx.config.fleet.idle_output_timeout = 120
 
         captured_env_extras: list[dict[str, str] | None] = []
 

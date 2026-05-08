@@ -430,12 +430,18 @@ def test_research_campaign_run_implement_ingredients():
         "experiment_plan",
         "visualization_plan_path",
         "source_dir",
+        "base_branch",
+        "issue_url",
+        "output_mode",
     }
     assert d.ingredients["worktree_path"] == "${{ campaign.worktree_path }}"
     assert d.ingredients["research_dir"] == "${{ campaign.research_dir }}"
     assert d.ingredients["experiment_plan"] == "${{ campaign.experiment_plan }}"
     assert d.ingredients["visualization_plan_path"] == "${{ campaign.visualization_plan_path }}"
     assert d.ingredients["source_dir"] == "${{ inputs.source_dir }}"
+    assert d.ingredients["base_branch"] == "${{ inputs.base_branch }}"
+    assert d.ingredients["issue_url"] == "${{ inputs.issue_url }}"
+    assert d.ingredients["output_mode"] == "${{ inputs.output_mode }}"
 
 
 def test_research_campaign_run_implement_capture():
@@ -459,8 +465,18 @@ def test_research_campaign_run_review_ingredients():
         "visualization_plan_path",
         "report_path",
         "source_dir",
+        "base_branch",
+        "issue_url",
+        "output_mode",
+        "review_pr",
+        "audit_claims",
     }
     assert d.ingredients["source_dir"] == "${{ inputs.source_dir }}"
+    assert d.ingredients["base_branch"] == "${{ inputs.base_branch }}"
+    assert d.ingredients["issue_url"] == "${{ inputs.issue_url }}"
+    assert d.ingredients["output_mode"] == "${{ inputs.output_mode }}"
+    assert d.ingredients["review_pr"] == "${{ inputs.review_pr }}"
+    assert d.ingredients["audit_claims"] == "${{ inputs.audit_claims }}"
     for key in [
         "worktree_path",
         "research_dir",

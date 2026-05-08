@@ -15,6 +15,7 @@ from autoskillit.core import (
     NoResume,
     OutputFormat,
 )
+from autoskillit.core.types._type_dispatch_identity import DispatchIdentity
 from autoskillit.execution.commands import (
     _HEADLESS_EXCLUSIVE_VARS,
     _MAX_MCP_OUTPUT_TOKENS_VALUE,
@@ -811,6 +812,39 @@ class TestBuildFoodTruckCmdResume:
     def test_none_resume_session_id_omits_resume_flag(self):
         spec = build_food_truck_cmd(**self.BASE, resume_session_id=None)
         assert "--resume" not in spec.cmd
+
+    def test_resume_prompt_contains_sentinel_open_marker(self):
+        """Resume prompt must contain l3-result sentinel open marker."""
+        identity = DispatchIdentity.from_dispatch_id("aaaabbbb-cccc-dddd-eeee-ffffffffffff")
+        spec = build_food_truck_cmd(
+            **self.BASE, resume_session_id="abc-123", sentinel_contract=identity.sentinel_contract
+        )
+        cmd = spec.cmd
+        prompt_idx = cmd.index("-p") + 1
+        prompt = cmd[prompt_idx]
+        assert identity.sentinel_open in prompt
+
+    def test_resume_prompt_contains_sentinel_close_marker(self):
+        """Resume prompt must contain end-l3-result sentinel close marker."""
+        identity = DispatchIdentity.from_dispatch_id("aaaabbbb-cccc-dddd-eeee-ffffffffffff")
+        spec = build_food_truck_cmd(
+            **self.BASE, resume_session_id="abc-123", sentinel_contract=identity.sentinel_contract
+        )
+        cmd = spec.cmd
+        prompt_idx = cmd.index("-p") + 1
+        prompt = cmd[prompt_idx]
+        assert identity.sentinel_close in prompt
+
+    def test_resume_prompt_contains_completion_marker(self):
+        """Resume prompt must contain L3_DONE completion marker."""
+        identity = DispatchIdentity.from_dispatch_id("aaaabbbb-cccc-dddd-eeee-ffffffffffff")
+        spec = build_food_truck_cmd(
+            **self.BASE, resume_session_id="abc-123", sentinel_contract=identity.sentinel_contract
+        )
+        cmd = spec.cmd
+        prompt_idx = cmd.index("-p") + 1
+        prompt = cmd[prompt_idx]
+        assert identity.completion_marker in prompt
 
 
 def test_headless_exclusive_vars_contains_max_mcp_output_tokens() -> None:

@@ -368,6 +368,9 @@ async def _run_dispatch(
 
     dispatch_id = str(uuid4())
     completion_marker = f"%%L3_DONE::{dispatch_id[:8]}%%"
+    from autoskillit.core.types._type_dispatch_identity import _build_sentinel_contract
+
+    sentinel_contract = _build_sentinel_contract(dispatch_id, dispatch_id[:8])
     from autoskillit.fleet.sidecar import sidecar_path as compute_sidecar_path  # noqa: PLC0415
 
     dispatch_sidecar_path = str(compute_sidecar_path(dispatch_id, tool_ctx.project_dir))
@@ -437,6 +440,7 @@ async def _run_dispatch(
         },
         requires_packs=list(full_recipe.requires_packs) or ["kitchen-core"],
         on_spawn=_on_spawn,
+        sentinel_contract=sentinel_contract,
     )
     ended_at = time.time()
 

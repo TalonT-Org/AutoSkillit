@@ -693,7 +693,10 @@ def test_requires_packs_covers_all_default_disabled_skill_categories() -> None:
         name for name, pdef in PACK_REGISTRY.items() if not pdef.default_enabled
     )
     for path in sorted(builtin_recipes_dir().glob("*.yaml")):
-        recipe = load_recipe(path)
+        try:
+            recipe = load_recipe(path)
+        except Exception as exc:
+            pytest.fail(f"{path.name}: {exc}")
         needed_packs: set[str] = set()
         for step_name, step in recipe.steps.items():
             if step.tool not in SKILL_TOOLS:

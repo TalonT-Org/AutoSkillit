@@ -124,7 +124,7 @@ class TestFleetConfig:
         """FleetConfig.validate() rejects max_concurrent_dispatches > 3."""
         from autoskillit.config.settings import FleetConfig
 
-        with pytest.raises(ValueError, match="max_concurrent_dispatches"):
+        with pytest.raises(ValueError, match="must be <= 3"):
             FleetConfig(max_concurrent_dispatches=4).validate(feature_enabled=True)
 
     def test_fleet_config_max_concurrent_dispatches_validates_positive(self) -> None:

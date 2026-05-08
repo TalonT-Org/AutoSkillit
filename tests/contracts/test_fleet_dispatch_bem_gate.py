@@ -14,7 +14,7 @@ def fleet_prompt() -> str:
     return _build_fleet_dispatch_prompt(mcp_prefix=MCP_PREFIX)
 
 
-def test_fleet_prompt_contains_bem_wrapperReference(fleet_prompt: str) -> None:
+def test_fleet_prompt_contains_bem_wrapper_reference(fleet_prompt: str) -> None:
     """Fleet dispatcher prompt must reference bem-wrapper for conflict analysis."""
     assert "bem-wrapper" in fleet_prompt, (
         "Fleet dispatcher prompt must instruct the dispatcher to use bem-wrapper "
@@ -57,6 +57,6 @@ def test_fleet_prompt_references_fallback_to_sequential(fleet_prompt: str) -> No
 
 def test_fleet_prompt_references_max_total_issues_cap(fleet_prompt: str) -> None:
     """Fleet dispatcher prompt must describe the max_total_issues cap."""
-    assert "max_total_issues" in fleet_prompt or "12" in fleet_prompt, (
+    assert "max_total_issues" in fleet_prompt, (
         "Fleet dispatcher prompt must mention the total issues session cap"
     )

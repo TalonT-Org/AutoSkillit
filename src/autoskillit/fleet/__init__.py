@@ -50,6 +50,7 @@ from .state_recovery import (
     classify_stale_dispatch,
     derive_orchestrator_resume_spec,
 )
+from .state_types import FLEET_STATE_SCHEMA_VERSION
 from .summary import (
     CampaignParseResult,
     CampaignSummary,
@@ -108,6 +109,7 @@ __all__ = [
     "write_initial_state",
     "normalize_dispatch_token_usage",
     "classify_stale_dispatch",
+    "FLEET_STATE_SCHEMA_VERSION",
     "derive_orchestrator_resume_spec",
     "checkpoint_from_sidecar",
     "is_dispatch_session_alive",

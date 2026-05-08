@@ -203,7 +203,7 @@ class TestCacheSchemaVersion:
     """Phase 4 (#711 Part B): quota cache schema versioning tests."""
 
     def setup_method(self):
-        from autoskillit.execution.quota import _reset_schema_drift_logged_for_tests
+        from autoskillit.core.io import _reset_schema_drift_logged_for_tests
 
         _reset_schema_drift_logged_for_tests()
 
@@ -313,10 +313,9 @@ class TestCacheSchemaVersion:
         with structlog.testing.capture_logs() as cap:
             _read_cache(str(cache_path), max_age=60)
 
-        drift_logs = [r for r in cap if "quota_cache_schema_drift" in r.get("event", "")]
+        drift_logs = [r for r in cap if "schema_drift" in r.get("event", "")]
         assert len(drift_logs) == 1
-        assert "cache_path" in drift_logs[0]
-        assert drift_logs[0]["observed"] is None
+        assert "path" in drift_logs[0]
 
     def test_read_cache_logs_drift_exactly_once_per_path_per_process(self, tmp_path):
         import structlog.testing
@@ -335,7 +334,7 @@ class TestCacheSchemaVersion:
             for _ in range(5):
                 _read_cache(str(cache_path), max_age=60)
 
-        drift_logs = [r for r in cap if "quota_cache_schema_drift" in r.get("event", "")]
+        drift_logs = [r for r in cap if "schema_drift" in r.get("event", "")]
         assert len(drift_logs) == 1
 
     def test_read_cache_logs_drift_once_per_path_not_globally(self, tmp_path):
@@ -359,16 +358,14 @@ class TestCacheSchemaVersion:
             _read_cache(str(tmp_path / "cache_a.json"), max_age=60)
             _read_cache(str(tmp_path / "cache_b.json"), max_age=60)
 
-        drift_logs = [r for r in cap if "quota_cache_schema_drift" in r.get("event", "")]
+        drift_logs = [r for r in cap if "schema_drift" in r.get("event", "")]
         assert len(drift_logs) == 2
 
     def test_read_cache_drift_set_is_module_scoped_and_reset_helper_works(self, tmp_path):
         import structlog.testing
 
-        from autoskillit.execution.quota import (
-            _read_cache,
-            _reset_schema_drift_logged_for_tests,
-        )
+        from autoskillit.core.io import _reset_schema_drift_logged_for_tests
+        from autoskillit.execution.quota import _read_cache
 
         cache_path = tmp_path / "cache.json"
         cache_path.write_text(
@@ -383,13 +380,13 @@ class TestCacheSchemaVersion:
 
         with structlog.testing.capture_logs() as cap1:
             _read_cache(str(cache_path), max_age=60)
-        assert len([r for r in cap1 if "quota_cache_schema_drift" in r.get("event", "")]) == 1
+        assert len([r for r in cap1 if "schema_drift" in r.get("event", "")]) == 1
 
         _reset_schema_drift_logged_for_tests()
 
         with structlog.testing.capture_logs() as cap2:
             _read_cache(str(cache_path), max_age=60)
-        assert len([r for r in cap2 if "quota_cache_schema_drift" in r.get("event", "")]) == 1
+        assert len([r for r in cap2 if "schema_drift" in r.get("event", "")]) == 1
 
     @pytest.mark.anyio
     async def test_old_format_cache_gets_rewritten_with_new_format_on_next_fetch(
@@ -425,6 +422,48 @@ class TestCacheSchemaVersion:
         await check_and_sleep_if_needed(config)
         new_data = json.loads(cache_path.read_text())
         assert new_data["schema_version"] == 3
+
+    def test_read_cache_uses_shared_read_versioned_json(self, tmp_path, monkeypatch):
+        """_read_cache must call read_versioned_json (not inline validation)."""
+        from autoskillit.core.io import read_versioned_json
+        from autoskillit.execution.quota import (
+            QUOTA_CACHE_SCHEMA_VERSION,
+            _read_cache,
+        )
+
+        now = datetime.now(UTC)
+        cache_data = {
+            "schema_version": QUOTA_CACHE_SCHEMA_VERSION,
+            "fetched_at": (now - timedelta(seconds=30)).isoformat(),
+            "windows": {
+                "five_hour": {
+                    "utilization": 87.3,
+                    "resets_at": "2026-02-27T20:15:00+00:00",
+                }
+            },
+            "binding": {
+                "window_name": "five_hour",
+                "utilization": 87.3,
+                "resets_at": "2026-02-27T20:15:00+00:00",
+                "should_block": True,
+                "effective_threshold": 85.0,
+            },
+        }
+        cache_path = tmp_path / "usage_cache.json"
+        cache_path.write_text(json.dumps(cache_data))
+
+        calls = []
+
+        def spy(path, expected_version, *, logger=None):
+            calls.append({"path": path, "expected_version": expected_version})
+            return read_versioned_json(path, expected_version, logger=logger)
+
+        monkeypatch.setattr("autoskillit.execution.quota.read_versioned_json", spy)
+        status = _read_cache(str(cache_path), max_age=120)
+
+        assert status is not None
+        assert len(calls) == 1
+        assert calls[0]["expected_version"] == QUOTA_CACHE_SCHEMA_VERSION
 
 
 class TestInvalidateCache:

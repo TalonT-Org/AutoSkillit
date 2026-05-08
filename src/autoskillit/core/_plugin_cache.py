@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import fcntl
-import json
 import os
 import shutil
 from datetime import UTC, datetime, timedelta
@@ -12,7 +11,7 @@ from typing import IO
 
 import psutil
 
-from .io import write_versioned_json
+from .io import read_versioned_json, write_versioned_json
 from .logging import get_logger
 
 logger = get_logger(__name__)
@@ -62,10 +61,8 @@ def append_retiring_entry(version: str, path: str) -> None:
     try:
         entries: list[dict[str, str]] = []
         if cache.exists():
-            try:
-                entries = json.loads(cache.read_text()).get("retiring", [])
-            except (json.JSONDecodeError, AttributeError):
-                entries = []
+            data = read_versioned_json(cache, _SCHEMA_VERSION, logger=logger)
+            entries = data.get("retiring", []) if data is not None else []
         entries.append(
             {"version": version, "path": path, "retired_at": datetime.now(UTC).isoformat()}
         )
@@ -81,11 +78,10 @@ def sweep_retiring_cache(grace_hours: int = 2) -> int:
         return 0
     fh = _open_lock(lock)
     try:
-        try:
-            data = json.loads(cache.read_text())
-            entries: list[dict[str, str]] = data.get("retiring", [])
-        except (json.JSONDecodeError, AttributeError, OSError):
+        data = read_versioned_json(cache, _SCHEMA_VERSION, logger=logger)
+        if data is None:
             return 0
+        entries: list[dict[str, str]] = data.get("retiring", [])
 
         survivors: list[dict[str, str]] = []
         count = 0
@@ -181,10 +177,8 @@ def register_active_kitchen(kitchen_id: str, pid: int, project_path: str) -> Non
     try:
         entries: list[dict[str, object]] = []
         if akp.exists():
-            try:
-                entries = json.loads(akp.read_text()).get("kitchens", [])
-            except (json.JSONDecodeError, AttributeError):
-                entries = []
+            data = read_versioned_json(akp, _SCHEMA_VERSION, logger=logger)
+            entries = data.get("kitchens", []) if data is not None else []
         try:
             create_time: float | None = psutil.Process(pid).create_time()
         except psutil.NoSuchProcess:
@@ -210,10 +204,8 @@ def unregister_active_kitchen(kitchen_id: str) -> None:
     try:
         entries: list[dict[str, object]] = []
         if akp.exists():
-            try:
-                entries = json.loads(akp.read_text()).get("kitchens", [])
-            except (json.JSONDecodeError, AttributeError):
-                entries = []
+            data = read_versioned_json(akp, _SCHEMA_VERSION, logger=logger)
+            entries = data.get("kitchens", []) if data is not None else []
         survivors = [e for e in entries if e.get("kitchen_id") != kitchen_id]
         write_versioned_json(akp, {"kitchens": survivors}, schema_version=_SCHEMA_VERSION)
     finally:
@@ -227,10 +219,8 @@ def clear_kitchens_for_pid(pid: int) -> None:
     try:
         entries: list[dict[str, object]] = []
         if akp.exists():
-            try:
-                entries = json.loads(akp.read_text()).get("kitchens", [])
-            except (json.JSONDecodeError, AttributeError):
-                entries = []
+            data = read_versioned_json(akp, _SCHEMA_VERSION, logger=logger)
+            entries = data.get("kitchens", []) if data is not None else []
         survivors = [e for e in entries if e.get("pid") != pid]
         write_versioned_json(akp, {"kitchens": survivors}, schema_version=_SCHEMA_VERSION)
     finally:
@@ -244,10 +234,10 @@ def any_kitchen_open(project_path: str | None = None) -> bool:
         return False
     fh = _open_lock(lock)
     try:
-        try:
-            entries: list[dict[str, object]] = json.loads(akp.read_text()).get("kitchens", [])
-        except (json.JSONDecodeError, AttributeError, OSError):
+        data = read_versioned_json(akp, _SCHEMA_VERSION, logger=logger)
+        if data is None:
             return False
+        entries: list[dict[str, object]] = data.get("kitchens", [])
         survivors = []
         for entry in entries:
             pid = entry.get("pid")

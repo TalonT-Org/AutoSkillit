@@ -18,11 +18,13 @@ def _write_campaign_state(state_path: Path, dispatches: list[dict]) -> None:
     """Write a minimal campaign state file with the given dispatch records."""
     import time
 
+    from autoskillit.fleet import FLEET_STATE_SCHEMA_VERSION
+
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text(
         json.dumps(
             {
-                "schema_version": 1,
+                "schema_version": FLEET_STATE_SCHEMA_VERSION,
                 "campaign_id": "test-campaign",
                 "campaign_name": "test",
                 "manifest_path": "/fake/manifest.yaml",

@@ -16,6 +16,7 @@ from autoskillit.fleet import (
     DispatchRecord,
     DispatchStatus,
     append_dispatch_record,
+    build_protected_campaign_ids,
     classify_stale_dispatch,
     has_failed_dispatch,
     mark_dispatch_resumable,
@@ -26,6 +27,8 @@ from autoskillit.fleet import (
     write_captured_values,
     write_initial_state,
 )
+from autoskillit.fleet.state import FLEET_STATE_SCHEMA_VERSION
+from autoskillit.fleet.state import _write_state as fleet_write_state
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -389,7 +392,8 @@ class TestCapturedValuesRoundTrip:
 
 
 class TestReadV2StateFileDefaultsCapturedValues:
-    def test_read_v2_state_file_defaults_captured_values(self, tmp_path: Path) -> None:
+    def test_read_v2_state_file_rejected(self, tmp_path: Path) -> None:
+        """v2 state files are rejected (stale schema version)."""
         sp = _state_path(tmp_path)
         sp.parent.mkdir(parents=True, exist_ok=True)
         v2_data = {
@@ -403,8 +407,7 @@ class TestReadV2StateFileDefaultsCapturedValues:
         sp.write_text(json.dumps(v2_data), encoding="utf-8")
 
         state = read_state(sp)
-        assert state is not None
-        assert state.captured_values == {}
+        assert state is None
 
 
 class TestReadAllCampaignCaptures:
@@ -1095,3 +1098,119 @@ class TestClassifyStaleDispatch:
         status, sidecar_path_out = classify_stale_dispatch(record)
         assert status == DispatchStatus.INTERRUPTED
         assert sidecar_path_out == ""
+
+
+class TestWriteStateSchemaVersionPinning:
+    def test_write_state_pins_schema_version_to_constant(self, tmp_path: Path) -> None:
+        """_write_state must stamp FLEET_STATE_SCHEMA_VERSION, not state.schema_version."""
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("a"))
+        state = read_state(sp)
+        assert state is not None
+        # Artificially corrupt the in-memory schema_version
+        bad_state = state
+        bad_state.schema_version = 2  # type: ignore[attr-defined]
+        fleet_write_state(sp, bad_state)
+        raw = json.loads(sp.read_text())
+        assert raw["schema_version"] == FLEET_STATE_SCHEMA_VERSION
+
+    def test_round_trip_version_upgrade(self, tmp_path: Path) -> None:
+        """A v4 state file written back after mutation stays v4."""
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("a"))
+        state = read_state(sp)
+        assert state is not None
+        assert state.schema_version == FLEET_STATE_SCHEMA_VERSION
+        mark_dispatch_running(sp, "a", dispatch_id="d1", dispatched_pid=42)
+        raw = json.loads(sp.read_text())
+        assert raw["schema_version"] == FLEET_STATE_SCHEMA_VERSION
+
+
+class TestBuildProtectedCampaignIdsSchemaValidation:
+    def test_build_protected_campaign_ids_skips_stale_version(self, tmp_path: Path) -> None:
+        """build_protected_campaign_ids must skip files with stale schema_version."""
+        dispatches_dir = tmp_path / ".autoskillit" / "temp" / "dispatches"
+        dispatches_dir.mkdir(parents=True)
+        stale_file = dispatches_dir / "cid-stale.json"
+        stale_file.write_text(
+            json.dumps(
+                {
+                    "schema_version": 2,  # stale
+                    "campaign_id": "cid-stale",
+                    "campaign_name": "test",
+                    "manifest_path": "/m.yaml",
+                    "started_at": 0.0,
+                    "dispatches": [{"name": "d1", "status": "running"}],
+                }
+            ),
+            encoding="utf-8",
+        )
+        result = build_protected_campaign_ids(tmp_path)
+        assert "cid-stale" not in result
+
+    def test_build_protected_campaign_ids_includes_current_version(self, tmp_path: Path) -> None:
+        """build_protected_campaign_ids includes files with current schema_version."""
+        dispatches_dir = tmp_path / ".autoskillit" / "temp" / "dispatches"
+        dispatches_dir.mkdir(parents=True)
+        current_file = dispatches_dir / "cid-current.json"
+        current_file.write_text(
+            json.dumps(
+                {
+                    "schema_version": FLEET_STATE_SCHEMA_VERSION,
+                    "campaign_id": "cid-current",
+                    "campaign_name": "test",
+                    "manifest_path": "/m.yaml",
+                    "started_at": 0.0,
+                    "dispatches": [{"name": "d1", "status": "running"}],
+                }
+            ),
+            encoding="utf-8",
+        )
+        result = build_protected_campaign_ids(tmp_path)
+        assert "cid-current" in result
+
+
+class TestReadAllCampaignCapturesSchemaValidation:
+    def test_read_all_campaign_captures_skips_stale_version(self, tmp_path: Path) -> None:
+        """read_all_campaign_captures must skip files with stale schema_version."""
+        dispatches_dir = tmp_path / "dispatches"
+        dispatches_dir.mkdir()
+        stale_file = dispatches_dir / "cid-stale.json"
+        stale_file.write_text(
+            json.dumps(
+                {
+                    "schema_version": 2,  # stale
+                    "campaign_id": "cid-stale",
+                    "campaign_name": "test",
+                    "manifest_path": "/m.yaml",
+                    "started_at": 0.0,
+                    "dispatches": [{"name": "d1", "status": "success"}],
+                    "captured_values": {"key": "value"},
+                }
+            ),
+            encoding="utf-8",
+        )
+        result = read_all_campaign_captures(dispatches_dir, "cid-stale")
+        assert result == {}
+
+    def test_read_all_campaign_captures_includes_current_version(self, tmp_path: Path) -> None:
+        """read_all_campaign_captures includes files with current schema_version."""
+        dispatches_dir = tmp_path / "dispatches"
+        dispatches_dir.mkdir()
+        current_file = dispatches_dir / "cid-current.json"
+        current_file.write_text(
+            json.dumps(
+                {
+                    "schema_version": FLEET_STATE_SCHEMA_VERSION,
+                    "campaign_id": "cid-current",
+                    "campaign_name": "test",
+                    "manifest_path": "/m.yaml",
+                    "started_at": 0.0,
+                    "dispatches": [{"name": "d1", "status": "success"}],
+                    "captured_values": {"key": "value"},
+                }
+            ),
+            encoding="utf-8",
+        )
+        result = read_all_campaign_captures(dispatches_dir, "cid-current")
+        assert result == {"key": "value"}

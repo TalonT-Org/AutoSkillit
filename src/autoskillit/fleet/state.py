@@ -7,7 +7,6 @@ All writes use core.io.atomic_write for crash-safety (tmp + os.replace).
 from __future__ import annotations
 
 import fcntl
-import json
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -16,7 +15,7 @@ if TYPE_CHECKING:
     from types import TracebackType
     from typing import IO
 
-from autoskillit.core import get_logger, write_versioned_json
+from autoskillit.core import get_logger, read_versioned_json, write_versioned_json
 from autoskillit.fleet.state_gates import record_gate_outcome
 from autoskillit.fleet.state_recovery import (
     has_failed_dispatch,
@@ -27,9 +26,9 @@ from autoskillit.fleet.state_types import (
     _ALLOWED_TRANSITIONS,  # noqa: F401
     _COMPLETED_STATUSES,  # noqa: F401
     _INFRASTRUCTURE_FAILURE_REASONS,  # noqa: F401
-    _SCHEMA_VERSION,  # noqa: F401
     _VISIBLE_IN_BLOCK_STATUSES,  # noqa: F401
     FLEET_HALTED_SENTINEL,
+    FLEET_STATE_SCHEMA_VERSION,
     TERMINAL_DISPATCH_STATUSES,
     CampaignState,
     DispatchRecord,
@@ -91,7 +90,7 @@ def write_initial_state(
         "started_at": time.time(),
         "dispatches": [d.to_dict() for d in dispatches],
     }
-    write_versioned_json(state_path, payload, schema_version=_SCHEMA_VERSION)
+    write_versioned_json(state_path, payload, schema_version=FLEET_STATE_SCHEMA_VERSION)
 
 
 def _clear_dispatch_for_retry(d: DispatchRecord) -> None:
@@ -138,14 +137,12 @@ def read_state(state_path: Path) -> CampaignState | None:
     Returns None on missing file, malformed JSON, or schema mismatch.
     Never raises.
     """
-    try:
-        data = json.loads(state_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    data = read_versioned_json(state_path, FLEET_STATE_SCHEMA_VERSION, logger=logger)
+    if data is None:
         return None
     try:
         dispatches = [DispatchRecord.from_dict(d) for d in data["dispatches"]]
         return CampaignState(
-            schema_version=data["schema_version"],
             campaign_id=data["campaign_id"],
             campaign_name=data["campaign_name"],
             manifest_path=data["manifest_path"],
@@ -155,7 +152,7 @@ def read_state(state_path: Path) -> CampaignState | None:
             orchestrator_session_id=data.get("orchestrator_session_id") or "",
         )
     except (KeyError, ValueError, TypeError) as exc:
-        logger.warning("read_state: schema mismatch or corrupt payload in %s: %s", state_path, exc)
+        logger.warning("read_state_corrupt_payload", path=str(state_path), exc=str(exc))
         return None
 
 
@@ -239,7 +236,7 @@ def _write_state(state_path: Path, state: CampaignState) -> None:
         "captured_values": state.captured_values,
         "orchestrator_session_id": state.orchestrator_session_id,
     }
-    write_versioned_json(state_path, payload, schema_version=state.schema_version)
+    write_versioned_json(state_path, payload, schema_version=FLEET_STATE_SCHEMA_VERSION)
 
 
 def mark_dispatch_running(
@@ -372,8 +369,10 @@ def build_protected_campaign_ids(project_dir: Path) -> frozenset[str]:
         if not dispatches_dir.is_dir():
             return frozenset()
         for state_file in dispatches_dir.glob("*.json"):
+            data = read_versioned_json(state_file, FLEET_STATE_SCHEMA_VERSION, logger=logger)
+            if data is None:
+                continue
             try:
-                data = json.loads(state_file.read_text(encoding="utf-8"))
                 cid = data.get("campaign_id", "")
                 if not cid:
                     continue
@@ -386,7 +385,7 @@ def build_protected_campaign_ids(project_dir: Path) -> frozenset[str]:
                     if status not in TERMINAL_DISPATCH_STATUSES:
                         protected.add(cid)
                         break
-            except (json.JSONDecodeError, OSError):
+            except (KeyError, TypeError):
                 continue
         return frozenset(protected)
     except Exception:
@@ -437,8 +436,10 @@ def read_all_campaign_captures(
     if not dispatches_dir.is_dir():
         return result
     for path in dispatches_dir.glob("*.json"):
+        data = read_versioned_json(path, FLEET_STATE_SCHEMA_VERSION, logger=logger)
+        if data is None:
+            continue
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
             if data.get("campaign_id") != campaign_id:
                 continue
             caps = data.get("captured_values", {})
@@ -448,7 +449,7 @@ def read_all_campaign_captures(
             all_success = all(d.get("status") == DispatchStatus.SUCCESS for d in dispatches)
             if all_success and dispatches:
                 result.update(caps)
-        except (json.JSONDecodeError, OSError) as exc:
+        except (KeyError, TypeError) as exc:
             logger.warning("read_all_campaign_captures: skipping %s: %s", path, exc)
             continue
     return result

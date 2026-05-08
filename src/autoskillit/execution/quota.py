@@ -15,14 +15,13 @@ from typing import Any
 
 import httpx
 
-from autoskillit.core import get_logger, write_versioned_json
+from autoskillit.core import get_logger, read_versioned_json, write_versioned_json
 
 logger = get_logger(__name__)
 
 _DEFAULT_BASE_URL: str = "https://api.anthropic.com"
 
 QUOTA_CACHE_SCHEMA_VERSION: int = 3
-_SCHEMA_DRIFT_LOGGED: set[str] = set()
 
 # Canonical Anthropic quota API window names, as returned by GET /api/oauth/usage.
 # Update these when Anthropic adds or renames windows — the contract tests will
@@ -44,11 +43,6 @@ LONG_WINDOW_NAMES: frozenset[str] = frozenset(
         "seven_day",
     }
 )
-
-
-def _reset_schema_drift_logged_for_tests() -> None:
-    """Test-only helper: clear the once-per-process drift-log set."""
-    _SCHEMA_DRIFT_LOGGED.clear()
 
 
 @dataclass
@@ -187,20 +181,14 @@ def _read_credentials(credentials_path: str) -> str:
 
 def _read_cache(cache_path: str, max_age: int) -> QuotaStatus | None:
     """Return a fresh QuotaStatus from local cache, or None if stale/missing/old-format."""
+    raw = read_versioned_json(
+        Path(cache_path).expanduser(),
+        QUOTA_CACHE_SCHEMA_VERSION,
+        logger=logger,
+    )
+    if raw is None:
+        return None
     try:
-        raw = json.loads(Path(cache_path).expanduser().read_text())
-        if not isinstance(raw, dict):
-            return None
-        if raw.get("schema_version") != QUOTA_CACHE_SCHEMA_VERSION:
-            cache_key = str(Path(cache_path).expanduser())
-            if cache_key not in _SCHEMA_DRIFT_LOGGED:
-                _SCHEMA_DRIFT_LOGGED.add(cache_key)
-                logger.warning(
-                    "quota_cache_schema_drift",
-                    cache_path=cache_key,
-                    observed=raw.get("schema_version"),
-                )
-            return None
         fetched_at = datetime.fromisoformat(raw["fetched_at"])
         age = (datetime.now(UTC) - fetched_at).total_seconds()
         if age > max_age:
@@ -215,7 +203,7 @@ def _read_cache(cache_path: str, max_age: int) -> QuotaStatus | None:
             should_block=bool(b.get("should_block", False)),
             effective_threshold=float(b.get("effective_threshold", 0.0)),
         )
-    except (FileNotFoundError, KeyError, ValueError, TypeError, json.JSONDecodeError):
+    except (KeyError, ValueError, TypeError):
         return None
 
 

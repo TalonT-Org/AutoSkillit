@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
-from autoskillit.core.io import write_versioned_json
+from autoskillit.core.io import read_versioned_json, write_versioned_json
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
@@ -252,3 +253,134 @@ def test_write_versioned_json_produces_indented_output(tmp_path):
     lines = raw.strip().splitlines()
     assert len(lines) > 1, "Output must be multi-line (indented)"
     assert json.loads(raw) == {"a": 1, "b": [2, 3], "schema_version": 1}
+
+
+# read_versioned_json — schema version validation helper
+
+
+class TestReadVersionedJson:
+    def setup_method(self):
+        from autoskillit.core.io import _reset_schema_drift_logged_for_tests
+
+        _reset_schema_drift_logged_for_tests()
+
+    def test_read_versioned_json_returns_payload_on_match(self, tmp_path: Path) -> None:
+        from autoskillit.core.io import write_versioned_json
+
+        target = tmp_path / "v3.json"
+        write_versioned_json(target, {"a": 1}, schema_version=3)
+        result = read_versioned_json(target, expected_version=3)
+        assert result == {"a": 1, "schema_version": 3}
+
+    def test_read_versioned_json_returns_none_on_version_mismatch(self, tmp_path: Path) -> None:
+        from autoskillit.core.io import write_versioned_json
+
+        target = tmp_path / "v1.json"
+        write_versioned_json(target, {"a": 1}, schema_version=1)
+        result = read_versioned_json(target, expected_version=3)
+        assert result is None
+
+    def test_read_versioned_json_logs_drift_warning_on_mismatch(self, tmp_path: Path) -> None:
+        import warnings as _warnings
+
+        from autoskillit.core.io import write_versioned_json
+
+        target = tmp_path / "v1.json"
+        write_versioned_json(target, {"a": 1}, schema_version=1)
+        with _warnings.catch_warnings(record=True) as w:
+            _warnings.simplefilter("always")
+            result = read_versioned_json(target, expected_version=3)
+        assert result is None
+        assert len(w) == 1
+        assert "schema_drift" in str(w[0].message)
+
+    def test_read_versioned_json_deduplicates_drift_warnings(self, tmp_path: Path) -> None:
+        import warnings as _warnings
+
+        from autoskillit.core.io import write_versioned_json
+
+        target = tmp_path / "v1.json"
+        write_versioned_json(target, {"a": 1}, schema_version=1)
+        with _warnings.catch_warnings(record=True) as w:
+            _warnings.simplefilter("always")
+            read_versioned_json(target, expected_version=3)
+            read_versioned_json(target, expected_version=3)
+        assert len(w) == 1
+
+    def test_read_versioned_json_deduplicates_per_path_not_globally(self, tmp_path: Path) -> None:
+        import warnings as _warnings
+
+        from autoskillit.core.io import write_versioned_json
+
+        a = tmp_path / "a.json"
+        b = tmp_path / "b.json"
+        write_versioned_json(a, {"a": 1}, schema_version=1)
+        write_versioned_json(b, {"b": 2}, schema_version=1)
+        with _warnings.catch_warnings(record=True) as w:
+            _warnings.simplefilter("always")
+            read_versioned_json(a, expected_version=3)
+            read_versioned_json(b, expected_version=3)
+        assert len(w) == 2
+
+    def test_read_versioned_json_returns_none_on_missing_file(self, tmp_path: Path) -> None:
+
+        result = read_versioned_json(tmp_path / "nonexistent.json", expected_version=1)
+        assert result is None
+
+    def test_read_versioned_json_returns_none_on_corrupt_json(self, tmp_path: Path) -> None:
+
+        target = tmp_path / "bad.json"
+        target.write_text("not valid json {{{", encoding="utf-8")
+        result = read_versioned_json(target, expected_version=1)
+        assert result is None
+
+    def test_read_versioned_json_returns_none_on_non_dict(self, tmp_path: Path) -> None:
+
+        target = tmp_path / "array.json"
+        target.write_text("[1,2,3]", encoding="utf-8")
+        result = read_versioned_json(target, expected_version=1)
+        assert result is None
+
+    def test_read_versioned_json_returns_none_on_missing_schema_version_key(
+        self, tmp_path: Path
+    ) -> None:
+
+        target = tmp_path / "no_ver.json"
+        target.write_text('{"a": 1}', encoding="utf-8")
+        result = read_versioned_json(target, expected_version=1)
+        assert result is None
+
+    def test_read_versioned_json_reset_drift_set_clears_dedup(self, tmp_path: Path) -> None:
+        import warnings as _warnings
+
+        from autoskillit.core.io import (
+            _reset_schema_drift_logged_for_tests,
+            write_versioned_json,
+        )
+
+        target = tmp_path / "v1.json"
+        write_versioned_json(target, {"a": 1}, schema_version=1)
+        with _warnings.catch_warnings(record=True) as w1:
+            _warnings.simplefilter("always")
+            read_versioned_json(target, expected_version=3)
+        assert len(w1) == 1
+
+        _reset_schema_drift_logged_for_tests()
+
+        with _warnings.catch_warnings(record=True) as w2:
+            _warnings.simplefilter("always")
+            read_versioned_json(target, expected_version=3)
+        assert len(w2) == 1
+
+    def test_read_versioned_json_deduplicates_per_path_and_version(self, tmp_path: Path) -> None:
+        import warnings as _warnings
+
+        from autoskillit.core.io import write_versioned_json
+
+        target = tmp_path / "v1.json"
+        write_versioned_json(target, {"a": 1}, schema_version=1)
+        with _warnings.catch_warnings(record=True) as w:
+            _warnings.simplefilter("always")
+            read_versioned_json(target, expected_version=3)
+            read_versioned_json(target, expected_version=5)
+        assert len(w) == 2

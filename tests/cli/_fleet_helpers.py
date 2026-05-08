@@ -154,7 +154,6 @@ def _make_state(*, statuses: list[str]) -> CampaignState:
         DispatchRecord(name=f"d{i}", status=DispatchStatus(s)) for i, s in enumerate(statuses)
     ]
     return CampaignState(
-        schema_version=2,
         campaign_id="test-id",
         campaign_name="test",
         manifest_path="manifest.yaml",
@@ -175,7 +174,6 @@ def _make_state_with_tokens(*, input_total: int) -> CampaignState:
         )
     ]
     return CampaignState(
-        schema_version=2,
         campaign_id="test-id",
         campaign_name="test",
         manifest_path="manifest.yaml",

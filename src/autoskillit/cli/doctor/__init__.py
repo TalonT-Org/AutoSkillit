@@ -29,6 +29,7 @@ from ._doctor_fleet import (
     _check_campaign_manifest_clone_dests,
     _check_campaign_onboarding_hint,
     _check_fleet_dispatch_guard_registered,
+    _check_fleet_state_schema,
     _check_script_version_health,
     _check_sous_chef_bundled,
     _check_stale_fleet_state,
@@ -176,6 +177,9 @@ def run_doctor(*, output_json: bool = False) -> None:
 
         # Check 28: Campaign manifest clone destination collisions
         results.append(_check_campaign_manifest_clone_dests())
+
+        # Check 29: Fleet state schema version drift
+        results.append(_check_fleet_state_schema())
 
     # Output
     if output_json:

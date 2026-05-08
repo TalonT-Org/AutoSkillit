@@ -41,6 +41,7 @@ from .io import atomic_write as atomic_write
 from .io import dump_yaml_str as dump_yaml_str
 from .io import ensure_project_temp as ensure_project_temp
 from .io import load_yaml as load_yaml
+from .io import read_versioned_json as read_versioned_json
 from .io import resolve_temp_dir as resolve_temp_dir
 from .io import temp_dir_display_str as temp_dir_display_str
 from .io import write_versioned_json as write_versioned_json

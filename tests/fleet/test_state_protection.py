@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.fleet import FLEET_STATE_SCHEMA_VERSION
 from autoskillit.fleet.state import build_protected_campaign_ids
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.feature("fleet"), pytest.mark.small]
@@ -14,7 +15,9 @@ pytestmark = [pytest.mark.layer("fleet"), pytest.mark.feature("fleet"), pytest.m
 
 def _write_dispatch_file(dispatches_dir: Path, filename: str, data: dict) -> None:
     dispatches_dir.mkdir(parents=True, exist_ok=True)
-    (dispatches_dir / filename).write_text(json.dumps(data), encoding="utf-8")
+    # Inject current schema version so build_protected_campaign_ids accepts the file
+    payload = {"schema_version": FLEET_STATE_SCHEMA_VERSION, **data}
+    (dispatches_dir / filename).write_text(json.dumps(payload), encoding="utf-8")
 
 
 def test_build_protected_ids_missing_dispatches_dir(tmp_path: Path) -> None:
@@ -130,3 +133,17 @@ def test_build_protected_ids_exported_from_fleet(tmp_path: Path) -> None:
 
     assert callable(fn)
     assert fn(tmp_path) == frozenset()
+
+
+def test_build_protected_ids_stale_schema_version_skipped(tmp_path: Path) -> None:
+    """PROT_10: State file with stale schema_version is skipped, not protected."""
+    dispatches_dir = tmp_path / ".autoskillit" / "temp" / "dispatches"
+    dispatches_dir.mkdir(parents=True, exist_ok=True)
+    stale_payload = {
+        "schema_version": FLEET_STATE_SCHEMA_VERSION - 1,
+        "campaign_id": "stale-campaign",
+        "dispatches": [{"name": "d1", "status": "running"}],
+    }
+    (dispatches_dir / "stale.json").write_text(json.dumps(stale_payload), encoding="utf-8")
+    result = build_protected_campaign_ids(tmp_path)
+    assert result == frozenset()

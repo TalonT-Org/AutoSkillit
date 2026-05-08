@@ -672,8 +672,7 @@ def test_orchestrator_prompt_contains_missing_on_failure_instruction():
     from autoskillit.cli._prompts import _build_orchestrator_prompt
 
     prompt = _build_orchestrator_prompt("my-recipe", mcp_prefix=DIRECT_PREFIX)
-    assert "missing route" in prompt
-    assert "recipe authoring error" in prompt
+    assert "recipe authoring error. Stop the pipeline and report the missing route." in prompt
 
 
 def test_campaign_prompt_tool_list_still_enumerates_six_tools():

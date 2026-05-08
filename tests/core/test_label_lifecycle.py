@@ -1,4 +1,4 @@
-"""Tests for IssueLabelState, LabelDef, LABEL_LIFECYCLE_REGISTRY, LABEL_TRANSITIONS, and validate_label_transition."""
+"""Tests for IssueLabelState, LabelDef, LABEL_LIFECYCLE_REGISTRY, and LABEL_TRANSITIONS."""
 
 from __future__ import annotations
 

@@ -31,7 +31,9 @@ class TestReleaseIssueFailLabel:
         assert result["success"] is True
         assert result["failed"] is True
         assert result["fail_label"] == "fail"
-        mock_client.ensure_label.assert_called_once_with("owner", "repo", "fail", color="d73a4a")
+        mock_client.ensure_label.assert_called_once_with(
+            "owner", "repo", "fail", color="d73a4a", description="Recipe execution failed"
+        )
         mock_client.swap_labels.assert_called_once_with(
             "owner",
             "repo",

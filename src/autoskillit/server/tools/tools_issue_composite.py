@@ -136,9 +136,7 @@ async def claim_and_resolve_issue(
             label_def = LABEL_LIFECYCLE_REGISTRY[target_state]
             ensure_color = label_def.color
             ensure_description = label_def.description
-            remove_labels = [
-                tool_ctx.config.github.label_for_state(s) for s in label_def.removes_on_entry
-            ]
+            remove_labels = tool_ctx.config.github.labels_for_states(label_def.removes_on_entry)
         else:
             ensure_color = "fbca04"
             ensure_description = "Issue is actively being processed by a pipeline session"

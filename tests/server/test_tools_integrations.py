@@ -137,9 +137,9 @@ class TestClaimIssueTool:
         assert result["success"] is True
         assert result["claimed"] is True
         assert result.get("reentry", False) is False
-        mock_client.swap_labels.assert_called_once_with(
-            "owner", "repo", 42, remove_labels=["fail"], add_labels=["in-progress"]
-        )
+        call_kwargs = mock_client.swap_labels.call_args.kwargs
+        assert set(call_kwargs["remove_labels"]) == {"queued", "fail"}
+        assert call_kwargs["add_labels"] == ["in-progress"]
 
     @pytest.mark.anyio
     async def test_claim_issue_with_queued_label(self, tool_ctx_kitchen_open):

@@ -12,7 +12,6 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import (
     LABEL_LIFECYCLE_REGISTRY,
-    IssueLabelState,
     RetryReason,
     _parse_issue_ref,
     get_logger,
@@ -457,9 +456,7 @@ async def claim_issue(
             label_def = LABEL_LIFECYCLE_REGISTRY[target_state]
             ensure_color = label_def.color
             ensure_description = label_def.description
-            remove_labels = [
-                tool_ctx.config.github.label_for_state(s) for s in label_def.removes_on_entry
-            ]
+            remove_labels = tool_ctx.config.github.labels_for_states(label_def.removes_on_entry)
         else:
             ensure_color = "fbca04"
             ensure_description = "Issue is actively being processed by a pipeline session"
@@ -576,9 +573,9 @@ async def release_issue(
                 staged_def = LABEL_LIFECYCLE_REGISTRY[staged_state]
                 staged_color = staged_def.color
                 staged_description = staged_def.description
-                remove_labels = [
-                    tool_ctx.config.github.label_for_state(s) for s in staged_def.removes_on_entry
-                ]
+                remove_labels = tool_ctx.config.github.labels_for_states(
+                    staged_def.removes_on_entry
+                )
                 queued_lbl = tool_ctx.config.github.queued_label
                 if queued_lbl not in remove_labels:
                     remove_labels.append(queued_lbl)
@@ -645,9 +642,7 @@ async def release_issue(
                 fail_def = LABEL_LIFECYCLE_REGISTRY[fail_state]
                 fail_color = fail_def.color
                 fail_description = fail_def.description
-                remove_labels = [
-                    tool_ctx.config.github.label_for_state(s) for s in fail_def.removes_on_entry
-                ]
+                remove_labels = tool_ctx.config.github.labels_for_states(fail_def.removes_on_entry)
                 queued_lbl = tool_ctx.config.github.queued_label
                 if queued_lbl not in remove_labels:
                     remove_labels.append(queued_lbl)
@@ -706,14 +701,11 @@ async def release_issue(
                 "release_issue bare removal (no fail_label or target_branch) for %s",
                 issue_url,
             )
-            all_lifecycle_labels = [
-                tool_ctx.config.github.label_for_state(s) for s in IssueLabelState
-            ]
             swap_result = await tool_ctx.github_client.swap_labels(
                 owner,
                 repo,
                 issue_number,
-                remove_labels=all_lifecycle_labels,
+                remove_labels=tool_ctx.config.github.all_lifecycle_labels(),
                 add_labels=[],
             )
             if not swap_result.get("success"):

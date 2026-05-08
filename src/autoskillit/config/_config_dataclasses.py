@@ -201,6 +201,12 @@ class GitHubConfig:
                 return state
         return None
 
+    def labels_for_states(self, states: frozenset[IssueLabelState]) -> list[str]:
+        return [self.label_for_state(s) for s in states]
+
+    def all_lifecycle_labels(self) -> list[str]:
+        return [self.label_for_state(s) for s in IssueLabelState]
+
     def check_labels_allowed(self, labels: list[str]) -> str | None:
         """Return None if all labels are permitted, or an error message for the first violation.
 

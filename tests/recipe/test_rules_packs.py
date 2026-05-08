@@ -103,9 +103,19 @@ def test_all_builtin_packs_pass():
 class TestUndeclaredPackRequirement:
     """Tests for the undeclared-pack-requirement semantic rule."""
 
-    def _run_rule(self, recipe: Recipe) -> list:
+    def _run_rule(
+        self,
+        recipe: Recipe,
+        skill_category_map: dict[str, frozenset[str]] | None = None,
+    ) -> list:
         import autoskillit.recipe  # noqa: F401 -- triggers rule registration
 
+        if skill_category_map is not None:
+            from autoskillit.recipe._analysis import make_validation_context
+
+            ctx = make_validation_context(recipe)
+            ctx.skill_category_map = skill_category_map
+            return [f for f in run_semantic_rules(ctx) if f.rule == "undeclared-pack-requirement"]
         return [f for f in run_semantic_rules(recipe) if f.rule == "undeclared-pack-requirement"]
 
     def test_skill_needing_disabled_pack_without_declaration_is_error(self):
@@ -143,7 +153,8 @@ class TestUndeclaredPackRequirement:
             requires_packs=["research"],  # missing both exp-lens and vis-lens
             skill_command="/autoskillit:experiment-compare",
         )
-        findings = self._run_rule(recipe)
+        mock_map = {"experiment-compare": frozenset({"exp-lens", "vis-lens"})}
+        findings = self._run_rule(recipe, skill_category_map=mock_map)
         assert len(findings) == 2
         assert all(f.severity == Severity.ERROR for f in findings)
         pack_names = {p for f in findings for p in ["exp-lens", "vis-lens"] if p in f.message}

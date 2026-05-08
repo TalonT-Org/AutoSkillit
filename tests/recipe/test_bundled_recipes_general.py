@@ -7,8 +7,9 @@ from pathlib import Path
 import pytest
 import structlog.testing
 
-from autoskillit.core import SKILL_TOOLS
+from autoskillit.core import PACK_REGISTRY, SKILL_TOOLS
 from autoskillit.recipe._analysis import build_recipe_graph
+from autoskillit.recipe._skill_helpers import _get_skill_category_map
 from autoskillit.recipe.contracts import load_bundled_manifest, resolve_skill_name
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.rules.rules_merge import _is_commit_guard

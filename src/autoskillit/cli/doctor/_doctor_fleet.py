@@ -213,3 +213,30 @@ def _check_campaign_manifest_clone_dests(project_dir: Path | None = None) -> Doc
             f"Use unique clone paths per dispatch.",
         )
     return DoctorResult(Severity.OK, check_name, "All dispatch clone destinations unique")
+
+
+def _check_fleet_state_schema(dispatches_dir: Path | None = None) -> DoctorResult:
+    """Check fleet state files for schema version drift."""
+    from autoskillit.fleet.state_types import _SCHEMA_VERSION
+
+    check_name = "fleet_state_schema"
+    if dispatches_dir is None:
+        dispatches_dir = Path.cwd() / ".autoskillit" / "temp" / "dispatches"
+    if not dispatches_dir.is_dir():
+        return DoctorResult(Severity.OK, check_name, "No dispatches directory")
+    stale_files: list[str] = []
+    for path in dispatches_dir.glob("*.json"):
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            observed = raw.get("schema_version") if isinstance(raw, dict) else None
+            if observed != _SCHEMA_VERSION:
+                stale_files.append(f"{path}: observed={observed!r}, expected={_SCHEMA_VERSION}")
+        except (json.JSONDecodeError, OSError):
+            continue
+    if stale_files:
+        return DoctorResult(
+            Severity.WARNING,
+            check_name,
+            f"Fleet state schema drift: {'; '.join(stale_files)}",
+        )
+    return DoctorResult(Severity.OK, check_name, "All fleet state files at current schema version")

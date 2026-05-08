@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from types import TracebackType
     from typing import IO
 
-from autoskillit.core import get_logger, write_versioned_json
+from autoskillit.core import get_logger, read_versioned_json, write_versioned_json
 from autoskillit.fleet.state_gates import record_gate_outcome
 from autoskillit.fleet.state_recovery import (
     has_failed_dispatch,
@@ -138,14 +138,13 @@ def read_state(state_path: Path) -> CampaignState | None:
     Returns None on missing file, malformed JSON, or schema mismatch.
     Never raises.
     """
-    try:
-        data = json.loads(state_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    data = read_versioned_json(state_path, _SCHEMA_VERSION, logger=logger)
+    if data is None:
         return None
     try:
         dispatches = [DispatchRecord.from_dict(d) for d in data["dispatches"]]
         return CampaignState(
-            schema_version=data["schema_version"],
+            schema_version=_SCHEMA_VERSION,
             campaign_id=data["campaign_id"],
             campaign_name=data["campaign_name"],
             manifest_path=data["manifest_path"],
@@ -155,7 +154,7 @@ def read_state(state_path: Path) -> CampaignState | None:
             orchestrator_session_id=data.get("orchestrator_session_id") or "",
         )
     except (KeyError, ValueError, TypeError) as exc:
-        logger.warning("read_state: schema mismatch or corrupt payload in %s: %s", state_path, exc)
+        logger.warning("read_state: corrupt payload in %s: %s", state_path, exc)
         return None
 
 
@@ -239,7 +238,7 @@ def _write_state(state_path: Path, state: CampaignState) -> None:
         "captured_values": state.captured_values,
         "orchestrator_session_id": state.orchestrator_session_id,
     }
-    write_versioned_json(state_path, payload, schema_version=state.schema_version)
+    write_versioned_json(state_path, payload, schema_version=_SCHEMA_VERSION)
 
 
 def mark_dispatch_running(
@@ -374,6 +373,8 @@ def build_protected_campaign_ids(project_dir: Path) -> frozenset[str]:
         for state_file in dispatches_dir.glob("*.json"):
             try:
                 data = json.loads(state_file.read_text(encoding="utf-8"))
+                if data.get("schema_version") != _SCHEMA_VERSION:
+                    continue
                 cid = data.get("campaign_id", "")
                 if not cid:
                     continue
@@ -439,6 +440,8 @@ def read_all_campaign_captures(
     for path in dispatches_dir.glob("*.json"):
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
+            if data.get("schema_version") != _SCHEMA_VERSION:
+                continue
             if data.get("campaign_id") != campaign_id:
                 continue
             caps = data.get("captured_values", {})

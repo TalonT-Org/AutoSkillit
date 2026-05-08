@@ -68,8 +68,66 @@ class TestDispatchRecordSchemaV2:
     def test_schema_version_is_4(self) -> None:
         assert _SCHEMA_VERSION == 4
 
-    def test_read_state_accepts_legacy_l2_field_names(self, tmp_path: Path) -> None:
-        """read_state must parse schema v3 state files that use old l2_* field names."""
+    def test_read_state_returns_none_on_version_mismatch(self, tmp_path: Path) -> None:
+        """read_state returns None when schema_version is stale (v1)."""
+        stale_payload = {
+            "schema_version": 1,
+            "campaign_id": "cmp",
+            "campaign_name": "test",
+            "manifest_path": "/m.yaml",
+            "started_at": 1.0,
+            "dispatches": [],
+        }
+        state_path = tmp_path / "state.json"
+        state_path.write_text(json.dumps(stale_payload))
+        state = read_state(state_path)
+        assert state is None
+
+    def test_read_state_returns_none_on_future_version(self, tmp_path: Path) -> None:
+        """read_state returns None when schema_version is a future version."""
+        future_payload = {
+            "schema_version": 99,
+            "campaign_id": "cmp",
+            "campaign_name": "test",
+            "manifest_path": "/m.yaml",
+            "started_at": 1.0,
+            "dispatches": [],
+        }
+        state_path = tmp_path / "state.json"
+        state_path.write_text(json.dumps(future_payload))
+        state = read_state(state_path)
+        assert state is None
+
+    def test_read_state_logs_drift_warning_on_mismatch(self, tmp_path: Path) -> None:
+        """read_state logs a drift warning when schema_version is stale."""
+        import structlog.testing
+
+        stale_payload = {
+            "schema_version": 3,
+            "campaign_id": "cmp",
+            "campaign_name": "test",
+            "manifest_path": "/m.yaml",
+            "started_at": 1.0,
+            "dispatches": [],
+        }
+        state_path = tmp_path / "state.json"
+        state_path.write_text(json.dumps(stale_payload))
+        with structlog.testing.capture_logs() as cap:
+            state = read_state(state_path)
+        assert state is None
+        drift_logs = [r for r in cap if "schema_drift" in r.get("event", "")]
+        assert len(drift_logs) >= 1
+
+    def test_read_state_succeeds_on_current_version(self, tmp_path: Path) -> None:
+        """read_state succeeds when schema_version matches _SCHEMA_VERSION."""
+        state_path = tmp_path / "state.json"
+        write_initial_state(state_path, "cmp-ok", "test", "/m.yaml", [DispatchRecord(name="d1")])
+        state = read_state(state_path)
+        assert state is not None
+        assert state.schema_version == _SCHEMA_VERSION
+
+    def test_read_state_rejects_stale_schema_version(self, tmp_path: Path) -> None:
+        """read_state must reject schema v3 state files (stale version)."""
         legacy_payload = {
             "schema_version": 3,
             "campaign_id": "cmp-legacy",
@@ -92,13 +150,7 @@ class TestDispatchRecordSchemaV2:
         state_path = tmp_path / "state.json"
         state_path.write_text(json.dumps(legacy_payload))
         state = read_state(state_path)
-        assert state is not None
-        d = state.dispatches[0]
-        assert d.dispatched_session_id == "sess-old"
-        assert d.dispatched_session_log_dir == "/old/logs"
-        assert d.dispatched_pid == 1234
-        assert d.dispatched_starttime_ticks == 5678
-        assert d.dispatched_boot_id == "boot-old"
+        assert state is None
 
     def test_dispatch_record_serializes_dispatched_field_names(self) -> None:
         """DispatchRecord.to_dict() must use dispatched_* field names."""
@@ -109,8 +161,8 @@ class TestDispatchRecordSchemaV2:
         assert "l2_pid" not in raw
         assert "l2_session_id" not in raw
 
-    def test_read_state_accepts_legacy_l3_field_names(self, tmp_path: Path) -> None:
-        """read_state must parse schema v3 state files that use old l3_* field names."""
+    def test_read_state_rejects_v3_schema(self, tmp_path: Path) -> None:
+        """read_state must reject schema v3 state files (stale version)."""
         legacy_payload = {
             "schema_version": 3,
             "campaign_id": "cmp-legacy-l3",
@@ -133,17 +185,10 @@ class TestDispatchRecordSchemaV2:
         state_path = tmp_path / "state.json"
         state_path.write_text(json.dumps(legacy_payload))
         state = read_state(state_path)
-        assert state is not None
-        d = state.dispatches[0]
-        assert d.dispatched_session_id == "sess-old-l3"
-        assert d.dispatched_session_log_dir == "/old/l3/logs"
-        assert d.dispatched_pid == 1234
-        assert d.dispatched_starttime_ticks == 5678
-        assert d.dispatched_boot_id == "boot-old-l3"
-        assert d.caller_session_id == ""
+        assert state is None
 
-    def test_read_state_handles_v1_without_ticks(self, tmp_path: Path) -> None:
-        """read_state on a v1 file missing dispatched_starttime_ticks or dispatched_boot_id."""
+    def test_read_state_rejects_v1_schema(self, tmp_path: Path) -> None:
+        """read_state must reject schema v1 state files (stale version)."""
         sp = tmp_path / "state_v1.json"
         v1_payload = {
             "schema_version": 1,
@@ -168,11 +213,7 @@ class TestDispatchRecordSchemaV2:
         }
         sp.write_text(json.dumps(v1_payload))
         state = read_state(sp)
-        assert state is not None
-        d = state.dispatches[0]
-        assert d.dispatched_pid == 9999
-        assert d.dispatched_starttime_ticks == 0
-        assert d.dispatched_boot_id == ""
+        assert state is None
 
 
 class TestCampaignIdField:
@@ -360,6 +401,7 @@ class TestDispatchRecordSchemaV3:
     def test_backward_compat_missing_campaign_id_defaults_to_empty_string(
         self, tmp_path: Path
     ) -> None:
+        """v1 state files are rejected (stale schema version)."""
         sp = tmp_path / "state_v1.json"
         v1_payload = {
             "schema_version": 1,
@@ -384,5 +426,4 @@ class TestDispatchRecordSchemaV3:
         }
         sp.write_text(json.dumps(v1_payload))
         state = read_state(sp)
-        assert state is not None
-        assert state.dispatches[0].campaign_id == ""
+        assert state is None

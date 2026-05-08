@@ -29,6 +29,7 @@ CLI command, subcommand, and interactive workflow tests.
 | `test_doctor.py` | Tests for CLI doctor command and related utilities |
 | `test_doctor_migration.py` | Tests for doctor quota cache schema, install classification, version consistency, and drift |
 | `test_doctor_scripts.py` | Tests for doctor script/recipe version health checks |
+| `test_doctor_fleet.py` | Tests for fleet state schema version doctor check |
 | `test_doctor_split.py` | Structural guards: test_doctor.py split into three files (P1-F02) |
 | `test_features_cli.py` | Tests for the features CLI subcommand |
 | `test_fleet_campaign.py` | Tests: fleet CLI campaign command |

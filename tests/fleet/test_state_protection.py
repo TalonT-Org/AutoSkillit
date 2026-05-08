@@ -8,13 +8,16 @@ from pathlib import Path
 import pytest
 
 from autoskillit.fleet.state import build_protected_campaign_ids
+from autoskillit.fleet.state_types import _SCHEMA_VERSION
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.feature("fleet"), pytest.mark.small]
 
 
 def _write_dispatch_file(dispatches_dir: Path, filename: str, data: dict) -> None:
     dispatches_dir.mkdir(parents=True, exist_ok=True)
-    (dispatches_dir / filename).write_text(json.dumps(data), encoding="utf-8")
+    # Inject current schema version so build_protected_campaign_ids accepts the file
+    payload = {"schema_version": _SCHEMA_VERSION, **data}
+    (dispatches_dir / filename).write_text(json.dumps(payload), encoding="utf-8")
 
 
 def test_build_protected_ids_missing_dispatches_dir(tmp_path: Path) -> None:

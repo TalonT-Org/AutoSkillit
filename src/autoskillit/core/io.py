@@ -39,7 +39,10 @@ __all__ = [
     "resolve_temp_dir",
     "temp_dir_display_str",
     "write_versioned_json",
+    "read_versioned_json",
 ]
+
+_SCHEMA_DRIFT_LOGGED: set[str] = set()
 
 
 def resolve_temp_dir(project_dir: Path, override: str | None = None) -> Path:
@@ -127,6 +130,53 @@ def write_versioned_json(path: Path, payload: dict[str, Any], schema_version: in
         raise TypeError("write_versioned_json requires a dict payload")
     enriched = {**payload, "schema_version": schema_version}
     atomic_write(path, _fast_dumps(enriched, indent=True))
+
+
+def read_versioned_json(
+    path: Path,
+    expected_version: int,
+    *,
+    logger: Any = None,
+) -> dict[str, Any] | None:
+    """Read a versioned JSON artifact and validate its schema_version.
+
+    Returns the parsed dict on version match, None on any failure
+    (missing file, corrupt JSON, non-dict, missing/mismatched schema_version).
+    Logs a deduped drift warning on version mismatch.
+    """
+    import json as _json
+    import warnings
+
+    try:
+        raw = _json.loads(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, _json.JSONDecodeError, OSError):
+        return None
+    if not isinstance(raw, dict):
+        return None
+    observed = raw.get("schema_version")
+    if observed != expected_version:
+        cache_key = str(path.resolve())
+        if cache_key not in _SCHEMA_DRIFT_LOGGED:
+            _SCHEMA_DRIFT_LOGGED.add(cache_key)
+            if logger is not None:
+                logger.warning(
+                    "schema_drift: path=%s expected=%s observed=%s",
+                    path,
+                    expected_version,
+                    observed,
+                )
+            else:
+                warnings.warn(
+                    f"schema_drift: path={path} expected={expected_version} observed={observed}",
+                    stacklevel=2,
+                )
+        return None
+    return raw
+
+
+def _reset_schema_drift_logged_for_tests() -> None:
+    """Test-only helper: clear the once-per-process drift-log set."""
+    _SCHEMA_DRIFT_LOGGED.clear()
 
 
 _AUTOSKILLIT_GITIGNORE_ENTRIES = [

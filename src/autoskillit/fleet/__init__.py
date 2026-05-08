@@ -50,7 +50,7 @@ from .state_recovery import (
     classify_stale_dispatch,
     derive_orchestrator_resume_spec,
 )
-from .state_types import _SCHEMA_VERSION as FLEET_STATE_SCHEMA_VERSION
+from .state_types import FLEET_STATE_SCHEMA_VERSION
 from .summary import (
     CampaignParseResult,
     CampaignSummary,

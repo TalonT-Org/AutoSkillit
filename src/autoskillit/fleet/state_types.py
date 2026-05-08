@@ -11,7 +11,7 @@ from autoskillit.core import FleetErrorCode, RetryReason
 
 _resume_lock = threading.Lock()
 
-_SCHEMA_VERSION = 4
+FLEET_STATE_SCHEMA_VERSION = 4
 
 FLEET_HALTED_SENTINEL = "fleet_halted_on_failure"
 
@@ -131,7 +131,7 @@ class CampaignState:
     campaign_name: str
     manifest_path: str
     started_at: float
-    schema_version: int = _SCHEMA_VERSION
+    schema_version: int = FLEET_STATE_SCHEMA_VERSION
     dispatches: list[DispatchRecord] = field(default_factory=list)
     captured_values: dict[str, str] = field(default_factory=dict)
     orchestrator_session_id: str = ""

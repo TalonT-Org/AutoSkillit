@@ -26,9 +26,9 @@ from autoskillit.fleet.state_types import (
     _ALLOWED_TRANSITIONS,  # noqa: F401
     _COMPLETED_STATUSES,  # noqa: F401
     _INFRASTRUCTURE_FAILURE_REASONS,  # noqa: F401
-    _SCHEMA_VERSION,  # noqa: F401
     _VISIBLE_IN_BLOCK_STATUSES,  # noqa: F401
     FLEET_HALTED_SENTINEL,
+    FLEET_STATE_SCHEMA_VERSION,
     TERMINAL_DISPATCH_STATUSES,
     CampaignState,
     DispatchRecord,
@@ -90,7 +90,7 @@ def write_initial_state(
         "started_at": time.time(),
         "dispatches": [d.to_dict() for d in dispatches],
     }
-    write_versioned_json(state_path, payload, schema_version=_SCHEMA_VERSION)
+    write_versioned_json(state_path, payload, schema_version=FLEET_STATE_SCHEMA_VERSION)
 
 
 def _clear_dispatch_for_retry(d: DispatchRecord) -> None:
@@ -137,7 +137,7 @@ def read_state(state_path: Path) -> CampaignState | None:
     Returns None on missing file, malformed JSON, or schema mismatch.
     Never raises.
     """
-    data = read_versioned_json(state_path, _SCHEMA_VERSION, logger=logger)
+    data = read_versioned_json(state_path, FLEET_STATE_SCHEMA_VERSION, logger=logger)
     if data is None:
         return None
     try:
@@ -236,7 +236,7 @@ def _write_state(state_path: Path, state: CampaignState) -> None:
         "captured_values": state.captured_values,
         "orchestrator_session_id": state.orchestrator_session_id,
     }
-    write_versioned_json(state_path, payload, schema_version=_SCHEMA_VERSION)
+    write_versioned_json(state_path, payload, schema_version=FLEET_STATE_SCHEMA_VERSION)
 
 
 def mark_dispatch_running(
@@ -369,7 +369,7 @@ def build_protected_campaign_ids(project_dir: Path) -> frozenset[str]:
         if not dispatches_dir.is_dir():
             return frozenset()
         for state_file in dispatches_dir.glob("*.json"):
-            data = read_versioned_json(state_file, _SCHEMA_VERSION, logger=logger)
+            data = read_versioned_json(state_file, FLEET_STATE_SCHEMA_VERSION, logger=logger)
             if data is None:
                 continue
             try:
@@ -436,7 +436,7 @@ def read_all_campaign_captures(
     if not dispatches_dir.is_dir():
         return result
     for path in dispatches_dir.glob("*.json"):
-        data = read_versioned_json(path, _SCHEMA_VERSION, logger=logger)
+        data = read_versioned_json(path, FLEET_STATE_SCHEMA_VERSION, logger=logger)
         if data is None:
             continue
         try:

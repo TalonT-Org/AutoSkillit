@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.fleet import (
+    FLEET_STATE_SCHEMA_VERSION,
     DispatchRecord,
     DispatchStatus,
     DispatchTokenUsage,
@@ -16,7 +17,6 @@ from autoskillit.fleet import (
     read_state,
     write_initial_state,
 )
-from autoskillit.fleet.state import _SCHEMA_VERSION
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -66,7 +66,7 @@ class TestDispatchRecordSchemaV2:
         assert dispatch_raw["dispatched_boot_id"] == "abc-boot"
 
     def test_schema_version_is_4(self) -> None:
-        assert _SCHEMA_VERSION == 4
+        assert FLEET_STATE_SCHEMA_VERSION == 4
 
     def test_read_state_returns_none_on_version_mismatch(self, tmp_path: Path) -> None:
         """read_state returns None when schema_version is stale (v1)."""
@@ -119,12 +119,12 @@ class TestDispatchRecordSchemaV2:
         assert len(drift_logs) == 1
 
     def test_read_state_succeeds_on_current_version(self, tmp_path: Path) -> None:
-        """read_state succeeds when schema_version matches _SCHEMA_VERSION."""
+        """read_state succeeds when schema_version matches FLEET_STATE_SCHEMA_VERSION."""
         state_path = tmp_path / "state.json"
         write_initial_state(state_path, "cmp-ok", "test", "/m.yaml", [DispatchRecord(name="d1")])
         state = read_state(state_path)
         assert state is not None
-        assert state.schema_version == _SCHEMA_VERSION
+        assert state.schema_version == FLEET_STATE_SCHEMA_VERSION
 
     def test_read_state_rejects_stale_schema_version(self, tmp_path: Path) -> None:
         """read_state must reject schema v3 state files (stale version)."""

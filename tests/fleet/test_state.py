@@ -27,7 +27,7 @@ from autoskillit.fleet import (
     write_captured_values,
     write_initial_state,
 )
-from autoskillit.fleet.state import _SCHEMA_VERSION
+from autoskillit.fleet.state import FLEET_STATE_SCHEMA_VERSION
 from autoskillit.fleet.state import _write_state as fleet_write_state
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
@@ -1102,7 +1102,7 @@ class TestClassifyStaleDispatch:
 
 class TestWriteStateSchemaVersionPinning:
     def test_write_state_pins_schema_version_to_constant(self, tmp_path: Path) -> None:
-        """_write_state must stamp the current _SCHEMA_VERSION, not state.schema_version."""
+        """_write_state must stamp FLEET_STATE_SCHEMA_VERSION, not state.schema_version."""
         sp = _state_path(tmp_path)
         write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("a"))
         state = read_state(sp)
@@ -1112,7 +1112,7 @@ class TestWriteStateSchemaVersionPinning:
         bad_state.schema_version = 2  # type: ignore[attr-defined]
         fleet_write_state(sp, bad_state)
         raw = json.loads(sp.read_text())
-        assert raw["schema_version"] == _SCHEMA_VERSION
+        assert raw["schema_version"] == FLEET_STATE_SCHEMA_VERSION
 
     def test_round_trip_version_upgrade(self, tmp_path: Path) -> None:
         """A v4 state file written back after mutation stays v4."""
@@ -1120,10 +1120,10 @@ class TestWriteStateSchemaVersionPinning:
         write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("a"))
         state = read_state(sp)
         assert state is not None
-        assert state.schema_version == _SCHEMA_VERSION
+        assert state.schema_version == FLEET_STATE_SCHEMA_VERSION
         mark_dispatch_running(sp, "a", dispatch_id="d1", dispatched_pid=42)
         raw = json.loads(sp.read_text())
-        assert raw["schema_version"] == _SCHEMA_VERSION
+        assert raw["schema_version"] == FLEET_STATE_SCHEMA_VERSION
 
 
 class TestBuildProtectedCampaignIdsSchemaValidation:
@@ -1156,7 +1156,7 @@ class TestBuildProtectedCampaignIdsSchemaValidation:
         current_file.write_text(
             json.dumps(
                 {
-                    "schema_version": _SCHEMA_VERSION,
+                    "schema_version": FLEET_STATE_SCHEMA_VERSION,
                     "campaign_id": "cid-current",
                     "campaign_name": "test",
                     "manifest_path": "/m.yaml",
@@ -1201,7 +1201,7 @@ class TestReadAllCampaignCapturesSchemaValidation:
         current_file.write_text(
             json.dumps(
                 {
-                    "schema_version": _SCHEMA_VERSION,
+                    "schema_version": FLEET_STATE_SCHEMA_VERSION,
                     "campaign_id": "cid-current",
                     "campaign_name": "test",
                     "manifest_path": "/m.yaml",

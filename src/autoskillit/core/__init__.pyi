@@ -1,11 +1,11 @@
-from ._json import fast_dumps as fast_dumps
-from ._json import fast_loads as fast_loads
 from ._claude_env import build_claude_env as build_claude_env
 from ._install_detect import DirectUrlInfo as DirectUrlInfo
 from ._install_detect import _is_release_tag as _is_release_tag
 from ._install_detect import _is_stable_track as _is_stable_track
 from ._install_detect import is_dev_install as is_dev_install
 from ._install_detect import parse_direct_url as parse_direct_url
+from ._json import fast_dumps as fast_dumps
+from ._json import fast_loads as fast_loads
 from ._plugin_cache import _InstallLock as _InstallLock
 from ._plugin_cache import _retire_old_versions as _retire_old_versions
 from ._plugin_cache import any_kitchen_open as any_kitchen_open

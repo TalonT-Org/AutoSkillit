@@ -1,4 +1,3 @@
-# tests/arch/test_dataclass_slots.py
 import ast
 import pathlib
 

@@ -62,7 +62,7 @@ def test_cycle_with_only_on_failure_exit_is_warning() -> None:
 
 
 def test_cycle_with_retry_exit_is_clean() -> None:
-    """Cycle where retrying step's success path stays in cycle → WARNING (outer loop unbounded)."""
+    """Cycle where retrying step's success path stays in cycle → ERROR (outer loop unbounded)."""
     recipe = _make_recipe(
         {
             "A": RecipeStep(
@@ -79,12 +79,12 @@ def test_cycle_with_retry_exit_is_clean() -> None:
     findings = run_semantic_rules(recipe)
     cycle_findings = [f for f in findings if f.rule == "unbounded-cycle"]
     assert len(cycle_findings) == 1
-    assert cycle_findings[0].severity == Severity.WARNING
+    assert cycle_findings[0].severity == Severity.ERROR
 
 
-def test_cycle_with_retry_exit_but_success_reenters_is_warning() -> None:
+def test_cycle_with_retry_exit_but_success_reenters_is_error() -> None:
     """A→B(retries=2, on_exhausted=done)→C→A: B exits on exhaustion but
-    success path C→A re-enters the cycle. Must produce WARNING."""
+    success path C→A re-enters the cycle. Must produce ERROR."""
     recipe = _make_recipe(
         {
             "A": RecipeStep(
@@ -117,8 +117,8 @@ def test_cycle_with_retry_exit_but_success_reenters_is_warning() -> None:
     findings = run_semantic_rules(recipe)
     cycle_findings = [f for f in findings if f.rule == "unbounded-cycle"]
     assert len(cycle_findings) >= 1
-    # Must be WARNING (has conditional exit but no outer bound)
-    assert any(f.severity == Severity.WARNING for f in cycle_findings)
+    # Must be ERROR (has retry exit but no outer bound)
+    assert any(f.severity == Severity.ERROR for f in cycle_findings)
 
 
 def test_no_cycle_is_clean() -> None:
@@ -203,6 +203,41 @@ def test_cycle_with_on_result_all_routes_in_cycle_is_still_flagged() -> None:
     findings = run_semantic_rules(recipe)
     cycle_findings = [f for f in findings if f.rule == "unbounded-cycle"]
     assert len(cycle_findings) == 1
+
+
+def test_cycle_with_loop_guard_step_is_clean() -> None:
+    """A cycle containing a check_loop_iteration guard with an exit route is bounded."""
+    recipe = _make_recipe(
+        {
+            "step_a": RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/autoskillit:foo"},
+                on_success="check_loop",
+                on_failure="done",
+            ),
+            "check_loop": RecipeStep(
+                tool="run_python",
+                with_args={
+                    "callable": "autoskillit.smoke_utils.check_loop_iteration",
+                    "current_iteration": "${{ context.loop_count }}",
+                    "max_iterations": "3",
+                },
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(
+                            when="${{ result.max_exceeded }} == true",
+                            route="done",
+                        ),
+                        StepResultCondition(route="step_a"),
+                    ]
+                ),
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+    findings = [f for f in run_semantic_rules(recipe) if f.rule == "unbounded-cycle"]
+    assert len(findings) == 0
 
 
 # ---------------------------------------------------------------------------

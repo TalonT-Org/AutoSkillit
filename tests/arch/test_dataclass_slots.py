@@ -19,7 +19,16 @@ def _frozen_without_slots(path: pathlib.Path) -> list[tuple[int, str]]:
             if not isinstance(dec, ast.Call):
                 continue
             func = dec.func
-            name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", "")
+            if isinstance(func, ast.Name):
+                name = func.id
+            elif (
+                isinstance(func, ast.Attribute)
+                and isinstance(func.value, ast.Name)
+                and func.value.id == "dataclasses"
+            ):
+                name = func.attr
+            else:
+                continue
             if name != "dataclass":
                 continue
             has_frozen = any(
@@ -43,6 +52,7 @@ def _frozen_without_slots(path: pathlib.Path) -> list[tuple[int, str]]:
 
 def test_all_frozen_dataclasses_have_slots() -> None:
     """Every @dataclass(frozen=True) in src/autoskillit/ must also have slots=True."""
+    assert _SRC.is_dir(), f"Source directory not found: {_SRC}"
     all_violations: list[str] = []
     for py_file in sorted(_SRC.rglob("*.py")):
         for lineno, cls_name in _frozen_without_slots(py_file):

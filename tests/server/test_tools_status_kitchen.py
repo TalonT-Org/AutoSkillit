@@ -55,15 +55,17 @@ class TestKitchenStatus:
     """kitchen_status tool returns version health info."""
 
     @pytest.fixture(autouse=True)
-    def _setup(self, tool_ctx, monkeypatch, tmp_path):
+    def _setup(self, tool_ctx_kitchen_open, monkeypatch, tmp_path):
         monkeypatch.chdir(tmp_path)
 
     @pytest.mark.anyio
-    async def test_status_returns_version_info(self, tool_ctx):
+    async def test_status_returns_version_info(self, tool_ctx_kitchen_open):
         import autoskillit
         from autoskillit.core.types._type_plugin_source import DirectInstall
 
-        tool_ctx.plugin_source = DirectInstall(plugin_dir=Path(autoskillit.__file__).parent)
+        tool_ctx_kitchen_open.plugin_source = DirectInstall(
+            plugin_dir=Path(autoskillit.__file__).parent
+        )
         from autoskillit import __version__
 
         result = json.loads(await kitchen_status())
@@ -73,7 +75,7 @@ class TestKitchenStatus:
         assert "warning" not in result
 
     @pytest.mark.anyio
-    async def test_status_reports_mismatch(self, tmp_path, tool_ctx):
+    async def test_status_reports_mismatch(self, tmp_path, tool_ctx_kitchen_open):
         plugin_dir = tmp_path / ".claude-plugin"
         plugin_dir.mkdir()
         (plugin_dir / "plugin.json").write_text(
@@ -81,7 +83,7 @@ class TestKitchenStatus:
         )
         from autoskillit.core.types._type_plugin_source import DirectInstall
 
-        tool_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
+        tool_ctx_kitchen_open.plugin_source = DirectInstall(plugin_dir=tmp_path)
         result = json.loads(await kitchen_status())
         assert result["versions_match"] is False
         assert "warning" in result
@@ -95,44 +97,46 @@ class TestKitchenStatus:
         assert result["token_usage_verbosity"] == "summary"
 
     @pytest.mark.anyio
-    async def test_status_reflects_none_verbosity(self, tool_ctx):
+    async def test_status_reflects_none_verbosity(self, tool_ctx_kitchen_open):
         """TU_S2: kitchen_status reflects 'none' verbosity from config."""
         cfg = AutomationConfig()
         cfg.token_usage = TokenUsageConfig(verbosity="none")
-        tool_ctx.config = cfg
+        tool_ctx_kitchen_open.config = cfg
         result = json.loads(await kitchen_status())
         assert result["token_usage_verbosity"] == "none"
 
     @pytest.mark.anyio
-    async def test_kitchen_status_includes_github_config(self, tool_ctx):
-        tool_ctx.config.github.default_repo = "owner/repo"
+    async def test_kitchen_status_includes_github_config(self, tool_ctx_kitchen_open):
+        tool_ctx_kitchen_open.config.github.default_repo = "owner/repo"
         status = json.loads(await kitchen_status())
         assert "github_default_repo" in status
         assert status["github_default_repo"] == "owner/repo"
         assert "github_token_configured" in status
 
     @pytest.mark.anyio
-    async def test_kitchen_status_github_token_configured_true_from_client(self, tool_ctx):
+    async def test_kitchen_status_github_token_configured_true_from_client(
+        self, tool_ctx_kitchen_open
+    ):
         """kitchen_status must read github_token_configured from ctx.github_client.has_token."""
-        tool_ctx.github_client = DefaultGitHubFetcher(token="my-token")
+        tool_ctx_kitchen_open.github_client = DefaultGitHubFetcher(token="my-token")
         status = json.loads(await kitchen_status())
         assert status["github_token_configured"] is True
 
     @pytest.mark.anyio
     async def test_kitchen_status_github_token_not_configured_from_client(
-        self, tool_ctx, monkeypatch
+        self, tool_ctx_kitchen_open, monkeypatch
     ):
         monkeypatch.delenv("GITHUB_TOKEN", raising=False)
-        tool_ctx.github_client = DefaultGitHubFetcher(token=None)
+        tool_ctx_kitchen_open.github_client = DefaultGitHubFetcher(token=None)
         status = json.loads(await kitchen_status())
         assert status["github_token_configured"] is False
 
     @pytest.mark.anyio
     async def test_kitchen_status_github_token_does_not_reflect_post_construction_env(
-        self, tool_ctx, monkeypatch
+        self, tool_ctx_kitchen_open, monkeypatch
     ):
         """kitchen_status must NOT re-read os.environ — reflects ctx.github_client.has_token."""
-        tool_ctx.github_client = DefaultGitHubFetcher(token=None)
+        tool_ctx_kitchen_open.github_client = DefaultGitHubFetcher(token=None)
         monkeypatch.setenv("GITHUB_TOKEN", "set-after-construction")
         status = json.loads(await kitchen_status())
         assert status["github_token_configured"] is False
@@ -166,7 +170,7 @@ class TestGetPipelineReport:
         assert result.get("subtype") == "gate_error"
 
     @pytest.mark.anyio
-    async def test_returns_empty_initially(self, tool_ctx):
+    async def test_returns_empty_initially(self, tool_ctx_kitchen_open):
         result = json.loads(await get_pipeline_report())
         assert result["total_failures"] == 0
         assert result["failures"] == []
@@ -188,15 +192,17 @@ class TestGetPipelineReport:
         assert result["failures"][0]["skill_command"].startswith("/autoskillit:test")
 
     @pytest.mark.anyio
-    async def test_clear_true_resets_after_returning(self, tool_ctx):
-        tool_ctx.audit.record_failure(_make_failure_record())
+    async def test_clear_true_resets_after_returning(self, tool_ctx_kitchen_open):
+        tool_ctx_kitchen_open.audit.record_failure(_make_failure_record())
         result = json.loads(await get_pipeline_report(clear=True))
         assert result["total_failures"] == 1
         result2 = json.loads(await get_pipeline_report())
         assert result2["total_failures"] == 0
 
     @pytest.mark.anyio
-    async def test_get_pipeline_report_awaits_startup_ready(self, tool_ctx, monkeypatch):
+    async def test_get_pipeline_report_awaits_startup_ready(
+        self, tool_ctx_kitchen_open, monkeypatch
+    ):
         """get_pipeline_report must await _startup_ready before accessing audit data."""
         import autoskillit.server._state as _state_mod
 
@@ -286,33 +292,33 @@ class TestTelemetryRecoveryData:
             f.write(json.dumps(idx) + "\n")
 
     @pytest.mark.anyio
-    async def test_token_summary_reflects_recovered_data(self, tool_ctx, tmp_path):
+    async def test_token_summary_reflects_recovered_data(self, tool_ctx_kitchen_open, tmp_path):
         """get_token_summary returns data loaded via load_from_log_dir."""
         log_root = tmp_path / "logs"
         self._write_token_session(log_root, "s001", "implement", 500)
-        tool_ctx.token_log.load_from_log_dir(log_root)
+        tool_ctx_kitchen_open.token_log.load_from_log_dir(log_root)
         result = json.loads(await get_token_summary())
         steps = {s["step_name"]: s for s in result["steps"]}
         assert "implement" in steps
         assert steps["implement"]["input_tokens"] == 500
 
     @pytest.mark.anyio
-    async def test_timing_summary_reflects_recovered_data(self, tool_ctx, tmp_path):
+    async def test_timing_summary_reflects_recovered_data(self, tool_ctx_kitchen_open, tmp_path):
         """get_timing_summary returns data loaded via load_from_log_dir."""
         log_root = tmp_path / "logs"
         self._write_timing_session(log_root, "s001", "plan", 99.0)
-        tool_ctx.timing_log.load_from_log_dir(log_root)
+        tool_ctx_kitchen_open.timing_log.load_from_log_dir(log_root)
         result = json.loads(await get_timing_summary())
         steps = {s["step_name"]: s for s in result["steps"]}
         assert "plan" in steps
         assert steps["plan"]["total_seconds"] == pytest.approx(99.0)
 
     @pytest.mark.anyio
-    async def test_pipeline_report_reflects_recovered_audit(self, tool_ctx, tmp_path):
+    async def test_pipeline_report_reflects_recovered_audit(self, tool_ctx_kitchen_open, tmp_path):
         """get_pipeline_report returns failures loaded via load_from_log_dir."""
         log_root = tmp_path / "logs"
         self._write_audit_session(log_root, "s001")
-        tool_ctx.audit.load_from_log_dir(log_root)
+        tool_ctx_kitchen_open.audit.load_from_log_dir(log_root)
         result = json.loads(await get_pipeline_report())
         assert result["total_failures"] == 1
         assert result["failures"][0]["skill_command"] == "/autoskillit:implement-worktree"

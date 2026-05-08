@@ -274,7 +274,7 @@ def minimal_ctx(tmp_path):
         audit=DefaultAuditLog(),
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
-        gate=DefaultGateState(enabled=True),
+        gate=DefaultGateState(enabled=False),
         plugin_source=DirectInstall(plugin_dir=tmp_path),
         runner=None,
         temp_dir=tmp_path / ".autoskillit" / "temp",
@@ -292,15 +292,14 @@ def tool_ctx(monkeypatch, tmp_path):
     test only needs gate, audit, token_log, timing_log, or config fields.
 
     Monkeypatches server._ctx so all server tool calls use this context.
-    Gate is enabled (open kitchen) by default — tests that need a closed
-    gate should do: tool_ctx.gate = DefaultGateState(enabled=False) locally.
+    Gate starts closed (matching production) — use tool_ctx_kitchen_open
+    when a test needs the gate open.
 
     All service fields (executor, tester, db_reader, workspace_mgr, recipes,
     migrations) are wired via make_context() so routing tests work correctly.
     """
     from autoskillit.config import AutomationConfig
     from autoskillit.core.types._type_plugin_source import DirectInstall
-    from autoskillit.pipeline.gate import DefaultGateState
     from autoskillit.server import _state
     from autoskillit.server._factory import make_context
     from tests.fakes import MockSubprocessRunner
@@ -311,7 +310,6 @@ def tool_ctx(monkeypatch, tmp_path):
         runner=mock_runner,
         plugin_source=DirectInstall(plugin_dir=tmp_path),
     )
-    ctx.gate = DefaultGateState(enabled=True)
     ctx.config.linux_tracing.log_dir = str(tmp_path / "session_logs")
     ctx.config.linux_tracing.tmpfs_path = str(tmp_path / "shm")
     # Anchor temp_dir to tmp_path so server tools that read from ctx.temp_dir
@@ -342,13 +340,27 @@ def tool_ctx_marketplace(monkeypatch, tmp_path):
         runner=mock_runner,
         plugin_source=MarketplaceInstall(cache_path=fake_cache),
     )
-    ctx.gate = DefaultGateState(enabled=True)
+    ctx.gate = DefaultGateState(enabled=False)
     ctx.config.linux_tracing.log_dir = str(tmp_path / "session_logs")
     ctx.config.linux_tracing.tmpfs_path = str(tmp_path / "shm")
     ctx.temp_dir = tmp_path / ".autoskillit" / "temp"
     monkeypatch.setattr(_state, "_ctx", ctx)
     monkeypatch.setattr(_state, "_startup_ready", None)
     return ctx
+
+
+@pytest.fixture
+def tool_ctx_kitchen_open(tool_ctx):
+    """tool_ctx variant with gate explicitly opened.
+
+    Use when the test requires a tool that calls _require_enabled() and
+    the test is not testing gate-boot behavior itself. This fixture
+    mirrors the post-lifespan-boot state for interactive sessions.
+    """
+    from autoskillit.pipeline.gate import DefaultGateState
+
+    tool_ctx.gate = DefaultGateState(enabled=True)
+    return tool_ctx
 
 
 # ---------------------------------------------------------------------------

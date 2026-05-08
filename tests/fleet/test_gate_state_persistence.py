@@ -41,7 +41,9 @@ class TestRecordGateDispatch:
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
 
     @pytest.mark.anyio
-    async def test_record_gate_dispatch_writes_success(self, tool_ctx, monkeypatch, tmp_path):
+    async def test_record_gate_dispatch_writes_success(
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path
+    ):
         sp = _init_state(tmp_path, "gate-check", "phase-one")
         monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(sp))
 
@@ -60,7 +62,9 @@ class TestRecordGateDispatch:
         assert phase.status == DispatchStatus.PENDING
 
     @pytest.mark.anyio
-    async def test_record_gate_dispatch_writes_failure(self, tool_ctx, monkeypatch, tmp_path):
+    async def test_record_gate_dispatch_writes_failure(
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path
+    ):
         sp = _init_state(tmp_path, "gate-check", "phase-one")
         monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(sp))
 
@@ -78,7 +82,7 @@ class TestRecordGateDispatch:
 
     @pytest.mark.anyio
     async def test_record_gate_dispatch_rejects_unknown_dispatch(
-        self, tool_ctx, monkeypatch, tmp_path
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path
     ):
         sp = _init_state(tmp_path, "full-audit", "review-gate")
         monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(sp))
@@ -91,7 +95,9 @@ class TestRecordGateDispatch:
         assert result["error"] == "fleet_gate_unknown_dispatch"
 
     @pytest.mark.anyio
-    async def test_record_gate_dispatch_rejects_non_pending(self, tool_ctx, monkeypatch, tmp_path):
+    async def test_record_gate_dispatch_rejects_non_pending(
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path
+    ):
         from autoskillit.fleet.state import append_dispatch_record
 
         sp = _init_state(tmp_path, "gate-check", "phase-one")
@@ -111,7 +117,9 @@ class TestRecordGateDispatch:
         assert result["error"] == "fleet_gate_already_recorded"
 
     @pytest.mark.anyio
-    async def test_record_gate_dispatch_requires_campaign_state_path(self, tool_ctx, monkeypatch):
+    async def test_record_gate_dispatch_requires_campaign_state_path(
+        self, tool_ctx_kitchen_open, monkeypatch
+    ):
         monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", raising=False)
 
         from autoskillit.server.tools.tools_fleet_dispatch import record_gate_dispatch
@@ -134,7 +142,7 @@ class TestDispatchFoodTruckCampaignState:
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_updates_campaign_state_on_success(
-        self, tool_ctx, monkeypatch, tmp_path
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path
     ):
         sp = _init_state(tmp_path, "full-audit")
         monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(sp))
@@ -169,7 +177,7 @@ class TestDispatchFoodTruckCampaignState:
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_updates_campaign_state_on_failure(
-        self, tool_ctx, monkeypatch, tmp_path
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path
     ):
         sp = _init_state(tmp_path, "full-audit")
         monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(sp))
@@ -204,7 +212,7 @@ class TestDispatchFoodTruckCampaignState:
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_skips_campaign_state_without_env(
-        self, tool_ctx, monkeypatch, tmp_path
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path
     ):
         monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", raising=False)
         monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
@@ -236,7 +244,7 @@ class TestDispatchFoodTruckCampaignState:
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_skips_campaign_state_without_dispatch_name(
-        self, tool_ctx, monkeypatch, tmp_path
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path
     ):
         sp = _init_state(tmp_path, "full-audit")
         monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(sp))

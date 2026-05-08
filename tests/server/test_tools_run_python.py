@@ -25,7 +25,9 @@ class TestRunPythonObservability:
         return ctx
 
     @pytest.mark.anyio
-    async def test_run_python_binds_tool_contextvar_and_calls_ctx_info(self, tool_ctx, mock_ctx):
+    async def test_run_python_binds_tool_contextvar_and_calls_ctx_info(
+        self, tool_ctx_kitchen_open, mock_ctx
+    ):
         """run_python binds tool='run_python' contextvar and calls ctx.info on success."""
         with structlog.testing.capture_logs(
             processors=[structlog.contextvars.merge_contextvars]

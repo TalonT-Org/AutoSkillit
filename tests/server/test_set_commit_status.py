@@ -57,13 +57,13 @@ async def test_set_commit_status_gate_check(tool_ctx):
 
 
 @pytest.mark.anyio
-async def test_set_commit_status_posts_pending(tool_ctx, monkeypatch):
+async def test_set_commit_status_posts_pending(tool_ctx_kitchen_open, monkeypatch):
     """Tool posts gh api with state=pending to the correct endpoint."""
     monkeypatch.setattr(
         "autoskillit.server.tools.tools_ci.resolve_repo_from_remote",
         lambda cwd, hint=None: _async_return("owner/repo"),
     )
-    tool_ctx.runner.push(_make_result(0, "", ""))
+    tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
 
     raw = await set_commit_status(
         sha="deadbeef",
@@ -80,7 +80,7 @@ async def test_set_commit_status_posts_pending(tool_ctx, monkeypatch):
     assert result["context"] == "autoskillit/ai-review"
 
     # Verify the POST call went to the right endpoint
-    cmd, *_ = tool_ctx.runner.call_args_list[0]
+    cmd, *_ = tool_ctx_kitchen_open.runner.call_args_list[0]
     cmd_str = " ".join(cmd)
     assert "/repos/owner/repo/statuses/deadbeef" in cmd_str
     assert "pending" in cmd_str
@@ -92,13 +92,13 @@ async def test_set_commit_status_posts_pending(tool_ctx, monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_set_commit_status_posts_success(tool_ctx, monkeypatch):
+async def test_set_commit_status_posts_success(tool_ctx_kitchen_open, monkeypatch):
     """Tool posts gh api with state=success and context preserved."""
     monkeypatch.setattr(
         "autoskillit.server.tools.tools_ci.resolve_repo_from_remote",
         lambda cwd, hint=None: _async_return("myorg/myrepo"),
     )
-    tool_ctx.runner.push(_make_result(0, "", ""))
+    tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
 
     raw = await set_commit_status(
         sha="cafebabe",
@@ -112,7 +112,7 @@ async def test_set_commit_status_posts_success(tool_ctx, monkeypatch):
     assert result["state"] == "success"
     assert result["context"] == "autoskillit/ai-review"
 
-    post_cmd = " ".join(tool_ctx.runner.call_args_list[0][0])
+    post_cmd = " ".join(tool_ctx_kitchen_open.runner.call_args_list[0][0])
     assert "success" in post_cmd
 
 
@@ -122,13 +122,13 @@ async def test_set_commit_status_posts_success(tool_ctx, monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_set_commit_status_posts_failure(tool_ctx, monkeypatch):
+async def test_set_commit_status_posts_failure(tool_ctx_kitchen_open, monkeypatch):
     """Tool posts gh api with state=failure."""
     monkeypatch.setattr(
         "autoskillit.server.tools.tools_ci.resolve_repo_from_remote",
         lambda cwd, hint=None: _async_return("owner/repo"),
     )
-    tool_ctx.runner.push(_make_result(0, "", ""))
+    tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
 
     raw = await set_commit_status(
         sha="feedface",
@@ -141,7 +141,7 @@ async def test_set_commit_status_posts_failure(tool_ctx, monkeypatch):
     assert result["success"] is True
     assert result["state"] == "failure"
 
-    post_cmd = " ".join(tool_ctx.runner.call_args_list[0][0])
+    post_cmd = " ".join(tool_ctx_kitchen_open.runner.call_args_list[0][0])
     assert "failure" in post_cmd
 
 
@@ -151,7 +151,7 @@ async def test_set_commit_status_posts_failure(tool_ctx, monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_set_commit_status_infers_repo_from_cwd(tool_ctx, monkeypatch):
+async def test_set_commit_status_infers_repo_from_cwd(tool_ctx_kitchen_open, monkeypatch):
     """Tool infers owner/repo via resolve_repo_from_remote when repo param is absent."""
     infer_calls: list[str] = []
 
@@ -160,7 +160,7 @@ async def test_set_commit_status_infers_repo_from_cwd(tool_ctx, monkeypatch):
         return "inferred/repo"
 
     monkeypatch.setattr("autoskillit.server.tools.tools_ci.resolve_repo_from_remote", fake_infer)
-    tool_ctx.runner.push(_make_result(0, "", ""))
+    tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
 
     raw = await set_commit_status(
         sha="abc001",
@@ -175,12 +175,14 @@ async def test_set_commit_status_infers_repo_from_cwd(tool_ctx, monkeypatch):
     assert infer_calls, "resolve_repo_from_remote was not called"
 
     # POST must use the inferred repo
-    post_cmd = tool_ctx.runner.call_args_list[0][0]
+    post_cmd = tool_ctx_kitchen_open.runner.call_args_list[0][0]
     assert "inferred/repo" in " ".join(post_cmd)
 
 
 @pytest.mark.anyio
-async def test_set_commit_status_falls_back_to_plugin_dir_when_no_cwd(tool_ctx, monkeypatch):
+async def test_set_commit_status_falls_back_to_plugin_dir_when_no_cwd(
+    tool_ctx_kitchen_open, monkeypatch
+):
     """When neither repo nor cwd is provided, tool falls back to plugin_source for inference."""
     infer_calls: list[str] = []
 
@@ -189,25 +191,27 @@ async def test_set_commit_status_falls_back_to_plugin_dir_when_no_cwd(tool_ctx, 
         return "fallback/repo"
 
     monkeypatch.setattr("autoskillit.server.tools.tools_ci.resolve_repo_from_remote", fake_infer)
-    tool_ctx.runner.push(_make_result(0, "", ""))
+    tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
 
     raw = await set_commit_status(
         sha="abc003",
         state="pending",
         context="autoskillit/ai-review",
-        # neither repo nor cwd — falls back to tool_ctx.plugin_source
+        # neither repo nor cwd — falls back to tool_ctx_kitchen_open.plugin_source
     )
     result = json.loads(raw)
 
     assert result["success"] is True
     assert infer_calls, "resolve_repo_from_remote was not called for fallback"
     # POST must reference the fallback repo
-    post_cmd, *_ = tool_ctx.runner.call_args_list[0]
+    post_cmd, *_ = tool_ctx_kitchen_open.runner.call_args_list[0]
     assert "fallback/repo" in " ".join(post_cmd)
 
 
 @pytest.mark.anyio
-async def test_set_commit_status_uses_explicit_repo_without_inference(tool_ctx, monkeypatch):
+async def test_set_commit_status_uses_explicit_repo_without_inference(
+    tool_ctx_kitchen_open, monkeypatch
+):
     """When repo is provided explicitly, resolve_repo_from_remote is not called."""
     infer_calls: list[str] = []
 
@@ -216,7 +220,7 @@ async def test_set_commit_status_uses_explicit_repo_without_inference(tool_ctx, 
         return "should-not-be-used/repo"
 
     monkeypatch.setattr("autoskillit.server.tools.tools_ci.resolve_repo_from_remote", fake_infer)
-    tool_ctx.runner.push(_make_result(0, "", ""))
+    tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
 
     raw = await set_commit_status(
         sha="abc002",
@@ -229,7 +233,7 @@ async def test_set_commit_status_uses_explicit_repo_without_inference(tool_ctx, 
 
     assert result["success"] is True
     assert not infer_calls, "resolve_repo_from_remote should not be called when repo is explicit"
-    post_cmd = tool_ctx.runner.call_args_list[0][0]
+    post_cmd = tool_ctx_kitchen_open.runner.call_args_list[0][0]
     assert "explicit/repo" in " ".join(post_cmd)
 
 
@@ -239,13 +243,15 @@ async def test_set_commit_status_uses_explicit_repo_without_inference(tool_ctx, 
 
 
 @pytest.mark.anyio
-async def test_set_commit_status_on_gh_failure_returns_error_dict(tool_ctx, monkeypatch):
+async def test_set_commit_status_on_gh_failure_returns_error_dict(
+    tool_ctx_kitchen_open, monkeypatch
+):
     """When gh api returns non-zero, tool returns success=false, never raises."""
     monkeypatch.setattr(
         "autoskillit.server.tools.tools_ci.resolve_repo_from_remote",
         lambda cwd, hint=None: _async_return("owner/repo"),
     )
-    tool_ctx.runner.push(_make_result(1, "", "API rate limit exceeded"))
+    tool_ctx_kitchen_open.runner.push(_make_result(1, "", "API rate limit exceeded"))
 
     raw = await set_commit_status(
         sha="baadf00d",
@@ -260,7 +266,9 @@ async def test_set_commit_status_on_gh_failure_returns_error_dict(tool_ctx, monk
 
 
 @pytest.mark.anyio
-async def test_set_commit_status_repo_inference_failure_returns_error(tool_ctx, monkeypatch):
+async def test_set_commit_status_repo_inference_failure_returns_error(
+    tool_ctx_kitchen_open, monkeypatch
+):
     """When repo inference returns empty string, tool returns success=false."""
     monkeypatch.setattr(
         "autoskillit.server.tools.tools_ci.resolve_repo_from_remote",
@@ -308,7 +316,7 @@ async def test_set_commit_status_validation_errors_return_str(tool_ctx):
 
 
 @pytest.mark.anyio
-async def test_set_commit_status_success_returns_str(tool_ctx, monkeypatch):
+async def test_set_commit_status_success_returns_str(tool_ctx_kitchen_open, monkeypatch):
     """Success path returns str."""
     import json
 
@@ -318,7 +326,7 @@ async def test_set_commit_status_success_returns_str(tool_ctx, monkeypatch):
         return "owner/repo"
 
     monkeypatch.setattr("autoskillit.server.tools.tools_ci.resolve_repo_from_remote", fake_infer)
-    tool_ctx.runner.push(_make_result(0, "", ""))
+    tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
     result = await set_commit_status(sha="abc123", state="success", context="ci", cwd="/tmp")
     assert isinstance(result, str)
     parsed = json.loads(result)
@@ -326,7 +334,9 @@ async def test_set_commit_status_success_returns_str(tool_ctx, monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_set_commit_status_uses_infer_repo_not_gh_subprocess(tool_ctx, monkeypatch):
+async def test_set_commit_status_uses_infer_repo_not_gh_subprocess(
+    tool_ctx_kitchen_open, monkeypatch
+):
     """Must call resolve_repo_from_remote, not launch gh repo view subprocess."""
     from tests.conftest import _make_result
 
@@ -338,11 +348,11 @@ async def test_set_commit_status_uses_infer_repo_not_gh_subprocess(tool_ctx, mon
 
     monkeypatch.setattr("autoskillit.server.tools.tools_ci.resolve_repo_from_remote", fake_infer)
     # Only one runner push needed (the POST call, repo already resolved)
-    tool_ctx.runner.push(_make_result(0, "", ""))
+    tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
     await set_commit_status(sha="abc", state="success", context="ci", cwd="/tmp")
     assert calls, "resolve_repo_from_remote was never called"
     # gh repo view must NOT have been invoked as a subprocess
-    for cmd_args, *_ in tool_ctx.runner.call_args_list:
+    for cmd_args, *_ in tool_ctx_kitchen_open.runner.call_args_list:
         assert not ("repo" in cmd_args and "view" in cmd_args), (
             "gh repo view subprocess was invoked; resolve_repo_from_remote should be used instead"
         )

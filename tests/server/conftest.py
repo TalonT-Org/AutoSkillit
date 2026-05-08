@@ -142,7 +142,7 @@ def build_ctx(tmp_path):
             audit=DefaultAuditLog(),
             token_log=DefaultTokenLog(),
             timing_log=DefaultTimingLog(),
-            gate=DefaultGateState(enabled=True),
+            gate=DefaultGateState(enabled=False),
             plugin_source=DirectInstall(plugin_dir=tmp_path),
             runner=None,
             temp_dir=tmp_path / ".autoskillit" / "temp",
@@ -150,6 +150,19 @@ def build_ctx(tmp_path):
         )
         for field_name, value in overrides.items():
             setattr(ctx, field_name, value)
+        return ctx
+
+    return _factory
+
+
+@pytest.fixture
+def build_ctx_open(build_ctx):
+    """build_ctx variant with gate open — returns a factory callable like build_ctx."""
+    from autoskillit.pipeline.gate import DefaultGateState
+
+    def _factory(**overrides):
+        ctx = build_ctx(**overrides)
+        ctx.gate = DefaultGateState(enabled=True)
         return ctx
 
     return _factory

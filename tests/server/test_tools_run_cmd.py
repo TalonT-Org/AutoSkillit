@@ -19,30 +19,30 @@ class TestRunCmd:
     """T1, T2: run_cmd executes commands and returns exit code semantics."""
 
     @pytest.mark.anyio
-    async def test_successful_command(self, tool_ctx):
-        tool_ctx.runner.push(_make_result(0, "hello\n", ""))
+    async def test_successful_command(self, tool_ctx_kitchen_open):
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "hello\n", ""))
         result = json.loads(await run_cmd(cmd="echo hello", cwd="/tmp"))
 
         assert result["success"] is True
         assert result["exit_code"] == 0
         assert "hello" in result["stdout"]
-        assert len(tool_ctx.runner.call_args_list) == 1
-        assert tool_ctx.runner.call_args_list[0][0] == ["bash", "-c", "echo hello"]
+        assert len(tool_ctx_kitchen_open.runner.call_args_list) == 1
+        assert tool_ctx_kitchen_open.runner.call_args_list[0][0] == ["bash", "-c", "echo hello"]
 
     @pytest.mark.anyio
-    async def test_failing_command(self, tool_ctx):
-        tool_ctx.runner.push(_make_result(1, "", "error"))
+    async def test_failing_command(self, tool_ctx_kitchen_open):
+        tool_ctx_kitchen_open.runner.push(_make_result(1, "", "error"))
         result = json.loads(await run_cmd(cmd="false", cwd="/tmp"))
 
         assert result["success"] is False
         assert result["exit_code"] == 1
 
     @pytest.mark.anyio
-    async def test_custom_timeout(self, tool_ctx):
-        tool_ctx.runner.push(_make_result(0, "", ""))
+    async def test_custom_timeout(self, tool_ctx_kitchen_open):
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
         await run_cmd(cmd="echo timeout_test", cwd="/tmp", timeout=30)
 
-        assert tool_ctx.runner.call_args_list[-1][2] == 30.0
+        assert tool_ctx_kitchen_open.runner.call_args_list[-1][2] == 30.0
 
 
 class TestRunSubprocessDelegatesToManaged:
@@ -103,7 +103,7 @@ class TestProcessRunnerResult:
         assert "5" in stderr
 
 
-@pytest.mark.usefixtures("tool_ctx")
+@pytest.mark.usefixtures("tool_ctx_kitchen_open")
 class TestRunPython:
     """run_python tool: import, call, timeout, async support."""
 
@@ -207,59 +207,61 @@ class TestRunCmdSleepInterception:
     """Sleep commands are intercepted and converted to asyncio.sleep."""
 
     @pytest.mark.anyio
-    async def test_python_sleep_intercepted(self, tool_ctx):
+    async def test_python_sleep_intercepted(self, tool_ctx_kitchen_open):
         result = json.loads(
             await run_cmd(cmd='python3 -c "import time; time.sleep(0)"', cwd="/tmp")
         )
         assert result == {"success": True, "exit_code": 0, "stdout": "", "stderr": ""}
-        assert len(tool_ctx.runner.call_args_list) == 0
+        assert len(tool_ctx_kitchen_open.runner.call_args_list) == 0
 
     @pytest.mark.anyio
-    async def test_bare_sleep_intercepted(self, tool_ctx):
+    async def test_bare_sleep_intercepted(self, tool_ctx_kitchen_open):
         result = json.loads(await run_cmd(cmd="sleep 0", cwd="/tmp"))
         assert result["success"] is True
-        assert len(tool_ctx.runner.call_args_list) == 0
+        assert len(tool_ctx_kitchen_open.runner.call_args_list) == 0
 
     @pytest.mark.anyio
-    async def test_python3_single_quotes_intercepted(self, tool_ctx):
+    async def test_python3_single_quotes_intercepted(self, tool_ctx_kitchen_open):
         result = json.loads(
             await run_cmd(cmd="python3 -c 'import time; time.sleep(0)'", cwd="/tmp")
         )
         assert result["success"] is True
-        assert len(tool_ctx.runner.call_args_list) == 0
+        assert len(tool_ctx_kitchen_open.runner.call_args_list) == 0
 
     @pytest.mark.anyio
-    async def test_non_sleep_uses_subprocess(self, tool_ctx):
-        tool_ctx.runner.push(_make_result(0, "hello", ""))
+    async def test_non_sleep_uses_subprocess(self, tool_ctx_kitchen_open):
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "hello", ""))
         await run_cmd(cmd="echo hello", cwd="/tmp")
-        assert len(tool_ctx.runner.call_args_list) == 1
-        assert tool_ctx.runner.call_args_list[0][0] == ["bash", "-c", "echo hello"]
+        assert len(tool_ctx_kitchen_open.runner.call_args_list) == 1
+        assert tool_ctx_kitchen_open.runner.call_args_list[0][0] == ["bash", "-c", "echo hello"]
 
     @pytest.mark.anyio
-    async def test_decimal_seconds_intercepted(self, tool_ctx):
+    async def test_decimal_seconds_intercepted(self, tool_ctx_kitchen_open):
         result = json.loads(
             await run_cmd(cmd='python3 -c "import time; time.sleep(0.0)"', cwd="/tmp")
         )
         assert result["success"] is True
-        assert len(tool_ctx.runner.call_args_list) == 0
+        assert len(tool_ctx_kitchen_open.runner.call_args_list) == 0
 
     @pytest.mark.anyio
-    async def test_compound_sleep_not_intercepted(self, tool_ctx):
-        tool_ctx.runner.push(_make_result(0, "", ""))
+    async def test_compound_sleep_not_intercepted(self, tool_ctx_kitchen_open):
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
         await run_cmd(cmd="echo before && sleep 10 && echo after", cwd="/tmp")
-        assert len(tool_ctx.runner.call_args_list) == 1
+        assert len(tool_ctx_kitchen_open.runner.call_args_list) == 1
 
     @pytest.mark.anyio
-    async def test_step_name_timing_recorded(self, tool_ctx):
+    async def test_step_name_timing_recorded(self, tool_ctx_kitchen_open):
         await run_cmd(cmd="sleep 0", cwd="/tmp", step_name="quota_wait")
-        assert len(tool_ctx.runner.call_args_list) == 0
-        assert any(e["step_name"] == "quota_wait" for e in tool_ctx.timing_log.get_report())
+        assert len(tool_ctx_kitchen_open.runner.call_args_list) == 0
+        assert any(
+            e["step_name"] == "quota_wait" for e in tool_ctx_kitchen_open.timing_log.get_report()
+        )
 
 
 # ─── Type coercion tests (Step 1a) ───────────────────────────────────────────
 
 
-@pytest.mark.usefixtures("tool_ctx")
+@pytest.mark.usefixtures("tool_ctx_kitchen_open")
 class TestImportAndCallTypeCoercion:
     """Test _import_and_call annotation-aware type coercion."""
 

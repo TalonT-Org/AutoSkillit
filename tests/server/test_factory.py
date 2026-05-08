@@ -574,3 +574,26 @@ def test_make_context_no_env_profile_preserves_config_default(monkeypatch):
     config.providers.profiles = {}
     ctx = make_context(config, runner=_runner())
     assert ctx.config.providers.default_provider == "openai"
+
+
+# ---------------------------------------------------------------------------
+# Fixture gate-default verification tests
+# ---------------------------------------------------------------------------
+
+
+def test_tool_ctx_fixture_gate_starts_closed(tool_ctx) -> None:
+    """tool_ctx must start with gate closed to match production."""
+    assert tool_ctx.gate.enabled is False, (
+        "tool_ctx must start with gate closed to match production. "
+        "Use tool_ctx_kitchen_open for tests that need an open gate."
+    )
+
+
+def test_minimal_ctx_fixture_gate_starts_closed(minimal_ctx) -> None:
+    """minimal_ctx must start with gate closed to match production."""
+    assert minimal_ctx.gate.enabled is False
+
+
+def test_tool_ctx_kitchen_open_fixture_gate_starts_open(tool_ctx_kitchen_open) -> None:
+    """tool_ctx_kitchen_open must start with gate open."""
+    assert tool_ctx_kitchen_open.gate.enabled is True

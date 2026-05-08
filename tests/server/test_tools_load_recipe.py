@@ -61,8 +61,8 @@ class TestLoadRecipeTools:
     """Tests for kitchen-gated load_recipe tool."""
 
     @pytest.fixture(autouse=True)
-    def _ensure_ctx(self, tool_ctx):
-        """Ensure server context is initialized (gate open by default)."""
+    def _ensure_ctx(self, tool_ctx_kitchen_open):
+        """Ensure server context is initialized with gate open."""
 
     # SS2
     @pytest.mark.anyio
@@ -195,8 +195,8 @@ class TestLoadRecipeExceptionHandling:
     """CC-1: Outer except in load_recipe must catch anticipated exceptions only."""
 
     @pytest.fixture(autouse=True)
-    def _setup_ctx(self, tool_ctx):
-        """Initialize ToolContext so load_recipe can call _get_config()."""
+    def _setup_ctx(self, tool_ctx_kitchen_open):
+        """Initialize ToolContext with gate open so load_recipe can call _get_config()."""
 
     @pytest.mark.anyio
     async def test_yaml_error_surfaces_as_suggestion(
@@ -300,7 +300,7 @@ class TestMigrationSuppression:
     # SUP1
     @pytest.mark.anyio
     async def test_outdated_version_not_in_suggestions_when_suppressed(
-        self, tmp_path, monkeypatch, tool_ctx
+        self, tmp_path, monkeypatch, tool_ctx_kitchen_open
     ):
         """SUP1: outdated-recipe-version absent when recipe is suppressed; headless not called."""
         from autoskillit.config import MigrationConfig
@@ -309,7 +309,9 @@ class TestMigrationSuppression:
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         _write_minimal_script(scripts_dir, "test-script")
 
-        tool_ctx.config = AutomationConfig(migration=MigrationConfig(suppressed=["test-script"]))
+        tool_ctx_kitchen_open.config = AutomationConfig(
+            migration=MigrationConfig(suppressed=["test-script"])
+        )
 
         mock_headless = AsyncMock(
             return_value=SkillResult(
@@ -335,7 +337,7 @@ class TestMigrationSuppression:
     # SUP4
     @pytest.mark.anyio
     async def test_validate_always_includes_outdated_version_regardless_of_suppression(
-        self, tmp_path, tool_ctx
+        self, tmp_path, tool_ctx_kitchen_open
     ):
         """SUP4: validate_recipe includes outdated-script-version even when suppressed."""
         from autoskillit.config import MigrationConfig
@@ -345,7 +347,9 @@ class TestMigrationSuppression:
         script.write_text(_MINIMAL_SCRIPT_YAML + 'autoskillit_version: "0.0.1"\n')
 
         # Even with script suppressed in config, validate_recipe does not filter
-        tool_ctx.config = AutomationConfig(migration=MigrationConfig(suppressed=["test-script"]))
+        tool_ctx_kitchen_open.config = AutomationConfig(
+            migration=MigrationConfig(suppressed=["test-script"])
+        )
 
         result = json.loads(await validate_recipe(script_path=str(script)))
         assert "findings" in result
@@ -433,8 +437,8 @@ class TestLoadRecipeReadOnly:
     """P4: load_recipe is strictly read-only — no migration, no contract card generation."""
 
     @pytest.fixture(autouse=True)
-    def _ensure_ctx(self, tool_ctx):
-        """Ensure server context is initialized (gate open by default)."""
+    def _ensure_ctx(self, tool_ctx_kitchen_open):
+        """Ensure server context is initialized with gate open."""
 
     @pytest.mark.anyio
     async def test_load_recipe_does_not_call_migration_engine(self, tmp_path, monkeypatch):
@@ -477,7 +481,9 @@ class TestLoadRecipeDiagram:
 
     # DG-12
     @pytest.mark.anyio
-    async def test_load_recipe_response_has_diagram_key(self, tmp_path, monkeypatch, tool_ctx):
+    async def test_load_recipe_response_has_diagram_key(
+        self, tmp_path, monkeypatch, tool_ctx_kitchen_open
+    ):
         """DG-12: load_recipe response always contains a 'diagram' key."""
         self._setup_project_recipe(tmp_path, monkeypatch)
         result = json.loads(await load_recipe(name="my-recipe"))
@@ -486,7 +492,7 @@ class TestLoadRecipeDiagram:
     # DG-13
     @pytest.mark.anyio
     async def test_load_recipe_diagram_none_when_not_generated(
-        self, tmp_path, monkeypatch, tool_ctx
+        self, tmp_path, monkeypatch, tool_ctx_kitchen_open
     ):
         """DG-13: diagram is None when no diagram file exists."""
         self._setup_project_recipe(tmp_path, monkeypatch)
@@ -519,8 +525,8 @@ class TestLoadRecipeIngredientsOnly:
     """load_recipe(ingredients_only=True) strips content, preserves metadata."""
 
     @pytest.fixture(autouse=True)
-    def _ensure_ctx(self, tool_ctx):
-        """Ensure server context is initialized (gate open by default)."""
+    def _ensure_ctx(self, tool_ctx_kitchen_open):
+        """Ensure server context is initialized with gate open."""
 
     @pytest.mark.anyio
     async def test_load_recipe_ingredients_only_strips_content(self, tmp_path, monkeypatch):

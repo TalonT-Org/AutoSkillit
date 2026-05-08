@@ -231,7 +231,9 @@ def test_build_replay_runner_scans_skill_snapshots(tmp_path, monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_run_skill_replay_uses_snapshot_over_init_session(tool_ctx, tmp_path, monkeypatch):
+async def test_run_skill_replay_uses_snapshot_over_init_session(
+    tool_ctx_kitchen_open, tmp_path, monkeypatch
+):
     """With a skill snapshot for the step, run_skill skips init_session."""
     from unittest.mock import MagicMock
 
@@ -245,17 +247,17 @@ async def test_run_skill_replay_uses_snapshot_over_init_session(tool_ctx, tmp_pa
     skill_md.write_text("# investigate\n", encoding="utf-8")
 
     replay_runner = ReplayingSubprocessRunner({}, {}, skill_snapshots={"investigate": snap_dir})
-    tool_ctx.runner = replay_runner
+    tool_ctx_kitchen_open.runner = replay_runner
 
     mock_ssm = MagicMock()
-    tool_ctx.session_skill_manager = mock_ssm
+    tool_ctx_kitchen_open.session_skill_manager = mock_ssm
 
     executor = InMemoryHeadlessExecutor()
-    tool_ctx.executor = executor
+    tool_ctx_kitchen_open.executor = executor
 
     ephemeral_root = tmp_path / "sessions"
-    tool_ctx.ephemeral_root = ephemeral_root
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+    tool_ctx_kitchen_open.ephemeral_root = ephemeral_root
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
     await run_skill("/investigate foo", str(tmp_path), step_name="investigate")
 
@@ -269,7 +271,9 @@ async def test_run_skill_replay_uses_snapshot_over_init_session(tool_ctx, tmp_pa
 
 
 @pytest.mark.anyio
-async def test_run_skill_replay_fallback_to_init_session(tool_ctx, tmp_path, monkeypatch):
+async def test_run_skill_replay_fallback_to_init_session(
+    tool_ctx_kitchen_open, tmp_path, monkeypatch
+):
     """With no snapshot for the step, run_skill falls back to init_session."""
     from unittest.mock import MagicMock
 
@@ -279,17 +283,17 @@ async def test_run_skill_replay_fallback_to_init_session(tool_ctx, tmp_path, mon
     from tests.fakes import InMemoryHeadlessExecutor
 
     replay_runner = ReplayingSubprocessRunner({}, {}, skill_snapshots={})
-    tool_ctx.runner = replay_runner
+    tool_ctx_kitchen_open.runner = replay_runner
 
     fake_validated = ValidatedAddDir(path="/fake/session")
     mock_ssm = MagicMock()
     mock_ssm.init_session.return_value = fake_validated
-    tool_ctx.session_skill_manager = mock_ssm
+    tool_ctx_kitchen_open.session_skill_manager = mock_ssm
 
     executor = InMemoryHeadlessExecutor()
-    tool_ctx.executor = executor
+    tool_ctx_kitchen_open.executor = executor
 
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
     await run_skill("/investigate foo", str(tmp_path), step_name="investigate")
 

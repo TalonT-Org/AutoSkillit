@@ -11,13 +11,13 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 @pytest.mark.anyio
 async def test_run_skill_provider_extras_none_when_feature_disabled(
-    tool_ctx, tmp_path, monkeypatch
+    tool_ctx_kitchen_open, tmp_path, monkeypatch
 ) -> None:
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
-    tool_ctx.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+    tool_ctx_kitchen_open.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
     monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: False)
 
     captured: dict = {}
@@ -37,13 +37,13 @@ async def test_run_skill_provider_extras_none_when_feature_disabled(
 
 @pytest.mark.anyio
 async def test_run_skill_provider_extras_none_for_anthropic_sentinel(
-    tool_ctx, tmp_path, monkeypatch
+    tool_ctx_kitchen_open, tmp_path, monkeypatch
 ) -> None:
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
-    tool_ctx.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+    tool_ctx_kitchen_open.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
     monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: True)
     monkeypatch.setattr(
         "autoskillit.server._guards._resolve_provider_profile",
@@ -67,13 +67,13 @@ async def test_run_skill_provider_extras_none_for_anthropic_sentinel(
 
 @pytest.mark.anyio
 async def test_run_skill_provider_extras_forwarded_for_non_anthropic(
-    tool_ctx, tmp_path, monkeypatch
+    tool_ctx_kitchen_open, tmp_path, monkeypatch
 ) -> None:
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
-    tool_ctx.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+    tool_ctx_kitchen_open.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
     monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: True)
     monkeypatch.setattr(
         "autoskillit.server._guards._resolve_provider_profile",
@@ -97,13 +97,13 @@ async def test_run_skill_provider_extras_forwarded_for_non_anthropic(
 
 @pytest.mark.anyio
 async def test_run_skill_model_as_profile_resolves_provider(
-    tool_ctx, tmp_path, monkeypatch
+    tool_ctx_kitchen_open, tmp_path, monkeypatch
 ) -> None:
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
-    tool_ctx.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+    tool_ctx_kitchen_open.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
     monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: True)
     monkeypatch.setattr(
         "autoskillit.server._guards._resolve_provider_profile",
@@ -132,13 +132,13 @@ async def test_run_skill_model_as_profile_resolves_provider(
 
 @pytest.mark.anyio
 async def test_run_skill_step_overrides_win_over_model_as_profile(
-    tool_ctx, tmp_path, monkeypatch
+    tool_ctx_kitchen_open, tmp_path, monkeypatch
 ) -> None:
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
-    tool_ctx.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+    tool_ctx_kitchen_open.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
     monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: True)
     monkeypatch.setattr(
         "autoskillit.server._guards._resolve_provider_profile",
@@ -168,13 +168,13 @@ async def test_run_skill_step_overrides_win_over_model_as_profile(
 
 @pytest.mark.anyio
 async def test_run_skill_model_as_profile_disabled_when_feature_off(
-    tool_ctx, tmp_path, monkeypatch
+    tool_ctx_kitchen_open, tmp_path, monkeypatch
 ) -> None:
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
-    tool_ctx.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+    tool_ctx_kitchen_open.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
     monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: False)
 
     captured: dict = {}
@@ -194,13 +194,13 @@ async def test_run_skill_model_as_profile_disabled_when_feature_off(
 
 @pytest.mark.anyio
 async def test_run_skill_model_as_profile_no_anthropic_model_falls_through(
-    tool_ctx, tmp_path, monkeypatch
+    tool_ctx_kitchen_open, tmp_path, monkeypatch
 ) -> None:
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
-    tool_ctx.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+    tool_ctx_kitchen_open.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
     monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: True)
     monkeypatch.setattr(
         "autoskillit.server._guards._resolve_provider_profile",

@@ -30,16 +30,16 @@ async def test_fetch_github_issue_gate_closed(tool_ctx) -> None:
 
 
 @pytest.mark.anyio
-async def test_fetch_github_issue_no_client(tool_ctx) -> None:
+async def test_fetch_github_issue_no_client(tool_ctx_kitchen_open) -> None:
     """github_client=None → {"success": False, "error": "GitHub client not configured"}."""
-    tool_ctx.github_client = None
+    tool_ctx_kitchen_open.github_client = None
     result = json.loads(await fetch_github_issue("owner/repo#42"))
     assert result["success"] is False
     assert "GitHub client not configured" in result["error"]
 
 
 @pytest.mark.anyio
-async def test_fetch_github_issue_success(tool_ctx) -> None:
+async def test_fetch_github_issue_success(tool_ctx_kitchen_open) -> None:
     """client.fetch_issue returns data → JSON with that data."""
     issue_data = {
         "success": True,
@@ -50,8 +50,8 @@ async def test_fetch_github_issue_success(tool_ctx) -> None:
         "labels": [],
         "content": "## Body\nSome content.",
     }
-    tool_ctx.github_client = AsyncMock()
-    tool_ctx.github_client.fetch_issue = AsyncMock(return_value=issue_data)
+    tool_ctx_kitchen_open.github_client = AsyncMock()
+    tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(return_value=issue_data)
 
     result = json.loads(await fetch_github_issue("https://github.com/owner/repo/issues/42"))
     assert result["success"] is True
@@ -59,10 +59,10 @@ async def test_fetch_github_issue_success(tool_ctx) -> None:
 
 
 @pytest.mark.anyio
-async def test_fetch_github_issue_bare_number_no_default_repo(tool_ctx) -> None:
+async def test_fetch_github_issue_bare_number_no_default_repo(tool_ctx_kitchen_open) -> None:
     """issue_url='42', no default_repo → error response."""
-    tool_ctx.github_client = AsyncMock()
-    tool_ctx.config.github.default_repo = ""
+    tool_ctx_kitchen_open.github_client = AsyncMock()
+    tool_ctx_kitchen_open.config.github.default_repo = ""
 
     result = json.loads(await fetch_github_issue("42"))
     assert result["success"] is False
@@ -71,10 +71,10 @@ async def test_fetch_github_issue_bare_number_no_default_repo(tool_ctx) -> None:
 
 @pytest.mark.anyio
 async def test_fetch_github_issue_bare_number_with_default_repo(
-    tool_ctx,
+    tool_ctx_kitchen_open,
 ) -> None:
     """issue_url='42', default_repo='owner/repo' → resolves to 'owner/repo#42'."""
-    tool_ctx.config.github.default_repo = "owner/repo"
+    tool_ctx_kitchen_open.config.github.default_repo = "owner/repo"
     issue_data = {
         "success": True,
         "issue_number": 42,
@@ -84,18 +84,18 @@ async def test_fetch_github_issue_bare_number_with_default_repo(
         "labels": [],
         "content": "content",
     }
-    tool_ctx.github_client = AsyncMock()
-    tool_ctx.github_client.fetch_issue = AsyncMock(return_value=issue_data)
+    tool_ctx_kitchen_open.github_client = AsyncMock()
+    tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(return_value=issue_data)
 
     result = json.loads(await fetch_github_issue("42"))
     assert result["success"] is True
     # Verify fetch_issue was called with the resolved ref
-    call_args = tool_ctx.github_client.fetch_issue.call_args
+    call_args = tool_ctx_kitchen_open.github_client.fetch_issue.call_args
     assert "owner/repo#42" in call_args.args[0]
 
 
 @pytest.mark.anyio
-async def test_fetch_github_issue_delegates_to_client(tool_ctx):
+async def test_fetch_github_issue_delegates_to_client(tool_ctx_kitchen_open):
     mock_client = AsyncMock()
     mock_client.fetch_issue.return_value = {
         "success": True,
@@ -106,7 +106,7 @@ async def test_fetch_github_issue_delegates_to_client(tool_ctx):
         "labels": [],
         "content": "# T",
     }
-    tool_ctx.github_client = mock_client
+    tool_ctx_kitchen_open.github_client = mock_client
     result = json.loads(await fetch_github_issue("owner/repo#1"))
     assert result["success"] is True
     mock_client.fetch_issue.assert_called_once_with("owner/repo#1", include_comments=True)
@@ -170,7 +170,7 @@ async def test_get_issue_title_no_client(tool_ctx) -> None:
 
 
 @pytest.mark.anyio
-async def test_get_issue_title_success(tool_ctx) -> None:
+async def test_get_issue_title_success(tool_ctx_kitchen_open) -> None:
     """client.fetch_title returns data → JSON with title and slug."""
     title_data = {
         "success": True,
@@ -178,8 +178,8 @@ async def test_get_issue_title_success(tool_ctx) -> None:
         "title": "Fix the bug",
         "slug": "fix-the-bug",
     }
-    tool_ctx.github_client = AsyncMock()
-    tool_ctx.github_client.fetch_title = AsyncMock(return_value=title_data)
+    tool_ctx_kitchen_open.github_client = AsyncMock()
+    tool_ctx_kitchen_open.github_client.fetch_title = AsyncMock(return_value=title_data)
 
     result = json.loads(await get_issue_title("owner/repo#42"))
     assert result["success"] is True
@@ -188,7 +188,7 @@ async def test_get_issue_title_success(tool_ctx) -> None:
 
 class TestGetIssueTitleTool:
     @pytest.mark.anyio
-    async def test_get_issue_title_success(self, tool_ctx):
+    async def test_get_issue_title_success(self, tool_ctx_kitchen_open):
         """Delegates to github_client.fetch_title; returns JSON result."""
         mock_client = AsyncMock()
         mock_client.fetch_title.return_value = {
@@ -197,7 +197,7 @@ class TestGetIssueTitleTool:
             "title": "Fix merge conflict triage",
             "slug": "fix-merge-conflict-triage",
         }
-        tool_ctx.github_client = mock_client
+        tool_ctx_kitchen_open.github_client = mock_client
         result = json.loads(await get_issue_title("https://github.com/owner/repo/issues/42"))
         assert result["success"] is True
         assert result["number"] == 42

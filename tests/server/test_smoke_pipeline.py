@@ -74,8 +74,8 @@ class TestSmokeScriptValidation:
     """Validate the smoke-test pipeline YAML structure."""
 
     @pytest.fixture(autouse=True)
-    def _setup_ctx(self, tool_ctx):
-        """Pull tool_ctx into scope to trigger its monkeypatch side-effect.
+    def _setup_ctx(self, tool_ctx_kitchen_open):
+        """Pull tool_ctx_kitchen_open into scope to trigger its monkeypatch side-effect.
 
         The server module's _ctx is set by the tool_ctx fixture. Tests in this
         class call server tools (e.g. validate_recipe) that read _ctx. Without

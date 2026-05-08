@@ -25,6 +25,7 @@ import structlog
 from autoskillit.core import (
     CAMPAIGN_ID_ENV_VAR,
     DISPATCH_ID_ENV_VAR,
+    FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
     KillReason,
     ProviderOutcome,
     RecipeIdentity,
@@ -823,12 +824,12 @@ class DefaultHeadlessExecutor:
 
         merged_extras: dict[str, str] = dict(env_extras) if env_extras else {}
         if requires_packs:
-            if "AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS" in merged_extras:
+            if FOOD_TRUCK_TOOL_TAGS_ENV_VAR in merged_extras:
                 raise ValueError(
-                    "dispatch_food_truck: requires_packs and env_extras both specify "
-                    "AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS — use requires_packs exclusively"
+                    f"dispatch_food_truck: requires_packs and env_extras both specify "
+                    f"{FOOD_TRUCK_TOOL_TAGS_ENV_VAR} — use requires_packs exclusively"
                 )
-            merged_extras["AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS"] = ",".join(sorted(requires_packs))
+            merged_extras[FOOD_TRUCK_TOOL_TAGS_ENV_VAR] = ",".join(sorted(requires_packs))
 
         fleet_idle = fleet_cfg.idle_output_timeout
         if idle_output_timeout is not None:

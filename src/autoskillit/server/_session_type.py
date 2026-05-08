@@ -13,6 +13,7 @@ from autoskillit.core import (
     FEATURE_REGISTRY,
     FLEET_DISPATCH_MODE,
     FLEET_MODE_ENV_VAR,
+    FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
     HEADLESS_ENV_VAR,
     SessionType,
     get_logger,
@@ -46,7 +47,7 @@ def _apply_session_type_visibility() -> None:
         if os.environ.get(FLEET_MODE_ENV_VAR) == FLEET_DISPATCH_MODE:
             mcp.enable(tags={"fleet-dispatch"})
     elif _session is SessionType.ORCHESTRATOR and _headless:
-        tool_tags = os.environ.get("AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS", "")
+        tool_tags = os.environ.get(FOOD_TRUCK_TOOL_TAGS_ENV_VAR, "")
         if tool_tags:
             mcp.enable(tags={"kitchen-core"})
             for pack in tool_tags.split(","):

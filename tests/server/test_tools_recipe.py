@@ -99,8 +99,8 @@ class TestValidateRecipeTool:
     """Tests for kitchen-gated validate_recipe tool."""
 
     @pytest.fixture(autouse=True)
-    def _ensure_ctx(self, tool_ctx):
-        """Ensure server context is initialized (gate open by default)."""
+    def _ensure_ctx(self, tool_ctx_kitchen_open):
+        """Ensure server context is initialized with gate open."""
 
     # VS1
     @pytest.mark.anyio
@@ -252,8 +252,8 @@ class TestMigrationSuggestions:
     """MSUG2: validate_recipe surfaces migration warnings."""
 
     @pytest.fixture(autouse=True)
-    def _ensure_ctx(self, tool_ctx):
-        """Ensure server context is initialized (gate open by default)."""
+    def _ensure_ctx(self, tool_ctx_kitchen_open):
+        """Ensure server context is initialized with gate open."""
 
     # MSUG2
     @pytest.mark.anyio
@@ -453,9 +453,9 @@ class TestLoadSkillScriptFailurePredicates:
 
 # P5F2-T3
 @pytest.mark.anyio
-async def test_validate_recipe_no_recipes_returns_error(tool_ctx, tmp_path):
+async def test_validate_recipe_no_recipes_returns_error(tool_ctx_kitchen_open, tmp_path):
     """validate_recipe returns invalid JSON when recipes is not configured."""
-    tool_ctx.recipes = None
+    tool_ctx_kitchen_open.recipes = None
     result = json.loads(await validate_recipe(script_path=str(tmp_path / "x.yaml")))
     assert result.get("valid") is False
 

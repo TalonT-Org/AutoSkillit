@@ -47,7 +47,9 @@ async def _noop_quota_refresher(config, **kwargs) -> None:
 
 class TestDispatchFoodTruckGates:
     @pytest.mark.anyio
-    async def test_dispatch_food_truck_hard_refusal_headless(self, tool_ctx, monkeypatch):
+    async def test_dispatch_food_truck_hard_refusal_headless(
+        self, tool_ctx_kitchen_open, monkeypatch
+    ):
         """AUTOSKILLIT_HEADLESS=1 → fleet_hard_refusal_headless, regardless of SESSION_TYPE."""
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
         from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
@@ -57,7 +59,9 @@ class TestDispatchFoodTruckGates:
         assert result["subtype"] == "headless_error"
 
     @pytest.mark.anyio
-    async def test_dispatch_food_truck_requires_fleet_session_type(self, tool_ctx, monkeypatch):
+    async def test_dispatch_food_truck_requires_fleet_session_type(
+        self, tool_ctx_kitchen_open, monkeypatch
+    ):
         """Non-fleet session type → headless_error, even for interactive callers."""
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
         monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
@@ -107,7 +111,7 @@ class TestDispatchFoodTruckGates:
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_refuses_when_fleet_feature_disabled(
-        self, tool_ctx, monkeypatch
+        self, tool_ctx_kitchen_open, monkeypatch
     ):
         """features.fleet: false in config → fleet_feature_disabled, regardless of gate state."""
         import dataclasses
@@ -118,7 +122,9 @@ class TestDispatchFoodTruckGates:
         # Gate is open (fleet session already booted), env var absent
         # Only config file has fleet disabled
         monkeypatch.delenv("AUTOSKILLIT_FEATURES__FLEET", raising=False)
-        tool_ctx.config = dataclasses.replace(tool_ctx.config, features={"fleet": False})
+        tool_ctx_kitchen_open.config = dataclasses.replace(
+            tool_ctx_kitchen_open.config, features={"fleet": False}
+        )
 
         result = json.loads(await dispatch_food_truck(recipe="r", task="t"))
         assert result["success"] is False
@@ -724,20 +730,20 @@ class TestDispatchFoodTruckExecution:
 
 @pytest.mark.anyio
 async def test_dispatch_food_truck_tool_passes_resume_session_id_to_executor(
-    tool_ctx, monkeypatch
+    tool_ctx_kitchen_open, monkeypatch
 ):
     """dispatch_food_truck MCP tool forwards resume_session_id all the way to the executor."""
     from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
-    tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+    tool_ctx_kitchen_open.fleet_lock = FleetSemaphore(max_concurrent=1)
     repo = InMemoryRecipeRepository()
     recipe_info = _make_recipe_info("test-recipe")
     repo.add_recipe("test-recipe", recipe_info)
     repo.add_full_recipe(recipe_info.path, _make_standard_recipe("test-recipe"))
-    tool_ctx.recipes = repo
+    tool_ctx_kitchen_open.recipes = repo
     executor = InMemoryHeadlessExecutor()
-    tool_ctx.executor = executor
+    tool_ctx_kitchen_open.executor = executor
 
     await dispatch_food_truck(
         recipe="test-recipe",
@@ -812,12 +818,12 @@ class TestDispatchFoodTruckIdleTimeout:
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_passes_idle_output_timeout_to_executor(
-        self, tool_ctx, monkeypatch
+        self, tool_ctx_kitchen_open, monkeypatch
     ):
         """dispatch_food_truck MCP tool forwards idle_output_timeout to executor."""
         from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
-        self._setup_dispatch(tool_ctx)
+        self._setup_dispatch(tool_ctx_kitchen_open)
 
         await dispatch_food_truck(
             recipe="test-recipe",
@@ -825,38 +831,38 @@ class TestDispatchFoodTruckIdleTimeout:
             idle_output_timeout=0,
         )
 
-        executor = tool_ctx.executor
+        executor = tool_ctx_kitchen_open.executor
         assert executor.dispatch_calls, "dispatch_food_truck executor was never called"
         assert executor.dispatch_calls[0].idle_output_timeout == 0.0
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_idle_timeout_none_when_not_specified(
-        self, tool_ctx, monkeypatch
+        self, tool_ctx_kitchen_open, monkeypatch
     ):
         """When idle_output_timeout is not specified, executor receives None."""
         from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
-        self._setup_dispatch(tool_ctx)
+        self._setup_dispatch(tool_ctx_kitchen_open)
 
         await dispatch_food_truck(
             recipe="test-recipe",
             task="do-work",
         )
 
-        executor = tool_ctx.executor
+        executor = tool_ctx_kitchen_open.executor
         assert executor.dispatch_calls, "dispatch_food_truck executor was never called"
         assert executor.dispatch_calls[0].idle_output_timeout is None
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_idle_timeout_overrides_config_default(
-        self, tool_ctx, monkeypatch
+        self, tool_ctx_kitchen_open, monkeypatch
     ):
         """Explicit idle_output_timeout=0 overrides the config default of 1000."""
         from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
-        self._setup_dispatch(tool_ctx)
+        self._setup_dispatch(tool_ctx_kitchen_open)
         # Config idle_output_timeout is 1000 (default from RunSkillConfig)
-        assert tool_ctx.config.run_skill.idle_output_timeout == 1000
+        assert tool_ctx_kitchen_open.config.run_skill.idle_output_timeout == 1000
 
         await dispatch_food_truck(
             recipe="test-recipe",
@@ -864,7 +870,7 @@ class TestDispatchFoodTruckIdleTimeout:
             idle_output_timeout=0,
         )
 
-        executor = tool_ctx.executor
+        executor = tool_ctx_kitchen_open.executor
         assert executor.dispatch_calls, "dispatch_food_truck executor was never called"
         # Executor receives 0.0, overriding the config default
         assert executor.dispatch_calls[0].idle_output_timeout == 0.0

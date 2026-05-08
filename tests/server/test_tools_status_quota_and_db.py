@@ -20,7 +20,7 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 class TestGetQuotaEvents:
     @pytest.mark.anyio
-    async def test_returns_events_from_jsonl(self, tool_ctx, tmp_path, monkeypatch):
+    async def test_returns_events_from_jsonl(self, tool_ctx_kitchen_open, tmp_path, monkeypatch):
         events = [
             {
                 "ts": "2026-03-10T10:00:00+00:00",
@@ -40,13 +40,13 @@ class TestGetQuotaEvents:
         (log_dir / "quota_events.jsonl").write_text(
             "\n".join(json.dumps(e) for e in events) + "\n"
         )
-        monkeypatch.setattr(tool_ctx.config.linux_tracing, "log_dir", str(log_dir))
+        monkeypatch.setattr(tool_ctx_kitchen_open.config.linux_tracing, "log_dir", str(log_dir))
         result = json.loads(await get_quota_events())
         assert result["total_count"] == 2
         assert result["events"][0]["event"] == "blocked"  # most recent first
 
     @pytest.mark.anyio
-    async def test_limits_to_n_events(self, tool_ctx, tmp_path, monkeypatch):
+    async def test_limits_to_n_events(self, tool_ctx_kitchen_open, tmp_path, monkeypatch):
         log_dir = tmp_path / "logs"
         log_dir.mkdir()
         lines = [
@@ -54,7 +54,7 @@ class TestGetQuotaEvents:
             for h in range(10)
         ]
         (log_dir / "quota_events.jsonl").write_text("\n".join(lines) + "\n")
-        monkeypatch.setattr(tool_ctx.config.linux_tracing, "log_dir", str(log_dir))
+        monkeypatch.setattr(tool_ctx_kitchen_open.config.linux_tracing, "log_dir", str(log_dir))
         result = json.loads(await get_quota_events(n=3))
         assert len(result["events"]) == 3
         assert result["total_count"] == 10
@@ -64,10 +64,12 @@ class TestGetQuotaEvents:
         assert result["events"][2]["ts"] == "2026-03-10T07:00:00+00:00"
 
     @pytest.mark.anyio
-    async def test_returns_empty_when_file_missing(self, tool_ctx, tmp_path, monkeypatch):
+    async def test_returns_empty_when_file_missing(
+        self, tool_ctx_kitchen_open, tmp_path, monkeypatch
+    ):
         log_dir = tmp_path / "logs"
         log_dir.mkdir()
-        monkeypatch.setattr(tool_ctx.config.linux_tracing, "log_dir", str(log_dir))
+        monkeypatch.setattr(tool_ctx_kitchen_open.config.linux_tracing, "log_dir", str(log_dir))
         result = json.loads(await get_quota_events())
         assert result["events"] == []
         assert result["total_count"] == 0
@@ -75,8 +77,8 @@ class TestGetQuotaEvents:
 
 class TestWriteTelemetryFiles:
     @pytest.mark.anyio
-    async def test_writes_token_summary_markdown(self, tool_ctx, tmp_path):
-        tool_ctx.token_log.record(
+    async def test_writes_token_summary_markdown(self, tool_ctx_kitchen_open, tmp_path):
+        tool_ctx_kitchen_open.token_log.record(
             "step1",
             {
                 "input_tokens": 100,
@@ -97,8 +99,8 @@ class TestWriteTelemetryFiles:
         assert "# Token Summary" not in content
 
     @pytest.mark.anyio
-    async def test_writes_timing_summary_markdown(self, tool_ctx, tmp_path):
-        tool_ctx.timing_log.record("step1", 12.5)
+    async def test_writes_timing_summary_markdown(self, tool_ctx_kitchen_open, tmp_path):
+        tool_ctx_kitchen_open.timing_log.record("step1", 12.5)
         result = json.loads(await write_telemetry_files(str(tmp_path)))
         path = Path(result["timing_summary_path"])
         assert path.exists()
@@ -111,9 +113,9 @@ class TestWriteTelemetryFiles:
         assert "# Timing Summary" not in content
 
     @pytest.mark.anyio
-    async def test_token_file_uses_wall_clock_seconds(self, tool_ctx, tmp_path):
+    async def test_token_file_uses_wall_clock_seconds(self, tool_ctx_kitchen_open, tmp_path):
         """write_telemetry_files merges wall_clock_seconds from timing log."""
-        tool_ctx.token_log.record(
+        tool_ctx_kitchen_open.token_log.record(
             "deploy",
             {
                 "input_tokens": 100,
@@ -123,14 +125,14 @@ class TestWriteTelemetryFiles:
             },
             elapsed_seconds=5.0,
         )
-        tool_ctx.timing_log.record("deploy", 120.0)
+        tool_ctx_kitchen_open.timing_log.record("deploy", 120.0)
         result = json.loads(await write_telemetry_files(str(tmp_path)))
         content = Path(result["token_summary_path"]).read_text()
         # Should show 2m 0s (wall_clock=120), not 5s (elapsed)
         assert "2m 0s" in content
 
     @pytest.mark.anyio
-    async def test_creates_output_dir_if_missing(self, tool_ctx, tmp_path):
+    async def test_creates_output_dir_if_missing(self, tool_ctx_kitchen_open, tmp_path):
         out = str(tmp_path / "nested" / "telemetry")
         result = json.loads(await write_telemetry_files(out))
         assert Path(result["token_summary_path"]).exists()
@@ -149,7 +151,7 @@ class TestWriteTelemetryFiles:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.usefixtures("tool_ctx")
+@pytest.mark.usefixtures("tool_ctx_kitchen_open")
 class TestReadDb:
     """Integration tests for read_db tool with real SQLite databases."""
 
@@ -293,8 +295,8 @@ class TestReadDb:
         assert "not enabled" in result["result"].lower()
 
     @pytest.mark.anyio
-    async def test_max_rows_truncation(self, sample_db, tool_ctx):
-        tool_ctx.config = AutomationConfig(read_db=ReadDbConfig(max_rows=2))
+    async def test_max_rows_truncation(self, sample_db, tool_ctx_kitchen_open):
+        tool_ctx_kitchen_open.config = AutomationConfig(read_db=ReadDbConfig(max_rows=2))
         result = json.loads(
             await read_db(
                 db_path=str(sample_db),
@@ -324,8 +326,8 @@ class TestReadDb:
         assert base64.b64decode(result["rows"][0]["content"]) == b"\x00\x01\x02\xff"
 
     @pytest.mark.anyio
-    async def test_query_timeout(self, sample_db, tool_ctx):
-        tool_ctx.config = AutomationConfig(read_db=ReadDbConfig(timeout=1))
+    async def test_query_timeout(self, sample_db, tool_ctx_kitchen_open):
+        tool_ctx_kitchen_open.config = AutomationConfig(read_db=ReadDbConfig(timeout=1))
         # Cross join 3 rows^18 = ~387 million rows — guaranteed to exceed 1s timeout
         slow_query = "SELECT count(*) FROM " + ", ".join(f"users t{i}" for i in range(18))
         result = json.loads(
@@ -349,14 +351,14 @@ class TestReadDb:
 
 
 @pytest.mark.anyio
-async def test_tools_status_routes_through_db_reader(tool_ctx, tmp_path) -> None:
+async def test_tools_status_routes_through_db_reader(tool_ctx_kitchen_open, tmp_path) -> None:
     """read_db routes through ctx.db_reader.query()."""
     import sqlite3 as _sqlite3
 
     from tests.fakes import InMemoryDatabaseReader
 
     reader = InMemoryDatabaseReader(query_result={"rows": [], "count": 0})
-    tool_ctx.db_reader = reader
+    tool_ctx_kitchen_open.db_reader = reader
 
     db_path = str(tmp_path / "test.db")
     # Create an empty sqlite db so path-exists check passes
@@ -371,11 +373,11 @@ async def test_tools_status_routes_through_db_reader(tool_ctx, tmp_path) -> None
 
 
 @pytest.mark.anyio
-async def test_read_db_all_error_paths_include_success_false(tool_ctx, monkeypatch):
+async def test_read_db_all_error_paths_include_success_false(tool_ctx_kitchen_open, monkeypatch):
     """Every read_db error path must return success=False."""
     from autoskillit.server import _state
 
-    monkeypatch.setattr(_state, "_ctx", tool_ctx)
+    monkeypatch.setattr(_state, "_ctx", tool_ctx_kitchen_open)
 
     # Nonexistent db path — exercises the "does not exist" error branch
     result = json.loads(await read_db(db_path="/nonexistent/path/db.sqlite", query="SELECT 1"))

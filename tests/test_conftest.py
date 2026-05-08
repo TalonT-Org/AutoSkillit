@@ -6,11 +6,11 @@ from autoskillit.core.types import SubprocessResult, TerminationReason
 
 
 def test_tool_ctx_provides_isolated_gate(tool_ctx):
-    """tool_ctx fixture provides a ToolContext with gate enabled."""
+    """tool_ctx fixture provides a ToolContext with gate closed (matching production)."""
     from autoskillit.pipeline.gate import DefaultGateState
 
     assert isinstance(tool_ctx.gate, DefaultGateState)
-    assert tool_ctx.gate.enabled is True
+    assert tool_ctx.gate.enabled is False
 
 
 def test_tool_ctx_provides_isolated_audit(tool_ctx):
@@ -218,11 +218,11 @@ def test_clear_headless_env_no_server_import():
 
 
 def test_minimal_ctx_provides_isolated_gate(minimal_ctx):
-    """minimal_ctx fixture provides a ToolContext with gate enabled."""
+    """minimal_ctx fixture provides a ToolContext with gate closed (matching production)."""
     from autoskillit.pipeline.gate import DefaultGateState
 
     assert isinstance(minimal_ctx.gate, DefaultGateState)
-    assert minimal_ctx.gate.enabled is True
+    assert minimal_ctx.gate.enabled is False
 
 
 def test_is_test_feature_enabled_reads_project_config(monkeypatch):

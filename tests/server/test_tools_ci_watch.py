@@ -14,16 +14,16 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 @pytest.mark.anyio
-async def test_wait_for_ci_rejects_invalid_event(tool_ctx) -> None:
-    tool_ctx.ci_watcher = InMemoryCIWatcher()
+async def test_wait_for_ci_rejects_invalid_event(tool_ctx_kitchen_open) -> None:
+    tool_ctx_kitchen_open.ci_watcher = InMemoryCIWatcher()
     result = json.loads(await wait_for_ci("main", event="made_up_event"))
     assert result["conclusion"] == "error"
     assert "event" in result.get("error", "").lower()
 
 
 @pytest.mark.anyio
-async def test_wait_for_ci_coerces_string_none_to_null(tool_ctx) -> None:
-    tool_ctx.ci_watcher = InMemoryCIWatcher(
+async def test_wait_for_ci_coerces_string_none_to_null(tool_ctx_kitchen_open) -> None:
+    tool_ctx_kitchen_open.ci_watcher = InMemoryCIWatcher(
         wait_result={"run_id": 42, "conclusion": "success", "failed_jobs": []}
     )
     result = json.loads(await wait_for_ci("main", event="None"))
@@ -56,34 +56,34 @@ class TestWaitForCiAutoTrigger:
     """wait_for_ci auto_trigger=True: active webhook recovery."""
 
     @pytest.mark.anyio
-    async def test_auto_trigger_default_false_does_not_fire(self, tool_ctx):
+    async def test_auto_trigger_default_false_does_not_fire(self, tool_ctx_kitchen_open):
         watcher = InMemoryCIWatcher(wait_result=_NO_RUNS)
-        tool_ctx.ci_watcher = watcher
-        tool_ctx.runner.push(_sub(0, "abc123\n"))
+        tool_ctx_kitchen_open.ci_watcher = watcher
+        tool_ctx_kitchen_open.runner.push(_sub(0, "abc123\n"))
 
         result = json.loads(await wait_for_ci("branch", cwd="/repo"))
 
         assert len(watcher.wait_calls) == 1
-        assert len(tool_ctx.runner.call_args_list) == 1
+        assert len(tool_ctx_kitchen_open.runner.call_args_list) == 1
         assert result["conclusion"] == "no_runs"
         assert "triggered" not in result
 
     @pytest.mark.anyio
-    async def test_auto_trigger_fires_on_no_runs(self, tool_ctx):
+    async def test_auto_trigger_fires_on_no_runs(self, tool_ctx_kitchen_open):
         watcher = InMemoryCIWatcher(wait_results=[_NO_RUNS, _SUCCESS])
-        tool_ctx.ci_watcher = watcher
-        tool_ctx.runner.push(
+        tool_ctx_kitchen_open.ci_watcher = watcher
+        tool_ctx_kitchen_open.runner.push(
             _sub(0, "abc123\n")
         )  # git rev-parse HEAD — wait_for_ci initial HEAD inference
-        tool_ctx.runner.push(_sub(0, '{"mergeable":"MERGEABLE"}\n'))  # gh pr view
-        tool_ctx.runner.push(_sub(0))  # git commit --allow-empty
-        tool_ctx.runner.push(
+        tool_ctx_kitchen_open.runner.push(_sub(0, '{"mergeable":"MERGEABLE"}\n'))  # gh pr view
+        tool_ctx_kitchen_open.runner.push(_sub(0))  # git commit --allow-empty
+        tool_ctx_kitchen_open.runner.push(
             _sub(0, "def456\n")
         )  # git rev-parse HEAD — new HEAD after empty commit
-        tool_ctx.runner.push(
+        tool_ctx_kitchen_open.runner.push(
             _sub(0, "https://github.com/org/repo\n")
         )  # git remote get-url upstream
-        tool_ctx.runner.push(_sub(0))  # git push --force-with-lease
+        tool_ctx_kitchen_open.runner.push(_sub(0))  # git push --force-with-lease
 
         result = json.loads(await wait_for_ci("feature-branch", cwd="/repo", auto_trigger=True))
 
@@ -94,11 +94,11 @@ class TestWaitForCiAutoTrigger:
         assert result["head_sha"] == "def456"
 
     @pytest.mark.anyio
-    async def test_auto_trigger_skips_on_conflicting_pr(self, tool_ctx):
+    async def test_auto_trigger_skips_on_conflicting_pr(self, tool_ctx_kitchen_open):
         watcher = InMemoryCIWatcher(wait_result=_NO_RUNS)
-        tool_ctx.ci_watcher = watcher
-        tool_ctx.runner.push(_sub(0, "abc123\n"))  # git rev-parse HEAD
-        tool_ctx.runner.push(_sub(0, '{"mergeable":"CONFLICTING"}\n'))  # gh pr view
+        tool_ctx_kitchen_open.ci_watcher = watcher
+        tool_ctx_kitchen_open.runner.push(_sub(0, "abc123\n"))  # git rev-parse HEAD
+        tool_ctx_kitchen_open.runner.push(_sub(0, '{"mergeable":"CONFLICTING"}\n'))  # gh pr view
 
         result = json.loads(await wait_for_ci("branch", cwd="/repo", auto_trigger=True))
 
@@ -109,11 +109,11 @@ class TestWaitForCiAutoTrigger:
         assert result["failed_jobs"] == []
 
     @pytest.mark.anyio
-    async def test_auto_trigger_returns_gh_view_failed_on_gh_failure(self, tool_ctx):
+    async def test_auto_trigger_returns_gh_view_failed_on_gh_failure(self, tool_ctx_kitchen_open):
         watcher = InMemoryCIWatcher(wait_result=_NO_RUNS)
-        tool_ctx.ci_watcher = watcher
-        tool_ctx.runner.push(_sub(0, "abc123\n"))  # git rev-parse HEAD (initial)
-        tool_ctx.runner.push(_sub(1))  # gh pr view — CLI failure (no PR)
+        tool_ctx_kitchen_open.ci_watcher = watcher
+        tool_ctx_kitchen_open.runner.push(_sub(0, "abc123\n"))  # git rev-parse HEAD (initial)
+        tool_ctx_kitchen_open.runner.push(_sub(1))  # gh pr view — CLI failure (no PR)
 
         result = json.loads(await wait_for_ci("branch", cwd="/repo", auto_trigger=True))
 
@@ -122,12 +122,12 @@ class TestWaitForCiAutoTrigger:
         assert result["triggered"] is False
 
     @pytest.mark.anyio
-    async def test_auto_trigger_commit_failure_returns_no_runs(self, tool_ctx):
+    async def test_auto_trigger_commit_failure_returns_no_runs(self, tool_ctx_kitchen_open):
         watcher = InMemoryCIWatcher(wait_result=_NO_RUNS)
-        tool_ctx.ci_watcher = watcher
-        tool_ctx.runner.push(_sub(0, "abc123\n"))  # git rev-parse HEAD
-        tool_ctx.runner.push(_sub(0, '{"mergeable":"MERGEABLE"}\n'))  # gh pr view
-        tool_ctx.runner.push(
+        tool_ctx_kitchen_open.ci_watcher = watcher
+        tool_ctx_kitchen_open.runner.push(_sub(0, "abc123\n"))  # git rev-parse HEAD
+        tool_ctx_kitchen_open.runner.push(_sub(0, '{"mergeable":"MERGEABLE"}\n'))  # gh pr view
+        tool_ctx_kitchen_open.runner.push(
             _sub(128, stderr="error: pre-commit hook rejected commit")
         )  # git commit fails
 
@@ -138,22 +138,24 @@ class TestWaitForCiAutoTrigger:
         assert "triggered" not in result
 
     @pytest.mark.anyio
-    async def test_auto_trigger_push_failure_returns_no_runs(self, tool_ctx):
+    async def test_auto_trigger_push_failure_returns_no_runs(self, tool_ctx_kitchen_open):
         watcher = InMemoryCIWatcher(wait_result=_NO_RUNS)
-        tool_ctx.ci_watcher = watcher
-        tool_ctx.runner.push(_sub(0, "abc123\n"))  # git rev-parse HEAD
-        tool_ctx.runner.push(_sub(0, '{"mergeable":"MERGEABLE"}\n'))  # gh pr view
-        tool_ctx.runner.push(_sub(0))  # git commit --allow-empty
-        tool_ctx.runner.push(_sub(0, "def456\n"))  # git rev-parse HEAD (new)
-        tool_ctx.runner.push(
+        tool_ctx_kitchen_open.ci_watcher = watcher
+        tool_ctx_kitchen_open.runner.push(_sub(0, "abc123\n"))  # git rev-parse HEAD
+        tool_ctx_kitchen_open.runner.push(_sub(0, '{"mergeable":"MERGEABLE"}\n'))  # gh pr view
+        tool_ctx_kitchen_open.runner.push(_sub(0))  # git commit --allow-empty
+        tool_ctx_kitchen_open.runner.push(_sub(0, "def456\n"))  # git rev-parse HEAD (new)
+        tool_ctx_kitchen_open.runner.push(
             _sub(0, "https://github.com/org/repo\n")
         )  # git remote get-url upstream
-        tool_ctx.runner.push(_sub(1, stderr="error: remote rejected"))  # git push fails
-        tool_ctx.runner.push(_sub(0))  # git reset --soft HEAD~1 (cleanup)
+        tool_ctx_kitchen_open.runner.push(
+            _sub(1, stderr="error: remote rejected")
+        )  # git push fails
+        tool_ctx_kitchen_open.runner.push(_sub(0))  # git reset --soft HEAD~1 (cleanup)
 
         result = json.loads(await wait_for_ci("branch", cwd="/repo", auto_trigger=True))
 
-        reset_cmd = tool_ctx.runner.call_args_list[-1][0]
+        reset_cmd = tool_ctx_kitchen_open.runner.call_args_list[-1][0]
         assert reset_cmd == ["git", "reset", "--soft", "HEAD~1"], (
             f"Expected reset, got: {reset_cmd}"
         )
@@ -162,7 +164,9 @@ class TestWaitForCiAutoTrigger:
         assert "triggered" not in result
 
     @pytest.mark.anyio
-    async def test_auto_trigger_ci_poll_exception_returns_auto_trigger_failed(self, tool_ctx):
+    async def test_auto_trigger_ci_poll_exception_returns_auto_trigger_failed(
+        self, tool_ctx_kitchen_open
+    ):
         call_count_holder = [0]
 
         def poll_raises_on_second_call() -> dict:
@@ -173,19 +177,19 @@ class TestWaitForCiAutoTrigger:
 
         watcher = InMemoryCIWatcher(wait_result=_NO_RUNS)
         watcher.wait_side_effect = poll_raises_on_second_call
-        tool_ctx.ci_watcher = watcher
-        tool_ctx.runner.push(
+        tool_ctx_kitchen_open.ci_watcher = watcher
+        tool_ctx_kitchen_open.runner.push(
             _sub(0, "abc123\n")
         )  # git rev-parse HEAD — wait_for_ci initial HEAD inference
-        tool_ctx.runner.push(_sub(0, '{"mergeable":"MERGEABLE"}\n'))  # gh pr view
-        tool_ctx.runner.push(_sub(0))  # git commit --allow-empty
-        tool_ctx.runner.push(
+        tool_ctx_kitchen_open.runner.push(_sub(0, '{"mergeable":"MERGEABLE"}\n'))  # gh pr view
+        tool_ctx_kitchen_open.runner.push(_sub(0))  # git commit --allow-empty
+        tool_ctx_kitchen_open.runner.push(
             _sub(0, "def456\n")
         )  # git rev-parse HEAD — new HEAD after empty commit
-        tool_ctx.runner.push(
+        tool_ctx_kitchen_open.runner.push(
             _sub(0, "https://github.com/org/repo\n")
         )  # git remote get-url upstream
-        tool_ctx.runner.push(_sub(0))  # git push --force-with-lease
+        tool_ctx_kitchen_open.runner.push(_sub(0))  # git push --force-with-lease
 
         result = json.loads(await wait_for_ci("branch", cwd="/repo", auto_trigger=True))
 
@@ -194,18 +198,18 @@ class TestWaitForCiAutoTrigger:
         assert result["triggered"] is False
 
     @pytest.mark.anyio
-    async def test_auto_trigger_ci_forwards_lookback_seconds(self, tool_ctx):
+    async def test_auto_trigger_ci_forwards_lookback_seconds(self, tool_ctx_kitchen_open):
         """The second wait() call in _auto_trigger_ci must forward lookback_seconds."""
         watcher = InMemoryCIWatcher(wait_results=[_NO_RUNS, _SUCCESS])
-        tool_ctx.ci_watcher = watcher
-        tool_ctx.runner.push(_sub(0, "abc123\n"))  # git rev-parse HEAD
-        tool_ctx.runner.push(_sub(0, '{"mergeable":"MERGEABLE"}\n'))  # gh pr view
-        tool_ctx.runner.push(_sub(0))  # git commit --allow-empty
-        tool_ctx.runner.push(_sub(0, "def456\n"))  # git rev-parse HEAD — new HEAD
-        tool_ctx.runner.push(
+        tool_ctx_kitchen_open.ci_watcher = watcher
+        tool_ctx_kitchen_open.runner.push(_sub(0, "abc123\n"))  # git rev-parse HEAD
+        tool_ctx_kitchen_open.runner.push(_sub(0, '{"mergeable":"MERGEABLE"}\n'))  # gh pr view
+        tool_ctx_kitchen_open.runner.push(_sub(0))  # git commit --allow-empty
+        tool_ctx_kitchen_open.runner.push(_sub(0, "def456\n"))  # git rev-parse HEAD — new HEAD
+        tool_ctx_kitchen_open.runner.push(
             _sub(0, "https://github.com/org/repo\n")
         )  # git remote get-url upstream
-        tool_ctx.runner.push(_sub(0))  # git push --force-with-lease
+        tool_ctx_kitchen_open.runner.push(_sub(0))  # git push --force-with-lease
 
         await wait_for_ci("branch", cwd="/repo", auto_trigger=True, lookback_seconds=7200)
 

@@ -13,7 +13,7 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 @pytest.mark.anyio
-async def test_enqueue_pr_delegates_to_watcher_enqueue(tool_ctx):
+async def test_enqueue_pr_delegates_to_watcher_enqueue(tool_ctx_kitchen_open):
     """enqueue_pr tool passes auto_merge_available to watcher.enqueue()."""
     watcher = InMemoryMergeQueueWatcher(
         enqueue_result={
@@ -22,7 +22,7 @@ async def test_enqueue_pr_delegates_to_watcher_enqueue(tool_ctx):
             "enrollment_method": "direct_enqueue",
         },
     )
-    tool_ctx.merge_queue_watcher = watcher
+    tool_ctx_kitchen_open.merge_queue_watcher = watcher
 
     with patch(
         "autoskillit.server.tools.tools_ci_merge_queue.resolve_repo_from_remote",
@@ -46,9 +46,9 @@ async def test_enqueue_pr_delegates_to_watcher_enqueue(tool_ctx):
 
 
 @pytest.mark.anyio
-async def test_enqueue_pr_returns_structured_error_when_watcher_none(tool_ctx):
+async def test_enqueue_pr_returns_structured_error_when_watcher_none(tool_ctx_kitchen_open):
     """enqueue_pr returns {"success": false} when merge_queue_watcher is None."""
-    tool_ctx.merge_queue_watcher = None
+    tool_ctx_kitchen_open.merge_queue_watcher = None
 
     from autoskillit.server.tools.tools_ci_merge_queue import enqueue_pr
 

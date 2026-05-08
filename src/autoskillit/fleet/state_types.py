@@ -127,11 +127,11 @@ class DispatchRecord:
 class CampaignState:
     """Top-level campaign state file content."""
 
-    schema_version: int
     campaign_id: str
     campaign_name: str
     manifest_path: str
     started_at: float
+    schema_version: int = _SCHEMA_VERSION
     dispatches: list[DispatchRecord] = field(default_factory=list)
     captured_values: dict[str, str] = field(default_factory=dict)
     orchestrator_session_id: str = ""

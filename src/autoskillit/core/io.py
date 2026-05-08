@@ -10,7 +10,6 @@ is detectable. Existing artifacts are tracked in
 
 from __future__ import annotations
 
-import json
 import os
 import tempfile
 from pathlib import Path
@@ -18,6 +17,8 @@ from typing import Any
 
 import yaml
 from yaml import YAMLError as YAMLError  # explicit re-export for callers and type checkers
+
+from autoskillit.core._json import fast_dumps as _fast_dumps
 
 try:
     from yaml import CSafeLoader as _Loader
@@ -125,7 +126,7 @@ def write_versioned_json(path: Path, payload: dict[str, Any], schema_version: in
     if not isinstance(payload, dict):
         raise TypeError("write_versioned_json requires a dict payload")
     enriched = {**payload, "schema_version": schema_version}
-    atomic_write(path, json.dumps(enriched, indent=2))
+    atomic_write(path, _fast_dumps(enriched, indent=True))
 
 
 _AUTOSKILLIT_GITIGNORE_ENTRIES = [

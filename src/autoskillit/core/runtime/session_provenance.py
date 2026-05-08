@@ -7,6 +7,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from autoskillit.core._json import fast_dumps as _fast_dumps
+
 
 @dataclass(frozen=True)
 class ProvenanceRecord:
@@ -50,7 +52,7 @@ def write_provenance_record(record: ProvenanceRecord, project_dir: Path | None =
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(record.__dict__, sort_keys=True) + "\n")
+            fh.write(_fast_dumps(record.__dict__, sort_keys=True) + "\n")
     except OSError:
         pass
 

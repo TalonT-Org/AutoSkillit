@@ -29,6 +29,7 @@ from autoskillit.core import (
     get_logger,
     iter_merged_assistant_turns,
 )
+from autoskillit.core._json import fast_dumps as _fast_dumps
 from autoskillit.execution.anomaly_detection import (
     detect_anomalies,
     detect_identity_drift,
@@ -229,7 +230,7 @@ def flush_session_log(
                     **snap,
                     "event": snap.get("event", "snapshot"),
                 }
-                f.write(json.dumps(record, sort_keys=True) + "\n")
+                f.write(_fast_dumps(record, sort_keys=True) + "\n")
 
                 # Track peaks
                 rss = snap.get("vm_rss_kb", 0)
@@ -281,7 +282,7 @@ def flush_session_log(
         anomalies_path = session_dir / "anomalies.jsonl"
         with anomalies_path.open("w") as f:
             for a in anomalies:
-                f.write(json.dumps(a, sort_keys=True) + "\n")
+                f.write(_fast_dumps(a, sort_keys=True) + "\n")
 
     anomaly_count = len(anomalies)
 
@@ -304,7 +305,7 @@ def flush_session_log(
     if telemetry.github_api_usage is not None:
         atomic_write(
             session_dir / "github_api_usage.json",
-            json.dumps(telemetry.github_api_usage, sort_keys=True, indent=2) + "\n",
+            _fast_dumps(telemetry.github_api_usage, sort_keys=True, indent=True) + "\n",
         )
 
     # Write summary.json
@@ -365,13 +366,13 @@ def flush_session_log(
             "composite_hash": recipe_identity.composite_hash,
         }
     summary_path = session_dir / "summary.json"
-    atomic_write(summary_path, json.dumps(summary, sort_keys=True, indent=2) + "\n")
+    atomic_write(summary_path, _fast_dumps(summary, sort_keys=True, indent=True) + "\n")
 
     if campaign_id:
         meta_path = session_dir / "meta.json"
         atomic_write(
             meta_path,
-            json.dumps({"campaign_id": campaign_id, "dispatch_id": dispatch_id}, sort_keys=True),
+            _fast_dumps({"campaign_id": campaign_id, "dispatch_id": dispatch_id}, sort_keys=True),
         )
 
     if not success and raw_stdout:
@@ -400,12 +401,12 @@ def flush_session_log(
             "dispatch_id": dispatch_id,
             "campaign_id": campaign_id,
         }
-        atomic_write(session_dir / "token_usage.json", json.dumps(tu_data))
+        atomic_write(session_dir / "token_usage.json", _fast_dumps(tu_data))
 
     if timing_seconds is not None:
         atomic_write(
             session_dir / "step_timing.json",
-            json.dumps(
+            _fast_dumps(
                 {
                     "step_name": label,
                     "total_seconds": max(0.0, timing_seconds),
@@ -415,7 +416,7 @@ def flush_session_log(
         )
 
     if step_name and audit_record is not None:
-        atomic_write(session_dir / "audit_log.json", json.dumps([audit_record]))
+        atomic_write(session_dir / "audit_log.json", _fast_dumps([audit_record]))
 
     # Append to sessions.jsonl index
     index_entry = {
@@ -463,7 +464,7 @@ def flush_session_log(
     }
     index_path = log_root / "sessions.jsonl"
     with index_path.open("a") as f:
-        f.write(json.dumps(index_entry, sort_keys=True) + "\n")
+        f.write(_fast_dumps(index_entry, sort_keys=True) + "\n")
 
     # Co-write session provenance record
     if cwd:

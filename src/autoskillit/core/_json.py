@@ -10,7 +10,7 @@ try:
     import orjson as _orjson
 
     def fast_loads(s: str | bytes) -> Any:
-        """Raises json.JSONDecodeError (via orjson.JSONDecodeError subclass) on invalid input."""
+        """Raises orjson.JSONDecodeError (a subclass of json.JSONDecodeError) on invalid input."""
         return _orjson.loads(s)
 
     def fast_dumps(

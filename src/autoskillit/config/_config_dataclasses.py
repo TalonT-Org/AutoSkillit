@@ -7,7 +7,7 @@ import os
 from dataclasses import dataclass, field
 from typing import ClassVar
 
-from autoskillit.core import IssueLabelState, OutputFormat, get_logger
+from autoskillit.core import LABEL_LIFECYCLE_REGISTRY, IssueLabelState, OutputFormat, get_logger
 
 logger = get_logger(__name__)
 
@@ -212,7 +212,6 @@ class GitHubConfig:
         Uses the registry when label maps to a lifecycle state; falls back to
         IN_PROGRESS defaults for custom labels not in the registry.
         """
-        from autoskillit.core import LABEL_LIFECYCLE_REGISTRY  # noqa: PLC0415
 
         state = self.state_for_label(label)
         if state is not None:

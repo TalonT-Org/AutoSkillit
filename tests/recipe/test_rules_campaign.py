@@ -967,3 +967,524 @@ def test_campaign_dangling_ingredient_exempts_task(tmp_path: Path):
     )
     found = _findings(recipe, "campaign-dangling-ingredient", project_dir=tmp_path)
     assert found == []
+
+
+# ---------------------------------------------------------------------------
+# T-R1: dispatch-required-ingredient-provided
+# ---------------------------------------------------------------------------
+
+
+def test_dispatch_required_ingredient_provided_fires_on_missing(tmp_path: Path):
+    """Rule fires when target recipe has a required ingredient the dispatch doesn't provide."""
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    _write_recipe_yaml(
+        recipes_dir / "target-recipe.yaml",
+        {
+            "name": "target-recipe",
+            "description": "target",
+            "kind": "standard",
+            "kitchen_rules": ["NEVER"],
+            "ingredients": {
+                "task": {"description": "The task", "required": True},
+                "source_dir": {"description": "Source directory", "required": True},
+                "base_branch": {"description": "Base branch", "default": "main"},
+            },
+            "steps": {"stop": {"action": "stop", "message": "done"}},
+        },
+    )
+    recipe = _campaign(
+        dispatches=[
+            CampaignDispatch(
+                name="phase-one",
+                recipe="target-recipe",
+                task="do it",
+                ingredients={"task": "do it"},
+                # source_dir is required but not provided
+            ),
+        ]
+    )
+    found = _findings(recipe, "dispatch-required-ingredient-provided", project_dir=tmp_path)
+    assert len(found) == 1
+    assert found[0].severity == Severity.ERROR
+    assert "source_dir" in found[0].message
+
+
+def test_dispatch_required_ingredient_provided_passes_when_all_provided(tmp_path: Path):
+    """Rule passes when all required ingredients are provided."""
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    _write_recipe_yaml(
+        recipes_dir / "target-recipe.yaml",
+        {
+            "name": "target-recipe",
+            "description": "target",
+            "kind": "standard",
+            "kitchen_rules": ["NEVER"],
+            "ingredients": {
+                "task": {"description": "The task", "required": True},
+                "source_dir": {"description": "Source directory", "required": True},
+            },
+            "steps": {"stop": {"action": "stop", "message": "done"}},
+        },
+    )
+    recipe = _campaign(
+        dispatches=[
+            CampaignDispatch(
+                name="phase-one",
+                recipe="target-recipe",
+                task="do it",
+                ingredients={"task": "do it", "source_dir": "/tmp/src"},
+            ),
+        ]
+    )
+    found = _findings(recipe, "dispatch-required-ingredient-provided", project_dir=tmp_path)
+    assert found == []
+
+
+def test_dispatch_required_ingredient_provided_ignores_defaulted(tmp_path: Path):
+    """Rule does not fire for required ingredients that have a default."""
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    _write_recipe_yaml(
+        recipes_dir / "target-recipe.yaml",
+        {
+            "name": "target-recipe",
+            "description": "target",
+            "kind": "standard",
+            "kitchen_rules": ["NEVER"],
+            "ingredients": {
+                "task": {"description": "The task", "required": True},
+                "base_branch": {"description": "Base branch", "default": "main"},
+            },
+            "steps": {"stop": {"action": "stop", "message": "done"}},
+        },
+    )
+    recipe = _campaign(
+        dispatches=[
+            CampaignDispatch(
+                name="phase-one",
+                recipe="target-recipe",
+                task="do it",
+                ingredients={"task": "do it"},
+            ),
+        ]
+    )
+    found = _findings(recipe, "dispatch-required-ingredient-provided", project_dir=tmp_path)
+    assert found == []
+
+
+def test_dispatch_required_ingredient_provided_exempts_task_auto_injection(tmp_path: Path):
+    """Rule does not fire when target declares task as required with no default."""
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    _write_recipe_yaml(
+        recipes_dir / "target-recipe.yaml",
+        {
+            "name": "target-recipe",
+            "description": "target",
+            "kind": "standard",
+            "kitchen_rules": ["NEVER"],
+            "ingredients": {
+                "task": {"description": "The task", "required": True},
+            },
+            "steps": {"stop": {"action": "stop", "message": "done"}},
+        },
+    )
+    recipe = _campaign(
+        dispatches=[
+            CampaignDispatch(
+                name="phase-one",
+                recipe="target-recipe",
+                task="do it",
+                ingredients={},  # task is auto-injected from dispatch.task field
+            ),
+        ]
+    )
+    found = _findings(recipe, "dispatch-required-ingredient-provided", project_dir=tmp_path)
+    assert found == []
+
+
+def test_dispatch_required_ingredient_provided_skips_gate_dispatches(tmp_path: Path):
+    """Rule skips gate dispatches which have no target recipe."""
+    recipe = _campaign(
+        dispatches=[
+            CampaignDispatch(name="gate-check", gate="confirm", message="Proceed?"),
+        ],
+    )
+    found = _findings(recipe, "dispatch-required-ingredient-provided", project_dir=tmp_path)
+    assert found == []
+
+
+def test_dispatch_required_ingredient_provided_skips_unloadable_target(tmp_path: Path):
+    """Rule skips when target recipe cannot be loaded."""
+    recipe = _campaign(
+        dispatches=[
+            CampaignDispatch(
+                name="phase-one",
+                recipe="nonexistent-recipe",
+                task="do it",
+                ingredients={},
+            ),
+        ],
+    )
+    found = _findings(recipe, "dispatch-required-ingredient-provided", project_dir=tmp_path)
+    assert found == []
+
+
+def test_dispatch_required_ingredient_provided_fires_per_dispatch(tmp_path: Path):
+    """Rule fires per-dispatch; multi-dispatch campaign with one missing."""
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    _write_recipe_yaml(
+        recipes_dir / "target-recipe.yaml",
+        {
+            "name": "target-recipe",
+            "description": "target",
+            "kind": "standard",
+            "kitchen_rules": ["NEVER"],
+            "ingredients": {
+                "task": {"description": "The task", "required": True},
+                "source_dir": {"description": "Source directory", "required": True},
+            },
+            "steps": {"stop": {"action": "stop", "message": "done"}},
+        },
+    )
+    recipe = _campaign(
+        dispatches=[
+            CampaignDispatch(
+                name="phase-one",
+                recipe="target-recipe",
+                task="do it",
+                ingredients={"task": "do it", "source_dir": "/tmp/src"},
+            ),
+            CampaignDispatch(
+                name="phase-two",
+                recipe="target-recipe",
+                task="do it",
+                ingredients={"task": "do it"},
+                # source_dir missing
+            ),
+        ],
+    )
+    found = _findings(recipe, "dispatch-required-ingredient-provided", project_dir=tmp_path)
+    assert len(found) == 1
+    assert "phase-two" in found[0].message
+    assert "phase-one" not in found[0].message
+
+
+def test_dispatch_required_ingredient_provided_skips_non_campaign(tmp_path: Path):
+    """Rule skips non-campaign recipes."""
+    recipe = _standard_recipe()
+    found = _findings(recipe, "dispatch-required-ingredient-provided", project_dir=tmp_path)
+    assert found == []
+
+
+# ---------------------------------------------------------------------------
+# T-S1: dispatch-capture-field-in-sentinel
+# ---------------------------------------------------------------------------
+
+
+def test_dispatch_capture_field_in_sentinel_fires_on_unknown_field(tmp_path: Path):
+    """Rule fires when capture references a field not in target's sentinel."""
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    _write_recipe_yaml(
+        recipes_dir / "target-recipe.yaml",
+        {
+            "name": "target-recipe",
+            "description": "target",
+            "kind": "standard",
+            "kitchen_rules": ["NEVER"],
+            "ingredients": {"task": {"description": "t", "required": True}},
+            "steps": {
+                "done": {
+                    "action": "stop",
+                    "message": (
+                        "Emit the L3 result sentinel JSON block now. "
+                        'Example sentinel: {"success": true, "output_path": "<path>"}'
+                    ),
+                }
+            },
+        },
+    )
+    recipe = _campaign(
+        dispatches=[
+            CampaignDispatch(
+                name="phase-one",
+                recipe="target-recipe",
+                task="do it",
+                capture={"bad_field": "${{ result.nonexistent_field }}"},
+            ),
+        ]
+    )
+    found = _findings(recipe, "dispatch-capture-field-in-sentinel", project_dir=tmp_path)
+    assert len(found) == 1
+    assert found[0].severity == Severity.WARNING
+    assert "nonexistent_field" in found[0].message
+
+
+def test_dispatch_capture_field_in_sentinel_passes_when_field_exists(tmp_path: Path):
+    """Rule passes when capture field matches sentinel fields."""
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    _write_recipe_yaml(
+        recipes_dir / "target-recipe.yaml",
+        {
+            "name": "target-recipe",
+            "description": "target",
+            "kind": "standard",
+            "kitchen_rules": ["NEVER"],
+            "ingredients": {"task": {"description": "t", "required": True}},
+            "steps": {
+                "done": {
+                    "action": "stop",
+                    "message": (
+                        "Emit the L3 result sentinel JSON block now. "
+                        'Example sentinel: {"success": true, "output_path": "<path>"}'
+                    ),
+                }
+            },
+        },
+    )
+    recipe = _campaign(
+        dispatches=[
+            CampaignDispatch(
+                name="phase-one",
+                recipe="target-recipe",
+                task="do it",
+                capture={"output_path": "${{ result.output_path }}"},
+            ),
+        ]
+    )
+    found = _findings(recipe, "dispatch-capture-field-in-sentinel", project_dir=tmp_path)
+    assert found == []
+
+
+def test_dispatch_capture_field_in_sentinel_checks_any_sentinel(tmp_path: Path):
+    """Rule passes if field is in ANY sentinel stop step."""
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    _write_recipe_yaml(
+        recipes_dir / "target-recipe.yaml",
+        {
+            "name": "target-recipe",
+            "description": "target",
+            "kind": "standard",
+            "kitchen_rules": ["NEVER"],
+            "ingredients": {"task": {"description": "t", "required": True}},
+            "steps": {
+                "path-a": {
+                    "action": "stop",
+                    "message": ('Example sentinel: {"success": true, "alpha": "<val>"}'),
+                },
+                "path-b": {
+                    "action": "stop",
+                    "message": ('Example sentinel: {"success": true, "beta": "<val>"}'),
+                },
+            },
+        },
+    )
+    recipe = _campaign(
+        dispatches=[
+            CampaignDispatch(
+                name="phase-one",
+                recipe="target-recipe",
+                task="do it",
+                capture={"alpha": "${{ result.alpha }}"},
+            ),
+        ]
+    )
+    found = _findings(recipe, "dispatch-capture-field-in-sentinel", project_dir=tmp_path)
+    assert found == []
+
+
+def test_dispatch_capture_field_in_sentinel_skips_no_sentinel(tmp_path: Path):
+    """Rule silently skips when target has no sentinel stop step."""
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    _write_recipe_yaml(
+        recipes_dir / "target-recipe.yaml",
+        {
+            "name": "target-recipe",
+            "description": "target",
+            "kind": "standard",
+            "kitchen_rules": ["NEVER"],
+            "ingredients": {"task": {"description": "t", "required": True}},
+            "steps": {"stop": {"action": "stop", "message": "done"}},
+        },
+    )
+    recipe = _campaign(
+        dispatches=[
+            CampaignDispatch(
+                name="phase-one",
+                recipe="target-recipe",
+                task="do it",
+                capture={"output_path": "${{ result.output_path }}"},
+            ),
+        ]
+    )
+    found = _findings(recipe, "dispatch-capture-field-in-sentinel", project_dir=tmp_path)
+    assert found == []
+
+
+def test_dispatch_capture_field_in_sentinel_skips_no_capture(tmp_path: Path):
+    """Rule silently skips when dispatch has no capture block."""
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    _write_recipe_yaml(
+        recipes_dir / "target-recipe.yaml",
+        {
+            "name": "target-recipe",
+            "description": "target",
+            "kind": "standard",
+            "kitchen_rules": ["NEVER"],
+            "ingredients": {"task": {"description": "t", "required": True}},
+            "steps": {
+                "done": {
+                    "action": "stop",
+                    "message": ('Example sentinel: {"success": true, "output_path": "<path>"}'),
+                }
+            },
+        },
+    )
+    recipe = _campaign(
+        dispatches=[
+            CampaignDispatch(
+                name="phase-one",
+                recipe="target-recipe",
+                task="do it",
+                capture={},
+            ),
+        ]
+    )
+    found = _findings(recipe, "dispatch-capture-field-in-sentinel", project_dir=tmp_path)
+    assert found == []
+
+
+def test_dispatch_capture_field_in_sentinel_skips_gate_dispatches(tmp_path: Path):
+    """Rule skips gate dispatches."""
+    recipe = _campaign(
+        dispatches=[
+            CampaignDispatch(name="gate-check", gate="confirm", message="Proceed?"),
+        ],
+    )
+    found = _findings(recipe, "dispatch-capture-field-in-sentinel", project_dir=tmp_path)
+    assert found == []
+
+
+def test_dispatch_capture_field_in_sentinel_skips_unloadable_target(tmp_path: Path):
+    """Rule skips when target recipe cannot be loaded."""
+    recipe = _campaign(
+        dispatches=[
+            CampaignDispatch(
+                name="phase-one",
+                recipe="nonexistent-recipe",
+                task="do it",
+                capture={"output_path": "${{ result.output_path }}"},
+            ),
+        ],
+    )
+    found = _findings(recipe, "dispatch-capture-field-in-sentinel", project_dir=tmp_path)
+    assert found == []
+
+
+def test_dispatch_capture_field_in_sentinel_skips_non_campaign(tmp_path: Path):
+    """Rule skips non-campaign recipes."""
+    recipe = _standard_recipe()
+    found = _findings(recipe, "dispatch-capture-field-in-sentinel", project_dir=tmp_path)
+    assert found == []
+
+
+# ---------------------------------------------------------------------------
+# T-S2: _extract_sentinel_fields
+# ---------------------------------------------------------------------------
+
+
+def test_extract_sentinel_fields_parses_json_example():
+    """Helper parses JSON example block and returns field names."""
+    from autoskillit.recipe.rules.rules_campaign import _extract_sentinel_fields
+    from autoskillit.recipe.schema import Recipe, RecipeStep
+
+    recipe = Recipe(
+        name="test",
+        description="test",
+        steps={
+            "done": RecipeStep(
+                action="stop",
+                message=(
+                    "Emit the L3 result sentinel JSON block now. "
+                    'Example sentinel: {"success": true, "output_path": "<path>"}'
+                ),
+            )
+        },
+        kitchen_rules=["NEVER"],
+    )
+    fields = _extract_sentinel_fields(recipe)
+    assert fields == {"success", "output_path"}
+
+
+def test_extract_sentinel_fields_returns_empty_for_no_json():
+    """Helper returns empty set when no JSON example block is present."""
+    from autoskillit.recipe.rules.rules_campaign import _extract_sentinel_fields
+    from autoskillit.recipe.schema import Recipe, RecipeStep
+
+    recipe = Recipe(
+        name="test",
+        description="test",
+        steps={"done": RecipeStep(action="stop", message="done")},
+        kitchen_rules=["NEVER"],
+    )
+    fields = _extract_sentinel_fields(recipe)
+    assert fields == set()
+
+
+def test_extract_sentinel_fields_handles_multiline_json():
+    """Helper handles JSON spanning multiple lines (folded YAML block)."""
+    from autoskillit.recipe.rules.rules_campaign import _extract_sentinel_fields
+    from autoskillit.recipe.schema import Recipe, RecipeStep
+
+    recipe = Recipe(
+        name="test",
+        description="test",
+        steps={
+            "done": RecipeStep(
+                action="stop",
+                message=(
+                    "Example sentinel:\n"
+                    "  {\n"
+                    '    "success": true,\n'
+                    '    "output_path": "<path>",\n'
+                    '    "errors": []\n'
+                    "  }"
+                ),
+            )
+        },
+        kitchen_rules=["NEVER"],
+    )
+    fields = _extract_sentinel_fields(recipe)
+    assert fields == {"success", "output_path", "errors"}
+
+
+def test_extract_sentinel_fields_handles_multiple_sentinels():
+    """Helper returns union of fields from all sentinel stop steps."""
+    from autoskillit.recipe.rules.rules_campaign import _extract_sentinel_fields
+    from autoskillit.recipe.schema import Recipe, RecipeStep
+
+    recipe = Recipe(
+        name="test",
+        description="test",
+        steps={
+            "path-a": RecipeStep(
+                action="stop",
+                message='Example sentinel: {"success": true, "alpha": "<val>"}',
+            ),
+            "path-b": RecipeStep(
+                action="stop",
+                message='Example sentinel: {"success": true, "beta": "<val>"}',
+            ),
+        },
+        kitchen_rules=["NEVER"],
+    )
+    fields = _extract_sentinel_fields(recipe)
+    assert fields == {"success", "alpha", "beta"}

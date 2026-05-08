@@ -192,3 +192,15 @@ def test_serve_startup_regenerates_on_hash_mismatch(tmp_path: Path, monkeypatch)
 
     updated = _json.loads((hooks_dir / "hooks.json").read_text())
     assert updated.get("_autoskillit_registry_hash") == HOOK_REGISTRY_HASH
+
+
+def test_lifespan_boot_registry_covers_all_session_types() -> None:
+    """_LIFESPAN_BOOT_REGISTRY must have an entry for every SessionType value."""
+    from autoskillit.core import SessionType
+    from autoskillit.server._lifespan import _LIFESPAN_BOOT_REGISTRY
+
+    missing = set(SessionType) - set(_LIFESPAN_BOOT_REGISTRY)
+    assert not missing, (
+        f"SessionType values not in _LIFESPAN_BOOT_REGISTRY: {missing}. "
+        "Every SessionType must declare a boot function or None."
+    )

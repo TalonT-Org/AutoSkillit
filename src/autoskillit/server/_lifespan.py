@@ -18,10 +18,16 @@ from __future__ import annotations
 
 import asyncio as _asyncio
 import os
+from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import Any
 
-from autoskillit.core import cleanup_readiness_sentinel, get_logger, write_readiness_sentinel
+from autoskillit.core import (
+    SessionType,
+    cleanup_readiness_sentinel,
+    get_logger,
+    write_readiness_sentinel,
+)
 from autoskillit.execution import RecordingSubprocessRunner
 from autoskillit.server._state import _get_ctx_or_none, deferred_initialize
 
@@ -203,6 +209,95 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
         logger.warning("fleet_auto_gate_boot_registry_failed", exc_info=True)
 
 
+async def _food_truck_auto_gate_boot(ctx: Any) -> None:
+    """Auto-open gate for headless food truck (ORCHESTRATOR) sessions.
+
+    Runs at lifespan startup when AUTOSKILLIT_HEADLESS=1 and
+    AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS is set. No-ops for interactive
+    ORCHESTRATOR sessions (open_kitchen handles the gate there).
+    """
+    import os as _os
+    from pathlib import Path
+    from uuid import uuid4
+
+    from autoskillit.core import (
+        CAMPAIGN_ID_ENV_VAR,
+        FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
+        HEADLESS_ENV_VAR,
+        register_active_kitchen,
+    )
+    from autoskillit.pipeline import create_background_task
+    from autoskillit.server._misc import (
+        _prime_quota_cache,
+        _quota_refresh_loop,
+    )
+    from autoskillit.server.tools.tools_kitchen import _write_hook_config
+
+    if _os.environ.get(HEADLESS_ENV_VAR) != "1":
+        return
+    _raw_tags = _os.environ.get(FOOD_TRUCK_TOOL_TAGS_ENV_VAR, "")
+    if not _raw_tags:
+        return
+
+    _packs = frozenset(p.strip() for p in _raw_tags.split(",") if p.strip())
+    ctx.kitchen_id = _os.environ.get(CAMPAIGN_ID_ENV_VAR) or str(uuid4())
+    ctx.active_recipe_packs = _packs
+    ctx.active_recipe_features = frozenset()
+
+    if ctx.gate is None:
+        logger.warning("food_truck_auto_gate_boot_no_gate")
+        return
+
+    ctx.gate.enable()
+    logger.info(
+        "food_truck_auto_gate_boot",
+        gate_state="open",
+        kitchen_id=ctx.kitchen_id,
+        packs=sorted(_packs),
+    )
+
+    try:
+        from autoskillit.core import _collect_disabled_feature_tags
+        from autoskillit.server import mcp as _mcp
+
+        _features = ctx.config.features if ctx.config is not None else {}
+        _exp_enabled = ctx.config.experimental_enabled if ctx.config is not None else False
+        for _tag in _collect_disabled_feature_tags(_features, experimental_enabled=_exp_enabled):
+            _mcp.disable(tags={_tag})
+    except Exception:
+        logger.warning("food_truck_auto_gate_boot_feature_suppression_failed", exc_info=True)
+
+    try:
+        _write_hook_config()
+    except Exception:
+        logger.warning("food_truck_auto_gate_boot_hook_config_failed", exc_info=True)
+
+    try:
+        await _prime_quota_cache()
+    except Exception:
+        logger.warning("food_truck_auto_gate_boot_quota_cache_failed", exc_info=True)
+
+    try:
+        ctx.quota_refresh_task = create_background_task(
+            _quota_refresh_loop(ctx.config.quota_guard),
+            label="quota_refresh_loop",
+        )
+    except Exception:
+        logger.warning("food_truck_auto_gate_boot_refresh_loop_failed", exc_info=True)
+
+    try:
+        register_active_kitchen(ctx.kitchen_id, _os.getpid(), str(Path.cwd()))
+    except Exception:
+        logger.warning("food_truck_auto_gate_boot_registry_failed", exc_info=True)
+
+
+_LIFESPAN_BOOT_REGISTRY: dict[SessionType, Callable[[Any], Awaitable[None]] | None] = {
+    SessionType.FLEET: _fleet_auto_gate_boot,
+    SessionType.ORCHESTRATOR: _food_truck_auto_gate_boot,
+    SessionType.SKILL: None,
+}
+
+
 @asynccontextmanager
 async def _autoskillit_lifespan(server: Any) -> Any:
     """Server lifecycle: write readiness sentinel, yield, then finalize recording.
@@ -239,13 +334,13 @@ async def _autoskillit_lifespan(server: Any) -> Any:
             create_background_task(_run_hook_health_check_async(), label="hook_health")
         )
         bg_tasks.append(create_background_task(_run_deferred_init(event), label="deferred_init"))
-        from autoskillit.core import SessionType
         from autoskillit.core import session_type as _resolve_session_type
 
-        if _resolve_session_type() is SessionType.FLEET:
-            _fleet_ctx = _get_ctx_or_none()
-            if _fleet_ctx is not None:
-                await _fleet_auto_gate_boot(_fleet_ctx)
+        _boot_fn = _LIFESPAN_BOOT_REGISTRY.get(_resolve_session_type())
+        if _boot_fn is not None:
+            _boot_ctx = _get_ctx_or_none()
+            if _boot_ctx is not None:
+                await _boot_fn(_boot_ctx)
         yield
     finally:
         for task in bg_tasks:

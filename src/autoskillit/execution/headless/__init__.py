@@ -822,8 +822,8 @@ class DefaultHeadlessExecutor:
         if requires_packs:
             if FOOD_TRUCK_TOOL_TAGS_ENV_VAR in merged_extras:
                 raise ValueError(
-                    "dispatch_food_truck: requires_packs and env_extras both specify "
-                    "AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS — use requires_packs exclusively"
+                    f"dispatch_food_truck: requires_packs and env_extras both specify "
+                    f"{FOOD_TRUCK_TOOL_TAGS_ENV_VAR} — use requires_packs exclusively"
                 )
             merged_extras[FOOD_TRUCK_TOOL_TAGS_ENV_VAR] = ",".join(sorted(requires_packs))
 

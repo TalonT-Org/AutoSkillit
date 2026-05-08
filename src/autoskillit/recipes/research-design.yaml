@@ -1,7 +1,7 @@
 name: research-design
 recipe_version: "1.0.0"
 categories: [research-family]
-requires_packs: [research]
+requires_packs: [research, vis-lens]
 description: >
   Design-phase sub-recipe extracted from research.yaml. Scopes a research
   question, plans an experiment, optionally reviews the design (bounded by

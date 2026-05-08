@@ -26,6 +26,14 @@ __all__ = [
 
 logger = get_logger(__name__)
 
+_RETRIABLE_NON_SUCCESS = frozenset(
+    {
+        DispatchStatus.FAILURE,
+        DispatchStatus.INTERRUPTED,
+        DispatchStatus.REFUSED,
+    }
+)
+
 
 def has_failed_dispatch(state_path: Path) -> bool:
     """Check whether any dispatch has a FAILURE status attributable to logic (not infrastructure).
@@ -158,12 +166,6 @@ def resume_campaign_from_state(
         if m.state is None:
             return None
 
-        was_blocked = frozenset(
-            d.name
-            for d in m.state.dispatches
-            if d.status in {DispatchStatus.INTERRUPTED, DispatchStatus.REFUSED}
-        )
-
         for d in m.state.dispatches:
             if d.status == DispatchStatus.RUNNING:
                 if is_dispatch_session_alive(d):
@@ -175,17 +177,9 @@ def resume_campaign_from_state(
                     d.sidecar_path = sidecar_path
                 m.mark_dirty()
 
-        _RETRIABLE_NON_SUCCESS = frozenset(
-            {
-                DispatchStatus.FAILURE,
-                DispatchStatus.INTERRUPTED,
-                DispatchStatus.REFUSED,
-            }
-        )
-
         if continue_on_failure and reset_on_retry:
             for d in m.state.dispatches:
-                if d.status in {DispatchStatus.INTERRUPTED, DispatchStatus.REFUSED}:
+                if d.status in _RETRIABLE_NON_SUCCESS:
                     _clear_dispatch_for_retry(d)
                     m.mark_dirty()
 

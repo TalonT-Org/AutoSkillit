@@ -286,6 +286,7 @@ async def _run_dispatch(
     from autoskillit.fleet.state import (
         DispatchRecord,
         DispatchStatus,
+        append_dispatch_record,
         normalize_dispatch_token_usage,
         upsert_dispatch_record_by_name,
         write_captured_values,

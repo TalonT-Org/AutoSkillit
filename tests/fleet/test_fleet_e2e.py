@@ -16,7 +16,7 @@ import threading
 import time
 from collections.abc import Generator
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 import anyio
@@ -266,7 +266,7 @@ class FleetRuntime:
             quota_checker=quota_checker if quota_checker is not None else _no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
-        return json.loads(raw)  # type: ignore[no-any-return]
+        return cast(dict[str, Any], json.loads(raw.to_envelope()))
 
     def dispatch_state_path(self, dispatch_id: str) -> Path:
         """Path to per-dispatch state file created by execute_dispatch."""
@@ -769,12 +769,11 @@ async def test_l3_timeout_enforced(fleet_runtime: FleetRuntime) -> None:
     )
 
     assert result["success"] is False
-    assert result["error"] == "fleet_l3_timeout"
-    assert "details" in result
-    assert "dispatch_id" in result["details"]
-    assert "dispatched_session_id" in result["details"]
+    assert result["reason"] == "fleet_l3_timeout"
+    assert "dispatch_id" in result
+    assert "dispatched_session_id" in result
 
-    state = rt.read_dispatch_state(result["details"]["dispatch_id"])
+    state = rt.read_dispatch_state(result["dispatch_id"])
     assert state is not None
     assert state.dispatches[0].status == DispatchStatus.FAILURE
     assert state.dispatches[0].reason == "fleet_l3_timeout"

@@ -44,7 +44,7 @@ async def _run(tool_ctx, recipe: str = "test-recipe") -> dict:
         quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
-    return json.loads(raw)
+    return json.loads(raw.to_envelope())
 
 
 def _make_completed_clean(success: bool):

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import threading
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -209,6 +210,66 @@ class GateRecordResult:
     status: str = ""
     error_code: str = ""
     error_message: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class DispatchRejected:
+    """Pre-validation or infrastructure rejection — no subprocess was launched."""
+
+    error_code: FleetErrorCode
+    message: str
+    details: dict[str, Any] | None = None
+
+    def to_envelope(self) -> str:
+        return json.dumps(
+            {
+                "success": False,
+                "error": self.error_code,
+                "user_visible_message": self.message,
+                "details": self.details,
+            }
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class DispatchCompleted:
+    """Dispatch that reached subprocess phase — may have succeeded or failed."""
+
+    success: bool
+    dispatch_status: DispatchStatus
+    dispatch_id: str
+    dispatched_session_id: str
+    reason: str
+    token_usage: dict[str, Any] = field(default_factory=dict)
+    l3_payload: dict[str, Any] | None = None
+    l3_parse_source: str = ""
+    lifespan_started: bool = False
+    l3_raw_body: str | None = None
+    l3_parse_error: str | None = None
+    resume_checkpoint: dict[str, Any] | None = None
+
+    def to_envelope(self) -> str:
+        d: dict[str, Any] = {
+            "success": self.success,
+            "dispatch_status": self.dispatch_status.value,
+            "dispatch_id": self.dispatch_id,
+            "dispatched_session_id": self.dispatched_session_id,
+            "reason": self.reason,
+            "token_usage": self.token_usage,
+            "l3_payload": self.l3_payload,
+            "l3_parse_source": self.l3_parse_source,
+            "lifespan_started": self.lifespan_started,
+        }
+        if self.l3_raw_body is not None:
+            d["l3_raw_body"] = self.l3_raw_body
+        if self.l3_parse_error is not None:
+            d["l3_parse_error"] = self.l3_parse_error
+        if self.resume_checkpoint is not None:
+            d["resume_checkpoint"] = self.resume_checkpoint
+        return json.dumps(d)
+
+
+DispatchOutcome = DispatchCompleted | DispatchRejected
 
 
 _COMPLETED_STATUSES = frozenset(

@@ -93,19 +93,18 @@ class TestDispatchFoodTruckGates:
         await lock.acquire()  # lock it
         tool_ctx.fleet_lock = lock
 
-        result = json.loads(
-            await execute_dispatch(
-                tool_ctx=tool_ctx,
-                recipe="r",
-                task="t",
-                ingredients=None,
-                dispatch_name=None,
-                timeout_sec=None,
-                prompt_builder=_simple_prompt_builder,
-                quota_checker=_no_sleep_quota_checker,
-                quota_refresher=_noop_quota_refresher,
-            )
+        _outcome = await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="r",
+            task="t",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
         )
+        result = json.loads(_outcome.to_envelope())
         assert result["success"] is False
         assert result["error"] == "fleet_parallel_refused"
 
@@ -153,19 +152,18 @@ class TestDispatchFoodTruckValidation:
         )
         tool_ctx.recipes = repo
 
-        result = json.loads(
-            await execute_dispatch(
-                tool_ctx=tool_ctx,
-                recipe="campaign-recipe",
-                task="t",
-                ingredients=None,
-                dispatch_name=None,
-                timeout_sec=None,
-                prompt_builder=_simple_prompt_builder,
-                quota_checker=_no_sleep_quota_checker,
-                quota_refresher=_noop_quota_refresher,
-            )
+        _outcome = await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="campaign-recipe",
+            task="t",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
         )
+        result = json.loads(_outcome.to_envelope())
         assert result["success"] is False
         assert result["error"] == "fleet_invalid_recipe_kind"
 
@@ -182,19 +180,18 @@ class TestDispatchFoodTruckValidation:
         tool_ctx.recipes = repo
         tool_ctx.executor = InMemoryHeadlessExecutor()
 
-        result = json.loads(
-            await execute_dispatch(
-                tool_ctx=tool_ctx,
-                recipe="test-recipe",
-                task="t",
-                ingredients={"task": "v", "unknown_key": "bad"},
-                dispatch_name=None,
-                timeout_sec=None,
-                prompt_builder=_simple_prompt_builder,
-                quota_checker=_no_sleep_quota_checker,
-                quota_refresher=_noop_quota_refresher,
-            )
+        _outcome = await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="t",
+            ingredients={"task": "v", "unknown_key": "bad"},
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
         )
+        result = json.loads(_outcome.to_envelope())
         assert result["success"] is False
         assert result["error"] == "fleet_unknown_ingredient"
         assert "unknown_key" in result["user_visible_message"]
@@ -207,19 +204,18 @@ class TestDispatchFoodTruckValidation:
         lock = FleetSemaphore(max_concurrent=1)
         tool_ctx.fleet_lock = lock
 
-        result = json.loads(
-            await execute_dispatch(
-                tool_ctx=tool_ctx,
-                recipe="r",
-                task="t",
-                ingredients={"key": 123},  # type: ignore[dict-item]
-                dispatch_name=None,
-                timeout_sec=None,
-                prompt_builder=_simple_prompt_builder,
-                quota_checker=_no_sleep_quota_checker,
-                quota_refresher=_noop_quota_refresher,
-            )
+        _outcome = await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="r",
+            task="t",
+            ingredients={"key": 123},  # type: ignore[dict-item]
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
         )
+        result = json.loads(_outcome.to_envelope())
         assert result["success"] is False
         assert result["error"] == "fleet_unknown_ingredient"
         # Lock must not have been acquired
@@ -233,19 +229,18 @@ class TestDispatchFoodTruckValidation:
         tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
         tool_ctx.recipes = None
 
-        result = json.loads(
-            await execute_dispatch(
-                tool_ctx=tool_ctx,
-                recipe="r",
-                task="t",
-                ingredients=None,
-                dispatch_name=None,
-                timeout_sec=None,
-                prompt_builder=_simple_prompt_builder,
-                quota_checker=_no_sleep_quota_checker,
-                quota_refresher=_noop_quota_refresher,
-            )
+        _outcome = await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="r",
+            task="t",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
         )
+        result = json.loads(_outcome.to_envelope())
         assert result["success"] is False
         assert result["error"] == "fleet_manifest_missing"
 
@@ -262,19 +257,18 @@ class TestDispatchFoodTruckValidation:
         tool_ctx.recipes = repo
         tool_ctx.executor = None
 
-        result = json.loads(
-            await execute_dispatch(
-                tool_ctx=tool_ctx,
-                recipe="test-recipe",
-                task="t",
-                ingredients=None,
-                dispatch_name=None,
-                timeout_sec=None,
-                prompt_builder=_simple_prompt_builder,
-                quota_checker=_no_sleep_quota_checker,
-                quota_refresher=_noop_quota_refresher,
-            )
+        _outcome = await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="t",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
         )
+        result = json.loads(_outcome.to_envelope())
         assert result["success"] is False
         assert result["error"] == "fleet_manifest_missing"
 
@@ -306,19 +300,18 @@ class TestDispatchFoodTruckValidation:
         )
         tool_ctx.recipes = repo
 
-        result = json.loads(
-            await execute_dispatch(
-                tool_ctx=tool_ctx,
-                recipe="test-recipe",
-                task="run task",
-                ingredients=None,
-                dispatch_name=None,
-                timeout_sec=None,
-                prompt_builder=_simple_prompt_builder,
-                quota_checker=_no_sleep_quota_checker,
-                quota_refresher=_noop_quota_refresher,
-            )
+        _outcome = await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="run task",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
         )
+        result = json.loads(_outcome.to_envelope())
 
         assert result.get("error") != "fleet_l3_startup_or_crash", (
             "Expected structured validation error, not FLEET_L3_STARTUP_OR_CRASH. "
@@ -363,19 +356,18 @@ class TestDispatchFoodTruckValidation:
         )
         tool_ctx.recipes = repo
 
-        result = json.loads(
-            await execute_dispatch(
-                tool_ctx=tool_ctx,
-                recipe="test-recipe",
-                task="run task",
-                ingredients={"unknown_key": "val"},
-                dispatch_name=None,
-                timeout_sec=None,
-                prompt_builder=_simple_prompt_builder,
-                quota_checker=_no_sleep_quota_checker,
-                quota_refresher=_noop_quota_refresher,
-            )
+        _outcome = await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="run task",
+            ingredients={"unknown_key": "val"},
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
         )
+        result = json.loads(_outcome.to_envelope())
 
         assert result.get("error") == "fleet_unknown_ingredient", (
             f"Expected fleet_unknown_ingredient error. Got: {result}"
@@ -428,19 +420,18 @@ class TestDispatchFoodTruckExecution:
             side_effect=RuntimeError("executor crashed")
         )
 
-        result = json.loads(
-            await execute_dispatch(
-                tool_ctx=tool_ctx,
-                recipe="test-recipe",
-                task="t",
-                ingredients=None,
-                dispatch_name=None,
-                timeout_sec=None,
-                prompt_builder=_simple_prompt_builder,
-                quota_checker=_no_sleep_quota_checker,
-                quota_refresher=_noop_quota_refresher,
-            )
+        _outcome = await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="t",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
         )
+        result = json.loads(_outcome.to_envelope())
         assert result["success"] is False
         assert not tool_ctx.fleet_lock.at_capacity()
 
@@ -510,12 +501,14 @@ class TestDispatchFoodTruckExecution:
             quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
-        result = json.loads(raw)
+        result = json.loads(raw.to_envelope())
         assert result["success"] is True
         assert "dispatch_id" in result
         assert result["dispatched_session_id"] == "sess-abc"
         assert result["l3_payload"] == canned_payload
-        assert result["token_usage"] == {"input_tokens": 100}
+        from autoskillit.fleet.state import normalize_dispatch_token_usage
+
+        assert result["token_usage"] == normalize_dispatch_token_usage({"input_tokens": 100})
         assert result["l3_parse_source"] == "stdout"
 
     @pytest.mark.anyio
@@ -724,7 +717,7 @@ class TestDispatchFoodTruckExecution:
             quota_refresher=_noop_quota_refresher,
         )
 
-        result = json.loads(result_json)
+        result = json.loads(result_json.to_envelope())
         assert result["success"] is True
 
 
@@ -783,19 +776,18 @@ async def test_dispatch_food_truck_marketplace_install_succeeds(tool_ctx_marketp
     tool_ctx_marketplace.recipes = repo
     tool_ctx_marketplace.executor = InMemoryHeadlessExecutor()
 
-    result = json.loads(
-        await execute_dispatch(
-            tool_ctx=tool_ctx_marketplace,
-            recipe="test-recipe",
-            task="t",
-            ingredients=None,
-            dispatch_name=None,
-            timeout_sec=None,
-            prompt_builder=_simple_prompt_builder,
-            quota_checker=_no_sleep_quota_checker,
-            quota_refresher=_noop_quota_refresher,
-        )
+    _outcome = await execute_dispatch(
+        tool_ctx=tool_ctx_marketplace,
+        recipe="test-recipe",
+        task="t",
+        ingredients=None,
+        dispatch_name=None,
+        timeout_sec=None,
+        prompt_builder=_simple_prompt_builder,
+        quota_checker=_no_sleep_quota_checker,
+        quota_refresher=_noop_quota_refresher,
     )
+    result = json.loads(_outcome.to_envelope())
     assert result["success"] is True
 
 

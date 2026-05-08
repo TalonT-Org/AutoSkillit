@@ -25,7 +25,9 @@ from .state import (
     TERMINAL_DISPATCH_STATUSES,
     CampaignState,
     CampaignStateMutator,
+    DispatchCompleted,
     DispatchRecord,
+    DispatchRejected,
     DispatchStatus,
     GateRecordResult,
     ResumeDecision,
@@ -50,7 +52,7 @@ from .state_recovery import (
     classify_stale_dispatch,
     derive_orchestrator_resume_spec,
 )
-from .state_types import FLEET_STATE_SCHEMA_VERSION
+from .state_types import FLEET_STATE_SCHEMA_VERSION, DispatchOutcome
 from .summary import (
     CampaignParseResult,
     CampaignSummary,
@@ -88,8 +90,11 @@ __all__ = [
     "FLEET_HALTED_SENTINEL",
     "CampaignState",
     "CampaignStateMutator",
+    "DispatchCompleted",
     "DispatchRecord",
+    "DispatchRejected",
     "DispatchStatus",
+    "DispatchOutcome",
     "ResumeDecision",
     "GateRecordResult",
     "append_dispatch_record",

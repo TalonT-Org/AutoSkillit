@@ -47,7 +47,7 @@ async def _run(
         quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
-    return json.loads(raw)
+    return json.loads(raw.to_envelope())
 
 
 def _read_dispatch_record(tool_ctx) -> dict:
@@ -109,7 +109,7 @@ class TestTimeoutPath:
 
         result = await _run(tool_ctx)
         assert result["success"] is False
-        assert result["error"] == "fleet_l3_timeout"
+        assert result["reason"] == "fleet_l3_timeout"
 
     @pytest.mark.anyio
     async def test_timeout_writes_state_with_reason_l3_timeout(self, tool_ctx, monkeypatch):
@@ -149,9 +149,9 @@ class TestTimeoutPath:
             _should_not_be_called,
         )
 
-        # Should succeed (return l3_timeout error envelope) without raising
+        # Should succeed (return l3_timeout envelope) without raising
         result = await _run(tool_ctx)
-        assert result["error"] == "fleet_l3_timeout"
+        assert result["reason"] == "fleet_l3_timeout"
 
     @pytest.mark.anyio
     async def test_timeout_envelope_includes_dispatch_metadata(self, tool_ctx, monkeypatch):
@@ -170,11 +170,12 @@ class TestTimeoutPath:
             )
         )
 
+        from autoskillit.fleet.state import normalize_dispatch_token_usage
+
         result = await _run(tool_ctx)
-        details = result.get("details", {})
-        assert "dispatch_id" in details
-        assert details["dispatched_session_id"] == "sess-timeout-123"
-        assert details["token_usage"] == {"input_tokens": 50}
+        assert "dispatch_id" in result
+        assert result["dispatched_session_id"] == "sess-timeout-123"
+        assert result["token_usage"] == normalize_dispatch_token_usage({"input_tokens": 50})
 
     @pytest.mark.anyio
     async def test_idle_stall_falls_through_to_parse(self, tool_ctx, monkeypatch):

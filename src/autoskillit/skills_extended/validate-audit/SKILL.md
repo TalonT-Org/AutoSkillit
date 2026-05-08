@@ -484,6 +484,7 @@ headless.
   Tickets:   {ticket_body_1_path}
              {ticket_body_2_path}  (one line per ticket group)
   Contested: {contested_findings_path}  (omit if N_contested == 0)
+  Report:    {validated_report_path}
 validated_report_path = {validated_report_path}
 verdict = validated
 ```
@@ -509,7 +510,7 @@ rule and the validation summary content, write the combined text to a temp file,
 
 All output files are written under `$AUDIT_BASE_DIR/` where `AUDIT_BASE_DIR` is determined as follows:
 - If `AUTOSKILLIT_AUDIT_RUN_DIR` is set (by the recipe's `init_audit_run` step): `$AUDIT_BASE_DIR = $AUTOSKILLIT_AUDIT_RUN_DIR`
-- Otherwise: `$AUDIT_BASE_DIR = {{AUTOSKILLIT_TEMP}}/validate-audit-$(date -u +%Y-%m-%d_%H%M%S)` (a newly created per-run directory):
+- Otherwise: `$AUDIT_BASE_DIR = {{AUTOSKILLIT_TEMP}}/validate-audit-$(date -u +%Y-%m-%d_%H%M%S)`:
 
 ```
 $AUDIT_BASE_DIR/

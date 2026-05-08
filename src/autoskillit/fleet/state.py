@@ -7,7 +7,6 @@ All writes use core.io.atomic_write for crash-safety (tmp + os.replace).
 from __future__ import annotations
 
 import fcntl
-import json
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -144,7 +143,6 @@ def read_state(state_path: Path) -> CampaignState | None:
     try:
         dispatches = [DispatchRecord.from_dict(d) for d in data["dispatches"]]
         return CampaignState(
-            schema_version=_SCHEMA_VERSION,
             campaign_id=data["campaign_id"],
             campaign_name=data["campaign_name"],
             manifest_path=data["manifest_path"],
@@ -371,10 +369,10 @@ def build_protected_campaign_ids(project_dir: Path) -> frozenset[str]:
         if not dispatches_dir.is_dir():
             return frozenset()
         for state_file in dispatches_dir.glob("*.json"):
+            data = read_versioned_json(state_file, _SCHEMA_VERSION, logger=logger)
+            if data is None:
+                continue
             try:
-                data = json.loads(state_file.read_text(encoding="utf-8"))
-                if data.get("schema_version") != _SCHEMA_VERSION:
-                    continue
                 cid = data.get("campaign_id", "")
                 if not cid:
                     continue
@@ -387,7 +385,7 @@ def build_protected_campaign_ids(project_dir: Path) -> frozenset[str]:
                     if status not in TERMINAL_DISPATCH_STATUSES:
                         protected.add(cid)
                         break
-            except (json.JSONDecodeError, OSError):
+            except (KeyError, TypeError):
                 continue
         return frozenset(protected)
     except Exception:
@@ -438,10 +436,10 @@ def read_all_campaign_captures(
     if not dispatches_dir.is_dir():
         return result
     for path in dispatches_dir.glob("*.json"):
+        data = read_versioned_json(path, _SCHEMA_VERSION, logger=logger)
+        if data is None:
+            continue
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-            if data.get("schema_version") != _SCHEMA_VERSION:
-                continue
             if data.get("campaign_id") != campaign_id:
                 continue
             caps = data.get("captured_values", {})
@@ -451,7 +449,7 @@ def read_all_campaign_captures(
             all_success = all(d.get("status") == DispatchStatus.SUCCESS for d in dispatches)
             if all_success and dispatches:
                 result.update(caps)
-        except (json.JSONDecodeError, OSError) as exc:
+        except (KeyError, TypeError) as exc:
             logger.warning("read_all_campaign_captures: skipping %s: %s", path, exc)
             continue
     return result

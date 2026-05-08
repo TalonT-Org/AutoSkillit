@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import threading
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
@@ -56,7 +56,25 @@ class DispatchRecord:
     sidecar_path: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        return {
+            "name": self.name,
+            "status": self.status,
+            "dispatch_id": self.dispatch_id,
+            "campaign_id": self.campaign_id,
+            "caller_session_id": self.caller_session_id,
+            "dispatched_session_id": self.dispatched_session_id,
+            "dispatched_session_log_dir": self.dispatched_session_log_dir,
+            "dispatched_pid": self.dispatched_pid,
+            "dispatched_starttime_ticks": self.dispatched_starttime_ticks,
+            "dispatched_boot_id": self.dispatched_boot_id,
+            "reason": self.reason,
+            "kill_reason": self.kill_reason,
+            "infra_exit_category": self.infra_exit_category,
+            "token_usage": dict(self.token_usage),
+            "started_at": self.started_at,
+            "ended_at": self.ended_at,
+            "sidecar_path": self.sidecar_path,
+        }
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> DispatchRecord:

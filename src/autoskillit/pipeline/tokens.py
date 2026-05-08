@@ -10,7 +10,7 @@ with a defensive copy getter.
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
@@ -81,7 +81,20 @@ class TokenEntry:
     turn_count: int = 0
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        return {
+            "step_name": self.step_name,
+            "model": self.model,
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "cache_creation_input_tokens": self.cache_creation_input_tokens,
+            "cache_read_input_tokens": self.cache_read_input_tokens,
+            "invocation_count": self.invocation_count,
+            "elapsed_seconds": self.elapsed_seconds,
+            "loc_insertions": self.loc_insertions,
+            "loc_deletions": self.loc_deletions,
+            "peak_context": self.peak_context,
+            "turn_count": self.turn_count,
+        }
 
 
 __all__ = ["TokenEntry", "DefaultTokenLog", "canonical_step_name"]

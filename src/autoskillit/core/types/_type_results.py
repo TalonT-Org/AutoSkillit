@@ -9,7 +9,7 @@ directories — a cross-import would undermine the cascade narrowing.
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any, Generic, Literal, TypedDict, TypeVar
@@ -137,8 +137,16 @@ class FailureRecord:
     retry_reason: str  # RetryReason.value string
     stderr: str  # truncated to STDERR_MAX_LEN
 
-    def to_dict(self) -> dict:  # type: ignore[type-arg]
-        return asdict(self)
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "timestamp": self.timestamp,
+            "skill_command": self.skill_command,
+            "exit_code": self.exit_code,
+            "subtype": self.subtype,
+            "needs_retry": self.needs_retry,
+            "retry_reason": self.retry_reason,
+            "stderr": self.stderr,
+        }
 
 
 @dataclass(frozen=True, slots=True)

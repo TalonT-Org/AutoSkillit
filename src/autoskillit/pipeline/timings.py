@@ -7,7 +7,7 @@ MCP tool retrieves the accumulated data grouped by step.
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +27,11 @@ class TimingEntry:
     invocation_count: int = 0
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        return {
+            "step_name": self.step_name,
+            "total_seconds": self.total_seconds,
+            "invocation_count": self.invocation_count,
+        }
 
 
 __all__ = ["TimingEntry", "DefaultTimingLog"]

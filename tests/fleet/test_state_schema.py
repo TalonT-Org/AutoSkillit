@@ -273,6 +273,56 @@ class TestNormalizeDispatchTokenUsage:
         assert "normalize_dispatch_token_usage" in autoskillit.fleet.__all__
 
 
+class TestDispatchRecordToDict:
+    def test_dispatch_record_to_dict_all_fields(self) -> None:
+        """DispatchRecord.to_dict() must return all expected keys."""
+        from autoskillit.fleet import DispatchRecord
+
+        record = DispatchRecord(name="test-job")
+        d = record.to_dict()
+        assert set(d.keys()) == {
+            "name",
+            "status",
+            "dispatch_id",
+            "campaign_id",
+            "caller_session_id",
+            "dispatched_session_id",
+            "dispatched_session_log_dir",
+            "dispatched_pid",
+            "dispatched_starttime_ticks",
+            "dispatched_boot_id",
+            "reason",
+            "kill_reason",
+            "infra_exit_category",
+            "token_usage",
+            "started_at",
+            "ended_at",
+            "sidecar_path",
+        }
+
+    def test_dispatch_record_to_dict_token_usage_is_shallow_copy(self) -> None:
+        """DispatchRecord.to_dict() token_usage is a shallow copy, not a deep copy."""
+        from autoskillit.fleet import DispatchRecord
+
+        inner = {"nested": "value"}
+        record = DispatchRecord(name="test-job", token_usage={"key": inner})
+        d = record.to_dict()
+        assert d["token_usage"] is not record.token_usage
+        assert d["token_usage"]["key"] is inner
+
+    def test_dispatch_record_to_dict_is_json_serializable(self) -> None:
+        """DispatchRecord.to_dict() output must be JSON-serializable."""
+        import json
+
+        from autoskillit.fleet import DispatchRecord
+
+        record = DispatchRecord(name="test-job", token_usage={"x": 1})
+        d = record.to_dict()
+        roundtripped = json.loads(json.dumps(d))
+        assert roundtripped["name"] == "test-job"
+        assert roundtripped["token_usage"] == {"x": 1}
+
+
 class TestDispatchRecordSchemaV3:
     def test_normalize_maps_cache_keys_to_canonical_names(self) -> None:
         result = normalize_dispatch_token_usage(

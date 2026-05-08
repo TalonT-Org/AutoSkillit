@@ -43,7 +43,7 @@ signal downstream processing.
 
 **NEVER:**
 - Modify any source code files
-- Create files outside `{{AUTOSKILLIT_TEMP}}/validate-audit/`
+- Create files outside the per-run output directory (`{{AUTOSKILLIT_TEMP}}/validate-audit-{YYYY-MM-DD_HHMMSS}/`)
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message
 - Write output files before synthesizing ALL subagent results
 - Subagents must NOT create their own files — they return findings in response text only
@@ -246,10 +246,11 @@ After all agents return:
 
 ### Step 5 — Generate Output Files
 
-Ensure `{{AUTOSKILLIT_TEMP}}/validate-audit/` exists (`mkdir -p`).
+Generate a run timestamp: `{YYYY-MM-DD_HHMMSS}` (current UTC). Create the per-run directory:
+`mkdir -p {{AUTOSKILLIT_TEMP}}/validate-audit-{YYYY-MM-DD_HHMMSS}/`
 
 **File 1 — Validated report**
-Path: `{{AUTOSKILLIT_TEMP}}/validate-audit/validated_report_tests_{YYYY-MM-DD_HHMMSS}.md`
+Path: `{{AUTOSKILLIT_TEMP}}/validate-audit-{YYYY-MM-DD_HHMMSS}/validated_report_tests.md`
 
 Structure:
 
@@ -279,11 +280,11 @@ Format: original finding text, VALID verdict badge, severity adjustment note if 
 
 ---
 
-*{N_contested} finding(s) contested and excluded — see contested_findings_tests_{ts}.md*
+*{N_contested} finding(s) contested and excluded — see contested_findings_tests.md*
 ```
 
 **File 2 — Contested findings** (write only when `N_contested > 0`)
-Path: `{{AUTOSKILLIT_TEMP}}/validate-audit/contested_findings_tests_{YYYY-MM-DD_HHMMSS}.md`
+Path: `{{AUTOSKILLIT_TEMP}}/validate-audit-{YYYY-MM-DD_HHMMSS}/contested_findings_tests.md`
 
 Structure:
 
@@ -305,7 +306,7 @@ Structure:
 Write the full audit trail to a separate file. This file is NOT part of the issue body —
 it is posted as a comment after issue creation.
 
-Path: `{{AUTOSKILLIT_TEMP}}/validate-audit/validation_summary_tests_{YYYY-MM-DD_HHMMSS}.md`
+Path: `{{AUTOSKILLIT_TEMP}}/validate-audit-{YYYY-MM-DD_HHMMSS}/validation_summary_tests.md`
 
 Structure:
 
@@ -359,8 +360,8 @@ tool — they return findings as response text only.
 
 Receives paths to three files:
 1. Original audit report (`{audit_report_path}`)
-2. Validated report (`validated_report_tests_{ts}.md`)
-3. Validation summary (`validation_summary_tests_{ts}.md`)
+2. Validated report (`validated_report_tests.md`)
+3. Validation summary (`validation_summary_tests.md`)
 
 Instructions:
 > You are cross-validating three audit artifacts for consistency. Read all three files.
@@ -453,11 +454,11 @@ For each ticket group in the grouping manifest:
    - A subset Summary Table (only the rows for included finding IDs)
    - Only the `## Validated Findings` sub-sections for included finding IDs
    - A footer: `*Part of validated tests audit — see full report for remaining tickets.*`
-3. Write to: `{{AUTOSKILLIT_TEMP}}/validate-audit/ticket_body_tests_{N}_{YYYY-MM-DD_HHMMSS}.md`
+3. Write to: `{{AUTOSKILLIT_TEMP}}/validate-audit-{YYYY-MM-DD_HHMMSS}/ticket_body_tests_{N}.md`
    where `{N}` is 1-indexed from the grouping manifest.
 
 Also write the grouping manifest itself to:
-`{{AUTOSKILLIT_TEMP}}/validate-audit/grouping_manifest_tests_{YYYY-MM-DD_HHMMSS}.md`
+`{{AUTOSKILLIT_TEMP}}/validate-audit-{YYYY-MM-DD_HHMMSS}/grouping_manifest_tests.md`
 
 The grouping manifest file is the structured text returned by the ticket grouper subagent,
 prefixed with:
@@ -508,15 +509,15 @@ rule and the validation summary content, write the combined text to a temp file,
 
 ## Output Location
 
-All output files are written relative to the current working directory under `{{AUTOSKILLIT_TEMP}}/validate-audit/`:
+All output files are written under `{{AUTOSKILLIT_TEMP}}/validate-audit-{YYYY-MM-DD_HHMMSS}/`:
 
 ```
-{{AUTOSKILLIT_TEMP}}/validate-audit/
-├── validated_report_tests_{YYYY-MM-DD_HHMMSS}.md      (always written; VALID findings only)
-├── contested_findings_tests_{YYYY-MM-DD_HHMMSS}.md       (when N_contested > 0)
-├── validation_summary_tests_{YYYY-MM-DD_HHMMSS}.md       (always written; audit trail)
-├── grouping_manifest_tests_{YYYY-MM-DD_HHMMSS}.md        (always written; ticket grouping)
-└── ticket_body_tests_{N}_{YYYY-MM-DD_HHMMSS}.md          (one per ticket group, N ≥ 1)
+{{AUTOSKILLIT_TEMP}}/validate-audit-{YYYY-MM-DD_HHMMSS}/
+├── validated_report_tests.md      (always written; VALID findings only)
+├── contested_findings_tests.md       (when N_contested > 0)
+├── validation_summary_tests.md       (always written; audit trail)
+├── grouping_manifest_tests.md        (always written; ticket grouping)
+└── ticket_body_tests_{N}.md          (one per ticket group, N ≥ 1)
 ```
 
 ## Related Skills

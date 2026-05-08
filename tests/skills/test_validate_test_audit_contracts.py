@@ -63,7 +63,7 @@ class TestValidateTestAuditContent:
 
     # T-VTA-008
     def test_output_dir_matches_validate_audit(self) -> None:
-        assert "{{AUTOSKILLIT_TEMP}}/validate-audit/" in _skill_text()
+        assert "{{AUTOSKILLIT_TEMP}}/validate-audit-" in _skill_text()
 
     # T-VTA-009
     def test_history_research_agent(self) -> None:
@@ -96,6 +96,14 @@ class TestValidateTestAuditContent:
     # T-VTA-014
     def test_interactive_headless_distinction(self) -> None:
         assert "Interactive vs Headless" in _skill_text()
+
+    # T-VTA-027
+    def test_validate_test_audit_uses_per_run_subdirectory_pattern(self) -> None:
+        """validate-test-audit must use per-run subdirectory pattern."""
+        text = _skill_text()
+        assert "validate-audit-{YYYY-MM-DD_HHMMSS}/" in text, (
+            "validate-test-audit/SKILL.md missing per-run subdirectory pattern"
+        )
 
 
 class TestValidateTestAuditSemanticRules:

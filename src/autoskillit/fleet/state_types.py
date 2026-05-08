@@ -286,7 +286,7 @@ _VISIBLE_IN_BLOCK_STATUSES = _COMPLETED_STATUSES | frozenset(
 )
 
 # FAILURE is included here (stops forward progress) but can transition back to PENDING
-# via explicit retry. REFUSED is a gate rejection — no allowed transitions, truly terminal.
+# via explicit retry.
 TERMINAL_DISPATCH_STATUSES: frozenset[str] = frozenset(
     {
         DispatchStatus.SUCCESS,

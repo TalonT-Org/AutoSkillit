@@ -398,9 +398,7 @@ class TestDispatchRecordSchemaV3:
         assert state.dispatches[0].campaign_id == "camp-xyz"
         assert json.loads(sp.read_text())["dispatches"][0]["campaign_id"] == "camp-xyz"
 
-    def test_backward_compat_missing_campaign_id_defaults_to_empty_string(
-        self, tmp_path: Path
-    ) -> None:
+    def test_v1_state_file_is_rejected(self, tmp_path: Path) -> None:
         """v1 state files are rejected (stale schema version)."""
         sp = tmp_path / "state_v1.json"
         v1_payload = {

@@ -196,7 +196,7 @@ async def _watch_child_activity(
     fail-closed — anyio propagates exceptions in the task group, cancelling
     siblings.
     """
-    original_deadline: float | None = None
+    _first_observed_deadline: float | None = None
 
     while not trigger.is_set():
         await anyio.sleep(_poll_interval)
@@ -207,15 +207,15 @@ async def _watch_child_activity(
         if scope is None:
             continue
 
-        if original_deadline is None:
-            original_deadline = scope.deadline
+        if _first_observed_deadline is None:
+            _first_observed_deadline = scope.deadline
 
         active = _has_active_child_processes(pid) or _has_active_api_connection(pid)
         if not active:
             continue
 
-        cap = original_deadline + max_extension_seconds
-        desired = original_deadline + _poll_interval * 2
+        cap = _first_observed_deadline + max_extension_seconds
+        desired = _first_observed_deadline + _poll_interval * 2
         new_deadline = min(desired, cap)
         if new_deadline > scope.deadline:
             logger.debug(

@@ -13,6 +13,8 @@ import pytest
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
+_api_sim_mcp = pytest.importorskip("api_simulator.mcp")
+
 
 def _make_mock_ctx(tmp_path: Path) -> MagicMock:
     """Return a minimal mock ToolContext for _initialize tests."""
@@ -129,8 +131,6 @@ def test_initialize_registers_mcp_recording_middleware(tmp_path, monkeypatch):
     mock_mcp = MagicMock()
     mock_middleware_cls = MagicMock()
 
-    _api_sim_mcp = pytest.importorskip("api_simulator.mcp")
-
     monkeypatch.setattr("autoskillit.server.mcp", mock_mcp)
     monkeypatch.setattr(_api_sim_mcp, "McpRecordingMiddleware", mock_middleware_cls)
 
@@ -207,8 +207,6 @@ def test_initialize_registers_mcp_replay_middleware(tmp_path, monkeypatch):
 
     mock_mcp = MagicMock()
     mock_middleware_cls = MagicMock()
-
-    _api_sim_mcp = pytest.importorskip("api_simulator.mcp")
 
     monkeypatch.setattr("autoskillit.server.mcp", mock_mcp)
     monkeypatch.setattr(_api_sim_mcp, "McpReplayMiddleware", mock_middleware_cls)

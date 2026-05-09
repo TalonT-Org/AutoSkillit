@@ -13,6 +13,8 @@ from tests.fakes import MockSubprocessRunner
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
+_api_sim_claude = pytest.importorskip("api_simulator.claude")
+
 
 @dataclass
 class FakeStepResult:
@@ -86,7 +88,6 @@ def test_make_context_wraps_runner_when_record_scenario(monkeypatch, tmp_path):
     monkeypatch.setenv("RECORD_SCENARIO_DIR", str(scenario_dir))
     monkeypatch.setenv("RECORD_SCENARIO_RECIPE", "smoke-test")
     mock_recorder = Mock()
-    _api_sim_claude = pytest.importorskip("api_simulator.claude")
 
     monkeypatch.setattr(
         _api_sim_claude, "make_scenario_recorder", Mock(return_value=mock_recorder), raising=False
@@ -135,8 +136,6 @@ def test_make_context_wires_sequencing_runner_when_replay_scenario(monkeypatch, 
     mock_player.build_session_map.return_value = {}
     mock_make_player = Mock(return_value=mock_player)
 
-    _api_sim_claude = pytest.importorskip("api_simulator.claude")
-
     monkeypatch.setattr(_api_sim_claude, "make_scenario_player", mock_make_player, raising=False)
 
     from autoskillit.config import AutomationConfig
@@ -168,8 +167,6 @@ def test_replay_takes_precedence_over_record(monkeypatch, tmp_path):
     mock_player.build_session_map.return_value = {}
     mock_recorder = Mock()
     mock_make_recorder = Mock(return_value=mock_recorder)
-
-    _api_sim_claude = pytest.importorskip("api_simulator.claude")
 
     monkeypatch.setattr(
         _api_sim_claude, "make_scenario_player", Mock(return_value=mock_player), raising=False
@@ -214,8 +211,6 @@ def test_build_replay_runner_scans_skill_snapshots(tmp_path, monkeypatch):
     mock_player = Mock()
     mock_player.scenario.return_value = mock_scenario
     mock_player.build_session_map.return_value = {}
-
-    _api_sim_claude = pytest.importorskip("api_simulator.claude")
 
     monkeypatch.setattr(
         _api_sim_claude, "make_scenario_player", Mock(return_value=mock_player), raising=False

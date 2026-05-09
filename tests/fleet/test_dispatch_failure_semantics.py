@@ -6,6 +6,7 @@ import json
 
 import pytest
 
+from autoskillit.core.types import CliSubtype
 from autoskillit.fleet.result_parser import L3ParseResult
 from tests.fakes import InMemoryHeadlessExecutor
 from tests.fleet._helpers import _setup_dispatch
@@ -219,14 +220,12 @@ class TestTimeoutPath:
         from tests.fakes import _DEFAULT_SKILL_RESULT
 
         _setup_dispatch(tool_ctx, monkeypatch)
-        # Simulate what _build_skill_result produces for TIMED_OUT with UNPARSEABLE stdout
-        # (the CORRECT output after the fix: subtype="timeout" despite the leak scenario)
         tool_ctx.executor = InMemoryHeadlessExecutor(
             default_result=dataclasses.replace(
                 _DEFAULT_SKILL_RESULT,
-                subtype="timeout",  # This is the correct output after fix
+                subtype="timeout",
                 success=False,
-                cli_subtype="timeout",
+                cli_subtype=CliSubtype.TIMEOUT,
             )
         )
 

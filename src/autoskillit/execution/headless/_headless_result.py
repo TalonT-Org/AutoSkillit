@@ -457,12 +457,9 @@ def _build_skill_result(
 
     normalized_subtype = session.normalize_subtype(outcome, completion_marker)
 
-    # Invariant guard: TIMED_OUT sessions must produce subtype='timeout'.
-    # STALE and IDLE_STALL early-return before reaching this point, so their
-    # subtypes are not guarded here. This guard catches regression if a future
-    # change breaks the unconditional promotion at the TIMED_OUT branch above.
-    if result.termination == TerminationReason.TIMED_OUT:
-        assert normalized_subtype == "timeout", (
+    # Invariant: TIMED_OUT sessions must produce subtype='timeout'.
+    if result.termination == TerminationReason.TIMED_OUT and normalized_subtype != "timeout":
+        raise AssertionError(
             f"TIMED_OUT session produced subtype={normalized_subtype!r}, expected 'timeout'"
         )
 

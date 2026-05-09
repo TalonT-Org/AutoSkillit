@@ -278,7 +278,7 @@ class TestTimedOutAlwaysProducesTimeoutSubtype:
         assert sr.subtype == "timeout", (
             f"UNPARSEABLE leak: TIMED_OUT session produced subtype={sr.subtype!r}, "
             f"expected 'timeout'. parse_session_result returned CliSubtype.UNPARSEABLE "
-            f"but the conditional at line 306 only promotes SUCCESS."
+            f"but the TIMED_OUT branch unconditionally promotes to TIMEOUT."
         )
         assert sr.cli_subtype == CliSubtype.TIMEOUT
         assert sr.success is False
@@ -485,7 +485,7 @@ class TestTimedOutSessionPreservesState:
         assert sr.success is False
         assert sr.needs_retry is False
         assert sr.subtype == "timeout"
-        assert sr.cli_subtype == "timeout"
+        assert sr.cli_subtype == CliSubtype.TIMEOUT
 
     def test_timed_out_with_empty_stdout_uses_timeout_subtype(self):
         """Timed-out session with no stdout uses TIMEOUT subtype."""
@@ -502,7 +502,7 @@ class TestTimedOutSessionPreservesState:
         assert sr.success is False
         assert sr.write_call_count == 0
         assert sr.subtype == "timeout"
-        assert sr.cli_subtype == "timeout"
+        assert sr.cli_subtype == CliSubtype.TIMEOUT
 
     def test_timed_out_with_success_result_overrides_to_timeout(self):
         """When timed-out stdout has a success result, subtype is overridden to timeout."""

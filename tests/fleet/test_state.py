@@ -1364,7 +1364,7 @@ class TestAllInterruptedCampaignDoesNotSilentlyComplete:
     """A campaign where every dispatch is INTERRUPTED must halt or retry, not silently complete."""
 
     def test_all_interrupted_continue_on_failure_false_halts(self, tmp_path: Path) -> None:
-        """resume_campaign_from_state must not return next_dispatch_name='' for all-INTERRUPTED."""
+        """All-INTERRUPTED + continue_on_failure=False: empty name and FLEET_HALTED_SENTINEL."""
         sp = _state_path(tmp_path)
         write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("A"))
         from autoskillit.fleet import upsert_dispatch_record_by_name
@@ -1405,7 +1405,7 @@ class TestAllRefusedCampaignDoesNotSilentlyComplete:
     """A campaign where every dispatch is REFUSED must halt or retry, not silently complete."""
 
     def test_all_refused_continue_on_failure_false_halts(self, tmp_path: Path) -> None:
-        """resume_campaign_from_state must not return next_dispatch_name='' for all-REFUSED."""
+        """All-REFUSED + continue_on_failure=False: empty name and FLEET_HALTED_SENTINEL."""
         sp = _state_path(tmp_path)
         write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("A"))
         from autoskillit.fleet import upsert_dispatch_record_by_name

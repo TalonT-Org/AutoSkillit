@@ -458,9 +458,13 @@ def _build_skill_result(
     normalized_subtype = session.normalize_subtype(outcome, completion_marker)
 
     # Invariant: TIMED_OUT sessions must produce subtype='timeout'.
-    if result.termination == TerminationReason.TIMED_OUT and normalized_subtype != "timeout":
+    if (
+        result.termination == TerminationReason.TIMED_OUT
+        and normalized_subtype != CliSubtype.TIMEOUT.value
+    ):
+        expected = CliSubtype.TIMEOUT.value
         raise RuntimeError(
-            f"TIMED_OUT session produced subtype={normalized_subtype!r}, expected 'timeout'"
+            f"TIMED_OUT session produced subtype={normalized_subtype!r}, expected {expected!r}"
         )
 
     # For adjudicated_failure + write evidence: record as retriable so the consecutive

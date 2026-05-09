@@ -459,7 +459,7 @@ def _build_skill_result(
 
     # Invariant: TIMED_OUT sessions must produce subtype='timeout'.
     if result.termination == TerminationReason.TIMED_OUT and normalized_subtype != "timeout":
-        raise AssertionError(
+        raise RuntimeError(
             f"TIMED_OUT session produced subtype={normalized_subtype!r}, expected 'timeout'"
         )
 

@@ -1688,7 +1688,7 @@ class TestTerminationSubtypeConsistencyInvariant:
         )
         sr = _build_skill_result(sub_result)
         # The invariant guard is inside _build_skill_result; if subtype != 'timeout',
-        # it would raise AssertionError. So a successful return means it passed.
+        # it would raise RuntimeError. So a successful return means it passed.
         assert sr.subtype == "timeout"
 
     def test_non_timed_out_non_timeout_subtype_is_not_guarded(self):
@@ -1718,7 +1718,7 @@ class TestTerminationSubtypeConsistencyInvariant:
         )
         sr = _build_skill_result(sub_result)
         # NATURAL_EXIT with UNPARSEABLE → normalize_subtype returns "unparseable"
-        # The guard does not apply (only TIMED_OUT is guarded), so no AssertionError
+        # The guard does not apply (only TIMED_OUT is guarded), so no RuntimeError
         assert sr.subtype == "unparseable"
 
     def test_idle_stall_with_hardcoded_subtype_not_guarded(self):

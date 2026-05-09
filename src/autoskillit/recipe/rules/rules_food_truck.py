@@ -11,7 +11,7 @@ from autoskillit.recipe.schema import RecipeKind
 @semantic_rule(
     name="food-truck-has-sentinel-stop",
     description="Food-truck recipes must have a stop step referencing L3 sentinel",
-    severity=Severity.WARNING,
+    severity=Severity.ERROR,
 )
 def _check_food_truck_has_sentinel_stop(ctx: ValidationContext) -> list[RuleFinding]:
     if ctx.recipe.kind != RecipeKind.FOOD_TRUCK:
@@ -22,7 +22,7 @@ def _check_food_truck_has_sentinel_stop(ctx: ValidationContext) -> list[RuleFind
     return [
         RuleFinding(
             rule="food-truck-has-sentinel-stop",
-            severity=Severity.WARNING,
+            severity=Severity.ERROR,
             step_name="(top-level)",
             message=(
                 "Food-truck recipe has no stop step referencing L3 sentinel. "

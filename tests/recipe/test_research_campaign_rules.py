@@ -133,3 +133,17 @@ def test_run_archive_no_dead_ingredient_forwarding(campaign_recipe: Recipe) -> N
     assert run_arc is not None
     assert "all_diagram_paths" not in run_arc.ingredients
     assert "report_path_after_finalize" not in run_arc.ingredients
+
+
+def test_dispatch_capture_field_in_all_sentinels_contract_passes(validation_ctx) -> None:
+    """Per-sentinel-path validation: captures must appear in ALL sentinel paths, not just union.
+
+    Uses the existing module-scoped `validation_ctx` fixture.
+    """
+    findings = run_semantic_rules(validation_ctx)
+    all_sentinel_findings = [
+        f for f in findings if f.rule == "dispatch-capture-field-in-all-sentinels"
+    ]
+    assert all_sentinel_findings == [], (
+        f"Per-path sentinel validation failures: {all_sentinel_findings}"
+    )

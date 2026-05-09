@@ -127,7 +127,7 @@
     },
     "research_complete": {
       "action": "stop",
-      "message": "Research archival complete. Artifacts separated into a dedicated PR, experiment branch tagged and preserved, original PR closed with cross-references to the artifact PR and archive tag.\n"
+      "message": "Research archival complete. Artifacts separated into a dedicated PR, experiment branch tagged and preserved, original PR closed with cross-references to the artifact PR and archive tag. Emit the L3 result sentinel JSON block now. The sentinel must include: success=true. Example sentinel: {\"success\": true}"
     },
     "escalate_stop": {
       "action": "stop",

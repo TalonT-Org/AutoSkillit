@@ -39,6 +39,11 @@ logger = get_logger(__name__)
 
 ENVELOPE_STDERR_MAX = 2000
 
+
+class CaptureCompletenessError(RuntimeError):
+    """Raised when a capture spec extracts zero fields from the payload."""
+
+
 _CAMPAIGN_REF_RE = re.compile(r"\$\{\{\s*campaign\.(\w+)\s*\}\}")
 _RESULT_REF_RE = re.compile(r"^\$\{\{\s*result\.([\w-]+)\s*\}\}$")
 
@@ -50,17 +55,34 @@ def _extract_captures(
     """Extract captured values from an L3 result payload.
 
     For each entry in `capture_spec` whose value matches ``${{ result.field }}``,
-    reads `payload[field]` and converts it to str. Missing payload keys are skipped.
+    reads `payload[field]` and converts it to str. Missing payload keys are logged
+    as warnings. If the capture spec has entries but all fields are absent from the
+    payload, raises CaptureCompletenessError.
     """
     result: dict[str, str] = {}
+    expected_fields: list[str] = []
     for key, template in capture_spec.items():
         m = _RESULT_REF_RE.match(template.strip())
         if m is None:
             continue
         field_name = m.group(1)
+        expected_fields.append(field_name)
         if field_name in payload:
             value = payload[field_name]
             result[key] = value if isinstance(value, str) else json.dumps(value, default=str)
+        else:
+            logger.warning(
+                "capture_field_missing_from_payload",
+                capture_name=key,
+                expected_field=field_name,
+                available_fields=sorted(str(k) for k in payload.keys()),
+            )
+    if expected_fields and not result:
+        raise CaptureCompletenessError(
+            f"Capture spec expected fields {expected_fields} but none were "
+            f"present in payload. Available: {sorted(str(k) for k in payload.keys())}. "
+            f"This indicates a sentinel/capture misalignment."
+        )
     return result
 
 

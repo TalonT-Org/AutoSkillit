@@ -1220,7 +1220,7 @@ def test_dispatch_capture_field_in_sentinel_fires_on_unknown_field(tmp_path: Pat
     )
     found = _findings(recipe, "dispatch-capture-field-in-sentinel", project_dir=tmp_path)
     assert len(found) == 1
-    assert found[0].severity == Severity.WARNING
+    assert found[0].severity == Severity.ERROR
     assert "nonexistent_field" in found[0].message
 
 
@@ -1488,3 +1488,83 @@ def test_extract_sentinel_fields_handles_multiple_sentinels():
     )
     fields = _extract_sentinel_fields(recipe)
     assert fields == {"success", "alpha", "beta"}
+
+
+def test_dispatch_capture_field_in_sentinel_severity_is_error():
+    """Guard: dispatch-capture-field-in-sentinel must be ERROR, not WARNING.
+
+    Phantom captures that pass validation at WARNING severity caused
+    cascading runtime failures in campaign dispatch chains (see #2276).
+    This test prevents the severity from being downgraded.
+    """
+    from autoskillit.recipe.registry import _RULE_REGISTRY
+
+    rule = next(
+        (r for r in _RULE_REGISTRY if r.name == "dispatch-capture-field-in-sentinel"), None
+    )
+    assert rule is not None, "Rule 'dispatch-capture-field-in-sentinel' not found in registry"
+    assert rule.severity == Severity.ERROR
+
+
+def test_dispatch_capture_field_in_all_sentinels_severity_is_error():
+    """Guard: dispatch-capture-field-in-all-sentinels must be ERROR, not WARNING."""
+    from autoskillit.recipe.registry import _RULE_REGISTRY
+
+    rule = next(
+        (r for r in _RULE_REGISTRY if r.name == "dispatch-capture-field-in-all-sentinels"), None
+    )
+    assert rule is not None, "Rule 'dispatch-capture-field-in-all-sentinels' not found in registry"
+    assert rule.severity == Severity.ERROR
+
+
+def test_dispatch_capture_field_in_all_sentinels_fires_on_path_exclusive_field(tmp_path):
+    """A capture referencing a field emitted by only ONE sentinel path must fire ERROR.
+
+    Reproduces the review_local_complete gap: pr_url is emitted by
+    review_pr_complete but not review_local_complete. The union check
+    passes, but the per-path check must fail.
+    """
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    _write_recipe_yaml(
+        recipes_dir / "dual-sentinel-target.yaml",
+        {
+            "name": "dual-sentinel-target",
+            "description": "target with two sentinel paths",
+            "kind": "food-truck",
+            "kitchen_rules": ["NEVER"],
+            "ingredients": {"task": {"description": "t", "required": True}},
+            "steps": {
+                "path_a": {
+                    "action": "stop",
+                    "message": (
+                        "Emit the L3 result sentinel JSON block now. "
+                        'Example sentinel: {"success": true, "pr_url": "<url>", '
+                        '"report_path": "<path>"}'
+                    ),
+                },
+                "path_b": {
+                    "action": "stop",
+                    "message": (
+                        "Emit the L3 result sentinel JSON block now. "
+                        'Example sentinel: {"success": true, "local_path": "<path>"}'
+                    ),
+                },
+            },
+        },
+    )
+    recipe = _campaign(
+        dispatches=[
+            CampaignDispatch(
+                name="phase-one",
+                recipe="dual-sentinel-target",
+                task="do it",
+                capture={"pr_url": "${{ result.pr_url }}"},
+            ),
+        ]
+    )
+    found = _findings(recipe, "dispatch-capture-field-in-all-sentinels", project_dir=tmp_path)
+    assert len(found) == 1
+    assert found[0].severity == Severity.ERROR
+    assert "pr_url" in found[0].message
+    assert "not all sentinel" in found[0].message.lower()

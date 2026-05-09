@@ -25,14 +25,14 @@ def test_extract_captures_from_payload():
     assert result == {"sources_manifest": "/tmp/sources.json"}
 
 
-def test_extract_captures_missing_field_skipped():
-    from autoskillit.fleet._api import _extract_captures
+def test_extract_captures_all_fields_missing_raises():
+    from autoskillit.fleet._api import CaptureCompletenessError, _extract_captures
 
-    result = _extract_captures(
-        {"missing_key": "${{ result.missing_key }}"},
-        {"other": "value"},
-    )
-    assert "missing_key" not in result
+    with pytest.raises(CaptureCompletenessError):
+        _extract_captures(
+            {"missing_key": "${{ result.missing_key }}"},
+            {"other": "value"},
+        )
 
 
 def test_extract_captures_non_result_template_skipped():
@@ -544,3 +544,44 @@ async def test_unresolved_campaign_ref_in_ingredients_returns_fleet_error(tool_c
     result = json.loads(raw.to_envelope())
     assert result["success"] is False
     assert "error" in result
+
+
+def test_extract_captures_logs_warning_for_missing_spec_keys():
+    """_extract_captures must log a WARNING for every capture spec key
+    whose result field is absent from the payload, rather than silently skipping.
+    """
+    import structlog
+
+    from autoskillit.fleet._api import _extract_captures
+
+    capture_spec = {
+        "pr_url": "${{ result.pr_url }}",
+        "report_path": "${{ result.report_path }}",
+    }
+    payload = {"pr_url": "https://github.com/..."}  # report_path absent
+
+    with structlog.testing.capture_logs() as logs:
+        result = _extract_captures(capture_spec, payload)
+
+    assert "pr_url" in result
+    assert "report_path" not in result
+    assert any(
+        e.get("log_level") == "warning" and e.get("expected_field") == "report_path" for e in logs
+    )
+
+
+def test_extract_captures_raises_on_complete_capture_miss():
+    """When ALL capture spec fields are absent from the payload,
+    _extract_captures must raise CaptureCompletenessError rather than
+    returning an empty dict that silently poisons the campaign state.
+    """
+    from autoskillit.fleet._api import CaptureCompletenessError, _extract_captures
+
+    capture_spec = {
+        "pr_url": "${{ result.pr_url }}",
+        "report_path": "${{ result.report_path }}",
+    }
+    payload = {"success": True}  # No captured fields present at all
+
+    with pytest.raises(CaptureCompletenessError):
+        _extract_captures(capture_spec, payload)

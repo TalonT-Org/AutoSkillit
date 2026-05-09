@@ -98,6 +98,7 @@
     "create_issues": {
       "tool": "run_skill",
       "description": "File GitHub issues from validated audit ticket body files",
+      "model": "",
       "with": {
         "skill_command": "/autoskillit:file-audit-issues ${{ context.audit_run_dir }}",
         "cwd": "${{ inputs.workspace }}",
@@ -105,8 +106,7 @@
       },
       "note": "BATCHED ISSUE FILING — The file-audit-issues skill discovers all ticket_body_{source}_{N}_{ts}.md files in the audit run directory, deduplicates against existing open issues, batch-creates via GraphQL createIssue mutations with aliases (chunked at 20), applies labels, appends validation summaries to created issues, and writes a filed_issues_manifest.json for traceability.\nThe AUTOSKILLIT_AUDIT_RUN_DIR env var scopes discovery to the per-run directory created by init_audit_run.\n",
       "capture": {
-        "issue_urls": "${{ result.issue_urls }}",
-        "issue_count": "${{ result.issue_count }}"
+        "issue_urls": "${{ result.issue_urls }}"
       },
       "on_success": "done",
       "on_failure": "escalate_stop",

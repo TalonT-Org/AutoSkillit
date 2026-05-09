@@ -2111,11 +2111,13 @@ skills:
       - name: issue_count
         type: str
     expected_output_patterns:
-      - "issue_urls\\s*=\\s*\\S+"
-      - "issue_count\\s*=\\s*\\S+"
+      - "issue_urls\\s*="
+      - "issue_count\\s*=\\s*\\d+"
     pattern_examples:
       - "issue_urls = https://github.com/org/repo/issues/100,https://github.com/org/repo/issues/101\nissue_count = 2"
-    write_behavior: always
+    write_behavior: conditional
+    write_expected_when:
+      - "issue_count\\s*=\\s*\\d+"
   promote-to-main:
     inputs:
     - name: batch_branch

@@ -135,6 +135,7 @@ def test_full_audit_semantic_rules_no_errors() -> None:
             "validate-audit",
             "validate-test-audit",
             "validate-review-decisions",
+            "file-audit-issues",
         }
     )
     ctx = make_validation_context(recipe, available_skills=known_skills)
@@ -238,8 +239,8 @@ def test_full_audit_create_issues_uses_batched_graphql() -> None:
 
     data = yaml.safe_load(RECIPE_PATH.read_text())
     step = data["steps"]["create_issues"]
-    assert step["tool"] == "run_python"
-    assert "batch_create_issues" in step["with"]["callable"]
+    assert step["tool"] == "run_skill"
+    assert "file-audit-issues" in step["with"]["skill_command"]
     note = step["note"].lower()
     assert "batched" in note or "graphql" in note
 

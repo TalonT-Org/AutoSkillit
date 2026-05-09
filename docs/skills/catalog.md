@@ -1,7 +1,7 @@
 # Skill catalog
 
-The complete list of bundled skills (133 total: 3 in `src/autoskillit/skills/`,
-130 in `src/autoskillit/skills_extended/`). Filesystem walk this directory if
+The complete list of bundled skills (134 total: 3 in `src/autoskillit/skills/`,
+131 in `src/autoskillit/skills_extended/`). Filesystem walk this directory if
 you need an exhaustive listing; this catalog groups by purpose.
 
 ## Tier 1 — free range (3)
@@ -47,7 +47,7 @@ runs:
 `prepare-pr`, `compose-pr`, `open-integration-pr`, `merge-pr`, `analyze-prs`, `review-pr`,
 `resolve-review`, `implement-worktree-no-merge`, `resolve-failures`,
 `retry-worktree`, `resolve-merge-conflicts`, `audit-impl`, `smoke-task`,
-`report-bug`, `pipeline-summary`, `diagnose-ci`, `verify-diag`,
+`report-bug`, `pipeline-summary`, `diagnose-ci`, `file-audit-issues`, `verify-diag`,
 `resolve-claims-review`, `resolve-design-review`, `resolve-research-review`,
 `compose-research-pr`, `prepare-research-pr`, `review-research-pr`,
 `promote-to-main`

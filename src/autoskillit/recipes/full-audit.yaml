@@ -164,6 +164,7 @@ steps:
   create_issues:
     tool: run_skill
     description: "File GitHub issues from validated audit ticket body files"
+    model: ""
     with:
       skill_command: "/autoskillit:file-audit-issues ${{ context.audit_run_dir }}"
       cwd: "${{ inputs.workspace }}"
@@ -180,7 +181,6 @@ steps:
       per-run directory created by init_audit_run.
     capture:
       issue_urls: "${{ result.issue_urls }}"
-      issue_count: "${{ result.issue_count }}"
     on_success: done
     on_failure: escalate_stop
     retries: 1

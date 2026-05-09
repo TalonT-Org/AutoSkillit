@@ -76,9 +76,25 @@ issue_urls = {comma-separated URLs}
 issue_count = {N}
 ```
 
-**Critical constraints:**
-- NEVER use `gh issue comment` — all content goes in the issue body
-- NEVER create issues individually via REST — always batch via GraphQL
-- Sleep 1 second between consecutive mutating GitHub API calls
-- Use `--body-file` for all body content (never `--body` inline for large content)
-- When `AUTOSKILLIT_HEADLESS` is `1`, skip all prompts and execute directly
+When no ticket body files are found, emit empty values and exit immediately:
+
+```
+issue_urls = 
+issue_count = 0
+```
+
+## Critical Constraints
+
+**NEVER:**
+- Use `gh issue comment` — all issue content goes in the body via `--body-file`
+- Create issues individually via REST — always batch via GraphQL `createIssue` mutations
+- Skip the 1-second sleep between consecutive mutating GitHub API calls
+- Use `--body` inline for large content — always write to temp file and use `--body-file`
+- Prompt interactively when `AUTOSKILLIT_HEADLESS` is `1` — execute all steps directly
+
+**ALWAYS:**
+- Emit `issue_count = {N}` and `issue_urls = {urls}` as the final structured output (emit `issue_urls = ` with empty value when N=0)
+- Deduplicate against existing open issues before creating any new ones
+- Write `filed_issues_manifest_{timestamp}.json` to the audit run directory
+- Sleep 1 second between each chunk of batch GraphQL mutations
+- Use absolute paths for all temp files written during this skill

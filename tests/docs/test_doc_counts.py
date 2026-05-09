@@ -314,10 +314,10 @@ def test_docs_state_37_kitchen_tools(doc_path: Path) -> None:
     _assert_doc_states_number(doc_path, "kitchen tools", 37)
 
 
-def test_skill_visibility_states_133_skills() -> None:
-    # 133 = 3 Tier-1 (open-kitchen, close-kitchen, sous-chef) + 130 extended.
-    # DefaultSkillResolver.list_all() returns 132 (excludes sous-chef from public surface).
-    _assert_doc_states_number(DOCS_DIR / "skills" / "visibility.md", "skills total", 133)
+def test_skill_visibility_states_134_skills() -> None:
+    # 134 = 3 Tier-1 (open-kitchen, close-kitchen, sous-chef) + 131 extended.
+    # DefaultSkillResolver.list_all() returns 133 (excludes sous-chef from public surface).
+    _assert_doc_states_number(DOCS_DIR / "skills" / "visibility.md", "skills total", 134)
 
 
 def test_safety_hooks_states_21_hooks() -> None:

@@ -171,7 +171,7 @@ async def dispatch_food_truck(
                 )
 
         from autoskillit.core import SessionCheckpoint  # noqa: PLC0415
-        from autoskillit.fleet import execute_dispatch
+        from autoskillit.fleet import DispatchCompleted, execute_dispatch  # noqa: PLC0415
         from autoskillit.server import _get_ctx
         from autoskillit.server._misc import (  # noqa: PLC0415
             _refresh_quota_cache,
@@ -186,6 +186,7 @@ async def dispatch_food_truck(
         from autoskillit.core import find_caller_session_id
 
         caller_session_id = find_caller_session_id(project_dir=tool_ctx.project_dir)
+        effective_name = dispatch_name or recipe
         result = await execute_dispatch(
             tool_ctx=tool_ctx,
             recipe=recipe,
@@ -202,12 +203,13 @@ async def dispatch_food_truck(
             resume_checkpoint=parsed_checkpoint,
             idle_output_timeout=idle_output_timeout,
             caller_session_id=caller_session_id,
+            campaign_state_path=Path(campaign_state_path_str) if campaign_state_path_str else None,
         )
 
-        if campaign_state_path_str and dispatch_name:
+        if campaign_state_path_str and isinstance(result, DispatchCompleted):
             _write_dispatch_to_campaign_state(
                 campaign_state_path_str,
-                dispatch_name,
+                effective_name,
                 result,
             )
 

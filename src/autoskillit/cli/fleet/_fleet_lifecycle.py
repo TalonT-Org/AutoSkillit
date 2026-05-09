@@ -132,6 +132,8 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
                 except psutil.NoSuchProcess:
                     _mark_dead_pid(dry_run, name, pid, dispatch, m)
                     continue
+                except psutil.AccessDenied:
+                    identity_confirmed = False
             else:
                 identity_confirmed = False
 

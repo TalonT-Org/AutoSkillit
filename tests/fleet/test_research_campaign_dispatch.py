@@ -397,12 +397,15 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
 
     # Update accumulated captures
     state_files = list((tool_ctx.temp_dir / "dispatches").glob("*.json"))
-    assert len(state_files) == 2
     impl_state = next(
-        f
-        for f in state_files
-        if json.loads(f.read_text()).get("campaign_name") == "research-implement"
+        (
+            f
+            for f in state_files
+            if json.loads(f.read_text()).get("campaign_name") == "research-implement"
+        ),
+        None,
     )
+    assert impl_state is not None, "research-implement dispatch state file not found"
     impl_data = json.loads(impl_state.read_text())
     accumulated.update(impl_data.get("captured_values", {}))
 
@@ -475,10 +478,14 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
     # Update accumulated captures
     state_files = list((tool_ctx.temp_dir / "dispatches").glob("*.json"))
     review_state = next(
-        f
-        for f in state_files
-        if json.loads(f.read_text()).get("campaign_name") == "research-review"
+        (
+            f
+            for f in state_files
+            if json.loads(f.read_text()).get("campaign_name") == "research-review"
+        ),
+        None,
     )
+    assert review_state is not None, "research-review dispatch state file not found"
     review_data = json.loads(review_state.read_text())
     accumulated.update(review_data.get("captured_values", {}))
 

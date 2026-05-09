@@ -408,7 +408,7 @@ async def _run_dispatch(
     campaign_id = tool_ctx.kitchen_id
     state_path = tool_ctx.temp_dir / "dispatches" / f"{dispatch_id}.json"
     state_path.parent.mkdir(parents=True, exist_ok=True)
-    if not (resume_session_id and prior_dispatch_id):
+    if not resume_session_id:
         # On resume, the state file already exists with attempt_history;
         # writing a new initial state would destroy it.
         recipe_snapshot = {
@@ -524,7 +524,11 @@ async def _run_dispatch(
                         if aid and aid != dispatch_id:
                             prior_ids.append(aid)
     except Exception:
-        logger.warning("failed to collect prior dispatch_ids from state", exc_info=True)
+        logger.warning(
+            "failed to collect prior dispatch_ids from state",
+            state_path=str(state_path),
+            exc_info=True,
+        )
 
     prior_completion_markers = (
         [f"%%L3_DONE::{pid[:8]}%%" for pid in prior_ids] if prior_ids else None

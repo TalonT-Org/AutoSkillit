@@ -25,9 +25,7 @@ def test_extract_captures_from_payload():
     assert result == {"sources_manifest": "/tmp/sources.json"}
 
 
-def test_extract_captures_missing_field_skipped():
-    import pytest
-
+def test_extract_captures_all_fields_missing_raises():
     from autoskillit.fleet._api import CaptureCompletenessError, _extract_captures
 
     with pytest.raises(CaptureCompletenessError):
@@ -575,8 +573,6 @@ def test_extract_captures_raises_on_complete_capture_miss():
     _extract_captures must raise CaptureCompletenessError rather than
     returning an empty dict that silently poisons the campaign state.
     """
-    import pytest
-
     from autoskillit.fleet._api import CaptureCompletenessError, _extract_captures
 
     capture_spec = {

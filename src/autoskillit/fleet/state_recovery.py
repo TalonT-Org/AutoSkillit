@@ -26,20 +26,14 @@ __all__ = [
 
 logger = get_logger(__name__)
 
-_RETRIABLE_NON_SUCCESS = frozenset(
-    {
-        DispatchStatus.FAILURE,
-        DispatchStatus.INTERRUPTED,
-        DispatchStatus.REFUSED,
-    }
-)
-
 _ALWAYS_BLOCKING_STATUSES = frozenset(
     {
         DispatchStatus.INTERRUPTED,
         DispatchStatus.REFUSED,
     }
 )
+
+_RETRIABLE_NON_SUCCESS = _ALWAYS_BLOCKING_STATUSES | frozenset({DispatchStatus.FAILURE})
 
 
 def has_failed_dispatch(state_path: Path) -> bool:

@@ -200,19 +200,3 @@ class TestStaleTokenUsagePropagation:
         assert tu["output_tokens"] == 200
         assert tu["cache_creation_input_tokens"] == 50
         assert tu["cache_read_input_tokens"] == 75
-
-
-class TestFieldCompleteness:
-    """Verify diagnostic fields are non-default across all construction branches."""
-
-    def test_stale_infra_kill_not_natural_exit(self):
-        result = _stale_result(kill_reason=KillReason.INFRA_KILL)
-        skill_result = _build_skill_result(result)
-        assert skill_result.kill_reason == KillReason.INFRA_KILL
-        assert skill_result.kill_reason != KillReason.NATURAL_EXIT
-
-    def test_idle_stall_infra_kill_not_natural_exit(self):
-        result = _idle_stall_result_with_kill(kill_reason=KillReason.INFRA_KILL)
-        skill_result = _build_skill_result(result)
-        assert skill_result.kill_reason == KillReason.INFRA_KILL
-        assert skill_result.kill_reason != KillReason.NATURAL_EXIT

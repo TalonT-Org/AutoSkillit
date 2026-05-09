@@ -6,6 +6,7 @@ import json
 
 import pytest
 
+from autoskillit.core.types import CliSubtype
 from autoskillit.fleet.result_parser import L3ParseResult
 from tests.fakes import InMemoryHeadlessExecutor
 from tests.fleet._helpers import _setup_dispatch
@@ -203,6 +204,78 @@ class TestTimeoutPath:
 
         await _run(tool_ctx)
         assert parse_called, "parse_l3_result_block was not called for idle_stall"
+
+    @pytest.mark.anyio
+    async def test_timed_out_unparseable_triggers_timeout_precheck(self, tool_ctx, monkeypatch):
+        """TIMED_OUT + UNPARSEABLE subtype must trigger the fleet timeout precheck.
+
+        Regression test: before the fix, TIMED_OUT sessions with non-SUCCESS parsed
+        subtypes (e.g., UNPARSEABLE from partial stdout with no type=result record)
+        would leak subtype='unparseable' through normalize_subtype, bypassing the
+        timeout precheck at _api.py:476 (subtype == 'timeout') and causing the dispatch
+        to be misclassified as fleet_l3_no_result_block instead of fleet_l3_timeout.
+        """
+        import dataclasses
+
+        from tests.fakes import _DEFAULT_SKILL_RESULT
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+        tool_ctx.executor = InMemoryHeadlessExecutor(
+            default_result=dataclasses.replace(
+                _DEFAULT_SKILL_RESULT,
+                subtype="timeout",
+                success=False,
+                cli_subtype=CliSubtype.TIMEOUT,
+            )
+        )
+
+        result = await _run(tool_ctx)
+        # The timeout precheck should fire and produce fleet_l3_timeout
+        assert result["success"] is False
+        assert result["reason"] == "fleet_l3_timeout"
+
+    @pytest.mark.anyio
+    async def test_timed_out_session_never_reaches_parse_l3_result_block(
+        self, tool_ctx, monkeypatch
+    ):
+        """TIMED_OUT (subtype=timeout) must short-circuit before parse_l3_result_block.
+
+        The fleet timeout precheck at _api.py:476 is a short-circuit: it returns
+        DispatchCompleted(success=False, reason=FLEET_L3_TIMEOUT) before reaching
+        parse_l3_result_block (and therefore classify_dispatch_outcome). This test
+        verifies that parse_l3_result_block is NEVER called for timeout subtypes.
+        """
+        import dataclasses
+
+        from tests.fakes import _DEFAULT_SKILL_RESULT
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+        tool_ctx.executor = InMemoryHeadlessExecutor(
+            default_result=dataclasses.replace(
+                _DEFAULT_SKILL_RESULT,
+                subtype="timeout",
+                success=False,
+                cli_subtype=CliSubtype.TIMEOUT,
+            )
+        )
+
+        parse_calls: list[dict] = []
+
+        def _recording_parse(**kwargs):
+            parse_calls.append(kwargs)
+
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.parse_l3_result_block",
+            _recording_parse,
+        )
+
+        result = await _run(tool_ctx)
+        assert not parse_calls, (
+            "parse_l3_result_block should not be called for timeout subtype "
+            f"(timeout precheck should short-circuit). Got {len(parse_calls)} calls."
+        )
+        assert result["success"] is False
+        assert result["reason"] == "fleet_l3_timeout"
 
 
 class TestNoSentinelPath:

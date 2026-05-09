@@ -303,7 +303,7 @@ def _build_skill_result(
         returncode = -1
         if result.stdout.strip():
             session = parse_session_result(result.stdout)
-            if session.subtype == CliSubtype.SUCCESS:
+            if session.subtype != CliSubtype.TIMEOUT:
                 session = dataclasses.replace(session, subtype=CliSubtype.TIMEOUT, is_error=True)
         else:
             session = ClaudeSessionResult(
@@ -456,6 +456,16 @@ def _build_skill_result(
         outcome = SessionOutcome.RETRIABLE
 
     normalized_subtype = session.normalize_subtype(outcome, completion_marker)
+
+    # Invariant: TIMED_OUT sessions must produce subtype='timeout'.
+    if (
+        result.termination == TerminationReason.TIMED_OUT
+        and normalized_subtype != CliSubtype.TIMEOUT.value
+    ):
+        expected = CliSubtype.TIMEOUT.value
+        raise RuntimeError(
+            f"TIMED_OUT session produced subtype={normalized_subtype!r}, expected {expected!r}"
+        )
 
     # For adjudicated_failure + write evidence: record as retriable so the consecutive
     # chain is intact for the CONTRACT_RECOVERY budget guard (genuinely retriable).

@@ -255,12 +255,15 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
     campaign_path = builtin_recipes_dir() / "campaigns" / "research-campaign.yaml"
     campaign = load_recipe(campaign_path)
 
+    from autoskillit.fleet import FleetSemaphore
+
     repo = InMemoryRecipeRepository()
     for dispatch in campaign.dispatches:
+        recipe_path = builtin_recipes_dir() / f"{dispatch.recipe}.yaml"
+        actual_recipe = load_recipe(recipe_path)
         info = _make_recipe_info(dispatch.recipe)
         repo.add_recipe(dispatch.recipe, info)
-
-    from autoskillit.fleet import FleetSemaphore
+        repo.add_full_recipe(info.path, actual_recipe)
 
     tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=4)
     tool_ctx.recipes = repo

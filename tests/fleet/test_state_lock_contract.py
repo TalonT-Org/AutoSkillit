@@ -62,7 +62,7 @@ class TestFlockLockTarget:
 
         fleet_root = Path(autoskillit.fleet.__file__).parent
         cli_fleet_root = fleet_root.parent / "cli" / "fleet"
-        src_root = fleet_root.parent.parent
+        src_root = fleet_root.parent
 
         FCNTL_ALLOWED_MODULES = {
             src_root / "core" / "_plugin_cache.py",

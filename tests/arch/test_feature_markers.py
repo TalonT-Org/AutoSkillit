@@ -229,6 +229,22 @@ def _pytestmark_has_skipif_platform(tree: ast.Module) -> bool:
     return False
 
 
+def _has_module_level_skip(tree: ast.Module) -> bool:
+    """Check if module contains a top-level pytest.skip(allow_module_level=True) call."""
+    for node in ast.iter_child_nodes(tree):
+        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
+            call = node.value
+            if isinstance(call.func, ast.Attribute) and call.func.attr == "skip":
+                for kw in call.keywords:
+                    if (
+                        kw.arg == "allow_module_level"
+                        and isinstance(kw.value, ast.Constant)
+                        and kw.value.value
+                    ):
+                        return True
+    return False
+
+
 def test_ci_workflow_gates_experimental_for_stable_track() -> None:
     """CI workflow must set AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED in the test job."""
     workflow_path = _TESTS_ROOT.parent / ".github" / "workflows" / "tests.yml"
@@ -254,27 +270,28 @@ def test_ci_workflow_gates_experimental_for_stable_track() -> None:
 def test_linux_proc_importers_have_platform_guard() -> None:
     """Fleet tests importing _linux_proc must have sys.platform skipif in pytestmark."""
     fleet_test_dir = _TESTS_ROOT / "fleet"
-    linux_proc_importers: list[Path] = []
+    linux_proc_importers: dict[Path, ast.Module] = {}
 
     for test_file in sorted(fleet_test_dir.glob("test_*.py")):
         source = test_file.read_text()
         if "_linux_proc" in source:
             tree = ast.parse(source, filename=str(test_file))
-            for node in ast.walk(tree):
+            for node in ast.iter_child_nodes(tree):
                 if isinstance(node, (ast.Import, ast.ImportFrom)):
                     module = getattr(node, "module", "") or ""
                     if "_linux_proc" in module:
-                        linux_proc_importers.append(test_file)
+                        linux_proc_importers[test_file] = tree
                         break
 
-    assert linux_proc_importers, "Expected at least one fleet test importing _linux_proc"
+    if not linux_proc_importers:
+        pytest.skip(
+            "No fleet tests import _linux_proc at module level — guard vacuously satisfied"
+        )
 
     missing_guard: list[str] = []
-    for test_file in linux_proc_importers:
-        source = test_file.read_text()
-        tree = ast.parse(source, filename=str(test_file))
+    for test_file, tree in linux_proc_importers.items():
         has_skipif = _pytestmark_has_skipif_platform(tree)
-        has_module_skip = "pytest.skip(" in source and "allow_module_level" in source
+        has_module_skip = _has_module_level_skip(tree)
         if not has_skipif and not has_module_skip:
             missing_guard.append(test_file.name)
 

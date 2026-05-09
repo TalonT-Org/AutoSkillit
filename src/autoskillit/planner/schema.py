@@ -254,9 +254,9 @@ def validate_wp_result(
         count = len(result.get("deliverables", []))
         lo, hi = DELIVERABLE_BOUNDS
         if count < lo:
-            raise ValueError(f"WP {wp_id} has {count} deliverables (must be {lo}–{hi})")
+            raise ValueError(f"WP {wp_id} has {count} deliverables (below {lo})")
         if not skip_upper_bound and count > hi:
-            raise ValueError(f"WP {wp_id} has {count} deliverables (must be {lo}–{hi})")
+            raise ValueError(f"WP {wp_id} has {count} deliverables (exceeds {hi})")
 
     result.setdefault("summary", "")
     result.setdefault("goal", "")

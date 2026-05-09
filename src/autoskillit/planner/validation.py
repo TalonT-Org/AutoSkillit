@@ -223,7 +223,7 @@ def _check_sizing_bounds(wp_results: dict[str, dict]) -> list[ValidationFinding]
         if count < lo:
             findings.append(
                 {
-                    "message": f"WP {wp_id} has {count} deliverables (must be {lo}–{hi})",
+                    "message": f"WP {wp_id} has {count} deliverables (below {lo})",
                     "severity": "error",
                     "check": "sizing_bounds",
                 }

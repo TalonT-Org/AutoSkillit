@@ -272,7 +272,6 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
     dispatch_names = [d.name for d in campaign.dispatches]
     assert dispatch_names == ["run-design", "run-implement", "run-review", "run-archive"]
 
-    # Track accumulated captures across dispatches
     accumulated: dict[str, str] = {}
 
     # Step 1: run-design
@@ -399,8 +398,11 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
     # Update accumulated captures
     state_files = list((tool_ctx.temp_dir / "dispatches").glob("*.json"))
     assert len(state_files) == 2
-    # Find most recent
-    impl_state = max(state_files, key=lambda f: f.stat().st_mtime)
+    impl_state = next(
+        f
+        for f in state_files
+        if json.loads(f.read_text()).get("campaign_name") == "research-implement"
+    )
     impl_data = json.loads(impl_state.read_text())
     accumulated.update(impl_data.get("captured_values", {}))
 
@@ -472,7 +474,11 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
 
     # Update accumulated captures
     state_files = list((tool_ctx.temp_dir / "dispatches").glob("*.json"))
-    review_state = max(state_files, key=lambda f: f.stat().st_mtime)
+    review_state = next(
+        f
+        for f in state_files
+        if json.loads(f.read_text()).get("campaign_name") == "research-review"
+    )
     review_data = json.loads(review_state.read_text())
     accumulated.update(review_data.get("captured_values", {}))
 

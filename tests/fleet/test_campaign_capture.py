@@ -548,11 +548,6 @@ async def test_unresolved_campaign_ref_in_ingredients_returns_fleet_error(tool_c
     assert "error" in result
 
 
-# ---------------------------------------------------------------------------
-# Capture completeness tests
-# ---------------------------------------------------------------------------
-
-
 def test_extract_captures_logs_warning_for_missing_spec_keys():
     """_extract_captures must log a WARNING for every capture spec key
     whose result field is absent from the payload, rather than silently skipping.
@@ -592,16 +587,3 @@ def test_extract_captures_raises_on_complete_capture_miss():
 
     with pytest.raises(CaptureCompletenessError):
         _extract_captures(capture_spec, payload)
-
-
-def test_extract_captures_missing_field_raises_completeness_error():
-    """When the only capture spec field is absent, CaptureCompletenessError is raised."""
-    import pytest
-
-    from autoskillit.fleet._api import CaptureCompletenessError, _extract_captures
-
-    with pytest.raises(CaptureCompletenessError):
-        _extract_captures(
-            {"missing_key": "${{ result.missing_key }}"},
-            {"other": "value"},
-        )

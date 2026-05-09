@@ -83,11 +83,6 @@ def test_food_truck_has_sentinel_stop_rule_skips_standard():
     assert found == []
 
 
-# ---------------------------------------------------------------------------
-# Severity-pinning contract test
-# ---------------------------------------------------------------------------
-
-
 def test_food_truck_has_sentinel_stop_severity_is_error():
     """Guard: food-truck-has-sentinel-stop must be ERROR, not WARNING."""
     from autoskillit.recipe.registry import _RULE_REGISTRY

@@ -1490,11 +1490,6 @@ def test_extract_sentinel_fields_handles_multiple_sentinels():
     assert fields == {"success", "alpha", "beta"}
 
 
-# ---------------------------------------------------------------------------
-# Severity-pinning contract tests
-# ---------------------------------------------------------------------------
-
-
 def test_dispatch_capture_field_in_sentinel_severity_is_error():
     """Guard: dispatch-capture-field-in-sentinel must be ERROR, not WARNING.
 

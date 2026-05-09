@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -723,3 +724,14 @@ class TestSessionIdPersistence:
         state = read_state(state_path)
         assert state is not None
         assert state.orchestrator_session_id == "reload-id-persist-xyz"
+
+
+class TestFleetSessionPromptPriorDispatchId:
+    async def test_build_fleet_campaign_prompt_accepts_prior_dispatch_id_parameter(
+        self,
+    ) -> None:
+        """_build_fleet_campaign_prompt must accept prior_dispatch_id parameter."""
+        from autoskillit.cli._prompts_campaign import _build_fleet_campaign_prompt
+
+        sig = inspect.signature(_build_fleet_campaign_prompt)
+        assert "prior_dispatch_id" in sig.parameters

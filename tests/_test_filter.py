@@ -609,6 +609,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             # file-level: fleet tests that import server tool handlers directly
             "fleet/test_pack_enforcement.py",
             "fleet/test_gate_state_persistence.py",
+            "fleet/test_dispatch_identity_continuity.py",
         }
     ),
     "cli": frozenset(

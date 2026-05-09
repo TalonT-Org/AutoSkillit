@@ -601,7 +601,7 @@ async def _run_dispatch(
                         if aid and aid != dispatch_id:
                             prior_ids.append(aid)
     except Exception:
-        pass
+        logger.warning("failed to collect prior dispatch_ids from state", exc_info=True)
 
     parsed = parse_l3_result_block(
         stdout=skill_result.result or "",

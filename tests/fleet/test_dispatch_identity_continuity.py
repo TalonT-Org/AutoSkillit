@@ -32,14 +32,3 @@ class TestDispatchFoodTruckPriorDispatchId:
 
         sig = inspect.signature(dispatch_food_truck)
         assert "prior_dispatch_id" in sig.parameters
-
-
-class TestFleetSessionPromptPriorDispatchId:
-    async def test_build_fleet_campaign_prompt_accepts_prior_dispatch_id_parameter(
-        self,
-    ) -> None:
-        """_build_fleet_campaign_prompt must accept prior_dispatch_id parameter."""
-        from autoskillit.cli._prompts_campaign import _build_fleet_campaign_prompt
-
-        sig = inspect.signature(_build_fleet_campaign_prompt)
-        assert "prior_dispatch_id" in sig.parameters

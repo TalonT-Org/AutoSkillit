@@ -711,3 +711,42 @@ def _check_review_loop_waypoint(ctx: ValidationContext) -> list[RuleFinding]:
             ),
         )
     ]
+
+
+@semantic_rule(
+    name="review-mode-reentry-waypoint-guard",
+    description=(
+        "review_pr must not be reachable from check_review_loop without "
+        "traversing annotate_pr_diff. Bypassing annotate_pr_diff prevents "
+        "review_mode from being recomputed on loop re-entry, causing mode "
+        "to remain 'local' permanently and no GitHub comments to be posted."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_review_mode_reentry_waypoint(ctx: ValidationContext) -> list[RuleFinding]:
+    steps = ctx.recipe.steps
+    if not all(k in steps for k in ("review_pr", "check_review_loop", "annotate_pr_diff")):
+        return []
+
+    reachable = bfs_reachable_without_barrier(
+        recipe=ctx.recipe,
+        start="check_review_loop",
+        barrier="annotate_pr_diff",
+    )
+
+    if "review_pr" not in reachable:
+        return []
+
+    return [
+        RuleFinding(
+            rule="review-mode-reentry-waypoint-guard",
+            severity=Severity.ERROR,
+            step_name="check_review_loop",
+            message=(
+                "review_pr is reachable from check_review_loop without crossing "
+                "annotate_pr_diff. All loop re-entry paths must traverse "
+                "annotate_pr_diff so review_mode is recomputed with the updated "
+                "review_loop_count on every iteration."
+            ),
+        )
+    ]

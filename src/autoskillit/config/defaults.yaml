@@ -130,7 +130,7 @@ ci:
   event: null     # Trigger event to filter CI runs, e.g. "push"
 
 review:
-  local_review_rounds: 3
+  local_review_rounds: 2
 
 subsets:
   disabled: []

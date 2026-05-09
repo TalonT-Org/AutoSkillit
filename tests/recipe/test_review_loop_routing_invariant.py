@@ -67,3 +67,26 @@ def test_check_review_loop_step_receives_local_review_rounds(recipe_name: str) -
     assert "local_review_rounds" in step.with_args, (
         f"[{recipe_name}] check_review_loop step missing local_review_rounds in with_args."
     )
+
+
+@pytest.mark.parametrize("recipe_name", REVIEW_LOOP_RECIPES)
+def test_review_pr_not_bfs_reachable_from_check_review_loop_without_annotate(
+    recipe_name: str,
+) -> None:
+    """BFS from check_review_loop must not reach review_pr without annotate_pr_diff.
+
+    The re-entry barrier ensures that every loop-back path from check_review_loop
+    to review_pr first crosses annotate_pr_diff, so review_mode is recomputed
+    with the updated review_loop_count on every iteration.
+    """
+    from autoskillit.recipe._analysis_bfs import bfs_reachable_without_barrier
+
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    reachable = bfs_reachable_without_barrier(
+        recipe=recipe, start="check_review_loop", barrier="annotate_pr_diff"
+    )
+    assert "review_pr" not in reachable, (
+        f"[{recipe_name}] review_pr BFS-reachable from check_review_loop "
+        f"without crossing annotate_pr_diff. review_mode is never recomputed "
+        f"on loop re-entry — mode graduation from local to github is broken."
+    )

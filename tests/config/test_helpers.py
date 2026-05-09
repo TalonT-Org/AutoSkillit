@@ -45,7 +45,7 @@ def test_resolve_ingredient_defaults_still_works_with_github_origin(tmp_path):
 
 
 def test_resolve_ingredient_defaults_includes_local_review_rounds(tmp_path):
-    """T2.3: resolve_ingredient_defaults includes local_review_rounds with default value 3."""
+    """T2.3: resolve_ingredient_defaults includes local_review_rounds with default value 2."""
     from autoskillit.config import resolve_ingredient_defaults
 
     repo = tmp_path / "repo"
@@ -57,4 +57,4 @@ def test_resolve_ingredient_defaults_includes_local_review_rounds(tmp_path):
     )
 
     defaults = resolve_ingredient_defaults(repo)
-    assert defaults.get("local_review_rounds") == "3"
+    assert defaults.get("local_review_rounds") == "2"

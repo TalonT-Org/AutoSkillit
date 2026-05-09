@@ -451,5 +451,39 @@ def _check_ingredient_type_default_invalid(ctx: ValidationContext) -> list[RuleF
                     ),
                 )
             )
-
     return findings
+
+
+@semantic_rule(
+    name="local-rounds-max-retries-alignment",
+    description=(
+        "local_review_rounds default must be less than review_max_retries default "
+        "for the local-to-github mode graduation to occur with default configuration."
+    ),
+    severity=Severity.WARNING,
+)
+def _check_local_rounds_alignment(ctx: ValidationContext) -> list[RuleFinding]:
+    ingredients = ctx.recipe.ingredients
+    local_rounds_ing = ingredients.get("local_review_rounds")
+    max_retries_ing = ingredients.get("review_max_retries")
+    if not local_rounds_ing or not max_retries_ing:
+        return []
+    try:
+        local_default = int(local_rounds_ing.default or "0")
+        max_default = int(max_retries_ing.default or "3")
+    except (ValueError, TypeError):
+        return []
+    if local_default == 0 or local_default < max_default:
+        return []
+    return [
+        RuleFinding(
+            rule="local-rounds-max-retries-alignment",
+            severity=Severity.WARNING,
+            step_name="(ingredients)",
+            message=(
+                f"local_review_rounds default ({local_default}) >= "
+                f"review_max_retries default ({max_default}). Mode will never "
+                f"transition from local to github with default configuration."
+            ),
+        )
+    ]

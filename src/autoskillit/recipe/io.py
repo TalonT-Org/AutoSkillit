@@ -51,6 +51,15 @@ def substitute_temp_placeholder(text: str, temp_dir_relpath: str) -> str:
     return text.replace(_TEMP_PLACEHOLDER, temp_dir_relpath)
 
 
+def _assert_no_raw_placeholders(text: str, *, context: str = "") -> None:
+    # Content-delivery boundary guard: raises if placeholder substitution was skipped.
+    if _TEMP_PLACEHOLDER in text:
+        raise ValueError(
+            f"Unresolved {_TEMP_PLACEHOLDER} in recipe content"
+            + (f" ({context})" if context else "")
+        )
+
+
 def _load_recipe_dict(
     yaml_path: Path,
     *,

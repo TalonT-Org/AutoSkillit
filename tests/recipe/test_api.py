@@ -253,6 +253,83 @@ def test_load_and_validate_cache_invalidated_on_dir_mtime_change(tmp_path, monke
     assert len(calls) == 2
 
 
+def test_load_and_validate_cache_key_includes_all_result_affecting_params(tmp_path, monkeypatch):
+    import inspect
+
+    import autoskillit.recipe._api as api_mod
+
+    # resolved_defaults affects result["ingredients_table"] but is intentionally excluded here.
+    RESULT_METADATA_ONLY_PARAMS: frozenset[str] = frozenset(
+        {
+            "recipe_info",
+            "recipe_list",
+            "resolved_defaults",
+            "lister",
+            "temp_dir",
+        }
+    )
+
+    sig = inspect.signature(api_mod.load_and_validate)
+    all_params = set(sig.parameters.keys())
+
+    # Find all params NOT in the metadata-only allowlist
+    result_affecting_params = all_params - RESULT_METADATA_ONLY_PARAMS
+
+    cache_snap: dict = {}
+    monkeypatch.setattr(api_mod, "_LOAD_CACHE", cache_snap)
+
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    (recipes_dir / "myrecipe.yaml").write_text(MINIMAL_RECIPE_YAML)
+
+    api_mod.load_and_validate("myrecipe", tmp_path)
+
+    assert cache_snap, "cache was never populated"
+    cache_key = next(iter(cache_snap.keys()))
+
+    # Verify each result-affecting param has a corresponding position in the cache key
+    param_to_key_index: dict[str, int] = {
+        "name": 0,
+        "temp_dir_relpath": 1,
+        "project_dir": 2,
+        "suppressed": 3,
+        "ingredient_overrides": 4,
+        "_exp_types_hash": 5,
+        "_user_exp_hash": 6,
+        "_method_traditions_hash": 7,
+        "_user_method_traditions_hash": 8,
+    }
+
+    missing_params: list[str] = []
+    for param in result_affecting_params:
+        if param not in param_to_key_index:
+            missing_params.append(param)
+
+    assert not missing_params, (
+        f"The following result-affecting parameters are not represented in the "
+        f"cache key construction: {missing_params}"
+    )
+
+    # Verify actual values at deterministic positions
+    assert cache_key[0] == "myrecipe", f"cache_key[0] expected 'myrecipe', got {cache_key[0]!r}"
+    assert cache_key[1] == ".autoskillit/temp", (
+        f"cache_key[1] expected default temp relpath, got {cache_key[1]!r}"
+    )
+    assert cache_key[2] == str(tmp_path), (
+        f"cache_key[2] expected str(project_dir), got {cache_key[2]!r}"
+    )
+    assert cache_key[3] == (), (
+        f"cache_key[3] expected empty suppressed tuple, got {cache_key[3]!r}"
+    )
+    assert cache_key[4] == (), (
+        f"cache_key[4] expected empty ingredient_overrides tuple, got {cache_key[4]!r}"
+    )
+    for idx in (5, 6, 7, 8):
+        assert isinstance(cache_key[idx], str), (
+            f"cache_key[{idx}] expected str hash, got {type(cache_key[idx])!r}"
+        )
+
+
 # ---------------------------------------------------------------------------
 # Stage timing test
 # ---------------------------------------------------------------------------

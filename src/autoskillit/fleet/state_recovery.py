@@ -34,6 +34,13 @@ _RETRIABLE_NON_SUCCESS = frozenset(
     }
 )
 
+_ALWAYS_BLOCKING_STATUSES = frozenset(
+    {
+        DispatchStatus.INTERRUPTED,
+        DispatchStatus.REFUSED,
+    }
+)
+
 
 def has_failed_dispatch(state_path: Path) -> bool:
     """Check whether any dispatch has a FAILURE status attributable to logic (not infrastructure).
@@ -73,7 +80,7 @@ def has_blocking_dispatch(state_path: Path) -> bool:
     if state is None:
         return False
     for d in state.dispatches:
-        if d.status in {DispatchStatus.INTERRUPTED, DispatchStatus.REFUSED}:
+        if d.status in _ALWAYS_BLOCKING_STATUSES:
             return True
         if d.status == DispatchStatus.FAILURE and d.reason not in _INFRASTRUCTURE_FAILURE_REASONS:
             return True
@@ -179,7 +186,7 @@ def resume_campaign_from_state(
 
         if continue_on_failure and reset_on_retry:
             for d in m.state.dispatches:
-                if d.status in {DispatchStatus.INTERRUPTED, DispatchStatus.REFUSED}:
+                if d.status in _ALWAYS_BLOCKING_STATUSES:
                     _clear_dispatch_for_retry(d)
                     m.mark_dirty()
 

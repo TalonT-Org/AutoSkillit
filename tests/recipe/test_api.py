@@ -254,21 +254,11 @@ def test_load_and_validate_cache_invalidated_on_dir_mtime_change(tmp_path, monke
 
 
 def test_load_and_validate_cache_key_includes_all_result_affecting_params(tmp_path, monkeypatch):
-    """Every load_and_validate parameter that affects the result must be in the cache key.
-
-    This is a structural test: it uses inspection to find parameters that affect
-    the result, then verifies the cache key construction includes all of them.
-    Metadata-only parameters (recipe_info, recipe_list) are intentionally excluded.
-    """
     import inspect
 
     import autoskillit.recipe._api as api_mod
 
-    # Parameters that affect the result but are NOT in the cache key (if any).
-    # These must remain stable across calls for the same cached result.
-    # Update this set when adding new result-affecting parameters.
-    # Note: resolved_defaults affects result["ingredients_table"] but is intentionally
-    # excluded from this test's scope (covers only result["content"] per the plan).
+    # resolved_defaults affects result["ingredients_table"] but is intentionally excluded here.
     RESULT_METADATA_ONLY_PARAMS: frozenset[str] = frozenset(
         {
             "recipe_info",
@@ -285,14 +275,7 @@ def test_load_and_validate_cache_key_includes_all_result_affecting_params(tmp_pa
     # Find all params NOT in the metadata-only allowlist
     result_affecting_params = all_params - RESULT_METADATA_ONLY_PARAMS
 
-    # Replace _LOAD_CACHE with a fresh dict to inspect stored keys after the call
     cache_snap: dict = {}
-
-    def capturing_new():
-        return cache_snap
-
-    original_cache = api_mod._LOAD_CACHE
-    api_mod._LOAD_CACHE = cache_snap
     monkeypatch.setattr(api_mod, "_LOAD_CACHE", cache_snap)
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
@@ -301,14 +284,10 @@ def test_load_and_validate_cache_key_includes_all_result_affecting_params(tmp_pa
 
     api_mod.load_and_validate("myrecipe", tmp_path)
 
-    api_mod._LOAD_CACHE = original_cache
-
     assert cache_snap, "cache was never populated"
     cache_key = next(iter(cache_snap.keys()))
 
     # Verify each result-affecting param has a corresponding position in the cache key
-    # The cache key order is: name, _temp_relpath, _pdir, suppressed, ingredient_overrides,
-    # _exp_types_hash, _user_exp_hash, _method_traditions_hash, _user_method_traditions_hash
     param_to_key_index: dict[str, int] = {
         "name": 0,
         "temp_dir_relpath": 1,

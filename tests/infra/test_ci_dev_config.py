@@ -385,8 +385,12 @@ class TestCIEnvVarIsolation:
 
         missing = []
         for var in sorted(ci_env_vars):
-            prefix = var.rsplit("__", 1)[0] + "__"
-            if var not in conftest_text and prefix not in conftest_text:
+            if "__" in var:
+                prefix = var.rsplit("__", 1)[0] + "__"
+                covered = var in conftest_text or prefix in conftest_text
+            else:
+                covered = var in conftest_text
+            if not covered:
                 missing.append(var)
 
         assert not missing, (

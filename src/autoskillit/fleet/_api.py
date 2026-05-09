@@ -73,7 +73,7 @@ def _extract_captures(
         else:
             logger.warning(
                 "capture_field_missing_from_payload",
-                capture_key=key,
+                capture_name=key,
                 expected_field=field_name,
                 available_fields=sorted(str(k) for k in payload.keys()),
             )

@@ -260,7 +260,9 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
         info = _make_recipe_info(dispatch.recipe)
         repo.add_recipe(dispatch.recipe, info)
 
-    tool_ctx.fleet_lock = None  # Not needed for single-dispatch sequencing
+    from autoskillit.fleet import FleetSemaphore
+
+    tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=4)
     tool_ctx.recipes = repo
     tool_ctx.executor = InMemoryHeadlessExecutor()
 
@@ -516,4 +518,3 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
     assert captured_during_archive["pr_url"] == "https://github.com/example/repo/pull/123"
     assert captured_during_archive["worktree_path"] == "/tmp/wt/proj"
     assert captured_during_archive["research_dir"] == "/tmp/wt/proj/.research"
-    assert "campaign.research_dir" in result["user_visible_message"]

@@ -73,7 +73,7 @@ class TestResumeWithoutPriorDispatchId:
             lambda **_: mock_parsed,
         )
         monkeypatch.setattr(
-            "autoskillit.fleet._api.classify_dispatch_outcome",
+            "autoskillit.fleet.classify_dispatch_outcome",
             lambda *a, **kw: (DispatchStatus.SUCCESS, None),
         )
 

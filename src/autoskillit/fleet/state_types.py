@@ -323,5 +323,6 @@ _ABANDON_REASONS: frozenset[str] = frozenset(
         RetryReason.THINKING_STALL,
         RetryReason.PATH_CONTAMINATION,
         RetryReason.CLONE_CONTAMINATION,
+        RetryReason.IDLE_STALL,
     }
 )

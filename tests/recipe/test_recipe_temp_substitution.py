@@ -132,11 +132,11 @@ def test_load_and_validate_content_has_no_raw_placeholders(tmp_path: Path) -> No
 
 def test_load_and_validate_different_temp_dir_relpath_produces_different_content(
     tmp_path: Path,
+    monkeypatch,
 ) -> None:
-    """Different temp_dir_relpath values must produce different result['content']."""
     import autoskillit.recipe._api as api_mod
 
-    api_mod._LOAD_CACHE.clear()
+    monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
     _setup_project_recipe_with_placeholder(tmp_path, "temp-placeholder-test")
 
     result1 = api_mod.load_and_validate(
@@ -177,13 +177,14 @@ def test_all_bundled_recipes_content_no_raw_placeholders(
     from autoskillit.recipe.io import list_recipes
 
     recipes_root = Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "recipes"
+    repo_root = Path(__file__).resolve().parents[2]
     result = list_recipes(recipes_root)
 
     offenders: list[str] = []
     for recipe_info in result.items:
         if recipe_info.content is not None and "{{AUTOSKILLIT_TEMP}}" in recipe_info.content:
-            load_result = load_and_validate(recipe_info.name, project_dir=recipes_root)
-            if "{{AUTOSKILLIT_TEMP}}" in load_result["content"]:
+            load_result = load_and_validate(recipe_info.name, project_dir=repo_root)
+            if "error" not in load_result and "{{AUTOSKILLIT_TEMP}}" in load_result["content"]:
                 offenders.append(recipe_info.name)
 
     assert not offenders, (

@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import ast
 import fcntl
+import io
 import threading
 from pathlib import Path
+from typing import IO, Any
 from unittest.mock import patch
 
 import pytest
@@ -32,6 +34,16 @@ from autoskillit.fleet import (
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
+_FCNTL_ALLOWED_RELATIVE_PATHS: frozenset[str] = frozenset(
+    {
+        "core/_plugin_cache.py",
+        "execution/session/_session_state.py",
+        "workspace/clone_registry.py",
+        "fleet/state.py",
+        "planner/merge.py",
+    }
+)
+
 _MUTATION_FUNCTIONS: dict[str, object] = {
     "mark_dispatch_running": mark_dispatch_running,
     "mark_dispatch_interrupted": mark_dispatch_interrupted,
@@ -50,53 +62,75 @@ _MUTATION_FUNCTIONS: dict[str, object] = {
 
 
 class TestFlockLockTarget:
-    def test_all_fleet_flock_callers_use_lock_sidecar(self) -> None:
-        """Every fcntl.flock call in fleet/ and cli/fleet/ must target the .lock sidecar.
+    def test_all_flock_callers_use_lock_sidecar(self) -> None:
+        """Every fcntl.flock call in the scan scope must target the .lock sidecar.
 
-        Uses AST to find all open() calls inside "with" statements and verifies
-        that any fcntl.flock() call inside a non-.lock opening is flagged.
+        Scans all open() calls (both with-statement and bare-assignment forms)
+        and os.open() calls within function bodies. If fcntl.flock appears in the
+        same function without the target path containing .lock, it is flagged.
+        planner/merge.py is excepted — it intentionally locks data files directly.
         """
         import autoskillit.fleet
 
         fleet_root = Path(autoskillit.fleet.__file__).parent
         cli_fleet_root = fleet_root.parent / "cli" / "fleet"
+        src_root = fleet_root.parent
+
+        FCNTL_ALLOWED_MODULES = {src_root / p for p in _FCNTL_ALLOWED_RELATIVE_PATHS}
+        FLOCK_DATA_FILE_EXCEPTIONS = {src_root / "planner" / "merge.py"}
+
+        scan_roots = [fleet_root, cli_fleet_root] + list(FCNTL_ALLOWED_MODULES)
 
         violations: list[tuple[str, str, int]] = []
 
-        for root in [fleet_root, cli_fleet_root]:
-            for py_file in root.rglob("*.py"):
-                try:
-                    content = py_file.read_text()
-                    tree = ast.parse(content, filename=str(py_file))
-                except SyntaxError:
+        def _is_open_call(call: ast.Call) -> bool:
+            return (isinstance(call.func, ast.Attribute) and call.func.attr == "open") or (
+                isinstance(call.func, ast.Name) and call.func.id == "open"
+            )
+
+        py_files: set[Path] = set()
+        for r in scan_roots:
+            if r.is_dir():
+                py_files.update(r.rglob("*.py"))
+            elif r.suffix == ".py":
+                py_files.add(r)
+        for py_file in py_files:
+            try:
+                content = py_file.read_text()
+                tree = ast.parse(content, filename=str(py_file))
+            except SyntaxError:
+                continue
+
+            for node in ast.walk(tree):
+                if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                if py_file in FLOCK_DATA_FILE_EXCEPTIONS:
                     continue
 
-                for node in ast.walk(tree):
-                    if not isinstance(node, ast.With):
+                open_calls: list[tuple[str, int]] = []
+                for child in ast.walk(node):
+                    if not isinstance(child, ast.Call):
                         continue
-                    for item in node.items:
-                        if not isinstance(item.context_expr, ast.Call):
-                            continue
-                        call = item.context_expr
-                        if not (
-                            isinstance(call.func, ast.Attribute)
-                            and call.func.attr == "open"
-                            and call.args
-                        ):
-                            continue
-                        arg_src = ast.unparse(call.args[0])
-                        if ".lock" in arg_src or "with_suffix('.lock')" in arg_src:
-                            continue
-                        # Non-.lock file opened — check for fcntl.flock inside
-                        for child in ast.walk(node):
-                            if (
-                                isinstance(child, ast.Call)
-                                and isinstance(child.func, ast.Attribute)
-                                and child.func.attr == "flock"
-                                and isinstance(child.func.value, ast.Name)
-                                and child.func.value.id == "fcntl"
-                            ):
-                                violations.append((str(py_file), arg_src, call.lineno))
+                    if _is_open_call(child) and child.args:
+                        open_calls.append((ast.unparse(child.args[0]), child.lineno))
+
+                for arg_src, lineno in open_calls:
+                    if (
+                        ".lock" in arg_src
+                        or "with_suffix('.lock')" in arg_src
+                        or "lock_path" in arg_src
+                    ):
+                        continue
+                    has_flock = any(
+                        isinstance(n, ast.Call)
+                        and isinstance(n.func, ast.Attribute)
+                        and n.func.attr == "flock"
+                        and isinstance(n.func.value, ast.Name)
+                        and n.func.value.id == "fcntl"
+                        for n in ast.walk(node)
+                    )
+                    if has_flock:
+                        violations.append((str(py_file), arg_src, lineno))
 
         assert not violations, (
             f"Found {len(violations)} flock call(s) targeting non-.lock file:\n"
@@ -223,3 +257,91 @@ class TestAppendAndCaptureAtomic:
             "Reader observed all_success=True with captured_values={} — "
             "CampaignStateMutator two-write TOCTOU window exists"
         )
+
+
+# -------------------------------------------------------------------
+# 1c. Runtime lock-target path verification
+# -------------------------------------------------------------------
+
+
+class TestFlockTargetPathVerification:
+    @pytest.mark.parametrize(
+        "fn_name,fn", list(_MUTATION_FUNCTIONS.items()), ids=list(_MUTATION_FUNCTIONS.keys())
+    )
+    def test_flock_fd_resolves_to_lock_sidecar(
+        self, tmp_path: Path, fn_name: str, fn: object
+    ) -> None:
+        """Every fd passed to fcntl.flock must correspond to a .lock sidecar file.
+
+        Patches builtins.open to record fileno→path mappings, then cross-references
+        each fd seen by flock against those mappings to assert the locked file
+        is the .lock sidecar, not the state JSON directly.
+        """
+        import builtins
+
+        sp = tmp_path / "state.json"
+        write_initial_state(sp, "cid", "camp", "/m.yaml", [DispatchRecord(name="d1")])
+
+        fd_to_path: dict[int, str] = {}
+        original_open = builtins.open
+
+        def tracking_open(*args: object, **kwargs: object) -> object:
+            result = original_open(*args, **kwargs)  # type: ignore[arg-type]
+            if hasattr(result, "fileno"):
+                try:
+                    fd = result.fileno()
+                    path_arg = args[0] if args else kwargs.get("file", "")
+                    fd_to_path[fd] = str(path_arg)
+                except (io.UnsupportedOperation, OSError):
+                    pass
+            return result
+
+        flock_calls: list[tuple[int, int]] = []
+        original_flock = fcntl.flock
+
+        def tracking_flock(fd: int | IO[Any], op: int) -> None:
+            actual_fd = fd.fileno() if hasattr(fd, "fileno") else fd  # type: ignore[union-attr]
+            flock_calls.append((actual_fd, op))  # type: ignore[arg-type]
+            return original_flock(fd, op)
+
+        if fn_name in ("mark_dispatch_interrupted", "mark_dispatch_resumable"):
+            import json
+
+            raw = json.loads(sp.read_text())
+            raw["dispatches"][0]["status"] = "running"
+            sp.write_text(json.dumps(raw))
+
+        with (
+            patch.object(builtins, "open", side_effect=tracking_open),
+            patch("autoskillit.fleet.state.fcntl.flock", side_effect=tracking_flock),
+        ):
+            if fn_name == "mark_dispatch_running":
+                fn(sp, "d1", dispatch_id="x", dispatched_pid=42)  # type: ignore[operator]
+            elif fn_name == "mark_dispatch_interrupted":
+                fn(sp, "d1", reason="test")  # type: ignore[operator]
+            elif fn_name == "mark_dispatch_resumable":
+                fn(sp, "d1", sidecar_path="/tmp/sidecar")  # type: ignore[operator]
+            elif fn_name == "append_dispatch_record":
+                fn(sp, DispatchRecord(name="d1", status=DispatchStatus.SUCCESS))  # type: ignore[operator]
+            elif fn_name == "write_captured_values":
+                fn(sp, {"key": "val"})  # type: ignore[operator]
+            elif fn_name == "reset_blocking_dispatch":
+                append_dispatch_record(
+                    sp, DispatchRecord(name="d1", status=DispatchStatus.FAILURE)
+                )
+                flock_calls.clear()
+                fd_to_path.clear()
+                fn(sp, "d1")  # type: ignore[operator]
+            elif fn_name == "update_orchestrator_session_id":
+                fn(sp, "sess-123")  # type: ignore[operator]
+            elif fn_name == "upsert_dispatch_record_by_name":
+                fn(sp, DispatchRecord(name="d1", status=DispatchStatus.SUCCESS))  # type: ignore[operator]
+
+        for fd, op in flock_calls:
+            if op == fcntl.LOCK_UN:
+                continue
+            path = fd_to_path.get(fd, "<untracked>")
+            assert path.endswith(".lock"), (
+                f"{fn_name}: flock fd={fd} resolves to {path!r}"
+                " ('<untracked>' means fd was not recorded), expected .lock sidecar"
+            )

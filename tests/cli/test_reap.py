@@ -210,8 +210,8 @@ class TestReap:
 
         assert sp.read_text() == original_text
 
-    def test_reap_concurrent_flock(self, tmp_path: Path) -> None:
-        """Two concurrent reap calls — second sees terminal states and skips cleanly."""
+    def test_reap_sequential_idempotency(self, tmp_path: Path) -> None:
+        """Two sequential reap calls — second sees terminal states and skips cleanly."""
         sp = _make_running_state(tmp_path, dispatched_pid=12345)
 
         with (

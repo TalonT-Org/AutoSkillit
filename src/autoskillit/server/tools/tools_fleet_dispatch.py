@@ -146,7 +146,12 @@ async def dispatch_food_truck(
 
             campaign_sp = Path(campaign_state_path_str)
             if dispatch_name:
-                reset_blocking_dispatch(campaign_sp, dispatch_name)
+                if not reset_blocking_dispatch(campaign_sp, dispatch_name):
+                    logger.warning(
+                        "reset_blocking_dispatch: dispatch %r not found in a blocking state"
+                        " — campaign block may originate from a different dispatch",
+                        dispatch_name,
+                    )
             if has_blocking_dispatch(campaign_sp):
                 return fleet_error(
                     FleetErrorCode.FLEET_CAMPAIGN_HALTED,

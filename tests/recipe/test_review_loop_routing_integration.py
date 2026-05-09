@@ -184,11 +184,10 @@ def test_review_loop_routes_to_annotate_pr_diff_when_had_blocking_and_not_max_ex
 
 @pytest.mark.parametrize("recipe_name", RECIPE_NAMES)
 def test_review_mode_transitions_from_local_to_github(recipe_name: str) -> None:
-    """Full cycle: annotate_pr_diff must be re-invoked on every loop iteration.
+    """Structural guard: check_review_loop must route back to annotate_pr_diff.
 
-    Traces the routing graph through 4 iterations with local_review_rounds=3:
-    - Iterations 0-2: annotate_pr_diff returns review_mode=local
-    - Iteration 3: annotate_pr_diff returns review_mode=github
+    Verifies that a conditional route to annotate_pr_diff exists in check_review_loop
+    so review_mode is recomputed on every loop re-entry (default local_review_rounds=2).
 
     This test would have caught #2196 (counter bypass) and #2288 (routing bypass).
     """

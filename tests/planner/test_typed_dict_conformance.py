@@ -159,13 +159,34 @@ def test_validate_wp_result_accepts_empty_deliverables_with_allow_stub() -> None
     assert result["deliverables"] == []
 
 
-def test_validate_wp_result_rejects_too_many_deliverables() -> None:
+def test_validate_wp_result_warns_too_many_deliverables() -> None:
     _, hi = DELIVERABLE_BOUNDS
-    with pytest.raises(ValueError, match=f"has {hi + 1} deliverables"):
+    with pytest.warns(UserWarning, match=f"has {hi + 1} deliverables"):
         validate_wp_result(
             {
                 "id": "P1-A1-WP1",
                 "name": "WP",
                 "deliverables": [f"f{i}.py" for i in range(hi + 1)],
             }
+        )
+
+
+def test_validate_wp_result_skips_upper_bound_when_requested() -> None:
+    _, hi = DELIVERABLE_BOUNDS
+    result = validate_wp_result(
+        {
+            "id": "P1-A1-WP1",
+            "name": "WP",
+            "deliverables": [f"f{i}.py" for i in range(hi + 2)],
+        },
+        skip_upper_bound=True,
+    )
+    assert len(result["deliverables"]) == hi + 2
+
+
+def test_validate_wp_result_enforces_lower_bound_with_skip_upper_bound() -> None:
+    with pytest.raises(ValueError, match="has 0 deliverables"):
+        validate_wp_result(
+            {"id": "P1-A1-WP1", "name": "WP", "deliverables": []},
+            skip_upper_bound=True,
         )

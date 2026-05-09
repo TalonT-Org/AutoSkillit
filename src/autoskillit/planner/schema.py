@@ -232,7 +232,9 @@ def validate_assignment_result(data: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def validate_wp_result(data: dict[str, Any], *, allow_stub: bool = False) -> dict[str, Any]:
+def validate_wp_result(
+    data: dict[str, Any], *, allow_stub: bool = False, skip_upper_bound: bool = False
+) -> dict[str, Any]:
     missing = WP_REQUIRED_KEYS - data.keys()
     if missing:
         raise ValueError(f"WP result missing required keys: {sorted(missing)}")
@@ -251,8 +253,13 @@ def validate_wp_result(data: dict[str, Any], *, allow_stub: bool = False) -> dic
     if not allow_stub:
         count = len(result.get("deliverables", []))
         lo, hi = DELIVERABLE_BOUNDS
-        if not (lo <= count <= hi):
-            raise ValueError(f"WP {wp_id} has {count} deliverables (must be {lo}–{hi})")
+        if count < lo:
+            raise ValueError(f"WP {wp_id} has {count} deliverables (below {lo})")
+        if not skip_upper_bound and count > hi:
+            warnings.warn(
+                f"WP {wp_id} has {count} deliverables (exceeds {hi})",
+                stacklevel=2,
+            )
 
     result.setdefault("summary", "")
     result.setdefault("goal", "")

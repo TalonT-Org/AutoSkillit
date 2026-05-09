@@ -170,17 +170,16 @@ async def execute_dispatch(
     Returns DispatchOutcome (DispatchCompleted | DispatchRejected).
     """
     effective_name = dispatch_name or recipe
+    from autoskillit.fleet.state import (  # noqa: PLC0415
+        DispatchRecord,
+        DispatchStatus,
+        upsert_dispatch_record_by_name,
+    )
 
     def _reject(error_code: FleetErrorCode, message: str, **kwargs: Any) -> DispatchRejected:
         rejection = DispatchRejected(error_code=error_code, message=message, **kwargs)
         if campaign_state_path is not None:
             try:
-                from autoskillit.fleet.state import (
-                    DispatchRecord,
-                    DispatchStatus,
-                    upsert_dispatch_record_by_name,
-                )
-
                 upsert_dispatch_record_by_name(
                     campaign_state_path,
                     DispatchRecord(
@@ -467,7 +466,6 @@ async def _run_dispatch(
 
     dispatch_sidecar_path = str(compute_sidecar_path(dispatch_id, tool_ctx.project_dir))
 
-    campaign_id = tool_ctx.kitchen_id
     prompt = prompt_builder(
         recipe=recipe,
         task=task,
@@ -478,18 +476,9 @@ async def _run_dispatch(
     )
 
     if tool_ctx.executor is None:
-        append_dispatch_record(
-            state_path,
-            DispatchRecord(
-                name=effective_name,
-                status=DispatchStatus.REFUSED,
-                reason=FleetErrorCode.FLEET_MANIFEST_MISSING,
-            ),
-        )
-        return DispatchRejected(
-            error_code=FleetErrorCode.FLEET_MANIFEST_MISSING,
-            message="Executor not configured.",
-            dispatch_id=dispatch_id,
+        return _reject_with_state(
+            FleetErrorCode.FLEET_MANIFEST_MISSING,
+            "Executor not configured.",
         )
 
     started_at = time.time()

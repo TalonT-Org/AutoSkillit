@@ -237,11 +237,11 @@ class TestReap:
             dispatched_create_time=1000000.5,
         )
         with (
-            patch("psutil.pid_exists", return_value=True),
+            patch("autoskillit.cli.fleet._fleet_lifecycle.psutil.pid_exists", return_value=True),
             patch("autoskillit.execution.read_starttime_ticks", return_value=None),
             patch("autoskillit.execution.read_boot_id", return_value=BOOT_ID),
             patch("autoskillit.execution.kill_process_tree") as mock_kill,
-            patch("psutil.Process") as mock_proc_cls,
+            patch("autoskillit.cli.fleet._fleet_lifecycle.psutil.Process") as mock_proc_cls,
         ):
             mock_proc_cls.return_value.create_time.return_value = 1000000.5
             _reap(sp)
@@ -259,11 +259,11 @@ class TestReap:
             dispatched_create_time=1000000.5,
         )
         with (
-            patch("psutil.pid_exists", return_value=True),
+            patch("autoskillit.cli.fleet._fleet_lifecycle.psutil.pid_exists", return_value=True),
             patch("autoskillit.execution.read_starttime_ticks", return_value=None),
             patch("autoskillit.execution.read_boot_id", return_value=BOOT_ID),
             patch("autoskillit.execution.kill_process_tree") as mock_kill,
-            patch("psutil.Process") as mock_proc_cls,
+            patch("autoskillit.cli.fleet._fleet_lifecycle.psutil.Process") as mock_proc_cls,
         ):
             mock_proc_cls.return_value.create_time.return_value = 9999999.0
             _reap(sp)
@@ -281,7 +281,7 @@ class TestReap:
             dispatched_create_time=0.0,
         )
         with (
-            patch("psutil.pid_exists", return_value=True),
+            patch("autoskillit.cli.fleet._fleet_lifecycle.psutil.pid_exists", return_value=True),
             patch("autoskillit.execution.read_starttime_ticks", return_value=None),
             patch("autoskillit.execution.read_boot_id", return_value=BOOT_ID),
             patch("autoskillit.execution.kill_process_tree") as mock_kill,
@@ -301,12 +301,13 @@ class TestReap:
             dispatched_create_time=1000000.5,
         )
         with (
-            patch("psutil.pid_exists", return_value=True),
+            patch("autoskillit.cli.fleet._fleet_lifecycle.psutil.pid_exists", return_value=True),
             patch("autoskillit.execution.read_starttime_ticks", return_value=None),
             patch("autoskillit.execution.read_boot_id", return_value=BOOT_ID),
             patch("autoskillit.execution.kill_process_tree") as mock_kill,
-            patch("psutil.Process", side_effect=psutil.NoSuchProcess(12345)),
+            patch("autoskillit.cli.fleet._fleet_lifecycle.psutil.Process") as mock_proc_cls,
         ):
+            mock_proc_cls.return_value.create_time.side_effect = psutil.NoSuchProcess(12345)
             _reap(sp)
 
         mock_kill.assert_not_called()

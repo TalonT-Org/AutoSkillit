@@ -1499,7 +1499,10 @@ def test_dispatch_capture_field_in_sentinel_severity_is_error():
     """
     from autoskillit.recipe.registry import _RULE_REGISTRY
 
-    rule = next(r for r in _RULE_REGISTRY if r.name == "dispatch-capture-field-in-sentinel")
+    rule = next(
+        (r for r in _RULE_REGISTRY if r.name == "dispatch-capture-field-in-sentinel"), None
+    )
+    assert rule is not None, "Rule 'dispatch-capture-field-in-sentinel' not found in registry"
     assert rule.severity == Severity.ERROR
 
 
@@ -1507,7 +1510,10 @@ def test_dispatch_capture_field_in_all_sentinels_severity_is_error():
     """Guard: dispatch-capture-field-in-all-sentinels must be ERROR, not WARNING."""
     from autoskillit.recipe.registry import _RULE_REGISTRY
 
-    rule = next(r for r in _RULE_REGISTRY if r.name == "dispatch-capture-field-in-all-sentinels")
+    rule = next(
+        (r for r in _RULE_REGISTRY if r.name == "dispatch-capture-field-in-all-sentinels"), None
+    )
+    assert rule is not None, "Rule 'dispatch-capture-field-in-all-sentinels' not found in registry"
     assert rule.severity == Severity.ERROR
 
 

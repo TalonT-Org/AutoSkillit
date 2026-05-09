@@ -87,5 +87,6 @@ def test_food_truck_has_sentinel_stop_severity_is_error():
     """Guard: food-truck-has-sentinel-stop must be ERROR, not WARNING."""
     from autoskillit.recipe.registry import _RULE_REGISTRY
 
-    rule = next(r for r in _RULE_REGISTRY if r.name == "food-truck-has-sentinel-stop")
+    rule = next((r for r in _RULE_REGISTRY if r.name == "food-truck-has-sentinel-stop"), None)
+    assert rule is not None, "Rule 'food-truck-has-sentinel-stop' not found in registry"
     assert rule.severity == Severity.ERROR

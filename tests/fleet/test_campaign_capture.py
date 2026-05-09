@@ -565,7 +565,9 @@ def test_extract_captures_logs_warning_for_missing_spec_keys():
 
     assert "pr_url" in result
     assert "report_path" not in result
-    assert any(entry.get("expected_field") == "report_path" for entry in logs)
+    assert any(
+        e.get("log_level") == "warning" and e.get("expected_field") == "report_path" for e in logs
+    )
 
 
 def test_extract_captures_raises_on_complete_capture_miss():

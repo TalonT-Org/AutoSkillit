@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from pathlib import Path
 
@@ -373,10 +374,6 @@ class TestDispatchRecordToDict:
 
     def test_to_dict_keys_match_dataclass_fields(self) -> None:
         """to_dict() must emit exactly the dataclass field names."""
-        import dataclasses
-
-        from autoskillit.fleet import DispatchRecord
-
         record = DispatchRecord(name="test")
         actual = set(record.to_dict().keys())
         expected = {f.name for f in dataclasses.fields(DispatchRecord)}

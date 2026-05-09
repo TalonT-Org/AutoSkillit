@@ -509,7 +509,7 @@ class TestTimedOutSessionPreservesState:
             pid=12345,
         )
         sr = _build_skill_result(sub_result)
-        assert sr.cli_subtype == "timeout"
+        assert sr.cli_subtype == CliSubtype.TIMEOUT
         assert sr.subtype == "timeout"
         assert sr.write_call_count == 1
 

@@ -255,6 +255,7 @@ class TestTimeoutPath:
                 _DEFAULT_SKILL_RESULT,
                 subtype="timeout",
                 success=False,
+                cli_subtype=CliSubtype.TIMEOUT,
             )
         )
 
@@ -268,11 +269,13 @@ class TestTimeoutPath:
             _recording_parse,
         )
 
-        await _run(tool_ctx)
+        result = await _run(tool_ctx)
         assert not parse_calls, (
             "parse_l3_result_block should not be called for timeout subtype "
             f"(timeout precheck should short-circuit). Got {len(parse_calls)} calls."
         )
+        assert result["success"] is False
+        assert result["reason"] == "fleet_l3_timeout"
 
 
 class TestNoSentinelPath:

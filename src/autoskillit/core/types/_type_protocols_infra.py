@@ -65,6 +65,9 @@ class FleetLock(Protocol):
     @property
     def max_concurrent(self) -> int: ...
 
+    @property
+    def timeout(self) -> float | None: ...
+
 
 @runtime_checkable
 class QuotaRefreshTask(Protocol):

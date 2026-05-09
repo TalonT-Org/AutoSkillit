@@ -46,6 +46,7 @@ class TestFleetErrorCodeEnum:
             "fleet_gate_no_campaign",
             "fleet_missing_ingredient",
             "fleet_campaign_halted",
+            "fleet_acquire_timeout",
         }
         assert {c.value for c in FleetErrorCode} == expected_values
 

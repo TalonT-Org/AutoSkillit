@@ -77,3 +77,44 @@ class TestFleetSemaphoreConstructorGuard:
     def test_max_concurrent_negative_raises(self) -> None:
         with pytest.raises(ValueError):
             FleetSemaphore(max_concurrent=-1)
+
+
+@pytest.mark.anyio
+async def test_fleet_semaphore_acquire_raises_timeout():
+    """acquire() raises TimeoutError when timeout expires."""
+    s = FleetSemaphore(max_concurrent=1, timeout=0.05)
+    await s.acquire()
+    with pytest.raises(TimeoutError):
+        await s.acquire()
+
+
+@pytest.mark.anyio
+async def test_fleet_semaphore_acquire_succeeds_within_timeout():
+    """acquire() succeeds when slot becomes available before timeout."""
+    import asyncio
+
+    s = FleetSemaphore(max_concurrent=1, timeout=5.0)
+    await s.acquire()
+
+    async def release_soon():
+        await asyncio.sleep(0.05)
+        s.release()
+
+    task = asyncio.create_task(release_soon())
+    try:
+        await s.acquire()
+        assert s.active_count == 1
+    finally:
+        if not task.done():
+            task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+
+@pytest.mark.anyio
+async def test_fleet_semaphore_no_timeout_is_default():
+    """timeout=None means no timeout (backward compat)."""
+    s = FleetSemaphore(max_concurrent=1)
+    assert s.timeout is None

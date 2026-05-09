@@ -82,6 +82,7 @@ def write_initial_state(
     campaign_name: str,
     manifest_path: str,
     dispatches: list[DispatchRecord],
+    recipe_snapshot: dict[str, Any] | None = None,
 ) -> None:
     """Create the campaign state file with all dispatches in pending status.
 
@@ -93,6 +94,7 @@ def write_initial_state(
         "manifest_path": manifest_path,
         "started_at": time.time(),
         "dispatches": [d.to_dict() for d in dispatches],
+        "recipe_snapshot": recipe_snapshot or {},
     }
     write_versioned_json(state_path, payload, schema_version=FLEET_STATE_SCHEMA_VERSION)
 
@@ -100,6 +102,20 @@ def write_initial_state(
 def _clear_dispatch_for_retry(d: DispatchRecord) -> None:
     """Clear a dispatch record for retry."""
     _validate_transition(d.status, DispatchStatus.PENDING, d.name)
+    d.attempt_history.append(
+        {
+            "status": str(d.status),
+            "dispatch_id": d.dispatch_id,
+            "dispatched_session_id": d.dispatched_session_id,
+            "dispatched_pid": d.dispatched_pid,
+            "reason": d.reason,
+            "kill_reason": d.kill_reason,
+            "infra_exit_category": d.infra_exit_category,
+            "started_at": d.started_at,
+            "ended_at": d.ended_at,
+            "token_usage": dict(d.token_usage) if d.token_usage is not None else {},
+        }
+    )
     d.status = DispatchStatus.PENDING
     d.reason = ""
     d.dispatch_id = ""
@@ -135,15 +151,32 @@ def reset_failed_dispatch(state_path: Path, dispatch_name: str) -> bool:
         return False
 
 
+_LEGACY_SCHEMA_VERSIONS = frozenset({4})
+
+
+def _read_raw_json(state_path: Path) -> dict[str, Any] | None:
+    import json as _json
+
+    try:
+        raw = _json.loads(state_path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, _json.JSONDecodeError, OSError):
+        return None
+    return raw if isinstance(raw, dict) else None
+
+
 def read_state(state_path: Path) -> CampaignState | None:
     """Load campaign state from disk.
 
     Returns None on missing file, malformed JSON, or schema mismatch.
+    Accepts the current schema version and legacy versions in _LEGACY_SCHEMA_VERSIONS.
     Never raises.
     """
     data = read_versioned_json(state_path, FLEET_STATE_SCHEMA_VERSION, logger=logger)
     if data is None:
-        return None
+        raw = _read_raw_json(state_path)
+        if raw is None or raw.get("schema_version") not in _LEGACY_SCHEMA_VERSIONS:
+            return None
+        data = raw
     try:
         dispatches = [DispatchRecord.from_dict(d) for d in data["dispatches"]]
         return CampaignState(
@@ -154,6 +187,8 @@ def read_state(state_path: Path) -> CampaignState | None:
             dispatches=dispatches,
             captured_values=data.get("captured_values", {}),
             orchestrator_session_id=data.get("orchestrator_session_id") or "",
+            ended_at=data.get("ended_at", 0.0),
+            recipe_snapshot=data.get("recipe_snapshot", {}),
         )
     except (KeyError, ValueError, TypeError) as exc:
         logger.warning("read_state_corrupt_payload", path=str(state_path), exc=str(exc))
@@ -179,6 +214,10 @@ class CampaignStateMutator:
         _resume_lock.acquire()
         try:
             self._lock_path.parent.mkdir(parents=True, exist_ok=True)
+            # Lock files are intentionally not deleted after use. Safe cleanup after
+            # fcntl release requires inode-comparison to avoid a TOCTOU race; the
+            # files are empty and bounded to one per state file, so accumulation cost
+            # is negligible compared to the complexity of safe deletion.
             fh = open(self._lock_path, "wb")
             try:
                 fcntl.flock(fh, fcntl.LOCK_EX)
@@ -239,6 +278,8 @@ def _write_state(state_path: Path, state: CampaignState) -> None:
         "dispatches": [d.to_dict() for d in state.dispatches],
         "captured_values": state.captured_values,
         "orchestrator_session_id": state.orchestrator_session_id,
+        "ended_at": state.ended_at,
+        "recipe_snapshot": state.recipe_snapshot,
     }
     write_versioned_json(state_path, payload, schema_version=FLEET_STATE_SCHEMA_VERSION)
 
@@ -325,6 +366,8 @@ def append_dispatch_record(
 
     If a dispatch with the same name exists, it is replaced in-place.
     Otherwise the record is appended to the end.
+
+    Thread-safe: uses _resume_lock + fcntl.LOCK_EX.
     """
     with CampaignStateMutator(state_path) as m:
         if m.state is None:
@@ -333,9 +376,15 @@ def append_dispatch_record(
             if d.name == record.name:
                 _validate_transition(d.status, record.status, d.name)
                 m.state.dispatches[i] = record
-                m.mark_dirty()
-                return
-        m.state.dispatches.append(record)
+                break
+        else:
+            m.state.dispatches.append(record)
+        if (
+            m.state.ended_at == 0.0
+            and m.state.dispatches
+            and all(d.status in TERMINAL_DISPATCH_STATUSES for d in m.state.dispatches)
+        ):
+            m.state.ended_at = time.time()
         m.mark_dirty()
 
 

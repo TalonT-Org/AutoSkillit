@@ -65,8 +65,8 @@ class TestDispatchRecordSchemaV2:
         assert dispatch_raw["dispatched_starttime_ticks"] == 42
         assert dispatch_raw["dispatched_boot_id"] == "abc-boot"
 
-    def test_schema_version_is_4(self) -> None:
-        assert FLEET_STATE_SCHEMA_VERSION == 4
+    def test_schema_version_is_5(self) -> None:
+        assert FLEET_STATE_SCHEMA_VERSION == 5
 
     def test_read_state_returns_none_on_version_mismatch(self, tmp_path: Path) -> None:
         """read_state returns None when schema_version is stale (v1)."""
@@ -339,6 +339,7 @@ class TestDispatchRecordToDict:
             "started_at",
             "ended_at",
             "sidecar_path",
+            "attempt_history",
         }
 
     def test_dispatch_record_to_dict_token_usage_is_shallow_copy(self) -> None:
@@ -425,3 +426,27 @@ class TestDispatchRecordSchemaV3:
         sp.write_text(json.dumps(v1_payload))
         state = read_state(sp)
         assert state is None
+
+
+class TestAttemptHistoryFields:
+    def test_attempt_history_in_to_dict(self) -> None:
+        """to_dict includes attempt_history."""
+        d = DispatchRecord(
+            name="d1", attempt_history=[{"dispatch_id": "old", "status": "failure"}]
+        )
+        result = d.to_dict()
+        assert "attempt_history" in result
+        assert result["attempt_history"] == [{"dispatch_id": "old", "status": "failure"}]
+
+    def test_attempt_history_from_dict_missing_defaults_empty(self) -> None:
+        """from_dict handles missing attempt_history (v4 compat)."""
+        d = DispatchRecord.from_dict({"name": "d1"})
+        assert d.attempt_history == []
+
+    def test_attempt_history_round_trips_through_to_dict(self) -> None:
+        """attempt_history survives to_dict round-trip."""
+        d = DispatchRecord(
+            name="d1", attempt_history=[{"dispatch_id": "attempt-1", "status": "failure"}]
+        )
+        roundtripped = DispatchRecord.from_dict(d.to_dict())
+        assert roundtripped.attempt_history == [{"dispatch_id": "attempt-1", "status": "failure"}]

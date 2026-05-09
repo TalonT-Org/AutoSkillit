@@ -49,7 +49,7 @@ class TestInitialState:
 
         state = read_state(sp)
         assert state is not None
-        assert state.schema_version == 4
+        assert state.schema_version == 5
         assert state.campaign_id == "cid-1"
         assert state.campaign_name == "my-campaign"
         assert state.manifest_path == "/m.yaml"
@@ -1115,7 +1115,7 @@ class TestWriteStateSchemaVersionPinning:
         assert raw["schema_version"] == FLEET_STATE_SCHEMA_VERSION
 
     def test_round_trip_version_upgrade(self, tmp_path: Path) -> None:
-        """A v4 state file written back after mutation stays v4."""
+        """A v5 state file written back after mutation stays v5."""
         sp = _state_path(tmp_path)
         write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("a"))
         state = read_state(sp)
@@ -1214,3 +1214,93 @@ class TestReadAllCampaignCapturesSchemaValidation:
         )
         result = read_all_campaign_captures(dispatches_dir, "cid-current")
         assert result == {"key": "value"}
+
+
+class TestCampaignEndedAt:
+    def test_campaign_ended_at_defaults_to_zero(self, tmp_path: Path) -> None:
+        """CampaignState.ended_at defaults to 0.0 on fresh state file."""
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("d1"))
+        state = read_state(sp)
+        assert state is not None
+        assert state.ended_at == 0.0
+
+    def test_campaign_ended_at_round_trips(self, tmp_path: Path) -> None:
+        """ended_at persists through write/read cycle."""
+        from autoskillit.fleet.state import _write_state
+
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("d1"))
+        state = read_state(sp)
+        assert state is not None
+        state.ended_at = 1234567890.0
+        _write_state(sp, state)
+        reloaded = read_state(sp)
+        assert reloaded is not None
+        assert reloaded.ended_at == 1234567890.0
+
+    def test_campaign_ended_at_set_when_all_dispatches_terminal(self, tmp_path: Path) -> None:
+        """ended_at is auto-set when append_dispatch_record makes all dispatches terminal."""
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("d1"))
+        append_dispatch_record(sp, DispatchRecord(name="d1", status=DispatchStatus.SUCCESS))
+        state = read_state(sp)
+        assert state is not None
+        assert state.ended_at > 0.0
+
+    def test_campaign_ended_at_not_set_when_pending_remains(self, tmp_path: Path) -> None:
+        """ended_at stays 0.0 when non-terminal dispatches remain."""
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("d1", "d2"))
+        append_dispatch_record(sp, DispatchRecord(name="d1", status=DispatchStatus.SUCCESS))
+        state = read_state(sp)
+        assert state is not None
+        assert state.ended_at == 0.0
+
+
+class TestRecipeSnapshot:
+    def test_recipe_snapshot_defaults_to_empty(self, tmp_path: Path) -> None:
+        """recipe_snapshot defaults to {} on state files without it."""
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("d1"))
+        state = read_state(sp)
+        assert state is not None
+        assert state.recipe_snapshot == {}
+
+    def test_recipe_snapshot_round_trips(self, tmp_path: Path) -> None:
+        """recipe_snapshot is written and read back faithfully."""
+        sp = _state_path(tmp_path)
+        snapshot = {
+            "recipe_name": "fix-bugs",
+            "content_hash": "sha256:abc123",
+            "effective_ingredients": {"task": "fix issue #42"},
+        }
+        write_initial_state(
+            sp, "cid", "camp", "/m.yaml", _make_dispatches("d1"), recipe_snapshot=snapshot
+        )
+        state = read_state(sp)
+        assert state is not None
+        assert state.recipe_snapshot == snapshot
+
+
+class TestV4BackwardCompat:
+    def test_v4_state_file_loads_with_defaults(self, tmp_path: Path) -> None:
+        """State file without new fields (v4) loads with correct defaults."""
+        sp = _state_path(tmp_path)
+        sp.parent.mkdir(parents=True, exist_ok=True)
+        v4_data = {
+            "schema_version": 4,
+            "campaign_id": "cid",
+            "campaign_name": "camp",
+            "manifest_path": "/m.yaml",
+            "started_at": 1000.0,
+            "dispatches": [{"name": "d1", "status": "pending"}],
+            "captured_values": {},
+            "orchestrator_session_id": "",
+        }
+        sp.write_text(json.dumps(v4_data))
+        state = read_state(sp)
+        assert state is not None
+        assert state.ended_at == 0.0
+        assert state.recipe_snapshot == {}
+        assert state.dispatches[0].attempt_history == []

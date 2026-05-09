@@ -333,7 +333,10 @@ def make_context(
         fleet_lock=(
             fleet_lock
             if fleet_lock is not None
-            else FleetSemaphore(max_concurrent=config.fleet.max_concurrent_dispatches)
+            else FleetSemaphore(
+                max_concurrent=config.fleet.max_concurrent_dispatches,
+                timeout=config.fleet.acquire_timeout_sec,
+            )
         ),
     )
 

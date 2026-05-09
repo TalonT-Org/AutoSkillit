@@ -188,7 +188,16 @@ async def execute_dispatch(
             ),
         )
 
-    await lock.acquire()
+    try:
+        await lock.acquire()
+    except TimeoutError:
+        return DispatchRejected(
+            error_code=FleetErrorCode.FLEET_ACQUIRE_TIMEOUT,
+            message=(
+                f"Timed out waiting for fleet semaphore after {lock.timeout}s "
+                f"({lock.active_count}/{lock.max_concurrent} dispatches running)."
+            ),
+        )
     try:
         return await _run_dispatch(
             tool_ctx=tool_ctx,
@@ -391,12 +400,20 @@ async def _run_dispatch(
 
     state_path = tool_ctx.temp_dir / "dispatches" / f"{dispatch_id}.json"
     state_path.parent.mkdir(parents=True, exist_ok=True)
+    recipe_snapshot = {
+        "recipe_name": recipe_obj.name,
+        "recipe_path": str(recipe_obj.path),
+        "recipe_version": recipe_obj.recipe_version or "",
+        "content_hash": recipe_obj.content_hash or "",
+        "effective_ingredients": dict(effective_ingredients),
+    }
     write_initial_state(
         state_path,
         campaign_id=campaign_id,
         campaign_name=effective_name,
         manifest_path="",
         dispatches=[DispatchRecord(name=effective_name, caller_session_id=caller_session_id)],
+        recipe_snapshot=recipe_snapshot,
     )
 
     if tool_ctx.executor is None:

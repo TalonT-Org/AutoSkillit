@@ -410,6 +410,7 @@ class FleetErrorCode(StrEnum):
     FLEET_GATE_UNKNOWN_DISPATCH = "fleet_gate_unknown_dispatch"
     FLEET_GATE_ALREADY_RECORDED = "fleet_gate_already_recorded"
     FLEET_GATE_NO_CAMPAIGN = "fleet_gate_no_campaign"
+    FLEET_ACQUIRE_TIMEOUT = "fleet_acquire_timeout"
 
 
 class FeatureLifecycle(StrEnum):

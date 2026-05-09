@@ -510,6 +510,9 @@ class AutomationConfig:
                 idle_output_timeout=float(
                     val(fr, "idle_output_timeout", _fr["idle_output_timeout"])
                 ),
+                acquire_timeout_sec=float(
+                    val(fr, "acquire_timeout_sec", _fr["acquire_timeout_sec"])
+                ),
             ),
             providers=ProvidersConfig(
                 default_provider=val(pvd, "default_provider", _pvd["default_provider"]),

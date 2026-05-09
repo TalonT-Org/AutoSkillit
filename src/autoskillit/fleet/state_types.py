@@ -12,7 +12,7 @@ from autoskillit.core import FleetErrorCode, RetryReason
 
 _resume_lock = threading.Lock()
 
-FLEET_STATE_SCHEMA_VERSION = 4
+FLEET_STATE_SCHEMA_VERSION = 5
 
 FLEET_HALTED_SENTINEL = "fleet_halted_on_failure"
 
@@ -55,6 +55,7 @@ class DispatchRecord:
     started_at: float = 0.0
     ended_at: float = 0.0
     sidecar_path: str | None = None
+    attempt_history: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -75,6 +76,7 @@ class DispatchRecord:
             "started_at": self.started_at,
             "ended_at": self.ended_at,
             "sidecar_path": self.sidecar_path,
+            "attempt_history": list(self.attempt_history),
         }
 
     @classmethod
@@ -121,6 +123,7 @@ class DispatchRecord:
             started_at=d.get("started_at", 0.0),
             ended_at=d.get("ended_at", 0.0),
             sidecar_path=d.get("sidecar_path"),
+            attempt_history=d.get("attempt_history", []),
         )
 
 
@@ -136,6 +139,8 @@ class CampaignState:
     dispatches: list[DispatchRecord] = field(default_factory=list)
     captured_values: dict[str, str] = field(default_factory=dict)
     orchestrator_session_id: str = ""
+    ended_at: float = 0.0
+    recipe_snapshot: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)

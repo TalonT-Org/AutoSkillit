@@ -584,6 +584,52 @@ class TestStaleSuppressionBounded:
         bounded_in_stdout = "Suppression bounded" in captured
         assert bounded_in_logs or bounded_in_stdout
 
+    @pytest.mark.anyio
+    async def test_shared_suppression_timer_prevents_chaining(self, tmp_path, monkeypatch):
+        """Switching suppression gates (API → marker) does not chain independent timers."""
+        session_file = tmp_path / "session.jsonl"
+        session_file.write_text("")
+        spawn_time = time.time() - 10
+
+        call_count = {"n": 0}
+
+        def _api_conn(pid):
+            call_count["n"] += 1
+            return call_count["n"] <= 2
+
+        monkeypatch.setattr(
+            "autoskillit.execution.process._process_monitor._has_active_api_connection",
+            _api_conn,
+        )
+        monkeypatch.setattr(
+            "autoskillit.execution.process._process_monitor._has_active_child_processes",
+            lambda pid: False,
+        )
+
+        (tmp_path / "dispatch-in-progress-some-uuid.marker").write_text("{}")
+
+        suppression_start = time.monotonic()
+        with anyio.fail_after(8.0):
+            result = await _session_log_monitor(
+                tmp_path,
+                "DONE",
+                stale_threshold=0.05,
+                spawn_time=spawn_time,
+                pid=9999,
+                _phase1_poll=0.01,
+                _phase2_poll=0.05,
+                max_suppression_seconds=0.3,
+                marker_dir=tmp_path,
+                caller_session_id=None,
+            )
+        elapsed = time.monotonic() - suppression_start
+
+        assert result.status == ChannelBStatus.STALE
+        assert elapsed <= 0.45, f"elapsed {elapsed:.2f}s exceeds 0.45s — timer may have chained"
+        assert elapsed >= 0.15, (
+            f"elapsed {elapsed:.2f}s below 0.15s — suppression may not have fired"
+        )
+
 
 class TestStaleSuppressionDispatchMarker:
     """Dispatch marker suppresses stale: fresh marker → suppressed; expired → pass-through.

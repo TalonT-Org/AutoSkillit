@@ -249,7 +249,7 @@ exp-lens-error-budget, exp-lens-estimand-clarity, exp-lens-exploratory-confirmat
 exp-lens-governance-risk, exp-lens-iterative-learning, exp-lens-measurement-validity, exp-lens-pipeline-integrity,
 exp-lens-randomization-blocking, exp-lens-reproducibility-artifacts, exp-lens-sensitivity-robustness,
 exp-lens-severity-testing, exp-lens-unit-interference, exp-lens-validity-threats, exp-lens-variance-stability,
-implement-experiment, implement-worktree, implement-worktree-no-merge, investigate, issue-splitter, make-arch-diag,
+file-audit-issues, implement-experiment, implement-worktree, implement-worktree-no-merge, investigate, issue-splitter, make-arch-diag,
 make-campaign, make-experiment-diag, make-groups, make-plan, make-req, merge-pr, mermaid, migrate-recipes, open-integration-pr,
 open-kitchen, pipeline-summary, plan-experiment, plan-visualization, planner-analyze, planner-assess-review-approach, planner-consolidate-wps, planner-elaborate-assignments, planner-elaborate-phase, planner-elaborate-wps, planner-extract-domain, planner-generate-phases, planner-reconcile-deps, planner-refine, planner-refine-assignments, planner-refine-phases, planner-refine-wps, planner-validate-task-alignment, prepare-issue, prepare-pr, prepare-research-pr, process-issues, promote-to-main, rectify, reload-session, report-bug,
 resolve-claims-review, resolve-design-review, resolve-failures, resolve-merge-conflicts, resolve-research-review, resolve-review, retry-worktree, review-approach, review-design, review-pr, review-research-pr, run-experiment,

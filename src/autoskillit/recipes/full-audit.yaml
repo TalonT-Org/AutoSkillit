@@ -5,7 +5,7 @@ description: >-
   GitHub issue from each validated report.
 summary: "branch → audit×6 ∥ → validate×6 ∥ → issue×6 ∥ → done"
 recipe_version: "1.2.0"
-requires_packs: [audit, github]
+requires_packs: [audit, github, audit-pipeline]
 
 ingredients:
   workspace:
@@ -162,22 +162,14 @@ steps:
     on_exhausted: escalate_stop
 
   create_issues:
-    tool: run_python
-    description: "Batch-create GitHub issues via GraphQL from validated ticket body files"
+    tool: run_skill
+    description: "File GitHub issues from validated audit ticket body files"
+    model: ""
     with:
-      callable: "autoskillit.recipe._cmd_rpc.batch_create_issues"
-      workspace: "${{ inputs.workspace }}"
-      audit_run_dir: "${{ context.audit_run_dir }}"
-      timeout: 120
-    note: >
-      BATCHED ISSUE CREATION via GraphQL — The callable discovers all
-      ticket_body_{source}_{N}_{ts}.md files in the validate-audit temp directory,
-      parses titles and bodies, includes validation summaries, resolves repository
-      and label IDs, and executes a single batched createIssue mutation with aliases.
-      Chunks at 20 issues per request if needed.
-
-      No headless sessions are spawned. Rate-limit cost: 5 pts per chunk
-      (vs 90 pts for 18 sequential REST calls).
+      skill_command: "/autoskillit:file-audit-issues ${{ context.audit_run_dir }}"
+      cwd: "${{ inputs.workspace }}"
+      step_name: "create_issues"
+    note: "Runs /autoskillit:file-audit-issues — discovers ticket_body_*.md in audit_run_dir, deduplicates, batch-creates GitHub issues via GraphQL, applies labels, appends validation summaries."
     capture:
       issue_urls: "${{ result.issue_urls }}"
       issue_count: "${{ result.issue_count }}"
@@ -193,7 +185,8 @@ steps:
       Emit the L3 result sentinel. context.issue_urls is a comma-separated
       string of the created issue URLs — include it directly in the sentinel JSON:
       {"success": true, "reason": "completed", "summary": "Full audit complete.
-      GitHub issues created.", "issue_urls": "${{ context.issue_urls }}"}
+      GitHub issues created.", "issue_urls": "${{ context.issue_urls }}",
+      "issue_count": "${{ context.issue_count }}"}
       Artifacts are in {{AUTOSKILLIT_TEMP}}/.
 
   escalate_stop:

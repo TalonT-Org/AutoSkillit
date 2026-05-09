@@ -494,16 +494,10 @@ verdict = validated
 
 > Write validated report and contested findings files? [Y/n]
 
-On Y or empty input, write all files. After writing, offer:
-
-> Run `/autoskillit:prepare-issue` for each ticket group? [Y/n]
-
-On Y, call `prepare-issue` for each ticket body file (in parallel). After issue creation,
-append the validation summary to each created issue body using `gh issue edit --body-file`:
-fetch the current issue body, verify the fetched body is non-empty (abort the append for
-that issue if empty to avoid overwriting with summary-only content), append a horizontal
-rule and the validation summary content, write the combined text to a temp file, then run
-`gh issue edit {issue_number} --body-file` with that temp file. Do NOT use `gh issue comment`.
+On Y or empty input, write all files and print the same terminal summary as headless mode
+(excluding the structured output tokens). Issue filing is handled separately by the
+`file-audit-issues` skill — direct the user there if they want to create GitHub issues
+from the ticket body files.
 
 ---
 
@@ -524,4 +518,4 @@ All output files are written under `{{AUTOSKILLIT_TEMP}}/validate-audit-{YYYY-MM
 
 - `/autoskillit:audit-tests` — produces reports this skill validates
 - `/autoskillit:validate-audit` — validates all other audit types (arch, cohesion, feature_gates, docs, review_decisions)
-- `/autoskillit:prepare-issue` — offered interactively for contested findings
+- `/autoskillit:file-audit-issues` — batch-creates issues from ticket body files (pipeline-only, run via full-audit recipe)

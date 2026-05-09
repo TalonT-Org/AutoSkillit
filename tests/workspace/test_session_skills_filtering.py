@@ -213,6 +213,32 @@ def test_resolve_effective_disabled_recipe_packs_overrides_default() -> None:
     assert "research" not in result  # enabled by recipe
 
 
+def test_audit_pipeline_disabled_by_default() -> None:
+    from autoskillit.core import PACK_REGISTRY
+    from autoskillit.workspace.session_skills import _resolve_effective_disabled
+
+    result = _resolve_effective_disabled(
+        explicit_disabled=[],
+        pack_registry=PACK_REGISTRY,
+        packs_enabled=[],
+        recipe_packs=None,
+    )
+    assert "audit-pipeline" in result
+
+
+def test_audit_pipeline_enabled_by_recipe_packs() -> None:
+    from autoskillit.core import PACK_REGISTRY
+    from autoskillit.workspace.session_skills import _resolve_effective_disabled
+
+    result = _resolve_effective_disabled(
+        explicit_disabled=[],
+        pack_registry=PACK_REGISTRY,
+        packs_enabled=[],
+        recipe_packs=frozenset(["audit-pipeline"]),
+    )
+    assert "audit-pipeline" not in result
+
+
 def test_resolve_effective_disabled_includes_feature_tags() -> None:
     from autoskillit.core import PACK_REGISTRY
     from autoskillit.workspace.session_skills import _resolve_effective_disabled

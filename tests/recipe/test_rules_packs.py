@@ -97,6 +97,14 @@ def test_all_builtin_packs_pass():
     assert not findings, f"Built-in packs must not trigger unknown-required-pack: {findings}"
 
 
+def test_full_audit_declares_audit_pipeline_pack() -> None:
+    from autoskillit.core import pkg_root
+    from autoskillit.recipe.io import load_recipe
+
+    recipe = load_recipe(pkg_root() / "recipes" / "full-audit.yaml")
+    assert "audit-pipeline" in recipe.requires_packs
+
+
 # ----------------------------------------------------------------------
 # undeclared-pack-requirement tests
 # ----------------------------------------------------------------------

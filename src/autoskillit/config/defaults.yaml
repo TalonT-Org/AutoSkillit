@@ -264,6 +264,7 @@ skills:
     - report-bug
     - pipeline-summary
     - diagnose-ci
+    - file-audit-issues
     - verify-diag
     - prepare-research-pr
     - compose-research-pr

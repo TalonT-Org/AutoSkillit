@@ -54,6 +54,17 @@ def test_pack_registry_new_packs_are_default_disabled() -> None:
     assert PACK_REGISTRY["exp-lens"].default_enabled is False
 
 
+def test_audit_pipeline_pack_in_registry() -> None:
+    from autoskillit.core import PACK_REGISTRY
+
+    assert "audit-pipeline" in PACK_REGISTRY
+    assert PACK_REGISTRY["audit-pipeline"].default_enabled is False
+    assert (
+        PACK_REGISTRY["audit-pipeline"].description
+        == "Audit pipeline internals (recipe-dispatched only)"
+    )
+
+
 def test_pack_registry_importable_from_core() -> None:
     from autoskillit.core import PACK_REGISTRY, PackDef
 

@@ -182,6 +182,8 @@ async def _session_log_monitor(
     _on_poll: Callable[[], None] | None = None,
     expected_session_id: str | None = None,
     max_suppression_seconds: float = 1800.0,
+    marker_dir: Path | None = None,
+    caller_session_id: str | None = None,
 ) -> SessionMonitorResult:
     """Watch Claude Code session log for completion or staleness.
 
@@ -354,6 +356,28 @@ async def _session_log_monitor(
                         "suppressing stale kill (pid=%d)",
                         elapsed,
                         pid,
+                    )
+                elif marker_dir is not None and _has_active_dispatch_marker(
+                    marker_dir, session_id=caller_session_id
+                ):
+                    if suppression_start is None:
+                        suppression_start = _time.monotonic()
+                    suppression_elapsed = _time.monotonic() - suppression_start
+                    if suppression_elapsed >= max_suppression_seconds:
+                        logger.warning(
+                            "Suppression bounded: stale kill after dispatch marker "
+                            "suppression exceeded max_suppression_seconds",
+                            suppression_elapsed=suppression_elapsed,
+                            caller_session_id=caller_session_id,
+                            marker_dir=str(marker_dir),
+                        )
+                        return SessionMonitorResult(ChannelBStatus.STALE, _session_id)
+                    last_change = _time.monotonic()
+                    logger.warning(
+                        "JSONL silent but active dispatch marker found — suppressing stale kill",
+                        stale_elapsed=elapsed,
+                        caller_session_id=caller_session_id,
+                        marker_dir=str(marker_dir),
                     )
                 else:
                     return SessionMonitorResult(

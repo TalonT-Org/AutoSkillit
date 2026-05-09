@@ -337,6 +337,38 @@ class TestRunSkillConfigExitAfterStopDelay:
         assert "exit_after_stop_delay_ms" in names
 
 
+class TestRunSkillConfigStreamIdleTimeout:
+    def test_default_stream_idle_timeout_is_600000(self):
+        cfg = AutomationConfig()
+        assert cfg.run_skill.stream_idle_timeout_ms == 600000
+
+    def test_yaml_loads_stream_idle_timeout(self, tmp_path):
+        (tmp_path / ".autoskillit").mkdir()
+        (tmp_path / ".autoskillit" / "config.yaml").write_text(
+            "run_skill:\n  stream_idle_timeout_ms: 300000\n"
+        )
+        cfg = load_config(tmp_path)
+        assert cfg.run_skill.stream_idle_timeout_ms == 300000
+
+    def test_zero_disables_injection(self, tmp_path):
+        (tmp_path / ".autoskillit").mkdir()
+        (tmp_path / ".autoskillit" / "config.yaml").write_text(
+            "run_skill:\n  stream_idle_timeout_ms: 0\n"
+        )
+        cfg = load_config(tmp_path)
+        assert cfg.run_skill.stream_idle_timeout_ms == 0
+
+    def test_partial_run_skill_config_preserves_default(self, tmp_path):
+        (tmp_path / ".autoskillit").mkdir()
+        (tmp_path / ".autoskillit" / "config.yaml").write_text("run_skill:\n  timeout: 1800\n")
+        cfg = load_config(tmp_path)
+        assert cfg.run_skill.stream_idle_timeout_ms == 600000
+
+    def test_run_skill_config_fields_include_stream_idle_timeout(self):
+        names = {f.name for f in dc_fields(RunSkillConfig)}
+        assert "stream_idle_timeout_ms" in names
+
+
 class TestLoggingConfig:
     """LoggingConfig dataclass and YAML loading."""
 

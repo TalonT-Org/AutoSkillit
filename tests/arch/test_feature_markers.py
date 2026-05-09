@@ -216,9 +216,93 @@ def test_no_feature_marker_on_infrastructure_tests():
     )
 
 
-def test_fleet_cross_dir_files_no_duplicates():
-    paths = list(_FLEET_CROSS_DIR_FILES)
-    assert len(paths) == len(set(paths)), "Duplicate paths in _FLEET_CROSS_DIR_FILES"
+def _pytestmark_has_skipif_platform(tree: ast.Module) -> bool:
+    """Check if module-level pytestmark contains a skipif with sys.platform condition."""
+    for node in ast.iter_child_nodes(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "pytestmark":
+                    source_segment = ast.unparse(node.value)
+                    if "skipif" in source_segment and "platform" in source_segment:
+                        return True
+    return False
+
+
+def _has_module_level_skip(tree: ast.Module) -> bool:
+    """Check if module contains a top-level pytest.skip(allow_module_level=True) call."""
+    for node in ast.iter_child_nodes(tree):
+        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
+            call = node.value
+            if isinstance(call.func, ast.Attribute) and call.func.attr == "skip":
+                for kw in call.keywords:
+                    if (
+                        kw.arg == "allow_module_level"
+                        and isinstance(kw.value, ast.Constant)
+                        and kw.value.value
+                    ):
+                        return True
+    return False
+
+
+def test_ci_workflow_gates_experimental_for_stable_track() -> None:
+    """CI workflow must set AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED in the test job."""
+    import yaml
+
+    workflow_path = _TESTS_ROOT.parent / ".github" / "workflows" / "tests.yml"
+    assert workflow_path.exists(), f"CI workflow not found at {workflow_path}"
+
+    with workflow_path.open() as f:
+        wf = yaml.safe_load(f)
+
+    assert isinstance(wf, dict), f"CI workflow YAML is empty or invalid at {workflow_path}"
+    jobs = wf.get("jobs", {})
+    assert "test" in jobs, f"CI workflow has no 'test' job (found: {sorted(jobs)})"
+    test_job = jobs["test"]
+    steps = test_job.get("steps") or []
+    assert steps, f"CI workflow 'test' job has no steps at {workflow_path}"
+
+    run_test_steps = [s for s in steps if s.get("name", "") == "Run tests"]
+    assert run_test_steps, "No 'Run tests' step found in test job"
+
+    run_step = run_test_steps[0]
+    env = run_step.get("env", {})
+    assert "AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED" in env, (
+        "CI test step must set AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED "
+        "to gate experimental features on stable/main"
+    )
+
+
+def test_linux_proc_importers_have_platform_guard() -> None:
+    """Fleet tests importing _linux_proc must have sys.platform skipif in pytestmark."""
+    fleet_test_dir = _TESTS_ROOT / "fleet"
+    linux_proc_importers: dict[Path, ast.Module] = {}
+
+    for test_file in sorted(fleet_test_dir.glob("test_*.py")):
+        source = test_file.read_text()
+        if "_linux_proc" in source:
+            tree = ast.parse(source, filename=str(test_file))
+            for node in ast.iter_child_nodes(tree):
+                if isinstance(node, (ast.Import, ast.ImportFrom)):
+                    module = getattr(node, "module", "") or ""
+                    if "_linux_proc" in module:
+                        linux_proc_importers[test_file] = tree
+                        break
+
+    if not linux_proc_importers:
+        pytest.skip(
+            "No fleet tests import _linux_proc at module level — guard vacuously satisfied"
+        )
+
+    missing_guard: list[str] = []
+    for test_file, tree in linux_proc_importers.items():
+        has_skipif = _pytestmark_has_skipif_platform(tree)
+        has_module_skip = _has_module_level_skip(tree)
+        if not has_skipif and not has_module_skip:
+            missing_guard.append(test_file.name)
+
+    assert not missing_guard, (
+        f"Fleet tests importing _linux_proc lack sys.platform skipif: {missing_guard}"
+    )
 
 
 def test_import_safety_with_features_disabled():

@@ -12,6 +12,7 @@ import json
 import os
 import signal
 import subprocess
+import sys
 import threading
 import time
 from collections.abc import Generator
@@ -28,6 +29,7 @@ pytestmark = [
     pytest.mark.medium,
     pytest.mark.integration,
     pytest.mark.feature("fleet"),
+    pytest.mark.skipif(sys.platform != "linux", reason="Linux-only: /proc filesystem required"),
 ]
 
 

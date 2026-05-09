@@ -583,6 +583,26 @@ def test_secrets_only_keys_covers_all_github_secret_fields() -> None:
             )
 
 
+def test_experimental_enabled_env_override_false(monkeypatch: pytest.MonkeyPatch) -> None:
+    """AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED=false disables experimental features."""
+    from autoskillit.core.feature_flags import is_feature_enabled
+
+    # Baseline: confirm the env var can enable experimental (proves the override is active)
+    monkeypatch.setenv("AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED", "true")
+    cfg_true = load_config()
+    assert cfg_true.experimental_enabled, (
+        "Baseline: AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED=true must enable "
+        "experimental_enabled"
+    )
+
+    monkeypatch.setenv("AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED", "false")
+    cfg = load_config()
+    assert not cfg.experimental_enabled
+    assert not is_feature_enabled(
+        "fleet", cfg.features, experimental_enabled=cfg.experimental_enabled
+    )
+
+
 class TestWorkspaceConfig:
     """WorkspaceConfig section is present in AutomationConfig with correct defaults."""
 

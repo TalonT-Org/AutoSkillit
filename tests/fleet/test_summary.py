@@ -301,15 +301,10 @@ def test_campaign_summary_accepts_prior_campaign_id() -> None:
 
     prior_cid = "kitchen-uuid-A"
     current_cid = "kitchen-uuid-B"
-    text = (
-        f"---campaign-summary::{prior_cid}---\n"
-        '{"overall_status": "success", "total_dispatched": 1, '
-        '"succeeded": 1, "failed": 0, "per_dispatch": [{"name": "t1", '
-        '"status": "success", "elapsed_seconds": 1.0, "token_usage": {"input": 1, '
-        '"output": 1, "cache_read": 0, '
-        '"cache_creation": 0}, "dispatched_session_id": "s1", '
-        '"dispatch_id": "d1"}], "error_records": []}\n'
-        f"---end-campaign-summary::{prior_cid}---\n"
-    )
+    prior_summary = {
+        **_VALID_SUMMARY_DICT,
+        "campaign_id": prior_cid,
+    }
+    text = _make_sentinel_text(prior_summary, campaign_id=prior_cid)
     result = parse_campaign_summary(text, current_cid, prior_campaign_ids=[prior_cid])
     assert isinstance(result, CampaignSummary)

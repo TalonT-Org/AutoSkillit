@@ -15,6 +15,7 @@ from autoskillit.fleet import (
     resume_campaign_from_state,
     write_initial_state,
 )
+from tests.fleet.conftest import fleet_lock_from_ctx
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -329,10 +330,6 @@ class TestValidationFailureCampaignState:
         """T1: execute_dispatch writes REFUSED to campaign state on type validation error."""
 
         sp = _init_state(tmp_path, "step1")
-        # Give the context a fleet lock so the early type-check path is skipped
-        # but the lock itself is not the rejection source — ingredients are.
-        from tests.fleet.conftest import fleet_lock_from_ctx
-
         fleet_lock_from_ctx(tool_ctx)
 
         from autoskillit.fleet import execute_dispatch

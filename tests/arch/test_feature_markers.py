@@ -14,7 +14,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-import yaml
 
 _TESTS_ROOT = Path(__file__).parent.parent
 
@@ -247,6 +246,8 @@ def _has_module_level_skip(tree: ast.Module) -> bool:
 
 def test_ci_workflow_gates_experimental_for_stable_track() -> None:
     """CI workflow must set AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED in the test job."""
+    import yaml
+
     workflow_path = _TESTS_ROOT.parent / ".github" / "workflows" / "tests.yml"
     assert workflow_path.exists(), f"CI workflow not found at {workflow_path}"
 

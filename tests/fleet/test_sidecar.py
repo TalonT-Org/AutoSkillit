@@ -206,6 +206,7 @@ class TestMergeSidecarChain:
         merged = merge_sidecar_chain([did_a, did_b], tmp_path)
         assert len(merged) == 1
         assert merged[0].issue_url == URL1
+        assert merged[0].status == "completed"  # first-seen (did_a) wins
 
     def test_missing_sidecar_files_are_skipped(self, tmp_path: Path) -> None:
         did_a = "aaaaaaaa-0000-0000-0000-000000000000"

@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import ast
 import fcntl
+import io
 import threading
 from pathlib import Path
+from typing import IO, Any
 from unittest.mock import patch
 
 import pytest
@@ -290,17 +292,16 @@ class TestFlockTargetPathVerification:
                     fd = result.fileno()
                     path_arg = args[0] if args else kwargs.get("file", "")
                     fd_to_path[fd] = str(path_arg)
-                except Exception:
+                except (io.UnsupportedOperation, OSError):
                     pass
             return result
 
         flock_calls: list[tuple[int, int]] = []
         original_flock = fcntl.flock
 
-        def tracking_flock(fd: int, op: int) -> None:
-            # fcntl.flock is duck-typed: accepts file objects (extracts fileno internally)
+        def tracking_flock(fd: int | IO[Any], op: int) -> None:
             actual_fd = fd.fileno() if hasattr(fd, "fileno") else fd  # type: ignore[union-attr]
-            flock_calls.append((actual_fd, op))
+            flock_calls.append((actual_fd, op))  # type: ignore[arg-type]
             return original_flock(fd, op)
 
         if fn_name in ("mark_dispatch_interrupted", "mark_dispatch_resumable"):
@@ -339,7 +340,8 @@ class TestFlockTargetPathVerification:
         for fd, op in flock_calls:
             if op == fcntl.LOCK_UN:
                 continue
-            path = fd_to_path.get(fd, "")
+            path = fd_to_path.get(fd, "<untracked>")
             assert path.endswith(".lock"), (
-                f"{fn_name}: flock fd={fd} resolves to {path!r}, not a .lock sidecar"
+                f"{fn_name}: flock fd={fd} resolves to {path!r}"
+                " ('<untracked>' means fd was not recorded), expected .lock sidecar"
             )

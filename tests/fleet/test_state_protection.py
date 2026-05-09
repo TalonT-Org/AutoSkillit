@@ -81,9 +81,8 @@ def test_build_protected_ids_all_terminal_not_protected(tmp_path: Path) -> None:
             "campaign_id": "campaign-done",
             "dispatches": [
                 {"name": "d1", "status": "success"},
-                {"name": "d2", "status": "failure"},
-                {"name": "d3", "status": "skipped"},
-                {"name": "d4", "status": "released"},
+                {"name": "d2", "status": "skipped"},
+                {"name": "d3", "status": "released"},
             ],
         },
     )

@@ -183,11 +183,16 @@ _ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
     ),
     DispatchStatus.FAILURE: frozenset({DispatchStatus.PENDING}),
     DispatchStatus.SUCCESS: frozenset(),
-    DispatchStatus.INTERRUPTED: frozenset(),
+    DispatchStatus.INTERRUPTED: frozenset({DispatchStatus.PENDING}),
     DispatchStatus.SKIPPED: frozenset(),
-    DispatchStatus.REFUSED: frozenset(),
+    DispatchStatus.REFUSED: frozenset({DispatchStatus.PENDING}),
     DispatchStatus.RELEASED: frozenset(),
 }
+
+for _ds in DispatchStatus:
+    if _ds not in _ALLOWED_TRANSITIONS:
+        raise AssertionError(f"DispatchStatus.{_ds.name} missing from _ALLOWED_TRANSITIONS")
+del _ds
 
 
 def _validate_transition(current: str, new: str, dispatch_name: str) -> None:
@@ -285,23 +290,15 @@ _COMPLETED_STATUSES = frozenset(
 
 _VISIBLE_IN_BLOCK_STATUSES = _COMPLETED_STATUSES | frozenset(
     {
-        DispatchStatus.INTERRUPTED,
-        DispatchStatus.REFUSED,
         DispatchStatus.RELEASED,
         DispatchStatus.RUNNING,
+        DispatchStatus.INTERRUPTED,
+        DispatchStatus.REFUSED,
     }
 )
 
-# FAILURE is included here (stops forward progress) but can transition back to PENDING
-# via explicit retry.
 TERMINAL_DISPATCH_STATUSES: frozenset[str] = frozenset(
-    {
-        DispatchStatus.SUCCESS,
-        DispatchStatus.FAILURE,
-        DispatchStatus.SKIPPED,
-        DispatchStatus.RELEASED,
-        DispatchStatus.REFUSED,
-    }
+    status for status, transitions in _ALLOWED_TRANSITIONS.items() if not transitions
 )
 
 

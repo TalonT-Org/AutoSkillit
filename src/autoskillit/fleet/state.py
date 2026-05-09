@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 from autoskillit.core import get_logger, read_versioned_json, write_versioned_json
 from autoskillit.fleet.state_gates import record_gate_outcome
 from autoskillit.fleet.state_recovery import (
+    has_blocking_dispatch,
     has_failed_dispatch,
     resume_campaign_from_state,
 )
@@ -45,6 +46,7 @@ __all__ = [
     # re-exported from state_gates
     "record_gate_outcome",
     # re-exported from state_recovery
+    "has_blocking_dispatch",
     "has_failed_dispatch",
     "resume_campaign_from_state",
     # re-exported from state_types
@@ -64,7 +66,7 @@ __all__ = [
     "mark_dispatch_running",
     "mark_dispatch_interrupted",
     "mark_dispatch_resumable",
-    "reset_failed_dispatch",
+    "reset_blocking_dispatch",
     "append_dispatch_record",
     "upsert_dispatch_record_by_name",
     "build_protected_campaign_ids",
@@ -132,19 +134,23 @@ def _clear_dispatch_for_retry(d: DispatchRecord) -> None:
     d.infra_exit_category = ""
 
 
-def reset_failed_dispatch(state_path: Path, dispatch_name: str) -> bool:
-    """Reset a FAILURE dispatch to PENDING, clearing all execution metadata.
+def reset_blocking_dispatch(state_path: Path, dispatch_name: str) -> bool:
+    """Reset a blocking dispatch (FAILURE, INTERRUPTED, or REFUSED) to PENDING.
 
-    Returns True if the dispatch was found in FAILURE state and reset,
-    False if the dispatch was not found, not in FAILURE, or the state file
-    is missing/corrupted. OSError raised by _write_state propagates to
-    the caller — write failures are not silently converted to False.
+    Returns True if the dispatch was found in a blocking state and reset,
+    False if the dispatch was not found, not in a blocking state, or the
+    state file is missing/corrupted. OSError raised by _write_state propagates
+    to the caller — write failures are not silently converted to False.
     """
     with CampaignStateMutator(state_path) as m:
         if m.state is None:
             return False
         for d in m.state.dispatches:
-            if d.name == dispatch_name and d.status == DispatchStatus.FAILURE:
+            if d.name == dispatch_name and d.status in {
+                DispatchStatus.FAILURE,
+                DispatchStatus.INTERRUPTED,
+                DispatchStatus.REFUSED,
+            }:
                 _clear_dispatch_for_retry(d)
                 m.mark_dirty()
                 return True
@@ -300,6 +306,8 @@ def mark_dispatch_running(
             raise FileNotFoundError(f"State file not found or corrupted: {state_path}")
         for d in m.state.dispatches:
             if d.name == dispatch_name:
+                d.kill_reason = ""
+                d.infra_exit_category = ""
                 _validate_transition(d.status, DispatchStatus.RUNNING, d.name)
                 d.status = DispatchStatus.RUNNING
                 d.dispatch_id = dispatch_id

@@ -296,12 +296,6 @@ class TestCampaignResumeChain:
         assert "review-gate" in decision.completed_dispatches_block
 
 
-def test_refused_dispatch_is_terminal():
-    from autoskillit.fleet.state_types import TERMINAL_DISPATCH_STATUSES
-
-    assert DispatchStatus.REFUSED in TERMINAL_DISPATCH_STATUSES
-
-
 def test_refused_gate_resume_selects_next(tmp_path):
     sp = _init_state(tmp_path, "gate-check", "phase-one")
     from autoskillit.fleet.state_gates import record_gate_outcome

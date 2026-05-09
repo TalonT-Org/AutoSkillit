@@ -240,8 +240,8 @@ def test_ci_workflow_gates_experimental_for_stable_track() -> None:
     test_job = wf["jobs"]["test"]
     steps = test_job["steps"]
 
-    run_test_steps = [s for s in steps if "task test-all" in s.get("run", "")]
-    assert run_test_steps, "No 'task test-all' step found in test job"
+    run_test_steps = [s for s in steps if s.get("name", "") == "Run tests"]
+    assert run_test_steps, "No 'Run tests' step found in test job"
 
     run_step = run_test_steps[0]
     env = run_step.get("env", {})

@@ -468,8 +468,10 @@ def _check_local_rounds_alignment(ctx: ValidationContext) -> list[RuleFinding]:
     max_retries_ing = ingredients.get("review_max_retries")
     if not local_rounds_ing or not max_retries_ing:
         return []
+    if local_rounds_ing.default is None:
+        return []
     try:
-        local_default = int(local_rounds_ing.default or "0")
+        local_default = int(local_rounds_ing.default)
         max_default = int(max_retries_ing.default or "3")
     except (ValueError, TypeError):
         return []

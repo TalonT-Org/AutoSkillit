@@ -368,6 +368,10 @@ class TestRunSkillConfigStreamIdleTimeout:
         names = {f.name for f in dc_fields(RunSkillConfig)}
         assert "stream_idle_timeout_ms" in names
 
+    def test_negative_stream_idle_timeout_raises(self):
+        with pytest.raises(ValueError, match="stream_idle_timeout_ms=-1 must be >= 0"):
+            RunSkillConfig(stream_idle_timeout_ms=-1)
+
 
 class TestLoggingConfig:
     """LoggingConfig dataclass and YAML loading."""

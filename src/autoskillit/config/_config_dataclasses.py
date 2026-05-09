@@ -103,6 +103,11 @@ class RunSkillConfig:
     _EXIT_GRACE_BUFFER_MS: ClassVar[int] = 500
 
     def __post_init__(self) -> None:
+        if self.stream_idle_timeout_ms < 0:
+            raise ValueError(
+                f"stream_idle_timeout_ms={self.stream_idle_timeout_ms} must be >= 0 "
+                "(use 0 to disable injection)."
+            )
         required_ms = self.exit_after_stop_delay_ms + self._EXIT_GRACE_BUFFER_MS
         # Convert seconds → ms for the comparison
         if self.natural_exit_grace_seconds * 1000 < required_ms:

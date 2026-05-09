@@ -863,13 +863,9 @@ def test_fcntl_import_allowlist() -> None:
     creating cross-process race conditions on state files. This test enforces
     that only the established lock utilities are used.
     """
-    FCNTL_ALLOWED_MODULES = {
-        "core/_plugin_cache.py",
-        "execution/session/_session_state.py",
-        "workspace/clone_registry.py",
-        "fleet/state.py",
-        "planner/merge.py",
-    }
+    from tests.fleet.test_state_lock_contract import _FCNTL_ALLOWED_RELATIVE_PATHS
+
+    FCNTL_ALLOWED_MODULES = _FCNTL_ALLOWED_RELATIVE_PATHS
     violations: list[str] = []
     for py_file in sorted(SRC_ROOT.rglob("*.py")):
         try:

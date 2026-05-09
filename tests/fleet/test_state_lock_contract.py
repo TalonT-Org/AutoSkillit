@@ -32,6 +32,16 @@ from autoskillit.fleet import (
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
+_FCNTL_ALLOWED_RELATIVE_PATHS: frozenset[str] = frozenset(
+    {
+        "core/_plugin_cache.py",
+        "execution/session/_session_state.py",
+        "workspace/clone_registry.py",
+        "fleet/state.py",
+        "planner/merge.py",
+    }
+)
+
 _MUTATION_FUNCTIONS: dict[str, object] = {
     "mark_dispatch_running": mark_dispatch_running,
     "mark_dispatch_interrupted": mark_dispatch_interrupted,
@@ -64,13 +74,7 @@ class TestFlockLockTarget:
         cli_fleet_root = fleet_root.parent / "cli" / "fleet"
         src_root = fleet_root.parent
 
-        FCNTL_ALLOWED_MODULES = {
-            src_root / "core" / "_plugin_cache.py",
-            src_root / "execution" / "session" / "_session_state.py",
-            src_root / "workspace" / "clone_registry.py",
-            src_root / "fleet" / "state.py",
-            src_root / "planner" / "merge.py",
-        }
+        FCNTL_ALLOWED_MODULES = {src_root / p for p in _FCNTL_ALLOWED_RELATIVE_PATHS}
         FLOCK_DATA_FILE_EXCEPTIONS = {src_root / "planner" / "merge.py"}
 
         scan_roots = [fleet_root, cli_fleet_root] + list(FCNTL_ALLOWED_MODULES)

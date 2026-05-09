@@ -167,11 +167,14 @@ def test_validate_plan_wp_too_many_deliverables_warns_not_fails(tmp_path: Path) 
     _make_minimal_output_dir(tmp_path)
     wp_path = tmp_path / "work_packages" / "P1-A1-WP1_result.json"
     raw = json.loads(wp_path.read_text())
-    raw["deliverables"] = ["a", "b", "c", "d", "e", "f"]
+    _, hi = DELIVERABLE_BOUNDS
+    raw["deliverables"] = [f"f{i}.py" for i in range(hi + 1)]
     wp_path.write_text(json.dumps(raw))
     result = validate_plan(str(tmp_path))
     assert result["verdict"] == "pass"
     assert int(result["warning_count"]) == 1
+    validation = json.loads((tmp_path / "validation.json").read_text())
+    assert validation["warnings"][0]["check"] == "sizing_bounds"
 
 
 def test_validate_plan_duplicate_deliverables_fails(tmp_path: Path) -> None:
@@ -548,9 +551,9 @@ def test_validate_plan_ignores_non_wp_file_in_work_packages_dir(tmp_path: Path) 
     ("count", "expected_findings", "expected_severity"),
     [
         (0, 1, "error"),
-        (1, 0, None),
+        (DELIVERABLE_BOUNDS[0], 0, None),
         (5, 0, None),
-        (6, 1, "warning"),
+        (DELIVERABLE_BOUNDS[1] + 1, 1, "warning"),
     ],
 )
 def test_check_sizing_bounds_boundary_values(

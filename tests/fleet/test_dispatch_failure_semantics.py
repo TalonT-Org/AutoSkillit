@@ -397,7 +397,7 @@ class TestDispatchStatusEnvelopeField:
             def fresh(cls) -> DispatchIdentity:
                 return _fixed_identity
 
-        monkeypatch.setattr("autoskillit.fleet._api.DispatchIdentity", _FixedDispatchIdentity)
+        monkeypatch.setattr("autoskillit.fleet.state.DispatchIdentity", _FixedDispatchIdentity)
 
         from autoskillit.fleet.sidecar import sidecar_path
 

@@ -13,7 +13,6 @@ import psutil
 import regex as re
 
 from autoskillit.core import (
-    DispatchIdentity,
     FleetErrorCode,
     InfraExitCategory,
     RetryReason,
@@ -354,13 +353,13 @@ async def _run_dispatch(
     """Inner dispatch body — called after lock acquisition."""
     from autoskillit.fleet.state import (
         DispatchRecord,
+        DispatchStateHandle,
         DispatchStatus,
         append_dispatch_record,
         normalize_dispatch_token_usage,
         read_state,
         upsert_dispatch_record_by_name,
         write_captured_values,
-        write_initial_state,
     )
 
     if tool_ctx.recipes is None:
@@ -399,18 +398,13 @@ async def _run_dispatch(
         effective_ingredients = {"task": task, **effective_ingredients}
 
     effective_name = dispatch_name or recipe
-    identity = (
-        DispatchIdentity.from_dispatch_id(prior_dispatch_id)
-        if resume_session_id and prior_dispatch_id
-        else DispatchIdentity.fresh()
-    )
-    dispatch_id = identity.dispatch_id
+    dispatches_dir = tool_ctx.temp_dir / "dispatches"
+    dispatches_dir.mkdir(parents=True, exist_ok=True)
     campaign_id = tool_ctx.kitchen_id
-    state_path = tool_ctx.temp_dir / "dispatches" / f"{dispatch_id}.json"
-    state_path.parent.mkdir(parents=True, exist_ok=True)
-    if not resume_session_id:
-        # On resume, the state file already exists with attempt_history;
-        # writing a new initial state would destroy it.
+
+    if resume_session_id and prior_dispatch_id:
+        handle = DispatchStateHandle.open_continued(dispatches_dir, prior_dispatch_id)
+    else:
         recipe_snapshot = {
             "recipe_name": recipe_obj.name,
             "recipe_path": str(recipe_obj.path),
@@ -418,14 +412,18 @@ async def _run_dispatch(
             "content_hash": recipe_obj.content_hash or "",
             "effective_ingredients": dict(effective_ingredients),
         }
-        write_initial_state(
-            state_path,
-            campaign_id=campaign_id,
-            campaign_name=effective_name,
-            manifest_path="",
-            dispatches=[DispatchRecord(name=effective_name, caller_session_id=caller_session_id)],
-            recipe_snapshot=recipe_snapshot,
+        handle = DispatchStateHandle.create_fresh(
+            dispatches_dir,
+            campaign_id,
+            effective_name,
+            "",
+            [DispatchRecord(name=effective_name, caller_session_id=caller_session_id)],
+            recipe_snapshot,
         )
+
+    identity = handle.identity
+    dispatch_id = identity.dispatch_id
+    state_path = handle.state_path
 
     def _reject_with_state(error_code: FleetErrorCode, message: str) -> DispatchRejected:
         """Post-dispatch-id rejection path — writes both per-dispatch and campaign state."""
@@ -657,6 +655,8 @@ async def _run_dispatch(
         extracted = _extract_captures(capture, parsed.payload)
 
     upsert_dispatch_record_by_name(state_path, record)
+    if not state_path.exists():
+        raise FileNotFoundError(f"State file missing after upsert: {state_path}")
     if extracted:
         write_captured_values(state_path, extracted)
     _post_dispatch_cleanup(tool_ctx, skill_result, cache_invalidator, quota_refresher)

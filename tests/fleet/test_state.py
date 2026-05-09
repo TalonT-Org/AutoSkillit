@@ -770,8 +770,8 @@ class TestAppendDispatchRecordIllegalTransition:
         assert latest.status == DispatchStatus.SUCCESS
 
 
-class TestRefusedDispatchSkippedInBlock:
-    def test_refused_dispatch_skipped_next_is_b(self, tmp_path: Path) -> None:
+class TestRefusedDispatchVisibleInBlock:
+    def test_refused_dispatch_visible_next_is_b(self, tmp_path: Path) -> None:
         sp = _state_path(tmp_path)
         write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("A", "B"))
         from autoskillit.fleet import upsert_dispatch_record_by_name
@@ -780,7 +780,8 @@ class TestRefusedDispatchSkippedInBlock:
         decision = resume_campaign_from_state(sp, continue_on_failure=True)
         assert decision is not None
         assert decision.next_dispatch_name == "B"
-        assert "A" not in decision.completed_dispatches_block
+        assert "A" in decision.completed_dispatches_block
+        assert "refused" in decision.completed_dispatches_block.lower()
         state = read_state(sp)
         assert state is not None
         a = next(d for d in state.dispatches if d.name == "A")
@@ -799,8 +800,8 @@ class TestResumeShowsReleasedInBlock:
         assert "released" in decision.completed_dispatches_block.lower()
 
 
-class TestInterruptedDispatchSkippedInBlock:
-    def test_interrupted_dispatch_skipped_next_is_c(self, tmp_path: Path) -> None:
+class TestInterruptedDispatchVisibleInBlock:
+    def test_interrupted_dispatch_visible_next_is_c(self, tmp_path: Path) -> None:
         sp = _state_path(tmp_path)
         write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("A", "B", "C"))
         append_dispatch_record(sp, DispatchRecord(name="A", status=DispatchStatus.SUCCESS))
@@ -813,7 +814,8 @@ class TestInterruptedDispatchSkippedInBlock:
         assert decision is not None
         assert decision.next_dispatch_name == "C"
         assert "A" in decision.completed_dispatches_block
-        assert "B" not in decision.completed_dispatches_block
+        assert "B" in decision.completed_dispatches_block
+        assert "interrupted" in decision.completed_dispatches_block.lower()
 
 
 class TestResumeIncludesRunningAliveInBlock:

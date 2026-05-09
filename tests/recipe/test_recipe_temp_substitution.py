@@ -182,10 +182,9 @@ def test_all_bundled_recipes_content_no_raw_placeholders(
 
     offenders: list[str] = []
     for recipe_info in result.items:
-        if recipe_info.content is not None and "{{AUTOSKILLIT_TEMP}}" in recipe_info.content:
-            load_result = load_and_validate(recipe_info.name, project_dir=repo_root)
-            if "error" not in load_result and "{{AUTOSKILLIT_TEMP}}" in load_result["content"]:
-                offenders.append(recipe_info.name)
+        load_result = load_and_validate(recipe_info.name, project_dir=repo_root)
+        if "error" not in load_result and "{{AUTOSKILLIT_TEMP}}" in load_result["content"]:
+            offenders.append(recipe_info.name)
 
     assert not offenders, (
         f"The following recipes have unsubstituted {{{{AUTOSKILLIT_TEMP}}}} in "

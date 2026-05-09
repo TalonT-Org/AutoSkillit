@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 from autoskillit.core import get_logger, read_versioned_json, write_versioned_json
 from autoskillit.fleet.state_gates import record_gate_outcome
 from autoskillit.fleet.state_recovery import (
+    has_blocking_dispatch,
     has_failed_dispatch,
     resume_campaign_from_state,
 )
@@ -305,9 +306,8 @@ def mark_dispatch_running(
             raise FileNotFoundError(f"State file not found or corrupted: {state_path}")
         for d in m.state.dispatches:
             if d.name == dispatch_name:
-                if d.status == DispatchStatus.RESUMABLE:
-                    d.kill_reason = ""
-                    d.infra_exit_category = ""
+                d.kill_reason = ""
+                d.infra_exit_category = ""
                 _validate_transition(d.status, DispatchStatus.RUNNING, d.name)
                 d.status = DispatchStatus.RUNNING
                 d.dispatch_id = dispatch_id

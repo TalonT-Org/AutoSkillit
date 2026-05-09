@@ -248,8 +248,7 @@ async def _session_log_monitor(
     last_change = _time.monotonic()
     scan_pos = 0
     os_error_count = 0
-    suppression_start_api: float | None = None
-    suppression_start_child: float | None = None
+    suppression_start: float | None = None
     _last_record_type: str | None = None
 
     while True:
@@ -268,8 +267,7 @@ async def _session_log_monitor(
         if current_size > last_size:
             last_size = current_size
             last_change = _time.monotonic()
-            suppression_start_api = None
-            suppression_start_child = None
+            suppression_start = None
 
             # Check new content for completion marker (structured)
             try:
@@ -294,14 +292,13 @@ async def _session_log_monitor(
             elapsed = _time.monotonic() - last_change
             if elapsed >= stale_threshold:
                 if pid is not None and _has_active_api_connection(pid):
-                    suppression_start_child = None
-                    if suppression_start_api is None:
-                        suppression_start_api = _time.monotonic()
-                    if _time.monotonic() - suppression_start_api >= max_suppression_seconds:
+                    if suppression_start is None:
+                        suppression_start = _time.monotonic()
+                    if _time.monotonic() - suppression_start >= max_suppression_seconds:
                         logger.warning(
                             "Suppression bounded: stale kill after %.0fs consecutive "
                             "suppression (max_suppression_seconds=%.0f, pid=%d)",
-                            _time.monotonic() - suppression_start_api,
+                            _time.monotonic() - suppression_start,
                             max_suppression_seconds,
                             pid,
                         )
@@ -314,14 +311,13 @@ async def _session_log_monitor(
                         pid,
                     )
                 elif pid is not None and _has_active_child_processes(pid):
-                    suppression_start_api = None
-                    if suppression_start_child is None:
-                        suppression_start_child = _time.monotonic()
-                    if _time.monotonic() - suppression_start_child >= max_suppression_seconds:
+                    if suppression_start is None:
+                        suppression_start = _time.monotonic()
+                    if _time.monotonic() - suppression_start >= max_suppression_seconds:
                         logger.warning(
                             "Suppression bounded: stale kill after %.0fs consecutive "
                             "suppression (max_suppression_seconds=%.0f, pid=%d)",
-                            _time.monotonic() - suppression_start_child,
+                            _time.monotonic() - suppression_start,
                             max_suppression_seconds,
                             pid,
                         )

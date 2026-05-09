@@ -28,6 +28,7 @@ def test_sigterm_writes_scenario_json(tmp_path):
     Invariant: must be deterministically passing. A single miss is a
     structural failure — do not bump deadlines as a fix.
     """
+    pytest.importorskip("api_simulator")
     output_dir = tmp_path / "scenario"
     output_dir.mkdir()
 

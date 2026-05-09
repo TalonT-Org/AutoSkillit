@@ -129,7 +129,7 @@ def test_initialize_registers_mcp_recording_middleware(tmp_path, monkeypatch):
     mock_mcp = MagicMock()
     mock_middleware_cls = MagicMock()
 
-    import api_simulator.mcp as _api_sim_mcp
+    _api_sim_mcp = pytest.importorskip("api_simulator.mcp")
 
     monkeypatch.setattr("autoskillit.server.mcp", mock_mcp)
     monkeypatch.setattr(_api_sim_mcp, "McpRecordingMiddleware", mock_middleware_cls)
@@ -208,7 +208,7 @@ def test_initialize_registers_mcp_replay_middleware(tmp_path, monkeypatch):
     mock_mcp = MagicMock()
     mock_middleware_cls = MagicMock()
 
-    import api_simulator.mcp as _api_sim_mcp
+    _api_sim_mcp = pytest.importorskip("api_simulator.mcp")
 
     monkeypatch.setattr("autoskillit.server.mcp", mock_mcp)
     monkeypatch.setattr(_api_sim_mcp, "McpReplayMiddleware", mock_middleware_cls)

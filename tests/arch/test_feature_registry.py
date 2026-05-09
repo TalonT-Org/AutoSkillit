@@ -546,10 +546,12 @@ def test_load_config_integration_experimental_auto_detects(
     """load_config auto-detects experimental_enabled via is_dev_install when unset."""
     from autoskillit.config.settings import load_config
 
+    monkeypatch.delenv("AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED", raising=False)
     monkeypatch.setattr("autoskillit.config.settings.is_dev_install", lambda: True)
     cfg = load_config(tmp_path)
     assert cfg.experimental_enabled is True
 
+    monkeypatch.delenv("AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED", raising=False)
     monkeypatch.setattr("autoskillit.config.settings.is_dev_install", lambda: False)
     cfg = load_config(tmp_path)
     assert cfg.experimental_enabled is False
@@ -564,6 +566,7 @@ def test_load_config_non_dev_install_experimental_disabled(
     """load_config defaults experimental_enabled=False for non-dev install."""
     from autoskillit.config.settings import load_config
 
+    monkeypatch.delenv("AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED", raising=False)
     monkeypatch.setattr("autoskillit.config.settings.is_dev_install", lambda: False)
     cfg = load_config(tmp_path)
     assert cfg.experimental_enabled is False

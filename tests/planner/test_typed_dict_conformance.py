@@ -159,9 +159,9 @@ def test_validate_wp_result_accepts_empty_deliverables_with_allow_stub() -> None
     assert result["deliverables"] == []
 
 
-def test_validate_wp_result_rejects_too_many_deliverables() -> None:
+def test_validate_wp_result_warns_too_many_deliverables() -> None:
     _, hi = DELIVERABLE_BOUNDS
-    with pytest.raises(ValueError, match=f"has {hi + 1} deliverables"):
+    with pytest.warns(UserWarning, match=f"has {hi + 1} deliverables"):
         validate_wp_result(
             {
                 "id": "P1-A1-WP1",

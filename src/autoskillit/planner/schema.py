@@ -256,7 +256,10 @@ def validate_wp_result(
         if count < lo:
             raise ValueError(f"WP {wp_id} has {count} deliverables (below {lo})")
         if not skip_upper_bound and count > hi:
-            raise ValueError(f"WP {wp_id} has {count} deliverables (exceeds {hi})")
+            warnings.warn(
+                f"WP {wp_id} has {count} deliverables (exceeds {hi})",
+                stacklevel=2,
+            )
 
     result.setdefault("summary", "")
     result.setdefault("goal", "")

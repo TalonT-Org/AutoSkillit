@@ -3,6 +3,7 @@ and orphaned tool result detection."""
 
 from __future__ import annotations
 
+import os as _os
 import sys
 import time
 from unittest.mock import MagicMock, patch
@@ -616,7 +617,6 @@ class TestHasActiveDispatchMarker:
         marker = tmp_path / "dispatch-in-progress-xyz-001.marker"
         marker.touch()
         old_time = time.time() - 120
-        import os as _os
 
         _os.utime(marker, (old_time, old_time))
         result = _has_active_dispatch_marker(tmp_path, max_marker_age=60.0)
@@ -646,5 +646,9 @@ class TestHasActiveDispatchMarker:
         source = inspect.getsource(_has_active_dispatch_marker)
         tree = ast.parse(source)
         for node in ast.walk(tree):
-            if isinstance(node, ast.Attribute) and node.attr.startswith("logger"):
+            if (
+                isinstance(node, ast.Attribute)
+                and isinstance(node.value, ast.Name)
+                and node.value.id == "logger"
+            ):
                 pytest.fail(f"Found logger.{node.attr} in _has_active_dispatch_marker body")

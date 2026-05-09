@@ -201,6 +201,21 @@ class DefaultTestRunner:
         self._config = config
         self._runner = runner
 
+    def check_infrastructure(self, cwd: Path) -> str | None:
+        """Return None if test infrastructure exists, or an error description."""
+        import shutil
+
+        for cmd in self._config.test_check.effective_commands:
+            if not cmd:
+                continue
+            if cmd[0] == "task":
+                if not (cwd / "Taskfile.yml").exists() and not (cwd / "Taskfile.yaml").exists():
+                    return f"No Taskfile.yml or Taskfile.yaml found in {cwd}"
+            else:
+                if shutil.which(cmd[0]) is None:
+                    return f"Command '{cmd[0]}' not found in PATH"
+        return None
+
     async def run(self, cwd: Path) -> TestResult:
         effective_commands = self._config.test_check.effective_commands
         timeout = float(self._config.test_check.timeout)

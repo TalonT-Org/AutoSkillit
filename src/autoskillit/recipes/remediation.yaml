@@ -316,6 +316,8 @@ steps:
         route: test
       - when: "${{ result.verdict }} == 'ci_only_failure'"
         route: release_issue_failure
+      - when: "${{ result.verdict }} == 'no_test_infrastructure'"
+        route: release_issue_failure
     on_context_limit: test
     on_failure: release_issue_failure
     on_exhausted: release_issue_failure
@@ -1512,6 +1514,8 @@ steps:
       - when: "${{ result.verdict }} == 'flake_suspected'"
         route: re_push
       - when: "${{ result.verdict }} == 'ci_only_failure'"
+        route: release_issue_failure
+      - when: "${{ result.verdict }} == 'no_test_infrastructure'"
         route: release_issue_failure
       - route: release_issue_failure
     on_failure: release_issue_failure

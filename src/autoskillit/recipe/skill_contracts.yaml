@@ -105,6 +105,7 @@ skills:
         - already_green
         - flake_suspected
         - ci_only_failure
+        - no_test_infrastructure
     - name: fixes_applied
       type: integer
     write_behavior: conditional

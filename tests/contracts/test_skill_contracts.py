@@ -229,6 +229,20 @@ def test_review_pr_verdict_allowed_values_includes_approved_with_comments(skills
     )
 
 
+def test_no_test_infrastructure_verdict_in_contract() -> None:
+    """T7: resolve-failures contract must include no_test_infrastructure verdict.
+
+    The no_test_infrastructure verdict is emitted when test_check detects that
+    the worktree lacks test infrastructure (no Taskfile, command not in PATH).
+    """
+    contracts = yaml.safe_load(_CONTRACTS_YAML.read_text())
+    rf = contracts["skills"]["resolve-failures"]
+    outputs = {o["name"]: o for o in rf["outputs"]}
+    verdict_output = outputs.get("verdict")
+    assert verdict_output is not None, "resolve-failures must declare verdict output"
+    assert "no_test_infrastructure" in verdict_output["allowed_values"]
+
+
 def test_review_pr_pattern_examples_cover_all_verdicts(skills):
     """Every allowed verdict value for review-pr must appear in at least one pattern_example.
 

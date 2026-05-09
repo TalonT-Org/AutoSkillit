@@ -42,6 +42,10 @@
       "required": false,
       "default": "local",
       "description": "Where research outputs land. 'local' (default) produces a self-contained report.html bundle under {source_dir}/research-bundles/{date-slug}/ with no GitHub interaction. 'pr' opens a GitHub PR alongside the HTML bundle and runs the full review/archival flow.\n"
+    },
+    "test_check_enabled": {
+      "description": "When 'true' (the default), run test_check after report generation. Set to 'false' for de novo worktrees without test infrastructure.\n",
+      "default": "true"
     }
   },
   "kitchen_rules": [
@@ -540,6 +544,7 @@
       "with": {
         "worktree_path": "${{ context.worktree_path }}"
       },
+      "skip_when_false": "inputs.test_check_enabled",
       "on_success": "push_branch",
       "on_failure": "fix_tests"
     },
@@ -570,6 +575,10 @@
         },
         {
           "when": "${{ result.verdict }} == 'ci_only_failure'",
+          "route": "escalate_stop"
+        },
+        {
+          "when": "${{ result.verdict }} == 'no_test_infrastructure'",
           "route": "escalate_stop"
         }
       ],

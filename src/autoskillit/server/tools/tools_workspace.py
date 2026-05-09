@@ -67,9 +67,21 @@ async def test_check(
         if tool_ctx.tester is None:
             return json.dumps({"passed": False, "error": "Test runner not configured"})
 
+        resolved = os.path.realpath(worktree_path)
+        if hasattr(tool_ctx.tester, "check_infrastructure"):
+            infra_issue = tool_ctx.tester.check_infrastructure(Path(resolved))  # type: ignore[attr-defined]
+            if infra_issue is not None:
+                logger.warning("test_check infrastructure missing", detail=infra_issue)
+                return json.dumps(
+                    {
+                        "passed": False,
+                        "error": f"Test infrastructure not found: {infra_issue}",
+                        "infrastructure_missing": True,
+                    }
+                )
+
         _start = time.monotonic()
         try:
-            resolved = os.path.realpath(worktree_path)
             test_result = await tool_ctx.tester.run(Path(resolved))
 
             if not test_result.passed:

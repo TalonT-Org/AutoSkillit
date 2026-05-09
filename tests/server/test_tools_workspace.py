@@ -337,6 +337,90 @@ class TestTestCheck:
         assert "tests_selected" not in data
 
 
+class TestTestCheckInfrastructure:
+    """T1-T5: Infrastructure pre-flight checks in test_check."""
+
+    @pytest.fixture
+    def tool_ctx_custom_cmd(self, monkeypatch, tmp_path):
+        """ToolContext with a custom command whose binary is not in PATH."""
+        from autoskillit.config import AutomationConfig
+        from autoskillit.core.types._type_plugin_source import DirectInstall
+        from autoskillit.server import _state
+        from autoskillit.server._factory import make_context
+        from tests.fakes import MockSubprocessRunner
+
+        runner = MockSubprocessRunner()
+        config = AutomationConfig()
+        config.test_check.command = ["nonexistent_binary_xyz", "arg"]
+        ctx = make_context(
+            config,
+            runner=runner,
+            plugin_source=DirectInstall(plugin_dir=tmp_path),
+        )
+        monkeypatch.setattr(_state, "_ctx", ctx)
+        monkeypatch.setattr(_state, "_startup_ready", None)
+        return ctx
+
+    @pytest.mark.anyio
+    async def test_test_check_infrastructure_missing_no_taskfile(self, tool_ctx, tmp_path):
+        """T1: test_check returns infrastructure_missing=true when Taskfile is absent."""
+        wt = tmp_path / "empty_worktree"
+        wt.mkdir()
+        result = json.loads(await test_check(worktree_path=str(wt)))
+        assert result["passed"] is False
+        assert result["infrastructure_missing"] is True
+        assert "Taskfile" in result["error"]
+        assert len(tool_ctx.runner.call_args_list) == 0
+
+    @pytest.mark.anyio
+    async def test_test_check_infrastructure_present_taskfile_yml(self, tool_ctx, tmp_path):
+        """T2: test_check passes pre-flight and delegates when Taskfile.yml exists."""
+        wt = tmp_path / "has_taskfile"
+        wt.mkdir()
+        (wt / "Taskfile.yml").write_text("version: '3'\n")
+        tool_ctx.runner.push(_make_result(returncode=0, stdout="= 10 passed =\n"))
+        result = json.loads(await test_check(worktree_path=str(wt)))
+        assert result["passed"] is True
+        assert "infrastructure_missing" not in result
+
+    @pytest.mark.anyio
+    async def test_test_check_infrastructure_present_taskfile_yaml(self, tool_ctx, tmp_path):
+        """T3: test_check passes pre-flight and delegates when Taskfile.yaml exists."""
+        wt = tmp_path / "has_taskfile_yaml"
+        wt.mkdir()
+        (wt / "Taskfile.yaml").write_text("version: '3'\n")
+        tool_ctx.runner.push(_make_result(returncode=0, stdout="= 5 passed =\n"))
+        result = json.loads(await test_check(worktree_path=str(wt)))
+        assert result["passed"] is True
+        assert "infrastructure_missing" not in result
+
+    @pytest.mark.anyio
+    async def test_test_check_infrastructure_missing_custom_command(
+        self, tool_ctx_custom_cmd, tmp_path
+    ):
+        """T4: Custom command not in PATH returns infrastructure_missing=true."""
+        wt = tmp_path / "wt"
+        wt.mkdir()
+        result = json.loads(await test_check(worktree_path=str(wt)))
+        assert result["passed"] is False
+        assert result["infrastructure_missing"] is True
+        assert len(tool_ctx_custom_cmd.runner.call_args_list) == 0
+
+    @pytest.mark.anyio
+    async def test_test_check_infrastructure_custom_command_in_path(self, tool_ctx, tmp_path):
+        """T5: Custom command in PATH passes pre-flight and delegates to runner."""
+        import shutil
+
+        wt = tmp_path / "wt_path"
+        wt.mkdir()
+        tool_ctx.config.test_check.command = [shutil.which("python3") or "python3", "-V"]
+        tool_ctx.runner.push(_make_result(returncode=0, stdout=""))
+        result = json.loads(await test_check(worktree_path=str(wt)))
+        assert result["passed"] is True
+        assert "infrastructure_missing" not in result
+        assert len(tool_ctx.runner.call_args_list) > 0
+
+
 class TestResetGuard:
     """Marker-file-based reset guard for destructive operations."""
 

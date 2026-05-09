@@ -47,6 +47,10 @@
       "description": "Path to the visualization plan (passed by campaign dispatch)",
       "required": true,
       "hidden": true
+    },
+    "test_check_enabled": {
+      "description": "When 'true' (the default), run test_check after report generation. Set to 'false' for de novo worktrees without test infrastructure.\n",
+      "default": "true"
     }
   },
   "kitchen_rules": [
@@ -339,6 +343,7 @@
       "with": {
         "worktree_path": "${{ context.worktree_path }}"
       },
+      "skip_when_false": "inputs.test_check_enabled",
       "on_success": "push_branch",
       "on_failure": "fix_tests"
     },
@@ -369,6 +374,10 @@
         },
         {
           "when": "${{ context.verdict }} == 'ci_only_failure'",
+          "route": "escalate_stop"
+        },
+        {
+          "when": "${{ context.verdict }} == 'no_test_infrastructure'",
           "route": "escalate_stop"
         }
       ],

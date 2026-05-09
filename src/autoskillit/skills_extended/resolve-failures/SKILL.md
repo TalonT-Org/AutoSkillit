@@ -111,6 +111,8 @@ Read the configured test command(s) from `.autoskillit/config.yaml`: check `test
    sibling parallel-call cancellations.
 4. Check for development environment in worktree, recreate if missing. Use the project's configured `worktree_setup.command`, or: `cd "${worktree_path}" && task install-worktree`
 
+5. **Test infrastructure check:** Run `test_check` once on the worktree. If the result contains `"infrastructure_missing": true`, emit verdict `no_test_infrastructure` with `fixes_applied = 0` and exit immediately. Do NOT enter the fix loop.
+
 ### Step 0.5: Commit Uncommitted Files
 1. Run `git -C {worktree_path} status --porcelain`
 2. If output is non-empty (dirty tree):
@@ -272,14 +274,15 @@ fixes_applied = {N}
 ```
 
 Where:
-- `{verdict}` is one of: `real_fix`, `flake_suspected`, `ci_only_failure`
-- `{N}` is the number of fix iterations performed (0 for `flake_suspected` or `ci_only_failure` verdicts, ≥1 for `real_fix`)
+- `{verdict}` is one of: `real_fix`, `flake_suspected`, `ci_only_failure`, `no_test_infrastructure`
+- `{N}` is the number of fix iterations performed (0 for `flake_suspected`, `ci_only_failure`, or `no_test_infrastructure` verdicts, ≥1 for `real_fix`)
 
 Return control to the orchestrator. The recipe's `on_result:` routing dispatches
 on `verdict`:
 - `real_fix` → `re_push` (fix landed, push to remote)
 - `flake_suspected` → `re_push` (retry via CI, bounded by retries: 2 / on_exhausted: release_issue_failure)
 - `ci_only_failure` → `release_issue_failure` (human escalation)
+- `no_test_infrastructure` → `release_issue_failure` / `escalate_stop` / `register_clone_failure` (depending on recipe)
 
 **Invariant:** `ci_only_failure` is NEVER emitted when `fixes_applied >= 1`. If a fix was
 committed during this invocation and tests pass, the verdict is always `real_fix`.

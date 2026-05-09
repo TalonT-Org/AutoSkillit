@@ -590,13 +590,15 @@ class TestStaleSuppressionDispatchMarker:
 
     Tests the following scenarios for dispatch marker stale suppression:
     - T1: Active marker (True→False via monkeypatch) suppresses stale, then fires
-    - T2: Expired marker (mtime > 60s) does NOT suppress stale
+    - T2: Expired marker (mtime > 60s) does NOT suppress stale (real helper, no monkeypatch —
+      exercises the mtime-expiry threshold in _has_active_dispatch_marker directly)
     - T3: No marker_dir (None) skips dispatch check entirely (regression guard)
     - T4: Bounded suppression fires after max_suppression_seconds
     - T5: Session-scoped matching — sessionA marker does not suppress sessionB
 
     Monkeypatch target: autoskillit.execution.process._process_monitor._has_active_dispatch_marker
     Convention: caller_session_id= is the kwarg used at call sites.
+    Note: T1, T4 monkeypatch the helper; T2, T5 use real marker files to test helper internals.
     """
 
     @pytest.mark.anyio

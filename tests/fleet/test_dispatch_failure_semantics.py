@@ -236,15 +236,15 @@ class TestTimeoutPath:
         assert result["reason"] == "fleet_l3_timeout"
 
     @pytest.mark.anyio
-    async def test_timed_out_session_never_reaches_classify_dispatch_outcome(
+    async def test_timed_out_session_never_reaches_parse_l3_result_block(
         self, tool_ctx, monkeypatch
     ):
-        """TIMED_OUT (subtype=timeout) must short-circuit before classify_dispatch_outcome.
+        """TIMED_OUT (subtype=timeout) must short-circuit before parse_l3_result_block.
 
         The fleet timeout precheck at _api.py:476 is a short-circuit: it returns
         DispatchCompleted(success=False, reason=FLEET_L3_TIMEOUT) before reaching
-        parse_l3_result_block and classify_dispatch_outcome. This test verifies
-        that classify_dispatch_outcome is NEVER called for timeout subtypes.
+        parse_l3_result_block (and therefore classify_dispatch_outcome). This test
+        verifies that parse_l3_result_block is NEVER called for timeout subtypes.
         """
         import dataclasses
 
@@ -259,20 +259,20 @@ class TestTimeoutPath:
             )
         )
 
-        classify_calls: list[dict] = []
+        parse_calls: list[dict] = []
 
-        def _recording_classify(**kwargs):
-            classify_calls.append(kwargs)
+        def _recording_parse(**kwargs):
+            parse_calls.append(kwargs)
 
         monkeypatch.setattr(
-            "autoskillit.fleet._api.classify_dispatch_outcome",
-            _recording_classify,
+            "autoskillit.fleet._api.parse_l3_result_block",
+            _recording_parse,
         )
 
         await _run(tool_ctx)
-        assert not classify_calls, (
-            "classify_dispatch_outcome should not be called for timeout subtype "
-            f"(timeout precheck should short-circuit). Got {len(classify_calls)} calls."
+        assert not parse_calls, (
+            "parse_l3_result_block should not be called for timeout subtype "
+            f"(timeout precheck should short-circuit). Got {len(parse_calls)} calls."
         )
 
 

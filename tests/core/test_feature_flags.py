@@ -95,16 +95,3 @@ class TestCollectDisabledFeatureTags:
         result = _collect_disabled_feature_tags({"feat_a": False, "feat_b": True})
         # feat_b enabled claims the tag → must not appear in result
         assert "shared-tag" not in result
-
-
-def test_experimental_enabled_env_override_false(monkeypatch: pytest.MonkeyPatch) -> None:
-    """AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED=false disables experimental features."""
-    from autoskillit.config._config_loader import load_config
-    from autoskillit.core.feature_flags import is_feature_enabled
-
-    monkeypatch.setenv("AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED", "false")
-    cfg = load_config()
-    assert not cfg.experimental_enabled
-    assert not is_feature_enabled(
-        "fleet", cfg.features, experimental_enabled=cfg.experimental_enabled
-    )

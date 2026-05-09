@@ -310,13 +310,24 @@ def test_load_and_validate_cache_key_includes_all_result_affecting_params(tmp_pa
         f"cache key construction: {missing_params}"
     )
 
-    # Verify the cache key has an entry for each mapped param
-    for param, idx in param_to_key_index.items():
-        if param in result_affecting_params:
-            assert len(cache_key) > idx, (
-                f"cache_key too short for param {param} (index {idx}); "
-                f"got {len(cache_key)} elements"
-            )
+    # Verify actual values at deterministic positions
+    assert cache_key[0] == "myrecipe", f"cache_key[0] expected 'myrecipe', got {cache_key[0]!r}"
+    assert cache_key[1] == ".autoskillit/temp", (
+        f"cache_key[1] expected default temp relpath, got {cache_key[1]!r}"
+    )
+    assert cache_key[2] == str(tmp_path), (
+        f"cache_key[2] expected str(project_dir), got {cache_key[2]!r}"
+    )
+    assert cache_key[3] == (), (
+        f"cache_key[3] expected empty suppressed tuple, got {cache_key[3]!r}"
+    )
+    assert cache_key[4] == (), (
+        f"cache_key[4] expected empty ingredient_overrides tuple, got {cache_key[4]!r}"
+    )
+    for idx in (5, 6, 7, 8):
+        assert isinstance(cache_key[idx], str), (
+            f"cache_key[{idx}] expected str hash, got {type(cache_key[idx])!r}"
+        )
 
 
 # ---------------------------------------------------------------------------

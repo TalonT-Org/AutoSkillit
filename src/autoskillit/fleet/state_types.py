@@ -232,16 +232,18 @@ class DispatchRejected:
     error_code: FleetErrorCode
     message: str
     details: dict[str, Any] | None = None
+    dispatch_id: str = ""
 
     def to_envelope(self) -> str:
-        return json.dumps(
-            {
-                "success": False,
-                "error": self.error_code,
-                "user_visible_message": self.message,
-                "details": self.details,
-            }
-        )
+        d: dict[str, Any] = {
+            "success": False,
+            "error": self.error_code,
+            "user_visible_message": self.message,
+            "details": self.details,
+        }
+        if self.dispatch_id:
+            d["dispatch_id"] = self.dispatch_id
+        return json.dumps(d)
 
 
 @dataclass(frozen=True, slots=True)

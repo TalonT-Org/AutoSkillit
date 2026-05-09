@@ -162,28 +162,56 @@ async def execute_dispatch(
     resume_checkpoint: SessionCheckpoint | None = None,
     idle_output_timeout: int | None = None,
     caller_session_id: str = "",
+    campaign_state_path: Path | None = None,
 ) -> DispatchOutcome:
     """Execute a single food truck dispatch.
 
     Orchestrates: lock → validate → quota → prompt → dispatch → parse → state → cleanup.
     Returns DispatchOutcome (DispatchCompleted | DispatchRejected).
     """
+    effective_name = dispatch_name or recipe
+
+    def _reject(error_code: FleetErrorCode, message: str, **kwargs: Any) -> DispatchRejected:
+        rejection = DispatchRejected(error_code=error_code, message=message, **kwargs)
+        if campaign_state_path is not None:
+            try:
+                from autoskillit.fleet.state import (
+                    DispatchRecord,
+                    DispatchStatus,
+                    upsert_dispatch_record_by_name,
+                )
+
+                upsert_dispatch_record_by_name(
+                    campaign_state_path,
+                    DispatchRecord(
+                        name=effective_name,
+                        status=DispatchStatus.REFUSED,
+                        reason=error_code,
+                    ),
+                )
+            except Exception:
+                logger.warning(
+                    "execute_dispatch: failed to record rejection to campaign state",
+                    exc_info=True,
+                )
+        return rejection
+
     if ingredients is not None:
         bad_vals = [k for k, v in ingredients.items() if not isinstance(v, str)]
         if bad_vals:
-            return DispatchRejected(
-                error_code=FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
-                message=f"Ingredient values must be strings. Non-string keys: {bad_vals}",
+            return _reject(
+                FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
+                f"Ingredient values must be strings. Non-string keys: {bad_vals}",
             )
 
     lock = tool_ctx.fleet_lock
     if lock is None:
-        return DispatchRejected(
+        return _reject(
             error_code=FleetErrorCode.FLEET_LOCK_NOT_INITIALIZED,
             message="Fleet lock not initialized — open_kitchen with fleet mode.",
         )
     if lock.at_capacity():
-        return DispatchRejected(
+        return _reject(
             error_code=FleetErrorCode.FLEET_PARALLEL_REFUSED,
             message=(
                 f"Fleet at capacity ({lock.active_count}/{lock.max_concurrent}"
@@ -194,7 +222,7 @@ async def execute_dispatch(
     try:
         await lock.acquire()
     except TimeoutError:
-        return DispatchRejected(
+        return _reject(
             error_code=FleetErrorCode.FLEET_ACQUIRE_TIMEOUT,
             message=(
                 f"Timed out waiting for fleet semaphore after {lock.timeout}s "
@@ -218,12 +246,13 @@ async def execute_dispatch(
             resume_checkpoint=resume_checkpoint,
             idle_output_timeout=idle_output_timeout,
             caller_session_id=caller_session_id,
+            campaign_state_path=campaign_state_path,
         )
     except asyncio.CancelledError:
         raise
     except Exception as exc:
         logger.error("execute_dispatch failed", exc_info=True)
-        return DispatchRejected(
+        return _reject(
             error_code=FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
             message=f"{type(exc).__name__}: {exc}",
         )
@@ -291,6 +320,7 @@ async def _run_dispatch(
     resume_checkpoint: SessionCheckpoint | None = None,
     idle_output_timeout: int | None = None,
     caller_session_id: str = "",
+    campaign_state_path: Path | None = None,
 ) -> DispatchOutcome:
     """Inner dispatch body — called after lock acquisition."""
     from autoskillit.fleet.state import (
@@ -337,70 +367,11 @@ async def _run_dispatch(
     effective_ingredients = ingredients or {}
     if "task" in full_recipe.ingredients and "task" not in effective_ingredients:
         effective_ingredients = {"task": task, **effective_ingredients}
-    if effective_ingredients:
-        unknown = set(effective_ingredients.keys()) - set(full_recipe.ingredients.keys())
-        if unknown:
-            return DispatchRejected(
-                error_code=FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
-                message=f"Unknown ingredient keys: {sorted(unknown)}. "
-                f"Valid keys: {sorted(full_recipe.ingredients.keys())}",
-            )
 
-    missing_required = [
-        key
-        for key, ing in full_recipe.ingredients.items()
-        if getattr(ing, "required", False)
-        and getattr(ing, "default", None) is None
-        and key not in effective_ingredients
-    ]
-    if missing_required:
-        return DispatchRejected(
-            error_code=FleetErrorCode.FLEET_MISSING_INGREDIENT,
-            message=f"Missing required ingredients: {sorted(missing_required)}. "
-            f"These have no default and must be supplied.",
-        )
-
-    from autoskillit.fleet.state import read_all_campaign_captures  # noqa: PLC0415
-
-    dispatches_dir = tool_ctx.temp_dir / "dispatches"
-    accumulated_captures = read_all_campaign_captures(dispatches_dir, tool_ctx.kitchen_id)
-
-    _has_campaign_refs = any(_CAMPAIGN_REF_RE.search(v) for v in effective_ingredients.values())
-    if _has_campaign_refs:
-        try:
-            effective_ingredients = _interpolate_campaign_refs(
-                effective_ingredients, accumulated_captures
-            )
-        except ValueError as exc:
-            logger.warning("ingredient interpolation failed", exc_info=True)
-            return DispatchRejected(
-                error_code=FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
-                message=str(exc),
-            )
-
-    quota_result = await quota_checker(tool_ctx.config.quota_guard)
-    if quota_result.get("should_sleep"):
-        await asyncio.sleep(quota_result.get("sleep_seconds", 0))
-
+    effective_name = dispatch_name or recipe
     identity = DispatchIdentity.fresh()
     dispatch_id = identity.dispatch_id
-    completion_marker = identity.completion_marker
-    sentinel_contract = identity.sentinel_contract
-    from autoskillit.fleet.sidecar import sidecar_path as compute_sidecar_path  # noqa: PLC0415
-
-    dispatch_sidecar_path = str(compute_sidecar_path(dispatch_id, tool_ctx.project_dir))
-    effective_name = dispatch_name or recipe
-
     campaign_id = tool_ctx.kitchen_id
-    prompt = prompt_builder(
-        recipe=recipe,
-        task=task,
-        ingredients=effective_ingredients,
-        dispatch_id=dispatch_id,
-        campaign_id=campaign_id,
-        l3_timeout_sec=timeout_sec or 1800,
-    )
-
     state_path = tool_ctx.temp_dir / "dispatches" / f"{dispatch_id}.json"
     state_path.parent.mkdir(parents=True, exist_ok=True)
     recipe_snapshot = {
@@ -419,6 +390,93 @@ async def _run_dispatch(
         recipe_snapshot=recipe_snapshot,
     )
 
+    def _reject_with_state(error_code: FleetErrorCode, message: str) -> DispatchRejected:
+        try:
+            append_dispatch_record(
+                state_path,
+                DispatchRecord(
+                    name=effective_name,
+                    status=DispatchStatus.REFUSED,
+                    reason=error_code,
+                ),
+            )
+        except Exception:
+            logger.warning("_reject_with_state: per-dispatch state write failed", exc_info=True)
+        if campaign_state_path is not None:
+            try:
+                upsert_dispatch_record_by_name(
+                    campaign_state_path,
+                    DispatchRecord(
+                        name=effective_name,
+                        status=DispatchStatus.REFUSED,
+                        reason=error_code,
+                    ),
+                )
+            except Exception:
+                logger.warning("_reject_with_state: campaign state write failed", exc_info=True)
+        return DispatchRejected(error_code=error_code, message=message, dispatch_id=dispatch_id)
+
+    if effective_ingredients:
+        unknown = set(effective_ingredients.keys()) - set(full_recipe.ingredients.keys())
+        if unknown:
+            return _reject_with_state(
+                FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
+                f"Unknown ingredient keys: {sorted(unknown)}. "
+                f"Valid keys: {sorted(full_recipe.ingredients.keys())}",
+            )
+
+    missing_required = [
+        key
+        for key, ing in full_recipe.ingredients.items()
+        if getattr(ing, "required", False)
+        and getattr(ing, "default", None) is None
+        and key not in effective_ingredients
+    ]
+    if missing_required:
+        return _reject_with_state(
+            FleetErrorCode.FLEET_MISSING_INGREDIENT,
+            f"Missing required ingredients: {sorted(missing_required)}. "
+            f"These have no default and must be supplied.",
+        )
+
+    from autoskillit.fleet.state import read_all_campaign_captures  # noqa: PLC0415
+
+    dispatches_dir = tool_ctx.temp_dir / "dispatches"
+    accumulated_captures = read_all_campaign_captures(dispatches_dir, tool_ctx.kitchen_id)
+
+    _has_campaign_refs = any(_CAMPAIGN_REF_RE.search(v) for v in effective_ingredients.values())
+    if _has_campaign_refs:
+        try:
+            effective_ingredients = _interpolate_campaign_refs(
+                effective_ingredients, accumulated_captures
+            )
+        except ValueError as exc:
+            logger.warning("ingredient interpolation failed", exc_info=True)
+            return _reject_with_state(
+                FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
+                str(exc),
+            )
+
+    quota_result = await quota_checker(tool_ctx.config.quota_guard)
+    if quota_result.get("should_sleep"):
+        await asyncio.sleep(quota_result.get("sleep_seconds", 0))
+
+    completion_marker = identity.completion_marker
+    sentinel_contract = identity.sentinel_contract
+    from autoskillit.fleet.sidecar import sidecar_path as compute_sidecar_path  # noqa: PLC0415
+
+    dispatch_sidecar_path = str(compute_sidecar_path(dispatch_id, tool_ctx.project_dir))
+
+    campaign_id = tool_ctx.kitchen_id
+    prompt = prompt_builder(
+        recipe=recipe,
+        task=task,
+        ingredients=effective_ingredients,
+        dispatch_id=dispatch_id,
+        campaign_id=campaign_id,
+        l3_timeout_sec=timeout_sec or 1800,
+    )
+
     if tool_ctx.executor is None:
         append_dispatch_record(
             state_path,
@@ -431,6 +489,7 @@ async def _run_dispatch(
         return DispatchRejected(
             error_code=FleetErrorCode.FLEET_MANIFEST_MISSING,
             message="Executor not configured.",
+            dispatch_id=dispatch_id,
         )
 
     started_at = time.time()

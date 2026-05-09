@@ -184,7 +184,7 @@ def parse_l3_result_block(
             if positions is not None:
                 open_pos, close_pos = positions
                 return _parse_body(cleaned, open_pos, close_pos, prior_open, "stdout")
-            if jsonl_text is not None:
+            if jsonl_text is not None:  # only set when assistant_messages_path was provided
                 positions = _scan_for_sentinel(jsonl_text, prior_open, prior_close)
                 if positions is not None:
                     open_pos, close_pos = positions

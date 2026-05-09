@@ -1,12 +1,4 @@
-"""AST guard: verify all SkillResult() constructions include kill_reason keyword arg.
-
-This guard prevents the class of bug where a new early-return branch constructs
-SkillResult without passing kill_reason=result.kill_reason, silently defaulting to
-KillReason.NATURAL_EXIT instead of preserving the subprocess's actual kill reason.
-
-Scans _headless_result.py for direct SkillResult() calls and asserts each call
-includes kill_reason as a keyword argument.
-"""
+"""AST guard: verify all SkillResult() constructions in _headless_result.py include kill_reason."""
 
 from __future__ import annotations
 
@@ -48,12 +40,7 @@ HEADLESS_RESULT_PATH = (
 
 class TestSkillResultConstructionGuard:
     def test_all_skill_result_calls_include_kill_reason(self):
-        """Every direct SkillResult() call must pass kill_reason as a keyword arg.
-
-        This prevents new construction sites from accidentally omitting kill_reason,
-        which silently defaults to NATURAL_EXIT instead of propagating the actual
-        subprocess kill reason (INFRA_KILL for stale/idle/exception terminations).
-        """
+        assert HEADLESS_RESULT_PATH.exists(), f"Production file not found: {HEADLESS_RESULT_PATH}"
         src = HEADLESS_RESULT_PATH.read_text()
         calls = _find_skill_result_calls(src)
 

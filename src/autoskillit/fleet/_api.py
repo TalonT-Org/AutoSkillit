@@ -23,7 +23,12 @@ from autoskillit.core import (
 )
 from autoskillit.fleet.result_parser import L3ParseResult, parse_l3_result_block
 from autoskillit.fleet.state import DispatchStatus
-from autoskillit.fleet.state_types import DispatchCompleted, DispatchOutcome, DispatchRejected
+from autoskillit.fleet.state_types import (
+    _ABANDON_REASONS,
+    DispatchCompleted,
+    DispatchOutcome,
+    DispatchRejected,
+)
 
 if TYPE_CHECKING:
     from autoskillit.pipeline.context import ToolContext
@@ -209,16 +214,6 @@ async def execute_dispatch(
         )
     finally:
         lock.release()
-
-
-_ABANDON_REASONS: frozenset[str] = frozenset(
-    {
-        RetryReason.STALE,
-        RetryReason.THINKING_STALL,
-        RetryReason.PATH_CONTAMINATION,
-        RetryReason.CLONE_CONTAMINATION,
-    }
-)
 
 
 def _is_abandon_reason(skill_result: SkillResult) -> bool:

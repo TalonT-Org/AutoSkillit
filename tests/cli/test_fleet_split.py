@@ -11,7 +11,6 @@ def test_fleet_display_importable():
 
 def test_fleet_lifecycle_importable():
     from autoskillit.cli.fleet._fleet_lifecycle import (  # noqa: F401
-        _fleet_signal_guard,
         _reap_stale_dispatches,
     )
 

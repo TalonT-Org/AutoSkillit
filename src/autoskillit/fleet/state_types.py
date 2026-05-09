@@ -285,17 +285,20 @@ _VISIBLE_IN_BLOCK_STATUSES = _COMPLETED_STATUSES | frozenset(
     }
 )
 
+# FAILURE is included here (stops forward progress) but can transition back to PENDING
+# via explicit retry.
 TERMINAL_DISPATCH_STATUSES: frozenset[str] = frozenset(
     {
         DispatchStatus.SUCCESS,
         DispatchStatus.FAILURE,
         DispatchStatus.SKIPPED,
         DispatchStatus.RELEASED,
+        DispatchStatus.REFUSED,
     }
 )
 
 
-_ABANDON_KILL_REASONS: frozenset[str] = frozenset(
+_ABANDON_REASONS: frozenset[str] = frozenset(
     {
         RetryReason.STALE,
         RetryReason.THINKING_STALL,

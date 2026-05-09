@@ -1,17 +1,12 @@
-"""Fleet signal guard and stale-dispatch reaping extracted from _fleet.py."""
+"""Fleet stale-dispatch reaping extracted from _fleet.py."""
 
 from __future__ import annotations
 
-import signal
 import sys
 import time
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import anyio
-import anyio.abc
 import psutil
 
 from autoskillit.core import get_logger
@@ -36,127 +31,6 @@ def _apply_stale_dispatch(
         dispatch.sidecar_path = sidecar
     dispatch.ended_at = time.time()
     m.mark_dirty()
-
-
-@asynccontextmanager
-async def _fleet_signal_guard(
-    state_path: Path,
-    campaign_id: str,
-    *,
-    campaign_name: str | None = None,
-    cleanup_on_interrupt: bool = False,
-) -> AsyncIterator[None]:
-    """Async context manager that installs SIGINT/SIGTERM handlers.
-
-    On signal receipt:
-    - Cancels the enclosing task group scope first.
-    - Reads state.json and marks RUNNING dispatches as INTERRUPTED.
-    - Verifies PID identity via starttime_ticks before killing.
-    - Optionally runs workspace cleanup.
-    - Logs a resume hint.
-    """
-
-    async def _watch(
-        scope: anyio.CancelScope,
-        *,
-        task_status: anyio.abc.TaskStatus = anyio.TASK_STATUS_IGNORED,
-    ) -> None:
-        with anyio.open_signal_receiver(signal.SIGTERM, signal.SIGINT, signal.SIGHUP) as signals:
-            task_status.started()
-            async for sig in signals:
-                signame = sig.name
-
-                # Cancel the enclosing scope FIRST to unwind any in-flight dispatch
-                # coroutine before the cleanup writes state (prevents ordering races).
-                scope.cancel()
-
-                # Shield the cleanup from the now-cancelled scope so that async
-                # operations (kill, state write) are not interrupted.
-                with anyio.CancelScope(shield=True):
-                    from autoskillit.execution import async_kill_process_tree, read_starttime_ticks
-                    from autoskillit.fleet import (  # noqa: PLC0415
-                        CampaignStateMutator,
-                        DispatchStatus,
-                    )
-
-                    with CampaignStateMutator(state_path) as m:
-                        if m.state is not None:
-                            for dispatch in m.state.dispatches:
-                                if dispatch.status != DispatchStatus.RUNNING:
-                                    continue
-                                if dispatch.dispatched_pid == 0:
-                                    _apply_stale_dispatch(dispatch, f"signal_{signame}", m)
-                                    continue
-
-                                # Verify PID identity before killing
-                                current_ticks = read_starttime_ticks(dispatch.dispatched_pid)
-                                if current_ticks is not None:
-                                    if (
-                                        dispatch.dispatched_starttime_ticks > 0
-                                        and current_ticks == dispatch.dispatched_starttime_ticks
-                                    ):
-                                        try:
-                                            await async_kill_process_tree(
-                                                dispatch.dispatched_pid, timeout=5.0
-                                            )
-                                        except Exception:
-                                            logger.warning(
-                                                "signal_guard: kill_process_tree failed",
-                                                exc_info=True,
-                                            )
-                                    else:
-                                        logger.warning(
-                                            "signal_guard: PID %d recycled (ticks mismatch)",
-                                            dispatch.dispatched_pid,
-                                        )
-                                else:
-                                    # Non-Linux fallback: psutil.pid_exists without identity check
-                                    if psutil.pid_exists(dispatch.dispatched_pid):
-                                        try:
-                                            await async_kill_process_tree(
-                                                dispatch.dispatched_pid, timeout=5.0
-                                            )
-                                        except Exception:
-                                            logger.warning(
-                                                "signal_guard: kill_process_tree failed"
-                                                " (non-linux fallback)",
-                                                exc_info=True,
-                                            )
-                                    else:
-                                        logger.info(
-                                            "signal_guard: PID %d not found (non-linux fallback)"
-                                            " — transitioning without kill",
-                                            dispatch.dispatched_pid,
-                                        )
-
-                                _apply_stale_dispatch(dispatch, f"signal_{signame}", m)
-
-                    if cleanup_on_interrupt:
-                        try:
-                            from autoskillit.core import ensure_project_temp
-                            from autoskillit.workspace import DefaultWorkspaceManager
-
-                            workspace_dir = ensure_project_temp(Path.cwd())
-                            mgr = DefaultWorkspaceManager()
-                            mgr.delete_contents(workspace_dir)
-                        except Exception:
-                            logger.warning("signal_guard: workspace cleanup failed", exc_info=True)
-
-                    if campaign_name is not None:
-                        resume_cmd = (
-                            f"autoskillit fleet campaign {campaign_name} --resume {campaign_id}"
-                        )
-                    else:
-                        resume_cmd = f"autoskillit fleet campaign <name> --resume {campaign_id}"
-                    sys.stderr.write(f"Campaign {campaign_id} interrupted. Resume: {resume_cmd}\n")
-                return
-
-    async with anyio.create_task_group() as tg:
-        await tg.start(_watch, tg.cancel_scope)
-        try:
-            yield
-        finally:
-            tg.cancel_scope.cancel()
 
 
 def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:

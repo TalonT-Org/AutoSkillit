@@ -22,7 +22,7 @@ from autoskillit.fleet.state_recovery import (
     resume_campaign_from_state,
 )
 from autoskillit.fleet.state_types import (
-    _ABANDON_KILL_REASONS,  # noqa: F401
+    _ABANDON_REASONS,  # noqa: F401
     _ALLOWED_TRANSITIONS,  # noqa: F401
     _COMPLETED_STATUSES,  # noqa: F401
     _INFRASTRUCTURE_FAILURE_REASONS,  # noqa: F401

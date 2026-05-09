@@ -52,7 +52,7 @@ def record_gate_outcome(
                 ),
             )
 
-        status = DispatchStatus.SUCCESS if approved else DispatchStatus.FAILURE
+        status = DispatchStatus.SUCCESS if approved else DispatchStatus.REFUSED
         now = time.time()
         new_record = DispatchRecord(
             name=dispatch_name,

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from autoskillit.core import InfraExitCategory, NamedResume, NoResume, RetryReason, get_logger
 from autoskillit.fleet.state_types import (
-    _ABANDON_KILL_REASONS,
+    _ABANDON_REASONS,
     _INFRASTRUCTURE_FAILURE_REASONS,
     _VISIBLE_IN_BLOCK_STATUSES,
     FLEET_HALTED_SENTINEL,
@@ -48,9 +48,9 @@ def has_failed_dispatch(state_path: Path) -> bool:
     )
 
 
-def _is_abandon_kill_reason(kill_reason: str, infra_exit_category: str) -> bool:
-    """Check if stored kill metadata indicates resume would be futile."""
-    if kill_reason in _ABANDON_KILL_REASONS:
+def _is_abandon_kill_metadata(kill_reason: str, infra_exit_category: str) -> bool:
+    """Return True when stored kill metadata indicates resume would be futile."""
+    if kill_reason in _ABANDON_REASONS:
         return True
     if (
         kill_reason == RetryReason.RESUME
@@ -94,7 +94,7 @@ def classify_stale_dispatch(
                 # treat as having entries to avoid conflating parse errors with 'no entries'.
                 has_entries = bool(raw_lines)
             if not raw_lines or has_entries:
-                if _is_abandon_kill_reason(dispatch.kill_reason, dispatch.infra_exit_category):
+                if _is_abandon_kill_metadata(dispatch.kill_reason, dispatch.infra_exit_category):
                     return (DispatchStatus.INTERRUPTED, "")
                 return (DispatchStatus.RESUMABLE, sidecar_path_str)
     logger.debug(

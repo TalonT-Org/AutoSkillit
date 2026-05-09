@@ -216,6 +216,7 @@ async def _execute_claude_headless(
     expected_output_patterns: Sequence[str] = (),
     write_behavior: WriteBehaviorSpec | None = None,
     completion_marker: str = "",
+    prior_completion_markers: Sequence[str] | None = None,
     recipe_name: str = "",
     recipe_content_hash: str = "",
     recipe_composite_hash: str = "",
@@ -448,6 +449,7 @@ async def _execute_claude_headless(
             cwd=cwd,
             write_behavior=write_behavior,
             fs_writes_detected=_fs_writes_detected,
+            prior_completion_markers=prior_completion_markers,
             provider_used=current_provider_name,
         )
 
@@ -798,6 +800,7 @@ class DefaultHeadlessExecutor:
         cwd: str,
         *,
         completion_marker: str,
+        prior_completion_markers: Sequence[str] | None = None,
         resume_session_id: str | None = None,
         resume_checkpoint: SessionCheckpoint | None = None,
         model: str = "",
@@ -892,6 +895,7 @@ class DefaultHeadlessExecutor:
             stale_threshold=float(effective_stale),
             idle_output_timeout=effective_idle_out,
             completion_marker=completion_marker,
+            prior_completion_markers=prior_completion_markers,
             on_spawn=on_spawn,
             skip_clone_guard=True,
             provider_name=provider_name,

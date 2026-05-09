@@ -69,6 +69,7 @@ class HeadlessExecutor(Protocol):
         cwd: str,
         *,
         completion_marker: str,
+        prior_completion_markers: Sequence[str] | None = None,
         resume_session_id: str | None = None,
         resume_checkpoint: SessionCheckpoint | None = None,
         model: str = "",

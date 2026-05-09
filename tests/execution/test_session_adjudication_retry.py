@@ -521,6 +521,32 @@ class TestContentStateEnum:
 
 
 # ---------------------------------------------------------------------------
+# Prior completion marker tests
+# ---------------------------------------------------------------------------
+
+
+def test_retry_fsm_no_spurious_early_stop_with_prior_marker() -> None:
+    """When session contains a prior attempt's completion marker,
+    _compute_retry should not flag EARLY_STOP."""
+    original_marker = "%%L3_DONE::a3f7b2c1%%"
+    new_marker = "%%L3_DONE::x9y8z7w6%%"
+    session = ClaudeSessionResult(
+        subtype="success",
+        is_error=False,
+        result=f"Done.\n{original_marker}",
+        session_id="test-session",
+    )
+    _, reason = _compute_retry(
+        session,
+        returncode=0,
+        termination=TerminationReason.NATURAL_EXIT,
+        completion_marker=new_marker,
+        prior_completion_markers=[original_marker],
+    )
+    assert reason != RetryReason.EARLY_STOP
+
+
+# ---------------------------------------------------------------------------
 # T2: API errors route to RetryReason.RESUME (not EMPTY_OUTPUT)
 # ---------------------------------------------------------------------------
 

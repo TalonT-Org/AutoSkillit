@@ -292,3 +292,24 @@ class TestCampaignSummarySchema:
         assert isinstance(result, CampaignSummary)
         assert result.per_dispatch[0].dispatch_id == ""
         assert result.per_dispatch[1].dispatch_id == ""
+
+
+def test_campaign_summary_accepts_prior_campaign_id() -> None:
+    """If sentinel uses a prior campaign_id, parse_campaign_summary
+    should succeed when prior_campaign_ids is provided."""
+    from autoskillit.fleet import CampaignSummary, parse_campaign_summary
+
+    prior_cid = "kitchen-uuid-A"
+    current_cid = "kitchen-uuid-B"
+    text = (
+        f"---campaign-summary::{prior_cid}---\n"
+        '{"overall_status": "success", "total_dispatched": 1, '
+        '"succeeded": 1, "failed": 0, "per_dispatch": [{"name": "t1", '
+        '"status": "success", "elapsed_seconds": 1.0, "token_usage": {"input": 1, '
+        '"output": 1, "cache_read_input_tokens": 0, '
+        '"cache_creation_input_tokens": 0}, "dispatched_session_id": "s1", '
+        '"dispatch_id": "d1"}], "error_records": []}\n'
+        f"---end-campaign-summary::{prior_cid}---\n"
+    )
+    result = parse_campaign_summary(text, current_cid, prior_campaign_ids=[prior_cid])
+    assert isinstance(result, CampaignSummary)

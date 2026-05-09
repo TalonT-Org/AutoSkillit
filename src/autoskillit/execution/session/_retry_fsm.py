@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import assert_never
 
 from autoskillit.core import (
@@ -55,6 +56,7 @@ def _compute_retry(
     termination: TerminationReason,
     channel_confirmation: ChannelConfirmation = ChannelConfirmation.UNMONITORED,
     completion_marker: str = "",
+    prior_completion_markers: Sequence[str] | None = None,
 ) -> tuple[bool, RetryReason]:
     """Compute whether the session result warrants a retry.
 
@@ -111,14 +113,19 @@ def _compute_retry(
                 and completion_marker
                 and completion_marker not in session.result
             ):
-                skill_tool_calls = [t for t in session.tool_uses if t.get("name") == "Skill"]
-                logger.debug(
-                    "compute_retry_early_stop",
-                    termination="NATURAL_EXIT",
-                    has_skill_calls=bool(skill_tool_calls),
-                    skill_call_count=len(skill_tool_calls),
-                )
-                return True, RetryReason.EARLY_STOP
+                if prior_completion_markers and any(
+                    pm and pm in session.result for pm in prior_completion_markers
+                ):
+                    pass  # a prior marker is present — do not flag EARLY_STOP
+                else:
+                    skill_tool_calls = [t for t in session.tool_uses if t.get("name") == "Skill"]
+                    logger.debug(
+                        "compute_retry_early_stop",
+                        termination="NATURAL_EXIT",
+                        has_skill_calls=bool(skill_tool_calls),
+                        skill_call_count=len(skill_tool_calls),
+                    )
+                    return True, RetryReason.EARLY_STOP
             logger.debug(
                 "compute_retry_result",
                 termination="NATURAL_EXIT",

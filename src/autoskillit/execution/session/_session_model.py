@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, assert_never
@@ -143,7 +144,12 @@ class ClaudeSessionResult:
             return RetryReason.RESUME
         return RetryReason.NONE
 
-    def normalize_subtype(self, outcome: SessionOutcome, completion_marker: str) -> str:
+    def normalize_subtype(
+        self,
+        outcome: SessionOutcome,
+        completion_marker: str,
+        prior_completion_markers: Sequence[str] | None = None,
+    ) -> str:
         """Map (outcome, completion_marker) → adjudicated subtype string.
 
         Class 2 (upward): SUCCEEDED + failure subtype → "success".
@@ -159,7 +165,11 @@ class ClaudeSessionResult:
                 if self._is_context_exhausted():
                     return "context_exhausted"
                 if completion_marker and completion_marker not in self.result:
-                    return "missing_completion_marker"
+                    if not (
+                        prior_completion_markers
+                        and any(pm and pm in self.result for pm in prior_completion_markers)
+                    ):
+                        return "missing_completion_marker"
                 return "adjudicated_failure"
             case (
                 CliSubtype.UNKNOWN

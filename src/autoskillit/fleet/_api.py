@@ -512,6 +512,24 @@ async def _run_dispatch(
     started_at = time.time()
     _dispatched_pid: list[int] = []
 
+    # Collect prior dispatch_ids from attempt_history for defense-in-depth parsing
+    prior_ids: list[str] = []
+    try:
+        state = read_state(state_path)
+        if state:
+            for d in state.dispatches:
+                if d.name == effective_name:
+                    for attempt in d.attempt_history:
+                        aid = attempt.get("dispatch_id", "")
+                        if aid and aid != dispatch_id:
+                            prior_ids.append(aid)
+    except Exception:
+        logger.warning("failed to collect prior dispatch_ids from state", exc_info=True)
+
+    prior_completion_markers = (
+        [f"%%L3_DONE::{pid[:8]}%%" for pid in prior_ids] if prior_ids else None
+    )
+
     def _on_spawn(pid: int, ticks: int) -> None:
         _dispatched_pid.append(pid)
         try:
@@ -526,6 +544,7 @@ async def _run_dispatch(
         orchestrator_prompt=prompt,
         cwd=str(tool_ctx.project_dir),
         completion_marker=completion_marker,
+        prior_completion_markers=prior_completion_markers,
         resume_session_id=resume_session_id,
         resume_checkpoint=resume_checkpoint,
         kitchen_id=tool_ctx.kitchen_id,
@@ -588,20 +607,6 @@ async def _run_dispatch(
         )
 
     jsonl_path = claude_code_log_path(str(tool_ctx.project_dir), skill_result.session_id or "")
-
-    # Collect prior dispatch_ids from attempt_history for defense-in-depth parsing
-    prior_ids: list[str] = []
-    try:
-        state = read_state(state_path)
-        if state:
-            for d in state.dispatches:
-                if d.name == effective_name:
-                    for attempt in d.attempt_history:
-                        aid = attempt.get("dispatch_id", "")
-                        if aid and aid != dispatch_id:
-                            prior_ids.append(aid)
-    except Exception:
-        logger.warning("failed to collect prior dispatch_ids from state", exc_info=True)
 
     parsed = parse_l3_result_block(
         stdout=skill_result.result or "",

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Literal
@@ -90,3 +91,18 @@ def compute_remaining_issues(
 ) -> list[str]:
     seen = {e.issue_url for e in read_sidecar(dispatch_id, project_dir)}
     return [url for url in original_urls if url not in seen]
+
+
+def merge_sidecar_chain(dispatch_ids: Sequence[str], project_dir: Path) -> list[IssueSidecarEntry]:
+    """Read sidecar entries from multiple dispatch IDs and merge by issue_url.
+
+    When resuming a dispatch that has prior attempt dispatch IDs, their sidecar
+    files contain entries for issues already processed. Merging them avoids
+    re-processing those issues.
+    """
+    seen: dict[str, IssueSidecarEntry] = {}
+    for did in dispatch_ids:
+        for entry in read_sidecar(did, project_dir):
+            if entry.issue_url not in seen:
+                seen[entry.issue_url] = entry
+    return list(seen.values())

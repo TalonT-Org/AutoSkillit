@@ -7,6 +7,7 @@ emitted by L3 fleet sessions before exit.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
@@ -159,7 +160,11 @@ def validate_campaign_summary(data: dict[str, Any]) -> list[str]:
     return errors
 
 
-def parse_campaign_summary(text: str, campaign_id: str) -> CampaignParseResult:
+def parse_campaign_summary(
+    text: str,
+    campaign_id: str,
+    prior_campaign_ids: Sequence[str] | None = None,
+) -> CampaignParseResult:
     """Parse campaign summary from sentinel-wrapped text.
 
     Returns CampaignSummary on success, ParseFailure with a specific kind on any failure.
@@ -169,12 +174,17 @@ def parse_campaign_summary(text: str, campaign_id: str) -> CampaignParseResult:
         return ParseFailure(
             ParseFailureKind.SENTINEL_MISSING, "No campaign summary sentinel found"
         )
-    if match.group("cid") != campaign_id or match.group("cid_end") != campaign_id:
-        cid, cid_end = match.group("cid"), match.group("cid_end")
-        return ParseFailure(
-            ParseFailureKind.CAMPAIGN_ID_MISMATCH,
-            f"Sentinel ids {cid!r}/{cid_end!r} do not match expected {campaign_id!r}",
-        )
+    found_cid = match.group("cid")
+    found_cid_end = match.group("cid_end")
+    if found_cid != campaign_id or found_cid_end != campaign_id:
+        if prior_campaign_ids and found_cid in prior_campaign_ids:
+            pass  # prior campaign ID accepted
+        else:
+            return ParseFailure(
+                ParseFailureKind.CAMPAIGN_ID_MISMATCH,
+                f"Sentinel ids {found_cid!r}/{found_cid_end!r} do not match "
+                f"expected {campaign_id!r}",
+            )
     try:
         data = json.loads(match.group("body"))
     except json.JSONDecodeError as exc:

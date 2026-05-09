@@ -183,10 +183,12 @@ async def execute_dispatch(
     try:
         await lock.acquire()
     except TimeoutError:
-        return fleet_error(
-            FleetErrorCode.FLEET_ACQUIRE_TIMEOUT,
-            f"Timed out waiting for fleet semaphore after {lock.timeout}s "
-            f"({lock.active_count}/{lock.max_concurrent} dispatches running).",
+        return DispatchRejected(
+            error_code=FleetErrorCode.FLEET_ACQUIRE_TIMEOUT,
+            message=(
+                f"Timed out waiting for fleet semaphore after {lock.timeout}s "
+                f"({lock.active_count}/{lock.max_concurrent} dispatches running)."
+            ),
         )
     try:
         return await _run_dispatch(

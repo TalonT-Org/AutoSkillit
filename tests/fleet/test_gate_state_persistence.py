@@ -333,8 +333,7 @@ class TestValidationFailureCampaignState:
         # but the lock itself is not the rejection source — ingredients are.
         from tests.fleet.conftest import fleet_lock_from_ctx
 
-        lock = fleet_lock_from_ctx(tool_ctx)
-        tool_ctx.fleet_lock = lock
+        fleet_lock_from_ctx(tool_ctx)
 
         from autoskillit.fleet import execute_dispatch
 
@@ -404,7 +403,6 @@ class TestValidationFailureCampaignState:
             quota_refresher=lambda **kw: None,
             campaign_state_path=None,
         )
-        import json
 
         dispatches_dir = tool_ctx.temp_dir / "dispatches"
         dispatch_files = list(dispatches_dir.glob("*.json"))

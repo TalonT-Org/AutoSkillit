@@ -728,11 +728,11 @@ class TestStderrEnvelopeForwarding:
         )
 
         result = await _run(tool_ctx)
-        assert result["details"]["stderr"] == "timeout stderr"
+        assert result["stderr"] == "timeout stderr"
 
     @pytest.mark.anyio
     async def test_timeout_envelope_stderr_truncated_to_envelope_max(self, tool_ctx, monkeypatch):
-        """Timeout fleet_error details["stderr"] is truncated when stderr exceeds ENVELOPE_STDERR_MAX."""  # noqa: E501
+        """Timeout envelope stderr is truncated when stderr exceeds ENVELOPE_STDERR_MAX."""
         import dataclasses
 
         from tests.fakes import _DEFAULT_SKILL_RESULT
@@ -746,8 +746,8 @@ class TestStderrEnvelopeForwarding:
         )
 
         result = await _run(tool_ctx)
-        assert len(result["details"]["stderr"]) < 3000
-        assert "truncated" in result["details"]["stderr"]
+        assert len(result["stderr"]) < 3000
+        assert "truncated" in result["stderr"]
 
     @pytest.mark.anyio
     async def test_envelope_stderr_truncated_to_envelope_max(self, tool_ctx, monkeypatch):

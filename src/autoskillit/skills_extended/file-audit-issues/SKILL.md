@@ -48,7 +48,7 @@ Collect created issue URLs and numbers.
 
 ## Step 5 — Apply Source-Specific Labels
 
-Parse the source from each ticket body filename (`ticket_body_{source}_{N}.md`). For each unique
+Parse the source from each ticket body filename (`ticket_body_{source}_{N}_{ts}.md`). For each unique
 source, ensure a label exists (e.g., `audit:tests`, `audit:arch`, `audit:cohesion`, etc.).
 Batch-apply source labels via GraphQL `addLabelsToLabelable` mutation with aliases.
 

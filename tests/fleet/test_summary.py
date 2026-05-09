@@ -306,8 +306,8 @@ def test_campaign_summary_accepts_prior_campaign_id() -> None:
         '{"overall_status": "success", "total_dispatched": 1, '
         '"succeeded": 1, "failed": 0, "per_dispatch": [{"name": "t1", '
         '"status": "success", "elapsed_seconds": 1.0, "token_usage": {"input": 1, '
-        '"output": 1, "cache_read_input_tokens": 0, '
-        '"cache_creation_input_tokens": 0}, "dispatched_session_id": "s1", '
+        '"output": 1, "cache_read": 0, '
+        '"cache_creation": 0}, "dispatched_session_id": "s1", '
         '"dispatch_id": "d1"}], "error_records": []}\n'
         f"---end-campaign-summary::{prior_cid}---\n"
     )

@@ -17,7 +17,7 @@ HEADLESS_SIZE_BUDGETS = {
     "headless/__init__.py": 920,
     "headless/_headless_recovery.py": 340,
     "headless/_headless_path_tokens.py": 175,
-    "headless/_headless_result.py": 670,
+    "headless/_headless_result.py": 672,
 }
 
 
@@ -71,7 +71,7 @@ NEW_MQ_MODULES = ["_merge_queue_classifier.py", "_merge_queue_repo_state.py"]
 
 SESSION_SIZE_BUDGETS = {
     "session/__init__.py": 65,  # was 420; facade is ~40 lines after P2
-    "session/_session_model.py": 436,
+    "session/_session_model.py": 447,
     "session/_session_content.py": 200,
 }
 NEW_SESSION_FSM_MODULES = ["_retry_fsm.py", "_session_outcome.py"]

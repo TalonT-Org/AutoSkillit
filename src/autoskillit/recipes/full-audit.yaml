@@ -194,7 +194,8 @@ steps:
       Emit the L3 result sentinel. context.issue_urls is a comma-separated
       string of the created issue URLs — include it directly in the sentinel JSON:
       {"success": true, "reason": "completed", "summary": "Full audit complete.
-      GitHub issues created.", "issue_urls": "${{ context.issue_urls }}"}
+      GitHub issues created.", "issue_urls": "${{ context.issue_urls }}",
+      "issue_count": "${{ context.issue_count }}"}
       Artifacts are in {{AUTOSKILLIT_TEMP}}/.
 
   escalate_stop:

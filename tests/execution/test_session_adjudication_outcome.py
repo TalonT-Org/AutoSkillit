@@ -784,6 +784,33 @@ class TestDeadEndGuardContentState:
 
 
 # ---------------------------------------------------------------------------
+# Prior completion marker tests
+# ---------------------------------------------------------------------------
+
+
+def test_content_check_accepts_prior_completion_marker(
+    make_session: Callable[..., ClaudeSessionResult],
+) -> None:
+    """If session result contains a prior attempt's completion marker,
+    content check should pass when prior_markers is provided."""
+    original_marker = "%%L3_DONE::a3f7b2c1%%"
+    new_marker = "%%L3_DONE::x9y8z7w6%%"
+    session = make_session(
+        subtype="success",
+        is_error=False,
+        result=f"Task completed successfully.\n{original_marker}",
+    )
+    assert (
+        _check_session_content(
+            session,
+            completion_marker=new_marker,
+            prior_completion_markers=[original_marker],
+        )
+        is True
+    )
+
+
+# ---------------------------------------------------------------------------
 # T1: parse_session_result preserves file_path from Write/Edit tool_use input
 # ---------------------------------------------------------------------------
 

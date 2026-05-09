@@ -33,6 +33,7 @@ def _compute_success(
     completion_marker: str = "",
     channel_confirmation: ChannelConfirmation = ChannelConfirmation.UNMONITORED,
     expected_output_patterns: Sequence[str] = (),
+    prior_completion_markers: Sequence[str] | None = None,
 ) -> bool:
     """Cross-validate all signals to determine unambiguous success/failure.
 
@@ -91,7 +92,7 @@ def _compute_success(
             ):
                 return False
             content_ok = _check_session_content(
-                session, completion_marker, expected_output_patterns
+                session, completion_marker, expected_output_patterns, prior_completion_markers
             )
             logger.debug(
                 "compute_success_termination",
@@ -127,7 +128,7 @@ def _compute_success(
                     return content_ok
                 return False
             content_ok = _check_session_content(
-                session, completion_marker, expected_output_patterns
+                session, completion_marker, expected_output_patterns, prior_completion_markers
             )
             logger.debug(
                 "compute_success_termination",
@@ -148,6 +149,7 @@ def _compute_outcome(
     completion_marker: str = "",
     channel_confirmation: ChannelConfirmation = ChannelConfirmation.UNMONITORED,
     expected_output_patterns: Sequence[str] = (),
+    prior_completion_markers: Sequence[str] | None = None,
 ) -> tuple[SessionOutcome, RetryReason]:
     """Compose _compute_success and _compute_retry into a (SessionOutcome, RetryReason) pair.
 
@@ -161,9 +163,15 @@ def _compute_outcome(
         completion_marker,
         channel_confirmation,
         expected_output_patterns,
+        prior_completion_markers,
     )
     needs_retry, retry_reason = _compute_retry(
-        session, returncode, termination, channel_confirmation, completion_marker
+        session,
+        returncode,
+        termination,
+        channel_confirmation,
+        completion_marker,
+        prior_completion_markers,
     )
 
     logger.debug(
@@ -199,7 +207,7 @@ def _compute_outcome(
         match channel_confirmation:
             case ChannelConfirmation.CHANNEL_A | ChannelConfirmation.CHANNEL_B:
                 content_state = _evaluate_content_state(
-                    session, completion_marker, expected_output_patterns
+                    session, completion_marker, expected_output_patterns, prior_completion_markers
                 )
                 if content_state == ContentState.ABSENT:
                     needs_retry = True

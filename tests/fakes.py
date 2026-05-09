@@ -112,6 +112,7 @@ class DispatchFoodTruckCall:
     on_spawn: Callable[[int, int], None] | None = None
     allowed_write_prefix: str = ""
     sentinel_contract: str = ""
+    prior_completion_markers: Sequence[str] | None = None
 
 
 _DEFAULT_SKILL_RESULT = SkillResult(
@@ -234,6 +235,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         provider_fallback_env: dict[str, str] | None = None,
         provider_fallback_name: str = "",
         sentinel_contract: str = "",
+        prior_completion_markers: Sequence[str] | None = None,
     ) -> SkillResult:
         self.dispatch_calls.append(
             DispatchFoodTruckCall(
@@ -258,6 +260,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 on_spawn=on_spawn,
                 allowed_write_prefix=allowed_write_prefix,
                 sentinel_contract=sentinel_contract,
+                prior_completion_markers=prior_completion_markers,
             )
         )
         if self._queue:

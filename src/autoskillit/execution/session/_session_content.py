@@ -92,6 +92,7 @@ def _check_session_content(
     session: ClaudeSessionResult,
     completion_marker: str,
     expected_output_patterns: Sequence[str] = (),
+    prior_completion_markers: Sequence[str] | None = None,
 ) -> bool:
     """Validate session content fields after termination-specific gates pass."""
     if session.is_error:
@@ -105,17 +106,27 @@ def _check_session_content(
         return False
     if completion_marker:
         result_text = session.result.strip()
-        marker_stripped = result_text.replace(completion_marker, "").strip()
-        if not marker_stripped:
-            logger.debug("content_check_failed", reason="result_is_only_marker")
-            return False
-        if completion_marker not in result_text:
-            logger.debug(
-                "content_check_failed",
-                reason="completion_marker_absent",
-                result_tail=result_text[-200:] if len(result_text) > 200 else result_text,
-            )
-            return False
+        if completion_marker in result_text:
+            marker_stripped = result_text.replace(completion_marker, "").strip()
+            if not marker_stripped:
+                logger.debug("content_check_failed", reason="result_is_only_marker")
+                return False
+        else:
+            found_prior = False
+            if prior_completion_markers:
+                for prior_marker in prior_completion_markers:
+                    if prior_marker and prior_marker in result_text:
+                        marker_stripped = result_text.replace(prior_marker, "").strip()
+                        if marker_stripped:
+                            found_prior = True
+                            break
+            if not found_prior:
+                logger.debug(
+                    "content_check_failed",
+                    reason="completion_marker_absent",
+                    result_tail=result_text[-200:] if len(result_text) > 200 else result_text,
+                )
+                return False
     if not _check_expected_patterns(session.result.strip(), expected_output_patterns):
         logger.warning(
             "content_check_failed",
@@ -131,6 +142,7 @@ def _evaluate_content_state(
     session: ClaudeSessionResult,
     completion_marker: str,
     expected_output_patterns: Sequence[str],
+    prior_completion_markers: Sequence[str] | None = None,
 ) -> ContentState:
     """Classify the content completeness and contract compliance of a session result.
 
@@ -147,31 +159,24 @@ def _evaluate_content_state(
         ContentState.SESSION_ERROR: The CLI session itself reported an error
             (is_error=True) or produced a failure subtype. Terminal.
     """
-    # Process-level / CLI-level failure — terminal regardless of content
     if session.is_error:
         return ContentState.SESSION_ERROR
 
     result = session.result.strip()
 
-    # Empty result — drain-race candidate regardless of content requirements.
-    # This must come before the "no requirements" shortcut so that CHANNEL_A
-    # dead-end guard can detect drain-race artifacts even when no marker or
-    # patterns are configured.
     if not result:
         return ContentState.ABSENT
 
-    # No content requirements configured and result is non-empty: CHANNEL_B
-    # confirmation alone is sufficient. Returning COMPLETE here preserves the
-    # existing behaviour for skills that produce non-empty output without a
-    # marker (e.g. fire-and-forget commands with plain text output).
     if not completion_marker and not expected_output_patterns:
         return ContentState.COMPLETE
 
-    # Marker absent — partial drain candidate
     if completion_marker and completion_marker not in result:
-        return ContentState.ABSENT
+        if not (
+            prior_completion_markers
+            and any(pm and pm in result for pm in prior_completion_markers)
+        ):
+            return ContentState.ABSENT
 
-    # Result non-empty, marker present (or not configured) — check pattern contract
     if expected_output_patterns and not _check_expected_patterns(result, expected_output_patterns):
         return ContentState.CONTRACT_VIOLATION
 

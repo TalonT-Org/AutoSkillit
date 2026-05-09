@@ -328,3 +328,86 @@ def test_extract_text_from_jsonl_extracts_text_blocks_only(tmp_path: Path) -> No
     text = _extract_text_from_jsonl(path)
     assert text == "Final result here."
     assert "Private reasoning" not in text
+
+
+# ---------------------------------------------------------------------------
+# Tests for dispatch identity continuity on resume
+# ---------------------------------------------------------------------------
+
+
+def test_parse_accepts_prior_dispatch_id_on_resume() -> None:
+    """Prior dispatch_id sentinel should be found when prior_dispatch_ids is provided."""
+    original_id = "aaaa1111-bbbb-cccc-dddd-eeee2222ffff"
+    new_id = "xxxx9999-yyyy-zzzz-wwww-vvvv8888uuuu"
+    sentinel_text = (
+        f"---l3-result::{original_id}---\n"
+        f'{{"success": true, "reason": "completed", "summary": "done"}}\n'
+        f"---end-l3-result::{original_id}---\n"
+    )
+    result = parse_l3_result_block(
+        stdout=sentinel_text,
+        expected_dispatch_id=new_id,
+        prior_dispatch_ids=[original_id],
+    )
+    assert result.outcome == "completed_clean"
+
+
+def test_parse_prefers_primary_dispatch_id_over_prior() -> None:
+    """When both primary and prior sentinels exist, primary wins."""
+    primary_id = "pppp1111-pppp-pppp-pppp-pppp1111pppp"
+    prior_id = "qqqq2222-qqqq-qqqq-qqqq-qqqq2222qqqq"
+    sentinel_text = (
+        f"---l3-result::{prior_id}---\n"
+        f'{{"success": false, "reason": "failed", "summary": "prior"}}\n'
+        f"---end-l3-result::{prior_id}---\n"
+        f"---l3-result::{primary_id}---\n"
+        f'{{"success": true, "reason": "completed", "summary": "current"}}\n'
+        f"---end-l3-result::{primary_id}---\n"
+    )
+    result = parse_l3_result_block(
+        stdout=sentinel_text,
+        expected_dispatch_id=primary_id,
+        prior_dispatch_ids=[prior_id],
+    )
+    assert result.outcome == "completed_clean"
+    assert result.payload["success"] is True
+    assert result.payload["summary"] == "current"
+
+
+def test_parse_without_prior_ids_backward_compatible() -> None:
+    """Omitting prior_dispatch_ids should not change existing behavior."""
+    dispatch_id = "aaaa1111-bbbb-cccc-dddd-eeee2222ffff"
+    wrong_id = "xxxx9999-yyyy-zzzz-wwww-vvvv8888uuuu"
+    sentinel_text = (
+        f"---l3-result::{dispatch_id}---\n"
+        f'{{"success": true, "reason": "completed", "summary": "done"}}\n'
+        f"---end-l3-result::{dispatch_id}---\n"
+    )
+    result = parse_l3_result_block(
+        stdout=sentinel_text,
+        expected_dispatch_id=wrong_id,
+    )
+    assert result.outcome == "no_sentinel"
+
+
+def test_parse_prior_dispatch_ids_jsonl_fallback(tmp_path: Path) -> None:
+    """Prior dispatch_id fallback should also work via JSONL when stdout has no match."""
+    original_id = "aaaa1111-bbbb-cccc-dddd-eeee2222ffff"
+    new_id = "xxxx9999-yyyy-zzzz-wwww-vvvv8888uuuu"
+    # stdout has nothing useful; JSONL has the original sentinel
+    jsonl_path = make_jsonl_file(
+        tmp_path,
+        [
+            f"---l3-result::{original_id}---\n"
+            f'{{"success": true, "reason": "completed", "summary": "from_jsonl"}}\n'
+            f"---end-l3-result::{original_id}---"
+        ],
+    )
+    result = parse_l3_result_block(
+        stdout="no sentinel in stdout",
+        expected_dispatch_id=new_id,
+        assistant_messages_path=jsonl_path,
+        prior_dispatch_ids=[original_id],
+    )
+    assert result.outcome == "completed_clean"
+    assert result.payload["summary"] == "from_jsonl"

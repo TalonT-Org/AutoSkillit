@@ -199,6 +199,7 @@ def resume_campaign_from_state(
         next_name = ""
         is_resumable = False
         resumable_dispatched_session_id = ""
+        resumable_dispatch_id = ""
         resumable_kill_reason = ""
         for d in m.state.dispatches:
             if d.status in _VISIBLE_IN_BLOCK_STATUSES:
@@ -207,6 +208,7 @@ def resume_campaign_from_state(
                 next_name = d.name
                 is_resumable = True
                 resumable_dispatched_session_id = d.dispatched_session_id
+                resumable_dispatch_id = d.dispatch_id
                 resumable_kill_reason = d.kill_reason
             elif (
                 d.status
@@ -229,6 +231,7 @@ def resume_campaign_from_state(
             completed_dispatches_block=completed_block,
             is_resumable=is_resumable,
             dispatched_session_id=resumable_dispatched_session_id,
+            dispatch_id=resumable_dispatch_id,
             kill_reason=resumable_kill_reason,
         )
 

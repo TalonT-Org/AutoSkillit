@@ -7,6 +7,7 @@ from autoskillit.fleet.sidecar import (
     IssueSidecarEntry,
     append_sidecar_entry,
     compute_remaining_issues,
+    merge_sidecar_chain,
     read_sidecar,
     read_sidecar_from_path,
     sidecar_path,
@@ -177,3 +178,42 @@ class TestReadSidecarFromPath:
         assert all(isinstance(e, IssueSidecarEntry) for e in entries)
         assert entries[0].issue_url == URL1
         assert entries[1].issue_url == URL2
+
+
+class TestMergeSidecarChain:
+    def test_merges_entries_from_multiple_dispatch_ids(self, tmp_path: Path) -> None:
+        did_a = "aaaaaaaa-0000-0000-0000-000000000000"
+        did_b = "bbbbbbbb-0000-0000-0000-000000000000"
+        append_sidecar_entry(
+            did_a, IssueSidecarEntry(issue_url=URL1, status="completed", ts=TS), tmp_path
+        )
+        append_sidecar_entry(
+            did_b, IssueSidecarEntry(issue_url=URL2, status="completed", ts=TS), tmp_path
+        )
+        merged = merge_sidecar_chain([did_a, did_b], tmp_path)
+        urls = {e.issue_url for e in merged}
+        assert urls == {URL1, URL2}
+
+    def test_deduplicates_by_issue_url(self, tmp_path: Path) -> None:
+        did_a = "aaaaaaaa-0000-0000-0000-000000000000"
+        did_b = "bbbbbbbb-0000-0000-0000-000000000000"
+        append_sidecar_entry(
+            did_a, IssueSidecarEntry(issue_url=URL1, status="completed", ts=TS), tmp_path
+        )
+        append_sidecar_entry(
+            did_b, IssueSidecarEntry(issue_url=URL1, status="failed", ts=TS), tmp_path
+        )
+        merged = merge_sidecar_chain([did_a, did_b], tmp_path)
+        assert len(merged) == 1
+        assert merged[0].issue_url == URL1
+        assert merged[0].status == "completed"  # first-seen (did_a) wins
+
+    def test_missing_sidecar_files_are_skipped(self, tmp_path: Path) -> None:
+        did_a = "aaaaaaaa-0000-0000-0000-000000000000"
+        did_missing = "bbbbbbbb-0000-0000-0000-000000000000"
+        append_sidecar_entry(
+            did_a, IssueSidecarEntry(issue_url=URL1, status="completed", ts=TS), tmp_path
+        )
+        merged = merge_sidecar_chain([did_a, did_missing], tmp_path)
+        assert len(merged) == 1
+        assert merged[0].issue_url == URL1

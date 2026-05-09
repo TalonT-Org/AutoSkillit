@@ -90,6 +90,7 @@ async def dispatch_food_truck(
     resume_session_id: str | None = None,
     resume_checkpoint: dict[str, object] | None = None,
     idle_output_timeout: int | None = None,
+    prior_dispatch_id: str | None = None,
     ctx: Context = CurrentContext(),
 ) -> str:
     """Dispatch a single food truck L2 session for one recipe.
@@ -204,6 +205,7 @@ async def dispatch_food_truck(
             idle_output_timeout=idle_output_timeout,
             caller_session_id=caller_session_id,
             campaign_state_path=Path(campaign_state_path_str) if campaign_state_path_str else None,
+            prior_dispatch_id=prior_dispatch_id,
         )
 
         if campaign_state_path_str and isinstance(result, DispatchCompleted):

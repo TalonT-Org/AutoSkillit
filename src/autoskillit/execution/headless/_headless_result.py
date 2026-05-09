@@ -164,6 +164,7 @@ def _build_skill_result(
     cwd: str = "",
     write_behavior: WriteBehaviorSpec | None = None,
     fs_writes_detected: bool = False,
+    prior_completion_markers: Sequence[str] | None = None,
     *,
     provider_used: str = "",
 ) -> SkillResult:
@@ -424,6 +425,7 @@ def _build_skill_result(
         completion_marker,
         channel_confirmation=result.channel_confirmation,
         expected_output_patterns=expected_output_patterns,
+        prior_completion_markers=prior_completion_markers,
     )
     success = outcome == SessionOutcome.SUCCEEDED
     needs_retry = outcome == SessionOutcome.RETRIABLE
@@ -456,7 +458,9 @@ def _build_skill_result(
         needs_retry = True
         outcome = SessionOutcome.RETRIABLE
 
-    normalized_subtype = session.normalize_subtype(outcome, completion_marker)
+    normalized_subtype = session.normalize_subtype(
+        outcome, completion_marker, prior_completion_markers
+    )
 
     # Invariant: TIMED_OUT sessions must produce subtype='timeout'.
     if (

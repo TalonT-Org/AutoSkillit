@@ -86,14 +86,6 @@ class TestFlockLockTarget:
                 isinstance(call.func, ast.Name) and call.func.id == "open"
             )
 
-        def _is_os_open(call: ast.Call) -> bool:
-            return (
-                isinstance(call.func, ast.Attribute)
-                and call.func.attr == "open"
-                and isinstance(call.func.value, ast.Name)
-                and call.func.value.id == "os"
-            )
-
         py_files: set[Path] = set()
         for r in scan_roots:
             if r.is_dir():
@@ -119,8 +111,6 @@ class TestFlockLockTarget:
                         continue
                     if _is_open_call(child) and child.args:
                         open_calls.append((ast.unparse(child.args[0]), child.lineno))
-                    elif _is_os_open(child):
-                        open_calls.append((ast.unparse(child.args[0]), child.lineno))
 
                 for arg_src, lineno in open_calls:
                     if (
@@ -129,7 +119,6 @@ class TestFlockLockTarget:
                         or "lock_path" in arg_src
                     ):
                         continue
-                    # Non-.lock file opened — check for fcntl.flock in same function
                     has_flock = any(
                         isinstance(n, ast.Call)
                         and isinstance(n.func, ast.Attribute)

@@ -146,6 +146,29 @@ def _post_dispatch_cleanup(
             )
 
 
+def _write_campaign_refusal(
+    campaign_state_path: Path | None,
+    effective_name: str,
+    error_code: FleetErrorCode,
+) -> None:
+    """Write a REFUSED dispatch record to the campaign state file."""
+    if campaign_state_path is None:
+        return
+    from autoskillit.fleet.state import (  # noqa: PLC0415
+        DispatchRecord,
+        DispatchStatus,
+        upsert_dispatch_record_by_name,
+    )
+
+    try:
+        upsert_dispatch_record_by_name(
+            campaign_state_path,
+            DispatchRecord(name=effective_name, status=DispatchStatus.REFUSED, reason=error_code),
+        )
+    except Exception:
+        logger.warning("failed to record refusal to campaign state", exc_info=True)
+
+
 async def execute_dispatch(
     tool_ctx: ToolContext,
     recipe: str,
@@ -170,29 +193,11 @@ async def execute_dispatch(
     Returns DispatchOutcome (DispatchCompleted | DispatchRejected).
     """
     effective_name = dispatch_name or recipe
-    from autoskillit.fleet.state import (  # noqa: PLC0415
-        DispatchRecord,
-        DispatchStatus,
-        upsert_dispatch_record_by_name,
-    )
 
     def _reject(error_code: FleetErrorCode, message: str, **kwargs: Any) -> DispatchRejected:
+        """Pre-lock, pre-dispatch-id rejection path — no per-dispatch state file exists yet."""
         rejection = DispatchRejected(error_code=error_code, message=message, **kwargs)
-        if campaign_state_path is not None:
-            try:
-                upsert_dispatch_record_by_name(
-                    campaign_state_path,
-                    DispatchRecord(
-                        name=effective_name,
-                        status=DispatchStatus.REFUSED,
-                        reason=error_code,
-                    ),
-                )
-            except Exception:
-                logger.warning(
-                    "execute_dispatch: failed to record rejection to campaign state",
-                    exc_info=True,
-                )
+        _write_campaign_refusal(campaign_state_path, effective_name, error_code)
         return rejection
 
     if ingredients is not None:
@@ -390,6 +395,7 @@ async def _run_dispatch(
     )
 
     def _reject_with_state(error_code: FleetErrorCode, message: str) -> DispatchRejected:
+        """Post-dispatch-id rejection path — writes both per-dispatch and campaign state."""
         try:
             append_dispatch_record(
                 state_path,
@@ -401,18 +407,7 @@ async def _run_dispatch(
             )
         except Exception:
             logger.warning("_reject_with_state: per-dispatch state write failed", exc_info=True)
-        if campaign_state_path is not None:
-            try:
-                upsert_dispatch_record_by_name(
-                    campaign_state_path,
-                    DispatchRecord(
-                        name=effective_name,
-                        status=DispatchStatus.REFUSED,
-                        reason=error_code,
-                    ),
-                )
-            except Exception:
-                logger.warning("_reject_with_state: campaign state write failed", exc_info=True)
+        _write_campaign_refusal(campaign_state_path, effective_name, error_code)
         return DispatchRejected(error_code=error_code, message=message, dispatch_id=dispatch_id)
 
     if effective_ingredients:

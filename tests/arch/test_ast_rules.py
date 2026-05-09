@@ -856,6 +856,45 @@ def test_expand_functions_call_validators() -> None:
             assert "validate_refined_plan" in body_source
 
 
+def test_fcntl_import_allowlist() -> None:
+    """Only the five allowlisted modules may import fcntl.
+
+    Unauthorized fcntl usage bypasses the CampaignStateMutator lock gateway,
+    creating cross-process race conditions on state files. This test enforces
+    that only the established lock utilities are used.
+    """
+    FCNTL_ALLOWED_MODULES = {
+        "core/_plugin_cache.py",
+        "execution/session/_session_state.py",
+        "workspace/clone_registry.py",
+        "fleet/state.py",
+        "planner/merge.py",
+    }
+    violations: list[str] = []
+    for py_file in sorted(SRC_ROOT.rglob("*.py")):
+        try:
+            tree = ast.parse(py_file.read_text())
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name == "fcntl":
+                        rel = py_file.relative_to(SRC_ROOT)
+                        if str(rel) not in FCNTL_ALLOWED_MODULES:
+                            violations.append(f"  {rel}:{node.lineno}: imports fcntl")
+            elif isinstance(node, ast.ImportFrom):
+                if node.module == "fcntl":
+                    rel = py_file.relative_to(SRC_ROOT)
+                    if str(rel) not in FCNTL_ALLOWED_MODULES:
+                        violations.append(f"  {rel}:{node.lineno}: from fcntl import ...")
+
+    assert not violations, (
+        "Unauthorized fcntl imports found — all fcntl usage must go through "
+        "CampaignStateMutator or the other allowlisted lock utilities:\n" + "\n".join(violations)
+    )
+
+
 def test_no_build_cmd_accepts_output_format_value_string() -> None:
     """No cmd builder should accept output_format_value: str — use OutputFormat enum (ARCH-011)."""
     source = (SRC_ROOT / "execution" / "commands.py").read_text()

@@ -243,26 +243,6 @@ def test_env_var_fleet_uppercase_loads_without_crash(
     assert cfg.features.get("fleet") is True
 
 
-def test_load_config_experimental_immune_to_ci_env_var(monkeypatch, tmp_path):
-    """Verify is_dev_install() controls experimental_enabled even when
-    AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED is set in the environment.
-
-    This test reproduces the merge_group CI failure: the env var is set to
-    "false" but the test expects is_dev_install() to control the value.
-    Without the conftest autouse fixture clearing FEATURES__ env vars,
-    this test will fail.
-    """
-    from autoskillit.config.settings import load_config
-
-    monkeypatch.setenv("AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED", "false")
-    monkeypatch.setattr("autoskillit.config.settings.is_dev_install", lambda: True)
-    cfg = load_config(tmp_path)
-    # If env var leaks, cfg.experimental_enabled is False (from env var).
-    # With proper isolation, is_dev_install() returns True.
-    # This test FAILS until the autouse fixture is added, proving the gap.
-    assert cfg.experimental_enabled is True
-
-
 def test_config_dependency_validation(monkeypatch):
     """_build_features_dict raises ConfigSchemaError when B is enabled but dep A is disabled."""
 

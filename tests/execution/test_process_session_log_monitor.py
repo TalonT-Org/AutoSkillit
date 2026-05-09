@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 from unittest.mock import patch
 
@@ -582,6 +583,138 @@ class TestStaleSuppressionBounded:
         bounded_in_logs = any("Suppression bounded" in str(log.get("event", "")) for log in logs)
         bounded_in_stdout = "Suppression bounded" in captured
         assert bounded_in_logs or bounded_in_stdout
+
+
+class TestStaleSuppressionDispatchMarker:
+    """Dispatch marker suppresses stale: fresh marker → suppressed; expired → pass-through.
+
+    Tests the following scenarios for dispatch marker stale suppression:
+    - T1: Active marker (True→False via monkeypatch) suppresses stale, then fires
+    - T2: Expired marker (mtime > 60s) does NOT suppress stale
+    - T3: No marker_dir (None) skips dispatch check entirely (regression guard)
+    - T4: Bounded suppression fires after max_suppression_seconds
+    - T5: Session-scoped matching — sessionA marker does not suppress sessionB
+
+    Monkeypatch target: autoskillit.execution.process._process_monitor._has_active_dispatch_marker
+    Convention: caller_session_id= is the kwarg used at call sites.
+    """
+
+    @pytest.mark.anyio
+    async def test_stale_suppressed_by_active_dispatch_marker(self, tmp_path, monkeypatch):
+        """Active dispatch marker suppresses stale, then fires when marker disappears."""
+        session_file = tmp_path / "session.jsonl"
+        session_file.write_text("")
+        spawn_time = time.time() - 10
+        call_count = {"n": 0}
+
+        def side_effect_fn(marker_dir, session_id=None):
+            call_count["n"] += 1
+            return call_count["n"] == 1
+
+        monkeypatch.setattr(
+            "autoskillit.execution.process._process_monitor._has_active_dispatch_marker",
+            side_effect_fn,
+        )
+        with anyio.fail_after(5.0):
+            result = await _session_log_monitor(
+                tmp_path,
+                "DONE",
+                stale_threshold=0.05,
+                spawn_time=spawn_time,
+                marker_dir=tmp_path,
+                caller_session_id="test-session",
+                _phase1_poll=0.01,
+                _phase2_poll=0.05,
+            )
+        assert result.status == ChannelBStatus.STALE
+
+    @pytest.mark.anyio
+    async def test_stale_not_suppressed_when_marker_expired(self, tmp_path):
+        """Expired marker (mtime > 60s) does not suppress stale."""
+        session_file = tmp_path / "session.jsonl"
+        session_file.write_text("")
+        spawn_time = time.time() - 10
+        marker_path = tmp_path / "dispatch-in-progress-test-session-abc.marker"
+        marker_path.write_text("{}")
+        past = time.time() - 120
+        os.utime(marker_path, (past, past))
+        with anyio.fail_after(5.0):
+            result = await _session_log_monitor(
+                tmp_path,
+                "DONE",
+                stale_threshold=0.05,
+                spawn_time=spawn_time,
+                marker_dir=tmp_path,
+                caller_session_id="test-session",
+                _phase1_poll=0.01,
+                _phase2_poll=0.05,
+            )
+        assert result.status == ChannelBStatus.STALE
+
+    @pytest.mark.anyio
+    async def test_stale_not_suppressed_when_no_marker(self, tmp_path):
+        """No marker_dir means dispatch check is skipped entirely."""
+        session_file = tmp_path / "session.jsonl"
+        session_file.write_text("")
+        spawn_time = time.time() - 10
+        with anyio.fail_after(2.0):
+            result = await _session_log_monitor(
+                tmp_path,
+                "DONE",
+                stale_threshold=0.05,
+                spawn_time=spawn_time,
+                marker_dir=None,
+                _phase1_poll=0.01,
+                _phase2_poll=0.05,
+            )
+        assert result.status == ChannelBStatus.STALE
+
+    @pytest.mark.anyio
+    async def test_stale_marker_suppression_bounded(self, tmp_path, monkeypatch):
+        """Stale fires after max_suppression_seconds despite perpetually-fresh marker."""
+        session_file = tmp_path / "session.jsonl"
+        session_file.write_text("")
+        spawn_time = time.time() - 10
+        monkeypatch.setattr(
+            "autoskillit.execution.process._process_monitor._has_active_dispatch_marker",
+            lambda marker_dir, session_id=None: True,
+        )
+        with anyio.fail_after(3.0):
+            result = await _session_log_monitor(
+                tmp_path,
+                "DONE",
+                stale_threshold=0.05,
+                spawn_time=spawn_time,
+                pid=None,
+                _phase1_poll=0.01,
+                _phase2_poll=0.05,
+                max_suppression_seconds=0.1,
+                marker_dir=tmp_path,
+                caller_session_id=None,
+            )
+        assert result.status == ChannelBStatus.STALE
+
+    @pytest.mark.anyio
+    async def test_session_scoped_marker_matching(self, tmp_path):
+        """Marker for sessionA does not suppress stale for sessionB."""
+        session_file = tmp_path / "session.jsonl"
+        session_file.write_text("")
+        spawn_time = time.time() - 10
+        marker_path = tmp_path / "dispatch-in-progress-sessionA-dispatch1.marker"
+        marker_path.write_text("{}")
+        with anyio.fail_after(3.0):
+            result = await _session_log_monitor(
+                tmp_path,
+                "DONE",
+                stale_threshold=0.05,
+                spawn_time=spawn_time,
+                pid=None,
+                _phase1_poll=0.01,
+                _phase2_poll=0.05,
+                marker_dir=tmp_path,
+                caller_session_id="sessionB",
+            )
+        assert result.status == ChannelBStatus.STALE
 
 
 class TestSessionLogMonitorSessionId:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from pathlib import Path
 
@@ -370,6 +371,13 @@ class TestDispatchRecordToDict:
         roundtripped = json.loads(json.dumps(d))
         assert roundtripped["name"] == "test-job"
         assert roundtripped["token_usage"] == {"x": 1}
+
+    def test_to_dict_keys_match_dataclass_fields(self) -> None:
+        """to_dict() must emit exactly the dataclass field names."""
+        record = DispatchRecord(name="test")
+        actual = set(record.to_dict().keys())
+        expected = {f.name for f in dataclasses.fields(DispatchRecord)}
+        assert actual == expected
 
 
 class TestDispatchRecordSchemaV3:

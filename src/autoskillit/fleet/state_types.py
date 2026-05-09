@@ -16,6 +16,15 @@ FLEET_STATE_SCHEMA_VERSION = 5
 
 FLEET_HALTED_SENTINEL = "fleet_halted_on_failure"
 
+_RETRY_IDENTITY_FIELDS: frozenset[str] = frozenset(
+    {
+        "name",
+        "campaign_id",
+        "caller_session_id",
+        "attempt_history",
+    }
+)
+
 
 class DispatchStatus(StrEnum):
     """Status of a single dispatch within a campaign."""

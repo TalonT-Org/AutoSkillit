@@ -19,7 +19,7 @@ from autoskillit.fleet import (
     write_initial_state,
 )
 from autoskillit.fleet.state import _clear_dispatch_for_retry
-from autoskillit.fleet.state_types import _validate_transition
+from autoskillit.fleet.state_types import _RETRY_IDENTITY_FIELDS, _validate_transition
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -347,7 +347,7 @@ class TestAttemptHistoryOnRetry:
 class TestClearDispatchFieldCoverage:
     """Structural guard: _clear_dispatch_for_retry must reset all execution-metadata fields."""
 
-    _IDENTITY_FIELDS = frozenset({"name", "campaign_id", "caller_session_id", "attempt_history"})
+    _IDENTITY_FIELDS = _RETRY_IDENTITY_FIELDS
 
     def test_clear_covers_all_execution_metadata_fields(self):
         """Every non-identity field must be reset to its default by _clear_dispatch_for_retry."""
@@ -390,3 +390,83 @@ class TestClearDispatchFieldCoverage:
                 f"_clear_dispatch_for_retry did not reset {f.name!r} to its default "
                 f"({default!r}); got {getattr(d, f.name)!r}"
             )
+
+
+class TestSnapshotCompleteness:
+    """Guard: every non-identity field must appear in the attempt_history snapshot."""
+
+    _IDENTITY_FIELDS = _RETRY_IDENTITY_FIELDS
+
+    @staticmethod
+    def _make_dirty_values() -> dict[str, Any]:
+        """Build a DispatchRecord kwargs dict with every field set to a non-default dirty value."""
+        dirty_values: dict[str, Any] = {
+            "name": "test",
+            "campaign_id": "cid",
+            "caller_session_id": "csid",
+            "attempt_history": [],
+        }
+        for f in dataclasses.fields(DispatchRecord):
+            if f.name in dirty_values:
+                continue
+            default = (
+                f.default_factory() if f.default_factory is not dataclasses.MISSING else f.default
+            )
+            if isinstance(default, str):
+                dirty_values[f.name] = f"dirty-{f.name}"
+            elif isinstance(default, int):
+                dirty_values[f.name] = 99999
+            elif isinstance(default, float):
+                dirty_values[f.name] = 9999.0
+            elif isinstance(default, dict):
+                dirty_values[f.name] = {"prompt_tokens": 500}
+            elif default is None:
+                dirty_values[f.name] = "/dirty/path"
+            elif isinstance(default, DispatchStatus):
+                dirty_values[f.name] = DispatchStatus.FAILURE
+            else:
+                raise AssertionError(f"Unhandled default type for {f.name!r}: {type(default)}")
+        return dirty_values
+
+    def test_snapshot_captures_all_non_identity_fields(self):
+        """Every non-identity field must appear as a key in the attempt_history snapshot."""
+        dirty_values = self._make_dirty_values()
+        d = DispatchRecord(**dirty_values)
+        _clear_dispatch_for_retry(d)
+        assert len(d.attempt_history) == 1
+        snapshot_keys = set(d.attempt_history[0].keys())
+        expected_keys = {
+            f.name
+            for f in dataclasses.fields(DispatchRecord)
+            if f.name not in self._IDENTITY_FIELDS
+        }
+        assert snapshot_keys == expected_keys, (
+            f"Snapshot missing fields: {expected_keys - snapshot_keys}; "
+            f"Extra fields: {snapshot_keys - expected_keys}"
+        )
+
+    def test_snapshot_values_match_pre_clear_state(self):
+        """Each snapshot value must equal the field value before clear."""
+        dirty_values = self._make_dirty_values()
+        d = DispatchRecord(**dirty_values)
+
+        # Capture expected values before clear
+        expected = {
+            f.name: getattr(d, f.name)
+            for f in dataclasses.fields(DispatchRecord)
+            if f.name not in self._IDENTITY_FIELDS
+        }
+
+        _clear_dispatch_for_retry(d)
+        snapshot = d.attempt_history[0]
+
+        for key, expected_val in expected.items():
+            assert key in snapshot, f"Field {key!r} missing from snapshot"
+            if key == "status":
+                assert snapshot[key] == str(expected_val)
+            elif isinstance(expected_val, dict):
+                assert snapshot[key] == dict(expected_val)
+            else:
+                assert snapshot[key] == expected_val, (
+                    f"Snapshot[{key!r}] = {snapshot[key]!r}, expected {expected_val!r}"
+                )

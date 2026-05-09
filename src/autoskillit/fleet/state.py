@@ -6,6 +6,7 @@ All writes use core.io.atomic_write for crash-safety (tmp + os.replace).
 
 from __future__ import annotations
 
+import dataclasses
 import fcntl
 import time
 from pathlib import Path
@@ -27,6 +28,7 @@ from autoskillit.fleet.state_types import (
     _ALLOWED_TRANSITIONS,  # noqa: F401
     _COMPLETED_STATUSES,  # noqa: F401
     _INFRASTRUCTURE_FAILURE_REASONS,  # noqa: F401
+    _RETRY_IDENTITY_FIELDS,
     _VISIBLE_IN_BLOCK_STATUSES,  # noqa: F401
     FLEET_HALTED_SENTINEL,
     FLEET_STATE_SCHEMA_VERSION,
@@ -104,35 +106,34 @@ def write_initial_state(
 def _clear_dispatch_for_retry(d: DispatchRecord) -> None:
     """Clear a dispatch record for retry."""
     _validate_transition(d.status, DispatchStatus.PENDING, d.name)
-    d.attempt_history.append(
-        {
-            "status": str(d.status),
-            "dispatch_id": d.dispatch_id,
-            "dispatched_session_id": d.dispatched_session_id,
-            "dispatched_pid": d.dispatched_pid,
-            "reason": d.reason,
-            "kill_reason": d.kill_reason,
-            "infra_exit_category": d.infra_exit_category,
-            "started_at": d.started_at,
-            "ended_at": d.ended_at,
-            "token_usage": dict(d.token_usage) if d.token_usage is not None else {},
-        }
-    )
-    d.status = DispatchStatus.PENDING
-    d.reason = ""
-    d.dispatch_id = ""
-    d.dispatched_session_id = ""
-    d.dispatched_session_log_dir = ""
-    d.dispatched_pid = 0
-    d.dispatched_starttime_ticks = 0
-    d.dispatched_boot_id = ""
-    d.dispatched_create_time = 0.0
-    d.token_usage = {}
-    d.started_at = 0.0
-    d.ended_at = 0.0
-    d.sidecar_path = None
-    d.kill_reason = ""
-    d.infra_exit_category = ""
+
+    # Snapshot all non-identity fields before resetting
+    snapshot: dict[str, Any] = {}
+    for f in dataclasses.fields(d):
+        if f.name in _RETRY_IDENTITY_FIELDS:
+            continue
+        val = getattr(d, f.name)
+        if f.name == "status":
+            snapshot[f.name] = str(val)
+        elif isinstance(val, dict):
+            snapshot[f.name] = dict(val)
+        else:
+            snapshot[f.name] = val
+    d.attempt_history.append(snapshot)
+
+    # Reset all non-identity fields to their defaults
+    for f in dataclasses.fields(d):
+        if f.name in _RETRY_IDENTITY_FIELDS:
+            continue
+        default = (
+            f.default_factory() if f.default_factory is not dataclasses.MISSING else f.default
+        )
+        if default is dataclasses.MISSING:
+            raise RuntimeError(
+                f"Field {f.name!r} has neither a default nor a default_factory; "
+                "cannot reset to default for retry"
+            )
+        setattr(d, f.name, default)
 
 
 def reset_blocking_dispatch(state_path: Path, dispatch_name: str) -> bool:

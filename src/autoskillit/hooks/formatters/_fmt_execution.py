@@ -246,6 +246,7 @@ _FMT_TEST_CHECK_RENDERED: frozenset[str] = frozenset(
         "stdout",
         "stderr",
         "error",
+        "infrastructure_missing",
     }
 )
 _FMT_TEST_CHECK_SUPPRESSED: frozenset[str] = frozenset()

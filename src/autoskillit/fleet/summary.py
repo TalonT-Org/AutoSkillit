@@ -177,9 +177,7 @@ def parse_campaign_summary(
     found_cid = match.group("cid")
     found_cid_end = match.group("cid_end")
     if found_cid != campaign_id or found_cid_end != campaign_id:
-        if prior_campaign_ids and found_cid in prior_campaign_ids:
-            pass  # prior campaign ID accepted
-        else:
+        if not (prior_campaign_ids and found_cid in prior_campaign_ids):
             return ParseFailure(
                 ParseFailureKind.CAMPAIGN_ID_MISMATCH,
                 f"Sentinel ids {found_cid!r}/{found_cid_end!r} do not match "

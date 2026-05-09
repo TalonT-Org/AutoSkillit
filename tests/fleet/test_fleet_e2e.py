@@ -291,7 +291,7 @@ def _force_running_state(
     ticks: int,
     boot_id: str,
     *,
-    create_time: float = 0.0,
+    dispatched_create_time: float = 0.0,
 ) -> None:
     """Directly set a dispatch to RUNNING with PID identity fields in the JSON."""
     data = json.loads(state_path.read_text(encoding="utf-8"))
@@ -301,7 +301,7 @@ def _force_running_state(
             d["dispatched_pid"] = pid
             d["dispatched_starttime_ticks"] = ticks
             d["dispatched_boot_id"] = boot_id
-            d["dispatched_create_time"] = create_time
+            d["dispatched_create_time"] = dispatched_create_time
             d["started_at"] = time.time()
             break
     state_path.write_text(json.dumps(data), encoding="utf-8")
@@ -746,7 +746,7 @@ async def test_orphan_l3_reaping(fleet_runtime: FleetRuntime, tmp_path: Path) ->
             orphan_pid,
             orphan_ticks,
             boot_id,
-            create_time=orphan_create_time,
+            dispatched_create_time=orphan_create_time,
         )
 
         _reap_stale_dispatches(state_path, dry_run=False)

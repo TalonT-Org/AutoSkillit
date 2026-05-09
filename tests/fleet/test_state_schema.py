@@ -415,7 +415,7 @@ class TestDispatchRecordSchemaV3:
             dispatched_pid=9999,
             starttime_ticks=0,
             boot_id="",
-            create_time=1700000000.5,
+            dispatched_create_time=1700000000.5,
         )
         state = read_state(sp)
         assert state is not None

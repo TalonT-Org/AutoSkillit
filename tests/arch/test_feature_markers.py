@@ -14,6 +14,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+import yaml
 
 _TESTS_ROOT = Path(__file__).parent.parent
 
@@ -216,9 +217,70 @@ def test_no_feature_marker_on_infrastructure_tests():
     )
 
 
-def test_fleet_cross_dir_files_no_duplicates():
-    paths = list(_FLEET_CROSS_DIR_FILES)
-    assert len(paths) == len(set(paths)), "Duplicate paths in _FLEET_CROSS_DIR_FILES"
+def _pytestmark_has_skipif_platform(tree: ast.Module) -> bool:
+    """Check if module-level pytestmark contains a skipif with sys.platform condition."""
+    for node in ast.iter_child_nodes(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "pytestmark":
+                    source_segment = ast.dump(node.value)
+                    if "skipif" in source_segment and "platform" in source_segment:
+                        return True
+    return False
+
+
+def test_ci_workflow_gates_experimental_for_stable_track() -> None:
+    """CI workflow must set AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED in the test job."""
+    workflow_path = _TESTS_ROOT.parent / ".github" / "workflows" / "tests.yml"
+    assert workflow_path.exists(), f"CI workflow not found at {workflow_path}"
+
+    with workflow_path.open() as f:
+        wf = yaml.safe_load(f)
+
+    test_job = wf["jobs"]["test"]
+    steps = test_job["steps"]
+
+    run_test_steps = [s for s in steps if "task test-all" in s.get("run", "")]
+    assert run_test_steps, "No 'task test-all' step found in test job"
+
+    run_step = run_test_steps[0]
+    env = run_step.get("env", {})
+    assert "AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED" in env, (
+        "CI test step must set AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED "
+        "to gate experimental features on stable/main"
+    )
+
+
+def test_linux_proc_importers_have_platform_guard() -> None:
+    """Fleet tests importing _linux_proc must have sys.platform skipif in pytestmark."""
+    fleet_test_dir = _TESTS_ROOT / "fleet"
+    linux_proc_importers: list[Path] = []
+
+    for test_file in sorted(fleet_test_dir.glob("test_*.py")):
+        source = test_file.read_text()
+        if "_linux_proc" in source:
+            tree = ast.parse(source, filename=str(test_file))
+            for node in ast.walk(tree):
+                if isinstance(node, (ast.Import, ast.ImportFrom)):
+                    module = getattr(node, "module", "") or ""
+                    if "_linux_proc" in module:
+                        linux_proc_importers.append(test_file)
+                        break
+
+    assert linux_proc_importers, "Expected at least one fleet test importing _linux_proc"
+
+    missing_guard: list[str] = []
+    for test_file in linux_proc_importers:
+        source = test_file.read_text()
+        tree = ast.parse(source, filename=str(test_file))
+        has_skipif = _pytestmark_has_skipif_platform(tree)
+        has_module_skip = "pytest.skip(" in source and "allow_module_level" in source
+        if not has_skipif and not has_module_skip:
+            missing_guard.append(test_file.name)
+
+    assert not missing_guard, (
+        f"Fleet tests importing _linux_proc lack sys.platform skipif: {missing_guard}"
+    )
 
 
 def test_import_safety_with_features_disabled():

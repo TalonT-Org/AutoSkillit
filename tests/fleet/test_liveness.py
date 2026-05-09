@@ -1,4 +1,5 @@
 import os
+import sys
 
 import pytest
 
@@ -6,7 +7,12 @@ from autoskillit.core.runtime._linux_proc import read_boot_id, read_starttime_ti
 from autoskillit.fleet import DispatchRecord
 from autoskillit.fleet._liveness import is_dispatch_session_alive
 
-pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
+pytestmark = [
+    pytest.mark.layer("fleet"),
+    pytest.mark.small,
+    pytest.mark.feature("fleet"),
+    pytest.mark.skipif(sys.platform != "linux", reason="Linux-only: /proc filesystem required"),
+]
 
 
 class TestIsDispatchSessionAlive:

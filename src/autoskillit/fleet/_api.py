@@ -9,6 +9,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import psutil
 import regex as re
 
 from autoskillit.core import (
@@ -96,6 +97,7 @@ def _write_pid(
     pid: int,
     starttime_ticks: int,
     sidecar_path: str | None = None,
+    dispatched_create_time: float = 0.0,
 ) -> None:
     """on_spawn callback: atomically mark dispatch as running with dispatched_pid."""
     from autoskillit.core import read_boot_id
@@ -109,6 +111,7 @@ def _write_pid(
             dispatched_pid=pid,
             starttime_ticks=starttime_ticks,
             boot_id=read_boot_id() or "",
+            dispatched_create_time=dispatched_create_time,
             sidecar_path=sidecar_path,
         )
     except Exception:
@@ -435,7 +438,13 @@ async def _run_dispatch(
 
     def _on_spawn(pid: int, ticks: int) -> None:
         _dispatched_pid.append(pid)
-        _write_pid(state_path, effective_name, dispatch_id, pid, ticks, dispatch_sidecar_path)
+        try:
+            create_time = psutil.Process(pid).create_time()
+        except psutil.NoSuchProcess:
+            create_time = 0.0
+        _write_pid(
+            state_path, effective_name, dispatch_id, pid, ticks, dispatch_sidecar_path, create_time
+        )
 
     skill_result = await tool_ctx.executor.dispatch_food_truck(
         orchestrator_prompt=prompt,

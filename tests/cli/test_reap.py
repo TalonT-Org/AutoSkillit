@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
+import psutil
 import pytest
 
 from autoskillit.fleet import (
@@ -28,6 +29,7 @@ def _make_running_state(
     dispatched_pid: int = 12345,
     dispatched_starttime_ticks: int = 1000,
     dispatched_boot_id: str = BOOT_ID,
+    dispatched_create_time: float = 0.0,
 ) -> Path:
     """Create a state file with a single RUNNING dispatch."""
     sp = tmp_path / "state.json"
@@ -43,6 +45,7 @@ def _make_running_state(
             "dispatched_pid": dispatched_pid,
             "dispatched_starttime_ticks": dispatched_starttime_ticks,
             "dispatched_boot_id": dispatched_boot_id,
+            "dispatched_create_time": dispatched_create_time,
             "started_at": 1000.0,
         }
     )
@@ -225,3 +228,89 @@ class TestReap:
         state = read_state(sp)
         assert state is not None
         assert state.dispatches[0].status == DispatchStatus.INTERRUPTED
+
+    def test_reap_kills_orphan_via_create_time_fallback(self, tmp_path: Path) -> None:
+        sp = _make_running_state(
+            tmp_path,
+            dispatched_pid=12345,
+            dispatched_starttime_ticks=1000,
+            dispatched_create_time=1000000.5,
+        )
+        with (
+            patch("autoskillit.cli.fleet._fleet_lifecycle.psutil.pid_exists", return_value=True),
+            patch("autoskillit.execution.read_starttime_ticks", return_value=None),
+            patch("autoskillit.execution.read_boot_id", return_value=BOOT_ID),
+            patch("autoskillit.execution.kill_process_tree") as mock_kill,
+            patch("autoskillit.cli.fleet._fleet_lifecycle.psutil.Process") as mock_proc_cls,
+        ):
+            mock_proc_cls.return_value.create_time.return_value = 1000000.5
+            _reap(sp)
+
+        mock_kill.assert_called_once_with(12345)
+        state = read_state(sp)
+        assert state is not None
+        assert state.dispatches[0].reason == "reaped_orphan"
+
+    def test_reap_skips_recycled_pid_via_create_time(self, tmp_path: Path) -> None:
+        sp = _make_running_state(
+            tmp_path,
+            dispatched_pid=12345,
+            dispatched_starttime_ticks=1000,
+            dispatched_create_time=1000000.5,
+        )
+        with (
+            patch("autoskillit.cli.fleet._fleet_lifecycle.psutil.pid_exists", return_value=True),
+            patch("autoskillit.execution.read_starttime_ticks", return_value=None),
+            patch("autoskillit.execution.read_boot_id", return_value=BOOT_ID),
+            patch("autoskillit.execution.kill_process_tree") as mock_kill,
+            patch("autoskillit.cli.fleet._fleet_lifecycle.psutil.Process") as mock_proc_cls,
+        ):
+            mock_proc_cls.return_value.create_time.return_value = 9999999.0
+            _reap(sp)
+
+        mock_kill.assert_not_called()
+        state = read_state(sp)
+        assert state is not None
+        assert state.dispatches[0].reason == "reaped_pid_recycled"
+
+    def test_reap_no_create_time_marks_recycled(self, tmp_path: Path) -> None:
+        sp = _make_running_state(
+            tmp_path,
+            dispatched_pid=12345,
+            dispatched_starttime_ticks=0,
+            dispatched_create_time=0.0,
+        )
+        with (
+            patch("autoskillit.cli.fleet._fleet_lifecycle.psutil.pid_exists", return_value=True),
+            patch("autoskillit.execution.read_starttime_ticks", return_value=None),
+            patch("autoskillit.execution.read_boot_id", return_value=BOOT_ID),
+            patch("autoskillit.execution.kill_process_tree") as mock_kill,
+        ):
+            _reap(sp)
+
+        mock_kill.assert_not_called()
+        state = read_state(sp)
+        assert state is not None
+        assert state.dispatches[0].reason == "reaped_pid_recycled"
+
+    def test_reap_create_time_nosuchprocess_marks_dead(self, tmp_path: Path) -> None:
+        sp = _make_running_state(
+            tmp_path,
+            dispatched_pid=12345,
+            dispatched_starttime_ticks=1000,
+            dispatched_create_time=1000000.5,
+        )
+        with (
+            patch("autoskillit.cli.fleet._fleet_lifecycle.psutil.pid_exists", return_value=True),
+            patch("autoskillit.execution.read_starttime_ticks", return_value=None),
+            patch("autoskillit.execution.read_boot_id", return_value=BOOT_ID),
+            patch("autoskillit.execution.kill_process_tree") as mock_kill,
+            patch("autoskillit.cli.fleet._fleet_lifecycle.psutil.Process") as mock_proc_cls,
+        ):
+            mock_proc_cls.return_value.create_time.side_effect = psutil.NoSuchProcess(12345)
+            _reap(sp)
+
+        mock_kill.assert_not_called()
+        state = read_state(sp)
+        assert state is not None
+        assert state.dispatches[0].reason == "reaped_dead_pid"

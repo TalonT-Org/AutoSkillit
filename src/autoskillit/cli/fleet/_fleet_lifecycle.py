@@ -33,6 +33,20 @@ def _apply_stale_dispatch(
     m.mark_dirty()
 
 
+def _mark_dead_pid(
+    dry_run: bool,
+    name: str,
+    pid: int,
+    dispatch: DispatchRecord,
+    m: CampaignStateMutator,
+) -> None:
+    if dry_run:
+        logger.info("reap: [WOULD MARK]  %s  pid=%d  (process dead)", name, pid)
+    else:
+        _apply_stale_dispatch(dispatch, "reaped_dead_pid", m)
+        logger.info("reap: [MARKED]      %s  pid=%d  (process dead)", name, pid)
+
+
 def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
     """Reap stale RUNNING dispatches with PID-recycling-safe identity checks.
 
@@ -102,16 +116,28 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
                 continue
 
             if not psutil.pid_exists(pid):
-                if dry_run:
-                    logger.info("reap: [WOULD MARK]  %s  pid=%d  (process dead)", name, pid)
-                else:
-                    _apply_stale_dispatch(dispatch, "reaped_dead_pid", m)
-                    logger.info("reap: [MARKED]      %s  pid=%d  (process dead)", name, pid)
+                _mark_dead_pid(dry_run, name, pid, dispatch, m)
                 continue
 
             # Process is alive — check identity
             current_ticks = read_starttime_ticks(pid)
             if current_ticks is not None and current_ticks == dispatch.dispatched_starttime_ticks:
+                # Linux: /proc identity confirmed
+                identity_confirmed = True
+            elif current_ticks is None and dispatch.dispatched_create_time > 0.0:
+                # Non-Linux fallback: psutil create_time
+                try:
+                    actual_ct = psutil.Process(pid).create_time()
+                    identity_confirmed = abs(actual_ct - dispatch.dispatched_create_time) < 1.0
+                except psutil.NoSuchProcess:
+                    _mark_dead_pid(dry_run, name, pid, dispatch, m)
+                    continue
+                except psutil.AccessDenied:
+                    identity_confirmed = False
+            else:
+                identity_confirmed = False
+
+            if identity_confirmed:
                 if dry_run:
                     logger.info(
                         "reap: [WOULD KILL]  %s  pid=%d  (orphan, identity match)", name, pid

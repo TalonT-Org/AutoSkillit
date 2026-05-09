@@ -290,6 +290,8 @@ def _force_running_state(
     pid: int,
     ticks: int,
     boot_id: str,
+    *,
+    dispatched_create_time: float = 0.0,
 ) -> None:
     """Directly set a dispatch to RUNNING with PID identity fields in the JSON."""
     data = json.loads(state_path.read_text(encoding="utf-8"))
@@ -299,6 +301,7 @@ def _force_running_state(
             d["dispatched_pid"] = pid
             d["dispatched_starttime_ticks"] = ticks
             d["dispatched_boot_id"] = boot_id
+            d["dispatched_create_time"] = dispatched_create_time
             d["started_at"] = time.time()
             break
     state_path.write_text(json.dumps(data), encoding="utf-8")
@@ -725,6 +728,7 @@ async def test_orphan_l3_reaping(fleet_runtime: FleetRuntime, tmp_path: Path) ->
     orphan = subprocess.Popen(["sleep", "999"])
     orphan_pid = orphan.pid
     orphan_ticks = read_starttime_ticks(orphan_pid) or 0
+    orphan_create_time = psutil.Process(orphan_pid).create_time()
     boot_id = read_boot_id() or ""
 
     try:
@@ -736,7 +740,14 @@ async def test_orphan_l3_reaping(fleet_runtime: FleetRuntime, tmp_path: Path) ->
             str(state_path),
             [DispatchRecord(name="orphaned")],
         )
-        _force_running_state(state_path, "orphaned", orphan_pid, orphan_ticks, boot_id)
+        _force_running_state(
+            state_path,
+            "orphaned",
+            orphan_pid,
+            orphan_ticks,
+            boot_id,
+            dispatched_create_time=orphan_create_time,
+        )
 
         _reap_stale_dispatches(state_path, dry_run=False)
 

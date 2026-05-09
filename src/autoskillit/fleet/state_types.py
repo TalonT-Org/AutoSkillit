@@ -292,6 +292,8 @@ _VISIBLE_IN_BLOCK_STATUSES = _COMPLETED_STATUSES | frozenset(
     {
         DispatchStatus.RELEASED,
         DispatchStatus.RUNNING,
+        DispatchStatus.INTERRUPTED,
+        DispatchStatus.REFUSED,
     }
 )
 

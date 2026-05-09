@@ -908,7 +908,7 @@ class TestDispatchMarkerSuppression:
                 )
         assert result.status == ChannelBStatus.STALE
         bounded_logs = [log for log in logs if "Suppression bounded" in str(log.get("event", ""))]
-        assert len(bounded_logs) >= 1
+        assert len(bounded_logs) == 1
 
     @pytest.mark.anyio
     async def test_dispatch_marker_suppression_emits_warning_with_fields(
@@ -958,7 +958,7 @@ class TestDispatchMarkerSuppression:
                     caller_session_id="sess-abc",
                 )
         warning_logs = [log for log in logs if "dispatch" in str(log.get("event", ""))]
-        assert len(warning_logs) >= 1
+        assert len(warning_logs) == 1
         log = warning_logs[0]
         assert log.get("caller_session_id") == "sess-abc"
         assert log.get("marker_dir") == str(tmp_path)
@@ -1001,7 +1001,7 @@ class TestDispatchMarkerSuppression:
                     max_suppression_seconds=1.0,
                 )
         bounded_logs = [log for log in logs if "Suppression bounded" in str(log.get("event", ""))]
-        assert len(bounded_logs) >= 1
+        assert len(bounded_logs) == 1
         log = bounded_logs[0]
         assert log.get("caller_session_id") == "sess-abc"
         assert log.get("marker_dir") == str(tmp_path)

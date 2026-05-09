@@ -130,12 +130,6 @@ class TestIdleStallLifespanStarted:
 
 
 class TestKillReasonPropagation:
-    """Verify kill_reason propagates through all early-return branches.
-
-    Each branch should preserve kill_reason from the SubprocessResult rather than
-    silently defaulting to KillReason.NATURAL_EXIT.
-    """
-
     def test_stale_failure_propagates_infra_kill(self):
         result = _stale_result(kill_reason=KillReason.INFRA_KILL)
         skill_result = _build_skill_result(result)
@@ -149,13 +143,13 @@ class TestKillReasonPropagation:
     def test_recovered_stale_propagates_infra_kill(self):
         stdout = _success_result_json()
         result = _stale_result(kill_reason=KillReason.INFRA_KILL, stdout=stdout)
-        skill_result = _build_skill_result(result, completion_marker="DONE")
+        skill_result = _build_skill_result(result, completion_marker="done")
         assert skill_result.kill_reason == KillReason.INFRA_KILL
 
     def test_recovered_idle_stall_propagates_infra_kill(self):
         stdout = _success_result_json()
         result = _idle_stall_result_with_kill(kill_reason=KillReason.INFRA_KILL, stdout=stdout)
-        skill_result = _build_skill_result(result, completion_marker="DONE")
+        skill_result = _build_skill_result(result, completion_marker="done")
         assert skill_result.kill_reason == KillReason.INFRA_KILL
 
     def test_path_contamination_propagates_kill_reason(self):

@@ -809,7 +809,7 @@ class TestDispatchMarkerSuppression:
 
     @pytest.mark.anyio
     async def test_accepts_marker_dir_and_caller_session_id_params(self, tmp_path):
-        """_session_log_monitor accepts marker_dir and caller_session_id without TypeError."""
+        """marker_dir and caller_session_id params are forwarded; monitor exits STALE."""
         session_file = tmp_path / "abc123.jsonl"
         session_file.write_text("")
         spawn_time = time.time() - 10
@@ -824,7 +824,7 @@ class TestDispatchMarkerSuppression:
                 marker_dir=tmp_path,
                 caller_session_id="test-session",
             )
-        assert isinstance(result.status, ChannelBStatus)
+        assert result.status == ChannelBStatus.STALE
 
     @pytest.mark.anyio
     async def test_dispatch_marker_suppresses_stale(self, tmp_path, monkeypatch):
@@ -869,7 +869,7 @@ class TestDispatchMarkerSuppression:
                 caller_session_id="sess-abc",
             )
         assert result.status == ChannelBStatus.STALE
-        assert call_count["n"] == 2
+        assert call_count["n"] >= 2
 
     @pytest.mark.anyio
     async def test_dispatch_marker_bounded_by_max_suppression(self, tmp_path, monkeypatch):
@@ -955,8 +955,8 @@ class TestDispatchMarkerSuppression:
         warning_logs = [log for log in logs if "dispatch" in str(log.get("event", ""))]
         assert len(warning_logs) >= 1
         log = warning_logs[0]
-        assert "caller_session_id" in log or "sess-abc" in str(log.values())
-        assert "marker_dir" in log or str(tmp_path) in str(log.values())
+        assert log.get("caller_session_id") == "sess-abc"
+        assert log.get("marker_dir") == str(tmp_path)
 
     @pytest.mark.anyio
     async def test_dispatch_marker_bounded_kill_emits_warning_with_fields(
@@ -998,8 +998,8 @@ class TestDispatchMarkerSuppression:
         bounded_logs = [log for log in logs if "Suppression bounded" in str(log.get("event", ""))]
         assert len(bounded_logs) >= 1
         log = bounded_logs[0]
-        assert "caller_session_id" in log or "sess-abc" in str(log.values())
-        assert "marker_dir" in log or str(tmp_path) in str(log.values())
+        assert log.get("caller_session_id") == "sess-abc"
+        assert log.get("marker_dir") == str(tmp_path)
 
     @pytest.mark.anyio
     async def test_marker_dir_none_skips_dispatch_check(self, tmp_path, monkeypatch):

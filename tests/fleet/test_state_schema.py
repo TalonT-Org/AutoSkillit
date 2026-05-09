@@ -371,6 +371,17 @@ class TestDispatchRecordToDict:
         assert roundtripped["name"] == "test-job"
         assert roundtripped["token_usage"] == {"x": 1}
 
+    def test_to_dict_keys_match_dataclass_fields(self) -> None:
+        """to_dict() must emit exactly the dataclass field names."""
+        import dataclasses
+
+        from autoskillit.fleet import DispatchRecord
+
+        record = DispatchRecord(name="test")
+        actual = set(record.to_dict().keys())
+        expected = {f.name for f in dataclasses.fields(DispatchRecord)}
+        assert actual == expected
+
 
 class TestDispatchRecordSchemaV3:
     def test_normalize_maps_cache_keys_to_canonical_names(self) -> None:

@@ -282,6 +282,9 @@ class InMemoryTestRunner(TestRunner):
         self._call_count = 0
         self.calls: list[Path] = []
 
+    def check_infrastructure(self, cwd: Path) -> str | None:
+        return None
+
     async def run(self, cwd: Path) -> TestResult:
         self._call_count += 1
         self.calls.append(cwd)

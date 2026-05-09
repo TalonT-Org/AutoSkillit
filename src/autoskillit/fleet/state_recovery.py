@@ -179,7 +179,7 @@ def resume_campaign_from_state(
 
         if continue_on_failure and reset_on_retry:
             for d in m.state.dispatches:
-                if d.status in _RETRIABLE_NON_SUCCESS:
+                if d.status in {DispatchStatus.INTERRUPTED, DispatchStatus.REFUSED}:
                     _clear_dispatch_for_retry(d)
                     m.mark_dirty()
 

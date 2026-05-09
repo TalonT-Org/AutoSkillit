@@ -281,6 +281,25 @@ class TestBuildSkillSessionCmd:
         spec = build_skill_session_cmd("/investigate foo", **params)
         assert "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY" not in spec.env
 
+    def test_env_has_stream_idle_timeout_when_positive(self):
+        params = {**self.BASE, "stream_idle_timeout_ms": 120000}
+        spec = build_skill_session_cmd("/investigate foo", **params)
+        assert spec.env["CLAUDE_STREAM_IDLE_TIMEOUT_MS"] == "120000"
+
+    def test_env_omits_stream_idle_timeout_when_zero(self):
+        params = {**self.BASE, "stream_idle_timeout_ms": 0}
+        spec = build_skill_session_cmd("/investigate foo", **params)
+        assert "CLAUDE_STREAM_IDLE_TIMEOUT_MS" not in spec.env
+
+    def test_headless_exclusive_vars_stripped_stream_idle_timeout(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """CLAUDE_STREAM_IDLE_TIMEOUT_MS in host env must be stripped even when ms=0."""
+        monkeypatch.setenv("CLAUDE_STREAM_IDLE_TIMEOUT_MS", "99999")
+        params = {**self.BASE, "stream_idle_timeout_ms": 0}
+        spec = build_skill_session_cmd("/investigate foo", **params)
+        assert "CLAUDE_STREAM_IDLE_TIMEOUT_MS" not in spec.env
+
     def test_env_strips_sse_port(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("CLAUDE_CODE_SSE_PORT", "23270")
         spec = build_skill_session_cmd("/investigate foo", **self.BASE)
@@ -744,6 +763,22 @@ class TestBuildFoodTruckCmdFeatureParity:
         spec = build_food_truck_cmd(**{**self.BASE, "exit_after_stop_delay_ms": 0})
         assert "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY" not in spec.env
 
+    def test_env_has_stream_idle_timeout_when_positive(self):
+        spec = build_food_truck_cmd(**{**self.BASE, "stream_idle_timeout_ms": 120000})
+        assert spec.env["CLAUDE_STREAM_IDLE_TIMEOUT_MS"] == "120000"
+
+    def test_env_omits_stream_idle_timeout_when_zero(self):
+        spec = build_food_truck_cmd(**{**self.BASE, "stream_idle_timeout_ms": 0})
+        assert "CLAUDE_STREAM_IDLE_TIMEOUT_MS" not in spec.env
+
+    def test_headless_exclusive_vars_stripped_stream_idle_timeout(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """CLAUDE_STREAM_IDLE_TIMEOUT_MS in host env must be stripped even when ms=0."""
+        monkeypatch.setenv("CLAUDE_STREAM_IDLE_TIMEOUT_MS", "99999")
+        spec = build_food_truck_cmd(**{**self.BASE, "stream_idle_timeout_ms": 0})
+        assert "CLAUDE_STREAM_IDLE_TIMEOUT_MS" not in spec.env
+
     def test_env_has_scenario_step_name_when_set(self):
         spec = build_food_truck_cmd(**{**self.BASE, "scenario_step_name": "cook-recipe"})
         assert spec.env["SCENARIO_STEP_NAME"] == "cook-recipe"
@@ -1006,6 +1041,11 @@ def test_anthropic_api_key_in_headless_exclusive_vars() -> None:
 def test_anthropic_auth_token_in_headless_exclusive_vars() -> None:
     """ANTHROPIC_AUTH_TOKEN must be headless-exclusive."""
     assert "ANTHROPIC_AUTH_TOKEN" in _HEADLESS_EXCLUSIVE_VARS
+
+
+def test_stream_idle_timeout_in_headless_exclusive_vars() -> None:
+    """CLAUDE_STREAM_IDLE_TIMEOUT_MS must be headless-exclusive."""
+    assert "CLAUDE_STREAM_IDLE_TIMEOUT_MS" in _HEADLESS_EXCLUSIVE_VARS
 
 
 # ---------------------------------------------------------------------------

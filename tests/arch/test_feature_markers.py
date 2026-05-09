@@ -254,8 +254,12 @@ def test_ci_workflow_gates_experimental_for_stable_track() -> None:
     with workflow_path.open() as f:
         wf = yaml.safe_load(f)
 
-    test_job = wf["jobs"]["test"]
-    steps = test_job["steps"]
+    assert isinstance(wf, dict), f"CI workflow YAML is empty or invalid at {workflow_path}"
+    jobs = wf.get("jobs", {})
+    assert "test" in jobs, f"CI workflow has no 'test' job (found: {sorted(jobs)})"
+    test_job = jobs["test"]
+    steps = test_job.get("steps") or []
+    assert steps, f"CI workflow 'test' job has no steps at {workflow_path}"
 
     run_test_steps = [s for s in steps if s.get("name", "") == "Run tests"]
     assert run_test_steps, "No 'Run tests' step found in test job"

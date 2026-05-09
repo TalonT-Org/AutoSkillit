@@ -770,7 +770,7 @@ class TestAppendDispatchRecordIllegalTransition:
         assert latest.status == DispatchStatus.SUCCESS
 
 
-class TestResumeShowsRefusedInBlock:
+class TestRefusedDispatchSkippedInBlock:
     def test_refused_dispatch_skipped_next_is_b(self, tmp_path: Path) -> None:
         sp = _state_path(tmp_path)
         write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("A", "B"))
@@ -781,6 +781,10 @@ class TestResumeShowsRefusedInBlock:
         assert decision is not None
         assert decision.next_dispatch_name == "B"
         assert "A" not in decision.completed_dispatches_block
+        state = read_state(sp)
+        assert state is not None
+        a = next(d for d in state.dispatches if d.name == "A")
+        assert a.status == DispatchStatus.REFUSED
 
 
 class TestResumeShowsReleasedInBlock:
@@ -795,7 +799,7 @@ class TestResumeShowsReleasedInBlock:
         assert "released" in decision.completed_dispatches_block.lower()
 
 
-class TestResumeIncludesInterruptedInBlock:
+class TestInterruptedDispatchSkippedInBlock:
     def test_interrupted_dispatch_skipped_next_is_c(self, tmp_path: Path) -> None:
         sp = _state_path(tmp_path)
         write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("A", "B", "C"))
@@ -808,6 +812,8 @@ class TestResumeIncludesInterruptedInBlock:
         decision = resume_campaign_from_state(sp, continue_on_failure=True)
         assert decision is not None
         assert decision.next_dispatch_name == "C"
+        assert "A" in decision.completed_dispatches_block
+        assert "B" not in decision.completed_dispatches_block
 
 
 class TestResumeIncludesRunningAliveInBlock:
@@ -1368,15 +1374,13 @@ class TestAllInterruptedCampaignDoesNotSilentlyComplete:
         decision = resume_campaign_from_state(sp, continue_on_failure=False)
 
         assert decision is not None
-        assert (
-            decision.next_dispatch_name != ""
-            or decision.completed_dispatches_block == FLEET_HALTED_SENTINEL
-        ), "All-INTERRUPTED campaign returned empty next_name with no halt sentinel — silent stall"
+        assert decision.next_dispatch_name == ""
+        assert decision.completed_dispatches_block == FLEET_HALTED_SENTINEL
 
     def test_all_interrupted_continue_on_failure_true_resets_to_pending(
         self, tmp_path: Path
     ) -> None:
-        """resume_campaign_from_state with continue_on_failure=True resets INTERRUPTED to PENDING."""
+        """continue_on_failure=True resets INTERRUPTED dispatch to PENDING."""
         sp = _state_path(tmp_path)
         write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("A"))
         from autoskillit.fleet import upsert_dispatch_record_by_name
@@ -1409,10 +1413,8 @@ class TestAllRefusedCampaignDoesNotSilentlyComplete:
         decision = resume_campaign_from_state(sp, continue_on_failure=False)
 
         assert decision is not None
-        assert (
-            decision.next_dispatch_name != ""
-            or decision.completed_dispatches_block == FLEET_HALTED_SENTINEL
-        ), "All-REFUSED campaign returned empty next_name with no halt sentinel — silent stall"
+        assert decision.next_dispatch_name == ""
+        assert decision.completed_dispatches_block == FLEET_HALTED_SENTINEL
 
     def test_all_refused_continue_on_failure_true_resets_to_pending(self, tmp_path: Path) -> None:
         """resume_campaign_from_state with continue_on_failure=True resets REFUSED to PENDING."""
@@ -1439,18 +1441,24 @@ class TestKillReasonNotStaleAfterResumableRedispatch:
 
     def test_kill_reason_cleared_on_resumable_to_running(self, tmp_path: Path) -> None:
         """mark_dispatch_running clears kill_reason when re-dispatching a RESUMABLE dispatch."""
+        from autoskillit.fleet import upsert_dispatch_record_by_name
+
         sp = _state_path(tmp_path)
         sidecar = tmp_path / "sidecar.jsonl"
         sidecar.write_text("")
         write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("A"))
         mark_dispatch_running(sp, "A", dispatch_id="d1", dispatched_pid=42)
         mark_dispatch_resumable(sp, "A", sidecar_path=str(sidecar))
-        data = json.loads(sp.read_text())
-        for d in data["dispatches"]:
-            if d["name"] == "A":
-                d["kill_reason"] = "idle_stall"
-                d["infra_exit_category"] = "something"
-        sp.write_text(json.dumps(data))
+        upsert_dispatch_record_by_name(
+            sp,
+            DispatchRecord(
+                name="A",
+                status=DispatchStatus.RESUMABLE,
+                kill_reason="idle_stall",
+                infra_exit_category="something",
+                sidecar_path=str(sidecar),
+            ),
+        )
 
         mark_dispatch_running(sp, "A", dispatch_id="d2", dispatched_pid=43)
 

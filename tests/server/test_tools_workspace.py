@@ -113,6 +113,13 @@ class TestResetWorkspace:
 class TestTestCheck:
     """test_check returns unambiguous PASS/FAIL with cross-validation."""
 
+    @pytest.fixture(autouse=True)
+    def _wt_dir(self, tmp_path):
+        wt = tmp_path / "wt"
+        wt.mkdir()
+        (wt / "Taskfile.yml").write_text("version: '3'\n")
+        self.wt = str(wt)
+
     @pytest.mark.anyio
     async def test_test_check_accessible_without_gate(self, tool_ctx):
         """test_check must not be blocked by gate — _require_enabled() was removed."""
@@ -121,7 +128,7 @@ class TestTestCheck:
         tool_ctx.gate = DefaultGateState(enabled=False)
         # Still need runner to be set up — push a result for it
         tool_ctx.runner.push(_make_result(0, "= 10 passed =\n", ""))
-        result_str = await test_check(worktree_path="/tmp/wt")
+        result_str = await test_check(worktree_path=self.wt)
         result = json.loads(result_str)
         assert result.get("subtype") != "gate_error", (
             "test_check must not be gated — _require_enabled() was removed"
@@ -132,21 +139,21 @@ class TestTestCheck:
     async def test_passes_on_clean_run(self, tool_ctx):
         """returncode=0 with passing summary -> passed=True."""
         tool_ctx.runner.push(_make_result(0, "= 100 passed =\n", ""))
-        result = json.loads(await test_check(worktree_path="/tmp/wt"))
+        result = json.loads(await test_check(worktree_path=self.wt))
         assert result["passed"] is True
 
     @pytest.mark.anyio
     async def test_fails_on_nonzero_exit(self, tool_ctx):
         """returncode=1 -> passed=False regardless of output."""
         tool_ctx.runner.push(_make_result(1, "= 3 failed, 97 passed =\n", ""))
-        result = json.loads(await test_check(worktree_path="/tmp/wt"))
+        result = json.loads(await test_check(worktree_path=self.wt))
         assert result["passed"] is False
 
     @pytest.mark.anyio
     async def test_cross_validates_exit_code_against_output(self, tool_ctx):
         """returncode=0 but output contains 'failed' -> passed=False."""
         tool_ctx.runner.push(_make_result(0, "= 3 failed, 8538 passed =\n", ""))
-        result = json.loads(await test_check(worktree_path="/tmp/wt"))
+        result = json.loads(await test_check(worktree_path=self.wt))
         assert result["passed"] is False
 
     @pytest.mark.anyio
@@ -155,7 +162,7 @@ class TestTestCheck:
         tool_ctx.runner.push(
             _make_result(0, "= 100 passed =\nTest output saved to: /tmp/out.txt\n", "")
         )
-        result = json.loads(await test_check(worktree_path="/tmp/wt"))
+        result = json.loads(await test_check(worktree_path=self.wt))
         assert "summary" not in result
         assert "output_file" not in result
         assert "passed" in result
@@ -167,70 +174,78 @@ class TestTestCheck:
     async def test_cross_validates_error_in_output(self, tool_ctx):
         """returncode=0 but output contains 'error' -> passed=False."""
         tool_ctx.runner.push(_make_result(0, "= 1 error, 99 passed =\n", ""))
-        result = json.loads(await test_check(worktree_path="/tmp/wt"))
+        result = json.loads(await test_check(worktree_path=self.wt))
         assert result["passed"] is False
 
     @pytest.mark.anyio
     async def test_xfailed_not_treated_as_failure(self, tool_ctx):
         """xfailed tests are expected failures — exit code 0, should pass."""
         tool_ctx.runner.push(_make_result(0, "= 8552 passed, 3 xfailed =\n", ""))
-        result = json.loads(await test_check(worktree_path="/tmp/wt"))
+        result = json.loads(await test_check(worktree_path=self.wt))
         assert result["passed"] is True
 
     @pytest.mark.anyio
     async def test_xpassed_not_treated_as_failure(self, tool_ctx):
         """xpassed tests are unexpected passes — exit code 0, should pass."""
         tool_ctx.runner.push(_make_result(0, "= 99 passed, 1 xpassed =\n", ""))
-        result = json.loads(await test_check(worktree_path="/tmp/wt"))
+        result = json.loads(await test_check(worktree_path=self.wt))
         assert result["passed"] is True
 
     @pytest.mark.anyio
     async def test_mixed_xfail_with_real_failure(self, tool_ctx):
         """Real failure + xfailed — should still fail on the real failure."""
         tool_ctx.runner.push(_make_result(0, "= 1 failed, 2 xfailed, 97 passed =\n", ""))
-        result = json.loads(await test_check(worktree_path="/tmp/wt"))
+        result = json.loads(await test_check(worktree_path=self.wt))
         assert result["passed"] is False
 
     @pytest.mark.anyio
     async def test_skipped_with_exit_zero_passes(self, tool_ctx):
         """Skipped tests with exit 0 — parser trusts exit code."""
         tool_ctx.runner.push(_make_result(0, "= 97 passed, 3 skipped =\n", ""))
-        result = json.loads(await test_check(worktree_path="/tmp/wt"))
+        result = json.loads(await test_check(worktree_path=self.wt))
         assert result["passed"] is True
 
     @pytest.mark.anyio
     async def test_warnings_not_treated_as_failure(self, tool_ctx):
         """Warnings with exit 0 — should pass."""
         tool_ctx.runner.push(_make_result(0, "= 100 passed, 5 warnings =\n", ""))
-        result = json.loads(await test_check(worktree_path="/tmp/wt"))
+        result = json.loads(await test_check(worktree_path=self.wt))
         assert result["passed"] is True
 
     @pytest.mark.anyio
     async def test_bare_q_failures_detected(self, tool_ctx):
         """Bare -q failure line (rc=0 due to PIPESTATUS bug) -> passed=False."""
         tool_ctx.runner.push(_make_result(0, "3 failed, 97 passed in 2.31s\n", ""))
-        result = json.loads(await test_check(worktree_path="/tmp/wt"))
+        result = json.loads(await test_check(worktree_path=self.wt))
         assert result["passed"] is False
 
     @pytest.mark.anyio
     async def test_non_pytest_runner_empty_output_passes(self, tool_ctx):
         """Non-pytest runner: rc=0, empty stdout, empty stderr -> passed=True (trust exit code)."""
         tool_ctx.runner.push(_make_result(0, "", ""))
-        result = json.loads(await test_check(worktree_path="/tmp/wt"))
+        result = json.loads(await test_check(worktree_path=self.wt))
         assert result["passed"] is True
 
     @pytest.mark.anyio
     async def test_bare_q_clean_passes(self, tool_ctx):
         """Bare -q all-passing output: rc=0 and summary found -> passed=True."""
         tool_ctx.runner.push(_make_result(0, "100 passed in 1.50s\n", ""))
-        result = json.loads(await test_check(worktree_path="/tmp/wt"))
+        result = json.loads(await test_check(worktree_path=self.wt))
         assert result["passed"] is True
 
     @pytest.mark.anyio
-    async def test_test_check_resolves_relative_worktree_path(self, tool_ctx):
+    async def test_test_check_resolves_relative_worktree_path(
+        self, tool_ctx, tmp_path, monkeypatch
+    ):
         """test_check must apply os.path.realpath() to worktree_path so that relative
         paths are resolved against os.getcwd() consistently, matching reset_test_dir
         and reset_workspace behavior."""
+        subdir = tmp_path / "subdir"
+        subdir.mkdir()
+        wt = tmp_path / "some_worktree"
+        wt.mkdir()
+        (wt / "Taskfile.yml").write_text("version: '3'\n")
+        monkeypatch.chdir(subdir)
         relative_path = "../some_worktree"
         expected_resolved = os.path.realpath(relative_path)
 
@@ -252,7 +267,7 @@ class TestTestCheck:
         for var in AUTOSKILLIT_PRIVATE_ENV_VARS:
             monkeypatch.setenv(var, "1")
 
-        await test_check(worktree_path="/tmp/wt")
+        await test_check(worktree_path=self.wt)
 
         assert tool_ctx.runner.call_args_list, "Runner was not called"
         _cmd, _cwd, _timeout, kwargs = tool_ctx.runner.call_args_list[-1]
@@ -267,7 +282,7 @@ class TestTestCheck:
     async def test_cargo_nextest_style_passes(self, tool_ctx):
         """Non-pytest runner: rc=0, stderr-only output -> passed=True, stderr surfaced."""
         tool_ctx.runner.push(_make_result(0, "", "PASS [0.5s] 5 tests"))
-        result = json.loads(await test_check(worktree_path="/tmp/wt"))
+        result = json.loads(await test_check(worktree_path=self.wt))
         assert result["passed"] is True
         assert "PASS [0.5s] 5 tests" in result["stderr"]
 
@@ -275,21 +290,21 @@ class TestTestCheck:
     async def test_response_schema_includes_stderr(self, tool_ctx):
         """test_check response contains passed, stdout, and stderr keys."""
         tool_ctx.runner.push(_make_result(0, "= 10 passed =\n", ""))
-        result = json.loads(await test_check(worktree_path="/tmp/wt"))
+        result = json.loads(await test_check(worktree_path=self.wt))
         assert set(result.keys()) == {"passed", "stdout", "stderr", "duration_seconds"}
 
     @pytest.mark.anyio
     async def test_pytest_failure_still_detected(self, tool_ctx):
         """Regression guard: pytest failures are still detected after CWA removal."""
         tool_ctx.runner.push(_make_result(0, "= 3 failed, 97 passed =\n", ""))
-        result = json.loads(await test_check(worktree_path="/tmp/wt"))
+        result = json.loads(await test_check(worktree_path=self.wt))
         assert result["passed"] is False
 
     @pytest.mark.anyio
     async def test_test_check_response_includes_duration(self, tool_ctx):
         """test_check JSON includes duration_seconds."""
         tool_ctx.runner.push(_make_result(0, "= 10 passed =\n", ""))
-        raw = await test_check("/tmp/wt")
+        raw = await test_check(self.wt)
         data = json.loads(raw)
         assert "duration_seconds" in data
         assert isinstance(data["duration_seconds"], float)
@@ -321,7 +336,7 @@ class TestTestCheck:
             )
 
         monkeypatch.setattr(tool_ctx.tester, "_runner", fake_runner)
-        raw = await test_check("/tmp/wt")
+        raw = await test_check(self.wt)
         data = json.loads(raw)
         assert data["filter_mode"] == "aggressive"
         assert data["tests_selected"] == 73
@@ -331,7 +346,7 @@ class TestTestCheck:
     async def test_test_check_response_omits_filter_stats_when_absent(self, tool_ctx):
         """Filter fields are absent (not null) from response when no filter active."""
         tool_ctx.runner.push(_make_result(0, "= 10 passed =\n", ""))
-        raw = await test_check("/tmp/wt")
+        raw = await test_check(self.wt)
         data = json.loads(raw)
         assert "filter_mode" not in data
         assert "tests_selected" not in data
@@ -584,17 +599,24 @@ async def test_reset_workspace_returns_partial_failure_json(tool_ctx_kitchen_ope
 class TestTestCheckTiming:
     """test_check records wall-clock timing when step_name is provided."""
 
+    @pytest.fixture(autouse=True)
+    def _wt_dir(self, tmp_path):
+        wt = tmp_path / "wt"
+        wt.mkdir()
+        (wt / "Taskfile.yml").write_text("version: '3'\n")
+        self.wt = str(wt)
+
     @pytest.mark.anyio
     async def test_test_check_step_name_records_timing(self, tool_ctx):
         tool_ctx.runner.push(_make_result(0, "= 10 passed =\n", ""))
-        await test_check("/tmp/wt", step_name="test_check")
+        await test_check(self.wt, step_name="test_check")
         report = tool_ctx.timing_log.get_report()
         assert any(e["step_name"] == "test_check" for e in report)
 
     @pytest.mark.anyio
     async def test_test_check_empty_step_name_skips_timing(self, tool_ctx):
         tool_ctx.runner.push(_make_result(0, "= 10 passed =\n", ""))
-        await test_check("/tmp/wt")
+        await test_check(self.wt)
         assert tool_ctx.timing_log.get_report() == []
 
 

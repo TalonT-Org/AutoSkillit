@@ -436,6 +436,7 @@ def test_research_campaign_run_implement_ingredients():
         "base_branch",
         "issue_url",
         "output_mode",
+        "test_check_enabled",
     }
     assert d.ingredients["task"] == "${{ inputs.task }}"
     assert d.ingredients["worktree_path"] == "${{ campaign.worktree_path }}"
@@ -446,6 +447,7 @@ def test_research_campaign_run_implement_ingredients():
     assert d.ingredients["base_branch"] == "${{ inputs.base_branch }}"
     assert d.ingredients["issue_url"] == "${{ inputs.issue_url }}"
     assert d.ingredients["output_mode"] == "${{ inputs.output_mode }}"
+    assert d.ingredients["test_check_enabled"] == "${{ inputs.test_check_enabled }}"
 
 
 def test_research_campaign_run_implement_capture():

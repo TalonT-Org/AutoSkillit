@@ -601,7 +601,7 @@ def _check_dispatch_capture_value_references_result(ctx: ValidationContext) -> l
 @semantic_rule(
     name="dispatch-capture-field-in-sentinel",
     description="Captured result fields should appear in target recipe's sentinel message",
-    severity=Severity.WARNING,
+    severity=Severity.ERROR,
 )
 def _check_dispatch_capture_field_in_sentinel(ctx: ValidationContext) -> list[RuleFinding]:
     if ctx.recipe.kind != RecipeKind.CAMPAIGN:
@@ -625,7 +625,7 @@ def _check_dispatch_capture_field_in_sentinel(ctx: ValidationContext) -> list[Ru
                 findings.append(
                     RuleFinding(
                         rule="dispatch-capture-field-in-sentinel",
-                        severity=Severity.WARNING,
+                        severity=Severity.ERROR,
                         step_name="(top-level)",
                         message=(
                             f"Dispatch {d.name!r} captures {cap_key!r} as "
@@ -633,6 +633,76 @@ def _check_dispatch_capture_field_in_sentinel(ctx: ValidationContext) -> list[Ru
                             f"{d.recipe!r} has no sentinel stop step listing "
                             f"field {field_name!r}. "
                             f"Known sentinel fields: {sorted(sentinel_fields)}."
+                        ),
+                    )
+                )
+    return findings
+
+
+def _extract_sentinel_fields_per_stop(recipe: Recipe) -> list[frozenset[str]]:
+    """Extract field sets from each individual sentinel stop step.
+
+    Returns a list of frozensets, one per sentinel stop, rather than
+    the union. This enables per-path validation.
+    """
+    per_stop: list[frozenset[str]] = []
+    for step in recipe.steps.values():
+        if step.action != "stop" or not step.message:
+            continue
+        if "sentinel" not in step.message.lower():
+            continue
+        fields: set[str] = set()
+        for match in _SENTINEL_JSON_RE.finditer(step.message):
+            try:
+                parsed = json.loads(match.group(1))
+                if isinstance(parsed, dict):
+                    fields.update(parsed.keys())
+            except (json.JSONDecodeError, ValueError):
+                continue
+        if fields:
+            per_stop.append(frozenset(fields))
+    return per_stop
+
+
+@semantic_rule(
+    name="dispatch-capture-field-in-all-sentinels",
+    description="Captured result fields must appear in ALL sentinel stop paths of target recipe",
+    severity=Severity.ERROR,
+)
+def _check_dispatch_capture_field_in_all_sentinels(
+    ctx: ValidationContext,
+) -> list[RuleFinding]:
+    if ctx.recipe.kind != RecipeKind.CAMPAIGN:
+        return []
+    findings: list[RuleFinding] = []
+    for d in ctx.recipe.dispatches:
+        if d.gate or not d.capture:
+            continue
+        target = _load_dispatch_target(d, ctx.project_dir)
+        if target is None:
+            continue
+        per_stop = _extract_sentinel_fields_per_stop(target)
+        if len(per_stop) < 2:
+            continue
+        for cap_key, cap_val in d.capture.items():
+            match = _RESULT_FIELD_RE.match(cap_val.strip())
+            if not match:
+                continue
+            field_name = match.group(1)
+            missing_in = [i for i, fields in enumerate(per_stop) if field_name not in fields]
+            if missing_in:
+                findings.append(
+                    RuleFinding(
+                        rule="dispatch-capture-field-in-all-sentinels",
+                        severity=Severity.ERROR,
+                        step_name="(top-level)",
+                        message=(
+                            f"Dispatch {d.name!r} captures {cap_key!r} as "
+                            f"${{{{ result.{field_name} }}}} but not all sentinel "
+                            f"stop paths in target recipe {d.recipe!r} emit "
+                            f"field {field_name!r}. The field is missing from "
+                            f"{len(missing_in)} of {len(per_stop)} sentinel paths. "
+                            f"All sentinel paths must emit all captured fields."
                         ),
                     )
                 )

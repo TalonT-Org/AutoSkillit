@@ -462,9 +462,11 @@ steps:
       Review phase complete (local mode). Local bundle exported successfully.
       Emit the L3 result sentinel JSON block now.
       The sentinel must include: success=true,
-      local_bundle_path=${{ context.local_bundle_path }}.
+      local_bundle_path=${{ context.local_bundle_path }},
+      pr_url="" (empty string — no PR in local mode),
+      report_path_after_finalize="" (empty string — no finalization in local mode).
       Example sentinel:
-      {"success": true, "local_bundle_path": "<path>"}
+      {"success": true, "local_bundle_path": "<path>", "pr_url": "", "report_path_after_finalize": ""}
 
   escalate_stop:
     action: stop

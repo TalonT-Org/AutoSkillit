@@ -3,6 +3,9 @@ and orphaned tool result detection."""
 
 from __future__ import annotations
 
+import ast
+import inspect
+import os as _os
 import sys
 import time
 from unittest.mock import MagicMock, patch
@@ -15,6 +18,7 @@ from autoskillit.core.types import ChannelBStatus, TerminationReason
 from autoskillit.execution.process import (
     _has_active_api_connection,
     _has_active_child_processes,
+    _has_active_dispatch_marker,
     _heartbeat,
     _session_log_monitor,
     run_managed_async,
@@ -593,3 +597,58 @@ class TestOrphanedToolResultDetection:
 
         assert result.status == ChannelBStatus.COMPLETION
         assert result.orphaned_tool_result is False
+
+
+class TestHasActiveDispatchMarker:
+    """Unit tests for _has_active_dispatch_marker."""
+
+    def test_dispatch_marker_nonexistent_dir_returns_false(self, tmp_path):
+        """Nonexistent marker directory returns False without raising."""
+        result = _has_active_dispatch_marker(tmp_path / "nonexistent")
+        assert result is False
+
+    def test_dispatch_marker_fresh_marker_returns_true(self, tmp_path):
+        """A fresh marker file causes the function to return True."""
+        marker = tmp_path / "dispatch-in-progress-sess1-abc.marker"
+        marker.touch()
+        result = _has_active_dispatch_marker(tmp_path)
+        assert result is True
+
+    def test_dispatch_marker_expired_marker_returns_false(self, tmp_path):
+        """A marker file with mtime older than max_marker_age returns False."""
+        marker = tmp_path / "dispatch-in-progress-xyz-001.marker"
+        marker.touch()
+        old_time = time.time() - 120
+
+        _os.utime(marker, (old_time, old_time))
+        result = _has_active_dispatch_marker(tmp_path, max_marker_age=60.0)
+        assert result is False
+
+    def test_dispatch_marker_session_id_filters(self, tmp_path):
+        """When session_id is provided, only markers matching that session are considered."""
+        (tmp_path / "dispatch-in-progress-abc-001.marker").touch()
+        (tmp_path / "dispatch-in-progress-xyz-002.marker").touch()
+        result_matching = _has_active_dispatch_marker(tmp_path, session_id="abc")
+        result_non_matching = _has_active_dispatch_marker(tmp_path, session_id="def")
+        assert result_matching is True
+        assert result_non_matching is False
+
+    def test_dispatch_marker_none_session_id_matches_all(self, tmp_path):
+        """session_id=None matches any dispatch-in-progress marker."""
+        marker = tmp_path / "dispatch-in-progress-xyz-001.marker"
+        marker.touch()
+        result = _has_active_dispatch_marker(tmp_path, session_id=None)
+        assert result is True
+
+    def test_dispatch_marker_no_logger_calls(self):
+        """The function body contains no logger.* attribute access calls."""
+
+        source = inspect.getsource(_has_active_dispatch_marker)
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Attribute)
+                and isinstance(node.value, ast.Name)
+                and node.value.id == "logger"
+            ):
+                pytest.fail(f"Found logger.{node.attr} in _has_active_dispatch_marker body")

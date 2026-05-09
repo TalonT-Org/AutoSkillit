@@ -874,6 +874,8 @@ class TestDispatchMarkerSuppression:
     @pytest.mark.anyio
     async def test_dispatch_marker_bounded_by_max_suppression(self, tmp_path, monkeypatch):
         """Stale fires after max_suppression_seconds despite active dispatch marker."""
+        import structlog.testing
+
         session_file = tmp_path / "abc123.jsonl"
         session_file.write_text("")
         spawn_time = time.time() - 10
@@ -890,20 +892,23 @@ class TestDispatchMarkerSuppression:
             "autoskillit.execution.process._process_monitor._has_active_dispatch_marker",
             lambda marker_dir, session_id=None: True,
         )
-        with anyio.fail_after(8.0):
-            result = await _session_log_monitor(
-                tmp_path,
-                "DONE",
-                stale_threshold=0.05,
-                spawn_time=spawn_time,
-                pid=9999,
-                _phase1_poll=0.01,
-                _phase2_poll=0.05,
-                marker_dir=tmp_path,
-                caller_session_id="sess-abc",
-                max_suppression_seconds=1.0,
-            )
+        with structlog.testing.capture_logs() as logs:
+            with anyio.fail_after(8.0):
+                result = await _session_log_monitor(
+                    tmp_path,
+                    "DONE",
+                    stale_threshold=0.05,
+                    spawn_time=spawn_time,
+                    pid=9999,
+                    _phase1_poll=0.01,
+                    _phase2_poll=0.05,
+                    marker_dir=tmp_path,
+                    caller_session_id="sess-abc",
+                    max_suppression_seconds=1.0,
+                )
         assert result.status == ChannelBStatus.STALE
+        bounded_logs = [log for log in logs if "Suppression bounded" in str(log.get("event", ""))]
+        assert len(bounded_logs) >= 1
 
     @pytest.mark.anyio
     async def test_dispatch_marker_suppression_emits_warning_with_fields(

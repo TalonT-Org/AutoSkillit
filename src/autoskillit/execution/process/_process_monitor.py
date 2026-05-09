@@ -362,11 +362,12 @@ async def _session_log_monitor(
                 ):
                     if suppression_start is None:
                         suppression_start = _time.monotonic()
-                    if _time.monotonic() - suppression_start >= max_suppression_seconds:
+                    suppression_elapsed = _time.monotonic() - suppression_start
+                    if suppression_elapsed >= max_suppression_seconds:
                         logger.warning(
                             "Suppression bounded: stale kill after dispatch marker "
                             "suppression exceeded max_suppression_seconds",
-                            elapsed=_time.monotonic() - suppression_start,
+                            suppression_elapsed=suppression_elapsed,
                             caller_session_id=caller_session_id,
                             marker_dir=str(marker_dir),
                         )
@@ -374,7 +375,7 @@ async def _session_log_monitor(
                     last_change = _time.monotonic()
                     logger.warning(
                         "JSONL silent but active dispatch marker found — suppressing stale kill",
-                        elapsed=elapsed,
+                        stale_elapsed=elapsed,
                         caller_session_id=caller_session_id,
                         marker_dir=str(marker_dir),
                     )

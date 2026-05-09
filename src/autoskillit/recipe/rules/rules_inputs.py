@@ -472,7 +472,7 @@ def _check_local_rounds_alignment(ctx: ValidationContext) -> list[RuleFinding]:
         return []
     try:
         local_default = int(local_rounds_ing.default)
-        max_default = int(max_retries_ing.default or "3")
+        max_default = int(max_retries_ing.default if max_retries_ing.default is not None else "3")
     except (ValueError, TypeError):
         return []
     if local_default == 0 or local_default < max_default:

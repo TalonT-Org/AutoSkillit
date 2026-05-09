@@ -63,6 +63,11 @@ def test_analysis_graph_no_toplevel_networkx_import():
 
     src_file = Path(_analysis_graph_mod.__file__)
     tree = ast.parse(src_file.read_text())
+    # iter_child_nodes only visits direct children of the module node — it does not
+    # recurse into nested if-blocks, so a TYPE_CHECKING-gated `import networkx as nx`
+    # is invisible to this walk. That is intentional: TYPE_CHECKING guards have zero
+    # runtime cost and are an accepted pattern. This test guards only bare runtime
+    # top-level imports that would incur real import latency.
     for node in ast.iter_child_nodes(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:

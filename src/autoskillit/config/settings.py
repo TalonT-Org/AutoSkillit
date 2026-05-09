@@ -390,6 +390,9 @@ class AutomationConfig:
                 max_suppression_seconds=int(
                     val(rs, "max_suppression_seconds", _rs["max_suppression_seconds"])
                 ),
+                stream_idle_timeout_ms=int(
+                    val(rs, "stream_idle_timeout_ms", _rs["stream_idle_timeout_ms"])
+                ),
             ),
             model=ModelConfig(
                 default=_d if (_d := val(mc, "default", None)) is not None else _mc["default"],

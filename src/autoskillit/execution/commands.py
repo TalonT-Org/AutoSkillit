@@ -178,6 +178,7 @@ _HEADLESS_EXCLUSIVE_VARS: frozenset[str] = frozenset(
         "AUTOSKILLIT_SESSION_TYPE",
         "AUTOSKILLIT_SKILL_NAME",
         "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY",
+        "CLAUDE_STREAM_IDLE_TIMEOUT_MS",
         "MAX_MCP_OUTPUT_TOKENS",
         "SCENARIO_STEP_NAME",
     }
@@ -337,6 +338,7 @@ def build_skill_session_cmd(
     output_format: OutputFormat,
     add_dirs: Sequence[ValidatedAddDir] = (),
     exit_after_stop_delay_ms: int = 0,
+    stream_idle_timeout_ms: int = 0,
     scenario_step_name: str = "",
     temp_dir_relpath: str | None = None,
     allowed_write_prefix: str = "",
@@ -432,6 +434,8 @@ def build_skill_session_cmd(
     }
     if exit_after_stop_delay_ms > 0:
         extras["CLAUDE_CODE_EXIT_AFTER_STOP_DELAY"] = str(exit_after_stop_delay_ms)
+    if stream_idle_timeout_ms > 0:
+        extras["CLAUDE_STREAM_IDLE_TIMEOUT_MS"] = str(stream_idle_timeout_ms)
     if scenario_step_name:
         extras["SCENARIO_STEP_NAME"] = scenario_step_name
     campaign_id = os.environ.get(CAMPAIGN_ID_ENV_VAR)
@@ -482,6 +486,7 @@ def build_food_truck_cmd(
     env_extras: Mapping[str, str] | None = None,
     output_format: OutputFormat = OutputFormat.STREAM_JSON,
     exit_after_stop_delay_ms: int = 0,
+    stream_idle_timeout_ms: int = 0,
     scenario_step_name: str = "",
     temp_dir_relpath: str | None = None,
     allowed_write_prefix: str = "",
@@ -580,6 +585,8 @@ def build_food_truck_cmd(
     }
     if exit_after_stop_delay_ms > 0:
         extras["CLAUDE_CODE_EXIT_AFTER_STOP_DELAY"] = str(exit_after_stop_delay_ms)
+    if stream_idle_timeout_ms > 0:
+        extras["CLAUDE_STREAM_IDLE_TIMEOUT_MS"] = str(stream_idle_timeout_ms)
     if scenario_step_name:
         extras["SCENARIO_STEP_NAME"] = scenario_step_name
     kitchen_session_id = os.environ.get(KITCHEN_SESSION_ID_ENV_VAR)

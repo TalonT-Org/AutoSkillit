@@ -95,6 +95,7 @@ class RunSkillConfig:
     natural_exit_grace_seconds: float = 3.0
     idle_output_timeout: int = 1000
     max_suppression_seconds: int = 1800
+    stream_idle_timeout_ms: int = 600000
 
     # Safety margin (ms) above exit_after_stop_delay_ms that
     # natural_exit_grace_seconds must cover so the drain window can absorb

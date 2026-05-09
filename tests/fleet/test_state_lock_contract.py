@@ -90,7 +90,13 @@ class TestFlockLockTarget:
                 and call.func.value.id == "os"
             )
 
-        for py_file in {r for r in scan_roots if r.is_dir() for r in r.rglob("*.py")}:
+        py_files: set[Path] = set()
+        for r in scan_roots:
+            if r.is_dir():
+                py_files.update(r.rglob("*.py"))
+            elif r.suffix == ".py":
+                py_files.add(r)
+        for py_file in py_files:
             try:
                 content = py_file.read_text()
                 tree = ast.parse(content, filename=str(py_file))

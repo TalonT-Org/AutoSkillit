@@ -223,7 +223,7 @@ def _pytestmark_has_skipif_platform(tree: ast.Module) -> bool:
         if isinstance(node, ast.Assign):
             for target in node.targets:
                 if isinstance(target, ast.Name) and target.id == "pytestmark":
-                    source_segment = ast.dump(node.value)
+                    source_segment = ast.unparse(node.value)
                     if "skipif" in source_segment and "platform" in source_segment:
                         return True
     return False

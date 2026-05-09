@@ -6,6 +6,7 @@ import pytest
 
 from autoskillit.core.types import (
     ChannelConfirmation,
+    CliSubtype,
     RetryReason,
     SubprocessResult,
     TerminationReason,
@@ -243,6 +244,220 @@ class TestBuildSkillResultDirMissingRecovery:
         assert skill.success is False
 
 
+class TestTimedOutAlwaysProducesTimeoutSubtype:
+    """TIMED_OUT termination must produce subtype='timeout' regardless of parsed CliSubtype.
+
+    Regression test for: TIMED_OUT branch only promoted SUCCESS→TIMEOUT at the conditional,
+    leaving all other subtypes (UNPARSEABLE, ERROR_MAX_TURNS, etc.) unchanged. These leaked
+    subtypes bypass the fleet timeout precheck at _api.py:476 (subtype == "timeout"), causing
+    TIMED_OUT dispatches to be misclassified as fleet_l3_no_result_block instead of
+    fleet_l3_timeout, altering campaign halt semantics.
+    """
+
+    def test_timed_out_with_unparseable_subtype(self):
+        """TIMED_OUT + no type=result record in stdout → UNPARSEABLE → must yield 'timeout'."""
+        from autoskillit.core.types import CliSubtype
+        from autoskillit.execution.headless import _build_skill_result
+
+        ndjson = "\n".join(
+            [
+                _make_tool_use_line("Write", {"file_path": "/tmp/a.py", "content": "x"}),
+                _make_tool_use_line(
+                    "Edit", {"file_path": "/tmp/b.py", "old_string": "a", "new_string": "b"}
+                ),
+            ]
+        )
+        sub_result = SubprocessResult(
+            returncode=-1,
+            stdout=ndjson,
+            stderr="",
+            termination=TerminationReason.TIMED_OUT,
+            pid=12345,
+        )
+        sr = _build_skill_result(sub_result)
+        assert sr.subtype == "timeout", (
+            f"UNPARSEABLE leak: TIMED_OUT session produced subtype={sr.subtype!r}, "
+            f"expected 'timeout'. parse_session_result returned CliSubtype.UNPARSEABLE "
+            f"but the conditional at line 306 only promotes SUCCESS."
+        )
+        assert sr.cli_subtype == CliSubtype.TIMEOUT
+        assert sr.success is False
+        assert sr.needs_retry is False
+
+    def test_timed_out_with_error_max_turns_subtype(self):
+        """TIMED_OUT + error_max_turns result block → must yield 'timeout'."""
+        from autoskillit.core.types import CliSubtype
+        from autoskillit.execution.headless import _build_skill_result
+
+        ndjson = "\n".join(
+            [
+                _make_tool_use_line("Write", {"file_path": "/tmp/a.py", "content": "x"}),
+                json.dumps(
+                    {
+                        "type": "result",
+                        "subtype": "error_max_turns",
+                        "is_error": True,
+                        "result": "Max turns reached.",
+                        "session_id": "s1",
+                        "errors": ["max_turns"],
+                    }
+                ),
+            ]
+        )
+        sub_result = SubprocessResult(
+            returncode=-1,
+            stdout=ndjson,
+            stderr="",
+            termination=TerminationReason.TIMED_OUT,
+            pid=12345,
+        )
+        sr = _build_skill_result(sub_result)
+        assert sr.subtype == "timeout"
+        assert sr.cli_subtype == CliSubtype.TIMEOUT
+        assert sr.success is False
+        assert sr.needs_retry is False
+
+    def test_timed_out_with_error_during_execution_subtype(self):
+        """TIMED_OUT + error_during_execution result block → must yield 'timeout'."""
+        from autoskillit.core.types import CliSubtype
+        from autoskillit.execution.headless import _build_skill_result
+
+        ndjson = json.dumps(
+            {
+                "type": "result",
+                "subtype": "error_during_execution",
+                "is_error": True,
+                "result": "Execution error.",
+                "session_id": "s1",
+                "errors": ["exec_error"],
+            }
+        )
+        sub_result = SubprocessResult(
+            returncode=-1,
+            stdout=ndjson,
+            stderr="",
+            termination=TerminationReason.TIMED_OUT,
+            pid=12345,
+        )
+        sr = _build_skill_result(sub_result)
+        assert sr.subtype == "timeout"
+        assert sr.cli_subtype == CliSubtype.TIMEOUT
+        assert sr.success is False
+        assert sr.needs_retry is False
+
+    def test_timed_out_with_context_exhaustion_subtype(self):
+        """TIMED_OUT + context_exhaustion result block → must yield 'timeout'."""
+        from autoskillit.core.types import CliSubtype
+        from autoskillit.execution.headless import _build_skill_result
+
+        ndjson = json.dumps(
+            {
+                "type": "result",
+                "subtype": "context_exhaustion",
+                "is_error": True,
+                "result": "Context limit reached.",
+                "session_id": "s1",
+                "errors": [],
+            }
+        )
+        sub_result = SubprocessResult(
+            returncode=-1,
+            stdout=ndjson,
+            stderr="",
+            termination=TerminationReason.TIMED_OUT,
+            pid=12345,
+        )
+        sr = _build_skill_result(sub_result)
+        assert sr.subtype == "timeout"
+        assert sr.cli_subtype == CliSubtype.TIMEOUT
+        assert sr.success is False
+        assert sr.needs_retry is False
+
+    def test_timed_out_with_interrupted_subtype(self):
+        """TIMED_OUT + interrupted result block → must yield 'timeout'."""
+        from autoskillit.core.types import CliSubtype
+        from autoskillit.execution.headless import _build_skill_result
+
+        ndjson = json.dumps(
+            {
+                "type": "result",
+                "subtype": "interrupted",
+                "is_error": True,
+                "result": "Session interrupted.",
+                "session_id": "s1",
+                "errors": [],
+            }
+        )
+        sub_result = SubprocessResult(
+            returncode=-1,
+            stdout=ndjson,
+            stderr="",
+            termination=TerminationReason.TIMED_OUT,
+            pid=12345,
+        )
+        sr = _build_skill_result(sub_result)
+        assert sr.subtype == "timeout"
+        assert sr.cli_subtype == CliSubtype.TIMEOUT
+        assert sr.success is False
+        assert sr.needs_retry is False
+
+    def test_timed_out_with_unknown_subtype(self):
+        """TIMED_OUT + unknown result block → must yield 'timeout'."""
+        from autoskillit.core.types import CliSubtype
+        from autoskillit.execution.headless import _build_skill_result
+
+        ndjson = json.dumps(
+            {
+                "type": "result",
+                "subtype": "unknown",
+                "is_error": True,
+                "result": "Unknown result.",
+                "session_id": "s1",
+                "errors": [],
+            }
+        )
+        sub_result = SubprocessResult(
+            returncode=-1,
+            stdout=ndjson,
+            stderr="",
+            termination=TerminationReason.TIMED_OUT,
+            pid=12345,
+        )
+        sr = _build_skill_result(sub_result)
+        assert sr.subtype == "timeout"
+        assert sr.cli_subtype == CliSubtype.TIMEOUT
+        assert sr.success is False
+        assert sr.needs_retry is False
+
+    def test_timed_out_with_empty_output_subtype(self):
+        """TIMED_OUT + empty_output result block → must yield 'timeout'."""
+        from autoskillit.core.types import CliSubtype
+        from autoskillit.execution.headless import _build_skill_result
+
+        ndjson = json.dumps(
+            {
+                "type": "result",
+                "subtype": "empty_output",
+                "is_error": True,
+                "result": "",
+                "session_id": "s1",
+                "errors": [],
+            }
+        )
+        sub_result = SubprocessResult(
+            returncode=-1,
+            stdout=ndjson,
+            stderr="",
+            termination=TerminationReason.TIMED_OUT,
+            pid=12345,
+        )
+        sr = _build_skill_result(sub_result)
+        assert sr.subtype == "timeout"
+        assert sr.cli_subtype == CliSubtype.TIMEOUT
+        assert sr.success is False
+        assert sr.needs_retry is False
+
+
 class TestTimedOutSessionPreservesState:
     """TIMED_OUT branch must parse stdout to preserve tool_uses and assistant_messages."""
 
@@ -269,6 +484,8 @@ class TestTimedOutSessionPreservesState:
         assert sr.write_call_count == 2
         assert sr.success is False
         assert sr.needs_retry is False
+        assert sr.subtype == "timeout"
+        assert sr.cli_subtype == "timeout"
 
     def test_timed_out_with_empty_stdout_uses_timeout_subtype(self):
         """Timed-out session with no stdout uses TIMEOUT subtype."""
@@ -284,6 +501,8 @@ class TestTimedOutSessionPreservesState:
         sr = _build_skill_result(sub_result)
         assert sr.success is False
         assert sr.write_call_count == 0
+        assert sr.subtype == "timeout"
+        assert sr.cli_subtype == "timeout"
 
     def test_timed_out_with_success_result_overrides_to_timeout(self):
         """When timed-out stdout has a success result, subtype is overridden to timeout."""
@@ -312,6 +531,7 @@ class TestTimedOutSessionPreservesState:
         )
         sr = _build_skill_result(sub_result)
         assert sr.cli_subtype == "timeout"
+        assert sr.subtype == "timeout"
         assert sr.write_call_count == 1
 
 
@@ -428,11 +648,12 @@ def make_headless_session():
     def _factory(
         result: str = "",
         tool_uses: list[dict] | None = None,
-        subtype: str = "success",
+        subtype: "CliSubtype | str" = CliSubtype.SUCCESS,
         is_error: bool = False,
     ) -> ClaudeSessionResult:
+        subtype_val = CliSubtype(subtype) if isinstance(subtype, str) else subtype
         return ClaudeSessionResult(
-            subtype=subtype,
+            subtype=subtype_val,
             is_error=is_error,
             result=result,
             session_id="test-session",
@@ -1449,3 +1670,94 @@ class TestEarlyStopDetection:
         )
         assert sr.needs_retry is True
         assert sr.retry_reason == RetryReason.EARLY_STOP
+
+
+class TestTerminationSubtypeConsistencyInvariant:
+    """Post-construction invariant: TIMED_OUT termination must produce subtype='timeout'.
+
+    Regression test for the invariant guard added in _headless_result.py after
+    the unconditional TIMED_OUT subtype promotion. The guard catches regressions
+    where a future change breaks the promotion logic.
+    """
+
+    def test_timed_out_with_valid_subtype_passes_guard(self):
+        """TIMED_OUT + subtype='timeout' → no assertion error."""
+        from autoskillit.execution.headless import _build_skill_result
+
+        # Empty stdout forces subtype=CliSubtype.TIMEOUT via the else branch
+        sub_result = SubprocessResult(
+            returncode=-1,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.TIMED_OUT,
+            pid=12345,
+        )
+        sr = _build_skill_result(sub_result)
+        assert sr.subtype == "timeout"
+
+    def test_timed_out_with_parsed_unparseable_is_promoted(self):
+        """TIMED_OUT + UNPARSEABLE → promoted to 'timeout' by unconditional fix."""
+        from autoskillit.execution.headless import _build_skill_result
+
+        ndjson = _make_tool_use_line("Write", {"file_path": "/tmp/a.py", "content": "x"})
+        sub_result = SubprocessResult(
+            returncode=-1,
+            stdout=ndjson,
+            stderr="",
+            termination=TerminationReason.TIMED_OUT,
+            pid=12345,
+        )
+        sr = _build_skill_result(sub_result)
+        # The invariant guard is inside _build_skill_result; if subtype != 'timeout',
+        # it would raise AssertionError. So a successful return means it passed.
+        assert sr.subtype == "timeout"
+
+    def test_non_timed_out_non_timeout_subtype_is_not_guarded(self):
+        """Non-TIMED_OUT terminations with non-timeout subtypes are not guarded.
+
+        The invariant only guards TIMED_OUT. Non-TIMED_OUT paths (e.g. NATURAL_EXIT)
+        with unusual subtypes must pass through without triggering the guard.
+        """
+        from autoskillit.execution.headless import _build_skill_result
+
+        ndjson = json.dumps(
+            {
+                "type": "result",
+                "subtype": "unparseable",
+                "is_error": True,
+                "result": "Partial output.",
+                "session_id": "s1",
+                "errors": [],
+            }
+        )
+        sub_result = SubprocessResult(
+            returncode=1,
+            stdout=ndjson,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,  # Not TIMED_OUT → no guard
+            pid=12345,
+        )
+        sr = _build_skill_result(sub_result)
+        # NATURAL_EXIT with UNPARSEABLE → normalize_subtype returns "unparseable"
+        # The guard does not apply (only TIMED_OUT is guarded), so no AssertionError
+        assert sr.subtype == "unparseable"
+
+    def test_idle_stall_with_hardcoded_subtype_not_guarded(self):
+        """IDLE_STALL early-returns with hardcoded subtype='idle_stall' — not guarded.
+
+        The invariant guard is only on the shared path (reached by TIMED_OUT, not
+        IDLE_STALL). IDLE_STALL early-returns before the guard at line 458.
+        """
+        from autoskillit.execution.headless import _build_skill_result
+
+        sub_result = SubprocessResult(
+            returncode=-1,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.IDLE_STALL,
+            pid=12345,
+        )
+        sr = _build_skill_result(sub_result)
+        # IDLE_STALL early-returns with hardcoded subtype='idle_stall'
+        # No invariant guard applies to this path
+        assert sr.subtype == "idle_stall"

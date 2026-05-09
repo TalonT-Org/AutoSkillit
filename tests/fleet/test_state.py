@@ -1083,8 +1083,8 @@ class TestClassifyStaleDispatch:
         assert status == DispatchStatus.INTERRUPTED
         assert sidecar_path_out == ""
 
-    def test_idle_stall_kill_reason_returns_resumable(self, tmp_path: Path) -> None:
-        """kill_reason=idle_stall (non-abandon) + empty sidecar → RESUMABLE."""
+    def test_idle_stall_kill_reason_returns_interrupted(self, tmp_path: Path) -> None:
+        """kill_reason=idle_stall (abandon) + empty sidecar → INTERRUPTED."""
         sidecar = tmp_path / "sidecar.jsonl"
         sidecar.write_text("")  # empty sidecar → raw_lines=[] → not raw_lines=True
         record = DispatchRecord(
@@ -1095,8 +1095,8 @@ class TestClassifyStaleDispatch:
             infra_exit_category="",
         )
         status, sidecar_path_out = classify_stale_dispatch(record)
-        assert status == DispatchStatus.RESUMABLE
-        assert sidecar_path_out == str(sidecar)
+        assert status == DispatchStatus.INTERRUPTED
+        assert sidecar_path_out == ""
 
     def test_no_sidecar_returns_interrupted(self) -> None:
         """No sidecar path → INTERRUPTED fallback."""

@@ -146,14 +146,14 @@ class TestClassifyDispatchOutcomeCompletedDirty:
 
 
 class TestReasonAwareResumePolicy:
-    def test_idle_stall_with_progress_is_resumable(self):
+    def test_idle_stall_with_progress_is_failure(self):
         parsed, skill_result = _no_sentinel(session_id="sess-abc", lifespan_started=True)
         skill_result = dataclasses.replace(
             skill_result,
             retry_reason="idle_stall",
         )
         status, reason = classify_dispatch_outcome(parsed, skill_result, sidecar_exists=True)
-        assert status == DispatchStatus.RESUMABLE
+        assert status == DispatchStatus.FAILURE
         assert reason == FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
 
     def test_context_exhausted_with_progress_is_failure(self):

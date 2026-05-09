@@ -45,6 +45,7 @@ from autoskillit.recipe.diagrams import (
 )
 from autoskillit.recipe.io import (
     RecipeInfo,
+    _assert_no_raw_placeholders,
     _load_recipe_dict,
     _parse_recipe,
     builtin_recipes_dir,
@@ -347,8 +348,10 @@ def load_and_validate(
     _method_traditions_hash = _compute_registry_hash(BUNDLED_METHODOLOGY_TRADITIONS_DIR)
     _user_method_traditions_dir = _pdir / ".autoskillit" / "methodology-traditions"
     _user_method_traditions_hash = _compute_registry_hash(_user_method_traditions_dir)
+    _temp_relpath = temp_dir_relpath or ".autoskillit/temp"
     cache_key = (
         name,
+        _temp_relpath,
         str(_pdir),
         tuple(sorted(suppressed)) if suppressed else (),
         tuple(sorted(ingredient_overrides.items())) if ingredient_overrides else (),
@@ -390,7 +393,7 @@ def load_and_validate(
         return {"error": f"No recipe named '{name}' found"}
 
     raw = match.content if match.content is not None else match.path.read_text()
-    _temp_relpath = temp_dir_relpath or ".autoskillit/temp"
+    raw = substitute_temp_placeholder(raw, _temp_relpath)
     suggestions: list[dict[str, Any]] = []
     valid = True
     recipe = None
@@ -552,6 +555,7 @@ def load_and_validate(
         else None
     )
 
+    _assert_no_raw_placeholders(raw, context=name)
     result: LoadRecipeResult = {
         "content": raw,
         "diagram": diagram,

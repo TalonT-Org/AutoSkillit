@@ -51,6 +51,19 @@ def substitute_temp_placeholder(text: str, temp_dir_relpath: str) -> str:
     return text.replace(_TEMP_PLACEHOLDER, temp_dir_relpath)
 
 
+def _assert_no_raw_placeholders(text: str, *, context: str = "") -> None:
+    """Raise if text still contains ``{{AUTOSKILLIT_TEMP}}``.
+
+    Called at content-delivery boundaries to enforce the invariant that
+    all placeholders are resolved before content reaches the consumer.
+    """
+    if _TEMP_PLACEHOLDER in text:
+        raise ValueError(
+            f"Unresolved {_TEMP_PLACEHOLDER} in recipe content"
+            + (f" ({context})" if context else "")
+        )
+
+
 def _load_recipe_dict(
     yaml_path: Path,
     *,

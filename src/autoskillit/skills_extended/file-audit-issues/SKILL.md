@@ -34,13 +34,20 @@ For each ticket body file, extract 2–3 key terms from the title. Run:
 ```
 gh issue list --search "{key terms}" --json number,title,state --limit 5 --state open
 ```
-in the workspace. If any existing open issue title has high similarity (shares 3+ significant
-words with the ticket title), mark that ticket body as a duplicate and skip it. Log skipped
-duplicates to terminal.
+in the workspace. If any existing open issue title has high similarity, mark that ticket body
+as a duplicate and skip it. Log skipped duplicates to terminal.
+
+**Similarity definition:** Tokenize both titles to lowercase words; discard stopwords
+(`a`, `an`, `the`, `in`, `of`, `to`, `with`, `for`, `and`, `or`, `is`, `are`, `that`,
+`this`, `it`, `be`, `at`, `by`, `from`). Count the number of shared tokens between the
+two sets. Three or more shared tokens ⇒ duplicate.
 
 ## Step 4 — Batch-Create Issues via GraphQL
 
 Resolve repo identity: `gh api repos/{owner}/{repo} --jq '.node_id'` (or `gh repo view --json owner,name,id`).
+If this call fails or returns an empty node_id (missing `GH_TOKEN`, wrong remote, insufficient
+permissions), abort immediately with a clear error message: `"Error: could not resolve repo node_id
+— check GH_TOKEN and remote URL. Aborting."` Do not proceed with GraphQL mutations using an empty node_id.
 Resolve label IDs for `audit` and `recipe:implementation` labels (ensure they exist via `gh label create --force`).
 Build batched GraphQL `createIssue` mutations with aliases (`issue0`, `issue1`, ...), chunked at 20 per request.
 Execute via `gh api graphql --input -`. Sleep 1 second between chunks (per GitHub API discipline).
@@ -55,7 +62,10 @@ Batch-apply source labels via GraphQL `addLabelsToLabelable` mutation with alias
 ## Step 6 — Append Validation Summaries
 
 For each created issue, find the corresponding `validation_summary_{source}*.md` in the run directory.
-For each: fetch current issue body via `gh issue view {number} --json body --jq .body`.
+If no matching summary file exists for a given source, log a warning
+(`"Warning: no validation summary found for source '{source}' — skipping append for issue #{number}"`)
+and skip the append for that issue; do not abort the step.
+For each matched issue: fetch current issue body via `gh issue view {number} --json body --jq .body`.
 Verify fetched body is non-empty (skip append if empty to avoid overwriting). Append horizontal
 rule + validation summary content. Write combined text to temp file, run `gh issue edit {number} --body-file "$FILE"`.
 Sleep 1 second between edits (per GitHub API discipline).

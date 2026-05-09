@@ -151,15 +151,32 @@ def reset_failed_dispatch(state_path: Path, dispatch_name: str) -> bool:
         return False
 
 
+_LEGACY_SCHEMA_VERSIONS = frozenset({4})
+
+
+def _read_raw_json(state_path: Path) -> dict[str, Any] | None:
+    import json as _json
+
+    try:
+        raw = _json.loads(state_path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, _json.JSONDecodeError, OSError):
+        return None
+    return raw if isinstance(raw, dict) else None
+
+
 def read_state(state_path: Path) -> CampaignState | None:
     """Load campaign state from disk.
 
     Returns None on missing file, malformed JSON, or schema mismatch.
+    Accepts the current schema version and legacy versions in _LEGACY_SCHEMA_VERSIONS.
     Never raises.
     """
     data = read_versioned_json(state_path, FLEET_STATE_SCHEMA_VERSION, logger=logger)
     if data is None:
-        return None
+        raw = _read_raw_json(state_path)
+        if raw is None or raw.get("schema_version") not in _LEGACY_SCHEMA_VERSIONS:
+            return None
+        data = raw
     try:
         dispatches = [DispatchRecord.from_dict(d) for d in data["dispatches"]]
         return CampaignState(

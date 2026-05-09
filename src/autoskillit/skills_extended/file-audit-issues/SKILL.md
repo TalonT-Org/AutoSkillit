@@ -20,13 +20,13 @@ hooks:
 
 Check `AUTOSKILLIT_AUDIT_RUN_DIR` env var first. If unset, check positional argument
 (`{run_dir_or_paths}`). If neither, discover the most recent `validate-audit-*` directory
-under `{{AUTOSKILLIT_TEMP}}/`. Error and exit if no run directory found.
+under `{{AUTOSKILLIT_TEMP}}/`. Abort with an error when no run directory can be resolved.
 
 ## Step 2 — Discover Ticket Body Files
 
 Glob `ticket_body_*.md` in the resolved run directory. Parse each file: extract H1 title
-via first `# ` line, read full body text. If no ticket body files found, emit
-`issue_urls = ` and `issue_count = 0` and exit.
+via first `# ` line, read full body text. When the discovery produces zero ticket body
+files, emit `issue_urls = ` and `issue_count = 0` and exit.
 
 ## Step 3 — Dedup Against Existing Issues
 

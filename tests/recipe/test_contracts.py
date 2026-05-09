@@ -664,6 +664,7 @@ ALWAYS_WRITE_SKILLS = {
     "design-guards",
     "diagnose-ci",
     "dry-walkthrough",
+    "file-audit-issues",
     "generate-report",
     "implement-experiment",
     "implement-worktree",

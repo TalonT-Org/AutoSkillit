@@ -229,7 +229,7 @@ def test_review_pr_verdict_allowed_values_includes_approved_with_comments(skills
     )
 
 
-def test_no_test_infrastructure_verdict_in_contract() -> None:
+def test_infrastructure_missing_verdict_present_in_contract() -> None:
     """T7: resolve-failures contract must include no_test_infrastructure verdict.
 
     The no_test_infrastructure verdict is emitted when test_check detects that

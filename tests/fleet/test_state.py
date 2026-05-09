@@ -1506,3 +1506,49 @@ class TestL3GateBlocksOnInterruptedDispatch:
         append_dispatch_record(sp, DispatchRecord(name="B", status=DispatchStatus.SUCCESS))
 
         assert has_blocking_dispatch(sp) is False
+
+
+class TestContinueOnFailureDoesNotResetFailureDispatches:
+    """FAILURE dispatches must NOT be reset when continue_on_failure=True.
+
+    Design intent: continue_on_failure skips halting on FAILURE but deliberately
+    does not retry FAILURE dispatches — only INTERRUPTED/REFUSED are reset.
+    Confirmed by commit b1476f2d.
+    """
+
+    def test_failure_not_reset_under_continue_on_failure(self, tmp_path: Path) -> None:
+        """resume_campaign_from_state with continue_on_failure=True must not reset FAILURE."""
+        from autoskillit.fleet import upsert_dispatch_record_by_name
+
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("A", "B"))
+        upsert_dispatch_record_by_name(
+            sp,
+            DispatchRecord(name="A", status=DispatchStatus.FAILURE, reason="task-failed"),
+        )
+
+        resume_campaign_from_state(sp, continue_on_failure=True, reset_on_retry=True)
+
+        state = read_state(sp)
+        assert state is not None
+        a = next(d for d in state.dispatches if d.name == "A")
+        assert a.status == DispatchStatus.FAILURE, (
+            "FAILURE dispatch must not be reset to PENDING under continue_on_failure=True"
+        )
+
+    def test_interrupted_still_reset_under_continue_on_failure(self, tmp_path: Path) -> None:
+        """INTERRUPTED dispatches ARE reset when continue_on_failure=True (not FAILURE)."""
+        from autoskillit.fleet import upsert_dispatch_record_by_name
+
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("A", "B"))
+        upsert_dispatch_record_by_name(
+            sp, DispatchRecord(name="A", status=DispatchStatus.INTERRUPTED)
+        )
+
+        resume_campaign_from_state(sp, continue_on_failure=True, reset_on_retry=True)
+
+        state = read_state(sp)
+        assert state is not None
+        a = next(d for d in state.dispatches if d.name == "A")
+        assert a.status == DispatchStatus.PENDING

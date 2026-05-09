@@ -94,11 +94,7 @@ def _apply_budget_guard(
     audit: AuditLog | None,
     max_consecutive_retries: int,
 ) -> SkillResult:
-    """Override needs_retry to False when the consecutive-failure budget is exhausted.
-
-    The audit log records the raw failure (needs_retry=True) before this guard
-    runs; the guard is a post-processing filter on the returned SkillResult only.
-    """
+    """Override needs_retry to False when the consecutive-failure budget is exhausted."""
     if not sr.needs_retry or audit is None or not skill_command:
         return sr
     consecutive = audit.consecutive_failures(skill_command)
@@ -122,15 +118,40 @@ def _resolve_skill_session_id(
     session: ClaudeSessionResult | None,
     result: SubprocessResult,
 ) -> str:
-    """Return the best-available Claude session UUID.
-
-    Precedence: stdout-parsed session_id (Channel A) > transport-resolved
-    session_id (process.py) > Channel B JSONL filename stem.
-    Returns "" only when all sources are empty.
-    """
+    """Return the best-available Claude session UUID."""
     if session is not None and session.session_id:
         return session.session_id
     return result.session_id or result.channel_b_session_id
+
+
+def _make_terminated_result(
+    *,
+    result: SubprocessResult,
+    session: ClaudeSessionResult,
+    success: bool,
+    result_text: str,
+    subtype: str,
+    needs_retry: bool,
+    retry_reason: RetryReason,
+    provider_used: str = "",
+) -> SkillResult:
+    """Construct SkillResult for infrastructure-terminated sessions (stale/idle_stall)."""
+    return SkillResult(
+        success=success,
+        result=result_text,
+        session_id=session.session_id or _resolve_skill_session_id(session, result),
+        subtype=subtype,
+        is_error=session.is_error if success else False,
+        exit_code=result.returncode if result.returncode is not None else -1,
+        needs_retry=needs_retry,
+        retry_reason=retry_reason,
+        stderr=result.stderr if result.stderr else "",
+        token_usage=session.token_usage,
+        kill_reason=result.kill_reason,
+        last_stop_reason=session.last_stop_reason,
+        lifespan_started=session.lifespan_started,
+        provider=ProviderOutcome(provider_used=provider_used, fallback_activated=False),
+    )
 
 
 def _build_skill_result(
@@ -187,21 +208,15 @@ def _build_skill_result(
                 logger.warning(
                     "Session went stale but stdout contained a valid result; recovering"
                 )
-                return SkillResult(
+                return _make_terminated_result(
+                    result=result,
+                    session=stale_session,
                     success=True,
-                    result=_truncate(stale_session.agent_result),
-                    session_id=stale_session.session_id or _resolve_skill_session_id(None, result),
+                    result_text=_truncate(stale_session.agent_result),
                     subtype="recovered_from_stale",
-                    is_error=False,
-                    exit_code=stale_returncode,
                     needs_retry=False,
                     retry_reason=RetryReason.NONE,
-                    stderr=result.stderr if result.stderr else "",
-                    token_usage=stale_session.token_usage,
-                    last_stop_reason=stale_session.last_stop_reason,
-                    provider=ProviderOutcome(
-                        provider_used=provider_used, fallback_activated=False
-                    ),
+                    provider_used=provider_used,
                 )
         # No valid result in stdout — fall through to original stale response
         _capture_failure(
@@ -213,21 +228,18 @@ def _build_skill_result(
             stderr=result.stderr if result.stderr else "",
             audit=audit,
         )
-        stale_sr = SkillResult(
+        stale_sr = _make_terminated_result(
+            result=result,
+            session=stale_session,
             success=False,
-            result=(
+            result_text=(
                 "Session went stale (no activity for configured threshold). "
                 "Partial progress may have been made. Retry to continue."
             ),
-            session_id=_resolve_skill_session_id(None, result),
             subtype="stale",
-            is_error=False,
-            exit_code=-1,
             needs_retry=True,
             retry_reason=RetryReason.STALE,
-            stderr="",
-            token_usage=None,
-            provider=ProviderOutcome(provider_used=provider_used, fallback_activated=False),
+            provider_used=provider_used,
         )
         return _apply_budget_guard(stale_sr, skill_command, audit, max_consecutive_retries)
 
@@ -251,22 +263,15 @@ def _build_skill_result(
                 logger.warning(
                     "Session idle-stalled but stdout contained a valid result; recovering"
                 )
-                return SkillResult(
+                return _make_terminated_result(
+                    result=result,
+                    session=idle_session,
                     success=True,
-                    result=_truncate(idle_session.agent_result),
-                    session_id=idle_session.session_id or _resolve_skill_session_id(None, result),
+                    result_text=_truncate(idle_session.agent_result),
                     subtype="recovered_from_idle_stall",
-                    is_error=False,
-                    exit_code=idle_returncode,
                     needs_retry=False,
                     retry_reason=RetryReason.NONE,
-                    stderr=result.stderr if result.stderr else "",
-                    token_usage=idle_session.token_usage,
-                    last_stop_reason=idle_session.last_stop_reason,
-                    lifespan_started=idle_session.lifespan_started,
-                    provider=ProviderOutcome(
-                        provider_used=provider_used, fallback_activated=False
-                    ),
+                    provider_used=provider_used,
                 )
         _capture_failure(
             skill_command,
@@ -280,22 +285,18 @@ def _build_skill_result(
         logger.warning(
             "Headless session killed: stdout idle for configured threshold (IDLE_STALL)"
         )
-        idle_sr = SkillResult(
+        idle_sr = _make_terminated_result(
+            result=result,
+            session=idle_session,
             success=False,
-            result=(
+            result_text=(
                 "Session killed: stdout idle for configured threshold (no output growth). "
                 "Partial progress may have been made. Retry to continue."
             ),
-            session_id=idle_session.session_id or _resolve_skill_session_id(None, result),
             subtype="idle_stall",
-            is_error=False,
-            exit_code=-1,
             needs_retry=True,
             retry_reason=RetryReason.IDLE_STALL,
-            stderr="",
-            token_usage=idle_session.token_usage,
-            lifespan_started=idle_session.lifespan_started,
-            provider=ProviderOutcome(provider_used=provider_used, fallback_activated=False),
+            provider_used=provider_used,
         )
         return _apply_budget_guard(idle_sr, skill_command, audit, max_consecutive_retries)
 
@@ -537,6 +538,7 @@ def _build_skill_result(
             write_path_warnings=write_path_warnings,
             write_call_count=write_call_count,
             fs_writes_detected=fs_writes_detected,
+            kill_reason=result.kill_reason,
             last_stop_reason=session.last_stop_reason,
             lifespan_started=session.lifespan_started,
             provider=ProviderOutcome(provider_used=provider_used, fallback_activated=False),

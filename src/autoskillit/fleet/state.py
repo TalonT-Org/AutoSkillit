@@ -128,6 +128,11 @@ def _clear_dispatch_for_retry(d: DispatchRecord) -> None:
         default = (
             f.default_factory() if f.default_factory is not dataclasses.MISSING else f.default
         )
+        if default is dataclasses.MISSING:
+            raise RuntimeError(
+                f"Field {f.name!r} has neither a default nor a default_factory; "
+                "cannot reset to default for retry"
+            )
         setattr(d, f.name, default)
 
 

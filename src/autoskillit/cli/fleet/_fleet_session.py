@@ -118,6 +118,11 @@ def _launch_fleet_session(
             if resume_metadata is not None and resume_metadata.is_resumable
             else ""
         )
+        resume_dispatch_id = (
+            resume_metadata.dispatch_id
+            if resume_metadata is not None and resume_metadata.is_resumable
+            else ""
+        )
         resume_kill_reason = (
             resume_metadata.kill_reason
             if resume_metadata is not None and resume_metadata.is_resumable
@@ -133,6 +138,7 @@ def _launch_fleet_session(
             resume_session_id=resume_session_id,
             resume_kill_reason=resume_kill_reason,
             ingredients_table=ingredients_table,
+            prior_dispatch_id=resume_dispatch_id,
         )
         extra_env = {
             "AUTOSKILLIT_SESSION_TYPE": "fleet",
@@ -197,6 +203,7 @@ def _launch_fleet_session(
             resume_session_id = (
                 fresh_metadata.dispatched_session_id if fresh_metadata.is_resumable else ""
             )
+            resume_dispatch_id = fresh_metadata.dispatch_id if fresh_metadata.is_resumable else ""
             resume_kill_reason = fresh_metadata.kill_reason if fresh_metadata.is_resumable else ""
             prompt = _build_fleet_campaign_prompt(
                 campaign_recipe,
@@ -208,4 +215,5 @@ def _launch_fleet_session(
                 resume_session_id=resume_session_id,
                 resume_kill_reason=resume_kill_reason,
                 ingredients_table=ingredients_table,
+                prior_dispatch_id=resume_dispatch_id,
             )

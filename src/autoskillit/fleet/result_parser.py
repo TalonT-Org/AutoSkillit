@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -143,12 +144,16 @@ def parse_l3_result_block(
     stdout: str,
     expected_dispatch_id: str,
     assistant_messages_path: Path | None = None,
+    prior_dispatch_ids: Sequence[str] | None = None,
 ) -> L3ParseResult:
     """Parse an L3 result block from food truck dispatch output.
 
     Strips ANSI codes, scans stdout for the last occurrence of the sentinel
     block keyed to expected_dispatch_id, and returns a tri-state outcome.
     Falls back to reading the Channel B JSONL file when stdout is truncated.
+    When prior_dispatch_ids is provided, additional fallback scans are performed
+    for each prior ID after the primary and JSONL scans fail — this handles
+    the resume case where the LLM may emit a sentinel keyed to an earlier ID.
     """
     open_sentinel = f"---l3-result::{expected_dispatch_id}---"
     close_sentinel = f"---end-l3-result::{expected_dispatch_id}---"
@@ -160,22 +165,36 @@ def parse_l3_result_block(
         open_pos, close_pos = positions
         return _parse_body(cleaned, open_pos, close_pos, open_sentinel, "stdout")
 
-    if assistant_messages_path is None:
-        return L3ParseResult(
-            outcome="no_sentinel",
-            payload=None,
-            raw_body=None,
-            parse_error=None,
-            source="stdout",
-        )
+    jsonl_text: str | None = None
+    if assistant_messages_path is not None:
+        jsonl_text = _extract_text_from_jsonl(assistant_messages_path)
+        positions = _scan_for_sentinel(jsonl_text, open_sentinel, close_sentinel)
+        if positions is not None:
+            open_pos, close_pos = positions
+            return _parse_body(
+                jsonl_text, open_pos, close_pos, open_sentinel, "assistant_messages_jsonl"
+            )
 
-    jsonl_text = _extract_text_from_jsonl(assistant_messages_path)
-    positions = _scan_for_sentinel(jsonl_text, open_sentinel, close_sentinel)
-    if positions is not None:
-        open_pos, close_pos = positions
-        return _parse_body(
-            jsonl_text, open_pos, close_pos, open_sentinel, "assistant_messages_jsonl"
-        )
+    # Fallback scan through prior dispatch_ids (defense-in-depth for resume)
+    if prior_dispatch_ids:
+        for prior_id in prior_dispatch_ids:
+            prior_open = f"---l3-result::{prior_id}---"
+            prior_close = f"---end-l3-result::{prior_id}---"
+            positions = _scan_for_sentinel(cleaned, prior_open, prior_close)
+            if positions is not None:
+                open_pos, close_pos = positions
+                return _parse_body(cleaned, open_pos, close_pos, prior_open, "stdout")
+            if jsonl_text is not None:
+                positions = _scan_for_sentinel(jsonl_text, prior_open, prior_close)
+                if positions is not None:
+                    open_pos, close_pos = positions
+                    return _parse_body(
+                        jsonl_text,
+                        open_pos,
+                        close_pos,
+                        prior_open,
+                        "assistant_messages_jsonl",
+                    )
 
     return L3ParseResult(
         outcome="no_sentinel",

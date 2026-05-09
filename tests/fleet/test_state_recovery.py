@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from autoskillit.core import NamedResume, NoResume
 from autoskillit.fleet import CampaignState, DispatchRecord, DispatchStatus
+from autoskillit.fleet.state_types import ResumeDecision
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -127,3 +130,65 @@ class TestDeriveOrchestratorResumeSpec:
         state = _make_state(orchestrator_session_id="", dispatches=dispatches)
         result = derive_orchestrator_resume_spec(state)
         assert result == NoResume()
+
+
+class TestResumeDecisionDispatchId:
+    def test_resume_decision_carries_dispatch_id(self) -> None:
+        """ResumeDecision must include the original dispatch_id for identity continuity."""
+        decision = ResumeDecision(
+            next_dispatch_name="fix-bug",
+            completed_dispatches_block="",
+            is_resumable=True,
+            dispatched_session_id="session-abc",
+            dispatch_id="original-uuid-A",
+        )
+        assert decision.dispatch_id == "original-uuid-A"
+
+    def test_resume_decision_dispatch_id_defaults_to_empty_string(self) -> None:
+        """dispatch_id should default to empty string for backward compatibility."""
+        decision = ResumeDecision(
+            next_dispatch_name="fix-bug",
+            completed_dispatches_block="",
+            is_resumable=False,
+            dispatched_session_id="",
+        )
+        assert decision.dispatch_id == ""
+
+
+class TestResumeCampaignFromStateDispatchId:
+    async def test_resume_campaign_populates_dispatch_id(self, tmp_path: Path) -> None:
+        """When a RESUMABLE dispatch is found, its dispatch_id must appear in ResumeDecision."""
+        from autoskillit.fleet.state import upsert_dispatch_record_by_name, write_initial_state
+
+        state_path = tmp_path / "test_state.json"
+        # Create initial state with a pending dispatch
+        write_initial_state(
+            state_path,
+            campaign_id="test-campaign",
+            campaign_name="fix-issue",
+            manifest_path="",
+            dispatches=[DispatchRecord(name="fix-issue")],
+        )
+        # Upsert it to RESUMABLE with a dispatch_id
+        upsert_dispatch_record_by_name(
+            state_path,
+            DispatchRecord(
+                name="fix-issue",
+                status=DispatchStatus.RESUMABLE,
+                dispatch_id="original-uuid-A",
+                dispatched_session_id="session-abc",
+            ),
+        )
+        from autoskillit.fleet.state_recovery import resume_campaign_from_state
+
+        decision = resume_campaign_from_state(state_path, continue_on_failure=False)
+        assert decision is not None
+        assert decision.dispatch_id == "original-uuid-A"
+
+    async def test_resume_campaign_returns_none_for_missing_state(self, tmp_path: Path) -> None:
+        """Missing state file should return None, not raise."""
+        from autoskillit.fleet.state_recovery import resume_campaign_from_state
+
+        state_path = tmp_path / "nonexistent.json"
+        decision = resume_campaign_from_state(state_path, continue_on_failure=False)
+        assert decision is None

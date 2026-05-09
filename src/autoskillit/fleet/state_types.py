@@ -163,6 +163,7 @@ class ResumeDecision:
     completed_dispatches_block: str
     is_resumable: bool = False
     dispatched_session_id: str = ""
+    dispatch_id: str = ""
     kill_reason: str = ""
 
 

@@ -208,6 +208,7 @@ async def execute_dispatch(
     idle_output_timeout: int | None = None,
     caller_session_id: str = "",
     campaign_state_path: Path | None = None,
+    prior_dispatch_id: str | None = None,
 ) -> DispatchOutcome:
     """Execute a single food truck dispatch.
 
@@ -273,6 +274,7 @@ async def execute_dispatch(
             idle_output_timeout=idle_output_timeout,
             caller_session_id=caller_session_id,
             campaign_state_path=campaign_state_path,
+            prior_dispatch_id=prior_dispatch_id,
         )
     except asyncio.CancelledError:
         raise
@@ -347,6 +349,7 @@ async def _run_dispatch(
     idle_output_timeout: int | None = None,
     caller_session_id: str = "",
     campaign_state_path: Path | None = None,
+    prior_dispatch_id: str | None = None,
 ) -> DispatchOutcome:
     """Inner dispatch body — called after lock acquisition."""
     from autoskillit.fleet.state import (
@@ -354,6 +357,7 @@ async def _run_dispatch(
         DispatchStatus,
         append_dispatch_record,
         normalize_dispatch_token_usage,
+        read_state,
         upsert_dispatch_record_by_name,
         write_captured_values,
         write_initial_state,
@@ -395,26 +399,33 @@ async def _run_dispatch(
         effective_ingredients = {"task": task, **effective_ingredients}
 
     effective_name = dispatch_name or recipe
-    identity = DispatchIdentity.fresh()
+    identity = (
+        DispatchIdentity.from_dispatch_id(prior_dispatch_id)
+        if resume_session_id and prior_dispatch_id
+        else DispatchIdentity.fresh()
+    )
     dispatch_id = identity.dispatch_id
     campaign_id = tool_ctx.kitchen_id
     state_path = tool_ctx.temp_dir / "dispatches" / f"{dispatch_id}.json"
     state_path.parent.mkdir(parents=True, exist_ok=True)
-    recipe_snapshot = {
-        "recipe_name": recipe_obj.name,
-        "recipe_path": str(recipe_obj.path),
-        "recipe_version": recipe_obj.recipe_version or "",
-        "content_hash": recipe_obj.content_hash or "",
-        "effective_ingredients": dict(effective_ingredients),
-    }
-    write_initial_state(
-        state_path,
-        campaign_id=campaign_id,
-        campaign_name=effective_name,
-        manifest_path="",
-        dispatches=[DispatchRecord(name=effective_name, caller_session_id=caller_session_id)],
-        recipe_snapshot=recipe_snapshot,
-    )
+    if not (resume_session_id and prior_dispatch_id):
+        # On resume, the state file already exists with attempt_history;
+        # writing a new initial state would destroy it.
+        recipe_snapshot = {
+            "recipe_name": recipe_obj.name,
+            "recipe_path": str(recipe_obj.path),
+            "recipe_version": recipe_obj.recipe_version or "",
+            "content_hash": recipe_obj.content_hash or "",
+            "effective_ingredients": dict(effective_ingredients),
+        }
+        write_initial_state(
+            state_path,
+            campaign_id=campaign_id,
+            campaign_name=effective_name,
+            manifest_path="",
+            dispatches=[DispatchRecord(name=effective_name, caller_session_id=caller_session_id)],
+            recipe_snapshot=recipe_snapshot,
+        )
 
     def _reject_with_state(error_code: FleetErrorCode, message: str) -> DispatchRejected:
         """Post-dispatch-id rejection path — writes both per-dispatch and campaign state."""
@@ -577,10 +588,26 @@ async def _run_dispatch(
         )
 
     jsonl_path = claude_code_log_path(str(tool_ctx.project_dir), skill_result.session_id or "")
+
+    # Collect prior dispatch_ids from attempt_history for defense-in-depth parsing
+    prior_ids: list[str] = []
+    try:
+        state = read_state(state_path)
+        if state:
+            for d in state.dispatches:
+                if d.name == effective_name:
+                    for attempt in d.attempt_history:
+                        aid = attempt.get("dispatch_id", "")
+                        if aid and aid != dispatch_id:
+                            prior_ids.append(aid)
+    except Exception:
+        pass
+
     parsed = parse_l3_result_block(
         stdout=skill_result.result or "",
         expected_dispatch_id=dispatch_id,
         assistant_messages_path=jsonl_path,
+        prior_dispatch_ids=prior_ids or None,
     )
 
     sidecar_file = Path(dispatch_sidecar_path)

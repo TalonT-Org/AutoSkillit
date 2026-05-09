@@ -10,6 +10,7 @@ import pytest
 from autoskillit.fleet import (
     DispatchCompleted,
     DispatchRecord,
+    DispatchRejected,
     DispatchStatus,
     read_state,
     resume_campaign_from_state,
@@ -409,6 +410,7 @@ class TestValidationFailureCampaignState:
         refused = [r for r in records if r.status == DispatchStatus.REFUSED]
         assert len(refused) == 1
         assert refused[0].reason == "fleet_missing_ingredient"
+        assert refused[0].name == "step1"
 
     @pytest.mark.anyio
     async def test_run_dispatch_writes_campaign_state_on_unknown_ingredient(
@@ -498,8 +500,7 @@ class TestValidationFailureCampaignState:
         d = next(d for d in state.dispatches if d.name == "my-recipe")
         assert d.status == DispatchStatus.FAILURE
 
-    @pytest.mark.anyio
-    async def test_campaign_resume_halts_on_validation_refused(self, tmp_path):
+    def test_campaign_resume_halts_on_validation_refused(self, tmp_path):
         """T5: resume_campaign_from_state halts on REFUSED dispatch."""
         from autoskillit.fleet.state import append_dispatch_record
 
@@ -564,5 +565,5 @@ class TestValidationFailureCampaignState:
             campaign_state_path=None,
         )
 
-        assert hasattr(result, "dispatch_id")
+        assert isinstance(result, DispatchRejected)
         assert result.dispatch_id != ""

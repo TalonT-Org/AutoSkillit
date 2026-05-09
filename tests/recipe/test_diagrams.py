@@ -323,6 +323,8 @@ steps:
         g = build_recipe_graph(sentinel_recipe)
         assert isinstance(g, nx.DiGraph), f"Expected nx.DiGraph, got {type(g)}"
 
+        # one node per recipe step — build_recipe_graph adds no synthetic START/END
+        # nodes and does not deduplicate steps, so node count == step count exactly.
         assert g.number_of_nodes() == len(sentinel_recipe.steps), (
             f"Node count mismatch: {g.number_of_nodes()} vs {len(sentinel_recipe.steps)}"
         )

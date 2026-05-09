@@ -171,7 +171,7 @@ async def dispatch_food_truck(
                 )
 
         from autoskillit.core import SessionCheckpoint  # noqa: PLC0415
-        from autoskillit.fleet import execute_dispatch
+        from autoskillit.fleet import DispatchCompleted, execute_dispatch  # noqa: PLC0415
         from autoskillit.server import _get_ctx
         from autoskillit.server._misc import (  # noqa: PLC0415
             _refresh_quota_cache,
@@ -206,7 +206,7 @@ async def dispatch_food_truck(
             campaign_state_path=Path(campaign_state_path_str) if campaign_state_path_str else None,
         )
 
-        if campaign_state_path_str:
+        if campaign_state_path_str and isinstance(result, DispatchCompleted):
             _write_dispatch_to_campaign_state(
                 campaign_state_path_str,
                 effective_name,

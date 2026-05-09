@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import NamedTuple
@@ -141,6 +142,31 @@ def _has_active_child_processes(pid: int) -> bool:
         _child_process_cache.pop(stale_pid, None)
 
     return active
+
+
+def _has_active_dispatch_marker(
+    marker_dir: Path,
+    session_id: str | None = None,
+    max_marker_age: float = 60.0,
+) -> bool:
+    """Return True if any dispatch-in-progress marker was touched within max_marker_age seconds."""
+    try:
+        now = time.time()
+        pattern = (
+            f"dispatch-in-progress-{session_id}-*.marker"
+            if session_id is not None
+            else "dispatch-in-progress-*.marker"
+        )
+        for p in marker_dir.glob(pattern):
+            try:
+                st = p.stat()
+                if now - st.st_mtime <= max_marker_age:
+                    return True
+            except OSError:
+                continue
+    except OSError:
+        pass
+    return False
 
 
 async def _session_log_monitor(

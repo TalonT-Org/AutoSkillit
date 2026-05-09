@@ -21,6 +21,7 @@ _EXPECTED_PROCESS_SYMBOLS: frozenset[str] = frozenset(
         "RaceSignals",
         "_has_active_api_connection",
         "_has_active_child_processes",
+        "_has_active_dispatch_marker",
         "_heartbeat",
         "_jsonl_contains_marker",
         "_jsonl_has_record_type",
@@ -98,6 +99,7 @@ def test_process_monitor_exports():
     are defined in _process_monitor submodule."""
     from autoskillit.execution.process._process_monitor import (
         _has_active_api_connection,
+        _has_active_dispatch_marker,
         _heartbeat,
         _session_log_monitor,
     )
@@ -109,6 +111,10 @@ def test_process_monitor_exports():
     assert callable(_has_active_api_connection)
     assert (
         _has_active_api_connection.__module__ == "autoskillit.execution.process._process_monitor"
+    )
+    assert callable(_has_active_dispatch_marker)
+    assert (
+        _has_active_dispatch_marker.__module__ == "autoskillit.execution.process._process_monitor"
     )
 
 
@@ -130,7 +136,7 @@ def test_process_race_exports():
 
 
 def test_process_facade_reexports_all_public_symbols():
-    """process.py facade re-exports exactly the expected 27 public symbols."""
+    """process.py facade re-exports exactly the expected 28 public symbols."""
     from autoskillit.execution import process
 
     assert hasattr(process, "__all__")

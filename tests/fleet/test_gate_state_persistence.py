@@ -354,7 +354,7 @@ class TestValidationFailureCampaignState:
 
     @pytest.mark.anyio
     async def test_run_dispatch_writes_per_dispatch_state_on_missing_ingredient(
-        self, tool_ctx, monkeypatch, tmp_path
+        self, tool_ctx, tmp_path
     ):
         """T2: _run_dispatch creates per-dispatch state file on missing required ingredient."""
         from autoskillit.core import RecipeSource
@@ -407,12 +407,12 @@ class TestValidationFailureCampaignState:
         with open(dispatch_files[0]) as f:
             records = [DispatchRecord.from_dict(r) for r in json.load(f)["dispatches"]]
         refused = [r for r in records if r.status == DispatchStatus.REFUSED]
-        assert len(refused) >= 1
+        assert len(refused) == 1
         assert refused[0].reason == "fleet_missing_ingredient"
 
     @pytest.mark.anyio
     async def test_run_dispatch_writes_campaign_state_on_unknown_ingredient(
-        self, tool_ctx, monkeypatch, tmp_path
+        self, tool_ctx, tmp_path
     ):
         """T3: _run_dispatch writes REFUSED to campaign state on unknown ingredient."""
         from autoskillit.core import RecipeSource
@@ -518,7 +518,7 @@ class TestValidationFailureCampaignState:
         assert decision.completed_dispatches_block == "fleet_halted_on_failure"
 
     @pytest.mark.anyio
-    async def test_dispatch_rejected_carries_dispatch_id(self, tool_ctx, monkeypatch, tmp_path):
+    async def test_dispatch_rejected_carries_dispatch_id(self, tool_ctx, tmp_path):
         """T6: DispatchRejected returned from execute_dispatch carries non-empty dispatch_id."""
         from autoskillit.core import RecipeSource
         from autoskillit.fleet import FleetSemaphore

@@ -68,17 +68,19 @@ def test_check_review_loop_has_skip_when_false_open_pr(recipe) -> None:
 
 
 # T_IP_LOOP4
-def test_check_review_loop_on_result_routes_to_review_pr_when_had_blocking_and_not_max_exceeded(
+def test_check_review_loop_routes_to_annotate_pr_diff_when_had_blocking(
     recipe,
 ) -> None:
-    """check_review_loop on_result routes to review_pr only when
+    """check_review_loop on_result routes to annotate_pr_diff only when
     had_blocking=true AND max_exceeded=false."""
     step = recipe.steps["check_review_loop"]
     assert step.on_result is not None
     review_conditions = [
-        c for c in step.on_result.conditions if c.when is not None and c.route == "review_pr"
+        c
+        for c in step.on_result.conditions
+        if c.when is not None and c.route == "annotate_pr_diff"
     ]
-    assert review_conditions, "No conditional route to review_pr found"
+    assert review_conditions, "No conditional route to annotate_pr_diff found"
     cond = review_conditions[0].when
     assert "had_blocking" in cond
     assert "max_exceeded" in cond

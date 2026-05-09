@@ -2201,6 +2201,15 @@ callable_contracts:
     - name: file_threshold
       type: str
       required: false
+    - name: base_branch
+      type: str
+      required: false
+    - name: local_review_rounds
+      type: str
+      required: false
+    - name: current_iteration
+      type: str
+      required: false
     outputs:
     - name: annotated_diff_path
       type: file_path
@@ -2208,6 +2217,8 @@ callable_contracts:
       type: file_path
     - name: diff_metrics_path
       type: file_path
+    - name: review_mode
+      type: str
   autoskillit.smoke_utils.compute_domain_partitions:
     inputs:
     - name: batch_branch

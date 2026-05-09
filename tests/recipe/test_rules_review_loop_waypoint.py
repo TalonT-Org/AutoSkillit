@@ -105,3 +105,67 @@ def test_waypoint_rule_skips_recipes_without_review_loop_steps():
     violations = run_semantic_rules(recipe)
     rule_violations = [v for v in violations if v.rule == RULE_ID]
     assert len(rule_violations) == 0
+
+
+# ---------------------------------------------------------------------------
+# review-mode-reentry-waypoint-guard tests
+# ---------------------------------------------------------------------------
+
+REENTRY_RULE_ID = "review-mode-reentry-waypoint-guard"
+
+
+def test_reentry_waypoint_rule_is_registered():
+    """The re-entry waypoint rule must be registered in the semantic rule registry."""
+    rule_ids = {r.name for r in _RULE_REGISTRY}
+    assert REENTRY_RULE_ID in rule_ids, (
+        f"{REENTRY_RULE_ID} not found in rule registry. Registered rules: {sorted(rule_ids)}"
+    )
+
+
+@pytest.mark.parametrize("recipe_name", REVIEW_LOOP_RECIPES)
+def test_reentry_waypoint_rule_silent_on_fixed_recipes(recipe_name):
+    """
+    After the routing fix (check_review_loop routes to annotate_pr_diff on loop re-entry),
+    the re-entry waypoint rule must not fire on any of the three review-loop recipes.
+    """
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    violations = run_semantic_rules(recipe)
+    rule_violations = [v for v in violations if v.rule == REENTRY_RULE_ID]
+    assert len(rule_violations) == 0, (
+        f"[{recipe_name}] {REENTRY_RULE_ID} fired after routing fix: {rule_violations}"
+    )
+
+
+def test_reentry_waypoint_rule_fires_on_recipe_with_bypass():
+    """
+    When a recipe has a direct check_review_loop → review_pr route (the bug pattern),
+    the re-entry waypoint rule must fire with a descriptive violation.
+    """
+    recipe = _make_recipe(
+        {
+            "annotate_pr_diff": RecipeStep(tool="run_python", on_success="review_pr"),
+            "review_pr": RecipeStep(
+                tool="run_skill",
+                on_result=StepResultRoute(
+                    conditions=[StepResultCondition(when="true", route="check_review_loop")]
+                ),
+            ),
+            "check_review_loop": RecipeStep(
+                tool="run_python",
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(
+                            when="${{ result.had_blocking }} == true",
+                            route="review_pr",
+                        ),
+                        StepResultCondition(when=None, route="check_repo_ci_event"),
+                    ]
+                ),
+            ),
+            "check_repo_ci_event": RecipeStep(tool="check_repo_merge_state"),
+        }
+    )
+    violations = run_semantic_rules(recipe)
+    rule_violations = [v for v in violations if v.rule == REENTRY_RULE_ID]
+    assert len(rule_violations) == 1
+    assert "annotate_pr_diff" in rule_violations[0].message

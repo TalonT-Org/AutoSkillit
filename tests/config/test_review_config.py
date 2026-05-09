@@ -13,9 +13,9 @@ pytestmark = [pytest.mark.layer("config"), pytest.mark.small]
 
 class TestReviewConfigDefaults:
     def test_review_config_defaults(self) -> None:
-        """T1.1: AutomationConfig().review.local_review_rounds == 3."""
+        """T1.1: AutomationConfig().review.local_review_rounds == 2."""
         cfg = AutomationConfig()
-        assert cfg.review.local_review_rounds == 3
+        assert cfg.review.local_review_rounds == 2
 
 
 class TestReviewConfigFromYaml:
@@ -39,9 +39,9 @@ class TestReviewConfigFromYaml:
 
 class TestReviewConfigDefaultsYaml:
     def test_review_config_defaults_yaml_coherence(self) -> None:
-        """T1.4: defaults.yaml review.local_review_rounds == 3."""
+        """T1.4: defaults.yaml review.local_review_rounds == 2."""
         pkg_root = Path(autoskillit.config.__file__).parent
         defaults_file = pkg_root / "defaults.yaml"
         with open(defaults_file) as f:
             data = yaml.safe_load(f)
-        assert data["review"]["local_review_rounds"] == 3
+        assert data["review"]["local_review_rounds"] == 2

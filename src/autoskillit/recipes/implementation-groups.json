@@ -54,7 +54,7 @@
     "local_review_rounds": {
       "description": "Number of review-resolve cycles to run locally before switching to GitHub-backed review. 0 disables local mode entirely.",
       "type": "integer",
-      "default": "3"
+      "default": "2"
     },
     "issue_url": {
       "description": "GitHub issue to close on merge",
@@ -677,7 +677,7 @@
       "on_result": [
         {
           "when": "${{ result.had_blocking }} == true and ${{ result.max_exceeded }} == false",
-          "route": "review_pr"
+          "route": "annotate_pr_diff"
         },
         {
           "route": "check_repo_ci_event"
@@ -689,7 +689,7 @@
         "review_loop_count",
         "review_verdict"
       ],
-      "note": "Compound iteration + blocking guard. Routes back to review_pr only when had_blocking=true AND max_exceeded=false. had_blocking is true when previous_verdict=changes_requested OR (local_review_rounds > 0 AND iteration < local_review_rounds), ensuring local review rounds are fully exhausted before exiting to CI.\n"
+      "note": "Compound iteration + blocking guard. Routes back to annotate_pr_diff only when had_blocking=true AND max_exceeded=false. had_blocking is true when previous_verdict=changes_requested OR (local_review_rounds > 0 AND iteration < local_review_rounds), ensuring local review rounds are fully exhausted before exiting to CI.\n"
     },
     "check_repo_ci_event": {
       "tool": "check_repo_merge_state",

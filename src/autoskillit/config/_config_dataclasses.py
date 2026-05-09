@@ -309,7 +309,7 @@ class CIConfig:
 
 @dataclass
 class ReviewConfig:
-    local_review_rounds: int = 3
+    local_review_rounds: int = 2
 
     def __post_init__(self) -> None:
         if self.local_review_rounds < 0:

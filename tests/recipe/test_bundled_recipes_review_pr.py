@@ -309,3 +309,36 @@ class TestReviewMaxRetriesDefault:
         assert ing.default == "3", (
             f"{recipe.name}: review_max_retries.default is {ing.default!r}, expected '3'"
         )
+
+
+class TestLocalReviewRoundsAndMaxRetriesAlignment:
+    """Alignment guard: local_review_rounds must be < review_max_retries for mode graduation."""
+
+    @pytest.fixture(
+        scope="class",
+        params=[
+            "implementation.yaml",
+            "implementation-groups.yaml",
+            "remediation.yaml",
+        ],
+    )
+    def recipe(self, request: pytest.FixtureRequest) -> object:
+        return load_recipe(builtin_recipes_dir() / request.param)
+
+    def test_local_review_rounds_less_than_max_retries(self, recipe: object) -> None:
+        """local_review_rounds must be < review_max_retries for mode graduation to occur.
+
+        If local_review_rounds >= review_max_retries, the loop exits at max_exceeded
+        before review_mode can transition to github, and zero GitHub comments are posted.
+        """
+        local_rounds_ing = recipe.ingredients["local_review_rounds"]
+        max_retries_ing = recipe.ingredients["review_max_retries"]
+        try:
+            local_rounds = int(local_rounds_ing.default)
+            max_retries = int(max_retries_ing.default)
+        except (ValueError, TypeError) as exc:
+            pytest.fail(f"[{recipe.name}] ingredient default is not a valid integer: {exc}")
+        assert local_rounds < max_retries, (
+            f"[{recipe.name}] local_review_rounds ({local_rounds}) >= review_max_retries "
+            f"({max_retries}). Mode will never transition to github with default config."
+        )

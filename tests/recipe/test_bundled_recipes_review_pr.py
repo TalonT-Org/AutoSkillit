@@ -333,8 +333,11 @@ class TestLocalReviewRoundsAndMaxRetriesAlignment:
         """
         local_rounds_ing = recipe.ingredients["local_review_rounds"]
         max_retries_ing = recipe.ingredients["review_max_retries"]
-        local_rounds = int(local_rounds_ing.default)
-        max_retries = int(max_retries_ing.default)
+        try:
+            local_rounds = int(local_rounds_ing.default)
+            max_retries = int(max_retries_ing.default)
+        except (ValueError, TypeError) as exc:
+            pytest.fail(f"[{recipe.name}] ingredient default is not a valid integer: {exc}")
         assert local_rounds < max_retries, (
             f"[{recipe.name}] local_review_rounds ({local_rounds}) >= review_max_retries "
             f"({max_retries}). Mode will never transition to github with default config."

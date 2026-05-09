@@ -314,6 +314,43 @@ steps:
             f"Unexpected warnings from action-step exhausted edge: {warning_events}"
         )
 
+    def test_build_recipe_graph_returns_nx_digraph_with_correct_attributes(self, sentinel_recipe):
+        """T-SENT-5: build_recipe_graph returns nx.DiGraph with expected node/edge attrs."""
+        import networkx as nx  # noqa: PLC0415
+
+        from autoskillit.recipe._analysis import build_recipe_graph  # noqa: PLC0415
+
+        g = build_recipe_graph(sentinel_recipe)
+        assert isinstance(g, nx.DiGraph), f"Expected nx.DiGraph, got {type(g)}"
+
+        assert g.number_of_nodes() == len(sentinel_recipe.steps), (
+            f"Node count mismatch: {g.number_of_nodes()} vs {len(sentinel_recipe.steps)}"
+        )
+
+        expected_node_attrs = frozenset(
+            {
+                "name",
+                "tool",
+                "action",
+                "note",
+                "retries",
+                "skip_when_false",
+                "is_infra",
+                "is_terminal",
+                "is_confirm",
+            }
+        )
+        for node_id, attrs in g.nodes(data=True):
+            assert expected_node_attrs.issubset(attrs.keys()), (
+                f"Node {node_id} missing attrs: {expected_node_attrs - attrs.keys()}"
+            )
+
+        expected_edge_attrs = frozenset({"edge_type", "condition"})
+        for u, v, attrs in g.edges(data=True):
+            assert expected_edge_attrs.issubset(attrs.keys()), (
+                f"Edge ({u}, {v}) missing attrs: {expected_edge_attrs - attrs.keys()}"
+            )
+
 
 # ---------------------------------------------------------------------------
 # T-VER-1: spec fixture version matches DIAGRAM_FORMAT_VERSION constant

@@ -1,4 +1,4 @@
-"""Recipe graph builders: igraph visualization and step adjacency."""
+"""Recipe graph builders: networkx visualization and step adjacency."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import dataclasses
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    import igraph
+    import networkx as nx
 
 from autoskillit.core import get_logger
 from autoskillit.recipe.schema import _TERMINAL_TARGETS, Recipe, RecipeStep
@@ -42,12 +42,12 @@ def _is_infrastructure_step(step: RecipeStep) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# igraph recipe graph builder
+# networkx recipe graph builder
 # ---------------------------------------------------------------------------
 
 
-def build_recipe_graph(recipe: Recipe) -> igraph.Graph:
-    """Build a directed igraph.Graph from a Recipe dataclass.
+def build_recipe_graph(recipe: Recipe) -> nx.DiGraph:
+    """Build a directed nx.DiGraph from a Recipe dataclass.
 
     Nodes represent recipe steps. Each vertex carries attributes matching the
     RecipeStep fields relevant to diagram rendering:
@@ -70,25 +70,33 @@ def build_recipe_graph(recipe: Recipe) -> igraph.Graph:
         recipe: The loaded Recipe dataclass.
 
     Returns:
-        A directed ``igraph.Graph`` with vertex and edge attributes as described.
+        A directed ``nx.DiGraph`` with vertex and edge attributes as described.
     """
-    import igraph  # noqa: PLC0415
+    import networkx as nx  # noqa: PLC0415
 
     step_names = list(recipe.steps.keys())
     name_to_id: dict[str, int] = {name: i for i, name in enumerate(step_names)}
 
-    g = igraph.Graph(n=len(step_names), directed=True)
+    g = nx.DiGraph()
     steps_list = list(recipe.steps.values())
 
-    g.vs["name"] = step_names
-    g.vs["tool"] = [s.tool or "" for s in steps_list]
-    g.vs["action"] = [s.action or "" for s in steps_list]
-    g.vs["note"] = [s.note or "" for s in steps_list]
-    g.vs["retries"] = [s.retries for s in steps_list]
-    g.vs["skip_when_false"] = [s.skip_when_false or "" for s in steps_list]
-    g.vs["is_infra"] = [_is_infrastructure_step(s) for s in steps_list]
-    g.vs["is_terminal"] = [s.action == "stop" for s in steps_list]
-    g.vs["is_confirm"] = [s.action == "confirm" for s in steps_list]
+    g.add_nodes_from(
+        (
+            i,
+            {
+                "name": name,
+                "tool": step.tool or "",
+                "action": step.action or "",
+                "note": step.note or "",
+                "retries": step.retries,
+                "skip_when_false": step.skip_when_false or "",
+                "is_infra": _is_infrastructure_step(step),
+                "is_terminal": step.action == "stop",
+                "is_confirm": step.action == "confirm",
+            },
+        )
+        for i, (name, step) in enumerate(zip(step_names, steps_list))
+    )
 
     edges: list[tuple[int, int]] = []
     edge_types: list[str] = []
@@ -116,7 +124,10 @@ def build_recipe_graph(recipe: Recipe) -> igraph.Graph:
                 )
 
     if edges:
-        g.add_edges(edges, attributes={"edge_type": edge_types, "condition": edge_conditions})
+        g.add_edges_from(
+            (src, dst, {"edge_type": etype, "condition": cond})
+            for (src, dst), etype, cond in zip(edges, edge_types, edge_conditions)
+        )
 
     return g
 

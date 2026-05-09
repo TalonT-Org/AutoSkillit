@@ -43,6 +43,7 @@ IDE_ENV_DENYLIST: frozenset[str] = frozenset(
         # via extras. Without stripping, a parent headless session's env would leak
         # into child sessions even when exit_after_stop_delay_ms=0 or no step name.
         "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY",
+        "CLAUDE_STREAM_IDLE_TIMEOUT_MS",
         "SCENARIO_STEP_NAME",
         # MCP response size gate: injected explicitly by AutoSkillit session launchers
         # so the child always gets the correct value regardless of the parent env.

@@ -52,11 +52,7 @@ def substitute_temp_placeholder(text: str, temp_dir_relpath: str) -> str:
 
 
 def _assert_no_raw_placeholders(text: str, *, context: str = "") -> None:
-    """Raise if text still contains ``{{AUTOSKILLIT_TEMP}}``.
-
-    Called at content-delivery boundaries to enforce the invariant that
-    all placeholders are resolved before content reaches the consumer.
-    """
+    # Content-delivery boundary guard: raises if placeholder substitution was skipped.
     if _TEMP_PLACEHOLDER in text:
         raise ValueError(
             f"Unresolved {_TEMP_PLACEHOLDER} in recipe content"

@@ -65,7 +65,7 @@ class TestSkillResultConstructionGuard:
                 missing_kill_reason.append(call.lineno)
 
         assert not missing_kill_reason, (
-            f"SkillResult() calls missing kill_reason keyword arg at lines: {missing_kill_reason}. "
+            f"SkillResult() calls missing kill_reason kwarg at lines: {missing_kill_reason}. "
             "All SkillResult() constructions must pass kill_reason=result.kill_reason "
             "to avoid silently defaulting to KillReason.NATURAL_EXIT."
         )

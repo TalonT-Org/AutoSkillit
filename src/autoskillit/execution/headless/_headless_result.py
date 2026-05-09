@@ -94,11 +94,7 @@ def _apply_budget_guard(
     audit: AuditLog | None,
     max_consecutive_retries: int,
 ) -> SkillResult:
-    """Override needs_retry to False when the consecutive-failure budget is exhausted.
-
-    The audit log records the raw failure (needs_retry=True) before this guard
-    runs; the guard is a post-processing filter on the returned SkillResult only.
-    """
+    """Override needs_retry to False when the consecutive-failure budget is exhausted."""
     if not sr.needs_retry or audit is None or not skill_command:
         return sr
     consecutive = audit.consecutive_failures(skill_command)
@@ -122,12 +118,7 @@ def _resolve_skill_session_id(
     session: ClaudeSessionResult | None,
     result: SubprocessResult,
 ) -> str:
-    """Return the best-available Claude session UUID.
-
-    Precedence: stdout-parsed session_id (Channel A) > transport-resolved
-    session_id (process.py) > Channel B JSONL filename stem.
-    Returns "" only when all sources are empty.
-    """
+    """Return the best-available Claude session UUID."""
     if session is not None and session.session_id:
         return session.session_id
     return result.session_id or result.channel_b_session_id
@@ -144,12 +135,7 @@ def _make_terminated_result(
     retry_reason: RetryReason,
     provider_used: str = "",
 ) -> SkillResult:
-    """Construct SkillResult for infrastructure-terminated sessions.
-
-    Centralizes field propagation for stale/idle_stall branches so that
-    kill_reason, token_usage, and other diagnostic fields cannot be
-    accidentally omitted.
-    """
+    """Construct SkillResult for infrastructure-terminated sessions (stale/idle_stall)."""
     return SkillResult(
         success=success,
         result=result_text,

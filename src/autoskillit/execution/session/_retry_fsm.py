@@ -113,11 +113,13 @@ def _compute_retry(
                 and completion_marker
                 and completion_marker not in session.result
             ):
-                if prior_completion_markers and any(
-                    pm and pm in session.result for pm in prior_completion_markers
+                if not (
+                    prior_completion_markers
+                    and any(
+                        pm and pm in session.result and session.result.replace(pm, "").strip()
+                        for pm in prior_completion_markers
+                    )
                 ):
-                    pass  # a prior marker is present — do not flag EARLY_STOP
-                else:
                     skill_tool_calls = [t for t in session.tool_uses if t.get("name") == "Skill"]
                     logger.debug(
                         "compute_retry_early_stop",

@@ -171,11 +171,10 @@ def _evaluate_content_state(
         return ContentState.COMPLETE
 
     if completion_marker and completion_marker not in result:
-        if prior_completion_markers and any(
-            pm and pm in result for pm in prior_completion_markers
+        if not (
+            prior_completion_markers
+            and any(pm and pm in result for pm in prior_completion_markers)
         ):
-            pass  # a prior marker is present — treat as COMPLETE
-        else:
             return ContentState.ABSENT
 
     if expected_output_patterns and not _check_expected_patterns(result, expected_output_patterns):

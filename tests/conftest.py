@@ -225,6 +225,36 @@ def _clear_skip_stale_check_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _clear_features_env(monkeypatch):
+    """Clear ALL AUTOSKILLIT_FEATURES__* env vars before every test.
+
+    Dynaconf reads env vars with prefix AUTOSKILLIT_ and injects them
+    into the config dict at the highest priority layer. Feature-related
+    env vars (AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED, FLEET, etc.)
+    override the is_dev_install() auto-detection and config file values,
+    breaking test isolation when CI sets these vars.
+
+    Uses prefix-based scanning so new feature env vars are automatically
+    covered without needing individual fixture additions.
+    """
+    for key in list(os.environ):
+        if key.startswith("AUTOSKILLIT_FEATURES__"):
+            monkeypatch.delenv(key, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _clear_test_filter_env(monkeypatch):
+    """Clear AUTOSKILLIT_TEST_FILTER and related env vars before every test.
+
+    These env vars control test filtering behavior in CI and must not
+    leak between tests or affect tests that don't explicitly need them.
+    """
+    monkeypatch.delenv("AUTOSKILLIT_TEST_FILTER", raising=False)
+    monkeypatch.delenv("AUTOSKILLIT_TEST_BASE_REF", raising=False)
+    monkeypatch.delenv("AUTOSKILLIT_FILTER_STATS_FILE", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def _reset_mcp_visibility():
     import sys
 

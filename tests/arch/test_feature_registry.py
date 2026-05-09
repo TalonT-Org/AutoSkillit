@@ -236,10 +236,31 @@ def test_env_var_fleet_uppercase_loads_without_crash(
     """AUTOSKILLIT_FEATURES__FLEET=true is accepted and loaded correctly."""
     from autoskillit.config.settings import load_config
 
+    monkeypatch.delenv("AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED", raising=False)
     monkeypatch.setattr("autoskillit.config.settings.is_dev_install", lambda: False)
     monkeypatch.setenv("AUTOSKILLIT_FEATURES__FLEET", "true")
     cfg = load_config(tmp_path)
     assert cfg.features.get("fleet") is True
+
+
+def test_load_config_experimental_immune_to_ci_env_var(monkeypatch, tmp_path):
+    """Verify is_dev_install() controls experimental_enabled even when
+    AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED is set in the environment.
+
+    This test reproduces the merge_group CI failure: the env var is set to
+    "false" but the test expects is_dev_install() to control the value.
+    Without the conftest autouse fixture clearing FEATURES__ env vars,
+    this test will fail.
+    """
+    from autoskillit.config.settings import load_config
+
+    monkeypatch.setenv("AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED", "false")
+    monkeypatch.setattr("autoskillit.config.settings.is_dev_install", lambda: True)
+    cfg = load_config(tmp_path)
+    # If env var leaks, cfg.experimental_enabled is False (from env var).
+    # With proper isolation, is_dev_install() returns True.
+    # This test FAILS until the autouse fixture is added, proving the gap.
+    assert cfg.experimental_enabled is True
 
 
 def test_config_dependency_validation(monkeypatch):
@@ -326,6 +347,7 @@ def test_fleet_feature_default_disabled():
 
 
 def test_build_features_dict_accepts_fleet_key(monkeypatch):
+    monkeypatch.delenv("AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED", raising=False)
     monkeypatch.setattr("autoskillit.config.settings.is_dev_install", lambda: False)
     from autoskillit.config.settings import AutomationConfig
 
@@ -480,6 +502,7 @@ def test_build_features_dict_absent_experimental_enabled_auto_detects(
     """_build_features_dict calls is_dev_install() when experimental_enabled absent."""
     from autoskillit.config.settings import AutomationConfig
 
+    monkeypatch.delenv("AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED", raising=False)
     monkeypatch.setattr("autoskillit.config.settings.is_dev_install", lambda: True)
     result, exp_enabled = AutomationConfig._build_features_dict({})
     assert exp_enabled is True
@@ -497,6 +520,7 @@ def test_build_features_dict_explicit_true_overrides_auto_detect(
     """_build_features_dict returns True when explicit True, ignoring is_dev_install."""
     from autoskillit.config.settings import AutomationConfig
 
+    monkeypatch.delenv("AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED", raising=False)
     monkeypatch.setattr("autoskillit.config.settings.is_dev_install", lambda: False)
     _, exp_enabled = AutomationConfig._build_features_dict({"experimental_enabled": True})
     assert exp_enabled is True
@@ -508,6 +532,7 @@ def test_build_features_dict_explicit_false_overrides_auto_detect(
     """_build_features_dict returns False when explicit False, ignoring is_dev_install."""
     from autoskillit.config.settings import AutomationConfig
 
+    monkeypatch.delenv("AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED", raising=False)
     monkeypatch.setattr("autoskillit.config.settings.is_dev_install", lambda: True)
     _, exp_enabled = AutomationConfig._build_features_dict({"experimental_enabled": False})
     assert exp_enabled is False
@@ -602,6 +627,7 @@ def test_project_config_override_beats_auto_detect(
 
     from autoskillit.config.settings import load_config
 
+    monkeypatch.delenv("AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED", raising=False)
     monkeypatch.setattr("autoskillit.config.settings.is_dev_install", lambda: False)
     config_dir = tmp_path / ".autoskillit"
     config_dir.mkdir()
@@ -618,6 +644,7 @@ def test_user_config_override_beats_auto_detect(monkeypatch: pytest.MonkeyPatch,
 
     from autoskillit.config.settings import load_config
 
+    monkeypatch.delenv("AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED", raising=False)
     monkeypatch.setattr("autoskillit.config.settings.is_dev_install", lambda: False)
     fake_home = tmp_path / "home"
     user_config_dir = fake_home / ".autoskillit"

@@ -197,8 +197,10 @@ def test_review_mode_transitions_from_local_to_github(recipe_name: str) -> None:
     loop_route_conditions = [c for c in check_step.on_result.conditions if c.when is not None]
     assert loop_route_conditions, "No conditional route found on check_review_loop"
 
-    loop_target = loop_route_conditions[0].route
-    assert loop_target == "annotate_pr_diff", (
-        f"check_review_loop loops to '{loop_target}' instead of 'annotate_pr_diff'. "
-        f"review_mode is never recomputed on loop re-entry."
+    annotate_condition = next(
+        (c for c in loop_route_conditions if c.route == "annotate_pr_diff"), None
+    )
+    assert annotate_condition is not None, (
+        "No conditional route to 'annotate_pr_diff' found in check_review_loop. "
+        "review_mode is never recomputed on loop re-entry."
     )

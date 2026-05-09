@@ -333,7 +333,7 @@ class TestAttemptHistoryOnRetry:
                 ended_at=200.0,
             ),
         )
-        reset_failed_dispatch(sp, "d1")
+        reset_blocking_dispatch(sp, "d1")
         state = read_state(sp)
         assert state is not None
         d1 = next(d for d in state.dispatches if d.name == "d1")

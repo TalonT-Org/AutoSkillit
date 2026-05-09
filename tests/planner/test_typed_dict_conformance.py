@@ -169,3 +169,24 @@ def test_validate_wp_result_rejects_too_many_deliverables() -> None:
                 "deliverables": [f"f{i}.py" for i in range(hi + 1)],
             }
         )
+
+
+def test_validate_wp_result_skips_upper_bound_when_requested() -> None:
+    _, hi = DELIVERABLE_BOUNDS
+    result = validate_wp_result(
+        {
+            "id": "P1-A1-WP1",
+            "name": "WP",
+            "deliverables": [f"f{i}.py" for i in range(hi + 2)],
+        },
+        skip_upper_bound=True,
+    )
+    assert len(result["deliverables"]) == hi + 2
+
+
+def test_validate_wp_result_enforces_lower_bound_with_skip_upper_bound() -> None:
+    with pytest.raises(ValueError, match="has 0 deliverables"):
+        validate_wp_result(
+            {"id": "P1-A1-WP1", "name": "WP", "deliverables": []},
+            skip_upper_bound=True,
+        )

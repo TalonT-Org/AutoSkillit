@@ -400,6 +400,31 @@ def test_consolidate_wps_rejects_merge_with_empty_deliverables(tmp_path: Path) -
         consolidate_wps(refined_wps_path=str(refined_path), planner_dir=str(tmp_path))
 
 
+def test_consolidate_wps_accepts_merge_exceeding_upper_bound(tmp_path: Path) -> None:
+    """Merging WPs whose combined deliverables exceed DELIVERABLE_BOUNDS[1] must succeed."""
+    wps = [
+        make_wp_result("P1-A1-WP1", deliverables=["a.py", "b.py", "c.py"]),
+        make_wp_result("P1-A1-WP2", deliverables=["d.py", "e.py", "f.py"]),
+    ]
+    refined_path = _make_refined_wps(tmp_path, wps)
+    consolidation_dir = tmp_path / "work_packages" / "consolidation"
+    _make_manifest(
+        consolidation_dir,
+        "P1",
+        [
+            {
+                "merged_id": "P1-A1-WP1",
+                "source_wp_ids": ["P1-A1-WP1", "P1-A1-WP2"],
+                "merge_order": ["P1-A1-WP1", "P1-A1-WP2"],
+                "name": None,
+                "goal": None,
+            }
+        ],
+    )
+    result = consolidate_wps(refined_wps_path=str(refined_path), planner_dir=str(tmp_path))
+    assert int(result["merged_count"]) == 1
+
+
 def test_fallback_merges_same_assignment_shared_files(tmp_path: Path) -> None:
     wps = [
         make_wp_result("P1-A1-WP1", files_touched=["src/config.yaml"]),

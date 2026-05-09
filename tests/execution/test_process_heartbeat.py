@@ -3,6 +3,8 @@ and orphaned tool result detection."""
 
 from __future__ import annotations
 
+import ast
+import inspect
 import os as _os
 import sys
 import time
@@ -640,8 +642,6 @@ class TestHasActiveDispatchMarker:
 
     def test_dispatch_marker_no_logger_calls(self):
         """The function body contains no logger.* attribute access calls."""
-        import ast
-        import inspect
 
         source = inspect.getsource(_has_active_dispatch_marker)
         tree = ast.parse(source)

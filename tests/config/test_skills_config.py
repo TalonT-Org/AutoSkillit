@@ -51,6 +51,12 @@ class TestSkillsConfig:
         assert "make-plan" in cfg.skills.tier2
         assert "compose-pr" in cfg.skills.tier3
 
+    def test_file_audit_issues_in_tier3(self) -> None:
+        from autoskillit.config import load_config
+
+        cfg = load_config()
+        assert "file-audit-issues" in cfg.skills.tier3
+
     def test_skills_config_exported_from_config_package(self) -> None:
         """SkillsConfig is importable from autoskillit.config and has expected fields."""
         from autoskillit.config import SkillsConfig

@@ -2100,6 +2100,22 @@ skills:
     write_behavior: conditional
     write_expected_when:
       - "verdict\\s*=\\s*validated"
+  file-audit-issues:
+    inputs:
+      - name: run_dir
+        type: file_path
+        required: false
+    outputs:
+      - name: issue_urls
+        type: str
+      - name: issue_count
+        type: str
+    expected_output_patterns:
+      - "issue_urls\\s*=\\s*\\S+"
+      - "issue_count\\s*=\\s*\\S+"
+    pattern_examples:
+      - "issue_urls = https://github.com/org/repo/issues/100,https://github.com/org/repo/issues/101\nissue_count = 2"
+    write_behavior: always
   promote-to-main:
     inputs:
     - name: batch_branch

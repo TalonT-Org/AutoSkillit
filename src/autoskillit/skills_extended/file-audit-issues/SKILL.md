@@ -1,0 +1,84 @@
+---
+name: file-audit-issues
+categories: [audit-pipeline]
+description: >-
+  Batch-create GitHub issues from validated audit ticket body files. Discovers
+  ticket bodies from the audit run directory, deduplicates against existing open
+  issues, creates via batched GraphQL mutations, applies labels, appends
+  validation summaries, and writes a filed-issues manifest. Pipeline-only skill
+  dispatched by the full-audit recipe.
+hooks:
+  PreToolUse:
+    - matcher: "*"
+      hooks:
+        - type: command
+          command: "echo '[SKILL: file-audit-issues] Filing audit issues from validated reports...'"
+          once: true
+---
+
+## Step 1 — Resolve Run Directory
+
+Check `AUTOSKILLIT_AUDIT_RUN_DIR` env var first. If unset, check positional argument
+(`{run_dir_or_paths}`). If neither, discover the most recent `validate-audit-*` directory
+under `{{AUTOSKILLIT_TEMP}}/`. Error and exit if no run directory found.
+
+## Step 2 — Discover Ticket Body Files
+
+Glob `ticket_body_*.md` in the resolved run directory. Parse each file: extract H1 title
+via first `# ` line, read full body text. If no ticket body files found, emit
+`issue_urls = ` and `issue_count = 0` and exit.
+
+## Step 3 — Dedup Against Existing Issues
+
+For each ticket body file, extract 2–3 key terms from the title. Run:
+```
+gh issue list --search "{key terms}" --json number,title,state --limit 5 --state open
+```
+in the workspace. If any existing open issue title has high similarity (shares 3+ significant
+words with the ticket title), mark that ticket body as a duplicate and skip it. Log skipped
+duplicates to terminal.
+
+## Step 4 — Batch-Create Issues via GraphQL
+
+Resolve repo identity: `gh api repos/{owner}/{repo} --jq '.node_id'` (or `gh repo view --json owner,name,id`).
+Resolve label IDs for `audit` and `recipe:implementation` labels (ensure they exist via `gh label create --force`).
+Build batched GraphQL `createIssue` mutations with aliases (`issue0`, `issue1`, ...), chunked at 20 per request.
+Execute via `gh api graphql --input -`. Sleep 1 second between chunks (per GitHub API discipline).
+Collect created issue URLs and numbers.
+
+## Step 5 — Apply Source-Specific Labels
+
+Parse the source from each ticket body filename (`ticket_body_{source}_{N}.md`). For each unique
+source, ensure a label exists (e.g., `audit:tests`, `audit:arch`, `audit:cohesion`, etc.).
+Batch-apply source labels via GraphQL `addLabelsToLabelable` mutation with aliases.
+
+## Step 6 — Append Validation Summaries
+
+For each created issue, find the corresponding `validation_summary_{source}*.md` in the run directory.
+For each: fetch current issue body via `gh issue view {number} --json body --jq .body`.
+Verify fetched body is non-empty (skip append if empty to avoid overwriting). Append horizontal
+rule + validation summary content. Write combined text to temp file, run `gh issue edit {number} --body-file "$FILE"`.
+Sleep 1 second between edits (per GitHub API discipline).
+
+## Step 7 — Write Filed Issues Manifest
+
+Write `filed_issues_manifest_{timestamp}.json` to the run directory with:
+- `created_at` (ISO timestamp)
+- `run_dir` (absolute path)
+- `issues` array: `[{number, url, title, source, labels, ticket_body_file}]`
+- `skipped_duplicates` array: `[{title, matched_issue_number, ticket_body_file}]`
+- `total_created` and `total_skipped` counts
+
+## Step 8 — Emit Structured Output
+
+```
+issue_urls = {comma-separated URLs}
+issue_count = {N}
+```
+
+**Critical constraints:**
+- NEVER use `gh issue comment` — all content goes in the issue body
+- NEVER create issues individually via REST — always batch via GraphQL
+- Sleep 1 second between consecutive mutating GitHub API calls
+- Use `--body-file` for all body content (never `--body` inline for large content)
+- When `AUTOSKILLIT_HEADLESS` is `1`, skip all prompts and execute directly

@@ -256,9 +256,6 @@ class TestTimedOutAlwaysProducesTimeoutSubtype:
 
     def test_timed_out_with_unparseable_subtype(self):
         """TIMED_OUT + no type=result record in stdout → UNPARSEABLE → must yield 'timeout'."""
-        from autoskillit.core.types import CliSubtype
-        from autoskillit.execution.headless import _build_skill_result
-
         ndjson = "\n".join(
             [
                 _make_tool_use_line("Write", {"file_path": "/tmp/a.py", "content": "x"}),
@@ -286,9 +283,6 @@ class TestTimedOutAlwaysProducesTimeoutSubtype:
 
     def test_timed_out_with_error_max_turns_subtype(self):
         """TIMED_OUT + error_max_turns result block → must yield 'timeout'."""
-        from autoskillit.core.types import CliSubtype
-        from autoskillit.execution.headless import _build_skill_result
-
         ndjson = "\n".join(
             [
                 _make_tool_use_line("Write", {"file_path": "/tmp/a.py", "content": "x"}),
@@ -319,9 +313,6 @@ class TestTimedOutAlwaysProducesTimeoutSubtype:
 
     def test_timed_out_with_error_during_execution_subtype(self):
         """TIMED_OUT + error_during_execution result block → must yield 'timeout'."""
-        from autoskillit.core.types import CliSubtype
-        from autoskillit.execution.headless import _build_skill_result
-
         ndjson = json.dumps(
             {
                 "type": "result",
@@ -347,9 +338,6 @@ class TestTimedOutAlwaysProducesTimeoutSubtype:
 
     def test_timed_out_with_context_exhaustion_subtype(self):
         """TIMED_OUT + context_exhaustion result block → must yield 'timeout'."""
-        from autoskillit.core.types import CliSubtype
-        from autoskillit.execution.headless import _build_skill_result
-
         ndjson = json.dumps(
             {
                 "type": "result",
@@ -375,9 +363,6 @@ class TestTimedOutAlwaysProducesTimeoutSubtype:
 
     def test_timed_out_with_interrupted_subtype(self):
         """TIMED_OUT + interrupted result block → must yield 'timeout'."""
-        from autoskillit.core.types import CliSubtype
-        from autoskillit.execution.headless import _build_skill_result
-
         ndjson = json.dumps(
             {
                 "type": "result",
@@ -403,9 +388,6 @@ class TestTimedOutAlwaysProducesTimeoutSubtype:
 
     def test_timed_out_with_unknown_subtype(self):
         """TIMED_OUT + unknown result block → must yield 'timeout'."""
-        from autoskillit.core.types import CliSubtype
-        from autoskillit.execution.headless import _build_skill_result
-
         ndjson = json.dumps(
             {
                 "type": "result",
@@ -431,9 +413,6 @@ class TestTimedOutAlwaysProducesTimeoutSubtype:
 
     def test_timed_out_with_empty_output_subtype(self):
         """TIMED_OUT + empty_output result block → must yield 'timeout'."""
-        from autoskillit.core.types import CliSubtype
-        from autoskillit.execution.headless import _build_skill_result
-
         ndjson = json.dumps(
             {
                 "type": "result",

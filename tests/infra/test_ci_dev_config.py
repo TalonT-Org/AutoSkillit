@@ -15,6 +15,7 @@ import yaml
 REPO_ROOT = Path(__file__).parent.parent.parent
 PRECOMMIT_CONFIG = REPO_ROOT / ".pre-commit-config.yaml"
 CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "tests.yml"
+CONFTEST_PATH = REPO_ROOT / "tests" / "conftest.py"
 
 
 class TestPreCommitConfig:
@@ -311,3 +312,117 @@ class TestPtyTestGuard:
             'test_process_pty.py does not use shutil.which("script") — '
             "test_pty_wrapper_provides_tty needs a skipif guard for missing script binary"
         )
+
+
+class TestCIWorkflowExpressions:
+    def test_ci_experimental_expression_covers_merge_group(self):
+        """The AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED expression must
+        handle merge_group events, not just pull_request.
+
+        Without merge_group handling, the expression evaluates to 'false'
+        in the merge queue for develop-targeting PRs, incorrectly disabling
+        experimental features.
+        """
+        workflow = yaml.safe_load(CI_WORKFLOW.read_text())
+        jobs = workflow["jobs"]
+        test_job = jobs["test"]
+
+        # Find the Run tests step
+        run_step = None
+        for step in test_job["steps"]:
+            if step.get("name") == "Run tests":
+                run_step = step
+                break
+
+        assert run_step is not None, "Run tests step not found"
+
+        # Check env block for AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED
+        env_block = run_step.get("env", {})
+        exp_val = env_block.get("AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED")
+
+        assert exp_val is not None, (
+            "AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED must be set in the "
+            "Run tests step env block"
+        )
+
+        exp_str = str(exp_val)
+        assert "merge_group" in exp_str, (
+            "AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED expression must "
+            "handle merge_group events. Current expression: " + exp_str
+        )
+
+
+class TestCIEnvVarIsolation:
+    """Verify that every AUTOSKILLIT_* env var set in CI has a
+    corresponding cleanup mechanism in the test conftest."""
+
+    def test_ci_env_vars_have_conftest_cleanup(self):
+        """Every AUTOSKILLIT_* env var set in CI workflow env blocks
+        must have a corresponding monkeypatch.delenv autouse fixture
+        in tests/conftest.py, OR be covered by a prefix-based cleanup.
+
+        This prevents Dynaconf env var leakage into tests.
+        """
+        workflow = yaml.safe_load(CI_WORKFLOW.read_text())
+        conftest_text = CONFTEST_PATH.read_text()
+
+        # Collect all AUTOSKILLIT_* env vars from CI
+        ci_env_vars = set()
+        for job in workflow["jobs"].values():
+            for step in job.get("steps", []):
+                env = step.get("env", {})
+                for key in env:
+                    if key.startswith("AUTOSKILLIT_"):
+                        ci_env_vars.add(key)
+                run_block = step.get("run", "")
+                # Also check inline exports
+                for line in run_block.splitlines():
+                    if "export AUTOSKILLIT_" in line:
+                        parts = line.split("AUTOSKILLIT_", 1)
+                        if len(parts) > 1:
+                            var_name = "AUTOSKILLIT_" + parts[1].split("=")[0]
+                            ci_env_vars.add(var_name.strip())
+
+        missing = []
+        for var in sorted(ci_env_vars):
+            if "__" in var:
+                prefix = var.rsplit("__", 1)[0] + "__"
+                covered = var in conftest_text or prefix in conftest_text
+            else:
+                covered = var in conftest_text
+            if not covered:
+                missing.append(var)
+
+        assert not missing, (
+            f"CI env vars missing conftest cleanup: {missing}. "
+            "Add a monkeypatch.delenv autouse fixture in tests/conftest.py "
+            "or extend a prefix-based cleanup fixture."
+        )
+
+
+class TestSetupUvVersionPin:
+    def test_setup_uv_version_pin_all_workflows(self):
+        """Every workflow file that uses setup-uv must use the 'version'
+        input parameter, not 'uv-version' (which is an output, not an input).
+
+        This extends the existing test_setup_uv_action_has_version_pin to
+        cover ALL workflow files, not just tests.yml.
+        """
+        workflows_dir = CI_WORKFLOW.parent
+        violations = []
+        for wf_path in sorted(workflows_dir.glob("*.yml")):
+            workflow = yaml.safe_load(wf_path.read_text())
+            for job_name, job in workflow.get("jobs", {}).items():
+                for step in job.get("steps", []):
+                    uses = step.get("uses", "")
+                    if "setup-uv" in uses:
+                        with_block = step.get("with", {})
+                        if "uv-version" in with_block:
+                            violations.append(
+                                f"{wf_path.name}:{job_name}: uses 'uv-version' "
+                                f"(output) instead of 'version' (input)"
+                            )
+                        elif "version" not in with_block:
+                            violations.append(f"{wf_path.name}:{job_name}: missing 'version' pin")
+
+        assert not violations, "setup-uv version pin violations:\n" + "\n".join(violations)

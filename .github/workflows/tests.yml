@@ -89,8 +89,12 @@ jobs:
 
       - name: Run tests
         env:
-          AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED: ${{ (github.event_name == 'pull_request' && github.base_ref == 'develop') || (github.event_name == 'merge_group' && contains(github.ref, '/develop/')) }}
           AUTOSKILLIT_FILTER_STATS_FILE: ${{ github.workspace }}/.autoskillit/temp/filter-stats.json
+          AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED: >-
+            ${{
+              (github.event_name == 'pull_request' && github.base_ref == 'develop')
+              || (github.event_name == 'merge_group' && contains(github.ref, '/develop/'))
+            }}
         run: |
           mkdir -p .autoskillit/temp
           if [[ "${{ github.event_name }}" == "pull_request" && "${{ github.base_ref }}" == "develop" ]]; then

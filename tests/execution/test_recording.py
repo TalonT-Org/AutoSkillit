@@ -22,6 +22,8 @@ from tests.fakes import MockSubprocessRunner
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
+_api_sim_claude = pytest.importorskip("api_simulator.claude")
+
 
 @dataclass
 class FakeStepResult:
@@ -441,8 +443,6 @@ def test_build_replay_runner_stores_player_on_runner(tmp_path, monkeypatch):
     mock_player = Mock()
     mock_player.scenario.return_value = mock_scenario
     mock_player.build_session_map.return_value = {}
-
-    import api_simulator.claude as _api_sim_claude
 
     monkeypatch.setattr(
         _api_sim_claude, "make_scenario_player", Mock(return_value=mock_player), raising=False

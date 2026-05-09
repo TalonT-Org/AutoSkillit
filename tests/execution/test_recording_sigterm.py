@@ -20,6 +20,8 @@ from tests._subprocess_ready import wait_for_subprocess_ready
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
+pytest.importorskip("api_simulator")
+
 
 @pytest.mark.integration
 def test_sigterm_writes_scenario_json(tmp_path):

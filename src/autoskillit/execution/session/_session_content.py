@@ -106,32 +106,27 @@ def _check_session_content(
         return False
     if completion_marker:
         result_text = session.result.strip()
-        marker_stripped = result_text.replace(completion_marker, "").strip()
-        if not marker_stripped:
-            logger.debug("content_check_failed", reason="result_is_only_marker")
-            return False
-        if completion_marker not in result_text:
-            logger.debug(
-                "content_check_failed",
-                reason="completion_marker_absent",
-                result_tail=result_text[-200:] if len(result_text) > 200 else result_text,
-            )
-            return False
-    if prior_completion_markers:
-        result_text = session.result.strip()
-        for prior_marker in prior_completion_markers:
-            if prior_marker:
-                marker_stripped = result_text.replace(prior_marker, "").strip()
-                if not marker_stripped:
-                    logger.debug("content_check_failed", reason="result_is_only_prior_marker")
-                    return False
-                if prior_marker not in result_text:
-                    logger.debug(
-                        "content_check_failed",
-                        reason="prior_completion_marker_absent",
-                        prior_marker=prior_marker,
-                    )
-                    return False
+        if completion_marker in result_text:
+            marker_stripped = result_text.replace(completion_marker, "").strip()
+            if not marker_stripped:
+                logger.debug("content_check_failed", reason="result_is_only_marker")
+                return False
+        else:
+            found_prior = False
+            if prior_completion_markers:
+                for prior_marker in prior_completion_markers:
+                    if prior_marker and prior_marker in result_text:
+                        marker_stripped = result_text.replace(prior_marker, "").strip()
+                        if marker_stripped:
+                            found_prior = True
+                            break
+            if not found_prior:
+                logger.debug(
+                    "content_check_failed",
+                    reason="completion_marker_absent",
+                    result_tail=result_text[-200:] if len(result_text) > 200 else result_text,
+                )
+                return False
     if not _check_expected_patterns(session.result.strip(), expected_output_patterns):
         logger.warning(
             "content_check_failed",

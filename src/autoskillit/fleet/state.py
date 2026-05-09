@@ -126,6 +126,7 @@ def _clear_dispatch_for_retry(d: DispatchRecord) -> None:
     d.dispatched_pid = 0
     d.dispatched_starttime_ticks = 0
     d.dispatched_boot_id = ""
+    d.dispatched_create_time = 0.0
     d.token_usage = {}
     d.started_at = 0.0
     d.ended_at = 0.0
@@ -298,6 +299,7 @@ def mark_dispatch_running(
     dispatched_pid: int,
     starttime_ticks: int = 0,
     boot_id: str = "",
+    create_time: float = 0.0,
     sidecar_path: str | None = None,
 ) -> None:
     """Atomically mark a dispatch as running with its dispatch_id and dispatched_pid."""
@@ -314,6 +316,7 @@ def mark_dispatch_running(
                 d.dispatched_pid = dispatched_pid
                 d.dispatched_starttime_ticks = starttime_ticks
                 d.dispatched_boot_id = boot_id
+                d.dispatched_create_time = create_time
                 d.started_at = time.time()
                 d.sidecar_path = sidecar_path
                 m.mark_dirty()

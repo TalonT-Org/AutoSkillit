@@ -48,6 +48,7 @@ class DispatchRecord:
     dispatched_pid: int = 0
     dispatched_starttime_ticks: int = 0
     dispatched_boot_id: str = ""
+    dispatched_create_time: float = 0.0
     reason: str = ""
     kill_reason: str = ""
     infra_exit_category: str = ""
@@ -69,6 +70,7 @@ class DispatchRecord:
             "dispatched_pid": self.dispatched_pid,
             "dispatched_starttime_ticks": self.dispatched_starttime_ticks,
             "dispatched_boot_id": self.dispatched_boot_id,
+            "dispatched_create_time": self.dispatched_create_time,
             "reason": self.reason,
             "kill_reason": self.kill_reason,
             "infra_exit_category": self.infra_exit_category,
@@ -116,6 +118,7 @@ class DispatchRecord:
             dispatched_boot_id=(
                 d.get("dispatched_boot_id") or d.get("l3_boot_id") or d.get("l2_boot_id", "")
             ),
+            dispatched_create_time=d.get("dispatched_create_time", 0.0),
             reason=d.get("reason", ""),
             kill_reason=d.get("kill_reason", ""),
             infra_exit_category=d.get("infra_exit_category", ""),

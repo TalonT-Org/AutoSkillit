@@ -42,6 +42,12 @@ class TestDispatchRecordSchemaV2:
         assert d.dispatched_boot_id == ""
         assert isinstance(d.dispatched_boot_id, str)
 
+    def test_dispatch_record_has_dispatched_create_time(self) -> None:
+        d = DispatchRecord(name="x")
+        assert hasattr(d, "dispatched_create_time")
+        assert d.dispatched_create_time == 0.0
+        assert isinstance(d.dispatched_create_time, float)
+
     def test_mark_dispatch_running_stores_starttime_ticks(self, tmp_path: Path) -> None:
         sp = _make_state(tmp_path, "a")
         mark_dispatch_running(
@@ -332,6 +338,7 @@ class TestDispatchRecordToDict:
             "dispatched_pid",
             "dispatched_starttime_ticks",
             "dispatched_boot_id",
+            "dispatched_create_time",
             "reason",
             "kill_reason",
             "infra_exit_category",
@@ -398,6 +405,25 @@ class TestDispatchRecordSchemaV3:
         assert state is not None
         assert state.dispatches[0].campaign_id == "camp-xyz"
         assert json.loads(sp.read_text())["dispatches"][0]["campaign_id"] == "camp-xyz"
+
+    def test_dispatched_create_time_roundtrip(self, tmp_path: Path) -> None:
+        sp = _make_state(tmp_path, "a")
+        mark_dispatch_running(
+            sp,
+            "a",
+            dispatch_id="did-1",
+            dispatched_pid=9999,
+            starttime_ticks=0,
+            boot_id="",
+            create_time=1700000000.5,
+        )
+        state = read_state(sp)
+        assert state is not None
+        d = state.dispatches[0]
+        assert d.dispatched_create_time == 1700000000.5
+
+        raw = json.loads(sp.read_text())
+        assert raw["dispatches"][0]["dispatched_create_time"] == 1700000000.5
 
     def test_v1_state_file_is_rejected(self, tmp_path: Path) -> None:
         """v1 state files are rejected (stale schema version)."""

@@ -423,6 +423,8 @@ def test_consolidate_wps_accepts_merge_exceeding_upper_bound(tmp_path: Path) -> 
     )
     result = consolidate_wps(refined_wps_path=str(refined_path), planner_dir=str(tmp_path))
     assert int(result["merged_count"]) == 1
+    merged_wp = json.loads((tmp_path / "work_packages" / "P1-A1-WP1_result.json").read_text())
+    assert sorted(merged_wp["deliverables"]) == ["a.py", "b.py", "c.py", "d.py", "e.py", "f.py"]
 
 
 def test_fallback_merges_same_assignment_shared_files(tmp_path: Path) -> None:

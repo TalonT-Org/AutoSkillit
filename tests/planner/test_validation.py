@@ -171,7 +171,7 @@ def test_validate_plan_wp_too_many_deliverables_warns_not_fails(tmp_path: Path) 
     wp_path.write_text(json.dumps(raw))
     result = validate_plan(str(tmp_path))
     assert result["verdict"] == "pass"
-    assert int(result["warning_count"]) >= 1
+    assert int(result["warning_count"]) == 1
 
 
 def test_validate_plan_duplicate_deliverables_fails(tmp_path: Path) -> None:

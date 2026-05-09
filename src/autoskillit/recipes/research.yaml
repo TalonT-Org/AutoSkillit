@@ -60,6 +60,11 @@ ingredients:
       report.html bundle under {source_dir}/research-bundles/{date-slug}/ with
       no GitHub interaction. 'pr' opens a GitHub PR alongside the HTML bundle
       and runs the full review/archival flow.
+  test_check_enabled:
+    description: >
+      When 'true' (the default), run test_check after report generation.
+      Set to 'false' for de novo worktrees without test infrastructure.
+    default: "true"
 
 kitchen_rules:
   - >
@@ -539,6 +544,7 @@ steps:
     tool: test_check
     with:
       worktree_path: "${{ context.worktree_path }}"
+    skip_when_false: inputs.test_check_enabled
     on_success: push_branch
     on_failure: fix_tests
 
@@ -560,6 +566,8 @@ steps:
       - when: "${{ result.verdict }} == 'flake_suspected'"
         route: retest
       - when: "${{ result.verdict }} == 'ci_only_failure'"
+        route: escalate_stop
+      - when: "${{ result.verdict }} == 'no_test_infrastructure'"
         route: escalate_stop
     on_failure: escalate_stop
     on_context_limit: retest

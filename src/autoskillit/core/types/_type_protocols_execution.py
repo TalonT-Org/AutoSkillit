@@ -24,6 +24,8 @@ class TestRunner(Protocol):
     Returns a TestResult with passed, stdout, and stderr from the test run.
     """
 
+    def check_infrastructure(self, cwd: Path) -> str | None: ...
+
     async def run(self, cwd: Path) -> TestResult: ...
 
 

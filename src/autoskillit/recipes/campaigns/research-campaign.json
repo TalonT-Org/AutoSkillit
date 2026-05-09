@@ -50,6 +50,10 @@
       "description": "Where research outputs land. 'local' (default) produces a self-contained report bundle. 'pr' opens a GitHub PR and runs the full review/archival flow.",
       "required": false,
       "default": "local"
+    },
+    "test_check_enabled": {
+      "description": "When 'true' (the default), run test_check in the implementation phase. Set to 'false' for de novo worktrees without test infrastructure.\n",
+      "default": "true"
     }
   },
   "dispatches": [
@@ -87,7 +91,8 @@
         "source_dir": "${{ inputs.source_dir }}",
         "base_branch": "${{ inputs.base_branch }}",
         "issue_url": "${{ inputs.issue_url }}",
-        "output_mode": "${{ inputs.output_mode }}"
+        "output_mode": "${{ inputs.output_mode }}",
+        "test_check_enabled": "${{ inputs.test_check_enabled }}"
       },
       "capture": {
         "report_path": "${{ result.report_path }}",

@@ -21,6 +21,7 @@ from autoskillit.execution.testing import (
     parse_pytest_summary as _parse_pytest_summary,
 )
 from tests._helpers import make_test_check_config, make_test_config
+from tests.fakes import MockSubprocessRunner
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -921,3 +922,58 @@ async def test_default_test_runner_full_run_reason_none_when_absent(tmp_path: Pa
     tester = DefaultTestRunner(config=make_test_config(), runner=fake_runner)
     result = await tester.run(tmp_path)
     assert result.full_run_reason is None
+
+
+# T6: check_infrastructure unit tests
+
+
+def test_check_infrastructure_no_taskfile(tmp_path):
+    """T6a: check_infrastructure returns error when no Taskfile exists."""
+    config = make_test_config()
+    runner = MockSubprocessRunner()
+    tester = DefaultTestRunner(config=config, runner=runner)
+    result = tester.check_infrastructure(tmp_path)
+    assert result is not None
+    assert "Taskfile" in result
+
+
+def test_check_infrastructure_taskfile_yml_present(tmp_path):
+    """T6b: check_infrastructure returns None when Taskfile.yml exists."""
+    (tmp_path / "Taskfile.yml").write_text("version: '3'\n")
+    config = make_test_config()
+    runner = MockSubprocessRunner()
+    tester = DefaultTestRunner(config=config, runner=runner)
+    assert tester.check_infrastructure(tmp_path) is None
+
+
+def test_check_infrastructure_taskfile_yaml_present(tmp_path):
+    """T6c: check_infrastructure returns None when Taskfile.yaml exists."""
+    (tmp_path / "Taskfile.yaml").write_text("version: '3'\n")
+    config = make_test_config()
+    runner = MockSubprocessRunner()
+    tester = DefaultTestRunner(config=config, runner=runner)
+    assert tester.check_infrastructure(tmp_path) is None
+
+
+def test_check_infrastructure_custom_command_not_in_path(tmp_path):
+    """T6d: check_infrastructure returns error when custom command binary is missing."""
+    config = make_test_config()
+    config.test_check.command = ["nonexistent_binary_abc_xyz", "arg"]
+    runner = MockSubprocessRunner()
+    tester = DefaultTestRunner(config=config, runner=runner)
+    result = tester.check_infrastructure(tmp_path)
+    assert result is not None
+    assert "not found in PATH" in result
+
+
+def test_check_infrastructure_custom_command_in_path(tmp_path):
+    """T6e: check_infrastructure returns None when custom command binary is in PATH."""
+    import shutil
+
+    config = make_test_config()
+    python_path = shutil.which("python3")
+    assert python_path is not None
+    config.test_check.command = [python_path, "-V"]
+    runner = MockSubprocessRunner()
+    tester = DefaultTestRunner(config=config, runner=runner)
+    assert tester.check_infrastructure(tmp_path) is None

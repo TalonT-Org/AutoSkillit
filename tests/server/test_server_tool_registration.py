@@ -246,7 +246,7 @@ class TestConfigDrivenBehavior:
     """S1-S10: Verify tools use config instead of hardcoded values."""
 
     @pytest.mark.anyio
-    async def test_test_check_uses_config_command(self, tool_ctx):
+    async def test_test_check_uses_config_command(self, tool_ctx, tmp_path, monkeypatch):
         """S1: test_check runs config.test_check.command."""
         from autoskillit.config import TestCheckConfig
         from autoskillit.execution import DefaultTestRunner
@@ -259,8 +259,13 @@ class TestConfigDrivenBehavior:
         # Re-create tester with updated config so it reads the new command
         tool_ctx.tester = DefaultTestRunner(config=tool_ctx.config, runner=tool_ctx.runner)
 
+        wt = tmp_path / "wt"
+        wt.mkdir()
+        monkeypatch.setattr(
+            "shutil.which", lambda cmd, **kw: "/usr/bin/pytest" if cmd == "pytest" else None
+        )
         tool_ctx.runner.push(_make_result(0, "= 100 passed =\n", ""))
-        await test_check(worktree_path="/tmp/wt")
+        await test_check(worktree_path=str(wt))
 
         assert tool_ctx.runner.call_args_list[0][0] == ["pytest", "-x"]
         assert tool_ctx.runner.call_args_list[0][2] == pytest.approx(300.0, abs=1.0)

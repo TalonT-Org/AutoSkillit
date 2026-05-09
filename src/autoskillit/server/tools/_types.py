@@ -84,6 +84,7 @@ class TestCheckResult(_TestCheckResultBase, total=False):
     tests_deselected: int
     full_run_reason: str
     error: str
+    infrastructure_missing: bool
 
 
 class MergeWorktreeResult(TypedDict, total=False):

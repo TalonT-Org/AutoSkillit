@@ -328,6 +328,10 @@
         {
           "when": "${{ result.verdict }} == 'ci_only_failure'",
           "route": "release_issue_failure"
+        },
+        {
+          "when": "${{ result.verdict }} == 'no_test_infrastructure'",
+          "route": "release_issue_failure"
         }
       ],
       "on_context_limit": "test",
@@ -1659,6 +1663,10 @@
         },
         {
           "when": "${{ result.verdict }} == 'ci_only_failure'",
+          "route": "release_issue_failure"
+        },
+        {
+          "when": "${{ result.verdict }} == 'no_test_infrastructure'",
           "route": "release_issue_failure"
         },
         {

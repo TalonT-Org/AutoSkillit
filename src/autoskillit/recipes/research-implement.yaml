@@ -45,6 +45,11 @@ ingredients:
     description: Path to the visualization plan (passed by campaign dispatch)
     required: true
     hidden: true
+  test_check_enabled:
+    description: >
+      When 'true' (the default), run test_check after report generation.
+      Set to 'false' for de novo worktrees without test infrastructure.
+    default: "true"
 
 kitchen_rules:
   - >
@@ -327,6 +332,7 @@ steps:
     tool: test_check
     with:
       worktree_path: "${{ context.worktree_path }}"
+    skip_when_false: inputs.test_check_enabled
     on_success: push_branch
     on_failure: fix_tests
 
@@ -348,6 +354,8 @@ steps:
       - when: "${{ context.verdict }} == 'flake_suspected'"
         route: retest
       - when: "${{ context.verdict }} == 'ci_only_failure'"
+        route: escalate_stop
+      - when: "${{ context.verdict }} == 'no_test_infrastructure'"
         route: escalate_stop
     on_failure: escalate_stop
     on_context_limit: retest

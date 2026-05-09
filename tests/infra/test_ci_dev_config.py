@@ -383,15 +383,11 @@ class TestCIEnvVarIsolation:
                             var_name = "AUTOSKILLIT_" + parts[1].split("=")[0]
                             ci_env_vars.add(var_name.strip())
 
-        # For each CI env var, verify conftest has cleanup
         missing = []
         for var in sorted(ci_env_vars):
-            # Check for exact delenv OR prefix-based cleanup
-            if var not in conftest_text and var.split("__")[0] + "__" not in conftest_text:
-                # Check if a prefix-based loop covers it
-                prefix = var.rsplit("__", 1)[0] + "__"
-                if prefix not in conftest_text:
-                    missing.append(var)
+            prefix = var.rsplit("__", 1)[0] + "__"
+            if var not in conftest_text and prefix not in conftest_text:
+                missing.append(var)
 
         assert not missing, (
             f"CI env vars missing conftest cleanup: {missing}. "
@@ -422,7 +418,7 @@ class TestSetupUvVersionPin:
                                 f"{wf_path.name}:{job_name}: uses 'uv-version' "
                                 f"(output) instead of 'version' (input)"
                             )
-                        if "version" not in with_block:
+                        elif "version" not in with_block:
                             violations.append(f"{wf_path.name}:{job_name}: missing 'version' pin")
 
         assert not violations, "setup-uv version pin violations:\n" + "\n".join(violations)

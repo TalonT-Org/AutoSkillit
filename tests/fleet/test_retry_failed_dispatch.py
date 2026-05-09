@@ -397,8 +397,9 @@ class TestSnapshotCompleteness:
 
     _IDENTITY_FIELDS = _RETRY_IDENTITY_FIELDS
 
-    def test_snapshot_captures_all_non_identity_fields(self):
-        """Every non-identity field must appear as a key in the attempt_history snapshot."""
+    @staticmethod
+    def _make_dirty_values() -> dict[str, Any]:
+        """Build a DispatchRecord kwargs dict with every field set to a non-default dirty value."""
         dirty_values: dict[str, Any] = {
             "name": "test",
             "campaign_id": "cid",
@@ -425,6 +426,11 @@ class TestSnapshotCompleteness:
                 dirty_values[f.name] = DispatchStatus.FAILURE
             else:
                 raise AssertionError(f"Unhandled default type for {f.name!r}: {type(default)}")
+        return dirty_values
+
+    def test_snapshot_captures_all_non_identity_fields(self):
+        """Every non-identity field must appear as a key in the attempt_history snapshot."""
+        dirty_values = self._make_dirty_values()
         d = DispatchRecord(**dirty_values)
         _clear_dispatch_for_retry(d)
         assert len(d.attempt_history) == 1
@@ -441,32 +447,7 @@ class TestSnapshotCompleteness:
 
     def test_snapshot_values_match_pre_clear_state(self):
         """Each snapshot value must equal the field value before clear."""
-        dirty_values: dict[str, Any] = {
-            "name": "test",
-            "campaign_id": "cid",
-            "caller_session_id": "csid",
-            "attempt_history": [],
-        }
-        for f in dataclasses.fields(DispatchRecord):
-            if f.name in dirty_values:
-                continue
-            default = (
-                f.default_factory() if f.default_factory is not dataclasses.MISSING else f.default
-            )
-            if isinstance(default, str):
-                dirty_values[f.name] = f"dirty-{f.name}"
-            elif isinstance(default, int):
-                dirty_values[f.name] = 99999
-            elif isinstance(default, float):
-                dirty_values[f.name] = 9999.0
-            elif isinstance(default, dict):
-                dirty_values[f.name] = {"prompt_tokens": 500}
-            elif default is None:
-                dirty_values[f.name] = "/dirty/path"
-            elif isinstance(default, DispatchStatus):
-                dirty_values[f.name] = DispatchStatus.FAILURE
-            else:
-                raise AssertionError(f"Unhandled default type for {f.name!r}: {type(default)}")
+        dirty_values = self._make_dirty_values()
         d = DispatchRecord(**dirty_values)
 
         # Capture expected values before clear
@@ -483,7 +464,7 @@ class TestSnapshotCompleteness:
             assert key in snapshot, f"Field {key!r} missing from snapshot"
             if key == "status":
                 assert snapshot[key] == str(expected_val)
-            elif key == "token_usage":
+            elif isinstance(expected_val, dict):
                 assert snapshot[key] == dict(expected_val)
             else:
                 assert snapshot[key] == expected_val, (

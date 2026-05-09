@@ -26,7 +26,7 @@ under `{{AUTOSKILLIT_TEMP}}/`. Abort with an error when no run directory can be 
 
 Glob `ticket_body_*.md` in the resolved run directory. Parse each file: extract H1 title
 via first `# ` line, read full body text. When the discovery produces zero ticket body
-files, emit `issue_urls = ` and `issue_count = 0` and exit.
+files, emit `issue_urls = ` and `issue_count = 0` and exit with success (exit code 0).
 
 ## Step 3 — Dedup Against Existing Issues
 
@@ -44,7 +44,7 @@ two sets. Three or more shared tokens ⇒ duplicate.
 
 ## Step 4 — Batch-Create Issues via GraphQL
 
-Resolve repo identity: `gh api repos/{owner}/{repo} --jq '.node_id'` (or `gh repo view --json owner,name,id`).
+Resolve repo identity: use `gh repo view --json owner,name` to get the canonical owner and repo name, then fetch `gh api repos/{owner}/{repo} --jq '.node_id'`.
 If this call fails or returns an empty node_id (missing `GH_TOKEN`, wrong remote, insufficient
 permissions), abort immediately with a clear error message: `"Error: could not resolve repo node_id
 — check GH_TOKEN and remote URL. Aborting."` Do not proceed with GraphQL mutations using an empty node_id.

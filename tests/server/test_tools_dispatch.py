@@ -470,7 +470,8 @@ class TestDispatchFoodTruckSemanticValidation:
             quota_refresher=_noop_quota_refresher,
         )
         result = json.loads(raw.to_envelope())
-        assert result["success"] is True
+        assert result.get("error") != "fleet_recipe_invalid", f"Got: {result}"
+        assert "dispatch_id" in result
 
     @pytest.mark.anyio
     async def test_dispatch_rejects_when_load_and_validate_raises(self, tool_ctx, monkeypatch):

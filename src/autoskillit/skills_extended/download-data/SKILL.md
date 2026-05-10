@@ -1,0 +1,155 @@
+---
+name: download-data
+categories: [research]
+description: >
+  Download external and gitignored datasets declared in the experiment plan's
+  data_manifest. Executes acquisition commands sequentially into pre-created
+  directories, verifies each download, and emits a PASS/FAIL verdict.
+hooks:
+  PreToolUse:
+    - matcher: "*"
+      hooks:
+        - type: command
+          command: "echo '[SKILL: download-data] Downloading external datasets...'"
+          once: true
+---
+
+# Download Data Skill
+
+Download external and gitignored datasets declared in the experiment plan's
+`data_manifest` frontmatter section. Executes acquisition commands sequentially
+into the directories pre-created by `stage_data`, verifies each download, and
+emits a PASS/FAIL verdict. PASS proceeds to `setup_environment` (research.yaml)
+or `decompose_phases` (research-implement.yaml); FAIL escalates immediately.
+
+## When to Use
+
+- Invoked by the research recipe's `download_data` step between `stage_data`
+  and `setup_environment` (research.yaml) or `decompose_phases` (research-implement.yaml)
+- Whenever external or gitignored datasets need to be acquired before experiment execution
+
+## Arguments
+
+```
+/autoskillit:download-data <experiment_plan_path>
+```
+
+- `experiment_plan_path` — Absolute path to the experiment plan (positional).
+  Default: `$AUTOSKILLIT_TEMP/experiment-plan.md` in the current working directory.
+
+## Critical Constraints
+
+**NEVER:**
+- Modify the experiment plan or any source files
+- Run subagents in the background (`run_in_background: true` is prohibited)
+- Skip the `depends_on` command when it is specified for an entry
+- Proceed with a failed download without escalating
+- Write files outside `{{AUTOSKILLIT_TEMP}}/download-data/`
+
+**ALWAYS:**
+- Read the `data_manifest` frontmatter section of the experiment plan
+- Filter for `source_type: external` and `source_type: gitignored` entries only
+- Skip entries that lack an `acquisition` command (e.g., `source_type: literature`
+  or `source_type: database` entries without download commands)
+- Execute `depends_on` before `acquisition` for the same entry
+- Verify each download using the entry's `verification` criteria
+- Write the download report before emitting the verdict token
+- Use `model: "sonnet"` for all subagents
+
+## Workflow
+
+### Step 1 — Parse the Experiment Plan
+
+Read the experiment plan at the provided path (or default path). Parse the
+`data_manifest` YAML frontmatter section. Identify all entries where
+`source_type` is `"external"` or `"gitignored"`.
+
+### Step 2 — Short-Circuit for No-Downloads Plans
+
+If no `external` or `gitignored` entries with `acquisition` commands exist,
+emit `verdict = PASS` with a note that no external data downloads are required.
+Write a minimal download report and exit. This covers synthetic/fixture-only
+plans and plans with only `source_type: literature` or `source_type: database`
+entries that lack acquisition commands.
+
+### Step 3 — Execute Acquisition Commands Sequentially
+
+For each `external`/`gitignored` entry (respecting `depends_on` ordering):
+
+**a. Skip entries without acquisition commands** — Entries whose `source_type`
+is `literature` or `database` and lack an `acquisition` field are skipped.
+
+**b. Handle retry cleanup** — If this is a retry (the step's `retries: 1`
+triggers re-execution on failure), remove any partial output files at the
+entry's target location before proceeding to prevent partial-file corruption
+on re-download.
+
+**c. Execute `depends_on` if specified** — If the entry has a `depends_on`
+field, execute that command first in the worktree CWD.
+
+**d. Execute the acquisition command** — Run the `acquisition` command via Bash
+in the worktree CWD. Use no timeout on individual commands (the step-level
+`stale_threshold: 14400` provides the outer bound). Log stdout/stderr to:
+```
+{{AUTOSKILLIT_TEMP}}/download-data/download_{entry_index}_{timestamp}.log
+```
+
+**e. Verify the download** — After each command completes, run the `verification`
+check. Verification forms include:
+- checksum file comparison (`.md5`, `.sha256` sidecars)
+- minimum file size threshold
+- directory non-empty assertion
+- custom shell command specified in the entry's `verification` field
+
+### Step 4 — Assess Results
+
+Build a download results table:
+```
+| Entry | Source Type | Location | Status | Duration |
+| ...   | external    | data/geo/| OK     | 42m 18s  |
+| ...   | external    | data/rna/| FAILED | 12m 03s  |
+```
+
+- **PASS**: all entries succeeded
+- **FAIL**: any entry failed
+
+### Step 5 — Write the Download Report
+
+Save to:
+```
+{{AUTOSKILLIT_TEMP}}/download-data/download_report_{YYYY-MM-DD_HHMMSS}.md
+```
+
+Report structure:
+```markdown
+## Download Report
+**Date:** {timestamp}
+**Verdict:** PASS | FAIL
+
+### Download Results
+| Entry | Source Type | Location | Status | Duration |
+|-------|-------------|----------|--------|----------|
+...
+
+### Individual Logs
+- {entry}: {{AUTOSKILLIT_TEMP}}/download-data/download_{entry_index}_{timestamp}.log
+```
+
+### Step 6 — Emit Structured Output Tokens
+
+Emit structured output tokens as LITERAL PLAIN TEXT with NO markdown
+formatting on the token names. Do not wrap token names in `**bold**`,
+`*italic*`, or any other markdown. The adjudicator performs a regex match
+on the exact token name — decorators cause match failure.
+
+```
+verdict = PASS
+download_report = /absolute/path/to/download_report_{YYYY-MM-DD_HHMMSS}.md
+```
+
+## Output
+
+```
+verdict = PASS|FAIL
+download_report = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/download-data/download_report_{YYYY-MM-DD_HHMMSS}.md
+```

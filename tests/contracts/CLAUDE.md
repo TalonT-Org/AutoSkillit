@@ -59,6 +59,7 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_sous_chef_routing.py` | Contract tests for the CONTEXT LIMIT ROUTING section in sous-chef SKILL.md |
 | `test_sous_chef_scheduling.py` | Contract tests for the PARALLEL STEP SCHEDULING section in sous-chef SKILL.md |
 | `test_stage_data_contracts.py` | Contract tests for stage-data SKILL.md — pre-flight resource feasibility gate |
+| `test_download_data_contracts.py` | Contract tests for download-data SKILL.md — external dataset acquisition step |
 | `test_sub_skill_refusal_contracts.py` | Cross-skill contract: every SKILL.md that invokes sub-skills must contain explicit refusal handling language |
 | `test_target_skill_invocability.py` | Contract: the target skill of a run_skill call must be invocable after session setup |
 | `test_token_summary_contracts.py` | Structural contracts for the token summary pipeline |

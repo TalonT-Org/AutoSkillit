@@ -27,7 +27,7 @@ compute on doomed downloads.
 ## When to Use
 
 - Invoked by the research recipe's `stage_data` step between `create_worktree`
-  and `decompose_phases`
+  and `download_data`
 - Whenever a pre-flight resource check is needed before data-intensive implementation
 
 ## Arguments

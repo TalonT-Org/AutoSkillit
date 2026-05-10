@@ -73,7 +73,7 @@ class TestResearchImplementRecipe:
 class TestResearchImplementDownloadData:
     """Tests for download_data step in research-implement.yaml (T3)."""
 
-    @pytest.fixture(scope="module")
+    @pytest.fixture(scope="class")
     def recipe(self):
         return load_recipe(builtin_recipes_dir() / "research-implement.yaml")
 

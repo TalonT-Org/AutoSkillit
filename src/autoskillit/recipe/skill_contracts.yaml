@@ -1341,7 +1341,7 @@ skills:
       type: file_path
     expected_output_patterns:
     - "verdict\\s*=\\s*(PASS|FAIL)"
-    - "download_report\\s*=\\s*/.+"
+    - "download_report\\s*=\\s*/.+/download-data/.+"
     pattern_examples:
     - "verdict = PASS\ndownload_report = /tmp/download-data/download_report_2026-05-10_120000.md\n%%ORDER_UP%%"
     write_behavior: always

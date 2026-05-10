@@ -24,17 +24,17 @@ def test_skill_md_exists() -> None:
     assert SKILL_PATH.exists()
 
 
-def test_skill_name_matches_directory() -> None:
+def test_skill_name_matches_directory(skill_text: str) -> None:
     """Frontmatter name field must be 'download-data'."""
-    text = SKILL_PATH.read_text()
-    assert "name: download-data" in text
+    assert "name: download-data" in skill_text
 
 
-def test_skill_categories_include_research() -> None:
+def test_skill_categories_include_research(skill_text: str) -> None:
     """Frontmatter categories must include 'research'."""
-    text = SKILL_PATH.read_text()
-    assert "categories:" in text
-    assert "research" in text
+    lines = skill_text.splitlines()
+    cats_idx = next((i for i, line in enumerate(lines) if "categories:" in line), None)
+    assert cats_idx is not None, "categories: block not found in frontmatter"
+    assert any("research" in lines[j] for j in range(cats_idx + 1, min(cats_idx + 5, len(lines))))
 
 
 def test_skill_md_has_output_section() -> None:
@@ -105,4 +105,4 @@ def test_skill_categories_in_frontmatter() -> None:
     text = SKILL_PATH.read_text()
     cats_idx = text.find("categories:")
     hooks_idx = text.find("hooks:")
-    assert cats_idx > 0 and cats_idx < hooks_idx
+    assert cats_idx != -1 and hooks_idx != -1 and cats_idx < hooks_idx

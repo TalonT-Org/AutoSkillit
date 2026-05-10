@@ -1397,6 +1397,9 @@ skills:
     - name: results_path
       type: file_path
       required: true
+    - name: group_manifest
+      type: file_path
+      required: false
     outputs:
     - name: report_path
       type: file_path

@@ -7,9 +7,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-__all__ = ["CaptureEntrySpec", "CaptureValueTypeError"]
+__all__ = ["CAPTURE_VALID_VALUE_TYPES", "CaptureEntrySpec", "CaptureValueTypeError"]
 
-_VALID_VALUE_TYPES = frozenset({"path", "url", "string", "optional_string"})
+CAPTURE_VALID_VALUE_TYPES = frozenset({"path", "url", "string", "optional_string"})
+
+_VALID_VALUE_TYPES = CAPTURE_VALID_VALUE_TYPES
 
 
 @dataclass(frozen=True, slots=True)

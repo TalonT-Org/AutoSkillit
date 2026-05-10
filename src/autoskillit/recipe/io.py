@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from autoskillit.core import (
+    CAPTURE_VALID_VALUE_TYPES,
     CORE_PACKS,
     CaptureEntrySpec,
     DispatchGateType,
@@ -38,7 +39,6 @@ logger = get_logger(__name__)
 
 _TEMP_PLACEHOLDER = "{{AUTOSKILLIT_TEMP}}"
 _SCRIPTS_PLACEHOLDER = "{{AUTOSKILLIT_SCRIPTS}}"
-_CAPTURE_VALID_VALUE_TYPES = frozenset({"path", "url", "string", "optional_string"})
 
 
 def substitute_temp_placeholder(text: str, temp_dir_relpath: str) -> str:
@@ -401,7 +401,7 @@ def _parse_capture_spec(capture_raw: Any) -> dict[str, CaptureEntrySpec]:
             type_ = val.get("type")
             if isinstance(from_, str):
                 effective_type = type_ if isinstance(type_, str) else "string"
-                if effective_type not in _CAPTURE_VALID_VALUE_TYPES:
+                if effective_type not in CAPTURE_VALID_VALUE_TYPES:
                     logger.warning(
                         "capture_spec_unknown_type",
                         capture_name=key,

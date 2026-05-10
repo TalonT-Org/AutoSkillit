@@ -81,9 +81,7 @@ def _build_food_truck_prompt(
         ", " + ", ".join(f'"capture_{k}": "<{k}_value>"' for k in capture) if capture else ""
     )
     extra_fields_docs = (
-        "\n" + "\n".join(f"- capture_{k}: captured value for {k}" for k in capture)
-        if capture
-        else ""
+        "\n" + "\n".join(f"- capture_{k}: {v}" for k, v in capture.items()) if capture else ""
     )
 
     return f"""\

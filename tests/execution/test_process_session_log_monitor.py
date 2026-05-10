@@ -82,7 +82,7 @@ class TestSessionLogMonitor:
             tg.start_soon(append_marker)
             tg.start_soon(_run_monitor)
 
-        assert monitor_result[0].status == "completion"
+        assert monitor_result[0].status == ChannelBStatus.COMPLETION
         assert monitor_result[0].session_id == "abc123"
 
     @pytest.mark.anyio
@@ -111,7 +111,7 @@ class TestSessionLogMonitor:
         )
         elapsed = time.monotonic() - start
 
-        assert result.status == "stale"
+        assert result.status == ChannelBStatus.STALE
         assert result.session_id == "abc123"
         assert elapsed < 1.0, f"Staleness should fire after ~0.2s, took {elapsed:.1f}s"
 
@@ -167,7 +167,7 @@ class TestSessionLogMonitor:
             tg.start_soon(_run_monitor)
 
         # Staleness should have fired AFTER the writing stopped, not during
-        assert monitor_result[0].status == "stale"
+        assert monitor_result[0].status == ChannelBStatus.STALE
 
     @pytest.mark.anyio
     async def test_monitor_ignores_marker_in_non_assistant_records(self, tmp_path):
@@ -239,7 +239,7 @@ class TestSessionLogMonitor:
                 f.write(assistant_record + "\n")
             # task group awaits _run_monitor to detect assistant record and complete
 
-        assert monitor_result[0].status == "completion"
+        assert monitor_result[0].status == ChannelBStatus.COMPLETION
 
     @pytest.mark.anyio
     async def test_monitor_realistic_jsonl_sequence(self, tmp_path):
@@ -323,7 +323,7 @@ class TestSessionLogMonitor:
                 f.write(assistant_record + "\n")
             # task group awaits _run_monitor to detect assistant record and complete
 
-        assert monitor_result[0].status == "completion"
+        assert monitor_result[0].status == ChannelBStatus.COMPLETION
 
 
 class TestSessionLogMonitorStaleSuppressionGate:
@@ -360,7 +360,7 @@ class TestSessionLogMonitorStaleSuppressionGate:
                     _phase1_poll=0.01,
                     _phase2_poll=0.05,
                 )
-        assert result.status == "stale"
+        assert result.status == ChannelBStatus.STALE
         assert call_count["n"] == 2
 
     @pytest.mark.anyio
@@ -379,7 +379,7 @@ class TestSessionLogMonitorStaleSuppressionGate:
                 _phase1_poll=0.01,
                 _phase2_poll=0.05,
             )
-        assert result.status == "stale"
+        assert result.status == ChannelBStatus.STALE
 
     @pytest.mark.anyio
     async def test_fires_stale_when_pid_is_none_regardless_of_tcp(self, tmp_path):
@@ -401,7 +401,7 @@ class TestSessionLogMonitorStaleSuppressionGate:
                     _phase1_poll=0.01,
                     _phase2_poll=0.05,
                 )
-        assert result.status == "stale"
+        assert result.status == ChannelBStatus.STALE
         mock_tcp.assert_not_called()
 
     @pytest.mark.anyio
@@ -793,7 +793,7 @@ class TestSessionLogMonitorSessionId:
             spawn_time=time.time() - 1,
         )
 
-        assert result.status == "completion"
+        assert result.status == ChannelBStatus.COMPLETION
         assert result.session_id == session_uuid
 
     @pytest.mark.anyio
@@ -822,7 +822,7 @@ class TestSessionLogMonitorSessionId:
             _phase2_poll=0.05,
         )
 
-        assert result.status == "stale"
+        assert result.status == ChannelBStatus.STALE
         assert result.session_id == session_uuid
 
     @pytest.mark.anyio
@@ -836,7 +836,7 @@ class TestSessionLogMonitorSessionId:
             _phase1_timeout=0.1,
         )
 
-        assert result.status == "stale"
+        assert result.status == ChannelBStatus.STALE
         assert result.session_id == ""
 
     @pytest.mark.anyio
@@ -938,7 +938,7 @@ class TestSessionIdBasedSelection:
             spawn_time=time.time() - 2,
             expected_session_id=session_a,
         )
-        assert result.status == "completion"
+        assert result.status == ChannelBStatus.COMPLETION
         assert result.session_id == session_a
 
     @pytest.mark.anyio
@@ -959,7 +959,7 @@ class TestSessionIdBasedSelection:
             spawn_time=time.time() - 2,
             expected_session_id="nonexistent-session-id",
         )
-        assert result.status == "completion"
+        assert result.status == ChannelBStatus.COMPLETION
         assert result.session_id == session_b
 
 

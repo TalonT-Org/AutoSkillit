@@ -119,6 +119,21 @@ _BROAD_EXCEPT_EXEMPT = frozenset(
 
 _ASYNCIO_PIPE_EXEMPT: frozenset[str] = frozenset({"process.py"})
 
+# ARCH-010: Known StrEnum field names that are compared against raw string literals.
+# Maps field name → enum class name for documentation purposes.
+# These are derived from dataclass/protocol definitions across the codebase.
+_STRENUM_FIELD_NAMES: frozenset[str] = frozenset(
+    {
+        "severity",  # Severity
+        "status",  # ChannelBStatus, DispatchStatus
+        "outcome",  # SessionOutcome
+        "install_type",  # InstallType
+        "lifecycle",  # FeatureLifecycle
+        "session_type",  # SessionType
+        "dispatch_gate_type",  # DispatchGateType
+    }
+)
+
 # ARCH-007: Functions that check TerminationReason as sequential early-exit guards
 # (single-value checks), not as dispatch tables (>=2 values). Exempt from ARCH-007.
 _DISPATCH_TABLE_EXEMPT_FUNCTIONS = frozenset(
@@ -127,7 +142,7 @@ _DISPATCH_TABLE_EXEMPT_FUNCTIONS = frozenset(
     }
 )
 
-# ── RULES tuple — 9 entries ───────────────────────────────────────────────────
+# ── RULES tuple — 10 entries ──────────────────────────────────────────────────
 
 RULES: tuple[RuleDescriptor, ...] = (
     RuleDescriptor(
@@ -284,6 +299,25 @@ RULES: tuple[RuleDescriptor, ...] = (
         exemptions=frozenset(),
         severity="error",
         defense_standard="DS-009",
+    ),
+    RuleDescriptor(
+        rule_id="ARCH-010",
+        name="no-strenum-string-compare",
+        lens="development",
+        description=(
+            "StrEnum-typed attributes must not be compared against raw string literals; "
+            "use the enum member instead."
+        ),
+        rationale=(
+            "Python's StrEnum uses lowercase .value strings while member names are UPPERCASE. "
+            "Comparing a StrEnum field against a case-mismatched string literal always returns "
+            "False, creating vacuous assertions that silently pass regardless of actual state. "
+            "This rule enforces enum-member comparisons (f.severity == Severity.ERROR) which "
+            "are immune to case drift and checked by IDE autocompletion."
+        ),
+        exemptions=frozenset(),
+        severity="error",
+        defense_standard="DS-010",
     ),
 )
 

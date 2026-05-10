@@ -428,7 +428,7 @@ class TestDownstreamContextCompletenessRule:
               consume:
                 tool: run_skill
                 with:
-                  skill_command: /autoskillit:scope ${{ inputs.my_input }}
+                  skill_command: /autoskillit:scope ${{ context.my_input }}
                 on_success: done
               done:
                 action: stop

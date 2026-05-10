@@ -443,7 +443,8 @@
         "step_name": "run_experiment"
       },
       "capture": {
-        "experiment_results": "${{ result.results_path }}"
+        "experiment_results": "${{ result.results_path }}",
+        "group_manifest": "${{ result.group_manifest }}"
       },
       "retries": 2,
       "on_success": "generate_report",
@@ -490,7 +491,8 @@
         "step_name": "adjust"
       },
       "capture": {
-        "experiment_results": "${{ result.results_path }}"
+        "experiment_results": "${{ result.results_path }}",
+        "group_manifest": "${{ result.group_manifest }}"
       },
       "on_success": "check_run_fix_loop",
       "on_failure": "ensure_results",
@@ -567,7 +569,7 @@
       "tool": "run_skill",
       "model": "",
       "with": {
-        "skill_command": "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }} --experiment-type '${{ context.experiment_type }}' --methodology-traditions '${{ context.methodology_tradition }}' --design-review-verdict '${{ context.verdict }}' --disambiguation-rule-applied '${{ context.disambiguation_rule_applied }}' --tier-c-lens '${{ context.tier_c_lens }}' --classification-timestamp '${{ context.classification_timestamp }}'",
+        "skill_command": "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }} --experiment-type '${{ context.experiment_type }}' --methodology-traditions '${{ context.methodology_tradition }}' --design-review-verdict '${{ context.verdict }}' --disambiguation-rule-applied '${{ context.disambiguation_rule_applied }}' --tier-c-lens '${{ context.tier_c_lens }}' --classification-timestamp '${{ context.classification_timestamp }}' --group-manifest '${{ context.group_manifest }}'",
         "cwd": "${{ context.worktree_path }}",
         "step_name": "generate_report"
       },
@@ -583,7 +585,7 @@
       "tool": "run_skill",
       "model": "",
       "with": {
-        "skill_command": "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --inconclusive --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }} --experiment-type '${{ context.experiment_type }}' --methodology-traditions '${{ context.methodology_tradition }}' --design-review-verdict '${{ context.verdict }}' --disambiguation-rule-applied '${{ context.disambiguation_rule_applied }}' --tier-c-lens '${{ context.tier_c_lens }}' --classification-timestamp '${{ context.classification_timestamp }}'",
+        "skill_command": "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --inconclusive --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }} --experiment-type '${{ context.experiment_type }}' --methodology-traditions '${{ context.methodology_tradition }}' --design-review-verdict '${{ context.verdict }}' --disambiguation-rule-applied '${{ context.disambiguation_rule_applied }}' --tier-c-lens '${{ context.tier_c_lens }}' --classification-timestamp '${{ context.classification_timestamp }}' --group-manifest '${{ context.group_manifest }}'",
         "cwd": "${{ context.worktree_path }}",
         "step_name": "generate_report"
       },
@@ -884,7 +886,7 @@
       "tool": "run_skill",
       "model": "",
       "with": {
-        "skill_command": "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }} --experiment-type '${{ context.experiment_type }}' --methodology-traditions '${{ context.methodology_tradition }}' --design-review-verdict '${{ context.verdict }}' --disambiguation-rule-applied '${{ context.disambiguation_rule_applied }}' --tier-c-lens '${{ context.tier_c_lens }}' --classification-timestamp '${{ context.classification_timestamp }}'",
+        "skill_command": "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }} --experiment-type '${{ context.experiment_type }}' --methodology-traditions '${{ context.methodology_tradition }}' --design-review-verdict '${{ context.verdict }}' --disambiguation-rule-applied '${{ context.disambiguation_rule_applied }}' --tier-c-lens '${{ context.tier_c_lens }}' --classification-timestamp '${{ context.classification_timestamp }}' --group-manifest '${{ context.group_manifest }}'",
         "cwd": "${{ context.worktree_path }}",
         "step_name": "re_generate_report"
       },

@@ -385,7 +385,7 @@ async def _run_dispatch(
     except Exception as exc:
         logger.warning("load_and_validate failed for '%s'", recipe, exc_info=True)
         return DispatchRejected(
-            error_code=FleetErrorCode.FLEET_RECIPE_NOT_FOUND,
+            error_code=FleetErrorCode.FLEET_RECIPE_INVALID,
             message=f"Recipe '{recipe}' could not be loaded: {exc}",
         )
 

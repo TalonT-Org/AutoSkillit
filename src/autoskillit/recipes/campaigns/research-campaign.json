@@ -56,7 +56,7 @@
       "default": "true"
     },
     "audit": {
-      "description": "When 'true' (the default), run audit-impl in the implementation phase to verify all decomposed phases have corresponding commits.",
+      "description": "When 'true' (the default), run audit-impl after phase iteration to verify all decomposed phases have corresponding implementation commits. Catches silent group abandonment when context_limit fires mid-iteration.\n",
       "default": "true"
     }
   },

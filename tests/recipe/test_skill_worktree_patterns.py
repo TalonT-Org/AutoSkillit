@@ -29,6 +29,9 @@ def _skill_md_paths() -> list[tuple[str, Path]]:
     return paths
 
 
+_SKILL_MD_PATHS = _skill_md_paths()
+
+
 # ---------------------------------------------------------------------------
 # Absolute path resolution pattern tests
 # ---------------------------------------------------------------------------
@@ -100,8 +103,8 @@ class TestNoSkillMdUsesRelativeWorktreePath:
 
     @pytest.mark.parametrize(
         "skill_name,skill_md_path",
-        _skill_md_paths(),
-        ids=[name for name, _ in _skill_md_paths()],
+        _SKILL_MD_PATHS,
+        ids=[name for name, _ in _SKILL_MD_PATHS],
     )
     def test_no_skill_md_uses_relative_worktree_path_in_bash_blocks(
         self, skill_name: str, skill_md_path: Path
@@ -124,8 +127,8 @@ class TestNoSkillMdUsesRelativeWorktreePath:
 
     @pytest.mark.parametrize(
         "skill_name,skill_md_path",
-        _skill_md_paths(),
-        ids=[name for name, _ in _skill_md_paths()],
+        _SKILL_MD_PATHS,
+        ids=[name for name, _ in _SKILL_MD_PATHS],
     )
     def test_no_worktree_creating_skill_uses_relative_path(
         self, skill_name: str, skill_md_path: Path
@@ -134,7 +137,7 @@ class TestNoSkillMdUsesRelativeWorktreePath:
         text = skill_md_path.read_text()
         creates_worktree = "git worktree add" in text
         if not creates_worktree:
-            return  # Not a worktree-creating skill, skip
+            pytest.skip("not a worktree-creating skill")
 
         # If it creates worktrees, it must not use the relative path pattern
         bash_blocks = re.findall(r"```bash(.*?)```", text, re.DOTALL)

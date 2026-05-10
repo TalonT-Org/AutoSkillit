@@ -92,15 +92,19 @@ jobs:
         id: test-paths
         run: |
           SHARD_A_DIRS="tests/execution tests/contracts tests/core tests/planner tests/pipeline tests/migration tests/integration"
+          if find tests/ -maxdepth 1 -name 'test_*.py' -print0 | grep -qz ' '; then
+            echo "::error::Test filenames with spaces are not supported by the shard path splitter"
+            exit 1
+          fi
           if [[ "${{ matrix.shard }}" == "execution" ]]; then
-            ROOT_FILES=$(find tests/ -maxdepth 1 -name "test_*.py" | sort | tr '\n' ' ')
+            ROOT_FILES=$(find tests/ -maxdepth 1 -name 'test_*.py' | sort | tr '\n' ' ')
             echo "PYTEST_TEST_PATHS=${SHARD_A_DIRS} ${ROOT_FILES}" >> "$GITHUB_ENV"
           else
             IGNORES=""
             for d in $SHARD_A_DIRS; do
               IGNORES="$IGNORES --ignore=$d"
             done
-            ROOT_IGNORES=$(find tests/ -maxdepth 1 -name "test_*.py" -exec echo "--ignore={}" \; | sort | tr '\n' ' ')
+            ROOT_IGNORES=$(find tests/ -maxdepth 1 -name 'test_*.py' | sort | sed 's|^|--ignore=|' | tr '\n' ' ')
             echo "PYTEST_TEST_PATHS=tests/" >> "$GITHUB_ENV"
             echo "PYTEST_IGNORE_PATHS=${IGNORES} ${ROOT_IGNORES}" >> "$GITHUB_ENV"
           fi

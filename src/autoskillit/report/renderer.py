@@ -19,8 +19,7 @@ from pathlib import Path
 
 import regex as re
 
-from autoskillit.core import pkg_root
-from autoskillit.core.io import atomic_write
+from autoskillit.core import atomic_write, pkg_root
 
 # Validation keywords for mermaid diagrams (mirrors compose-research-pr)
 VALIDATION_KEYWORDS = {

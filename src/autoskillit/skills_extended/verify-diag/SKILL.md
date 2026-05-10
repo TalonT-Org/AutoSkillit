@@ -24,6 +24,8 @@ Verify an architecture diagram's factual accuracy against the actual codebase. A
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Modify source code files
 - Modify the diagram during verification (report findings only)
 - Run subagents in the background (`run_in_background: true` is prohibited)

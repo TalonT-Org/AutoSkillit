@@ -37,6 +37,7 @@ Does NOT invoke lens skills or other sub-skills.
 - Auto-merge or approve the PR — research PRs are for human review only
 - Fail the pipeline when `gh` is not accessible — emit `pr_url = ` (empty string) and return
 - Create files outside `{{AUTOSKILLIT_TEMP}}/compose-research-pr/` (relative to the current working directory)
+- Fabricate diagram descriptions or validation conclusions not present in the source files — report what the files actually contain, not what you assume they should contain
 - Invent mermaid classDef colors — when embedding validated diagrams, include them verbatim.
   Using ONLY classDef styles from the mermaid skill when composing the PR body.
 - Run subagents in the background (`run_in_background: true` is prohibited)

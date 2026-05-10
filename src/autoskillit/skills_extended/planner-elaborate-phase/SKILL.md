@@ -33,6 +33,8 @@ independently and writes a single elaborated phase result. No dependency on
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Write output outside `$3/`
 - Read any `*_result.json` file from other phases (you have only the snapshot)
 - Require or read a context file from `check_remaining`

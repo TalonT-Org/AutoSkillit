@@ -272,6 +272,8 @@ def test_output_path_tokens_synchronized() -> None:
             "review_approach_assessment_path",
             # setup-environment skill output (research recipe pre-flight gate)
             "env_report",
+            # run-experiment group manifest output (multi-group awareness)
+            "group_manifest",
         }
     )
 

@@ -38,6 +38,8 @@ branch already checked out.
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Create files outside `{{AUTOSKILLIT_TEMP}}/resolve-review/`
 - Merge, push, or call `merge_worktree`
 - Fix issues beyond the explicit scope of the reviewer's comments

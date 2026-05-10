@@ -52,6 +52,8 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Modify any source code files
 - Create files outside `{{AUTOSKILLIT_TEMP}}/make-groups/` directory
 - Drop, split, or rewrite requirements — reference them by original ID

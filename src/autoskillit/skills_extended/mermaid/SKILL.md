@@ -30,6 +30,8 @@ Create professional, color-coded mermaid diagrams with consistent styling for ar
 - Apply class styling to all nodes
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Use inline styles (use classDef instead)
 - Create diagrams without color coding
 - Omit the color legend

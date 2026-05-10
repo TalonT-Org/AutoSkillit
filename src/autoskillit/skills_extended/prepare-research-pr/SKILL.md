@@ -33,6 +33,8 @@ Does NOT invoke any exp-lens skills or create a PR.
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Invoke exp-lens skills — they are run in separate sessions by the recipe orchestrator
 - Create files outside `{{AUTOSKILLIT_TEMP}}/prepare-research-pr/` (relative to the current working directory)
 - Fail silently — always emit all three output tokens as your final output

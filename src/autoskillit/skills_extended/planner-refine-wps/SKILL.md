@@ -37,6 +37,8 @@ suggestions, resolves conflicts, and writes `refined_wps.json`.
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Write any file outside `$4/`
 - Directly modify `combined_wps.json` ($1) — always write a new `refined_wps.json`
 - Allow an L0 subagent to write files directly (L0s return structured text only)

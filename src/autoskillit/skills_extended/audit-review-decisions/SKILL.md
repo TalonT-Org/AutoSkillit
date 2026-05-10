@@ -35,6 +35,8 @@ implemented. Identify review debt before it compounds.
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Create files outside `${AUTOSKILLIT_TEMP}/audit-review-decisions/`
 - Have triage or validation subagents make GitHub API calls (local data only for Step 2)
 - Post duplicate `[AUDIT]` markers — check for existing marker before posting

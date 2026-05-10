@@ -41,6 +41,8 @@ This skill is intentionally lightweight: concern analysis is performed as in-con
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Use subagents — concern analysis is in-context LLM reasoning, not subagent delegation
 - Close the parent issue — it becomes a tracking issue
 - Apply `batch:N` labels to any GitHub object

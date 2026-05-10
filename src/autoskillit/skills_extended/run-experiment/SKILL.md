@@ -44,6 +44,8 @@ plan, executes what the plan describes, and reports what happened.
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Modify files outside the worktree
 - Merge the worktree — leave it intact for the orchestrator
 - Skip result collection — every run must produce structured output
@@ -236,7 +238,29 @@ the final conclusions.}
    for `generate-report` to read. Final results are published to `research/` by
    the `generate-report` skill.
 
-After saving, emit the structured output token as the very last line of your
+### Step 5b — Produce Group Manifest
+
+1. Read the experiment plan from `{{AUTOSKILLIT_TEMP}}/experiment-plan.md` to determine
+   how many groups were defined (if any).
+2. Cross-reference the experiment plan's group definitions against the results file
+   to determine each group's status: `completed`, `partially_completed`, `skipped`,
+   `blocked`, or `not_attempted`.
+3. Save a JSON manifest to:
+   `{{AUTOSKILLIT_TEMP}}/run-experiment/group_manifest.json`
+   with structure:
+   ```json
+   {
+     "total_groups": N,
+     "groups": [
+       {"name": "groupA", "status": "completed", "results_section": "line range or null"},
+       {"name": "groupB", "status": "not_attempted", "results_section": null}
+     ]
+   }
+   ```
+   If the experiment plan does not define multiple groups, emit a manifest with
+   `total_groups: 1` and a single entry.
+
+After saving, emit the structured output tokens as the very last line of your
 text output:
 
 > **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
@@ -246,6 +270,7 @@ text output:
 
 ```
 results_path = {absolute_path_to_results_file}
+group_manifest = {absolute_path_to_group_manifest_json}
 ```
 
 **When pre-flight blocks hypotheses due to missing planned data:**

@@ -26,6 +26,8 @@ arbitrary tasks and produce capturable outputs. Not for production pipeline use.
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Use this skill outside of smoke-test pipeline execution
 - Ignore explicit output-line instructions (e.g. `key=value`) — they must be emitted exactly
 

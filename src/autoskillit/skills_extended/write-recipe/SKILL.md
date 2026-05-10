@@ -30,6 +30,8 @@ No positional arguments. The skill prompts interactively for workflow details.
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Create SKILL.md files (not in `.claude/commands/`, `.claude/skills/`, or anywhere else)
 - Create Markdown companion files alongside the YAML script
 - Create files outside `.autoskillit/recipes/` directory

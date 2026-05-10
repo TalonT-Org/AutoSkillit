@@ -40,6 +40,8 @@ file to `$3/refine_contexts/{phase_id}_result.json`.
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Write any file outside `$3/`
 - Directly modify the context file ($1) — always write a new result file
 - Allow an L0 subagent to write files directly (L0s return structured text only)

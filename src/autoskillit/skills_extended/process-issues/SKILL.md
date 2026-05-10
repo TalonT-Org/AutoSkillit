@@ -26,6 +26,8 @@ issues upfront, load recipe, execute session, collect result, report.
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Create files outside `{{AUTOSKILLIT_TEMP}}/process-issues/` directory
 - Apply `batch:N` labels to GitHub issues (batch assignments are internal — they live only
   in the manifest JSON, not on GitHub objects)

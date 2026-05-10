@@ -28,6 +28,8 @@ hooks:
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Modify any source code files
 - Conflate with general process flow (that's a different lens)
 - Ignore thread safety implications

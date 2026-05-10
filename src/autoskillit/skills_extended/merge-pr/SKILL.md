@@ -34,6 +34,8 @@ conflicts from earlier merges in the queue.
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Modify any source code files directly (conflict resolution is handled by `make-plan` + `implement-worktree-no-merge`)
 - Use `git merge` to merge the PR into the integration branch — always use `gh pr merge --squash --auto` (when `autoMergeAllowed=true`) or `gh pr merge --squash` (when `autoMergeAllowed=false`)
 - Close or comment on the PR

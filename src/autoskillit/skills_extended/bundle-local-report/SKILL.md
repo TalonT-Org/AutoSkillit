@@ -13,6 +13,7 @@ mermaid diagrams and inserted plot images from `yaml:figure-spec` blocks.
 **NEVER:**
 - Raise a fatal error on missing diagrams or missing visualization-plan — log and continue.
 - Use the ESM mermaid build — ESM triggers CORS under `file://`; always use the UMD bundle (`mermaid.min.js`).
+- Fabricate HTML rendering details or attribute explanations when the bundling process produces unexpected output — describe what was actually produced rather than inventing plausible rendering behavior.
 - Exit without emitting `html_path = ` (even empty) as your final output — the recipe `capture:` block expects it.
 
 **ALWAYS:**

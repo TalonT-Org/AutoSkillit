@@ -38,6 +38,8 @@ by the recipe pipeline after `open_pr_step` opens the PR.
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Create files outside `{{AUTOSKILLIT_TEMP}}/review-pr/`
 - Approve a PR that has `changes_requested` findings
 - Post review comments when `gh` is unavailable — output `verdict=approved` and exit 0

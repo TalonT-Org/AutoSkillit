@@ -42,6 +42,8 @@ compute on doomed downloads.
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Modify the experiment plan
 - Modify any source files
 - Write files outside `{{AUTOSKILLIT_TEMP}}/stage-data/`

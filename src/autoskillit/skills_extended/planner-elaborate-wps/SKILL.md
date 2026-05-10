@@ -26,6 +26,8 @@ is the sole writer for this phase's WPs — no concurrent write races.
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Allow L0 subagents to write files directly — L0s return JSON only
 - Let an L0 failure abort the phase — always write a stub and continue
 - Write output outside `$2/work_packages/`

@@ -31,6 +31,7 @@ results are valid findings, not failures.
 /autoskillit:generate-report {worktree_path} {results_path} [--inconclusive]
 [--output-mode {local|pr}] [--issue-url {url}]
 [--experiment-type {type}] [--methodology-traditions {tradition}]
+[--group-manifest {path}]
 ```
 
 - `{worktree_path}` — Absolute path to the worktree (required). First path-like
@@ -55,6 +56,10 @@ results are valid findings, not failures.
 - `--disambiguation-rule-applied {rule}` — Optional. Disambiguation rule applied during Tier-C routing.
 - `--tier-c-lens {lens}` — Optional. Tier-C vis-lens selected.
 - `--classification-timestamp {timestamp}` — Optional. UTC timestamp of design classification.
+- `--group-manifest {path}` — Optional. Absolute path to a JSON file containing
+  per-group experiment metadata (group names, completion status, result file paths).
+  When provided, the report enumerates all groups and their status before presenting
+  detailed findings.
 
 ## Inputs
 
@@ -69,6 +74,7 @@ In addition to the arguments above, this skill reads from the worktree:
 **NEVER:**
 - Modify source code files outside the `research/` directory
 - Fabricate or embellish results — report exactly what was measured
+- Attribute missing data to "time constraints", "resource limitations", or other invented explanations not present in the results file. When data is absent, state the factual status: what is present, what is absent, and if the results file does not explain why, state "reason not recorded in results."
 - Omit the methodology section — reproducibility requires it
 - Frame inconclusive results as failures — they are valid findings
 - Create the report outside the worktree's `research/` directory
@@ -111,6 +117,11 @@ Read all available artifacts from the worktree:
    section of the report.
 6. Experiment code: scan the worktree for scripts, fixtures, and tools
    added during implementation
+7. Group manifest: if `--group-manifest {path}` is provided, read it to determine
+   how many experiment groups were defined and their individual completion status.
+   Cross-reference group names against the results file to determine per-group
+   outcome: completed, partially completed, skipped, blocked, or not attempted.
+   In the Results section, report per-group status before presenting detailed findings.
 
 ### Step 1.5 — Inject Issue Reference Header (local mode only)
 
@@ -227,8 +238,6 @@ research/YYYY-MM-DD-{slug}/
 
 The `{slug}` is a kebab-case summary of the research topic (max 40 chars).
 
-<<<<<<< HEAD
-=======
 Write a YAML frontmatter block (fenced with `---`) at the very top of report.md,
 before the title heading. Use the values from `--experiment-type` and
 `--methodology-traditions` flags. If a flag is absent or its value is the literal
@@ -236,7 +245,6 @@ string `null`, write the key with value `null` (not omitted). Always include
 `generated_at`. If `--output-mode local` with `--issue-url`, the issue blockquote
 goes AFTER the frontmatter, before the title.
 
->>>>>>> b64b32f7 (fix(review): align --methodology-tradition synopsis to plural form)
 The report structure:
 
 ```markdown

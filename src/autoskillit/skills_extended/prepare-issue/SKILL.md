@@ -408,6 +408,8 @@ gh issue edit {issue_number} --add-label "{issue_type}"
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Create or modify GitHub issues without explicit user intent
 - Apply labels not in the defined set (`recipe:implementation`, `recipe:remediation`, `bug`, `enhancement`)
 - Skip the dedup check when creating a new issue (unless `--issue N` is provided)

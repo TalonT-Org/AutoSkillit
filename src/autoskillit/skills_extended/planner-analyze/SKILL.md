@@ -27,6 +27,8 @@ Detect language, framework, test infrastructure, project structure, and existing
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Modify any target project files
 - Write analysis.json outside `$1/`
 - Run subagents in the background (`run_in_background: true` is prohibited)

@@ -454,7 +454,7 @@ class TestGroupDApiContractPreservation:
         assert sig.parameters["session_id"].default is None
 
     def test_default_subprocess_runner_marker_params_after_max_extension(self):
-        """marker_dir/session_id appear after max_extension_seconds."""
+        """marker_dir/session_id appear after max_extension_seconds in DefaultSubprocessRunner."""
         sig = inspect.signature(DefaultSubprocessRunner.__call__)
         max_extension_idx = list(sig.parameters).index("max_extension_seconds")
         marker_dir_idx = list(sig.parameters).index("marker_dir")
@@ -463,7 +463,7 @@ class TestGroupDApiContractPreservation:
         assert session_id_idx == marker_dir_idx + 1
 
     def test_default_subprocess_runner_satisfies_protocol_with_marker_params(self):
-        """DefaultSubprocessRunner() satisfies SubprocessRunner protocol."""
+        """DefaultSubprocessRunner satisfies SubprocessRunner with marker_dir/session_id."""
         from autoskillit.core.types import SubprocessRunner
 
         runner = DefaultSubprocessRunner()

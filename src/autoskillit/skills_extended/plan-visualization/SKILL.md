@@ -36,6 +36,7 @@ outputs, and synthesizes a complete visualization plan.
 - Run vis-lens calls across multiple assistant messages — all selected lens calls must
   appear in a SINGLE assistant message to execute in parallel
 - Write outputs outside `{{AUTOSKILLIT_TEMP}}/plan-visualization/`
+- Fabricate lens recommendations or validation conclusions not supported by the data — report what the experiment plan and scope show, not what you assume they should show
 - Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**

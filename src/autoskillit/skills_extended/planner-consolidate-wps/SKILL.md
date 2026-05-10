@@ -38,6 +38,8 @@ merging).
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Merge WPs from different assignments unless they have a direct dependency linking them
 - Create a merged group that would clearly exceed a medium-complexity PR (use judgment — no hard threshold)
 - Skip a WP from a manifest — every WP must appear in exactly one group (singleton = no-op)

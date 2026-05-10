@@ -25,6 +25,8 @@ Elaborate a single phase from a high-level migration plan into a complete, self-
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Modify any source code files
 - Implement any part of the plan
 - Add backward compatibility to the plan (unless a cleanup phase explicitly removes it)

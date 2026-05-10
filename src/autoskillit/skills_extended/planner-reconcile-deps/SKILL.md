@@ -34,6 +34,8 @@ spawning parallel sessions.
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Load full WP result files — only `wp_index.json` (the compact array)
 - Spawn additional sessions — this skill must run as a single session for holistic reasoning
 - Write output outside `{$1}/`

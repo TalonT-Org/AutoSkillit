@@ -46,6 +46,8 @@ requirements, scope creep, and unexpected changes. Produces a GO or NO GO verdic
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Modify source files, plan files, or any other files — read-only audit only
 - Run tests — this skill audits, it does not fix
 - Create files outside `{{AUTOSKILLIT_TEMP}}/audit-impl/`

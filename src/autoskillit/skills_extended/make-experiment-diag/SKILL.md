@@ -26,6 +26,8 @@ Select the right experimental design lens for your analysis. Each lens asks one 
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Skip the selection step — always confirm which lens to use
 - Modify any source code or experimental artifacts
 - Combine multiple lenses in a single invocation

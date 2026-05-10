@@ -198,6 +198,8 @@ Before writing the final plan, verify:
 - Justifications based on effort, risk, or preserving existing code
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Change any code
 - Choose an approach because it's easier
 - Reject an approach because it's harder

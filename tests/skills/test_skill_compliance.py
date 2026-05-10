@@ -334,6 +334,28 @@ next lens.
     assert not violations, f"Detector falsely flagged guarded loop: {violations}"
 
 
+_FABRICATION_GUARD_RE = re.compile(
+    r"(?i)(?:fabricat|embellish|invent|hallucinat|attribute.*missing.*to)",
+)
+
+
+@pytest.mark.parametrize("skill_dir", _all_skill_dirs(), ids=lambda d: d.name)
+def test_all_skills_have_anti_fabrication_guard(skill_dir: Path) -> None:
+    """Every skill with a NEVER block must include anti-fabrication language."""
+    from tests._helpers import extract_never_block
+
+    skill_md = skill_dir / "SKILL.md"
+    if not skill_md.exists():
+        pytest.skip("no SKILL.md")
+    text = skill_md.read_text()
+    never_block = extract_never_block(text)
+    if not never_block:
+        pytest.skip(f"{skill_dir.name}: no NEVER block in SKILL.md")
+    assert _FABRICATION_GUARD_RE.search(never_block), (
+        f"{skill_dir.name}: NEVER block must include anti-fabrication language"
+    )
+
+
 def test_detector_catches_unguarded_mcp_loop() -> None:
     """Verify _check_loop_boundary detects a 'For each' loop containing
     MCP tool invocations (load_recipe, run_skill, fetch_github_issue)

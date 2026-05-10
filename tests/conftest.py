@@ -490,6 +490,11 @@ def pytest_configure(config: pytest.Config) -> None:
         )
 
 
+# ---------------------------------------------------------------------------
+# Config resolution
+# ---------------------------------------------------------------------------
+
+
 @functools.lru_cache(maxsize=1)
 def _resolve_test_config() -> "AutomationConfig | None":
     """Resolve full config for test collection via full config resolution.

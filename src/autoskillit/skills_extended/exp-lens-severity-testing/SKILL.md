@@ -39,6 +39,8 @@ hooks:
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Modify any source code files
 - Accept a "pass" result without asking what a false result would have looked like under this design
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-severity-testing/`

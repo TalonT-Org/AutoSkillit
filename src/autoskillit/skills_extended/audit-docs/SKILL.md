@@ -27,6 +27,8 @@ Audit all documentation sources for drift, staleness, and inconsistency against 
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Modify any source files
 - Update an existing report — always generate a new one
 - Compare doc-to-doc without first grounding claims in actual code behavior

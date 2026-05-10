@@ -34,6 +34,8 @@ retries) before escalation.
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Attempt to auto-fix missing assignments or missing WPs — these require human review
 - Remove a deliverable without reassigning it to another WP
 - Introduce new WP IDs — the skill never creates WPs; it repairs or escalates existing ones

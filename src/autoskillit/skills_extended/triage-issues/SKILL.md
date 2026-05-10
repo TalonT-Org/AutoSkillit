@@ -25,6 +25,8 @@ Analyze open GitHub issues, classify each into a recipe route, group them into p
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Modify any source code files
 - Create or edit Python, YAML, or config files
 - Guess recipe classification when confidence is low — escalate to user

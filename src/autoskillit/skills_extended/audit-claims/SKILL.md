@@ -39,6 +39,8 @@ comments and emits a verdict for recipe routing.
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Create files outside `{{AUTOSKILLIT_TEMP}}/audit-claims/`
 - Approve a PR that has `changes_requested` findings
 - Post review comments when `gh` is unavailable — output `verdict=approved` and exit 0

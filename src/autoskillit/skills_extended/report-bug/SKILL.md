@@ -29,6 +29,8 @@ Report output path: /absolute/path/to/report.md
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Modify any source code files
 - Create files other than the specified report output path
 - Spawn subagents or Agent tool calls

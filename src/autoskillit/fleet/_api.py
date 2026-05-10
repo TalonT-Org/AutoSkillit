@@ -201,12 +201,12 @@ async def _touch_dispatch_marker(
     """Periodically touch marker_path to refresh mtime; runs until trigger is set."""
     while trigger is None or not trigger.is_set():
         await anyio.sleep(interval)
-        if trigger is not None and trigger.is_set():
-            break
         try:
             marker_path.touch()
         except OSError:
-            logger.debug("_touch_dispatch_marker: failed to touch %s", marker_path, exc_info=True)
+            logger.warning(
+                "_touch_dispatch_marker: failed to touch %s", marker_path, exc_info=True
+            )
 
 
 async def execute_dispatch(
@@ -605,7 +605,7 @@ async def _run_dispatch(
                 schema_version=1,
             )
         except OSError:
-            logger.warning("dispatch_marker_write_failed", marker=str(marker_path))
+            logger.warning("dispatch_marker_write_failed", marker=str(marker_path), exc_info=True)
             marker_dir = None
             marker_path = None
 
@@ -661,7 +661,9 @@ async def _run_dispatch(
             try:
                 marker_path.unlink(missing_ok=True)
             except OSError:
-                logger.warning("dispatch_marker_unlink_failed", marker=str(marker_path))
+                logger.warning(
+                    "dispatch_marker_unlink_failed", marker=str(marker_path), exc_info=True
+                )
 
     # --- Timeout pre-check: short-circuit before result-block parsing ---
     if skill_result.subtype == "timeout":

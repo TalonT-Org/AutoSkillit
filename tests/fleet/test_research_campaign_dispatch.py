@@ -53,6 +53,7 @@ def _setup_research_campaign(tool_ctx):
             ingredients={
                 "worktree_path": RecipeIngredient(description="Path to worktree"),
                 "research_dir": RecipeIngredient(description="Path to research dir"),
+                "research_dir_rel": RecipeIngredient(description="Repo-relative research dir"),
             },
         ),
     )
@@ -282,6 +283,7 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
                 "success": True,
                 "worktree_path": "/tmp/wt/proj",
                 "research_dir": "/tmp/wt/proj/.research",
+                "research_dir_rel": ".research",
                 "experiment_plan": "/tmp/wt/proj/.research/plan.md",
                 "visualization_plan_path": "/tmp/wt/proj/.research/vis.md",
                 "scope_report": "/tmp/wt/proj/.research/scope.md",
@@ -316,6 +318,7 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
         capture={
             "worktree_path": "${{ result.worktree_path }}",
             "research_dir": "${{ result.research_dir }}",
+            "research_dir_rel": "${{ result.research_dir_rel }}",
             "experiment_plan": "${{ result.experiment_plan }}",
             "visualization_plan_path": "${{ result.visualization_plan_path }}",
             "scope_report": "${{ result.scope_report }}",
@@ -336,6 +339,7 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
 
     assert accumulated["worktree_path"] == "/tmp/wt/proj"
     assert accumulated["research_dir"] == "/tmp/wt/proj/.research"
+    assert accumulated["research_dir_rel"] == ".research"
     assert accumulated["experiment_plan"] == "/tmp/wt/proj/.research/plan.md"
     assert accumulated["experiment_type"] == "observational"
 
@@ -345,6 +349,7 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
             outcome="completed_clean",
             payload={
                 "success": True,
+                "worktree_path": "/tmp/wt/proj",
                 "report_path": "/tmp/wt/proj/.research/report.md",
                 "experiment_results": "/tmp/wt/proj/.research/results.json",
             },
@@ -368,7 +373,8 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
         ingredients={
             "task": "do it",
             "worktree_path": "${{ campaign.worktree_path }}",
-            "research_dir": "${{ campaign.research_dir }}",
+            "research_dir": "${{ campaign.worktree_path }}/${{ campaign.research_dir_rel }}",
+            "research_dir_rel": "${{ campaign.research_dir_rel }}",
             "experiment_plan": "${{ campaign.experiment_plan }}",
             "visualization_plan_path": "${{ campaign.visualization_plan_path }}",
             "source_dir": "",
@@ -379,6 +385,7 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
         dispatch_name=None,
         timeout_sec=None,
         capture={
+            "worktree_path": "${{ result.worktree_path }}",
             "report_path": "${{ result.report_path }}",
             "experiment_results": "${{ result.experiment_results }}",
         },
@@ -392,6 +399,7 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
     # Verify implement resolved all campaign refs from design captures
     assert captured_during_implement["worktree_path"] == "/tmp/wt/proj"
     assert captured_during_implement["research_dir"] == "/tmp/wt/proj/.research"
+    assert captured_during_implement["research_dir_rel"] == ".research"
     assert captured_during_implement["experiment_plan"] == "/tmp/wt/proj/.research/plan.md"
     assert captured_during_implement["visualization_plan_path"] == "/tmp/wt/proj/.research/vis.md"
 
@@ -409,6 +417,7 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
     impl_data = json.loads(impl_state.read_text())
     accumulated.update(impl_data.get("captured_values", {}))
 
+    assert accumulated["worktree_path"] == "/tmp/wt/proj"
     assert accumulated["report_path"] == "/tmp/wt/proj/.research/report.md"
     assert accumulated["experiment_results"] == "/tmp/wt/proj/.research/results.json"
 
@@ -444,7 +453,7 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
             "experiment_type": "${{ campaign.experiment_type }}",
             "scope_report": "${{ campaign.scope_report }}",
             "worktree_path": "${{ campaign.worktree_path }}",
-            "research_dir": "${{ campaign.research_dir }}",
+            "research_dir": "${{ campaign.worktree_path }}/${{ campaign.research_dir_rel }}",
             "experiment_plan": "${{ campaign.experiment_plan }}",
             "visualization_plan_path": "${{ campaign.visualization_plan_path }}",
             "report_path": "${{ campaign.report_path }}",
@@ -473,6 +482,7 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
     assert captured_during_review["experiment_type"] == "observational"
     assert captured_during_review["scope_report"] == "/tmp/wt/proj/.research/scope.md"
     assert captured_during_review["worktree_path"] == "/tmp/wt/proj"
+    assert captured_during_review["research_dir"] == "/tmp/wt/proj/.research"
     assert captured_during_review["report_path"] == "/tmp/wt/proj/.research/report.md"
 
     # Update accumulated captures
@@ -517,7 +527,7 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
         ingredients={
             "base_branch": "main",
             "worktree_path": "${{ campaign.worktree_path }}",
-            "research_dir": "${{ campaign.research_dir }}",
+            "research_dir": "${{ campaign.worktree_path }}/${{ campaign.research_dir_rel }}",
             "pr_url": "${{ campaign.pr_url }}",
         },
         dispatch_name=None,

@@ -412,6 +412,7 @@ def test_research_campaign_run_design_capture():
     assert set(d.capture.keys()) == {
         "worktree_path",
         "research_dir",
+        "research_dir_rel",
         "experiment_plan",
         "visualization_plan_path",
         "scope_report",
@@ -430,6 +431,7 @@ def test_research_campaign_run_implement_ingredients():
         "task",
         "worktree_path",
         "research_dir",
+        "research_dir_rel",
         "experiment_plan",
         "visualization_plan_path",
         "source_dir",
@@ -441,7 +443,11 @@ def test_research_campaign_run_implement_ingredients():
     }
     assert d.ingredients["task"] == "${{ inputs.task }}"
     assert d.ingredients["worktree_path"] == "${{ campaign.worktree_path }}"
-    assert d.ingredients["research_dir"] == "${{ campaign.research_dir }}"
+    assert (
+        d.ingredients["research_dir"]
+        == "${{ campaign.worktree_path }}/${{ campaign.research_dir_rel }}"
+    )
+    assert d.ingredients["research_dir_rel"] == "${{ campaign.research_dir_rel }}"
     assert d.ingredients["experiment_plan"] == "${{ campaign.experiment_plan }}"
     assert d.ingredients["visualization_plan_path"] == "${{ campaign.visualization_plan_path }}"
     assert d.ingredients["source_dir"] == "${{ inputs.source_dir }}"
@@ -457,7 +463,8 @@ def test_research_campaign_run_implement_capture():
     recipe = load_recipe(path)
     d = recipe.dispatches[1]
     assert d.name == "run-implement"
-    assert set(d.capture.keys()) == {"report_path", "experiment_results"}
+    assert set(d.capture.keys()) == {"worktree_path", "report_path", "experiment_results"}
+    assert d.capture["worktree_path"].from_ == "${{ result.worktree_path }}"
     assert d.capture["report_path"].from_ == "${{ result.report_path }}"
     assert d.capture["experiment_results"].from_ == "${{ result.experiment_results }}"
 
@@ -491,12 +498,15 @@ def test_research_campaign_run_review_ingredients():
     assert d.ingredients["output_mode"] == "${{ inputs.output_mode }}"
     assert d.ingredients["review_pr"] == "${{ inputs.review_pr }}"
     assert d.ingredients["audit_claims"] == "${{ inputs.audit_claims }}"
+    assert (
+        d.ingredients["research_dir"]
+        == "${{ campaign.worktree_path }}/${{ campaign.research_dir_rel }}"
+    )
     for key in [
         "experiment_results",
         "experiment_type",
         "scope_report",
         "worktree_path",
-        "research_dir",
         "experiment_plan",
         "visualization_plan_path",
         "report_path",
@@ -528,10 +538,12 @@ def test_research_campaign_run_archive_ingredients():
         "pr_url",
     }
     assert d.ingredients["base_branch"] == "${{ inputs.base_branch }}"
-    for key in d.ingredients:
-        if key == "base_branch":
-            continue
-        assert d.ingredients[key] == f"${{{{ campaign.{key} }}}}"
+    assert d.ingredients["worktree_path"] == "${{ campaign.worktree_path }}"
+    assert d.ingredients["pr_url"] == "${{ campaign.pr_url }}"
+    assert (
+        d.ingredients["research_dir"]
+        == "${{ campaign.worktree_path }}/${{ campaign.research_dir_rel }}"
+    )
 
 
 def test_research_campaign_no_campaign_refs_in_run_design():

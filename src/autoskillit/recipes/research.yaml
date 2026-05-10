@@ -254,7 +254,6 @@ steps:
     capture:
       worktree_path: "${{ result.worktree_path }}"
       research_dir: "${{ result.research_dir }}"
-      research_dir_rel: "${{ result.research_dir_rel }}"
     on_success: stage_data
     on_failure: escalate_stop
     note: >

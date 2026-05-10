@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
@@ -94,10 +96,9 @@ class TestResearchDesignRecipeStructure:
         assert "experiment_plan" in recipe.steps["plan_experiment"].capture
 
     def test_plan_experiment_optional_context_refs(self, recipe) -> None:
-        assert "revision_guidance" in recipe.steps["plan_experiment"].optional_context_refs
-
-    def test_plan_experiment_optional_context_refs_includes_scope_directions(self, recipe) -> None:
-        assert "scope_directions" in recipe.steps["plan_experiment"].optional_context_refs
+        refs = recipe.steps["plan_experiment"].optional_context_refs
+        for field in ("revision_guidance", "scope_directions"):
+            assert field in refs, f"plan_experiment optional_context_refs must include: {field}"
 
     def test_review_design_skip_when_false(self, recipe) -> None:
         assert recipe.steps["review_design"].skip_when_false == "inputs.review_design"
@@ -240,7 +241,9 @@ class TestResearchDesignRecipeStructure:
 
     def test_design_complete_sentinel_includes_scope_directions(self, recipe) -> None:
         msg = recipe.steps["design_complete"].message
-        assert "scope_directions=<context.scope_directions>" in msg
+        assert re.search(r"scope_directions\s*=\s*<context\.scope_directions>", msg), (
+            "design_complete message must reference scope_directions via template syntax"
+        )
 
     def test_design_recipe_has_create_worktree_step(self, recipe) -> None:
         step = recipe.steps["create_worktree"]

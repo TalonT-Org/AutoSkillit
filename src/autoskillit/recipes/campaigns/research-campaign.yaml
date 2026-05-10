@@ -74,6 +74,7 @@ ingredients:
     description: >
       Minimum number of directions to select when scope reports 3 or more directions.
       Enforced by the select_directions step in the design phase.
+      Set to 0 to disable breadth enforcement.
     default: "2"
 
 dispatches:

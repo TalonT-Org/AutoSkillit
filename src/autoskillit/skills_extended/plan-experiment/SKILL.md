@@ -460,7 +460,6 @@ V9: data_manifest completeness
   relevant field line.
 
 Field requirements by experiment type:
-
 | Field | benchmark | causal_inf | config_study | evid_synth | exploratory | fact_design | instr_valid | obs_corr | qual_interp | robust_audit | sim_model | single_subj |
 |-------|-----------|-----------|-------------|-----------|-------------|-----------|------------|---------|------------|-------------|----------|------------|
 | experiment_type | required | required | required | required | required | required | required | required | required | required | required | required |

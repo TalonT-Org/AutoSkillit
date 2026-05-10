@@ -347,6 +347,7 @@ format: "pdf"
 target_dpi: 300
 library: "matplotlib"
 report_section: "Section 4 Evaluation"
+image_path: ""
 priority: "P0"
 placement_tier: "main"
 conflicts: []

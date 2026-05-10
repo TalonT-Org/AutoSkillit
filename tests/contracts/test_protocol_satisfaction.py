@@ -463,7 +463,7 @@ class TestGroupDApiContractPreservation:
         assert session_id_idx == marker_dir_idx + 1
 
     def test_default_subprocess_runner_satisfies_protocol_with_marker_params(self):
-        """DefaultSubprocessRunner satisfies SubprocessRunner with marker_dir/session_id."""
+        """DefaultSubprocessRunner() satisfies SubprocessRunner with marker_dir/session_id."""
         from autoskillit.core.types import SubprocessRunner
 
         runner = DefaultSubprocessRunner()

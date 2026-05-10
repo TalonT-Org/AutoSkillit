@@ -206,3 +206,27 @@ def test_dockerfile_template_wires_bash_env() -> None:
         "assets/research/Dockerfile.template must set BASH_ENV to wire micromamba "
         "activation into every shell context (including non-interactive)"
     )
+
+
+def test_generate_report_writes_image_path_back_to_viz_plan() -> None:
+    """Step 2.5 must instruct writing image_path back to visualization-plan.md.
+
+    bundle-local-report reads image_path from yaml:figure-spec blocks in
+    visualization-plan.md. If generate-report renders figures but never writes
+    image_path back, figure insertion silently fails.
+    """
+    text = SKILL_PATH.read_text()
+
+    # Find Step 2.5 section (between ### Step 2.5 and ### Step 3)
+    assert "### Step 2.5" in text, (
+        "generate-report/SKILL.md is missing '### Step 2.5' section header"
+    )
+    assert "### Step 3" in text, "generate-report/SKILL.md is missing '### Step 3' section header"
+    step25_section = text.split("### Step 2.5")[1].split("### Step 3")[0]
+
+    # The instruction must mention image_path being written back
+    assert "image_path" in step25_section, (
+        "Step 2.5 in generate-report/SKILL.md must instruct writing image_path "
+        "back into yaml:figure-spec blocks in visualization-plan.md after rendering. "
+        "bundle-local-report depends on this field for image insertion."
+    )

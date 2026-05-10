@@ -24,6 +24,7 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_enrich_issues_contracts.py` | Contract tests for the enrich-issues skill SKILL.md |
 | `test_execution_map_contracts.py` | Contract tests for the build-execution-map skill SKILL.md |
 | `test_exogenous_string_coupling.py` | Exogenous string coupling tests: orchestrator prompt triggers coupled to emitting module |
+| `test_figure_spec_contracts.py` | Figure spec schema contracts: vis-lens producer fields ⊇ bundle-local-report consumer fields |
 | `test_filter_env_var_coverage.py` | Tests that retry-worktree and audit-impl skills set filter env vars for test runs |
 | `test_fleet_dispatch_bem_gate.py` | Contract: fleet dispatcher prompt contains BEM pre-step gate instructions |
 | `test_generate_report_contracts.py` | Contract tests for generate-report SKILL.md — data provenance lifecycle |

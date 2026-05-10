@@ -14,6 +14,8 @@ from ._type_dispatch_identity import *  # noqa: F401, F403
 from ._type_dispatch_identity import __all__ as _dispatch_identity_all
 from ._type_enums import *  # noqa: F401, F403
 from ._type_enums import __all__ as _enums_all
+from ._type_figure_spec import *  # noqa: F401, F403
+from ._type_figure_spec import __all__ as _figure_spec_all
 from ._type_helpers import *  # noqa: F401, F403
 from ._type_helpers import __all__ as _helpers_all
 from ._type_plugin_source import *  # noqa: F401, F403
@@ -44,6 +46,7 @@ __all__ = (
     + _constants_all
     + _dispatch_identity_all
     + _enums_all
+    + _figure_spec_all
     + _helpers_all
     + _plugin_source_all
     + _protocols_logging_all

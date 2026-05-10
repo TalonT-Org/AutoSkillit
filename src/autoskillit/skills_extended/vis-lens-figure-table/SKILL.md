@@ -162,6 +162,7 @@ format: "pdf"
 target_dpi: 300
 library: "matplotlib"
 report_section: "Section 3 Training"
+image_path: ""
 priority: "P1"
 placement_tier: "main"
 conflicts: []

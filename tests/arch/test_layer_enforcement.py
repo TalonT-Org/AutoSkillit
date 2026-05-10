@@ -37,6 +37,7 @@ SUBPACKAGE_LAYERS: dict[str, int] = {
     "execution": 1,
     "workspace": 1,
     "planner": 1,
+    "report": 1,
     # IL-2: domain services — may import from IL-0 and IL-1
     "recipe": 2,
     "migration": 2,
@@ -823,6 +824,42 @@ def test_no_file_based_path_resolution_outside_paths_module() -> None:
 
     assert not violations, (
         "Forbidden __file__-based path resolution found outside core/paths.py:\n"
+        + "\n".join(violations)
+    )
+
+
+def test_no_dunder_file_in_embedded_python_blocks() -> None:
+    """REQ-P12-002: SKILL.md files must not contain Path(__file__) in embedded Python blocks.
+
+    This extends the arch-test boundary from .py files to include Python code blocks
+    extracted from SKILL.md files. Any future SKILL.md that embeds a script using
+    Path(__file__) would escape the existing test.
+    """
+    violations = []
+    skill_dirs = [
+        SRC_ROOT / "skills",
+        SRC_ROOT / "skills_extended",
+    ]
+
+    for skill_dir in skill_dirs:
+        for md_file in skill_dir.rglob("*.md"):
+            text = md_file.read_text()
+            python_blocks = re.findall(r"```python\n(.*?)```", text, re.DOTALL)
+            for block_idx, block in enumerate(python_blocks, 1):
+                try:
+                    tree = ast.parse(block)
+                except SyntaxError:
+                    continue
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Name) and node.id == "__file__":
+                        violations.append(
+                            f"{md_file.relative_to(SRC_ROOT)}:python-block-{block_idx} — "
+                            "__file__ reference in embedded Python. "
+                            "Use pkg_root() from autoskillit.core instead."
+                        )
+
+    assert not violations, (
+        "Forbidden __file__-based path resolution found in SKILL.md embedded Python:\n"
         + "\n".join(violations)
     )
 

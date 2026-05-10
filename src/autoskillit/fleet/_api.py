@@ -656,7 +656,7 @@ async def _run_dispatch(
 
     upsert_dispatch_record_by_name(state_path, record)
     if not state_path.exists():
-        raise FileNotFoundError(f"State file missing after upsert: {state_path}")
+        raise FileNotFoundError(f"State file missing after upsert: {state_path}") from None
     if extracted:
         write_captured_values(state_path, extracted)
     _post_dispatch_cleanup(tool_ctx, skill_result, cache_invalidator, quota_refresher)

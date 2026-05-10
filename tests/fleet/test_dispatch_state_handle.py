@@ -50,6 +50,12 @@ class TestResumeWithoutPriorDispatchId:
         assert len(state_files) == 1
         assert state_files[0].exists()
 
+        from autoskillit.fleet.state import read_state
+
+        state = read_state(state_files[0])
+        assert state is not None
+        assert len(state.dispatches) == 1
+
     @pytest.mark.anyio
     async def test_resume_without_prior_dispatch_id_persists_captures(self, tool_ctx, monkeypatch):
         from autoskillit.fleet.result_parser import L3ParseResult
@@ -213,7 +219,8 @@ class TestCaptureChainAcrossResumeBoundary:
         dispatches_dir.mkdir(parents=True, exist_ok=True)
         campaign_id = tool_ctx.kitchen_id
 
-        prev_state_path = dispatches_dir / "prev-dispatch-abc123.json"
+        prior_id = "prev-dispatch-abc123"
+        prev_state_path = dispatches_dir / f"{prior_id}.json"
         write_initial_state(
             prev_state_path, campaign_id, "camp", "", [DispatchRecord(name="dispatch-a")]
         )
@@ -232,6 +239,8 @@ class TestCaptureChainAcrossResumeBoundary:
             prompt_builder=lambda **_: "prompt",
             quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
+            resume_session_id="sess-resume-1",
+            prior_dispatch_id=prior_id,
         )
 
         if isinstance(result, DispatchRejected):

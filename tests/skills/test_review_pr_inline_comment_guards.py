@@ -548,6 +548,76 @@ def test_resolve_review_handles_null_line_file_level_threads():
     )
 
 
+def test_step6_jq_includes_severity_filter():
+    """Step 6 jq expression must filter to critical/warning before building comment objects.
+
+    The jq expression maps FILTERED_FINDINGS but must not pass info-severity findings
+    to the GitHub API. A severity select filter (select(.severity == "critical" or
+    .severity == "warning")) must be applied before the map.
+    """
+    step6_start = SKILL_TEXT.find("### Step 6")
+    step65_start = SKILL_TEXT.find("### Step 6.5")
+    assert step6_start != -1
+    assert step65_start != -1
+    step6_section = SKILL_TEXT[step6_start:step65_start]
+    # Must have a jq select that filters on severity
+    assert "select" in step6_section and "severity" in step6_section, (
+        "Step 6 jq expression must include a select filter on severity "
+        "to exclude info-severity findings before building comment objects"
+    )
+    # Must filter to critical/warning (positive allowlist)
+    assert "critical" in step6_section.lower() and "warning" in step6_section.lower(), (
+        "Step 6 jq severity filter must restrict to critical and warning"
+    )
+
+
+def test_research_pr_step6_jq_includes_severity_filter():
+    """review-research-pr Step 6 jq expression must filter to critical/warning.
+
+    Same severity filter requirement as review-pr Step 6. Info-severity findings
+    must not be posted as GitHub comments.
+    """
+    step6_start = RESEARCH_SKILL_TEXT.find("### Step 6")
+    step65_start = RESEARCH_SKILL_TEXT.find("### Step 6.5")
+    assert step6_start != -1
+    assert step65_start != -1
+    step6_section = RESEARCH_SKILL_TEXT[step6_start:step65_start]
+    assert "select" in step6_section and "severity" in step6_section, (
+        "review-research-pr Step 6 jq expression must include a select filter on severity"
+    )
+    assert "critical" in step6_section.lower() and "warning" in step6_section.lower(), (
+        "review-research-pr Step 6 jq severity filter must restrict to critical and warning"
+    )
+
+
+def test_tier1_fallback_includes_severity_filter():
+    """Tier 1 fallback must iterate only critical/warning findings, skipping info.
+
+    When the batch POST fails and individual POSTs are attempted, the iteration
+    must not process info-severity findings — they do not warrant individual
+    GitHub comments.
+    """
+    tier1_idx = SKILL_TEXT.find("Fallback Tier 1")
+    assert tier1_idx >= 0, "Tier 1 fallback section not found in review-pr SKILL.md"
+    tier2_idx = SKILL_TEXT.find("Tier 2", tier1_idx)
+    tier1_section = SKILL_TEXT[tier1_idx:tier2_idx] if tier2_idx >= 0 else SKILL_TEXT[tier1_idx:]
+    # Must have an explicit instruction to skip/filter info-severity.
+    # A bare mention of "severity" (from {finding.severity}) is not sufficient.
+    has_severity_gate = (
+        "info" in tier1_section.lower()
+        and any(kw in tier1_section.lower() for kw in ["skip", "exclud", "filter"])
+    ) or (
+        "critical" in tier1_section.lower()
+        and "warning" in tier1_section.lower()
+        and any(kw in tier1_section.lower() for kw in ["only", "limit", "restrict"])
+    )
+    assert has_severity_gate, (
+        "Tier 1 fallback must include instructions to skip info-severity findings "
+        "when iterating for individual comment POSTs. "
+        "The section must explicitly say to only process critical/warning findings."
+    )
+
+
 def test_resolve_research_review_handles_null_line_file_level_threads():
     """resolve-research-review must handle null-line file-level comment threads gracefully."""
     text = RESOLVE_RESEARCH_SKILL_TEXT

@@ -12,8 +12,13 @@ assert SKILL_PATH.exists(), f"SKILL.md not found at {SKILL_PATH}"
 SKILL_TEXT = SKILL_PATH.read_text()
 
 
-def test_info_findings_auto_classified_as_discuss() -> None:
-    """Step 3 must state info findings are auto-classified as DISCUSS, bypassing Step 3.5."""
+def test_info_findings_classified_as_verdict_info_not_discuss() -> None:
+    """Step 3 must classify info findings with verdict=INFO, not verdict=DISCUSS.
+
+    The DISCUSS verdict is reserved for findings that require a human design decision
+    (validated by Step 3.5 sub-agents). Info-severity findings are classified with
+    verdict=INFO at Step 3 and acknowledged via the Step 6.5 INFO reply template.
+    """
     step3_idx = SKILL_TEXT.find("### Step 3:")
     if step3_idx == -1:
         step3_idx = SKILL_TEXT.find("### Step 3")
@@ -21,19 +26,37 @@ def test_info_findings_auto_classified_as_discuss() -> None:
     step35_idx = SKILL_TEXT.find("### Step 3.5")
     assert step35_idx != -1, "SKILL.md must have a Step 3.5 section"
     step3_section = SKILL_TEXT[step3_idx:step35_idx]
-    assert (
-        "auto-classified" in step3_section.lower()
-        or "auto-classify" in step3_section.lower()
-        or ("discuss" in step3_section and "info" in step3_section.lower())
-    ), "Step 3 must state that info findings are auto-classified as DISCUSS"
-    assert (
-        "do not enter" in step3_section.lower()
-        or "bypass" in step3_section.lower()
-        or (
-            "not enter step 3.5" in step3_section.lower()
-            or "do not enter step" in step3_section.lower()
-        )
-    ), "Step 3 must state that info findings do not enter Step 3.5"
+    # Must mention INFO verdict for info findings
+    assert "verdict" in step3_section.lower() and "INFO" in step3_section, (
+        "Step 3 must use verdict=INFO for info findings (not DISCUSS)"
+    )
+    # Info findings must not be described as DISCUSS
+    assert not (
+        "info" in step3_section.lower()
+        and "auto-classified" in step3_section.lower()
+        and "DISCUSS" in step3_section
+    ), "Step 3 must not describe info findings as auto-classified as DISCUSS"
+
+
+def test_verdict_taxonomy_info_is_distinct_from_discuss() -> None:
+    """Info findings must never be described as being classified with DISCUSS verdict.
+
+    This is a regression guard against re-introducing the verdict conflation
+    where info-severity findings were incorrectly given verdict=DISCUSS.
+    """
+    assert not __skill_text_matches("info.*auto.*discuss"), (
+        "SKILL.md must never describe info findings as 'auto-classified as DISCUSS'"
+    )
+    assert not __skill_text_matches("info.*classified as.*DISCUSS"), (
+        "SKILL.md must never describe info findings as 'classified as DISCUSS'"
+    )
+
+
+def __skill_text_matches(pattern: str) -> bool:
+    """Check if pattern matches anywhere in SKILL.md (case-insensitive)."""
+    import re
+
+    return bool(re.search(pattern, SKILL_TEXT, re.IGNORECASE))
 
 
 def test_intent_validation_restricted_to_critical_and_warning() -> None:

@@ -204,3 +204,28 @@ def test_resolve_review_mode_default_github():
     assert mode_input.get("required") is not True, (
         "mode parameter should not be required (has default: github)"
     )
+
+
+def test_deferred_observations_contract_excludes_info():
+    """deferred_observations_path description must exclude info-severity findings.
+
+    The description must make clear that only critical/warning DISCUSS findings
+    are accumulated, not all DISCUSS findings (which would include info-severity
+    auto-classified as DISCUSS in the old design).
+    """
+    contracts = _contracts()
+    outputs = contracts.get("skills", {}).get("resolve-review", {}).get("outputs", [])
+    deferred_obs = next(
+        (o for o in outputs if o.get("name") == "deferred_observations_path"),
+        None,
+    )
+    assert deferred_obs is not None, (
+        "deferred_observations_path must exist in resolve-review outputs"
+    )
+    desc = deferred_obs.get("description", "")
+    # Must mention critical or warning, not just "DISCUSS findings"
+    assert any(kw in desc.lower() for kw in ["critical", "warning", "exclud"]), (
+        "deferred_observations_path description must qualify that only critical/warning "
+        "findings are accumulated (not all DISCUSS findings). "
+        "Expected description to mention 'critical', 'warning', or 'exclud'."
+    )

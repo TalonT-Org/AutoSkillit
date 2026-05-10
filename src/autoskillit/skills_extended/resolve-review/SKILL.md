@@ -129,7 +129,8 @@ DEFERRED_FILE="{{AUTOSKILLIT_TEMP}}/resolve-review/deferred_observations_${PR_NU
 
 If the file exists and contains entries:
 1. Load the deferred observations array from the file
-2. Post ALL entries as a single batch review via `POST /repos/{owner}/{repo}/pulls/{pr_number}/reviews`:
+2. **Filter loaded entries:** exclude any entry where `severity == "info"`. This is a boundary guard — deferred_observations should never contain info entries (see Step 3.6), but the posting boundary enforces the invariant independently.
+3. Post the filtered entries as a single batch review via `POST /repos/{owner}/{repo}/pulls/{pr_number}/reviews`:
    - `event`: `"COMMENT"` (not requesting changes — these are observations for discussion)
    - `body`: `"Observations accumulated from {N} local review rounds:"`
    - `commit_id`: current HEAD commit SHA (from `gh pr view {pr_number} --json headRefOid -q .headRefOid`)
@@ -148,10 +149,10 @@ If the file exists and contains entries:
        <!-- REVIEW-FLAG: severity={severity} dimension={dimension} -->
        ```
 
-3. Use the batch review endpoint (never post individual comments unless the batch call fails)
-4. **Fallback:** If the batch POST returns HTTP 422 (e.g., stale line numbers), retry by posting each observation individually via `gh api repos/{owner}/{repo}/pulls/{pr_number}/comments --method POST` with 1s delay between calls
-5. After all deferred observations are posted successfully, rename the file to `deferred_observations_${PR_NUMBER}_posted.json` to prevent re-posting on retry
-6. These review threads are left UNRESOLVED (same behavior as DISCUSS in github mode)
+4. Use the batch review endpoint (never post individual comments unless the batch call fails)
+5. **Fallback:** If the batch POST returns HTTP 422 (e.g., stale line numbers), retry by posting each observation individually via `gh api repos/{owner}/{repo}/pulls/{pr_number}/comments --method POST` with 1s delay between calls
+6. After all deferred observations are posted successfully, rename the file to `deferred_observations_${PR_NUMBER}_posted.json` to prevent re-posting on retry
+7. These review threads are left UNRESOLVED (same behavior as DISCUSS in github mode)
 
 If the file does not exist or is empty, skip this step and proceed to Step 2.
 
@@ -302,7 +303,7 @@ From **top-level reviews**, extract:
 
 When a finding matches multiple tiers, use the highest severity.
 
-Critical and warning findings proceed to intent validation (Step 3.5). Info findings are auto-classified as `DISCUSS` — they do not enter Step 3.5.
+Critical and warning findings proceed to intent validation (Step 3.5). Info findings are classified with `verdict="INFO"` — they do not enter Step 3.5. Only `ACCEPT`, `REJECT`, and `DISCUSS` verdicts are assigned by Step 3.5 sub-agents; `INFO` is assigned at classification time.
 
 ### Step 3.5: Intent Validation (Parallel Sub-Agents — BEFORE any code changes)
 
@@ -398,7 +399,7 @@ Each entry must also carry two additional fields populated at merge time (not de
 - `severity` — `diff_context_map.get((path, line), {}).get("severity", locally_classified_severity)` where `locally_classified_severity` is the severity computed in Step 3 (`critical`/`warning`/`info` from keyword matching). This ensures a meaningful value even when no review-pr handoff entry exists for this `(path, line)`.
 - `dimension` — `diff_context_map.get((path, line), {}).get("dimension", "unknown")` (`arch|tests|bugs|defense|cohesion|slop|deletion_regression|unknown`). `"unknown"` is the correct sentinel when `diff_context_map` has no entry.
 
-For auto-classified INFO findings (those classified as DISCUSS in Step 3 without entering Step 3.5): add them to `classification_map` with `severity="info"` and `dimension=diff_context_map.get((path, line), {}).get("dimension", "unknown")`.
+For INFO-verdict findings (classified in Step 3, not validated by sub-agents): add them to `classification_map` with `verdict="INFO"`, `severity="info"`, and `dimension=diff_context_map.get((path, line), {}).get("dimension", "unknown")`.
 
 **Write analysis report** to `{{AUTOSKILLIT_TEMP}}/resolve-review/analysis_{pr_number}_{ts}.md` before
 any code changes are made. The report must include a summary banner:
@@ -431,10 +432,12 @@ existing = []
 if deferred_file.exists():
     existing = json.loads(deferred_file.read_text())
 
-# Build new entries from classification_map (DISCUSS only)
+# Build new entries from classification_map (DISCUSS only, info-severity excluded)
 discuss_entries = []
 for c in classification_map.values():
     if c.get("verdict") != "DISCUSS":
+        continue
+    if c.get("severity") == "info":
         continue
     entry = {
         "round": iteration_number,
@@ -442,7 +445,7 @@ for c in classification_map.values():
         "line": c.get("line"),
         "body": c.get("body"),
         "evidence": c.get("evidence", ""),
-        "severity": c.get("severity", "warning"),
+        "severity": c["severity"],
         "dimension": c.get("dimension", "unknown"),
         "verdict": "DISCUSS",
         "category": c.get("category", "design_decision"),
@@ -458,6 +461,8 @@ all_entries = existing + new_entries
 deferred_file.write_text(json.dumps(all_entries, indent=2))
 print(f"Accumulated {len(new_entries)} new DISCUSS findings ({len(all_entries)} total)")
 ```
+
+Info-severity findings are acknowledged in the current round via Step 6.5's INFO reply template and are not carried forward to deferred observations. Only genuine DISCUSS verdicts from Step 3.5 sub-agent validation — representing findings that require a human design decision — are accumulated.
 
 The `round` value is the iteration number from `local_findings_{pr_number}.json` (written
 by review-pr with auto-incrementing logic).
@@ -594,7 +599,7 @@ BODY="Investigated — this is intentional. ${evidence}
 BODY="Valid observation — flagged for design decision. ${evidence}
 <!-- REVIEW-FLAG: severity=${severity} dimension=${dimension} -->
 <!-- autoskillit:resolved comment_id=${comment_id} verdict=DISCUSS -->"
-# INFO (auto-classified DISCUSS):
+# INFO (verdict=INFO from Step 3):
 BODY="Acknowledged — minor suggestion noted.
 <!-- REVIEW-FLAG: severity=info dimension=${dimension} -->
 <!-- autoskillit:resolved comment_id=${comment_id} verdict=INFO -->"

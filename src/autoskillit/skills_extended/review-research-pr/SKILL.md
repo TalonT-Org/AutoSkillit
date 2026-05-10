@@ -270,9 +270,9 @@ in the updated file).
 Build a proper JSON payload where each comment is a complete object, then post via `--input -`.
 
 ```bash
-# Build comments JSON array from findings
+# Build comments JSON array from findings (critical/warning only)
 COMMENTS_JSON=$(jq -n --argjson findings "$FILTERED_FINDINGS" '
-  $findings | map({
+  $findings | map(select(.severity == "critical" or .severity == "warning")) | map({
     path: .file,
     line: .line,
     side: "RIGHT",

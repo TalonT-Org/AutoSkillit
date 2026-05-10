@@ -62,6 +62,7 @@ class TestResearchImplementRecipe:
         assert "implement_retry_delay" in recipe.steps
         step = recipe.steps["implement_retry_delay"]
         assert step.tool == "run_cmd"
+        assert "sleep" in step.with_args.get("cmd", "")
 
     def test_research_implement_has_run_retry_delay_steps(self, recipe) -> None:
         """research-implement.yaml must have the run retry delay gate and sleep step."""
@@ -69,3 +70,4 @@ class TestResearchImplementRecipe:
         assert "run_retry_delay" in recipe.steps
         step = recipe.steps["run_retry_delay"]
         assert step.tool == "run_cmd"
+        assert "sleep" in step.with_args.get("cmd", "")

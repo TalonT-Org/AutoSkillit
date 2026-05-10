@@ -370,7 +370,7 @@ async def test_watch_stdout_idle_marker_false_fires_immediately(
 
 
 @pytest.mark.anyio
-async def test_idle_stall_suppressed_by_active_dispatch_marker(
+async def test_watch_stdout_idle_dispatch_marker_suppresses_stall(
     tmp_path: anyio.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Active dispatch marker suppresses idle stall within the suppression window."""
@@ -404,7 +404,7 @@ async def test_idle_stall_suppressed_by_active_dispatch_marker(
 
 
 @pytest.mark.anyio
-async def test_idle_stall_fires_when_marker_absent(tmp_path: anyio.Path) -> None:
+async def test_watch_stdout_idle_fires_when_marker_absent(tmp_path: anyio.Path) -> None:
     """No marker_dir kwarg — idle stall fires unchanged (existing behavior path)."""
     stdout_file = tmp_path / "stdout.txt"
     stdout_file.write_bytes(b"")
@@ -428,7 +428,7 @@ async def test_idle_stall_fires_when_marker_absent(tmp_path: anyio.Path) -> None
 
 
 @pytest.mark.anyio
-async def test_idle_stall_fires_when_marker_stale(tmp_path: anyio.Path) -> None:
+async def test_watch_stdout_idle_fires_when_marker_stale(tmp_path: anyio.Path) -> None:
     """Marker file exists but is stale (mtime 120s ago) — watchdog fires."""
     marker_path = tmp_path / "dispatch-in-progress-testsession-abc123.marker"
     marker_path.write_text("{}")
@@ -461,7 +461,7 @@ async def test_idle_stall_fires_when_marker_stale(tmp_path: anyio.Path) -> None:
 
 
 @pytest.mark.anyio
-async def test_idle_stall_marker_suppression_bounded(
+async def test_watch_stdout_idle_marker_suppression_bounded(
     tmp_path: anyio.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Suppression cap exceeded — idle stall fires despite active marker."""

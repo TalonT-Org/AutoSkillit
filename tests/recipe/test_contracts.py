@@ -16,6 +16,7 @@ from autoskillit.recipe.contracts import (
     load_recipe_card,
     validate_recipe_cards,
 )
+from autoskillit.recipe.io import builtin_recipes_dir
 from autoskillit.workspace import bundled_skills_extended_dir
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
@@ -955,6 +956,116 @@ def test_research_recipe_card_contains_research_skills() -> None:
         assert entry["write_behavior"] in {"always", "conditional", "never"}, (
             f"{skill_name} 'write_behavior' has unexpected value: {entry['write_behavior']!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Contract card freshness: exhaustive bundled-recipe tests
+# ---------------------------------------------------------------------------
+
+
+def _iter_pipeline_recipes() -> list[Path]:
+    """Discover all pipeline recipe YAMLs (top-level + campaigns/)."""
+    recipes_dir = builtin_recipes_dir()
+    paths = sorted(recipes_dir.glob("*.yaml"))
+    campaigns_dir = recipes_dir / "campaigns"
+    if campaigns_dir.is_dir():
+        paths.extend(sorted(campaigns_dir.glob("*.yaml")))
+    return paths
+
+
+def test_all_bundled_recipes_have_contract_cards():
+    """Every bundled recipe YAML must have a corresponding contract card."""
+    recipes_dir = builtin_recipes_dir()
+    missing = []
+    for yaml_path in _iter_pipeline_recipes():
+        recipe_name = yaml_path.stem
+        card_path = recipes_dir / "contracts" / f"{recipe_name}.yaml"
+        if not card_path.is_file():
+            missing.append(recipe_name)
+    assert not missing, f"Bundled recipes without contract cards: {missing}"
+
+
+def test_all_bundled_contract_cards_have_source_hash():
+    """Every contract card must embed a recipe_source_hash field."""
+    recipes_dir = builtin_recipes_dir()
+    missing_hash = []
+    for card_path in sorted((recipes_dir / "contracts").glob("*.yaml")):
+        card = yaml.safe_load(card_path.read_text())
+        if "recipe_source_hash" not in card:
+            missing_hash.append(card_path.stem)
+    assert not missing_hash, f"Contract cards without recipe_source_hash: {missing_hash}"
+
+
+def test_all_bundled_contract_cards_are_fresh():
+    """Contract card content must match what generate_recipe_card would produce now."""
+    from autoskillit.core.io import load_yaml
+    from autoskillit.recipe.staleness_cache import compute_recipe_hash
+
+    recipes_dir = builtin_recipes_dir()
+    stale = []
+    for yaml_path in _iter_pipeline_recipes():
+        recipe_name = yaml_path.stem
+        card_path = recipes_dir / "contracts" / f"{recipe_name}.yaml"
+        if not card_path.is_file():
+            continue
+
+        stored_card = load_yaml(card_path)
+        current_hash = compute_recipe_hash(yaml_path)
+        stored_hash = stored_card.get("recipe_source_hash")
+
+        if stored_hash != current_hash:
+            stale.append(recipe_name)
+
+    assert not stale, (
+        f"Bundled contract cards are stale (recipe YAML changed since generation): {stale}. "
+        "Run: task regen-contracts"
+    )
+
+
+def test_generate_recipe_card_embeds_source_hash(tmp_path: Path) -> None:
+    """generate_recipe_card must embed a recipe_source_hash in the card."""
+    from autoskillit.core.io import load_yaml
+    from autoskillit.recipe.staleness_cache import compute_recipe_hash
+
+    recipes_dir = tmp_path / "recipes"
+    recipes_dir.mkdir()
+    pipeline = recipes_dir / "test-hash-pipeline.yaml"
+    pipeline.write_text(SAMPLE_PIPELINE_YAML)
+
+    result = generate_recipe_card(pipeline, recipes_dir)
+    assert "recipe_source_hash" in result, (
+        "generate_recipe_card dict must include recipe_source_hash"
+    )
+    assert result["recipe_source_hash"] == compute_recipe_hash(pipeline)
+
+    card_path = recipes_dir / "contracts" / "test-hash-pipeline.yaml"
+    stored = load_yaml(card_path)
+    assert "recipe_source_hash" in stored
+    assert stored["recipe_source_hash"] == compute_recipe_hash(pipeline)
+
+
+def test_check_contract_staleness_detects_recipe_content_drift(tmp_path: Path) -> None:
+    """check_contract_staleness must detect when the recipe YAML has changed."""
+    from autoskillit.recipe.staleness_cache import compute_recipe_hash
+
+    recipes_dir = tmp_path / "recipes"
+    recipes_dir.mkdir()
+    original_yaml = SAMPLE_PIPELINE_YAML
+    pipeline = recipes_dir / "drift-test.yaml"
+    pipeline.write_text(original_yaml)
+
+    card = generate_recipe_card(pipeline, recipes_dir)
+    assert "recipe_source_hash" in card
+    stored_hash = card["recipe_source_hash"]
+
+    pipeline.write_text(original_yaml + "\n# a harmless comment\n")
+
+    stale = check_contract_staleness(card, recipe_path=pipeline)
+    assert len(stale) == 1, f"Expected exactly one stale item, got: {stale}"
+    assert stale[0].reason == "recipe_content_drift"
+    assert stale[0].skill == "<recipe>"
+    assert stale[0].stored_value == stored_hash
+    assert stale[0].current_value == compute_recipe_hash(pipeline)
 
 
 def test_research_recipe_card_dataflow() -> None:

@@ -1,5 +1,6 @@
 {
-  "generated_at": "2026-04-28T09:27:39.466273+00:00",
+  "generated_at": "2026-05-10T21:58:20.161495+00:00",
+  "recipe_source_hash": "sha256:c4f6d0e0461f2cc59d5df1f41a04b83a649b215a48d91b3cdd361c2e00c89eba",
   "bundled_manifest_version": "0.1.0",
   "skill_hashes": {},
   "skills": {
@@ -23,6 +24,18 @@
           "type": "string"
         },
         {
+          "name": "dispatched_count",
+          "type": "string"
+        },
+        {
+          "name": "deferred_count",
+          "type": "string"
+        },
+        {
+          "name": "has_deferred",
+          "type": "string"
+        },
+        {
           "name": "review_approach_candidates",
           "type": "string"
         }
@@ -31,7 +44,7 @@
         "execution_map\\s*=\\s*/.+"
       ],
       "pattern_examples": [
-        "execution_map = /tmp/build-execution-map/execution_map_2026-04-22_190000.json\nexecution_map_report = /tmp/build-execution-map/execution_map_report_2026-04-22_190000.md\ngroup_count = 3\ntotal_issues = 5"
+        "execution_map = /tmp/build-execution-map/execution_map_2026-04-22_190000.json\nexecution_map_report = /tmp/build-execution-map/execution_map_report_2026-04-22_190000.md\ngroup_count = 3\ntotal_issues = 5\ndispatched_count = 4\ndeferred_count = 1\nhas_deferred = true"
       ],
       "write_behavior": "always"
     }

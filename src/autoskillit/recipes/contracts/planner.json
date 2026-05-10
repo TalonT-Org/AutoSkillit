@@ -1,22 +1,8 @@
 {
-  "generated_at": "2026-05-03T01:40:00.180863+00:00",
+  "generated_at": "2026-05-10T21:58:20.276228+00:00",
+  "recipe_source_hash": "sha256:ef1d910b31e8c48629106a7ba649914f10880a2322f498dfb2cd4c625999642b",
   "bundled_manifest_version": "0.1.0",
-  "skill_hashes": {
-    "planner-analyze": "sha256:bc64ba4984d3c1b32231c062e46550bc5e00d94689d5a8967b3f222abfe0e172",
-    "planner-extract-domain": "sha256:dcb246a33465b839a552719dff34684ea9421ad99e021232ae677448a69eff45",
-    "planner-generate-phases": "sha256:0904a31c377aee72e98e937915f8397e42b02dc7fab5572cb156e144bf613817",
-    "planner-elaborate-phase": "sha256:d0127bd85e030eecaabb727730ccb8d80fc05cb55227975320393ba17fcb2238",
-    "planner-refine-phases": "sha256:3a514d6a658cb3bcee2de18f0f3aea2f529c01a24268b7f6007ec391ba8fe91c",
-    "planner-elaborate-assignments": "sha256:1545a91c18d14d00031077833d3f37af1be7b0287e8239d469df3388496c649e",
-    "planner-refine-assignments": "sha256:584c1715729a91928994d4d18b91a8e48ca03ee94ce70dd1c613c7a5159e6318",
-    "planner-elaborate-wps": "sha256:301bebf89b29e658de254d5790d50878fde417a3359222c5b282065f13aa2b30",
-    "planner-refine-wps": "sha256:17d44c80abb78698c6173c74f6259df65ac09cd87063cfdf3e0e1de763043334",
-    "planner-consolidate-wps": "sha256:384ae024bfc9ef67fd25d4a929badcd5790577364a768d2f655b5172bc13a8e7",
-    "planner-validate-task-alignment": "sha256:f57d27bbf345f2da0c7fe4d8918f63e02b12882fd5fe1f7bb43e6c096f340b2b",
-    "planner-reconcile-deps": "sha256:4ea197d4d0c25af5b734f36c79ddb182bc140d98cdfe811f515ff182961ac9bb",
-    "planner-assess-review-approach": "sha256:4c3dfa00349ab2bec06c089d282f00d3e127e1c794b41daa6a71779612ab3558",
-    "planner-refine": "sha256:31e088ee392a4bee262818c5117eea98c57d910a6aec1363dc1a0c9e9f710e1d"
-  },
+  "skill_hashes": {},
   "skills": {
     "planner-analyze": {
       "inputs": [],
@@ -552,29 +538,48 @@
       ],
       "required": [],
       "produced": [
-        "combined_assignments_path"
+        "refine_context_paths"
       ]
     },
     {
       "step": "refine_assignments",
       "available": [
         "assignment_context_paths",
-        "combined_assignments_path",
         "combined_phases_path",
         "phase_ids",
         "phase_manifest_path",
         "plan_snapshot_path",
         "planner_assess_review_approach",
         "planner_dir",
+        "refine_context_paths",
         "refined_plan_path",
         "source_dir",
         "task",
         "task_file_path",
         "task_label"
       ],
-      "required": [
-        "output_dir"
+      "required": [],
+      "produced": [],
+      "positional_args": 1
+    },
+    {
+      "step": "merge_refined_assignments",
+      "available": [
+        "assignment_context_paths",
+        "combined_phases_path",
+        "phase_ids",
+        "phase_manifest_path",
+        "plan_snapshot_path",
+        "planner_assess_review_approach",
+        "planner_dir",
+        "refine_context_paths",
+        "refined_plan_path",
+        "source_dir",
+        "task",
+        "task_file_path",
+        "task_label"
       ],
+      "required": [],
       "produced": [
         "refined_assignments_path"
       ]
@@ -583,13 +588,13 @@
       "step": "expand_wps",
       "available": [
         "assignment_context_paths",
-        "combined_assignments_path",
         "combined_phases_path",
         "phase_ids",
         "phase_manifest_path",
         "plan_snapshot_path",
         "planner_assess_review_approach",
         "planner_dir",
+        "refine_context_paths",
         "refined_assignments_path",
         "refined_plan_path",
         "source_dir",
@@ -606,13 +611,13 @@
       "step": "elaborate_wps",
       "available": [
         "assignment_context_paths",
-        "combined_assignments_path",
         "combined_phases_path",
         "phase_ids",
         "phase_manifest_path",
         "plan_snapshot_path",
         "planner_assess_review_approach",
         "planner_dir",
+        "refine_context_paths",
         "refined_assignments_path",
         "refined_plan_path",
         "source_dir",
@@ -629,13 +634,13 @@
       "step": "finalize_wp_manifest",
       "available": [
         "assignment_context_paths",
-        "combined_assignments_path",
         "combined_phases_path",
         "phase_ids",
         "phase_manifest_path",
         "plan_snapshot_path",
         "planner_assess_review_approach",
         "planner_dir",
+        "refine_context_paths",
         "refined_assignments_path",
         "refined_plan_path",
         "source_dir",
@@ -651,13 +656,13 @@
       "step": "merge_wps",
       "available": [
         "assignment_context_paths",
-        "combined_assignments_path",
         "combined_phases_path",
         "phase_ids",
         "phase_manifest_path",
         "plan_snapshot_path",
         "planner_assess_review_approach",
         "planner_dir",
+        "refine_context_paths",
         "refined_assignments_path",
         "refined_plan_path",
         "source_dir",
@@ -675,7 +680,6 @@
       "step": "refine_wps",
       "available": [
         "assignment_context_paths",
-        "combined_assignments_path",
         "combined_phases_path",
         "combined_wps_path",
         "phase_ids",
@@ -683,6 +687,7 @@
         "plan_snapshot_path",
         "planner_assess_review_approach",
         "planner_dir",
+        "refine_context_paths",
         "refined_assignments_path",
         "refined_plan_path",
         "source_dir",
@@ -702,7 +707,6 @@
       "step": "consolidate_wps_analyze",
       "available": [
         "assignment_context_paths",
-        "combined_assignments_path",
         "combined_phases_path",
         "combined_wps_path",
         "phase_ids",
@@ -710,6 +714,7 @@
         "plan_snapshot_path",
         "planner_assess_review_approach",
         "planner_dir",
+        "refine_context_paths",
         "refined_assignments_path",
         "refined_plan_path",
         "refined_wps_path",
@@ -726,7 +731,6 @@
       "step": "consolidate_wps_merge",
       "available": [
         "assignment_context_paths",
-        "combined_assignments_path",
         "combined_phases_path",
         "combined_wps_path",
         "phase_ids",
@@ -734,6 +738,7 @@
         "plan_snapshot_path",
         "planner_assess_review_approach",
         "planner_dir",
+        "refine_context_paths",
         "refined_assignments_path",
         "refined_plan_path",
         "refined_wps_path",
@@ -752,7 +757,6 @@
       "step": "validate_task_alignment",
       "available": [
         "assignment_context_paths",
-        "combined_assignments_path",
         "combined_phases_path",
         "combined_wps_path",
         "consolidated_wps_path",
@@ -761,6 +765,7 @@
         "plan_snapshot_path",
         "planner_assess_review_approach",
         "planner_dir",
+        "refine_context_paths",
         "refined_assignments_path",
         "refined_plan_path",
         "refined_wps_path",
@@ -783,7 +788,6 @@
       "available": [
         "alignment_findings_path",
         "assignment_context_paths",
-        "combined_assignments_path",
         "combined_phases_path",
         "combined_wps_path",
         "consolidated_wps_path",
@@ -792,6 +796,7 @@
         "plan_snapshot_path",
         "planner_assess_review_approach",
         "planner_dir",
+        "refine_context_paths",
         "refined_assignments_path",
         "refined_plan_path",
         "refined_wps_path",
@@ -809,7 +814,6 @@
       "available": [
         "alignment_findings_path",
         "assignment_context_paths",
-        "combined_assignments_path",
         "combined_phases_path",
         "combined_wps_path",
         "consolidated_wps_path",
@@ -818,6 +822,7 @@
         "plan_snapshot_path",
         "planner_assess_review_approach",
         "planner_dir",
+        "refine_context_paths",
         "refined_assignments_path",
         "refined_plan_path",
         "refined_wps_path",
@@ -839,7 +844,6 @@
       "available": [
         "alignment_findings_path",
         "assignment_context_paths",
-        "combined_assignments_path",
         "combined_phases_path",
         "combined_wps_path",
         "consolidated_wps_path",
@@ -848,6 +852,7 @@
         "plan_snapshot_path",
         "planner_assess_review_approach",
         "planner_dir",
+        "refine_context_paths",
         "refined_assignments_path",
         "refined_plan_path",
         "refined_wps_path",
@@ -868,7 +873,6 @@
       "available": [
         "alignment_findings_path",
         "assignment_context_paths",
-        "combined_assignments_path",
         "combined_phases_path",
         "combined_wps_path",
         "consolidated_wps_path",
@@ -877,6 +881,7 @@
         "plan_snapshot_path",
         "planner_assess_review_approach",
         "planner_dir",
+        "refine_context_paths",
         "refined_assignments_path",
         "refined_plan_path",
         "refined_wps_path",
@@ -896,7 +901,6 @@
       "available": [
         "alignment_findings_path",
         "assignment_context_paths",
-        "combined_assignments_path",
         "combined_phases_path",
         "combined_wps_path",
         "consolidated_wps_path",
@@ -905,6 +909,7 @@
         "plan_snapshot_path",
         "planner_assess_review_approach",
         "planner_dir",
+        "refine_context_paths",
         "refined_assignments_path",
         "refined_plan_path",
         "refined_wps_path",
@@ -925,7 +930,6 @@
       "available": [
         "alignment_findings_path",
         "assignment_context_paths",
-        "combined_assignments_path",
         "combined_phases_path",
         "combined_wps_path",
         "consolidated_wps_path",
@@ -934,6 +938,7 @@
         "plan_snapshot_path",
         "planner_assess_review_approach",
         "planner_dir",
+        "refine_context_paths",
         "refined_assignments_path",
         "refined_plan_path",
         "refined_wps_path",
@@ -953,7 +958,6 @@
       "available": [
         "alignment_findings_path",
         "assignment_context_paths",
-        "combined_assignments_path",
         "combined_phases_path",
         "combined_wps_path",
         "consolidated_wps_path",
@@ -962,6 +966,7 @@
         "plan_snapshot_path",
         "planner_assess_review_approach",
         "planner_dir",
+        "refine_context_paths",
         "refined_assignments_path",
         "refined_plan_path",
         "refined_wps_path",
@@ -981,7 +986,6 @@
       "available": [
         "alignment_findings_path",
         "assignment_context_paths",
-        "combined_assignments_path",
         "combined_phases_path",
         "combined_wps_path",
         "consolidated_wps_path",
@@ -990,6 +994,7 @@
         "plan_snapshot_path",
         "planner_assess_review_approach",
         "planner_dir",
+        "refine_context_paths",
         "refined_assignments_path",
         "refined_plan_path",
         "refined_wps_path",

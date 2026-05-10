@@ -1,4 +1,5 @@
-generated_at: '1970-01-01T00:00:00+00:00'
+generated_at: '2026-05-10T21:58:20.376143+00:00'
+recipe_source_hash: sha256:ed344cbcce49ceb9988434986fcc0c4ba100d7d9612f178bc8bafbce296d88c3
 bundled_manifest_version: 0.1.0
 skill_hashes: {}
 skills:
@@ -20,6 +21,30 @@ skills:
     - 'scope_report = /tmp/scope_report.md
 
       scope_directions = /tmp/scope_directions.json
+
+      %%ORDER_UP%%'
+    write_behavior: always
+  select-directions:
+    inputs:
+    - name: scope_directions_path
+      type: file_path
+      required: true
+      recommended: false
+    - name: scope_report_path
+      type: file_path
+      required: false
+      recommended: false
+    - name: min_breadth
+      type: string
+      required: false
+      recommended: false
+    outputs:
+    - name: selected_directions
+      type: file_path
+    expected_output_patterns:
+    - selected_directions\s*=\s*/.+
+    pattern_examples:
+    - 'selected_directions = /tmp/selected_directions.json
 
       %%ORDER_UP%%'
     write_behavior: always
@@ -131,7 +156,7 @@ skills:
       required: true
       recommended: false
     - name: scope_report_path
-      type: file_path
+      type: string
       required: false
       recommended: false
     outputs:
@@ -223,12 +248,12 @@ skills:
     pattern_examples:
     - 'verdict = PASS
 
-      download_report = /tmp/download-data/download_report.md
+      download_report = /tmp/download-data/download_report_2026-05-10_120000.md
 
       %%ORDER_UP%%'
     - 'verdict = WARN
 
-      download_report = /tmp/download-data/download_report.md
+      download_report = /tmp/download-data/download_report_2026-05-10_120000.md
 
       %%ORDER_UP%%'
     write_behavior: always
@@ -408,7 +433,6 @@ skills:
       remediation_path = /tmp/remediation.md
 
       %%ORDER_UP%%'
-    write_behavior: always
   run-experiment:
     inputs:
     - name: worktree_path
@@ -424,9 +448,7 @@ skills:
     - results_path\s*=\s*/.+
     - group_manifest\s*=\s*/.+
     pattern_examples:
-    - 'results_path = /tmp/run-experiment/results.md
-
-      group_manifest = /tmp/run-experiment/group_manifest.json
+    - 'results_path = /tmp/run-experiment/results.md group_manifest = /tmp/run-experiment/group_manifest.json
 
       %%ORDER_UP%%'
     write_behavior: always
@@ -750,6 +772,7 @@ dataflow:
   - audit_claims
   - base_branch
   - issue_url
+  - min_breadth
   - output_mode
   - review_design
   - review_pr
@@ -761,12 +784,13 @@ dataflow:
   produced:
   - scope_report
   - scope_directions
-- step: plan_experiment
+- step: select_directions
   available:
   - audit
   - audit_claims
   - base_branch
   - issue_url
+  - min_breadth
   - output_mode
   - review_design
   - review_pr
@@ -776,7 +800,27 @@ dataflow:
   - task
   - test_check_enabled
   required:
+  - scope_directions_path
+  produced:
+  - selected_directions
+- step: plan_experiment
+  available:
+  - audit
+  - audit_claims
+  - base_branch
+  - issue_url
+  - min_breadth
+  - output_mode
+  - review_design
+  - review_pr
+  - scope_directions
   - scope_report
+  - selected_directions
+  - source_dir
+  - task
+  - test_check_enabled
+  required:
+  - scope_report_path
   produced:
   - experiment_plan
 - step: review_design
@@ -786,11 +830,13 @@ dataflow:
   - base_branch
   - experiment_plan
   - issue_url
+  - min_breadth
   - output_mode
   - review_design
   - review_pr
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - test_check_enabled
@@ -811,12 +857,14 @@ dataflow:
   - experiment_plan
   - experiment_type
   - issue_url
+  - min_breadth
   - output_mode
   - review_design
   - review_pr
   - revision_guidance
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - test_check_enabled
@@ -842,6 +890,7 @@ dataflow:
   - experiment_type
   - issue_url
   - methodology_tradition
+  - min_breadth
   - output_mode
   - report_plan_path
   - review_design
@@ -849,6 +898,7 @@ dataflow:
   - revision_guidance
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - test_check_enabled
@@ -870,6 +920,7 @@ dataflow:
   - experiment_type
   - issue_url
   - methodology_tradition
+  - min_breadth
   - output_mode
   - report_plan_path
   - review_design
@@ -877,6 +928,7 @@ dataflow:
   - revision_guidance
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - test_check_enabled
@@ -900,6 +952,7 @@ dataflow:
   - experiment_type
   - issue_url
   - methodology_tradition
+  - min_breadth
   - output_mode
   - report_plan_path
   - review_design
@@ -907,6 +960,7 @@ dataflow:
   - revision_guidance
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - test_check_enabled
@@ -930,6 +984,7 @@ dataflow:
   - experiment_type
   - issue_url
   - methodology_tradition
+  - min_breadth
   - output_mode
   - report_plan_path
   - review_design
@@ -937,6 +992,7 @@ dataflow:
   - revision_guidance
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - test_check_enabled
@@ -959,6 +1015,7 @@ dataflow:
   - experiment_type
   - issue_url
   - methodology_tradition
+  - min_breadth
   - output_mode
   - report_plan_path
   - review_design
@@ -966,6 +1023,7 @@ dataflow:
   - revision_guidance
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - test_check_enabled
@@ -990,6 +1048,7 @@ dataflow:
   - experiment_type
   - issue_url
   - methodology_tradition
+  - min_breadth
   - output_mode
   - report_plan_path
   - research_dir
@@ -998,6 +1057,7 @@ dataflow:
   - revision_guidance
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - test_check_enabled
@@ -1023,6 +1083,7 @@ dataflow:
   - experiment_type
   - issue_url
   - methodology_tradition
+  - min_breadth
   - output_mode
   - report_plan_path
   - research_dir
@@ -1032,6 +1093,7 @@ dataflow:
   - revision_guidance
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - test_check_enabled
@@ -1040,8 +1102,7 @@ dataflow:
   - visualization_plan_path
   - visualization_plan_trace_path
   - worktree_path
-  required:
-  - experiment_plan
+  required: []
   produced:
   - verdict
   - download_report
@@ -1059,6 +1120,7 @@ dataflow:
   - experiment_type
   - issue_url
   - methodology_tradition
+  - min_breadth
   - output_mode
   - report_plan_path
   - research_dir
@@ -1068,6 +1130,7 @@ dataflow:
   - revision_guidance
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - test_check_enabled
@@ -1093,6 +1156,7 @@ dataflow:
   - experiment_type
   - issue_url
   - methodology_tradition
+  - min_breadth
   - output_mode
   - report_plan_path
   - research_dir
@@ -1102,6 +1166,7 @@ dataflow:
   - revision_guidance
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - test_check_enabled
@@ -1129,6 +1194,7 @@ dataflow:
   - group_files
   - issue_url
   - methodology_tradition
+  - min_breadth
   - output_mode
   - report_plan_path
   - research_dir
@@ -1138,6 +1204,7 @@ dataflow:
   - revision_guidance
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - test_check_enabled
@@ -1165,6 +1232,7 @@ dataflow:
   - impl_base_sha
   - issue_url
   - methodology_tradition
+  - min_breadth
   - output_mode
   - report_plan_path
   - research_dir
@@ -1174,6 +1242,7 @@ dataflow:
   - revision_guidance
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - test_check_enabled
@@ -1202,6 +1271,7 @@ dataflow:
   - impl_base_sha
   - issue_url
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - report_plan_path
@@ -1212,6 +1282,7 @@ dataflow:
   - revision_guidance
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - test_check_enabled
@@ -1240,6 +1311,7 @@ dataflow:
   - impl_base_sha
   - issue_url
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - report_plan_path
@@ -1250,6 +1322,7 @@ dataflow:
   - revision_guidance
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - test_check_enabled
@@ -1280,6 +1353,7 @@ dataflow:
   - is_fixable
   - issue_url
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - report_plan_path
@@ -1291,6 +1365,7 @@ dataflow:
   - revision_guidance
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - test_check_enabled
@@ -1318,6 +1393,7 @@ dataflow:
   - is_fixable
   - issue_url
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - report_plan_path
@@ -1329,6 +1405,7 @@ dataflow:
   - revision_guidance
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - test_check_enabled
@@ -1358,6 +1435,7 @@ dataflow:
   - is_fixable
   - issue_url
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - report_plan_path
@@ -1369,6 +1447,7 @@ dataflow:
   - revision_guidance
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - test_check_enabled
@@ -1397,6 +1476,7 @@ dataflow:
   - is_fixable
   - issue_url
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - report_plan_path
@@ -1408,6 +1488,7 @@ dataflow:
   - revision_guidance
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - test_check_enabled
@@ -1436,6 +1517,7 @@ dataflow:
   - is_fixable
   - issue_url
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - report_plan_path
@@ -1447,6 +1529,7 @@ dataflow:
   - revision_guidance
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - test_check_enabled
@@ -1475,6 +1558,7 @@ dataflow:
   - is_fixable
   - issue_url
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - report_plan_path
@@ -1486,6 +1570,7 @@ dataflow:
   - revision_guidance
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - test_check_enabled
@@ -1497,7 +1582,6 @@ dataflow:
   required:
   - plan_path
   produced:
-  - audit_verdict
   - remediation_path
 - step: run_experiment
   available:
@@ -1517,6 +1601,7 @@ dataflow:
   - is_fixable
   - issue_url
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - remediation_path
@@ -1529,6 +1614,7 @@ dataflow:
   - revision_guidance
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - test_check_enabled
@@ -1561,6 +1647,7 @@ dataflow:
   - is_fixable
   - issue_url
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - remediation_path
@@ -1573,6 +1660,7 @@ dataflow:
   - revision_guidance
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - test_check_enabled
@@ -1606,6 +1694,7 @@ dataflow:
   - is_fixable
   - issue_url
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - remediation_path
@@ -1620,6 +1709,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - test_check_enabled
@@ -1650,6 +1740,7 @@ dataflow:
   - is_fixable
   - issue_url
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - remediation_path
@@ -1664,6 +1755,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - test_check_enabled
@@ -1697,6 +1789,7 @@ dataflow:
   - is_fixable
   - issue_url
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - remediation_path
@@ -1711,6 +1804,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - test_check_enabled
@@ -1742,6 +1836,7 @@ dataflow:
   - is_fixable
   - issue_url
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - remediation_path
@@ -1757,6 +1852,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - test_check_enabled
@@ -1787,6 +1883,7 @@ dataflow:
   - is_fixable
   - issue_url
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - remediation_path
@@ -1802,6 +1899,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - test_check_enabled
@@ -1832,6 +1930,7 @@ dataflow:
   - is_fixable
   - issue_url
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - remediation_path
@@ -1847,6 +1946,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - test_check_enabled
@@ -1878,6 +1978,7 @@ dataflow:
   - is_fixable
   - issue_url
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - remediation_path
@@ -1893,6 +1994,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - test_check_enabled
@@ -1925,6 +2027,7 @@ dataflow:
   - is_fixable
   - issue_url
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - remediation_path
@@ -1941,6 +2044,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - test_check_enabled
@@ -1973,6 +2077,7 @@ dataflow:
   - is_fixable
   - issue_url
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - remediation_path
@@ -1989,6 +2094,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - test_check_enabled
@@ -2019,6 +2125,7 @@ dataflow:
   - is_fixable
   - issue_url
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - remediation_path
@@ -2035,6 +2142,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - test_check_enabled
@@ -2069,6 +2177,7 @@ dataflow:
   - is_fixable
   - issue_url
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - remediation_path
@@ -2085,6 +2194,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - test_check_enabled
@@ -2116,6 +2226,7 @@ dataflow:
   - is_fixable
   - issue_url
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - remediation_path
@@ -2132,6 +2243,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - test_check_enabled
@@ -2163,6 +2275,7 @@ dataflow:
   - is_fixable
   - issue_url
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - remediation_path
@@ -2179,6 +2292,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - test_check_enabled
@@ -2215,6 +2329,7 @@ dataflow:
   - issue_url
   - lens_context_paths
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - prep_path
@@ -2232,6 +2347,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - selected_lenses
   - source_dir
   - task
@@ -2265,6 +2381,7 @@ dataflow:
   - issue_url
   - lens_context_paths
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - prep_path
@@ -2282,6 +2399,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - selected_lenses
   - source_dir
   - task
@@ -2315,6 +2433,7 @@ dataflow:
   - issue_url
   - lens_context_paths
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - prep_path
@@ -2332,6 +2451,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - selected_lenses
   - source_dir
   - task
@@ -2365,6 +2485,7 @@ dataflow:
   - issue_url
   - lens_context_paths
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - prep_path
@@ -2382,6 +2503,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - selected_lenses
   - source_dir
   - task
@@ -2417,6 +2539,7 @@ dataflow:
   - issue_url
   - lens_context_paths
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - pr_url
@@ -2435,6 +2558,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - selected_lenses
   - source_dir
   - task
@@ -2468,6 +2592,7 @@ dataflow:
   - issue_url
   - lens_context_paths
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - pr_url
@@ -2486,6 +2611,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - selected_lenses
   - source_dir
   - task
@@ -2520,6 +2646,7 @@ dataflow:
   - issue_url
   - lens_context_paths
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - pr_url
@@ -2539,6 +2666,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - selected_lenses
   - source_dir
   - task
@@ -2574,6 +2702,7 @@ dataflow:
   - issue_url
   - lens_context_paths
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - pr_url
@@ -2593,6 +2722,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - selected_lenses
   - source_dir
   - task
@@ -2627,6 +2757,7 @@ dataflow:
   - issue_url
   - lens_context_paths
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - pr_url
@@ -2646,6 +2777,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - selected_lenses
   - source_dir
   - task
@@ -2681,6 +2813,7 @@ dataflow:
   - issue_url
   - lens_context_paths
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - pr_url
@@ -2701,6 +2834,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - selected_lenses
   - source_dir
   - task
@@ -2735,6 +2869,7 @@ dataflow:
   - issue_url
   - lens_context_paths
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - pr_url
@@ -2755,6 +2890,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - selected_lenses
   - source_dir
   - task
@@ -2791,6 +2927,7 @@ dataflow:
   - issue_url
   - lens_context_paths
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - pr_url
@@ -2811,6 +2948,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - selected_lenses
   - source_dir
   - task
@@ -2846,6 +2984,7 @@ dataflow:
   - issue_url
   - lens_context_paths
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - pr_url
@@ -2866,6 +3005,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - selected_lenses
   - source_dir
   - task
@@ -2903,6 +3043,7 @@ dataflow:
   - issue_url
   - lens_context_paths
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - pr_url
@@ -2923,6 +3064,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - selected_lenses
   - source_dir
   - task
@@ -2960,6 +3102,7 @@ dataflow:
   - issue_url
   - lens_context_paths
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - pr_url
@@ -2980,6 +3123,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - selected_lenses
   - source_dir
   - task
@@ -3015,6 +3159,7 @@ dataflow:
   - issue_url
   - lens_context_paths
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - pr_url
@@ -3035,6 +3180,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - selected_lenses
   - source_dir
   - task
@@ -3070,6 +3216,7 @@ dataflow:
   - issue_url
   - lens_context_paths
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - pr_url
@@ -3090,6 +3237,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - selected_lenses
   - source_dir
   - task
@@ -3125,6 +3273,7 @@ dataflow:
   - issue_url
   - lens_context_paths
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - pr_url
@@ -3145,6 +3294,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - selected_lenses
   - source_dir
   - task
@@ -3181,6 +3331,7 @@ dataflow:
   - issue_url
   - lens_context_paths
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - pr_url
@@ -3202,6 +3353,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - selected_lenses
   - source_dir
   - task
@@ -3240,6 +3392,7 @@ dataflow:
   - issue_url
   - lens_context_paths
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - pr_url
@@ -3261,6 +3414,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - selected_lenses
   - source_dir
   - task
@@ -3297,6 +3451,7 @@ dataflow:
   - issue_url
   - lens_context_paths
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - pr_url
@@ -3318,6 +3473,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - selected_lenses
   - source_dir
   - task
@@ -3356,6 +3512,7 @@ dataflow:
   - lens_context_paths
   - local_bundle_path
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - pr_url
@@ -3377,6 +3534,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - selected_lenses
   - source_dir
   - task
@@ -3414,6 +3572,7 @@ dataflow:
   - lens_context_paths
   - local_bundle_path
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - pr_url
@@ -3435,6 +3594,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - selected_lenses
   - source_dir
   - task
@@ -3474,6 +3634,7 @@ dataflow:
   - lens_context_paths
   - local_bundle_path
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - pr_url
@@ -3495,6 +3656,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - selected_lenses
   - source_dir
   - task
@@ -3535,6 +3697,7 @@ dataflow:
   - lens_context_paths
   - local_bundle_path
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - pr_url
@@ -3556,6 +3719,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - selected_lenses
   - source_dir
   - task
@@ -3597,6 +3761,7 @@ dataflow:
   - lens_context_paths
   - local_bundle_path
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - pr_url
@@ -3618,6 +3783,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - selected_lenses
   - source_dir
   - task
@@ -3660,6 +3826,7 @@ dataflow:
   - lens_context_paths
   - local_bundle_path
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - pr_url
@@ -3681,6 +3848,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - selected_lenses
   - source_dir
   - task
@@ -3722,6 +3890,7 @@ dataflow:
   - lens_context_paths
   - local_bundle_path
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - pr_url
@@ -3743,6 +3912,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - selected_lenses
   - source_dir
   - task
@@ -3784,6 +3954,7 @@ dataflow:
   - lens_context_paths
   - local_bundle_path
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - pr_url
@@ -3805,6 +3976,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - selected_lenses
   - source_dir
   - task
@@ -3846,6 +4018,7 @@ dataflow:
   - lens_context_paths
   - local_bundle_path
   - methodology_tradition
+  - min_breadth
   - output_mode
   - phase_plan_path
   - pr_url
@@ -3867,6 +4040,7 @@ dataflow:
   - run_retry_delay
   - scope_directions
   - scope_report
+  - selected_directions
   - selected_lenses
   - source_dir
   - task

@@ -1,4 +1,5 @@
-generated_at: '1970-01-01T00:00:00+00:00'
+generated_at: '2026-05-10T21:58:20.343563+00:00'
+recipe_source_hash: sha256:a3bc1fea6b80c7dacecc6ad4af1aa2aa7e6639d280c25a5beff6c09124f136a3
 bundled_manifest_version: 0.1.0
 skill_hashes: {}
 skills:
@@ -20,6 +21,30 @@ skills:
     - 'scope_report = /tmp/scope_report.md
 
       scope_directions = /tmp/scope_directions.json
+
+      %%ORDER_UP%%'
+    write_behavior: always
+  select-directions:
+    inputs:
+    - name: scope_directions_path
+      type: file_path
+      required: true
+      recommended: false
+    - name: scope_report_path
+      type: file_path
+      required: false
+      recommended: false
+    - name: min_breadth
+      type: string
+      required: false
+      recommended: false
+    outputs:
+    - name: selected_directions
+      type: file_path
+    expected_output_patterns:
+    - selected_directions\s*=\s*/.+
+    pattern_examples:
+    - 'selected_directions = /tmp/selected_directions.json
 
       %%ORDER_UP%%'
     write_behavior: always
@@ -53,7 +78,7 @@ skills:
       type: file_path
       required: true
       recommended: false
-    - name: scope_report_path
+    - name: scope_report
       type: file_path
       required: false
       recommended: false
@@ -131,7 +156,7 @@ skills:
       required: true
       recommended: false
     - name: scope_report_path
-      type: file_path
+      type: string
       required: false
       recommended: false
     outputs:
@@ -190,6 +215,7 @@ dataflow:
   available:
   - base_branch
   - issue_url
+  - min_breadth
   - review_design
   - source_dir
   - task
@@ -198,17 +224,33 @@ dataflow:
   produced:
   - scope_report
   - scope_directions
-- step: plan_experiment
+- step: select_directions
   available:
   - base_branch
   - issue_url
+  - min_breadth
   - review_design
   - scope_directions
   - scope_report
   - source_dir
   - task
   required:
+  - scope_directions_path
+  produced:
+  - selected_directions
+- step: plan_experiment
+  available:
+  - base_branch
+  - issue_url
+  - min_breadth
+  - review_design
+  - scope_directions
   - scope_report
+  - selected_directions
+  - source_dir
+  - task
+  required:
+  - scope_report_path
   produced:
   - experiment_plan
 - step: review_design
@@ -216,13 +258,14 @@ dataflow:
   - base_branch
   - experiment_plan
   - issue_url
+  - min_breadth
   - review_design
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
-  required:
-  - experiment_plan
+  required: []
   produced:
   - verdict
   - experiment_type
@@ -235,10 +278,12 @@ dataflow:
   - experiment_plan
   - experiment_type
   - issue_url
+  - min_breadth
   - review_design
   - revision_guidance
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - verdict
@@ -255,11 +300,13 @@ dataflow:
   - experiment_plan
   - experiment_type
   - issue_url
+  - min_breadth
   - report_plan_path
   - review_design
   - revision_guidance
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - verdict
@@ -274,11 +321,13 @@ dataflow:
   - experiment_plan
   - experiment_type
   - issue_url
+  - min_breadth
   - report_plan_path
   - review_design
   - revision_guidance
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - verdict
@@ -295,11 +344,13 @@ dataflow:
   - experiment_plan
   - experiment_type
   - issue_url
+  - min_breadth
   - report_plan_path
   - review_design
   - revision_guidance
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - verdict
@@ -316,11 +367,13 @@ dataflow:
   - experiment_plan
   - experiment_type
   - issue_url
+  - min_breadth
   - report_plan_path
   - review_design
   - revision_guidance
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - verdict
@@ -336,11 +389,13 @@ dataflow:
   - experiment_plan
   - experiment_type
   - issue_url
+  - min_breadth
   - report_plan_path
   - review_design
   - revision_guidance
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - verdict
@@ -359,6 +414,7 @@ dataflow:
   - experiment_plan
   - experiment_type
   - issue_url
+  - min_breadth
   - report_plan_path
   - research_dir
   - research_dir_rel
@@ -366,6 +422,7 @@ dataflow:
   - revision_guidance
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - verdict
@@ -382,6 +439,7 @@ dataflow:
   - experiment_plan
   - experiment_type
   - issue_url
+  - min_breadth
   - report_plan_path
   - research_dir
   - research_dir_rel
@@ -389,6 +447,7 @@ dataflow:
   - revision_guidance
   - scope_directions
   - scope_report
+  - selected_directions
   - source_dir
   - task
   - verdict

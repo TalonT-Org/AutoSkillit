@@ -1,0 +1,106 @@
+{
+  "generated_at": "2026-05-10T21:58:20.291900+00:00",
+  "recipe_source_hash": "sha256:b6942fb601194a2fa8dac278c8319a291cafe3a844a7bb0995ba72cacb44174d",
+  "bundled_manifest_version": "0.1.0",
+  "skill_hashes": {},
+  "skills": {
+    "promote-to-main": {
+      "inputs": [
+        {
+          "name": "batch_branch",
+          "type": "string",
+          "required": false,
+          "recommended": false
+        },
+        {
+          "name": "base_branch",
+          "type": "string",
+          "required": false,
+          "recommended": false
+        }
+      ],
+      "outputs": [
+        {
+          "name": "pr_url",
+          "type": "string"
+        },
+        {
+          "name": "verdict",
+          "type": "string"
+        },
+        {
+          "name": "category_summary",
+          "type": "string"
+        },
+        {
+          "name": "pr_body_path",
+          "type": "file_path"
+        }
+      ],
+      "expected_output_patterns": [
+        "verdict\\s*=\\s*(created|dry_run|preflight_failed)"
+      ],
+      "pattern_examples": [
+        "pr_url = https://github.com/org/repo/pull/42\nverdict = created\ncategory_summary = 14 fixes, 3 features\n%%ORDER_UP%%",
+        "pr_url = \nverdict = dry_run\ncategory_summary = 14 fixes, 3 features\n%%ORDER_UP%%",
+        "pr_url = \nverdict = preflight_failed\ncategory_summary = \n%%ORDER_UP%%"
+      ],
+      "write_behavior": "always"
+    }
+  },
+  "dataflow": [
+    {
+      "step": "promote",
+      "available": [
+        "base_branch",
+        "batch_branch",
+        "source_dir"
+      ],
+      "required": [],
+      "produced": [
+        "pr_url",
+        "verdict",
+        "category_summary"
+      ]
+    },
+    {
+      "step": "emit_result",
+      "available": [
+        "base_branch",
+        "batch_branch",
+        "category_summary",
+        "pr_url",
+        "source_dir",
+        "verdict"
+      ],
+      "required": [],
+      "produced": []
+    },
+    {
+      "step": "done",
+      "available": [
+        "base_branch",
+        "batch_branch",
+        "category_summary",
+        "pr_url",
+        "source_dir",
+        "verdict"
+      ],
+      "required": [],
+      "produced": []
+    },
+    {
+      "step": "escalate_stop",
+      "available": [
+        "base_branch",
+        "batch_branch",
+        "category_summary",
+        "pr_url",
+        "source_dir",
+        "verdict"
+      ],
+      "required": [],
+      "produced": []
+    }
+  ]
+}

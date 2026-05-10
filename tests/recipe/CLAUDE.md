@@ -34,6 +34,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_contract_verdict_output_required.py` | Contract: verdict output is required in recipe step |
 | `test_contracts.py` | Contract tests for recipe schema and recipe step contracts |
 | `test_contracts_block_fingerprint.py` | Tests for block fingerprint contract |
+| `test_create_worktree_script.py` | Tests for create_worktree.sh script |
 | `test_diagnose_ci_subtype_output.py` | Tests for CI subtype diagnosis output |
 | `test_registry_types.py` | Tests for `RuleDef` and `BlockRuleDef` frozen dataclasses |
 | `test_diagrams.py` | Tests for recipe flow diagram generation and staleness detection |

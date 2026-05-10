@@ -84,3 +84,4 @@ cd "${RESOLVED}" && git add research/ && git commit -m "Add experiment plan and 
 
 echo "research_dir=${RESEARCH_DIR}"
 echo "worktree_path=${RESOLVED}"
+echo "research_dir_rel=research/$(date +%Y-%m-%d)-${SLUG:-experiment}"

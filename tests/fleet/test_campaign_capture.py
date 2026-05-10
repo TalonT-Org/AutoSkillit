@@ -297,6 +297,38 @@ def test_extract_research_capture_all_fields_combined():
     assert result["all_diagram_paths"] == '["a.png", "b.png"]'
 
 
+def test_relative_path_capture_and_reconstruction():
+    """Repo-relative path values survive capture → interpolation
+    and produce correct absolute paths when joined with worktree_path."""
+    from autoskillit.fleet._api import _extract_captures, _interpolate_campaign_refs
+
+    spec = {
+        "worktree_path": "${{ result.worktree_path }}",
+        "research_dir_rel": "${{ result.research_dir_rel }}",
+    }
+    payload = {
+        "worktree_path": "/tmp/wt-A",
+        "research_dir_rel": "research/2026-05-10-test",
+        "research_dir": "/tmp/wt-A/research/2026-05-10-test",
+    }
+    captured = _extract_captures(spec, payload)
+    assert captured == {
+        "worktree_path": "/tmp/wt-A",
+        "research_dir_rel": "research/2026-05-10-test",
+    }
+
+    # Simulate implement phase updating the anchor to a new worktree
+    new_anchor = {**captured, "worktree_path": "/tmp/wt-B"}
+    interpolated = _interpolate_campaign_refs(
+        {"research_dir": "${{ campaign.worktree_path }}/${{ campaign.research_dir_rel }}"},
+        new_anchor,
+    )
+    assert interpolated["research_dir"] == "/tmp/wt-B/research/2026-05-10-test"
+    assert not interpolated["research_dir"].startswith("/tmp/wt-A"), (
+        "research_dir must be reconstructed from new anchor, not the stale design worktree"
+    )
+
+
 def test_interpolate_campaign_worktree_and_report_path():
     from autoskillit.fleet._api import _interpolate_campaign_refs
 

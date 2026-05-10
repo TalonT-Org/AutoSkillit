@@ -1269,12 +1269,12 @@ skills:
 
   select-directions:
     inputs:
-    - name: scope_report_path
-      type: file_path
-      required: false
     - name: scope_directions_path
       type: file_path
       required: true
+    - name: scope_report_path
+      type: file_path
+      required: false
     - name: min_breadth
       type: string
       required: false

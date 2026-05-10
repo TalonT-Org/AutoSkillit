@@ -376,7 +376,7 @@ async def test_watch_stdout_idle_dispatch_marker_suppresses_stall(
     """Active dispatch marker suppresses idle stall within the suppression window."""
     monkeypatch.setattr(
         "autoskillit.execution.process._process_race._has_active_dispatch_marker",
-        lambda *a, **kw: True,
+        lambda marker_dir, session_id=None: True,
     )
     stdout_file = tmp_path / "stdout.txt"
     stdout_file.write_bytes(b"")
@@ -467,7 +467,7 @@ async def test_watch_stdout_idle_marker_suppression_bounded(
     """Suppression cap exceeded — idle stall fires despite active marker."""
     monkeypatch.setattr(
         "autoskillit.execution.process._process_race._has_active_dispatch_marker",
-        lambda *a, **kw: True,
+        lambda marker_dir, session_id=None: True,
     )
     stdout_file = tmp_path / "stdout.txt"
     stdout_file.write_bytes(b"")

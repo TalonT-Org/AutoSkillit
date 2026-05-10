@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import ast
-import re
 from pathlib import Path
 
 import pytest
@@ -20,7 +19,6 @@ from autoskillit.report.renderer import (
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-SKILL_MD = _REPO_ROOT / "src/autoskillit/skills_extended/bundle-local-report/SKILL.md"
 
 
 def test_renders_minimal_report(tmp_path: Path) -> None:
@@ -132,34 +130,23 @@ def test_html_includes_mermaid_version_comment(tmp_path: Path) -> None:
 
 
 def test_renderer_uses_importlib_not_dunder_file() -> None:
-    """SKILL.md embedded renderer (if any) must not use Path(__file__) for asset resolution.
+    """renderer.py must not use Path(__file__) for asset resolution.
 
     Path(__file__) resolves to the temp directory when running extracted scripts,
     causing _find_mermaid_assets() to always return (None, "unknown").
     The renderer module must use pkg_root() from core.paths instead.
     """
-    text = SKILL_MD.read_text()
-    match = re.search(
-        r"```python\n# bundle-local-report renderer\n(.*?)```",
-        text,
-        re.DOTALL,
-    )
-    if not match:
-        # Renderer has been extracted to renderer.py — this test does not apply
-        pytest.skip("No embedded python block in SKILL.md (already extracted to renderer.py)")
-
-    script = match.group(1)
-    tree = ast.parse(script)
+    renderer_path = _REPO_ROOT / "src/autoskillit/report/renderer.py"
+    tree = ast.parse(renderer_path.read_text(encoding="utf-8"))
     for node in ast.walk(tree):
-        if isinstance(node, ast.Attribute):
-            if node.attr == "__file__":
-                pytest.fail(
-                    "Embedded renderer uses Path(__file__) which breaks in temp directories. "
-                    "Extract to renderer.py and use pkg_root() from core.paths instead."
-                )
+        if isinstance(node, ast.Attribute) and node.attr == "__file__":
+            pytest.fail(
+                "renderer.py uses __file__ for asset resolution. "
+                "Use pkg_root() from core.paths instead."
+            )
 
 
-def test_mermaid_version_is_not_unknown_via_module(tmp_path: Path) -> None:
+def test_mermaid_version_is_not_unknown_via_module() -> None:
     """Module-level _find_mermaid_assets() must resolve to real version via pkg_root().
 
     This test calls _find_mermaid_assets() directly (not via main subprocess).

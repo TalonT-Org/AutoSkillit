@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 
 import pytest
+import yaml
 
 from autoskillit.core import PRODUCER_SCHEMA_FIELDS, REQUIRED_CONSUMER_FIELDS, FigureSpec
 from autoskillit.core.paths import pkg_root
@@ -37,16 +38,13 @@ def _figure_spec_blocks_in(skill_md: Path) -> list[tuple[str, str]]:
 
 def _field_names_from_yaml_block(block_text: str) -> frozenset[str]:
     """Parse field names from a figure-spec YAML block (top-level scalar keys only)."""
-    fields = set()
-    for line in block_text.splitlines():
-        line = line.strip()
-        if line.startswith("#") or not line:
-            continue
-        if ":" in line:
-            key = line.split(":")[0].strip()
-            if key:
-                fields.add(key)
-    return frozenset(fields)
+    try:
+        parsed = yaml.safe_load(block_text)
+    except yaml.YAMLError:
+        return frozenset()
+    if not isinstance(parsed, dict):
+        return frozenset()
+    return frozenset(str(k) for k in parsed.keys())
 
 
 def _non_composite_vis_lens_skills() -> list[Path]:
@@ -64,6 +62,9 @@ def _non_composite_vis_lens_skills() -> list[Path]:
         if skill_md.exists():
             skills.append(skill_md)
     return sorted(skills)
+
+
+_VIS_LENS_SKILLS = _non_composite_vis_lens_skills()
 
 
 def test_figure_spec_schema_completeness() -> None:
@@ -90,8 +91,8 @@ def test_figure_spec_schema_completeness() -> None:
 
 @pytest.mark.parametrize(
     "skill_md",
-    _non_composite_vis_lens_skills(),
-    ids=[p.parent.name for p in _non_composite_vis_lens_skills()],
+    _VIS_LENS_SKILLS,
+    ids=[p.parent.name for p in _VIS_LENS_SKILLS],
 )
 def test_figure_spec_producer_includes_consumer_required_fields(skill_md: Path) -> None:
     """Each vis-lens skill's figure-spec output must include all fields bundle-local-report needs.

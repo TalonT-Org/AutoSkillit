@@ -37,6 +37,7 @@ SUBPACKAGE_LAYERS: dict[str, int] = {
     "execution": 1,
     "workspace": 1,
     "planner": 1,
+    "report": 1,
     # IL-2: domain services — may import from IL-0 and IL-1
     "recipe": 2,
     "migration": 2,

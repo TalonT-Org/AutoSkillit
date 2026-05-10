@@ -72,6 +72,7 @@ format: str                  # "svg" | "png" | "pdf"
 target_dpi: int              # 300 for publication, 150 for slides
 library: str                 # "matplotlib" | "seaborn" | "plotly" | "ggplot2" | "vega"
 report_section: str          # section of the paper/report this figure appears in
+image_path: str              # populated by generate-report after rendering; empty until then
 priority: str                # "P0" | "P1" | "P2"
 placement_tier: str          # "main" | "appendix" | "supplementary"
 conflicts: list[str]         # figure_ids this conflicts with (same data, different view)
@@ -229,6 +230,7 @@ format: "pdf"
 target_dpi: 300
 library: "matplotlib"
 report_section: "Section 4.1 Main Results"
+image_path: ""           # populated by generate-report after rendering; empty until then
 priority: "P0"
 placement_tier: "main"
 conflicts: []

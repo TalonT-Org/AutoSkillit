@@ -192,7 +192,12 @@ If `${RESEARCH_DIR}/visualization-plan.md` exists:
                  python /workspace/scripts/fig${N}_${slug}.py"
       ```
    c. Confirm output exists at `${RESEARCH_DIR}/images/fig-${N}.{png,svg}`.
-   d. On failure: emit `MISSING: fig-${N} — {error summary}` to stdout and
+   d. After confirming the image exists, update the corresponding `yaml:figure-spec`
+      block in `visualization-plan.md` by appending
+      `image_path: images/fig-${N}.{ext}` to that block (using the actual filename
+      produced, e.g. `images/fig-1.pdf` or `images/fig-2.png`). This field is
+      required by `bundle-local-report` for image insertion.
+   e. On failure: emit `MISSING: fig-${N} — {error summary}` to stdout and
       continue with remaining figures. Do not abort the skill.
 
 4. Commit scripts and images (if any were produced):

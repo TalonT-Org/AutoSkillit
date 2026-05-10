@@ -37,6 +37,25 @@ _ORCHESTRATION_REF_RE = re.compile(
 )
 _TOKEN_NAME_RE = re.compile(r"^(\w+)\s*=", re.MULTILINE)
 
+
+@pytest.mark.parametrize("skill_md", _all_skill_mds(), ids=lambda p: p.parent.name)
+def test_no_merge_conflict_markers_in_skill_md(skill_md: Path) -> None:
+    """SKILL.md must not contain unresolved git merge conflict markers."""
+    text = skill_md.read_text()
+    lines = text.splitlines()
+    for i, line in enumerate(lines, 1):
+        stripped = line.strip()
+        if (
+            stripped.startswith("<<<<<<<")
+            or stripped.startswith("=======")
+            or stripped.startswith(">>>>>>>")
+        ):
+            pytest.fail(
+                f"{skill_md.parent.name}/SKILL.md line {i} contains an unresolved "
+                f"git merge conflict marker: {stripped[:20]!r}"
+            )
+
+
 _KNOWN_VIOLATORS: frozenset[str] = frozenset(
     {
         "compose-pr",

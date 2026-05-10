@@ -159,6 +159,7 @@ forbidden_modules = [
     "autoskillit.migration",
     "autoskillit.server",
     "autoskillit.cli",
+    "autoskillit.report",
 ]
 
 # IL-002 | Lens: module-dependency | DS-001
@@ -177,6 +178,7 @@ forbidden_modules = [
     "autoskillit.migration",
     "autoskillit.server",
     "autoskillit.cli",
+    "autoskillit.report",
 ]
 
 # IL-003 | Lens: module-dependency | DS-001
@@ -202,6 +204,7 @@ forbidden_modules = [
     "autoskillit.migration",
     "autoskillit.server",
     "autoskillit.cli",
+    "autoskillit.report",
 ]
 
 # IL-004 | Lens: module-dependency | DS-001
@@ -220,6 +223,7 @@ forbidden_modules = [
     "autoskillit.migration",
     "autoskillit.server",
     "autoskillit.cli",
+    "autoskillit.report",
 ]
 
 # IL-005 | Lens: module-dependency | DS-001
@@ -238,6 +242,7 @@ forbidden_modules = [
     "autoskillit.migration",
     "autoskillit.server",
     "autoskillit.cli",
+    "autoskillit.report",
 ]
 
 # IL-006 | Lens: module-dependency | DS-001
@@ -255,6 +260,7 @@ forbidden_modules = [
     "autoskillit.migration",
     "autoskillit.server",
     "autoskillit.cli",
+    "autoskillit.report",
 ]
 
 # IL-007 | Lens: module-dependency | DS-001
@@ -269,6 +275,7 @@ forbidden_modules = [
     "autoskillit.pipeline",
     "autoskillit.server",
     "autoskillit.cli",
+    "autoskillit.report",
 ]
 
 # IL-008 | Lens: module-dependency | DS-001
@@ -285,6 +292,7 @@ modules = [
     "autoskillit.pipeline",
     "autoskillit.execution",
     "autoskillit.workspace",
+    "autoskillit.report",
 ]
 # EXCEPTION: autoskillit.pipeline.context may import autoskillit.config.
 # pipeline.context.ToolContext owns AutomationConfig as the DI wiring point.
@@ -310,6 +318,29 @@ forbidden_modules = [
     "autoskillit.execution",
     "autoskillit.migration",
     "autoskillit.recipe",
+    "autoskillit.server",
+    "autoskillit.cli",
+    "autoskillit.report",
+]
+
+# IL-010 | Lens: module-dependency | DS-001
+# Rationale: report/ is an IL-1 package that renders research bundles. It must only
+# import from IL-0 (core) to remain a leaf service that can be tested without
+# spinning up the full autoskillit stack. The renderer is extracted from an
+# embedded SKILL.md code block so it is subject to all static analysis (mypy, ruff,
+# import-linter, arch tests).
+[[tool.importlinter.contracts]]
+name = "IL-1 report imports only IL-0"
+type = "forbidden"
+source_modules = ["autoskillit.report"]
+forbidden_modules = [
+    "autoskillit.config",
+    "autoskillit.pipeline",
+    "autoskillit.execution",
+    "autoskillit.workspace",
+    "autoskillit.recipe",
+    "autoskillit.migration",
+    "autoskillit.fleet",
     "autoskillit.server",
     "autoskillit.cli",
 ]

@@ -80,6 +80,10 @@ def _build_food_truck_prompt(
     extra_fields_example = (
         ", " + ", ".join(f'"capture_{k}": "<{k}_value>"' for k in capture) if capture else ""
     )
+    sentinel_json_example = (
+        '{"success": <true|false>, "reason": "<completion_reason>",'
+        ' "summary": "<one_line_summary>"' + extra_fields_example + "}"
+    )
     extra_fields_docs = (
         "\n" + "\n".join(f"- capture_{k}: {v}" for k, v in capture.items()) if capture else ""
     )
@@ -274,8 +278,7 @@ as your final output. No other text after the sentinel.
 
 ```
 ---l3-result::{dispatch_id}---
-{{"success": <true|false>, "reason": "<completion_reason>", "summary": "<one_line_summary>"
-{extra_fields_example}}}
+{sentinel_json_example}
 ---end-l3-result::{dispatch_id}---
 %%L3_DONE::{dispatch_id_short}%%
 ```

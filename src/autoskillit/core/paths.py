@@ -14,6 +14,7 @@ Design rationale:
 from __future__ import annotations
 
 import importlib.resources as ir
+import subprocess
 from pathlib import Path
 
 
@@ -134,7 +135,6 @@ def resolve_main_worktree(path: Path) -> Path | None:
     This is the canonical resolution — works regardless of how deeply nested
     the path is within the worktree graph.
     """
-    import subprocess
 
     try:
         git_common_dir = subprocess.run(
@@ -143,9 +143,12 @@ def resolve_main_worktree(path: Path) -> Path | None:
             text=True,
             check=True,
         )
-    except subprocess.CalledProcessError:
+    except (subprocess.CalledProcessError, OSError):
         return None
-    return Path(git_common_dir.stdout.strip()).parent.resolve()
+    output = git_common_dir.stdout.strip()
+    if not output or not Path(output).is_absolute():
+        return None
+    return Path(output).parent.resolve()
 
 
 GENERATED_FILES: frozenset[str] = frozenset(

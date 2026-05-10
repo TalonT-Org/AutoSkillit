@@ -429,6 +429,8 @@ def test_all_builtin_recipe_yamls_are_discoverable(tmp_path: Path) -> None:
     for subdir in RECIPE_SCAN_DIRS:
         scan_dir = base / subdir if subdir else base
         if scan_dir.is_dir():
+            # Non-recursive: _collect_recipes scans only one level deep per RECIPE_SCAN_DIR.
+            # If recursion is ever added to the implementation, this test must be updated too.
             for f in scan_dir.iterdir():
                 if f.suffix in (".yaml", ".yml") and f.is_file():
                     expected_paths.add(f)

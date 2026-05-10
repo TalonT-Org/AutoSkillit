@@ -563,3 +563,90 @@ def test_replaying_runner_restore_missing_step_returns_none(tmp_path):
     runner = ReplayingSubprocessRunner({}, {}, skill_snapshots={})
     result = runner.restore_skill_snapshot("missing", tmp_path / "sessions", "headless-abc")
     assert result is None
+
+
+# --- T-MARKER-FWD: RecordingSubprocessRunner forwards marker_dir and session_id to inner ---
+
+
+@pytest.mark.anyio
+async def test_recording_runner_forwards_marker_dir_and_session_id(tmp_path):
+    """Non-session branch passes marker_dir and session_id to self._inner()."""
+    mock_recorder = Mock()
+    inner = MockSubprocessRunner()
+    inner.set_default(_make_result(returncode=0))
+    runner = RecordingSubprocessRunner(recorder=mock_recorder, inner=inner)
+
+    marker = tmp_path / "markers"
+    cmd = ["pytest", "tests/"]
+    env = {"SCENARIO_STEP_NAME": "test-check"}
+
+    await runner(
+        cmd,
+        cwd=Path("/tmp"),
+        timeout=60,
+        env=env,
+        pty_mode=False,
+        marker_dir=marker,
+        session_id="sess-abc",
+    )
+
+    assert len(inner.call_args_list) == 1
+    kwargs = inner.call_args_list[0][3]
+    assert kwargs["marker_dir"] == marker
+    assert kwargs["session_id"] == "sess-abc"
+
+
+# --- T-MARKER-SESSION-BRANCH: session branch does not forward marker_dir/session_id ---
+
+
+@pytest.mark.anyio
+async def test_recording_runner_session_branch_ignores_marker_params(tmp_path):
+    """pty_mode=True + step_name → _record_session; marker_dir/session_id not forwarded."""
+    mock_recorder = Mock()
+    mock_recorder.record_step.return_value = FakeStepResult(
+        cassette_exit_code=0,
+        cassette_path=str(tmp_path / "cassette"),
+        cassette_duration_ms=5000,
+    )
+    inner = MockSubprocessRunner()
+    runner = RecordingSubprocessRunner(recorder=mock_recorder, inner=inner)
+
+    cmd = ["claude", "--model", "sonnet", "--print", "do stuff"]
+    env = {"AUTOSKILLIT_HEADLESS": "1", "SCENARIO_STEP_NAME": "investigate"}
+
+    result = await runner(
+        cmd,
+        cwd=Path("/tmp"),
+        timeout=300,
+        env=env,
+        pty_mode=True,
+        marker_dir=tmp_path / "markers",
+        session_id="sess-xyz",
+    )
+
+    assert inner.call_args_list == []  # inner NOT called
+    assert result.returncode == 0
+
+
+# --- T-MARKER-REPLAY-ACCEPTS: ReplayingSubprocessRunner accepts marker params ---
+
+
+@pytest.mark.anyio
+async def test_replaying_runner_accepts_marker_params(tmp_path):
+    """ReplayingSubprocessRunner.__call__ accepts marker_dir and session_id without error."""
+    non_session = {"check": {"exit_code": 0, "stdout_head": "ok", "stderr": ""}}
+    runner = ReplayingSubprocessRunner({}, non_session)
+
+    cmd = ["task", "test-check"]
+    env = {"SCENARIO_STEP_NAME": "check"}
+    result = await runner(
+        cmd,
+        cwd=tmp_path,
+        timeout=60,
+        env=env,
+        marker_dir=tmp_path / "markers",
+        session_id="sess-123",
+    )
+
+    assert result.returncode == 0
+    assert result.stdout == "ok"

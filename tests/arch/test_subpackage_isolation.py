@@ -746,7 +746,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         _install_detect.py adds the is_dev_install() predicate for config resolution
         to auto-detect whether the install is editable when experimental_enabled is absent,
         bringing the count to 33.
-        Exempt at 33 files.
+        _type_session_env.py adds FleetSessionEnv frozen dataclass for typed env spec
+        at the session launch boundary, bringing the count to 20.
+        Exempt at 34 files (core/types: 20).
       cli/ — REQ-CNST-003-E5: cli/ retains _terminal_table.py as a re-export shim
         for backward-compatible cli/ imports; canonical implementation lives in
         core/_terminal_table.py. Also contains _terminal.py — the terminal state
@@ -802,7 +804,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "recipe": 31,
         "execution": 18,
         "core": 20,
-        "core/types": 19,
+        "core/types": 20,
         "cli": 20,
         "hooks": 10,
         "pipeline": 12,

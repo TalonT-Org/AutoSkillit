@@ -4,7 +4,7 @@ categories: [research]
 description: >
   Download external and gitignored datasets declared in the experiment plan's
   data_manifest. Executes acquisition commands sequentially into pre-created
-  directories, verifies each download, and emits a PASS/FAIL verdict.
+  directories, verifies each download, and emits a PASS/WARN/FAIL verdict.
 hooks:
   PreToolUse:
     - matcher: "*"
@@ -19,8 +19,9 @@ hooks:
 Download external and gitignored datasets declared in the experiment plan's
 `data_manifest` frontmatter section. Executes acquisition commands sequentially
 into the directories pre-created by `stage_data`, verifies each download, and
-emits a PASS/FAIL verdict. PASS proceeds to `setup_environment` (research.yaml)
-or `decompose_phases` (research-implement.yaml); FAIL escalates immediately.
+emits a PASS/WARN/FAIL verdict. PASS and WARN proceed to `setup_environment`
+(research.yaml) or `decompose_phases` (research-implement.yaml); FAIL escalates
+immediately.
 
 ## When to Use
 
@@ -35,7 +36,7 @@ or `decompose_phases` (research-implement.yaml); FAIL escalates immediately.
 ```
 
 - `experiment_plan_path` — Absolute path to the experiment plan (positional).
-  Default: `$AUTOSKILLIT_TEMP/experiment-plan.md` in the current working directory.
+  Default: `$AUTOSKILLIT_TEMP/experiment-plan.md`.
 
 ## Critical Constraints
 
@@ -90,8 +91,9 @@ on re-download.
 field, execute that command first in the worktree CWD.
 
 **d. Execute the acquisition command** — Run the `acquisition` command via Bash
-in the worktree CWD. Use no timeout on individual commands (the step-level
-`stale_threshold: 14400` provides the outer bound). Log stdout/stderr to:
+in the worktree CWD. Pass `timeout=14400000` (ms) to each Bash invocation to
+prevent the tool's 120 s default from killing multi-GB downloads; the step-level
+`stale_threshold: 14400` provides the outer bound. Log stdout/stderr to:
 ```
 {{AUTOSKILLIT_TEMP}}/download-data/download_{entry_index}_{timestamp}.log
 ```
@@ -112,8 +114,11 @@ Build a download results table:
 | ...   | external    | data/rna/| FAILED | 12m 03s  |
 ```
 
-- **PASS**: all entries succeeded
-- **FAIL**: any entry failed
+- **PASS**: all entries succeeded with no warnings
+- **WARN**: all entries completed but at least one triggered a recoverable condition
+  (e.g., a verification check passed after retry, or the directory is non-empty but
+  below the expected size threshold)
+- **FAIL**: any entry failed and could not be recovered
 
 ### Step 5 — Write the Download Report
 
@@ -126,7 +131,7 @@ Report structure:
 ```markdown
 ## Download Report
 **Date:** {timestamp}
-**Verdict:** PASS | FAIL
+**Verdict:** PASS | WARN | FAIL
 
 ### Download Results
 | Entry | Source Type | Location | Status | Duration |
@@ -145,7 +150,7 @@ formatting on the token names. Do not wrap token names in `**bold**`,
 on the exact token name — decorators cause match failure.
 
 ```
-verdict = PASS
+verdict = PASS|WARN|FAIL
 download_report = /absolute/path/to/download_report_{YYYY-MM-DD_HHMMSS}.md
 ```
 
@@ -155,6 +160,6 @@ Include the completion marker from the ORCHESTRATION DIRECTIVE at the end of the
 structured output block.
 
 ```
-verdict = PASS|FAIL
+verdict = PASS|WARN|FAIL
 download_report = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/download-data/download_report_{YYYY-MM-DD_HHMMSS}.md
 ```

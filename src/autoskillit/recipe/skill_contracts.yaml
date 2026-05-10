@@ -19,10 +19,13 @@ skills:
       type: string
     - name: is_fixable
       type: string
+    - name: retry_delay
+      type: string
     expected_output_patterns:
     - "is_fixable\\s*=\\s*(true|false)"
     pattern_examples:
     - "diagnosis_path = /tmp/diagnosis.md\nfailure_type = stale_timeout\nis_fixable = true\n%%ORDER_UP%%"
+    - "diagnosis_path = /tmp/diagnosis.md\nfailure_type = transient_api\nis_fixable = true\nretry_delay = 120\n%%ORDER_UP%%"
     write_behavior: always
   diagnose-ci:
     inputs:

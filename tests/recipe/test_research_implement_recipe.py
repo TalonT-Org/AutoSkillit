@@ -18,7 +18,7 @@ class TestResearchImplementRecipe:
         assert errors == [], f"Validation errors: {errors}"
 
     def test_research_implement_step_count(self, recipe) -> None:
-        assert len(recipe.steps) == 22
+        assert len(recipe.steps) == 26
 
     def test_research_implement_header(self, recipe) -> None:
         assert recipe.name == "research-implement"
@@ -55,3 +55,17 @@ class TestResearchImplementRecipe:
         assert "${{ context.worktree_path }}" in recipe.steps["implement_complete"].message
         assert "${{ context.report_path }}" in recipe.steps["implement_complete"].message
         assert "${{ context.experiment_results }}" in recipe.steps["implement_complete"].message
+
+    def test_research_implement_has_retry_delay_steps(self, recipe) -> None:
+        """research-implement.yaml must have the retry delay gate and sleep step."""
+        assert "route_implement_retry_delay" in recipe.steps
+        assert "implement_retry_delay" in recipe.steps
+        step = recipe.steps["implement_retry_delay"]
+        assert step.tool == "run_cmd"
+
+    def test_research_implement_has_run_retry_delay_steps(self, recipe) -> None:
+        """research-implement.yaml must have the run retry delay gate and sleep step."""
+        assert "route_run_retry_delay" in recipe.steps
+        assert "run_retry_delay" in recipe.steps
+        step = recipe.steps["run_retry_delay"]
+        assert step.tool == "run_cmd"

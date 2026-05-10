@@ -121,7 +121,7 @@ def test_anti_fabrication_never_rule() -> None:
 
 
 def test_generate_report_group_manifest_input() -> None:
-    """generate-report contract must declare group_manifest as a required input."""
+    """generate-report contract must declare group_manifest as an optional input."""
     import yaml
 
     contract_path = (

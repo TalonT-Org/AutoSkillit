@@ -78,13 +78,40 @@
       "on_result": {
         "field": "verdict",
         "routes": {
+          "PASS": "download_data",
+          "WARN": "download_data",
+          "FAIL": "escalate_stop"
+        }
+      },
+      "on_failure": "escalate_stop",
+      "note": "Pre-flight resource gate. Reads the experiment plan's data_manifest, checks available disk space and network connectivity for external/gitignored data entries, and creates the required directory structure in the worktree. PASS and WARN proceed to download_data. FAIL escalates immediately with a detailed resource feasibility report rather than wasting compute on doomed downloads.\n"
+    },
+    "download_data": {
+      "tool": "run_skill",
+      "model": "",
+      "stale_threshold": 14400,
+      "idle_output_timeout": 0,
+      "retries": 1,
+      "on_exhausted": "escalate_stop",
+      "with": {
+        "skill_command": "/autoskillit:download-data ${{ inputs.experiment_plan }}",
+        "cwd": "${{ inputs.worktree_path }}",
+        "step_name": "download_data"
+      },
+      "capture": {
+        "verdict": "${{ result.verdict }}",
+        "download_report": "${{ result.download_report }}"
+      },
+      "on_result": {
+        "field": "verdict",
+        "routes": {
           "PASS": "decompose_phases",
           "WARN": "decompose_phases",
           "FAIL": "escalate_stop"
         }
       },
       "on_failure": "escalate_stop",
-      "note": "Pre-flight resource gate. Reads the experiment plan's data_manifest, checks available disk space and network connectivity for external/gitignored data entries, and creates the required directory structure in the worktree. PASS and WARN proceed to decompose_phases. FAIL escalates immediately with a detailed resource feasibility report rather than wasting compute on doomed downloads.\n"
+      "note": "Downloads external and gitignored datasets declared in the experiment plan's data_manifest. Executes acquisition commands sequentially into the directories pre-created by stage_data. Uses a 4-hour stale threshold to accommodate multi-GB downloads. PASS and WARN proceed to decompose_phases. FAIL escalates immediately.\n"
     },
     "decompose_phases": {
       "tool": "run_skill",

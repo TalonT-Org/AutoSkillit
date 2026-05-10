@@ -663,6 +663,7 @@ ALWAYS_WRITE_SKILLS = {
     "compose-research-pr",
     "design-guards",
     "diagnose-ci",
+    "download-data",
     "dry-walkthrough",
     "file-audit-issues",
     "generate-report",

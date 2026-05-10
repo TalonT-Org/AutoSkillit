@@ -576,6 +576,7 @@ class TestOutputPathTokensDerivedFromContracts:
             "env_report",
             # run-experiment group manifest output (multi-group awareness)
             "group_manifest",
+            "download_report",
         }
     )
 

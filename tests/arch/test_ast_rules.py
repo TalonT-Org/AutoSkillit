@@ -967,6 +967,7 @@ def test_arch010_accepts_non_strenum_field(tmp_path: Path) -> None:
 
 
 _TEST_FILES = sorted((Path(__file__).parent.parent).rglob("*.py"))
+_TEST_IDS = [str(f.relative_to(Path(__file__).parent.parent)) for f in _TEST_FILES]
 
 
 class TestArch010Enforcement:
@@ -975,13 +976,15 @@ class TestArch010Enforcement:
     @pytest.mark.parametrize(
         "test_file",
         _TEST_FILES,
-        ids=[str(f.relative_to(Path(__file__).parent.parent)) for f in _TEST_FILES],
+        ids=_TEST_IDS,
     )
     def test_no_strenum_string_compare_in_tests(self, test_file: Path) -> None:
         """ARCH-010: test files must not compare StrEnum fields against raw string literals."""
         # Exempt calibration snippets in test_ast_rules.py itself
         if test_file.name == "test_ast_rules.py":
-            return
+            pytest.skip(
+                "exempt: calibration snippets in this file are intentional ARCH-010 violations"
+            )
         violations = _scan_strenum_compare(test_file)
         assert not violations, (
             f"ARCH-010 violations in {test_file.relative_to(Path(__file__).parent.parent)}:\n"

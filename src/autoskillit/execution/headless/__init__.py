@@ -304,8 +304,6 @@ async def _execute_claude_headless(
     _result: SubprocessResult | None = None
     result: SubprocessResult
     skill_result: SkillResult
-    # session_id is dispatch_id (DispatchIdentity UUID), not a post-run Claude Code session UUID
-    effective_marker_dir = marker_dir or (claude_code_project_dir(cwd) if cwd else None)
     while True:
         try:
             _result = await runner(
@@ -324,7 +322,7 @@ async def _execute_claude_headless(
                 on_pid_resolved=on_spawn,
                 enable_deadline_extension=enable_deadline_extension,
                 max_extension_seconds=max_extension_seconds,
-                marker_dir=effective_marker_dir,
+                marker_dir=marker_dir,
                 session_id=session_id,
             )
         except Exception as exc:

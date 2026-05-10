@@ -1,6 +1,7 @@
 # tests/infra/test_ci_shard_config.py
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -8,16 +9,33 @@ import pytest
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "tests.yml"
 
-SHARD_A_DIRS = [
-    "tests/execution",
-    "tests/contracts",
-    "tests/core",
-    "tests/planner",
-    "tests/pipeline",
-    "tests/migration",
-    "tests/integration",
-]
+KNOWN_GENERAL_SHARD_DIRS = {
+    "arch",
+    "assets",
+    "cli",
+    "config",
+    "docs",
+    "fleet",
+    "hooks",
+    "infra",
+    "recipe",
+    "server",
+    "skills",
+    "skills_extended",
+    "workspace",
+}
+
+
+def _parse_shard_a_dirs_from_workflow() -> list[str]:
+    text = WORKFLOW_PATH.read_text()
+    match = re.search(r'SHARD_A_DIRS="([^"]+)"', text)
+    assert match, "Could not find SHARD_A_DIRS definition in tests.yml"
+    return match.group(1).split()
+
+
+SHARD_A_DIRS = _parse_shard_a_dirs_from_workflow()
 
 
 class TestCIShardConfig:
@@ -30,12 +48,16 @@ class TestCIShardConfig:
             test_files = list((REPO_ROOT / d).rglob("test_*.py"))
             assert test_files, f"Shard A directory {d} contains no test files"
 
-    def test_shard_a_directories_are_subset_of_test_dirs(self) -> None:
+    def test_all_test_dirs_assigned_to_shard(self) -> None:
         all_test_dirs = {
             p.name
             for p in (REPO_ROOT / "tests").iterdir()
             if p.is_dir() and not p.name.startswith("_") and not p.name.startswith(".")
         }
         shard_a_names = {Path(d).name for d in SHARD_A_DIRS}
-        extra = shard_a_names - all_test_dirs
-        assert not extra, f"Shard A references non-existent test directories: {extra}"
+        assigned = shard_a_names | KNOWN_GENERAL_SHARD_DIRS
+        unassigned = all_test_dirs - assigned
+        assert not unassigned, (
+            f"Test directories not assigned to any shard: {unassigned}. "
+            "Add to SHARD_A_DIRS in tests.yml or KNOWN_GENERAL_SHARD_DIRS in this file."
+        )

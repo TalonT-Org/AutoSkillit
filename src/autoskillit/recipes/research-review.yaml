@@ -121,7 +121,7 @@ steps:
     tool: run_cmd
     optional_context_refs: [research_dir, worktree_path]
     with:
-      cmd: "bash scripts/recipe/stage_bundle.sh '${{ context.research_dir }}' '${{ context.worktree_path }}' '{{AUTOSKILLIT_TEMP}}'"
+      cmd: "bash {{AUTOSKILLIT_SCRIPTS}}/stage_bundle.sh '${{ context.research_dir }}' '${{ context.worktree_path }}' '{{AUTOSKILLIT_TEMP}}'"
       cwd: "${{ context.worktree_path }}"
       step_name: stage_bundle
     on_success: route_pr_or_local
@@ -343,7 +343,7 @@ steps:
     tool: run_cmd
     optional_context_refs: [research_dir, worktree_path]
     with:
-      cmd: "bash scripts/recipe/stage_bundle.sh '${{ context.research_dir }}' '${{ context.worktree_path }}' '{{AUTOSKILLIT_TEMP}}'"
+      cmd: "bash {{AUTOSKILLIT_SCRIPTS}}/stage_bundle.sh '${{ context.research_dir }}' '${{ context.worktree_path }}' '{{AUTOSKILLIT_TEMP}}'"
       cwd: "${{ context.worktree_path }}"
       step_name: re_stage_bundle
     on_success: re_test
@@ -380,7 +380,7 @@ steps:
     tool: run_cmd
     optional_context_refs: [research_dir, worktree_path]
     with:
-      cmd: "bash scripts/recipe/finalize_bundle.sh '${{ inputs.output_mode }}' '${{ context.research_dir }}' '${{ context.worktree_path }}'"
+      cmd: "bash {{AUTOSKILLIT_SCRIPTS}}/finalize_bundle.sh '${{ inputs.output_mode }}' '${{ context.research_dir }}' '${{ context.worktree_path }}'"
       cwd: "${{ context.worktree_path }}"
       step_name: finalize_bundle
     capture:

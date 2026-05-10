@@ -36,6 +36,7 @@ logger = get_logger(__name__)
 
 
 _TEMP_PLACEHOLDER = "{{AUTOSKILLIT_TEMP}}"
+_SCRIPTS_PLACEHOLDER = "{{AUTOSKILLIT_SCRIPTS}}"
 
 
 def substitute_temp_placeholder(text: str, temp_dir_relpath: str) -> str:
@@ -51,13 +52,19 @@ def substitute_temp_placeholder(text: str, temp_dir_relpath: str) -> str:
     return text.replace(_TEMP_PLACEHOLDER, temp_dir_relpath)
 
 
+def substitute_scripts_placeholder(text: str) -> str:
+    """Replace ``{{AUTOSKILLIT_SCRIPTS}}`` with the absolute path to bundled scripts."""
+    return text.replace(_SCRIPTS_PLACEHOLDER, str(builtin_scripts_dir()))
+
+
 def _assert_no_raw_placeholders(text: str, *, context: str = "") -> None:
     # Content-delivery boundary guard: raises if placeholder substitution was skipped.
-    if _TEMP_PLACEHOLDER in text:
-        raise ValueError(
-            f"Unresolved {_TEMP_PLACEHOLDER} in recipe content"
-            + (f" ({context})" if context else "")
-        )
+    for placeholder in (_TEMP_PLACEHOLDER, _SCRIPTS_PLACEHOLDER):
+        if placeholder in text:
+            raise ValueError(
+                f"Unresolved {placeholder} in recipe content"
+                + (f" ({context})" if context else "")
+            )
 
 
 def _load_recipe_dict(
@@ -80,6 +87,7 @@ def _load_recipe_dict(
             text = json_path.read_text(encoding="utf-8")
             if temp_dir_relpath is not None:
                 text = substitute_temp_placeholder(text, temp_dir_relpath)
+            text = substitute_scripts_placeholder(text)
             data = _fast_loads(text)
             if isinstance(data, dict):
                 return data
@@ -94,6 +102,7 @@ def _load_recipe_dict(
         raw_text = yaml_path.read_text(encoding="utf-8")
     if temp_dir_relpath is not None:
         raw_text = substitute_temp_placeholder(raw_text, temp_dir_relpath)
+    raw_text = substitute_scripts_placeholder(raw_text)
     data = load_yaml(raw_text)
     if not isinstance(data, dict):
         raise ValueError(f"Recipe file must contain a YAML mapping: {yaml_path}")
@@ -182,6 +191,11 @@ def builtin_recipes_dir() -> Path:
 def builtin_sub_recipes_dir() -> Path:
     """Return the path to the built-in sub-recipes directory."""
     return pkg_root() / "recipes" / "sub-recipes"
+
+
+def builtin_scripts_dir() -> Path:
+    """Return the path to the built-in recipe scripts directory."""
+    return pkg_root() / "recipes" / "scripts"
 
 
 def find_sub_recipe_by_name(name: str, project_dir: Path) -> Path | None:

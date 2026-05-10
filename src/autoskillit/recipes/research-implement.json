@@ -395,7 +395,7 @@
     "push_branch": {
       "tool": "run_cmd",
       "with": {
-        "cmd": "bash scripts/recipe/push_branch.sh '${{ inputs.output_mode }}' '${{ context.worktree_path }}'",
+        "cmd": "bash {{AUTOSKILLIT_SCRIPTS}}/push_branch.sh '${{ inputs.output_mode }}' '${{ context.worktree_path }}'",
         "cwd": "${{ context.worktree_path }}",
         "step_name": "push_branch"
       },

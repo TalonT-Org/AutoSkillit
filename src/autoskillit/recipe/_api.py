@@ -52,6 +52,7 @@ from autoskillit.recipe.io import (
     builtin_sub_recipes_dir,
     find_recipe_by_name,
     list_recipes,
+    substitute_scripts_placeholder,
     substitute_temp_placeholder,
 )
 from autoskillit.recipe.schema import Recipe
@@ -394,6 +395,7 @@ def load_and_validate(
 
     raw = match.content if match.content is not None else match.path.read_text()
     raw = substitute_temp_placeholder(raw, _temp_relpath)
+    raw = substitute_scripts_placeholder(raw)
     suggestions: list[dict[str, Any]] = []
     valid = True
     recipe = None

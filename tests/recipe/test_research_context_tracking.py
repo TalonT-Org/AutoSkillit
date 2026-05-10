@@ -4,12 +4,11 @@ import re
 
 import pytest
 
-from autoskillit.core.paths import pkg_root
-from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+from autoskillit.recipe.io import builtin_recipes_dir, builtin_scripts_dir, load_recipe
 from autoskillit.recipe.validator import run_semantic_rules, validate_recipe_structure
 
 RESEARCH_RECIPE_PATH = builtin_recipes_dir() / "research.yaml"
-SCRIPTS_DIR = pkg_root().parent.parent / "scripts" / "recipe"
+SCRIPTS_DIR = builtin_scripts_dir()
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 

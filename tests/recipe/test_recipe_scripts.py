@@ -8,12 +8,58 @@ import subprocess
 import pytest
 
 from autoskillit.core.paths import pkg_root
-from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+from autoskillit.recipe.io import builtin_recipes_dir, builtin_scripts_dir, load_recipe
 from autoskillit.recipe.validator import run_semantic_rules
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
-SCRIPTS_DIR = pkg_root().parent.parent / "scripts" / "recipe"
+SCRIPTS_DIR = builtin_scripts_dir()
+
+
+def test_bundled_scripts_exist_within_package_boundary():
+    """All scripts referenced in bundled recipe cmd fields must live inside pkg_root()."""
+    scripts_dir = builtin_scripts_dir()
+    pkg = pkg_root()
+    assert scripts_dir.exists(), f"builtin_scripts_dir does not exist: {scripts_dir}"
+    assert scripts_dir.is_relative_to(pkg), (
+        f"builtin_scripts_dir() ({scripts_dir}) is not under pkg_root() ({pkg})"
+    )
+    scripts = list(scripts_dir.glob("*.sh"))
+    assert scripts, f"No .sh scripts found in {scripts_dir}"
+    for sh in scripts:
+        assert sh.is_relative_to(pkg), f"Script {sh} is outside package boundary {pkg}"
+
+
+def test_autoskillit_scripts_placeholder_substituted_at_load_time():
+    """Loading a recipe must resolve {{AUTOSKILLIT_SCRIPTS}} to an absolute path."""
+    recipe = load_recipe(builtin_recipes_dir() / "research.yaml")
+    for name, step in recipe.steps.items():
+        if step.tool != "run_cmd":
+            continue
+        cmd = (step.with_args or {}).get("cmd", "")
+        assert "{{AUTOSKILLIT_SCRIPTS}}" not in cmd, (
+            f"Step '{name}' has unresolved {{{{AUTOSKILLIT_SCRIPTS}}}} in cmd"
+        )
+        if "scripts/" in cmd and ".sh" in cmd:
+            assert cmd.strip().startswith("bash /"), (
+                f"Step '{name}' script path not resolved to absolute: {cmd[:80]}"
+            )
+
+
+@pytest.mark.parametrize(
+    "recipe_name",
+    ["research", "research-design", "research-implement", "research-review", "research-archive"],
+)
+def test_no_recipe_uses_dev_tree_script_paths(recipe_name):
+    """Loaded bundled recipes must not contain relative scripts/recipe/ paths."""
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    for name, step in recipe.steps.items():
+        if step.tool != "run_cmd":
+            continue
+        cmd = (step.with_args or {}).get("cmd", "")
+        assert "scripts/recipe/" not in cmd, (
+            f"Step '{name}' in {recipe_name} still uses dev-tree path: {cmd[:80]}"
+        )
 
 
 def test_recipe_scripts_are_executable():

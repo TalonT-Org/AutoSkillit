@@ -197,7 +197,7 @@
     "create_worktree": {
       "tool": "run_cmd",
       "with": {
-        "cmd": "bash scripts/recipe/create_worktree.sh \"${{ inputs.source_dir }}\" \"${{ inputs.task }}\" \"${{ context.experiment_plan }}\" \"${{ context.scope_report }}\" \"${{ context.evaluation_dashboard }}\" \"${{ context.visualization_plan_path }}\" \"${{ context.report_plan_path }}\" \"{{AUTOSKILLIT_TEMP}}\" \"${{ context.visualization_plan_trace_path }}\"",
+        "cmd": "bash {{AUTOSKILLIT_SCRIPTS}}/create_worktree.sh \"${{ inputs.source_dir }}\" \"${{ inputs.task }}\" \"${{ context.experiment_plan }}\" \"${{ context.scope_report }}\" \"${{ context.evaluation_dashboard }}\" \"${{ context.visualization_plan_path }}\" \"${{ context.report_plan_path }}\" \"{{AUTOSKILLIT_TEMP}}\" \"${{ context.visualization_plan_trace_path }}\"",
         "cwd": "${{ inputs.source_dir }}",
         "step_name": "create_worktree"
       },

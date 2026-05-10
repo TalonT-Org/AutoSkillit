@@ -67,7 +67,7 @@ async def test_marker_deleted_after_success(tool_ctx, monkeypatch, tmp_path: Pat
         quota_refresher=_noop_quota_refresher,
     )
 
-    remaining = list(marker_dir.glob("dispatch-in-progress-*.marker"))
+    remaining = list(marker_dir.glob("dispatch-in-progress--*.marker"))
     assert remaining == [], f"Expected no marker files, found {remaining}"
 
 
@@ -101,7 +101,7 @@ async def test_marker_deleted_after_exception(tool_ctx, monkeypatch, tmp_path: P
     except* RuntimeError:
         pass
 
-    remaining = list(marker_dir.glob("dispatch-in-progress-*.marker"))
+    remaining = list(marker_dir.glob("dispatch-in-progress--*.marker"))
     assert remaining == [], f"Expected no marker files after exception, found {remaining}"
 
 

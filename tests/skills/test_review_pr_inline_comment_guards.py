@@ -561,7 +561,7 @@ def test_step6_jq_includes_severity_filter():
     assert step65_start != -1
     step6_section = SKILL_TEXT[step6_start:step65_start]
     # Must have a jq select that filters on severity
-    assert "select" in step6_section and "severity" in step6_section, (
+    assert "select(.severity" in step6_section, (
         "Step 6 jq expression must include a select filter on severity "
         "to exclude info-severity findings before building comment objects"
     )
@@ -582,7 +582,7 @@ def test_research_pr_step6_jq_includes_severity_filter():
     assert step6_start != -1
     assert step65_start != -1
     step6_section = RESEARCH_SKILL_TEXT[step6_start:step65_start]
-    assert "select" in step6_section and "severity" in step6_section, (
+    assert "select(.severity" in step6_section, (
         "review-research-pr Step 6 jq expression must include a select filter on severity"
     )
     assert "critical" in step6_section.lower() and "warning" in step6_section.lower(), (

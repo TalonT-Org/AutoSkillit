@@ -87,7 +87,7 @@ def test_all_weight_values_are_valid() -> None:
             )
 
 
-def test_all_eight_dimensions_present() -> None:
+def test_all_nine_dimensions_present() -> None:
     """All 9 dimensions from the SKILL.md matrix are present in each bundled type."""
     types = load_all_experiment_types()
     for spec in types:

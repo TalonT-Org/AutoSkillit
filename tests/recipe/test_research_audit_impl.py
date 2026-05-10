@@ -1,5 +1,3 @@
-"""Tests for audit_impl gate and capture_impl_base in research recipes."""
-
 from __future__ import annotations
 
 import pytest
@@ -53,9 +51,7 @@ class TestResearchRecipesAuditImpl:
         step = recipe.steps["audit_impl"]
         assert step.on_result is not None
         conditions = step.on_result.conditions
-        go_cond = next(
-            (c for c in conditions if c.when and "verdict" in c.when and "GO" in c.when), None
-        )
+        go_cond = next((c for c in conditions if c.when and "== GO" in c.when), None)
         assert go_cond is not None, "audit_impl must have a GO verdict condition"
         assert go_cond.route == "run_experiment"
 
@@ -82,7 +78,8 @@ class TestResearchRecipesAuditImpl:
         step = recipe.steps["check_implement_fix_loop"]
         conditions = step.on_result.conditions
         max_exceeded_cond = next(
-            (c for c in conditions if c.when and "max_exceeded" in c.when), None
+            (c for c in conditions if c.when and "max_exceeded" in c.when and "== true" in c.when),
+            None,
         )
         assert max_exceeded_cond is not None, (
             "check_implement_fix_loop must have a max_exceeded condition"

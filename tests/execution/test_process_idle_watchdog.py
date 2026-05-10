@@ -495,3 +495,4 @@ async def test_watch_stdout_idle_marker_suppression_bounded(
     elapsed = time.monotonic() - start
     assert acc.idle_stall is True
     assert elapsed >= 1.5
+    assert elapsed < 5.0

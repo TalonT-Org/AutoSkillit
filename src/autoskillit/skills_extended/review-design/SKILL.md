@@ -92,6 +92,9 @@ absent. The recipe routes to `on_context_limit`, abandoning the partial review.
    skipped (not spawned, not mentioned in output — same behavior as a SILENT dimension).
    When present, read the scope report file and extract the "Proposed Investigation
    Directions" section for use by the `scope_alignment` subagent in Step 3.
+   **Error handling:** If `scope_report_path` is provided but the file does not exist or
+   is unreadable, emit `verdict = STOP` with message "Scope report file not found: {path}"
+   and return.
 4. Read the plan file.
    **Error handling:** If the file does not exist or is unreadable at the resolved path,
    emit `verdict = STOP` with message "Plan file not found: {path}" and return.
@@ -338,6 +341,10 @@ Evaluation procedure:
 
 1. **Direction extraction**: Read the "Proposed Investigation Directions" section of the
    scope report. Enumerate each direction as D1, D2, D3, etc.
+   **Empty section guard:** If the "Proposed Investigation Directions" section is absent
+   or contains no enumerable directions (`total_directions == 0`), emit an Info finding:
+   "Scope report contains no enumerable directions — scope alignment check skipped." and
+   return without a coverage ratio or narrowing verdict. Do not emit Critical or Warning.
 2. **Coverage mapping**: For each direction, check whether the plan's hypotheses, methods,
    independent variables, or implementation steps address it. A direction is "covered" if
    the plan contains a hypothesis, experimental arm, or measurement that directly

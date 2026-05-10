@@ -44,13 +44,14 @@ jobs:
           uv run python --version
 
   test:
-    name: Test on ${{ matrix.os }}
+    name: Test (${{ matrix.shard }}) on ${{ matrix.os }}
     needs: preflight
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: ${{ fromJSON(needs.preflight.outputs.os-matrix) }}
+        shard: [execution, general]
 
     steps:
       - uses: actions/checkout@v4
@@ -87,6 +88,31 @@ jobs:
       - name: Generate recipe diagrams
         run: uv run autoskillit recipes render
 
+      - name: Compute test paths
+        id: test-paths
+        run: |
+          SHARD_A_DIRS="tests/execution tests/contracts tests/core tests/planner tests/pipeline tests/migration tests/integration"
+          if find tests/ -maxdepth 1 -name 'test_*.py' -print0 | grep -qz ' '; then
+            echo "::error::Test filenames with spaces are not supported by the shard path splitter"
+            exit 1
+          fi
+          if [[ "${{ matrix.shard }}" == "execution" ]]; then
+            ROOT_FILES=$(find tests/ -maxdepth 1 -name 'test_*.py' | sort | tr '\n' ' ')
+            echo "PYTEST_TEST_PATHS=${SHARD_A_DIRS} ${ROOT_FILES}" >> "$GITHUB_ENV"
+          else
+            IGNORES=""
+            for d in $SHARD_A_DIRS; do
+              IGNORES="$IGNORES --ignore=$d"
+            done
+            ROOT_IGNORES=$(find tests/ -maxdepth 1 -name 'test_*.py' | sort | sed 's|^|--ignore=|' | tr '\n' ' ')
+            echo "PYTEST_TEST_PATHS=tests/" >> "$GITHUB_ENV"
+            echo "PYTEST_IGNORE_PATHS=${IGNORES} ${ROOT_IGNORES}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Lint imports
+        if: matrix.shard == 'execution'
+        run: uv run lint-imports
+
       - name: Run tests
         env:
           AUTOSKILLIT_FILTER_STATS_FILE: ${{ github.workspace }}/.autoskillit/temp/filter-stats.json
@@ -100,12 +126,12 @@ jobs:
           if [[ "${{ github.event_name }}" == "pull_request" && "${{ github.base_ref }}" == "develop" ]]; then
             export AUTOSKILLIT_TEST_FILTER=conservative
           fi
-          task test-all
+          task test-check
 
       - name: Upload filter stats
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: filter-stats-${{ matrix.os }}
+          name: filter-stats-${{ matrix.os }}-${{ matrix.shard }}
           path: .autoskillit/temp/filter-stats.json
           if-no-files-found: ignore

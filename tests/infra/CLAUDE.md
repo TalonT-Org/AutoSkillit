@@ -15,6 +15,7 @@ CI/CD configuration, security, guard coverage, and release sanity tests.
 | `test_branch_protection_guard.py` | Tests for hooks/branch_protection_guard.py — PreToolUse branch protection |
 | `test_ci_dev_config.py` | Structural enforcement: CI workflow and pre-commit configuration must contain required quality gates |
 | `test_ci_workflow.py` | CI workflow structural tests |
+| `test_ci_shard_config.py` | Tests for CI shard directory configuration consistency |
 | `test_claude_md_critical_rules.py` | Tests that CLAUDE.md contains required critical rules (FRICT-1B-3, FRICT-3A-1) |
 | `test_command_guard_completeness.py` | Structural meta-test: command-inspecting guards must cover all command-executing tools |
 | `test_coverage_audit.py` | Tests for scripts/compare-coverage-ast.py — AST extraction and coverage comparison |

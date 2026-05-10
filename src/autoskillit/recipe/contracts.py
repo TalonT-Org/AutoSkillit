@@ -125,7 +125,7 @@ class BlockFingerprint:
 @dataclasses.dataclass
 class RecipeCard:
     generated_at: str
-    recipe_source_hash: str
+    recipe_source_hash: str | None
     bundled_manifest_version: str
     skill_hashes: dict[str, str]
     skills: dict[str, SkillContract]
@@ -376,7 +376,7 @@ def _generate_recipe_card_for_recipe(recipe: Recipe) -> RecipeCard:
     manifest = load_bundled_manifest()
     return RecipeCard(
         generated_at=datetime.now(UTC).isoformat(),
-        recipe_source_hash="",
+        recipe_source_hash=None,
         bundled_manifest_version=manifest.get("version", ""),
         skill_hashes={},
         skills={},
@@ -630,8 +630,8 @@ def check_contract_staleness(
     stale: list[StaleItem] = []
 
     if recipe_path is not None:
-        stored_hash = contract.get("recipe_source_hash", "")
-        if stored_hash:
+        stored_hash = contract.get("recipe_source_hash")
+        if stored_hash is not None:
             current_hash = compute_recipe_hash(recipe_path)
             if stored_hash != current_hash:
                 stale.append(

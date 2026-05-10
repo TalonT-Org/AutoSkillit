@@ -224,7 +224,7 @@
     "create_worktree": {
       "tool": "run_cmd",
       "with": {
-        "cmd": "bash scripts/recipe/create_worktree.sh '${{ inputs.source_dir }}' '${{ inputs.task }}' '${{ context.experiment_plan }}' '${{ context.scope_report }}' '${{ context.evaluation_dashboard }}' '${{ context.visualization_plan_path }}' '${{ context.report_plan_path }}' '{{AUTOSKILLIT_TEMP}}' '${{ context.visualization_plan_trace_path }}'",
+        "cmd": "bash {{AUTOSKILLIT_SCRIPTS}}/create_worktree.sh '${{ inputs.source_dir }}' '${{ inputs.task }}' '${{ context.experiment_plan }}' '${{ context.scope_report }}' '${{ context.evaluation_dashboard }}' '${{ context.visualization_plan_path }}' '${{ context.report_plan_path }}' '{{AUTOSKILLIT_TEMP}}' '${{ context.visualization_plan_trace_path }}'",
         "cwd": "${{ inputs.source_dir }}",
         "step_name": "create_worktree"
       },
@@ -596,7 +596,7 @@
     "push_branch": {
       "tool": "run_cmd",
       "with": {
-        "cmd": "bash scripts/recipe/push_branch.sh '${{ inputs.output_mode }}' '${{ context.worktree_path }}'",
+        "cmd": "bash {{AUTOSKILLIT_SCRIPTS}}/push_branch.sh '${{ inputs.output_mode }}' '${{ context.worktree_path }}'",
         "cwd": "${{ context.worktree_path }}",
         "step_name": "push_branch"
       },
@@ -637,7 +637,7 @@
     "stage_bundle": {
       "tool": "run_cmd",
       "with": {
-        "cmd": "bash scripts/recipe/stage_bundle.sh '${{ context.research_dir }}' '${{ context.worktree_path }}' '{{AUTOSKILLIT_TEMP}}'",
+        "cmd": "bash {{AUTOSKILLIT_SCRIPTS}}/stage_bundle.sh '${{ context.research_dir }}' '${{ context.worktree_path }}' '{{AUTOSKILLIT_TEMP}}'",
         "cwd": "${{ context.worktree_path }}",
         "step_name": "stage_bundle"
       },
@@ -843,7 +843,7 @@
     "re_stage_bundle": {
       "tool": "run_cmd",
       "with": {
-        "cmd": "bash scripts/recipe/stage_bundle.sh '${{ context.research_dir }}' '${{ context.worktree_path }}' '{{AUTOSKILLIT_TEMP}}'",
+        "cmd": "bash {{AUTOSKILLIT_SCRIPTS}}/stage_bundle.sh '${{ context.research_dir }}' '${{ context.worktree_path }}' '{{AUTOSKILLIT_TEMP}}'",
         "cwd": "${{ context.worktree_path }}",
         "step_name": "re_stage_bundle"
       },
@@ -873,7 +873,7 @@
     "finalize_bundle": {
       "tool": "run_cmd",
       "with": {
-        "cmd": "bash scripts/recipe/finalize_bundle.sh '${{ inputs.output_mode }}' '${{ context.research_dir }}' '${{ context.worktree_path }}'",
+        "cmd": "bash {{AUTOSKILLIT_SCRIPTS}}/finalize_bundle.sh '${{ inputs.output_mode }}' '${{ context.research_dir }}' '${{ context.worktree_path }}'",
         "cwd": "${{ context.worktree_path }}",
         "step_name": "finalize_bundle"
       },
@@ -955,7 +955,7 @@
     "create_artifact_branch": {
       "tool": "run_cmd",
       "with": {
-        "cmd": "bash scripts/recipe/create_artifact_branch.sh '${{ context.worktree_path }}' '${{ context.experiment_branch }}' '${{ inputs.base_branch }}' '${{ context.research_dir }}'",
+        "cmd": "bash {{AUTOSKILLIT_SCRIPTS}}/create_artifact_branch.sh '${{ context.worktree_path }}' '${{ context.experiment_branch }}' '${{ inputs.base_branch }}' '${{ context.research_dir }}'",
         "cwd": "${{ context.worktree_path }}",
         "step_name": "create_artifact_branch"
       },
@@ -969,7 +969,7 @@
     "open_artifact_pr": {
       "tool": "run_cmd",
       "with": {
-        "cmd": "bash scripts/recipe/open_artifact_pr.sh '${{ context.worktree_path }}' '${{ context.experiment_branch }}' '${{ context.artifact_branch }}' '${{ context.pr_url }}' '${{ inputs.base_branch }}' '${{ context.research_dir }}'",
+        "cmd": "bash {{AUTOSKILLIT_SCRIPTS}}/open_artifact_pr.sh '${{ context.worktree_path }}' '${{ context.experiment_branch }}' '${{ context.artifact_branch }}' '${{ context.pr_url }}' '${{ inputs.base_branch }}' '${{ context.research_dir }}'",
         "cwd": "${{ context.worktree_path }}",
         "step_name": "open_artifact_pr"
       },
@@ -983,7 +983,7 @@
     "tag_experiment_branch": {
       "tool": "run_cmd",
       "with": {
-        "cmd": "bash scripts/recipe/tag_experiment_branch.sh '${{ context.worktree_path }}' '${{ context.experiment_branch }}' '${{ context.artifact_pr_url }}'",
+        "cmd": "bash {{AUTOSKILLIT_SCRIPTS}}/tag_experiment_branch.sh '${{ context.worktree_path }}' '${{ context.experiment_branch }}' '${{ context.artifact_pr_url }}'",
         "cwd": "${{ context.worktree_path }}",
         "step_name": "tag_experiment_branch"
       },

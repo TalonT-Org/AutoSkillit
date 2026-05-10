@@ -247,3 +247,8 @@ class TestCaptureChainAcrossResumeBoundary:
             assert result.error_code != FleetErrorCode.FLEET_UNKNOWN_INGREDIENT, (
                 f"Campaign capture ref not resolved — captures lost: {result.message}"
             )
+        else:
+            from autoskillit.fleet.state_types import DispatchCompleted
+
+            assert isinstance(result, DispatchCompleted), f"Unexpected result type: {type(result)}"
+            assert result.dispatch_id == prior_id

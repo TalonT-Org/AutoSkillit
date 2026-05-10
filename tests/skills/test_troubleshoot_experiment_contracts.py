@@ -23,9 +23,21 @@ def test_troubleshoot_experiment_has_transient_api_classification():
     skill_md = (
         pkg_root() / "skills_extended" / "troubleshoot-experiment" / "SKILL.md"
     ).read_text()
-    assert "transient_api" in skill_md
-    assert "overloaded_error" in skill_md
-    assert "rate_limit_error" in skill_md
+    step4_start = skill_md.find("### Step 4:")
+    step5_start = skill_md.find("### Step 5:")
+    assert step4_start != -1, "SKILL.md must have a '### Step 4:' section"
+    decision_table = (
+        skill_md[step4_start:step5_start] if step5_start != -1 else skill_md[step4_start:]
+    )
+    assert "transient_api" in decision_table, (
+        "transient_api must appear in the Step 4 decision table"
+    )
+    assert "overloaded_error" in decision_table, (
+        "overloaded_error must appear in the Step 4 decision table"
+    )
+    assert "rate_limit_error" in decision_table, (
+        "rate_limit_error must appear in the Step 4 decision table"
+    )
 
 
 def test_troubleshoot_experiment_emits_retry_delay_token():
@@ -33,7 +45,10 @@ def test_troubleshoot_experiment_emits_retry_delay_token():
     skill_md = (
         pkg_root() / "skills_extended" / "troubleshoot-experiment" / "SKILL.md"
     ).read_text()
-    assert "retry_delay" in skill_md
+    step6_start = skill_md.find("### Step 6:")
+    assert step6_start != -1, "SKILL.md must have a '### Step 6:' section"
+    step6_section = skill_md[step6_start:]
+    assert "retry_delay" in step6_section, "retry_delay output token must be declared in Step 6"
 
 
 def test_troubleshoot_experiment_contract_includes_retry_delay():

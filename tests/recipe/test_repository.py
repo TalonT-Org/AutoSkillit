@@ -270,3 +270,47 @@ def test_repository_load_and_validate_passes_recipe_list_to_api(tmp_path: Path) 
     assert captured_kwargs["recipe_list"] is not None
     assert isinstance(captured_kwargs["recipe_list"], list)
     assert captured_kwargs["recipe_list"][0].name == "foo"
+
+
+def test_repository_cache_invalidates_on_campaign_subdir_change(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cache must detect changes in campaigns/ subdirectory, not just root."""
+    from autoskillit.core.types import LoadResult
+
+    captured_results: list[LoadResult] = []
+
+    def mock_list_recipes(project_dir: Path) -> LoadResult:
+        result = LoadResult(items=[])
+        captured_results.append(result)
+        return result
+
+    monkeypatch.setattr("autoskillit.recipe.repository.list_recipes", mock_list_recipes)
+
+    call_n: list[int] = [0]
+
+    def mock_dir_mtime(path: Path) -> float:
+        call_n[0] += 1
+        return float(call_n[0])
+
+    monkeypatch.setattr("autoskillit.recipe.repository._dir_mtime", mock_dir_mtime)
+
+    repo = DefaultRecipeRepository()
+
+    project_recipes = tmp_path / ".autoskillit" / "recipes"
+    project_campaigns = project_recipes / "campaigns"
+    project_campaigns.mkdir(parents=True)
+
+    repo._get_list(tmp_path)
+    first_call_count = len(captured_results)
+
+    (project_campaigns / "new-campaign.yaml").write_text(
+        "name: new-campaign\nkind: campaign\ndescription: test\nsteps:\n  s1:\n    skill: noop\n"
+    )
+
+    repo._get_list(tmp_path)
+    second_call_count = len(captured_results)
+
+    assert second_call_count > first_call_count, (
+        "Cache was not invalidated after adding a campaign recipe to campaigns/ subdirectory"
+    )

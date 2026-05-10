@@ -41,8 +41,19 @@ class DefaultRecipeRepository:
         self._cached_builtin_mtime: float = 0.0
 
     def _get_list(self, project_dir: Path) -> LoadResult[RecipeInfo]:
-        pm = _dir_mtime(project_dir / ".autoskillit" / "recipes")
-        bm = _dir_mtime(builtin_recipes_dir())
+        from autoskillit.recipe.io import RECIPE_SCAN_DIRS  # noqa: PLC0415
+
+        project_base = project_dir / ".autoskillit" / "recipes"
+        builtin_base = builtin_recipes_dir()
+
+        pm = max(
+            (_dir_mtime(project_base / s if s else project_base) for s in RECIPE_SCAN_DIRS),
+            default=0.0,
+        )
+        bm = max(
+            (_dir_mtime(builtin_base / s if s else builtin_base) for s in RECIPE_SCAN_DIRS),
+            default=0.0,
+        )
         if (
             self._cached_list is not None
             and self._cached_project_dir == project_dir

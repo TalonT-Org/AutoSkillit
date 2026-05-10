@@ -162,3 +162,14 @@ async def test_list_recipes_gate_closed_returns_gate_error(tool_ctx):
     result = json.loads(await list_recipes())
     assert result.get("success") is False
     assert result.get("subtype") == "gate_error"
+
+
+# Campaign discovery gap test
+@pytest.mark.anyio
+async def test_list_recipes_mcp_includes_builtin_campaigns(tool_ctx_kitchen_open):
+    """MCP list_recipes tool must include campaign recipes when fleet is enabled."""
+    result = json.loads(await list_recipes())
+    names = [r["name"] for r in result["recipes"]]
+    assert "research-campaign" in names, (
+        f"Campaign 'research-campaign' not in MCP list_recipes response. Got: {names}"
+    )

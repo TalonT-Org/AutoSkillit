@@ -30,11 +30,17 @@ KNOWN_GENERAL_SHARD_DIRS = {
 
 def _parse_shard_a_dirs_from_workflow() -> list[str]:
     if not WORKFLOW_PATH.exists():
-        pytest.skip(f"Workflow file not found: {WORKFLOW_PATH}")
+        pytest.skip(
+            f"Workflow file not found: {WORKFLOW_PATH}",
+            allow_module_level=True,
+        )
     text = WORKFLOW_PATH.read_text()
     match = re.search(r'SHARD_A_DIRS="([^"]+)"', text)
     if not match:
-        pytest.skip("SHARD_A_DIRS not found in tests.yml — skipping shard config tests")
+        pytest.skip(
+            "SHARD_A_DIRS not found in tests.yml — skipping shard config tests",
+            allow_module_level=True,
+        )
     return match.group(1).split()
 
 
@@ -69,7 +75,7 @@ class TestCIShardConfig:
             for p in (REPO_ROOT / "tests").iterdir()
             if p.is_dir() and not p.name.startswith("_") and not p.name.startswith(".")
         }
-        shard_a_names = {Path(d).name for d in SHARD_A_DIRS}
+        shard_a_names = {d.removeprefix("tests/") for d in SHARD_A_DIRS}
         assigned = shard_a_names | KNOWN_GENERAL_SHARD_DIRS
         unassigned = all_test_dirs - assigned
         assert not unassigned, (

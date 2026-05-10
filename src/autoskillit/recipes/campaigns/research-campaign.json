@@ -75,7 +75,6 @@
       },
       "capture": {
         "worktree_path": "${{ result.worktree_path }}",
-        "research_dir": "${{ result.research_dir }}",
         "research_dir_rel": "${{ result.research_dir_rel }}",
         "experiment_plan": "${{ result.experiment_plan }}",
         "visualization_plan_path": "${{ result.visualization_plan_path }}",

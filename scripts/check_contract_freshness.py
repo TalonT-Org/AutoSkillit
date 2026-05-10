@@ -2,25 +2,17 @@
 
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 
-try:
-    from yaml import SafeLoader as YamlLoader
-except ImportError:
-    from yaml import SafeLoader as YamlLoader  # type: ignore[no-redef,assignment]
+from yaml import SafeLoader as YamlLoader
+
+from autoskillit.recipe.staleness_cache import compute_recipe_hash
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RECIPES_DIR = PROJECT_ROOT / "src" / "autoskillit" / "recipes"
 
 
-def compute_recipe_hash(recipe_path: Path) -> str:
-    """sha256 of recipe file bytes, returned as 'sha256:<hex>'."""
-    return "sha256:" + hashlib.sha256(recipe_path.read_bytes()).hexdigest()
-
-
 def load_yaml(path: Path) -> dict:
-    """Load a YAML file and return a dict."""
     import yaml
 
     return yaml.load(path.read_text(encoding="utf-8"), Loader=YamlLoader)
@@ -50,7 +42,7 @@ def main() -> int:
     if stale:
         print(f"Stale contract cards: {stale}")
     if missing or stale:
-        print("Run: task compile-recipes  (triggers regen-contracts as a dep)")
+        print("Run: task regen-contracts")
         return 1
     return 0
 

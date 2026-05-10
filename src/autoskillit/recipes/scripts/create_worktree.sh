@@ -84,4 +84,8 @@ cd "${RESOLVED}" && git add research/ && git commit -m "Add experiment plan and 
 
 echo "research_dir=${RESEARCH_DIR}"
 echo "worktree_path=${RESOLVED}"
-echo "research_dir_rel=${RESEARCH_DIR#"${RESOLVED}/"}"
+RESEARCH_DIR_REL="${RESEARCH_DIR#"${RESOLVED}/"}"
+case "${RESEARCH_DIR_REL}" in
+  /*) echo "error: research_dir_rel is absolute — prefix strip failed" >&2; exit 1;;
+esac
+echo "research_dir_rel=${RESEARCH_DIR_REL}"

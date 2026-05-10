@@ -197,9 +197,25 @@ def test_research_recipe_has_route_implement_retry_delay(recipe):
     assert step.action == "route"
 
 
+def test_research_recipe_has_run_retry_delay_step(recipe):
+    """research.yaml must contain the run_retry_delay run_cmd step."""
+    assert "run_retry_delay" in recipe.steps
+    step = recipe.steps["run_retry_delay"]
+    assert step.tool == "run_cmd"
+
+
+def test_research_recipe_has_route_run_retry_delay(recipe):
+    """research.yaml must contain the route_run_retry_delay routing step."""
+    assert "route_run_retry_delay" in recipe.steps
+    step = recipe.steps["route_run_retry_delay"]
+    assert step.action == "route"
+
+
 def test_check_implement_fix_loop_routes_to_delay_gate(recipe):
     """Loop guard must route through delay gate, not directly to plan_phase."""
     step = recipe.steps["check_implement_fix_loop"]
-    conditions = step.on_result.conditions if step.on_result else []
+    assert step.on_result is not None, "check_implement_fix_loop must have on_result"
+    conditions = step.on_result.conditions
+    assert conditions, "check_implement_fix_loop on_result must have non-empty conditions"
     non_exhausted = [c for c in conditions if c.when is None or "max_exceeded" not in c.when]
     assert any(c.route == "route_implement_retry_delay" for c in non_exhausted)

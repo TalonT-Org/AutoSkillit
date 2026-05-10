@@ -175,6 +175,7 @@ format: "pdf"
 target_dpi: 300
 library: "matplotlib==3.8.2"
 report_section: "Section 4 Results"
+image_path: ""
 priority: "P0"
 placement_tier: "main"
 conflicts: []

@@ -67,7 +67,8 @@ def _non_composite_vis_lens_skills() -> list[Path]:
 
 
 def test_figure_spec_schema_completeness() -> None:
-    """FigureSpec TypedDict must include all PRODUCER_SCHEMA_FIELDS and cover REQUIRED_CONSUMER_FIELDS.
+    """FigureSpec TypedDict must include all PRODUCER_SCHEMA_FIELDS and cover
+    REQUIRED_CONSUMER_FIELDS.
 
     This ensures the shared schema is self-consistent: every field a producer may emit
     is declared in the TypedDict, and every field a consumer requires is present.
@@ -76,12 +77,14 @@ def test_figure_spec_schema_completeness() -> None:
 
     missing_from_typed_dict = PRODUCER_SCHEMA_FIELDS - figure_spec_keys
     assert not missing_from_typed_dict, (
-        f"PRODUCER_SCHEMA_FIELDS fields missing from FigureSpec TypedDict: {sorted(missing_from_typed_dict)}"
+        f"PRODUCER_SCHEMA_FIELDS fields missing from FigureSpec TypedDict: "
+        f"{sorted(missing_from_typed_dict)}"
     )
 
     missing_consumer_coverage = REQUIRED_CONSUMER_FIELDS - PRODUCER_SCHEMA_FIELDS
     assert not missing_consumer_coverage, (
-        f"REQUIRED_CONSUMER_FIELDS not covered by PRODUCER_SCHEMA_FIELDS: {sorted(missing_consumer_coverage)}"
+        f"REQUIRED_CONSUMER_FIELDS not covered by PRODUCER_SCHEMA_FIELDS: "
+        f"{sorted(missing_consumer_coverage)}"
     )
 
 

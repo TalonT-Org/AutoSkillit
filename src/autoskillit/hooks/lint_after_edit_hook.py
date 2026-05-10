@@ -74,7 +74,7 @@ def main() -> None:
 
     try:
         subprocess.run(
-            [ruff_cmd, "check", "--fix", file_path],
+            [ruff_cmd, "check", "--fix", "--ignore", "F4", file_path],
             capture_output=True,
             text=True,
             timeout=_TIMEOUT_S,

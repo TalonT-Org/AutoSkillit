@@ -133,6 +133,7 @@ def test_generate_report_group_manifest_input() -> None:
         / "research.yaml"
     )
     manifest = yaml.safe_load(contract_path.read_text())
+    assert isinstance(manifest, dict), f"research.yaml did not parse to a dict: {type(manifest)}"
     gen_report = manifest["skills"]["generate-report"]
     input_names = [inp["name"] for inp in gen_report.get("inputs", [])]
     assert "group_manifest" in input_names, (

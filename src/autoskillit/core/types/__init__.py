@@ -44,10 +44,10 @@ from ._type_subprocess import *  # noqa: F401, F403
 from ._type_subprocess import __all__ as _subprocess_all
 
 __all__ = (
-    _checkpoint_all
+    _capture_all
+    + _checkpoint_all
     + _constants_all
     + _dispatch_identity_all
-    + _capture_all
     + _enums_all
     + _figure_spec_all
     + _helpers_all

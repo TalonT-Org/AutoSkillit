@@ -75,7 +75,7 @@
           "recommended": false
         },
         {
-          "name": "scope_report",
+          "name": "scope_report_path",
           "type": "file_path",
           "required": false,
           "recommended": false

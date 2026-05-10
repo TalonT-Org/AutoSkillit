@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 SKILL_PATH = (
@@ -54,7 +55,6 @@ def test_verdict_taxonomy_info_is_distinct_from_discuss() -> None:
 
 def _skill_text_matches(pattern: str) -> bool:
     """Check if pattern matches anywhere in SKILL.md (case-insensitive)."""
-    import re
 
     return bool(re.search(pattern, SKILL_TEXT, re.IGNORECASE))
 

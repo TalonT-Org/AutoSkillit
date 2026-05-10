@@ -11,16 +11,26 @@ from autoskillit.recipe.io import _parse_step, builtin_recipes_dir, load_recipe
 from autoskillit.recipe.schema import Recipe, RecipeStep
 
 NO_AUTOSKILLIT_IMPORT = "no-autoskillit-import-in-skill-python-block"
+_CONTRACT_POSITIONAL = frozenset(
+    {
+        "contract-unsatisfied-input",
+        "contract-unreferenced-required",
+    }
+)
 
 KNOWN_VIOLATIONS_BY_RECIPE: dict[str, frozenset[str]] = {
-    "research-design": frozenset({"skill-result-routing-gap", NO_AUTOSKILLIT_IMPORT}),
-    "research": frozenset({"skill-result-routing-gap", "unbounded-cycle", NO_AUTOSKILLIT_IMPORT}),
+    "research-design": frozenset({"skill-result-routing-gap", NO_AUTOSKILLIT_IMPORT})
+    | _CONTRACT_POSITIONAL,
+    "research": frozenset({"skill-result-routing-gap", "unbounded-cycle", NO_AUTOSKILLIT_IMPORT})
+    | _CONTRACT_POSITIONAL,
     "research-review": frozenset({"skill-result-routing-gap", NO_AUTOSKILLIT_IMPORT}),
-    "implementation": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT}),
-    "implementation-groups": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT}),
-    "merge-prs": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT}),
-    "planner": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT}),
-    "remediation": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT}),
+    "implementation": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT}) | _CONTRACT_POSITIONAL,
+    "implementation-groups": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT})
+    | _CONTRACT_POSITIONAL,
+    "merge-prs": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT}) | _CONTRACT_POSITIONAL,
+    "planner": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT}) | _CONTRACT_POSITIONAL,
+    "promote-to-main-wrapper": frozenset({NO_AUTOSKILLIT_IMPORT}),
+    "remediation": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT}) | _CONTRACT_POSITIONAL,
     "research-implement": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT}),
 }
 

@@ -351,10 +351,14 @@ skills:
     outputs:
     - name: results_path
       type: file_path
+    - name: group_manifest
+      type: file_path
     expected_output_patterns:
     - results_path\s*=\s*/.+
+    - group_manifest\s*=\s*/.+
     pattern_examples:
     - 'results_path = /tmp/run-experiment/results.md
+      group_manifest = /tmp/run-experiment/group_manifest.json
 
       %%ORDER_UP%%'
     write_behavior: always
@@ -374,6 +378,10 @@ skills:
       recommended: false
     - name: methodology_tradition
       type: string
+      required: false
+      recommended: false
+    - name: group_manifest
+      type: file_path
       required: false
       recommended: false
     outputs:

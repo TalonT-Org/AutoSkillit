@@ -353,3 +353,90 @@ class TestImplicitHandoffRule:
             "once investigate declares investigation_path in skill_contracts.yaml"
         )
         assert any(f.severity == Severity.ERROR for f in ih)
+
+
+# ---------------------------------------------------------------------------
+# TestDownstreamContextCompletenessRule
+# ---------------------------------------------------------------------------
+
+
+class TestDownstreamContextCompletenessRule:
+    def test_dc1_rule_in_registry(self) -> None:
+        """T_DC1: downstream-context-gap is in _RULE_REGISTRY."""
+        from autoskillit.recipe.validator import _RULE_REGISTRY
+
+        rule_names = [r.name for r in _RULE_REGISTRY]
+        assert "downstream-context-gap" in rule_names
+
+    def test_dc2_warns_for_unwired_context_ref(self) -> None:
+        """T_DC2: downstream-context-gap fires WARNING when a step references unwired context."""
+        steps = {
+            "produce": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:scope test question"},
+                "capture": {"scope_report": "${{ result.scope_report }}"},
+                "on_success": "consume",
+            },
+            "consume": {
+                "tool": "run_skill",
+                "with": {
+                    "skill_command": "/autoskillit:plan-experiment ${{ context.unwired_var }}"
+                },
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+        recipe = _make_workflow(steps)
+        findings = run_semantic_rules(recipe)
+        gap = [f for f in findings if f.rule == "downstream-context-gap"]
+        assert len(gap) >= 1, "downstream-context-gap must fire for unwired context reference"
+        assert any(f.severity == Severity.WARNING and f.step_name == "consume" for f in gap)
+
+    def test_dc3_does_not_fire_for_wired_context(self) -> None:
+        """T_DC3: downstream-context-gap does NOT fire when context var is produced upstream."""
+        steps = {
+            "produce": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:scope test question"},
+                "capture": {"my_var": "${{ result.scope_report }}"},
+                "on_success": "consume",
+            },
+            "consume": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:plan-experiment ${{ context.my_var }}"},
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+        recipe = _make_workflow(steps)
+        findings = run_semantic_rules(recipe)
+        gap = [
+            f for f in findings if f.rule == "downstream-context-gap" and f.step_name == "consume"
+        ]
+        assert gap == [], f"downstream-context-gap must not fire for properly wired context: {gap}"
+
+    def test_dc4_does_not_fire_for_recipe_input(self) -> None:
+        """T_DC4: downstream-context-gap does NOT fire when context var is a recipe input."""
+        recipe_yaml = textwrap.dedent("""\
+            name: test-recipe
+            description: test
+            ingredients:
+              my_input:
+                description: Test input
+                required: true
+            steps:
+              consume:
+                tool: run_skill
+                with:
+                  skill_command: /autoskillit:scope ${{ inputs.my_input }}
+                on_success: done
+              done:
+                action: stop
+                message: Done
+        """)
+        recipe = _parse_recipe(yaml.safe_load(recipe_yaml))
+        findings = run_semantic_rules(recipe)
+        gap = [
+            f for f in findings if f.rule == "downstream-context-gap" and f.step_name == "consume"
+        ]
+        assert gap == [], f"downstream-context-gap must not fire for recipe input context: {gap}"

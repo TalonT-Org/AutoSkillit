@@ -47,6 +47,7 @@ incorporate the feedback before writing the plan.
 - Modify any source code files
 - Create files outside `{{AUTOSKILLIT_TEMP}}/plan-experiment/` directory
 - Write implementation code — this skill produces a plan only
+- Fabricate feasibility justifications or causal mechanism explanations when evidence is insufficient — state what is unknown and why rather than inventing plausible-sounding explanations
 - Skip the threats-to-validity section
 - Leave success criteria vague — every criterion must be measurable
 - Omit the environment assessment — always explicitly state whether a custom

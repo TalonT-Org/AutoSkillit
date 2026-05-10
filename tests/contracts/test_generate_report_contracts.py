@@ -96,6 +96,47 @@ def test_generate_report_step25_no_host_venv() -> None:
     )
 
 
+def test_multi_group_enumeration_instruction() -> None:
+    """Step 1 must instruct agent to enumerate all experiment groups."""
+    text = SKILL_PATH.read_text()
+    step1 = text.split("### Step 1")[1].split("### Step 2")[0]
+    assert "group" in step1.lower(), (
+        "Step 1 must instruct agent to enumerate all experiment groups"
+    )
+
+
+def test_anti_fabrication_never_rule() -> None:
+    """NEVER block must prohibit fabricated explanations for absent data."""
+    from tests.conftest import _extract_never_block
+
+    text = SKILL_PATH.read_text()
+    never_block = _extract_never_block(text)
+    assert any(
+        phrase in never_block.lower()
+        for phrase in ["attribute missing data", "invented explanation", "time constraints"]
+    ), "NEVER block must prohibit fabricated explanations for absent data"
+
+
+def test_generate_report_group_manifest_input() -> None:
+    """generate-report contract must declare group_manifest as a required input."""
+    import yaml
+
+    contract_path = (
+        Path(__file__).resolve().parent.parent.parent
+        / "src"
+        / "autoskillit"
+        / "recipes"
+        / "contracts"
+        / "research.yaml"
+    )
+    manifest = yaml.safe_load(contract_path.read_text())
+    gen_report = manifest["skills"]["generate-report"]
+    input_names = [inp["name"] for inp in gen_report.get("inputs", [])]
+    assert "group_manifest" in input_names, (
+        "generate-report contract must declare group_manifest as an input"
+    )
+
+
 def test_generate_report_step25_uses_docker_run() -> None:
     """Step 2.5 must use docker run to execute visualization scripts."""
     text = SKILL_PATH.read_text()

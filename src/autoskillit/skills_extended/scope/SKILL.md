@@ -48,6 +48,7 @@ text is supplementary context.
 - Create files outside `{{AUTOSKILLIT_TEMP}}/scope/` directory
 - Propose solutions or write implementation code
 - Skip the prior art survey — always check what already exists in the codebase
+- Fabricate research findings when external sources return no results — if web searches or literature searches yield nothing, state that explicitly and note what the codebase evidence shows instead
 - Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**

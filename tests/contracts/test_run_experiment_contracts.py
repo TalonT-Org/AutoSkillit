@@ -35,6 +35,26 @@ def test_run_experiment_env_mode_dispatch() -> None:
     )
 
 
+def test_run_experiment_group_manifest_output() -> None:
+    """run-experiment contract must declare group_manifest as an output."""
+    import yaml
+
+    contract_path = (
+        Path(__file__).resolve().parent.parent.parent
+        / "src"
+        / "autoskillit"
+        / "recipes"
+        / "contracts"
+        / "research.yaml"
+    )
+    manifest = yaml.safe_load(contract_path.read_text())
+    run_exp = manifest["skills"]["run-experiment"]
+    output_names = [out["name"] for out in run_exp.get("outputs", [])]
+    assert "group_manifest" in output_names, (
+        "run-experiment contract must declare group_manifest as an output"
+    )
+
+
 def test_run_experiment_micromamba_run_command() -> None:
     """run-experiment must include micromamba run command for host fallback."""
     text = SKILL_PATH.read_text()

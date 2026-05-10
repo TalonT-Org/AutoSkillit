@@ -35,6 +35,7 @@ Called by the `research` recipe on `implement_phase` failure before routing to
 - Modify any source code files
 - Run tests
 - Write files outside `{{AUTOSKILLIT_TEMP}}/troubleshoot-experiment/`
+- Fabricate or invent causes for failures when log data is insufficient to determine a root cause — state "cause undetermined from available logs" rather than inferring probable causes
 - Abort when session data is missing — emit `failure_type=unknown`, `is_fixable=false` and exit cleanly
 
 **ALWAYS:**

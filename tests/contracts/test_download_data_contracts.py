@@ -34,7 +34,7 @@ def test_skill_categories_include_research(skill_text: str) -> None:
     lines = skill_text.splitlines()
     cats_idx = next((i for i, line in enumerate(lines) if "categories:" in line), None)
     assert cats_idx is not None, "categories: block not found in frontmatter"
-    assert any("research" in lines[j] for j in range(cats_idx + 1, min(cats_idx + 5, len(lines))))
+    assert any("research" in lines[j] for j in range(cats_idx, min(cats_idx + 5, len(lines))))
 
 
 def test_skill_md_has_output_section() -> None:

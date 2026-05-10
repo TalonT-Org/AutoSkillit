@@ -32,10 +32,10 @@ def test_implement_phase_failure_routes_to_troubleshoot(recipe):
     assert step.on_failure == "troubleshoot_implement_failure"
 
 
-def test_implement_phase_exhausted_routes_to_run_experiment(recipe):
-    """implement_phase on_exhausted must route to run_experiment (not escalate)."""
+def test_implement_phase_exhausted_routes_to_audit_impl(recipe):
+    """implement_phase on_exhausted must route to audit_impl."""
     step = recipe.steps["implement_phase"]
-    assert step.on_exhausted == "run_experiment"
+    assert step.on_exhausted == "audit_impl"
 
 
 def test_implement_phase_uses_implement_experiment(recipe):

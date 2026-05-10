@@ -77,6 +77,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_research_campaign.py` | Contract card assertions for the research-campaign recipe |
 | `test_repository.py` | Tests for DefaultRecipeRepository |
 | `test_research_archive_recipe.py` | Tests for research-archive sub-recipe structure |
+| `test_research_audit_impl.py` | Tests for audit_impl gate and capture_impl_base in research recipes |
 | `test_research_bundle_lifecycle.py` | Tests for research bundle lifecycle in recipes |
 | `test_research_context_tracking.py` | Tests for research context tracking in recipes |
 | `test_research_implement_recipe.py` | Tests for research-implement sub-recipe structure |

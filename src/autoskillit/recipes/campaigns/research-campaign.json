@@ -54,6 +54,10 @@
     "test_check_enabled": {
       "description": "When 'true' (the default), run test_check in the implementation phase. Set to 'false' for de novo worktrees without test infrastructure.\n",
       "default": "true"
+    },
+    "audit": {
+      "description": "When 'true' (the default), run audit-impl in the implementation phase to verify all decomposed phases have corresponding commits.",
+      "default": "true"
     }
   },
   "dispatches": [
@@ -92,7 +96,8 @@
         "base_branch": "${{ inputs.base_branch }}",
         "issue_url": "${{ inputs.issue_url }}",
         "output_mode": "${{ inputs.output_mode }}",
-        "test_check_enabled": "${{ inputs.test_check_enabled }}"
+        "test_check_enabled": "${{ inputs.test_check_enabled }}",
+        "audit": "${{ inputs.audit }}"
       },
       "capture": {
         "report_path": "${{ result.report_path }}",

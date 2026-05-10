@@ -386,8 +386,8 @@ def _parse_capture_spec(capture_raw: Any) -> dict[str, CaptureEntrySpec]:
     - Long-form: ``{key: {from: "${{ result.field }}", type: "path"}}``
       → ``CaptureEntrySpec(from_=..., value_type="path")``
 
-    Unknown YAML structures are silently ignored (treated as non-result-template
-    values that _extract_captures will skip).
+    Malformed long-form dicts (e.g. missing ``from`` key) emit a warning.
+    Non-dict, non-string values are silently skipped.
     """
     if not capture_raw or not isinstance(capture_raw, dict):
         return {}
@@ -410,7 +410,12 @@ def _parse_capture_spec(capture_raw: Any) -> dict[str, CaptureEntrySpec]:
                     )
                     effective_type = "string"
                 result[key] = CaptureEntrySpec(from_=from_, value_type=effective_type)
-        # Non-dict, non-string values are ignored
+            else:
+                logger.warning(
+                    "capture_spec_malformed_longform",
+                    capture_name=key,
+                    keys=sorted(val.keys()),
+                )
     return result
 
 

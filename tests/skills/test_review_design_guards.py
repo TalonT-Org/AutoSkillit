@@ -54,21 +54,6 @@ def test_agent_implementability_weight_row() -> None:
         )
 
 
-def test_scope_alignment_dimension_exists() -> None:
-    text = SKILL_PATH.read_text()
-    assert "scope_alignment" in text
-
-
-def test_scope_alignment_not_l_weight() -> None:
-    """scope_alignment must be M-weight minimum to influence verdict in at least one type."""
-    types = load_all_experiment_types()
-    for spec in types:
-        weight = spec.dimension_weights.get("scope_alignment")
-        if weight in ("M", "H"):
-            return
-    raise AssertionError("scope_alignment must have M or H weight in at least one bundled type")
-
-
 def test_scope_alignment_weight_row() -> None:
     """scope_alignment must have H/M/M/M/L weights for the 5 original bundled types."""
     types = load_all_experiment_types()

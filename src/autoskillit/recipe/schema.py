@@ -117,6 +117,9 @@ class RecipeStep:
     stale_threshold: int | None = None  # None means use global RunSkillConfig.stale_threshold
     idle_output_timeout: int | None = None  # None = use global cfg; 0 = disabled for this step
     block: str | None = None  # Named block anchor this step belongs to (e.g. "pre_queue_gate")
+    pass_through: list[str] = field(
+        default_factory=list
+    )  # Captured output names used for informational propagation, not flow control
 
 
 @dataclass(frozen=True, slots=True)

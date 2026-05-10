@@ -19,11 +19,9 @@ _CONTRACT_POSITIONAL = frozenset(
 )
 
 KNOWN_VIOLATIONS_BY_RECIPE: dict[str, frozenset[str]] = {
-    "research-design": frozenset({"skill-result-routing-gap", NO_AUTOSKILLIT_IMPORT})
-    | _CONTRACT_POSITIONAL,
-    "research": frozenset({"skill-result-routing-gap", "unbounded-cycle", NO_AUTOSKILLIT_IMPORT})
-    | _CONTRACT_POSITIONAL,
-    "research-review": frozenset({"skill-result-routing-gap", NO_AUTOSKILLIT_IMPORT}),
+    "research-design": frozenset({NO_AUTOSKILLIT_IMPORT}) | _CONTRACT_POSITIONAL,
+    "research": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT}) | _CONTRACT_POSITIONAL,
+    "research-review": frozenset({NO_AUTOSKILLIT_IMPORT}),
     "implementation": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT}) | _CONTRACT_POSITIONAL,
     "implementation-groups": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT})
     | _CONTRACT_POSITIONAL,

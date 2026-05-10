@@ -490,7 +490,8 @@ steps:
       commits. Catches silent group abandonment when on_context_limit fires
       mid-iteration — reports exactly which phases were completed vs. skipped.
       On GO, proceeds to run_experiment. On NO GO, escalates with a remediation
-      report detailing which phases are missing.
+      report detailing which phases are missing. If false (inputs.audit=false),
+      skip directly to run_experiment.
 
   # --- EXPERIMENT + REPORT PHASE ---
   run_experiment:

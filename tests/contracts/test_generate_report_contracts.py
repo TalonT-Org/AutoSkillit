@@ -99,6 +99,8 @@ def test_generate_report_step25_no_host_venv() -> None:
 def test_multi_group_enumeration_instruction() -> None:
     """Step 1 must instruct agent to enumerate all experiment groups."""
     text = SKILL_PATH.read_text()
+    assert "### Step 1" in text, "generate-report SKILL.md must contain '### Step 1' heading"
+    assert "### Step 2" in text, "generate-report SKILL.md must contain '### Step 2' heading"
     step1 = text.split("### Step 1")[1].split("### Step 2")[0]
     assert "group" in step1.lower(), (
         "Step 1 must instruct agent to enumerate all experiment groups"
@@ -111,6 +113,7 @@ def test_anti_fabrication_never_rule() -> None:
 
     text = SKILL_PATH.read_text()
     never_block = _extract_never_block(text)
+    assert never_block, "no NEVER block found in generate-report SKILL.md"
     assert any(
         phrase in never_block.lower()
         for phrase in ["attribute missing data", "invented explanation", "time constraints"]

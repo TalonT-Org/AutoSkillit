@@ -40,7 +40,7 @@ one self-contained folder under `research/`.
 produced by `/autoskillit:scope`. Scan for the second path-like token. When present and
 the file exists, use its structured directions instead of extracting directions from the
 prose report. When absent or the file does not exist, fall back to extracting directions
-from the Proposed Investigation Directions section of the scope report (backward-compatible).
+from the Proposed Investigation Directions section of the scope report.
 
 `{revision_guidance}` — Optional. Absolute path to revision guidance produced by
 `/autoskillit:review-design` when verdict=REVISE. Scan for the third path-like token.

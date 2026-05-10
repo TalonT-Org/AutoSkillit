@@ -1380,10 +1380,13 @@ skills:
     outputs:
     - name: results_path
       type: file_path
+    - name: group_manifest
+      type: file_path
     expected_output_patterns:
     - "results_path\\s*=\\s*/.+"
+    - "group_manifest\\s*=\\s*/.+"
     pattern_examples:
-    - "results_path = /tmp/run-experiment/results.md\n%%ORDER_UP%%"
+    - "results_path = /tmp/run-experiment/results.md group_manifest = /tmp/run-experiment/group_manifest.json\n%%ORDER_UP%%"
     write_behavior: always
 
   generate-report:

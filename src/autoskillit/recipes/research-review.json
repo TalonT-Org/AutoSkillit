@@ -203,6 +203,9 @@
       "capture": {
         "review_verdict": "${{ result.verdict }}"
       },
+      "pass_through": [
+        "verdict"
+      ],
       "skip_when_false": "inputs.review_pr",
       "on_context_limit": "audit_claims",
       "on_failure": "audit_claims",
@@ -227,6 +230,9 @@
       "capture": {
         "audit_verdict": "${{ result.verdict }}"
       },
+      "pass_through": [
+        "verdict"
+      ],
       "skip_when_false": "inputs.audit_claims",
       "retries": 1,
       "on_exhausted": "route_review_resolve",

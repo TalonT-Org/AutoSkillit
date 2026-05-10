@@ -131,6 +131,9 @@
         "revision_guidance": "${{ result.revision_guidance }}",
         "classification_timestamp": "${{ result.classification_timestamp }}"
       },
+      "pass_through": [
+        "experiment_type"
+      ],
       "skip_when_false": "inputs.review_design",
       "retries": 2,
       "on_exhausted": "create_worktree",

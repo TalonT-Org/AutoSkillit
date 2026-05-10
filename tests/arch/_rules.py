@@ -119,6 +119,17 @@ _BROAD_EXCEPT_EXEMPT = frozenset(
 
 _ASYNCIO_PIPE_EXEMPT: frozenset[str] = frozenset({"process.py"})
 
+# ARCH-010: Files exempt from the StrEnum-to-string comparison scan.
+# These files compare against fields typed as Literal[...], not actual StrEnums.
+# The same attribute names (e.g. "outcome", "status") appear in both Literal and
+# StrEnum contexts; the AST rule cannot distinguish them by field name alone.
+_STRENUM_COMPARE_EXEMPT_FILES: frozenset[str] = frozenset(
+    {
+        "test_result_parser.py",  # L3ParseResult.outcome: Literal[...], not SessionOutcome
+        "test_sidecar.py",  # IssueSidecarEntry.status: Literal["completed", "failed"], not StrEnum
+    }
+)
+
 # ARCH-010: Known StrEnum field names that are compared against raw string literals.
 # Maps field name → enum class name for documentation purposes.
 # These are derived from dataclass/protocol definitions across the codebase.

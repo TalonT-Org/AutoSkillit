@@ -923,7 +923,7 @@ def test_arch010_detects_strenum_field_compared_to_uppercase_string(tmp_path: Pa
         f"Expected ARCH-010 violation for 'status == \"completion\"', got: {violations}"
     )
     assert "status" in arch010[0].message
-    assert '"completion"' in arch010[0].message
+    assert "'completion'" in arch010[0].message
 
 
 def test_arch010_detects_severity_error_uppercase_string(tmp_path: Path) -> None:

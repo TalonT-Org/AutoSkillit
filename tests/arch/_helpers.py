@@ -12,6 +12,7 @@ from tests.arch._rules import (
     _PRINT_EXEMPT,
     _RULE,
     _SENSITIVE_KEYWORDS,
+    _STRENUM_COMPARE_EXEMPT_FILES,
     _STRENUM_FIELD_NAMES,
     RuleDescriptor,
     Violation,
@@ -251,6 +252,8 @@ def _scan_strenum_compare(path: Path) -> list[Violation]:
     Unlike _scan(), this function is used for test files and uses a standalone
     AST walk that does not depend on the full ArchitectureViolationVisitor.
     """
+    if path.name in _STRENUM_COMPARE_EXEMPT_FILES:
+        return []
     source = path.read_text(encoding="utf-8")
     try:
         tree = ast.parse(source, filename=str(path))

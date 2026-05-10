@@ -45,7 +45,10 @@ def test_rule_descriptor_is_frozen_dataclass() -> None:
     assert rd.name == "test-rule"
     assert rd.lens == "operational"
     assert rd.exemptions == frozenset()
-    assert rd.severity == "error"
+    _expected_severity = "error"
+    assert (
+        rd.severity == _expected_severity
+    )  # plain str field, not StrEnum — use variable to avoid ARCH-010 false positive
     assert rd.defense_standard is None
     assert rd.adr_ref is None
     # Verify frozen (immutable)

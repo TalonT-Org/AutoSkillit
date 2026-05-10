@@ -476,3 +476,6 @@ class TestResearchRecipeStructure:
 
     def test_scope_captures_scope_directions(self, recipe) -> None:
         assert "scope_directions" in recipe.steps["scope"].capture
+
+    def test_plan_experiment_optional_context_refs_includes_scope_directions(self, recipe) -> None:
+        assert "scope_directions" in recipe.steps["plan_experiment"].optional_context_refs

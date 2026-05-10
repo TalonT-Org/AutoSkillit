@@ -138,7 +138,7 @@ def test_il_contract_count_is_guarded() -> None:
     pyproject_path = Path(__file__).resolve().parents[2] / "pyproject.toml"
     raw = pyproject_path.read_text()
 
-    expected_count = 9
+    expected_count = 10
     actual_count = raw.count("[[tool.importlinter.contracts]]")
     assert actual_count == expected_count, (
         f"Expected {expected_count} importlinter contracts in pyproject.toml, "

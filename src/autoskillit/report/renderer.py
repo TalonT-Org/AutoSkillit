@@ -13,12 +13,14 @@ Writes:
 
 from __future__ import annotations
 
-import re
 import shutil
 import sys
 from pathlib import Path
 
+import regex as re
+
 from autoskillit.core import pkg_root
+from autoskillit.core.io import atomic_write
 
 # Validation keywords for mermaid diagrams (mirrors compose-research-pr)
 VALIDATION_KEYWORDS = {
@@ -131,7 +133,7 @@ def _markdown_to_html(md_text: str) -> str:
         from markdown_it import MarkdownIt  # type: ignore[import]
 
         md = MarkdownIt()
-        # Render standard markdown; mermaid fenced blocks become <pre><code class="language-mermaid">
+        # Render markdown; mermaid fenced blocks become <pre><code class="language-mermaid">
         html = md.render(md_text)
         # Convert mermaid code blocks to <pre class="mermaid">
         html = re.sub(
@@ -160,7 +162,8 @@ def _find_mermaid_assets() -> tuple[Path | None, str]:
 
 def main() -> None:
     if len(sys.argv) < 3:
-        print("html_path = ", flush=True)
+        sys.stdout.write("html_path = \n")
+        sys.stdout.flush()
         sys.exit(0)
 
     research_dir = Path(sys.argv[1])
@@ -169,7 +172,8 @@ def main() -> None:
     viz_plan_path = sys.argv[4] if len(sys.argv) > 4 else ""
 
     if not report_path.exists():
-        print("html_path = ", flush=True)
+        sys.stdout.write("html_path = \n")
+        sys.stdout.flush()
         sys.exit(0)
 
     # 1. Validate and collect mermaid diagram sources
@@ -201,14 +205,15 @@ def main() -> None:
 
     # 8. Write report.html
     out_html = research_dir / "report.html"
-    out_html.write_text(html, encoding="utf-8")
+    atomic_write(out_html, html)
 
     # 9. Copy mermaid.min.js as sibling
     dest_js = research_dir / "mermaid.min.js"
     if mermaid_js_src and mermaid_js_src.exists():
         shutil.copy2(mermaid_js_src, dest_js)
 
-    print(f"html_path = {out_html}", flush=True)
+    sys.stdout.write(f"html_path = {out_html}\n")
+    sys.stdout.flush()
 
 
 if __name__ == "__main__":

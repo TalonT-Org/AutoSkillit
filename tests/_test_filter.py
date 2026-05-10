@@ -182,6 +182,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
             "hook_registry",
             "migration",
             "recipe",
+            "report",
             "server",
             "workspace",
         }
@@ -477,6 +478,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "config",
             "execution",
             "pipeline",
+            "report",
             "workspace",
             "recipe",
             "migration",
@@ -640,6 +642,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
         }
     ),
     # Standalone modules (not subpackage directories)
+    # L1
+    "report": frozenset({"skills_extended"}),
     "planner": frozenset({"planner", "recipe"}),
     "_llm_triage": frozenset({"test_llm_triage.py", "server"}),
     "_test_filter": frozenset({"arch", "infra", "contracts"}),

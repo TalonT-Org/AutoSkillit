@@ -232,8 +232,8 @@ class TestSentinelFormat:
     @pytest.mark.parametrize(
         "capture_arg",
         [
-            {"worktree_path": "/repo"},
-            {"worktree_path": "/repo", "pr_url": "https://github.com/org/repo/pull/1"},
+            {"worktree_path": "${{ result.worktree_path }}"},
+            {"worktree_path": "${{ result.worktree_path }}", "pr_url": "${{ result.pr_url }}"},
         ],
         ids=["1-key", "2-key"],
     )
@@ -251,8 +251,9 @@ class TestSentinelFormat:
             capture=capture_arg,
         )
         section8 = prompt[prompt.index("--- SECTION 8") :]
-        for key in capture_arg:
+        for key, description in capture_arg.items():
             assert f"capture_{key}" in section8
+            assert description in section8
         assert '"success"' in section8
         assert '"reason"' in section8
 

@@ -159,7 +159,7 @@ class TestResearchDesignRecipeStructure:
         """review_design step must pass scope_report as a second argument."""
         step = recipe.steps["review_design"]
         cmd = step.with_args["skill_command"]
-        assert "scope_report" in cmd
+        assert "${{ context.scope_report }}" in cmd
 
     def test_plan_visualization_on_success(self, recipe) -> None:
         assert recipe.steps["plan_visualization"].on_success == "create_worktree"

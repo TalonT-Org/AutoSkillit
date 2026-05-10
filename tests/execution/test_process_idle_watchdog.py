@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import functools
+import os  # noqa: F401
 import sys
 import textwrap
 import time
@@ -366,3 +367,131 @@ async def test_watch_stdout_idle_marker_false_fires_immediately(
             await trigger.wait()
 
     assert acc.idle_stall is True
+
+
+@pytest.mark.anyio
+async def test_idle_stall_suppressed_by_active_dispatch_marker(
+    tmp_path: anyio.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Active dispatch marker suppresses idle stall within the suppression window."""
+    monkeypatch.setattr(
+        "autoskillit.execution.process._process_race._has_active_dispatch_marker",
+        lambda *a, **kw: True,
+    )
+    stdout_file = tmp_path / "stdout.txt"
+    stdout_file.write_bytes(b"")
+
+    acc = RaceAccumulator()
+    trigger = anyio.Event()
+
+    with anyio.fail_after(4.0):
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(
+                functools.partial(
+                    _watch_stdout_idle,
+                    stdout_file,
+                    0.5,
+                    acc,
+                    trigger,
+                    0.2,
+                    marker_dir=tmp_path,
+                )
+            )
+            await anyio.sleep(1.0)
+            tg.cancel_scope.cancel()
+
+    assert acc.idle_stall is False
+
+
+@pytest.mark.anyio
+async def test_idle_stall_fires_when_marker_absent(tmp_path: anyio.Path) -> None:
+    """No marker_dir kwarg — idle stall fires unchanged (existing behavior path)."""
+    stdout_file = tmp_path / "stdout.txt"
+    stdout_file.write_bytes(b"")
+
+    acc = RaceAccumulator()
+    trigger = anyio.Event()
+
+    with anyio.fail_after(3.0):
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(
+                _watch_stdout_idle,
+                stdout_file,
+                0.5,
+                acc,
+                trigger,
+                0.2,
+            )
+            await trigger.wait()
+
+    assert acc.idle_stall is True
+
+
+@pytest.mark.anyio
+async def test_idle_stall_fires_when_marker_stale(tmp_path: anyio.Path) -> None:
+    """Marker file exists but is stale (mtime 120s ago) — watchdog fires."""
+    marker_path = tmp_path / "dispatch-in-progress-testsession-abc123.marker"
+    marker_path.write_text("{}")
+    stale_time = time.time() - 120
+    os.utime(str(marker_path), (stale_time, stale_time))
+
+    stdout_file = tmp_path / "stdout.txt"
+    stdout_file.write_bytes(b"")
+
+    acc = RaceAccumulator()
+    trigger = anyio.Event()
+
+    with anyio.fail_after(3.0):
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(
+                functools.partial(
+                    _watch_stdout_idle,
+                    stdout_file,
+                    0.5,
+                    acc,
+                    trigger,
+                    0.2,
+                    marker_dir=tmp_path,
+                    session_id=None,
+                )
+            )
+            await trigger.wait()
+
+    assert acc.idle_stall is True
+
+
+@pytest.mark.anyio
+async def test_idle_stall_marker_suppression_bounded(
+    tmp_path: anyio.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Suppression cap exceeded — idle stall fires despite active marker."""
+    monkeypatch.setattr(
+        "autoskillit.execution.process._process_race._has_active_dispatch_marker",
+        lambda *a, **kw: True,
+    )
+    stdout_file = tmp_path / "stdout.txt"
+    stdout_file.write_bytes(b"")
+
+    acc = RaceAccumulator()
+    trigger = anyio.Event()
+
+    start = time.monotonic()
+    with anyio.fail_after(6.0):
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(
+                functools.partial(
+                    _watch_stdout_idle,
+                    stdout_file,
+                    0.5,
+                    acc,
+                    trigger,
+                    0.2,
+                    marker_dir=tmp_path,
+                    max_suppression_seconds=1.5,
+                )
+            )
+            await trigger.wait()
+
+    elapsed = time.monotonic() - start
+    assert acc.idle_stall is True
+    assert elapsed >= 1.5

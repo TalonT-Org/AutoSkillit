@@ -27,7 +27,7 @@
         "scope_directions\\s*=\\s*/.+"
       ],
       "pattern_examples": [
-        "scope_report = /tmp/scope_report.md\n%%ORDER_UP%%"
+        "scope_report = /tmp/scope_report.md\nscope_directions = /tmp/scope_directions.json\n%%ORDER_UP%%"
       ],
       "write_behavior": "always"
     },

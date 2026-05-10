@@ -86,7 +86,7 @@ Detect and read inputs:
    - Proposed investigation directions
    - Success criteria hints
    - External research findings
-2. If a second path-like token is present and resolves to an existing file, read
+2. If a third path-like token is present and resolves to an existing file, read
    `{revision_guidance}`. Extract all revision instructions — these take priority over
    your initial analysis in Step 2. Note which sections of the plan need rework.
    When absent or empty, omit this sub-step and proceed normally (first pass).
@@ -95,9 +95,10 @@ Detect and read inputs:
    authoritative list of investigation directions instead of parsing them from the
    Markdown prose. Note which directions have `must_cover: true` — these are
    mandatory and each must receive its own experimental design section in Step 3.
-   If the file is absent or does not exist, fall back to extracting directions
+   If the file is absent, does not exist, cannot be parsed as valid JSON, or
+   lacks a non-empty `directions` array, fall back to extracting directions
    from the report's Proposed Investigation Directions section (no breadth
-   enforcement applies in this case).
+   enforcement applies in this case). Note the fallback reason in the plan.
 
 ### Step 2 — Explore Feasibility
 

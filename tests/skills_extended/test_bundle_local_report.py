@@ -46,6 +46,10 @@ def test_renders_minimal_report(tmp_path: Path) -> None:
     html_content = out_html.read_text()
     assert "mermaid.initialize" in html_content
     assert "Hello world paragraph" in html_content
+    assert "<!DOCTYPE html>" in html_content
+    assert '<article class="report">' in html_content
+    assert "</html>" in html_content
+    assert "{" not in html_content.split("</style>")[1].split("<script")[0]
 
 
 def test_renders_with_mermaid_diagram(tmp_path: Path) -> None:
@@ -130,10 +134,8 @@ def test_html_includes_mermaid_version_comment(tmp_path: Path) -> None:
 
 
 def test_renderer_uses_importlib_not_dunder_file() -> None:
-    """renderer.py must not use Path(__file__) for asset resolution.
+    """renderer.py must not reference __file__ for asset resolution.
 
-    Path(__file__) resolves to the temp directory when running extracted scripts,
-    causing _find_mermaid_assets() to always return (None, "unknown").
     The renderer module must use pkg_root() from core.paths instead.
     """
     renderer_path = _REPO_ROOT / "src/autoskillit/report/renderer.py"
@@ -141,7 +143,12 @@ def test_renderer_uses_importlib_not_dunder_file() -> None:
     for node in ast.walk(tree):
         if isinstance(node, ast.Attribute) and node.attr == "__file__":
             pytest.fail(
-                "renderer.py uses __file__ for asset resolution. "
+                "renderer.py uses __file__ (attribute form) for asset resolution. "
+                "Use pkg_root() from core.paths instead."
+            )
+        if isinstance(node, ast.Name) and node.id == "__file__":
+            pytest.fail(
+                "renderer.py uses __file__ (name form) for asset resolution. "
                 "Use pkg_root() from core.paths instead."
             )
 

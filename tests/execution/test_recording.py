@@ -582,7 +582,7 @@ async def test_recording_runner_forwards_marker_dir_and_session_id(tmp_path):
 
     await runner(
         cmd,
-        cwd=Path("/tmp"),
+        cwd=tmp_path,
         timeout=60,
         env=env,
         pty_mode=False,
@@ -616,7 +616,7 @@ async def test_recording_runner_session_branch_ignores_marker_params(tmp_path):
 
     result = await runner(
         cmd,
-        cwd=Path("/tmp"),
+        cwd=tmp_path,
         timeout=300,
         env=env,
         pty_mode=True,

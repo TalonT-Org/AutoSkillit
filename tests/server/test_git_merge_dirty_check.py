@@ -58,9 +58,6 @@ def _push_through_verify_merge(
     runner.push(_make_result(0, "abc123\n"))  # rev-parse --verify
     runner.push(_make_result(0, ""))  # git log --merges
     runner.push(_make_result(0, ""))  # rebase
-    runner.push(
-        _make_result(0, f"worktree /repo\nHEAD abc123\nbranch refs/heads/{base_branch}\n\n")
-    )  # wt list
     runner.push(_make_result(0, f"{base_branch}\n"))  # step 7.5: branch --show-current (main_repo)
 
 
@@ -76,7 +73,10 @@ async def test_dirty_main_repo_returns_error(tmp_path):
     _push_through_verify_merge(runner, fake_wt)
     runner.push(_make_result(0, " M src/foo.py\n M tests/bar.py\n"))  # step 7.6: dirty!
 
-    with patch("autoskillit.server.git.scan_editable_installs_for_worktree", return_value=[]):
+    with (
+        patch("autoskillit.server.git.scan_editable_installs_for_worktree", return_value=[]),
+        patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")),
+    ):
         result = await perform_merge(
             fake_wt,
             "dev",
@@ -107,7 +107,10 @@ async def test_clean_main_repo_proceeds_to_merge(tmp_path):
     runner.push(_make_result(0, ""))  # wt remove
     runner.push(_make_result(0, ""))  # branch -D
 
-    with patch("autoskillit.server.git.scan_editable_installs_for_worktree", return_value=[]):
+    with (
+        patch("autoskillit.server.git.scan_editable_installs_for_worktree", return_value=[]),
+        patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")),
+    ):
         result = await perform_merge(
             fake_wt,
             "dev",
@@ -132,7 +135,10 @@ async def test_dirty_check_error_format(tmp_path):
     dirty_output = " M file1.py\n M file2.py\n?? newfile.txt\n"
     runner.push(_make_result(0, dirty_output))  # step 7.6: dirty
 
-    with patch("autoskillit.server.git.scan_editable_installs_for_worktree", return_value=[]):
+    with (
+        patch("autoskillit.server.git.scan_editable_installs_for_worktree", return_value=[]),
+        patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")),
+    ):
         result = await perform_merge(
             fake_wt,
             "dev",

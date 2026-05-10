@@ -160,6 +160,7 @@ async def test_perform_merge_returns_success_on_green_tests(
     )
     conftest_mock_runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))
     conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git ls-files (no tracked generated files)
     conftest_mock_runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
     conftest_mock_runner.push(_make_result(0, "", ""))  # fetch
     conftest_mock_runner.push(_make_result(0, "", ""))  # ref check (5.5)
@@ -237,6 +238,7 @@ async def test_perform_merge_uses_no_edit_flag(default_config, conftest_mock_run
     tester = InMemoryTestRunner(results=[TestResult(True, "ok", ""), TestResult(True, "ok", "")])
     conftest_mock_runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))
     conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git ls-files (no tracked generated files)
     conftest_mock_runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
     conftest_mock_runner.push(_make_result(0, "", ""))  # fetch
     conftest_mock_runner.push(_make_result(0, "", ""))  # ref check
@@ -557,11 +559,14 @@ class TestPerformMergeSidecarCleanup:
         (wt / ".git").write_text("gitdir: /repo/.git/worktrees/impl-test")
 
         sidecar_calls = []
-        with patch(
-            "autoskillit.server.git.remove_worktree_sidecar",
-            side_effect=lambda proj, name: (
-                sidecar_calls.append(name) or CleanupResult(deleted=["s"])
+        with (
+            patch(
+                "autoskillit.server.git.remove_worktree_sidecar",
+                side_effect=lambda proj, name: (
+                    sidecar_calls.append(name) or CleanupResult(deleted=["s"])
+                ),
             ),
+            patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")),
         ):
             runner = MockSubprocessRunner()
             _push_full_success_sequence(runner, worktree_path=wt)
@@ -591,9 +596,12 @@ class TestPerformMergeSidecarCleanup:
         wt.mkdir(parents=True)
         (wt / ".git").write_text("gitdir: /repo/.git/worktrees/impl-test")
 
-        with patch(
-            "autoskillit.server.git.remove_worktree_sidecar",
-            return_value=CleanupResult(failed=[("/some/path", "permission denied")]),
+        with (
+            patch(
+                "autoskillit.server.git.remove_worktree_sidecar",
+                return_value=CleanupResult(failed=[("/some/path", "permission denied")]),
+            ),
+            patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")),
         ):
             runner = MockSubprocessRunner()
             _push_full_success_sequence(runner, worktree_path=wt)
@@ -622,8 +630,12 @@ class TestPerformMergeSidecarCleanup:
             remove_calls.append(path)
             return CleanupResult(deleted=[str(path)])
 
-        with patch(
-            "autoskillit.server.git.remove_git_worktree", new=AsyncMock(side_effect=_fake_remove)
+        with (
+            patch(
+                "autoskillit.server.git.remove_git_worktree",
+                new=AsyncMock(side_effect=_fake_remove),
+            ),
+            patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")),
         ):
             runner = MockSubprocessRunner()
             _push_full_success_sequence(runner, worktree_path=wt)
@@ -662,18 +674,17 @@ class TestPerformMergeTargetBranchVerification:
         runner.push(_make_result(0, "abc123\n"))  # rev-parse --verify
         runner.push(_make_result(0, ""))  # git log --merges
         runner.push(_make_result(0, ""))  # git rebase
-        # worktree list says main_repo is on 'main'
-        runner.push(_make_result(0, "worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n"))
         # Step 7.5: git branch --show-current on main_repo returns 'main'
         runner.push(_make_result(0, "main\n"))
 
-        result = await perform_merge(
-            str(wt),
-            "dev",
-            config=AutomationConfig(),
-            runner=runner,
-            tester=tester,
-        )
+        with patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")):
+            result = await perform_merge(
+                str(wt),
+                "dev",
+                config=AutomationConfig(),
+                runner=runner,
+                tester=tester,
+            )
 
         assert "error" in result
         assert result["failed_step"] == MergeFailedStep.MERGE
@@ -705,21 +716,20 @@ class TestPerformMergeTargetBranchVerification:
         runner.push(_make_result(0, "abc123\n"))  # rev-parse --verify
         runner.push(_make_result(0, ""))  # git log --merges
         runner.push(_make_result(0, ""))  # git rebase
-        # worktree list says main_repo is on 'dev'
-        runner.push(_make_result(0, "worktree /repo\nHEAD abc123\nbranch refs/heads/dev\n\n"))
         # Step 7.5: git branch --show-current on main_repo returns 'dev'
         runner.push(_make_result(0, "dev\n"))
         runner.push(_make_result(0, ""))  # step 7.6: git status --porcelain (clean)
         runner.push(_make_result(0, ""))  # git merge --no-edit
         # cleanup: remove_git_worktree + branch -D use runner defaults (rc=0)
 
-        result = await perform_merge(
-            str(wt),
-            "dev",
-            config=AutomationConfig(),
-            runner=runner,
-            tester=tester,
-        )
+        with patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")):
+            result = await perform_merge(
+                str(wt),
+                "dev",
+                config=AutomationConfig(),
+                runner=runner,
+                tester=tester,
+            )
 
         assert result["merge_succeeded"] is True
         assert result["into_branch"] == "dev"
@@ -744,19 +754,19 @@ class TestPerformMergeTargetBranchVerification:
         runner.push(_make_result(0, "abc123\n"))  # rev-parse --verify
         runner.push(_make_result(0, ""))  # git log --merges
         runner.push(_make_result(0, ""))  # git rebase
-        runner.push(_make_result(0, "worktree /repo\nHEAD abc123\nbranch refs/heads/dev\n\n"))
         # Step 7.5: branch verification
         runner.push(_make_result(0, "dev\n"))
         runner.push(_make_result(0, ""))  # step 7.6: git status --porcelain (clean)
         runner.push(_make_result(0, ""))  # git merge --no-edit
 
-        result = await perform_merge(
-            str(wt),
-            "dev",
-            config=AutomationConfig(),
-            runner=runner,
-            tester=tester,
-        )
+        with patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")):
+            result = await perform_merge(
+                str(wt),
+                "dev",
+                config=AutomationConfig(),
+                runner=runner,
+                tester=tester,
+            )
 
         assert result["merge_succeeded"] is True
         # Find the merge command and assert its cwd
@@ -787,19 +797,19 @@ class TestPerformMergeTargetBranchVerification:
         runner.push(_make_result(0, "abc123\n"))  # rev-parse --verify
         runner.push(_make_result(0, ""))  # git log --merges
         runner.push(_make_result(0, ""))  # git rebase
-        runner.push(_make_result(0, "worktree /repo\nHEAD abc123\nbranch refs/heads/dev\n\n"))
         # Step 7.5: verified branch
         runner.push(_make_result(0, "dev\n"))
         runner.push(_make_result(0, ""))  # step 7.6: git status --porcelain (clean)
         runner.push(_make_result(0, ""))  # merge
 
-        result = await perform_merge(
-            str(wt),
-            "dev",
-            config=AutomationConfig(),
-            runner=runner,
-            tester=tester,
-        )
+        with patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")):
+            result = await perform_merge(
+                str(wt),
+                "dev",
+                config=AutomationConfig(),
+                runner=runner,
+                tester=tester,
+            )
 
         assert result["merge_succeeded"] is True
         # into_branch must match the verified branch from step 7.5

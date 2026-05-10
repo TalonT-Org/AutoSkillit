@@ -25,14 +25,12 @@ def main(argv: list[str]) -> int:
     from autoskillit.recipe.contracts import check_contract_staleness, load_recipe_card
     from autoskillit.recipe.io import load_recipe
 
-    recipes_dir = _SRC_ROOT / "autoskillit" / "recipes"
     failed = False
     for recipe_path_str in argv[1:]:
         recipe_path = Path(recipe_path_str).resolve()
         if not recipe_path.is_absolute():
             recipe_path = _PROJECT_ROOT / recipe_path_str
-        if not str(recipe_path).startswith(str(recipes_dir)):
-            continue
+        recipes_dir = recipe_path.parent
         contract = load_recipe_card(recipe_path.stem, recipes_dir)
         if contract is None:
             print(
@@ -44,7 +42,7 @@ def main(argv: list[str]) -> int:
             continue
 
         try:
-            recipe = load_recipe(recipe_path)
+            load_recipe(recipe_path)
         except Exception as exc:
             print(
                 f"recipe_contract_freshness: could not load recipe {recipe_path.name}: {exc}",

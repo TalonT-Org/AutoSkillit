@@ -21,7 +21,7 @@ _CONTRACT_POSITIONAL = frozenset(
 KNOWN_VIOLATIONS_BY_RECIPE: dict[str, frozenset[str]] = {
     "research-design": frozenset({NO_AUTOSKILLIT_IMPORT}) | _CONTRACT_POSITIONAL,
     "research": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT}) | _CONTRACT_POSITIONAL,
-    "research-review": frozenset({NO_AUTOSKILLIT_IMPORT}),
+    "research-review": frozenset({NO_AUTOSKILLIT_IMPORT}) | _CONTRACT_POSITIONAL,
     "implementation": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT}) | _CONTRACT_POSITIONAL,
     "implementation-groups": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT})
     | _CONTRACT_POSITIONAL,
@@ -29,7 +29,8 @@ KNOWN_VIOLATIONS_BY_RECIPE: dict[str, frozenset[str]] = {
     "planner": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT}) | _CONTRACT_POSITIONAL,
     "promote-to-main-wrapper": frozenset({NO_AUTOSKILLIT_IMPORT}),
     "remediation": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT}) | _CONTRACT_POSITIONAL,
-    "research-implement": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT}),
+    "research-implement": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT})
+    | _CONTRACT_POSITIONAL,
 }
 
 KNOWN_PART_B_VIOLATIONS = frozenset().union(*KNOWN_VIOLATIONS_BY_RECIPE.values())

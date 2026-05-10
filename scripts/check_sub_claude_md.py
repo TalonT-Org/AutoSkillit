@@ -54,6 +54,7 @@ TESTS_EXPECTED = [
     "docs/CLAUDE.md",
     "execution/CLAUDE.md",
     "fleet/CLAUDE.md",
+    "hooks/CLAUDE.md",
     "infra/CLAUDE.md",
     "migration/CLAUDE.md",
     "pipeline/CLAUDE.md",
@@ -64,8 +65,6 @@ TESTS_EXPECTED = [
     "skills_extended/CLAUDE.md",
     "workspace/CLAUDE.md",
 ]
-
-TESTS_HOOKS_EXPECTED: list[str] = ["hooks/CLAUDE.md"]
 
 
 def check_coverage(root: Path, expected: list[str]) -> list[str]:

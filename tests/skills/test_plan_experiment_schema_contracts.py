@@ -55,9 +55,9 @@ def test_plan_experiment_documents_all_required_frontmatter_fields():
 
 
 def test_plan_experiment_defines_all_validation_rules():
-    """plan-experiment/SKILL.md must define all 8 validation rules V1–V8 as labeled entries."""
+    """plan-experiment/SKILL.md must define all 9 validation rules V1–V9 as labeled entries."""
     content = _read_skill_md("plan-experiment")
-    for rule_id in ["V1", "V2", "V3", "V4", "V5", "V6", "V7", "V8"]:
+    for rule_id in ["V1", "V2", "V3", "V4", "V5", "V6", "V7", "V8", "V9"]:
         assert f"{rule_id}:" in content, (
             f"plan-experiment/SKILL.md missing validation rule label {rule_id!r} "
             f"(expected '{rule_id}:' definition format)"

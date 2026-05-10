@@ -304,9 +304,7 @@ async def _execute_claude_headless(
     _result: SubprocessResult | None = None
     result: SubprocessResult
     skill_result: SkillResult
-
-    # NOTE: session_id is dispatch_id (DispatchIdentity UUID) at call time,
-    # NOT a post-run Claude Code session UUID
+    # session_id is dispatch_id (DispatchIdentity UUID), not a post-run Claude Code session UUID
     effective_marker_dir = marker_dir or (claude_code_project_dir(cwd) if cwd else None)
     while True:
         try:

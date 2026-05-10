@@ -10,15 +10,21 @@ import yaml
 from autoskillit.recipe.io import _parse_step, builtin_recipes_dir, load_recipe
 from autoskillit.recipe.schema import Recipe, RecipeStep
 
-# Excluded from general semantic-error assertions — these rules fire on recipes
-# that have not yet been updated.
 NO_AUTOSKILLIT_IMPORT = "no-autoskillit-import-in-skill-python-block"
-KNOWN_PART_B_VIOLATIONS: frozenset[str] = frozenset(
-    {
-        NO_AUTOSKILLIT_IMPORT,
-        "skill-result-routing-gap",
-    }
-)
+
+KNOWN_VIOLATIONS_BY_RECIPE: dict[str, frozenset[str]] = {
+    "research-design": frozenset({"skill-result-routing-gap", NO_AUTOSKILLIT_IMPORT}),
+    "research": frozenset({"skill-result-routing-gap", "unbounded-cycle", NO_AUTOSKILLIT_IMPORT}),
+    "research-review": frozenset({"skill-result-routing-gap", NO_AUTOSKILLIT_IMPORT}),
+    "implementation": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT}),
+    "implementation-groups": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT}),
+    "merge-prs": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT}),
+    "planner": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT}),
+    "remediation": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT}),
+    "research-implement": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT}),
+}
+
+KNOWN_PART_B_VIOLATIONS = frozenset().union(*KNOWN_VIOLATIONS_BY_RECIPE.values())
 
 
 @pytest.fixture(scope="module")

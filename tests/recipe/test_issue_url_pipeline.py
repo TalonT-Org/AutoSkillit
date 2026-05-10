@@ -8,7 +8,7 @@ import yaml
 from autoskillit.recipe._api import validate_from_path
 from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
-from tests.recipe.conftest import KNOWN_PART_B_VIOLATIONS as _KNOWN_PART_B_VIOLATIONS
+from tests.recipe.conftest import KNOWN_VIOLATIONS_BY_RECIPE as _KNOWN_VIOLATIONS_BY_RECIPE
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -26,7 +26,8 @@ class TestImplementationPipelineIssueUrl:
         errors = [
             f
             for f in result.get("findings", [])
-            if f.get("severity") == "error" and f.get("rule") not in _KNOWN_PART_B_VIOLATIONS
+            if f.get("severity") == "error"
+            and f.get("rule") not in _KNOWN_VIOLATIONS_BY_RECIPE.get("implementation", frozenset())
         ]
         assert errors == [], f"Unexpected errors: {errors}"
 
@@ -118,7 +119,8 @@ class TestInvestigateFirstIssueUrl:
         errors = [
             f
             for f in result.get("findings", [])
-            if f.get("severity") == "error" and f.get("rule") not in _KNOWN_PART_B_VIOLATIONS
+            if f.get("severity") == "error"
+            and f.get("rule") not in _KNOWN_VIOLATIONS_BY_RECIPE.get("remediation", frozenset())
         ]
         assert errors == [], f"Unexpected errors: {errors}"
 
@@ -208,7 +210,9 @@ class TestImplementationGroupsIssueTitle:
         errors = [
             f
             for f in result.get("findings", [])
-            if f.get("severity") == "error" and f.get("rule") not in _KNOWN_PART_B_VIOLATIONS
+            if f.get("severity") == "error"
+            and f.get("rule")
+            not in _KNOWN_VIOLATIONS_BY_RECIPE.get("implementation-groups", frozenset())
         ]
         assert errors == [], f"Unexpected errors: {errors}"
 

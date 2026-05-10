@@ -23,15 +23,12 @@ def test_recipe_parses() -> None:
 
 def test_recipe_validates_cleanly() -> None:
     from autoskillit.core.types import Severity
-    from tests.recipe.conftest import KNOWN_PART_B_VIOLATIONS
+    from tests.recipe.conftest import KNOWN_VIOLATIONS_BY_RECIPE
 
     recipe = _load()
     findings = run_semantic_rules(recipe)
-    errors = [
-        f
-        for f in findings
-        if f.severity == Severity.ERROR and f.rule not in KNOWN_PART_B_VIOLATIONS
-    ]
+    allowed = KNOWN_VIOLATIONS_BY_RECIPE.get("promote-to-main-wrapper", frozenset())
+    errors = [f for f in findings if f.severity == Severity.ERROR and f.rule not in allowed]
     undeclared = [f for f in findings if f.rule == "undeclared-capture-key"]
     assert errors == [], errors
     assert undeclared == [], undeclared

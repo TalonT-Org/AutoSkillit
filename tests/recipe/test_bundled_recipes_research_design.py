@@ -4,8 +4,10 @@ import re
 
 import pytest
 
+from autoskillit.recipe._api import load_and_validate
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.validator import validate_recipe_structure
+from tests.recipe.conftest import KNOWN_VIOLATIONS_BY_RECIPE
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -21,6 +23,16 @@ class TestResearchDesignRecipeStructure:
     def test_validates_with_zero_errors(self, recipe) -> None:
         errors = validate_recipe_structure(recipe)
         assert errors == [], f"Validation errors: {errors}"
+
+    def test_full_validation_no_unexpected_errors(self, recipe) -> None:
+        result = load_and_validate("research-design")
+        allowed = KNOWN_VIOLATIONS_BY_RECIPE.get("research-design", frozenset())
+        errors = [
+            s
+            for s in result.get("suggestions", [])
+            if s.get("severity") == "error" and s.get("rule") not in allowed
+        ]
+        assert not errors, f"Full validation failed: {errors}"
 
     def test_recipe_name(self, recipe) -> None:
         assert recipe.name == "research-design"

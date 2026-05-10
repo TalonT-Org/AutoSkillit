@@ -86,6 +86,7 @@ def _validate_diagram_paths(paths_str: str) -> list[str]:
     for raw in paths_str.split(","):
         p = Path(raw.strip())
         if not p.exists():
+            sys.stderr.write(f"Warning: diagram path not found, skipping: {p}\n")
             continue
         content = p.read_text(encoding="utf-8")
         if _count_keywords(content) >= 2:
@@ -97,9 +98,12 @@ def _validate_diagram_paths(paths_str: str) -> list[str]:
 def _parse_figure_specs(viz_plan_path: str) -> list[FigureSpec]:
     """Parse yaml:figure-spec blocks from visualization-plan.md."""
     specs: list[FigureSpec] = []
-    if not viz_plan_path or not Path(viz_plan_path).exists():
+    if not viz_plan_path:
         return specs
-    text = Path(viz_plan_path).read_text(encoding="utf-8")
+    viz_plan = Path(viz_plan_path)
+    if not viz_plan.exists():
+        return specs
+    text = viz_plan.read_text(encoding="utf-8")
     raw_blocks = re.findall(rf"{_FENCE}yaml:figure-spec\r?\n(.*?)\r?\n?{_FENCE}", text, re.DOTALL)
     for block in raw_blocks:
         spec: dict[str, Any] = {}
@@ -121,7 +125,7 @@ def _insert_images(html_body: str, specs: list[FigureSpec]) -> str:
         if not section or not img_path:
             continue
         img_tag = f'<img src="{_html.escape(img_path)}" alt="{_html.escape(title)}">'
-        pattern = rf"(<h[1-6][^>]*>[^<]*{re.escape(section)}[^<]*</h[1-6]>)"
+        pattern = rf"(<h[1-6][^>]*>.*?{re.escape(section)}.*?</h[1-6]>)"
         html_body = re.sub(
             pattern,
             lambda m, t=img_tag: m.group(1) + "\n" + t,
@@ -169,6 +173,7 @@ def main() -> None:
         sys.exit(0)
 
     research_dir = Path(sys.argv[1])
+    research_dir.mkdir(parents=True, exist_ok=True)
     report_path = Path(sys.argv[2])
     all_diagram_paths = sys.argv[3] if len(sys.argv) > 3 else ""
     viz_plan_path = sys.argv[4] if len(sys.argv) > 4 else ""

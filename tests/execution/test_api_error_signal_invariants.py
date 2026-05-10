@@ -112,12 +112,8 @@ class TestApiErrorChannelInvariant:
         assert classify_infra_exit(session, result) == InfraExitCategory.API_ERROR
 
     @pytest.mark.parametrize("signal", API_ERROR_SIGNALS)
-    def test_api_error_in_stderr_non_pty(self, signal: str) -> None:
-        """Non-PTY mode: signal in stderr → API_ERROR (parsed via assistant_messages)."""
-        # In non-PTY mode, stderr content can end up in assistant_messages after
-        # the session model absorbs it — but more importantly, the errors field
-        # may also carry it. Both paths are covered by the assistant_messages
-        # and errors field tests above. This test documents the non-PTY path.
+    def test_api_error_in_stderr_fallback(self, signal: str) -> None:
+        """Stderr fallback: signal in result.stderr → API_ERROR via classify_infra_exit."""
         session = ClaudeSessionResult(
             subtype="empty_output",
             is_error=True,
@@ -125,9 +121,6 @@ class TestApiErrorChannelInvariant:
             session_id="s1",
         )
         result = _make_result(returncode=1, stderr=f"Error: {signal}", stdout="")
-        # After the fix, stderr is no longer read directly — but an API error
-        # signal in stderr in non-PTY would need to be parsed into the session
-        # model to be detected. This test verifies the stdout/NDJSON path works.
         assert classify_infra_exit(session, result) == InfraExitCategory.API_ERROR
 
 

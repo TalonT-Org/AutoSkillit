@@ -21,8 +21,9 @@ fi
 
 # Resolve to main worktree root — prevents nested worktrees/worktrees/ when
 # SOURCE_DIR is itself a linked worktree.
-MAIN_ROOT="$(git -C "$SOURCE_DIR" rev-parse --path-format=absolute --git-common-dir)"
-MAIN_ROOT="$(dirname "$MAIN_ROOT")"
+MAIN_GIT_DIR="$(git -C "$SOURCE_DIR" rev-parse --path-format=absolute --git-common-dir)"
+[ -n "$MAIN_GIT_DIR" ] || { echo "error: could not resolve git-common-dir" >&2; exit 1; }
+MAIN_ROOT="$(dirname "$MAIN_GIT_DIR")"
 
 BRANCH="research-$(date +%Y%m%d-%H%M%S)"
 WORKTREE_DIR="${MAIN_ROOT}/../worktrees"

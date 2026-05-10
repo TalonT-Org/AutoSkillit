@@ -33,11 +33,18 @@
     },
     "worktree_path": {
       "description": "Path to the pre-created worktree (passed by campaign dispatch)",
-      "required": true
+      "required": true,
+      "type": "absolute_path"
+    },
+    "research_dir_rel": {
+      "description": "Repo-relative path to the research directory (e.g. research/2026-05-10-slug)",
+      "required": true,
+      "type": "worktree_relative_path"
     },
     "research_dir": {
-      "description": "Path to the research/ directory in the worktree",
-      "required": true
+      "description": "Path to the research/ directory in the worktree (reconstructed from anchor + rel)",
+      "required": true,
+      "type": "absolute_path"
     },
     "experiment_plan": {
       "description": "Path to the experiment plan file (passed by campaign dispatch)",
@@ -534,7 +541,7 @@
     },
     "implement_complete": {
       "action": "stop",
-      "message": "Implementation phase complete. Emit the L3 result sentinel JSON block now. The sentinel must include the following fields: success=true, worktree_path=${{ context.worktree_path }}, research_dir=${{ inputs.research_dir }}, report_path=${{ context.report_path }}, experiment_results=${{ context.experiment_results }}. Example sentinel: {\"success\": true, \"worktree_path\": \"<path>\", \"research_dir\": \"<path>\", \"report_path\": \"<path>\", \"experiment_results\": \"<path>\"}"
+      "message": "Implementation phase complete. Emit the L3 result sentinel JSON block now. The sentinel must include the following fields: success=true, worktree_path=${{ context.worktree_path }}, research_dir_rel=${{ inputs.research_dir_rel }}, research_dir=${{ inputs.research_dir }}, report_path=${{ context.report_path }}, experiment_results=${{ context.experiment_results }}. Example sentinel: {\"success\": true, \"worktree_path\": \"<path>\", \"research_dir_rel\": \"<rel>\", \"research_dir\": \"<path>\", \"report_path\": \"<path>\", \"experiment_results\": \"<path>\"}"
     }
   }
 }

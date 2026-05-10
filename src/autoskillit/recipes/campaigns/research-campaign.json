@@ -23,7 +23,8 @@
     },
     "source_dir": {
       "description": "Path to the project root",
-      "required": true
+      "required": true,
+      "type": "absolute_path"
     },
     "issue_url": {
       "description": "Optional URL to an existing GitHub issue describing the research goal. Provided as context to scope and plan_experiment.",
@@ -75,6 +76,7 @@
       "capture": {
         "worktree_path": "${{ result.worktree_path }}",
         "research_dir": "${{ result.research_dir }}",
+        "research_dir_rel": "${{ result.research_dir_rel }}",
         "experiment_plan": "${{ result.experiment_plan }}",
         "visualization_plan_path": "${{ result.visualization_plan_path }}",
         "scope_report": "${{ result.scope_report }}",
@@ -89,7 +91,8 @@
       "ingredients": {
         "task": "${{ inputs.task }}",
         "worktree_path": "${{ campaign.worktree_path }}",
-        "research_dir": "${{ campaign.research_dir }}",
+        "research_dir": "${{ campaign.worktree_path }}/${{ campaign.research_dir_rel }}",
+        "research_dir_rel": "${{ campaign.research_dir_rel }}",
         "experiment_plan": "${{ campaign.experiment_plan }}",
         "visualization_plan_path": "${{ campaign.visualization_plan_path }}",
         "source_dir": "${{ inputs.source_dir }}",
@@ -100,6 +103,7 @@
         "audit": "${{ inputs.audit }}"
       },
       "capture": {
+        "worktree_path": "${{ result.worktree_path }}",
         "report_path": "${{ result.report_path }}",
         "experiment_results": "${{ result.experiment_results }}"
       },
@@ -117,7 +121,7 @@
         "experiment_type": "${{ campaign.experiment_type }}",
         "scope_report": "${{ campaign.scope_report }}",
         "worktree_path": "${{ campaign.worktree_path }}",
-        "research_dir": "${{ campaign.research_dir }}",
+        "research_dir": "${{ campaign.worktree_path }}/${{ campaign.research_dir_rel }}",
         "experiment_plan": "${{ campaign.experiment_plan }}",
         "visualization_plan_path": "${{ campaign.visualization_plan_path }}",
         "report_path": "${{ campaign.report_path }}",
@@ -143,7 +147,7 @@
       "ingredients": {
         "base_branch": "${{ inputs.base_branch }}",
         "worktree_path": "${{ campaign.worktree_path }}",
-        "research_dir": "${{ campaign.research_dir }}",
+        "research_dir": "${{ campaign.worktree_path }}/${{ campaign.research_dir_rel }}",
         "pr_url": "${{ campaign.pr_url }}"
       },
       "capture": {},

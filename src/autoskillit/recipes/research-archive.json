@@ -15,12 +15,14 @@
     "worktree_path": {
       "description": "Path to the pre-created worktree (passed by campaign dispatch)",
       "required": true,
-      "hidden": true
+      "hidden": true,
+      "type": "absolute_path"
     },
     "research_dir": {
       "description": "Path to the research/ directory in the worktree",
       "required": true,
-      "hidden": true
+      "hidden": true,
+      "type": "absolute_path"
     },
     "pr_url": {
       "description": "URL of the original experiment PR (passed by campaign dispatch)",

@@ -203,7 +203,8 @@
       },
       "capture": {
         "worktree_path": "${{ result.worktree_path }}",
-        "research_dir": "${{ result.research_dir }}"
+        "research_dir": "${{ result.research_dir }}",
+        "research_dir_rel": "${{ result.research_dir_rel }}"
       },
       "optional_context_refs": [
         "evaluation_dashboard",
@@ -214,7 +215,7 @@
     },
     "design_complete": {
       "action": "stop",
-      "message": "Design phase complete. Emit the L3 result sentinel JSON block now. The sentinel must include the following fields from captured context: success=true, scope_report=<context.scope_report>, experiment_plan=<context.experiment_plan>, visualization_plan_path=<context.visualization_plan_path>, report_plan_path=<context.report_plan_path>, experiment_type=<context.experiment_type>, worktree_path=${{ context.worktree_path }}, research_dir=${{ context.research_dir }}. Example sentinel: {\"success\": true, \"scope_report\": \"<path>\", \"experiment_plan\": \"<path>\", \"visualization_plan_path\": \"<path>\", \"report_plan_path\": \"<path>\", \"experiment_type\": \"benchmark\", \"worktree_path\": \"<path>\", \"research_dir\": \"<path>\"}"
+      "message": "Design phase complete. Emit the L3 result sentinel JSON block now. The sentinel must include the following fields from captured context: success=true, scope_report=<context.scope_report>, experiment_plan=<context.experiment_plan>, visualization_plan_path=<context.visualization_plan_path>, report_plan_path=<context.report_plan_path>, experiment_type=<context.experiment_type>, worktree_path=${{ context.worktree_path }}, research_dir=${{ context.research_dir }}, research_dir_rel=${{ context.research_dir_rel }}. Example sentinel: {\"success\": true, \"scope_report\": \"<path>\", \"experiment_plan\": \"<path>\", \"visualization_plan_path\": \"<path>\", \"report_plan_path\": \"<path>\", \"experiment_type\": \"benchmark\", \"worktree_path\": \"<path>\", \"research_dir\": \"<path>\", \"research_dir_rel\": \"<rel>\"}"
     },
     "escalate_stop": {
       "action": "stop",

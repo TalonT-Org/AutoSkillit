@@ -129,6 +129,8 @@ from .types import RECIPE_PACK_TAGS as RECIPE_PACK_TAGS
 from .types import RESERVED_LOG_RECORD_KEYS as RESERVED_LOG_RECORD_KEYS
 from .types import RETIRED_FEATURES as RETIRED_FEATURES
 from .types import RETIRED_READINESS_TOKENS as RETIRED_READINESS_TOKENS
+from .types import PRODUCER_SCHEMA_FIELDS as PRODUCER_SCHEMA_FIELDS
+from .types import REQUIRED_CONSUMER_FIELDS as REQUIRED_CONSUMER_FIELDS
 from .types import RETIRED_SKILL_NAMES as RETIRED_SKILL_NAMES
 from .types import SESSION_TYPE_ENV_VAR as SESSION_TYPE_ENV_VAR
 from .types import SESSION_TYPE_FLEET as SESSION_TYPE_FLEET
@@ -166,6 +168,7 @@ from .types import DispatchIdentity as DispatchIdentity
 from .types import FailureRecord as FailureRecord
 from .types import FeatureDef as FeatureDef
 from .types import FeatureLifecycle as FeatureLifecycle
+from .types import FigureSpec as FigureSpec
 from .types import FleetErrorCode as FleetErrorCode
 from .types import FleetLock as FleetLock
 from .types import GateState as GateState

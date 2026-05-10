@@ -828,6 +828,54 @@ def test_no_file_based_path_resolution_outside_paths_module() -> None:
     )
 
 
+def test_no_dunder_file_in_embedded_python_blocks() -> None:
+    """REQ-P12-002: SKILL.md files must not contain Path(__file__) in embedded Python blocks.
+
+    This extends the arch-test boundary from .py files to include Python code blocks
+    extracted from SKILL.md files. Any future SKILL.md that embeds a script using
+    Path(__file__) would escape the existing test.
+    """
+    import re
+
+    violations = []
+    src_root = Path(__file__).parent.parent.parent / "src" / "autoskillit"
+    skill_dirs = [
+        src_root / "skills",
+        src_root / "skills_extended",
+    ]
+
+    for skill_dir in skill_dirs:
+        for md_file in skill_dir.rglob("*.md"):
+            text = md_file.read_text()
+            python_blocks = re.findall(r"```python\n(.*?)```", text, re.DOTALL)
+            for block_idx, block in enumerate(python_blocks, 1):
+                try:
+                    tree = ast.parse(block)
+                except SyntaxError:
+                    continue
+                for node in ast.walk(tree):
+                    if (
+                        isinstance(node, ast.Attribute)
+                        and node.attr == "parent"
+                        and isinstance(node.value, ast.Call)
+                        and isinstance(node.value.func, ast.Name)
+                        and node.value.func.id == "Path"
+                        and len(node.value.args) == 1
+                        and isinstance(node.value.args[0], ast.Name)
+                        and node.value.args[0].id == "__file__"
+                    ):
+                        violations.append(
+                            f"{md_file.relative_to(src_root)}:python-block-{block_idx} — "
+                            "Path(__file__).parent in embedded Python. "
+                            "Use pkg_root() from autoskillit.core instead."
+                        )
+
+    assert not violations, (
+        "Forbidden __file__-based path resolution found in SKILL.md embedded Python:\n"
+        + "\n".join(violations)
+    )
+
+
 def test_make_context_no_isinstance_against_concrete_migration() -> None:
     """REQ-P12-001: _factory.py must not isinstance-check DefaultMigrationService."""
     from pathlib import Path

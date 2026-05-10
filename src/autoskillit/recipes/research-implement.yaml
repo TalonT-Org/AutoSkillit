@@ -117,7 +117,7 @@ steps:
       Downloads external and gitignored datasets declared in the experiment
       plan's data_manifest. Executes acquisition commands sequentially into
       the directories pre-created by stage_data. Uses a 4-hour stale threshold
-      to accommodate multi-GB downloads. PASS proceeds to decompose_phases.
+      to accommodate multi-GB downloads. PASS and WARN proceed to decompose_phases.
       FAIL escalates immediately.
 
   # --- Phase Iteration ---

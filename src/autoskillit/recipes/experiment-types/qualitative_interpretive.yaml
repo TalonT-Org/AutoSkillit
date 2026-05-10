@@ -14,6 +14,7 @@ dimension_weights:
   resource_proportionality: S
   data_acquisition: L
   agent_implementability: L
+  scope_alignment: S
 applicable_lenses:
   primary: exp-lens-estimand-clarity
   secondary: exp-lens-validity-threats

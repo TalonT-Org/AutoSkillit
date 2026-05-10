@@ -15,7 +15,8 @@
     "measurement_alignment": "M",
     "resource_proportionality": "L",
     "data_acquisition": "M",
-    "agent_implementability": "H"
+    "agent_implementability": "H",
+    "scope_alignment": "H"
   },
   "applicable_lenses": {
     "primary": "exp-lens-estimand-clarity",
@@ -34,6 +35,7 @@
     "statistical_corrections": "All main effects and interaction terms inflate family-wise error rate; pre-specification of the primary interaction is required",
     "measurement_alignment": "Outcome metric must detect interaction effects, which are typically smaller than main effects",
     "data_acquisition": "Cell balance across factor combinations and counterbalancing affect interaction estimate validity",
-    "agent_implementability": "Factorial ANOVA and regression with interaction terms are highly standardized and automatable"
+    "agent_implementability": "Factorial ANOVA and regression with interaction terms are highly standardized and automatable",
+    "scope_alignment": "All scoped factors must appear in the factorial design matrix; omitting a factor invalidates the interaction analysis"
   }
 }

@@ -78,7 +78,7 @@ steps:
     tool: run_skill
     model: ""
     with:
-      skill_command: "/autoskillit:review-design ${{ context.experiment_plan }}"
+      skill_command: "/autoskillit:review-design ${{ context.experiment_plan }} ${{ context.scope_report }}"
       cwd: "${{ inputs.source_dir }}"
       step_name: review_design
     capture:

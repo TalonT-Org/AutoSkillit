@@ -601,3 +601,15 @@ def test_silent_type_handling_section_in_skill(skill_text: str) -> None:
     assert "is_silent_type" in skill_text
     assert "advisory_context" in skill_text
     assert "subject_kind" in skill_text
+
+
+def test_scope_report_argument_documented(skill_text: str) -> None:
+    """SKILL.md must document scope_report_path as an optional argument."""
+    assert "scope_report_path" in skill_text
+
+
+def test_scope_alignment_l2_placement(skill_text: str) -> None:
+    """scope_alignment must appear in the Step 3 (Level 2) section."""
+    assert "scope_alignment" in skill_text
+    step3_text = skill_text_between("### Step 3", "### Step 4", skill_text)
+    assert "scope_alignment" in step3_text

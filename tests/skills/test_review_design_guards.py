@@ -52,3 +52,38 @@ def test_agent_implementability_weight_row() -> None:
         assert actual == exp_weight, (
             f"{type_name}.agent_implementability = {actual!r}, expected {exp_weight!r}"
         )
+
+
+def test_scope_alignment_dimension_exists() -> None:
+    text = SKILL_PATH.read_text()
+    assert "scope_alignment" in text
+
+
+def test_scope_alignment_not_l_weight() -> None:
+    """scope_alignment must be M-weight minimum to influence verdict in at least one type."""
+    types = load_all_experiment_types()
+    for spec in types:
+        weight = spec.dimension_weights.get("scope_alignment")
+        if weight in ("M", "H"):
+            return
+    raise AssertionError("scope_alignment must have M or H weight in at least one bundled type")
+
+
+def test_scope_alignment_weight_row() -> None:
+    """scope_alignment must have H/M/M/M/L weights for the 5 original bundled types."""
+    types = load_all_experiment_types()
+    by_name = {s.name: s for s in types}
+    expected = {
+        "causal_inference": "H",
+        "benchmark": "M",
+        "configuration_study": "M",
+        "robustness_audit": "M",
+        "exploratory": "L",
+    }
+    for type_name, exp_weight in expected.items():
+        spec = by_name.get(type_name)
+        assert spec is not None, f"Bundled type {type_name!r} not found"
+        actual = spec.dimension_weights.get("scope_alignment")
+        assert actual == exp_weight, (
+            f"{type_name}.scope_alignment = {actual!r}, expected {exp_weight!r}"
+        )

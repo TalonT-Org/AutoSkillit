@@ -15,7 +15,8 @@
     "measurement_alignment": "H",
     "resource_proportionality": "L",
     "data_acquisition": "H",
-    "agent_implementability": "L"
+    "agent_implementability": "L",
+    "scope_alignment": "L"
   },
   "applicable_lenses": {
     "primary": "exp-lens-variance-stability",

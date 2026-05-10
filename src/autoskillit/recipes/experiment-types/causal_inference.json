@@ -15,7 +15,8 @@
     "measurement_alignment": "M",
     "resource_proportionality": "L",
     "data_acquisition": "M",
-    "agent_implementability": "M"
+    "agent_implementability": "M",
+    "scope_alignment": "H"
   },
   "applicable_lenses": {
     "primary": "exp-lens-estimand-clarity",

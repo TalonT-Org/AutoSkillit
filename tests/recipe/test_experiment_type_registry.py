@@ -44,6 +44,7 @@ EXPECTED_DIMENSIONS = {
     "resource_proportionality",
     "data_acquisition",
     "agent_implementability",
+    "scope_alignment",
 }
 
 NEW_TYPES = {
@@ -87,7 +88,7 @@ def test_all_weight_values_are_valid() -> None:
 
 
 def test_all_eight_dimensions_present() -> None:
-    """All 8 dimensions from the SKILL.md matrix are present in each bundled type."""
+    """All 9 dimensions from the SKILL.md matrix are present in each bundled type."""
     types = load_all_experiment_types()
     for spec in types:
         missing = EXPECTED_DIMENSIONS - set(spec.dimension_weights.keys())
@@ -121,6 +122,10 @@ def test_dimension_weights_match_skill_matrix() -> None:
     exploratory = by_name["exploratory"]
     assert exploratory.dimension_weights["statistical_corrections"] == "S"
     assert exploratory.dimension_weights["agent_implementability"] == "L"
+
+    assert by_name["causal_inference"].dimension_weights["scope_alignment"] == "H"
+    assert by_name["benchmark"].dimension_weights["scope_alignment"] == "M"
+    assert by_name["exploratory"].dimension_weights["scope_alignment"] == "L"
 
 
 def test_red_team_severity_caps_match_skill() -> None:
@@ -415,6 +420,11 @@ def test_new_types_dimension_weights_spot_check() -> None:
     assert by_name["observational_correlational"].dimension_weights["ecological_validity"] == "H"
     assert by_name["observational_correlational"].dimension_weights["variance_protocol"] == "L"
 
+    assert by_name["evidence_synthesis"].dimension_weights["scope_alignment"] == "H"
+    assert by_name["factorial_design"].dimension_weights["scope_alignment"] == "H"
+    assert by_name["qualitative_interpretive"].dimension_weights["scope_alignment"] == "S"
+    assert by_name["single_subject"].dimension_weights["scope_alignment"] == "L"
+
 
 @pytest.mark.parametrize("type_name", sorted(NEW_TYPES))
 def test_new_type_full_schema_valid(type_name: str) -> None:
@@ -674,7 +684,7 @@ def test_is_silent_type_false_for_standard_types(name: str) -> None:
 
 
 def test_is_silent_type_threshold_boundary() -> None:
-    """5 of 8 S dims is not silent; 6 of 8 is silent."""
+    """5 of 9 S dims is not silent; 6 of 9 is silent."""
     base = ExperimentTypeSpec(
         name="test_type",
         classification_triggers=["test"],
@@ -687,12 +697,13 @@ def test_is_silent_type_threshold_boundary() -> None:
             "resource_proportionality": "H",
             "data_acquisition": "H",
             "agent_implementability": "H",
+            "scope_alignment": "H",
         },
         applicable_lenses={},
         red_team_focus={},
         l1_severity={},
     )
-    assert is_silent_type(base) is False  # 5 of 8
+    assert is_silent_type(base) is False  # 5 of 9
 
     six_s = replace(
         base,
@@ -701,7 +712,7 @@ def test_is_silent_type_threshold_boundary() -> None:
             "resource_proportionality": "S",
         },
     )
-    assert is_silent_type(six_s) is True  # 6 of 8
+    assert is_silent_type(six_s) is True  # 6 of 9
 
 
 def test_qualitative_interpretive_silent_type_weights() -> None:

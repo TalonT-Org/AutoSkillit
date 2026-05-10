@@ -14,6 +14,7 @@ dimension_weights:
   resource_proportionality: L
   data_acquisition: L
   agent_implementability: H
+  scope_alignment: M
 applicable_lenses:
   primary: exp-lens-sensitivity-robustness
   secondary: exp-lens-validity-threats
@@ -30,3 +31,4 @@ dimension_weight_rationale:
   ecological_validity: "Whether the simulation accurately represents the target real-world system is the central validity question"
   measurement_alignment: "Simulation output metrics must be operationally linked to real-world constructs of interest"
   agent_implementability: "Computational simulation pipelines are highly structured; parameter sweeps and seed management are automatable"
+  scope_alignment: "Model scope should align with the research question; narrowing without justification may miss interaction effects"

@@ -26,11 +26,15 @@ best available plan.
 
 ## Arguments
 
-`/autoskillit:review-design {experiment_plan_path}`
+`/autoskillit:review-design {experiment_plan_path} [{scope_report_path}]`
 
 - **experiment_plan_path** — Absolute path to the experiment plan file produced by
   `/autoskillit:plan-experiment`. Scan tokens after the skill name for the first
   path-like token (starts with `/`, `./`, or `.autoskillit/`).
+- **scope_report_path** (optional) — Absolute path to the scope report file produced by
+  `/autoskillit:scope`. When provided, enables the `scope_alignment` dimension at Level 2.
+  Scan tokens after the skill name for path-like tokens. The first is `experiment_plan_path`;
+  the second (if present) is `scope_report_path`.
 
 ## Critical Constraints
 
@@ -83,10 +87,15 @@ absent. The recipe routes to `on_context_limit`, abandoning the partial review.
    **Error handling:** When no path-like token is present in the arguments, emit
    `verdict = STOP` with message "No experiment_plan_path provided" and return (per
    the NEVER exit-non-zero constraint).
-3. Read the plan file.
+3. Extract `scope_report_path` from arguments (second path-like token, if present).
+   This argument is optional. When absent, the `scope_alignment` dimension is silently
+   skipped (not spawned, not mentioned in output — same behavior as a SILENT dimension).
+   When present, read the scope report file and extract the "Proposed Investigation
+   Directions" section for use by the `scope_alignment` subagent in Step 3.
+4. Read the plan file.
    **Error handling:** If the file does not exist or is unreadable at the resolved path,
    emit `verdict = STOP` with message "Plan file not found: {path}" and return.
-4. **Load the experiment type registry:**
+5. **Load the experiment type registry:**
    a. Locate bundled types dir: run
       `python -c "from autoskillit.core import pkg_root; print(pkg_root() / 'recipes' / 'experiment-types')"`
       to get the absolute bundled directory path.
@@ -98,7 +107,7 @@ absent. The recipe routes to `on_context_limit`, abandoning the partial review.
       type replaces the bundled entry entirely — do not merge fields.
    d. The resulting registry is a mapping of type name → spec. The set of valid
       `experiment_type` values for this run is the set of keys in the registry.
-5. Parse YAML frontmatter using the **backward-compatible two-level fallback**:
+6. Parse YAML frontmatter using the **backward-compatible two-level fallback**:
    - **Level 1 (frontmatter)**: Read YAML frontmatter between `---` delimiters directly
      (zero LLM tokens). Return present fields and note which are missing.
      Record `source: frontmatter` for each extracted field.
@@ -304,7 +313,7 @@ to STRUCTURAL (absent estimands typically indicate deeper design flaws).
 
 ### Step 3: Level 2 + Red-Team (concurrent)
 
-When the L1 gate passes (no STRUCTURAL critical L1 findings — gate also passes when all L1 criticals are ADDRESSABLE), launch 2–3 Level 2 subagents AND the
+When the L1 gate passes (no STRUCTURAL critical L1 findings — gate also passes when all L1 criticals are ADDRESSABLE), launch 3–4 Level 2 subagents AND the
 red-team agent concurrently — all at the same time without waiting for each other.
 
 **Level 2 subagents** (parallel, weights from the matrix):
@@ -312,6 +321,50 @@ red-team agent concurrently — all at the same time without waiting for each ot
 - `causal_structure`: weight from matrix (S for benchmark/config_study, H for causal_inference).
   Only spawn when weight ≥ L.
 - `unit_interference`: "Can treatments spill over between experimental units?"
+- `scope_alignment`: "Does the experiment plan address the breadth of the original
+  research scope?" Only spawn when: (a) `scope_report_path` was provided in arguments,
+  AND (b) weight ≥ L in the matrix. When `scope_report_path` is absent, treat as
+  SILENT regardless of the weight matrix.
+
+#### `scope_alignment` — Scope Coverage Breadth
+
+Validates that the experiment plan addresses the research question as originally scoped,
+rather than silently narrowing to a subset of the proposed investigation directions.
+
+The subagent receives: full plan text AND the scope report content (read from
+`scope_report_path` in Step 0).
+
+Evaluation procedure:
+
+1. **Direction extraction**: Read the "Proposed Investigation Directions" section of the
+   scope report. Enumerate each direction as D1, D2, D3, etc.
+2. **Coverage mapping**: For each direction, check whether the plan's hypotheses, methods,
+   independent variables, or implementation steps address it. A direction is "covered" if
+   the plan contains a hypothesis, experimental arm, or measurement that directly
+   investigates the direction's topic.
+3. **Coverage ratio**: Calculate `covered_count / total_directions`.
+4. **Narrowing detection**: If `total_directions >= 3` and `covered_count == 1`, flag as
+   unjustified narrowing unless the plan explicitly states why the other directions were
+   excluded.
+5. **Justification check**: Directions are considered "justified-excluded" if the plan
+   contains an explicit rationale for deferring or excluding them (e.g., "out of scope
+   for this iteration", "addressed in separate experiment", "insufficient data
+   available").
+
+Findings rules:
+
+- **Critical** (when weight = H): Coverage ratio < 50% AND no justification for excluded
+  directions. Message: "Plan addresses {covered_count}/{total_directions} scope directions
+  without justification for excluded directions."
+- **Warning** (any weight): Coverage ratio < 50% with partial justification, OR plan
+  narrows to single direction from >= 3 scoped directions. Message: "Plan narrows from
+  {total_directions} scoped directions to {covered_count} without full justification."
+- **Info**: Coverage ratio >= 50% but some non-covered directions lack explicit
+  justification.
+
+This dimension does not produce STOP-eligible findings (L2 scope_alignment findings
+contribute to REVISE via the standard warning/critical count mechanism but are never
+added to `stop_triggers`).
 
 **Red-team agent** (concurrent with L2 and L4 — does NOT block L3):
 
@@ -444,6 +497,8 @@ Level 3 and Level 4 may run concurrently with the red-team agent (do not block o
 3. **Finding-count suppression** — L-weight dimensions with zero findings: omit from output
    entirely. H/M dimensions with zero findings: emit "No issues identified" (deliberate
    clean bill of health).
+4. **Scope-report absent** — `scope_alignment` is treated as SILENT regardless of matrix
+   weight when `scope_report_path` was not provided in arguments.
 
 ### Step 6: Wait for Red-Team
 

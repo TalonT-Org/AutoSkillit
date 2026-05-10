@@ -44,37 +44,43 @@ class TestClassifyInfraExit:
         result = _sr(returncode=1, stderr="")
         assert classify_infra_exit(session, result) == InfraExitCategory.CONTEXT_EXHAUSTED
 
-    def test_api_error_overloaded_in_stderr(self):
-        """stderr contains 'overloaded' → API_ERROR."""
+    def test_api_error_overloaded_in_assistant_messages(self):
+        """API error in assistant_messages → API_ERROR (PTY-safe path)."""
         session = ClaudeSessionResult(
             subtype="empty_output",
             is_error=True,
             result="",
             session_id="",
+            assistant_messages=[
+                "API Error: "
+                '{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}',
+            ],
         )
-        result = _sr(returncode=1, stderr="Error: API is overloaded")
+        result = _sr(returncode=0, stderr="")
         assert classify_infra_exit(session, result) == InfraExitCategory.API_ERROR
 
-    def test_api_error_529_in_stderr(self):
-        """stderr contains HTTP 529 → API_ERROR."""
+    def test_api_error_529_in_assistant_messages(self):
+        """HTTP 529 in assistant_messages → API_ERROR."""
         session = ClaudeSessionResult(
             subtype="empty_output",
             is_error=True,
             result="",
             session_id="",
+            assistant_messages=["HTTP Error 529: Service Overloaded"],
         )
-        result = _sr(returncode=1, stderr="HTTP Error 529: Service Overloaded")
+        result = _sr(returncode=0, stderr="")
         assert classify_infra_exit(session, result) == InfraExitCategory.API_ERROR
 
-    def test_api_error_connection_reset(self):
-        """stderr contains ECONNRESET → API_ERROR."""
+    def test_api_error_econnreset_in_assistant_messages(self):
+        """ECONNRESET in assistant_messages → API_ERROR."""
         session = ClaudeSessionResult(
             subtype="empty_output",
             is_error=True,
             result="",
             session_id="",
+            assistant_messages=["Error: read ECONNRESET"],
         )
-        result = _sr(returncode=1, stderr="Error: read ECONNRESET")
+        result = _sr(returncode=0, stderr="")
         assert classify_infra_exit(session, result) == InfraExitCategory.API_ERROR
 
     def test_process_killed_sigkill(self):
@@ -129,8 +135,12 @@ class TestClassifyInfraExit:
             result="prompt is too long",
             session_id="s1",
             jsonl_context_exhausted=True,
+            assistant_messages=[
+                "API Error: "
+                '{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}',
+            ],
         )
-        result = _sr(returncode=1, stderr="overloaded")
+        result = _sr(returncode=1, stderr="")
         assert classify_infra_exit(session, result) == InfraExitCategory.CONTEXT_EXHAUSTED
 
 

@@ -17,6 +17,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_conftest_import_guard.py` | Structural guard: conftest.py must not import merge_queue at module level |
 | `test_commands.py` | Tests for execution/commands.py — ClaudeInteractiveCmd / ClaudeHeadlessCmd builders |
 | `test_db.py` | L1 unit tests for execution/db.py — SQL validation and authorizer |
+| `test_api_error_signal_invariants.py` | API error signal invariants: API errors detected regardless of channel (PTY vs non-PTY) |
 | `test_diff_annotator.py` | Behavioral tests for execution/diff_annotator.py |
 | `test_exit_classification.py` | Unit tests for classify_infra_exit and InfraExitCategory enum |
 | `test_flag_contracts.py` | Contract tests for Claude CLI flags |

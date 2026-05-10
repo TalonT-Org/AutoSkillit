@@ -44,15 +44,15 @@ def test_verdict_taxonomy_info_is_distinct_from_discuss() -> None:
     This is a regression guard against re-introducing the verdict conflation
     where info-severity findings were incorrectly given verdict=DISCUSS.
     """
-    assert not __skill_text_matches("info.*auto.*discuss"), (
+    assert not _skill_text_matches("info.*auto.*discuss"), (
         "SKILL.md must never describe info findings as 'auto-classified as DISCUSS'"
     )
-    assert not __skill_text_matches("info.*classified as.*DISCUSS"), (
+    assert not _skill_text_matches("info.*classified as.*DISCUSS"), (
         "SKILL.md must never describe info findings as 'classified as DISCUSS'"
     )
 
 
-def __skill_text_matches(pattern: str) -> bool:
+def _skill_text_matches(pattern: str) -> bool:
     """Check if pattern matches anywhere in SKILL.md (case-insensitive)."""
     import re
 

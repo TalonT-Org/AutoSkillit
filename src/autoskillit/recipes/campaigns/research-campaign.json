@@ -79,6 +79,7 @@
         "experiment_plan": "${{ result.experiment_plan }}",
         "visualization_plan_path": "${{ result.visualization_plan_path }}",
         "scope_report": "${{ result.scope_report }}",
+        "scope_directions": "${{ result.scope_directions }}",
         "experiment_type": "${{ result.experiment_type }}"
       },
       "depends_on": []

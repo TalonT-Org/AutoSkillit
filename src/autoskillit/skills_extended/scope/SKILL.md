@@ -178,15 +178,76 @@ threshold values or scoring standards are, and where they are defined. If no eva
 framework was found, omit this section entirely — do not emit an empty section.}
 ```
 
+### Step 2a — Extract Directions Manifest
+
+After writing the scope report, extract the investigation directions into a
+machine-readable JSON sidecar. Parse the **Proposed Investigation Directions**
+section of the report and produce a `scope_directions_{topic}_{YYYY-MM-DD_HHMMSS}.json`
+file in `{{AUTOSKILLIT_TEMP}}/scope/` (the same directory as the scope report).
+
+**Schema:**
+
+```json
+{
+  "research_question": "{the refined research question from the report}",
+  "generated_at": "{ISO-8601 timestamp}",
+  "direction_count": 3,
+  "must_cover_count": 2,
+  "directions": [
+    {
+      "direction_id": "D1",
+      "title": "Short description of the direction (max 80 chars)",
+      "priority": "P0",
+      "must_cover": true,
+      "source_type": "computational",
+      "feasibility_notes": "Brief feasibility assessment (1-2 sentences)"
+    }
+  ]
+}
+```
+
+**Field rules:**
+
+| Field | Type | Constraints | Rules |
+|-------|------|-------------|-------|
+| `direction_id` | string | pattern: `^D\d+$` | Sequential: D1, D2, D3, ... |
+| `title` | string | maxLength: 80 | Short summary of the direction, max 80 characters |
+| `priority` | enum | values: `P0`, `P1`, `P2` | `P0` (primary), `P1` (secondary), `P2` (exploratory) |
+| `must_cover` | boolean | — | `true` for P0 directions; `false` for P1/P2 |
+| `source_type` | enum | values: `computational`, `wet_lab`, `literature`, `hybrid` | Classify the investigation approach |
+| `feasibility_notes` | string | — | Brief assessment of feasibility, 1-2 sentences |
+
+**Priority assignment rules:**
+- **P0 (primary):** Directions that directly address the core research question. These
+  are the main investigation paths. At least one direction must be P0. Set `must_cover: true`.
+- **P1 (secondary):** Directions that support or complement the primary investigation
+  but are not essential. Set `must_cover: false`.
+- **P2 (exploratory):** Speculative or long-shot directions worth noting but not
+  requiring coverage. Set `must_cover: false`.
+
+**Source type classification:**
+- **computational:** Can be investigated entirely through computation (code, simulation, analysis)
+- **wet_lab:** Requires physical laboratory work (synthesis, assays, measurements)
+- **literature:** Can be resolved through literature review and meta-analysis
+- **hybrid:** Requires a combination of computational and experimental approaches
+
+**Validation:** `direction_count` must equal `len(directions)`. `must_cover_count` must
+equal the number of entries where `must_cover == true`. `must_cover_count` must be ≥ 1
+(at least one direction must have `must_cover: true`). If any invariant is violated,
+correct the counts by recomputing them from the `directions` array before writing the
+file — do not emit a sidecar with stale or inconsistent count fields.
+
 ### Step 3 — Write Output
 
-Save the scope report to:
-`{{AUTOSKILLIT_TEMP}}/scope/scope_{topic}_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+Save both output files to `{{AUTOSKILLIT_TEMP}}/scope/` (relative to the current working directory):
 
-Where `{topic}` is a snake_case summary of the research question (max 40 chars).
+1. **Scope report:** `scope_{topic}_{YYYY-MM-DD_HHMMSS}.md`
+   Where `{topic}` is a snake_case summary of the research question (max 40 chars).
 
-After saving, emit the structured output token as the very last line of your
-text output:
+2. **Directions manifest:** `scope_directions_{topic}_{YYYY-MM-DD_HHMMSS}.json`
+
+After saving both files, emit the structured output tokens as the last two lines
+of your text output, in this exact order:
 
 > **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
 > markdown formatting on the token names**. Do not wrap token names in `**bold**`,
@@ -195,4 +256,5 @@ text output:
 
 ```
 scope_report = {absolute_path_to_scope_report}
+scope_directions = {absolute_path_to_scope_directions_json}
 ```

@@ -30,14 +30,20 @@ one self-contained folder under `research/`.
 
 ## Arguments
 
-/autoskillit:plan-experiment {scope_report_path} [{revision_guidance}]
+/autoskillit:plan-experiment {scope_report_path} [{scope_directions_path}] [{revision_guidance}]
 
 `{scope_report_path}` — Absolute path to the scope report produced by `/autoskillit:scope`
 (required). Scan tokens after the skill name for the first path-like token
 (starts with `/`, `./`, or `.autoskillit/`).
 
+`{scope_directions_path}` — Optional. Absolute path to the structured directions manifest
+produced by `/autoskillit:scope`. Scan for the second path-like token. When present and
+the file exists, use its structured directions instead of extracting directions from the
+prose report. When absent or the file does not exist, fall back to extracting directions
+from the Proposed Investigation Directions section of the scope report.
+
 `{revision_guidance}` — Optional. Absolute path to revision guidance produced by
-`/autoskillit:review-design` when verdict=REVISE. Scan for the second path-like token.
+`/autoskillit:review-design` when verdict=REVISE. Scan for the third path-like token.
 When absent or empty (first pass), proceed normally. When present, read it and
 incorporate the feedback before writing the plan.
 
@@ -80,7 +86,16 @@ Detect and read inputs:
    - Proposed investigation directions
    - Success criteria hints
    - External research findings
-2. If a second path-like token is present and resolves to an existing file, read
+2. If `{scope_directions_path}` is present and the file exists, read it as JSON.
+   Extract the `directions` array. Use these structured directions as the
+   authoritative list of investigation directions instead of parsing them from the
+   Markdown prose. Note which directions have `must_cover: true` — these are
+   mandatory and each must receive its own experimental design section in Step 3.
+   If the file is absent, does not exist, cannot be parsed as valid JSON, or
+   lacks a non-empty `directions` array, fall back to extracting directions
+   from the report's Proposed Investigation Directions section (no breadth
+   enforcement applies in this case). Note the fallback reason in the plan.
+3. If a third path-like token is present and resolves to an existing file, read
    `{revision_guidance}`. Extract all revision instructions — these take priority over
    your initial analysis in Step 2. Note which sections of the plan need rework.
    When absent or empty, omit this sub-step and proceed normally (first pass).
@@ -135,10 +150,24 @@ information gaps and produce the best possible experiment plan.
 - Investigation of specific technical constraints or requirements
 - Any other research that improves the experiment plan
 
+**Breadth enforcement (when scope_directions.json is available):**
+Each direction with `must_cover: true` must be assessed for feasibility by at least
+one subagent. You may combine related must_cover directions into a single subagent
+if they share the same feasibility concerns, but every must_cover direction must be
+explicitly addressed in the feasibility findings.
+
 ### Step 3 — Write Experiment Plan
 
 Produce a structured experiment plan. The plan has two halves: the **research
 design** (what and why) and the **implementation plan** (how to build it).
+
+**Breadth enforcement — plan sections (when scope_directions.json is available):**
+The experiment plan must include one clearly labeled design section per `must_cover: true`
+direction from `scope_directions.json`. If a must_cover direction is infeasible or
+redundant, you must include a **## Direction Dropped: {direction_id} — {title}** section
+with an explicit justification (minimum 2 sentences explaining why the direction was
+dropped and what evidence supports the decision). Silent omission of must_cover
+directions is prohibited.
 
 Choose a date-stamped slug for the experiment folder:
 `research/YYYY-MM-DD-{slug}/` where `{slug}` is a kebab-case summary of the

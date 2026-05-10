@@ -118,6 +118,7 @@ def test_run_design_capture_keys(recipe: Recipe) -> None:
         "experiment_plan",
         "visualization_plan_path",
         "scope_report",
+        "scope_directions",
         "experiment_type",
     }
 

@@ -183,7 +183,7 @@ framework was found, omit this section entirely — do not emit an empty section
 After writing the scope report, extract the investigation directions into a
 machine-readable JSON sidecar. Parse the **Proposed Investigation Directions**
 section of the report and produce a `scope_directions_{topic}_{YYYY-MM-DD_HHMMSS}.json`
-file in the same output directory.
+file in `{{AUTOSKILLIT_TEMP}}/scope/` (the same directory as the scope report).
 
 **Schema:**
 
@@ -233,7 +233,9 @@ file in the same output directory.
 
 **Validation:** `direction_count` must equal `len(directions)`. `must_cover_count` must
 equal the number of entries where `must_cover == true`. At least one direction must have
-`must_cover: true`.
+`must_cover: true`. If any invariant is violated, correct the counts by recomputing them
+from the `directions` array before writing the file — do not emit a sidecar with stale
+or inconsistent count fields.
 
 ### Step 3 — Write Output
 

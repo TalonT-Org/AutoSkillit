@@ -624,7 +624,7 @@ def _check_downstream_context_completeness(ctx: ValidationContext) -> list[RuleF
         # Check references first so a step's own captures cannot satisfy its own refs.
         # Captures become available to *subsequent* steps, not to the current step.
         if step.tool in SKILL_TOOLS:
-            skill_cmd = step.with_args.get("skill_command", "")
+            skill_cmd = (step.with_args or {}).get("skill_command", "")
             if isinstance(skill_cmd, str):
                 for ref in _CONTEXT_REF_RE.findall(skill_cmd):
                     if ref in produced_context or ref in recipe_inputs:
@@ -644,10 +644,8 @@ def _check_downstream_context_completeness(ctx: ValidationContext) -> list[RuleF
                     )
 
         if step.capture:
-            for ctx_var, capture_expr in step.capture.items():
-                result_refs = RESULT_CAPTURE_RE.findall(capture_expr)
-                for _ in result_refs:
-                    produced_context.add(ctx_var)
+            for ctx_var in step.capture:
+                produced_context.add(ctx_var)
 
     return findings
 

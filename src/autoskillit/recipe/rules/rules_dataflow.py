@@ -14,7 +14,6 @@ from autoskillit.core import (
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.contracts import (
     _CONTEXT_REF_RE,
-    INPUT_REF_RE,
     RESULT_CAPTURE_RE,
     get_callable_contract,
     get_skill_contract,
@@ -610,15 +609,9 @@ def _check_downstream_context_completeness(ctx: ValidationContext) -> list[RuleF
     (a) produced by a prior step's capture: block (result.X wired to context.X), or
     (b) declared as a top-level recipe input.
     """
-    from autoskillit.recipe.contracts import _CONTEXT_REF_RE
-
     findings: list[RuleFinding] = []
 
-    # Build a set of all context variables that are produced by recipe steps
-    # A context var X is produced when some prior step captures result.Y and
-    # that capture is wired: capture: {X: "${{ result.Y }}"} makes context.X available.
     produced_context: set[str] = set()
-    # Also collect recipe inputs
     recipe_inputs: set[str] = (
         set(ctx.recipe.ingredients.keys()) if ctx.recipe.ingredients else set()
     )
@@ -628,42 +621,33 @@ def _check_downstream_context_completeness(ctx: ValidationContext) -> list[RuleF
     for step_name in ordered_steps:
         step = ctx.recipe.steps[step_name]
 
-        # First, record what THIS step produces so subsequent steps can use it
+        # Check references first so a step's own captures cannot satisfy its own refs.
+        # Captures become available to *subsequent* steps, not to the current step.
+        if step.tool in SKILL_TOOLS:
+            skill_cmd = step.with_args.get("skill_command", "")
+            if isinstance(skill_cmd, str):
+                for ref in _CONTEXT_REF_RE.findall(skill_cmd):
+                    if ref in produced_context or ref in recipe_inputs:
+                        continue
+                    findings.append(
+                        RuleFinding(
+                            rule="downstream-context-gap",
+                            severity=Severity.WARNING,
+                            step_name=step_name,
+                            message=(
+                                f"Step '{step_name}' references ${{{{ context.{ref}}}}} in its "
+                                f"skill_command but '{ref}' is not produced by any prior step's "
+                                f"capture block and is not a recipe input."
+                                " The variable is unreachable."
+                            ),
+                        )
+                    )
+
         if step.capture:
             for ctx_var, capture_expr in step.capture.items():
-                # Check if this capture wires a result.X to context.ctx_var
                 result_refs = RESULT_CAPTURE_RE.findall(capture_expr)
                 for _ in result_refs:
                     produced_context.add(ctx_var)
-
-        # Second, check if this step's skill_command references any unwired context vars
-        if step.tool not in SKILL_TOOLS:
-            continue
-        skill_cmd = step.with_args.get("skill_command", "")
-        if not isinstance(skill_cmd, str):
-            continue
-
-        ctx_refs = _CONTEXT_REF_RE.findall(skill_cmd)
-        # Also collect all inputs.X refs to know which context names are covered
-        inp_refs = set(INPUT_REF_RE.findall(skill_cmd))
-        for ref in ctx_refs:
-            if ref in produced_context or ref in recipe_inputs:
-                continue
-            # If ref matches an inputs.X name, the recipe input is available as context
-            if ref in inp_refs:
-                continue
-            findings.append(
-                RuleFinding(
-                    rule="downstream-context-gap",
-                    severity=Severity.WARNING,
-                    step_name=step_name,
-                    message=(
-                        f"Step '{step_name}' references ${{{{ context.{ref}}}}} in its "
-                        f"skill_command but '{ref}' is not produced by any prior step's "
-                        f"capture block and is not a recipe input. The variable is unreachable."
-                    ),
-                )
-            )
 
     return findings
 

@@ -582,7 +582,8 @@ def read_all_campaign_captures(
             dispatches = data.get("dispatches", [])
             all_success = all(d.get("status") == DispatchStatus.SUCCESS for d in dispatches)
             if all_success and dispatches:
-                entries.append((data.get("started_at", 0.0), caps))
+                started = data.get("started_at")
+                entries.append((float(started) if started is not None else 0.0, caps))
         except (KeyError, TypeError) as exc:
             logger.warning("read_all_campaign_captures: skipping %s: %s", path, exc)
             continue

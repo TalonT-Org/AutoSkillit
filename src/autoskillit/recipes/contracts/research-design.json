@@ -1,0 +1,468 @@
+{
+  "generated_at": "2026-05-10T18:08:58.551845+00:00",
+  "bundled_manifest_version": "0.1.0",
+  "skill_hashes": {},
+  "skills": {
+    "scope": {
+      "inputs": [
+        {
+          "name": "research_question",
+          "type": "string",
+          "required": true,
+          "recommended": false
+        }
+      ],
+      "outputs": [
+        {
+          "name": "scope_report",
+          "type": "file_path"
+        },
+        {
+          "name": "scope_directions",
+          "type": "file_path"
+        }
+      ],
+      "expected_output_patterns": [
+        "scope_report\\s*=\\s*/.+",
+        "scope_directions\\s*=\\s*/.+"
+      ],
+      "pattern_examples": [
+        "scope_report = /tmp/scope_report.md\nscope_directions = /tmp/scope_directions.json\n%%ORDER_UP%%"
+      ],
+      "write_behavior": "always"
+    },
+    "plan-experiment": {
+      "inputs": [
+        {
+          "name": "scope_report_path",
+          "type": "file_path",
+          "required": true,
+          "recommended": false
+        },
+        {
+          "name": "scope_directions_path",
+          "type": "file_path",
+          "required": false,
+          "recommended": false
+        },
+        {
+          "name": "revision_guidance",
+          "type": "file_path",
+          "required": false,
+          "recommended": false
+        }
+      ],
+      "outputs": [
+        {
+          "name": "experiment_plan",
+          "type": "file_path"
+        }
+      ],
+      "expected_output_patterns": [
+        "experiment_plan\\s*=\\s*/.+"
+      ],
+      "pattern_examples": [
+        "experiment_plan = /tmp/experiment_plan.md\n%%ORDER_UP%%"
+      ],
+      "write_behavior": "always"
+    },
+    "review-design": {
+      "inputs": [
+        {
+          "name": "experiment_plan",
+          "type": "file_path",
+          "required": true,
+          "recommended": false
+        },
+        {
+          "name": "scope_report",
+          "type": "file_path",
+          "required": false,
+          "recommended": false
+        }
+      ],
+      "outputs": [
+        {
+          "name": "verdict",
+          "type": "string"
+        },
+        {
+          "name": "experiment_type",
+          "type": "string"
+        },
+        {
+          "name": "evaluation_dashboard",
+          "type": "file_path"
+        },
+        {
+          "name": "revision_guidance",
+          "type": "file_path"
+        },
+        {
+          "name": "classification_timestamp",
+          "type": "string"
+        }
+      ],
+      "expected_output_patterns": [
+        "verdict\\s*=\\s*(GO|REVISE|STOP)",
+        "(?:experiment_type\\s*=\\s*\\S+|verdict\\s*=\\s*STOP)"
+      ],
+      "pattern_examples": [
+        "verdict = GO\nexperiment_type = benchmark\nevaluation_dashboard = /tmp/eval.md\nrevision_guidance = /tmp/guidance.md\n%%ORDER_UP%%",
+        "verdict = REVISE\nexperiment_type = benchmark\nrevision_guidance = /tmp/guidance.md\n%%ORDER_UP%%",
+        "verdict = STOP\n%%ORDER_UP%%",
+        "verdict = GO\nexperiment_type = causal_inference\nevaluation_dashboard = /tmp/eval.md\n%%ORDER_UP%%",
+        "verdict = GO\nexperiment_type = configuration_study\nevaluation_dashboard = /tmp/eval.md\n%%ORDER_UP%%",
+        "verdict = GO\nexperiment_type = robustness_audit\nevaluation_dashboard = /tmp/eval.md\n%%ORDER_UP%%",
+        "verdict = GO\nexperiment_type = exploratory\nevaluation_dashboard = /tmp/eval.md\n%%ORDER_UP%%"
+      ],
+      "write_behavior": "always"
+    },
+    "plan-visualization": {
+      "inputs": [
+        {
+          "name": "source_dir",
+          "type": "directory_path",
+          "required": true,
+          "recommended": false
+        },
+        {
+          "name": "experiment_plan_path",
+          "type": "file_path",
+          "required": true,
+          "recommended": false
+        },
+        {
+          "name": "scope_report_path",
+          "type": "string",
+          "required": false,
+          "recommended": false
+        }
+      ],
+      "outputs": [
+        {
+          "name": "visualization_plan_path",
+          "type": "file_path"
+        },
+        {
+          "name": "report_plan_path",
+          "type": "file_path"
+        },
+        {
+          "name": "disambiguation_rule_applied",
+          "type": "string"
+        },
+        {
+          "name": "tier_c_lens",
+          "type": "string"
+        },
+        {
+          "name": "methodology_tradition",
+          "type": "string"
+        },
+        {
+          "name": "visualization_plan_trace_path",
+          "type": "file_path"
+        }
+      ],
+      "expected_output_patterns": [
+        "visualization_plan_path\\s*=\\s*/.+",
+        "report_plan_path\\s*=\\s*/.+"
+      ],
+      "pattern_examples": [
+        "visualization_plan_path = /tmp/plan-visualization/visualization-plan.md\nreport_plan_path = /tmp/plan-visualization/report-plan.md\n%%ORDER_UP%%"
+      ],
+      "write_behavior": "always"
+    },
+    "resolve-design-review": {
+      "inputs": [
+        {
+          "name": "evaluation_dashboard",
+          "type": "file_path",
+          "required": true,
+          "recommended": false
+        },
+        {
+          "name": "experiment_plan",
+          "type": "file_path",
+          "required": true,
+          "recommended": false
+        }
+      ],
+      "outputs": [
+        {
+          "name": "resolution",
+          "type": "string"
+        },
+        {
+          "name": "revision_guidance",
+          "type": "file_path"
+        }
+      ],
+      "expected_output_patterns": [
+        "resolution\\s*=\\s*(revised|failed)",
+        "(?:revision_guidance\\s*=\\s*/.+|resolution\\s*=\\s*failed)"
+      ],
+      "pattern_examples": [
+        "resolution = revised\nrevision_guidance = /tmp/guidance.md\n%%ORDER_UP%%",
+        "resolution = failed\n%%ORDER_UP%%"
+      ],
+      "write_behavior": "always"
+    }
+  },
+  "dataflow": [
+    {
+      "step": "scope",
+      "available": [
+        "base_branch",
+        "issue_url",
+        "review_design",
+        "source_dir",
+        "task"
+      ],
+      "required": [
+        "research_question"
+      ],
+      "produced": [
+        "scope_report",
+        "scope_directions"
+      ]
+    },
+    {
+      "step": "plan_experiment",
+      "available": [
+        "base_branch",
+        "issue_url",
+        "review_design",
+        "scope_directions",
+        "scope_report",
+        "source_dir",
+        "task"
+      ],
+      "required": [
+        "scope_report_path"
+      ],
+      "produced": [
+        "experiment_plan"
+      ]
+    },
+    {
+      "step": "review_design",
+      "available": [
+        "base_branch",
+        "experiment_plan",
+        "issue_url",
+        "review_design",
+        "scope_directions",
+        "scope_report",
+        "source_dir",
+        "task"
+      ],
+      "required": [],
+      "produced": [
+        "verdict",
+        "experiment_type",
+        "evaluation_dashboard",
+        "revision_guidance"
+      ]
+    },
+    {
+      "step": "plan_visualization",
+      "available": [
+        "base_branch",
+        "evaluation_dashboard",
+        "experiment_plan",
+        "experiment_type",
+        "issue_url",
+        "review_design",
+        "revision_guidance",
+        "scope_directions",
+        "scope_report",
+        "source_dir",
+        "task",
+        "verdict"
+      ],
+      "required": [
+        "experiment_plan_path"
+      ],
+      "produced": [
+        "visualization_plan_path",
+        "report_plan_path",
+        "visualization_plan_trace_path"
+      ]
+    },
+    {
+      "step": "revise_design",
+      "available": [
+        "base_branch",
+        "evaluation_dashboard",
+        "experiment_plan",
+        "experiment_type",
+        "issue_url",
+        "report_plan_path",
+        "review_design",
+        "revision_guidance",
+        "scope_directions",
+        "scope_report",
+        "source_dir",
+        "task",
+        "verdict",
+        "visualization_plan_path",
+        "visualization_plan_trace_path"
+      ],
+      "required": [],
+      "produced": []
+    },
+    {
+      "step": "check_design_review_loop",
+      "available": [
+        "base_branch",
+        "evaluation_dashboard",
+        "experiment_plan",
+        "experiment_type",
+        "issue_url",
+        "report_plan_path",
+        "review_design",
+        "revision_guidance",
+        "scope_directions",
+        "scope_report",
+        "source_dir",
+        "task",
+        "verdict",
+        "visualization_plan_path",
+        "visualization_plan_trace_path"
+      ],
+      "required": [],
+      "produced": [
+        "design_review_count"
+      ]
+    },
+    {
+      "step": "resolve_design_review",
+      "available": [
+        "base_branch",
+        "design_review_count",
+        "evaluation_dashboard",
+        "experiment_plan",
+        "experiment_type",
+        "issue_url",
+        "report_plan_path",
+        "review_design",
+        "revision_guidance",
+        "scope_directions",
+        "scope_report",
+        "source_dir",
+        "task",
+        "verdict",
+        "visualization_plan_path",
+        "visualization_plan_trace_path"
+      ],
+      "required": [],
+      "produced": [
+        "revision_guidance"
+      ]
+    },
+    {
+      "step": "design_rejected",
+      "available": [
+        "base_branch",
+        "design_review_count",
+        "evaluation_dashboard",
+        "experiment_plan",
+        "experiment_type",
+        "issue_url",
+        "report_plan_path",
+        "review_design",
+        "revision_guidance",
+        "scope_directions",
+        "scope_report",
+        "source_dir",
+        "task",
+        "verdict",
+        "visualization_plan_path",
+        "visualization_plan_trace_path"
+      ],
+      "required": [],
+      "produced": []
+    },
+    {
+      "step": "create_worktree",
+      "available": [
+        "base_branch",
+        "design_review_count",
+        "evaluation_dashboard",
+        "experiment_plan",
+        "experiment_type",
+        "issue_url",
+        "report_plan_path",
+        "review_design",
+        "revision_guidance",
+        "scope_directions",
+        "scope_report",
+        "source_dir",
+        "task",
+        "verdict",
+        "visualization_plan_path",
+        "visualization_plan_trace_path"
+      ],
+      "required": [],
+      "produced": [
+        "worktree_path",
+        "research_dir",
+        "research_dir_rel"
+      ]
+    },
+    {
+      "step": "design_complete",
+      "available": [
+        "base_branch",
+        "design_review_count",
+        "evaluation_dashboard",
+        "experiment_plan",
+        "experiment_type",
+        "issue_url",
+        "report_plan_path",
+        "research_dir",
+        "research_dir_rel",
+        "review_design",
+        "revision_guidance",
+        "scope_directions",
+        "scope_report",
+        "source_dir",
+        "task",
+        "verdict",
+        "visualization_plan_path",
+        "visualization_plan_trace_path",
+        "worktree_path"
+      ],
+      "required": [],
+      "produced": []
+    },
+    {
+      "step": "escalate_stop",
+      "available": [
+        "base_branch",
+        "design_review_count",
+        "evaluation_dashboard",
+        "experiment_plan",
+        "experiment_type",
+        "issue_url",
+        "report_plan_path",
+        "research_dir",
+        "research_dir_rel",
+        "review_design",
+        "revision_guidance",
+        "scope_directions",
+        "scope_report",
+        "source_dir",
+        "task",
+        "verdict",
+        "visualization_plan_path",
+        "visualization_plan_trace_path",
+        "worktree_path"
+      ],
+      "required": [],
+      "produced": []
+    }
+  ]
+}

@@ -208,14 +208,14 @@ file in `{{AUTOSKILLIT_TEMP}}/scope/` (the same directory as the scope report).
 
 **Field rules:**
 
-| Field | Type | Rules |
-|-------|------|-------|
-| `direction_id` | string | Sequential: D1, D2, D3, ... |
-| `title` | string | Short summary of the direction, max 80 characters |
-| `priority` | enum | `P0` (primary), `P1` (secondary), `P2` (exploratory) |
-| `must_cover` | boolean | `true` for P0 directions; `false` for P1/P2 |
-| `source_type` | enum | `computational`, `wet_lab`, `literature`, `hybrid` |
-| `feasibility_notes` | string | Brief assessment of feasibility, 1-2 sentences |
+| Field | Type | Constraints | Rules |
+|-------|------|-------------|-------|
+| `direction_id` | string | pattern: `^D\d+$` | Sequential: D1, D2, D3, ... |
+| `title` | string | maxLength: 80 | Short summary of the direction, max 80 characters |
+| `priority` | enum | values: `P0`, `P1`, `P2` | `P0` (primary), `P1` (secondary), `P2` (exploratory) |
+| `must_cover` | boolean | — | `true` for P0 directions; `false` for P1/P2 |
+| `source_type` | enum | values: `computational`, `wet_lab`, `literature`, `hybrid` | Classify the investigation approach |
+| `feasibility_notes` | string | — | Brief assessment of feasibility, 1-2 sentences |
 
 **Priority assignment rules:**
 - **P0 (primary):** Directions that directly address the core research question. These
@@ -232,10 +232,10 @@ file in `{{AUTOSKILLIT_TEMP}}/scope/` (the same directory as the scope report).
 - **hybrid:** Requires a combination of computational and experimental approaches
 
 **Validation:** `direction_count` must equal `len(directions)`. `must_cover_count` must
-equal the number of entries where `must_cover == true`. At least one direction must have
-`must_cover: true`. If any invariant is violated, correct the counts by recomputing them
-from the `directions` array before writing the file — do not emit a sidecar with stale
-or inconsistent count fields.
+equal the number of entries where `must_cover == true`. `must_cover_count` must be ≥ 1
+(at least one direction must have `must_cover: true`). If any invariant is violated,
+correct the counts by recomputing them from the `directions` array before writing the
+file — do not emit a sidecar with stale or inconsistent count fields.
 
 ### Step 3 — Write Output
 

@@ -184,6 +184,7 @@ steps:
     capture:
       worktree_path: "${{ result.worktree_path }}"
       research_dir: "${{ result.research_dir }}"
+      research_dir_rel: "${{ result.research_dir_rel }}"
     optional_context_refs: [evaluation_dashboard, visualization_plan_trace_path]
     on_success: design_complete
     on_failure: escalate_stop
@@ -199,12 +200,14 @@ steps:
       report_plan_path=<context.report_plan_path>,
       experiment_type=<context.experiment_type>,
       worktree_path=${{ context.worktree_path }},
-      research_dir=${{ context.research_dir }}.
+      research_dir=${{ context.research_dir }},
+      research_dir_rel=${{ context.research_dir_rel }}.
       Example sentinel:
       {"success": true, "scope_report": "<path>", "experiment_plan": "<path>",
       "visualization_plan_path": "<path>", "report_plan_path": "<path>",
       "experiment_type": "benchmark",
-      "worktree_path": "<path>", "research_dir": "<path>"}
+      "worktree_path": "<path>", "research_dir": "<path>",
+      "research_dir_rel": "<rel>"}
 
   escalate_stop:
     action: stop

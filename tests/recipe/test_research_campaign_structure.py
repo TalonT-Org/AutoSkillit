@@ -114,7 +114,7 @@ def test_run_design_capture_keys(recipe: Recipe) -> None:
     assert d is not None
     assert set(d.capture.keys()) == {
         "worktree_path",
-        "research_dir",
+        "research_dir_rel",
         "experiment_plan",
         "visualization_plan_path",
         "scope_report",
@@ -137,7 +137,7 @@ def test_run_implement_has_non_empty_capture(recipe: Recipe) -> None:
 def test_run_implement_capture_keys(recipe: Recipe) -> None:
     d = _dispatch_by_name(recipe, "run-implement")
     assert d is not None
-    assert set(d.capture.keys()) == {"report_path", "experiment_results"}
+    assert set(d.capture.keys()) == {"worktree_path", "report_path", "experiment_results"}
 
 
 def test_run_review_has_non_empty_capture(recipe: Recipe) -> None:

@@ -882,6 +882,80 @@ def _check_gate_dispatch_no_recipe(ctx: ValidationContext) -> list[RuleFinding]:
 
 
 @semantic_rule(
+    name="campaign-path-coherence",
+    description=(
+        "Detects dispatches that invoke worktree-creating recipes "
+        "without re-capturing worktree_path"
+    ),
+    severity=Severity.ERROR,
+)
+def _check_campaign_path_coherence(ctx: ValidationContext) -> list[RuleFinding]:
+    if ctx.recipe.kind != RecipeKind.CAMPAIGN:
+        return []
+    findings: list[RuleFinding] = []
+    for d in ctx.recipe.dispatches:
+        if d.gate:
+            continue
+        target = _load_dispatch_target(d, ctx.project_dir)
+        if target is None:
+            continue
+        for step in target.steps.values():
+            if step.capture and "worktree_path" in step.capture:
+                if "worktree_path" not in d.capture:
+                    findings.append(
+                        RuleFinding(
+                            rule="campaign-path-coherence",
+                            severity=Severity.ERROR,
+                            step_name="(top-level)",
+                            message=(
+                                f"Dispatch '{d.name}' invokes recipe '{d.recipe}' which "
+                                f"captures worktree_path at step '{step.name}', but the "
+                                f"dispatch does not re-capture worktree_path. Downstream "
+                                f"dispatches will receive a stale worktree path."
+                            ),
+                        )
+                    )
+                break
+    return findings
+
+
+@semantic_rule(
+    name="campaign-path-type-enforce",
+    description=(
+        "Validates that worktree_relative_path ingredients have "
+        "a corresponding worktree_path anchor"
+    ),
+    severity=Severity.ERROR,
+)
+def _check_campaign_path_type_enforce(ctx: ValidationContext) -> list[RuleFinding]:
+    if ctx.recipe.kind != RecipeKind.CAMPAIGN:
+        return []
+    findings: list[RuleFinding] = []
+    for d in ctx.recipe.dispatches:
+        if d.gate:
+            continue
+        target = _load_dispatch_target(d, ctx.project_dir)
+        if target is None:
+            continue
+        for key, ing in target.ingredients.items():
+            if getattr(ing, "type", None) == "worktree_relative_path":
+                if "worktree_path" not in d.ingredients:
+                    findings.append(
+                        RuleFinding(
+                            rule="campaign-path-type-enforce",
+                            severity=Severity.ERROR,
+                            step_name="(top-level)",
+                            message=(
+                                f"Dispatch '{d.name}' provides ingredient '{key}' "
+                                f"(type: worktree_relative_path) without a corresponding "
+                                f"worktree_path anchor."
+                            ),
+                        )
+                    )
+    return findings
+
+
+@semantic_rule(
     name="gate-dispatch-no-capture",
     description="A gate dispatch must not specify capture",
     severity=Severity.ERROR,

@@ -44,23 +44,28 @@
     },
     "worktree_path": {
       "description": "Path to the pre-created worktree (passed by campaign dispatch)",
-      "required": true
+      "required": true,
+      "type": "absolute_path"
     },
     "research_dir": {
       "description": "Path to the research/ directory in the worktree",
-      "required": true
+      "required": true,
+      "type": "absolute_path"
     },
     "report_path": {
       "description": "Path to the generated research report",
-      "required": true
+      "required": true,
+      "type": "absolute_path"
     },
     "experiment_plan": {
       "description": "Path to the experiment plan file",
-      "required": true
+      "required": true,
+      "type": "absolute_path"
     },
     "experiment_results": {
       "description": "Path to the experiment results file",
-      "required": true
+      "required": true,
+      "type": "absolute_path"
     },
     "experiment_type": {
       "description": "Type of experiment (e.g. benchmark, comparison)",

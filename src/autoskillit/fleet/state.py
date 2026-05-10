@@ -568,6 +568,7 @@ def read_all_campaign_captures(
     result: dict[str, str] = {}
     if not dispatches_dir.is_dir():
         return result
+    entries: list[tuple[float, dict[str, str]]] = []
     for path in dispatches_dir.glob("*.json"):
         data = read_versioned_json(path, FLEET_STATE_SCHEMA_VERSION, logger=logger)
         if data is None:
@@ -581,10 +582,14 @@ def read_all_campaign_captures(
             dispatches = data.get("dispatches", [])
             all_success = all(d.get("status") == DispatchStatus.SUCCESS for d in dispatches)
             if all_success and dispatches:
-                result.update(caps)
+                started = data.get("started_at")
+                entries.append((float(started) if started is not None else 0.0, caps))
         except (KeyError, TypeError) as exc:
             logger.warning("read_all_campaign_captures: skipping %s: %s", path, exc)
             continue
+    entries.sort(key=lambda e: e[0])
+    for _, caps in entries:
+        result.update(caps)
     return result
 
 

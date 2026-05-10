@@ -147,3 +147,145 @@ def test_dispatch_capture_field_in_all_sentinels_contract_passes(validation_ctx)
     assert all_sentinel_findings == [], (
         f"Per-path sentinel validation failures: {all_sentinel_findings}"
     )
+
+
+def test_campaign_path_coherence_rule_passes_on_valid_campaign(validation_ctx) -> None:
+    """The bundled research-campaign.yaml correctly re-captures worktree_path,
+    so the coherence rule should not fire."""
+    findings = run_semantic_rules(validation_ctx)
+    matched = [f for f in findings if f.rule == "campaign-path-coherence"]
+    assert not matched, "; ".join(f"{f.rule}: {f.message}" for f in matched)
+
+
+def test_campaign_path_type_enforce_rule_passes(validation_ctx) -> None:
+    """All worktree_relative_path ingredients must have a corresponding worktree_path anchor."""
+    findings = run_semantic_rules(validation_ctx)
+    matched = [f for f in findings if f.rule == "campaign-path-type-enforce"]
+    assert not matched, "; ".join(f"{f.rule}: {f.message}" for f in matched)
+
+
+def test_campaign_path_coherence_rule_detects_missing_recapture() -> None:
+    """Construct a campaign YAML where a dispatch invokes implement-experiment
+    (which captures worktree_path) but does NOT re-capture worktree_path itself.
+    The rule should emit an error."""
+    import tempfile
+    from pathlib import Path
+
+    from autoskillit.recipe._analysis import make_validation_context
+    from autoskillit.recipe.io import load_recipe
+
+    # Create a minimal campaign YAML where run-implement does NOT re-capture worktree_path
+    bad_yaml = """
+name: bad-campaign
+description: test
+kind: campaign
+recipe_version: "1.0.0"
+requires_recipe_packs:
+  - research-family
+allowed_recipes:
+  - research-implement
+
+dispatches:
+  - name: run-design
+    recipe: research-design
+    task: "Design the research"
+    ingredients:
+      task: "${{ inputs.task }}"
+    capture:
+      worktree_path: "${{ result.worktree_path }}"
+      research_dir_rel: "${{ result.research_dir_rel }}"
+    depends_on: []
+
+  - name: run-implement
+    recipe: research-implement
+    task: "Implement the research"
+    ingredients:
+      worktree_path: "${{ campaign.worktree_path }}"
+    capture:
+      report_path: "${{ result.report_path }}"
+    depends_on:
+      - run-design
+"""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        campaign_file = tmp_path / "test-campaign.yaml"
+        campaign_file.write_text(bad_yaml)
+
+        recipe = load_recipe(campaign_file)
+        ctx = make_validation_context(
+            recipe,
+            available_recipes=frozenset({"research-design", "research-implement"}),
+            project_dir=tmp_path,
+        )
+        findings = run_semantic_rules(ctx)
+        coherence_findings = [f for f in findings if f.rule == "campaign-path-coherence"]
+        assert coherence_findings, (
+            "campaign-path-coherence rule should have emitted an error for "
+            "run-implement dispatch that invokes research-implement (which captures "
+            "worktree_path at implement_phase) but does not re-capture worktree_path"
+        )
+
+
+def test_campaign_path_type_enforce_rule_detects_missing_anchor() -> None:
+    """A dispatch that provides a worktree_relative_path ingredient without
+    a corresponding worktree_path anchor should emit an error."""
+    import tempfile
+    from pathlib import Path
+
+    from autoskillit.recipe._analysis import make_validation_context
+    from autoskillit.recipe.io import load_recipe
+
+    bad_yaml = """
+name: bad-campaign
+description: test
+kind: campaign
+recipe_version: "1.0.0"
+requires_recipe_packs:
+  - research-family
+allowed_recipes:
+  - research-implement
+
+ingredients:
+  research_dir_rel:
+    description: "Repo-relative path to research dir"
+    required: true
+    type: worktree_relative_path
+
+dispatches:
+  - name: run-design
+    recipe: research-design
+    task: "Design the research"
+    ingredients:
+      task: "${{ inputs.task }}"
+    capture:
+      worktree_path: "${{ result.worktree_path }}"
+      research_dir_rel: "${{ result.research_dir_rel }}"
+    depends_on: []
+
+  - name: run-implement
+    recipe: research-implement
+    task: "Implement the research"
+    ingredients:
+      research_dir_rel: "${{ campaign.research_dir_rel }}"
+    capture: {}
+    depends_on:
+      - run-design
+"""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        campaign_file = tmp_path / "test-campaign.yaml"
+        campaign_file.write_text(bad_yaml)
+
+        recipe = load_recipe(campaign_file)
+        ctx = make_validation_context(
+            recipe,
+            available_recipes=frozenset({"research-design", "research-implement"}),
+            project_dir=tmp_path,
+        )
+        findings = run_semantic_rules(ctx)
+        type_findings = [f for f in findings if f.rule == "campaign-path-type-enforce"]
+        assert type_findings, (
+            "campaign-path-type-enforce rule should have emitted an error for "
+            "run-implement dispatch that provides research_dir_rel (type: "
+            "worktree_relative_path) without a corresponding worktree_path anchor"
+        )

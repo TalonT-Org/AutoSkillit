@@ -435,9 +435,7 @@ class TestDispatchFoodTruckSemanticValidation:
         assert "step_a" in result["user_visible_message"]
 
     @pytest.mark.anyio
-    async def test_dispatch_accepts_recipe_with_valid_semantic_validation(
-        self, tool_ctx, monkeypatch
-    ):
+    async def test_dispatch_accepts_recipe_with_valid_semantic_validation(self, tool_ctx):
         """load_and_validate returning valid=True → dispatch proceeds normally.
 
         When a recipe passes semantic validation, dispatch proceeds through
@@ -475,7 +473,7 @@ class TestDispatchFoodTruckSemanticValidation:
 
     @pytest.mark.anyio
     async def test_dispatch_rejects_when_load_and_validate_raises(self, tool_ctx, monkeypatch):
-        """load_and_validate raising an exception → fleet_recipe_not_found error."""
+        """load_and_validate raising an exception → fleet_recipe_invalid error."""
         from autoskillit.fleet._api import execute_dispatch
 
         tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
@@ -502,7 +500,9 @@ class TestDispatchFoodTruckSemanticValidation:
         )
         result = json.loads(_outcome.to_envelope())
         assert result["success"] is False
-        assert result["error"] == "fleet_recipe_not_found"
+        assert result["error"] == "fleet_recipe_invalid"
+        assert "could not be loaded" in result["user_visible_message"]
+        assert "validation infrastructure broken" in result["user_visible_message"]
 
 
 # ---------------------------------------------------------------------------

@@ -111,10 +111,10 @@ BASE_BRANCH=$(git rev-parse --abbrev-ref @{upstream} 2>/dev/null | sed 's|^[^/]*
 
 if [ -z "$BASE_BRANCH" ]; then
     # Fallback: read explicit file store written by implement-worktree-no-merge
-    MAIN_GIT_DIR=$(git rev-parse --git-common-dir)
-    MAIN_REPO_ROOT=$(dirname "${MAIN_GIT_DIR}")
+    MAIN_GIT_DIR="$(git rev-parse --path-format=absolute --git-common-dir)"
+    MAIN_ROOT="$(dirname "$MAIN_GIT_DIR")"
     WORKTREE_DIR_NAME=$(basename "$(pwd)")
-    STORE_FILE="${MAIN_REPO_ROOT}/{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_DIR_NAME}/base-branch"
+    STORE_FILE="${MAIN_ROOT}/{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_DIR_NAME}/base-branch"
     BASE_BRANCH=$(cat "${STORE_FILE}" 2>/dev/null)
 fi
 

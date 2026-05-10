@@ -143,6 +143,39 @@ def _check_retry_worktree_cwd(ctx: ValidationContext) -> list[RuleFinding]:
 
 
 @semantic_rule(
+    name="relative-worktree-path-in-cmd",
+    description=(
+        "run_cmd steps must not use relative '../worktrees/' paths. "
+        "Resolve the main worktree root via git rev-parse --git-common-dir "
+        "and compute an absolute worktree path from there."
+    ),
+    severity=Severity.WARNING,
+)
+def _check_relative_worktree_path_in_cmd(ctx: ValidationContext) -> list[RuleFinding]:
+    wf = ctx.recipe
+    findings: list[RuleFinding] = []
+    for step_name, step in wf.steps.items():
+        if step.tool != "run_cmd":
+            continue
+        cmd = step.with_args.get("cmd", "")
+        if "../worktrees/" in cmd:
+            findings.append(
+                RuleFinding(
+                    rule="relative-worktree-path-in-cmd",
+                    severity=Severity.WARNING,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' uses a relative '../worktrees/' path in its cmd. "
+                        f"This causes nested worktree directories when source_dir is "
+                        f"itself a worktree. Resolve the main repo root via "
+                        f"'git rev-parse --path-format=absolute --git-common-dir' first."
+                    ),
+                )
+            )
+    return findings
+
+
+@semantic_rule(
     name="file-writing-skill-missing-context-limit",
     description=(
         "A step invoking a write_behavior='always' skill has no on_context_limit route. "

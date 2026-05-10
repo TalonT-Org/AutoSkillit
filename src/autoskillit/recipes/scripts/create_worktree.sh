@@ -14,20 +14,28 @@ REPORT_PLAN="${7:-}"
 TEMP_NAME="${8:-.autoskillit/temp}"
 VIS_TRACE_PATH="${9:-}"
 
-if [ ! -d "$SOURCE_DIR/.git" ]; then
+if [ ! -e "$SOURCE_DIR/.git" ]; then
   git init -q "$SOURCE_DIR"
   git -C "$SOURCE_DIR" commit --allow-empty -m "autoskillit: init for research recipe" -q
 fi
 
+# Resolve to main worktree root — prevents nested worktrees/worktrees/ when
+# SOURCE_DIR is itself a linked worktree.
+MAIN_GIT_DIR="$(git -C "$SOURCE_DIR" rev-parse --path-format=absolute --git-common-dir)"
+[ -n "$MAIN_GIT_DIR" ] || { echo "error: could not resolve git-common-dir" >&2; exit 1; }
+MAIN_ROOT="$(dirname "$MAIN_GIT_DIR")"
+
 BRANCH="research-$(date +%Y%m%d-%H%M%S)"
-WORKTREE_PATH="../worktrees/${BRANCH}"
+WORKTREE_DIR="${MAIN_ROOT}/../worktrees"
+mkdir -p "${WORKTREE_DIR}"
+WORKTREE_PATH="${WORKTREE_DIR}/${BRANCH}"
 git -C "$SOURCE_DIR" worktree add -b "${BRANCH}" "${WORKTREE_PATH}"
-RESOLVED="$(cd "${SOURCE_DIR}/${WORKTREE_PATH}" && pwd)"
+RESOLVED="$(cd "${WORKTREE_PATH}" && pwd)"
 
 case "${RESOLVED}" in /*) ;; *) echo "error: resolved worktree path is not absolute: ${RESOLVED}" >&2; exit 1;; esac
 
-mkdir -p "${SOURCE_DIR}/${TEMP_NAME}/worktrees/${BRANCH}"
-git -C "$SOURCE_DIR" rev-parse --abbrev-ref HEAD > "${SOURCE_DIR}/${TEMP_NAME}/worktrees/${BRANCH}/base-branch"
+mkdir -p "${MAIN_ROOT}/${TEMP_NAME}/worktrees/${BRANCH}"
+git -C "$SOURCE_DIR" rev-parse --abbrev-ref HEAD > "${MAIN_ROOT}/${TEMP_NAME}/worktrees/${BRANCH}/base-branch"
 
 mkdir -p "${RESOLVED}/${TEMP_NAME}"
 cp "${EXPERIMENT_PLAN}" "${RESOLVED}/${TEMP_NAME}/experiment-plan.md"

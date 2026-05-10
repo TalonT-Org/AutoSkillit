@@ -207,14 +207,6 @@ class TestMergeWorktree:
             _make_result(0, "PASS\n= 100 passed =", "")
         )  # post-rebase test-check
         tool_ctx_kitchen_open.runner.push(
-            _make_result(
-                0,
-                "worktree /repo\nHEAD abc123\nbranch refs/heads/dev\n\n"
-                "worktree /wt\nHEAD def456\nbranch refs/heads/impl-branch\n\n",
-                "",
-            )
-        )  # worktree list --porcelain
-        tool_ctx_kitchen_open.runner.push(
             _make_result(0, "dev\n", "")
         )  # step 7.5: branch --show-current
         tool_ctx_kitchen_open.runner.push(
@@ -223,7 +215,8 @@ class TestMergeWorktree:
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # git merge
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # worktree remove
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # branch -D
-        result = json.loads(await merge_worktree(str(wt), "dev"))
+        with patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")):
+            result = json.loads(await merge_worktree(str(wt), "dev"))
         assert result["merge_succeeded"] is True
         assert result["into_branch"] == "dev"
         assert result["cleanup_succeeded"] is True
@@ -383,13 +376,6 @@ class TestMergeWorktreeCleanupReporting:
             _make_result(0, "PASS\n= 100 passed =", "")
         )  # post-rebase test-check
         tool_ctx_kitchen_open.runner.push(
-            _make_result(
-                0,
-                "worktree /repo\nHEAD abc\nbranch refs/heads/dev\n\n",
-                "",
-            )
-        )  # worktree list
-        tool_ctx_kitchen_open.runner.push(
             _make_result(0, "dev\n", "")
         )  # step 7.5: branch --show-current
         tool_ctx_kitchen_open.runner.push(
@@ -397,11 +383,14 @@ class TestMergeWorktreeCleanupReporting:
         )  # step 7.6: git status --porcelain (clean)
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # git merge
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # branch -D
-        with patch(
-            "autoskillit.server.git.remove_git_worktree",
-            new=AsyncMock(
-                return_value=CleanupResult(failed=[(str(wt), "error: untracked files")])
+        with (
+            patch(
+                "autoskillit.server.git.remove_git_worktree",
+                new=AsyncMock(
+                    return_value=CleanupResult(failed=[(str(wt), "error: untracked files")])
+                ),
             ),
+            patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")),
         ):
             result = json.loads(await merge_worktree(str(wt), "dev"))
         assert result["merge_succeeded"] is True
@@ -440,13 +429,6 @@ class TestMergeWorktreeCleanupReporting:
             _make_result(0, "PASS\n= 100 passed =", "")
         )  # post-rebase test-check
         tool_ctx_kitchen_open.runner.push(
-            _make_result(
-                0,
-                "worktree /repo\nHEAD abc\nbranch refs/heads/dev\n\n",
-                "",
-            )
-        )  # worktree list
-        tool_ctx_kitchen_open.runner.push(
             _make_result(0, "dev\n", "")
         )  # step 7.5: branch --show-current
         tool_ctx_kitchen_open.runner.push(
@@ -457,7 +439,8 @@ class TestMergeWorktreeCleanupReporting:
         tool_ctx_kitchen_open.runner.push(
             _make_result(1, "", "error: branch not found")
         )  # branch -D FAILS
-        result = json.loads(await merge_worktree(str(wt), "dev"))
+        with patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")):
+            result = json.loads(await merge_worktree(str(wt), "dev"))
         assert result["merge_succeeded"] is True
         assert result["cleanup_succeeded"] is False
         assert result["worktree_removed"] is True
@@ -523,9 +506,6 @@ class TestMergeWorktreeCleanupWarnings:
             _make_result(0, "PASS\n= 100 passed =", "")
         )  # post-rebase test-check
         tool_ctx_kitchen_open.runner.push(
-            _make_result(0, "worktree /repo\nHEAD abc\nbranch refs/heads/dev\n\n", "")
-        )
-        tool_ctx_kitchen_open.runner.push(
             _make_result(0, "dev\n", "")
         )  # step 7.5: branch --show-current
         tool_ctx_kitchen_open.runner.push(
@@ -541,6 +521,7 @@ class TestMergeWorktreeCleanupWarnings:
                     return_value=CleanupResult(failed=[(str(wt), "error: untracked files")])
                 ),
             ),
+            patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")),
             structlog.testing.capture_logs() as logs,
         ):
             result = json.loads(await merge_worktree(str(wt), "dev"))
@@ -580,9 +561,6 @@ class TestMergeWorktreeCleanupWarnings:
             _make_result(0, "PASS\n= 100 passed =", "")
         )  # post-rebase test-check
         tool_ctx_kitchen_open.runner.push(
-            _make_result(0, "worktree /repo\nHEAD abc\nbranch refs/heads/dev\n\n", "")
-        )
-        tool_ctx_kitchen_open.runner.push(
             _make_result(0, "dev\n", "")
         )  # step 7.5: branch --show-current
         tool_ctx_kitchen_open.runner.push(
@@ -594,7 +572,10 @@ class TestMergeWorktreeCleanupWarnings:
             _make_result(1, "", "error: branch not found")
         )  # branch -D FAILS
 
-        with structlog.testing.capture_logs() as logs:
+        with (
+            patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")),
+            structlog.testing.capture_logs() as logs,
+        ):
             result = json.loads(await merge_worktree(str(wt), "dev"))
 
         assert result["merge_succeeded"] is True
@@ -632,9 +613,6 @@ class TestMergeWorktreeCleanupWarnings:
             _make_result(0, "PASS\n= 100 passed =", "")
         )  # post-rebase test-check
         tool_ctx_kitchen_open.runner.push(
-            _make_result(0, "worktree /repo\nHEAD abc\nbranch refs/heads/dev\n\n", "")
-        )
-        tool_ctx_kitchen_open.runner.push(
             _make_result(0, "dev\n", "")
         )  # step 7.5: branch --show-current
         tool_ctx_kitchen_open.runner.push(
@@ -644,7 +622,10 @@ class TestMergeWorktreeCleanupWarnings:
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # worktree remove — success
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # branch -D — success
 
-        with structlog.testing.capture_logs() as logs:
+        with (
+            patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")),
+            structlog.testing.capture_logs() as logs,
+        ):
             result = json.loads(await merge_worktree(str(wt), "dev"))
 
         assert result["merge_succeeded"] is True

@@ -1,6 +1,7 @@
 """Integration tests verifying perform_merge() aborts before cleanup on poisoned installs."""
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -60,15 +61,15 @@ async def test_perform_merge_aborts_before_cleanup_on_poisoned_install(
     runner.push(_make_result(0, ""))  # ref check (step 5.5)
     runner.push(_make_result(0, ""))  # git log --merges (step 5.6 — no merge commits)
     runner.push(_make_result(0, ""))  # git rebase (step 6)
-    runner.push(_make_result(0, f"worktree {fake_wt}\n"))  # git worktree list (step 7)
     runner.push(_make_result(0, "dev\n"))  # git branch --show-current (step 7.5)
     runner.push(_make_result(0, ""))  # git status --porcelain (step 7.6)
     runner.push(_make_result(0, ""))  # git merge (step 8)
     # Step 8.5: editable guard fires (mocked above) — cleanup steps never reached
 
-    result = await perform_merge(
-        fake_wt, "dev", config=AutomationConfig(), runner=runner, tester=tester
-    )
+    with patch("autoskillit.server.git.resolve_main_worktree", return_value=Path(fake_wt)):
+        result = await perform_merge(
+            fake_wt, "dev", config=AutomationConfig(), runner=runner, tester=tester
+        )
 
     assert result["merge_succeeded"] is True
     assert result["state"] == MergeState.MERGE_SUCCEEDED_CLEANUP_BLOCKED
@@ -118,16 +119,16 @@ async def test_perform_merge_proceeds_normally_when_guard_returns_empty(
     runner.push(_make_result(0, ""))  # ref check (step 5.5)
     runner.push(_make_result(0, ""))  # git log --merges (step 5.6)
     runner.push(_make_result(0, ""))  # git rebase (step 6)
-    runner.push(_make_result(0, f"worktree {fake_wt}\n"))  # git worktree list (step 7)
     runner.push(_make_result(0, "dev\n"))  # git branch --show-current (step 7.5)
     runner.push(_make_result(0, ""))  # git status --porcelain (step 7.6)
     runner.push(_make_result(0, ""))  # git merge (step 8)
     # Step 8.5: guard returns [] — cleanup proceeds
     # Steps 9-10 (wt remove, branch -D) use MockSubprocessRunner default (rc=0, stdout="")
 
-    result = await perform_merge(
-        fake_wt, "dev", config=AutomationConfig(), runner=runner, tester=tester
-    )
+    with patch("autoskillit.server.git.resolve_main_worktree", return_value=Path(fake_wt)):
+        result = await perform_merge(
+            fake_wt, "dev", config=AutomationConfig(), runner=runner, tester=tester
+        )
 
     assert result.get("merge_succeeded") is True
     assert "error" not in result

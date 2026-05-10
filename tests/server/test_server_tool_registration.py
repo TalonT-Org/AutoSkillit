@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -549,19 +550,16 @@ class TestSafetyConfigWiring:
         )  # git log --merges (step 5.6 — no merge commits)
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # git rebase
         tool_ctx_kitchen_open.runner.push(
-            _make_result(
-                0,
-                "worktree /repo\nHEAD abc\nbranch refs/heads/dev\n\n",
-                "",
-            )
-        )  # worktree list
-        tool_ctx_kitchen_open.runner.push(
             _make_result(0, "dev\n", "")
         )  # git branch --show-current (step 7.5)
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "", "")
+        )  # step 7.6: git status --porcelain (main_repo clean)
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # git merge
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # worktree remove
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # branch -D
-        result = json.loads(await merge_worktree(str(wt), "dev"))
+        with patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")):
+            result = json.loads(await merge_worktree(str(wt), "dev"))
         assert result["merge_succeeded"] is True
 
         # Verify no test command was called — the 5th call should be git fetch, not test

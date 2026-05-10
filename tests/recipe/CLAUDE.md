@@ -26,6 +26,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_bundled_recipes_review_pr.py` | Tests for review-pr bundled recipe structure |
 | `test_callable_contracts.py` | Contract tests for run_python callable inputs and outputs |
 | `test_campaign_loader.py` | Tests for campaign recipe loading |
+| `test_create_worktree_functional.py` | Functional tests for scripts/recipe/create_worktree.sh — actually executes the script against real git repos |
 | `test_check_ci_already_passed_routing.py` | Tests for check_ci_already_passed routing logic |
 | `test_check_repo_merge_state_routing.py` | Tests for check_repo_merge_state routing logic |
 | `test_cmd_rpc.py` | Tests for recipe/_cmd_rpc.py run_python callables |
@@ -149,6 +150,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_rules_worktree.py` | Tests for worktree semantic validation rule |
 | `test_schema.py` | Tests for Recipe, RecipeStep, and DataFlowWarning schema |
 | `test_skill_emit_consistency.py` | Tests for skill emit consistency in recipe steps |
+| `test_skill_worktree_patterns.py` | Tests that SKILL.md files do not use fragile relative worktree path patterns |
 | `test_silent_type_convention.py` | Tests for silent-type-convention.md documentation |
 | `test_silent_type_flows.py` | Integration tests for silent-type convention flows (vis-lens out-of-scope path) |
 | `test_staleness_cache.py` | Tests for recipe staleness cache |

@@ -97,7 +97,11 @@ worktree, discarding all partial progress. Instead, route to the next step
 ```bash
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 WORKTREE_NAME="research-$(date +%Y%m%d-%H%M%S)"
-WORKTREE_PATH="../worktrees/${WORKTREE_NAME}"
+MAIN_GIT_DIR="$(git rev-parse --path-format=absolute --git-common-dir)"
+MAIN_ROOT="$(dirname "$MAIN_GIT_DIR")"
+WORKTREE_DIR="${MAIN_ROOT}/../worktrees"
+mkdir -p "${WORKTREE_DIR}"
+WORKTREE_PATH="${WORKTREE_DIR}/${WORKTREE_NAME}"
 git worktree add -b "${WORKTREE_NAME}" "${WORKTREE_PATH}"
 WORKTREE_PATH="$(cd "${WORKTREE_PATH}" && pwd)"
 

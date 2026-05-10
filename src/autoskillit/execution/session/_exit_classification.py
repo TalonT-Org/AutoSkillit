@@ -26,10 +26,6 @@ _API_ERROR_PATTERNS: tuple[re.Pattern[str], ...] = (
 )
 
 
-def _detect_api_error(stderr: str) -> bool:
-    return any(p.search(stderr) for p in _API_ERROR_PATTERNS)
-
-
 def classify_infra_exit(
     session: ClaudeSessionResult,
     result: SubprocessResult,
@@ -42,7 +38,7 @@ def classify_infra_exit(
     """
     if session._is_context_exhausted():
         return InfraExitCategory.CONTEXT_EXHAUSTED
-    if _detect_api_error(result.stderr):
+    if session._has_api_error():
         return InfraExitCategory.API_ERROR
     if result.returncode is not None and result.returncode < 0:
         return InfraExitCategory.PROCESS_KILLED

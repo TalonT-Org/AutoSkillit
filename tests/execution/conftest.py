@@ -74,6 +74,29 @@ EMPTY_OUTPUT_RESULT_LINE = json.dumps(
 )
 
 
+def _make_synthetic_api_error_ndjson(
+    error_type: str = "overloaded_error",
+    message: str = "Overloaded",
+) -> str:
+    """Build a synthetic assistant NDJSON record modelling an API error in Claude Code output."""
+    return json.dumps(
+        {
+            "type": "assistant",
+            "message": {
+                "model": "<synthetic>",
+                "stop_reason": "stop_sequence",
+                "usage": {"input_tokens": 0, "output_tokens": 0},
+                "content": [
+                    {
+                        "type": "text",
+                        "text": f'API Error: {{"type":"error","error":{{"details":null,"type":"{error_type}","message":"{message}"}}}}',
+                    }
+                ],
+            },
+        }
+    )
+
+
 def _make_tool_use_line(name: str, input_dict: dict) -> str:
     return json.dumps(
         {

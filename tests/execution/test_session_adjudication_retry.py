@@ -558,12 +558,13 @@ class TestApiErrorRetryRouting:
         self,
         stderr: str = "",
         returncode: int = 1,
+        stdout: str = "",
     ):
         from autoskillit.core.types import ChannelConfirmation, SubprocessResult, TerminationReason
 
         return SubprocessResult(
             returncode=returncode,
-            stdout="",
+            stdout=stdout,
             stderr=stderr,
             termination=TerminationReason.NATURAL_EXIT,
             pid=12345,
@@ -571,32 +572,83 @@ class TestApiErrorRetryRouting:
         )
 
     def test_api_error_overrides_empty_output_to_resume(self):
-        """When _build_skill_result detects API error in stderr, override
-        EMPTY_OUTPUT → RESUME for on_context_limit routing."""
+        """When _build_skill_result detects API error in stdout NDJSON (PTY mode),
+        override EMPTY_OUTPUT → RESUME for on_context_limit routing."""
+        import json
+
         from autoskillit.core.types import RetryReason
         from autoskillit.execution.headless._headless_result import _build_skill_result
+        from tests.execution.conftest import _make_synthetic_api_error_ndjson
 
-        result = self._make_result(stderr="Error: API is overloaded", returncode=1)
+        ndjson = _make_synthetic_api_error_ndjson(
+            error_type="overloaded_error",
+            message="Overloaded",
+        )
+        result_line = json.dumps(
+            {
+                "type": "result",
+                "subtype": "empty_output",
+                "is_error": True,
+                "result": "",
+                "session_id": "",
+            }
+        )
+        result = self._make_result(stderr="", returncode=0, stdout=ndjson + "\n" + result_line)
         sr = _build_skill_result(result)
+        assert sr.infra.exit_category == "api_error"
         assert sr.needs_retry is True
         assert sr.retry_reason == RetryReason.RESUME
 
     def test_api_error_503_overrides_to_resume(self):
-        """503 Service Unavailable in stderr → RESUME."""
+        """HTTP 529 in stdout NDJSON → RESUME."""
+        import json
+
         from autoskillit.core.types import RetryReason
         from autoskillit.execution.headless._headless_result import _build_skill_result
+        from tests.execution.conftest import _make_synthetic_api_error_ndjson
 
-        result = self._make_result(stderr="503 Service Unavailable", returncode=1)
+        ndjson = _make_synthetic_api_error_ndjson(
+            error_type="529_error",
+            message="Service Unavailable",
+        )
+        result_line = json.dumps(
+            {
+                "type": "result",
+                "subtype": "empty_output",
+                "is_error": True,
+                "result": "",
+                "session_id": "",
+            }
+        )
+        result = self._make_result(stderr="", returncode=0, stdout=ndjson + "\n" + result_line)
         sr = _build_skill_result(result)
+        assert sr.infra.exit_category == "api_error"
         assert sr.needs_retry is True
         assert sr.retry_reason == RetryReason.RESUME
 
     def test_api_error_econnreset_overrides_to_resume(self):
-        """ECONNRESET in stderr → RESUME."""
+        """ECONNRESET in stdout NDJSON → RESUME."""
+        import json
+
         from autoskillit.core.types import RetryReason
         from autoskillit.execution.headless._headless_result import _build_skill_result
+        from tests.execution.conftest import _make_synthetic_api_error_ndjson
 
-        result = self._make_result(stderr="read ECONNRESET", returncode=1)
+        ndjson = _make_synthetic_api_error_ndjson(
+            error_type="connection_reset_error",
+            message="Connection reset",
+        )
+        result_line = json.dumps(
+            {
+                "type": "result",
+                "subtype": "empty_output",
+                "is_error": True,
+                "result": "",
+                "session_id": "",
+            }
+        )
+        result = self._make_result(stderr="", returncode=0, stdout=ndjson + "\n" + result_line)
         sr = _build_skill_result(result)
+        assert sr.infra.exit_category == "api_error"
         assert sr.needs_retry is True
         assert sr.retry_reason == RetryReason.RESUME

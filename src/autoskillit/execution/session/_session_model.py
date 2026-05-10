@@ -111,6 +111,21 @@ class ClaudeSessionResult:
             return True
         return False
 
+    def _has_api_error(self) -> bool:
+        """True when the session encountered an API infrastructure error.
+
+        Scans assistant_messages, errors, and result for API error patterns.
+        This is the channel-agnostic counterpart to _is_context_exhausted().
+        """
+        from autoskillit.execution.session._exit_classification import _API_ERROR_PATTERNS
+
+        searchable = "\n".join(self.assistant_messages)
+        if self.errors:
+            searchable += "\n" + "\n".join(self.errors)
+        if self.result:
+            searchable += "\n" + self.result
+        return any(p.search(searchable) for p in _API_ERROR_PATTERNS)
+
     @property
     def agent_result(self) -> str:
         """Result text rewritten for LLM agent consumption."""

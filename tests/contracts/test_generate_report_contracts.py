@@ -109,10 +109,10 @@ def test_multi_group_enumeration_instruction() -> None:
 
 def test_anti_fabrication_never_rule() -> None:
     """NEVER block must prohibit fabricated explanations for absent data."""
-    from tests.conftest import _extract_never_block
+    from tests._helpers import extract_never_block
 
     text = SKILL_PATH.read_text()
-    never_block = _extract_never_block(text)
+    never_block = extract_never_block(text)
     assert never_block, "no NEVER block found in generate-report SKILL.md"
     assert any(
         phrase in never_block.lower()

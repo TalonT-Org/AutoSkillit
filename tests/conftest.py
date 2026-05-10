@@ -491,35 +491,6 @@ def pytest_configure(config: pytest.Config) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Shared SKILL.md helpers
-# ---------------------------------------------------------------------------
-
-
-def _extract_never_block(skill_text: str) -> str:
-    """Extract the NEVER block from a SKILL.md text.
-
-    Finds the line starting with **NEVER:** or **NEVER** and collects all
-    subsequent ``- `` list items until the next ``**`` header or end of text.
-    Returns the raw text of the NEVER block (may be empty string if not found).
-    """
-    import re
-
-    never_match = re.search(r"(?m)^\*\*NEVER(?::\*\*|\*\*)\s*$", skill_text)
-    if not never_match:
-        return ""
-    start = never_match.end()
-    next_header = re.search(r"(?m)^\*\*[A-Z][^\n]*\*\*", skill_text[start:])
-    if next_header:
-        end = start + next_header.start()
-    else:
-        end = len(skill_text)
-    block = skill_text[start:end]
-    # Collect only - prefixed lines
-    lines = [line for line in block.splitlines() if line.strip().startswith("- ")]
-    return "\n".join(lines)
-
-
-# ---------------------------------------------------------------------------
 # Config resolution
 # ---------------------------------------------------------------------------
 

@@ -342,13 +342,13 @@ _FABRICATION_GUARD_RE = re.compile(
 @pytest.mark.parametrize("skill_dir", _all_skill_dirs(), ids=lambda d: d.name)
 def test_all_skills_have_anti_fabrication_guard(skill_dir: Path) -> None:
     """Every skill with a NEVER block must include anti-fabrication language."""
-    from tests.conftest import _extract_never_block
+    from tests._helpers import extract_never_block
 
     skill_md = skill_dir / "SKILL.md"
     if not skill_md.exists():
         pytest.skip("no SKILL.md")
     text = skill_md.read_text()
-    never_block = _extract_never_block(text)
+    never_block = extract_never_block(text)
     if not never_block:
         pytest.skip(f"{skill_dir.name}: no NEVER block in SKILL.md")
     assert _FABRICATION_GUARD_RE.search(never_block), (

@@ -270,22 +270,6 @@ def test_extract_research_partial_payload_skips_missing():
     assert "visualization_plan_path" not in result
 
 
-def test_extract_empty_string_path_is_captured():
-    """Empty-string capture for path type must be rejected (CaptureValueTypeError).
-
-    This test documents the NEW correct behavior. The old buggy behavior (accepting
-    empty strings for any capture type) is no longer valid.
-    """
-    from autoskillit.core.types import CaptureEntrySpec
-    from autoskillit.fleet._api import CaptureValueTypeError, _extract_captures
-
-    capture_spec = {
-        "p": CaptureEntrySpec(from_="${{ result.p }}", value_type="path"),
-    }
-    with pytest.raises(CaptureValueTypeError):
-        _extract_captures(capture_spec, {"p": ""})
-
-
 def test_extract_research_capture_all_fields_combined():
     from autoskillit.fleet._api import _extract_captures
 
@@ -605,23 +589,14 @@ def test_extract_captures_raises_on_complete_capture_miss():
 # ---------------------------------------------------------------------------
 
 
-def _make_entry_spec(from_: str, value_type: str):
-    """Build a CaptureEntrySpec for testing."""
-    from autoskillit.core.types import CaptureEntrySpec
-
-    return CaptureEntrySpec(from_=from_, value_type=value_type)
-
-
 def test_extract_path_type_rejects_empty_string():
     """A path-type capture with an empty-string value must raise CaptureValueTypeError."""
-    from autoskillit.core.types import CaptureEntrySpec
+    from autoskillit.fleet._api import CaptureValueTypeError, _extract_captures
 
     capture_spec = {
         "p": CaptureEntrySpec(from_="${{ result.p }}", value_type="path"),
     }
     payload = {"p": ""}
-
-    from autoskillit.fleet._api import CaptureValueTypeError, _extract_captures
 
     with pytest.raises(CaptureValueTypeError) as exc_info:
         _extract_captures(capture_spec, payload)
@@ -631,29 +606,25 @@ def test_extract_path_type_rejects_empty_string():
 
 def test_extract_optional_string_type_accepts_empty():
     """An optional_string-type capture with an empty-string value must be accepted."""
-    from autoskillit.core.types import CaptureEntrySpec
+    from autoskillit.fleet._api import _extract_captures
 
     capture_spec = {
         "pr_url": CaptureEntrySpec(from_="${{ result.pr_url }}", value_type="optional_string"),
     }
     payload = {"pr_url": ""}
 
-    from autoskillit.fleet._api import _extract_captures
-
     result = _extract_captures(capture_spec, payload)
     assert result == {"pr_url": ""}
 
 
-def test_extract_path_type_rejects_nonexistent_path():
+def test_extract_path_type_rejects_nonexistent_path(tmp_path: Path):
     """A path-type capture with a non-existent path must raise CaptureValueTypeError."""
-    from autoskillit.core.types import CaptureEntrySpec
+    from autoskillit.fleet._api import CaptureValueTypeError, _extract_captures
 
     capture_spec = {
         "p": CaptureEntrySpec(from_="${{ result.p }}", value_type="path"),
     }
-    payload = {"p": "/tmp/does-not-exist-autoskillit-test-xyz"}
-
-    from autoskillit.fleet._api import CaptureValueTypeError, _extract_captures
+    payload = {"p": str(tmp_path / "nonexistent")}
 
     with pytest.raises(CaptureValueTypeError) as exc_info:
         _extract_captures(capture_spec, payload)
@@ -671,4 +642,5 @@ def test_interpolate_rejects_empty_string_campaign_ref():
     with pytest.raises(ValueError) as exc_info:
         _interpolate_campaign_refs(ingredients, captured)
     msg = str(exc_info.value).lower()
-    assert "empty" in msg or "report_path" in msg
+    assert "empty" in msg
+    assert "report_path" in msg

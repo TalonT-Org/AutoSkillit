@@ -17,9 +17,9 @@ from autoskillit.recipe.schema import CampaignDispatch, Recipe, RecipeKind, Reci
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
-def _cap(from_: str) -> CaptureEntrySpec:
+def _cap(from_: str, value_type: str = "string") -> CaptureEntrySpec:
     """Shorthand to build a CaptureEntrySpec in tests."""
-    return CaptureEntrySpec(from_=from_)
+    return CaptureEntrySpec(from_=from_, value_type=value_type)
 
 
 def _standard_recipe(**kwargs: object) -> Recipe:

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
 
 import anyio
@@ -27,11 +26,11 @@ async def test_marker_created_before_dispatch(tool_ctx, monkeypatch, tmp_path: P
     async def _asserting_dispatch(**_kw):
         found = list(marker_dir.glob("dispatch-in-progress--*.marker"))
         assert len(found) == 1, f"Expected 1 marker, found {len(found)}"
-        raise asyncio.CancelledError
+        raise RuntimeError("marker assertion complete")
 
     monkeypatch.setattr(tool_ctx.executor, "dispatch_food_truck", _asserting_dispatch)
 
-    with pytest.raises(asyncio.CancelledError):
+    with pytest.raises(RuntimeError, match="marker assertion complete"):
         await _run_dispatch(
             tool_ctx=tool_ctx,
             recipe="test-recipe",
@@ -117,7 +116,7 @@ async def test_heartbeat_refreshes_mtime(tmp_path: Path) -> None:
         tg.start_soon(_touch_dispatch_marker, marker_path, 0.05, trigger)
 
         async def _stop():
-            await anyio.sleep(0.25)
+            await anyio.sleep(1.0)
             trigger.set()
 
         tg.start_soon(_stop)

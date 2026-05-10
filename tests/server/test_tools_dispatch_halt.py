@@ -218,8 +218,6 @@ class TestPostDispatchHaltOnFailure:
         """
         from unittest.mock import AsyncMock
 
-        from autoskillit.fleet import DispatchCompleted, DispatchStatus
-
         state_path = tmp_path / "campaign_state.json"
         monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(state_path))
         monkeypatch.setenv("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false")
@@ -227,26 +225,10 @@ class TestPostDispatchHaltOnFailure:
         # Write a FAILURE dispatch record into campaign state
         _write_campaign_state(state_path, [{"name": "run-design", "status": "failure"}])
 
-        execute_called = False
-
-        async def mock_execute_dispatch(**kwargs):
-            nonlocal execute_called
-            execute_called = True
-            return DispatchCompleted(
-                success=False,
-                dispatch_status=DispatchStatus.FAILURE,
-                dispatch_id="d2",
-                dispatched_session_id="sess-2",
-                reason="task-failed",
-                token_usage={},
-                l3_parse_source="stdout",
-                lifespan_started=True,
-                l3_payload=None,
-            )
-
+        mock_execute = AsyncMock()
         monkeypatch.setattr(
             "autoskillit.fleet.execute_dispatch",
-            AsyncMock(side_effect=mock_execute_dispatch),
+            mock_execute,
         )
 
         self._setup_standard_dispatch(tool_ctx_kitchen_open, monkeypatch)
@@ -257,9 +239,7 @@ class TestPostDispatchHaltOnFailure:
         # Must return FLEET_CAMPAIGN_HALTED immediately — execute_dispatch must NOT be called
         assert result["success"] is False
         assert result["error"] == "fleet_campaign_halted"
-        assert execute_called is False, (
-            "execute_dispatch was called even though campaign is halted after prior FAILURE"
-        )
+        mock_execute.assert_not_called()
 
     def _setup_standard_dispatch(self, tool_ctx, monkeypatch):
         """Wire tool_ctx for a standard dispatch."""

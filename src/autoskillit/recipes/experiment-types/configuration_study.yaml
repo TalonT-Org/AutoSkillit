@@ -23,3 +23,5 @@ red_team_focus:
 l1_severity:
   estimand_clarity: warning
   hypothesis_falsifiability: warning
+dimension_weight_rationale:
+  scope_alignment: "Configuration studies explore a defined parameter space; covering only a subset of scoped parameters reduces cross-parameter interpretability but does not invalidate the explored configurations, justifying M rather than H"

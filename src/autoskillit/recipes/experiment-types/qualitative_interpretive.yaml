@@ -26,3 +26,4 @@ l1_severity:
   hypothesis_falsifiability: info
 dimension_weight_rationale:
   data_acquisition: "Purposive sampling strategy remains assessable at reduced rigor; saturation criteria are checked but qualitative validity is outside the quantitative audit framework"
+  scope_alignment: "Qualitative interpretive work is inherently emergent and participant-directed; the pre-study scope is routinely refined through fieldwork, making strict scope alignment a weak quality signal for this design type"

@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 import autoskillit.recipe._api as _api
 from autoskillit.recipe.contracts import StaleItem, load_bundled_manifest
-from autoskillit.recipe.io import builtin_recipes_dir, list_recipes, load_recipe
+from autoskillit.recipe.io import RECIPE_SCAN_DIRS, builtin_recipes_dir, list_recipes, load_recipe
 from autoskillit.recipe.staleness_cache import (
     StalenessEntry,
     compute_recipe_hash,
@@ -41,7 +41,6 @@ class DefaultRecipeRepository:
         self._cached_builtin_mtime: float = 0.0
 
     def _get_list(self, project_dir: Path) -> LoadResult[RecipeInfo]:
-        from autoskillit.recipe.io import RECIPE_SCAN_DIRS  # noqa: PLC0415
 
         project_base = project_dir / ".autoskillit" / "recipes"
         builtin_base = builtin_recipes_dir()

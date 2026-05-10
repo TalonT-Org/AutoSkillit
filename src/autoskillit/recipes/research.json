@@ -489,13 +489,38 @@
       "on_result": [
         {
           "when": "${{ result.next }} == more_phases",
-          "route": "plan_phase"
+          "route": "check_phase_loop"
         },
         {
           "route": "audit_impl"
         }
       ],
-      "note": "Routing step. The agent evaluates remaining phases: 1. If more phases remain in group_files -> route to plan_phase. 2. If all phases complete -> route to audit_impl for completeness verification.\n"
+      "note": "Routing step. The agent evaluates remaining phases: 1. If more phases remain in group_files -> route to check_phase_loop. 2. If all phases complete -> route to audit_impl for completeness verification.\n"
+    },
+    "check_phase_loop": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.smoke_utils.check_loop_iteration",
+        "current_iteration": "${{ context.phase_loop_count }}",
+        "max_iterations": "15"
+      },
+      "capture": {
+        "phase_loop_count": "${{ result.next_iteration }}"
+      },
+      "on_result": [
+        {
+          "when": "${{ result.max_exceeded }} == true",
+          "route": "audit_impl"
+        },
+        {
+          "route": "plan_phase"
+        }
+      ],
+      "on_failure": "audit_impl",
+      "optional_context_refs": [
+        "phase_loop_count"
+      ],
+      "note": "Guards the plan_phase → implement_phase → next_phase_or_experiment cycle. The loop is data-bounded by the finite group_files list; this provides a structural bound. 15 iterations allows complex multi-phase setups.\n"
     },
     "audit_impl": {
       "tool": "run_skill",

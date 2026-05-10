@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import structlog.testing
 
-from autoskillit.core import PACK_REGISTRY, SKILL_TOOLS
+from autoskillit.core import PACK_REGISTRY, SKILL_TOOLS, Severity
 from autoskillit.recipe._analysis import build_recipe_graph
 from autoskillit.recipe._skill_helpers import _get_skill_category_map
 from autoskillit.recipe.contracts import load_bundled_manifest, resolve_skill_name
@@ -36,7 +36,20 @@ for _dir in (builtin_recipes_dir(), PROJECT_ROOT / ".autoskillit" / "recipes"):
             if any(s.tool == "clone_repo" for s in _wf.steps.values()):
                 _ALL_CLONE_RECIPE_PATHS.append(_p)
 
-_CI_WATCH_CYCLE_STEPS = {"ci_watch", "handle_no_ci_runs", "check_ci_loop"}
+
+@pytest.mark.parametrize(
+    "recipe_yaml",
+    sorted(builtin_recipes_dir().glob("*.yaml")),
+    ids=lambda p: p.stem,
+)
+def test_no_unbounded_cycle_errors_in_bundled_recipes(recipe_yaml: Path) -> None:
+    """Every bundled recipe must have zero unbounded-cycle ERROR findings."""
+    recipe = load_recipe(recipe_yaml)
+    findings = run_semantic_rules(recipe)
+    errors = [f for f in findings if f.rule == "unbounded-cycle" and f.severity == Severity.ERROR]
+    assert errors == [], (
+        f"{recipe_yaml.stem}: {[f'{f.step_name}: {f.message[:80]}' for f in errors]}"
+    )
 
 
 def test_every_bundled_recipe_declares_requires_packs() -> None:
@@ -44,20 +57,6 @@ def test_every_bundled_recipe_declares_requires_packs() -> None:
     for path in sorted(builtin_recipes_dir().glob("*.yaml")):
         recipe = load_recipe(path)
         assert recipe.requires_packs, f"{path.name} does not declare requires_packs"
-
-
-@pytest.mark.parametrize("recipe_name", ["remediation", "implementation", "implementation-groups"])
-def test_bundled_recipe_no_unbounded_cycle_findings(recipe_name: str) -> None:
-    """Pipeline recipes must have zero unbounded-cycle findings for the ci_watch cycle."""
-    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
-    findings = run_semantic_rules(recipe)
-    ci_watch_cycle_findings = [
-        f for f in findings if f.rule == "unbounded-cycle" and f.step_name in _CI_WATCH_CYCLE_STEPS
-    ]
-    assert ci_watch_cycle_findings == [], (
-        f"{recipe_name} has unbounded-cycle findings for ci_watch cycle: "
-        + "; ".join(f.message for f in ci_watch_cycle_findings)
-    )
 
 
 def test_make_plan_contract_declares_plan_parts_output() -> None:

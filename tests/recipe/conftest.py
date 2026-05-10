@@ -17,7 +17,6 @@ KNOWN_PART_B_VIOLATIONS: frozenset[str] = frozenset(
     {
         NO_AUTOSKILLIT_IMPORT,
         "skill-result-routing-gap",
-        "unbounded-cycle",
     }
 )
 

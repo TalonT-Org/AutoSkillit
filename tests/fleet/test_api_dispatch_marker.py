@@ -117,7 +117,7 @@ async def test_heartbeat_refreshes_mtime(tmp_path: Path) -> None:
         tg.start_soon(_touch_dispatch_marker, marker_path, 0.05, trigger)
 
         async def _stop():
-            await anyio.sleep(0.25)
+            await anyio.sleep(2.1)
             trigger.set()
 
         tg.start_soon(_stop)

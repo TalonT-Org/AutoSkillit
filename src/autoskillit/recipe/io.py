@@ -8,7 +8,9 @@ from pathlib import Path
 from typing import Any
 
 from autoskillit.core import (
+    CAPTURE_VALID_VALUE_TYPES,
     CORE_PACKS,
+    CaptureEntrySpec,
     DispatchGateType,
     LoadReport,
     LoadResult,
@@ -375,6 +377,48 @@ if _PARSE_RECIPE_HANDLED_FIELDS | _RECIPE_COMPUTED_FIELDS != frozenset(
     )
 
 
+def _parse_capture_spec(capture_raw: Any) -> dict[str, CaptureEntrySpec]:
+    """Parse a YAML capture spec into ``dict[str, CaptureEntrySpec]``.
+
+    Accepts two YAML forms:
+    - Shorthand: ``{key: "${{ result.field }}"}`` →
+      ``CaptureEntrySpec(from_=..., value_type="string")``
+    - Long-form: ``{key: {from: "${{ result.field }}", type: "path"}}``
+      → ``CaptureEntrySpec(from_=..., value_type="path")``
+
+    Malformed long-form dicts (e.g. missing ``from`` key) emit a warning.
+    Non-dict, non-string values are silently skipped.
+    """
+    if not capture_raw or not isinstance(capture_raw, dict):
+        return {}
+    result: dict[str, CaptureEntrySpec] = {}
+    for key, val in capture_raw.items():
+        if isinstance(val, str):
+            # Shorthand: string value is the from_ template
+            result[key] = CaptureEntrySpec(from_=val, value_type="string")
+        elif isinstance(val, dict):
+            from_ = val.get("from")
+            type_ = val.get("type")
+            if isinstance(from_, str):
+                effective_type = type_ if isinstance(type_, str) else "string"
+                if effective_type not in CAPTURE_VALID_VALUE_TYPES:
+                    logger.warning(
+                        "capture_spec_unknown_type",
+                        capture_name=key,
+                        type_value=effective_type,
+                        fallback="string",
+                    )
+                    effective_type = "string"
+                result[key] = CaptureEntrySpec(from_=from_, value_type=effective_type)
+            else:
+                logger.warning(
+                    "capture_spec_malformed_longform",
+                    capture_name=key,
+                    present_fields=sorted(val),
+                )
+    return result
+
+
 def _parse_recipe(data: dict[str, Any]) -> Recipe:
     name = data.get("name", "")
     description = data.get("description", "")
@@ -454,7 +498,7 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
                     task=d.get("task", ""),
                     ingredients=d.get("ingredients") or {},
                     depends_on=d.get("depends_on") or [],
-                    capture=d.get("capture") or {},
+                    capture=_parse_capture_spec(d.get("capture")),
                     gate=d_gate,
                     message=d.get("message") or None,
                 )

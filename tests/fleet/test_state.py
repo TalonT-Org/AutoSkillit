@@ -1561,3 +1561,33 @@ class TestContinueOnFailureDoesNotResetFailureDispatches:
         assert state is not None
         a = next(d for d in state.dispatches if d.name == "A")
         assert a.status == DispatchStatus.PENDING
+
+
+class TestUpsertCannotOverwriteFailureWithSuccess:
+    """upsert_dispatch_record_by_name must reject overwriting FAILURE with SUCCESS."""
+
+    def test_upsert_cannot_overwrite_failure_with_success(self, tmp_path: Path) -> None:
+        """Overwriting a FAILURE dispatch record with SUCCESS must raise ValueError."""
+        from autoskillit.fleet import upsert_dispatch_record_by_name
+
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("run-implement"))
+
+        # Write an initial FAILURE record
+        upsert_dispatch_record_by_name(
+            sp,
+            DispatchRecord(
+                name="run-implement", status=DispatchStatus.FAILURE, reason="task-failed"
+            ),
+        )
+
+        # Attempting to overwrite with SUCCESS must raise
+        with pytest.raises(ValueError) as exc_info:
+            upsert_dispatch_record_by_name(
+                sp,
+                DispatchRecord(
+                    name="run-implement", status=DispatchStatus.SUCCESS, reason="all good"
+                ),
+            )
+        assert "FAILURE" in str(exc_info.value)
+        assert "run-implement" in str(exc_info.value)

@@ -418,7 +418,7 @@ def test_research_campaign_run_design_capture():
         "experiment_type",
     }
     for key, val in d.capture.items():
-        assert val == f"${{{{ result.{key} }}}}"
+        assert val.from_ == f"${{{{ result.{key} }}}}"
 
 
 def test_research_campaign_run_implement_ingredients():
@@ -458,8 +458,8 @@ def test_research_campaign_run_implement_capture():
     d = recipe.dispatches[1]
     assert d.name == "run-implement"
     assert set(d.capture.keys()) == {"report_path", "experiment_results"}
-    assert d.capture["report_path"] == "${{ result.report_path }}"
-    assert d.capture["experiment_results"] == "${{ result.experiment_results }}"
+    assert d.capture["report_path"].from_ == "${{ result.report_path }}"
+    assert d.capture["experiment_results"].from_ == "${{ result.experiment_results }}"
 
 
 def test_research_campaign_run_review_ingredients():
@@ -510,8 +510,10 @@ def test_research_campaign_run_review_capture():
     d = recipe.dispatches[2]
     assert d.name == "run-review"
     assert set(d.capture.keys()) == {"pr_url", "report_path_after_finalize"}
-    assert d.capture["pr_url"] == "${{ result.pr_url }}"
-    assert d.capture["report_path_after_finalize"] == "${{ result.report_path_after_finalize }}"
+    assert d.capture["pr_url"].from_ == "${{ result.pr_url }}"
+    assert (
+        d.capture["report_path_after_finalize"].from_ == "${{ result.report_path_after_finalize }}"
+    )
 
 
 def test_research_campaign_run_archive_ingredients():
@@ -570,7 +572,7 @@ def test_research_campaign_capture_values_reference_result():
             assert d.capture == {}, f"run-archive must have empty capture, got {d.capture!r}"
             continue
         for val in d.capture.values():
-            assert _RESULT_TEMPLATE_RE.match(val.strip()), (
+            assert _RESULT_TEMPLATE_RE.match(val.from_.strip()), (
                 f"Dispatch {d.name!r} capture value {val!r} does not reference result"
             )
 

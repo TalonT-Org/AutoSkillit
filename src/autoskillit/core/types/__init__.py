@@ -6,6 +6,8 @@ autoskillit.core (the package gateway) in production code — not from here.
 
 from __future__ import annotations
 
+from ._type_capture import *  # noqa: F401, F403
+from ._type_capture import __all__ as _capture_all
 from ._type_checkpoint import *  # noqa: F401, F403
 from ._type_checkpoint import __all__ as _checkpoint_all
 from ._type_constants import *  # noqa: F401, F403
@@ -42,7 +44,8 @@ from ._type_subprocess import *  # noqa: F401, F403
 from ._type_subprocess import __all__ as _subprocess_all
 
 __all__ = (
-    _checkpoint_all
+    _capture_all
+    + _checkpoint_all
     + _constants_all
     + _dispatch_identity_all
     + _enums_all

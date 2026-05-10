@@ -9,11 +9,17 @@ import yaml
 
 import autoskillit.recipe  # noqa: F401 -- triggers rule registration
 from autoskillit.core import Severity
+from autoskillit.core.types import CaptureEntrySpec
 from autoskillit.recipe._analysis import make_validation_context
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import CampaignDispatch, Recipe, RecipeKind, RecipeStep
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+
+
+def _cap(from_: str, value_type: str = "string") -> CaptureEntrySpec:
+    """Shorthand to build a CaptureEntrySpec in tests."""
+    return CaptureEntrySpec(from_=from_, value_type=value_type)
 
 
 def _standard_recipe(**kwargs: object) -> Recipe:
@@ -499,7 +505,7 @@ def test_capture_key_must_be_identifier():
                 name="phase-one",
                 recipe="implementation",
                 task="t",
-                capture={"bad-key": "${{ result.v }}"},
+                capture={"bad-key": _cap("${{ result.v }}")},
             )
         ]
     )
@@ -520,7 +526,7 @@ def test_capture_value_must_reference_result():
                 name="phase-one",
                 recipe="implementation",
                 task="t",
-                capture={"k": "not_a_template"},
+                capture={"k": _cap("not_a_template")},
             )
         ]
     )
@@ -568,7 +574,7 @@ def test_campaign_ingredient_ref_satisfied_by_ancestor():
                 name="phase-one",
                 recipe="implementation",
                 task="t",
-                capture={"x": "${{ result.x }}"},
+                capture={"x": _cap("${{ result.x }}")},
             ),
             CampaignDispatch(
                 name="phase-two",
@@ -595,7 +601,7 @@ def test_valid_capture_spec_passes():
                 name="phase-one",
                 recipe="implementation",
                 task="t",
-                capture={"out_file": "${{ result.out_file }}"},
+                capture={"out_file": _cap("${{ result.out_file }}")},
             )
         ]
     )
@@ -675,7 +681,7 @@ def test_gate_dispatch_no_capture_fires_when_capture_is_set():
                 name="gate-check",
                 gate="confirm",
                 message="Proceed?",
-                capture={"key": "${{ result.val }}"},
+                capture={"key": _cap("${{ result.val }}")},
             )
         ]
     )
@@ -1214,7 +1220,7 @@ def test_dispatch_capture_field_in_sentinel_fires_on_unknown_field(tmp_path: Pat
                 name="phase-one",
                 recipe="target-recipe",
                 task="do it",
-                capture={"bad_field": "${{ result.nonexistent_field }}"},
+                capture={"bad_field": _cap("${{ result.nonexistent_field }}")},
             ),
         ]
     )
@@ -1253,7 +1259,7 @@ def test_dispatch_capture_field_in_sentinel_passes_when_field_exists(tmp_path: P
                 name="phase-one",
                 recipe="target-recipe",
                 task="do it",
-                capture={"output_path": "${{ result.output_path }}"},
+                capture={"output_path": _cap("${{ result.output_path }}")},
             ),
         ]
     )
@@ -1291,7 +1297,7 @@ def test_dispatch_capture_field_in_sentinel_checks_any_sentinel(tmp_path: Path):
                 name="phase-one",
                 recipe="target-recipe",
                 task="do it",
-                capture={"alpha": "${{ result.alpha }}"},
+                capture={"alpha": _cap("${{ result.alpha }}")},
             ),
         ]
     )
@@ -1320,7 +1326,7 @@ def test_dispatch_capture_field_in_sentinel_skips_no_sentinel(tmp_path: Path):
                 name="phase-one",
                 recipe="target-recipe",
                 task="do it",
-                capture={"output_path": "${{ result.output_path }}"},
+                capture={"output_path": _cap("${{ result.output_path }}")},
             ),
         ]
     )
@@ -1381,7 +1387,7 @@ def test_dispatch_capture_field_in_sentinel_skips_unloadable_target(tmp_path: Pa
                 name="phase-one",
                 recipe="nonexistent-recipe",
                 task="do it",
-                capture={"output_path": "${{ result.output_path }}"},
+                capture={"output_path": _cap("${{ result.output_path }}")},
             ),
         ],
     )
@@ -1559,7 +1565,7 @@ def test_dispatch_capture_field_in_all_sentinels_fires_on_path_exclusive_field(t
                 name="phase-one",
                 recipe="dual-sentinel-target",
                 task="do it",
-                capture={"pr_url": "${{ result.pr_url }}"},
+                capture={"pr_url": _cap("${{ result.pr_url }}")},
             ),
         ]
     )

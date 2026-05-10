@@ -70,6 +70,12 @@ ingredients:
       all decomposed phases have corresponding implementation commits.
       Catches silent group abandonment when context_limit fires mid-iteration.
     default: "true"
+  min_breadth:
+    description: >
+      Minimum number of directions to select when scope reports 3 or more directions.
+      Enforced by the select_directions step in the design phase.
+      Set to 0 to disable breadth enforcement.
+    default: "2"
 
 dispatches:
   - name: run-design
@@ -81,6 +87,7 @@ dispatches:
       source_dir: "${{ inputs.source_dir }}"
       base_branch: "${{ inputs.base_branch }}"
       review_design: "${{ inputs.review_design }}"
+      min_breadth: "${{ inputs.min_breadth }}"
     capture:
       worktree_path: "${{ result.worktree_path }}"
       research_dir_rel: "${{ result.research_dir_rel }}"
@@ -88,6 +95,7 @@ dispatches:
       visualization_plan_path: "${{ result.visualization_plan_path }}"
       scope_report: "${{ result.scope_report }}"
       scope_directions: "${{ result.scope_directions }}"
+      selected_directions: "${{ result.selected_directions }}"
       experiment_type: "${{ result.experiment_type }}"
     depends_on: []
 

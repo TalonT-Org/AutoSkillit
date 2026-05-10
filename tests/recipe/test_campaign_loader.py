@@ -416,6 +416,7 @@ def test_research_campaign_run_design_capture():
         "visualization_plan_path",
         "scope_report",
         "scope_directions",
+        "selected_directions",
         "experiment_type",
     }
     for key, val in d.capture.items():

@@ -1,7 +1,7 @@
 # Skill catalog
 
-The complete list of bundled skills (135 total: 3 in `src/autoskillit/skills/`,
-132 in `src/autoskillit/skills_extended/`). Filesystem walk this directory if
+The complete list of bundled skills (136 total: 3 in `src/autoskillit/skills/`,
+133 in `src/autoskillit/skills_extended/`). Filesystem walk this directory if
 you need an exhaustive listing; this catalog groups by purpose.
 
 ## Tier 1 — free range (3)
@@ -33,7 +33,7 @@ Located under `src/autoskillit/skills_extended/`. Grouped by purpose:
 `process-issues`, `make-campaign`
 
 ### Experiment family
-`scope`, `plan-experiment`, `implement-experiment`, `run-experiment`,
+`scope`, `select-directions`, `plan-experiment`, `implement-experiment`, `run-experiment`,
 `generate-report`, `troubleshoot-experiment`
 
 ### Research and review

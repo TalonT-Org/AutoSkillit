@@ -544,6 +544,7 @@ class TestOutputPathTokensDerivedFromContracts:
             "revision_guidance",
             "scope_report",
             "scope_directions",
+            "selected_directions",
             "summary_path",
             "triage_manifest",
             "triage_report",

@@ -108,7 +108,7 @@ Write `selected_directions_{topic}_{timestamp}.json` with this structure:
   "generated_at": "<from original manifest>",
   "selected_at": "<ISO-8601 timestamp>",
   "selection_mode": "interactive|headless",
-  "direction_count": <count of selected>,
+  "selected_direction_count": <count of selected>,
   "must_cover_count": <count of selected with must_cover=true>,
   "original_direction_count": <from original manifest>,
   "min_breadth_applied": <threshold used>,

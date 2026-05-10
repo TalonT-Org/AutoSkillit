@@ -196,6 +196,7 @@ def list_recipes(
         project_dir_scan = project_base / subdir if subdir else project_base
         _collect_recipes(RecipeSource.PROJECT, project_dir_scan, seen, items, errors)
 
+    for subdir in RECIPE_SCAN_DIRS:
         builtin_dir_scan = builtin_base / subdir if subdir else builtin_base
         _collect_recipes(RecipeSource.BUILTIN, builtin_dir_scan, seen, items, errors)
 

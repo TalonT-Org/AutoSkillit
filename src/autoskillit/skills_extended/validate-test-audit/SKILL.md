@@ -42,6 +42,8 @@ signal downstream processing.
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Modify any source code files
 - Create files outside the per-run output directory (`{{AUTOSKILLIT_TEMP}}/validate-audit-{YYYY-MM-DD_HHMMSS}/`)
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message

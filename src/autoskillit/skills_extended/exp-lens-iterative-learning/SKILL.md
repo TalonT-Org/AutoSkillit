@@ -40,6 +40,8 @@ hooks:
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Modify any source code files
 - Recommend one-factor-at-a-time exploration when interactions are plausible
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-iterative-learning/`

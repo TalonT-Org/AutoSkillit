@@ -28,6 +28,8 @@ hooks:
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Modify any source code files
 - Include internal implementation details (that's for other lenses)
 - Show runtime behavior or state transitions

@@ -49,6 +49,8 @@ validated report carries a `validated: true` marker to signal downstream process
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Modify any source code files
 - Create files outside `$AUDIT_BASE_DIR/` (the per-run directory set in Step 5)
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message

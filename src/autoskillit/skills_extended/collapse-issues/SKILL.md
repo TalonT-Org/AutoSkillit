@@ -49,6 +49,8 @@ Grouping analysis is performed as in-context LLM reasoning. No parallel sessions
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Close original issues before the combined issue is successfully created
 - Apply `batch:N` labels to combined or original issues
 - Collapse issues with different `recipe:*` labels into one combined issue

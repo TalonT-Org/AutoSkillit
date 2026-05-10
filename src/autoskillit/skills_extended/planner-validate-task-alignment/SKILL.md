@@ -27,6 +27,8 @@ zero findings.
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Block the pipeline — all findings are `warning` severity
 - Write output outside `$3/`
 - Read files not passed as arguments

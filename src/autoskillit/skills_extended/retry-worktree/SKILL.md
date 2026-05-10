@@ -32,6 +32,8 @@ Continue implementing a plan in an **existing** git worktree. This skill is used
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Create a new worktree — the worktree already exists
 - Re-run worktree setup (e.g. `task install-worktree`) unless the environment is missing/broken
 - Re-explore systems that were already explored (skip Step 2 of implement-worktree)

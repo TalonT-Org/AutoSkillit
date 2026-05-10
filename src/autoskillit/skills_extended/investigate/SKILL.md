@@ -67,6 +67,8 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Modify any source code files
 - Suggest backward compatibility solutions
 - Suggest fallbacks that hide errors

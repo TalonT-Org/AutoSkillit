@@ -46,6 +46,8 @@ PR, and output `pr_url=<url>`.
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Create files outside `{{AUTOSKILLIT_TEMP}}/open-integration-pr/` (except the temp body file for `gh pr create --body-file`)
 - Modify any source code
 - Fail the pipeline if `gh` is unavailable or not authenticated — output `pr_url=` (empty) and exit successfully

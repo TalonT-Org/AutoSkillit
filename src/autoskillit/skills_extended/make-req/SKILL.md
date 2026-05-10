@@ -30,6 +30,8 @@ Decompose a task, plan, roadmap, or feature description into a structured set of
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Modify any source code files
 - Create files outside `{{AUTOSKILLIT_TEMP}}/make-req/` directory
 - Prescribe implementation approaches or libraries in requirements

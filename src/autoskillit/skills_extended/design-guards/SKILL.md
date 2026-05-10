@@ -27,6 +27,8 @@ Path to a bug pattern audit report (typically under `{{AUTOSKILLIT_TEMP}}/audit-
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Modify any source code files
 - Propose bandaid fixes or direct-only patches
 - Create files outside `{{AUTOSKILLIT_TEMP}}/design-guards/` directory

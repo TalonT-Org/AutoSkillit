@@ -28,6 +28,8 @@ hooks:
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Modify any source code files
 - Include static structure details (that's C4 lens)
 - Show data storage details (that's data lineage lens)

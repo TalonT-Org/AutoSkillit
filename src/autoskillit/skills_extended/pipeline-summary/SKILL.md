@@ -34,6 +34,8 @@ and a PR from the feature branch into the target branch.
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Fail the pipeline if `gh` is not available or not authenticated — write a local summary instead
 - Create empty issues or PRs (skip if no bugs to report)
 - Modify any source code — this skill only creates GitHub artifacts and a summary file

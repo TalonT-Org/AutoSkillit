@@ -504,7 +504,7 @@ def _extract_never_block(skill_text: str) -> str:
     """
     import re
 
-    never_match = re.search(r"(?m)^\*{0,2}NEVER\*{0,2}:\s*$", skill_text)
+    never_match = re.search(r"(?m)^\*{0,2}NEVER:\*{0,2}\s*$", skill_text)
     if not never_match:
         return ""
     start = never_match.end()

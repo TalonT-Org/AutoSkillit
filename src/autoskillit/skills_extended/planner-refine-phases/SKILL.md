@@ -33,6 +33,8 @@ conflicts, applies field-level edits to the plan, and writes `refined_plan.json`
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Write any file outside `$2/`
 - Directly modify the combined_plan.json ($1) — always write a new refined_plan.json
 - Allow an L0 subagent to write files directly (L0s return structured text only)

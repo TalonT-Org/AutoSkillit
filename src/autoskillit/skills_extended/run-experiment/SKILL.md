@@ -44,6 +44,8 @@ plan, executes what the plan describes, and reports what happened.
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Modify files outside the worktree
 - Merge the worktree — leave it intact for the orchestrator
 - Skip result collection — every run must produce structured output

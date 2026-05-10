@@ -28,6 +28,8 @@ hooks:
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Modify any source code files
 - Show internal component details
 - Include all possible scenarios (pick key ones)

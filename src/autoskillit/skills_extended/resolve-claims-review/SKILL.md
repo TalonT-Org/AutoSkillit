@@ -38,6 +38,8 @@ Called by the research recipe when `audit_claims` routes `changes_requested` via
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Merge or push the branch — the recipe's `re_push_research` step handles push
 - Dismiss review threads without addressing the underlying comment
 - Create files outside `{{AUTOSKILLIT_TEMP}}/resolve-claims-review/`

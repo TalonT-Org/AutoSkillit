@@ -28,6 +28,8 @@ The user may provide a "since" date (e.g., `2/7`, `2026-02-07`, `last week`). If
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Modify any source code files
 - Create files outside `{{AUTOSKILLIT_TEMP}}/audit-bugs/` directory
 - Run subagents in the background (`run_in_background: true` is prohibited)

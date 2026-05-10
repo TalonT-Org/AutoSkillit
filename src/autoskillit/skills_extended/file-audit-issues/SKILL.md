@@ -96,6 +96,8 @@ issue_count = 0
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Use `gh issue comment` — all issue content goes in the body via `--body-file`
 - Create issues individually via REST — always batch via GraphQL `createIssue` mutations
 - Skip the 1-second sleep between consecutive mutating GitHub API calls

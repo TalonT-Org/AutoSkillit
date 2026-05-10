@@ -26,6 +26,8 @@ Audit the codebase for internal cohesion: how well components integrate and main
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Modify any source code files
 - Update an existing report — always generate new
 - Duplicate findings that belong in audit-arch (rule violations)

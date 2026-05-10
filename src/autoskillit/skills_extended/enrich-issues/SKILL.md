@@ -222,6 +222,8 @@ After processing all candidates, emit to stdout:
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Edit an issue body without first fetching its current content immediately before
   the edit
 - Force requirements when the issue is too vague — comment and move on

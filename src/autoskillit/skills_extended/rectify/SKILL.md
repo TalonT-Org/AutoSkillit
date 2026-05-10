@@ -34,6 +34,8 @@ Do not change any code.
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Modify any source code files
 - Propose bandaid fixes, fallbacks, or direct-only fixes
 - Suggest backward compatibility shims

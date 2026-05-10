@@ -32,6 +32,8 @@ Explore a target project and generate tailored recipes and AutoSkillit config th
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Modify any files in the target project without user confirmation at the summary gate
 - Run commands that change the target project
 - Create files outside `{{AUTOSKILLIT_TEMP}}/setup-project/` directory (until the summary gate)

@@ -35,6 +35,8 @@ best available plan.
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Modify the plan file, any source code, or any file outside `{{AUTOSKILLIT_TEMP}}/review-design/`
 - Halt the pipeline for a REVISE verdict — emit the verdict and let the recipe route
 - Proceed to Level 2, 3, or 4 analysis when any Level 1 finding is classified as

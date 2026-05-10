@@ -27,6 +27,8 @@ Guides users through a 6-phase interactive workflow to decompose a campaign goal
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Modify or write to any source code files
 - Create files outside `.autoskillit/recipes/campaigns/` (final output) or `{{AUTOSKILLIT_TEMP}}/make-campaign/` (temp/validation drafts)
 - Write the final campaign YAML without first passing `validate_recipe` in Phase 5

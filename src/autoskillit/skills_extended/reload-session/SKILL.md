@@ -21,6 +21,8 @@ restored.
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Skip running `/exit` after `reload_session` — the reload does not happen until claude exits
 - Call this skill from a headless or automated session
 

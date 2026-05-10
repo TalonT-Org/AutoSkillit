@@ -218,6 +218,8 @@ When the user provides **more than one issue or task** in a single request:
    Present exactly **two options**. Nothing else.
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Claim "the recipe handles one issue at a time" — each pipeline instance is fully
   independent (separate clones, branches, PRs). Parallel execution is fully supported.
 - Suggest switching to `implementation-groups` — that recipe is for coordinated

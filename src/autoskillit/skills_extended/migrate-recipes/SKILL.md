@@ -32,6 +32,8 @@ The orchestrator provides all context in the prompt:
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Modify the original script file directly
 - Skip validation via validate_recipe
 - Apply changes without checking if the pattern exists in the script

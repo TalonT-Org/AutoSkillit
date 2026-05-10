@@ -24,6 +24,8 @@ Audit the test suite to identify useless tests, consolidation opportunities, qua
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Modify any source or test code files
 - Flag tests as useless without reading and understanding them
 - Recommend removing tests that guard against real regressions

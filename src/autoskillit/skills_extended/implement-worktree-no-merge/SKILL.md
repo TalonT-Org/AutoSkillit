@@ -28,6 +28,8 @@ The worktree is left intact for the orchestrator to test and merge separately.
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Implement without first exploring affected systems with subagents
 - Implement in the main working directory (always use the worktree)
 - Force push or perform destructive git operations

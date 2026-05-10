@@ -35,6 +35,8 @@ Space-separated issue numbers (required, minimum 2), plus optional flags:
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Modify any source code files
 - Create files outside `{{AUTOSKILLIT_TEMP}}/build-execution-map/` directory (relative to the current working directory)
 - Assume issues are independent without analysis

@@ -34,6 +34,8 @@ and creates a comprehensive promotion PR.
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Create files outside `{{AUTOSKILLIT_TEMP}}/promote-to-main/`
 - Modify any source code — this skill is read-only analysis + PR creation
 - Fail silently when `gh` is unavailable — output `pr_url = ` (empty) and exit successfully

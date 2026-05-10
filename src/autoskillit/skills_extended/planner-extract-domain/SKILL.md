@@ -28,6 +28,8 @@ Extract domain knowledge, naming conventions, and structural patterns specific t
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Modify any target project files
 - Abort the calling recipe on failure — log a warning and return gracefully
 - Run subagents in the background (`run_in_background: true` is prohibited)

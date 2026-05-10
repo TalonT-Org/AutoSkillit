@@ -25,6 +25,8 @@ complexity, and produce machine-readable output for the `merge-prs` recipe.
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Merge, close, or modify any PR
 - Modify any source code files
 - Create files outside `{{AUTOSKILLIT_TEMP}}/merge-prs/` directory

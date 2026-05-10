@@ -27,6 +27,8 @@ Fix test failures in a worktree implemented by `/autoskillit:implement-worktree-
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Merge if ANY test fails
 - Merge via `merge_worktree` or any other mechanism
 - Call `merge_worktree` MCP tool

@@ -28,6 +28,8 @@ writes `review_approach_assessment.json` to the planner directory. Does NOT invo
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Invoke `review-approach` — this skill performs assessment only
 - Write output outside `$2/`
 - Modify input files

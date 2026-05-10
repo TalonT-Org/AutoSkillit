@@ -33,6 +33,8 @@ in the decomposed PR flow (prepare → run_arch_lenses → compose).
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Invoke arch-lens skills or any other sub-skills
 - Create files outside `{{AUTOSKILLIT_TEMP}}/prepare-pr/`
 - Fail if closing_issue is absent or gh is unavailable — degrade gracefully

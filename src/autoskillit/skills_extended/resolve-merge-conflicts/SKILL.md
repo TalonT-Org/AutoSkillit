@@ -25,6 +25,8 @@ hooks:
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Run the full test suite — that is the pipeline `test` step's responsibility; tests already passed before `merge_to_integration` was attempted
 - Attempt partial resolution when any conflict file is LOW confidence — abort and escalate instead
 - Leave unresolved conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`) in any file

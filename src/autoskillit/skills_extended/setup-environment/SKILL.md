@@ -36,6 +36,8 @@ PASS and WARN proceed to `decompose_phases`; FAIL escalates immediately.
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Modify the experiment plan
 - Write files outside `{{AUTOSKILLIT_TEMP}}/setup-environment/`
 - Skip the Docker availability probe before attempting a build

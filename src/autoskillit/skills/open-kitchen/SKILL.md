@@ -11,6 +11,8 @@ Call the `open_kitchen` MCP tool to reveal all 24 kitchen tools for this session
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Skip calling `open_kitchen` and assume the kitchen is already open
 - Call this skill from a headless or automated session (it is human-only)
 

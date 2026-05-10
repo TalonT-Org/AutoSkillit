@@ -34,6 +34,8 @@ Creates comprehensive architecture diagrams for selected components or systems u
 - Use consistent color coding across all diagrams
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Create diagrams without understanding the code
 - Skip reading the actual implementation
 - Use generic placeholder names

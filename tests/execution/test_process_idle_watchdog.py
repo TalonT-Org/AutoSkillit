@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import functools
 import sys
 import textwrap
 import time
 
 import anyio
 import pytest
+import structlog.testing
 
 from autoskillit.execution.process._process_race import (
     RaceAccumulator,

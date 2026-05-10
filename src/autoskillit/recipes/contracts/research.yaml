@@ -17,9 +17,10 @@ skills:
     - scope_report\s*=\s*/.+
     - scope_directions\s*=\s*/.+
     pattern_examples:
-    - 'scope_report = /tmp/scope_report.md
-
-      %%ORDER_UP%%'
+    - |-
+      scope_report = /tmp/scope_report.md
+      scope_directions = /tmp/scope_directions.json
+      %%ORDER_UP%%
     write_behavior: always
   plan-experiment:
     inputs:

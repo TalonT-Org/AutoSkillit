@@ -324,9 +324,6 @@ def test_relative_path_capture_and_reconstruction():
         new_anchor,
     )
     assert interpolated["research_dir"] == "/tmp/wt-B/research/2026-05-10-test"
-    assert not interpolated["research_dir"].startswith("/tmp/wt-A"), (
-        "research_dir must be reconstructed from new anchor, not the stale design worktree"
-    )
 
 
 def test_interpolate_campaign_worktree_and_report_path():

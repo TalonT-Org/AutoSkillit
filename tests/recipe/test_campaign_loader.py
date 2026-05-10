@@ -411,7 +411,6 @@ def test_research_campaign_run_design_capture():
     assert d.name == "run-design"
     assert set(d.capture.keys()) == {
         "worktree_path",
-        "research_dir",
         "research_dir_rel",
         "experiment_plan",
         "visualization_plan_path",

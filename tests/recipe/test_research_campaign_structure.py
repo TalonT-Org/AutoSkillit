@@ -114,7 +114,6 @@ def test_run_design_capture_keys(recipe: Recipe) -> None:
     assert d is not None
     assert set(d.capture.keys()) == {
         "worktree_path",
-        "research_dir",
         "research_dir_rel",
         "experiment_plan",
         "visualization_plan_path",

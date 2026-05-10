@@ -170,7 +170,7 @@ class TestCreateWorktreeFunctional:
         assert result.returncode == 0, f"Script failed: {result.stderr}"
 
         new_worktrees = [d for d in (tmp_path / "worktrees").glob("research-*") if d != wt1_dir]
-        assert len(new_worktrees) == 1
+        assert len(new_worktrees) == 1, f"Expected one new worktree, found: {new_worktrees}"
 
         expected_sidecar = main / ".autoskillit" / "temp" / "worktrees"
         base_branch_files = list(expected_sidecar.glob("*/base-branch"))

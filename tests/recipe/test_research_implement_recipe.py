@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+from autoskillit.recipe.schema import Recipe
 from autoskillit.recipe.validator import validate_recipe_structure
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
@@ -74,42 +75,48 @@ class TestResearchImplementDownloadData:
     """Tests for download_data step in research-implement.yaml (T3)."""
 
     @pytest.fixture(scope="class")
-    def recipe(self):
+    def recipe(self) -> Recipe:
         return load_recipe(builtin_recipes_dir() / "research-implement.yaml")
 
-    def test_download_data_step_exists(self, recipe) -> None:
+    def test_download_data_step_exists(self, recipe: Recipe) -> None:
         """research-implement.yaml must include a download_data step."""
         assert "download_data" in recipe.steps
 
-    def test_download_data_pass_routes_to_decompose_phases(self, recipe) -> None:
+    def test_download_data_pass_routes_to_decompose_phases(self, recipe: Recipe) -> None:
         """download_data PASS verdict must route to decompose_phases."""
         step = recipe.steps["download_data"]
         assert step.on_result is not None
         assert step.on_result.routes["PASS"] == "decompose_phases"
 
-    def test_download_data_fail_routes_to_escalate_stop(self, recipe) -> None:
+    def test_download_data_warn_routes_to_decompose_phases(self, recipe: Recipe) -> None:
+        """download_data WARN verdict must route to decompose_phases."""
+        step = recipe.steps["download_data"]
+        assert step.on_result is not None
+        assert step.on_result.routes["WARN"] == "decompose_phases"
+
+    def test_download_data_fail_routes_to_escalate_stop(self, recipe: Recipe) -> None:
         """download_data FAIL verdict must route to escalate_stop."""
         step = recipe.steps["download_data"]
         assert step.on_result is not None
         assert step.on_result.routes["FAIL"] == "escalate_stop"
 
-    def test_download_data_stale_threshold(self, recipe) -> None:
+    def test_download_data_stale_threshold(self, recipe: Recipe) -> None:
         """download_data stale_threshold must be 14400 (4 hours)."""
         step = recipe.steps["download_data"]
         assert step.stale_threshold == 14400
 
-    def test_download_data_idle_output_timeout(self, recipe) -> None:
+    def test_download_data_idle_output_timeout(self, recipe: Recipe) -> None:
         """download_data idle_output_timeout must be 0 (disabled)."""
         step = recipe.steps["download_data"]
         assert step.idle_output_timeout == 0
 
-    def test_stage_data_pass_routes_to_download_data(self, recipe) -> None:
+    def test_stage_data_pass_routes_to_download_data(self, recipe: Recipe) -> None:
         """stage_data PASS verdict must route to download_data."""
         step = recipe.steps["stage_data"]
         assert step.on_result is not None
         assert step.on_result.routes["PASS"] == "download_data"
 
-    def test_stage_data_warn_routes_to_download_data(self, recipe) -> None:
+    def test_stage_data_warn_routes_to_download_data(self, recipe: Recipe) -> None:
         """stage_data WARN verdict must route to download_data."""
         step = recipe.steps["stage_data"]
         assert step.on_result is not None

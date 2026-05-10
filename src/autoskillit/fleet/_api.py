@@ -25,7 +25,6 @@ from autoskillit.core import (
     claude_code_project_dir,
     get_logger,
     truncate_text,
-    write_versioned_json,
 )
 from autoskillit.fleet.result_parser import L3ParseResult, parse_l3_result_block
 from autoskillit.fleet.state import DispatchStatus
@@ -599,14 +598,14 @@ async def _run_dispatch(
     if marker_dir is not None:
         marker_path = marker_dir / f"dispatch-in-progress-{caller_session_id}-{dispatch_id}.marker"
         try:
-            write_versioned_json(
-                marker_path,
-                {
-                    "dispatch_id": dispatch_id,
-                    "orchestrator_pid": os.getpid(),
-                    "session_id": caller_session_id,
-                },
-                schema_version=1,
+            marker_path.write_text(
+                json.dumps(
+                    {
+                        "dispatch_id": dispatch_id,
+                        "orchestrator_pid": os.getpid(),
+                        "session_id": caller_session_id,
+                    }
+                )
             )
         except OSError:
             logger.warning("dispatch_marker_write_failed", marker=str(marker_path), exc_info=True)

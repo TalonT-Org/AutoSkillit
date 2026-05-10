@@ -119,7 +119,11 @@ class TestDispatchStateHandleFactory:
         )
         assert handle.state_path.exists()
         assert handle.identity.dispatch_id in handle.state_path.name
-        assert read_state(handle.state_path) is not None
+        state = read_state(handle.state_path)
+        assert state is not None
+        assert state.campaign_name == "my-campaign"
+        assert len(state.dispatches) == 1
+        assert state.dispatches[0].name == "d1"
 
     def test_dispatch_state_handle_open_continued_rejects_missing_file(self, tmp_path):
         from autoskillit.fleet.state import DispatchStateHandle
@@ -173,6 +177,7 @@ class TestAllResumeCombinationsProduceValidHandle:
             )
 
         assert handle.state_path.exists()
+        assert handle.identity.dispatch_id in handle.state_path.name
         if not expect_fresh and prior:
             assert handle.identity.dispatch_id == prior
 

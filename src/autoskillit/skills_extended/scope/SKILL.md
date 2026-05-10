@@ -237,7 +237,7 @@ equal the number of entries where `must_cover == true`. At least one direction m
 
 ### Step 3 — Write Output
 
-Save both output files to `{{AUTOSKILLIT_TEMP}}/scope/`:
+Save both output files to `{{AUTOSKILLIT_TEMP}}/scope/` (relative to the current working directory):
 
 1. **Scope report:** `scope_{topic}_{YYYY-MM-DD_HHMMSS}.md`
    Where `{topic}` is a snake_case summary of the research question (max 40 chars).

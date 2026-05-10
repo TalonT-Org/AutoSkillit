@@ -172,6 +172,8 @@ async def _watch_stdout_idle(
     suppression_start_marker: float | None = None
     while True:
         await anyio.sleep(_poll_interval)
+        if trigger.is_set():
+            return
         try:
             current_size = stdout_path.stat().st_size
         except OSError:

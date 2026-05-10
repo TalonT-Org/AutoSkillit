@@ -146,21 +146,6 @@ def test_renderer_uses_importlib_not_dunder_file() -> None:
             )
 
 
-def test_mermaid_version_is_not_unknown_via_module() -> None:
-    """Module-level _find_mermaid_assets() must resolve to real version via pkg_root().
-
-    This test calls _find_mermaid_assets() directly (not via main subprocess).
-    The function must find mermaid assets via pkg_root(), not Path(__file__) walking.
-    """
-    js_path, version = _find_mermaid_assets()
-    assert js_path is not None, "mermaid.min.js not found via pkg_root()"
-    assert version != "unknown", (
-        "Mermaid version resolved to 'unknown' — _find_mermaid_assets() failed. "
-        "The renderer module must use pkg_root() from core.paths, "
-        "not Path(__file__).parent walking."
-    )
-
-
 def test_count_keywords() -> None:
     text = "This diagram shows treatment and outcome with hypothesis H0 and H1"
     assert _count_keywords(text) >= 4

@@ -880,15 +880,15 @@
       "on_result": [
         {
           "when": "${{ result.verdict }} == 'real_fix'",
-          "route": "test"
+          "route": "check_test_fix_loop"
         },
         {
           "when": "${{ result.verdict }} == 'already_green'",
-          "route": "test"
+          "route": "check_test_fix_loop"
         },
         {
           "when": "${{ result.verdict }} == 'flake_suspected'",
-          "route": "test"
+          "route": "check_test_fix_loop"
         },
         {
           "when": "${{ result.verdict }} == 'ci_only_failure'",
@@ -903,7 +903,32 @@
       "retries": 3,
       "on_exhausted": "register_clone_failure",
       "on_context_limit": "register_clone_failure",
-      "note": "Fixes test failures without merging. Routes back to test for re-validation before the GitHub-API merge sequence. The base_branch with: key is present for contract compatibility only; the merge target is always the integration branch.\n"
+      "note": "Fixes test failures without merging. Routes back to check_test_fix_loop for iteration guard before re-validation before the GitHub-API merge sequence. The base_branch with: key is present for contract compatibility only; the merge target is always the integration branch.\n"
+    },
+    "check_test_fix_loop": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.smoke_utils.check_loop_iteration",
+        "current_iteration": "${{ context.test_fix_loop_count }}",
+        "max_iterations": "3"
+      },
+      "capture": {
+        "test_fix_loop_count": "${{ result.next_iteration }}"
+      },
+      "on_result": [
+        {
+          "when": "${{ result.max_exceeded }} == true",
+          "route": "register_clone_failure"
+        },
+        {
+          "route": "test"
+        }
+      ],
+      "on_failure": "register_clone_failure",
+      "optional_context_refs": [
+        "test_fix_loop_count"
+      ],
+      "note": "Guards the test → fix → test cycle. Caps at 3 fix-retest iterations. If tests still fail after 3 fix attempts, escalates to clone failure.\n"
     },
     "next_part_or_next_pr": {
       "action": "route",
@@ -911,11 +936,36 @@
         "field": "next",
         "routes": {
           "more_parts": "verify",
-          "more_prs": "merge_pr",
+          "more_prs": "check_pr_merge_loop",
           "all_done": "push_batch_branch"
         }
       },
-      "note": "Routing step — no tool call. The agent evaluates what comes next: 1. If more plan_parts remain for the current PR → verify (next part). 2. If all parts done, advance current_pr_number. If more PRs remain → merge_pr. 3. If all PRs processed → push_batch_branch.\n"
+      "note": "Routing step — no tool call. The agent evaluates what comes next: 1. If more plan_parts remain for the current PR → verify (next part). 2. If all parts done, advance current_pr_number. If more PRs remain → check_pr_merge_loop. 3. If all PRs processed → push_batch_branch.\n"
+    },
+    "check_pr_merge_loop": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.smoke_utils.check_loop_iteration",
+        "current_iteration": "${{ context.pr_merge_loop_count }}",
+        "max_iterations": "50"
+      },
+      "capture": {
+        "pr_merge_loop_count": "${{ result.next_iteration }}"
+      },
+      "on_result": [
+        {
+          "when": "${{ result.max_exceeded }} == true",
+          "route": "register_clone_failure"
+        },
+        {
+          "route": "merge_pr"
+        }
+      ],
+      "on_failure": "register_clone_failure",
+      "optional_context_refs": [
+        "pr_merge_loop_count"
+      ],
+      "note": "Guards the merge_pr → next_part_or_next_pr outer loop. The loop is data-bounded by the finite pr_order_file list; this provides a structural bound for the cycle validator. 50 iterations allows large batch runs.\n"
     },
     "push_batch_branch": {
       "tool": "push_to_remote",

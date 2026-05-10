@@ -691,7 +691,6 @@
         }
       ],
       "on_failure": "check_repo_ci_event",
-      "skip_when_false": "inputs.open_pr",
       "optional_context_refs": [
         "review_loop_count",
         "review_verdict"
@@ -1656,9 +1655,34 @@
         "step_name": "pre_resolve_rebase"
       },
       "retries": 1,
-      "on_success": "diagnose_ci",
+      "on_success": "check_ci_rebase_loop",
       "on_failure": "release_issue_failure",
       "note": "Rebases the feature branch against integration head when resolve_ci emits already_green — the worktree was already clean because a sibling pipeline's fix already landed on integration. Pulling it in before re-running diagnose_ci gives the pipeline a real chance at emitting real_fix and reaching re_push.\n"
+    },
+    "check_ci_rebase_loop": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.smoke_utils.check_loop_iteration",
+        "current_iteration": "${{ context.ci_rebase_count }}",
+        "max_iterations": "3"
+      },
+      "capture": {
+        "ci_rebase_count": "${{ result.next_iteration }}"
+      },
+      "on_result": [
+        {
+          "when": "${{ result.max_exceeded }} == true",
+          "route": "release_issue_failure"
+        },
+        {
+          "route": "diagnose_ci"
+        }
+      ],
+      "on_failure": "release_issue_failure",
+      "optional_context_refs": [
+        "ci_rebase_count"
+      ],
+      "note": "Guards the resolve_ci(already_green) → pre_resolve_rebase → diagnose_ci cycle. Caps at 3 rebase-rediagnose iterations. If CI keeps reporting already_green after 3 rebases, a structural issue requires human intervention.\n"
     },
     "re_push": {
       "tool": "push_to_remote",

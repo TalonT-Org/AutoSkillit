@@ -874,11 +874,11 @@ steps:
       fixes_applied: "${{ result.fixes_applied }}"
     on_result:
       - when: "${{ result.verdict }} == 'real_fix'"
-        route: test
+        route: check_test_fix_loop
       - when: "${{ result.verdict }} == 'already_green'"
-        route: test
+        route: check_test_fix_loop
       - when: "${{ result.verdict }} == 'flake_suspected'"
-        route: test
+        route: check_test_fix_loop
       - when: "${{ result.verdict }} == 'ci_only_failure'"
         route: register_clone_failure
       - when: "${{ result.verdict }} == 'no_test_infrastructure'"
@@ -888,10 +888,29 @@ steps:
     on_exhausted: register_clone_failure
     on_context_limit: register_clone_failure
     note: >
-      Fixes test failures without merging. Routes back to test for
-      re-validation before the GitHub-API merge sequence. The base_branch with:
-      key is present for contract compatibility only; the merge target is always
-      the integration branch.
+      Fixes test failures without merging. Routes back to check_test_fix_loop for
+      iteration guard before re-validation before the GitHub-API merge sequence.
+      The base_branch with: key is present for contract compatibility only; the
+      merge target is always the integration branch.
+
+  check_test_fix_loop:
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.check_loop_iteration"
+      current_iteration: "${{ context.test_fix_loop_count }}"
+      max_iterations: "3"
+    capture:
+      test_fix_loop_count: "${{ result.next_iteration }}"
+    on_result:
+      - when: "${{ result.max_exceeded }} == true"
+        route: register_clone_failure
+      - route: test
+    on_failure: register_clone_failure
+    optional_context_refs:
+      - test_fix_loop_count
+    note: >
+      Guards the test → fix → test cycle. Caps at 3 fix-retest iterations.
+      If tests still fail after 3 fix attempts, escalates to clone failure.
 
   next_part_or_next_pr:
     action: route
@@ -899,13 +918,37 @@ steps:
       field: next
       routes:
         more_parts: verify
-        more_prs: merge_pr
+        more_prs: check_pr_merge_loop
         all_done: push_batch_branch
     note: >
       Routing step — no tool call. The agent evaluates what comes next:
       1. If more plan_parts remain for the current PR → verify (next part).
-      2. If all parts done, advance current_pr_number. If more PRs remain → merge_pr.
+      2. If all parts done, advance current_pr_number. If more PRs remain → check_pr_merge_loop.
       3. If all PRs processed → push_batch_branch.
+
+  check_pr_merge_loop:
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.check_loop_iteration"
+      current_iteration: "${{ context.pr_merge_loop_count }}"
+      max_iterations: "50"
+    capture:
+      pr_merge_loop_count: "${{ result.next_iteration }}"
+    on_result:
+      - when: "${{ result.max_exceeded }} == true"
+        route: register_clone_failure
+      - route: merge_pr
+    on_failure: register_clone_failure
+    optional_context_refs:
+      - pr_merge_loop_count
+    note: >
+      Guards the merge_pr → next_part_or_next_pr outer loop. The loop is
+      data-bounded by the finite pr_order_file list; this provides a structural
+      bound for the cycle validator. 50 iterations allows large batch runs.
+      Unlike retry loops (capped at 3–15 attempts), this cap is an outer
+      iteration over data items (PRs to merge), not a retry count — hence the
+      higher bound is safe: it tracks distinct work units, not repeated attempts
+      on the same operation.
 
   push_batch_branch:
     tool: push_to_remote

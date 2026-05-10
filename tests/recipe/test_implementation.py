@@ -61,10 +61,10 @@ def test_check_ci_timed_out_loop_exists_with_correct_pattern(recipe) -> None:
 
 
 # T_IP_LOOP3
-def test_check_review_loop_has_skip_when_false_open_pr(recipe) -> None:
-    """check_review_loop must be skipped when inputs.open_pr is false."""
+def test_check_review_loop_has_no_skip_when_false(recipe) -> None:
+    """check_review_loop must NOT have skip_when_false."""
     step = recipe.steps["check_review_loop"]
-    assert step.skip_when_false == "inputs.open_pr"
+    assert step.skip_when_false is None
 
 
 # T_IP_LOOP4

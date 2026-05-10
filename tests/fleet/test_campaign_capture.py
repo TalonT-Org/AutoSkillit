@@ -303,8 +303,8 @@ def test_relative_path_capture_and_reconstruction():
     from autoskillit.fleet._api import _extract_captures, _interpolate_campaign_refs
 
     spec = {
-        "worktree_path": "${{ result.worktree_path }}",
-        "research_dir_rel": "${{ result.research_dir_rel }}",
+        "worktree_path": _ce("${{ result.worktree_path }}"),
+        "research_dir_rel": _ce("${{ result.research_dir_rel }}"),
     }
     payload = {
         "worktree_path": "/tmp/wt-A",

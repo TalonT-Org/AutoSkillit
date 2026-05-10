@@ -358,6 +358,62 @@ def test_subprocess_runner_protocol_pty_mode_default_false():
 
 
 # ---------------------------------------------------------------------------
+# P2-A6 — SubprocessRunner marker_dir and session_id params
+# ---------------------------------------------------------------------------
+
+
+def test_subprocess_runner_protocol_marker_dir_default_none():
+    import inspect
+
+    from autoskillit.core import SubprocessRunner
+
+    sig = inspect.signature(SubprocessRunner.__call__)
+    assert sig.parameters["marker_dir"].default is None
+
+
+def test_subprocess_runner_protocol_session_id_default_none():
+    import inspect
+
+    from autoskillit.core import SubprocessRunner
+
+    sig = inspect.signature(SubprocessRunner.__call__)
+    assert sig.parameters["session_id"].default is None
+
+
+def test_subprocess_runner_protocol_marker_params_after_max_extension():
+    import inspect
+
+    from autoskillit.core import SubprocessRunner
+
+    sig = inspect.signature(SubprocessRunner.__call__)
+    params = list(sig.parameters)
+    max_ext_idx = params.index("max_extension_seconds")
+    marker_idx = params.index("marker_dir")
+    session_idx = params.index("session_id")
+    assert marker_idx == max_ext_idx + 1, (
+        f"marker_dir must immediately follow max_extension_seconds, "
+        f"got indices {max_ext_idx} and {marker_idx}"
+    )
+    assert session_idx == marker_idx + 1, (
+        f"session_id must immediately follow marker_dir, "
+        f"got indices {marker_idx} and {session_idx}"
+    )
+
+
+def test_subprocess_runner_protocol_marker_params_are_keyword_only():
+    import inspect
+
+    from autoskillit.core import SubprocessRunner
+
+    sig = inspect.signature(SubprocessRunner.__call__)
+    for name in ("marker_dir", "session_id"):
+        param = sig.parameters[name]
+        assert param.kind == inspect.Parameter.KEYWORD_ONLY, (
+            f"{name} must be keyword-only, got {param.kind.name}"
+        )
+
+
+# ---------------------------------------------------------------------------
 # CIRunScope event field
 # ---------------------------------------------------------------------------
 

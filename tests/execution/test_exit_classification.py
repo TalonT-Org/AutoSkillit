@@ -52,7 +52,8 @@ class TestClassifyInfraExit:
             result="",
             session_id="",
             assistant_messages=[
-                'API Error: {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}'
+                "API Error: "
+                '{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}',
             ],
         )
         result = _sr(returncode=0, stderr="")
@@ -135,7 +136,8 @@ class TestClassifyInfraExit:
             session_id="s1",
             jsonl_context_exhausted=True,
             assistant_messages=[
-                'API Error: {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}'
+                "API Error: "
+                '{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}',
             ],
         )
         result = _sr(returncode=1, stderr="")

@@ -477,5 +477,38 @@ class TestResearchRecipeStructure:
     def test_scope_captures_scope_directions(self, recipe) -> None:
         assert "scope_directions" in recipe.steps["scope"].capture
 
-    def test_plan_experiment_optional_context_refs_includes_scope_directions(self, recipe) -> None:
-        assert "scope_directions" in recipe.steps["plan_experiment"].optional_context_refs
+    # --- select_directions gate tests ---
+
+    def test_research_has_select_directions_step(self, recipe) -> None:
+        assert "select_directions" in recipe.steps
+
+    def test_scope_routes_to_select_directions(self, recipe) -> None:
+        assert recipe.steps["scope"].on_success == "select_directions"
+
+    def test_select_directions_routes_to_plan_experiment(self, recipe) -> None:
+        assert recipe.steps["select_directions"].on_success == "plan_experiment"
+
+    def test_select_directions_captures_selected_directions(self, recipe) -> None:
+        assert "selected_directions" in recipe.steps["select_directions"].capture
+
+    def test_select_directions_on_failure_routes_to_escalate(self, recipe) -> None:
+        assert recipe.steps["select_directions"].on_failure == "escalate_stop"
+
+    def test_plan_experiment_skill_command_uses_selected_directions(self, recipe) -> None:
+        cmd = recipe.steps["plan_experiment"].with_args.get("skill_command", "")
+        assert "selected_directions" in cmd
+
+    def test_plan_experiment_skill_command_no_longer_uses_scope_directions(self, recipe) -> None:
+        cmd = recipe.steps["plan_experiment"].with_args.get("skill_command", "")
+        assert "scope_directions" not in cmd
+
+    def test_research_has_min_breadth_ingredient(self, recipe) -> None:
+        assert "min_breadth" in recipe.ingredients
+        assert recipe.ingredients["min_breadth"].default == "2"
+        assert recipe.ingredients["min_breadth"].required is False
+
+    def test_plan_experiment_optional_context_refs_includes_selected_directions(
+        self, recipe
+    ) -> None:
+        assert "selected_directions" in recipe.steps["plan_experiment"].optional_context_refs
+        assert "scope_directions" not in recipe.steps["plan_experiment"].optional_context_refs

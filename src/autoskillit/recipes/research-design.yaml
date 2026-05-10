@@ -36,6 +36,11 @@ ingredients:
       Optional URL to an existing GitHub issue describing the research goal.
       Provided as context to scope and plan_experiment.
     required: false
+  min_breadth:
+    description: >
+      Minimum number of directions to select when scope reports 3 or more directions.
+      Enforced by the select_directions step. Set to 0 to disable breadth enforcement.
+    default: "2"
 
 kitchen_rules:
   - >
@@ -58,6 +63,18 @@ steps:
     capture:
       scope_report: "${{ result.scope_report }}"
       scope_directions: "${{ result.scope_directions }}"
+    on_success: select_directions
+    on_failure: escalate_stop
+
+  select_directions:
+    tool: run_skill
+    model: ""
+    with:
+      skill_command: "/autoskillit:select-directions ${{ context.scope_directions }} ${{ context.scope_report }} ${{ inputs.min_breadth }}"
+      cwd: "${{ inputs.source_dir }}"
+      step_name: select_directions
+    capture:
+      selected_directions: "${{ result.selected_directions }}"
     on_success: plan_experiment
     on_failure: escalate_stop
 
@@ -65,10 +82,10 @@ steps:
     tool: run_skill
     model: ""
     with:
-      skill_command: "/autoskillit:plan-experiment ${{ context.scope_report }} ${{ context.scope_directions }} ${{ context.revision_guidance }}"
+      skill_command: "/autoskillit:plan-experiment ${{ context.scope_report }} ${{ context.selected_directions }} ${{ context.revision_guidance }}"
       cwd: "${{ inputs.source_dir }}"
       step_name: plan_experiment
-    optional_context_refs: [revision_guidance, scope_directions]
+    optional_context_refs: [revision_guidance, selected_directions]
     capture:
       experiment_plan: "${{ result.experiment_plan }}"
     on_success: review_design
@@ -197,6 +214,7 @@ steps:
       The sentinel must include the following fields from captured context:
       success=true, scope_report=<context.scope_report>,
       scope_directions=<context.scope_directions>,
+      selected_directions=<context.selected_directions>,
       experiment_plan=<context.experiment_plan>,
       visualization_plan_path=<context.visualization_plan_path>,
       report_plan_path=<context.report_plan_path>,
@@ -206,10 +224,10 @@ steps:
       research_dir_rel=${{ context.research_dir_rel }}.
       Example sentinel:
       {"success": true, "scope_report": "<path>", "scope_directions": "<path>",
-      "experiment_plan": "<path>", "visualization_plan_path": "<path>",
-      "report_plan_path": "<path>", "experiment_type": "benchmark",
-      "worktree_path": "<path>", "research_dir": "<path>",
-      "research_dir_rel": "<rel>"}
+      "selected_directions": "<path>", "experiment_plan": "<path>",
+      "visualization_plan_path": "<path>", "report_plan_path": "<path>",
+      "experiment_type": "benchmark", "worktree_path": "<path>",
+      "research_dir": "<path>", "research_dir_rel": "<rel>"}
 
   escalate_stop:
     action: stop

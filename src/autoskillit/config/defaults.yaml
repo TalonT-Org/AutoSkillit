@@ -208,6 +208,7 @@ skills:
     - prepare-issue
     - process-issues
     - scope
+    - select-directions
     - plan-experiment
     - implement-experiment
     - run-experiment

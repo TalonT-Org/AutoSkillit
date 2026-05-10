@@ -119,8 +119,15 @@ def test_run_design_capture_keys(recipe: Recipe) -> None:
         "visualization_plan_path",
         "scope_report",
         "scope_directions",
+        "selected_directions",
         "experiment_type",
     }
+
+
+def test_campaign_design_captures_selected_directions(recipe: Recipe) -> None:
+    d = _dispatch_by_name(recipe, "run-design")
+    assert d is not None
+    assert "selected_directions" in d.capture
 
 
 def test_run_implement_has_non_empty_capture(recipe: Recipe) -> None:

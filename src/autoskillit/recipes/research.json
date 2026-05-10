@@ -50,6 +50,10 @@
     "audit": {
       "description": "When 'true' (the default), run audit-impl after phase iteration to verify all decomposed phases have corresponding implementation commits. Catches silent group abandonment when context_limit fires mid-iteration.\n",
       "default": "true"
+    },
+    "min_breadth": {
+      "description": "Minimum number of directions to select when scope reports 3 or more directions. Enforced by the select_directions step. Set to 0 to disable breadth enforcement.\n",
+      "default": "2"
     }
   },
   "kitchen_rules": [
@@ -77,6 +81,20 @@
         "scope_report": "${{ result.scope_report }}",
         "scope_directions": "${{ result.scope_directions }}"
       },
+      "on_success": "select_directions",
+      "on_failure": "escalate_stop"
+    },
+    "select_directions": {
+      "tool": "run_skill",
+      "model": "",
+      "with": {
+        "skill_command": "/autoskillit:select-directions ${{ context.scope_directions }} ${{ context.scope_report }} ${{ inputs.min_breadth }}",
+        "cwd": "${{ inputs.source_dir }}",
+        "step_name": "select_directions"
+      },
+      "capture": {
+        "selected_directions": "${{ result.selected_directions }}"
+      },
       "on_success": "plan_experiment",
       "on_failure": "escalate_stop"
     },
@@ -84,13 +102,13 @@
       "tool": "run_skill",
       "model": "",
       "with": {
-        "skill_command": "/autoskillit:plan-experiment ${{ context.scope_report }} ${{ context.scope_directions }} ${{ context.revision_guidance }}",
+        "skill_command": "/autoskillit:plan-experiment ${{ context.scope_report }} ${{ context.selected_directions }} ${{ context.revision_guidance }}",
         "cwd": "${{ inputs.source_dir }}",
         "step_name": "plan_experiment"
       },
       "optional_context_refs": [
         "revision_guidance",
-        "scope_directions"
+        "selected_directions"
       ],
       "capture": {
         "experiment_plan": "${{ result.experiment_plan }}"

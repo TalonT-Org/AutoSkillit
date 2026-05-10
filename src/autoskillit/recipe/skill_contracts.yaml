@@ -1267,6 +1267,26 @@ skills:
     - "scope_report = /tmp/scope_report.md\nscope_directions = /tmp/scope_directions.json\n%%ORDER_UP%%"
     write_behavior: always
 
+  select-directions:
+    inputs:
+    - name: scope_report_path
+      type: file_path
+      required: false
+    - name: scope_directions_path
+      type: file_path
+      required: true
+    - name: min_breadth
+      type: string
+      required: false
+    outputs:
+    - name: selected_directions
+      type: file_path
+    expected_output_patterns:
+    - "selected_directions\\s*=\\s*/.+"
+    pattern_examples:
+    - "selected_directions = /tmp/selected_directions.json\n%%ORDER_UP%%"
+    write_behavior: always
+
   plan-experiment:
     inputs:
     - name: scope_report_path

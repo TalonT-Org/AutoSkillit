@@ -35,7 +35,7 @@ class TestResearchDesignRecipeStructure:
         assert recipe.requires_packs == ["research", "vis-lens"]
 
     def test_ingredient_count(self, recipe) -> None:
-        assert len(recipe.ingredients) == 5
+        assert len(recipe.ingredients) == 6
 
     def test_task_ingredient_required(self, recipe) -> None:
         assert "task" in recipe.ingredients
@@ -58,11 +58,12 @@ class TestResearchDesignRecipeStructure:
         assert recipe.ingredients["issue_url"].required is False
 
     def test_step_count(self, recipe) -> None:
-        assert len(recipe.steps) == 11
+        assert len(recipe.steps) == 12
 
     def test_step_names(self, recipe) -> None:
         expected = {
             "scope",
+            "select_directions",
             "plan_experiment",
             "review_design",
             "plan_visualization",
@@ -78,7 +79,7 @@ class TestResearchDesignRecipeStructure:
 
     def test_scope_routing(self, recipe) -> None:
         step = recipe.steps["scope"]
-        assert step.on_success == "plan_experiment"
+        assert step.on_success == "select_directions"
         assert step.on_failure == "escalate_stop"
 
     def test_scope_captures_scope_report(self, recipe) -> None:
@@ -97,7 +98,7 @@ class TestResearchDesignRecipeStructure:
 
     def test_plan_experiment_optional_context_refs(self, recipe) -> None:
         refs = recipe.steps["plan_experiment"].optional_context_refs
-        for field in ("revision_guidance", "scope_directions"):
+        for field in ("revision_guidance", "selected_directions"):
             assert field in refs, f"plan_experiment optional_context_refs must include: {field}"
 
     def test_review_design_skip_when_false(self, recipe) -> None:
@@ -228,6 +229,7 @@ class TestResearchDesignRecipeStructure:
         for field in (
             "scope_report",
             "scope_directions",
+            "selected_directions",
             "experiment_plan",
             "visualization_plan_path",
             "report_plan_path",
@@ -238,6 +240,28 @@ class TestResearchDesignRecipeStructure:
             assert field in message, (
                 f"design_complete message must mention sentinel field: {field}"
             )
+
+    def test_design_has_select_directions_step(self, recipe) -> None:
+        assert "select_directions" in recipe.steps
+
+    def test_design_scope_routes_to_select_directions(self, recipe) -> None:
+        assert recipe.steps["scope"].on_success == "select_directions"
+
+    def test_design_select_directions_routes_to_plan_experiment(self, recipe) -> None:
+        assert recipe.steps["select_directions"].on_success == "plan_experiment"
+
+    def test_design_select_directions_captures_selected_directions(self, recipe) -> None:
+        assert "selected_directions" in recipe.steps["select_directions"].capture
+
+    def test_design_complete_sentinel_includes_selected_directions(self, recipe) -> None:
+        msg = recipe.steps["design_complete"].message
+        assert re.search(r"selected_directions\s*=\s*<context\.selected_directions>", msg), (
+            "design_complete message must reference selected_directions via template syntax"
+        )
+
+    def test_design_has_min_breadth_ingredient(self, recipe) -> None:
+        assert "min_breadth" in recipe.ingredients
+        assert recipe.ingredients["min_breadth"].default == "2"
 
     def test_design_complete_sentinel_includes_scope_directions(self, recipe) -> None:
         msg = recipe.steps["design_complete"].message

@@ -404,20 +404,6 @@ async def test_dispatch_food_truck_forwards_marker_dir_and_session_id(
             stderr="",
         )
 
-    monkeypatch.setattr(
-        "autoskillit.execution.headless._build_skill_result",
-        lambda *a, **kw: SkillResult(
-            success=True,
-            result="ok",
-            session_id="s1",
-            subtype="success",
-            is_error=False,
-            exit_code=0,
-            needs_retry=False,
-            retry_reason=RetryReason.NONE,
-            stderr="",
-        ),
-    )
     monkeypatch.setattr("autoskillit.execution.headless._execute_claude_headless", fake_execute)
     monkeypatch.setattr("autoskillit.execution.headless._capture_git_head_sha", lambda *a: "")
     monkeypatch.setattr(
@@ -463,20 +449,6 @@ async def test_dispatch_food_truck_derives_marker_dir_from_cwd(
             stderr="",
         )
 
-    monkeypatch.setattr(
-        "autoskillit.execution.headless._build_skill_result",
-        lambda *a, **kw: SkillResult(
-            success=True,
-            result="ok",
-            session_id="s1",
-            subtype="success",
-            is_error=False,
-            exit_code=0,
-            needs_retry=False,
-            retry_reason=RetryReason.NONE,
-            stderr="",
-        ),
-    )
     monkeypatch.setattr("autoskillit.execution.headless._execute_claude_headless", fake_execute)
     monkeypatch.setattr(
         "autoskillit.execution.headless.claude_code_project_dir",
@@ -518,20 +490,6 @@ async def test_dispatch_food_truck_marker_dir_none_when_cwd_falsy(
             stderr="",
         )
 
-    monkeypatch.setattr(
-        "autoskillit.execution.headless._build_skill_result",
-        lambda *a, **kw: SkillResult(
-            success=True,
-            result="ok",
-            session_id="s1",
-            subtype="success",
-            is_error=False,
-            exit_code=0,
-            needs_retry=False,
-            retry_reason=RetryReason.NONE,
-            stderr="",
-        ),
-    )
     monkeypatch.setattr("autoskillit.execution.headless._execute_claude_headless", fake_execute)
     monkeypatch.setattr("autoskillit.execution.headless._capture_git_head_sha", lambda *a: "")
     monkeypatch.setattr(

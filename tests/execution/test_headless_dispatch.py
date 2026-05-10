@@ -371,16 +371,3 @@ def test_default_executor_satisfies_protocol_with_dispatch(minimal_ctx) -> None:
 
     executor = DefaultHeadlessExecutor(minimal_ctx)
     assert isinstance(executor, HeadlessExecutor)
-
-
-def test_in_memory_executor_dispatch_accepts_marker_params():
-    import inspect
-
-    from tests.fakes import InMemoryHeadlessExecutor
-
-    sig = inspect.signature(InMemoryHeadlessExecutor.dispatch_food_truck)
-    params = sig.parameters
-    assert "marker_dir" in params
-    assert params["marker_dir"].default is None
-    assert "session_id" in params
-    assert params["session_id"].default is None

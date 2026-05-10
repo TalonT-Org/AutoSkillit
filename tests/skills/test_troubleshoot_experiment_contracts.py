@@ -47,7 +47,10 @@ def test_troubleshoot_experiment_emits_retry_delay_token():
     ).read_text()
     step6_start = skill_md.find("### Step 6:")
     assert step6_start != -1, "SKILL.md must have a '### Step 6:' section"
-    step6_section = skill_md[step6_start:]
+    step7_start = skill_md.find("### Step 7:", step6_start)
+    step6_section = (
+        skill_md[step6_start:step7_start] if step7_start != -1 else skill_md[step6_start:]
+    )
     assert "retry_delay" in step6_section, "retry_delay output token must be declared in Step 6"
 
 

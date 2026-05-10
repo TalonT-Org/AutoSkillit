@@ -599,7 +599,7 @@ class TestApiErrorRetryRouting:
         assert sr.needs_retry is True
         assert sr.retry_reason == RetryReason.RESUME
 
-    def test_api_error_503_overrides_to_resume(self):
+    def test_api_error_529_overrides_to_resume(self):
         """HTTP 529 in stdout NDJSON → RESUME."""
         import json
 

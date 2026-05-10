@@ -68,6 +68,25 @@ class TestPreCommitConfig:
             "the script does its own filesystem scan"
         )
 
+    def test_contract_staleness_pre_commit_hook_exists(self):
+        """pre-commit config must include a check-contract-freshness hook.
+
+        Without this, recipe YAML edits that staleness-change contract cards
+        go undetected until CI runs the staleness test.
+        """
+        config = yaml.safe_load(PRECOMMIT_CONFIG.read_text())
+        hooks = [hook for repo in config.get("repos", []) for hook in repo.get("hooks", [])]
+        freshness_hooks = [h for h in hooks if "check_contract_freshness" in h.get("entry", "")]
+        assert freshness_hooks, (
+            "Missing 'check-contract-freshness' hook in .pre-commit-config.yaml — "
+            "add it to catch recipe YAML changes that staleness-change contract cards before CI"
+        )
+        hook = freshness_hooks[0]
+        assert hook.get("pass_filenames") is False, (
+            "check-contract-freshness hook must use pass_filenames: false — "
+            "the script does its own filesystem scan"
+        )
+
 
 class TestCIWorkflow:
     def test_lockfile_check_present_in_workflow(self):

@@ -236,8 +236,14 @@ tasks:
     cmds:
       - uv run python -c "from autoskillit.hook_registry import HOOK_REGISTRY_HASH, HOOKS_DIR; (HOOKS_DIR / 'registry.sha256').write_text(HOOK_REGISTRY_HASH + '\n')"
 
+  regen-contracts:
+    desc: Regenerate all bundled recipe contract cards
+    cmds:
+      - uv run python scripts/regen_contracts.py
+
   compile-recipes:
     desc: Pre-compile bundled recipe YAML files to JSON
+    deps: [regen-contracts]
     cmds:
       - uv run python scripts/compile_recipes.py
 

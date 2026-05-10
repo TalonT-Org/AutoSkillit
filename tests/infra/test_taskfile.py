@@ -104,6 +104,11 @@ class TestTaskfile:
         data = self._load()
         assert "coverage-audit" in data["tasks"], "coverage-audit task missing from Taskfile.yml"
 
+    def test_regen_contracts_task_exists(self):
+        """TF-12 — regen-contracts task exists in Taskfile.yml."""
+        data = self._load()
+        assert "regen-contracts" in data["tasks"], "regen-contracts task missing from Taskfile.yml"
+
 
 def test_taskfile_pytest_paths_exist() -> None:
     """All pytest file paths in Taskfile.yml must exist."""

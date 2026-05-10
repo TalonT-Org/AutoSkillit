@@ -260,9 +260,7 @@ def test_resolve_review_step36_excludes_info_severity():
     # This requires a severity condition (severity == "info" skip, or severity != "info" proceed).
     has_severity_check = (
         'severity == "info"' in step36_section
-        or 'severity == "info"' in step36_section.lower()
         or 'severity != "info"' in step36_section
-        or 'severity != "info"' in step36_section.lower()
         or (
             "severity" in step36_section
             and "skip" in step36_section.lower()

@@ -239,7 +239,7 @@ class TestLintBehavior:
         assert "re-read" in updated.lower()
 
     def test_unused_import_not_removed(self, tmp_path, monkeypatch):
-        """F401 (unused import) must NOT be auto-fixed — import may be used in a later edit."""
+        """F4xx import rules must NOT be auto-fixed — import may be used in a later edit."""
         f = tmp_path / "staged_import.py"
         f.write_text("import asyncio\n\nx = 1\n")
         out, code = _run_hook(

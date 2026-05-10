@@ -11,6 +11,7 @@ Two composed functions wire the utilities together correctly:
 
 from __future__ import annotations
 
+import functools
 import subprocess
 import time
 from collections.abc import Callable, Mapping
@@ -208,6 +209,8 @@ async def run_managed_async(
     _heartbeat_poll: float = 0.5,
     _phase1_timeout: float = 30.0,
     _session_id_timeout: float = 1.0,
+    marker_dir: Path | None = None,
+    session_id: str | None = None,
 ) -> SubprocessResult:
     """Async subprocess execution with temp file I/O and process tree cleanup.
 
@@ -343,14 +346,21 @@ async def run_managed_async(
                         _session_id_timeout,
                         stdout_session_id_ready,
                         max_suppression_seconds,
+                        marker_dir,
+                        session_id,
                     )
                 if idle_output_timeout is not None and idle_output_timeout > 0:
                     tg.start_soon(
-                        _watch_stdout_idle,
-                        stdout_path,
-                        idle_output_timeout,
-                        acc,
-                        trigger,
+                        functools.partial(
+                            _watch_stdout_idle,
+                            stdout_path,
+                            idle_output_timeout,
+                            acc,
+                            trigger,
+                            marker_dir=marker_dir,
+                            session_id=session_id,
+                            max_suppression_seconds=max_suppression_seconds or 1800.0,
+                        ),
                     )
                 tracing_handle = None
                 if linux_tracing_config is not None and _target is not None:
@@ -579,6 +589,8 @@ class DefaultSubprocessRunner:
         on_pid_resolved: Callable[[int, int], None] | None = None,
         enable_deadline_extension: bool = False,
         max_extension_seconds: float = 7200,
+        marker_dir: Path | None = None,
+        session_id: str | None = None,
     ) -> SubprocessResult:
         return await run_managed_async(
             cmd,
@@ -597,4 +609,6 @@ class DefaultSubprocessRunner:
             on_pid_resolved=on_pid_resolved,
             enable_deadline_extension=enable_deadline_extension,
             max_extension_seconds=max_extension_seconds,
+            marker_dir=marker_dir,
+            session_id=session_id,
         )

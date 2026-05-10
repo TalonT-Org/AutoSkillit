@@ -287,19 +287,22 @@ def test_repository_cache_invalidates_on_campaign_subdir_change(
 
     monkeypatch.setattr("autoskillit.recipe.repository.list_recipes", mock_list_recipes)
 
-    call_n: list[int] = [0]
+    project_recipes = tmp_path / ".autoskillit" / "recipes"
+    project_campaigns = project_recipes / "campaigns"
+    project_campaigns.mkdir(parents=True)
+
+    # phase[0]==1: stable mtimes for all dirs (cache populates on first call)
+    # phase[0]==2: campaigns dir mtime bumped (cache invalidates on second call)
+    phase: list[int] = [1]
 
     def mock_dir_mtime(path: Path) -> float:
-        call_n[0] += 1
-        return float(call_n[0])
+        if phase[0] == 2 and path == project_campaigns:
+            return 2.0
+        return 1.0
 
     monkeypatch.setattr("autoskillit.recipe.repository._dir_mtime", mock_dir_mtime)
 
     repo = DefaultRecipeRepository()
-
-    project_recipes = tmp_path / ".autoskillit" / "recipes"
-    project_campaigns = project_recipes / "campaigns"
-    project_campaigns.mkdir(parents=True)
 
     repo._get_list(tmp_path)
     first_call_count = len(captured_results)
@@ -307,6 +310,7 @@ def test_repository_cache_invalidates_on_campaign_subdir_change(
     (project_campaigns / "new-campaign.yaml").write_text(
         "name: new-campaign\nkind: campaign\ndescription: test\nsteps:\n  s1:\n    skill: noop\n"
     )
+    phase[0] = 2
 
     repo._get_list(tmp_path)
     second_call_count = len(captured_results)

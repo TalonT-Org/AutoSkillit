@@ -118,6 +118,8 @@ information gaps and produce the best possible experiment plan.
 > must NOT assume the data will already be present — especially in worktrees where
 > gitignored directories are empty. If the directive specifies data that requires
 > download or generation, include the exact commands in the `acquisition` field.
+> For `literature` or `database` source types, describe the extraction or query
+> method in `acquisition` — download commands are not required.
 
 **Subagent C — Environment Assessment:**
 > Determine whether the experiment can run with the project's existing
@@ -315,7 +317,7 @@ complete experiment plan file with YAML frontmatter prepended before the
 
 ```
 ---
-experiment_type: {one of: benchmark, configuration_study, causal_inference, robustness_audit, exploratory}
+experiment_type: {one of: benchmark, causal_inference, configuration_study, evidence_synthesis, exploratory, factorial_design, instrument_validation, observational_correlational, qualitative_interpretive, robustness_audit, simulation_modeling, single_subject}
 
 estimand:
   treatment: "{the intervention}"     # RECOMMENDED; required when causal_inference
@@ -359,7 +361,7 @@ success_criteria:                     # REQUIRED
 
 data_manifest:                        # REQUIRED — one entry per hypothesis (or shared)
   - hypothesis: [H1, H2]             # which hypotheses consume this data
-    source_type: synthetic            # synthetic | fixture | external | gitignored
+    source_type: synthetic            # synthetic | fixture | external | gitignored | literature | database
     description: "Gaussian blobs, 10K-100K points"
     acquisition: "generate in-script via sklearn.datasets"
     location: null                    # null for in-script generation
@@ -371,6 +373,12 @@ data_manifest:                        # REQUIRED — one entry per hypothesis (o
   #   location: "temp/merfish_100k/"
   #   verification: "directory exists with >= 1 .parquet file, total size > 10MB"
   #   depends_on: "python tests/visual_eval/download_merfish.py"
+  # - hypothesis: [H1, H3]
+  #   source_type: literature
+  #   description: "Published expression data from Smith et al. 2023, Table 2"
+  #   acquisition: "extract values from published table"
+  #   location: null
+  #   verification: "values match published Table 2"
 
 experiment_slug: "{YYYY-MM-DD-slug}"  # optional, derived from directory layout
 ---
@@ -400,7 +408,7 @@ A list of data source entries, one per hypothesis (or shared across hypotheses).
 | Field | Required | Description |
 |-------|----------|-------------|
 | `hypothesis` | yes | List of hypothesis IDs that consume this data |
-| `source_type` | yes | One of: `synthetic`, `fixture`, `external`, `gitignored` |
+| `source_type` | yes | One of: `synthetic`, `fixture`, `external`, `gitignored`, `literature`, `database` |
 | `description` | yes | Human-readable description of the data |
 | `acquisition` | yes | Exact command or method to produce/retrieve the data |
 | `location` | no | Filesystem path where data will reside (null for in-script) |
@@ -410,14 +418,14 @@ A list of data source entries, one per hypothesis (or shared across hypotheses).
 Apply these validation rules in order before writing the frontmatter:
 
 ```
-V1: benchmark/causal_inference → len(baselines) >= 1 AND each baseline.version not empty
-    ERROR: "Benchmark/causal_inference experiments require at least one named baseline with a version"
+V1: benchmark/causal_inference/factorial_design/instrument_validation/single_subject → len(baselines) >= 1 AND each baseline.version not empty
+    ERROR: "This experiment type requires at least one named baseline with a version"
 
-V2: causal_inference → estimand.contrast is not null
-    ERROR: "causal_inference requires estimand with treatment, outcome, and contrast fields"
+V2: causal_inference/factorial_design → estimand.contrast is not null
+    ERROR: "causal_inference/factorial_design requires estimand with treatment, outcome, and contrast fields"
 
-V3: !exploratory → statistical_plan present AND test not null
-    ERROR: "Non-exploratory experiments require a statistical_plan; use {test: 'none'} to waive"
+V3: !(exploratory/qualitative_interpretive) → statistical_plan present AND test not null
+    ERROR: "Non-exploratory/non-qualitative experiments require a statistical_plan; use {test: 'none'} to waive"
 
 V4: environment.type=custom → spec_path not null
     ERROR: "Custom environment requires spec_path pointing to environment.yml"
@@ -439,6 +447,9 @@ V9: data_manifest completeness
     - Any hypothesis referenced in `success_criteria` has no entry in `data_manifest`
     - Any entry with `source_type: external` or `source_type: gitignored` lacks a non-null `location`
     - Any entry with `source_type: external` lacks a `depends_on` or explicit download command in `acquisition`
+    - Any entry with `source_type: database` lacks a non-null `acquisition` (must describe query method)
+    - Any entry with `source_type: literature` lacks a non-null `description` (must identify the source publication)
+    NOTE: `literature` and `database` entries do NOT require `depends_on` or download commands.
     ERROR: "Data Manifest incomplete: {specific missing field or hypothesis}"
 ```
 
@@ -449,18 +460,17 @@ V9: data_manifest completeness
   relevant field line.
 
 Field requirements by experiment type:
-
-| Field | benchmark | config_study | causal_inference | robustness_audit | exploratory |
-|-------|-----------|-------------|-----------------|-----------------|-------------|
-| experiment_type | required | required | required | required | required |
-| estimand | recommended | recommended | **required** | recommended | optional |
-| hypothesis_h0/h1 | required | required | required | required | required |
-| metrics | required | required | required | required | required |
-| baselines | **required** | optional | **required** | optional | optional |
-| statistical_plan | required | required | required | required | **waived** |
-| environment | required | required | required | required | required |
-| success_criteria | required | required | required | required | required |
-| data_manifest | required | required | required | required | required |
+| Field | benchmark | causal_inf | config_study | evid_synth | exploratory | fact_design | instr_valid | obs_corr | qual_interp | robust_audit | sim_model | single_subj |
+|-------|-----------|-----------|-------------|-----------|-------------|-----------|------------|---------|------------|-------------|----------|------------|
+| experiment_type | required | required | required | required | required | required | required | required | required | required | required | required |
+| estimand | recommended | **required** | recommended | optional | optional | **required** | recommended | recommended | optional | recommended | recommended | optional |
+| hypothesis_h0/h1 | required | required | required | optional | required | required | required | required | optional | required | required | required |
+| metrics | required | required | required | required | required | required | required | required | optional | required | required | required |
+| baselines | **required** | **required** | optional | optional | optional | **required** | **required** | optional | optional | optional | optional | **required** |
+| statistical_plan | required | required | required | required | **waived** | required | required | required | **waived** | required | required | required |
+| environment | required | required | required | required | required | required | required | required | required | required | required | required |
+| success_criteria | required | required | required | required | required | required | required | required | optional | required | required | required |
+| data_manifest | required | required | required | required | required | required | required | required | optional | required | required | required |
 
 ### Step 4 — Write Output
 

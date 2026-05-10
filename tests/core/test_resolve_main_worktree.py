@@ -2,11 +2,25 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
 from pathlib import Path
 
 import pytest
 
-pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("core"), pytest.mark.medium]
+
+_GIT_ENV = {
+    **os.environ,
+    "GIT_AUTHOR_NAME": "test",
+    "GIT_AUTHOR_EMAIL": "test@test.com",
+    "GIT_COMMITTER_NAME": "test",
+    "GIT_COMMITTER_EMAIL": "test@test.com",
+}
+
+
+def _git(*args: str) -> None:
+    subprocess.run(["git", *args], capture_output=True, text=True, check=True, env=_GIT_ENV)
 
 
 class TestResolveMainWorktree:
@@ -14,10 +28,12 @@ class TestResolveMainWorktree:
         """Main checkout resolves to itself."""
         from autoskillit.core.paths import resolve_main_worktree
 
-        (tmp_path / ".git").mkdir()
-        result = resolve_main_worktree(tmp_path)
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        _git("init", str(repo))
+        result = resolve_main_worktree(repo)
         assert result is not None
-        assert result == tmp_path.resolve()
+        assert result == repo.resolve()
 
     def test_resolve_main_worktree_from_linked_worktree(self, tmp_path: Path) -> None:
         """Worktree path resolves to the main checkout root."""
@@ -25,38 +41,32 @@ class TestResolveMainWorktree:
 
         main = tmp_path / "project"
         main.mkdir()
-        (main / ".git").mkdir()
-        worktrees_dir = main / ".git" / "worktrees"
-        worktrees_dir.mkdir(parents=True)
-        wt1 = worktrees_dir / "wt1"
-        wt1.mkdir()
-        (wt1 / ".git").write_text(f"gitdir: {main / '.git' / 'worktrees' / 'wt1'}\n")
+        _git("init", str(main))
+        _git("-C", str(main), "commit", "--allow-empty", "-m", "init")
 
-        # Actually create the worktree on disk
-        real_wt = tmp_path / "worktrees" / "wt1"
-        real_wt.mkdir(parents=True)
-        (real_wt / ".git").write_text(f"gitdir: {main / '.git' / 'worktrees' / 'wt1'}\n")
+        wt_path = tmp_path / "worktrees" / "wt1"
+        _git("-C", str(main), "worktree", "add", "-b", "wt1", str(wt_path))
 
-        result = resolve_main_worktree(real_wt)
+        result = resolve_main_worktree(wt_path)
         assert result is not None
         assert result == main.resolve()
 
     def test_resolve_main_worktree_from_nested_worktree(self, tmp_path: Path) -> None:
-        """Deeply nested worktree resolves to the main checkout root."""
+        """Worktree created from another worktree still resolves to main root."""
         from autoskillit.core.paths import resolve_main_worktree
 
         main = tmp_path / "project"
         main.mkdir()
-        (main / ".git").mkdir()
+        _git("init", str(main))
+        _git("-C", str(main), "commit", "--allow-empty", "-m", "init")
 
-        # Create first worktree
-        wt1 = main / ".git" / "worktrees" / "wt1"
-        wt1.mkdir(parents=True)
-        real_wt1 = tmp_path / "worktrees" / "wt1"
-        real_wt1.mkdir(parents=True)
-        (real_wt1 / ".git").write_text(f"gitdir: {main / '.git' / 'worktrees' / 'wt1'}\n")
+        wt1_path = tmp_path / "worktrees" / "wt1"
+        _git("-C", str(main), "worktree", "add", "-b", "wt1", str(wt1_path))
 
-        result = resolve_main_worktree(real_wt1)
+        wt2_path = tmp_path / "worktrees" / "worktrees" / "wt2"
+        _git("-C", str(wt1_path), "worktree", "add", "-b", "wt2", str(wt2_path))
+
+        result = resolve_main_worktree(wt2_path)
         assert result is not None
         assert result == main.resolve()
 
@@ -71,10 +81,12 @@ class TestResolveMainWorktree:
         """Subdirectory of main checkout resolves to main checkout root."""
         from autoskillit.core.paths import resolve_main_worktree
 
-        (tmp_path / ".git").mkdir()
-        subdir = tmp_path / "src" / "autoskillit"
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        _git("init", str(repo))
+        subdir = repo / "src" / "autoskillit"
         subdir.mkdir(parents=True)
 
         result = resolve_main_worktree(subdir)
         assert result is not None
-        assert result == tmp_path.resolve()
+        assert result == repo.resolve()

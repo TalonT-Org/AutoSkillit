@@ -499,7 +499,7 @@
         "group_manifest\\s*=\\s*/.+"
       ],
       "pattern_examples": [
-        "results_path = /tmp/run-experiment/results.md group_manifest = /tmp/run-experiment/group_manifest.json\n%%ORDER_UP%%"
+        "results_path = /tmp/run-experiment/results.md\ngroup_manifest = /tmp/run-experiment/group_manifest.json\n%%ORDER_UP%%"
       ],
       "write_behavior": "always"
     },

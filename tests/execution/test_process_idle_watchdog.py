@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import functools
-import os  # noqa: F401
+import os
 import sys
 import textwrap
 import time

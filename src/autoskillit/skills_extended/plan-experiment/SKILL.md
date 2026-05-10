@@ -159,7 +159,7 @@ explicitly addressed in the feasibility findings.
 Produce a structured experiment plan. The plan has two halves: the **research
 design** (what and why) and the **implementation plan** (how to build it).
 
-**Breadth enforcement (when scope_directions.json is available):**
+**Breadth enforcement — plan sections (when scope_directions.json is available):**
 The experiment plan must include one clearly labeled design section per `must_cover: true`
 direction from `scope_directions.json`. If a must_cover direction is infeasible or
 redundant, you must include a **## Direction Dropped: {direction_id} — {title}** section

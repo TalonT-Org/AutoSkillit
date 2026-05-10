@@ -9,6 +9,8 @@ from dataclasses import dataclass
 
 __all__ = ["CaptureEntrySpec", "CaptureValueTypeError"]
 
+_VALID_VALUE_TYPES = frozenset({"path", "url", "string", "optional_string"})
+
 
 @dataclass(frozen=True, slots=True)
 class CaptureEntrySpec:
@@ -23,6 +25,13 @@ class CaptureEntrySpec:
 
     from_: str
     value_type: str = "string"
+
+    def __post_init__(self) -> None:
+        if self.value_type not in _VALID_VALUE_TYPES:
+            raise ValueError(
+                f"CaptureEntrySpec.value_type must be one of {sorted(_VALID_VALUE_TYPES)}, "
+                f"got {self.value_type!r}"
+            )
 
 
 class CaptureValueTypeError(ValueError):

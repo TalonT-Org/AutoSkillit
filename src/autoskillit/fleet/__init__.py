@@ -55,7 +55,7 @@ from .state_recovery import (
     has_blocking_dispatch,
 )
 from .state_types import (
-    _INFRASTRUCTURE_FAILURE_REASONS,
+    _INFRASTRUCTURE_FAILURE_REASONS,  # noqa: F401
     FLEET_STATE_SCHEMA_VERSION,
     DispatchOutcome,
 )

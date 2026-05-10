@@ -141,7 +141,6 @@ async def dispatch_food_truck(
         continue_on_failure_str = os.environ.get("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false")
         if campaign_state_path_str and continue_on_failure_str.lower() != "true":
             from autoskillit.fleet import (  # noqa: PLC0415
-                _INFRASTRUCTURE_FAILURE_REASONS,
                 has_blocking_dispatch,
                 reset_blocking_dispatch,
             )
@@ -174,6 +173,7 @@ async def dispatch_food_truck(
 
         from autoskillit.core import SessionCheckpoint  # noqa: PLC0415
         from autoskillit.fleet import (  # noqa: PLC0415
+            _INFRASTRUCTURE_FAILURE_REASONS,
             DispatchCompleted,
             DispatchStatus,
             execute_dispatch,
@@ -230,7 +230,7 @@ async def dispatch_food_truck(
             campaign_state_path_str
             and continue_on_failure_str.lower() != "true"
             and isinstance(result, DispatchCompleted)
-            and result.dispatch_status != DispatchStatus.SUCCESS
+            and result.dispatch_status == DispatchStatus.FAILURE
             and result.reason not in _INFRASTRUCTURE_FAILURE_REASONS
             and not dispatch_name
         ):
@@ -239,6 +239,21 @@ async def dispatch_food_truck(
                 "Campaign halted: a prior dispatch failed and "
                 "continue_on_failure is false. "
                 "No further dispatches permitted.",
+            )
+
+        if (
+            campaign_state_path_str
+            and isinstance(result, DispatchCompleted)
+            and result.dispatch_status != DispatchStatus.SUCCESS
+            and (continue_on_failure_str.lower() == "true" or dispatch_name)
+        ):
+            logger.warning(
+                "dispatch_non_success_allowed_past_halt_gate",
+                dispatch_name=effective_name,
+                dispatch_status=result.dispatch_status,
+                reason=result.reason,
+                continue_on_failure=continue_on_failure_str,
+                has_dispatch_name=bool(dispatch_name),
             )
 
         return result.to_envelope()

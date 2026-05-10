@@ -38,6 +38,7 @@ logger = get_logger(__name__)
 
 _TEMP_PLACEHOLDER = "{{AUTOSKILLIT_TEMP}}"
 _SCRIPTS_PLACEHOLDER = "{{AUTOSKILLIT_SCRIPTS}}"
+_CAPTURE_VALID_VALUE_TYPES = frozenset({"path", "url", "string", "optional_string"})
 
 
 def substitute_temp_placeholder(text: str, temp_dir_relpath: str) -> str:
@@ -396,10 +397,19 @@ def _parse_capture_spec(capture_raw: Any) -> dict[str, CaptureEntrySpec]:
             # Shorthand: string value is the from_ template
             result[key] = CaptureEntrySpec(from_=val, value_type="string")
         elif isinstance(val, dict):
-            from_ = val.get("from") if isinstance(val, dict) else None
-            type_ = val.get("type") if isinstance(val, dict) else None
+            from_ = val.get("from")
+            type_ = val.get("type")
             if isinstance(from_, str):
-                result[key] = CaptureEntrySpec(from_=from_, value_type=type_ or "string")
+                effective_type = type_ if isinstance(type_, str) else "string"
+                if effective_type not in _CAPTURE_VALID_VALUE_TYPES:
+                    logger.warning(
+                        "capture_spec_unknown_type",
+                        key=key,
+                        type_value=effective_type,
+                        fallback="string",
+                    )
+                    effective_type = "string"
+                result[key] = CaptureEntrySpec(from_=from_, value_type=effective_type)
         # Non-dict, non-string values are ignored
     return result
 

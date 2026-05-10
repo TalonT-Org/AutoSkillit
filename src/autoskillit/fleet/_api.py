@@ -7,7 +7,7 @@ import functools
 import json
 import os
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -121,6 +121,13 @@ def _extract_captures(
         expected_fields.append(field_name)
         if field_name in payload:
             value: object = payload[field_name]
+            if not isinstance(value, str) and entry.value_type in ("path", "string", "url"):
+                raise CaptureValueTypeError(
+                    key=key,
+                    value=repr(value),
+                    declared_type=entry.value_type,
+                    reason=f"expected a string, got {type(value).__name__}",
+                )
             str_value = value if isinstance(value, str) else json.dumps(value, default=str)
             _validate_capture_value(key, str_value, entry.value_type)
             result[key] = str_value
@@ -252,15 +259,21 @@ def _write_campaign_refusal(
         logger.warning("failed to record refusal to campaign state", exc_info=True)
 
 
-def _normalize_capture_spec(capture: dict[str, str] | None) -> dict[str, CaptureEntrySpec] | None:
+def _normalize_capture_spec(
+    capture: Mapping[str, str | CaptureEntrySpec] | None,
+) -> dict[str, CaptureEntrySpec] | None:
     """Convert YAML-format ``dict[str, str]`` capture spec to ``dict[str, CaptureEntrySpec]``.
 
     The recipe YAML uses shorthand capture entries: ``{key: "${{ result.field }}"}``.
     This converts them to the typed ``CaptureEntrySpec`` format used internally.
+    Already-typed ``CaptureEntrySpec`` values are passed through unchanged.
     """
     if capture is None:
         return None
-    return {key: CaptureEntrySpec(from_=val) for key, val in capture.items()}
+    return {
+        key: val if isinstance(val, CaptureEntrySpec) else CaptureEntrySpec(from_=val)
+        for key, val in capture.items()
+    }
 
 
 async def _touch_dispatch_marker(

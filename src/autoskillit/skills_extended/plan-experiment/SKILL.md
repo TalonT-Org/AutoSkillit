@@ -424,7 +424,7 @@ V1: benchmark/causal_inference/factorial_design/instrument_validation/single_sub
 V2: causal_inference/factorial_design → estimand.contrast is not null
     ERROR: "causal_inference/factorial_design requires estimand with treatment, outcome, and contrast fields"
 
-V3: !(exploratory | qualitative_interpretive) → statistical_plan present AND test not null
+V3: !(exploratory/qualitative_interpretive) → statistical_plan present AND test not null
     ERROR: "Non-exploratory/non-qualitative experiments require a statistical_plan; use {test: 'none'} to waive"
 
 V4: environment.type=custom → spec_path not null

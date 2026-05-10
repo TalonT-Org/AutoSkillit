@@ -13,13 +13,15 @@ Writes:
 
 from __future__ import annotations
 
+import html as _html
 import shutil
 import sys
 from pathlib import Path
+from typing import cast
 
 import regex as re
 
-from autoskillit.core import atomic_write, pkg_root
+from autoskillit.core import FigureSpec, atomic_write, pkg_root
 
 # Validation keywords for mermaid diagrams (mirrors compose-research-pr)
 VALIDATION_KEYWORDS = {
@@ -74,7 +76,7 @@ def _count_keywords(text: str) -> int:
 
 def _extract_mermaid_blocks(text: str) -> list[str]:
     """Return list of mermaid diagram source strings from a markdown file."""
-    return re.findall(rf"{_T3}mermaid\n(.*?){_T3}", text, re.DOTALL)
+    return re.findall(rf"{_T3}mermaid\n(.*?)\n?{_T3}", text, re.DOTALL)
 
 
 def _validate_diagram_paths(paths_str: str) -> list[str]:
@@ -86,32 +88,32 @@ def _validate_diagram_paths(paths_str: str) -> list[str]:
         p = Path(raw.strip())
         if not p.exists():
             continue
-        content = p.read_text()
+        content = p.read_text(encoding="utf-8")
         if _count_keywords(content) >= 2:
             blocks = _extract_mermaid_blocks(content)
             validated.extend(blocks)
     return validated
 
 
-def _parse_figure_specs(viz_plan_path: str) -> list[dict]:
+def _parse_figure_specs(viz_plan_path: str) -> list[FigureSpec]:
     """Parse yaml:figure-spec blocks from visualization-plan.md."""
-    specs: list[dict] = []
+    specs: list[FigureSpec] = []
     if not viz_plan_path or not Path(viz_plan_path).exists():
         return specs
-    text = Path(viz_plan_path).read_text()
-    raw_blocks = re.findall(rf"{_T3}yaml:figure-spec\n(.*?){_T3}", text, re.DOTALL)
+    text = Path(viz_plan_path).read_text(encoding="utf-8")
+    raw_blocks = re.findall(rf"{_T3}yaml:figure-spec\n(.*?)\n?{_T3}", text, re.DOTALL)
     for block in raw_blocks:
-        spec = {}
+        spec: dict[str, str] = {}
         for line in block.splitlines():
             if ":" in line:
                 k, _, v = line.partition(":")
                 spec[k.strip()] = v.strip()
         if spec:
-            specs.append(spec)
+            specs.append(cast(FigureSpec, spec))
     return specs
 
 
-def _insert_images(html: str, specs: list[dict]) -> str:
+def _insert_images(html_body: str, specs: list[FigureSpec]) -> str:
     """Insert <img> tags after heading matches for each figure-spec."""
     for spec in specs:
         section = spec.get("report_section", "")
@@ -119,11 +121,10 @@ def _insert_images(html: str, specs: list[dict]) -> str:
         img_path = spec.get("image_path", "")
         if not section or not img_path:
             continue
-        img_tag = f'<img src="{img_path}" alt="{title}">'
-        # Insert after the first heading that contains the section name
+        img_tag = f'<img src="{_html.escape(img_path)}" alt="{_html.escape(title)}">'
         pattern = rf"(<h[1-6][^>]*>[^<]*{re.escape(section)}[^<]*</h[1-6]>)"
-        html = re.sub(pattern, rf"\1\n{img_tag}", html, count=1, flags=re.IGNORECASE)
-    return html
+        html_body = re.sub(pattern, rf"\1\n{img_tag}", html_body, count=1, flags=re.IGNORECASE)
+    return html_body
 
 
 def _markdown_to_html(md_text: str) -> str:
@@ -132,20 +133,17 @@ def _markdown_to_html(md_text: str) -> str:
         from markdown_it import MarkdownIt  # type: ignore[import]
 
         md = MarkdownIt()
-        # Render markdown; mermaid fenced blocks become <pre><code class="language-mermaid">
-        html = md.render(md_text)
-        # Convert mermaid code blocks to <pre class="mermaid">
-        html = re.sub(
+        rendered = md.render(md_text)
+        rendered = re.sub(
             r'<pre><code class="language-mermaid">(.*?)</code></pre>',
             lambda m: f'<pre class="mermaid">{m.group(1)}</pre>',
-            html,
+            rendered,
             flags=re.DOTALL,
         )
-        return html
+        return rendered
     except ImportError:
-        # Fallback: minimal paragraph wrapping (no markdown-it-py installed)
         paragraphs = md_text.strip().split("\n\n")
-        return "".join(f"<p>{p.replace(chr(10), ' ')}</p>\n" for p in paragraphs)
+        return "".join(f"<p>{_html.escape(p).replace(chr(10), ' ')}</p>\n" for p in paragraphs)
 
 
 def _find_mermaid_assets() -> tuple[Path | None, str]:
@@ -175,38 +173,23 @@ def main() -> None:
         sys.stdout.flush()
         sys.exit(0)
 
-    # 1. Validate and collect mermaid diagram sources
     validated_diagrams = _validate_diagram_paths(all_diagram_paths)
-
-    # 2. Build the mermaid section (injected at top of report body)
-    mermaid_section = "\n".join(f'<pre class="mermaid">{src}</pre>' for src in validated_diagrams)
-
-    # 3. Parse figure specs
+    mermaid_section = "\n".join(
+        f'<pre class="mermaid">{_html.escape(src)}</pre>' for src in validated_diagrams
+    )
     specs = _parse_figure_specs(viz_plan_path)
-
-    # 4. Convert report markdown → HTML
-    md_text = report_path.read_text()
+    md_text = report_path.read_text(encoding="utf-8")
     body_html = _markdown_to_html(md_text)
-
-    # 5. Insert figure images at section headings
     if specs:
         body_html = _insert_images(body_html, specs)
-
-    # 6. Locate mermaid assets
     mermaid_js_src, mermaid_version = _find_mermaid_assets()
-
-    # 7. Render full HTML
-    html = HTML_TEMPLATE.format(
+    rendered_html = HTML_TEMPLATE.format(
         mermaid_version=mermaid_version,
         mermaid_section=mermaid_section,
         body_html=body_html,
     )
-
-    # 8. Write report.html
     out_html = research_dir / "report.html"
-    atomic_write(out_html, html)
-
-    # 9. Copy mermaid.min.js as sibling
+    atomic_write(out_html, rendered_html)
     dest_js = research_dir / "mermaid.min.js"
     if mermaid_js_src and mermaid_js_src.exists():
         shutil.copy2(mermaid_js_src, dest_js)

@@ -1,9 +1,13 @@
 """Arch guard: keyword regexes in cmd-scanning rules must use path-safe guards.
 
 Enforces that all re.compile calls in cmd-scanning rule files either:
-  - Use cmd_keyword_pattern() (builder function), OR
-  - Contain (?<![.a-zA-Z_/]) (manual path-safe lookbehind), OR
+  - Contain (?<![.a-zA-Z0-9_/]) (manual path-safe lookbehind), OR
+  - Contain (?![.a-zA-Z0-9_/]) (manual path-safe lookahead), OR
   - Are in the EXEMPT_PATTERNS frozenset (non-keyword patterns)
+
+Patterns built via cmd_keyword_pattern() are implicitly excluded from extraction:
+their first argument is an f-string (not an ast.Constant), so _extract_re_compile_patterns
+skips them. They do not need to appear in GUARD_MARKERS.
 
 This prevents regressions where a developer adds a bare \\b keyword regex
 that would false-positive on paths containing keyword-like substrings
@@ -27,11 +31,12 @@ CMD_SCANNING_RULE_FILES = [
     SRC_ROOT / "recipe" / "_git_helpers.py",
 ]
 
-# Guard markers that indicate path-safe construction
+# Guard markers that indicate path-safe construction.
+# cmd_keyword_pattern() callers are implicitly excluded from extraction (f-string first arg).
 GUARD_MARKERS = frozenset(
     {
-        "(?<![.a-zA-Z_/])",  # path-safe lookbehind (established pattern)
-        "cmd_keyword_pattern",  # builder function use
+        "(?<![.a-zA-Z0-9_/])",  # path-safe lookbehind
+        "(?![.a-zA-Z0-9_/])",  # path-safe lookahead
     }
 )
 

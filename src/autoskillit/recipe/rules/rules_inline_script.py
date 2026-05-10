@@ -15,7 +15,7 @@ from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 _CONTROL_FLOW_RE = re.compile(
     r"""
-    (?<![.a-zA-Z_/])      # not preceded by word char or path separator
+    (?<![.a-zA-Z0-9_/])      # not preceded by word char, digit, or path separator
     (?:
         \bif\s+.*;\s*then\b |
         \bthen\b |

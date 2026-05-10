@@ -19,22 +19,15 @@ SCRIPTS_DIR = builtin_scripts_dir()
 def test_bundled_scripts_exist_within_package_boundary():
     """All scripts referenced in bundled recipe cmd fields must live inside pkg_root()."""
     scripts_dir = builtin_scripts_dir()
-    assert scripts_dir.exists(), f"builtin_scripts_dir does not exist: {scripts_dir}"
-    scripts = list(scripts_dir.glob("*.sh"))
-    assert scripts, f"No .sh scripts found in {scripts_dir}"
-    for sh in scripts:
-        assert str(sh).startswith(str(pkg_root())), (
-            f"Script {sh} is outside package boundary {pkg_root()}"
-        )
-
-
-def test_scripts_dir_does_not_traverse_above_pkg_root():
-    """builtin_scripts_dir() must resolve within pkg_root(), not traverse above it."""
-    scripts_dir = builtin_scripts_dir()
     pkg = pkg_root()
+    assert scripts_dir.exists(), f"builtin_scripts_dir does not exist: {scripts_dir}"
     assert scripts_dir.is_relative_to(pkg), (
         f"builtin_scripts_dir() ({scripts_dir}) is not under pkg_root() ({pkg})"
     )
+    scripts = list(scripts_dir.glob("*.sh"))
+    assert scripts, f"No .sh scripts found in {scripts_dir}"
+    for sh in scripts:
+        assert sh.is_relative_to(pkg), f"Script {sh} is outside package boundary {pkg}"
 
 
 def test_autoskillit_scripts_placeholder_substituted_at_load_time():

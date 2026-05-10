@@ -275,8 +275,8 @@ class TestDispatchMarkerLifecycle:
 
         result = await _run(tool_ctx)
 
-        # Should succeed (returns DispatchCompleted or DispatchRejected, not raise)
-        assert result.get("success") is not None
+        # Should succeed (returns DispatchCompleted, not raise)
+        assert result.get("success") is True
 
     @pytest.mark.anyio
     async def test_run_dispatch_marker_cleaned_up_after_success(

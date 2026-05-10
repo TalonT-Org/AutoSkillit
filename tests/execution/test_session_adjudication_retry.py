@@ -609,7 +609,7 @@ class TestApiErrorRetryRouting:
 
         ndjson = _make_synthetic_api_error_ndjson(
             error_type="529_error",
-            message="Service Unavailable",
+            message="529",
         )
         result_line = json.dumps(
             {

@@ -38,7 +38,7 @@ def classify_infra_exit(
     """
     if session._is_context_exhausted():
         return InfraExitCategory.CONTEXT_EXHAUSTED
-    if session._has_api_error():
+    if session._has_api_error() or any(p.search(result.stderr) for p in _API_ERROR_PATTERNS):
         return InfraExitCategory.API_ERROR
     if result.returncode is not None and result.returncode < 0:
         return InfraExitCategory.PROCESS_KILLED

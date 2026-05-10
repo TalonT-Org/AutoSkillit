@@ -851,19 +851,10 @@ def test_no_dunder_file_in_embedded_python_blocks() -> None:
                 except SyntaxError:
                     continue
                 for node in ast.walk(tree):
-                    if (
-                        isinstance(node, ast.Attribute)
-                        and node.attr == "parent"
-                        and isinstance(node.value, ast.Call)
-                        and isinstance(node.value.func, ast.Name)
-                        and node.value.func.id == "Path"
-                        and len(node.value.args) == 1
-                        and isinstance(node.value.args[0], ast.Name)
-                        and node.value.args[0].id == "__file__"
-                    ):
+                    if isinstance(node, ast.Name) and node.id == "__file__":
                         violations.append(
                             f"{md_file.relative_to(SRC_ROOT)}:python-block-{block_idx} — "
-                            "Path(__file__).parent in embedded Python. "
+                            "__file__ reference in embedded Python. "
                             "Use pkg_root() from autoskillit.core instead."
                         )
 

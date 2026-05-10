@@ -149,9 +149,9 @@ def test_dispatch_capture_field_in_all_sentinels_contract_passes(validation_ctx)
     )
 
 
-def test_campaign_path_coherence_rule_flags_missing_worktree_recapture(validation_ctx) -> None:
-    """A dispatch that invokes a recipe with implement_phase (worktree-creating)
-    must re-capture worktree_path, or the rule emits an error."""
+def test_campaign_path_coherence_rule_passes_on_valid_campaign(validation_ctx) -> None:
+    """The bundled research-campaign.yaml correctly re-captures worktree_path,
+    so the coherence rule should not fire."""
     findings = run_semantic_rules(validation_ctx)
     matched = [f for f in findings if f.rule == "campaign-path-coherence"]
     assert not matched, "; ".join(f"{f.rule}: {f.message}" for f in matched)

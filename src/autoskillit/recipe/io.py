@@ -414,7 +414,7 @@ def _parse_capture_spec(capture_raw: Any) -> dict[str, CaptureEntrySpec]:
                 logger.warning(
                     "capture_spec_malformed_longform",
                     capture_name=key,
-                    dict_keys=sorted(val.keys()),
+                    present_fields=sorted(val),
                 )
     return result
 

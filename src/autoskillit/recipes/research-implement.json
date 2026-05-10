@@ -107,7 +107,7 @@
         }
       },
       "on_failure": "escalate_stop",
-      "note": "Downloads external and gitignored datasets declared in the experiment plan's data_manifest. Executes acquisition commands sequentially into the directories pre-created by stage_data. Uses a 4-hour stale threshold to accommodate multi-GB downloads. PASS proceeds to decompose_phases. FAIL escalates immediately.\n"
+      "note": "Downloads external and gitignored datasets declared in the experiment plan's data_manifest. Executes acquisition commands sequentially into the directories pre-created by stage_data. Uses a 4-hour stale threshold to accommodate multi-GB downloads. PASS and WARN proceed to decompose_phases. FAIL escalates immediately.\n"
     },
     "decompose_phases": {
       "tool": "run_skill",

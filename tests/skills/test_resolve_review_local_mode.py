@@ -245,6 +245,68 @@ def test_resolve_review_local_mode_transforms_local_findings():
     )
 
 
+def test_resolve_review_step36_excludes_info_severity():
+    """Step 3.6 accumulation filter must exclude info-severity findings.
+
+    The deferred_observations file must only contain critical and warning
+    DISCUSS entries. Info-severity findings are acknowledged via Step 6.5's
+    INFO reply template and must not be carried forward to deferred observations.
+    """
+    text = _skill_text()
+    step36_idx = text.find("### Step 3.6")
+    assert step36_idx >= 0, "SKILL.md must have Step 3.6 for DISCUSS accumulation"
+    step36_section = text[step36_idx : step36_idx + 2000]
+    # Must have an explicit severity check in the accumulation code that excludes info-severity.
+    # This requires a severity condition (severity == "info" skip, or severity != "info" proceed).
+    has_severity_check = (
+        'severity == "info"' in step36_section
+        or 'severity != "info"' in step36_section
+        or (
+            "severity" in step36_section
+            and "skip" in step36_section.lower()
+            and "info" in step36_section.lower()
+        )
+        or (
+            "severity" in step36_section
+            and "exclud" in step36_section.lower()
+            and "info" in step36_section.lower()
+        )
+    )
+    assert has_severity_check, (
+        "Step 3.6 must have an explicit severity check that excludes info-severity "
+        "findings from deferred_observations accumulation. "
+        "The filter must gate on severity in addition to verdict==DISCUSS."
+    )
+
+
+def test_resolve_review_step15_filters_info_before_posting():
+    """Step 1.5 must filter info-severity entries before posting to GitHub.
+
+    Even though Step 3.6 should exclude info from deferred_observations,
+    the posting boundary enforces the invariant independently — deferred_observations
+    should never contain info entries, but the posting boundary is a second guard.
+    """
+    text = _skill_text()
+    step15_idx = text.find("### Step 1.5")
+    assert step15_idx >= 0, "SKILL.md must have Step 1.5 for posting deferred observations"
+    step15_section = text[step15_idx : step15_idx + 2500]
+    # Must have a severity filter before the POST call — an explicit check or explicit prose
+    # that tells the model to skip/filter info entries.
+    has_severity_gate = (
+        (
+            "severity" in step15_section.lower()
+            and "info" in step15_section.lower()
+            and any(kw in step15_section.lower() for kw in ["skip", "exclud", "filter"])
+        )
+        or 'severity == "info"' in step15_section.lower()
+        or 'severity != "info"' in step15_section.lower()
+    )
+    assert has_severity_gate, (
+        "Step 1.5 must filter out info-severity entries before building "
+        "the comments[] array for the POST /repos/{owner}/{repo}/pulls/{pr_number}/reviews call"
+    )
+
+
 def test_resolve_review_local_mode_reject_patterns_no_timestamp():
     """Assert SKILL.md local mode uses stable reject_patterns filename without timestamp
     (accumulating across rounds)."""

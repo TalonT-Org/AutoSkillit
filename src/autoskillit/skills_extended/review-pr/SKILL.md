@@ -533,9 +533,9 @@ The `--field` approach creates one array entry per flag (not one object per comm
 not be used for the `comments` array:
 
 ```bash
-# Build comments JSON array from FILTERED_FINDINGS only
+# Build comments JSON array from FILTERED_FINDINGS only (critical/warning only)
 COMMENTS_JSON=$(jq -n --argjson findings "$FILTERED_FINDINGS" '
-  $findings | map({
+  $findings | map(select(.severity == "critical" or .severity == "warning")) | map({
     path: .file,
     line: .line,
     side: "RIGHT",
@@ -600,12 +600,14 @@ best-effort supplementary visibility. Do not fall through to Tier 1/Tier 2 for t
 
 **Fallback Tier 1 — Individual Comments (if batch POST fails):**
 
-Attempt to post each finding from `FILTERED_FINDINGS` individually via:
+Iterate only critical and warning findings from `FILTERED_FINDINGS`. Skip info-severity findings — they do not warrant individual GitHub comments.
+
+Attempt to post each critical/warning finding individually via:
 
 ```bash
 COMMIT_ID=$(gh pr view {pr_number} --json headRefOid -q .headRefOid)
 
-# For each finding in FILTERED_FINDINGS:
+# For each critical/warning finding in FILTERED_FINDINGS:
 gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments \
   --method POST \
   --field path="{finding.file}" \

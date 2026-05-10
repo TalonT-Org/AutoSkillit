@@ -163,7 +163,7 @@ skills:
       type: integer
     - name: deferred_observations_path
       type: string
-      description: "Written when mode=local (accumulated DISCUSS findings) or when mode=github (posted from prior local rounds)."
+      description: "Written when mode=local (accumulated critical/warning DISCUSS findings, excluding info-severity) or when mode=github (posted from prior local rounds)."
       required: false
     - name: reject_patterns_path
       type: string

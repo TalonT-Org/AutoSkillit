@@ -121,6 +121,15 @@ Write `selected_directions_{topic}_{timestamp}.json` with this structure:
       "source_type": "...",
       "feasibility_notes": "...",
       "selection_justification": "..."
+    },
+    {
+      "direction_id": "D2",
+      "title": "...",
+      "priority": "P1",
+      "must_cover": true,
+      "source_type": "...",
+      "feasibility_notes": "...",
+      "selection_justification": "selected to meet min_breadth threshold"
     }
   ],
   "dropped_directions": [

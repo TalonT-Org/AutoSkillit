@@ -17,13 +17,12 @@ import html as _html
 import shutil
 import sys
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import regex as re
 
 from autoskillit.core import FigureSpec, atomic_write, pkg_root
 
-# Validation keywords for mermaid diagrams (mirrors compose-research-pr)
 VALIDATION_KEYWORDS = {
     "treatment",
     "outcome",
@@ -67,7 +66,7 @@ img {{ max-width: 100%; height: auto; display: block; margin: 1rem auto; }}
 </html>
 """
 
-_T3 = "```"
+_FENCE = "```"
 
 
 def _count_keywords(text: str) -> int:
@@ -76,7 +75,7 @@ def _count_keywords(text: str) -> int:
 
 def _extract_mermaid_blocks(text: str) -> list[str]:
     """Return list of mermaid diagram source strings from a markdown file."""
-    return re.findall(rf"{_T3}mermaid\n(.*?)\n?{_T3}", text, re.DOTALL)
+    return re.findall(rf"{_FENCE}mermaid\r?\n(.*?)\r?\n?{_FENCE}", text, re.DOTALL)
 
 
 def _validate_diagram_paths(paths_str: str) -> list[str]:
@@ -101,9 +100,9 @@ def _parse_figure_specs(viz_plan_path: str) -> list[FigureSpec]:
     if not viz_plan_path or not Path(viz_plan_path).exists():
         return specs
     text = Path(viz_plan_path).read_text(encoding="utf-8")
-    raw_blocks = re.findall(rf"{_T3}yaml:figure-spec\n(.*?)\n?{_T3}", text, re.DOTALL)
+    raw_blocks = re.findall(rf"{_FENCE}yaml:figure-spec\r?\n(.*?)\r?\n?{_FENCE}", text, re.DOTALL)
     for block in raw_blocks:
-        spec: dict[str, str] = {}
+        spec: dict[str, Any] = {}
         for line in block.splitlines():
             if ":" in line:
                 k, _, v = line.partition(":")
@@ -123,7 +122,13 @@ def _insert_images(html_body: str, specs: list[FigureSpec]) -> str:
             continue
         img_tag = f'<img src="{_html.escape(img_path)}" alt="{_html.escape(title)}">'
         pattern = rf"(<h[1-6][^>]*>[^<]*{re.escape(section)}[^<]*</h[1-6]>)"
-        html_body = re.sub(pattern, rf"\1\n{img_tag}", html_body, count=1, flags=re.IGNORECASE)
+        html_body = re.sub(
+            pattern,
+            lambda m, t=img_tag: m.group(1) + "\n" + t,
+            html_body,
+            count=1,
+            flags=re.IGNORECASE,
+        )
     return html_body
 
 
@@ -136,7 +141,7 @@ def _markdown_to_html(md_text: str) -> str:
         rendered = md.render(md_text)
         rendered = re.sub(
             r'<pre><code class="language-mermaid">(.*?)</code></pre>',
-            lambda m: f'<pre class="mermaid">{m.group(1)}</pre>',
+            lambda m: f'<pre class="mermaid">{_html.unescape(m.group(1))}</pre>',
             rendered,
             flags=re.DOTALL,
         )
@@ -185,8 +190,8 @@ def main() -> None:
     mermaid_js_src, mermaid_version = _find_mermaid_assets()
     rendered_html = HTML_TEMPLATE.format(
         mermaid_version=mermaid_version,
-        mermaid_section=mermaid_section,
-        body_html=body_html,
+        mermaid_section=mermaid_section.replace("{", "{{").replace("}", "}}"),
+        body_html=body_html.replace("{", "{{").replace("}", "}}"),
     )
     out_html = research_dir / "report.html"
     atomic_write(out_html, rendered_html)

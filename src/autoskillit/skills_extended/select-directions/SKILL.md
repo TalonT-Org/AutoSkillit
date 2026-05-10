@@ -90,7 +90,7 @@ Validate:
 
 Auto-select using this algorithm:
 1. Select all `must_cover: true` directions (P0)
-2. If selected count < min_breadth AND direction_count ≥ 3, add P1 directions in order until threshold met
+2. If selected count < min_breadth AND direction_count ≥ 3, add P1 directions in order until threshold met (set `must_cover: true` on each P1 direction added)
 3. Emit justification: "Auto-selected {N} directions: all P0 ({list}) + {M} P1 ({list}) to meet min_breadth={min_breadth}"
 
 ### Step 5: Write Output JSON

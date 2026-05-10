@@ -138,8 +138,10 @@ async def dispatch_food_truck(
             )
 
         campaign_state_path_str = os.environ.get("AUTOSKILLIT_CAMPAIGN_STATE_PATH")
-        continue_on_failure_str = os.environ.get("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false")
-        if campaign_state_path_str and continue_on_failure_str.lower() != "true":
+        continue_on_failure = (
+            os.environ.get("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false").lower() == "true"
+        )
+        if campaign_state_path_str and not continue_on_failure:
             from autoskillit.fleet import (  # noqa: PLC0415
                 has_blocking_dispatch,
                 reset_blocking_dispatch,
@@ -228,7 +230,7 @@ async def dispatch_food_truck(
         # handled the reset case, and a retry of the blocking dispatch should proceed.
         if (
             campaign_state_path_str
-            and continue_on_failure_str.lower() != "true"
+            and not continue_on_failure
             and isinstance(result, DispatchCompleted)
             and result.dispatch_status == DispatchStatus.FAILURE
             and result.reason not in _INFRASTRUCTURE_FAILURE_REASONS
@@ -245,14 +247,14 @@ async def dispatch_food_truck(
             campaign_state_path_str
             and isinstance(result, DispatchCompleted)
             and result.dispatch_status != DispatchStatus.SUCCESS
-            and (continue_on_failure_str.lower() == "true" or dispatch_name)
+            and (continue_on_failure or dispatch_name)
         ):
             logger.warning(
                 "dispatch_non_success_allowed_past_halt_gate",
                 dispatch_name=effective_name,
                 dispatch_status=result.dispatch_status,
                 reason=result.reason,
-                continue_on_failure=continue_on_failure_str,
+                continue_on_failure=continue_on_failure,
                 has_dispatch_name=bool(dispatch_name),
             )
 

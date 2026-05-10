@@ -835,13 +835,10 @@ def test_no_dunder_file_in_embedded_python_blocks() -> None:
     extracted from SKILL.md files. Any future SKILL.md that embeds a script using
     Path(__file__) would escape the existing test.
     """
-    import re
-
     violations = []
-    src_root = Path(__file__).parent.parent.parent / "src" / "autoskillit"
     skill_dirs = [
-        src_root / "skills",
-        src_root / "skills_extended",
+        SRC_ROOT / "skills",
+        SRC_ROOT / "skills_extended",
     ]
 
     for skill_dir in skill_dirs:
@@ -865,7 +862,7 @@ def test_no_dunder_file_in_embedded_python_blocks() -> None:
                         and node.value.args[0].id == "__file__"
                     ):
                         violations.append(
-                            f"{md_file.relative_to(src_root)}:python-block-{block_idx} — "
+                            f"{md_file.relative_to(SRC_ROOT)}:python-block-{block_idx} — "
                             "Path(__file__).parent in embedded Python. "
                             "Use pkg_root() from autoskillit.core instead."
                         )

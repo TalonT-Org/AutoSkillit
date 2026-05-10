@@ -238,6 +238,20 @@ class TestLintBehavior:
         assert LINT_AUTOFIX_TRIGGER in updated
         assert "re-read" in updated.lower()
 
+    def test_unused_import_not_removed(self, tmp_path, monkeypatch):
+        """F4xx import rules must NOT be auto-fixed — import may be used in a later edit."""
+        f = tmp_path / "staged_import.py"
+        f.write_text("import asyncio\n\nx = 1\n")
+        out, code = _run_hook(
+            _build_event("Edit", str(f)),
+            headless=True,
+            skill_name="implement-worktree",
+            monkeypatch=monkeypatch,
+        )
+        assert code == 0
+        # The import must survive — ruff should NOT have removed it
+        assert "import asyncio" in f.read_text()
+
     def test_unfixable_error_reported(self, tmp_path, monkeypatch):
         f = tmp_path / "long_line.py"
         long_var = "a" * 200

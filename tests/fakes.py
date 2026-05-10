@@ -389,7 +389,7 @@ class InMemoryRecipeRepository(RecipeRepository):
                 "temp_dir_relpath": temp_dir_relpath,
             }
         )
-        return self._validated.get(name, {"valid": False, "error": "not configured"})
+        return self._validated.get(name, {"valid": True, "suggestions": []})
 
     def validate_from_path(
         self, script_path: Any, temp_dir_relpath: str = ".autoskillit/temp"

@@ -233,3 +233,166 @@ def test_hardcoded_origin_in_run_cmd_fires_on_merge_base_origin():
     findings = run_semantic_rules(recipe)
     codes = [f.rule for f in findings]
     assert "hardcoded-origin-in-run-cmd" in codes
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# run-cmd-script-exists
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_script_exists_errors_on_nonexistent_script():
+    """bash /nonexistent/path/script.sh → ERROR from run-cmd-script-exists."""
+    recipe = _make_recipe(
+        {
+            "step_a": {
+                "tool": "run_cmd",
+                "with": {"cmd": "bash /nonexistent/path/script.sh"},
+                "on_success": "END",
+            }
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    codes = [f.rule for f in findings]
+    assert "run-cmd-script-exists" in codes
+    finding = next(f for f in findings if f.rule == "run-cmd-script-exists")
+    assert "step_a" in finding.step_name
+    assert "/nonexistent/path/script.sh" in finding.message
+
+
+def test_script_exists_passes_on_real_script():
+    """bash <real_absolute_path.sh> → no finding from run-cmd-script-exists."""
+    from autoskillit.recipe.io import builtin_scripts_dir
+
+    real_script = builtin_scripts_dir() / "create_worktree.sh"
+    recipe = _make_recipe(
+        {
+            "step_a": {
+                "tool": "run_cmd",
+                "with": {"cmd": f"bash {real_script}"},
+                "on_success": "END",
+            }
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    assert all(f.rule != "run-cmd-script-exists" for f in findings)
+
+
+def test_script_exists_only_fires_for_bash_sh_pattern():
+    """run-cmd-script-exists does NOT fire for non-bash commands."""
+    recipe = _make_recipe(
+        {
+            "step_a": {
+                "tool": "run_cmd",
+                "with": {"cmd": "git status"},
+                "on_success": "END",
+            }
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    assert all(f.rule != "run-cmd-script-exists" for f in findings)
+
+
+def test_script_exists_ignores_bash_c_inline():
+    """run-cmd-script-exists does NOT fire for bash -c "inline script" (no .sh path)."""
+    recipe = _make_recipe(
+        {
+            "step_a": {
+                "tool": "run_cmd",
+                "with": {"cmd": 'bash -c "echo hello && ls /tmp"'},
+                "on_success": "END",
+            }
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    assert all(f.rule != "run-cmd-script-exists" for f in findings)
+
+
+def test_script_exists_ignores_relative_script_path():
+    """run-cmd-script-exists does NOT fire for relative scripts/ paths (caught by unbundled)."""
+    recipe = _make_recipe(
+        {
+            "step_a": {
+                "tool": "run_cmd",
+                "with": {"cmd": "bash scripts/recipe/foo.sh"},
+                "on_success": "END",
+            }
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    assert all(f.rule != "run-cmd-script-exists" for f in findings)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# run-cmd-unbundled-script-ref
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_unbundled_script_ref_errors_on_relative_path():
+    """bash scripts/recipe/foo.sh → ERROR from run-cmd-unbundled-script-ref."""
+    recipe = _make_recipe(
+        {
+            "step_a": {
+                "tool": "run_cmd",
+                "with": {"cmd": "bash scripts/recipe/foo.sh"},
+                "on_success": "END",
+            }
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    codes = [f.rule for f in findings]
+    assert "run-cmd-unbundled-script-ref" in codes
+    finding = next(f for f in findings if f.rule == "run-cmd-unbundled-script-ref")
+    assert "step_a" in finding.step_name
+
+
+def test_unbundled_script_ref_ignores_bash_absolute_path():
+    """bash /abs/path/foo.sh → no finding from run-cmd-unbundled-script-ref."""
+    recipe = _make_recipe(
+        {
+            "step_a": {
+                "tool": "run_cmd",
+                "with": {"cmd": "bash /some/absolute/path/foo.sh"},
+                "on_success": "END",
+            }
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    assert all(f.rule != "run-cmd-unbundled-script-ref" for f in findings)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# bash / exemption in run-cmd-emit-alignment
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_emit_alignment_bash_absolute_path_exempt():
+    """bash /script.sh with capture → emit-alignment does NOT fire (exempt)."""
+    recipe = _make_recipe(
+        {
+            "step_a": {
+                "tool": "run_cmd",
+                "with": {"cmd": "bash /some/script.sh"},
+                "capture": {"output": "${{ result.stdout }}"},
+                "on_success": "END",
+            }
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    assert all(f.rule != "run-cmd-emit-alignment" for f in findings)
+
+
+def test_emit_alignment_non_bash_capture_still_flagged():
+    """Non-raw capture key without matching echo → emit-alignment fires for non-absolute."""
+    recipe = _make_recipe(
+        {
+            "step_a": {
+                "tool": "run_cmd",
+                "with": {"cmd": "echo something"},
+                "capture": {"my_key": "${{ result.my_output }}"},
+                "on_success": "END",
+            }
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    codes = [f.rule for f in findings]
+    assert "run-cmd-emit-alignment" in codes

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import regex as re
 
 from autoskillit.core import Severity
@@ -161,4 +163,39 @@ def _check_hardcoded_origin_in_run_cmd(ctx: ValidationContext) -> list[RuleFindi
                         ),
                     )
                 )
+    return findings
+
+
+_SCRIPT_EXISTS_RE = re.compile(r"^\s*bash\s+(/\S+\.sh)\b")
+
+
+@semantic_rule(
+    name="run-cmd-script-exists",
+    description=(
+        "For every run_cmd step with `bash /path/to/script.sh`, "
+        "verify the script file exists on disk."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_run_cmd_script_exists(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for name, step in ctx.recipe.steps.items():
+        if step.tool != "run_cmd":
+            continue
+        cmd = (step.with_args or {}).get("cmd", "")
+        if not isinstance(cmd, str):
+            continue
+        m = _SCRIPT_EXISTS_RE.match(cmd)
+        if m is None:
+            continue
+        script_path = Path(m.group(1))
+        if not script_path.is_file():
+            findings.append(
+                RuleFinding(
+                    rule="run-cmd-script-exists",
+                    severity=Severity.ERROR,
+                    step_name=name,
+                    message=f"Step '{name}' runs bash {m.group(1)} but the script does not exist.",
+                )
+            )
     return findings

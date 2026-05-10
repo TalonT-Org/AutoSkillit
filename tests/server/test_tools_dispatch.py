@@ -375,6 +375,137 @@ class TestDispatchFoodTruckValidation:
 
 
 # ---------------------------------------------------------------------------
+# Class TestDispatchFoodTruckSemanticValidation — load_and_validate gate
+# ---------------------------------------------------------------------------
+
+
+class TestDispatchFoodTruckSemanticValidation:
+    @pytest.mark.anyio
+    async def test_dispatch_rejects_recipe_with_semantic_validation_errors(
+        self, tool_ctx, monkeypatch
+    ):
+        """load_and_validate returning valid=False → fleet_recipe_invalid error.
+
+        The dispatch path now calls load_and_validate() before dispatch.
+        When validation finds ERROR-severity findings, dispatch is rejected
+        with FLEET_RECIPE_INVALID rather than proceeding to execution.
+        """
+        from autoskillit.fleet._api import execute_dispatch
+
+        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        repo = InMemoryRecipeRepository()
+        recipe_info = _make_recipe_info("test-recipe")
+        repo.add_recipe("test-recipe", recipe_info)
+        repo.add_full_recipe(recipe_info.path, _make_standard_recipe("test-recipe", ["task"]))
+        repo.set_validated(
+            "test-recipe",
+            {
+                "valid": False,
+                "suggestions": [
+                    {
+                        "rule": "run-cmd-script-exists",
+                        "severity": "error",
+                        "step_name": "step_a",
+                        "message": (
+                            "Step 'step_a' runs bash /nonexistent/script.sh"
+                            " but the script does not exist"
+                        ),
+                    }
+                ],
+            },
+        )
+        tool_ctx.recipes = repo
+        tool_ctx.executor = InMemoryHeadlessExecutor()
+
+        _outcome = await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="t",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+        )
+        result = json.loads(_outcome.to_envelope())
+        assert result["success"] is False
+        assert result["error"] == "fleet_recipe_invalid"
+        assert "run-cmd-script-exists" in result["user_visible_message"]
+        assert "step_a" in result["user_visible_message"]
+
+    @pytest.mark.anyio
+    async def test_dispatch_accepts_recipe_with_valid_semantic_validation(self, tool_ctx):
+        """load_and_validate returning valid=True → dispatch proceeds normally.
+
+        When a recipe passes semantic validation, dispatch proceeds through
+        the normal execution path (kind check, ingredient check, etc.).
+        """
+        from autoskillit.fleet._api import execute_dispatch
+        from tests.fakes import _DEFAULT_SKILL_RESULT
+
+        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        repo = InMemoryRecipeRepository()
+        recipe_info = _make_recipe_info("test-recipe")
+        repo.add_recipe("test-recipe", recipe_info)
+        repo.add_full_recipe(recipe_info.path, _make_standard_recipe("test-recipe", ["task"]))
+        repo.set_validated(
+            "test-recipe",
+            {"valid": True, "suggestions": []},
+        )
+        tool_ctx.recipes = repo
+        tool_ctx.executor = InMemoryHeadlessExecutor(default_result=_DEFAULT_SKILL_RESULT)
+
+        raw = await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="t",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+        )
+        result = json.loads(raw.to_envelope())
+        assert result.get("error") != "fleet_recipe_invalid", f"Got: {result}"
+        assert "dispatch_id" in result
+
+    @pytest.mark.anyio
+    async def test_dispatch_rejects_when_load_and_validate_raises(self, tool_ctx, monkeypatch):
+        """load_and_validate raising an exception → fleet_recipe_invalid error."""
+        from autoskillit.fleet._api import execute_dispatch
+
+        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+
+        class RaisingRepo(InMemoryRecipeRepository):
+            def load_and_validate(self, *args, **kwargs):
+                raise RuntimeError("validation infrastructure broken")
+
+        repo = RaisingRepo()
+        recipe_info = _make_recipe_info("test-recipe")
+        repo.add_recipe("test-recipe", recipe_info)
+        tool_ctx.recipes = repo
+
+        _outcome = await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="t",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+        )
+        result = json.loads(_outcome.to_envelope())
+        assert result["success"] is False
+        assert result["error"] == "fleet_recipe_invalid"
+        assert "could not be loaded" in result["user_visible_message"]
+        assert "validation infrastructure broken" in result["user_visible_message"]
+
+
+# ---------------------------------------------------------------------------
 # Class TestDispatchFoodTruckExecution — lock lifecycle, success, pid, quota, cleanup
 # ---------------------------------------------------------------------------
 

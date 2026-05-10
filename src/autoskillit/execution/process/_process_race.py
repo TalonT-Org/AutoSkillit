@@ -14,6 +14,7 @@ from autoskillit.core import fast_loads as _fast_loads
 from autoskillit.execution.process._process_monitor import (
     _has_active_api_connection,
     _has_active_child_processes,
+    _has_active_dispatch_marker,
     _heartbeat,
     _session_log_monitor,
 )
@@ -149,18 +150,30 @@ async def _watch_stdout_idle(
     acc: RaceAccumulator,
     trigger: anyio.Event,
     _poll_interval: float = 5.0,
+    *,
+    marker_dir: Path | None = None,
+    session_id: str | None = None,
+    max_suppression_seconds: float = 1800.0,
 ) -> None:
     """Kill the child if stdout stops growing for idle_output_timeout seconds.
 
     Orthogonal to Channel A/B: NOT suppressed by active API connections.
     Monitors raw byte count (st_size), not JSONL record structure.
+
+    When ``marker_dir`` is provided and an active dispatch marker exists, the
+    idle stall is suppressed for up to ``max_suppression_seconds`` to allow
+    in-flight dispatches to complete. Growth in stdout resets the suppression
+    timer, giving a fresh window for subsequent idle periods.
     """
     import time as _time
 
     last_size: int = 0
     last_growth_time: float = _time.monotonic()
+    suppression_start_marker: float | None = None
     while True:
         await anyio.sleep(_poll_interval)
+        if trigger.is_set():
+            return
         try:
             current_size = stdout_path.stat().st_size
         except OSError:
@@ -168,7 +181,24 @@ async def _watch_stdout_idle(
         if current_size > last_size:
             last_size = current_size
             last_growth_time = _time.monotonic()
+            suppression_start_marker = None
         elif _time.monotonic() - last_growth_time >= idle_output_timeout:
+            if marker_dir is not None and _has_active_dispatch_marker(
+                marker_dir, session_id=session_id
+            ):
+                now = _time.monotonic()
+                if suppression_start_marker is None:
+                    suppression_start_marker = now
+                elapsed = now - suppression_start_marker
+                if elapsed < max_suppression_seconds:
+                    logger.warning(
+                        "stdout_idle_stall_suppressed",
+                        marker_dir=str(marker_dir),
+                        session_id=session_id,
+                        suppression_elapsed=elapsed,
+                        max_suppression_seconds=max_suppression_seconds,
+                    )
+                    continue
             logger.warning(
                 "stdout idle for %ss — firing IDLE_STALL",
                 idle_output_timeout,
@@ -293,6 +323,8 @@ async def _watch_session_log(
     _session_id_timeout: float = 1.0,
     stdout_session_id_ready: anyio.Event | None = None,
     max_suppression_seconds: float | None = None,
+    marker_dir: Path | None = None,
+    session_id: str | None = None,
 ) -> None:
     """Monitor the session JSONL log and deposit the Channel B signal.
 
@@ -316,6 +348,10 @@ async def _watch_session_log(
     }
     if max_suppression_seconds is not None:
         _monitor_kwargs["max_suppression_seconds"] = max_suppression_seconds
+    if marker_dir is not None:
+        _monitor_kwargs["marker_dir"] = marker_dir
+    if session_id is not None:
+        _monitor_kwargs["caller_session_id"] = session_id
     monitor_result = await _session_log_monitor(
         session_log_dir,
         completion_marker,

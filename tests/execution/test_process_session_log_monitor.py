@@ -15,6 +15,7 @@ from autoskillit.execution.process import (
     _session_log_monitor,
     _watch_session_log,
 )
+from autoskillit.execution.process._process_monitor import SessionMonitorResult
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -1247,3 +1248,94 @@ class TestDispatchMarkerSuppression:
             )
         assert result.status == ChannelBStatus.STALE
         assert result.session_id == "abc123"
+
+
+@pytest.mark.anyio
+async def test_watch_session_log_passes_marker_dir_to_monitor_kwargs(
+    tmp_path: anyio.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """marker_dir and session_id are injected into _monitor_kwargs."""
+    captured_kwargs: dict[str, object] = {}
+
+    async def fake_session_log_monitor(*args, **kwargs) -> SessionMonitorResult:
+        captured_kwargs.update(kwargs)
+        return SessionMonitorResult(status=ChannelBStatus.STALE, session_id="")
+
+    monkeypatch.setattr(
+        "autoskillit.execution.process._process_race._session_log_monitor",
+        fake_session_log_monitor,
+    )
+
+    acc = RaceAccumulator()
+    trigger = anyio.Event()
+    channel_b_ready = anyio.Event()
+
+    session_file = tmp_path / "session.jsonl"
+    await anyio.Path(session_file).write_bytes(b"")
+
+    with anyio.fail_after(3.0):
+        await _watch_session_log(
+            session_log_dir=tmp_path,
+            completion_marker="DONE",
+            stale_threshold=60.0,
+            spawn_time=time.time(),
+            session_record_types=frozenset({"assistant"}),
+            pid=12345,
+            completion_drain_timeout=1.0,
+            acc=acc,
+            trigger=trigger,
+            channel_b_ready=channel_b_ready,
+            _phase1_poll=0.01,
+            _phase2_poll=0.05,
+            _phase1_timeout=0.1,
+            max_suppression_seconds=1800.0,
+            marker_dir=tmp_path,
+            session_id="parent-session",
+        )
+
+    assert captured_kwargs["marker_dir"] == tmp_path
+    assert captured_kwargs["caller_session_id"] == "parent-session"
+
+
+@pytest.mark.anyio
+async def test_watch_session_log_omits_marker_kwargs_when_none(
+    tmp_path: anyio.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """marker_dir=None and session_id=None — keys absent from _monitor_kwargs."""
+    captured_kwargs: dict[str, object] = {}
+
+    async def fake_session_log_monitor(*args, **kwargs) -> SessionMonitorResult:
+        captured_kwargs.update(kwargs)
+        return SessionMonitorResult(status=ChannelBStatus.STALE, session_id="")
+
+    monkeypatch.setattr(
+        "autoskillit.execution.process._process_race._session_log_monitor",
+        fake_session_log_monitor,
+    )
+
+    acc = RaceAccumulator()
+    trigger = anyio.Event()
+    channel_b_ready = anyio.Event()
+
+    session_file = tmp_path / "session.jsonl"
+    await anyio.Path(session_file).write_bytes(b"")
+
+    with anyio.fail_after(3.0):
+        await _watch_session_log(
+            session_log_dir=tmp_path,
+            completion_marker="DONE",
+            stale_threshold=60.0,
+            spawn_time=time.time(),
+            session_record_types=frozenset({"assistant"}),
+            pid=12345,
+            completion_drain_timeout=1.0,
+            acc=acc,
+            trigger=trigger,
+            channel_b_ready=channel_b_ready,
+            _phase1_poll=0.01,
+            _phase2_poll=0.05,
+            _phase1_timeout=0.1,
+        )
+
+    assert "marker_dir" not in captured_kwargs
+    assert "caller_session_id" not in captured_kwargs

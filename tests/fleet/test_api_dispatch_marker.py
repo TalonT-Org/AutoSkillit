@@ -98,7 +98,7 @@ async def test_marker_deleted_after_exception(tool_ctx, monkeypatch, tmp_path: P
             quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
-    except RuntimeError:
+    except* RuntimeError:
         pass
 
     remaining = list(marker_dir.glob("dispatch-in-progress-*.marker"))

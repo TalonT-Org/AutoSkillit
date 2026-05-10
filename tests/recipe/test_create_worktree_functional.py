@@ -12,12 +12,11 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core.paths import pkg_root
+from autoskillit.recipe.io import builtin_scripts_dir
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
-SCRIPTS_DIR = pkg_root().parent.parent / "scripts" / "recipe"
-CREATE_WORKTREE_SCRIPT = SCRIPTS_DIR / "create_worktree.sh"
+CREATE_WORKTREE_SCRIPT = builtin_scripts_dir() / "create_worktree.sh"
 
 _GIT_ENV = {
     **os.environ,

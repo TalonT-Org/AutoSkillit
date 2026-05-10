@@ -6,6 +6,7 @@ import regex as re
 
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
+from autoskillit.recipe._rule_helpers import cmd_keyword_pattern
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 # ---------------------------------------------------------------------------
@@ -36,13 +37,13 @@ _JQ_BLOCK_RE = re.compile(
     re.DOTALL,
 )
 
-_BASH_BUILTINS_RE = re.compile(r"\b(?:mapfile|read\s+-r|declare|local|export)\b")
+_BASH_BUILTINS_RE = cmd_keyword_pattern(r"mapfile|read\s+-r|declare|local|export")
 
 _VAR_ASSIGN_RE = re.compile(r"^[A-Z_][A-Z0-9_]*=", re.MULTILINE)
 
 _AND_CHAIN_RE = re.compile(r"&&")
 
-_PYTHON3_C_RE = re.compile(r"\bpython3?\s+-c\b")
+_PYTHON3_C_RE = cmd_keyword_pattern(r"python3?\s+-c")
 
 
 def _strip_jq_blocks(cmd: str) -> str:

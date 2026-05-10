@@ -84,19 +84,29 @@ def test_inline_script_fires_on_excessive_vars_and_chains():
     assert "inline-script-in-cmd" in codes
 
 
-def test_inline_script_fires_on_bash_builtins():
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        "local varname=value",
+        "export VARNAME=value",
+        "declare -A mymap",
+        "mapfile -t lines < input.txt",
+        "read -r line < input.txt",
+    ],
+    ids=["local", "export", "declare", "mapfile", "read-r"],
+)
+def test_inline_script_fires_on_each_bash_builtin(cmd):
     recipe = _make_recipe(
         {
             "step_a": {
                 "tool": "run_cmd",
-                "with": {"cmd": 'declare -A map && map[key]=value && echo "${map[key]}"'},
+                "with": {"cmd": cmd},
                 "on_success": "END",
             }
         }
     )
     findings = run_semantic_rules(recipe)
-    codes = [f.rule for f in findings]
-    assert "inline-script-in-cmd" in codes
+    assert any(f.rule == "inline-script-in-cmd" for f in findings)
 
 
 def test_inline_script_error_on_control_flow():
@@ -235,6 +245,51 @@ def test_inline_script_ignores_non_run_cmd_steps():
             "step_a": {
                 "tool": "run_python",
                 "with": {"callable": "autoskillit.smoke_utils.check_loop_iteration"},
+                "on_success": "END",
+            }
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    assert all(f.rule != "inline-script-in-cmd" for f in findings)
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        # .local in uv tool install path
+        (
+            "bash /home/user/.local/share/uv/tools/autoskillit/"
+            "lib/python3.13/site-packages/autoskillit/recipes/scripts/create_worktree.sh arg1"
+        ),
+        # /usr/local/ standard path
+        "bash /usr/local/bin/my_script.sh arg1 arg2",
+        # /export/ as NFS mount point
+        "/export/home/user/scripts/run.sh",
+        # export embedded in path segment (not standalone)
+        "bash /opt/exported-tools/run.sh",
+        # local embedded in longer word
+        "bash /opt/localization/run.sh",
+        # declare in path
+        "/usr/lib/declare-tools/runner.sh",
+        # read in path
+        "/home/user/readability/run.sh",
+    ],
+    ids=[
+        "uv-tool-dotlocal",
+        "usr-local-bin",
+        "nfs-export-mount",
+        "export-in-compound-word",
+        "local-in-compound-word",
+        "declare-in-path",
+        "read-in-path",
+    ],
+)
+def test_inline_script_no_fire_on_path_containing_builtin_keyword(cmd):
+    recipe = _make_recipe(
+        {
+            "step_a": {
+                "tool": "run_cmd",
+                "with": {"cmd": cmd},
                 "on_success": "END",
             }
         }

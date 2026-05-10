@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 
 import pytest
@@ -96,4 +97,24 @@ def test_recipes_pass_inline_script_rule(recipe_name):
     ]
     assert inline_findings == [], (
         f"Recipe {recipe_name} has inline script findings: {inline_findings}"
+    )
+
+
+def test_recipes_pass_inline_script_rule_with_uv_tool_path(monkeypatch, tmp_path):
+    """Guard: inline-script rule must not false-positive on uv-tool-install paths."""
+    fake_pkg = tmp_path / ".local" / "share" / "uv" / "tools" / "autoskillit"
+    real_pkg = pkg_root()
+    shutil.copytree(real_pkg, fake_pkg, dirs_exist_ok=True)
+
+    import autoskillit.recipe.io as _rio
+
+    monkeypatch.setattr(_rio, "pkg_root", lambda: fake_pkg)
+
+    recipe = load_recipe(builtin_recipes_dir() / "research.yaml")
+    findings = run_semantic_rules(recipe)
+    inline_findings = [
+        f for f in findings if f.rule in ("inline-script-in-cmd", "inline-python-in-cmd")
+    ]
+    assert inline_findings == [], (
+        f"research.yaml has inline script findings under uv-tool path: {inline_findings}"
     )

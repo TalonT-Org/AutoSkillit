@@ -16,10 +16,15 @@
         {
           "name": "scope_report",
           "type": "file_path"
+        },
+        {
+          "name": "scope_directions",
+          "type": "file_path"
         }
       ],
       "expected_output_patterns": [
-        "scope_report\\s*=\\s*/.+"
+        "scope_report\\s*=\\s*/.+",
+        "scope_directions\\s*=\\s*/.+"
       ],
       "pattern_examples": [
         "scope_report = /tmp/scope_report.md\n%%ORDER_UP%%"
@@ -32,6 +37,12 @@
           "name": "scope_report_path",
           "type": "file_path",
           "required": true,
+          "recommended": false
+        },
+        {
+          "name": "scope_directions_path",
+          "type": "file_path",
+          "required": false,
           "recommended": false
         },
         {
@@ -830,7 +841,8 @@
         "research_question"
       ],
       "produced": [
-        "scope_report"
+        "scope_report",
+        "scope_directions"
       ]
     },
     {
@@ -842,6 +854,7 @@
         "output_mode",
         "review_design",
         "review_pr",
+        "scope_directions",
         "scope_report",
         "source_dir",
         "task"

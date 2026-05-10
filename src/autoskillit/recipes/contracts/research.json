@@ -924,7 +924,7 @@
         "test_check_enabled"
       ],
       "required": [
-        "scope_report_path"
+        "scope_report"
       ],
       "produced": [
         "experiment_plan"

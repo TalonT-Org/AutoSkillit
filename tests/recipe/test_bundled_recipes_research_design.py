@@ -240,7 +240,7 @@ class TestResearchDesignRecipeStructure:
 
     def test_design_complete_sentinel_includes_scope_directions(self, recipe) -> None:
         msg = recipe.steps["design_complete"].message
-        assert "scope_directions" in msg
+        assert "scope_directions=<context.scope_directions>" in msg
 
     def test_design_recipe_has_create_worktree_step(self, recipe) -> None:
         step = recipe.steps["create_worktree"]

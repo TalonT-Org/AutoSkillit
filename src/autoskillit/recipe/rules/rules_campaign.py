@@ -582,15 +582,15 @@ def _check_dispatch_capture_value_references_result(ctx: ValidationContext) -> l
         return []
     findings = []
     for d in ctx.recipe.dispatches:
-        for key, val in d.capture.items():
-            if not _RESULT_TEMPLATE_RE.match(val.strip()):
+        for key, entry in d.capture.items():
+            if not _RESULT_TEMPLATE_RE.match(entry.from_.strip()):
                 findings.append(
                     RuleFinding(
                         rule="dispatch-capture-value-references-result",
                         severity=Severity.ERROR,
                         step_name="(top-level)",
                         message=(
-                            f"Dispatch {d.name!r} capture[{key!r}] value {val!r} must use "
+                            f"Dispatch {d.name!r} capture[{key!r}] value {entry.from_!r} must use "
                             "${{ result.<field_name> }} syntax."
                         ),
                     )
@@ -617,7 +617,7 @@ def _check_dispatch_capture_field_in_sentinel(ctx: ValidationContext) -> list[Ru
         if not sentinel_fields:
             continue
         for cap_key, cap_val in d.capture.items():
-            match = _RESULT_FIELD_RE.match(cap_val.strip())
+            match = _RESULT_FIELD_RE.match(cap_val.from_.strip())
             if not match:
                 continue
             field_name = match.group(1)
@@ -685,7 +685,7 @@ def _check_dispatch_capture_field_in_all_sentinels(
         if len(per_stop) < 2:
             continue
         for cap_key, cap_val in d.capture.items():
-            match = _RESULT_FIELD_RE.match(cap_val.strip())
+            match = _RESULT_FIELD_RE.match(cap_val.from_.strip())
             if not match:
                 continue
             field_name = match.group(1)

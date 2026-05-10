@@ -201,6 +201,77 @@ class TestDispatchFoodTruckHaltEnforcement:
         tool_ctx.executor = InMemoryHeadlessExecutor()
 
 
+class TestPostDispatchHaltOnFailure:
+    """Post-dispatch halt: FAILURE result + continue_on_failure=false → FLEET_CAMPAIGN_HALTED."""
+
+    @pytest.fixture(autouse=True)
+    def _set_fleet_session(self, monkeypatch):
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_halts_after_failure_when_continue_on_failure_false(
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path
+    ):
+        """After a dispatch returns FAILURE with continue_on_failure=false,
+        the next dispatch_food_truck call must return FLEET_CAMPAIGN_HALTED immediately,
+        before calling execute_dispatch.
+        """
+        from unittest.mock import AsyncMock
+
+        from autoskillit.fleet import DispatchCompleted, DispatchStatus
+
+        state_path = tmp_path / "campaign_state.json"
+        monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(state_path))
+        monkeypatch.setenv("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false")
+
+        # Write a FAILURE dispatch record into campaign state
+        _write_campaign_state(state_path, [{"name": "run-design", "status": "failure"}])
+
+        execute_called = False
+
+        async def mock_execute_dispatch(**kwargs):
+            nonlocal execute_called
+            execute_called = True
+            return DispatchCompleted(
+                success=False,
+                dispatch_status=DispatchStatus.FAILURE,
+                dispatch_id="d2",
+                dispatched_session_id="sess-2",
+                reason="task-failed",
+                token_usage={},
+                l3_parse_source="stdout",
+                lifespan_started=True,
+                l3_payload=None,
+            )
+
+        monkeypatch.setattr(
+            "autoskillit.fleet.execute_dispatch",
+            AsyncMock(side_effect=mock_execute_dispatch),
+        )
+
+        self._setup_standard_dispatch(tool_ctx_kitchen_open, monkeypatch)
+        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+
+        result = json.loads(await dispatch_food_truck(recipe="test-recipe", task="t"))
+
+        # Must return FLEET_CAMPAIGN_HALTED immediately — execute_dispatch must NOT be called
+        assert result["success"] is False
+        assert result["error"] == "fleet_campaign_halted"
+        assert execute_called is False, (
+            "execute_dispatch was called even though campaign is halted after prior FAILURE"
+        )
+
+    def _setup_standard_dispatch(self, tool_ctx, monkeypatch):
+        """Wire tool_ctx for a standard dispatch."""
+        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        repo = InMemoryRecipeRepository()
+        recipe_info = _make_recipe_info("test-recipe")
+        repo.add_recipe("test-recipe", recipe_info)
+        repo.add_full_recipe(recipe_info.path, _make_standard_recipe("test-recipe"))
+        tool_ctx.recipes = repo
+        tool_ctx.executor = InMemoryHeadlessExecutor()
+
+
 class TestDispatchFoodTruckRetryOnFailure:
     @pytest.fixture(autouse=True)
     def _set_fleet_session(self, monkeypatch):

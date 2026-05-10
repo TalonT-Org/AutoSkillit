@@ -58,6 +58,7 @@ class TestResumeWithoutPriorDispatchId:
 
     @pytest.mark.anyio
     async def test_resume_without_prior_dispatch_id_persists_captures(self, tool_ctx, monkeypatch):
+        from autoskillit.core.types import CaptureEntrySpec
         from autoskillit.fleet.result_parser import L3ParseResult
         from tests.fleet._helpers import (
             _no_sleep_quota_checker,
@@ -98,7 +99,7 @@ class TestResumeWithoutPriorDispatchId:
             quota_refresher=_noop_quota_refresher,
             resume_session_id="sess-123",
             prior_dispatch_id=None,
-            capture={"plan_path": "${{ result.plan_path }}"},
+            capture={"plan_path": CaptureEntrySpec(from_="${{ result.plan_path }}")},
         )
 
         dispatches_dir = tool_ctx.temp_dir / "dispatches"

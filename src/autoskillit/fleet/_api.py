@@ -16,6 +16,8 @@ import psutil
 import regex as re
 
 from autoskillit.core import (
+    CaptureEntrySpec,
+    CaptureValueTypeError,
     FleetErrorCode,
     InfraExitCategory,
     RetryReason,
@@ -52,28 +54,76 @@ _CAMPAIGN_REF_RE = re.compile(r"\$\{\{\s*campaign\.(\w+)\s*\}\}")
 _RESULT_REF_RE = re.compile(r"^\$\{\{\s*result\.([\w-]+)\s*\}\}$")
 
 
+def _validate_capture_value(key: str, value: str, declared_type: str) -> None:
+    """Validate a captured value against its declared type.
+
+    Raises CaptureValueTypeError if validation fails.
+    """
+    if declared_type == "path":
+        if not value:
+            raise CaptureValueTypeError(
+                key=key,
+                value=value,
+                declared_type=declared_type,
+                reason="path value must be non-empty",
+            )
+        if not Path(value).exists():
+            raise CaptureValueTypeError(
+                key=key,
+                value=value,
+                declared_type=declared_type,
+                reason=f"path does not exist: {value}",
+            )
+    elif declared_type == "string":
+        if not value:
+            raise CaptureValueTypeError(
+                key=key,
+                value=value,
+                declared_type=declared_type,
+                reason="string value must be non-empty",
+            )
+    elif declared_type == "url":
+        # URL type: non-empty values should look like URLs
+        if value and not (
+            value.startswith("http://")
+            or value.startswith("https://")
+            or value.startswith("file://")
+        ):
+            raise CaptureValueTypeError(
+                key=key,
+                value=value,
+                declared_type=declared_type,
+                reason=f"url value must start with http://, https://, or file://: {value!r}",
+            )
+    # optional_string: any value including empty string — no validation
+
+
 def _extract_captures(
-    capture_spec: dict[str, str],
+    capture_spec: dict[str, CaptureEntrySpec],
     payload: dict[str, object],
 ) -> dict[str, str]:
     """Extract captured values from an L3 result payload.
 
-    For each entry in `capture_spec` whose value matches ``${{ result.field }}``,
-    reads `payload[field]` and converts it to str. Missing payload keys are logged
-    as warnings. If the capture spec has entries but all fields are absent from the
-    payload, raises CaptureCompletenessError.
+    For each entry in `capture_spec`, reads `payload[field_name]` from the
+    ``from_`` template and validates it against the declared `value_type`.
+    Missing payload keys are logged as warnings. If the capture spec has
+    entries but all fields are absent from the payload, raises
+    CaptureCompletenessError. If a value fails type validation,
+    raises CaptureValueTypeError.
     """
     result: dict[str, str] = {}
     expected_fields: list[str] = []
-    for key, template in capture_spec.items():
-        m = _RESULT_REF_RE.match(template.strip())
+    for key, entry in capture_spec.items():
+        m = _RESULT_REF_RE.match(entry.from_.strip())
         if m is None:
             continue
         field_name = m.group(1)
         expected_fields.append(field_name)
         if field_name in payload:
-            value = payload[field_name]
-            result[key] = value if isinstance(value, str) else json.dumps(value, default=str)
+            value: object = payload[field_name]
+            str_value = value if isinstance(value, str) else json.dumps(value, default=str)
+            _validate_capture_value(key, str_value, entry.value_type)
+            result[key] = str_value
         else:
             logger.warning(
                 "capture_field_missing_from_payload",
@@ -96,7 +146,8 @@ def _interpolate_campaign_refs(
 ) -> dict[str, str]:
     """Resolve ``${{ campaign.key }}`` references in ingredient values.
 
-    Raises ValueError if a campaign reference cannot be resolved.
+    Raises ValueError if a campaign reference cannot be resolved or resolves to
+    an empty string (which may indicate an invalid capture from a prior dispatch).
     Non-campaign values are returned unchanged.
     """
     out: dict[str, str] = {}
@@ -110,7 +161,13 @@ def _interpolate_campaign_refs(
                     f"but '{ref}' has not been captured by any prior dispatch. "
                     f"Available: {sorted(captured)}"
                 )
-            return captured[ref]
+            resolved = captured[ref]
+            if resolved == "":
+                raise ValueError(
+                    f"Ingredient '{_k}' campaign ref '{ref}' resolved to empty string — "
+                    f"the capturing dispatch may have emitted an empty value"
+                )
+            return resolved
 
         out[k] = _CAMPAIGN_REF_RE.sub(_replace, v)
     return out
@@ -193,6 +250,17 @@ def _write_campaign_refusal(
         )
     except Exception:
         logger.warning("failed to record refusal to campaign state", exc_info=True)
+
+
+def _normalize_capture_spec(capture: dict[str, str] | None) -> dict[str, CaptureEntrySpec] | None:
+    """Convert YAML-format ``dict[str, str]`` capture spec to ``dict[str, CaptureEntrySpec]``.
+
+    The recipe YAML uses shorthand capture entries: ``{key: "${{ result.field }}"}``.
+    This converts them to the typed ``CaptureEntrySpec`` format used internally.
+    """
+    if capture is None:
+        return None
+    return {key: CaptureEntrySpec(from_=val) for key, val in capture.items()}
 
 
 async def _touch_dispatch_marker(
@@ -290,7 +358,7 @@ async def execute_dispatch(
             quota_checker=quota_checker,
             quota_refresher=quota_refresher,
             cache_invalidator=cache_invalidator,
-            capture=capture,
+            capture=_normalize_capture_spec(capture),
             resume_session_id=resume_session_id,
             resume_checkpoint=resume_checkpoint,
             idle_output_timeout=idle_output_timeout,
@@ -365,7 +433,7 @@ async def _run_dispatch(
     quota_checker: Callable[..., Any],
     quota_refresher: Callable[..., Any],
     cache_invalidator: Callable[[str], None] | None = None,
-    capture: dict[str, str] | None = None,
+    capture: dict[str, CaptureEntrySpec] | None = None,
     resume_session_id: str | None = None,
     resume_checkpoint: SessionCheckpoint | None = None,
     idle_output_timeout: int | None = None,

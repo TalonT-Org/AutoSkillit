@@ -104,7 +104,7 @@ def test_run_design_has_non_empty_capture(recipe: Recipe) -> None:
     for key in d.capture:
         assert _IDENT_RE.match(key), f"Capture key {key!r} is not a valid identifier"
     for val in d.capture.values():
-        assert _RESULT_TMPL_RE.match(val.strip()), (
+        assert _RESULT_TMPL_RE.match(val.from_.strip()), (
             f"Capture value {val!r} does not match result template"
         )
 
@@ -129,7 +129,7 @@ def test_run_implement_has_non_empty_capture(recipe: Recipe) -> None:
     for key in d.capture:
         assert _IDENT_RE.match(key), f"Capture key {key!r} is not a valid identifier"
     for val in d.capture.values():
-        assert _RESULT_TMPL_RE.match(val.strip()), (
+        assert _RESULT_TMPL_RE.match(val.from_.strip()), (
             f"Capture value {val!r} does not match result template"
         )
 
@@ -147,7 +147,7 @@ def test_run_review_has_non_empty_capture(recipe: Recipe) -> None:
     for key in d.capture:
         assert _IDENT_RE.match(key), f"Capture key {key!r} is not a valid identifier"
     for val in d.capture.values():
-        assert _RESULT_TMPL_RE.match(val.strip()), (
+        assert _RESULT_TMPL_RE.match(val.from_.strip()), (
             f"Capture value {val!r} does not match result template"
         )
 

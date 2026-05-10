@@ -9,6 +9,7 @@ from typing import Any
 
 from autoskillit.core import (
     CORE_PACKS,
+    CaptureEntrySpec,
     DispatchGateType,
     LoadReport,
     LoadResult,
@@ -375,6 +376,34 @@ if _PARSE_RECIPE_HANDLED_FIELDS | _RECIPE_COMPUTED_FIELDS != frozenset(
     )
 
 
+def _parse_capture_spec(capture_raw: Any) -> dict[str, CaptureEntrySpec]:
+    """Parse a YAML capture spec into ``dict[str, CaptureEntrySpec]``.
+
+    Accepts two YAML forms:
+    - Shorthand: ``{key: "${{ result.field }}"}`` →
+      ``CaptureEntrySpec(from_=..., value_type="string")``
+    - Long-form: ``{key: {from: "${{ result.field }}", type: "path"}}``
+      → ``CaptureEntrySpec(from_=..., value_type="path")``
+
+    Unknown YAML structures are silently ignored (treated as non-result-template
+    values that _extract_captures will skip).
+    """
+    if not capture_raw or not isinstance(capture_raw, dict):
+        return {}
+    result: dict[str, CaptureEntrySpec] = {}
+    for key, val in capture_raw.items():
+        if isinstance(val, str):
+            # Shorthand: string value is the from_ template
+            result[key] = CaptureEntrySpec(from_=val, value_type="string")
+        elif isinstance(val, dict):
+            from_ = val.get("from") if isinstance(val, dict) else None
+            type_ = val.get("type") if isinstance(val, dict) else None
+            if isinstance(from_, str):
+                result[key] = CaptureEntrySpec(from_=from_, value_type=type_ or "string")
+        # Non-dict, non-string values are ignored
+    return result
+
+
 def _parse_recipe(data: dict[str, Any]) -> Recipe:
     name = data.get("name", "")
     description = data.get("description", "")
@@ -454,7 +483,7 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
                     task=d.get("task", ""),
                     ingredients=d.get("ingredients") or {},
                     depends_on=d.get("depends_on") or [],
-                    capture=d.get("capture") or {},
+                    capture=_parse_capture_spec(d.get("capture")),
                     gate=d_gate,
                     message=d.get("message") or None,
                 )

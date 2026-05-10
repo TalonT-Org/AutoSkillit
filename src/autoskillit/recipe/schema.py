@@ -11,7 +11,13 @@ from typing import Final
 
 import regex as re
 
-from autoskillit.core import FEATURE_REGISTRY, RECIPE_PACK_TAGS, DispatchGateType, RecipeSource
+from autoskillit.core import (
+    FEATURE_REGISTRY,
+    RECIPE_PACK_TAGS,
+    CaptureEntrySpec,
+    DispatchGateType,
+    RecipeSource,
+)
 
 AUTOSKILLIT_VERSION_KEY: Final = "autoskillit_version"
 RECIPE_VERSION_KEY: Final = "recipe_version"
@@ -142,7 +148,7 @@ class CampaignDispatch:
         default_factory=dict
     )  # string-only: YAML pass-through key-value pairs, not structured RecipeIngredient objects
     depends_on: list[str] = field(default_factory=list)
-    capture: dict[str, str] = field(default_factory=dict)
+    capture: dict[str, CaptureEntrySpec] = field(default_factory=dict)
     gate: DispatchGateType | None = None
     message: str | None = None
 

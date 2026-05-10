@@ -172,7 +172,11 @@ async def dispatch_food_truck(
                 )
 
         from autoskillit.core import SessionCheckpoint  # noqa: PLC0415
-        from autoskillit.fleet import DispatchCompleted, execute_dispatch  # noqa: PLC0415
+        from autoskillit.fleet import (  # noqa: PLC0415
+            DispatchCompleted,
+            DispatchStatus,
+            execute_dispatch,
+        )
         from autoskillit.server import _get_ctx
         from autoskillit.server._misc import (  # noqa: PLC0415
             _refresh_quota_cache,
@@ -213,6 +217,21 @@ async def dispatch_food_truck(
                 campaign_state_path_str,
                 effective_name,
                 result,
+            )
+
+        # Post-dispatch halt: if continue_on_failure=false and the dispatch failed,
+        # return FLEET_CAMPAIGN_HALTED immediately — mirrors the pre-dispatch gate.
+        if (
+            campaign_state_path_str
+            and continue_on_failure_str.lower() != "true"
+            and isinstance(result, DispatchCompleted)
+            and result.dispatch_status != DispatchStatus.SUCCESS
+        ):
+            return fleet_error(
+                FleetErrorCode.FLEET_CAMPAIGN_HALTED,
+                "Campaign halted: a prior dispatch failed and "
+                "continue_on_failure is false. "
+                "No further dispatches permitted.",
             )
 
         return result.to_envelope()

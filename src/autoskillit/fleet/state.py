@@ -455,12 +455,21 @@ def upsert_dispatch_record_by_name(state_path: Path, record: DispatchRecord) -> 
     Intended for external writes (e.g. from result envelopes) where the prior
     state is unknown and _validate_transition enforcement is not appropriate.
     If the state file is missing or corrupted, this is a no-op.
+
+    Terminal-status protection: once a dispatch reaches FAILURE, it cannot be
+    silently overwritten with SUCCESS via this bypass path.
     """
     with CampaignStateMutator(state_path) as m:
         if m.state is None:
             return
         for i, d in enumerate(m.state.dispatches):
             if d.name == record.name:
+                # Terminal-status protection: reject SUCCESS overwriting FAILURE
+                if d.status == DispatchStatus.FAILURE and record.status == DispatchStatus.SUCCESS:
+                    raise ValueError(
+                        f"Cannot overwrite FAILURE dispatch {record.name!r} with SUCCESS — "
+                        f"use mark_dispatch_* state machine methods for valid transitions"
+                    )
                 m.state.dispatches[i] = record
                 m.mark_dirty()
                 return

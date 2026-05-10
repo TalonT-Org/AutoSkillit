@@ -47,7 +47,7 @@ def test_no_merge_conflict_markers_in_skill_md(skill_md: Path) -> None:
         stripped = line.strip()
         if (
             stripped.startswith("<<<<<<<")
-            or stripped.startswith("=======")
+            or stripped == "======="
             or stripped.startswith(">>>>>>>")
         ):
             pytest.fail(

@@ -376,6 +376,30 @@ async def _run_dispatch(
         )
 
     try:
+        validation_result = tool_ctx.recipes.load_and_validate(
+            recipe,
+            tool_ctx.project_dir,
+            suppressed=tool_ctx.config.migration.suppressed if tool_ctx.config else None,
+            temp_dir=tool_ctx.temp_dir,
+        )
+    except Exception as exc:
+        logger.warning("load_and_validate failed for '%s'", recipe, exc_info=True)
+        return DispatchRejected(
+            error_code=FleetErrorCode.FLEET_RECIPE_NOT_FOUND,
+            message=f"Recipe '{recipe}' could not be loaded: {exc}",
+        )
+
+    if not validation_result.get("valid", False):
+        error_findings = [
+            s for s in validation_result.get("suggestions", []) if s.get("severity") == "error"
+        ]
+        return DispatchRejected(
+            error_code=FleetErrorCode.FLEET_RECIPE_INVALID,
+            message=f"Recipe '{recipe}' has validation errors: "
+            + "; ".join(f"[{f['rule']}] {f['message']}" for f in error_findings[:3]),
+        )
+
+    try:
         full_recipe = tool_ctx.recipes.load(recipe_obj.path)
     except Exception as exc:
         logger.warning("load_recipe failed for '%s'", recipe, exc_info=True)

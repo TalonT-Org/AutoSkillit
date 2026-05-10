@@ -44,8 +44,8 @@ def test_create_worktree_script_has_git_init_guard():
     """create_worktree.sh must auto-init a git repo when .git is absent."""
     script_path = SCRIPTS_DIR / "create_worktree.sh"
     script = script_path.read_text()
-    assert '[ ! -d "$SOURCE_DIR/.git" ]' in script or "! -d" in script, (
-        "create_worktree.sh must check for .git directory absence"
+    assert '[ ! -e "$SOURCE_DIR/.git" ]' in script or "! -e" in script, (
+        "create_worktree.sh must check for .git existence"
     )
     assert "git init" in script, "create_worktree.sh must run git init when .git is missing"
     assert "--allow-empty" in script, (

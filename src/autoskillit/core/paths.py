@@ -122,6 +122,32 @@ def is_git_main_checkout(path: Path) -> bool:
     return False
 
 
+def resolve_main_worktree(path: Path) -> Path | None:
+    """Resolve ``path`` to the main git worktree root.
+
+    If ``path`` is inside a linked worktree, returns the main checkout root.
+    If ``path`` is already the main checkout, returns that directory.
+    If ``path`` is not inside any git repository, returns None.
+
+    Uses ``git rev-parse --path-format=absolute --git-common-dir`` to locate
+    the shared .git directory, then derives the main worktree root as its parent.
+    This is the canonical resolution — works regardless of how deeply nested
+    the path is within the worktree graph.
+    """
+    import subprocess
+
+    try:
+        git_common_dir = subprocess.run(
+            ["git", "-C", str(path), "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError:
+        return None
+    return Path(git_common_dir.stdout.strip()).parent.resolve()
+
+
 GENERATED_FILES: frozenset[str] = frozenset(
     {
         "src/autoskillit/hooks/hooks.json",

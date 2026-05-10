@@ -26,6 +26,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_bundled_recipes_review_pr.py` | Tests for review-pr bundled recipe structure |
 | `test_callable_contracts.py` | Contract tests for run_python callable inputs and outputs |
 | `test_campaign_loader.py` | Tests for campaign recipe loading |
+| `test_create_worktree_functional.py` | Functional tests for scripts/recipe/create_worktree.sh — actually executes the script against real git repos |
 | `test_check_ci_already_passed_routing.py` | Tests for check_ci_already_passed routing logic |
 | `test_check_repo_merge_state_routing.py` | Tests for check_repo_merge_state routing logic |
 | `test_cmd_rpc.py` | Tests for recipe/_cmd_rpc.py run_python callables |

@@ -231,6 +231,8 @@ async def _execute_claude_headless(
     provider_extras: Mapping[str, str] | None = None,
     enable_deadline_extension: bool = False,
     max_extension_seconds: float = 7200,
+    marker_dir: Path | None = None,
+    session_id: str | None = None,
 ) -> SkillResult:
     """Shared subprocess execution for headless Claude sessions.
 
@@ -320,6 +322,8 @@ async def _execute_claude_headless(
                 on_pid_resolved=on_spawn,
                 enable_deadline_extension=enable_deadline_extension,
                 max_extension_seconds=max_extension_seconds,
+                marker_dir=marker_dir,
+                session_id=session_id,
             )
         except Exception as exc:
             logger.error("headless_runner_crashed", exc_info=True)
@@ -822,6 +826,8 @@ class DefaultHeadlessExecutor:
         provider_fallback_env: dict[str, str] | None = None,
         provider_fallback_name: str = "",
         sentinel_contract: str = "",
+        marker_dir: Path | None = None,
+        session_id: str | None = None,
     ) -> SkillResult:
         cfg = self._ctx.config
         resolved_model = _resolve_model(model, cfg)
@@ -879,6 +885,10 @@ class DefaultHeadlessExecutor:
             else None
         )
 
+        effective_marker_dir: Path | None = marker_dir or (
+            claude_code_project_dir(cwd) if cwd else None
+        )
+
         return await _execute_claude_headless(
             spec,
             cwd,
@@ -903,4 +913,6 @@ class DefaultHeadlessExecutor:
             provider_fallback_name=provider_fallback_name,
             enable_deadline_extension=effective_deadline_ext,
             max_extension_seconds=effective_max_ext,
+            marker_dir=effective_marker_dir,
+            session_id=session_id,
         )

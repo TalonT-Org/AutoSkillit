@@ -11,8 +11,11 @@ skills:
     outputs:
     - name: scope_report
       type: file_path
+    - name: scope_directions
+      type: file_path
     expected_output_patterns:
     - scope_report\s*=\s*/.+
+    - scope_directions\s*=\s*/.+
     pattern_examples:
     - 'scope_report = /tmp/scope_report.md
 
@@ -23,6 +26,10 @@ skills:
     - name: scope_report_path
       type: file_path
       required: true
+      recommended: false
+    - name: scope_directions_path
+      type: file_path
+      required: false
       recommended: false
     - name: revision_guidance
       type: file_path
@@ -698,6 +705,7 @@ dataflow:
   - research_question
   produced:
   - scope_report
+  - scope_directions
 - step: plan_experiment
   available:
   - audit_claims
@@ -706,6 +714,7 @@ dataflow:
   - output_mode
   - review_design
   - review_pr
+  - scope_directions
   - scope_report
   - source_dir
   - task

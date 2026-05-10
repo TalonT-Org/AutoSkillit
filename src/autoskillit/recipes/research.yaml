@@ -123,6 +123,7 @@ steps:
       step_name: scope
     capture:
       scope_report: "${{ result.scope_report }}"
+      scope_directions: "${{ result.scope_directions }}"
     on_success: plan_experiment
     on_failure: escalate_stop
 
@@ -130,10 +131,10 @@ steps:
     tool: run_skill
     model: ""
     with:
-      skill_command: "/autoskillit:plan-experiment ${{ context.scope_report }} ${{ context.revision_guidance }}"
+      skill_command: "/autoskillit:plan-experiment ${{ context.scope_report }} ${{ context.scope_directions }} ${{ context.revision_guidance }}"
       cwd: "${{ inputs.source_dir }}"
       step_name: plan_experiment
-    optional_context_refs: [revision_guidance]
+    optional_context_refs: [revision_guidance, scope_directions]
     capture:
       experiment_plan: "${{ result.experiment_plan }}"
     on_success: review_design

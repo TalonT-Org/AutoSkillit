@@ -473,3 +473,6 @@ class TestResearchRecipeStructure:
         step = recipe.steps["stage_bundle"]
         assert step.on_success == "route_pr_or_local"
         assert step.on_failure == "route_pr_or_local"
+
+    def test_scope_captures_scope_directions(self, recipe) -> None:
+        assert "scope_directions" in recipe.steps["scope"].capture

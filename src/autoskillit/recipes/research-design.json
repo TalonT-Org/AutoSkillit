@@ -47,7 +47,8 @@
         "step_name": "scope"
       },
       "capture": {
-        "scope_report": "${{ result.scope_report }}"
+        "scope_report": "${{ result.scope_report }}",
+        "scope_directions": "${{ result.scope_directions }}"
       },
       "on_success": "plan_experiment",
       "on_failure": "escalate_stop"
@@ -56,12 +57,13 @@
       "tool": "run_skill",
       "model": "",
       "with": {
-        "skill_command": "/autoskillit:plan-experiment ${{ context.scope_report }} ${{ context.revision_guidance }}",
+        "skill_command": "/autoskillit:plan-experiment ${{ context.scope_report }} ${{ context.scope_directions }} ${{ context.revision_guidance }}",
         "cwd": "${{ inputs.source_dir }}",
         "step_name": "plan_experiment"
       },
       "optional_context_refs": [
-        "revision_guidance"
+        "revision_guidance",
+        "scope_directions"
       ],
       "capture": {
         "experiment_plan": "${{ result.experiment_plan }}"
@@ -215,7 +217,7 @@
     },
     "design_complete": {
       "action": "stop",
-      "message": "Design phase complete. Emit the L3 result sentinel JSON block now. The sentinel must include the following fields from captured context: success=true, scope_report=<context.scope_report>, experiment_plan=<context.experiment_plan>, visualization_plan_path=<context.visualization_plan_path>, report_plan_path=<context.report_plan_path>, experiment_type=<context.experiment_type>, worktree_path=${{ context.worktree_path }}, research_dir=${{ context.research_dir }}, research_dir_rel=${{ context.research_dir_rel }}. Example sentinel: {\"success\": true, \"scope_report\": \"<path>\", \"experiment_plan\": \"<path>\", \"visualization_plan_path\": \"<path>\", \"report_plan_path\": \"<path>\", \"experiment_type\": \"benchmark\", \"worktree_path\": \"<path>\", \"research_dir\": \"<path>\", \"research_dir_rel\": \"<rel>\"}"
+      "message": "Design phase complete. Emit the L3 result sentinel JSON block now. The sentinel must include the following fields from captured context: success=true, scope_report=<context.scope_report>, scope_directions=<context.scope_directions>, experiment_plan=<context.experiment_plan>, visualization_plan_path=<context.visualization_plan_path>, report_plan_path=<context.report_plan_path>, experiment_type=<context.experiment_type>, worktree_path=${{ context.worktree_path }}, research_dir=${{ context.research_dir }}, research_dir_rel=${{ context.research_dir_rel }}. Example sentinel: {\"success\": true, \"scope_report\": \"<path>\", \"scope_directions\": \"<path>\", \"experiment_plan\": \"<path>\", \"visualization_plan_path\": \"<path>\", \"report_plan_path\": \"<path>\", \"experiment_type\": \"benchmark\", \"worktree_path\": \"<path>\", \"research_dir\": \"<path>\", \"research_dir_rel\": \"<rel>\"}"
     },
     "escalate_stop": {
       "action": "stop",

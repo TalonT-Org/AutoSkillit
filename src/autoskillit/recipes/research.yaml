@@ -297,6 +297,7 @@ steps:
       field: verdict
       routes:
         PASS: setup_environment
+        WARN: setup_environment
         FAIL: escalate_stop
     on_failure: escalate_stop
     note: >

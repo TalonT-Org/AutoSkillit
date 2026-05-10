@@ -279,6 +279,7 @@
         "field": "verdict",
         "routes": {
           "PASS": "setup_environment",
+          "WARN": "setup_environment",
           "FAIL": "escalate_stop"
         }
       },

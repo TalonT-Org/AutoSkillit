@@ -102,6 +102,7 @@
         "field": "verdict",
         "routes": {
           "PASS": "decompose_phases",
+          "WARN": "decompose_phases",
           "FAIL": "escalate_stop"
         }
       },

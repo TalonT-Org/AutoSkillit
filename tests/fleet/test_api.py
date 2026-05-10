@@ -6,6 +6,7 @@ import asyncio
 import json
 from pathlib import Path
 
+import anyio
 import pytest
 import structlog.testing
 
@@ -185,3 +186,112 @@ class TestRequiresPacksForwarding:
         await _run(tool_ctx)
         call = tool_ctx.executor.dispatch_calls[0]
         assert list(call.requires_packs) == ["kitchen-core"]
+
+
+class TestTouchDispatchMarker:
+    """Unit tests for _touch_dispatch_marker helper."""
+
+    @pytest.mark.anyio
+    async def test_touch_dispatch_marker_creates_heartbeat_loop(self, tmp_path: Path) -> None:
+        """Heartbeat loop refreshes mtime until trigger is set."""
+        from autoskillit.fleet._api import _touch_dispatch_marker
+
+        marker = tmp_path / "test.marker"
+        marker.touch()
+        original_mtime = marker.stat().st_mtime
+
+        trigger = anyio.Event()
+
+        async def _heartbeat_wrapper() -> None:
+            await _touch_dispatch_marker(marker, interval=0.05, trigger=trigger)
+
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(_heartbeat_wrapper)
+            await anyio.sleep(0.18)
+            trigger.set()
+
+        new_mtime = marker.stat().st_mtime
+        assert new_mtime > original_mtime, "marker mtime should have been refreshed"
+
+    @pytest.mark.anyio
+    async def test_touch_dispatch_marker_oserror_does_not_propagate(self, tmp_path: Path) -> None:
+        """OSError during touch logs but does not raise."""
+        from autoskillit.fleet._api import _touch_dispatch_marker
+
+        subdir = tmp_path / "subdir"
+        subdir.mkdir()
+        marker_file = subdir / "test.marker"
+        marker_file.touch()  # create the file first
+        marker_file.chmod(0o000)  # make unwritable so touch() fails
+        trigger = anyio.Event()
+
+        async def _heartbeat_wrapper() -> None:
+            await _touch_dispatch_marker(marker_file, interval=0.05, trigger=trigger)
+
+        try:
+            async with anyio.create_task_group() as tg:
+                tg.start_soon(_heartbeat_wrapper)
+                await anyio.sleep(0.12)
+                trigger.set()
+        except OSError:
+            pytest.fail("_touch_dispatch_marker should not propagate OSError")
+        finally:
+            marker_file.chmod(0o644)  # restore for cleanup
+
+
+class TestDispatchMarkerLifecycle:
+    """Tests for marker lifecycle integration in _run_dispatch."""
+
+    @pytest.mark.anyio
+    async def test_run_dispatch_forwards_marker_dir_and_session_id_to_executor(
+        self, tool_ctx, monkeypatch, tmp_path: Path
+    ) -> None:
+        """dispatch_food_truck is called with marker_dir and session_id kwargs."""
+        _setup_dispatch(tool_ctx, monkeypatch)
+        marker_dir = tmp_path / "markers"
+        marker_dir.mkdir()
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.claude_code_project_dir",
+            lambda cwd: marker_dir,
+        )
+
+        await _run(tool_ctx)
+
+        assert len(tool_ctx.executor.dispatch_calls) == 1
+        call = tool_ctx.executor.dispatch_calls[0]
+        assert call.marker_dir == marker_dir
+        assert call.session_id is not None
+
+    @pytest.mark.anyio
+    async def test_run_dispatch_continues_when_marker_dir_unavailable(
+        self, tool_ctx, monkeypatch
+    ) -> None:
+        """execute_dispatch succeeds even when claude_code_project_dir raises OSError."""
+        _setup_dispatch(tool_ctx, monkeypatch)
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.claude_code_project_dir",
+            lambda cwd: (_ for _ in ()).throw(OSError("no project dir")),
+        )
+
+        result = await _run(tool_ctx)
+
+        # Should succeed (returns DispatchCompleted or DispatchRejected, not raise)
+        assert result.get("success") is not None
+
+    @pytest.mark.anyio
+    async def test_run_dispatch_marker_cleaned_up_after_success(
+        self, tool_ctx, monkeypatch, tmp_path: Path
+    ) -> None:
+        """No .marker files remain after successful dispatch."""
+        _setup_dispatch(tool_ctx, monkeypatch)
+        marker_dir = tmp_path / "markers"
+        marker_dir.mkdir()
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.claude_code_project_dir",
+            lambda cwd: marker_dir,
+        )
+
+        await _run(tool_ctx)
+
+        remaining = list(marker_dir.glob("*.marker"))
+        assert len(remaining) == 0, f"Expected no marker files, found {remaining}"

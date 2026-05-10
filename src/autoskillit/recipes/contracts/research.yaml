@@ -1,4 +1,4 @@
-generated_at: '2026-05-10T18:08:58.540586+00:00'
+generated_at: '1970-01-01T00:00:00+00:00'
 bundled_manifest_version: 0.1.0
 skill_hashes: {}
 skills:
@@ -131,7 +131,7 @@ skills:
       required: true
       recommended: false
     - name: scope_report_path
-      type: string
+      type: file_path
       required: false
       recommended: false
     outputs:
@@ -223,12 +223,12 @@ skills:
     pattern_examples:
     - 'verdict = PASS
 
-      download_report = /tmp/download-data/download_report_2026-05-10_120000.md
+      download_report = /tmp/download-data/download_report.md
 
       %%ORDER_UP%%'
     - 'verdict = WARN
 
-      download_report = /tmp/download-data/download_report_2026-05-10_120000.md
+      download_report = /tmp/download-data/download_report.md
 
       %%ORDER_UP%%'
     write_behavior: always
@@ -408,6 +408,7 @@ skills:
       remediation_path = /tmp/remediation.md
 
       %%ORDER_UP%%'
+    write_behavior: always
   run-experiment:
     inputs:
     - name: worktree_path
@@ -423,7 +424,9 @@ skills:
     - results_path\s*=\s*/.+
     - group_manifest\s*=\s*/.+
     pattern_examples:
-    - 'results_path = /tmp/run-experiment/results.md group_manifest = /tmp/run-experiment/group_manifest.json
+    - 'results_path = /tmp/run-experiment/results.md
+
+      group_manifest = /tmp/run-experiment/group_manifest.json
 
       %%ORDER_UP%%'
     write_behavior: always
@@ -1037,7 +1040,8 @@ dataflow:
   - visualization_plan_path
   - visualization_plan_trace_path
   - worktree_path
-  required: []
+  required:
+  - experiment_plan
   produced:
   - verdict
   - download_report
@@ -1493,6 +1497,7 @@ dataflow:
   required:
   - plan_path
   produced:
+  - verdict
   - remediation_path
 - step: run_experiment
   available:

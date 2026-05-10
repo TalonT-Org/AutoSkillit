@@ -633,6 +633,7 @@ async def _run_dispatch(
         dispatch_id=dispatch_id,
         campaign_id=campaign_id,
         l3_timeout_sec=timeout_sec or 1800,
+        capture={k: e.from_ for k, e in capture.items()} if capture else None,
     )
 
     if tool_ctx.executor is None:

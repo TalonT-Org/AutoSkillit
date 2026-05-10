@@ -604,8 +604,11 @@ def test_silent_type_handling_section_in_skill(skill_text: str) -> None:
 
 
 def test_scope_report_argument_documented(skill_text: str) -> None:
-    """SKILL.md must document scope_report_path as an optional argument."""
-    assert "scope_report_path" in skill_text
+    """SKILL.md must document scope_report_path in the Arguments section."""
+    args_text = skill_text_between("## Arguments", "## Critical Constraints", skill_text)
+    assert "scope_report_path" in args_text, (
+        "scope_report_path must be documented within the ## Arguments section"
+    )
 
 
 def test_scope_alignment_l2_placement(skill_text: str) -> None:

@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import json
+import os
 import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import anyio
 import psutil
 import regex as re
 
@@ -19,8 +22,10 @@ from autoskillit.core import (
     SessionCheckpoint,  # noqa: F401, TC001
     SkillResult,
     claude_code_log_path,
+    claude_code_project_dir,
     get_logger,
     truncate_text,
+    write_versioned_json,
 )
 from autoskillit.fleet.result_parser import L3ParseResult, parse_l3_result_block
 from autoskillit.fleet.state import DispatchStatus
@@ -188,6 +193,24 @@ def _write_campaign_refusal(
         )
     except Exception:
         logger.warning("failed to record refusal to campaign state", exc_info=True)
+
+
+async def _touch_dispatch_marker(
+    marker_path: Path, interval: float = 30.0, trigger: anyio.Event | None = None
+) -> None:
+    """Periodically touch marker_path to refresh mtime; runs until trigger is set."""
+    try:
+        marker_path.touch()
+    except OSError:
+        logger.warning("_touch_dispatch_marker: failed to touch %s", marker_path, exc_info=True)
+    while trigger is None or not trigger.is_set():
+        await anyio.sleep(interval)
+        try:
+            marker_path.touch()
+        except OSError:
+            logger.warning(
+                "_touch_dispatch_marker: failed to touch %s", marker_path, exc_info=True
+            )
 
 
 async def execute_dispatch(
@@ -566,41 +589,87 @@ async def _run_dispatch(
             state_path, effective_name, dispatch_id, pid, ticks, dispatch_sidecar_path, create_time
         )
 
-    skill_result = await tool_ctx.executor.dispatch_food_truck(
-        orchestrator_prompt=prompt,
-        cwd=str(tool_ctx.project_dir),
-        completion_marker=completion_marker,
-        prior_completion_markers=prior_completion_markers,
-        resume_session_id=resume_session_id,
-        resume_checkpoint=resume_checkpoint,
-        kitchen_id=tool_ctx.kitchen_id,
-        order_id=dispatch_id,
-        campaign_id=campaign_id,
-        dispatch_id=dispatch_id,
-        caller_session_id=caller_session_id,
-        project_dir=str(tool_ctx.project_dir),
-        timeout=float(timeout_sec) if timeout_sec else None,
-        idle_output_timeout=float(idle_output_timeout)
-        if idle_output_timeout is not None
-        else None,
-        env_extras={
-            "AUTOSKILLIT_PROJECT_DIR": str(tool_ctx.project_dir),
-            "AUTOSKILLIT_CAMPAIGN_ID": campaign_id,
-            "AUTOSKILLIT_DISPATCH_ID": dispatch_id,
-            "AUTOSKILLIT_SESSION_DEADLINE": str(
-                started_at
-                + (
-                    float(timeout_sec)
-                    if timeout_sec is not None
-                    else float(tool_ctx.config.fleet.default_timeout_sec)
+    marker_dir: Path | None = None
+    marker_path: Path | None = None
+    try:
+        marker_dir = claude_code_project_dir(str(tool_ctx.project_dir))
+    except OSError:
+        pass
+
+    if marker_dir is not None:
+        marker_path = marker_dir / f"dispatch-in-progress-{caller_session_id}-{dispatch_id}.marker"
+        try:
+            write_versioned_json(
+                marker_path,
+                {
+                    "dispatch_id": dispatch_id,
+                    "orchestrator_pid": os.getpid(),
+                    "session_id": caller_session_id,
+                },
+                schema_version=1,
+            )
+        except OSError:
+            logger.warning("dispatch_marker_write_failed", marker=str(marker_path), exc_info=True)
+            marker_dir = None
+            marker_path = None
+
+    _hb_trigger = anyio.Event()
+    try:
+        async with anyio.create_task_group() as tg:
+            if marker_path is not None:
+                tg.start_soon(
+                    functools.partial(_touch_dispatch_marker, marker_path, trigger=_hb_trigger)
                 )
-            ),
-        },
-        requires_packs=list(full_recipe.requires_packs) or ["kitchen-core"],
-        on_spawn=_on_spawn,
-        sentinel_contract=sentinel_contract,
-    )
-    ended_at = time.time()
+            try:
+                skill_result = await tool_ctx.executor.dispatch_food_truck(
+                    orchestrator_prompt=prompt,
+                    cwd=str(tool_ctx.project_dir),
+                    completion_marker=completion_marker,
+                    prior_completion_markers=prior_completion_markers,
+                    resume_session_id=resume_session_id,
+                    resume_checkpoint=resume_checkpoint,
+                    kitchen_id=tool_ctx.kitchen_id,
+                    order_id=dispatch_id,
+                    campaign_id=campaign_id,
+                    dispatch_id=dispatch_id,
+                    caller_session_id=caller_session_id,
+                    project_dir=str(tool_ctx.project_dir),
+                    marker_dir=marker_dir,
+                    session_id=caller_session_id,
+                    timeout=float(timeout_sec) if timeout_sec else None,
+                    idle_output_timeout=float(idle_output_timeout)
+                    if idle_output_timeout is not None
+                    else None,
+                    env_extras={
+                        "AUTOSKILLIT_PROJECT_DIR": str(tool_ctx.project_dir),
+                        "AUTOSKILLIT_CAMPAIGN_ID": campaign_id,
+                        "AUTOSKILLIT_DISPATCH_ID": dispatch_id,
+                        "AUTOSKILLIT_SESSION_DEADLINE": str(
+                            started_at
+                            + (
+                                float(timeout_sec)
+                                if timeout_sec is not None
+                                else float(tool_ctx.config.fleet.default_timeout_sec)
+                            )
+                        ),
+                    },
+                    requires_packs=list(full_recipe.requires_packs) or ["kitchen-core"],
+                    on_spawn=_on_spawn,
+                    sentinel_contract=sentinel_contract,
+                )
+            finally:
+                _hb_trigger.set()
+                tg.cancel_scope.cancel()
+
+        ended_at = time.time()
+    finally:
+        if marker_path is not None:
+            try:
+                marker_path.unlink(missing_ok=True)
+            except OSError:
+                logger.warning(
+                    "dispatch_marker_unlink_failed", marker=str(marker_path), exc_info=True
+                )
 
     # --- Timeout pre-check: short-circuit before result-block parsing ---
     if skill_result.subtype == "timeout":

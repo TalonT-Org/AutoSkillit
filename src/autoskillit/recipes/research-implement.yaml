@@ -54,6 +54,7 @@ ingredients:
     description: >
       When 'true' (the default), run audit-impl after phase iteration to verify
       all decomposed phases have corresponding implementation commits.
+      Catches silent group abandonment when context_limit fires mid-iteration.
     default: "true"
 
 kitchen_rules:
@@ -269,12 +270,12 @@ steps:
     on_context_limit: escalate_stop
     skip_when_false: "inputs.audit"
     note: >
-      Post-implementation quality gate. Diffs impl_base_sha..HEAD and verifies
-      all decomposed phases from group_files have corresponding implementation
-      commits. Catches silent group abandonment when on_context_limit fires
-      mid-iteration — reports exactly which phases were completed vs. skipped.
-      On GO, proceeds to run_experiment. On NO GO, escalates with a remediation
-      report detailing which phases are missing.
+      Diffs impl_base_sha..HEAD and verifies all decomposed phases from group_files
+      have corresponding implementation commits. Catches silent group abandonment
+      when on_context_limit fires mid-iteration — reports exactly which phases
+      were completed vs. skipped. On GO, proceeds to run_experiment. On NO GO,
+      escalates with a remediation report detailing which phases are missing.
+      If false (inputs.audit=false), skip directly to run_experiment.
 
   # --- Experiment + Report ---
   run_experiment:

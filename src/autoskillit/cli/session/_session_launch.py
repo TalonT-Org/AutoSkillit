@@ -28,6 +28,7 @@ def _run_interactive_session(
     extra_env: dict[str, str] | None = None,
     resume_spec: ResumeSpec | None = None,
     project_dir: Path | None = None,
+    required_env: frozenset[str] | None = None,
 ) -> str | _InfraExitSignal | None:
     """Launch an interactive Claude Code session.
 
@@ -58,6 +59,7 @@ def _run_interactive_session(
         initial_prompt=initial_message,
         resume_spec=resume_spec if resume_spec is not None else NoResume(),
         env_extras=extra_env,
+        required_env=required_env,
     )
     plugin_flags = (
         []
@@ -117,6 +119,7 @@ def _launch_cook_session(
     extra_env: dict[str, str] | None = None,
     resume_spec: ResumeSpec = NoResume(),
     project_dir: Path | None = None,
+    required_env: frozenset[str] | None = None,
 ) -> None:
     """Launch an interactive Claude Code cook session with reload and infra-resume support."""
     _max_reloads = 10
@@ -132,6 +135,7 @@ def _launch_cook_session(
             extra_env=extra_env,
             resume_spec=current_resume_spec,
             project_dir=project_dir,
+            required_env=required_env,
         )
         if session_signal is None:
             break

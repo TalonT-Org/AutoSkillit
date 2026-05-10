@@ -163,3 +163,31 @@ def test_build_claude_env_subprocess_compatible() -> None:
     stdout, _ = proc.communicate(timeout=10)
     assert proc.returncode == 0
     assert b"ok" in stdout
+
+
+def test_build_claude_env_required_raises_on_missing() -> None:
+    """build_claude_env raises ValueError when required keys are absent."""
+    with pytest.raises(ValueError) as exc_info:
+        build_claude_env(extras={"FOO": "bar"}, required=frozenset({"MISSING_KEY"}))
+    assert "MISSING_KEY" in str(exc_info.value)
+
+
+def test_build_claude_env_required_passes_when_all_present() -> None:
+    """build_claude_env succeeds when all required keys are present."""
+    result = build_claude_env(
+        extras={"REQUIRED_KEY": "val"},
+        required=frozenset({"REQUIRED_KEY"}),
+    )
+    assert result["REQUIRED_KEY"] == "val"
+
+
+def test_build_claude_env_required_empty_set_succeeds() -> None:
+    """required=frozenset() (empty) always passes."""
+    result = build_claude_env(extras={"A": "1"}, required=frozenset())
+    assert result["A"] == "1"
+
+
+def test_build_claude_env_required_none_defaults_to_no_check() -> None:
+    """required=None (default) skips the check entirely."""
+    result = build_claude_env(extras={"B": "2"})
+    assert result["B"] == "2"

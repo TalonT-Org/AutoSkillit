@@ -113,7 +113,10 @@ from .types import FLEET_DISPATCH_TOOLS as FLEET_DISPATCH_TOOLS
 from .types import FLEET_ERROR_CODES as FLEET_ERROR_CODES
 from .types import FLEET_MENU_TOOLS as FLEET_MENU_TOOLS
 from .types import FLEET_MODE_ENV_VAR as FLEET_MODE_ENV_VAR
+from .types import FLEET_SESSION_REQUIRED_ENV as FLEET_SESSION_REQUIRED_ENV
+from .types import FLEET_TOOLS as FLEET_TOOLS
 from .types import FOOD_TRUCK_TOOL_TAGS_ENV_VAR as FOOD_TRUCK_TOOL_TAGS_ENV_VAR
+from .types import FOOD_TRUCK_REQUIRED_ENV as FOOD_TRUCK_REQUIRED_ENV
 from .types import FLEET_TOOLS as FLEET_TOOLS
 from .types import FREE_RANGE_TOOLS as FREE_RANGE_TOOLS
 from .types import GATED_TOOLS as GATED_TOOLS
@@ -174,6 +177,7 @@ from .types import FeatureLifecycle as FeatureLifecycle
 from .types import FigureSpec as FigureSpec
 from .types import FleetErrorCode as FleetErrorCode
 from .types import FleetLock as FleetLock
+from .types import FleetSessionEnv as FleetSessionEnv
 from .types import GateState as GateState
 from .types import GitHubApiLog as GitHubApiLog
 from .types import GitHubFetcher as GitHubFetcher

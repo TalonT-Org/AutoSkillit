@@ -9,7 +9,8 @@ Type re-export hub and all typed building blocks for the autoskillit package (IL
 | `__init__.py` | Re-export hub — aggregates `__all__` from all `_type_*.py` modules |
 | `_type_enums.py` | All `StrEnum` discriminators (`RetryReason`, `KillReason`, `Severity`, etc.) |
 | `_type_figure_spec.py` | `FigureSpec` TypedDict and consumer/producer field sets for `yaml:figure-spec` contracts |
-| `_type_constants.py` | Shared constants: tool lists, env var names, version string |
+| `_type_constants.py` | Shared constants: tool lists, env var names, env var sets for session kinds |
+| `_type_session_env.py` | Typed env spec dataclasses for session launch boundaries (`FleetSessionEnv`) |
 | `_type_subprocess.py` | `SubprocessResult` dataclass and `SubprocessRunner` protocol |
 | `_type_results_execution.py` | Execution-scoped result dataclasses: `SessionTelemetry`, `RecipeIdentity`, `CIRunScope` |
 | `_type_results.py` | Core result dataclasses: `SkillResult`, `ProviderOutcome`, `LoadResult`, `FailureRecord`, `WriteBehaviorSpec` |

@@ -28,6 +28,7 @@ Core layer (IL-0) unit tests — paths, IO, types, feature flags.
 | `test_resolve_main_worktree.py` | Tests for autoskillit.core.paths.resolve_main_worktree — resolves any git path to the main worktree root |
 | `test_session_provenance.py` | Tests for core/runtime/session_provenance.py — provenance store for L2 sessions |
 | `test_session_checkpoint.py` | Tests for SessionCheckpoint schema validation and compute_remaining |
+| `test_session_env_specs.py` | Tests for FleetSessionEnv dataclass and its to_dict method |
 | `test_session_index_schema.py` | Tests for SessionIndexEntry TypedDict field completeness |
 | `test_session_liveness.py` | Tests for is_session_alive generalized liveness triple-check |
 | `test_session_registry.py` | Tests for core/session_registry.py |

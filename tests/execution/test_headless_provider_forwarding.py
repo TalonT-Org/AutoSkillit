@@ -346,3 +346,258 @@ def test_build_skill_result_provider_used_survives_budget_guard() -> None:
         provider_used="bedrock",
     )
     assert sr.provider.provider_used == "bedrock"
+
+
+# ── marker_dir / session_id forwarding tests ───────────────────────────────────
+
+
+def test_execute_claude_headless_accepts_marker_dir_and_session_id() -> None:
+    import inspect
+
+    from autoskillit.execution.headless import _execute_claude_headless
+
+    sig = inspect.signature(_execute_claude_headless)
+    params = sig.parameters
+    assert "marker_dir" in params
+    assert params["marker_dir"].default is None
+    assert params["marker_dir"].kind == inspect.Parameter.KEYWORD_ONLY
+    assert "session_id" in params
+    assert params["session_id"].default is None
+    assert params["session_id"].kind == inspect.Parameter.KEYWORD_ONLY
+
+
+def test_dispatch_food_truck_accepts_marker_dir_and_session_id() -> None:
+    import inspect
+
+    from autoskillit.execution.headless import DefaultHeadlessExecutor
+
+    sig = inspect.signature(DefaultHeadlessExecutor.dispatch_food_truck)
+    params = sig.parameters
+    assert "marker_dir" in params
+    assert params["marker_dir"].default is None
+    assert params["marker_dir"].kind == inspect.Parameter.KEYWORD_ONLY
+    assert "session_id" in params
+    assert params["session_id"].default is None
+    assert params["session_id"].kind == inspect.Parameter.KEYWORD_ONLY
+
+
+@pytest.mark.anyio
+async def test_dispatch_food_truck_forwards_marker_dir_and_session_id(
+    minimal_ctx, tmp_path, monkeypatch
+) -> None:
+
+    from autoskillit.execution.headless import DefaultHeadlessExecutor
+
+    execute_kwargs: dict = {}
+
+    async def fake_execute(spec, cwd, ctx, **kwargs):
+        execute_kwargs.update(kwargs)
+        return SkillResult(
+            success=True,
+            result="ok",
+            session_id="s1",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        )
+
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._build_skill_result",
+        lambda *a, **kw: SkillResult(
+            success=True,
+            result="ok",
+            session_id="s1",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        ),
+    )
+    monkeypatch.setattr("autoskillit.execution.headless._execute_claude_headless", fake_execute)
+    monkeypatch.setattr("autoskillit.execution.headless._capture_git_head_sha", lambda *a: "")
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._compute_post_session_metrics",
+        lambda *a, **kw: object(),
+    )
+
+    executor = DefaultHeadlessExecutor(minimal_ctx)
+    marker = tmp_path / "markers"
+    await executor.dispatch_food_truck(
+        "prompt",
+        str(tmp_path),
+        completion_marker="%%DONE%%",
+        marker_dir=marker,
+        session_id="dispatch-uuid-123",
+    )
+
+    assert execute_kwargs["marker_dir"] == marker
+    assert execute_kwargs["session_id"] == "dispatch-uuid-123"
+
+
+@pytest.mark.anyio
+async def test_dispatch_food_truck_derives_marker_dir_from_cwd(
+    minimal_ctx, tmp_path, monkeypatch
+) -> None:
+    from pathlib import Path
+
+    from autoskillit.execution.headless import DefaultHeadlessExecutor
+
+    execute_kwargs: dict = {}
+
+    async def fake_execute(spec, cwd, ctx, **kwargs):
+        execute_kwargs.update(kwargs)
+        return SkillResult(
+            success=True,
+            result="ok",
+            session_id="s1",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        )
+
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._build_skill_result",
+        lambda *a, **kw: SkillResult(
+            success=True,
+            result="ok",
+            session_id="s1",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        ),
+    )
+    monkeypatch.setattr("autoskillit.execution.headless._execute_claude_headless", fake_execute)
+    monkeypatch.setattr(
+        "autoskillit.execution.headless.claude_code_project_dir",
+        lambda cwd: Path("/derived/project"),
+    )
+    monkeypatch.setattr("autoskillit.execution.headless._capture_git_head_sha", lambda *a: "")
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._compute_post_session_metrics",
+        lambda *a, **kw: object(),
+    )
+
+    executor = DefaultHeadlessExecutor(minimal_ctx)
+    await executor.dispatch_food_truck(
+        "prompt",
+        str(tmp_path),
+        completion_marker="%%DONE%%",
+    )
+
+    assert execute_kwargs["marker_dir"] == Path("/derived/project")
+
+
+@pytest.mark.anyio
+async def test_dispatch_food_truck_marker_dir_none_when_cwd_falsy(
+    minimal_ctx, monkeypatch
+) -> None:
+    execute_kwargs: dict = {}
+
+    async def fake_execute(spec, cwd, ctx, **kwargs):
+        execute_kwargs.update(kwargs)
+        return SkillResult(
+            success=True,
+            result="ok",
+            session_id="s1",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        )
+
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._build_skill_result",
+        lambda *a, **kw: SkillResult(
+            success=True,
+            result="ok",
+            session_id="s1",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        ),
+    )
+    monkeypatch.setattr("autoskillit.execution.headless._execute_claude_headless", fake_execute)
+    monkeypatch.setattr("autoskillit.execution.headless._capture_git_head_sha", lambda *a: "")
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._compute_post_session_metrics",
+        lambda *a, **kw: object(),
+    )
+
+    from autoskillit.execution.headless import DefaultHeadlessExecutor
+
+    executor = DefaultHeadlessExecutor(minimal_ctx)
+    await executor.dispatch_food_truck(
+        "prompt",
+        "",
+        completion_marker="%%DONE%%",
+    )
+
+    assert execute_kwargs["marker_dir"] is None
+
+
+@pytest.mark.anyio
+async def test_execute_claude_headless_forwards_marker_dir_to_runner(
+    minimal_ctx, tmp_path, monkeypatch
+) -> None:
+    from pathlib import Path
+
+    from autoskillit.execution.commands import ClaudeHeadlessCmd
+    from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
+    from tests.execution.conftest import _sr
+
+    spec = ClaudeHeadlessCmd(cmd=["echo", "test"], env={})
+    runner_kwargs: dict = {}
+
+    async def fake_runner(cmd, **kwargs):
+        runner_kwargs.update(kwargs)
+        return _sr()
+
+    minimal_ctx.runner = fake_runner
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._build_skill_result",
+        lambda *a, **kw: SkillResult(
+            success=True,
+            result="ok",
+            session_id="s1",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        ),
+    )
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._compute_post_session_metrics",
+        lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),
+    )
+    monkeypatch.setattr("autoskillit.execution.headless._capture_git_head_sha", lambda *a: "")
+
+    await _execute_claude_headless(
+        spec,
+        str(tmp_path),
+        minimal_ctx,
+        timeout=60,
+        stale_threshold=30,
+        marker_dir=Path("/custom/markers"),
+        session_id="sess-abc",
+    )
+
+    assert runner_kwargs["marker_dir"] == Path("/custom/markers")
+    assert runner_kwargs["session_id"] == "sess-abc"

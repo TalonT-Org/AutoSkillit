@@ -245,6 +245,19 @@ def test_default_headless_executor_satisfies_headless_executor():
     assert isinstance(DefaultHeadlessExecutor(MagicMock()), HeadlessExecutor)
 
 
+def test_headless_executor_protocol_dispatch_has_marker_params():
+    import inspect
+
+    from autoskillit.core import HeadlessExecutor
+
+    sig = inspect.signature(HeadlessExecutor.dispatch_food_truck)
+    params = sig.parameters
+    assert "marker_dir" in params
+    assert params["marker_dir"].default is None
+    assert "session_id" in params
+    assert params["session_id"].default is None
+
+
 # ── GateState mutation (REQ-PROTO-009) ────────────────────────────────────────
 
 

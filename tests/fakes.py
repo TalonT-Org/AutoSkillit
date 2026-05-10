@@ -236,6 +236,8 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         provider_fallback_name: str = "",
         sentinel_contract: str = "",
         prior_completion_markers: Sequence[str] | None = None,
+        marker_dir: Path | None = None,
+        session_id: str | None = None,
     ) -> SkillResult:
         self.dispatch_calls.append(
             DispatchFoodTruckCall(

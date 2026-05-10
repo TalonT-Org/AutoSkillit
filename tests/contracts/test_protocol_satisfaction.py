@@ -342,6 +342,8 @@ class TestGroupDApiContractPreservation:
             "on_pid_resolved",
             "enable_deadline_extension",
             "max_extension_seconds",
+            "marker_dir",
+            "session_id",
         }
         assert expected == public_params, (
             f"run_managed_async public params changed.\n"
@@ -406,11 +408,53 @@ class TestGroupDApiContractPreservation:
             "on_pid_resolved",
             "enable_deadline_extension",
             "max_extension_seconds",
+            "marker_dir",
+            "session_id",
         }
         assert expected == actual, (
             f"DefaultSubprocessRunner.__call__ params changed.\n"
             f"  Missing: {expected - actual}\n"
             f"  Extra:   {actual - expected}"
+        )
+
+    def test_run_managed_async_marker_dir_session_id_defaults(self):
+        """run_managed_async marker_dir and session_id default to None."""
+        sig = inspect.signature(run_managed_async)
+        assert sig.parameters["marker_dir"].default is None
+        assert sig.parameters["session_id"].default is None
+
+    def test_run_managed_async_marker_params_after_session_id_timeout(self):
+        """marker_dir and session_id appear after _session_id_timeout in run_managed_async."""
+        sig = inspect.signature(run_managed_async)
+        p = sig.parameters
+        session_id_timeout_idx = list(sig.parameters).index("_session_id_timeout")
+        marker_dir_idx = list(sig.parameters).index("marker_dir")
+        session_id_idx = list(sig.parameters).index("session_id")
+        assert marker_dir_idx == session_id_timeout_idx + 1
+        assert session_id_idx == marker_dir_idx + 1
+
+    def test_default_subprocess_runner_marker_dir_session_id_defaults(self):
+        """DefaultSubprocessRunner.__call__ marker_dir and session_id default to None."""
+        sig = inspect.signature(DefaultSubprocessRunner.__call__)
+        assert sig.parameters["marker_dir"].default is None
+        assert sig.parameters["session_id"].default is None
+
+    def test_default_subprocess_runner_marker_params_after_max_extension(self):
+        """marker_dir and session_id appear after max_extension_seconds in DefaultSubprocessRunner.__call__."""
+        sig = inspect.signature(DefaultSubprocessRunner.__call__)
+        max_extension_idx = list(sig.parameters).index("max_extension_seconds")
+        marker_dir_idx = list(sig.parameters).index("marker_dir")
+        session_id_idx = list(sig.parameters).index("session_id")
+        assert marker_dir_idx == max_extension_idx + 1
+        assert session_id_idx == marker_dir_idx + 1
+
+    def test_default_subprocess_runner_satisfies_protocol_with_marker_params(self):
+        """DefaultSubprocessRunner() satisfies SubprocessRunner with marker_dir/session_id added."""
+        from autoskillit.core.types import SubprocessRunner
+
+        runner = DefaultSubprocessRunner()
+        assert isinstance(runner, SubprocessRunner), (
+            "DefaultSubprocessRunner no longer satisfies the SubprocessRunner protocol"
         )
 
     # ------------------------------------------------------------------

@@ -854,6 +854,13 @@ class TestWriteCapturedValuesCorruptStateNoOp:
         assert sp.read_text(encoding="utf-8") == original
 
 
+class TestWriteCapturedValuesRaisesOnMissingFile:
+    def test_missing_file_raises_file_not_found_error(self, tmp_path: Path) -> None:
+        sp = tmp_path / "nonexistent" / "state.json"
+        with pytest.raises(FileNotFoundError):
+            write_captured_values(sp, {"key": "val"})
+
+
 class TestReadAllCampaignCapturesMixedSuccessFailure:
     def test_mixed_success_failure_returns_empty(self, tmp_path: Path) -> None:
         d = tmp_path / "dispatches"

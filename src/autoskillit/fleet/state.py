@@ -9,6 +9,7 @@ from __future__ import annotations
 import dataclasses
 import fcntl
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -16,7 +17,12 @@ if TYPE_CHECKING:
     from types import TracebackType
     from typing import IO
 
-from autoskillit.core import get_logger, read_versioned_json, write_versioned_json
+from autoskillit.core import (
+    DispatchIdentity,
+    get_logger,
+    read_versioned_json,
+    write_versioned_json,
+)
 from autoskillit.fleet.state_gates import record_gate_outcome
 from autoskillit.fleet.state_recovery import (
     has_blocking_dispatch,
@@ -63,6 +69,7 @@ __all__ = [
     "ResumeDecision",
     # local
     "CampaignStateMutator",
+    "DispatchStateHandle",
     "write_initial_state",
     "read_state",
     "mark_dispatch_running",
@@ -101,6 +108,48 @@ def write_initial_state(
         "recipe_snapshot": recipe_snapshot or {},
     }
     write_versioned_json(state_path, payload, schema_version=FLEET_STATE_SCHEMA_VERSION)
+
+
+@dataclass(frozen=True, slots=True)
+class DispatchStateHandle:
+    """Proof that a per-dispatch state file exists.
+
+    Cannot be constructed without verifying or creating the file.
+    All state mutations in _run_dispatch use handle.state_path,
+    which is guaranteed to point to an existing file.
+    """
+
+    state_path: Path
+    identity: DispatchIdentity
+
+    @classmethod
+    def create_fresh(
+        cls,
+        dispatches_dir: Path,
+        campaign_id: str,
+        campaign_name: str,
+        manifest_path: str,
+        dispatches: list[DispatchRecord],
+        recipe_snapshot: dict[str, Any] | None = None,
+    ) -> DispatchStateHandle:
+        identity = DispatchIdentity.fresh()
+        state_path = dispatches_dir / f"{identity.dispatch_id}.json"
+        write_initial_state(
+            state_path, campaign_id, campaign_name, manifest_path, dispatches, recipe_snapshot
+        )
+        return cls(state_path=state_path, identity=identity)
+
+    @classmethod
+    def open_continued(
+        cls,
+        dispatches_dir: Path,
+        prior_dispatch_id: str,
+    ) -> DispatchStateHandle:
+        identity = DispatchIdentity.from_dispatch_id(prior_dispatch_id)
+        state_path = dispatches_dir / f"{identity.dispatch_id}.json"
+        if not state_path.exists():
+            raise FileNotFoundError(f"Cannot resume dispatch: state file missing at {state_path}")
+        return cls(state_path=state_path, identity=identity)
 
 
 def _clear_dispatch_for_retry(d: DispatchRecord) -> None:
@@ -462,11 +511,14 @@ def write_captured_values(state_path: Path, captures: dict[str, str]) -> None:
     """Atomically merge new captures into an existing state file.
 
     Merges `captures` into the existing `captured_values` dict (new keys win).
-    No-op if state file is missing or corrupted (logs a warning).
+    Raises FileNotFoundError if the state file does not exist.
+    No-op if state file is corrupted (logs a warning).
     """
+    if not state_path.exists():
+        raise FileNotFoundError(f"write_captured_values: state file not found at {state_path}")
     with CampaignStateMutator(state_path) as m:
         if m.state is None:
-            logger.warning("write_captured_values: state not found at %s", state_path)
+            logger.warning("write_captured_values: state corrupt at %s", state_path)
             return
         m.state.captured_values = {**m.state.captured_values, **captures}
         m.mark_dirty()

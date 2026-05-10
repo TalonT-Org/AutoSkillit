@@ -147,7 +147,8 @@
         "step_name": "troubleshoot_implement_failure"
       },
       "capture": {
-        "is_fixable": "${{ result.is_fixable }}"
+        "is_fixable": "${{ result.is_fixable }}",
+        "retry_delay": "${{ result.retry_delay }}"
       },
       "on_success": "route_implement_failure",
       "on_failure": "escalate_stop"
@@ -180,14 +181,41 @@
           "route": "run_experiment"
         },
         {
-          "route": "plan_phase"
+          "route": "route_implement_retry_delay"
         }
       ],
       "on_failure": "run_experiment",
       "optional_context_refs": [
-        "implement_fix_count"
+        "implement_fix_count",
+        "retry_delay"
       ],
       "note": "Iteration guard for implement_phase → troubleshoot → plan_phase cycle. Caps fix-and-retry loops at 3 iterations. On exhaustion, skips to run_experiment with whatever implementation is committed.\n"
+    },
+    "route_implement_retry_delay": {
+      "action": "route",
+      "on_result": [
+        {
+          "when": "${{ context.retry_delay }}",
+          "route": "implement_retry_delay"
+        },
+        {
+          "route": "plan_phase"
+        }
+      ]
+    },
+    "implement_retry_delay": {
+      "tool": "run_cmd",
+      "with": {
+        "cmd": "sleep ${{ context.retry_delay }}",
+        "cwd": "${{ inputs.source_dir }}",
+        "step_name": "implement_retry_delay"
+      },
+      "on_success": "plan_phase",
+      "on_failure": "plan_phase",
+      "optional_context_refs": [
+        "retry_delay"
+      ],
+      "note": "Backoff delay for transient API errors. Sleeps for the number of seconds specified by troubleshoot-experiment (typically 120s) before re-entering the plan_phase retry cycle.\n"
     },
     "next_phase_or_experiment": {
       "action": "route",
@@ -232,7 +260,8 @@
         "step_name": "troubleshoot_run_failure"
       },
       "capture": {
-        "run_is_fixable": "${{ result.is_fixable }}"
+        "run_is_fixable": "${{ result.is_fixable }}",
+        "run_retry_delay": "${{ result.retry_delay }}"
       },
       "on_success": "route_run_failure",
       "on_failure": "escalate_stop"
@@ -282,14 +311,41 @@
           "route": "ensure_results"
         },
         {
-          "route": "run_experiment"
+          "route": "route_run_retry_delay"
         }
       ],
       "on_failure": "ensure_results",
       "optional_context_refs": [
-        "run_fix_count"
+        "run_fix_count",
+        "run_retry_delay"
       ],
       "note": "Iteration guard for the adjust_experiment → check_run_fix_loop → run_experiment sub-loop (entered via troubleshoot_run_failure → route_run_failure → adjust_experiment). Caps experiment fix loops at 3 iterations. On exhaustion, proceeds to ensure_results to salvage whatever data exists.\n"
+    },
+    "route_run_retry_delay": {
+      "action": "route",
+      "on_result": [
+        {
+          "when": "${{ context.run_retry_delay }}",
+          "route": "run_retry_delay"
+        },
+        {
+          "route": "run_experiment"
+        }
+      ]
+    },
+    "run_retry_delay": {
+      "tool": "run_cmd",
+      "with": {
+        "cmd": "sleep ${{ context.run_retry_delay }}",
+        "cwd": "${{ inputs.source_dir }}",
+        "step_name": "run_retry_delay"
+      },
+      "on_success": "run_experiment",
+      "on_failure": "run_experiment",
+      "optional_context_refs": [
+        "run_retry_delay"
+      ],
+      "note": "Backoff delay for transient API errors before re-entering the run_experiment retry cycle.\n"
     },
     "ensure_results": {
       "tool": "run_python",

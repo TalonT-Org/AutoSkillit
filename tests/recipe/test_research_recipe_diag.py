@@ -174,3 +174,67 @@ def test_run_experiment_exhausted_unchanged(recipe):
     """run_experiment on_exhausted must still route to ensure_results."""
     step = recipe.steps["run_experiment"]
     assert step.on_exhausted == "ensure_results"
+
+
+def test_troubleshoot_step_captures_retry_delay(recipe):
+    """troubleshoot_implement_failure must capture retry_delay for downstream delay gate."""
+    step = recipe.steps["troubleshoot_implement_failure"]
+    capture = step.capture or {}
+    assert "retry_delay" in capture
+
+
+def test_troubleshoot_run_failure_captures_run_retry_delay(recipe):
+    """troubleshoot_run_failure must capture run_retry_delay for downstream delay gate."""
+    step = recipe.steps["troubleshoot_run_failure"]
+    capture = step.capture or {}
+    assert "run_retry_delay" in capture
+
+
+def test_research_recipe_has_implement_retry_delay_step(recipe):
+    """research.yaml must contain the implement_retry_delay run_cmd step."""
+    assert "implement_retry_delay" in recipe.steps
+    step = recipe.steps["implement_retry_delay"]
+    assert step.tool == "run_cmd"
+    assert "sleep" in step.with_args.get("cmd", "")
+
+
+def test_research_recipe_has_route_implement_retry_delay(recipe):
+    """research.yaml must contain the route_implement_retry_delay routing step."""
+    assert "route_implement_retry_delay" in recipe.steps
+    step = recipe.steps["route_implement_retry_delay"]
+    assert step.action == "route"
+
+
+def test_research_recipe_has_run_retry_delay_step(recipe):
+    """research.yaml must contain the run_retry_delay run_cmd step."""
+    assert "run_retry_delay" in recipe.steps
+    step = recipe.steps["run_retry_delay"]
+    assert step.tool == "run_cmd"
+    assert "sleep" in step.with_args.get("cmd", "")
+
+
+def test_research_recipe_has_route_run_retry_delay(recipe):
+    """research.yaml must contain the route_run_retry_delay routing step."""
+    assert "route_run_retry_delay" in recipe.steps
+    step = recipe.steps["route_run_retry_delay"]
+    assert step.action == "route"
+
+
+def test_check_implement_fix_loop_routes_to_delay_gate(recipe):
+    """Loop guard must route through delay gate, not directly to plan_phase."""
+    step = recipe.steps["check_implement_fix_loop"]
+    assert step.on_result is not None, "check_implement_fix_loop must have on_result"
+    conditions = step.on_result.conditions
+    assert conditions, "check_implement_fix_loop on_result must have non-empty conditions"
+    non_exhausted = [c for c in conditions if c.when is None or "max_exceeded" not in c.when]
+    assert any(c.route == "route_implement_retry_delay" for c in non_exhausted)
+
+
+def test_check_run_fix_loop_routes_to_delay_gate(recipe):
+    """Run loop guard must route through delay gate, not directly to run_experiment."""
+    step = recipe.steps["check_run_fix_loop"]
+    assert step.on_result is not None, "check_run_fix_loop must have on_result"
+    conditions = step.on_result.conditions
+    assert conditions, "check_run_fix_loop on_result must have non-empty conditions"
+    non_exhausted = [c for c in conditions if c.when is None or "max_exceeded" not in c.when]
+    assert any(c.route == "route_run_retry_delay" for c in non_exhausted)

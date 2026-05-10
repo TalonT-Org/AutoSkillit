@@ -85,9 +85,12 @@ Apply this decision table in priority order (stop at the first match):
 | 2 | `termination_reason == "stale"` | `stale_timeout` | `true` |
 | 3 | `exit_code != 0` AND logs contain build/compile error keywords (`SyntaxError`, `ModuleNotFoundError`, `ImportError`, `error: command`) | `build_failure` | `true` |
 | 4 | `step_name == "run_experiment"` AND (`blocked_hypotheses` token present in run-experiment results OR results file contains `## Status: FAILED` with data acquisition errors) | `data_missing` | `true` |
-| 5 | Logs contain environment/infra keywords (`Permission denied`, `No such file or directory` for system paths, `Connection refused`) | `environment_error` | `false` |
-| 6 | `anomaly_count > 0` AND any anomaly `kind` in `["oom_critical", "zombie_persistent"]` | `environment_error` | `false` |
-| 7 | All other cases | `unknown` | `false` |
+| 5 | Session logs contain Anthropic API error keywords (`overloaded_error`, `rate_limit_error`) OR HTTP status codes `429`, `529` in error responses | `transient_api` | `true` |
+| 6 | Logs contain environment/infra keywords (`Permission denied`, `No such file or directory` for system paths, `Connection refused`) | `environment_error` | `false` |
+| 7 | `anomaly_count > 0` AND any anomaly `kind` in `["oom_critical", "zombie_persistent"]` | `environment_error` | `false` |
+| 8 | All other cases | `unknown` | `false` |
+
+When `failure_type=transient_api`, the output MUST include `retry_delay = 120`. This signals the recipe orchestrator to wait 120 seconds before re-dispatching `plan_phase`, preventing tight retry loops against an overloaded API.
 
 ### Step 5: Write Diagnosis Report
 
@@ -130,6 +133,8 @@ Write the diagnosis file to:
   attempt should focus on resolving the identified error."
 - data_missing: "Required experiment data was not available. Adjust experiment
   parameters or data acquisition strategy."
+- transient_api: "The Anthropic API returned a transient error (overloaded or rate-limited).
+  The orchestrator will wait retry_delay seconds before retrying. No code changes needed."
 - environment_error/unknown: "Automated remediation is not feasible. Human review
   of the session log is required."}
 ```
@@ -142,8 +147,9 @@ on the exact token name — decorators cause match failure.
 
 ```
 diagnosis_path = {absolute_path_to_report}
-failure_type = {stale_timeout|context_exhaustion|build_failure|data_missing|environment_error|unknown}
+failure_type = {stale_timeout|context_exhaustion|build_failure|data_missing|transient_api|environment_error|unknown}
 is_fixable = {true|false}
+retry_delay = {seconds}  ← ONLY emitted when failure_type = transient_api
 ```
 
 ## Degradation Handling

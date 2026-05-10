@@ -14,7 +14,8 @@
     "measurement_alignment": "M",
     "resource_proportionality": "L",
     "data_acquisition": "M",
-    "agent_implementability": "H"
+    "agent_implementability": "H",
+    "scope_alignment": "M"
   },
   "applicable_lenses": {
     "primary": "exp-lens-estimand-clarity",
@@ -27,5 +28,8 @@
   "l1_severity": {
     "estimand_clarity": "warning",
     "hypothesis_falsifiability": "warning"
+  },
+  "dimension_weight_rationale": {
+    "scope_alignment": "Configuration studies explore a defined parameter space; covering only a subset of scoped parameters reduces cross-parameter interpretability but does not invalidate the explored configurations, justifying M rather than H"
   }
 }

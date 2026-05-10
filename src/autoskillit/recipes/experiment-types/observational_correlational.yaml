@@ -14,6 +14,7 @@ dimension_weights:
   resource_proportionality: L
   data_acquisition: H
   agent_implementability: L
+  scope_alignment: M
 applicable_lenses:
   primary: exp-lens-validity-threats
   secondary: exp-lens-measurement-validity
@@ -29,3 +30,4 @@ dimension_weight_rationale:
   ecological_validity: "Naturalistic observation maximizes ecological validity; the key question is sample representativeness"
   measurement_alignment: "Self-report scales and archival proxies introduce construct validity threats requiring convergent evidence"
   data_acquisition: "Sampling frame, response rate, and missing-not-at-random mechanisms determine population validity"
+  scope_alignment: "Observational designs should justify which scoped associations are included and which are deferred"

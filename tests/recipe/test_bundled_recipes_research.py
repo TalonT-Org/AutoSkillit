@@ -78,6 +78,12 @@ class TestResearchRecipeStructure:
         assert step.retries == 2
         assert step.on_exhausted == "create_worktree"
 
+    def test_review_design_receives_scope_report(self, recipe) -> None:
+        """review_design step must pass scope_report as a second argument."""
+        step = recipe.steps["review_design"]
+        cmd = step.with_args["skill_command"]
+        assert "${{ context.scope_report }}" in cmd
+
     def test_plan_experiment_routes_to_review_design(self, recipe) -> None:
         step = recipe.steps["plan_experiment"]
         assert step.on_success == "review_design"

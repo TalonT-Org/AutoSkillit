@@ -1,4 +1,4 @@
-generated_at: '2026-05-07T16:23:58.667262+00:00'
+generated_at: '1970-01-01T00:00:00+00:00'
 bundled_manifest_version: 0.1.0
 skill_hashes: {}
 skills:
@@ -17,10 +17,11 @@ skills:
     - scope_report\s*=\s*/.+
     - scope_directions\s*=\s*/.+
     pattern_examples:
-    - |-
-      scope_report = /tmp/scope_report.md
+    - 'scope_report = /tmp/scope_report.md
+
       scope_directions = /tmp/scope_directions.json
-      %%ORDER_UP%%
+
+      %%ORDER_UP%%'
     write_behavior: always
   plan-experiment:
     inputs:
@@ -51,6 +52,10 @@ skills:
     - name: experiment_plan
       type: file_path
       required: true
+      recommended: false
+    - name: scope_report
+      type: file_path
+      required: false
       recommended: false
     outputs:
     - name: verdict
@@ -126,11 +131,7 @@ skills:
       required: true
       recommended: false
     - name: scope_report_path
-      type: string
-      required: false
-      recommended: false
-    - name: experiment_type
-      type: string
+      type: file_path
       required: false
       recommended: false
     outputs:
@@ -149,20 +150,10 @@ skills:
     expected_output_patterns:
     - visualization_plan_path\s*=\s*/.+
     - report_plan_path\s*=\s*/.+
-    - methodology_tradition\s*=\s*\S+
     pattern_examples:
     - 'visualization_plan_path = /tmp/plan-visualization/visualization-plan.md
 
       report_plan_path = /tmp/plan-visualization/report-plan.md
-
-      methodology_tradition = controlled_intervention
-
-      %%ORDER_UP%%'
-    - 'visualization_plan_path = /tmp/plan-visualization/visualization-plan.md
-
-      report_plan_path = /tmp/plan-visualization/report-plan.md
-
-      methodology_tradition = null
 
       %%ORDER_UP%%'
     write_behavior: always
@@ -212,6 +203,32 @@ skills:
     - 'verdict = PASS
 
       resource_report = /tmp/stage-data/resource_feasibility_2026-04-13_120000.md
+
+      %%ORDER_UP%%'
+    write_behavior: always
+  download-data:
+    inputs:
+    - name: experiment_plan
+      type: file_path
+      required: true
+      recommended: false
+    outputs:
+    - name: verdict
+      type: string
+    - name: download_report
+      type: file_path
+    expected_output_patterns:
+    - verdict\s*=\s*(PASS|WARN|FAIL)
+    - download_report\s*=\s*\S+/download-data/.+
+    pattern_examples:
+    - 'verdict = PASS
+
+      download_report = /tmp/download-data/download_report.md
+
+      %%ORDER_UP%%'
+    - 'verdict = WARN
+
+      download_report = /tmp/download-data/download_report.md
 
       %%ORDER_UP%%'
     write_behavior: always
@@ -339,6 +356,8 @@ skills:
       type: string
     - name: is_fixable
       type: string
+    - name: retry_delay
+      type: integer
     expected_output_patterns:
     - is_fixable\s*=\s*(true|false)
     pattern_examples:
@@ -347,6 +366,46 @@ skills:
       failure_type = stale_timeout
 
       is_fixable = true
+
+      %%ORDER_UP%%'
+    - 'diagnosis_path = /tmp/diagnosis.md
+
+      failure_type = transient_api
+
+      is_fixable = true
+
+      retry_delay = 120
+
+      %%ORDER_UP%%'
+    write_behavior: always
+  audit-impl:
+    inputs:
+    - name: plan_path
+      type: file_path
+      required: true
+      recommended: false
+    - name: branch_name
+      type: string
+      required: false
+      recommended: false
+    - name: base_branch
+      type: string
+      required: false
+      recommended: false
+    outputs:
+    - name: verdict
+      type: string
+    - name: remediation_path
+      type: file_path
+    expected_output_patterns:
+    - verdict\s*=\s*(GO|NO GO)
+    pattern_examples:
+    - 'verdict = GO
+
+      %%ORDER_UP%%'
+    - 'verdict = NO GO
+
+      remediation_path = /tmp/remediation.md
 
       %%ORDER_UP%%'
     write_behavior: always
@@ -366,6 +425,7 @@ skills:
     - group_manifest\s*=\s*/.+
     pattern_examples:
     - 'results_path = /tmp/run-experiment/results.md
+
       group_manifest = /tmp/run-experiment/group_manifest.json
 
       %%ORDER_UP%%'
@@ -379,14 +439,6 @@ skills:
     - name: results_path
       type: file_path
       required: true
-      recommended: false
-    - name: experiment_type
-      type: string
-      required: false
-      recommended: false
-    - name: methodology_tradition
-      type: string
-      required: false
       recommended: false
     - name: group_manifest
       type: file_path
@@ -694,6 +746,7 @@ skills:
 dataflow:
 - step: scope
   available:
+  - audit
   - audit_claims
   - base_branch
   - issue_url
@@ -702,6 +755,7 @@ dataflow:
   - review_pr
   - source_dir
   - task
+  - test_check_enabled
   required:
   - research_question
   produced:
@@ -709,6 +763,7 @@ dataflow:
   - scope_directions
 - step: plan_experiment
   available:
+  - audit
   - audit_claims
   - base_branch
   - issue_url
@@ -719,12 +774,14 @@ dataflow:
   - scope_report
   - source_dir
   - task
+  - test_check_enabled
   required:
-  - scope_report_path
+  - scope_report
   produced:
   - experiment_plan
 - step: review_design
   available:
+  - audit
   - audit_claims
   - base_branch
   - experiment_plan
@@ -732,9 +789,11 @@ dataflow:
   - output_mode
   - review_design
   - review_pr
+  - scope_directions
   - scope_report
   - source_dir
   - task
+  - test_check_enabled
   required: []
   produced:
   - verdict
@@ -744,6 +803,7 @@ dataflow:
   - classification_timestamp
 - step: plan_visualization
   available:
+  - audit
   - audit_claims
   - base_branch
   - classification_timestamp
@@ -755,9 +815,11 @@ dataflow:
   - review_design
   - review_pr
   - revision_guidance
+  - scope_directions
   - scope_report
   - source_dir
   - task
+  - test_check_enabled
   - verdict
   required:
   - experiment_plan_path
@@ -770,6 +832,7 @@ dataflow:
   - visualization_plan_trace_path
 - step: revise_design
   available:
+  - audit
   - audit_claims
   - base_branch
   - classification_timestamp
@@ -784,17 +847,20 @@ dataflow:
   - review_design
   - review_pr
   - revision_guidance
+  - scope_directions
   - scope_report
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
   - visualization_plan_trace_path
   required: []
   produced: []
-- step: resolve_design_review
+- step: check_design_review_loop
   available:
+  - audit
   - audit_claims
   - base_branch
   - classification_timestamp
@@ -809,9 +875,41 @@ dataflow:
   - review_design
   - review_pr
   - revision_guidance
+  - scope_directions
   - scope_report
   - source_dir
   - task
+  - test_check_enabled
+  - tier_c_lens
+  - verdict
+  - visualization_plan_path
+  - visualization_plan_trace_path
+  required: []
+  produced:
+  - design_review_count
+- step: resolve_design_review
+  available:
+  - audit
+  - audit_claims
+  - base_branch
+  - classification_timestamp
+  - design_review_count
+  - disambiguation_rule_applied
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_type
+  - issue_url
+  - methodology_tradition
+  - output_mode
+  - report_plan_path
+  - review_design
+  - review_pr
+  - revision_guidance
+  - scope_directions
+  - scope_report
+  - source_dir
+  - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -821,9 +919,11 @@ dataflow:
   - revision_guidance
 - step: design_rejected
   available:
+  - audit
   - audit_claims
   - base_branch
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
   - evaluation_dashboard
   - experiment_plan
@@ -835,9 +935,11 @@ dataflow:
   - review_design
   - review_pr
   - revision_guidance
+  - scope_directions
   - scope_report
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -846,9 +948,11 @@ dataflow:
   produced: []
 - step: create_worktree
   available:
+  - audit
   - audit_claims
   - base_branch
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
   - evaluation_dashboard
   - experiment_plan
@@ -860,9 +964,11 @@ dataflow:
   - review_design
   - review_pr
   - revision_guidance
+  - scope_directions
   - scope_report
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -873,9 +979,11 @@ dataflow:
   - research_dir
 - step: stage_data
   available:
+  - audit
   - audit_claims
   - base_branch
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
   - evaluation_dashboard
   - experiment_plan
@@ -888,9 +996,11 @@ dataflow:
   - review_design
   - review_pr
   - revision_guidance
+  - scope_directions
   - scope_report
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -900,11 +1010,13 @@ dataflow:
   produced:
   - verdict
   - resource_report
-- step: setup_environment
+- step: download_data
   available:
+  - audit
   - audit_claims
   - base_branch
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
   - evaluation_dashboard
   - experiment_plan
@@ -918,9 +1030,47 @@ dataflow:
   - review_design
   - review_pr
   - revision_guidance
+  - scope_directions
   - scope_report
   - source_dir
   - task
+  - test_check_enabled
+  - tier_c_lens
+  - verdict
+  - visualization_plan_path
+  - visualization_plan_trace_path
+  - worktree_path
+  required:
+  - experiment_plan
+  produced:
+  - verdict
+  - download_report
+- step: setup_environment
+  available:
+  - audit
+  - audit_claims
+  - base_branch
+  - classification_timestamp
+  - design_review_count
+  - disambiguation_rule_applied
+  - download_report
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_type
+  - issue_url
+  - methodology_tradition
+  - output_mode
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_pr
+  - revision_guidance
+  - scope_directions
+  - scope_report
+  - source_dir
+  - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -931,10 +1081,13 @@ dataflow:
   - verdict
 - step: decompose_phases
   available:
+  - audit
   - audit_claims
   - base_branch
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_type
@@ -947,9 +1100,11 @@ dataflow:
   - review_design
   - review_pr
   - revision_guidance
+  - scope_directions
   - scope_report
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -959,12 +1114,15 @@ dataflow:
   - source_doc
   produced:
   - group_files
-- step: plan_phase
+- step: capture_impl_base
   available:
+  - audit
   - audit_claims
   - base_branch
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_type
@@ -978,9 +1136,47 @@ dataflow:
   - review_design
   - review_pr
   - revision_guidance
+  - scope_directions
   - scope_report
   - source_dir
   - task
+  - test_check_enabled
+  - tier_c_lens
+  - verdict
+  - visualization_plan_path
+  - visualization_plan_trace_path
+  - worktree_path
+  required: []
+  produced:
+  - impl_base_sha
+- step: plan_phase
+  available:
+  - audit
+  - audit_claims
+  - base_branch
+  - classification_timestamp
+  - design_review_count
+  - disambiguation_rule_applied
+  - download_report
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_type
+  - group_files
+  - impl_base_sha
+  - issue_url
+  - methodology_tradition
+  - output_mode
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_pr
+  - revision_guidance
+  - scope_directions
+  - scope_report
+  - source_dir
+  - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -992,14 +1188,18 @@ dataflow:
   - phase_plan_path
 - step: implement_phase
   available:
+  - audit
   - audit_claims
   - base_branch
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_type
   - group_files
+  - impl_base_sha
   - issue_url
   - methodology_tradition
   - output_mode
@@ -1010,9 +1210,11 @@ dataflow:
   - review_design
   - review_pr
   - revision_guidance
+  - scope_directions
   - scope_report
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -1024,14 +1226,18 @@ dataflow:
   - worktree_path
 - step: troubleshoot_implement_failure
   available:
+  - audit
   - audit_claims
   - base_branch
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_type
   - group_files
+  - impl_base_sha
   - issue_url
   - methodology_tradition
   - output_mode
@@ -1042,9 +1248,11 @@ dataflow:
   - review_design
   - review_pr
   - revision_guidance
+  - scope_directions
   - scope_report
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -1053,17 +1261,22 @@ dataflow:
   required: []
   produced:
   - is_fixable
+  - retry_delay
   positional_args: 1
 - step: route_implement_failure
   available:
+  - audit
   - audit_claims
   - base_branch
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_type
   - group_files
+  - impl_base_sha
   - is_fixable
   - issue_url
   - methodology_tradition
@@ -1072,12 +1285,132 @@ dataflow:
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_pr
   - revision_guidance
+  - scope_directions
   - scope_report
   - source_dir
   - task
+  - test_check_enabled
+  - tier_c_lens
+  - verdict
+  - visualization_plan_path
+  - visualization_plan_trace_path
+  - worktree_path
+  required: []
+  produced: []
+- step: check_implement_fix_loop
+  available:
+  - audit
+  - audit_claims
+  - base_branch
+  - classification_timestamp
+  - design_review_count
+  - disambiguation_rule_applied
+  - download_report
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_type
+  - group_files
+  - impl_base_sha
+  - is_fixable
+  - issue_url
+  - methodology_tradition
+  - output_mode
+  - phase_plan_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - retry_delay
+  - review_design
+  - review_pr
+  - revision_guidance
+  - scope_directions
+  - scope_report
+  - source_dir
+  - task
+  - test_check_enabled
+  - tier_c_lens
+  - verdict
+  - visualization_plan_path
+  - visualization_plan_trace_path
+  - worktree_path
+  required: []
+  produced:
+  - implement_fix_count
+- step: route_implement_retry_delay
+  available:
+  - audit
+  - audit_claims
+  - base_branch
+  - classification_timestamp
+  - design_review_count
+  - disambiguation_rule_applied
+  - download_report
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_type
+  - group_files
+  - impl_base_sha
+  - implement_fix_count
+  - is_fixable
+  - issue_url
+  - methodology_tradition
+  - output_mode
+  - phase_plan_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - retry_delay
+  - review_design
+  - review_pr
+  - revision_guidance
+  - scope_directions
+  - scope_report
+  - source_dir
+  - task
+  - test_check_enabled
+  - tier_c_lens
+  - verdict
+  - visualization_plan_path
+  - visualization_plan_trace_path
+  - worktree_path
+  required: []
+  produced: []
+- step: implement_retry_delay
+  available:
+  - audit
+  - audit_claims
+  - base_branch
+  - classification_timestamp
+  - design_review_count
+  - disambiguation_rule_applied
+  - download_report
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_type
+  - group_files
+  - impl_base_sha
+  - implement_fix_count
+  - is_fixable
+  - issue_url
+  - methodology_tradition
+  - output_mode
+  - phase_plan_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - retry_delay
+  - review_design
+  - review_pr
+  - revision_guidance
+  - scope_directions
+  - scope_report
+  - source_dir
+  - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -1087,14 +1420,19 @@ dataflow:
   produced: []
 - step: next_phase_or_experiment
   available:
+  - audit
   - audit_claims
   - base_branch
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_type
   - group_files
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - methodology_tradition
@@ -1103,12 +1441,15 @@ dataflow:
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_pr
   - revision_guidance
+  - scope_directions
   - scope_report
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -1116,16 +1457,21 @@ dataflow:
   - worktree_path
   required: []
   produced: []
-- step: run_experiment
+- step: audit_impl
   available:
+  - audit
   - audit_claims
   - base_branch
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_type
   - group_files
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - methodology_tradition
@@ -1134,12 +1480,58 @@ dataflow:
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_pr
   - revision_guidance
+  - scope_directions
   - scope_report
   - source_dir
   - task
+  - test_check_enabled
+  - tier_c_lens
+  - verdict
+  - visualization_plan_path
+  - visualization_plan_trace_path
+  - worktree_path
+  required:
+  - plan_path
+  produced:
+  - audit_verdict
+  - remediation_path
+- step: run_experiment
+  available:
+  - audit
+  - audit_claims
+  - base_branch
+  - classification_timestamp
+  - design_review_count
+  - disambiguation_rule_applied
+  - download_report
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_type
+  - group_files
+  - impl_base_sha
+  - implement_fix_count
+  - is_fixable
+  - issue_url
+  - methodology_tradition
+  - output_mode
+  - phase_plan_path
+  - remediation_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - retry_delay
+  - review_design
+  - review_pr
+  - revision_guidance
+  - scope_directions
+  - scope_report
+  - source_dir
+  - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -1148,31 +1540,42 @@ dataflow:
   required: []
   produced:
   - experiment_results
+  - group_manifest
 - step: troubleshoot_run_failure
   available:
+  - audit
   - audit_claims
   - base_branch
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_results
   - experiment_type
   - group_files
+  - group_manifest
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - methodology_tradition
   - output_mode
   - phase_plan_path
+  - remediation_path
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_pr
   - revision_guidance
+  - scope_directions
   - scope_report
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -1181,33 +1584,45 @@ dataflow:
   required: []
   produced:
   - run_is_fixable
+  - run_retry_delay
   positional_args: 1
 - step: route_run_failure
   available:
+  - audit
   - audit_claims
   - base_branch
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_results
   - experiment_type
   - group_files
+  - group_manifest
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - methodology_tradition
   - output_mode
   - phase_plan_path
+  - remediation_path
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_pr
   - revision_guidance
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -1217,30 +1632,41 @@ dataflow:
   produced: []
 - step: adjust_experiment
   available:
+  - audit
   - audit_claims
   - base_branch
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_results
   - experiment_type
   - group_files
+  - group_manifest
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - methodology_tradition
   - output_mode
   - phase_plan_path
+  - remediation_path
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_pr
   - revision_guidance
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -1249,33 +1675,181 @@ dataflow:
   required: []
   produced:
   - experiment_results
+  - group_manifest
   positional_args: 1
-- step: ensure_results
+- step: check_run_fix_loop
   available:
+  - audit
   - audit_claims
   - base_branch
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_results
   - experiment_type
   - group_files
+  - group_manifest
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - methodology_tradition
   - output_mode
   - phase_plan_path
+  - remediation_path
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_pr
   - revision_guidance
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - source_dir
   - task
+  - test_check_enabled
+  - tier_c_lens
+  - verdict
+  - visualization_plan_path
+  - visualization_plan_trace_path
+  - worktree_path
+  required: []
+  produced:
+  - run_fix_count
+- step: route_run_retry_delay
+  available:
+  - audit
+  - audit_claims
+  - base_branch
+  - classification_timestamp
+  - design_review_count
+  - disambiguation_rule_applied
+  - download_report
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - group_files
+  - group_manifest
+  - impl_base_sha
+  - implement_fix_count
+  - is_fixable
+  - issue_url
+  - methodology_tradition
+  - output_mode
+  - phase_plan_path
+  - remediation_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - retry_delay
+  - review_design
+  - review_pr
+  - revision_guidance
+  - run_fix_count
+  - run_is_fixable
+  - run_retry_delay
+  - scope_directions
+  - scope_report
+  - source_dir
+  - task
+  - test_check_enabled
+  - tier_c_lens
+  - verdict
+  - visualization_plan_path
+  - visualization_plan_trace_path
+  - worktree_path
+  required: []
+  produced: []
+- step: run_retry_delay
+  available:
+  - audit
+  - audit_claims
+  - base_branch
+  - classification_timestamp
+  - design_review_count
+  - disambiguation_rule_applied
+  - download_report
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - group_files
+  - group_manifest
+  - impl_base_sha
+  - implement_fix_count
+  - is_fixable
+  - issue_url
+  - methodology_tradition
+  - output_mode
+  - phase_plan_path
+  - remediation_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - retry_delay
+  - review_design
+  - review_pr
+  - revision_guidance
+  - run_fix_count
+  - run_is_fixable
+  - run_retry_delay
+  - scope_directions
+  - scope_report
+  - source_dir
+  - task
+  - test_check_enabled
+  - tier_c_lens
+  - verdict
+  - visualization_plan_path
+  - visualization_plan_trace_path
+  - worktree_path
+  required: []
+  produced: []
+- step: ensure_results
+  available:
+  - audit
+  - audit_claims
+  - base_branch
+  - classification_timestamp
+  - design_review_count
+  - disambiguation_rule_applied
+  - download_report
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - group_files
+  - group_manifest
+  - impl_base_sha
+  - implement_fix_count
+  - is_fixable
+  - issue_url
+  - methodology_tradition
+  - output_mode
+  - phase_plan_path
+  - remediation_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - retry_delay
+  - review_design
+  - review_pr
+  - revision_guidance
+  - run_fix_count
+  - run_is_fixable
+  - run_retry_delay
+  - scope_directions
+  - scope_report
+  - source_dir
+  - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -1286,30 +1860,42 @@ dataflow:
   - experiment_results
 - step: generate_report
   available:
+  - audit
   - audit_claims
   - base_branch
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_results
   - experiment_type
   - group_files
+  - group_manifest
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - methodology_tradition
   - output_mode
   - phase_plan_path
+  - remediation_path
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_pr
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -1318,34 +1904,46 @@ dataflow:
   required: []
   produced:
   - report_path
-  positional_args: 14
+  positional_args: 16
 - step: generate_report_inconclusive
   available:
+  - audit
   - audit_claims
   - base_branch
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_results
   - experiment_type
   - group_files
+  - group_manifest
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - methodology_tradition
   - output_mode
   - phase_plan_path
+  - remediation_path
   - report_path
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_pr
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -1354,34 +1952,46 @@ dataflow:
   required: []
   produced:
   - report_path
-  positional_args: 15
+  positional_args: 17
 - step: test
   available:
+  - audit
   - audit_claims
   - base_branch
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_results
   - experiment_type
   - group_files
+  - group_manifest
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - methodology_tradition
   - output_mode
   - phase_plan_path
+  - remediation_path
   - report_path
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_pr
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -1391,31 +2001,43 @@ dataflow:
   produced: []
 - step: fix_tests
   available:
+  - audit
   - audit_claims
   - base_branch
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_results
   - experiment_type
   - group_files
+  - group_manifest
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - methodology_tradition
   - output_mode
   - phase_plan_path
+  - remediation_path
   - report_path
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_pr
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -1428,32 +2050,44 @@ dataflow:
   - fixes_applied
 - step: retest
   available:
+  - audit
   - audit_claims
   - base_branch
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_results
   - experiment_type
   - fixes_applied
   - group_files
+  - group_manifest
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - methodology_tradition
   - output_mode
   - phase_plan_path
+  - remediation_path
   - report_path
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_pr
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -1463,32 +2097,44 @@ dataflow:
   produced: []
 - step: push_branch
   available:
+  - audit
   - audit_claims
   - base_branch
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_results
   - experiment_type
   - fixes_applied
   - group_files
+  - group_manifest
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - methodology_tradition
   - output_mode
   - phase_plan_path
+  - remediation_path
   - report_path
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_pr
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -1498,32 +2144,44 @@ dataflow:
   produced: []
 - step: prepare_research_pr
   available:
+  - audit
   - audit_claims
   - base_branch
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_results
   - experiment_type
   - fixes_applied
   - group_files
+  - group_manifest
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - methodology_tradition
   - output_mode
   - phase_plan_path
+  - remediation_path
   - report_path
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_pr
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -1537,16 +2195,22 @@ dataflow:
   - lens_context_paths
 - step: run_experiment_lenses
   available:
+  - audit
   - audit_claims
   - base_branch
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_results
   - experiment_type
   - fixes_applied
   - group_files
+  - group_manifest
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - lens_context_paths
@@ -1554,18 +2218,24 @@ dataflow:
   - output_mode
   - phase_plan_path
   - prep_path
+  - remediation_path
   - report_path
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_pr
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - selected_lenses
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -1575,16 +2245,22 @@ dataflow:
   produced: []
 - step: stage_bundle
   available:
+  - audit
   - audit_claims
   - base_branch
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_results
   - experiment_type
   - fixes_applied
   - group_files
+  - group_manifest
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - lens_context_paths
@@ -1592,18 +2268,24 @@ dataflow:
   - output_mode
   - phase_plan_path
   - prep_path
+  - remediation_path
   - report_path
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_pr
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - selected_lenses
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -1613,16 +2295,22 @@ dataflow:
   produced: []
 - step: route_pr_or_local
   available:
+  - audit
   - audit_claims
   - base_branch
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_results
   - experiment_type
   - fixes_applied
   - group_files
+  - group_manifest
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - lens_context_paths
@@ -1630,18 +2318,24 @@ dataflow:
   - output_mode
   - phase_plan_path
   - prep_path
+  - remediation_path
   - report_path
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_pr
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - selected_lenses
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -1651,16 +2345,22 @@ dataflow:
   produced: []
 - step: compose_research_pr
   available:
+  - audit
   - audit_claims
   - base_branch
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_results
   - experiment_type
   - fixes_applied
   - group_files
+  - group_manifest
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - lens_context_paths
@@ -1668,18 +2368,24 @@ dataflow:
   - output_mode
   - phase_plan_path
   - prep_path
+  - remediation_path
   - report_path
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_pr
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - selected_lenses
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -1691,16 +2397,22 @@ dataflow:
   positional_args: 1
 - step: guard_pr_url
   available:
+  - audit
   - audit_claims
   - base_branch
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_results
   - experiment_type
   - fixes_applied
   - group_files
+  - group_manifest
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - lens_context_paths
@@ -1709,18 +2421,24 @@ dataflow:
   - phase_plan_path
   - pr_url
   - prep_path
+  - remediation_path
   - report_path
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_pr
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - selected_lenses
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -1730,16 +2448,22 @@ dataflow:
   produced: []
 - step: review_research_pr
   available:
+  - audit
   - audit_claims
   - base_branch
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_results
   - experiment_type
   - fixes_applied
   - group_files
+  - group_manifest
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - lens_context_paths
@@ -1748,18 +2472,24 @@ dataflow:
   - phase_plan_path
   - pr_url
   - prep_path
+  - remediation_path
   - report_path
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_pr
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - selected_lenses
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -1770,16 +2500,22 @@ dataflow:
   - review_verdict
 - step: audit_claims
   available:
+  - audit
   - audit_claims
   - base_branch
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_results
   - experiment_type
   - fixes_applied
   - group_files
+  - group_manifest
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - lens_context_paths
@@ -1788,19 +2524,25 @@ dataflow:
   - phase_plan_path
   - pr_url
   - prep_path
+  - remediation_path
   - report_path
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_pr
   - review_verdict
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - selected_lenses
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -1811,17 +2553,23 @@ dataflow:
   - audit_verdict
 - step: route_review_resolve
   available:
+  - audit
   - audit_claims
   - audit_verdict
   - base_branch
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_results
   - experiment_type
   - fixes_applied
   - group_files
+  - group_manifest
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - lens_context_paths
@@ -1830,19 +2578,25 @@ dataflow:
   - phase_plan_path
   - pr_url
   - prep_path
+  - remediation_path
   - report_path
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_pr
   - review_verdict
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - selected_lenses
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -1852,17 +2606,23 @@ dataflow:
   produced: []
 - step: resolve_research_review
   available:
+  - audit
   - audit_claims
   - audit_verdict
   - base_branch
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_results
   - experiment_type
   - fixes_applied
   - group_files
+  - group_manifest
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - lens_context_paths
@@ -1871,19 +2631,25 @@ dataflow:
   - phase_plan_path
   - pr_url
   - prep_path
+  - remediation_path
   - report_path
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_pr
   - review_verdict
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - selected_lenses
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -1894,17 +2660,23 @@ dataflow:
   - review_needs_rerun
 - step: route_claims_resolve
   available:
+  - audit
   - audit_claims
   - audit_verdict
   - base_branch
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_results
   - experiment_type
   - fixes_applied
   - group_files
+  - group_manifest
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - lens_context_paths
@@ -1913,20 +2685,26 @@ dataflow:
   - phase_plan_path
   - pr_url
   - prep_path
+  - remediation_path
   - report_path
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_needs_rerun
   - review_pr
   - review_verdict
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - selected_lenses
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -1936,17 +2714,23 @@ dataflow:
   produced: []
 - step: resolve_claims_review
   available:
+  - audit
   - audit_claims
   - audit_verdict
   - base_branch
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_results
   - experiment_type
   - fixes_applied
   - group_files
+  - group_manifest
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - lens_context_paths
@@ -1955,20 +2739,26 @@ dataflow:
   - phase_plan_path
   - pr_url
   - prep_path
+  - remediation_path
   - report_path
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_needs_rerun
   - review_pr
   - review_verdict
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - selected_lenses
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -1979,18 +2769,24 @@ dataflow:
   - claims_needs_rerun
 - step: merge_escalations
   available:
+  - audit
   - audit_claims
   - audit_verdict
   - base_branch
   - claims_needs_rerun
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_results
   - experiment_type
   - fixes_applied
   - group_files
+  - group_manifest
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - lens_context_paths
@@ -1999,20 +2795,26 @@ dataflow:
   - phase_plan_path
   - pr_url
   - prep_path
+  - remediation_path
   - report_path
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_needs_rerun
   - review_pr
   - review_verdict
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - selected_lenses
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -2022,18 +2824,24 @@ dataflow:
   produced: []
 - step: re_run_experiment
   available:
+  - audit
   - audit_claims
   - audit_verdict
   - base_branch
   - claims_needs_rerun
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_results
   - experiment_type
   - fixes_applied
   - group_files
+  - group_manifest
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - lens_context_paths
@@ -2042,20 +2850,26 @@ dataflow:
   - phase_plan_path
   - pr_url
   - prep_path
+  - remediation_path
   - report_path
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_needs_rerun
   - review_pr
   - review_verdict
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - selected_lenses
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -2067,18 +2881,24 @@ dataflow:
   positional_args: 1
 - step: re_generate_report
   available:
+  - audit
   - audit_claims
   - audit_verdict
   - base_branch
   - claims_needs_rerun
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_results
   - experiment_type
   - fixes_applied
   - group_files
+  - group_manifest
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - lens_context_paths
@@ -2087,20 +2907,26 @@ dataflow:
   - phase_plan_path
   - pr_url
   - prep_path
+  - remediation_path
   - report_path
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_needs_rerun
   - review_pr
   - review_verdict
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - selected_lenses
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -2109,21 +2935,27 @@ dataflow:
   required: []
   produced:
   - report_path
-  positional_args: 14
+  positional_args: 16
 - step: re_stage_bundle
   available:
+  - audit
   - audit_claims
   - audit_verdict
   - base_branch
   - claims_needs_rerun
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_results
   - experiment_type
   - fixes_applied
   - group_files
+  - group_manifest
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - lens_context_paths
@@ -2132,20 +2964,26 @@ dataflow:
   - phase_plan_path
   - pr_url
   - prep_path
+  - remediation_path
   - report_path
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_needs_rerun
   - review_pr
   - review_verdict
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - selected_lenses
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -2155,18 +2993,24 @@ dataflow:
   produced: []
 - step: re_test
   available:
+  - audit
   - audit_claims
   - audit_verdict
   - base_branch
   - claims_needs_rerun
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_results
   - experiment_type
   - fixes_applied
   - group_files
+  - group_manifest
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - lens_context_paths
@@ -2175,20 +3019,26 @@ dataflow:
   - phase_plan_path
   - pr_url
   - prep_path
+  - remediation_path
   - report_path
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_needs_rerun
   - review_pr
   - review_verdict
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - selected_lenses
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -2198,18 +3048,24 @@ dataflow:
   produced: []
 - step: re_push_research
   available:
+  - audit
   - audit_claims
   - audit_verdict
   - base_branch
   - claims_needs_rerun
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_results
   - experiment_type
   - fixes_applied
   - group_files
+  - group_manifest
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - lens_context_paths
@@ -2218,20 +3074,26 @@ dataflow:
   - phase_plan_path
   - pr_url
   - prep_path
+  - remediation_path
   - report_path
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_needs_rerun
   - review_pr
   - review_verdict
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - selected_lenses
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -2241,18 +3103,24 @@ dataflow:
   produced: []
 - step: finalize_bundle
   available:
+  - audit
   - audit_claims
   - audit_verdict
   - base_branch
   - claims_needs_rerun
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_results
   - experiment_type
   - fixes_applied
   - group_files
+  - group_manifest
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - lens_context_paths
@@ -2261,20 +3129,26 @@ dataflow:
   - phase_plan_path
   - pr_url
   - prep_path
+  - remediation_path
   - report_path
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_needs_rerun
   - review_pr
   - review_verdict
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - selected_lenses
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -2285,18 +3159,24 @@ dataflow:
   - report_path_after_finalize
 - step: finalize_bundle_render
   available:
+  - audit
   - audit_claims
   - audit_verdict
   - base_branch
   - claims_needs_rerun
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_results
   - experiment_type
   - fixes_applied
   - group_files
+  - group_manifest
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - lens_context_paths
@@ -2305,21 +3185,27 @@ dataflow:
   - phase_plan_path
   - pr_url
   - prep_path
+  - remediation_path
   - report_path
   - report_path_after_finalize
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_needs_rerun
   - review_pr
   - review_verdict
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - selected_lenses
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -2331,19 +3217,25 @@ dataflow:
   - html_path
 - step: route_archive_or_export
   available:
+  - audit
   - audit_claims
   - audit_verdict
   - base_branch
   - claims_needs_rerun
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_results
   - experiment_type
   - fixes_applied
   - group_files
+  - group_manifest
   - html_path
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - lens_context_paths
@@ -2352,21 +3244,27 @@ dataflow:
   - phase_plan_path
   - pr_url
   - prep_path
+  - remediation_path
   - report_path
   - report_path_after_finalize
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_needs_rerun
   - review_pr
   - review_verdict
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - selected_lenses
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -2376,19 +3274,25 @@ dataflow:
   produced: []
 - step: export_local_bundle
   available:
+  - audit
   - audit_claims
   - audit_verdict
   - base_branch
   - claims_needs_rerun
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_results
   - experiment_type
   - fixes_applied
   - group_files
+  - group_manifest
   - html_path
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - lens_context_paths
@@ -2397,21 +3301,27 @@ dataflow:
   - phase_plan_path
   - pr_url
   - prep_path
+  - remediation_path
   - report_path
   - report_path_after_finalize
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_needs_rerun
   - review_pr
   - review_verdict
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - selected_lenses
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -2422,19 +3332,25 @@ dataflow:
   - local_bundle_path
 - step: begin_archival
   available:
+  - audit
   - audit_claims
   - audit_verdict
   - base_branch
   - claims_needs_rerun
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_results
   - experiment_type
   - fixes_applied
   - group_files
+  - group_manifest
   - html_path
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - lens_context_paths
@@ -2444,21 +3360,27 @@ dataflow:
   - phase_plan_path
   - pr_url
   - prep_path
+  - remediation_path
   - report_path
   - report_path_after_finalize
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_needs_rerun
   - review_pr
   - review_verdict
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - selected_lenses
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -2468,19 +3390,25 @@ dataflow:
   produced: []
 - step: capture_experiment_branch
   available:
+  - audit
   - audit_claims
   - audit_verdict
   - base_branch
   - claims_needs_rerun
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_plan
   - experiment_results
   - experiment_type
   - fixes_applied
   - group_files
+  - group_manifest
   - html_path
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - lens_context_paths
@@ -2490,21 +3418,27 @@ dataflow:
   - phase_plan_path
   - pr_url
   - prep_path
+  - remediation_path
   - report_path
   - report_path_after_finalize
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_needs_rerun
   - review_pr
   - review_verdict
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - selected_lenses
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -2515,12 +3449,15 @@ dataflow:
   - experiment_branch
 - step: create_artifact_branch
   available:
+  - audit
   - audit_claims
   - audit_verdict
   - base_branch
   - claims_needs_rerun
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_branch
   - experiment_plan
@@ -2528,7 +3465,10 @@ dataflow:
   - experiment_type
   - fixes_applied
   - group_files
+  - group_manifest
   - html_path
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - lens_context_paths
@@ -2538,21 +3478,27 @@ dataflow:
   - phase_plan_path
   - pr_url
   - prep_path
+  - remediation_path
   - report_path
   - report_path_after_finalize
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_needs_rerun
   - review_pr
   - review_verdict
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - selected_lenses
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -2564,12 +3510,15 @@ dataflow:
 - step: open_artifact_pr
   available:
   - artifact_branch
+  - audit
   - audit_claims
   - audit_verdict
   - base_branch
   - claims_needs_rerun
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_branch
   - experiment_plan
@@ -2577,7 +3526,10 @@ dataflow:
   - experiment_type
   - fixes_applied
   - group_files
+  - group_manifest
   - html_path
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - lens_context_paths
@@ -2587,21 +3539,27 @@ dataflow:
   - phase_plan_path
   - pr_url
   - prep_path
+  - remediation_path
   - report_path
   - report_path_after_finalize
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_needs_rerun
   - review_pr
   - review_verdict
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - selected_lenses
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -2614,12 +3572,15 @@ dataflow:
   available:
   - artifact_branch
   - artifact_pr_url
+  - audit
   - audit_claims
   - audit_verdict
   - base_branch
   - claims_needs_rerun
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_branch
   - experiment_plan
@@ -2627,7 +3588,10 @@ dataflow:
   - experiment_type
   - fixes_applied
   - group_files
+  - group_manifest
   - html_path
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - lens_context_paths
@@ -2637,21 +3601,27 @@ dataflow:
   - phase_plan_path
   - pr_url
   - prep_path
+  - remediation_path
   - report_path
   - report_path_after_finalize
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_needs_rerun
   - review_pr
   - review_verdict
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - selected_lenses
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -2665,12 +3635,15 @@ dataflow:
   - archive_tag
   - artifact_branch
   - artifact_pr_url
+  - audit
   - audit_claims
   - audit_verdict
   - base_branch
   - claims_needs_rerun
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_branch
   - experiment_plan
@@ -2678,7 +3651,10 @@ dataflow:
   - experiment_type
   - fixes_applied
   - group_files
+  - group_manifest
   - html_path
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - lens_context_paths
@@ -2688,21 +3664,27 @@ dataflow:
   - phase_plan_path
   - pr_url
   - prep_path
+  - remediation_path
   - report_path
   - report_path_after_finalize
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_needs_rerun
   - review_pr
   - review_verdict
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - selected_lenses
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -2715,12 +3697,15 @@ dataflow:
   - archive_tag
   - artifact_branch
   - artifact_pr_url
+  - audit
   - audit_claims
   - audit_verdict
   - base_branch
   - claims_needs_rerun
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_branch
   - experiment_plan
@@ -2728,7 +3713,10 @@ dataflow:
   - experiment_type
   - fixes_applied
   - group_files
+  - group_manifest
   - html_path
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - lens_context_paths
@@ -2738,21 +3726,27 @@ dataflow:
   - phase_plan_path
   - pr_url
   - prep_path
+  - remediation_path
   - report_path
   - report_path_after_finalize
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_needs_rerun
   - review_pr
   - review_verdict
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - selected_lenses
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -2765,12 +3759,15 @@ dataflow:
   - archive_tag
   - artifact_branch
   - artifact_pr_url
+  - audit
   - audit_claims
   - audit_verdict
   - base_branch
   - claims_needs_rerun
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_branch
   - experiment_plan
@@ -2778,7 +3775,10 @@ dataflow:
   - experiment_type
   - fixes_applied
   - group_files
+  - group_manifest
   - html_path
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - lens_context_paths
@@ -2788,21 +3788,27 @@ dataflow:
   - phase_plan_path
   - pr_url
   - prep_path
+  - remediation_path
   - report_path
   - report_path_after_finalize
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_needs_rerun
   - review_pr
   - review_verdict
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - selected_lenses
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path
@@ -2815,12 +3821,15 @@ dataflow:
   - archive_tag
   - artifact_branch
   - artifact_pr_url
+  - audit
   - audit_claims
   - audit_verdict
   - base_branch
   - claims_needs_rerun
   - classification_timestamp
+  - design_review_count
   - disambiguation_rule_applied
+  - download_report
   - evaluation_dashboard
   - experiment_branch
   - experiment_plan
@@ -2828,7 +3837,10 @@ dataflow:
   - experiment_type
   - fixes_applied
   - group_files
+  - group_manifest
   - html_path
+  - impl_base_sha
+  - implement_fix_count
   - is_fixable
   - issue_url
   - lens_context_paths
@@ -2838,21 +3850,27 @@ dataflow:
   - phase_plan_path
   - pr_url
   - prep_path
+  - remediation_path
   - report_path
   - report_path_after_finalize
   - report_plan_path
   - research_dir
   - resource_report
+  - retry_delay
   - review_design
   - review_needs_rerun
   - review_pr
   - review_verdict
   - revision_guidance
+  - run_fix_count
   - run_is_fixable
+  - run_retry_delay
+  - scope_directions
   - scope_report
   - selected_lenses
   - source_dir
   - task
+  - test_check_enabled
   - tier_c_lens
   - verdict
   - visualization_plan_path

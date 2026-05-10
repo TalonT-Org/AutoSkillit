@@ -13,6 +13,7 @@ dimension_weights:
   resource_proportionality: L
   data_acquisition: M
   agent_implementability: H
+  scope_alignment: M
 applicable_lenses:
   primary: exp-lens-estimand-clarity
   secondary: null
@@ -22,3 +23,5 @@ red_team_focus:
 l1_severity:
   estimand_clarity: warning
   hypothesis_falsifiability: warning
+dimension_weight_rationale:
+  scope_alignment: "Benchmark comparisons must cover all scoped comparators and metrics; dropping a comparator mid-design skews relative rankings but does not invalidate included comparisons, justifying M rather than H"

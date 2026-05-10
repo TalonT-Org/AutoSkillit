@@ -14,6 +14,7 @@ dimension_weights:
   resource_proportionality: L
   data_acquisition: H
   agent_implementability: M
+  scope_alignment: H
 applicable_lenses:
   primary: exp-lens-measurement-validity
   secondary: exp-lens-sensitivity-robustness
@@ -30,3 +31,4 @@ dimension_weight_rationale:
   measurement_alignment: "Outcome harmonization across heterogeneous measurement instruments is the defining data challenge"
   data_acquisition: "Search strategy completeness and PRISMA compliance determine which evidence enters the pool"
   agent_implementability: "Protocol steps are well-defined but access to literature databases may require external tools"
+  scope_alignment: "Systematic reviews must address the full breadth of the scoped review question; unreported exclusions introduce selection bias"

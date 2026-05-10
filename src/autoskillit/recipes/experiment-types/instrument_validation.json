@@ -15,7 +15,8 @@
     "measurement_alignment": "H",
     "resource_proportionality": "L",
     "data_acquisition": "M",
-    "agent_implementability": "M"
+    "agent_implementability": "M",
+    "scope_alignment": "M"
   },
   "applicable_lenses": {
     "primary": "exp-lens-measurement-validity",
@@ -35,6 +36,7 @@
     "ecological_validity": "Measurement context affects generalizability of psychometric properties; cross-sample invariance is required",
     "measurement_alignment": "The entire study purpose is to establish that the instrument measures the intended construct",
     "data_acquisition": "Sample size for factor analysis and participant characteristics determine reliability estimate stability",
-    "agent_implementability": "CFA and IRT pipelines are computationally defined but require psychometric expertise for interpretation"
+    "agent_implementability": "CFA and IRT pipelines are computationally defined but require psychometric expertise for interpretation",
+    "scope_alignment": "Validation scope should cover all construct facets identified in the scope report"
   }
 }

@@ -1514,6 +1514,9 @@ skills:
     - name: experiment_plan
       type: file_path
       required: true
+    - name: scope_report
+      type: file_path
+      required: false
     outputs:
     - name: verdict
       type: string

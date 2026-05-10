@@ -14,7 +14,8 @@
     "measurement_alignment": "H",
     "resource_proportionality": "L",
     "data_acquisition": "H",
-    "agent_implementability": "M"
+    "agent_implementability": "M",
+    "scope_alignment": "M"
   },
   "applicable_lenses": {
     "primary": "exp-lens-estimand-clarity",
@@ -27,5 +28,8 @@
   "l1_severity": {
     "estimand_clarity": "warning",
     "hypothesis_falsifiability": "warning"
+  },
+  "dimension_weight_rationale": {
+    "scope_alignment": "Robustness audits should cover all scoped failure modes and boundary conditions; omitting a scoped condition may leave vulnerabilities undetected, but the audit of covered conditions retains independent value, justifying M rather than H"
   }
 }

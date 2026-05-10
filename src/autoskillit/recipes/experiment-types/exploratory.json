@@ -14,7 +14,8 @@
     "measurement_alignment": "M",
     "resource_proportionality": "L",
     "data_acquisition": "M",
-    "agent_implementability": "L"
+    "agent_implementability": "L",
+    "scope_alignment": "L"
   },
   "applicable_lenses": {
     "primary": "exp-lens-estimand-clarity",
@@ -27,5 +28,8 @@
   "l1_severity": {
     "estimand_clarity": "info",
     "hypothesis_falsifiability": "info"
+  },
+  "dimension_weight_rationale": {
+    "scope_alignment": "Exploratory studies are designed to discover structure rather than confirm hypotheses; scope is iteratively narrowed during execution, so partial alignment to the initial scope is intrinsic to the design process"
   }
 }

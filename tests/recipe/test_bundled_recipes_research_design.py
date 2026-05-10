@@ -156,6 +156,12 @@ class TestResearchDesignRecipeStructure:
         for key in ("verdict", "experiment_type", "evaluation_dashboard", "revision_guidance"):
             assert key in capture, f"Missing capture key: {key}"
 
+    def test_review_design_receives_scope_report(self, recipe) -> None:
+        """review_design step must pass scope_report as a second argument."""
+        step = recipe.steps["review_design"]
+        cmd = step.with_args["skill_command"]
+        assert "${{ context.scope_report }}" in cmd
+
     def test_plan_visualization_on_success(self, recipe) -> None:
         assert recipe.steps["plan_visualization"].on_success == "create_worktree"
 

@@ -147,6 +147,15 @@ def test_review_design_experiment_type_output_has_allowed_values() -> None:
     assert set(et_output["allowed_values"]) == VALID_EXPERIMENT_TYPES
 
 
+def test_review_design_has_scope_report_input(skills: dict[str, Any]) -> None:
+    """review-design contract must declare scope_report as an optional input."""
+    rd = skills["review-design"]
+    input_names = [i["name"] for i in rd["inputs"]]
+    assert "scope_report" in input_names
+    scope_input = next(i for i in rd["inputs"] if i["name"] == "scope_report")
+    assert scope_input.get("required") is False
+
+
 def test_all_exp_lens_skills_have_contracts(skills):
     """Every exp-lens skill must have an entry in skill_contracts.yaml."""
     from autoskillit.workspace.skills import DefaultSkillResolver

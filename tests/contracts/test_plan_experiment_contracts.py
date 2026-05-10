@@ -10,6 +10,13 @@ SKILL_PATH = (
     / "plan-experiment"
     / "SKILL.md"
 )
+EXPERIMENT_TYPES_DIR = (
+    Path(__file__).resolve().parent.parent.parent
+    / "src"
+    / "autoskillit"
+    / "recipes"
+    / "experiment-types"
+)
 
 
 def test_data_manifest_in_frontmatter_schema() -> None:
@@ -79,17 +86,11 @@ def test_plan_experiment_layout_includes_taskfile() -> None:
 
 
 def test_experiment_type_enum_lists_all_registry_types() -> None:
-    """All 12 experiment types from the registry appear in the template enum."""
+    """All experiment types from the registry appear in the template enum."""
     import re
 
-    EXPERIMENT_TYPES_DIR = (
-        Path(__file__).resolve().parent.parent.parent
-        / "src"
-        / "autoskillit"
-        / "recipes"
-        / "experiment-types"
-    )
     registry_types = {p.stem for p in EXPERIMENT_TYPES_DIR.glob("*.yaml")}
+    assert len(registry_types) > 0, "experiment-types registry dir is empty or missing"
     text = SKILL_PATH.read_text()
     m = re.search(r"experiment_type:\s*\{one of:\s*([^}]+)\}", text, re.IGNORECASE)
     assert m, "experiment_type enum not found in SKILL.md template"
@@ -115,14 +116,8 @@ def test_field_requirements_table_covers_all_registry_types() -> None:
     """Field requirements table has a column for every registry experiment type."""
     import re
 
-    EXPERIMENT_TYPES_DIR = (
-        Path(__file__).resolve().parent.parent.parent
-        / "src"
-        / "autoskillit"
-        / "recipes"
-        / "experiment-types"
-    )
     registry_types = {p.stem for p in EXPERIMENT_TYPES_DIR.glob("*.yaml")}
+    assert len(registry_types) > 0, "experiment-types registry dir is empty or missing"
     text = SKILL_PATH.read_text()
     m = re.search(
         r"Field requirements by experiment type:(.+?)(?:\n\n|\Z)", text, re.DOTALL | re.IGNORECASE

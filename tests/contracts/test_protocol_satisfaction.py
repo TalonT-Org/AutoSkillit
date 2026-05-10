@@ -426,7 +426,6 @@ class TestGroupDApiContractPreservation:
     def test_run_managed_async_marker_params_after_session_id_timeout(self):
         """marker_dir and session_id appear after _session_id_timeout in run_managed_async."""
         sig = inspect.signature(run_managed_async)
-        p = sig.parameters
         session_id_timeout_idx = list(sig.parameters).index("_session_id_timeout")
         marker_dir_idx = list(sig.parameters).index("marker_dir")
         session_id_idx = list(sig.parameters).index("session_id")
@@ -440,7 +439,7 @@ class TestGroupDApiContractPreservation:
         assert sig.parameters["session_id"].default is None
 
     def test_default_subprocess_runner_marker_params_after_max_extension(self):
-        """marker_dir and session_id appear after max_extension_seconds in DefaultSubprocessRunner.__call__."""
+        """marker_dir/session_id appear after max_extension_seconds."""
         sig = inspect.signature(DefaultSubprocessRunner.__call__)
         max_extension_idx = list(sig.parameters).index("max_extension_seconds")
         marker_dir_idx = list(sig.parameters).index("marker_dir")
@@ -449,7 +448,7 @@ class TestGroupDApiContractPreservation:
         assert session_id_idx == marker_dir_idx + 1
 
     def test_default_subprocess_runner_satisfies_protocol_with_marker_params(self):
-        """DefaultSubprocessRunner() satisfies SubprocessRunner with marker_dir/session_id added."""
+        """DefaultSubprocessRunner() satisfies SubprocessRunner protocol."""
         from autoskillit.core.types import SubprocessRunner
 
         runner = DefaultSubprocessRunner()

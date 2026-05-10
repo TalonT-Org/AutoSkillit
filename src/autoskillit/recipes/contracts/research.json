@@ -1730,7 +1730,7 @@
         "plan_path"
       ],
       "produced": [
-        "verdict",
+        "audit_verdict",
         "remediation_path"
       ]
     },

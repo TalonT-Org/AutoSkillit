@@ -1497,7 +1497,7 @@ dataflow:
   required:
   - plan_path
   produced:
-  - verdict
+  - audit_verdict
   - remediation_path
 - step: run_experiment
   available:

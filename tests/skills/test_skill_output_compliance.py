@@ -274,6 +274,8 @@ def test_output_path_tokens_synchronized() -> None:
             "env_report",
             # run-experiment group manifest output (multi-group awareness)
             "group_manifest",
+            # download-data skill output (research recipe download report)
+            "download_report",
         }
     )
 

@@ -45,6 +45,8 @@ or `decompose_phases` (research-implement.yaml); FAIL escalates immediately.
 - Skip the `depends_on` command when it is specified for an entry
 - Proceed with a failed download without escalating
 - Write files outside `{{AUTOSKILLIT_TEMP}}/download-data/`
+- Fabricate or hallucinate download results — only report actual command output
+- Attribute a missing or partial file to a completed download
 
 **ALWAYS:**
 - Read the `data_manifest` frontmatter section of the experiment plan
@@ -148,6 +150,9 @@ download_report = /absolute/path/to/download_report_{YYYY-MM-DD_HHMMSS}.md
 ```
 
 ## Output
+
+Include the completion marker from the ORCHESTRATION DIRECTIVE at the end of the
+structured output block.
 
 ```
 verdict = PASS|FAIL

@@ -1329,6 +1329,23 @@ skills:
     - "verdict = PASS\nresource_report = /tmp/stage-data/resource_feasibility_2026-04-13_120000.md\n%%ORDER_UP%%"
     write_behavior: always
 
+  download-data:
+    inputs:
+    - name: experiment_plan
+      type: file_path
+      required: true
+    outputs:
+    - name: verdict
+      type: string
+    - name: download_report
+      type: file_path
+    expected_output_patterns:
+    - "verdict\\s*=\\s*(PASS|FAIL)"
+    - "download_report\\s*=\\s*/.+"
+    pattern_examples:
+    - "verdict = PASS\ndownload_report = /tmp/download-data/download_report_2026-05-10_120000.md\n%%ORDER_UP%%"
+    write_behavior: always
+
   setup-environment:
     inputs:
     - name: worktree_path

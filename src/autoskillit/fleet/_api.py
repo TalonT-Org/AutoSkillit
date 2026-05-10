@@ -199,6 +199,10 @@ async def _touch_dispatch_marker(
     marker_path: Path, interval: float = 30.0, trigger: anyio.Event | None = None
 ) -> None:
     """Periodically touch marker_path to refresh mtime; runs until trigger is set."""
+    try:
+        marker_path.touch()
+    except OSError:
+        logger.warning("_touch_dispatch_marker: failed to touch %s", marker_path, exc_info=True)
     while trigger is None or not trigger.is_set():
         await anyio.sleep(interval)
         try:
@@ -612,48 +616,50 @@ async def _run_dispatch(
     _hb_trigger = anyio.Event()
     try:
         async with anyio.create_task_group() as tg:
-            if marker_dir is not None and marker_path is not None:
+            if marker_path is not None:
                 tg.start_soon(
                     functools.partial(_touch_dispatch_marker, marker_path, trigger=_hb_trigger)
                 )
-            skill_result = await tool_ctx.executor.dispatch_food_truck(
-                orchestrator_prompt=prompt,
-                cwd=str(tool_ctx.project_dir),
-                completion_marker=completion_marker,
-                prior_completion_markers=prior_completion_markers,
-                resume_session_id=resume_session_id,
-                resume_checkpoint=resume_checkpoint,
-                kitchen_id=tool_ctx.kitchen_id,
-                order_id=dispatch_id,
-                campaign_id=campaign_id,
-                dispatch_id=dispatch_id,
-                caller_session_id=caller_session_id,
-                project_dir=str(tool_ctx.project_dir),
-                marker_dir=marker_dir,
-                session_id=caller_session_id,
-                timeout=float(timeout_sec) if timeout_sec else None,
-                idle_output_timeout=float(idle_output_timeout)
-                if idle_output_timeout is not None
-                else None,
-                env_extras={
-                    "AUTOSKILLIT_PROJECT_DIR": str(tool_ctx.project_dir),
-                    "AUTOSKILLIT_CAMPAIGN_ID": campaign_id,
-                    "AUTOSKILLIT_DISPATCH_ID": dispatch_id,
-                    "AUTOSKILLIT_SESSION_DEADLINE": str(
-                        started_at
-                        + (
-                            float(timeout_sec)
-                            if timeout_sec is not None
-                            else float(tool_ctx.config.fleet.default_timeout_sec)
-                        )
-                    ),
-                },
-                requires_packs=list(full_recipe.requires_packs) or ["kitchen-core"],
-                on_spawn=_on_spawn,
-                sentinel_contract=sentinel_contract,
-            )
-            _hb_trigger.set()
-            tg.cancel_scope.cancel()
+            try:
+                skill_result = await tool_ctx.executor.dispatch_food_truck(
+                    orchestrator_prompt=prompt,
+                    cwd=str(tool_ctx.project_dir),
+                    completion_marker=completion_marker,
+                    prior_completion_markers=prior_completion_markers,
+                    resume_session_id=resume_session_id,
+                    resume_checkpoint=resume_checkpoint,
+                    kitchen_id=tool_ctx.kitchen_id,
+                    order_id=dispatch_id,
+                    campaign_id=campaign_id,
+                    dispatch_id=dispatch_id,
+                    caller_session_id=caller_session_id,
+                    project_dir=str(tool_ctx.project_dir),
+                    marker_dir=marker_dir,
+                    session_id=caller_session_id,
+                    timeout=float(timeout_sec) if timeout_sec else None,
+                    idle_output_timeout=float(idle_output_timeout)
+                    if idle_output_timeout is not None
+                    else None,
+                    env_extras={
+                        "AUTOSKILLIT_PROJECT_DIR": str(tool_ctx.project_dir),
+                        "AUTOSKILLIT_CAMPAIGN_ID": campaign_id,
+                        "AUTOSKILLIT_DISPATCH_ID": dispatch_id,
+                        "AUTOSKILLIT_SESSION_DEADLINE": str(
+                            started_at
+                            + (
+                                float(timeout_sec)
+                                if timeout_sec is not None
+                                else float(tool_ctx.config.fleet.default_timeout_sec)
+                            )
+                        ),
+                    },
+                    requires_packs=list(full_recipe.requires_packs) or ["kitchen-core"],
+                    on_spawn=_on_spawn,
+                    sentinel_contract=sentinel_contract,
+                )
+            finally:
+                _hb_trigger.set()
+                tg.cancel_scope.cancel()
 
         ended_at = time.time()
     finally:

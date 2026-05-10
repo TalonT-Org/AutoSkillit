@@ -189,12 +189,13 @@ async def _watch_stdout_idle(
                 now = _time.monotonic()
                 if suppression_start_marker is None:
                     suppression_start_marker = now
-                if now - suppression_start_marker < max_suppression_seconds:
+                elapsed = now - suppression_start_marker
+                if elapsed < max_suppression_seconds:
                     logger.warning(
                         "stdout_idle_stall_suppressed",
                         marker_dir=str(marker_dir),
                         session_id=session_id,
-                        suppression_elapsed=now - suppression_start_marker,
+                        suppression_elapsed=elapsed,
                         max_suppression_seconds=max_suppression_seconds,
                     )
                     continue

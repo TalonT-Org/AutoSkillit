@@ -1271,7 +1271,7 @@ async def test_watch_session_log_passes_marker_dir_to_monitor_kwargs(
     channel_b_ready = anyio.Event()
 
     session_file = tmp_path / "session.jsonl"
-    session_file.write_text("")
+    await anyio.Path(session_file).write_bytes(b"")
 
     with anyio.fail_after(3.0):
         await _watch_session_log(
@@ -1318,7 +1318,7 @@ async def test_watch_session_log_omits_marker_kwargs_when_none(
     channel_b_ready = anyio.Event()
 
     session_file = tmp_path / "session.jsonl"
-    session_file.write_text("")
+    await anyio.Path(session_file).write_bytes(b"")
 
     with anyio.fail_after(3.0):
         await _watch_session_log(

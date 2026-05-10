@@ -152,27 +152,30 @@ async def test_watch_stdout_idle_suppressed_by_dispatch_marker(
     acc = RaceAccumulator()
     trigger = anyio.Event()
 
-    async def cancel_after_suppression() -> None:
-        await anyio.sleep(0.5)
-        trigger.set()
+    with structlog.testing.capture_logs() as cap:
 
-    async with anyio.create_task_group() as tg:
-        tg.start_soon(cancel_after_suppression)
-        with anyio.fail_after(2.0):
-            tg.start_soon(
-                functools.partial(
-                    _watch_stdout_idle,
-                    stdout_file,
-                    0.1,  # idle_output_timeout — very short
-                    acc,
-                    trigger,
-                    0.05,  # _poll_interval
-                    marker_dir=tmp_path,
-                    session_id="test-sess",
-                    max_suppression_seconds=10.0,
+        async def cancel_when_suppressed() -> None:
+            while not any(e.get("event") == "stdout_idle_stall_suppressed" for e in cap):
+                await anyio.sleep(0.01)
+            trigger.set()
+
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(cancel_when_suppressed)
+            with anyio.fail_after(2.0):
+                tg.start_soon(
+                    functools.partial(
+                        _watch_stdout_idle,
+                        stdout_file,
+                        0.1,  # idle_output_timeout — very short
+                        acc,
+                        trigger,
+                        0.05,  # _poll_interval
+                        marker_dir=tmp_path,
+                        session_id="test-sess",
+                        max_suppression_seconds=10.0,
+                    )
                 )
-            )
-            await trigger.wait()
+                await trigger.wait()
 
     assert acc.idle_stall is False
 
@@ -296,13 +299,15 @@ async def test_watch_stdout_idle_emits_suppression_warning(
     acc = RaceAccumulator()
     trigger = anyio.Event()
 
-    async def cancel_after_suppression() -> None:
-        await anyio.sleep(0.3)
-        trigger.set()
-
     with structlog.testing.capture_logs() as cap:
+
+        async def cancel_when_suppressed() -> None:
+            while not any(e.get("event") == "stdout_idle_stall_suppressed" for e in cap):
+                await anyio.sleep(0.01)
+            trigger.set()
+
         async with anyio.create_task_group() as tg:
-            tg.start_soon(cancel_after_suppression)
+            tg.start_soon(cancel_when_suppressed)
             with anyio.fail_after(2.0):
                 tg.start_soon(
                     functools.partial(

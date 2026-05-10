@@ -494,10 +494,14 @@ class TestK15IngredientsTableInjection:
 
     def test_no_ask_user_question_without_gate_dispatches(self) -> None:
         prompt = _build(ingredients_table=self._TABLE)
-        # Gate dispatches use AskUserQuestion; no gate dispatches should mean
-        # no AskUserQuestion in the ingredient/FIRST ACTION sections
+        # Slice covers both the ingredient section and the FIRST ACTION section.
+        # Gate dispatches (which reference AskUserQuestion) appear in the DISPATCH
+        # MANIFEST section, outside this slice — so the assertion verifies no
+        # AskUserQuestion leaks into the pre-dispatch portion of the prompt.
         ing_start = prompt.index("RECIPE INGREDIENTS")
-        ing_end = prompt.index("DISPATCH MANIFEST")
+        ing_end = (
+            prompt.index("DISPATCH MANIFEST") if "DISPATCH MANIFEST" in prompt else len(prompt)
+        )
         ingredient_and_first_action = prompt[ing_start:ing_end]
         assert "AskUserQuestion" not in ingredient_and_first_action
 

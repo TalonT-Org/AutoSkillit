@@ -382,13 +382,13 @@ def test_emit_alignment_bash_absolute_path_exempt():
 
 
 def test_emit_alignment_non_bash_capture_still_flagged():
-    """echo without matching capture key → emit-alignment still fires for non-absolute."""
+    """Non-raw capture key without matching echo → emit-alignment fires for non-absolute."""
     recipe = _make_recipe(
         {
             "step_a": {
                 "tool": "run_cmd",
                 "with": {"cmd": "echo something"},
-                "capture": {"my_key": "${{ result.stdout }}"},
+                "capture": {"my_key": "${{ result.my_output }}"},
                 "on_success": "END",
             }
         }

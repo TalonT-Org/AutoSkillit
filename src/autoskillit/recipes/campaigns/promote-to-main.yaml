@@ -91,6 +91,9 @@ dispatches:
       - implement-findings
 
 kitchen_rules:
+  - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
+    Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the
+    orchestrator. All work is delegated through run_skill."
   - "The review-gate dispatch requires explicit human approval before proceeding."
   - "Issues closed by the human during review are excluded by the BEM wrapper."
 

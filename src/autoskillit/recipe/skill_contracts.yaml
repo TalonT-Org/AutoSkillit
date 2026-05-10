@@ -20,7 +20,7 @@ skills:
     - name: is_fixable
       type: string
     - name: retry_delay
-      type: string
+      type: integer
     expected_output_patterns:
     - "is_fixable\\s*=\\s*(true|false)"
     pattern_examples:

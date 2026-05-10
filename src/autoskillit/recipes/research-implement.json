@@ -207,7 +207,8 @@
       "tool": "run_cmd",
       "with": {
         "cmd": "sleep ${{ context.retry_delay }}",
-        "cwd": "${{ inputs.source_dir }}"
+        "cwd": "${{ inputs.source_dir }}",
+        "step_name": "implement_retry_delay"
       },
       "on_success": "plan_phase",
       "on_failure": "plan_phase",
@@ -336,7 +337,8 @@
       "tool": "run_cmd",
       "with": {
         "cmd": "sleep ${{ context.run_retry_delay }}",
-        "cwd": "${{ inputs.source_dir }}"
+        "cwd": "${{ inputs.source_dir }}",
+        "step_name": "run_retry_delay"
       },
       "on_success": "run_experiment",
       "on_failure": "run_experiment",

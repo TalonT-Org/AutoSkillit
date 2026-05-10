@@ -716,6 +716,8 @@ async def test_cross_phase_paths_are_coherent_when_implement_creates_new_worktre
     assert impl_captures["report_path"] == "/tmp/wt-B/report.md"
     # research_dir_rel remains stable across worktree transitions
     assert "research_dir_rel" not in impl_captures
+    # stale research_dir from implement payload must not leak into captures
+    assert "research_dir" not in impl_captures
 
     # Step 3: run-review — receives reconstructed research_dir from updated anchor + relative
     def _make_review_result(**_):

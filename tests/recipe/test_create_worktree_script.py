@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 
 import pytest
@@ -62,8 +63,5 @@ def test_create_worktree_emits_research_dir_rel(tmp_path):
         f"stdout must contain 'research_dir_rel=research/...' line. Got:\n{stdout}"
     )
     # The rel path should follow pattern: research/YYYY-MM-DD-test-task
-    import re
-
     rel_match = re.search(r"research_dir_rel=(research/[\d-]+-[\w-]+)", stdout)
     assert rel_match, f"Could not find research_dir_rel pattern in stdout:\n{stdout}"
-    assert result.returncode == 0

@@ -404,7 +404,7 @@ def _parse_capture_spec(capture_raw: Any) -> dict[str, CaptureEntrySpec]:
                 if effective_type not in _CAPTURE_VALID_VALUE_TYPES:
                     logger.warning(
                         "capture_spec_unknown_type",
-                        key=key,
+                        capture_key=key,
                         type_value=effective_type,
                         fallback="string",
                     )

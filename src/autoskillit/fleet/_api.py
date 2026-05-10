@@ -121,12 +121,12 @@ def _extract_captures(
         expected_fields.append(field_name)
         if field_name in payload:
             value: object = payload[field_name]
-            if not isinstance(value, str) and entry.value_type in ("path", "string", "url"):
+            if not isinstance(value, str) and entry.value_type == "path":
                 raise CaptureValueTypeError(
                     key=key,
                     value=repr(value),
                     declared_type=entry.value_type,
-                    reason=f"expected a string, got {type(value).__name__}",
+                    reason=f"expected a string path, got {type(value).__name__}",
                 )
             str_value = value if isinstance(value, str) else json.dumps(value, default=str)
             _validate_capture_value(key, str_value, entry.value_type)

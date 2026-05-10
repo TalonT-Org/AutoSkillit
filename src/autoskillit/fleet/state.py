@@ -456,24 +456,25 @@ def upsert_dispatch_record_by_name(state_path: Path, record: DispatchRecord) -> 
     state is unknown and _validate_transition enforcement is not appropriate.
     If the state file is missing or corrupted, this is a no-op.
 
-    Terminal-status protection: once a dispatch reaches a terminal status (SUCCESS,
-    FAILURE, etc.), it cannot be overwritten with any other terminal status via this
-    bypass path. Use mark_dispatch_* state machine methods for valid transitions.
+    Terminal-status protection: FAILURE→SUCCESS and SUCCESS→FAILURE overwrites are
+    blocked — terminal status transitions must go through mark_dispatch_* state machine
+    methods.
     """
     with CampaignStateMutator(state_path) as m:
         if m.state is None:
             return
         for i, d in enumerate(m.state.dispatches):
             if d.name == record.name:
-                # Terminal-status protection: reject any terminal→terminal overwrite
-                if (
-                    d.status in TERMINAL_DISPATCH_STATUSES
-                    and record.status in TERMINAL_DISPATCH_STATUSES
-                    and d.status != record.status
-                ):
+                # Block terminal-status overwrites in both directions
+                if d.status == DispatchStatus.FAILURE and record.status == DispatchStatus.SUCCESS:
                     raise ValueError(
-                        f"Cannot overwrite terminal dispatch {record.name!r} "
-                        f"(status: {d.status!r}) with {record.status!r} — "
+                        f"Cannot overwrite FAILURE dispatch {record.name!r} with SUCCESS — "
+                        f"use mark_dispatch_* state machine methods for valid transitions"
+                    )
+                if d.status == DispatchStatus.SUCCESS and record.status != DispatchStatus.SUCCESS:
+                    raise ValueError(
+                        f"Cannot overwrite SUCCESS dispatch {record.name!r} "
+                        f"with {record.status!r} — "
                         f"use mark_dispatch_* state machine methods for valid transitions"
                     )
                 m.state.dispatches[i] = record

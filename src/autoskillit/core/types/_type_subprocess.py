@@ -125,7 +125,21 @@ class SubprocessResult:
 
 @runtime_checkable
 class SubprocessRunner(Protocol):
-    """Protocol for async subprocess execution. Matches run_managed_async signature."""
+    """Protocol for async subprocess execution. Matches run_managed_async signature.
+
+    Parameters
+    ----------
+    marker_dir : Path | None
+        Directory containing ``dispatch-in-progress-{session_id}-*.marker`` files.
+        When non-None, the session log monitor checks for active dispatch markers
+        before issuing stale-kill signals, suppressing kills while a fleet dispatch
+        is in progress. Default ``None`` (no suppression).
+    session_id : str | None
+        Caller's session identity, used to scope dispatch-marker glob patterns to
+        the originating fleet session. Threaded from fleet dispatch through headless
+        execution to ``_session_log_monitor``'s ``caller_session_id`` parameter.
+        Default ``None`` (match any marker).
+    """
 
     def __call__(
         self,
@@ -146,4 +160,6 @@ class SubprocessRunner(Protocol):
         on_pid_resolved: Callable[[int, int], None] | None = None,
         enable_deadline_extension: bool = False,
         max_extension_seconds: float = 7200,
+        marker_dir: Path | None = None,
+        session_id: str | None = None,
     ) -> Awaitable[SubprocessResult]: ...

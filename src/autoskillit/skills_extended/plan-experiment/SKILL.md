@@ -86,11 +86,7 @@ Detect and read inputs:
    - Proposed investigation directions
    - Success criteria hints
    - External research findings
-2. If a third path-like token is present and resolves to an existing file, read
-   `{revision_guidance}`. Extract all revision instructions — these take priority over
-   your initial analysis in Step 2. Note which sections of the plan need rework.
-   When absent or empty, omit this sub-step and proceed normally (first pass).
-3. If `{scope_directions_path}` is present and the file exists, read it as JSON.
+2. If `{scope_directions_path}` is present and the file exists, read it as JSON.
    Extract the `directions` array. Use these structured directions as the
    authoritative list of investigation directions instead of parsing them from the
    Markdown prose. Note which directions have `must_cover: true` — these are
@@ -99,6 +95,10 @@ Detect and read inputs:
    lacks a non-empty `directions` array, fall back to extracting directions
    from the report's Proposed Investigation Directions section (no breadth
    enforcement applies in this case). Note the fallback reason in the plan.
+3. If a third path-like token is present and resolves to an existing file, read
+   `{revision_guidance}`. Extract all revision instructions — these take priority over
+   your initial analysis in Step 2. Note which sections of the plan need rework.
+   When absent or empty, omit this sub-step and proceed normally (first pass).
 
 ### Step 2 — Explore Feasibility
 

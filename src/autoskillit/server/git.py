@@ -10,6 +10,7 @@ Public API:
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import os
 from pathlib import Path
@@ -22,6 +23,7 @@ from autoskillit.core import (
     SubprocessRunner,
     get_logger,
     is_protected_branch,
+    resolve_main_worktree,
     truncate_text,
 )
 from autoskillit.server._editable_guard import scan_editable_installs_for_worktree
@@ -389,17 +391,11 @@ async def perform_merge(
             }
 
     # 7. Discover main repo path
-    rc, wt_list, _ = await _run_git(
-        ["git", "worktree", "list", "--porcelain"], worktree_path, 10, runner
-    )
-    main_repo = ""
-    for line in wt_list.splitlines():
-        if line.startswith("worktree "):
-            main_repo = line.split(" ", 1)[1].strip()
-            break  # First entry is always the main working tree
+    main_repo_path = await asyncio.to_thread(resolve_main_worktree, Path(worktree_path))
+    main_repo = str(main_repo_path) if main_repo_path else ""
     if not main_repo:
         return {
-            "error": "Could not locate main repository from worktree list",
+            "error": "Could not locate main repository using resolve_main_worktree",
             "failed_step": MergeFailedStep.MERGE,
             "state": MergeState.WORKTREE_INTACT,
             "worktree_path": worktree_path,

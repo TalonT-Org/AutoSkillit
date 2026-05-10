@@ -150,6 +150,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_rules_worktree.py` | Tests for worktree semantic validation rule |
 | `test_schema.py` | Tests for Recipe, RecipeStep, and DataFlowWarning schema |
 | `test_skill_emit_consistency.py` | Tests for skill emit consistency in recipe steps |
+| `test_skill_worktree_patterns.py` | Tests that SKILL.md files do not use fragile relative worktree path patterns |
 | `test_silent_type_convention.py` | Tests for silent-type-convention.md documentation |
 | `test_silent_type_flows.py` | Integration tests for silent-type convention flows (vis-lens out-of-scope path) |
 | `test_staleness_cache.py` | Tests for recipe staleness cache |

@@ -639,3 +639,113 @@ def test_file_writing_skill_advisory_step_not_flagged() -> None:
         f"Advisory steps (skip_when_false) should not trigger "
         f"file-writing-skill-missing-context-limit: {findings}"
     )
+
+
+# ---------------------------------------------------------------------------
+# relative-worktree-path-in-cmd rule tests
+# ---------------------------------------------------------------------------
+
+
+def test_run_cmd_with_relative_worktree_path_fires_warning() -> None:
+    """run_cmd step with '../worktrees/' in cmd fires relative-worktree-path-in-cmd WARNING."""
+    wf = _make_workflow(
+        {
+            "create_wt": {
+                "tool": "run_cmd",
+                "with": {
+                    "cmd": (
+                        'WORKTREE_PATH="../worktrees/${WORKTREE_NAME}"; '
+                        "git worktree add -b '${WORKTREE_NAME}' '${WORKTREE_PATH}'"
+                    ),
+                    "cwd": "${{ inputs.source_dir }}",
+                },
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    warnings = [f for f in findings if f.severity == Severity.WARNING]
+    assert any(f.rule == "relative-worktree-path-in-cmd" for f in warnings), (
+        f"Expected relative-worktree-path-in-cmd WARNING for run_cmd with '../worktrees/' in cmd. "
+        f"Got: {findings}"
+    )
+
+
+def test_run_cmd_with_absolute_worktree_path_no_finding() -> None:
+    """run_cmd step with absolute worktree path has no relative-worktree-path-in-cmd finding."""
+    wf = _make_workflow(
+        {
+            "create_wt": {
+                "tool": "run_cmd",
+                "with": {
+                    "cmd": (
+                        'MAIN_GIT_DIR="$(git rev-parse --path-format=absolute --git-common-dir)"; '
+                        'WORKTREE_DIR="${MAIN_GIT_DIR}/../worktrees"; '
+                        "mkdir -p '${WORKTREE_DIR}'; "
+                        "WORKTREE_PATH='${WORKTREE_DIR}/${WORKTREE_NAME}'; "
+                        "git worktree add -b '${WORKTREE_NAME}' '${WORKTREE_PATH}'"
+                    ),
+                },
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    assert not any(f.rule == "relative-worktree-path-in-cmd" for f in findings), (
+        f"Unexpected relative-worktree-path-in-cmd finding for run_cmd with absolute path: "
+        f"{findings}"
+    )
+
+
+def test_run_cmd_non_worktree_cmd_no_finding() -> None:
+    """run_cmd step with no worktree path has no relative-worktree-path-in-cmd finding."""
+    wf = _make_workflow(
+        {
+            "echo": {
+                "tool": "run_cmd",
+                "with": {"cmd": "echo hello world"},
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    assert not any(f.rule == "relative-worktree-path-in-cmd" for f in findings)
+
+
+def test_run_cmd_other_tool_no_finding() -> None:
+    """Non-run_cmd steps are not checked by the rule."""
+    wf = _make_workflow(
+        {
+            "implement": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:implement-worktree-no-merge plan.md"},
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    assert not any(f.rule == "relative-worktree-path-in-cmd" for f in findings)
+
+
+def test_relative_worktree_path_warning_includes_step_name() -> None:
+    """The finding message contains the step name for actionable output."""
+    wf = _make_workflow(
+        {
+            "make_worktree": {
+                "tool": "run_cmd",
+                "with": {
+                    "cmd": 'WORKTREE_PATH="../worktrees/test-wt"; git worktree add test-wt',
+                },
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    matched = [f for f in findings if f.rule == "relative-worktree-path-in-cmd"]
+    assert len(matched) >= 1
+    assert "make_worktree" in matched[0].message

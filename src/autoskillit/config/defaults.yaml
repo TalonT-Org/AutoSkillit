@@ -229,6 +229,7 @@ skills:
     - vis-lens-story-arc
     - plan-visualization
     - stage-data
+    - download-data
     - setup-environment
     - bundle-local-report
     # planner

@@ -49,6 +49,10 @@ def test_run_experiment_group_manifest_output() -> None:
     )
     manifest = yaml.safe_load(contract_path.read_text())
     assert isinstance(manifest, dict), f"research.yaml did not parse to a dict: {type(manifest)}"
+    assert "skills" in manifest, "research.yaml missing top-level 'skills' key"
+    assert "run-experiment" in manifest["skills"], (
+        "research.yaml 'skills' missing 'run-experiment' entry"
+    )
     run_exp = manifest["skills"]["run-experiment"]
     output_names = [out["name"] for out in run_exp.get("outputs", [])]
     assert "group_manifest" in output_names, (

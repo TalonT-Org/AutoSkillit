@@ -134,6 +134,10 @@ def test_generate_report_group_manifest_input() -> None:
     )
     manifest = yaml.safe_load(contract_path.read_text())
     assert isinstance(manifest, dict), f"research.yaml did not parse to a dict: {type(manifest)}"
+    assert "skills" in manifest, "research.yaml missing top-level 'skills' key"
+    assert "generate-report" in manifest["skills"], (
+        "research.yaml 'skills' missing 'generate-report' entry"
+    )
     gen_report = manifest["skills"]["generate-report"]
     input_names = [inp["name"] for inp in gen_report.get("inputs", [])]
     assert "group_manifest" in input_names, (

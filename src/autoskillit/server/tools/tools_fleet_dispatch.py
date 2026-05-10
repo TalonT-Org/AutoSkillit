@@ -141,6 +141,7 @@ async def dispatch_food_truck(
         continue_on_failure_str = os.environ.get("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false")
         if campaign_state_path_str and continue_on_failure_str.lower() != "true":
             from autoskillit.fleet import (  # noqa: PLC0415
+                _INFRASTRUCTURE_FAILURE_REASONS,
                 has_blocking_dispatch,
                 reset_blocking_dispatch,
             )
@@ -219,13 +220,19 @@ async def dispatch_food_truck(
                 result,
             )
 
-        # Post-dispatch halt: if continue_on_failure=false and the dispatch failed,
-        # return FLEET_CAMPAIGN_HALTED immediately — mirrors the pre-dispatch gate.
+        # Post-dispatch halt: if continue_on_failure=false and the dispatch failed
+        # (logic failure, not infrastructure), return FLEET_CAMPAIGN_HALTED immediately.
+        # Infrastructure failures (fleet_l3_no_result_block, fleet_quota_exhausted) do
+        # not halt — they are retriable at the L3 level without campaign-level impact.
+        # Also skip halt if dispatch_name was provided — the pre-dispatch gate already
+        # handled the reset case, and a retry of the blocking dispatch should proceed.
         if (
             campaign_state_path_str
             and continue_on_failure_str.lower() != "true"
             and isinstance(result, DispatchCompleted)
             and result.dispatch_status != DispatchStatus.SUCCESS
+            and result.reason not in _INFRASTRUCTURE_FAILURE_REASONS
+            and not dispatch_name
         ):
             return fleet_error(
                 FleetErrorCode.FLEET_CAMPAIGN_HALTED,

@@ -62,6 +62,7 @@ CLI command, subcommand, and interactive workflow tests.
 | `test_serve_sigterm.py` | Regression guard: serve() uses event-loop-routed signal handling (issue #745) |
 | `test_session_launch.py` | Tests for cli/_session_launch.py — _run_interactive_session contract |
 | `test_session_picker.py` | Tests for cli/_session_picker.py |
+| `test_signal_guard.py` | Tests for _fleet_signal_guard in cli/_fleet.py (Group J) |
 | `test_startup_budget.py` | Integration test: serve() must call anyio.run() within the startup timing budget |
 | `test_subprocess_env_contracts.py` | Structural contract: every subprocess.run(["autoskillit",...]) in CLI must inject AUTOSKILLIT_SKIP_STALE_CHECK |
 | `test_terminal.py` | Tests for cli/_terminal.py terminal_guard() context manager |

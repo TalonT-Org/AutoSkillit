@@ -54,7 +54,11 @@ from .state_recovery import (
     derive_orchestrator_resume_spec,
     has_blocking_dispatch,
 )
-from .state_types import FLEET_STATE_SCHEMA_VERSION, DispatchOutcome
+from .state_types import (
+    _INFRASTRUCTURE_FAILURE_REASONS,
+    FLEET_STATE_SCHEMA_VERSION,
+    DispatchOutcome,
+)
 from .summary import (
     CampaignParseResult,
     CampaignSummary,

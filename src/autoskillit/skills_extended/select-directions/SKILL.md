@@ -155,7 +155,8 @@ selected_directions = {absolute_path_to_json}
 ## Output Location
 
 ```
-{{AUTOSKILLIT_TEMP}}/select-directions/selected_directions_{topic}_{timestamp}.json (relative to the current working directory)
+{{AUTOSKILLIT_TEMP}}/select-directions/selected_directions_{topic}_{timestamp}.json
+({{AUTOSKILLIT_TEMP}} resolves to an absolute path, independent of the current working directory)
 ```
 
 ## Output Fields (for recipe capture)

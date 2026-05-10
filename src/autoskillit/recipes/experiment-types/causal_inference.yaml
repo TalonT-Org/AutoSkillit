@@ -24,3 +24,5 @@ red_team_focus:
 l1_severity:
   estimand_clarity: critical
   hypothesis_falsifiability: critical
+dimension_weight_rationale:
+  scope_alignment: "Causal designs must address all scoped causal pathways; narrowing to a subset of proposed directions risks omitting mediators or confounders that affect the validity of the causal conclusion"

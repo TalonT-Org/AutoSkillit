@@ -326,9 +326,7 @@ forbidden_modules = [
 # IL-010 | Lens: module-dependency | DS-001
 # Rationale: report/ is an IL-1 package that renders research bundles. It must only
 # import from IL-0 (core) to remain a leaf service that can be tested without
-# spinning up the full autoskillit stack. The renderer is extracted from an
-# embedded SKILL.md code block so it is subject to all static analysis (mypy, ruff,
-# import-linter, arch tests).
+# spinning up the full autoskillit stack.
 [[tool.importlinter.contracts]]
 name = "IL-1 report imports only IL-0"
 type = "forbidden"

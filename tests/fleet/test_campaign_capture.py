@@ -604,6 +604,21 @@ def test_extract_path_type_rejects_empty_string():
     assert "p" in str(exc_info.value)
 
 
+def test_extract_url_type_rejects_empty_string():
+    """A url-type capture with an empty-string value must raise CaptureValueTypeError."""
+    from autoskillit.fleet._api import CaptureValueTypeError, _extract_captures
+
+    capture_spec = {
+        "u": CaptureEntrySpec(from_="${{ result.u }}", value_type="url"),
+    }
+    payload = {"u": ""}
+
+    with pytest.raises(CaptureValueTypeError) as exc_info:
+        _extract_captures(capture_spec, payload)
+    assert exc_info.value.declared_type == "url"
+    assert "non-empty" in str(exc_info.value)
+
+
 def test_extract_optional_string_type_accepts_empty():
     """An optional_string-type capture with an empty-string value must be accepted."""
     from autoskillit.fleet._api import _extract_captures

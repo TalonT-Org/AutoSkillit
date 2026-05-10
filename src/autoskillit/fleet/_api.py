@@ -83,8 +83,14 @@ def _validate_capture_value(key: str, value: str, declared_type: str) -> None:
                 reason="string value must be non-empty",
             )
     elif declared_type == "url":
-        # URL type: non-empty values should look like URLs
-        if value and not (
+        if not value:
+            raise CaptureValueTypeError(
+                key=key,
+                value=value,
+                declared_type=declared_type,
+                reason="url value must be non-empty",
+            )
+        if not (
             value.startswith("http://")
             or value.startswith("https://")
             or value.startswith("file://")

@@ -391,7 +391,10 @@ async def perform_merge(
             }
 
     # 7. Discover main repo path
-    main_repo_path = await asyncio.to_thread(resolve_main_worktree, Path(worktree_path))
+    if not worktree_path:
+        main_repo_path = None
+    else:
+        main_repo_path = await asyncio.to_thread(resolve_main_worktree, Path(worktree_path))
     main_repo = str(main_repo_path) if main_repo_path else ""
     if not main_repo:
         return {

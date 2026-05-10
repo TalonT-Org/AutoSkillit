@@ -212,8 +212,8 @@ Do NOT re-dispatch from the full original issue list.
         _ing_section = (
             "\n## RECIPE INGREDIENTS — USE THESE EXACT NAMES\n\n"
             f"{ingredients_table}\n\n"
-            "Before dispatching, collect values for all required ingredients from the user "
-            "via AskUserQuestion. Do not dispatch until all required values are confirmed.\n"
+            "Before dispatching, ask the user conversationally for all required "
+            "ingredient values. Do not dispatch until all required values are confirmed.\n"
         )
 
     _first_action_section = ""
@@ -224,7 +224,7 @@ Do NOT re-dispatch from the full original issue list.
         _first_action_section = (
             "\nFIRST ACTION — before asking for any inputs:\n\n"
             f"1. {_display}\n\n"
-            "2. Collect ingredient values via AskUserQuestion.\n\n"
+            "2. Ask for required ingredient values and wait for the user's response.\n\n"
             "3. Proceed only after all required ingredient values are confirmed.\n"
         )
 

@@ -480,9 +480,30 @@ class TestK15IngredientsTableInjection:
         prompt = _build(ingredients_table=None)
         assert "RECIPE INGREDIENTS" not in prompt
 
-    def test_ask_user_question_instruction_present(self) -> None:
+    def test_conversational_collection_instruction_present(self) -> None:
         prompt = _build(ingredients_table=self._TABLE)
-        assert "AskUserQuestion" in prompt
+        ing_start = prompt.index("RECIPE INGREDIENTS")
+        ing_end = (
+            prompt.index("FIRST ACTION")
+            if "FIRST ACTION" in prompt
+            else prompt.index("DISPATCH MANIFEST")
+        )
+        section = prompt[ing_start:ing_end]
+        assert "conversationally" in section
+        assert "AskUserQuestion" not in section
+
+    def test_no_ask_user_question_without_gate_dispatches(self) -> None:
+        prompt = _build(ingredients_table=self._TABLE)
+        # Slice covers both the ingredient section and the FIRST ACTION section.
+        # Gate dispatches (which reference AskUserQuestion) appear in the DISPATCH
+        # MANIFEST section, outside this slice — so the assertion verifies no
+        # AskUserQuestion leaks into the pre-dispatch portion of the prompt.
+        ing_start = prompt.index("RECIPE INGREDIENTS")
+        ing_end = (
+            prompt.index("DISPATCH MANIFEST") if "DISPATCH MANIFEST" in prompt else len(prompt)
+        )
+        ingredient_and_first_action = prompt[ing_start:ing_end]
+        assert "AskUserQuestion" not in ingredient_and_first_action
 
     def test_ingredients_section_between_overview_and_manifest(self) -> None:
         prompt = _build(ingredients_table=self._TABLE)
@@ -530,12 +551,13 @@ class TestK16IngredientDisplayFirstAction:
         prompt = _build(ingredients_table=self._TABLE)
         assert prompt.index("FIRST ACTION") < prompt.index("DISPATCH MANIFEST")
 
-    def test_first_action_instructs_ask_user_question(self) -> None:
+    def test_first_action_instructs_conversational_collection(self) -> None:
         prompt = _build(ingredients_table=self._TABLE)
         first_action_idx = prompt.index("FIRST ACTION")
         dispatch_manifest_idx = prompt.index("DISPATCH MANIFEST")
         section = prompt[first_action_idx:dispatch_manifest_idx]
-        assert "AskUserQuestion" in section
+        assert "AskUserQuestion" not in section
+        assert "wait for the user" in section
 
 
 class TestResumeReasonInPrompt:

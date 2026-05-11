@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import shutil
 import subprocess
 
 import pytest
@@ -11,6 +10,7 @@ import pytest
 from autoskillit.core.paths import pkg_root
 from autoskillit.recipe.io import builtin_recipes_dir, builtin_scripts_dir, load_recipe
 from autoskillit.recipe.validator import run_semantic_rules
+from tests.recipe.conftest import _make_workflow
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
@@ -100,21 +100,29 @@ def test_recipes_pass_inline_script_rule(recipe_name):
     )
 
 
-def test_recipes_pass_inline_script_rule_with_uv_tool_path(monkeypatch, tmp_path):
-    """Guard: inline-script rule must not false-positive on uv-tool-install paths."""
-    fake_pkg = tmp_path / ".local" / "share" / "uv" / "tools" / "autoskillit"
-    real_pkg = pkg_root()
-    shutil.copytree(real_pkg, fake_pkg, dirs_exist_ok=True)
-
-    import autoskillit.recipe.io as _rio
-
-    monkeypatch.setattr(_rio, "pkg_root", lambda: fake_pkg)
-
-    recipe = load_recipe(builtin_recipes_dir() / "research.yaml")
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        "autoskillit init --path /home/user/.local/share/uv/tools/autoskillit",
+        "bash /home/user/.local/share/uv/tools/autoskillit/recipes/scripts/setup.sh",
+        "task install --dir /export/apps/autoskillit",
+    ],
+    ids=["uv-tool-local-path", "script-from-uv-tool-path", "export-dir-path"],
+)
+def test_inline_script_does_not_false_positive_on_keyword_in_path(cmd):
+    """Guard: inline-script rule must not false-positive on paths containing keyword substrings."""
+    recipe = _make_workflow(
+        {
+            "step_a": {
+                "tool": "run_cmd",
+                "with": {"cmd": cmd},
+                "on_success": "END",
+            },
+            "END": {"action": "stop", "message": "Done"},
+        }
+    )
     findings = run_semantic_rules(recipe)
-    inline_findings = [
-        f for f in findings if f.rule in ("inline-script-in-cmd", "inline-python-in-cmd")
-    ]
-    assert inline_findings == [], (
-        f"research.yaml has inline script findings under uv-tool path: {inline_findings}"
+    assert not any(f.rule == "inline-script-in-cmd" for f in findings), (
+        f"False-positive on path-containing cmd '{cmd}': "
+        f"{[f for f in findings if f.rule == 'inline-script-in-cmd']}"
     )

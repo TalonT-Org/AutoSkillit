@@ -653,7 +653,7 @@ def check_contract_staleness(
             current_hash = compute_recipe_hash(recipe_path)
             if cached.recipe_hash == current_hash and cached.manifest_version == current_version:
                 if not cached.is_stale:
-                    return []
+                    return stale
                 # stale=True cache hit: fall through to re-compute for StaleItem details
 
     stored_version = contract.get("bundled_manifest_version", "")

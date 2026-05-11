@@ -326,6 +326,11 @@ RULES: tuple[RuleDescriptor, ...] = (
             "This rule enforces enum-member comparisons (f.severity == Severity.ERROR) which "
             "are immune to case drift and checked by IDE autocompletion."
         ),
+        # ARCH-010 uses a standalone scanner (_scan_strenum_compare in _helpers.py)
+        # rather than the visitor-level exemptions= slot used by other rules.
+        # Reason: test-file scanning runs only this rule in isolation (avoiding the full
+        # ArchitectureViolationVisitor), so file-level exemptions are handled by
+        # _STRENUM_COMPARE_EXEMPT_FILES in _scan_strenum_compare directly.
         exemptions=frozenset(),
         severity="error",
         defense_standard="DS-010",

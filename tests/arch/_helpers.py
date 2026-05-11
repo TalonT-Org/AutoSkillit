@@ -14,6 +14,7 @@ from tests.arch._rules import (
     _SENSITIVE_KEYWORDS,
     _STRENUM_COMPARE_EXEMPT_FILES,
     _STRENUM_FIELD_NAMES,
+    _STRENUM_SRC_COMPARE_EXEMPT_PATHS,
     RuleDescriptor,
     Violation,
     _rel,  # noqa: F401  # re-exported for test_layer_enforcement, test_subpackage_isolation
@@ -59,6 +60,13 @@ class ArchitectureViolationVisitor(ast.NodeVisitor):
         self._print_exempt = filepath.name in _PRINT_EXEMPT
         self._asyncio_pipe_exempt = filepath.name in _ASYNCIO_PIPE_EXEMPT
         self._broad_except_exempt = filepath.name in _BROAD_EXCEPT_EXEMPT
+        try:
+            rel = filepath.relative_to(SRC_ROOT)
+            self._strenum_src_compare_exempt = (
+                str(rel).replace("\\", "/") in _STRENUM_SRC_COMPARE_EXEMPT_PATHS
+            )
+        except ValueError:
+            self._strenum_src_compare_exempt = False
 
     def _add(self, node: ast.AST, rule: RuleDescriptor, message: str) -> None:
         self.violations.append(
@@ -203,8 +211,13 @@ class ArchitectureViolationVisitor(ast.NodeVisitor):
         Detects patterns like ``obj.severity == "ERROR"`` where ``severity`` is a known
         StrEnum field name but the comparator is a raw string constant (not an enum member).
         Comparisons against ``.value`` attribute accesses (e.g., ``f.severity.value == "error"``)
-        are exempt.
+        are exempt. Files in _STRENUM_SRC_COMPARE_EXEMPT_PATHS are fully exempt (Literal-typed
+        fields that share names with StrEnum fields).
         """
+        if self._strenum_src_compare_exempt:
+            self.generic_visit(node)
+            return
+
         # Only flag == and != operators
         if not isinstance(node.ops[0], (ast.Eq, ast.NotEq)):
             self.generic_visit(node)

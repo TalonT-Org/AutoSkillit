@@ -130,6 +130,19 @@ _STRENUM_COMPARE_EXEMPT_FILES: frozenset[str] = frozenset(
     }
 )
 
+# ARCH-010: Source files exempt from the visitor-level StrEnum comparison check.
+# Uses paths relative to src/autoskillit/ (forward slashes, platform-independent).
+# These source files compare Literal[...]-typed or plain-str fields that share names
+# with known StrEnum fields; the AST rule cannot distinguish by field name alone.
+_STRENUM_SRC_COMPARE_EXEMPT_PATHS: frozenset[str] = frozenset(
+    {
+        "cli/_validate.py",  # ValidationResult.status: plain str property, not a StrEnum
+        "execution/process/_process_monitor.py",  # psutil Connection.status: plain str
+        "fleet/_api.py",  # L3ParseResult.outcome: Literal[...], not SessionOutcome
+        "fleet/_checkpoint_bridge.py",  # IssueSidecarEntry.status: Literal[...], not StrEnum
+    }
+)
+
 # ARCH-010: Known StrEnum field names that are compared against raw string literals.
 # Maps field name → enum class name for documentation purposes.
 # These are derived from dataclass/protocol definitions across the codebase.

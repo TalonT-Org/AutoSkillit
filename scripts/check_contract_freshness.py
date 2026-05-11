@@ -4,17 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import yaml
-from yaml import SafeLoader as YamlLoader
-
+from autoskillit.core.io import load_yaml
 from autoskillit.recipe.staleness_cache import compute_recipe_hash
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RECIPES_DIR = PROJECT_ROOT / "src" / "autoskillit" / "recipes"
-
-
-def load_yaml(path: Path) -> dict | None:
-    return yaml.load(path.read_text(encoding="utf-8"), Loader=YamlLoader)
 
 
 def main() -> int:

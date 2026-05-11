@@ -8,11 +8,17 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
+from autoskillit.recipe.contracts import generate_recipe_card
 
 _SCRIPT = (
     Path(__file__).resolve().parent.parent.parent / "scripts" / "recipe_contract_freshness.py"
 )
+
+pytestmark = [
+    pytest.mark.layer("hooks"),
+    pytest.mark.medium,
+    pytest.mark.skipif(not _SCRIPT.exists(), reason=f"Script not found: {_SCRIPT}"),
+]
 
 
 def test_hook_detects_stale_contract(tmp_path: Path) -> None:
@@ -81,8 +87,6 @@ steps:
 
     contracts_dir = tmp_path / "contracts"
     contracts_dir.mkdir()
-
-    from autoskillit.recipe.contracts import generate_recipe_card
 
     generate_recipe_card(recipe_file, recipes_dir=tmp_path)
 

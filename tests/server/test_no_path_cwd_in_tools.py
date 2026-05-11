@@ -9,7 +9,6 @@ because it uses cwd to find the server's own log directory, not the project root
 
 from __future__ import annotations
 
-import ast
 from pathlib import Path
 
 import pytest
@@ -31,29 +30,6 @@ LIFESPAN_FILES = {
 
 ALL_FILES = {**TOOLS_FILES, **LIFESPAN_FILES}
 
-# _factory.py contains Path.cwd() as the last-resort fallback in _resolve_project_dir.
-# This is the resolver itself and is correct — not a tool handler.
-ALLOWED_FILE_PATTERNS = ["_factory.py"]
-
-
-class PathCwdVisitor(ast.NodeVisitor):
-    """Find all Path.cwd() calls in a file."""
-
-    def __init__(self, filename: str):
-        self.filename = filename
-        self.calls: list[tuple[int, str]] = []  # (lineno, line text)
-
-    def visit_Call(self, node: ast.Call) -> None:
-        # Check for Path.cwd()
-        if (
-            isinstance(node.func, ast.Attribute)
-            and node.func.attr == "cwd"
-            and isinstance(node.func.value, ast.Name)
-            and node.func.value.id == "Path"
-        ):
-            self.calls.append((node.lineno, ""))
-        self.generic_visit(node)
-
 
 def _find_path_cwd_lines(filepath: Path) -> list[int]:
     """Return line numbers where Path.cwd() appears in the file."""
@@ -62,7 +38,6 @@ def _find_path_cwd_lines(filepath: Path) -> list[int]:
     except OSError:
         return []
 
-    # Quick string check first
     lines_with_cwd = []
     for i, line in enumerate(source.splitlines(), start=1):
         if "Path.cwd()" in line:
@@ -73,8 +48,7 @@ def _find_path_cwd_lines(filepath: Path) -> list[int]:
 
 def _get_allowlisted_lines(filepath: str) -> list[int]:
     """Get the allowlisted line numbers for a given file."""
-    filename = Path(filepath).name
-    return ALL_FILES.get(filepath, ALL_FILES.get(filename, []))
+    return ALL_FILES.get(filepath, [])
 
 
 def test_no_path_cwd_in_server_tools():
@@ -86,12 +60,13 @@ def test_no_path_cwd_in_server_tools():
     import autoskillit
 
     pkg_root = Path(autoskillit.__file__).parent.parent.parent
+    missing_files = []
     violations = []
 
     for rel_path in ALL_FILES:
         filepath = pkg_root / rel_path
         if not filepath.exists():
-            violations.append(f"{rel_path}: FILE NOT FOUND")
+            missing_files.append(rel_path)
             continue
 
         lines_with_cwd = _find_path_cwd_lines(filepath)
@@ -101,4 +76,5 @@ def test_no_path_cwd_in_server_tools():
             if lineno not in allowlisted:
                 violations.append(f"{rel_path}:{lineno}: Path.cwd() found (not allowlisted)")
 
+    assert not missing_files, "Server tool files not found:\n" + "\n".join(missing_files)
     assert not violations, "Path.cwd() found in server tool handlers:\n" + "\n".join(violations)

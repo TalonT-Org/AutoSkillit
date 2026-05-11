@@ -836,50 +836,29 @@ def test_get_recipe_uses_project_dir(tmp_path, monkeypatch):
     recipe_yaml = {
         "name": "test-get-recipe-project-dir",
         "description": "Test recipe for get_recipe project_dir",
-        "ingredients": [],
-        "steps": [{"tool": "run_skill", "name": "s1", "with": {"skill": "test"}}],
+        "steps": {"s1": {"tool": "run_skill"}},
     }
     recipes_dir = different_dir / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
     (recipes_dir / "test-get-recipe-project-dir.yaml").write_text(yaml.dump(recipe_yaml))
 
-    from autoskillit.config.settings import AutomationConfig
-    from autoskillit.core.types import DirectInstall
-    from autoskillit.pipeline.audit import DefaultAuditLog
-    from autoskillit.pipeline.context import ToolContext
-    from autoskillit.pipeline.gate import DefaultGateState
-    from autoskillit.pipeline.timings import DefaultTimingLog
-    from autoskillit.pipeline.tokens import DefaultTokenLog
     from autoskillit.recipe.repository import DefaultRecipeRepository
 
     real_repo = DefaultRecipeRepository()
 
-    ctx = ToolContext(
-        config=AutomationConfig(features={"fleet": True}),
-        audit=DefaultAuditLog(),
-        token_log=DefaultTokenLog(),
-        timing_log=DefaultTimingLog(),
-        gate=DefaultGateState(enabled=False),
-        plugin_source=DirectInstall(plugin_dir=tmp_path),
-        runner=None,
-        temp_dir=tmp_path / ".autoskillit" / "temp",
-        project_dir=different_dir,
-        recipes=real_repo,
-    )
-
     mock_ctx = _make_mock_ctx()
-    mock_ctx.project_dir = ctx.project_dir
-    mock_ctx.recipes = ctx.recipes
+    mock_ctx.project_dir = different_dir
+    mock_ctx.recipes = real_repo
 
     with patch("autoskillit.server._state._get_ctx_or_none", return_value=mock_ctx):
         from autoskillit.server.tools.tools_kitchen import get_recipe
 
         result = get_recipe("test-get-recipe-project-dir")
 
-    parsed = json.loads(result)
-    assert "error" not in parsed or parsed.get("error", "") == "", (
-        f"get_recipe failed to find recipe in project_dir={different_dir}. Result: {parsed}"
+    # get_recipe returns raw YAML when found, JSON error dict when not found
+    assert '"error"' not in result, (
+        f"get_recipe failed to find recipe in project_dir={different_dir}. Result: {result}"
     )
-    assert "test-get-recipe-project-dir" in parsed, (
-        f"get_recipe did not return the recipe from project_dir. Result: {parsed}"
+    assert "test-get-recipe-project-dir" in result, (
+        f"get_recipe did not return the recipe from project_dir. Result: {result}"
     )

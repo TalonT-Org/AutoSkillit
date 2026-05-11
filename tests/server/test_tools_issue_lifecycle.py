@@ -429,8 +429,8 @@ async def test_prepare_issue_uses_project_dir_as_subprocess_cwd(tmp_path, monkey
     )
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
-        with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server._notify._notify", new=AsyncMock()):
+        with patch("autoskillit.server._state._get_ctx", return_value=mock_ctx):
+            with patch("autoskillit.server.logger"):
                 await prepare_issue(
                     title="Test issue",
                     body="Test body",
@@ -468,8 +468,8 @@ async def test_enrich_issues_uses_project_dir_as_subprocess_cwd(tmp_path, monkey
     )
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
-        with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server._notify._notify", new=AsyncMock()):
+        with patch("autoskillit.server._state._get_ctx", return_value=mock_ctx):
+            with patch("autoskillit.server.logger"):
                 await enrich_issues(
                     issue_numbers=[123],
                     repo="owner/repo",

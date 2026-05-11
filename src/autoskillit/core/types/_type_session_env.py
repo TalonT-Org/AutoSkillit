@@ -28,6 +28,7 @@ class FleetSessionEnv:
         }
         if self.campaign_id:
             d["AUTOSKILLIT_CAMPAIGN_ID"] = self.campaign_id
-            d["AUTOSKILLIT_CAMPAIGN_STATE_PATH"] = self.campaign_state_path
+            if self.campaign_state_path:
+                d["AUTOSKILLIT_CAMPAIGN_STATE_PATH"] = self.campaign_state_path
             d["AUTOSKILLIT_CONTINUE_ON_FAILURE"] = self.continue_on_failure
         return d

@@ -52,7 +52,6 @@ __all__ = [
     "FLEET_DISPATCH_TOOLS",
     "FLEET_ERROR_CODES",
     "FLEET_SESSION_REQUIRED_ENV",
-    "FOOD_TRUCK_REQUIRED_ENV",
     "FeatureDef",
     "FEATURE_REGISTRY",
     "RETIRED_FEATURES",
@@ -118,14 +117,6 @@ FLEET_SESSION_REQUIRED_ENV: frozenset[str] = frozenset(
         "AUTOSKILLIT_FLEET_MODE",
         "AUTOSKILLIT_PROJECT_DIR",
         "AUTOSKILLIT_HEADLESS",
-    }
-)
-
-FOOD_TRUCK_REQUIRED_ENV: frozenset[str] = frozenset(
-    {
-        "AUTOSKILLIT_SESSION_TYPE",
-        "AUTOSKILLIT_HEADLESS",
-        "AUTOSKILLIT_PROJECT_DIR",
     }
 )
 

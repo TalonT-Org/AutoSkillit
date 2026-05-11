@@ -206,6 +206,7 @@ async def test_open_kitchen_smoke_test_renders_resolved_base_branch(monkeypatch)
     )
 
     mock_ctx = _make_mock_ctx()
+    mock_ctx.project_dir = project_dir
     mock_ctx.enable_components = AsyncMock()
     mock_ctx.quota_refresh_task = None
     mock_ctx.recipes = DefaultRecipeRepository()

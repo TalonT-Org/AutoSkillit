@@ -973,6 +973,7 @@ def _iter_pipeline_recipes() -> list[Path]:
     return paths
 
 
+@pytest.mark.medium
 def test_all_bundled_recipes_have_contract_cards():
     """Every bundled recipe YAML must have a corresponding contract card."""
     recipes_dir = builtin_recipes_dir()
@@ -985,6 +986,7 @@ def test_all_bundled_recipes_have_contract_cards():
     assert not missing, f"Bundled recipes without contract cards: {missing}"
 
 
+@pytest.mark.medium
 def test_all_bundled_contract_cards_have_source_hash():
     """Every contract card must embed a recipe_source_hash field."""
     recipes_dir = builtin_recipes_dir()
@@ -996,6 +998,7 @@ def test_all_bundled_contract_cards_have_source_hash():
     assert not missing_hash, f"Contract cards without recipe_source_hash: {missing_hash}"
 
 
+@pytest.mark.medium
 def test_all_bundled_contract_cards_are_fresh():
     """Contract card content must match what generate_recipe_card would produce now."""
     from autoskillit.core.io import load_yaml

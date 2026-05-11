@@ -18,14 +18,16 @@ def test_conftest_has_no_known_violations_dict() -> None:
     """
     conftest = Path(__file__).parent / "conftest.py"
     tree = ast.parse(conftest.read_text())
-    violation_names = {
-        node.targets[0].id
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Assign)
-        and node.targets
-        and isinstance(node.targets[0], ast.Name)
-        and "VIOLATION" in node.targets[0].id.upper()
-    }
+    violation_names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and node.targets and isinstance(node.targets[0], ast.Name):
+            name = node.targets[0].id
+            if "VIOLATION" in name.upper():
+                violation_names.add(name)
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            name = node.target.id
+            if "VIOLATION" in name.upper():
+                violation_names.add(name)
     assert not violation_names, (
         f"Suppression mechanism found in conftest.py: {violation_names}. "
         "The dispatch gate test must mirror production with zero suppression. "

@@ -4,6 +4,7 @@ import re
 
 import pytest
 
+from autoskillit.core import Severity
 from autoskillit.recipe.io import builtin_recipes_dir, builtin_scripts_dir, load_recipe
 from autoskillit.recipe.validator import run_semantic_rules, validate_recipe_structure
 
@@ -110,7 +111,7 @@ def test_research_recipe_passes_semantic_rules(recipe):
     errors = validate_recipe_structure(recipe)
     assert not errors, f"Structural validation errors: {errors}"
     findings = run_semantic_rules(recipe)
-    error_findings = [f for f in findings if f.severity.value == "error"]
+    error_findings = [f for f in findings if f.severity == Severity.ERROR]
     assert not error_findings, (
         f"Semantic rule errors: {[f'{f.rule}: {f.message}' for f in error_findings]}"
     )

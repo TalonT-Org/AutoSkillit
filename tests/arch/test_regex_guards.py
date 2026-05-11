@@ -57,10 +57,8 @@ def _extract_re_compile_patterns(filepath: Path) -> list[tuple[str, str, int]]:
     tree = ast.parse(source)
     results = []
 
-    # Map from re.compile Call nodes to their assigned variable names
     compile_calls: dict[int, str] = {}
 
-    # First pass: find all Assign / AnnAssign nodes with a Call value and extract var names
     for node in ast.walk(tree):
         # Simple assignment: _FOO_RE = re.compile(...)
         if isinstance(node, ast.Assign):
@@ -72,7 +70,6 @@ def _extract_re_compile_patterns(filepath: Path) -> list[tuple[str, str, int]]:
             if isinstance(node.target, ast.Name) and isinstance(node.value, ast.Call):
                 compile_calls[id(node.value)] = node.target.id
 
-    # Second pass: find all re.compile / regex.compile calls
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue

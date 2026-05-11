@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import structlog
@@ -230,7 +229,7 @@ async def prepare_issue(
 
         result = await tool_ctx.executor.run(
             skill_command,
-            str(Path.cwd()),
+            str(tool_ctx.project_dir),
             expected_output_patterns=expected_output_patterns,
             write_behavior=write_spec,
         )
@@ -337,7 +336,7 @@ async def enrich_issues(
 
         result = await tool_ctx.executor.run(
             skill_command,
-            str(Path.cwd()),
+            str(tool_ctx.project_dir),
             expected_output_patterns=expected_output_patterns,
             write_behavior=write_spec,
         )

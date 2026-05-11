@@ -52,7 +52,7 @@ async def list_recipes() -> str:
         tool_ctx = _get_ctx_or_none()
         if tool_ctx is None or tool_ctx.recipes is None:
             return json.dumps({"error": "kitchen not open — call open_kitchen first"})
-        result = tool_ctx.recipes.list_all(Path.cwd(), features=tool_ctx.config.features)
+        result = tool_ctx.recipes.list_all(tool_ctx.project_dir, features=tool_ctx.config.features)
         return json.dumps(result)
     except Exception:
         logger.error("list_recipes unhandled exception", exc_info=True)
@@ -197,17 +197,17 @@ async def load_recipe(
         if tool_ctx is None or tool_ctx.recipes is None:
             return json.dumps({"error": "Server not initialized"})
         suppressed = tool_ctx.config.migration.suppressed
-        _defaults = resolve_ingredient_defaults(Path.cwd())
+        _defaults = resolve_ingredient_defaults(tool_ctx.project_dir)
         result = tool_ctx.recipes.load_and_validate(
             name,
-            Path.cwd(),
+            tool_ctx.project_dir,
             suppressed=suppressed,
             resolved_defaults=_defaults,
             ingredient_overrides=overrides,
             temp_dir=tool_ctx.temp_dir,
             temp_dir_relpath=temp_dir_display_str(tool_ctx.config.workspace.temp_dir),
         )
-        recipe_info = tool_ctx.recipes.find(name, Path.cwd())
+        recipe_info = tool_ctx.recipes.find(name, tool_ctx.project_dir)
         result = await _apply_triage_gate(result, name, recipe_info=recipe_info)
         if ingredients_only:
             result.pop("content", None)
@@ -313,7 +313,7 @@ async def migrate_recipe(name: str, ctx: Context = CurrentContext()) -> str:
 
         if tool_ctx.recipes is None:
             return json.dumps({"error": "Recipe repository not configured"})
-        recipe = tool_ctx.recipes.find(name, Path.cwd())
+        recipe = tool_ctx.recipes.find(name, tool_ctx.project_dir)
         if recipe is None:
             return json.dumps({"error": f"No recipe named '{name}' found"})
 

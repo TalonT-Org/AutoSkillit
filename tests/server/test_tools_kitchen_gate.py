@@ -710,3 +710,158 @@ async def test_open_kitchen_ingredients_only_no_name_ignored(tmp_path, monkeypat
     assert "content" in result
     assert result["kitchen"] == "open"
     assert "version" in result
+
+
+# ---------------------------------------------------------------------------
+# Group L — project_dir migration: tool handlers must use tool_ctx.project_dir
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_uses_project_dir_for_recipe_lookup(tmp_path, monkeypatch):
+    """open_kitchen must use tool_ctx.project_dir for recipe discovery, not Path.cwd().
+
+    Regression test: when project_dir differs from cwd, recipes must be found
+    in project_dir's .autoskillit/recipes/ directory.
+    """
+    import yaml
+
+    monkeypatch.chdir(tmp_path)  # Ensure cwd != project_dir
+    different_dir = tmp_path / "project_root"
+    different_dir.mkdir()
+
+    # Create a recipe only in project_dir, not in cwd
+    recipe_yaml = {
+        "name": "test-project-dir-recipe",
+        "description": "Test recipe for project_dir propagation",
+        "ingredients": [],
+        "steps": [{"tool": "run_skill", "name": "s1", "with": {"skill": "test"}}],
+    }
+    recipes_dir = different_dir / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    (recipes_dir / "test-project-dir-recipe.yaml").write_text(yaml.dump(recipe_yaml))
+
+    # Build context with project_dir = different_dir, recipes = RealRecipeRepository
+    from autoskillit.config.settings import AutomationConfig
+    from autoskillit.core.types import DirectInstall
+    from autoskillit.pipeline.audit import DefaultAuditLog
+    from autoskillit.pipeline.context import ToolContext
+    from autoskillit.pipeline.gate import DefaultGateState
+    from autoskillit.pipeline.timings import DefaultTimingLog
+    from autoskillit.pipeline.tokens import DefaultTokenLog
+    from autoskillit.recipe.repository import DefaultRecipeRepository
+
+    real_repo = DefaultRecipeRepository()
+
+    ctx = ToolContext(
+        config=AutomationConfig(features={"fleet": True}),
+        audit=DefaultAuditLog(),
+        token_log=DefaultTokenLog(),
+        timing_log=DefaultTimingLog(),
+        gate=DefaultGateState(enabled=False),
+        plugin_source=DirectInstall(plugin_dir=tmp_path),
+        runner=None,
+        temp_dir=tmp_path / ".autoskillit" / "temp",
+        project_dir=different_dir,
+        recipes=real_repo,
+    )
+
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+    mock_ctx.gate = ctx.gate
+    mock_ctx.recipes = ctx.recipes
+    mock_ctx.config = ctx.config
+    mock_ctx.project_dir = ctx.project_dir
+    mock_ctx.active_recipe_packs = frozenset()
+    mock_ctx.active_recipe_features = frozenset()
+    mock_ctx.quota_refresh_task = None
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch(
+                    "autoskillit.server.tools.tools_kitchen._apply_triage_gate",
+                    new=AsyncMock(side_effect=lambda r, *a, **kw: r),
+                ):
+                    with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                        with patch(
+                            "autoskillit.server.tools.tools_kitchen._build_hook_diagnostic_warning",
+                            return_value="",
+                        ):
+                            from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+                            result_json = await open_kitchen(
+                                name="test-project-dir-recipe", ctx=mock_ctx
+                            )
+
+    result = json.loads(result_json)
+    assert result["success"] is True, (
+        f"open_kitchen failed to find recipe in project_dir={different_dir}. Result: {result}"
+    )
+    assert result["recipe_name"] == "test-project-dir-recipe"
+
+
+def test_get_recipe_uses_project_dir(tmp_path, monkeypatch):
+    """get_recipe must use ctx.project_dir for recipe lookup, not Path.cwd().
+
+    Regression test: when project_dir differs from cwd, get_recipe must
+    find recipes in project_dir's .autoskillit/recipes/ directory.
+    """
+    import yaml
+
+    monkeypatch.chdir(tmp_path)
+    different_dir = tmp_path / "project_root"
+    different_dir.mkdir()
+
+    recipe_yaml = {
+        "name": "test-get-recipe-project-dir",
+        "description": "Test recipe for get_recipe project_dir",
+        "ingredients": [],
+        "steps": [{"tool": "run_skill", "name": "s1", "with": {"skill": "test"}}],
+    }
+    recipes_dir = different_dir / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    (recipes_dir / "test-get-recipe-project-dir.yaml").write_text(yaml.dump(recipe_yaml))
+
+    from autoskillit.config.settings import AutomationConfig
+    from autoskillit.core.types import DirectInstall
+    from autoskillit.pipeline.audit import DefaultAuditLog
+    from autoskillit.pipeline.context import ToolContext
+    from autoskillit.pipeline.gate import DefaultGateState
+    from autoskillit.pipeline.timings import DefaultTimingLog
+    from autoskillit.pipeline.tokens import DefaultTokenLog
+    from autoskillit.recipe.repository import DefaultRecipeRepository
+
+    real_repo = DefaultRecipeRepository()
+
+    ctx = ToolContext(
+        config=AutomationConfig(features={"fleet": True}),
+        audit=DefaultAuditLog(),
+        token_log=DefaultTokenLog(),
+        timing_log=DefaultTimingLog(),
+        gate=DefaultGateState(enabled=False),
+        plugin_source=DirectInstall(plugin_dir=tmp_path),
+        runner=None,
+        temp_dir=tmp_path / ".autoskillit" / "temp",
+        project_dir=different_dir,
+        recipes=real_repo,
+    )
+
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.project_dir = ctx.project_dir
+    mock_ctx.recipes = ctx.recipes
+
+    with patch("autoskillit.server._get_ctx_or_none", return_value=mock_ctx):
+        from autoskillit.server.tools.tools_kitchen import get_recipe
+
+        result = get_recipe("test-get-recipe-project-dir")
+
+    parsed = json.loads(result)
+    assert "error" not in parsed or parsed.get("error", "") == "", (
+        f"get_recipe failed to find recipe in project_dir={different_dir}. Result: {parsed}"
+    )
+    assert "test-get-recipe-project-dir" in parsed, (
+        f"get_recipe did not return the recipe from project_dir. Result: {parsed}"
+    )

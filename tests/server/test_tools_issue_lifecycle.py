@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -392,3 +392,95 @@ async def test_release_issue_stages_when_different_branch(
     assert result["success"] is True
     assert result["staged"] is True
     assert result["staged_label"] == "staged"
+
+
+# ---------------------------------------------------------------------------
+# project_dir migration: subprocess cwd
+# ---------------------------------------------------------------------------
+
+
+def _make_mock_tool_ctx_for_project_dir(project_dir):
+    """Build a minimal mock ToolContext for project_dir tests."""
+    mock_ctx = MagicMock()
+    mock_ctx.project_dir = project_dir
+    mock_ctx.executor = MagicMock()
+    mock_ctx.executor.run = AsyncMock()
+    mock_ctx.config.github.check_labels_allowed = MagicMock(return_value=None)
+    mock_ctx.output_pattern_resolver = MagicMock(return_value=[])
+    mock_ctx.write_expected_resolver = MagicMock(return_value=None)
+    return mock_ctx
+
+
+@pytest.mark.anyio
+async def test_prepare_issue_uses_project_dir_as_subprocess_cwd(tmp_path, monkeypatch):
+    """executor.run must be called with tool_ctx.project_dir as cwd, not Path.cwd().
+
+    Regression test: when project_dir differs from cwd, the headless skill subprocess
+    must run in project_dir.
+    """
+    monkeypatch.chdir(tmp_path)
+    different_dir = tmp_path / "project_root"
+    different_dir.mkdir()
+
+    mock_ctx = _make_mock_tool_ctx_for_project_dir(project_dir=different_dir)
+    mock_ctx.executor.run.return_value = _make_skill_result(
+        success=True,
+        result="---prepare-issue-result---\n{}\n---/prepare-issue-result---",
+    )
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch("autoskillit.server._notify._notify", new=AsyncMock()):
+                await prepare_issue(
+                    title="Test issue",
+                    body="Test body",
+                    repo="owner/repo",
+                    dry_run=True,
+                    split=False,
+                )
+
+    call_args = mock_ctx.executor.run.call_args
+    assert call_args is not None, "executor.run was not called"
+    # Second positional arg is cwd
+    actual_cwd = call_args[0][1]
+    assert actual_cwd == str(different_dir), (
+        f"executor.run was called with cwd={actual_cwd!r}, "
+        f"expected cwd={str(different_dir)!r}. "
+        "The subprocess must run in project_dir, not cwd."
+    )
+
+
+@pytest.mark.anyio
+async def test_enrich_issues_uses_project_dir_as_subprocess_cwd(tmp_path, monkeypatch):
+    """executor.run must be called with tool_ctx.project_dir as cwd, not Path.cwd().
+
+    Regression test: when project_dir differs from cwd, the headless skill subprocess
+    must run in project_dir.
+    """
+    monkeypatch.chdir(tmp_path)
+    different_dir = tmp_path / "project_root"
+    different_dir.mkdir()
+
+    mock_ctx = _make_mock_tool_ctx_for_project_dir(project_dir=different_dir)
+    mock_ctx.executor.run.return_value = _make_skill_result(
+        success=True,
+        result="---enrich-issues-result---\n[]\n---/enrich-issues-result---",
+    )
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch("autoskillit.server._notify._notify", new=AsyncMock()):
+                await enrich_issues(
+                    issue_numbers=[123],
+                    repo="owner/repo",
+                    dry_run=True,
+                )
+
+    call_args = mock_ctx.executor.run.call_args
+    assert call_args is not None, "executor.run was not called"
+    actual_cwd = call_args[0][1]
+    assert actual_cwd == str(different_dir), (
+        f"executor.run was called with cwd={actual_cwd!r}, "
+        f"expected cwd={str(different_dir)!r}. "
+        "The subprocess must run in project_dir, not cwd."
+    )

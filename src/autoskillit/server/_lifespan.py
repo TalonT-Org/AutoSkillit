@@ -154,7 +154,6 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
     logged as a warning and does not abort gate activation.
     """
     import os as _os
-    from pathlib import Path
     from uuid import uuid4
 
     from autoskillit.core import register_active_kitchen
@@ -204,7 +203,7 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
         logger.warning("fleet_auto_gate_boot_quota_refresh_failed", exc_info=True)
 
     try:
-        register_active_kitchen(ctx.kitchen_id, _os.getpid(), str(Path.cwd()))
+        register_active_kitchen(ctx.kitchen_id, _os.getpid(), str(ctx.project_dir))
     except Exception:
         logger.warning("fleet_auto_gate_boot_registry_failed", exc_info=True)
 
@@ -216,7 +215,6 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
     AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS is set. No-ops for interactive
     ORCHESTRATOR sessions (open_kitchen handles the gate there).
     """
-    from pathlib import Path
     from uuid import uuid4
 
     from autoskillit.core import (
@@ -286,7 +284,7 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
         logger.warning("food_truck_auto_gate_boot_refresh_loop_failed", exc_info=True)
 
     try:
-        register_active_kitchen(ctx.kitchen_id, os.getpid(), str(Path.cwd()))
+        register_active_kitchen(ctx.kitchen_id, os.getpid(), str(ctx.project_dir))
     except Exception:
         logger.warning("food_truck_auto_gate_boot_registry_failed", exc_info=True)
 

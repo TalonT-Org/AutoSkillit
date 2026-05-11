@@ -106,7 +106,7 @@ def _write_hook_config() -> None:
         "quota_guard": _quota_guard_hook_payload(cfg),
         "kitchen_id": ctx.kitchen_id,
     }
-    hook_cfg_path = _hook_config_path(Path.cwd())
+    hook_cfg_path = _hook_config_path(ctx.project_dir)
     try:
         hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
         atomic_write(hook_cfg_path, json.dumps(payload))
@@ -157,7 +157,7 @@ async def _open_kitchen_handler() -> str | None:
     try:
         from autoskillit.core import register_active_kitchen  # noqa: PLC0415
 
-        register_active_kitchen(ctx.kitchen_id, os.getpid(), str(Path.cwd()))
+        register_active_kitchen(ctx.kitchen_id, os.getpid(), str(ctx.project_dir))
     except Exception:
         logger.warning("open_kitchen_registry_failed", exc_info=True)
 
@@ -217,12 +217,12 @@ def _close_kitchen_handler() -> None:
     ctx.recipe_composite_hash = ""
     ctx.recipe_version = ""
     logger.info("close_kitchen", gate_state="closed")
-    hook_cfg_path = _hook_config_path(Path.cwd())
+    hook_cfg_path = _hook_config_path(ctx.project_dir)
     try:
         hook_cfg_path.unlink(missing_ok=True)
     except OSError:
         logger.warning("hook_config_remove_failed", path=str(hook_cfg_path))
-    review_gate_path = Path.cwd() / ".autoskillit" / "temp" / "review_gate_state.json"
+    review_gate_path = ctx.project_dir / ".autoskillit" / "temp" / "review_gate_state.json"
     try:
         try:
             state = json.loads(review_gate_path.read_text())
@@ -254,7 +254,7 @@ def get_recipe(name: str) -> str:
     from autoskillit.server._state import _get_ctx_or_none
 
     ctx = _get_ctx_or_none()
-    match = ctx.recipes.find(name, Path.cwd()) if ctx and ctx.recipes else None
+    match = ctx.recipes.find(name, ctx.project_dir) if ctx and ctx.recipes else None
     if match is None:
         return json.dumps({"error": f"No recipe named '{name}'."})
     return match.path.read_text()
@@ -362,7 +362,7 @@ async def open_kitchen(
                     ),
                 )
             suppressed = tool_ctx.config.migration.suppressed
-            _defaults = resolve_ingredient_defaults(Path.cwd())
+            _defaults = resolve_ingredient_defaults(tool_ctx.project_dir)
             # Runtime enum check: output_mode must be validated before recipe loading
             if name == "research":
                 _om_value = (overrides or {}).get("output_mode")
@@ -378,7 +378,7 @@ async def open_kitchen(
             try:
                 result = tool_ctx.recipes.load_and_validate(
                     name,
-                    Path.cwd(),
+                    tool_ctx.project_dir,
                     suppressed=suppressed,
                     resolved_defaults=_defaults,
                     ingredient_overrides=overrides,
@@ -402,7 +402,7 @@ async def open_kitchen(
                 result.setdefault("suggestions", []).append(rerun_suggestion)
 
             try:
-                recipe_info = tool_ctx.recipes.find(name, Path.cwd())
+                recipe_info = tool_ctx.recipes.find(name, tool_ctx.project_dir)
             except Exception as exc:
                 logger.warning("open_kitchen_failure", stage="recipe_find", exc_info=True)
                 return _kitchen_failure_envelope(exc, stage="recipe_find")
@@ -457,8 +457,8 @@ async def open_kitchen(
             return _kitchen_failure_envelope(exc, stage="read_sous_chef")
 
         # Check if the project needs an upgrade
-        scripts_dir = Path.cwd() / ".autoskillit" / "scripts"
-        recipes_dir = Path.cwd() / ".autoskillit" / "recipes"
+        scripts_dir = _ctx.project_dir / ".autoskillit" / "scripts"
+        recipes_dir = _ctx.project_dir / ".autoskillit" / "recipes"
         if scripts_dir.exists() and not recipes_dir.exists():
             text += (
                 "\n\n⚠️ UPGRADE NEEDED: This project has not been migrated"
@@ -529,7 +529,10 @@ async def disable_quota_guard() -> str:
     try:
         if (h := _require_orchestrator_exact("disable_quota_guard")) is not None:
             return h
-        hook_cfg_path = _hook_config_path(Path.cwd())
+        from autoskillit.server import _get_ctx
+
+        ctx = _get_ctx()
+        hook_cfg_path = _hook_config_path(ctx.project_dir)
         if not hook_cfg_path.exists():
             return json.dumps(
                 {

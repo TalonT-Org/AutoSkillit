@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 import structlog.testing
 
@@ -331,7 +329,83 @@ class TestFleetAutoGateBoot:
         mock_prime_quota_cache.assert_awaited_once_with()
         mock_create_bg_task.assert_called_once()
         mock_register_kitchen.assert_called_once_with(
-            tool_ctx.kitchen_id, os.getpid(), str(Path.cwd())
+            tool_ctx.kitchen_id, os.getpid(), str(tool_ctx.project_dir)
+        )
+
+
+@pytest.mark.feature("fleet")
+class TestFleetAutoGateBootProjectDir:
+    """Regression tests: _fleet_auto_gate_boot must use ctx.project_dir, not Path.cwd()."""
+
+    @pytest.mark.anyio
+    async def test_fleet_auto_gate_boot_uses_project_dir_for_kitchen_registration(
+        self, build_ctx, tmp_path, monkeypatch
+    ):
+        """register_active_kitchen must be called with ctx.project_dir, not Path.cwd()."""
+        import os
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server._lifespan import _fleet_auto_gate_boot
+
+        monkeypatch.chdir(tmp_path)  # Ensure cwd != project_dir
+        different_dir = tmp_path / "project_root"
+        different_dir.mkdir()
+
+        ctx = build_ctx(project_dir=different_dir)
+        ctx.gate = DefaultGateState(enabled=False)
+        ctx.quota_refresh_task = None
+
+        with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+            with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
+                with patch(
+                    "autoskillit.pipeline.create_background_task",
+                    return_value=MagicMock(),
+                ):
+                    with patch(
+                        "autoskillit.core.register_active_kitchen"
+                    ) as mock_register_kitchen:
+                        await _fleet_auto_gate_boot(ctx)
+
+        mock_register_kitchen.assert_called_once_with(
+            ctx.kitchen_id, os.getpid(), str(different_dir)
+        )
+
+    @pytest.mark.anyio
+    async def test_food_truck_auto_gate_boot_uses_project_dir_for_kitchen_registration(
+        self, build_ctx, tmp_path, monkeypatch
+    ):
+        """register_active_kitchen must be called with ctx.project_dir, not Path.cwd()."""
+        import os
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from autoskillit.core import FOOD_TRUCK_TOOL_TAGS_ENV_VAR
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server._lifespan import _food_truck_auto_gate_boot
+
+        monkeypatch.chdir(tmp_path)
+        different_dir = tmp_path / "project_root"
+        different_dir.mkdir()
+
+        ctx = build_ctx(project_dir=different_dir)
+        ctx.gate = DefaultGateState(enabled=False)
+        ctx.quota_refresh_task = None
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv(FOOD_TRUCK_TOOL_TAGS_ENV_VAR, "kitchen-core")
+
+        with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+            with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
+                with patch(
+                    "autoskillit.pipeline.create_background_task",
+                    return_value=MagicMock(),
+                ):
+                    with patch(
+                        "autoskillit.core.register_active_kitchen"
+                    ) as mock_register_kitchen:
+                        await _food_truck_auto_gate_boot(ctx)
+
+        mock_register_kitchen.assert_called_once_with(
+            ctx.kitchen_id, os.getpid(), str(different_dir)
         )
 
     @pytest.mark.anyio

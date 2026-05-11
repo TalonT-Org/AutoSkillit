@@ -106,5 +106,7 @@ def test_no_path_cwd_in_server_tools():
             if lineno not in allowlisted:
                 violations.append(f"{rel_path}:{lineno}: Path.cwd() found (not allowlisted)")
 
-    assert not missing_files, "Server tool files not found:\n" + "\n".join(missing_files)
+    assert not missing_files, (
+        "Server tool files not found (update TOOLS_FILES if renamed):\n" + "\n".join(missing_files)
+    )
     assert not violations, "Path.cwd() found in server tool handlers:\n" + "\n".join(violations)

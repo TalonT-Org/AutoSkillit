@@ -1,5 +1,6 @@
 {
-  "generated_at": "2026-05-10T22:23:17.745483+00:00",
+  "generated_at": "2026-05-11T01:26:31.280965+00:00",
+  "recipe_source_hash": "sha256:617abcd898b97ba2d6c3f51b3eb2613ce9c8a6dff71a1a9065b83e7ad24dba16",
   "bundled_manifest_version": "0.1.0",
   "skill_hashes": {},
   "skills": {
@@ -925,6 +926,36 @@
       "positional_args": 1
     },
     {
+      "step": "check_refine_loop",
+      "available": [
+        "alignment_findings_path",
+        "assignment_context_paths",
+        "combined_phases_path",
+        "combined_wps_path",
+        "consolidated_wps_path",
+        "phase_ids",
+        "phase_manifest_path",
+        "plan_snapshot_path",
+        "planner_assess_review_approach",
+        "planner_dir",
+        "refine_context_paths",
+        "refined_assignments_path",
+        "refined_plan_path",
+        "refined_wps_path",
+        "review_approach_assessment_path",
+        "source_dir",
+        "task",
+        "task_file_path",
+        "task_label",
+        "verdict",
+        "wp_context_paths"
+      ],
+      "required": [],
+      "produced": [
+        "refine_loop_count"
+      ]
+    },
+    {
       "step": "compile",
       "available": [
         "alignment_findings_path",
@@ -938,6 +969,7 @@
         "planner_assess_review_approach",
         "planner_dir",
         "refine_context_paths",
+        "refine_loop_count",
         "refined_assignments_path",
         "refined_plan_path",
         "refined_wps_path",
@@ -966,6 +998,7 @@
         "planner_assess_review_approach",
         "planner_dir",
         "refine_context_paths",
+        "refine_loop_count",
         "refined_assignments_path",
         "refined_plan_path",
         "refined_wps_path",
@@ -994,6 +1027,7 @@
         "planner_assess_review_approach",
         "planner_dir",
         "refine_context_paths",
+        "refine_loop_count",
         "refined_assignments_path",
         "refined_plan_path",
         "refined_wps_path",

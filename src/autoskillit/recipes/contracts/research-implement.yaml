@@ -1,4 +1,5 @@
-generated_at: '2026-05-10T23:21:05.377780+00:00'
+generated_at: '2026-05-11T01:26:31.321326+00:00'
+recipe_source_hash: sha256:c09727853bb3aa07f9545c5056f0aadf4fbbbd71e93e684d7605518e0dcf2325
 bundled_manifest_version: 0.1.0
 skill_hashes: {}
 skills:
@@ -522,6 +523,32 @@ dataflow:
   - worktree_path
   required: []
   produced: []
+- step: check_phase_loop
+  available:
+  - audit
+  - base_branch
+  - download_report
+  - experiment_plan
+  - group_files
+  - impl_base_sha
+  - implement_fix_count
+  - is_fixable
+  - issue_url
+  - output_mode
+  - phase_plan_path
+  - research_dir
+  - research_dir_rel
+  - resource_report
+  - retry_delay
+  - source_dir
+  - task
+  - test_check_enabled
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced:
+  - phase_loop_count
 - step: audit_impl
   available:
   - audit
@@ -534,6 +561,7 @@ dataflow:
   - is_fixable
   - issue_url
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - research_dir
   - research_dir_rel
@@ -561,6 +589,7 @@ dataflow:
   - is_fixable
   - issue_url
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - remediation_path
   - research_dir
@@ -589,6 +618,7 @@ dataflow:
   - is_fixable
   - issue_url
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - remediation_path
   - research_dir
@@ -619,6 +649,7 @@ dataflow:
   - is_fixable
   - issue_url
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - remediation_path
   - research_dir
@@ -648,6 +679,7 @@ dataflow:
   - is_fixable
   - issue_url
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - remediation_path
   - research_dir
@@ -679,6 +711,7 @@ dataflow:
   - is_fixable
   - issue_url
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - remediation_path
   - research_dir
@@ -709,6 +742,7 @@ dataflow:
   - is_fixable
   - issue_url
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - remediation_path
   - research_dir
@@ -739,6 +773,7 @@ dataflow:
   - is_fixable
   - issue_url
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - remediation_path
   - research_dir
@@ -769,6 +804,7 @@ dataflow:
   - is_fixable
   - issue_url
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - remediation_path
   - research_dir
@@ -800,6 +836,7 @@ dataflow:
   - is_fixable
   - issue_url
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - remediation_path
   - research_dir
@@ -832,6 +869,7 @@ dataflow:
   - is_fixable
   - issue_url
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - remediation_path
   - report_path
@@ -865,6 +903,7 @@ dataflow:
   - is_fixable
   - issue_url
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - remediation_path
   - report_path
@@ -896,6 +935,7 @@ dataflow:
   - is_fixable
   - issue_url
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - remediation_path
   - report_path
@@ -931,6 +971,7 @@ dataflow:
   - is_fixable
   - issue_url
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - remediation_path
   - report_path
@@ -963,6 +1004,7 @@ dataflow:
   - is_fixable
   - issue_url
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - remediation_path
   - report_path
@@ -995,6 +1037,7 @@ dataflow:
   - is_fixable
   - issue_url
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - remediation_path
   - report_path
@@ -1027,6 +1070,7 @@ dataflow:
   - is_fixable
   - issue_url
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - remediation_path
   - report_path

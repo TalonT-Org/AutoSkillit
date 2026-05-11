@@ -1,4 +1,5 @@
-generated_at: '2026-05-10T23:21:05.345613+00:00'
+generated_at: '2026-05-11T01:26:31.219143+00:00'
+recipe_source_hash: sha256:279302789aaccfa1e4b8663bd8c9896b95af4ece9022f5c001959ac0f7e0b23a
 bundled_manifest_version: 0.1.0
 skill_hashes: {}
 skills:
@@ -24,7 +25,7 @@ skills:
     - name: validated_report_path
       type: file_path
     - name: verdict
-      type: str
+      type: string
     expected_output_patterns:
     - validated_report_path\s*=\s*\S+
     - verdict\s*=\s*\S+
@@ -43,7 +44,7 @@ skills:
       recommended: false
     outputs:
     - name: issue_urls
-      type: str
+      type: string
     - name: issue_count
       type: integer
     expected_output_patterns:

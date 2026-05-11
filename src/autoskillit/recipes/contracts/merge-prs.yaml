@@ -1,4 +1,5 @@
-generated_at: '2026-05-11T00:46:27.834276+00:00'
+generated_at: '2026-05-11T01:26:31.270963+00:00'
+recipe_source_hash: sha256:8e46dcb1d749fbb395beacb197fc265d9da5a5b0e8626fbd4e0d67a5345a0ca8
 bundled_manifest_version: 0.1.0
 skill_hashes: {}
 skills:
@@ -1621,6 +1622,48 @@ dataflow:
   produced:
   - verdict
   - fixes_applied
+- step: check_test_fix_loop
+  available:
+  - audit
+  - auto_merge_available
+  - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_ci_loop_count
+  - conflict_escalation_reason
+  - conflict_escalation_required
+  - conflict_pr_number
+  - current_pr_number
+  - diagnosis_path
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
+  - fixes_applied
+  - merge_queue_data_path
+  - merged
+  - needs_plan
+  - next_pr_branch
+  - plans_dir
+  - pr_order_file
+  - pr_plan_path
+  - push_error_type
+  - queue_mode
+  - queue_pr_state
+  - queue_stall_loop_count
+  - remote_url
+  - run_name
+  - source_dir
+  - task
+  - verdict
+  - work_dir
+  - worktree_branch_name
+  - worktree_path
+  required: []
+  produced:
+  - test_fix_loop_count
 - step: next_part_or_next_pr
   available:
   - audit
@@ -1656,13 +1699,14 @@ dataflow:
   - run_name
   - source_dir
   - task
+  - test_fix_loop_count
   - verdict
   - work_dir
   - worktree_branch_name
   - worktree_path
   required: []
   produced: []
-- step: push_batch_branch
+- step: check_pr_merge_loop
   available:
   - audit
   - auto_merge_available
@@ -1697,6 +1741,51 @@ dataflow:
   - run_name
   - source_dir
   - task
+  - test_fix_loop_count
+  - verdict
+  - work_dir
+  - worktree_branch_name
+  - worktree_path
+  required: []
+  produced:
+  - pr_merge_loop_count
+- step: push_batch_branch
+  available:
+  - audit
+  - auto_merge_available
+  - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_ci_loop_count
+  - conflict_escalation_reason
+  - conflict_escalation_required
+  - conflict_pr_number
+  - current_pr_number
+  - diagnosis_path
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
+  - fixes_applied
+  - merge_queue_data_path
+  - merged
+  - needs_plan
+  - next_pr_branch
+  - plans_dir
+  - pr_merge_loop_count
+  - pr_order_file
+  - pr_plan_path
+  - push_error_type
+  - queue_mode
+  - queue_pr_state
+  - queue_stall_loop_count
+  - remote_url
+  - run_name
+  - source_dir
+  - task
+  - test_fix_loop_count
   - verdict
   - work_dir
   - worktree_branch_name
@@ -1728,6 +1817,7 @@ dataflow:
   - needs_plan
   - next_pr_branch
   - plans_dir
+  - pr_merge_loop_count
   - pr_order_file
   - pr_plan_path
   - push_error_type
@@ -1738,6 +1828,7 @@ dataflow:
   - run_name
   - source_dir
   - task
+  - test_fix_loop_count
   - verdict
   - work_dir
   - worktree_branch_name
@@ -1769,6 +1860,7 @@ dataflow:
   - needs_plan
   - next_pr_branch
   - plans_dir
+  - pr_merge_loop_count
   - pr_order_file
   - pr_plan_path
   - push_error_type
@@ -1779,6 +1871,7 @@ dataflow:
   - run_name
   - source_dir
   - task
+  - test_fix_loop_count
   - verdict
   - work_dir
   - worktree_branch_name
@@ -1813,6 +1906,7 @@ dataflow:
   - needs_plan
   - next_pr_branch
   - plans_dir
+  - pr_merge_loop_count
   - pr_order_file
   - pr_plan_path
   - push_error_type
@@ -1824,6 +1918,7 @@ dataflow:
   - run_name
   - source_dir
   - task
+  - test_fix_loop_count
   - verdict
   - work_dir
   - worktree_branch_name
@@ -1855,6 +1950,7 @@ dataflow:
   - needs_plan
   - next_pr_branch
   - plans_dir
+  - pr_merge_loop_count
   - pr_order_file
   - pr_plan_path
   - push_error_type
@@ -1866,6 +1962,7 @@ dataflow:
   - run_name
   - source_dir
   - task
+  - test_fix_loop_count
   - verdict
   - work_dir
   - worktree_branch_name
@@ -1899,6 +1996,7 @@ dataflow:
   - needs_plan
   - next_pr_branch
   - plans_dir
+  - pr_merge_loop_count
   - pr_order_file
   - pr_plan_path
   - push_error_type
@@ -1910,6 +2008,7 @@ dataflow:
   - run_name
   - source_dir
   - task
+  - test_fix_loop_count
   - verdict
   - work_dir
   - worktree_branch_name
@@ -1944,6 +2043,7 @@ dataflow:
   - needs_plan
   - next_pr_branch
   - plans_dir
+  - pr_merge_loop_count
   - pr_order_file
   - pr_plan_path
   - pr_url
@@ -1956,6 +2056,7 @@ dataflow:
   - run_name
   - source_dir
   - task
+  - test_fix_loop_count
   - verdict
   - work_dir
   - worktree_branch_name
@@ -1989,6 +2090,7 @@ dataflow:
   - needs_plan
   - next_pr_branch
   - plans_dir
+  - pr_merge_loop_count
   - pr_order_file
   - pr_plan_path
   - pr_url
@@ -2002,6 +2104,7 @@ dataflow:
   - run_name
   - source_dir
   - task
+  - test_fix_loop_count
   - verdict
   - work_dir
   - worktree_branch_name
@@ -2034,6 +2137,7 @@ dataflow:
   - needs_plan
   - next_pr_branch
   - plans_dir
+  - pr_merge_loop_count
   - pr_order_file
   - pr_plan_path
   - pr_url
@@ -2047,6 +2151,7 @@ dataflow:
   - run_name
   - source_dir
   - task
+  - test_fix_loop_count
   - verdict
   - work_dir
   - worktree_branch_name
@@ -2083,6 +2188,7 @@ dataflow:
   - needs_plan
   - next_pr_branch
   - plans_dir
+  - pr_merge_loop_count
   - pr_order_file
   - pr_plan_path
   - pr_url
@@ -2096,6 +2202,7 @@ dataflow:
   - run_name
   - source_dir
   - task
+  - test_fix_loop_count
   - verdict
   - work_dir
   - worktree_branch_name
@@ -2128,6 +2235,7 @@ dataflow:
   - needs_plan
   - next_pr_branch
   - plans_dir
+  - pr_merge_loop_count
   - pr_order_file
   - pr_plan_path
   - pr_url
@@ -2141,6 +2249,7 @@ dataflow:
   - run_name
   - source_dir
   - task
+  - test_fix_loop_count
   - verdict
   - work_dir
   - worktree_branch_name
@@ -2173,6 +2282,7 @@ dataflow:
   - needs_plan
   - next_pr_branch
   - plans_dir
+  - pr_merge_loop_count
   - pr_order_file
   - pr_plan_path
   - pr_url
@@ -2186,6 +2296,7 @@ dataflow:
   - run_name
   - source_dir
   - task
+  - test_fix_loop_count
   - verdict
   - work_dir
   - worktree_branch_name
@@ -2224,6 +2335,7 @@ dataflow:
   - needs_plan
   - next_pr_branch
   - plans_dir
+  - pr_merge_loop_count
   - pr_order_file
   - pr_plan_path
   - pr_url
@@ -2237,6 +2349,7 @@ dataflow:
   - run_name
   - source_dir
   - task
+  - test_fix_loop_count
   - verdict
   - work_dir
   - worktree_branch_name
@@ -2274,6 +2387,7 @@ dataflow:
   - needs_plan
   - next_pr_branch
   - plans_dir
+  - pr_merge_loop_count
   - pr_order_file
   - pr_plan_path
   - pr_url
@@ -2288,6 +2402,7 @@ dataflow:
   - run_name
   - source_dir
   - task
+  - test_fix_loop_count
   - verdict
   - work_dir
   - worktree_branch_name
@@ -2325,6 +2440,7 @@ dataflow:
   - needs_plan
   - next_pr_branch
   - plans_dir
+  - pr_merge_loop_count
   - pr_order_file
   - pr_plan_path
   - pr_url
@@ -2339,6 +2455,7 @@ dataflow:
   - run_name
   - source_dir
   - task
+  - test_fix_loop_count
   - verdict
   - work_dir
   - worktree_branch_name
@@ -2374,6 +2491,7 @@ dataflow:
   - needs_plan
   - next_pr_branch
   - plans_dir
+  - pr_merge_loop_count
   - pr_order_file
   - pr_plan_path
   - pr_url
@@ -2388,6 +2506,7 @@ dataflow:
   - run_name
   - source_dir
   - task
+  - test_fix_loop_count
   - verdict
   - work_dir
   - worktree_branch_name
@@ -2423,6 +2542,7 @@ dataflow:
   - needs_plan
   - next_pr_branch
   - plans_dir
+  - pr_merge_loop_count
   - pr_order_file
   - pr_plan_path
   - pr_url
@@ -2437,6 +2557,7 @@ dataflow:
   - run_name
   - source_dir
   - task
+  - test_fix_loop_count
   - verdict
   - work_dir
   - worktree_branch_name
@@ -2474,6 +2595,7 @@ dataflow:
   - needs_plan
   - next_pr_branch
   - plans_dir
+  - pr_merge_loop_count
   - pr_order_file
   - pr_plan_path
   - pr_url
@@ -2488,6 +2610,7 @@ dataflow:
   - run_name
   - source_dir
   - task
+  - test_fix_loop_count
   - verdict
   - work_dir
   - worktree_branch_name
@@ -2526,6 +2649,7 @@ dataflow:
   - needs_plan
   - next_pr_branch
   - plans_dir
+  - pr_merge_loop_count
   - pr_order_file
   - pr_plan_path
   - pr_url
@@ -2540,6 +2664,7 @@ dataflow:
   - run_name
   - source_dir
   - task
+  - test_fix_loop_count
   - verdict
   - work_dir
   - worktree_branch_name
@@ -2576,6 +2701,7 @@ dataflow:
   - needs_plan
   - next_pr_branch
   - plans_dir
+  - pr_merge_loop_count
   - pr_order_file
   - pr_plan_path
   - pr_url
@@ -2590,6 +2716,7 @@ dataflow:
   - run_name
   - source_dir
   - task
+  - test_fix_loop_count
   - verdict
   - work_dir
   - worktree_branch_name
@@ -2626,6 +2753,7 @@ dataflow:
   - needs_plan
   - next_pr_branch
   - plans_dir
+  - pr_merge_loop_count
   - pr_order_file
   - pr_plan_path
   - pr_url
@@ -2640,6 +2768,7 @@ dataflow:
   - run_name
   - source_dir
   - task
+  - test_fix_loop_count
   - verdict
   - work_dir
   - worktree_branch_name
@@ -2676,6 +2805,7 @@ dataflow:
   - needs_plan
   - next_pr_branch
   - plans_dir
+  - pr_merge_loop_count
   - pr_order_file
   - pr_plan_path
   - pr_url
@@ -2690,6 +2820,7 @@ dataflow:
   - run_name
   - source_dir
   - task
+  - test_fix_loop_count
   - verdict
   - work_dir
   - worktree_branch_name
@@ -2726,6 +2857,7 @@ dataflow:
   - needs_plan
   - next_pr_branch
   - plans_dir
+  - pr_merge_loop_count
   - pr_order_file
   - pr_plan_path
   - pr_url
@@ -2740,6 +2872,7 @@ dataflow:
   - run_name
   - source_dir
   - task
+  - test_fix_loop_count
   - verdict
   - work_dir
   - worktree_branch_name

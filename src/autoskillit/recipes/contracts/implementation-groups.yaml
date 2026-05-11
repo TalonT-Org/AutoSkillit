@@ -1,4 +1,5 @@
-generated_at: '2026-05-10T22:23:17.790639+00:00'
+generated_at: '2026-05-11T01:26:31.240261+00:00'
+recipe_source_hash: sha256:fa6b64288d101daa9e52bad391ddb2b7e8fcad8d8606214d23f4929f5a32d554
 bundled_manifest_version: 0.1.0
 skill_hashes: {}
 skills:
@@ -2276,6 +2277,62 @@ dataflow:
   - worktree_path
   required: []
   produced: []
+- step: check_ci_rebase_loop
+  available:
+  - active_trigger_count
+  - all_plan_paths
+  - annotated_diff_path
+  - arch_lenses
+  - audit
+  - auto_merge
+  - base_branch
+  - base_sha
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_loop_count
+  - ci_timed_out_loop_count
+  - claimed
+  - cleanup_succeeded
+  - conflict_escalation_required
+  - diagnosis_path
+  - diff_metrics_path
+  - fixes_applied
+  - group_files
+  - hunk_ranges_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - lens_context_paths
+  - local_review_rounds
+  - merge_fix_count
+  - merge_target
+  - open_pr
+  - phases_implemented
+  - plan_path
+  - pr_number
+  - pr_url
+  - prep_path
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_loop_count
+  - review_max_retries
+  - review_mode
+  - review_path
+  - review_verdict
+  - run_name
+  - selected_lenses
+  - source_dir
+  - source_doc
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced:
+  - ci_rebase_count
 - step: re_push
   available:
   - active_trigger_count
@@ -2290,6 +2347,7 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -2345,6 +2403,7 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -2405,6 +2464,7 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -2463,6 +2523,7 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -2521,6 +2582,7 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -2579,6 +2641,7 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -2638,6 +2701,7 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -2697,6 +2761,7 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -2757,6 +2822,7 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -2817,6 +2883,7 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -2877,6 +2944,7 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -2937,6 +3005,7 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -2999,6 +3068,7 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -3060,6 +3130,7 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -3121,6 +3192,7 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -3182,6 +3254,7 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -3245,6 +3318,7 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -3308,6 +3382,7 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -3370,6 +3445,7 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -3432,6 +3508,7 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -3494,6 +3571,7 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -3556,6 +3634,7 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -3618,6 +3697,7 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -3682,6 +3762,7 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -3744,6 +3825,7 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -3806,6 +3888,7 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -3868,6 +3951,7 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -3930,6 +4014,7 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -3992,6 +4077,7 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -4056,6 +4142,7 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -4118,6 +4205,7 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -4180,6 +4268,7 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -4242,6 +4331,7 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -4304,6 +4394,7 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -4368,6 +4459,7 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -4430,6 +4522,7 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -4492,6 +4585,7 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -4554,6 +4648,7 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -4616,6 +4711,7 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -4678,6 +4774,7 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -4740,6 +4837,7 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded

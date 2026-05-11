@@ -46,11 +46,11 @@ class DefaultRecipeRepository:
         builtin_base = builtin_recipes_dir()
 
         pm = max(
-            (_dir_mtime(project_base / s if s else project_base) for s in RECIPE_SCAN_DIRS),
+            (_dir_mtime(project_base / s) for s in RECIPE_SCAN_DIRS),
             default=0.0,
         )
         bm = max(
-            (_dir_mtime(builtin_base / s if s else builtin_base) for s in RECIPE_SCAN_DIRS),
+            (_dir_mtime(builtin_base / s) for s in RECIPE_SCAN_DIRS),
             default=0.0,
         )
         if (

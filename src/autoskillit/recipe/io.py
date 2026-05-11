@@ -37,7 +37,7 @@ from autoskillit.recipe.schema import (
 logger = get_logger(__name__)
 
 RECIPE_SCAN_DIRS: tuple[str, ...] = (
-    "",  # root — standard recipes
+    ".",  # root — standard recipes
     "campaigns",  # campaign recipes
 )
 
@@ -193,11 +193,11 @@ def list_recipes(
     builtin_base = pkg_root() / "recipes"
 
     for subdir in RECIPE_SCAN_DIRS:
-        project_dir_scan = project_base / subdir if subdir else project_base
+        project_dir_scan = project_base / subdir
         _collect_recipes(RecipeSource.PROJECT, project_dir_scan, seen, items, errors)
 
     for subdir in RECIPE_SCAN_DIRS:
-        builtin_dir_scan = builtin_base / subdir if subdir else builtin_base
+        builtin_dir_scan = builtin_base / subdir
         _collect_recipes(RecipeSource.BUILTIN, builtin_dir_scan, seen, items, errors)
 
     filtered = [r for r in items if r.kind not in exclude_kinds] if exclude_kinds else items
@@ -265,9 +265,12 @@ def list_campaign_recipes(project_dir: Path) -> LoadResult[RecipeInfo]:
     """Find available campaign recipes from project and built-in sources."""
     result = list_recipes(project_dir)
     campaign_items = [r for r in result.items if r.kind == RecipeKind.CAMPAIGN]
+    campaign_errors = [
+        e for e in result.errors if e.path is not None and e.path.parent.name == "campaigns"
+    ]
     return LoadResult(
         items=sorted(campaign_items, key=lambda r: (r.source != RecipeSource.BUILTIN, r.name)),
-        errors=result.errors,
+        errors=campaign_errors,
     )
 
 

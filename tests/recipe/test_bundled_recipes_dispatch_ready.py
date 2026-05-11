@@ -8,7 +8,6 @@ import yaml
 from autoskillit.recipe._api import load_and_validate
 from autoskillit.recipe.contracts import check_contract_staleness
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
-from tests.recipe.conftest import KNOWN_VIOLATIONS_BY_RECIPE
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
@@ -21,14 +20,11 @@ _CONTRACT_STEMS = sorted(p.stem for p in _CONTRACTS_DIR.glob("*.yaml"))
 @pytest.mark.parametrize("recipe_name", _RECIPE_STEMS)
 def test_bundled_recipe_dispatch_ready(recipe_name: str) -> None:
     result = load_and_validate(recipe_name)
-    allowed = KNOWN_VIOLATIONS_BY_RECIPE.get(recipe_name, frozenset())
-    errors = [
-        s
+    assert "error" not in result, f"Recipe '{recipe_name}' failed to load: {result.get('error')}"
+    assert result.get("valid") is True, f"Recipe '{recipe_name}' not dispatch-ready: " + "; ".join(
+        f"[{s.get('rule')}] {s.get('message', '')[:80]}"
         for s in result.get("suggestions", [])
-        if s.get("severity") == "error" and s.get("rule") not in allowed
-    ]
-    assert not errors, (
-        f"Recipe '{recipe_name}' is not dispatch-ready. Unexpected ERROR findings: {errors}"
+        if s.get("severity") == "error"
     )
 
 

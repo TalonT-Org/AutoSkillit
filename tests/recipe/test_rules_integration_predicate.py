@@ -5,7 +5,6 @@ import pytest
 from autoskillit.core.types import Severity
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.validator import run_semantic_rules
-from tests.recipe.conftest import KNOWN_VIOLATIONS_BY_RECIPE as _KNOWN_VIOLATIONS_BY_RECIPE
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -108,12 +107,7 @@ class TestRecipeIntegrationPredicateRouting:
             (self.ip_recipe, "implementation"),
         ]:
             findings = run_semantic_rules(recipe)
-            errors = [
-                f
-                for f in findings
-                if f.severity == Severity.ERROR
-                and f.rule not in _KNOWN_VIOLATIONS_BY_RECIPE.get(name, frozenset())
-            ]
+            errors = [f for f in findings if f.severity == Severity.ERROR]
             assert errors == [], f"{name} has ERROR-severity semantic findings: " + str(
                 [(f.rule, f.step_name, f.message) for f in errors]
             )

@@ -110,14 +110,7 @@ def test_research_recipe_passes_semantic_rules(recipe):
     errors = validate_recipe_structure(recipe)
     assert not errors, f"Structural validation errors: {errors}"
     findings = run_semantic_rules(recipe)
-    from tests.recipe.conftest import KNOWN_VIOLATIONS_BY_RECIPE
-
-    error_findings = [
-        f
-        for f in findings
-        if f.severity.value == "error"
-        and f.rule not in KNOWN_VIOLATIONS_BY_RECIPE.get("research", frozenset())
-    ]
+    error_findings = [f for f in findings if f.severity.value == "error"]
     assert not error_findings, (
         f"Semantic rule errors: {[f'{f.rule}: {f.message}' for f in error_findings]}"
     )

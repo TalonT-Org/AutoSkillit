@@ -111,10 +111,7 @@ working directory.
 ```bash
 mkdir -p {{AUTOSKILLIT_TEMP}}/promote-to-main
 python3 - <<'EOF' > {{AUTOSKILLIT_TEMP}}/promote-to-main/token_summary.md 2>/dev/null || true
-import json, pathlib, sys
-from autoskillit.pipeline.tokens import DefaultTokenLog
-from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
-from autoskillit.execution.session_log import resolve_log_dir
+import json, os, pathlib, subprocess, sys
 
 cfg_path = pathlib.Path(".autoskillit") / "temp" / ".hook_config.json"
 kitchen_id = ""
@@ -123,14 +120,44 @@ if cfg_path.exists():
     if isinstance(_cfg, dict):
         kitchen_id = _cfg.get("kitchen_id") or _cfg.get("pipeline_id", "")
 
-log_root = resolve_log_dir("")
-tl = DefaultTokenLog()
-n = tl.load_from_log_dir(log_root, kitchen_id_filter=kitchen_id)
-if n == 0:
+log_root = os.environ.get(
+    "AUTOSKILLIT_LOG_DIR",
+    pathlib.Path.home() / ".local" / "share" / "autoskillit" / "logs",
+)
+tl_path = pathlib.Path(log_root)
+if not tl_path.exists():
     sys.exit(0)
-steps = tl.get_report()
-total = tl.compute_total()
-print(TelemetryFormatter.format_token_table(steps, total))
+
+# Aggregate token usage across all sessions in log_root
+total_input = total_output = 0
+session_count = 0
+for session_dir in tl_path.iterdir():
+    if not session_dir.is_dir():
+        continue
+    token_file = session_dir / "tokens.json"
+    if not token_file.exists():
+        continue
+    try:
+        data = json.loads(token_file.read_text())
+        if kitchen_id and data.get("kitchen_id") != kitchen_id:
+            continue
+        session_count += 1
+        total_input += data.get("input_tokens", 0)
+        total_output += data.get("output_tokens", 0)
+    except (json.JSONDecodeError, OSError):
+        continue
+
+if session_count == 0:
+    sys.exit(0)
+
+# Format as a markdown table
+header = "| Metric | Value |\n|---|---|\n"
+rows = (
+    f"| Sessions | {session_count} |\n"
+    f"| Input Tokens | {total_input:,} |\n"
+    f"| Output Tokens | {total_output:,} |\n"
+)
+print(header + rows)
 EOF
 ```
 

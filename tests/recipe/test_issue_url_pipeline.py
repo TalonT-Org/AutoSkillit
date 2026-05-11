@@ -8,7 +8,6 @@ import yaml
 from autoskillit.recipe._api import validate_from_path
 from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
-from tests.recipe.conftest import KNOWN_VIOLATIONS_BY_RECIPE as _KNOWN_VIOLATIONS_BY_RECIPE
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -23,12 +22,7 @@ class TestImplementationPipelineIssueUrl:
     def test_recipe_validates_clean(self):
         """implementation must validate with no errors after adding issue_url."""
         result = validate_from_path(_recipe_path("implementation"))
-        errors = [
-            f
-            for f in result.get("findings", [])
-            if f.get("severity") == "error"
-            and f.get("rule") not in _KNOWN_VIOLATIONS_BY_RECIPE.get("implementation", frozenset())
-        ]
+        errors = [f for f in result.get("findings", []) if f.get("severity") == "error"]
         assert errors == [], f"Unexpected errors: {errors}"
 
     def test_issue_url_ingredient_declared(self):
@@ -116,12 +110,7 @@ class TestImplementationPipelineIssueUrl:
 class TestInvestigateFirstIssueUrl:
     def test_recipe_validates_clean(self):
         result = validate_from_path(_recipe_path("remediation"))
-        errors = [
-            f
-            for f in result.get("findings", [])
-            if f.get("severity") == "error"
-            and f.get("rule") not in _KNOWN_VIOLATIONS_BY_RECIPE.get("remediation", frozenset())
-        ]
+        errors = [f for f in result.get("findings", []) if f.get("severity") == "error"]
         assert errors == [], f"Unexpected errors: {errors}"
 
     def test_issue_url_ingredient_declared(self):
@@ -207,13 +196,7 @@ class TestInvestigateFirstIssueUrl:
 class TestImplementationGroupsIssueTitle:
     def test_recipe_validates_clean(self):
         result = validate_from_path(_recipe_path("implementation-groups"))
-        errors = [
-            f
-            for f in result.get("findings", [])
-            if f.get("severity") == "error"
-            and f.get("rule")
-            not in _KNOWN_VIOLATIONS_BY_RECIPE.get("implementation-groups", frozenset())
-        ]
+        errors = [f for f in result.get("findings", []) if f.get("severity") == "error"]
         assert errors == [], f"Unexpected errors: {errors}"
 
     def test_fetch_issue_step_replaced(self):

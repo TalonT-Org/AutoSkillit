@@ -12,48 +12,22 @@ from autoskillit.recipe.io import _parse_step, builtin_recipes_dir, load_recipe
 from autoskillit.recipe.registry import RuleFinding
 from autoskillit.recipe.schema import Recipe, RecipeStep
 
-NO_AUTOSKILLIT_IMPORT = "no-autoskillit-import-in-skill-python-block"
-_CONTRACT_POSITIONAL = frozenset(
-    {
-        "contract-unsatisfied-input",
-        "contract-unreferenced-required",
-    }
-)
-
-KNOWN_VIOLATIONS_BY_RECIPE: dict[str, frozenset[str]] = {
-    "research-design": frozenset({NO_AUTOSKILLIT_IMPORT}) | _CONTRACT_POSITIONAL,
-    "research": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT}) | _CONTRACT_POSITIONAL,
-    "research-review": frozenset({NO_AUTOSKILLIT_IMPORT}) | _CONTRACT_POSITIONAL,
-    "implementation": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT}) | _CONTRACT_POSITIONAL,
-    "implementation-groups": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT})
-    | _CONTRACT_POSITIONAL,
-    "merge-prs": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT}) | _CONTRACT_POSITIONAL,
-    "planner": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT}) | _CONTRACT_POSITIONAL,
-    "promote-to-main-wrapper": frozenset({NO_AUTOSKILLIT_IMPORT}),
-    "remediation": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT}) | _CONTRACT_POSITIONAL,
-    "research-implement": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT})
-    | _CONTRACT_POSITIONAL,
-}
-
-KNOWN_PART_B_VIOLATIONS = frozenset().union(*KNOWN_VIOLATIONS_BY_RECIPE.values())
-
 
 def assert_no_rule_errors(
     findings: list[RuleFinding],
     *,
-    suppress: frozenset[str] = KNOWN_PART_B_VIOLATIONS,
     context: str = "",
 ) -> None:
-    """Assert that findings contain no non-suppressed ERROR-severity violations.
+    """Assert that findings contain no ERROR-severity violations.
 
     This helper encapsulates the canonical pattern::
 
-        [f for f in findings if f.severity == Severity.ERROR and f.rule not in suppress]
+        [f for f in findings if f.severity == Severity.ERROR]
 
     Using this helper instead of inline filters prevents the StrEnum comparison bug
     where ``f.severity == "ERROR"`` always returns False (StrEnum values are lowercase).
     """
-    errors = [f for f in findings if f.severity == Severity.ERROR and f.rule not in suppress]
+    errors = [f for f in findings if f.severity == Severity.ERROR]
     assert not errors, (
         f"Unexpected ERROR findings{f' in {context}' if context else ''}: "
         f"{[(f.rule, f.step_name, f.message) for f in errors]}"

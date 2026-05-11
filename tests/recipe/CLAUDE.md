@@ -31,6 +31,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_check_ci_already_passed_routing.py` | Tests for check_ci_already_passed routing logic |
 | `test_check_repo_merge_state_routing.py` | Tests for check_repo_merge_state routing logic |
 | `test_cmd_rpc.py` | Tests for recipe/_cmd_rpc.py run_python callables |
+| `test_compute_recipe_validity.py` | Branch coverage for `compute_recipe_validity` |
 | `test_cmd_rpc_null_safety.py` | Null safety tests for _cmd_rpc callables |
 | `test_contract_verdict_output_required.py` | Contract: verdict output is required in recipe step |
 | `test_contracts.py` | Contract tests for recipe schema and recipe step contracts |
@@ -59,6 +60,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_methodology_disambiguation.py` | Tests for `DisambiguationRuleDef`, `CrossTraditionOverlapDef`, `DisambiguationResult`, `disambiguate`, and `load_disambiguation_rules` |
 | `test_methodology_tradition_router.py` | Tests for `classify_methodology` two-stage Tier-C router: per-tradition classification, multi-match, union rules, determinism |
 | `test_methodology_venue_appendix.py` | Tests for Stage B venue appendix resolution: folding map, conditional branching, constraint evaluation |
+| `test_no_suppression_drift.py` | Anti-regression: prevents reintroduction of validation suppression dicts |
 | `test_merge_prs.py` | Tests for merge-prs recipe structure |
 | `test_merge_prs_queue_any.py` | Tests for merge-prs-queue (any strategy) recipe |
 | `test_merge_prs_queue_common.py` | Shared queue behavior tests across all queue-capable recipes |

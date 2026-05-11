@@ -79,6 +79,77 @@ class TestLaunchFleetSessionIngredientsTable:
         assert captured["ingredients_table"] is None
 
 
+class TestLaunchFleetSessionProjectDirEnv:
+    """Contract test: extra_env includes AUTOSKILLIT_PROJECT_DIR for both paths."""
+
+    def _capture_env_adhoc(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict:
+        captured: dict = {}
+
+        def _fake_run(*args, **kwargs):
+            captured["extra_env"] = kwargs.get("extra_env", {})
+            return None
+
+        monkeypatch.setattr(
+            "autoskillit.cli.session._session_launch._run_interactive_session", _fake_run
+        )
+        monkeypatch.setattr(
+            "autoskillit.cli._prompts._build_fleet_dispatch_prompt",
+            lambda *a, **kw: "fake-prompt",
+        )
+        monkeypatch.chdir(tmp_path)
+
+        from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
+
+        _launch_fleet_session(None, None, None, None, fleet_mode="dispatch")
+        return captured
+
+    def _capture_env_campaign(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict:
+        captured: dict = {}
+
+        def _fake_run(*args, **kwargs):
+            captured["extra_env"] = kwargs.get("extra_env", {})
+            return None
+
+        monkeypatch.setattr(
+            "autoskillit.cli.session._session_launch._run_interactive_session", _fake_run
+        )
+        monkeypatch.setattr(
+            "autoskillit.cli._prompts._build_fleet_campaign_prompt",
+            lambda *a, **kw: "fake-prompt",
+        )
+        monkeypatch.chdir(tmp_path)
+
+        state_path = tmp_path / "state.json"
+        state_path.write_text("{}")
+
+        from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
+
+        _launch_fleet_session(
+            _make_campaign_recipe(), "test-id", state_path, None, fleet_mode="campaign"
+        )
+        return captured
+
+    def test_adhoc_extra_env_contains_project_dir(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        captured = self._capture_env_adhoc(monkeypatch, tmp_path)
+        assert "extra_env" in captured, (
+            "_launch_fleet_session raised before _run_interactive_session was reached"
+        )
+        assert "AUTOSKILLIT_PROJECT_DIR" in captured["extra_env"]
+        assert captured["extra_env"]["AUTOSKILLIT_PROJECT_DIR"] == str(tmp_path)
+
+    def test_campaign_extra_env_contains_project_dir(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        captured = self._capture_env_campaign(monkeypatch, tmp_path)
+        assert "extra_env" in captured, (
+            "_launch_fleet_session raised before _run_interactive_session was reached"
+        )
+        assert "AUTOSKILLIT_PROJECT_DIR" in captured["extra_env"]
+        assert captured["extra_env"]["AUTOSKILLIT_PROJECT_DIR"] == str(tmp_path)
+
+
 class TestLaunchFleetSessionContinueOnFailureEnv:
     def _capture_env(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, continue_on_failure: bool

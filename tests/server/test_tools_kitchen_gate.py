@@ -41,6 +41,7 @@ def test_close_kitchen_disables_gate(tmp_path, monkeypatch):
     """After _close_kitchen_handler(), gate is disabled."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
+    mock_ctx.project_dir = tmp_path
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
@@ -76,6 +77,7 @@ def test_close_kitchen_no_file_no_error(tmp_path, monkeypatch):
     """_close_kitchen_handler() doesn't raise when no gate file exists."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
+    mock_ctx.project_dir = tmp_path
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
@@ -112,6 +114,7 @@ async def test_open_kitchen_writes_hook_config_json(tmp_path, monkeypatch):
     """open_kitchen must write .autoskillit/.hook_config.json with user quota_guard values."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
+    mock_ctx.project_dir = tmp_path
     mock_ctx.config.quota_guard.short_window_threshold = 85.0
     mock_ctx.config.quota_guard.long_window_threshold = 98.0
     mock_ctx.config.quota_guard.long_window_patterns = ["weekly", "sonnet", "opus"]
@@ -168,6 +171,7 @@ async def test_open_kitchen_bridges_enabled_flag_as_disabled(
     """
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
+    mock_ctx.project_dir = tmp_path
     mock_ctx.config.quota_guard = QuotaGuardConfig(
         enabled=enabled, cache_max_age=300, cache_path="/p/q.json", buffer_seconds=60
     )
@@ -193,6 +197,7 @@ async def test_close_kitchen_removes_hook_config_json(tmp_path, monkeypatch):
     """close_kitchen must remove .autoskillit/.hook_config.json to prevent stale config."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
+    mock_ctx.project_dir = tmp_path
     mock_ctx.config.quota_guard.short_window_threshold = 85.0
     mock_ctx.config.quota_guard.long_window_threshold = 98.0
     mock_ctx.config.quota_guard.long_window_patterns = ["weekly", "sonnet", "opus"]
@@ -254,6 +259,7 @@ def test_close_kitchen_clears_active_recipe_packs(tmp_path, monkeypatch):
     """After _close_kitchen_handler(), ctx.active_recipe_packs is None."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
+    mock_ctx.project_dir = tmp_path
     mock_ctx.active_recipe_packs = frozenset(["research"])
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
@@ -296,6 +302,7 @@ def test_close_kitchen_cancels_quota_refresh_task(tmp_path, monkeypatch):
     """_close_kitchen_handler cancels ctx.quota_refresh_task and sets it to None."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
+    mock_ctx.project_dir = tmp_path
     mock_task = MagicMock(spec=asyncio.Task)
     mock_ctx.quota_refresh_task = mock_task
 
@@ -333,6 +340,12 @@ async def test_disable_quota_guard_writes_disabled_flag(tmp_path, monkeypatch):
     hook_cfg_path.write_text(
         json.dumps({"quota_guard": {"cache_path": "/some/path.json", "cache_max_age": 300}})
     )
+
+    from autoskillit.server import _state
+
+    mock_state_ctx = _make_mock_ctx()
+    mock_state_ctx.project_dir = tmp_path
+    monkeypatch.setattr(_state, "_ctx", mock_state_ctx)
 
     from autoskillit.server.tools.tools_kitchen import disable_quota_guard
 
@@ -413,6 +426,7 @@ def test_close_kitchen_preserves_review_gate_when_loop_active(tmp_path, monkeypa
     """Preserve review_gate_state.json when an active review loop is in progress."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
+    mock_ctx.project_dir = tmp_path
 
     state_path = tmp_path.joinpath(*_REVIEW_GATE_STATE_RELPATH)
     state_path.parent.mkdir(parents=True, exist_ok=True)
@@ -443,6 +457,7 @@ def test_close_kitchen_no_review_gate_state_no_error(tmp_path, monkeypatch):
     """_close_kitchen_handler() must not raise when review_gate_state.json is absent."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
+    mock_ctx.project_dir = tmp_path
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
@@ -458,6 +473,7 @@ def test_close_kitchen_removes_review_gate_when_loop_complete(tmp_path, monkeypa
     """Remove review_gate_state.json when check_review_loop_called is True."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
+    mock_ctx.project_dir = tmp_path
 
     state_path = tmp_path.joinpath(*_REVIEW_GATE_STATE_RELPATH)
     state_path.parent.mkdir(parents=True, exist_ok=True)
@@ -487,6 +503,7 @@ def test_close_kitchen_removes_review_gate_when_gate_not_loop_required(tmp_path,
     """_close_kitchen_handler() must remove review_gate_state.json when gate != LOOP_REQUIRED."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
+    mock_ctx.project_dir = tmp_path
 
     state_path = tmp_path.joinpath(*_REVIEW_GATE_STATE_RELPATH)
     state_path.parent.mkdir(parents=True, exist_ok=True)
@@ -515,6 +532,7 @@ def test_close_kitchen_removes_review_gate_on_corrupt_json(tmp_path, monkeypatch
     """Delete review_gate_state.json when JSON is malformed (fail-safe)."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
+    mock_ctx.project_dir = tmp_path
 
     state_path = tmp_path.joinpath(*_REVIEW_GATE_STATE_RELPATH)
     state_path.parent.mkdir(parents=True, exist_ok=True)
@@ -710,3 +728,132 @@ async def test_open_kitchen_ingredients_only_no_name_ignored(tmp_path, monkeypat
     assert "content" in result
     assert result["kitchen"] == "open"
     assert "version" in result
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_uses_project_dir_for_recipe_lookup(tmp_path, monkeypatch):
+    """open_kitchen must use tool_ctx.project_dir for recipe discovery, not Path.cwd().
+
+    Regression test: when project_dir differs from cwd, recipes must be found
+    in project_dir's .autoskillit/recipes/ directory.
+    """
+    import yaml
+
+    monkeypatch.chdir(tmp_path)  # Ensure cwd != project_dir
+    different_dir = tmp_path / "project_root"
+    different_dir.mkdir()
+
+    # Create a recipe only in project_dir, not in cwd
+    recipe_yaml = {
+        "name": "test-project-dir-recipe",
+        "description": "Test recipe for project_dir propagation",
+        "ingredients": [],
+        "steps": [{"tool": "run_skill", "name": "s1", "with": {"skill": "test"}}],
+    }
+    recipes_dir = different_dir / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    (recipes_dir / "test-project-dir-recipe.yaml").write_text(yaml.dump(recipe_yaml))
+
+    # Build context with project_dir = different_dir, recipes = RealRecipeRepository
+    from autoskillit.config.settings import AutomationConfig
+    from autoskillit.core.types import DirectInstall
+    from autoskillit.pipeline.audit import DefaultAuditLog
+    from autoskillit.pipeline.context import ToolContext
+    from autoskillit.pipeline.gate import DefaultGateState
+    from autoskillit.pipeline.timings import DefaultTimingLog
+    from autoskillit.pipeline.tokens import DefaultTokenLog
+    from autoskillit.recipe.repository import DefaultRecipeRepository
+
+    real_repo = DefaultRecipeRepository()
+
+    ctx = ToolContext(
+        config=AutomationConfig(features={"fleet": True}),
+        audit=DefaultAuditLog(),
+        token_log=DefaultTokenLog(),
+        timing_log=DefaultTimingLog(),
+        gate=DefaultGateState(enabled=False),
+        plugin_source=DirectInstall(plugin_dir=tmp_path),
+        runner=None,
+        temp_dir=tmp_path / ".autoskillit" / "temp",
+        project_dir=different_dir,
+        recipes=real_repo,
+    )
+
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+    mock_ctx.gate = ctx.gate
+    mock_ctx.recipes = ctx.recipes
+    mock_ctx.config = ctx.config
+    mock_ctx.project_dir = ctx.project_dir
+    mock_ctx.active_recipe_packs = frozenset()
+    mock_ctx.active_recipe_features = frozenset()
+    mock_ctx.quota_refresh_task = None
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch(
+                    "autoskillit.server.tools.tools_kitchen._apply_triage_gate",
+                    new=AsyncMock(side_effect=lambda r, *a, **kw: r),
+                ):
+                    with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                        with patch(
+                            "autoskillit.server.tools.tools_kitchen._build_hook_diagnostic_warning",
+                            return_value="",
+                        ):
+                            from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+                            result_json = await open_kitchen(
+                                name="test-project-dir-recipe", ctx=mock_ctx
+                            )
+
+    result = json.loads(result_json)
+    assert result["success"] is True, (
+        f"open_kitchen failed to find recipe in project_dir={different_dir}. Result: {result}"
+    )
+    assert result.get("kitchen") == "open"
+
+
+def test_get_recipe_uses_project_dir(tmp_path, monkeypatch):
+    """get_recipe must use ctx.project_dir for recipe lookup, not Path.cwd().
+
+    Regression test: when project_dir differs from cwd, get_recipe must
+    find recipes in project_dir's .autoskillit/recipes/ directory.
+    """
+    import yaml
+
+    monkeypatch.chdir(tmp_path)
+    different_dir = tmp_path / "project_root"
+    different_dir.mkdir()
+
+    recipe_yaml = {
+        "name": "test-get-recipe-project-dir",
+        "description": "Test recipe for get_recipe project_dir",
+        "steps": {"s1": {"tool": "run_skill"}},
+    }
+    recipes_dir = different_dir / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    (recipes_dir / "test-get-recipe-project-dir.yaml").write_text(yaml.dump(recipe_yaml))
+
+    from autoskillit.recipe.repository import DefaultRecipeRepository
+
+    real_repo = DefaultRecipeRepository()
+
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.project_dir = different_dir
+    mock_ctx.recipes = real_repo
+
+    with patch("autoskillit.server._state._get_ctx_or_none", return_value=mock_ctx):
+        from autoskillit.server.tools.tools_kitchen import get_recipe
+
+        result = get_recipe("test-get-recipe-project-dir")
+
+    # get_recipe returns raw YAML when found, JSON error dict when not found
+    assert '"error"' not in result, (
+        f"get_recipe failed to find recipe in project_dir={different_dir}. Result: {result}"
+    )
+    assert "test-get-recipe-project-dir" in result, (
+        f"get_recipe did not return the recipe from project_dir. Result: {result}"
+    )

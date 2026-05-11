@@ -40,6 +40,8 @@ from ._type_results_execution import *  # noqa: F401, F403
 from ._type_results_execution import __all__ as _results_execution_all
 from ._type_resume import *  # noqa: F401, F403
 from ._type_resume import __all__ as _resume_all
+from ._type_session_env import *  # noqa: F401, F403
+from ._type_session_env import __all__ as _session_env_all
 from ._type_subprocess import *  # noqa: F401, F403
 from ._type_subprocess import __all__ as _subprocess_all
 
@@ -61,5 +63,6 @@ __all__ = (
     + _results_all
     + _results_execution_all
     + _resume_all
+    + _session_env_all
     + _subprocess_all
 )

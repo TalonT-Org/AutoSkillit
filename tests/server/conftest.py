@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
@@ -99,6 +100,7 @@ def _make_mock_ctx() -> MagicMock:
     gate.enabled = False
     ctx = MagicMock()
     ctx.gate = gate
+    ctx.project_dir = Path("/fake/project")
     ctx.config.subsets.disabled = []  # REQ-VIS-008: no subsets disabled by default
     return ctx
 

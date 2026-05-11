@@ -72,6 +72,7 @@ def build_claude_env(
     base: Mapping[str, str] | None = None,
     *,
     extras: Mapping[str, str] | None = None,
+    required: frozenset[str] | None = None,
 ) -> Mapping[str, str]:
     """Return a scrubbed, sealed env dict suitable for a claude subprocess.
 
@@ -83,6 +84,10 @@ def build_claude_env(
         Caller-supplied overrides merged last. Used to carry
         ``AUTOSKILLIT_HEADLESS=1``, ``SCENARIO_STEP_NAME=...`` and similar
         into the child.
+    required
+        When provided, raise ``ValueError`` if any key in this set is absent
+        from the final assembled env. Used by session launchers to enforce
+        that required vars were explicitly injected and not silently scrubbed.
 
     Returns
     -------
@@ -103,4 +108,8 @@ def build_claude_env(
     out.update(IDE_ENV_ALWAYS_EXTRAS)
     if extras:
         out.update(extras)
+    if required is not None:
+        missing = required - frozenset(out.keys())
+        if missing:
+            raise ValueError(f"Required env vars missing from session env: {sorted(missing)}")
     return MappingProxyType(out)

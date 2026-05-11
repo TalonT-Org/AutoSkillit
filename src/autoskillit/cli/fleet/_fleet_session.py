@@ -6,7 +6,14 @@ import dataclasses
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
-from autoskillit.core import NamedResume, NoResume, dump_yaml_str, get_logger
+from autoskillit.core import (
+    FLEET_SESSION_REQUIRED_ENV,
+    FleetSessionEnv,
+    NamedResume,
+    NoResume,
+    dump_yaml_str,
+    get_logger,
+)
 
 logger = get_logger(__name__)
 
@@ -54,11 +61,12 @@ def _launch_fleet_session(
         from autoskillit.cli._prompts import _build_fleet_dispatch_prompt
 
         prompt = _build_fleet_dispatch_prompt(mcp_prefix, recipe_table=recipe_table)
-        extra_env: dict[str, str] = {
-            "AUTOSKILLIT_SESSION_TYPE": "fleet",
-            "AUTOSKILLIT_FLEET_MODE": fleet_mode,
-            "AUTOSKILLIT_HEADLESS": "0",
-        }
+        env_spec = FleetSessionEnv(
+            session_type="fleet",
+            fleet_mode=fleet_mode,
+            project_dir=str(project_dir),
+        )
+        extra_env: dict[str, str] = env_spec.to_dict()
         seen_reload_ids: set[str] = set()
         current_resume_spec: ResumeSpec = NoResume()
         current_initial_message = initial_message
@@ -70,6 +78,7 @@ def _launch_fleet_session(
                 extra_env=extra_env,
                 resume_spec=current_resume_spec,
                 project_dir=project_dir,
+                required_env=FLEET_SESSION_REQUIRED_ENV,
             )
             if session_signal is None:
                 break
@@ -140,14 +149,15 @@ def _launch_fleet_session(
             ingredients_table=ingredients_table,
             prior_dispatch_id=resume_dispatch_id,
         )
-        extra_env = {
-            "AUTOSKILLIT_SESSION_TYPE": "fleet",
-            "AUTOSKILLIT_FLEET_MODE": fleet_mode,
-            "AUTOSKILLIT_CAMPAIGN_ID": campaign_id,
-            "AUTOSKILLIT_CAMPAIGN_STATE_PATH": str(state_path),
-            "AUTOSKILLIT_CONTINUE_ON_FAILURE": str(campaign_recipe.continue_on_failure).lower(),
-            "AUTOSKILLIT_HEADLESS": "0",
-        }
+        env_spec = FleetSessionEnv(
+            session_type="fleet",
+            fleet_mode=fleet_mode,
+            project_dir=str(project_dir),
+            campaign_id=campaign_id,
+            campaign_state_path=str(state_path),
+            continue_on_failure=str(campaign_recipe.continue_on_failure).lower(),
+        )
+        extra_env = env_spec.to_dict()
 
         seen_reload_ids = set[str]()
         if resume_metadata is not None:
@@ -167,6 +177,7 @@ def _launch_fleet_session(
                 extra_env=extra_env,
                 resume_spec=current_resume_spec,
                 project_dir=project_dir,
+                required_env=FLEET_SESSION_REQUIRED_ENV,
             )
             if session_signal is None:
                 break

@@ -51,6 +51,7 @@ __all__ = [
     "FOOD_TRUCK_TOOL_TAGS_ENV_VAR",
     "FLEET_DISPATCH_TOOLS",
     "FLEET_ERROR_CODES",
+    "FLEET_SESSION_REQUIRED_ENV",
     "FeatureDef",
     "FEATURE_REGISTRY",
     "RETIRED_FEATURES",
@@ -107,6 +108,15 @@ AUTOSKILLIT_PRIVATE_ENV_VARS: frozenset[str] = frozenset(
         "AUTOSKILLIT_SKILL_NAME",
         # Provider-routing vars — must not leak into user-code subprocesses
         "AUTOSKILLIT_PROVIDER_PROFILE",
+    }
+)
+
+FLEET_SESSION_REQUIRED_ENV: frozenset[str] = frozenset(
+    {
+        "AUTOSKILLIT_SESSION_TYPE",
+        "AUTOSKILLIT_FLEET_MODE",
+        "AUTOSKILLIT_PROJECT_DIR",
+        "AUTOSKILLIT_HEADLESS",
     }
 )
 

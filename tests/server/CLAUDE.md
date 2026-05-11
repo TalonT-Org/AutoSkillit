@@ -69,6 +69,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_tools_kitchen_envelope.py` | Tests for tools_kitchen.py: hook drift warnings and failure envelopes |
 | `test_tools_kitchen_gate.py` | Tests for tools_kitchen.py: gate mechanics, hook config, recipe packs, refresh, misc |
 | `test_tools_kitchen_visibility.py` | Tests for tools_kitchen.py: visibility, component management, sous-chef, redisable_subsets |
+| `test_no_path_cwd_in_tools.py` | Regression guard: Path.cwd() must not appear in server tool handlers |
 | `test_tools_label_validation.py` | Tests for label whitelist validation in server tool handlers |
 | `test_tools_list_recipes.py` | Tests for autoskillit server list_recipes tool |
 | `test_tools_load_recipe.py` | Tests for autoskillit server load_recipe tool |

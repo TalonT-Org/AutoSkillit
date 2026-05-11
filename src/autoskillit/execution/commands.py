@@ -65,6 +65,7 @@ def build_interactive_cmd(
     add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
     resume_spec: ResumeSpec = NoResume(),
     env_extras: Mapping[str, str] | None = None,
+    required_env: frozenset[str] | None = None,
 ) -> ClaudeInteractiveCmd:
     """Build a Claude interactive session command.
 
@@ -88,6 +89,9 @@ def build_interactive_cmd(
         interactive picker). ``NamedResume`` passes ``--resume <id>``.
     env_extras
         Optional caller overrides merged into the resolved env after IDE scrubbing.
+    required_env
+        Optional set of env var keys that must be present in the final env.
+        Raise ``ValueError`` if any are missing.
 
     Orchestration level
     -------------------
@@ -122,7 +126,9 @@ def build_interactive_cmd(
     merged: dict[str, str] = dict(_SESSION_BASELINE_ENV)
     if env_extras:
         merged.update(env_extras)
-    return ClaudeInteractiveCmd(cmd=cmd, env=build_claude_env(extras=merged))
+    return ClaudeInteractiveCmd(
+        cmd=cmd, env=build_claude_env(extras=merged, required=required_env)
+    )
 
 
 def build_headless_cmd(

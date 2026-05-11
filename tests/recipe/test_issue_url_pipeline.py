@@ -23,6 +23,7 @@ class TestImplementationPipelineIssueUrl:
     def test_recipe_validates_clean(self):
         """implementation must validate with no errors after adding issue_url."""
         result = validate_from_path(_recipe_path("implementation"))
+        # validate_from_path returns raw dicts, not typed RuleFinding objects
         errors = [f for f in result.get("findings", []) if f.get("severity") == Severity.ERROR]
         assert errors == [], f"Unexpected errors: {errors}"
 

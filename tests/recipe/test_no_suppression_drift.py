@@ -17,6 +17,7 @@ def test_conftest_has_no_known_violations_dict() -> None:
     Its reintroduction would recreate the test/production divergence.
     """
     conftest = Path(__file__).parent / "conftest.py"
+    assert conftest.exists(), f"conftest.py not found at {conftest} — guard cannot run"
     tree = ast.parse(conftest.read_text())
     violation_names: set[str] = set()
     for node in ast.walk(tree):

@@ -133,6 +133,9 @@ class TestLaunchFleetSessionProjectDirEnv:
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         captured = self._capture_env_adhoc(monkeypatch, tmp_path)
+        assert "extra_env" in captured, (
+            "_launch_fleet_session raised before _run_interactive_session was reached"
+        )
         assert "AUTOSKILLIT_PROJECT_DIR" in captured["extra_env"]
         assert captured["extra_env"]["AUTOSKILLIT_PROJECT_DIR"] == str(tmp_path)
 
@@ -140,6 +143,9 @@ class TestLaunchFleetSessionProjectDirEnv:
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         captured = self._capture_env_campaign(monkeypatch, tmp_path)
+        assert "extra_env" in captured, (
+            "_launch_fleet_session raised before _run_interactive_session was reached"
+        )
         assert "AUTOSKILLIT_PROJECT_DIR" in captured["extra_env"]
         assert captured["extra_env"]["AUTOSKILLIT_PROJECT_DIR"] == str(tmp_path)
 

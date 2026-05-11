@@ -19,7 +19,7 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 # Files to check and their allowed Path.cwd() sites
 TOOLS_FILES = {
     "src/autoskillit/server/tools/tools_kitchen.py": [
-        # Line 597 in _reload_session_handler — correct: server's own cwd for log discovery
+        600,  # _reload_session_handler — correct: server's own cwd for log discovery
     ],
     "src/autoskillit/server/tools/tools_recipe.py": [],
     "src/autoskillit/server/tools/tools_issue_lifecycle.py": [],

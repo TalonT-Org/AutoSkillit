@@ -130,7 +130,7 @@ if not tl_path.exists():
 # Aggregate token usage across all sessions in log_root
 total_input = total_output = 0
 session_count = 0
-for session_dir in tl_path.iterdir():
+for session_dir in sorted(tl_path.iterdir()):
     if not session_dir.is_dir():
         continue
     token_file = session_dir / "tokens.json"

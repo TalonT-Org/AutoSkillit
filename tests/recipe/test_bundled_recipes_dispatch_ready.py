@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 import yaml
 
+from autoskillit.core.types import Severity
 from autoskillit.recipe._api import load_and_validate
 from autoskillit.recipe.contracts import check_contract_staleness
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
@@ -48,7 +49,7 @@ def test_bundled_recipe_dispatch_ready(recipe_name: str) -> None:
     assert result.get("valid") is True, f"Recipe '{recipe_name}' not dispatch-ready: " + "; ".join(
         f"[{s.get('rule')}] {s.get('message', '')[:80]}"
         for s in result.get("suggestions", [])
-        if s.get("severity") == "error"
+        if s.get("severity") == Severity.ERROR
     )
 
 

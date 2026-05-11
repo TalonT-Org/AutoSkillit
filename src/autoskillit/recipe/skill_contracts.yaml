@@ -2130,7 +2130,7 @@ skills:
       - name: validated_report_path
         type: file_path
       - name: verdict
-        type: str
+        type: string
     expected_output_patterns:
       - "validated_report_path\\s*=\\s*\\S+"
       - "verdict\\s*=\\s*\\S+"
@@ -2164,7 +2164,7 @@ skills:
         required: false
     outputs:
       - name: issue_urls
-        type: str
+        type: string
       - name: issue_count
         type: integer
     expected_output_patterns:

@@ -60,6 +60,13 @@ repos:
         files: ^(tests/|src/autoskillit/).*(\.py|CLAUDE\.md)$
         pass_filenames: false
 
+      - id: check-contract-freshness
+        name: Check contract card freshness
+        language: system
+        entry: python3 scripts/check_contract_freshness.py
+        files: ^src/autoskillit/recipes/(?!contracts/).*\.yaml$
+        pass_filenames: false
+
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:

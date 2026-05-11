@@ -125,6 +125,7 @@ class BlockFingerprint:
 @dataclasses.dataclass
 class RecipeCard:
     generated_at: str
+    recipe_source_hash: str | None
     bundled_manifest_version: str
     skill_hashes: dict[str, str]
     skills: dict[str, SkillContract]
@@ -375,6 +376,7 @@ def _generate_recipe_card_for_recipe(recipe: Recipe) -> RecipeCard:
     manifest = load_bundled_manifest()
     return RecipeCard(
         generated_at=datetime.now(UTC).isoformat(),
+        recipe_source_hash=None,
         bundled_manifest_version=manifest.get("version", ""),
         skill_hashes={},
         skills={},
@@ -414,6 +416,7 @@ def generate_recipe_card(
         raise ValueError("recipes_dir required when pipeline_path is a file path")
     pipeline_path = Path(pipeline_path)
     recipes_dir = Path(recipes_dir)
+    recipe_hash = compute_recipe_hash(pipeline_path)
 
     data = load_yaml(pipeline_path)
     recipe = _parse_recipe(data)
@@ -489,6 +492,7 @@ def generate_recipe_card(
 
     contract_data = {
         "generated_at": datetime.now(UTC).isoformat(),
+        "recipe_source_hash": recipe_hash,
         "bundled_manifest_version": manifest["version"],
         "skill_hashes": skill_hashes,
         "skills": skills,
@@ -623,6 +627,22 @@ def check_contract_staleness(
     if isinstance(contract, Recipe):
         return []
 
+    stale: list[StaleItem] = []
+
+    if recipe_path is not None:
+        stored_hash = contract.get("recipe_source_hash")
+        if stored_hash is not None:
+            current_hash = compute_recipe_hash(recipe_path)
+            if stored_hash != current_hash:
+                stale.append(
+                    StaleItem(
+                        skill="<recipe>",
+                        reason="recipe_content_drift",
+                        stored_value=stored_hash,
+                        current_value=current_hash,
+                    )
+                )
+
     manifest = load_bundled_manifest()
     current_version = manifest["version"]
     cached: StalenessEntry | None = None
@@ -633,10 +653,8 @@ def check_contract_staleness(
             current_hash = compute_recipe_hash(recipe_path)
             if cached.recipe_hash == current_hash and cached.manifest_version == current_version:
                 if not cached.is_stale:
-                    return []
+                    return stale
                 # stale=True cache hit: fall through to re-compute for StaleItem details
-
-    stale: list[StaleItem] = []
 
     stored_version = contract.get("bundled_manifest_version", "")
     if stored_version != current_version:

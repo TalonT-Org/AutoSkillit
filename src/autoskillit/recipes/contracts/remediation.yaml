@@ -1,4 +1,5 @@
-generated_at: '2026-05-03T07:01:54.187185+00:00'
+generated_at: '2026-05-11T00:54:58.491532+00:00'
+recipe_source_hash: sha256:6c124a9a8091f41ac3150d8fb4aa9fd6a0c4f28764e4eb1ca9747759d1323621
 bundled_manifest_version: 0.1.0
 skill_hashes: {}
 skills:
@@ -137,6 +138,40 @@ skills:
     write_behavior: conditional
     write_expected_when:
     - verdict\s*=\s*real_fix
+  resolve-merge-conflicts:
+    inputs:
+    - name: worktree_path
+      type: directory_path
+      required: true
+      recommended: false
+    - name: plan_path
+      type: file_path
+      required: true
+      recommended: false
+    - name: base_branch
+      type: string
+      required: true
+      recommended: false
+    outputs:
+    - name: worktree_path
+      type: directory_path
+    - name: branch_name
+      type: string
+    - name: conflict_report_path
+      type: file_path
+    - name: escalation_required
+      type: string
+    - name: escalation_reason
+      type: string
+    expected_output_patterns:
+    - worktree_path\s*=\s*/.+
+    pattern_examples:
+    - 'worktree_path = /tmp/worktrees/impl-foo-20260316
+
+      %%ORDER_UP%%'
+    write_behavior: conditional
+    write_expected_when:
+    - conflict_report_path\s*=\s*/.+
   audit-impl:
     inputs:
     - name: plan_path
@@ -280,12 +315,22 @@ skills:
       type: string
       required: false
       recommended: true
+    - name: diff_metrics_path
+      type: string
+      required: false
+      recommended: false
+    - name: mode
+      type: string
+      required: false
+      recommended: false
     outputs:
     - name: verdict
       type: string
+    - name: local_findings_path
+      type: string
     expected_output_patterns:
     - verdict\s*=\s*(approved|approved_with_comments|changes_requested|needs_human)
-    - '%%REVIEW_GATE::(LOOP_REQUIRED|CLEAR)%%'
+    - (?:%%REVIEW_GATE::(LOOP_REQUIRED|CLEAR)%%|verdict\s*=\s*approved_with_comments)
     pattern_examples:
     - 'verdict = approved
 
@@ -293,8 +338,6 @@ skills:
 
       %%ORDER_UP%%'
     - 'verdict = approved_with_comments
-
-      %%REVIEW_GATE::CLEAR%%
 
       %%ORDER_UP%%'
     - 'verdict = changes_requested
@@ -317,50 +360,24 @@ skills:
       type: string
       required: true
       recommended: false
+    - name: mode
+      type: string
+      required: false
+      recommended: false
     outputs:
     - name: verdict
       type: string
     - name: fixes_applied
       type: integer
+    - name: deferred_observations_path
+      type: string
+    - name: reject_patterns_path
+      type: string
     expected_output_patterns: []
     pattern_examples: []
     write_behavior: conditional
     write_expected_when:
     - verdict\s*=\s*real_fix
-  resolve-merge-conflicts:
-    inputs:
-    - name: worktree_path
-      type: directory_path
-      required: true
-      recommended: false
-    - name: plan_path
-      type: file_path
-      required: true
-      recommended: false
-    - name: base_branch
-      type: string
-      required: true
-      recommended: false
-    outputs:
-    - name: worktree_path
-      type: directory_path
-    - name: branch_name
-      type: string
-    - name: conflict_report_path
-      type: file_path
-    - name: escalation_required
-      type: string
-    - name: escalation_reason
-      type: string
-    expected_output_patterns:
-    - worktree_path\s*=\s*/.+
-    pattern_examples:
-    - 'worktree_path = /tmp/worktrees/impl-foo-20260316
-
-      %%ORDER_UP%%'
-    write_behavior: conditional
-    write_expected_when:
-    - conflict_report_path\s*=\s*/.+
   diagnose-ci:
     inputs:
     - name: branch
@@ -385,7 +402,7 @@ skills:
     - name: is_fixable
       type: string
     expected_output_patterns:
-    - diagnosis_path\s*=\s*/.+
+    - diagnosis_path\s*=\s*(?:/.+)?
     - failure_subtype\s*=\s*(flaky|timing_race|deterministic|fixture|import|env|unknown)
     pattern_examples:
     - 'diagnosis_path = /tmp/diagnosis.md
@@ -406,6 +423,80 @@ skills:
       is_fixable = false
 
       %%ORDER_UP%%'
+    - "diagnosis_path = \nfailure_type = test\nfailure_subtype = unknown\nis_fixable
+      = false\n%%ORDER_UP%%"
+    - 'diagnosis_path = /tmp/diagnosis.md
+
+      failure_type = test
+
+      failure_subtype = timing_race
+
+      is_fixable = true
+
+      %%ORDER_UP%%'
+    - 'diagnosis_path = /tmp/diagnosis.md
+
+      failure_type = test
+
+      failure_subtype = fixture
+
+      is_fixable = true
+
+      %%ORDER_UP%%'
+    - 'diagnosis_path = /tmp/diagnosis.md
+
+      failure_type = test
+
+      failure_subtype = import
+
+      is_fixable = true
+
+      %%ORDER_UP%%'
+    - 'diagnosis_path = /tmp/diagnosis.md
+
+      failure_type = lint
+
+      failure_subtype = unknown
+
+      is_fixable = true
+
+      %%ORDER_UP%%'
+    - 'diagnosis_path = /tmp/diagnosis.md
+
+      failure_type = build
+
+      failure_subtype = unknown
+
+      is_fixable = true
+
+      %%ORDER_UP%%'
+    - 'diagnosis_path = /tmp/diagnosis.md
+
+      failure_type = type_check
+
+      failure_subtype = unknown
+
+      is_fixable = true
+
+      %%ORDER_UP%%'
+    - 'diagnosis_path = /tmp/diagnosis.md
+
+      failure_type = env
+
+      failure_subtype = env
+
+      is_fixable = false
+
+      %%ORDER_UP%%'
+    - 'diagnosis_path = /tmp/diagnosis.md
+
+      failure_type = unknown
+
+      failure_subtype = unknown
+
+      is_fixable = false
+
+      %%ORDER_UP%%'
     write_behavior: always
 dataflow:
 - step: clone
@@ -416,6 +507,7 @@ dataflow:
   - base_branch
   - depth
   - issue_url
+  - local_review_rounds
   - max_parallel
   - open_pr
   - review_approach
@@ -429,29 +521,8 @@ dataflow:
   produced:
   - work_dir
   - remote_url
-- step: set_merge_target
-  available:
-  - arch_lenses
-  - audit
-  - auto_merge
-  - base_branch
-  - depth
-  - issue_url
-  - max_parallel
-  - open_pr
-  - remote_url
-  - review_approach
-  - review_max_retries
-  - run_mode
-  - run_name
-  - source_dir
-  - task
-  - upfront_claimed
-  - work_dir
-  required: []
-  produced:
   - merge_target
-- step: get_issue_title
+- step: claim_and_resolve
   available:
   - arch_lenses
   - audit
@@ -459,6 +530,7 @@ dataflow:
   - base_branch
   - depth
   - issue_url
+  - local_review_rounds
   - max_parallel
   - merge_target
   - open_pr
@@ -476,33 +548,8 @@ dataflow:
   - issue_number
   - issue_title
   - issue_slug
-- step: claim_issue
-  available:
-  - arch_lenses
-  - audit
-  - auto_merge
-  - base_branch
-  - depth
-  - issue_number
-  - issue_slug
-  - issue_title
-  - issue_url
-  - max_parallel
-  - merge_target
-  - open_pr
-  - remote_url
-  - review_approach
-  - review_max_retries
-  - run_mode
-  - run_name
-  - source_dir
-  - task
-  - upfront_claimed
-  - work_dir
-  required: []
-  produced:
   - claimed
-- step: compute_branch
+- step: create_and_publish
   available:
   - arch_lenses
   - audit
@@ -514,6 +561,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - local_review_rounds
   - max_parallel
   - merge_target
   - open_pr
@@ -528,62 +576,7 @@ dataflow:
   - work_dir
   required: []
   produced:
-  - proposed_branch
-- step: create_branch
-  available:
-  - arch_lenses
-  - audit
-  - auto_merge
-  - base_branch
-  - claimed
-  - depth
-  - issue_number
-  - issue_slug
-  - issue_title
-  - issue_url
-  - max_parallel
   - merge_target
-  - open_pr
-  - proposed_branch
-  - remote_url
-  - review_approach
-  - review_max_retries
-  - run_mode
-  - run_name
-  - source_dir
-  - task
-  - upfront_claimed
-  - work_dir
-  required: []
-  produced:
-  - merge_target
-- step: push_merge_target
-  available:
-  - arch_lenses
-  - audit
-  - auto_merge
-  - base_branch
-  - claimed
-  - depth
-  - issue_number
-  - issue_slug
-  - issue_title
-  - issue_url
-  - max_parallel
-  - merge_target
-  - open_pr
-  - proposed_branch
-  - remote_url
-  - review_approach
-  - review_max_retries
-  - run_mode
-  - run_name
-  - source_dir
-  - task
-  - upfront_claimed
-  - work_dir
-  required: []
-  produced: []
 - step: investigate
   available:
   - arch_lenses
@@ -596,10 +589,10 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - local_review_rounds
   - max_parallel
   - merge_target
   - open_pr
-  - proposed_branch
   - remote_url
   - review_approach
   - review_max_retries
@@ -626,10 +619,10 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - local_review_rounds
   - max_parallel
   - merge_target
   - open_pr
-  - proposed_branch
   - remote_url
   - review_approach
   - review_max_retries
@@ -655,11 +648,11 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - local_review_rounds
   - max_parallel
   - merge_target
   - open_pr
   - plan_path
-  - proposed_branch
   - remote_url
   - review_approach
   - review_max_retries
@@ -685,11 +678,11 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - local_review_rounds
   - max_parallel
   - merge_target
   - open_pr
   - plan_path
-  - proposed_branch
   - remote_url
   - review_approach
   - review_max_retries
@@ -715,11 +708,11 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - local_review_rounds
   - max_parallel
   - merge_target
   - open_pr
   - plan_path
-  - proposed_branch
   - remote_url
   - review_approach
   - review_max_retries
@@ -750,11 +743,11 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - local_review_rounds
   - max_parallel
   - merge_target
   - open_pr
   - plan_path
-  - proposed_branch
   - remote_url
   - review_approach
   - review_max_retries
@@ -787,12 +780,12 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - local_review_rounds
   - max_parallel
   - merge_target
   - open_pr
   - phases_implemented
   - plan_path
-  - proposed_branch
   - remote_url
   - review_approach
   - review_max_retries
@@ -806,6 +799,41 @@ dataflow:
   - worktree_path
   required: []
   produced: []
+- step: check_merge_fix_loop
+  available:
+  - arch_lenses
+  - audit
+  - auto_merge
+  - base_branch
+  - branch_name
+  - claimed
+  - depth
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - local_review_rounds
+  - max_parallel
+  - merge_target
+  - open_pr
+  - phases_implemented
+  - plan_path
+  - remote_url
+  - review_approach
+  - review_max_retries
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - task
+  - upfront_claimed
+  - work_dir
+  - worktree_path
+  required: []
+  produced:
+  - merge_fix_count
 - step: assess
   available:
   - arch_lenses
@@ -821,12 +849,13 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_target
   - open_pr
   - phases_implemented
   - plan_path
-  - proposed_branch
   - remote_url
   - review_approach
   - review_max_retries
@@ -842,7 +871,7 @@ dataflow:
   produced:
   - verdict
   - fixes_applied
-- step: audit_impl
+- step: rebase_conflict_fix
   available:
   - arch_lenses
   - audit
@@ -858,12 +887,52 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_target
   - open_pr
   - phases_implemented
   - plan_path
-  - proposed_branch
+  - remote_url
+  - review_approach
+  - review_max_retries
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced:
+  - conflict_escalation_required
+- step: audit_impl
+  available:
+  - arch_lenses
+  - audit
+  - auto_merge
+  - base_branch
+  - branch_name
+  - claimed
+  - conflict_escalation_required
+  - depth
+  - fixes_applied
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - local_review_rounds
+  - max_parallel
+  - merge_fix_count
+  - merge_target
+  - open_pr
+  - phases_implemented
+  - plan_path
   - remote_url
   - review_approach
   - review_max_retries
@@ -887,6 +956,7 @@ dataflow:
   - base_branch
   - branch_name
   - claimed
+  - conflict_escalation_required
   - depth
   - fixes_applied
   - implementation_ref
@@ -895,12 +965,13 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_target
   - open_pr
   - phases_implemented
   - plan_path
-  - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
@@ -924,6 +995,7 @@ dataflow:
   - base_branch
   - branch_name
   - claimed
+  - conflict_escalation_required
   - depth
   - fixes_applied
   - implementation_ref
@@ -932,12 +1004,13 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_target
   - open_pr
   - phases_implemented
   - plan_path
-  - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
@@ -962,6 +1035,7 @@ dataflow:
   - base_branch
   - branch_name
   - claimed
+  - conflict_escalation_required
   - depth
   - fixes_applied
   - implementation_ref
@@ -970,12 +1044,13 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_target
   - open_pr
   - phases_implemented
   - plan_path
-  - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
@@ -999,6 +1074,7 @@ dataflow:
   - base_branch
   - branch_name
   - claimed
+  - conflict_escalation_required
   - depth
   - fixes_applied
   - implementation_ref
@@ -1007,12 +1083,13 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_target
   - open_pr
   - phases_implemented
   - plan_path
-  - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
@@ -1039,6 +1116,7 @@ dataflow:
   - branch_name
   - claimed
   - cleanup_succeeded
+  - conflict_escalation_required
   - depth
   - fixes_applied
   - implementation_ref
@@ -1047,12 +1125,13 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_target
   - open_pr
   - phases_implemented
   - plan_path
-  - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
@@ -1077,6 +1156,7 @@ dataflow:
   - branch_name
   - claimed
   - cleanup_succeeded
+  - conflict_escalation_required
   - depth
   - fixes_applied
   - implementation_ref
@@ -1085,12 +1165,13 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_target
   - open_pr
   - phases_implemented
   - plan_path
-  - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
@@ -1115,6 +1196,7 @@ dataflow:
   - branch_name
   - claimed
   - cleanup_succeeded
+  - conflict_escalation_required
   - depth
   - fixes_applied
   - implementation_ref
@@ -1123,12 +1205,13 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_target
   - open_pr
   - phases_implemented
   - plan_path
-  - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
@@ -1157,6 +1240,7 @@ dataflow:
   - branch_name
   - claimed
   - cleanup_succeeded
+  - conflict_escalation_required
   - depth
   - fixes_applied
   - implementation_ref
@@ -1166,13 +1250,14 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_target
   - open_pr
   - phases_implemented
   - plan_path
   - prep_path
-  - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
@@ -1198,6 +1283,7 @@ dataflow:
   - branch_name
   - claimed
   - cleanup_succeeded
+  - conflict_escalation_required
   - depth
   - fixes_applied
   - implementation_ref
@@ -1207,13 +1293,14 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_target
   - open_pr
   - phases_implemented
   - plan_path
   - prep_path
-  - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
@@ -1241,6 +1328,7 @@ dataflow:
   - branch_name
   - claimed
   - cleanup_succeeded
+  - conflict_escalation_required
   - depth
   - fixes_applied
   - implementation_ref
@@ -1250,14 +1338,15 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_target
   - open_pr
   - phases_implemented
   - plan_path
   - pr_url
   - prep_path
-  - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
@@ -1284,6 +1373,7 @@ dataflow:
   - branch_name
   - claimed
   - cleanup_succeeded
+  - conflict_escalation_required
   - depth
   - fixes_applied
   - implementation_ref
@@ -1293,7 +1383,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_target
   - open_pr
   - phases_implemented
@@ -1301,7 +1393,6 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
@@ -1319,8 +1410,8 @@ dataflow:
   required: []
   produced:
   - annotated_diff_path
-  - diff_metrics_path
   - hunk_ranges_path
+  - diff_metrics_path
   - review_mode
 - step: review_pr
   available:
@@ -1332,7 +1423,9 @@ dataflow:
   - branch_name
   - claimed
   - cleanup_succeeded
+  - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -1342,7 +1435,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_target
   - open_pr
   - phases_implemented
@@ -1350,11 +1445,11 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
   - review_max_retries
+  - review_mode
   - review_path
   - run_mode
   - run_name
@@ -1368,7 +1463,7 @@ dataflow:
   required: []
   produced:
   - review_verdict
-  positional_args: 2
+  positional_args: 4
 - step: resolve_review
   available:
   - annotated_diff_path
@@ -1379,7 +1474,9 @@ dataflow:
   - branch_name
   - claimed
   - cleanup_succeeded
+  - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -1389,7 +1486,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_target
   - open_pr
   - phases_implemented
@@ -1397,11 +1496,11 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -1413,10 +1512,10 @@ dataflow:
   - verdict
   - work_dir
   - worktree_path
-  required:
-  - feature_branch
+  required: []
   produced:
   - verdict
+  positional_args: 1
 - step: re_push_review
   available:
   - annotated_diff_path
@@ -1427,7 +1526,9 @@ dataflow:
   - branch_name
   - claimed
   - cleanup_succeeded
+  - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -1437,7 +1538,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_target
   - open_pr
   - phases_implemented
@@ -1445,11 +1548,11 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -1473,7 +1576,9 @@ dataflow:
   - branch_name
   - claimed
   - cleanup_succeeded
+  - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -1483,7 +1588,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_target
   - open_pr
   - phases_implemented
@@ -1491,11 +1598,11 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -1520,7 +1627,9 @@ dataflow:
   - branch_name
   - claimed
   - cleanup_succeeded
+  - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -1530,7 +1639,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_target
   - open_pr
   - phases_implemented
@@ -1538,12 +1649,12 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -1569,7 +1680,9 @@ dataflow:
   - ci_event
   - claimed
   - cleanup_succeeded
+  - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -1579,7 +1692,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_target
   - open_pr
   - phases_implemented
@@ -1587,12 +1702,12 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -1617,7 +1732,9 @@ dataflow:
   - ci_event
   - claimed
   - cleanup_succeeded
+  - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -1627,7 +1744,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_target
   - open_pr
   - phases_implemented
@@ -1635,12 +1754,12 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -1656,7 +1775,7 @@ dataflow:
   produced:
   - ci_conclusion
   - ci_failed_jobs
-- step: handle_no_ci_runs
+- step: check_ci_timed_out_loop
   available:
   - annotated_diff_path
   - arch_lenses
@@ -1669,7 +1788,9 @@ dataflow:
   - ci_failed_jobs
   - claimed
   - cleanup_succeeded
+  - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -1679,7 +1800,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_target
   - open_pr
   - phases_implemented
@@ -1687,12 +1810,68 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
+  - review_path
+  - review_verdict
+  - run_mode
+  - run_name
+  - selected_lenses
+  - source_dir
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced:
+  - ci_timed_out_loop_count
+- step: handle_no_ci_runs
+  available:
+  - annotated_diff_path
+  - arch_lenses
+  - audit
+  - auto_merge
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_timed_out_loop_count
+  - claimed
+  - cleanup_succeeded
+  - conflict_escalation_required
+  - depth
+  - diff_metrics_path
+  - fixes_applied
+  - hunk_ranges_path
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - lens_context_paths
+  - local_review_rounds
+  - max_parallel
+  - merge_fix_count
+  - merge_target
+  - open_pr
+  - phases_implemented
+  - plan_path
+  - pr_number
+  - pr_url
+  - prep_path
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_loop_count
+  - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -1718,9 +1897,12 @@ dataflow:
   - ci_conclusion
   - ci_event
   - ci_failed_jobs
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
+  - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -1730,7 +1912,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_target
   - open_pr
   - phases_implemented
@@ -1738,12 +1922,12 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -1770,9 +1954,12 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
+  - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -1782,7 +1969,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_target
   - open_pr
   - phases_implemented
@@ -1790,12 +1979,12 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -1823,9 +2012,12 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
+  - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -1835,7 +2027,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_target
   - open_pr
   - phases_implemented
@@ -1843,12 +2037,12 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -1875,9 +2069,12 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
+  - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -1887,7 +2084,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_target
   - open_pr
   - phases_implemented
@@ -1895,12 +2094,12 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -1927,9 +2126,12 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
+  - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -1939,7 +2141,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_target
   - open_pr
   - phases_implemented
@@ -1947,12 +2151,12 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -1979,9 +2183,12 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
+  - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -1991,7 +2198,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_target
   - open_pr
   - phases_implemented
@@ -1999,12 +2208,12 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -2031,9 +2240,12 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
+  - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -2043,7 +2255,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_target
   - open_pr
   - phases_implemented
@@ -2051,12 +2265,12 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -2083,9 +2297,12 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
+  - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -2095,7 +2312,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_target
   - open_pr
   - phases_implemented
@@ -2103,12 +2322,12 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -2140,9 +2359,12 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
+  - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -2152,7 +2374,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -2161,13 +2385,13 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
   - queue_available
   - remediation_path
   - remote_url
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -2195,9 +2419,12 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
+  - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -2207,7 +2434,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -2216,13 +2445,13 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
   - queue_available
   - remediation_path
   - remote_url
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -2250,9 +2479,12 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
+  - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -2262,7 +2494,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -2271,13 +2505,13 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
   - queue_available
   - remediation_path
   - remote_url
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -2305,9 +2539,12 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
+  - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -2317,7 +2554,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -2326,13 +2565,13 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
   - queue_available
   - remediation_path
   - remote_url
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -2361,9 +2600,12 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
+  - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -2373,7 +2615,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -2382,7 +2626,6 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -2390,6 +2633,7 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -2417,9 +2661,12 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
+  - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -2429,7 +2676,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -2438,7 +2687,6 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -2446,6 +2694,7 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -2474,9 +2723,12 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
+  - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -2486,7 +2738,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -2495,7 +2749,6 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -2503,6 +2756,7 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -2531,9 +2785,12 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
+  - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -2543,7 +2800,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -2552,7 +2811,6 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -2560,6 +2818,7 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -2588,9 +2847,12 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
+  - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -2600,7 +2862,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -2609,7 +2873,6 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -2617,6 +2880,7 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -2645,9 +2909,12 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
+  - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -2657,7 +2924,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -2666,7 +2935,6 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -2674,6 +2942,7 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -2704,10 +2973,12 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -2717,7 +2988,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -2726,7 +2999,6 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -2734,6 +3006,134 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
+  - review_path
+  - review_verdict
+  - run_mode
+  - run_name
+  - selected_lenses
+  - source_dir
+  - stall_loop_count
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced:
+  - push_error_type
+- step: classify_push_failure
+  available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_loop_count
+  - ci_timed_out_loop_count
+  - claimed
+  - cleanup_succeeded
+  - conflict_escalation_required
+  - depth
+  - diff_metrics_path
+  - fixes_applied
+  - hunk_ranges_path
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - lens_context_paths
+  - local_review_rounds
+  - max_parallel
+  - merge_fix_count
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - phases_implemented
+  - plan_path
+  - pr_number
+  - pr_url
+  - prep_path
+  - push_error_type
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_loop_count
+  - review_max_retries
+  - review_mode
+  - review_path
+  - review_verdict
+  - run_mode
+  - run_name
+  - selected_lenses
+  - source_dir
+  - stall_loop_count
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: wait_dequeue_retry
+  available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_loop_count
+  - ci_timed_out_loop_count
+  - claimed
+  - cleanup_succeeded
+  - conflict_escalation_required
+  - depth
+  - diff_metrics_path
+  - fixes_applied
+  - hunk_ranges_path
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - lens_context_paths
+  - local_review_rounds
+  - max_parallel
+  - merge_fix_count
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - phases_implemented
+  - plan_path
+  - pr_number
+  - pr_url
+  - prep_path
+  - push_error_type
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_loop_count
+  - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -2762,10 +3162,12 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -2775,7 +3177,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -2784,7 +3188,7 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
+  - push_error_type
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -2792,6 +3196,7 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -2822,10 +3227,12 @@ dataflow:
   - ci_event
   - ci_failed_jobs
   - ci_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -2835,7 +3242,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -2844,7 +3253,7 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
+  - push_error_type
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -2852,6 +3261,7 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -2882,10 +3292,12 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -2895,7 +3307,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -2904,7 +3318,7 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
+  - push_error_type
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -2912,6 +3326,7 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -2941,10 +3356,12 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -2954,7 +3371,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -2963,7 +3382,7 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
+  - push_error_type
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -2971,6 +3390,7 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -3000,10 +3420,12 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -3013,7 +3435,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -3022,7 +3446,7 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
+  - push_error_type
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -3030,6 +3454,7 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -3059,10 +3484,12 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -3072,7 +3499,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -3081,7 +3510,7 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
+  - push_error_type
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -3089,6 +3518,7 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -3118,10 +3548,12 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -3131,7 +3563,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -3140,7 +3574,7 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
+  - push_error_type
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -3148,6 +3582,7 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -3177,10 +3612,12 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -3190,7 +3627,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -3199,7 +3638,7 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
+  - push_error_type
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -3207,6 +3646,7 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -3238,10 +3678,12 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -3251,7 +3693,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -3260,7 +3704,7 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
+  - push_error_type
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -3268,6 +3712,7 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -3297,10 +3742,12 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -3310,7 +3757,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -3319,7 +3768,7 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
+  - push_error_type
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -3327,6 +3776,7 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -3356,10 +3806,12 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -3369,7 +3821,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -3378,7 +3832,7 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
+  - push_error_type
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -3386,6 +3840,7 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -3415,10 +3870,12 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -3428,7 +3885,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -3437,7 +3896,7 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
+  - push_error_type
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -3445,6 +3904,7 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -3474,10 +3934,12 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -3487,7 +3949,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -3496,7 +3960,7 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
+  - push_error_type
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -3504,6 +3968,7 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -3533,10 +3998,12 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -3546,7 +4013,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -3555,7 +4024,7 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
+  - push_error_type
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -3563,6 +4032,7 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -3594,10 +4064,12 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -3607,7 +4079,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -3616,7 +4090,7 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
+  - push_error_type
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -3624,6 +4098,7 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -3653,10 +4128,12 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -3666,7 +4143,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -3675,7 +4154,7 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
+  - push_error_type
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -3683,6 +4162,7 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -3712,10 +4192,12 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
   - depth
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -3725,7 +4207,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -3734,7 +4218,7 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
+  - push_error_type
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -3742,6 +4226,7 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -3773,11 +4258,13 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
   - depth
   - diagnosis_path
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -3787,7 +4274,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -3796,7 +4285,7 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
+  - push_error_type
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -3804,6 +4293,7 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -3835,11 +4325,13 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
   - depth
   - diagnosis_path
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -3849,7 +4341,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -3858,7 +4352,7 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
+  - push_error_type
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -3866,6 +4360,7 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -3895,11 +4390,13 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
   - depth
   - diagnosis_path
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -3909,7 +4406,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -3918,7 +4417,7 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
+  - push_error_type
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -3926,6 +4425,7 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -3955,11 +4455,13 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
   - depth
   - diagnosis_path
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -3969,7 +4471,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -3978,7 +4482,7 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
+  - push_error_type
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -3986,6 +4490,7 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -4015,11 +4520,13 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
   - depth
   - diagnosis_path
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -4029,7 +4536,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -4038,7 +4547,7 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
+  - push_error_type
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -4046,6 +4555,7 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -4077,11 +4587,13 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
   - depth
   - diagnosis_path
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -4091,7 +4603,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -4100,7 +4614,7 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
+  - push_error_type
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -4108,6 +4622,7 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -4137,11 +4652,13 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
   - depth
   - diagnosis_path
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -4151,7 +4668,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -4160,7 +4679,7 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
+  - push_error_type
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -4168,6 +4687,7 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -4197,11 +4717,13 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
   - depth
   - diagnosis_path
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -4211,7 +4733,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -4220,7 +4744,7 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
+  - push_error_type
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -4228,6 +4752,7 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -4257,11 +4782,13 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
   - depth
   - diagnosis_path
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -4271,7 +4798,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -4280,7 +4809,7 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
+  - push_error_type
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -4288,6 +4817,7 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -4317,11 +4847,13 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
   - depth
   - diagnosis_path
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -4331,7 +4863,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -4340,7 +4874,7 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
+  - push_error_type
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -4348,6 +4882,7 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -4377,11 +4912,13 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
   - depth
   - diagnosis_path
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -4391,7 +4928,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -4400,7 +4939,7 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
+  - push_error_type
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -4408,6 +4947,7 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -4437,11 +4977,13 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
   - depth
   - diagnosis_path
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -4451,7 +4993,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -4460,7 +5004,7 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
+  - push_error_type
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -4468,6 +5012,7 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode
@@ -4497,11 +5042,13 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
   - depth
   - diagnosis_path
+  - diff_metrics_path
   - fixes_applied
   - hunk_ranges_path
   - implementation_ref
@@ -4511,7 +5058,9 @@ dataflow:
   - issue_title
   - issue_url
   - lens_context_paths
+  - local_review_rounds
   - max_parallel
+  - merge_fix_count
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -4520,7 +5069,7 @@ dataflow:
   - pr_number
   - pr_url
   - prep_path
-  - proposed_branch
+  - push_error_type
   - queue_available
   - queue_pr_state
   - remediation_path
@@ -4528,6 +5077,7 @@ dataflow:
   - review_approach
   - review_loop_count
   - review_max_retries
+  - review_mode
   - review_path
   - review_verdict
   - run_mode

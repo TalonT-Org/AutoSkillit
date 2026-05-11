@@ -1,0 +1,138 @@
+{
+  "generated_at": "2026-05-11T00:54:58.504538+00:00",
+  "recipe_source_hash": "sha256:80f5de286ec555b43df482eeee47852952b99dea1be9a076f51a702b20044365",
+  "bundled_manifest_version": "0.1.0",
+  "skill_hashes": {},
+  "skills": {},
+  "dataflow": [
+    {
+      "step": "begin_archival",
+      "available": [
+        "base_branch",
+        "pr_url",
+        "research_dir",
+        "worktree_path"
+      ],
+      "required": [],
+      "produced": []
+    },
+    {
+      "step": "capture_experiment_branch",
+      "available": [
+        "base_branch",
+        "pr_url",
+        "research_dir",
+        "worktree_path"
+      ],
+      "required": [],
+      "produced": [
+        "experiment_branch"
+      ]
+    },
+    {
+      "step": "create_artifact_branch",
+      "available": [
+        "base_branch",
+        "experiment_branch",
+        "pr_url",
+        "research_dir",
+        "worktree_path"
+      ],
+      "required": [],
+      "produced": [
+        "artifact_branch"
+      ]
+    },
+    {
+      "step": "open_artifact_pr",
+      "available": [
+        "artifact_branch",
+        "base_branch",
+        "experiment_branch",
+        "pr_url",
+        "research_dir",
+        "worktree_path"
+      ],
+      "required": [],
+      "produced": [
+        "artifact_pr_url"
+      ]
+    },
+    {
+      "step": "tag_experiment_branch",
+      "available": [
+        "artifact_branch",
+        "artifact_pr_url",
+        "base_branch",
+        "experiment_branch",
+        "pr_url",
+        "research_dir",
+        "worktree_path"
+      ],
+      "required": [],
+      "produced": [
+        "archive_tag"
+      ]
+    },
+    {
+      "step": "close_experiment_pr",
+      "available": [
+        "archive_tag",
+        "artifact_branch",
+        "artifact_pr_url",
+        "base_branch",
+        "experiment_branch",
+        "pr_url",
+        "research_dir",
+        "worktree_path"
+      ],
+      "required": [],
+      "produced": []
+    },
+    {
+      "step": "patch_token_summary",
+      "available": [
+        "archive_tag",
+        "artifact_branch",
+        "artifact_pr_url",
+        "base_branch",
+        "experiment_branch",
+        "pr_url",
+        "research_dir",
+        "worktree_path"
+      ],
+      "required": [],
+      "produced": []
+    },
+    {
+      "step": "research_complete",
+      "available": [
+        "archive_tag",
+        "artifact_branch",
+        "artifact_pr_url",
+        "base_branch",
+        "experiment_branch",
+        "pr_url",
+        "research_dir",
+        "worktree_path"
+      ],
+      "required": [],
+      "produced": []
+    },
+    {
+      "step": "escalate_stop",
+      "available": [
+        "archive_tag",
+        "artifact_branch",
+        "artifact_pr_url",
+        "base_branch",
+        "experiment_branch",
+        "pr_url",
+        "research_dir",
+        "worktree_path"
+      ],
+      "required": [],
+      "produced": []
+    }
+  ]
+}

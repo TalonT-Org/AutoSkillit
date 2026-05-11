@@ -1,0 +1,170 @@
+{
+  "generated_at": "2026-05-11T00:54:58.415237+00:00",
+  "recipe_source_hash": "sha256:279302789aaccfa1e4b8663bd8c9896b95af4ece9022f5c001959ac0f7e0b23a",
+  "bundled_manifest_version": "0.1.0",
+  "skill_hashes": {},
+  "skills": {
+    "audit-tests": {
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "audit_report_path",
+          "type": "file_path"
+        }
+      ],
+      "expected_output_patterns": [
+        "audit_report_path\\s*=\\s*\\S+"
+      ],
+      "pattern_examples": [
+        "audit_report_path = /tmp/autoskillit/audit-tests/test_audit_2026-04-28_120000.md\n%%ORDER_UP%%"
+      ],
+      "write_behavior": "always"
+    },
+    "validate-audit": {
+      "inputs": [
+        {
+          "name": "audit_report_path",
+          "type": "file_path",
+          "required": false,
+          "recommended": false
+        }
+      ],
+      "outputs": [
+        {
+          "name": "validated_report_path",
+          "type": "file_path"
+        },
+        {
+          "name": "verdict",
+          "type": "string"
+        }
+      ],
+      "expected_output_patterns": [
+        "validated_report_path\\s*=\\s*\\S+",
+        "verdict\\s*=\\s*\\S+"
+      ],
+      "pattern_examples": [
+        "validated_report_path = /tmp/autoskillit/validate-audit-2026-04-28_120000/validated_report_tests.md\nverdict = validated"
+      ],
+      "write_behavior": "conditional",
+      "write_expected_when": [
+        "verdict\\s*=\\s*validated"
+      ]
+    },
+    "file-audit-issues": {
+      "inputs": [
+        {
+          "name": "run_dir",
+          "type": "file_path",
+          "required": false,
+          "recommended": false
+        }
+      ],
+      "outputs": [
+        {
+          "name": "issue_urls",
+          "type": "string"
+        },
+        {
+          "name": "issue_count",
+          "type": "integer"
+        }
+      ],
+      "expected_output_patterns": [
+        "issue_urls\\s*=",
+        "issue_count\\s*=\\s*\\d+"
+      ],
+      "pattern_examples": [
+        "issue_urls = https://github.com/org/repo/issues/100,https://github.com/org/repo/issues/101\nissue_count = 2"
+      ],
+      "write_behavior": "always"
+    }
+  },
+  "dataflow": [
+    {
+      "step": "checkout",
+      "available": [
+        "branch",
+        "max_parallel",
+        "workspace"
+      ],
+      "required": [],
+      "produced": []
+    },
+    {
+      "step": "init_audit_run",
+      "available": [
+        "branch",
+        "max_parallel",
+        "workspace"
+      ],
+      "required": [],
+      "produced": [
+        "audit_run_dir"
+      ]
+    },
+    {
+      "step": "run_audits",
+      "available": [
+        "audit_run_dir",
+        "branch",
+        "max_parallel",
+        "workspace"
+      ],
+      "required": [],
+      "produced": []
+    },
+    {
+      "step": "validate_audits",
+      "available": [
+        "audit_run_dir",
+        "branch",
+        "max_parallel",
+        "workspace"
+      ],
+      "required": [],
+      "produced": [],
+      "positional_args": 1
+    },
+    {
+      "step": "create_issues",
+      "available": [
+        "audit_run_dir",
+        "branch",
+        "max_parallel",
+        "workspace"
+      ],
+      "required": [],
+      "produced": [
+        "issue_urls",
+        "issue_count"
+      ]
+    },
+    {
+      "step": "done",
+      "available": [
+        "audit_run_dir",
+        "branch",
+        "issue_count",
+        "issue_urls",
+        "max_parallel",
+        "workspace"
+      ],
+      "required": [],
+      "produced": []
+    },
+    {
+      "step": "escalate_stop",
+      "available": [
+        "audit_run_dir",
+        "branch",
+        "issue_count",
+        "issue_urls",
+        "max_parallel",
+        "workspace"
+      ],
+      "required": [],
+      "produced": []
+    }
+  ]
+}

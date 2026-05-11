@@ -1,4 +1,5 @@
-generated_at: '2026-04-25T21:57:00.000000+00:00'
+generated_at: '2026-05-11T00:54:58.464133+00:00'
+recipe_source_hash: sha256:0be43b2997c9d6d9deaa6c113612a6c4131b7ac0939452931393a41d25190701
 bundled_manifest_version: 0.1.0
 skill_hashes: {}
 skills:
@@ -7,9 +8,11 @@ skills:
     - name: base_branch
       type: string
       required: true
+      recommended: false
     - name: merge_queue_data_path
       type: file_path
       required: false
+      recommended: false
     outputs:
     - name: pr_order_file
       type: file_path
@@ -28,18 +31,23 @@ skills:
     expected_output_patterns:
     - pr_order_file\s*=\s*.+
     pattern_examples:
-    - 'pr_order_file = /tmp/pr_order.json'
+    - 'pr_order_file = /tmp/pr_order.json
+
+      %%ORDER_UP%%'
   resolve-merge-conflicts:
     inputs:
     - name: worktree_path
       type: directory_path
       required: true
+      recommended: false
     - name: plan_path
       type: file_path
       required: true
+      recommended: false
     - name: base_branch
       type: string
       required: true
+      recommended: false
     outputs:
     - name: worktree_path
       type: directory_path
@@ -54,24 +62,145 @@ skills:
     expected_output_patterns:
     - worktree_path\s*=\s*/.+
     pattern_examples:
-    - 'worktree_path = /tmp/worktrees/impl-foo-20260316'
+    - 'worktree_path = /tmp/worktrees/impl-foo-20260316
+
+      %%ORDER_UP%%'
     write_behavior: conditional
     write_expected_when:
     - conflict_report_path\s*=\s*/.+
+  diagnose-ci:
+    inputs:
+    - name: branch
+      type: string
+      required: true
+      recommended: false
+    - name: run_id
+      type: string
+      required: false
+      recommended: false
+    - name: ci_failed_jobs
+      type: string
+      required: false
+      recommended: false
+    outputs:
+    - name: diagnosis_path
+      type: file_path
+    - name: failure_type
+      type: string
+    - name: failure_subtype
+      type: string
+    - name: is_fixable
+      type: string
+    expected_output_patterns:
+    - diagnosis_path\s*=\s*(?:/.+)?
+    - failure_subtype\s*=\s*(flaky|timing_race|deterministic|fixture|import|env|unknown)
+    pattern_examples:
+    - 'diagnosis_path = /tmp/diagnosis.md
+
+      failure_type = test
+
+      failure_subtype = deterministic
+
+      is_fixable = true
+
+      %%ORDER_UP%%'
+    - 'diagnosis_path = /tmp/diagnosis.md
+
+      failure_type = test
+
+      failure_subtype = flaky
+
+      is_fixable = false
+
+      %%ORDER_UP%%'
+    - "diagnosis_path = \nfailure_type = test\nfailure_subtype = unknown\nis_fixable
+      = false\n%%ORDER_UP%%"
+    - 'diagnosis_path = /tmp/diagnosis.md
+
+      failure_type = test
+
+      failure_subtype = timing_race
+
+      is_fixable = true
+
+      %%ORDER_UP%%'
+    - 'diagnosis_path = /tmp/diagnosis.md
+
+      failure_type = test
+
+      failure_subtype = fixture
+
+      is_fixable = true
+
+      %%ORDER_UP%%'
+    - 'diagnosis_path = /tmp/diagnosis.md
+
+      failure_type = test
+
+      failure_subtype = import
+
+      is_fixable = true
+
+      %%ORDER_UP%%'
+    - 'diagnosis_path = /tmp/diagnosis.md
+
+      failure_type = lint
+
+      failure_subtype = unknown
+
+      is_fixable = true
+
+      %%ORDER_UP%%'
+    - 'diagnosis_path = /tmp/diagnosis.md
+
+      failure_type = build
+
+      failure_subtype = unknown
+
+      is_fixable = true
+
+      %%ORDER_UP%%'
+    - 'diagnosis_path = /tmp/diagnosis.md
+
+      failure_type = type_check
+
+      failure_subtype = unknown
+
+      is_fixable = true
+
+      %%ORDER_UP%%'
+    - 'diagnosis_path = /tmp/diagnosis.md
+
+      failure_type = env
+
+      failure_subtype = env
+
+      is_fixable = false
+
+      %%ORDER_UP%%'
+    - 'diagnosis_path = /tmp/diagnosis.md
+
+      failure_type = unknown
+
+      failure_subtype = unknown
+
+      is_fixable = false
+
+      %%ORDER_UP%%'
+    write_behavior: always
   merge-pr:
     inputs:
     - name: pr_number
       type: string
       required: true
+      recommended: false
     - name: complexity
       type: string
       required: true
+      recommended: false
     outputs:
     - name: merged
       type: string
-      allowed_values:
-        - "true"
-        - "false"
     - name: needs_plan
       type: string
     - name: escalation_required
@@ -89,13 +218,18 @@ skills:
     expected_output_patterns:
     - merged\s*=\s*(true|false)
     pattern_examples:
-    - 'merged = true'
-    - 'merged = false'
+    - 'merged = true
+
+      %%ORDER_UP%%'
+    - 'merged = false
+
+      %%ORDER_UP%%'
   make-plan:
     inputs:
     - name: task
       type: string
       required: true
+      recommended: false
     outputs:
     - name: plan_path
       type: file_path
@@ -104,13 +238,16 @@ skills:
     expected_output_patterns:
     - plan_path\s*=\s*/.+
     pattern_examples:
-    - 'plan_path = /tmp/plan.md'
+    - 'plan_path = /tmp/plan.md
+
+      %%ORDER_UP%%'
     write_behavior: always
   dry-walkthrough:
     inputs:
     - name: plan_path
       type: file_path
       required: true
+      recommended: false
     outputs: []
     expected_output_patterns: []
     pattern_examples: []
@@ -120,6 +257,7 @@ skills:
     - name: plan_path
       type: file_path
       required: true
+      recommended: false
     outputs:
     - name: worktree_path
       type: directory_path
@@ -128,52 +266,82 @@ skills:
     expected_output_patterns:
     - worktree_path\s*=\s*/.+
     pattern_examples:
-    - 'worktree_path = /tmp/worktrees/impl-foo-20260316'
+    - 'worktree_path = /tmp/worktrees/impl-foo-20260316
+
+      %%ORDER_UP%%'
     write_behavior: always
   retry-worktree:
     inputs:
     - name: plan_path
       type: file_path
       required: true
+      recommended: false
     - name: worktree_path
       type: directory_path
       required: true
+      recommended: false
     outputs:
     - name: worktree_path
       type: directory_path
     - name: branch_name
       type: string
+    - name: phases_implemented
+      type: integer
     expected_output_patterns:
     - worktree_path\s*=\s*/.+
     pattern_examples:
-    - 'worktree_path = /tmp/worktrees/impl-foo-20260316'
-    write_behavior: always
+    - 'worktree_path = /tmp/worktrees/impl-foo-20260316
+
+      branch_name = feature/123
+
+      phases_implemented = 2
+
+      %%ORDER_UP%%'
+    write_behavior: conditional
+    write_expected_when:
+    - phases_implemented\s*=\s*[1-9][0-9]*
   resolve-failures:
     inputs:
     - name: worktree_path
       type: directory_path
       required: true
+      recommended: false
     - name: plan_path
       type: file_path
       required: true
+      recommended: false
     - name: base_branch
       type: string
       required: true
-    outputs: []
+      recommended: false
+    - name: diagnosis_path
+      type: file_path
+      required: false
+      recommended: false
+    outputs:
+    - name: verdict
+      type: string
+    - name: fixes_applied
+      type: integer
     expected_output_patterns: []
     pattern_examples: []
-    write_behavior: always
+    write_behavior: conditional
+    write_expected_when:
+    - verdict\s*=\s*real_fix
   audit-impl:
     inputs:
     - name: plan_path
       type: file_path
       required: true
+      recommended: false
     - name: branch_name
       type: string
       required: false
+      recommended: false
     - name: base_branch
       type: string
       required: false
+      recommended: false
     outputs:
     - name: verdict
       type: string
@@ -182,92 +350,126 @@ skills:
     expected_output_patterns:
     - verdict\s*=\s*(GO|NO GO)
     pattern_examples:
-    - 'verdict = GO'
+    - 'verdict = GO
+
+      %%ORDER_UP%%'
     - 'verdict = NO GO
 
-      remediation_path = /tmp/remediation.md'
+      remediation_path = /tmp/remediation.md
+
+      %%ORDER_UP%%'
   open-integration-pr:
     inputs:
     - name: batch_branch
       type: string
       required: true
+      recommended: false
     - name: base_branch
       type: string
       required: true
+      recommended: false
     - name: pr_order_file
       type: file_path
       required: true
+      recommended: false
     - name: audit_verdict
       type: string
       required: false
+      recommended: false
     - name: domain_partitions_path
       type: file_path
       required: false
+      recommended: false
     outputs:
     - name: pr_url
       type: string
     expected_output_patterns:
     - https://github\.com/.*/pull/\d+
     pattern_examples:
-    - 'https://github.com/owner/repo/pull/42'
+    - 'https://github.com/owner/repo/pull/42
+
+      %%ORDER_UP%%'
   review-pr:
     inputs:
     - name: feature_branch
       type: string
       required: true
+      recommended: false
     - name: base_branch
       type: string
       required: true
+      recommended: false
     - name: annotated_diff_path
       type: string
       required: false
+      recommended: true
     - name: hunk_ranges_path
       type: string
       required: false
+      recommended: true
+    - name: diff_metrics_path
+      type: string
+      required: false
+      recommended: false
+    - name: mode
+      type: string
+      required: false
+      recommended: false
     outputs:
     - name: verdict
       type: string
+    - name: local_findings_path
+      type: string
     expected_output_patterns:
-    - verdict\s*=\s*(approved|changes_requested|needs_human)
+    - verdict\s*=\s*(approved|approved_with_comments|changes_requested|needs_human)
+    - (?:%%REVIEW_GATE::(LOOP_REQUIRED|CLEAR)%%|verdict\s*=\s*approved_with_comments)
     pattern_examples:
-    - 'verdict = approved'
-    - 'verdict = changes_requested'
-    - 'verdict = needs_human'
+    - 'verdict = approved
+
+      %%REVIEW_GATE::CLEAR%%
+
+      %%ORDER_UP%%'
+    - 'verdict = approved_with_comments
+
+      %%ORDER_UP%%'
+    - 'verdict = changes_requested
+
+      %%REVIEW_GATE::LOOP_REQUIRED%%
+
+      %%ORDER_UP%%'
+    - 'verdict = needs_human
+
+      %%REVIEW_GATE::CLEAR%%
+
+      %%ORDER_UP%%'
   resolve-review:
     inputs:
     - name: feature_branch
       type: string
       required: true
+      recommended: false
     - name: base_branch
       type: string
       required: true
-    outputs: []
+      recommended: false
+    - name: mode
+      type: string
+      required: false
+      recommended: false
+    outputs:
+    - name: verdict
+      type: string
+    - name: fixes_applied
+      type: integer
+    - name: deferred_observations_path
+      type: string
+    - name: reject_patterns_path
+      type: string
     expected_output_patterns: []
     pattern_examples: []
-    write_behavior: always
-  diagnose-ci:
-    inputs:
-    - name: branch
-      type: string
-      required: true
-    - name: run_id
-      type: string
-      required: false
-    - name: ci_failed_jobs
-      type: string
-      required: false
-    outputs:
-    - name: diagnosis_path
-      type: file_path
-    - name: failure_type
-      type: string
-    - name: is_fixable
-      type: string
-    expected_output_patterns:
-    - diagnosis_path\s*=\s*/.+
-    pattern_examples:
-    - 'diagnosis_path = /tmp/diagnosis.md'
-    write_behavior: always
+    write_behavior: conditional
+    write_expected_when:
+    - verdict\s*=\s*real_fix
 dataflow:
 - step: clone
   available:
@@ -291,10 +493,25 @@ dataflow:
   - work_dir
   required: []
   produced: []
-- step: check_integration_exists
+- step: check_repo_ci_event
   available:
   - audit
   - base_branch
+  - plans_dir
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced:
+  - ci_event
+  - auto_merge_available
+- step: check_integration_exists
+  available:
+  - audit
+  - auto_merge_available
+  - base_branch
+  - ci_event
   - plans_dir
   - remote_url
   - run_name
@@ -305,7 +522,9 @@ dataflow:
 - step: confirm_create_integration
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - ci_event
   - plans_dir
   - remote_url
   - run_name
@@ -316,7 +535,9 @@ dataflow:
 - step: create_persistent_integration
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - ci_event
   - plans_dir
   - remote_url
   - run_name
@@ -327,7 +548,9 @@ dataflow:
 - step: fetch_merge_queue_data
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - ci_event
   - plans_dir
   - remote_url
   - run_name
@@ -339,7 +562,9 @@ dataflow:
 - step: analyze_prs
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - ci_event
   - merge_queue_data_path
   - plans_dir
   - remote_url
@@ -351,11 +576,14 @@ dataflow:
   - pr_order_file
   - batch_branch
   - queue_mode
+  positional_args: 1
 - step: route_by_queue_mode
   available:
   - audit
+  - auto_merge_available
   - base_branch
   - batch_branch
+  - ci_event
   - merge_queue_data_path
   - plans_dir
   - pr_order_file
@@ -369,8 +597,10 @@ dataflow:
 - step: get_first_pr_number
   available:
   - audit
+  - auto_merge_available
   - base_branch
   - batch_branch
+  - ci_event
   - merge_queue_data_path
   - plans_dir
   - pr_order_file
@@ -385,9 +615,11 @@ dataflow:
 - step: enqueue_current_pr
   available:
   - audit
+  - auto_merge_available
   - base_branch
-  - current_pr_number
   - batch_branch
+  - ci_event
+  - current_pr_number
   - merge_queue_data_path
   - plans_dir
   - pr_order_file
@@ -401,9 +633,11 @@ dataflow:
 - step: wait_queue_pr
   available:
   - audit
+  - auto_merge_available
   - base_branch
-  - current_pr_number
   - batch_branch
+  - ci_event
+  - current_pr_number
   - merge_queue_data_path
   - plans_dir
   - pr_order_file
@@ -415,12 +649,52 @@ dataflow:
   required: []
   produced:
   - queue_pr_state
+- step: check_eject_limit
+  available:
+  - audit
+  - auto_merge_available
+  - base_branch
+  - batch_branch
+  - ci_event
+  - current_pr_number
+  - merge_queue_data_path
+  - plans_dir
+  - pr_order_file
+  - queue_mode
+  - queue_pr_state
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced: []
+- step: check_dropped_healthy_loop
+  available:
+  - audit
+  - auto_merge_available
+  - base_branch
+  - batch_branch
+  - ci_event
+  - current_pr_number
+  - merge_queue_data_path
+  - plans_dir
+  - pr_order_file
+  - queue_mode
+  - queue_pr_state
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced: []
 - step: get_ejected_pr_branch
   available:
   - audit
+  - auto_merge_available
   - base_branch
-  - current_pr_number
   - batch_branch
+  - ci_event
+  - current_pr_number
   - merge_queue_data_path
   - plans_dir
   - pr_order_file
@@ -436,10 +710,12 @@ dataflow:
 - step: attempt_cheap_rebase
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_event
   - current_pr_number
   - ejected_pr_branch
-  - batch_branch
   - merge_queue_data_path
   - plans_dir
   - pr_order_file
@@ -454,10 +730,12 @@ dataflow:
 - step: resolve_ejected_conflicts
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_event
   - current_pr_number
   - ejected_pr_branch
-  - batch_branch
   - merge_queue_data_path
   - plans_dir
   - pr_order_file
@@ -470,17 +748,65 @@ dataflow:
   required: []
   produced:
   - conflict_escalation_required
+  positional_args: 2
 - step: push_ejected_fix
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_event
   - conflict_escalation_required
   - current_pr_number
   - ejected_pr_branch
-  - batch_branch
   - merge_queue_data_path
   - plans_dir
   - pr_order_file
+  - queue_mode
+  - queue_pr_state
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced:
+  - push_error_type
+- step: classify_push_failure
+  available:
+  - audit
+  - auto_merge_available
+  - base_branch
+  - batch_branch
+  - ci_event
+  - conflict_escalation_required
+  - current_pr_number
+  - ejected_pr_branch
+  - merge_queue_data_path
+  - plans_dir
+  - pr_order_file
+  - push_error_type
+  - queue_mode
+  - queue_pr_state
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced: []
+- step: wait_dequeue_retry
+  available:
+  - audit
+  - auto_merge_available
+  - base_branch
+  - batch_branch
+  - ci_event
+  - conflict_escalation_required
+  - current_pr_number
+  - ejected_pr_branch
+  - merge_queue_data_path
+  - plans_dir
+  - pr_order_file
+  - push_error_type
   - queue_mode
   - queue_pr_state
   - remote_url
@@ -492,14 +818,17 @@ dataflow:
 - step: ci_watch_post_queue_fix
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_event
   - conflict_escalation_required
   - current_pr_number
   - ejected_pr_branch
-  - batch_branch
   - merge_queue_data_path
   - plans_dir
   - pr_order_file
+  - push_error_type
   - queue_mode
   - queue_pr_state
   - remote_url
@@ -507,18 +836,51 @@ dataflow:
   - source_dir
   - work_dir
   required: []
-  produced: []
-- step: reenter_queue
+  produced:
+  - ci_conclusion
+  - ci_failed_jobs
+- step: check_ci_post_queue_loop
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
   - conflict_escalation_required
   - current_pr_number
   - ejected_pr_branch
-  - batch_branch
   - merge_queue_data_path
   - plans_dir
   - pr_order_file
+  - push_error_type
+  - queue_mode
+  - queue_pr_state
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced:
+  - ci_post_queue_loop_count
+- step: reenter_queue
+  available:
+  - audit
+  - auto_merge_available
+  - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_escalation_required
+  - current_pr_number
+  - ejected_pr_branch
+  - merge_queue_data_path
+  - plans_dir
+  - pr_order_file
+  - push_error_type
   - queue_mode
   - queue_pr_state
   - remote_url
@@ -530,14 +892,20 @@ dataflow:
 - step: advance_queue_pr
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
   - conflict_escalation_required
   - current_pr_number
   - ejected_pr_branch
-  - batch_branch
   - merge_queue_data_path
   - plans_dir
   - pr_order_file
+  - push_error_type
   - queue_mode
   - queue_pr_state
   - remote_url
@@ -550,14 +918,20 @@ dataflow:
 - step: get_next_pr_branch
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
   - conflict_escalation_required
   - current_pr_number
   - ejected_pr_branch
-  - batch_branch
   - merge_queue_data_path
   - plans_dir
   - pr_order_file
+  - push_error_type
   - queue_mode
   - queue_pr_state
   - remote_url
@@ -570,15 +944,21 @@ dataflow:
 - step: proactive_rebase_next_pr
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
   - conflict_escalation_required
   - current_pr_number
   - ejected_pr_branch
-  - batch_branch
   - merge_queue_data_path
   - next_pr_branch
   - plans_dir
   - pr_order_file
+  - push_error_type
   - queue_mode
   - queue_pr_state
   - remote_url
@@ -590,15 +970,21 @@ dataflow:
 - step: resolve_proactive_rebase_conflicts
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
   - conflict_escalation_required
   - current_pr_number
   - ejected_pr_branch
-  - batch_branch
   - merge_queue_data_path
   - next_pr_branch
   - plans_dir
   - pr_order_file
+  - push_error_type
   - queue_mode
   - queue_pr_state
   - remote_url
@@ -607,20 +993,28 @@ dataflow:
   - work_dir
   required: []
   produced:
+  - conflict_escalation_required
   - conflict_escalation_reason
+  positional_args: 2
 - step: push_rebased_next_pr
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
   - conflict_escalation_reason
   - conflict_escalation_required
   - current_pr_number
   - ejected_pr_branch
-  - batch_branch
   - merge_queue_data_path
   - next_pr_branch
   - plans_dir
   - pr_order_file
+  - push_error_type
   - queue_mode
   - queue_pr_state
   - remote_url
@@ -632,14 +1026,22 @@ dataflow:
 - step: diagnose_queue_ci
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_escalation_reason
   - conflict_escalation_required
   - current_pr_number
   - ejected_pr_branch
-  - batch_branch
   - merge_queue_data_path
+  - next_pr_branch
   - plans_dir
   - pr_order_file
+  - push_error_type
   - queue_mode
   - queue_pr_state
   - remote_url
@@ -649,17 +1051,27 @@ dataflow:
   required: []
   produced:
   - diagnosis_path
+  positional_args: 4
 - step: reenroll_stalled_queue_pr
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_escalation_reason
   - conflict_escalation_required
   - current_pr_number
+  - diagnosis_path
   - ejected_pr_branch
-  - batch_branch
   - merge_queue_data_path
+  - next_pr_branch
   - plans_dir
   - pr_order_file
+  - push_error_type
   - queue_mode
   - queue_pr_state
   - remote_url
@@ -668,19 +1080,58 @@ dataflow:
   - work_dir
   required: []
   produced: []
+- step: check_queue_stall_loop
+  available:
+  - audit
+  - auto_merge_available
+  - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_escalation_reason
+  - conflict_escalation_required
+  - current_pr_number
+  - diagnosis_path
+  - ejected_pr_branch
+  - merge_queue_data_path
+  - next_pr_branch
+  - plans_dir
+  - pr_order_file
+  - push_error_type
+  - queue_mode
+  - queue_pr_state
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced:
+  - queue_stall_loop_count
 - step: create_batch_branch
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_escalation_reason
   - conflict_escalation_required
   - current_pr_number
+  - diagnosis_path
   - ejected_pr_branch
-  - batch_branch
   - merge_queue_data_path
+  - next_pr_branch
   - plans_dir
   - pr_order_file
+  - push_error_type
   - queue_mode
   - queue_pr_state
+  - queue_stall_loop_count
   - remote_url
   - run_name
   - source_dir
@@ -690,16 +1141,26 @@ dataflow:
 - step: publish_batch_branch
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_escalation_reason
   - conflict_escalation_required
   - current_pr_number
+  - diagnosis_path
   - ejected_pr_branch
-  - batch_branch
   - merge_queue_data_path
+  - next_pr_branch
   - plans_dir
   - pr_order_file
+  - push_error_type
   - queue_mode
   - queue_pr_state
+  - queue_stall_loop_count
   - remote_url
   - run_name
   - source_dir
@@ -709,16 +1170,26 @@ dataflow:
 - step: merge_pr
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_escalation_reason
   - conflict_escalation_required
   - current_pr_number
+  - diagnosis_path
   - ejected_pr_branch
-  - batch_branch
   - merge_queue_data_path
+  - next_pr_branch
   - plans_dir
   - pr_order_file
+  - push_error_type
   - queue_mode
   - queue_pr_state
+  - queue_stall_loop_count
   - remote_url
   - run_name
   - source_dir
@@ -730,22 +1201,35 @@ dataflow:
   - escalation_reason
   - task
   - current_pr_number
+  - merged
+  positional_args: 2
 - step: plan
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_escalation_reason
   - conflict_escalation_required
   - current_pr_number
+  - diagnosis_path
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - batch_branch
   - merge_queue_data_path
+  - merged
   - needs_plan
+  - next_pr_branch
   - plans_dir
   - pr_order_file
+  - push_error_type
   - queue_mode
   - queue_pr_state
+  - queue_stall_loop_count
   - remote_url
   - run_name
   - source_dir
@@ -757,20 +1241,31 @@ dataflow:
 - step: verify
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_escalation_reason
   - conflict_escalation_required
   - current_pr_number
+  - diagnosis_path
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - batch_branch
   - merge_queue_data_path
+  - merged
   - needs_plan
+  - next_pr_branch
   - plans_dir
   - pr_order_file
   - pr_plan_path
+  - push_error_type
   - queue_mode
   - queue_pr_state
+  - queue_stall_loop_count
   - remote_url
   - run_name
   - source_dir
@@ -782,20 +1277,31 @@ dataflow:
 - step: implement
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_escalation_reason
   - conflict_escalation_required
   - current_pr_number
+  - diagnosis_path
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - batch_branch
   - merge_queue_data_path
+  - merged
   - needs_plan
+  - next_pr_branch
   - plans_dir
   - pr_order_file
   - pr_plan_path
+  - push_error_type
   - queue_mode
   - queue_pr_state
+  - queue_stall_loop_count
   - remote_url
   - run_name
   - source_dir
@@ -809,20 +1315,31 @@ dataflow:
 - step: retry_worktree
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_escalation_reason
   - conflict_escalation_required
   - current_pr_number
+  - diagnosis_path
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - batch_branch
   - merge_queue_data_path
+  - merged
   - needs_plan
+  - next_pr_branch
   - plans_dir
   - pr_order_file
   - pr_plan_path
+  - push_error_type
   - queue_mode
   - queue_pr_state
+  - queue_stall_loop_count
   - remote_url
   - run_name
   - source_dir
@@ -838,20 +1355,31 @@ dataflow:
 - step: test
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_escalation_reason
   - conflict_escalation_required
   - current_pr_number
+  - diagnosis_path
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - batch_branch
   - merge_queue_data_path
+  - merged
   - needs_plan
+  - next_pr_branch
   - plans_dir
   - pr_order_file
   - pr_plan_path
+  - push_error_type
   - queue_mode
   - queue_pr_state
+  - queue_stall_loop_count
   - remote_url
   - run_name
   - source_dir
@@ -864,20 +1392,31 @@ dataflow:
 - step: push_worktree_branch
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_escalation_reason
   - conflict_escalation_required
   - current_pr_number
+  - diagnosis_path
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - batch_branch
   - merge_queue_data_path
+  - merged
   - needs_plan
+  - next_pr_branch
   - plans_dir
   - pr_order_file
   - pr_plan_path
+  - push_error_type
   - queue_mode
   - queue_pr_state
+  - queue_stall_loop_count
   - remote_url
   - run_name
   - source_dir
@@ -890,20 +1429,31 @@ dataflow:
 - step: create_conflict_pr
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_escalation_reason
   - conflict_escalation_required
   - current_pr_number
+  - diagnosis_path
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - batch_branch
   - merge_queue_data_path
+  - merged
   - needs_plan
+  - next_pr_branch
   - plans_dir
   - pr_order_file
   - pr_plan_path
+  - push_error_type
   - queue_mode
   - queue_pr_state
+  - queue_stall_loop_count
   - remote_url
   - run_name
   - source_dir
@@ -917,21 +1467,32 @@ dataflow:
 - step: wait_for_conflict_ci
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
   - current_pr_number
+  - diagnosis_path
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - batch_branch
   - merge_queue_data_path
+  - merged
   - needs_plan
+  - next_pr_branch
   - plans_dir
   - pr_order_file
   - pr_plan_path
+  - push_error_type
   - queue_mode
   - queue_pr_state
+  - queue_stall_loop_count
   - remote_url
   - run_name
   - source_dir
@@ -941,24 +1502,75 @@ dataflow:
   - worktree_path
   required: []
   produced: []
-- step: merge_conflict_pr
+- step: check_conflict_ci_loop
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
   - current_pr_number
+  - diagnosis_path
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - batch_branch
   - merge_queue_data_path
+  - merged
   - needs_plan
+  - next_pr_branch
   - plans_dir
   - pr_order_file
   - pr_plan_path
+  - push_error_type
   - queue_mode
   - queue_pr_state
+  - queue_stall_loop_count
+  - remote_url
+  - run_name
+  - source_dir
+  - task
+  - work_dir
+  - worktree_branch_name
+  - worktree_path
+  required: []
+  produced:
+  - conflict_ci_loop_count
+- step: merge_conflict_pr
+  available:
+  - audit
+  - auto_merge_available
+  - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_ci_loop_count
+  - conflict_escalation_reason
+  - conflict_escalation_required
+  - conflict_pr_number
+  - current_pr_number
+  - diagnosis_path
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
+  - merge_queue_data_path
+  - merged
+  - needs_plan
+  - next_pr_branch
+  - plans_dir
+  - pr_order_file
+  - pr_plan_path
+  - push_error_type
+  - queue_mode
+  - queue_pr_state
+  - queue_stall_loop_count
   - remote_url
   - run_name
   - source_dir
@@ -971,21 +1583,33 @@ dataflow:
 - step: fix
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_ci_loop_count
+  - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
   - current_pr_number
+  - diagnosis_path
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - batch_branch
   - merge_queue_data_path
+  - merged
   - needs_plan
+  - next_pr_branch
   - plans_dir
   - pr_order_file
   - pr_plan_path
+  - push_error_type
   - queue_mode
   - queue_pr_state
+  - queue_stall_loop_count
   - remote_url
   - run_name
   - source_dir
@@ -995,29 +1619,45 @@ dataflow:
   - worktree_path
   required:
   - plan_path
-  produced: []
+  produced:
+  - verdict
+  - fixes_applied
 - step: next_part_or_next_pr
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_ci_loop_count
+  - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
   - current_pr_number
+  - diagnosis_path
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - batch_branch
+  - fixes_applied
   - merge_queue_data_path
+  - merged
   - needs_plan
+  - next_pr_branch
   - plans_dir
   - pr_order_file
   - pr_plan_path
+  - push_error_type
   - queue_mode
   - queue_pr_state
+  - queue_stall_loop_count
   - remote_url
   - run_name
   - source_dir
   - task
+  - verdict
   - work_dir
   - worktree_branch_name
   - worktree_path
@@ -1026,79 +1666,80 @@ dataflow:
 - step: push_batch_branch
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_ci_loop_count
+  - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
   - current_pr_number
+  - diagnosis_path
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - batch_branch
+  - fixes_applied
   - merge_queue_data_path
+  - merged
   - needs_plan
+  - next_pr_branch
   - plans_dir
   - pr_order_file
   - pr_plan_path
+  - push_error_type
   - queue_mode
   - queue_pr_state
+  - queue_stall_loop_count
   - remote_url
   - run_name
   - source_dir
   - task
+  - verdict
   - work_dir
   - worktree_branch_name
   - worktree_path
   required: []
   produced: []
-- step: collect_artifacts
+- step: collect_and_check_impl_plans
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_ci_loop_count
+  - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
   - current_pr_number
+  - diagnosis_path
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - batch_branch
+  - fixes_applied
   - merge_queue_data_path
+  - merged
   - needs_plan
+  - next_pr_branch
   - plans_dir
   - pr_order_file
   - pr_plan_path
+  - push_error_type
   - queue_mode
   - queue_pr_state
+  - queue_stall_loop_count
   - remote_url
   - run_name
   - source_dir
   - task
-  - work_dir
-  - worktree_branch_name
-  - worktree_path
-  required: []
-  produced: []
-- step: check_impl_plans
-  available:
-  - audit
-  - base_branch
-  - conflict_escalation_required
-  - conflict_pr_number
-  - current_pr_number
-  - ejected_pr_branch
-  - escalation_reason
-  - escalation_required
-  - batch_branch
-  - merge_queue_data_path
-  - needs_plan
-  - plans_dir
-  - pr_order_file
-  - pr_plan_path
-  - queue_mode
-  - queue_pr_state
-  - remote_url
-  - run_name
-  - source_dir
-  - task
+  - verdict
   - work_dir
   - worktree_branch_name
   - worktree_path
@@ -1107,25 +1748,39 @@ dataflow:
 - step: audit_impl
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_ci_loop_count
+  - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
   - current_pr_number
+  - diagnosis_path
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - batch_branch
+  - fixes_applied
   - merge_queue_data_path
+  - merged
   - needs_plan
+  - next_pr_branch
   - plans_dir
   - pr_order_file
   - pr_plan_path
+  - push_error_type
   - queue_mode
   - queue_pr_state
+  - queue_stall_loop_count
   - remote_url
   - run_name
   - source_dir
   - task
+  - verdict
   - work_dir
   - worktree_branch_name
   - worktree_path
@@ -1133,24 +1788,38 @@ dataflow:
   produced:
   - verdict
   - remediation_path
+  positional_args: 2
 - step: remediate
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_ci_loop_count
+  - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
   - current_pr_number
+  - diagnosis_path
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - batch_branch
+  - fixes_applied
   - merge_queue_data_path
+  - merged
   - needs_plan
+  - next_pr_branch
   - plans_dir
   - pr_order_file
   - pr_plan_path
+  - push_error_type
   - queue_mode
   - queue_pr_state
+  - queue_stall_loop_count
   - remediation_path
   - remote_url
   - run_name
@@ -1165,21 +1834,34 @@ dataflow:
 - step: compute_domain_partitions
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_ci_loop_count
+  - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
   - current_pr_number
+  - diagnosis_path
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - batch_branch
+  - fixes_applied
   - merge_queue_data_path
+  - merged
   - needs_plan
+  - next_pr_branch
   - plans_dir
   - pr_order_file
   - pr_plan_path
+  - push_error_type
   - queue_mode
   - queue_pr_state
+  - queue_stall_loop_count
   - remediation_path
   - remote_url
   - run_name
@@ -1195,22 +1877,35 @@ dataflow:
 - step: open_integration_pr
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_ci_loop_count
+  - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
   - current_pr_number
+  - diagnosis_path
   - domain_partitions_path
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - batch_branch
+  - fixes_applied
   - merge_queue_data_path
+  - merged
   - needs_plan
+  - next_pr_branch
   - plans_dir
   - pr_order_file
   - pr_plan_path
+  - push_error_type
   - queue_mode
   - queue_pr_state
+  - queue_stall_loop_count
   - remediation_path
   - remote_url
   - run_name
@@ -1223,26 +1918,40 @@ dataflow:
   required: []
   produced:
   - pr_url
+  positional_args: 2
 - step: wait_for_review_pr_mergeability
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_ci_loop_count
+  - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
   - current_pr_number
+  - diagnosis_path
   - domain_partitions_path
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - batch_branch
+  - fixes_applied
   - merge_queue_data_path
+  - merged
   - needs_plan
+  - next_pr_branch
   - plans_dir
   - pr_order_file
   - pr_plan_path
   - pr_url
+  - push_error_type
   - queue_mode
   - queue_pr_state
+  - queue_stall_loop_count
   - remediation_path
   - remote_url
   - run_name
@@ -1258,23 +1967,36 @@ dataflow:
 - step: check_mergeability
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_ci_loop_count
+  - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
   - current_pr_number
+  - diagnosis_path
   - domain_partitions_path
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - batch_branch
+  - fixes_applied
   - merge_queue_data_path
+  - merged
   - needs_plan
+  - next_pr_branch
   - plans_dir
   - pr_order_file
   - pr_plan_path
   - pr_url
+  - push_error_type
   - queue_mode
   - queue_pr_state
+  - queue_stall_loop_count
   - remediation_path
   - remote_url
   - review_pr_number
@@ -1290,23 +2012,36 @@ dataflow:
 - step: resolve_integration_conflicts
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_ci_loop_count
+  - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
   - current_pr_number
+  - diagnosis_path
   - domain_partitions_path
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - batch_branch
+  - fixes_applied
   - merge_queue_data_path
+  - merged
   - needs_plan
+  - next_pr_branch
   - plans_dir
   - pr_order_file
   - pr_plan_path
   - pr_url
+  - push_error_type
   - queue_mode
   - queue_pr_state
+  - queue_stall_loop_count
   - remediation_path
   - remote_url
   - review_pr_number
@@ -1323,60 +2058,39 @@ dataflow:
   produced:
   - conflict_escalation_required
   - conflict_escalation_reason
-- step: force_push_after_rebase
+- step: force_push_and_wait_mergeability
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_ci_loop_count
   - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
   - current_pr_number
+  - diagnosis_path
   - domain_partitions_path
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - batch_branch
+  - fixes_applied
   - merge_queue_data_path
+  - merged
   - needs_plan
+  - next_pr_branch
   - plans_dir
   - pr_order_file
   - pr_plan_path
   - pr_url
+  - push_error_type
   - queue_mode
   - queue_pr_state
-  - remediation_path
-  - remote_url
-  - review_pr_number
-  - run_name
-  - source_dir
-  - task
-  - verdict
-  - work_dir
-  - worktree_branch_name
-  - worktree_path
-  required: []
-  produced: []
-- step: wait_for_post_rebase_mergeability
-  available:
-  - audit
-  - base_branch
-  - conflict_escalation_reason
-  - conflict_escalation_required
-  - conflict_pr_number
-  - current_pr_number
-  - domain_partitions_path
-  - ejected_pr_branch
-  - escalation_reason
-  - escalation_required
-  - batch_branch
-  - merge_queue_data_path
-  - needs_plan
-  - plans_dir
-  - pr_order_file
-  - pr_plan_path
-  - pr_url
-  - queue_mode
-  - queue_pr_state
+  - queue_stall_loop_count
   - remediation_path
   - remote_url
   - review_pr_number
@@ -1392,24 +2106,36 @@ dataflow:
 - step: check_mergeability_post_rebase
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_ci_loop_count
   - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
   - current_pr_number
+  - diagnosis_path
   - domain_partitions_path
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - batch_branch
+  - fixes_applied
   - merge_queue_data_path
+  - merged
   - needs_plan
+  - next_pr_branch
   - plans_dir
   - pr_order_file
   - pr_plan_path
   - pr_url
+  - push_error_type
   - queue_mode
   - queue_pr_state
+  - queue_stall_loop_count
   - remediation_path
   - remote_url
   - review_pr_number
@@ -1425,24 +2151,36 @@ dataflow:
 - step: annotate_pr_diff
   available:
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_ci_loop_count
   - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
   - current_pr_number
+  - diagnosis_path
   - domain_partitions_path
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
-  - batch_branch
+  - fixes_applied
   - merge_queue_data_path
+  - merged
   - needs_plan
+  - next_pr_branch
   - plans_dir
   - pr_order_file
   - pr_plan_path
   - pr_url
+  - push_error_type
   - queue_mode
   - queue_pr_state
+  - queue_stall_loop_count
   - remediation_path
   - remote_url
   - review_pr_number
@@ -1456,32 +2194,44 @@ dataflow:
   required: []
   produced:
   - annotated_diff_path
-  - diff_metrics_path
   - hunk_ranges_path
-  - review_mode
+  - diff_metrics_path
 - step: review_pr_integration
   available:
   - annotated_diff_path
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_ci_loop_count
   - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
   - current_pr_number
+  - diagnosis_path
+  - diff_metrics_path
   - domain_partitions_path
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
+  - fixes_applied
   - hunk_ranges_path
-  - batch_branch
   - merge_queue_data_path
+  - merged
   - needs_plan
+  - next_pr_branch
   - plans_dir
   - pr_order_file
   - pr_plan_path
   - pr_url
+  - push_error_type
   - queue_mode
   - queue_pr_state
+  - queue_stall_loop_count
   - remediation_path
   - remote_url
   - review_pr_number
@@ -1495,29 +2245,43 @@ dataflow:
   required: []
   produced:
   - review_verdict
+  positional_args: 3
 - step: resolve_review_integration
   available:
   - annotated_diff_path
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_ci_loop_count
   - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
   - current_pr_number
+  - diagnosis_path
+  - diff_metrics_path
   - domain_partitions_path
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
+  - fixes_applied
   - hunk_ranges_path
-  - batch_branch
   - merge_queue_data_path
+  - merged
   - needs_plan
+  - next_pr_branch
   - plans_dir
   - pr_order_file
   - pr_plan_path
   - pr_url
+  - push_error_type
   - queue_mode
   - queue_pr_state
+  - queue_stall_loop_count
   - remediation_path
   - remote_url
   - review_pr_number
@@ -1531,30 +2295,44 @@ dataflow:
   - worktree_path
   required:
   - feature_branch
-  produced: []
+  produced:
+  - verdict
 - step: re_push_review_integration
   available:
   - annotated_diff_path
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_ci_loop_count
   - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
   - current_pr_number
+  - diagnosis_path
+  - diff_metrics_path
   - domain_partitions_path
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
+  - fixes_applied
   - hunk_ranges_path
-  - batch_branch
   - merge_queue_data_path
+  - merged
   - needs_plan
+  - next_pr_branch
   - plans_dir
   - pr_order_file
   - pr_plan_path
   - pr_url
+  - push_error_type
   - queue_mode
   - queue_pr_state
+  - queue_stall_loop_count
   - remediation_path
   - remote_url
   - review_pr_number
@@ -1572,25 +2350,38 @@ dataflow:
   available:
   - annotated_diff_path
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_ci_loop_count
   - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
   - current_pr_number
+  - diagnosis_path
+  - diff_metrics_path
   - domain_partitions_path
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
+  - fixes_applied
   - hunk_ranges_path
-  - batch_branch
   - merge_queue_data_path
+  - merged
   - needs_plan
+  - next_pr_branch
   - plans_dir
   - pr_order_file
   - pr_plan_path
   - pr_url
+  - push_error_type
   - queue_mode
   - queue_pr_state
+  - queue_stall_loop_count
   - remediation_path
   - remote_url
   - review_pr_number
@@ -1604,29 +2395,93 @@ dataflow:
   - worktree_path
   required: []
   produced: []
-- step: diagnose_ci
+- step: check_ci_watch_pr_loop
   available:
   - annotated_diff_path
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - conflict_ci_loop_count
   - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
   - current_pr_number
+  - diagnosis_path
+  - diff_metrics_path
   - domain_partitions_path
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
+  - fixes_applied
   - hunk_ranges_path
-  - batch_branch
   - merge_queue_data_path
+  - merged
   - needs_plan
+  - next_pr_branch
   - plans_dir
   - pr_order_file
   - pr_plan_path
   - pr_url
+  - push_error_type
   - queue_mode
   - queue_pr_state
+  - queue_stall_loop_count
+  - remediation_path
+  - remote_url
+  - review_pr_number
+  - review_verdict
+  - run_name
+  - source_dir
+  - task
+  - verdict
+  - work_dir
+  - worktree_branch_name
+  - worktree_path
+  required: []
+  produced:
+  - ci_watch_pr_loop_count
+- step: diagnose_ci
+  available:
+  - annotated_diff_path
+  - audit
+  - auto_merge_available
+  - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - ci_watch_pr_loop_count
+  - conflict_ci_loop_count
+  - conflict_escalation_reason
+  - conflict_escalation_required
+  - conflict_pr_number
+  - current_pr_number
+  - diagnosis_path
+  - diff_metrics_path
+  - domain_partitions_path
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
+  - fixes_applied
+  - hunk_ranges_path
+  - merge_queue_data_path
+  - merged
+  - needs_plan
+  - next_pr_branch
+  - plans_dir
+  - pr_order_file
+  - pr_plan_path
+  - pr_url
+  - push_error_type
+  - queue_mode
+  - queue_pr_state
+  - queue_stall_loop_count
   - remediation_path
   - remote_url
   - review_pr_number
@@ -1641,30 +2496,94 @@ dataflow:
   required: []
   produced:
   - diagnosis_path
-- step: register_clone_success
+  positional_args: 3
+- step: patch_token_summary
   available:
   - annotated_diff_path
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - ci_watch_pr_loop_count
+  - conflict_ci_loop_count
   - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
   - current_pr_number
   - diagnosis_path
+  - diff_metrics_path
   - domain_partitions_path
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
+  - fixes_applied
   - hunk_ranges_path
-  - batch_branch
   - merge_queue_data_path
+  - merged
   - needs_plan
+  - next_pr_branch
   - plans_dir
   - pr_order_file
   - pr_plan_path
   - pr_url
+  - push_error_type
   - queue_mode
   - queue_pr_state
+  - queue_stall_loop_count
+  - remediation_path
+  - remote_url
+  - review_pr_number
+  - review_verdict
+  - run_name
+  - source_dir
+  - task
+  - verdict
+  - work_dir
+  - worktree_branch_name
+  - worktree_path
+  required: []
+  produced: []
+- step: register_clone_success
+  available:
+  - annotated_diff_path
+  - audit
+  - auto_merge_available
+  - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - ci_watch_pr_loop_count
+  - conflict_ci_loop_count
+  - conflict_escalation_reason
+  - conflict_escalation_required
+  - conflict_pr_number
+  - current_pr_number
+  - diagnosis_path
+  - diff_metrics_path
+  - domain_partitions_path
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
+  - fixes_applied
+  - hunk_ranges_path
+  - merge_queue_data_path
+  - merged
+  - needs_plan
+  - next_pr_branch
+  - plans_dir
+  - pr_order_file
+  - pr_plan_path
+  - pr_url
+  - push_error_type
+  - queue_mode
+  - queue_pr_state
+  - queue_stall_loop_count
   - remediation_path
   - remote_url
   - review_pr_number
@@ -1682,26 +2601,39 @@ dataflow:
   available:
   - annotated_diff_path
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - ci_watch_pr_loop_count
+  - conflict_ci_loop_count
   - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
   - current_pr_number
   - diagnosis_path
+  - diff_metrics_path
   - domain_partitions_path
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
+  - fixes_applied
   - hunk_ranges_path
-  - batch_branch
   - merge_queue_data_path
+  - merged
   - needs_plan
+  - next_pr_branch
   - plans_dir
   - pr_order_file
   - pr_plan_path
   - pr_url
+  - push_error_type
   - queue_mode
   - queue_pr_state
+  - queue_stall_loop_count
   - remediation_path
   - remote_url
   - review_pr_number
@@ -1719,26 +2651,39 @@ dataflow:
   available:
   - annotated_diff_path
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - ci_watch_pr_loop_count
+  - conflict_ci_loop_count
   - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
   - current_pr_number
   - diagnosis_path
+  - diff_metrics_path
   - domain_partitions_path
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
+  - fixes_applied
   - hunk_ranges_path
-  - batch_branch
   - merge_queue_data_path
+  - merged
   - needs_plan
+  - next_pr_branch
   - plans_dir
   - pr_order_file
   - pr_plan_path
   - pr_url
+  - push_error_type
   - queue_mode
   - queue_pr_state
+  - queue_stall_loop_count
   - remediation_path
   - remote_url
   - review_pr_number
@@ -1756,26 +2701,39 @@ dataflow:
   available:
   - annotated_diff_path
   - audit
+  - auto_merge_available
   - base_branch
+  - batch_branch
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_post_queue_loop_count
+  - ci_watch_pr_loop_count
+  - conflict_ci_loop_count
   - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
   - current_pr_number
   - diagnosis_path
+  - diff_metrics_path
   - domain_partitions_path
   - ejected_pr_branch
   - escalation_reason
   - escalation_required
+  - fixes_applied
   - hunk_ranges_path
-  - batch_branch
   - merge_queue_data_path
+  - merged
   - needs_plan
+  - next_pr_branch
   - plans_dir
   - pr_order_file
   - pr_plan_path
   - pr_url
+  - push_error_type
   - queue_mode
   - queue_pr_state
+  - queue_stall_loop_count
   - remediation_path
   - remote_url
   - review_pr_number

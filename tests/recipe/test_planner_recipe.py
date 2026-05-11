@@ -104,11 +104,6 @@ def test_planner_recipe_validation_has_no_errors(planner_recipe):
     assert errors == [], f"Unexpected ERROR findings: {[f.rule for f in errors]}"
 
 
-def test_planner_recipe_contract_exists():
-    contracts_dir = builtin_recipes_dir() / "contracts"
-    assert (contracts_dir / "planner.yaml").exists(), "Run: autoskillit recipes validate planner"
-
-
 def test_planner_recipe_extract_domain_uses_positional_args(planner_recipe):
     step = planner_recipe.steps["extract_domain"]
     skill_cmd = step.with_args.get("skill_command", "")

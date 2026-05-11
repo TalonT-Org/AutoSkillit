@@ -1,0 +1,198 @@
+generated_at: '2026-05-11T00:54:58.421046+00:00'
+recipe_source_hash: sha256:60df3c9aa757b621e8260129e48fd5459eb11e853ba98415f7cfc4bdcb81e4ed
+bundled_manifest_version: 0.1.0
+skill_hashes: {}
+skills:
+  build-execution-map:
+    inputs: []
+    outputs:
+    - name: execution_map
+      type: file_path
+    - name: execution_map_report
+      type: file_path
+    - name: group_count
+      type: string
+    - name: total_issues
+      type: string
+    - name: dispatched_count
+      type: string
+    - name: deferred_count
+      type: string
+    - name: has_deferred
+      type: string
+    - name: review_approach_candidates
+      type: string
+    expected_output_patterns:
+    - execution_map\s*=\s*/.+
+    pattern_examples:
+    - 'execution_map = /tmp/build-execution-map/execution_map_2026-04-22_190000.json
+
+      execution_map_report = /tmp/build-execution-map/execution_map_report_2026-04-22_190000.md
+
+      group_count = 3
+
+      total_issues = 5
+
+      dispatched_count = 4
+
+      deferred_count = 1
+
+      has_deferred = true'
+    write_behavior: always
+dataflow:
+- step: check_resume
+  available:
+  - base_branch
+  - execution_map
+  - issue_urls
+  - max_parallel
+  - model_context_window
+  - source_dir
+  required: []
+  produced:
+  - remaining_urls_json
+  - completed_count
+- step: route_bem_mode
+  available:
+  - base_branch
+  - completed_count
+  - execution_map
+  - issue_urls
+  - max_parallel
+  - model_context_window
+  - remaining_urls_json
+  - source_dir
+  required: []
+  produced: []
+- step: set_bem_path_from_ingredient
+  available:
+  - base_branch
+  - completed_count
+  - execution_map
+  - issue_urls
+  - max_parallel
+  - model_context_window
+  - remaining_urls_json
+  - source_dir
+  required: []
+  produced:
+  - execution_map_path
+- step: run_bem_internally
+  available:
+  - base_branch
+  - completed_count
+  - execution_map
+  - execution_map_path
+  - issue_urls
+  - max_parallel
+  - model_context_window
+  - remaining_urls_json
+  - source_dir
+  required: []
+  produced:
+  - execution_map_path
+- step: load_bem_from_file
+  available:
+  - base_branch
+  - completed_count
+  - execution_map
+  - execution_map_path
+  - issue_urls
+  - max_parallel
+  - model_context_window
+  - remaining_urls_json
+  - source_dir
+  required: []
+  produced:
+  - groups_json
+  - total_groups
+- step: claim_all_issues
+  available:
+  - base_branch
+  - completed_count
+  - execution_map
+  - execution_map_path
+  - groups_json
+  - issue_urls
+  - max_parallel
+  - model_context_window
+  - remaining_urls_json
+  - source_dir
+  - total_groups
+  required: []
+  produced: []
+- step: process_groups
+  available:
+  - base_branch
+  - completed_count
+  - execution_map
+  - execution_map_path
+  - groups_json
+  - issue_urls
+  - max_parallel
+  - model_context_window
+  - remaining_urls_json
+  - source_dir
+  - total_groups
+  required: []
+  produced: []
+- step: next_or_done
+  available:
+  - base_branch
+  - completed_count
+  - execution_map
+  - execution_map_path
+  - groups_json
+  - issue_urls
+  - max_parallel
+  - model_context_window
+  - remaining_urls_json
+  - source_dir
+  - total_groups
+  required: []
+  produced: []
+- step: batch_cleanup
+  available:
+  - base_branch
+  - completed_count
+  - execution_map
+  - execution_map_path
+  - groups_json
+  - issue_urls
+  - max_parallel
+  - model_context_window
+  - remaining_urls_json
+  - source_dir
+  - total_groups
+  required: []
+  produced: []
+- step: done
+  available:
+  - base_branch
+  - completed_count
+  - execution_map
+  - execution_map_path
+  - groups_json
+  - issue_urls
+  - max_parallel
+  - model_context_window
+  - remaining_urls_json
+  - source_dir
+  - total_groups
+  required: []
+  produced: []
+- step: escalate_stop
+  available:
+  - base_branch
+  - completed_count
+  - execution_map
+  - execution_map_path
+  - groups_json
+  - issue_urls
+  - max_parallel
+  - model_context_window
+  - remaining_urls_json
+  - source_dir
+  - total_groups
+  required: []
+  produced: []

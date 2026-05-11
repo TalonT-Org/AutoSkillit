@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-11T02:40:40.034721+00:00",
+  "generated_at": "2026-05-11T06:23:04.950374+00:00",
   "recipe_source_hash": "sha256:617abcd898b97ba2d6c3f51b3eb2613ce9c8a6dff71a1a9065b83e7ad24dba16",
   "bundled_manifest_version": "0.1.0",
   "skill_hashes": {},
@@ -374,7 +374,8 @@
         "task_label"
       ],
       "required": [],
-      "produced": []
+      "produced": [],
+      "positional_mapping": true
     },
     {
       "step": "extract_domain",
@@ -472,13 +473,11 @@
         "task_file_path",
         "task_label"
       ],
-      "required": [
-        "combined_plan_path",
-        "output_dir"
-      ],
+      "required": [],
       "produced": [
         "refined_plan_path"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "expand_assignments",
@@ -696,12 +695,11 @@
         "task_label",
         "wp_context_paths"
       ],
-      "required": [
-        "output_dir"
-      ],
+      "required": [],
       "produced": [
         "refined_wps_path"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "consolidate_wps_analyze",
@@ -775,13 +773,11 @@
         "task_label",
         "wp_context_paths"
       ],
-      "required": [
-        "refined_wps_path",
-        "output_dir"
-      ],
+      "required": [],
       "produced": [
         "alignment_findings_path"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "reconcile_deps",
@@ -807,7 +803,8 @@
         "wp_context_paths"
       ],
       "required": [],
-      "produced": []
+      "produced": [],
+      "positional_mapping": true
     },
     {
       "step": "assess_review_approach_step",
@@ -832,12 +829,11 @@
         "task_label",
         "wp_context_paths"
       ],
-      "required": [
-        "refined_wps_path"
-      ],
+      "required": [],
       "produced": [
         "review_approach_assessment_path"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "validate",

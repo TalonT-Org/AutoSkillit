@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-11T02:40:40.054197+00:00",
+  "generated_at": "2026-05-11T06:23:04.966016+00:00",
   "recipe_source_hash": "sha256:1f2f5c7133bd520c9ec25386fe7fadf75c4608928a3b0de591cfb788f78ca1f8",
   "bundled_manifest_version": "0.1.0",
   "skill_hashes": {},
@@ -712,12 +712,11 @@
         "upfront_claimed",
         "work_dir"
       ],
-      "required": [
-        "topic"
-      ],
+      "required": [],
       "produced": [
         "investigation_path"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "rectify",
@@ -1183,7 +1182,8 @@
       "required": [],
       "produced": [
         "plan_path"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "commit_guard",
@@ -1398,14 +1398,13 @@
         "work_dir",
         "worktree_path"
       ],
-      "required": [
-        "plan_paths"
-      ],
+      "required": [],
       "produced": [
         "prep_path",
         "selected_lenses",
         "lens_context_paths"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "run_arch_lenses",
@@ -3238,12 +3237,11 @@
         "work_dir",
         "worktree_path"
       ],
-      "required": [
-        "worktree_path"
-      ],
+      "required": [],
       "produced": [
         "conflict_escalation_required"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "re_push_queue_fix",
@@ -3980,12 +3978,11 @@
         "work_dir",
         "worktree_path"
       ],
-      "required": [
-        "worktree_path"
-      ],
+      "required": [],
       "produced": [
         "conflict_escalation_required"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "re_push_direct_fix",
@@ -4386,12 +4383,11 @@
         "work_dir",
         "worktree_path"
       ],
-      "required": [
-        "worktree_path"
-      ],
+      "required": [],
       "produced": [
         "conflict_escalation_required"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "re_push_immediate_fix",
@@ -4662,12 +4658,11 @@
         "work_dir",
         "worktree_path"
       ],
-      "required": [
-        "worktree_path"
-      ],
+      "required": [],
       "produced": [
         "verdict"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "pre_resolve_rebase",
@@ -5011,12 +5006,11 @@
         "work_dir",
         "worktree_path"
       ],
-      "required": [
-        "worktree_path"
-      ],
+      "required": [],
       "produced": [
         "conflict_escalation_required"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "register_clone_unconfirmed",

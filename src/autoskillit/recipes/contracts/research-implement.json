@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-11T02:40:40.083825+00:00",
+  "generated_at": "2026-05-11T06:23:04.989516+00:00",
   "recipe_source_hash": "sha256:c09727853bb3aa07f9545c5056f0aadf4fbbbd71e93e684d7605518e0dcf2325",
   "bundled_manifest_version": "0.1.0",
   "skill_hashes": {},
@@ -401,12 +401,11 @@
         "visualization_plan_path",
         "worktree_path"
       ],
-      "required": [
-        "source_doc"
-      ],
+      "required": [],
       "produced": [
         "group_files"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "capture_impl_base",
@@ -454,12 +453,11 @@
         "visualization_plan_path",
         "worktree_path"
       ],
-      "required": [
-        "task"
-      ],
+      "required": [],
       "produced": [
         "phase_plan_path"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "implement_phase",
@@ -483,12 +481,11 @@
         "visualization_plan_path",
         "worktree_path"
       ],
-      "required": [
-        "plan_path"
-      ],
+      "required": [],
       "produced": [
         "worktree_path"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "troubleshoot_implement_failure",
@@ -715,12 +712,11 @@
         "visualization_plan_path",
         "worktree_path"
       ],
-      "required": [
-        "plan_path"
-      ],
+      "required": [],
       "produced": [
         "remediation_path"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "run_experiment",
@@ -1139,13 +1135,12 @@
         "visualization_plan_path",
         "worktree_path"
       ],
-      "required": [
-        "plan_path"
-      ],
+      "required": [],
       "produced": [
         "verdict",
         "fixes_applied"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "retest",

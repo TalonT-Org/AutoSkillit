@@ -1,4 +1,4 @@
-generated_at: '2026-05-11T02:40:40.022326+00:00'
+generated_at: '2026-05-11T06:23:04.941166+00:00'
 recipe_source_hash: sha256:8e46dcb1d749fbb395beacb197fc265d9da5a5b0e8626fbd4e0d67a5345a0ca8
 bundled_manifest_version: 0.1.0
 skill_hashes: {}
@@ -1271,9 +1271,9 @@ dataflow:
   - source_dir
   - task
   - work_dir
-  required:
-  - plan_path
+  required: []
   produced: []
+  positional_mapping: true
 - step: implement
   available:
   - audit
@@ -1307,11 +1307,11 @@ dataflow:
   - source_dir
   - task
   - work_dir
-  required:
-  - plan_path
+  required: []
   produced:
   - worktree_path
   - worktree_branch_name
+  positional_mapping: true
 - step: retry_worktree
   available:
   - audit
@@ -1347,11 +1347,11 @@ dataflow:
   - work_dir
   - worktree_branch_name
   - worktree_path
-  required:
-  - plan_path
+  required: []
   produced:
   - worktree_path
   - worktree_branch_name
+  positional_mapping: true
 - step: test
   available:
   - audit
@@ -1617,11 +1617,11 @@ dataflow:
   - work_dir
   - worktree_branch_name
   - worktree_path
-  required:
-  - plan_path
+  required: []
   produced:
   - verdict
   - fixes_applied
+  positional_mapping: true
 - step: check_test_fix_loop
   available:
   - audit
@@ -2156,12 +2156,11 @@ dataflow:
   - work_dir
   - worktree_branch_name
   - worktree_path
-  required:
-  - worktree_path
-  - plan_path
+  required: []
   produced:
   - conflict_escalation_required
   - conflict_escalation_reason
+  positional_mapping: true
 - step: force_push_and_wait_mergeability
   available:
   - audit
@@ -2407,10 +2406,10 @@ dataflow:
   - work_dir
   - worktree_branch_name
   - worktree_path
-  required:
-  - feature_branch
+  required: []
   produced:
   - verdict
+  positional_mapping: true
 - step: re_push_review_integration
   available:
   - annotated_diff_path

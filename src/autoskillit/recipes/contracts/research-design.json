@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-11T02:40:40.075488+00:00",
+  "generated_at": "2026-05-11T06:23:04.982440+00:00",
   "recipe_source_hash": "sha256:dcd57563c3bb38164fbef5823246e9761d7cc43a51e80727487ecdd6b1d706de",
   "bundled_manifest_version": "0.1.0",
   "skill_hashes": {},
@@ -257,13 +257,12 @@
         "source_dir",
         "task"
       ],
-      "required": [
-        "research_question"
-      ],
+      "required": [],
       "produced": [
         "scope_report",
         "scope_directions"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "select_directions",
@@ -277,12 +276,11 @@
         "source_dir",
         "task"
       ],
-      "required": [
-        "scope_directions_path"
-      ],
+      "required": [],
       "produced": [
         "selected_directions"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "plan_experiment",
@@ -297,12 +295,11 @@
         "source_dir",
         "task"
       ],
-      "required": [
-        "scope_report_path"
-      ],
+      "required": [],
       "produced": [
         "experiment_plan"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "review_design",
@@ -344,14 +341,13 @@
         "task",
         "verdict"
       ],
-      "required": [
-        "experiment_plan_path"
-      ],
+      "required": [],
       "produced": [
         "visualization_plan_path",
         "report_plan_path",
         "visualization_plan_trace_path"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "revise_design",
@@ -428,7 +424,8 @@
       "required": [],
       "produced": [
         "revision_guidance"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "design_rejected",

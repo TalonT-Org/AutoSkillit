@@ -9,6 +9,7 @@ import yaml
 
 from autoskillit.recipe.contracts import (
     check_contract_staleness,
+    classify_step_arg_style,
     compute_skill_hash,
     generate_recipe_card,
     get_skill_contract,
@@ -458,6 +459,95 @@ def test_validate_recipe_cards_missing_input(tmp_path: Path) -> None:
     findings = validate_recipe_cards(None, contract)
     assert len(findings) > 0
     assert any("worktree_path" in f["message"] for f in findings)
+
+
+# ---------------------------------------------------------------------------
+# classify_step_arg_style tests
+# ---------------------------------------------------------------------------
+
+
+def test_classify_positional_text() -> None:
+    assert (
+        classify_step_arg_style("/autoskillit:investigate the test failures", set())
+        == "positional_text"
+    )
+
+
+def test_classify_positional_template() -> None:
+    assert (
+        classify_step_arg_style(
+            "/autoskillit:implement-worktree-no-merge ${{ context.work_dir }}",
+            {"worktree_path", "plan_path"},
+        )
+        == "positional_template"
+    )
+
+
+def test_classify_named_when_refs_match_inputs() -> None:
+    assert (
+        classify_step_arg_style(
+            "/autoskillit:retry-worktree ${{ context.plan_path }} ${{ context.worktree_path }}",
+            {"plan_path", "worktree_path"},
+        )
+        == "named"
+    )
+
+
+def test_classify_named_no_args() -> None:
+    assert classify_step_arg_style("/autoskillit:investigate", {"topic"}) == "named"
+
+
+def test_classify_positional_text_takes_priority_over_template() -> None:
+    assert (
+        classify_step_arg_style(
+            "/autoskillit:investigate some text ${{ context.work_dir }}",
+            {"worktree_path"},
+        )
+        == "positional_text"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Card generator positional template escape tests
+# ---------------------------------------------------------------------------
+
+POSITIONAL_TEMPLATE_YAML = """\
+name: positional-template-test
+description: Pipeline where template ref names don't match contract input names
+summary: "Positional template test"
+inputs:
+  work_dir:
+    description: Working directory
+    required: true
+steps:
+  implement:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:implement-worktree-no-merge ${{ inputs.work_dir }}"
+    on_success: done
+  done:
+    action: stop
+    message: "Done."
+constraints:
+  - test
+"""
+
+
+def test_card_generator_positional_template_escape(tmp_path: Path) -> None:
+    recipes_dir = tmp_path / ".autoskillit" / "scripts"
+    recipes_dir.mkdir(parents=True)
+    pipeline = recipes_dir / "pos-template.yaml"
+    pipeline.write_text(POSITIONAL_TEMPLATE_YAML)
+
+    contract = generate_recipe_card(pipeline, recipes_dir)
+
+    dataflow = contract["dataflow"]
+    implement_entry = next(e for e in dataflow if e["step"] == "implement")
+    assert implement_entry["required"] == []
+    assert implement_entry.get("positional_mapping") is True
+
+    findings = validate_recipe_cards(None, contract)
+    assert len(findings) == 0
 
 
 # ---------------------------------------------------------------------------

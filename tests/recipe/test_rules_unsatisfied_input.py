@@ -148,3 +148,22 @@ def test_unsatisfied_input_inline_positional_args_skipped() -> None:
     )
     findings = run_semantic_rules(wf)
     assert not any(f.rule == "missing-ingredient" for f in findings)
+
+
+def test_unsatisfied_input_positional_template_skipped() -> None:
+    wf = _make_workflow(
+        {
+            "implement": {
+                "tool": "run_skill",
+                "with": {
+                    "skill_command": (
+                        "/autoskillit:implement-worktree-no-merge ${{ context.work_dir }}"
+                    ),
+                },
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    assert not any(f.rule == "missing-ingredient" for f in findings)

@@ -7,7 +7,7 @@ import hashlib
 from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import regex as re
 
@@ -324,6 +324,18 @@ def count_positional_args(skill_command: str) -> int:
     return len(without_templates.split())
 
 
+def classify_step_arg_style(
+    skill_command: str,
+    contract_input_names: set[str],
+) -> Literal["positional_text", "positional_template", "named"]:
+    if count_positional_args(skill_command) > 0:
+        return "positional_text"
+    cmd_refs = extract_skill_cmd_refs(skill_command)
+    if cmd_refs and not cmd_refs.issubset(contract_input_names):
+        return "positional_template"
+    return "named"
+
+
 # ---------------------------------------------------------------------------
 # Block fingerprint helpers
 # ---------------------------------------------------------------------------
@@ -464,14 +476,15 @@ def generate_recipe_card(
                     if contract.read_only:
                         skill_entry["read_only"] = True
                     skills[skill_name] = skill_entry
-                    pos_arg_count = count_positional_args(skill_cmd)
-                    if pos_arg_count > 0:
-                        # Positional args used — can't verify named inputs by ref.
-                        # Record the count so downstream rules know args were supplied.
+                    all_input_names = {i.name for i in contract.inputs}
+                    arg_style = classify_step_arg_style(skill_cmd, all_input_names)
+                    if arg_style == "positional_text":
                         entry["required"] = []
-                        entry["positional_args"] = pos_arg_count
+                        entry["positional_args"] = count_positional_args(skill_cmd)
+                    elif arg_style == "positional_template":
+                        entry["required"] = []
+                        entry["positional_mapping"] = True
                     else:
-                        # Named template refs only — flag required inputs not referenced
                         ctx_refs = extract_context_refs(step)
                         inp_refs = extract_input_refs(step)
                         referenced = ctx_refs | inp_refs

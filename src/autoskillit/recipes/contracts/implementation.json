@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-11T02:40:40.004786+00:00",
+  "generated_at": "2026-05-11T06:23:04.927271+00:00",
   "recipe_source_hash": "sha256:488273bc4621762d2dcb2fd2b1c371befc47392f3616329f12d64394f2809466",
   "bundled_manifest_version": "0.1.0",
   "skill_hashes": {},
@@ -1152,7 +1152,8 @@
       "required": [],
       "produced": [
         "remediation_path"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "remediate",
@@ -1233,14 +1234,13 @@
         "work_dir",
         "worktree_path"
       ],
-      "required": [
-        "plan_paths"
-      ],
+      "required": [],
       "produced": [
         "prep_path",
         "selected_lenses",
         "lens_context_paths"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "run_arch_lenses",
@@ -3062,12 +3062,11 @@
         "work_dir",
         "worktree_path"
       ],
-      "required": [
-        "worktree_path"
-      ],
+      "required": [],
       "produced": [
         "conflict_escalation_required"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "re_push_queue_fix",
@@ -3782,12 +3781,11 @@
         "work_dir",
         "worktree_path"
       ],
-      "required": [
-        "worktree_path"
-      ],
+      "required": [],
       "produced": [
         "conflict_escalation_required"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "re_push_direct_fix",
@@ -4176,12 +4174,11 @@
         "work_dir",
         "worktree_path"
       ],
-      "required": [
-        "worktree_path"
-      ],
+      "required": [],
       "produced": [
         "conflict_escalation_required"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "re_push_immediate_fix",
@@ -4444,12 +4441,11 @@
         "work_dir",
         "worktree_path"
       ],
-      "required": [
-        "worktree_path"
-      ],
+      "required": [],
       "produced": [
         "verdict"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "pre_resolve_rebase",
@@ -4783,12 +4779,11 @@
         "work_dir",
         "worktree_path"
       ],
-      "required": [
-        "worktree_path"
-      ],
+      "required": [],
       "produced": [
         "conflict_escalation_required"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "release_issue_success",

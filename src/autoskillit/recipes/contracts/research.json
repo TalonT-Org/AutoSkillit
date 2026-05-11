@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-11T02:40:40.104616+00:00",
+  "generated_at": "2026-05-11T06:23:05.006069+00:00",
   "recipe_source_hash": "sha256:cfaa7e407aba93238c259e5079bfde5f3d04ad9bb96f5b757d01454699e968ee",
   "bundled_manifest_version": "0.1.0",
   "skill_hashes": {},
@@ -935,13 +935,12 @@
         "task",
         "test_check_enabled"
       ],
-      "required": [
-        "research_question"
-      ],
+      "required": [],
       "produced": [
         "scope_report",
         "scope_directions"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "select_directions",
@@ -960,12 +959,11 @@
         "task",
         "test_check_enabled"
       ],
-      "required": [
-        "scope_directions_path"
-      ],
+      "required": [],
       "produced": [
         "selected_directions"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "plan_experiment",
@@ -985,12 +983,11 @@
         "task",
         "test_check_enabled"
       ],
-      "required": [
-        "scope_report_path"
-      ],
+      "required": [],
       "produced": [
         "experiment_plan"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "review_design",
@@ -1044,9 +1041,7 @@
         "test_check_enabled",
         "verdict"
       ],
-      "required": [
-        "experiment_plan_path"
-      ],
+      "required": [],
       "produced": [
         "visualization_plan_path",
         "report_plan_path",
@@ -1054,7 +1049,8 @@
         "tier_c_lens",
         "methodology_tradition",
         "visualization_plan_trace_path"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "revise_design",
@@ -1158,7 +1154,8 @@
       "required": [],
       "produced": [
         "revision_guidance"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "design_rejected",
@@ -1385,12 +1382,11 @@
         "visualization_plan_trace_path",
         "worktree_path"
       ],
-      "required": [
-        "source_doc"
-      ],
+      "required": [],
       "produced": [
         "group_files"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "capture_impl_base",
@@ -1470,12 +1466,11 @@
         "visualization_plan_trace_path",
         "worktree_path"
       ],
-      "required": [
-        "task"
-      ],
+      "required": [],
       "produced": [
         "phase_plan_path"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "implement_phase",
@@ -1515,12 +1510,11 @@
         "visualization_plan_trace_path",
         "worktree_path"
       ],
-      "required": [
-        "plan_path"
-      ],
+      "required": [],
       "produced": [
         "worktree_path"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "troubleshoot_implement_failure",
@@ -1875,12 +1869,11 @@
         "visualization_plan_trace_path",
         "worktree_path"
       ],
-      "required": [
-        "plan_path"
-      ],
+      "required": [],
       "produced": [
         "remediation_path"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "run_experiment",
@@ -2504,13 +2497,12 @@
         "visualization_plan_trace_path",
         "worktree_path"
       ],
-      "required": [
-        "plan_path"
-      ],
+      "required": [],
       "produced": [
         "verdict",
         "fixes_applied"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "retest",
@@ -2668,14 +2660,13 @@
         "visualization_plan_trace_path",
         "worktree_path"
       ],
-      "required": [
-        "experiment_plan_path"
-      ],
+      "required": [],
       "produced": [
         "prep_path",
         "selected_lenses",
         "lens_context_paths"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "run_experiment_lenses",
@@ -3816,12 +3807,11 @@
         "visualization_plan_trace_path",
         "worktree_path"
       ],
-      "required": [
-        "report_path"
-      ],
+      "required": [],
       "produced": [
         "html_path"
-      ]
+      ],
+      "positional_mapping": true
     },
     {
       "step": "route_archive_or_export",

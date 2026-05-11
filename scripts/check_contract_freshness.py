@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import yaml
 from yaml import SafeLoader as YamlLoader
 
 from autoskillit.recipe.staleness_cache import compute_recipe_hash
@@ -12,9 +13,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RECIPES_DIR = PROJECT_ROOT / "src" / "autoskillit" / "recipes"
 
 
-def load_yaml(path: Path) -> dict:
-    import yaml
-
+def load_yaml(path: Path) -> dict | None:
     return yaml.load(path.read_text(encoding="utf-8"), Loader=YamlLoader)
 
 
@@ -33,6 +32,9 @@ def main() -> int:
             missing.append(name)
             continue
         card = load_yaml(card_path)
+        if not isinstance(card, dict):
+            missing.append(name)
+            continue
         stored_hash = card.get("recipe_source_hash", "")
         current_hash = compute_recipe_hash(yaml_path)
         if stored_hash != current_hash:

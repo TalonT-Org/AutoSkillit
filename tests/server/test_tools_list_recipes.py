@@ -168,7 +168,26 @@ async def test_list_recipes_gate_closed_returns_gate_error(tool_ctx):
 @pytest.mark.anyio
 async def test_list_recipes_mcp_includes_builtin_campaigns(tool_ctx_kitchen_open):
     """MCP list_recipes tool must include campaign recipes when fleet is enabled."""
-    result = json.loads(await list_recipes())
+    from autoskillit.core.types import LoadResult, RecipeSource
+    from autoskillit.recipe.schema import RecipeInfo, RecipeKind
+
+    with patch("autoskillit.recipe._api.list_recipes") as mock_list:
+        mock_list.return_value = LoadResult(
+            items=[
+                RecipeInfo(
+                    name="research-campaign",
+                    description="Research campaign",
+                    summary="research > results",
+                    path=Path("/x"),
+                    source=RecipeSource.BUILTIN,
+                    kind=RecipeKind.CAMPAIGN,
+                ),
+            ],
+            errors=[],
+        )
+        result = json.loads(await list_recipes())
+
+    assert "recipes" in result, f"Expected recipes key, got: {result}"
     names = [r["name"] for r in result["recipes"]]
     assert "research-campaign" in names, (
         f"Campaign 'research-campaign' not in MCP list_recipes response. Got: {names}"

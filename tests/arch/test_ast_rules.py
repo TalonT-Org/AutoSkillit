@@ -981,7 +981,7 @@ class TestArch010Enforcement:
     def test_no_strenum_string_compare_in_tests(self, test_file: Path) -> None:
         """ARCH-010: test files must not compare StrEnum fields against raw string literals."""
         # Exempt calibration snippets in test_ast_rules.py itself
-        if test_file.name == "test_ast_rules.py":
+        if test_file.resolve() == Path(__file__).resolve():
             pytest.skip(
                 "exempt: calibration snippets in this file are intentional ARCH-010 violations"
             )

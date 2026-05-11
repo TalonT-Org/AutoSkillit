@@ -53,7 +53,18 @@ def main(argv: list[str]) -> int:
             failed = True
             continue
 
-        stale_items = check_contract_staleness(contract, recipe_path=recipe_path, cache_path=None)
+        try:
+            stale_items = check_contract_staleness(
+                contract, recipe_path=recipe_path, cache_path=None
+            )
+        except Exception as exc:
+            print(
+                f"recipe_contract_freshness: staleness check failed for {recipe_path.name}: "
+                f"{type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
+            failed = True
+            continue
         if stale_items:
             reasons = ", ".join(sorted(set(item.reason for item in stale_items)))
             print(

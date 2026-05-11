@@ -730,11 +730,6 @@ async def test_open_kitchen_ingredients_only_no_name_ignored(tmp_path, monkeypat
     assert "version" in result
 
 
-# ---------------------------------------------------------------------------
-# Group L — project_dir migration: tool handlers must use tool_ctx.project_dir
-# ---------------------------------------------------------------------------
-
-
 @pytest.mark.anyio
 async def test_open_kitchen_uses_project_dir_for_recipe_lookup(tmp_path, monkeypatch):
     """open_kitchen must use tool_ctx.project_dir for recipe discovery, not Path.cwd().

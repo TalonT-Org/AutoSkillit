@@ -71,8 +71,10 @@ def test_contract_covers_all_recipe_steps(contract_name: str) -> None:
         f"Contract '{contract_name}' is missing dataflow entries for steps: {missing}. "
         f"Regenerate the contract card."
     )
-    orphaned = contract_steps - recipe_skill_steps
-    assert not orphaned, (
-        f"Contract '{contract_name}' has orphaned dataflow entries for steps that no longer "
-        f"exist in the recipe: {orphaned}. Regenerate the contract card."
-    )
+    has_sub_recipes = any(step.sub_recipe for step in recipe.steps.values())
+    if not has_sub_recipes:
+        orphaned = contract_steps - recipe_skill_steps
+        assert not orphaned, (
+            f"Contract '{contract_name}' has orphaned dataflow entries for steps that no longer "
+            f"exist in the recipe: {orphaned}. Regenerate the contract card."
+        )

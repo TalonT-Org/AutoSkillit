@@ -557,6 +557,14 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
     )
 
 
+def _ensure_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        return value
+    return []
+
+
 def _parse_step(data: dict[str, Any]) -> RecipeStep:
     if "retry" in data:
         raise ValueError(
@@ -611,7 +619,7 @@ def _parse_step(data: dict[str, Any]) -> RecipeStep:
         stale_threshold=data.get("stale_threshold"),
         idle_output_timeout=data.get("idle_output_timeout"),
         block=data.get("block"),
-        pass_through=data.get("pass_through", []),
+        pass_through=_ensure_list(data.get("pass_through", [])),
     )
 
 

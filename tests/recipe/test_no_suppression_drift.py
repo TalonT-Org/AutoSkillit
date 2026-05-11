@@ -5,6 +5,10 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
+
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+
 
 def test_conftest_has_no_known_violations_dict() -> None:
     """Guard against reintroduction of validation suppression dicts.

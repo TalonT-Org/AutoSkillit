@@ -120,10 +120,9 @@ if cfg_path.exists():
     if isinstance(_cfg, dict):
         kitchen_id = _cfg.get("kitchen_id") or _cfg.get("pipeline_id", "")
 
-log_root = os.environ.get(
-    "AUTOSKILLIT_LOG_DIR",
-    pathlib.Path.home() / ".local" / "share" / "autoskillit" / "logs",
-)
+log_root = os.environ.get("AUTOSKILLIT_LOG_DIR", "")
+if not log_root:
+    sys.exit(0)
 tl_path = pathlib.Path(log_root)
 if not tl_path.exists():
     sys.exit(0)

@@ -111,7 +111,7 @@ working directory.
 ```bash
 mkdir -p {{AUTOSKILLIT_TEMP}}/promote-to-main
 python3 - <<'EOF' > {{AUTOSKILLIT_TEMP}}/promote-to-main/token_summary.md 2>/dev/null || true
-import json, os, pathlib, subprocess, sys
+import json, os, pathlib, sys
 
 cfg_path = pathlib.Path(".autoskillit") / "temp" / ".hook_config.json"
 kitchen_id = ""

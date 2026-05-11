@@ -12,6 +12,9 @@ from tests.arch._rules import (
     _PRINT_EXEMPT,
     _RULE,
     _SENSITIVE_KEYWORDS,
+    _STRENUM_COMPARE_EXEMPT_FILES,
+    _STRENUM_FIELD_NAMES,
+    _STRENUM_SRC_COMPARE_EXEMPT_PATHS,
     RuleDescriptor,
     Violation,
     _rel,  # noqa: F401  # re-exported for test_layer_enforcement, test_subpackage_isolation
@@ -57,6 +60,13 @@ class ArchitectureViolationVisitor(ast.NodeVisitor):
         self._print_exempt = filepath.name in _PRINT_EXEMPT
         self._asyncio_pipe_exempt = filepath.name in _ASYNCIO_PIPE_EXEMPT
         self._broad_except_exempt = filepath.name in _BROAD_EXCEPT_EXEMPT
+        try:
+            rel = filepath.relative_to(SRC_ROOT)
+            self._strenum_src_compare_exempt = (
+                str(rel).replace("\\", "/") in _STRENUM_SRC_COMPARE_EXEMPT_PATHS
+            )
+        except ValueError:
+            self._strenum_src_compare_exempt = False
 
     def _add(self, node: ast.AST, rule: RuleDescriptor, message: str) -> None:
         self.violations.append(
@@ -195,6 +205,48 @@ class ArchitectureViolationVisitor(ast.NodeVisitor):
             )
         self.generic_visit(node)
 
+    def visit_Compare(self, node: ast.Compare) -> None:
+        """Rule ARCH-010: StrEnum fields must not be compared against raw string literals.
+
+        Detects patterns like ``obj.severity == "ERROR"`` where ``severity`` is a known
+        StrEnum field name but the comparator is a raw string constant (not an enum member).
+        Comparisons against ``.value`` attribute accesses (e.g., ``f.severity.value == "error"``)
+        are exempt. Files in _STRENUM_SRC_COMPARE_EXEMPT_PATHS are fully exempt (Literal-typed
+        fields that share names with StrEnum fields).
+        """
+        if self._strenum_src_compare_exempt:
+            self.generic_visit(node)
+            return
+
+        # Only flag == and != operators
+        if not isinstance(node.ops[0], (ast.Eq, ast.NotEq)):
+            self.generic_visit(node)
+            return
+
+        # Check left side: must be an Attribute with a known StrEnum field name
+        if not isinstance(node.left, ast.Attribute):
+            self.generic_visit(node)
+            return
+
+        attr = node.left
+        if attr.attr not in _STRENUM_FIELD_NAMES:
+            self.generic_visit(node)
+            return
+
+        # Check that the comparator is a string constant (not a .value access)
+        for comparator in node.comparators:
+            # Exempt: comparison against .value attribute access (f.severity.value == "error")
+            if isinstance(comparator, ast.Attribute) and comparator.attr == "value":
+                continue
+            if isinstance(comparator, ast.Constant) and isinstance(comparator.value, str):
+                self._add(
+                    node,
+                    _RULE["ARCH-010"],
+                    f"StrEnum field {attr.attr!r} compared against raw string literal "
+                    f"{comparator.value!r} -- use the enum member instead",
+                )
+        self.generic_visit(node)
+
 
 def _scan(path: Path) -> list[Violation]:
     source = path.read_text(encoding="utf-8")
@@ -205,6 +257,50 @@ def _scan(path: Path) -> list[Violation]:
     visitor = ArchitectureViolationVisitor(filepath=path)
     visitor.visit(tree)
     return visitor.violations
+
+
+def _scan_strenum_compare(path: Path) -> list[Violation]:
+    """Scan a single file for ARCH-010 StrEnum-to-string comparison violations.
+
+    Unlike _scan(), this function is used for test files and uses a standalone
+    AST walk that does not depend on the full ArchitectureViolationVisitor.
+    """
+    if path.name in _STRENUM_COMPARE_EXEMPT_FILES:
+        return []
+    source = path.read_text(encoding="utf-8")
+    try:
+        tree = ast.parse(source, filename=str(path))
+    except SyntaxError as exc:
+        return [Violation(path, exc.lineno or 0, 0, f"SyntaxError: {exc.msg}")]
+
+    violations: list[Violation] = []
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Compare):
+            continue
+        if not isinstance(node.ops[0], (ast.Eq, ast.NotEq)):
+            continue
+        if not isinstance(node.left, ast.Attribute):
+            continue
+        attr = node.left
+        if attr.attr not in _STRENUM_FIELD_NAMES:
+            continue
+        for comparator in node.comparators:
+            if isinstance(comparator, ast.Attribute) and comparator.attr == "value":
+                continue
+            if isinstance(comparator, ast.Constant) and isinstance(comparator.value, str):
+                violations.append(
+                    Violation(
+                        path,
+                        node.lineno,  # type: ignore[attr-defined]
+                        node.col_offset,  # type: ignore[attr-defined]
+                        f"StrEnum field {attr.attr!r} compared against raw string literal "
+                        f"{comparator.value!r} -- use the enum member instead",
+                        "ARCH-010",
+                        "development",
+                    )
+                )
+    return violations
 
 
 # ── Section B: Import analysis helpers ────────────────────────────────────────

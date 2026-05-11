@@ -250,6 +250,19 @@ def test_severity_has_ok_member():
     assert set(Severity) == {Severity.OK, Severity.ERROR, Severity.WARNING, Severity.INFO}
 
 
+def test_severity_enum_not_equal_to_uppercase_string():
+    """Regression: StrEnum values are lowercase; uppercase comparison is always False.
+
+    ``f.severity == "ERROR"`` always returns False because Severity.ERROR.value
+    is ``"error"`` (lowercase), not ``"ERROR"``.
+    """
+    from autoskillit.core.types import Severity
+
+    assert Severity.ERROR != "ERROR"
+    assert Severity.ERROR == "error"
+    assert Severity.ERROR == Severity.ERROR
+
+
 def test_github_fetcher_protocol_has_label_methods():
     import inspect
 

@@ -119,6 +119,45 @@ _BROAD_EXCEPT_EXEMPT = frozenset(
 
 _ASYNCIO_PIPE_EXEMPT: frozenset[str] = frozenset({"process.py"})
 
+# ARCH-010: Files exempt from the StrEnum-to-string comparison scan.
+# These files compare against fields typed as Literal[...], not actual StrEnums.
+# The same attribute names (e.g. "outcome", "status") appear in both Literal and
+# StrEnum contexts; the AST rule cannot distinguish them by field name alone.
+_STRENUM_COMPARE_EXEMPT_FILES: frozenset[str] = frozenset(
+    {
+        "test_result_parser.py",  # L3ParseResult.outcome: Literal[...], not SessionOutcome
+        "test_sidecar.py",  # IssueSidecarEntry.status: Literal["completed", "failed"], not StrEnum
+    }
+)
+
+# ARCH-010: Source files exempt from the visitor-level StrEnum comparison check.
+# Uses paths relative to src/autoskillit/ (forward slashes, platform-independent).
+# These source files compare Literal[...]-typed or plain-str fields that share names
+# with known StrEnum fields; the AST rule cannot distinguish by field name alone.
+_STRENUM_SRC_COMPARE_EXEMPT_PATHS: frozenset[str] = frozenset(
+    {
+        "cli/_validate.py",  # ValidationResult.status: plain str property, not a StrEnum
+        "execution/process/_process_monitor.py",  # psutil Connection.status: plain str
+        "fleet/_api.py",  # L3ParseResult.outcome: Literal[...], not SessionOutcome
+        "fleet/_checkpoint_bridge.py",  # IssueSidecarEntry.status: Literal[...], not StrEnum
+    }
+)
+
+# ARCH-010: Known StrEnum field names that are compared against raw string literals.
+# Maps field name → enum class name for documentation purposes.
+# These are derived from dataclass/protocol definitions across the codebase.
+_STRENUM_FIELD_NAMES: frozenset[str] = frozenset(
+    {
+        "severity",  # Severity
+        "status",  # ChannelBStatus, DispatchStatus
+        "outcome",  # SessionOutcome
+        "install_type",  # InstallType
+        "lifecycle",  # FeatureLifecycle
+        "session_type",  # SessionType
+        "dispatch_gate_type",  # DispatchGateType
+    }
+)
+
 # ARCH-007: Functions that check TerminationReason as sequential early-exit guards
 # (single-value checks), not as dispatch tables (>=2 values). Exempt from ARCH-007.
 _DISPATCH_TABLE_EXEMPT_FUNCTIONS = frozenset(
@@ -127,7 +166,7 @@ _DISPATCH_TABLE_EXEMPT_FUNCTIONS = frozenset(
     }
 )
 
-# ── RULES tuple — 9 entries ───────────────────────────────────────────────────
+# ── RULES tuple — 10 entries ──────────────────────────────────────────────────
 
 RULES: tuple[RuleDescriptor, ...] = (
     RuleDescriptor(
@@ -284,6 +323,30 @@ RULES: tuple[RuleDescriptor, ...] = (
         exemptions=frozenset(),
         severity="error",
         defense_standard="DS-009",
+    ),
+    RuleDescriptor(
+        rule_id="ARCH-010",
+        name="no-strenum-string-compare",
+        lens="development",
+        description=(
+            "StrEnum-typed attributes must not be compared against raw string literals; "
+            "use the enum member instead."
+        ),
+        rationale=(
+            "Python's StrEnum uses lowercase .value strings while member names are UPPERCASE. "
+            "Comparing a StrEnum field against a case-mismatched string literal always returns "
+            "False, creating vacuous assertions that silently pass regardless of actual state. "
+            "This rule enforces enum-member comparisons (f.severity == Severity.ERROR) which "
+            "are immune to case drift and checked by IDE autocompletion."
+        ),
+        # ARCH-010 uses a standalone scanner (_scan_strenum_compare in _helpers.py)
+        # rather than the visitor-level exemptions= slot used by other rules.
+        # Reason: test-file scanning runs only this rule in isolation (avoiding the full
+        # ArchitectureViolationVisitor), so file-level exemptions are handled by
+        # _STRENUM_COMPARE_EXEMPT_FILES in _scan_strenum_compare directly.
+        exemptions=frozenset(),
+        severity="error",
+        defense_standard="DS-010",
     ),
 )
 

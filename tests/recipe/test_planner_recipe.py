@@ -6,6 +6,7 @@ import pytest
 
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.validator import run_semantic_rules
+from tests.recipe.conftest import assert_no_rule_errors
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -100,8 +101,7 @@ def test_planner_recipe_validate_routes_to_refine_on_fail(planner_recipe):
 
 def test_planner_recipe_validation_has_no_errors(planner_recipe):
     findings = run_semantic_rules(planner_recipe)
-    errors = [f for f in findings if f.severity == "ERROR"]
-    assert errors == [], f"Unexpected ERROR findings: {[f.rule for f in errors]}"
+    assert_no_rule_errors(findings, context="planner recipe")
 
 
 def test_planner_recipe_extract_domain_uses_positional_args(planner_recipe):

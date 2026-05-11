@@ -1,4 +1,4 @@
-"""Architectural enforcement: AST-based visitor rules (ARCH-001 through ARCH-009).
+"""Architectural enforcement: AST-based visitor rules (ARCH-001 through ARCH-010).
 
 Rules enforced here (compile-time, no execution required):
   1. No print() calls in production code
@@ -10,6 +10,7 @@ Rules enforced here (compile-time, no execution required):
   7. Exhaustive TerminationReason dispatch (match/case + assert_never)
   8. No raw .pid attribute passed to start_linux_tracing()
   9. get_logger() result must be bound to variable named 'logger'
+ 10. StrEnum fields must not be compared against raw string literals
 
 Note: `import logging` and `logging.getLogger()` are enforced by ruff TID251
 at pre-commit time (see pyproject.toml [tool.ruff.lint.flake8-tidy-imports]).
@@ -33,6 +34,7 @@ from tests.arch._helpers import (
     _SOURCE_FILES,
     SRC_ROOT,
     _scan,
+    _scan_strenum_compare,
 )
 from tests.arch._rules import (
     _DISPATCH_TABLE_EXEMPT_FUNCTIONS,
@@ -906,3 +908,85 @@ def test_no_build_cmd_accepts_output_format_value_string() -> None:
                 f"{node.name} still accepts 'output_format_value' (raw string). "
                 f"Use 'output_format: OutputFormat' instead."
             )
+
+
+# ── ARCH-010: StrEnum-to-string comparison ────────────────────────────────────
+
+
+def test_arch010_detects_strenum_field_compared_to_uppercase_string(tmp_path: Path) -> None:
+    """ARCH-010 fires when a known StrEnum field is compared against a raw string literal."""
+    f = tmp_path / "bad.py"
+    f.write_text('result.status == "completion"\n')
+    violations = _scan(f)
+    arch010 = [v for v in violations if v.rule_id == "ARCH-010"]
+    assert arch010, (
+        f"Expected ARCH-010 violation for 'status == \"completion\"', got: {violations}"
+    )
+    assert "status" in arch010[0].message
+    assert "'completion'" in arch010[0].message
+
+
+def test_arch010_detects_severity_error_uppercase_string(tmp_path: Path) -> None:
+    """ARCH-010 fires for severity == "ERROR" (the original vacuous comparison bug)."""
+    f = tmp_path / "bad.py"
+    f.write_text('f.severity == "ERROR"\n')
+    violations = _scan(f)
+    arch010 = [v for v in violations if v.rule_id == "ARCH-010"]
+    assert arch010, f"Expected ARCH-010 violation for 'severity == \"ERROR\"', got: {violations}"
+    assert "severity" in arch010[0].message
+
+
+def test_arch010_accepts_enum_member_comparison(tmp_path: Path) -> None:
+    """ARCH-010 does NOT fire when comparing against an enum member (no raw string)."""
+    f = tmp_path / "good.py"
+    f.write_text("result.status == ChannelBStatus.COMPLETION\n")
+    violations = _scan(f)
+    arch010 = [v for v in violations if v.rule_id == "ARCH-010"]
+    assert not arch010, f"ARCH-010 should not fire for enum member comparison: {arch010}"
+
+
+def test_arch010_accepts_value_attribute_comparison(tmp_path: Path) -> None:
+    """ARCH-010 does NOT fire for f.severity.value == "error" (explicit .value access)."""
+    f = tmp_path / "ok.py"
+    f.write_text('f.severity.value == "error"\n')
+    violations = _scan(f)
+    arch010 = [v for v in violations if v.rule_id == "ARCH-010"]
+    assert not arch010, f"ARCH-010 should not fire for .value comparison: {arch010}"
+
+
+def test_arch010_accepts_non_strenum_field(tmp_path: Path) -> None:
+    """ARCH-010 does NOT fire for non-StrEnum fields."""
+    f = tmp_path / "ok.py"
+    f.write_text('result.name == "something"\n')
+    violations = _scan(f)
+    arch010 = [v for v in violations if v.rule_id == "ARCH-010"]
+    assert not arch010, f"ARCH-010 should not fire for non-StrEnum field: {arch010}"
+
+
+# ── ARCH-010 test-file parametrized sweep ──────────────────────────────────────
+
+
+_TEST_FILES = sorted((Path(__file__).parent.parent).rglob("*.py"))
+_TEST_IDS = [str(f.relative_to(Path(__file__).parent.parent)) for f in _TEST_FILES]
+
+
+class TestArch010Enforcement:
+    """ARCH-010 enforcement for test files (covers the original bug location)."""
+
+    @pytest.mark.parametrize(
+        "test_file",
+        _TEST_FILES,
+        ids=_TEST_IDS,
+    )
+    def test_no_strenum_string_compare_in_tests(self, test_file: Path) -> None:
+        """ARCH-010: test files must not compare StrEnum fields against raw string literals."""
+        # Exempt calibration snippets in test_ast_rules.py itself
+        if test_file.resolve() == Path(__file__).resolve():
+            pytest.skip(
+                "exempt: calibration snippets in this file are intentional ARCH-010 violations"
+            )
+        violations = _scan_strenum_compare(test_file)
+        assert not violations, (
+            f"ARCH-010 violations in {test_file.relative_to(Path(__file__).parent.parent)}:\n"
+            + "\n".join(f"  {v}" for v in violations)
+        )

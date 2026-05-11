@@ -60,12 +60,10 @@ def _extract_re_compile_patterns(filepath: Path) -> list[tuple[str, str, int]]:
     compile_calls: dict[int, str] = {}
 
     for node in ast.walk(tree):
-        # Simple assignment: _FOO_RE = re.compile(...)
         if isinstance(node, ast.Assign):
             for target in node.targets:
                 if isinstance(target, ast.Name) and isinstance(node.value, ast.Call):
                     compile_calls[id(node.value)] = target.id
-        # Annotated assignment: _FOO_RE: re.Pattern[str] = re.compile(...)
         elif isinstance(node, ast.AnnAssign):
             if isinstance(node.target, ast.Name) and isinstance(node.value, ast.Call):
                 compile_calls[id(node.value)] = node.target.id
@@ -101,7 +99,6 @@ def test_cmd_keyword_regexes_use_path_safe_guards():
         for var_name, pattern, lineno in _extract_re_compile_patterns(filepath):
             if var_name in EXEMPT_PATTERNS:
                 continue
-            # If it uses a guard marker, it's safe
             if any(marker in pattern for marker in GUARD_MARKERS):
                 continue
             # If it uses bare \b without a guard, it's a violation

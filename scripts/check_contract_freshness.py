@@ -29,7 +29,9 @@ def main() -> int:
         if not isinstance(card, dict):
             missing.append(name)
             continue
-        stored_hash = card.get("recipe_source_hash", "")
+        stored_hash = card.get("recipe_source_hash")
+        if stored_hash is None:
+            continue
         current_hash = compute_recipe_hash(yaml_path)
         if stored_hash != current_hash:
             stale.append(name)

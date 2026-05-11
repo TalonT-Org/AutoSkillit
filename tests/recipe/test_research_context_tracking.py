@@ -4,7 +4,7 @@ import re
 
 import pytest
 
-from autoskillit.core import Severity
+from autoskillit.core.types import Severity
 from autoskillit.recipe.io import builtin_recipes_dir, builtin_scripts_dir, load_recipe
 from autoskillit.recipe.validator import run_semantic_rules, validate_recipe_structure
 

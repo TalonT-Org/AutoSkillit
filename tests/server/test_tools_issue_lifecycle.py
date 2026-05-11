@@ -394,11 +394,6 @@ async def test_release_issue_stages_when_different_branch(
     assert result["staged_label"] == "staged"
 
 
-# ---------------------------------------------------------------------------
-# project_dir migration: subprocess cwd
-# ---------------------------------------------------------------------------
-
-
 def _make_mock_tool_ctx_for_project_dir(project_dir):
     """Build a minimal mock ToolContext for project_dir tests."""
     mock_ctx = MagicMock()
@@ -441,8 +436,11 @@ async def test_prepare_issue_uses_project_dir_as_subprocess_cwd(tmp_path, monkey
 
     call_args = mock_ctx.executor.run.call_args
     assert call_args is not None, "executor.run was not called"
-    # Second positional arg is cwd
-    actual_cwd = call_args[0][1]
+    actual_cwd = (
+        call_args.args[1]
+        if call_args.args and len(call_args.args) > 1
+        else call_args.kwargs.get("cwd")
+    )
     assert actual_cwd == str(different_dir), (
         f"executor.run was called with cwd={actual_cwd!r}, "
         f"expected cwd={str(different_dir)!r}. "
@@ -478,7 +476,11 @@ async def test_enrich_issues_uses_project_dir_as_subprocess_cwd(tmp_path, monkey
 
     call_args = mock_ctx.executor.run.call_args
     assert call_args is not None, "executor.run was not called"
-    actual_cwd = call_args[0][1]
+    actual_cwd = (
+        call_args.args[1]
+        if call_args.args and len(call_args.args) > 1
+        else call_args.kwargs.get("cwd")
+    )
     assert actual_cwd == str(different_dir), (
         f"executor.run was called with cwd={actual_cwd!r}, "
         f"expected cwd={str(different_dir)!r}. "

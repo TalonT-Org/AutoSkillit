@@ -27,9 +27,10 @@ def main(argv: list[str]) -> int:
 
     failed = False
     for recipe_path_str in argv[1:]:
-        recipe_path = Path(recipe_path_str).resolve()
+        recipe_path = Path(recipe_path_str)
         if not recipe_path.is_absolute():
             recipe_path = _PROJECT_ROOT / recipe_path_str
+        recipe_path = recipe_path.resolve()
         recipes_dir = recipe_path.parent
         contract = load_recipe_card(recipe_path.stem, recipes_dir)
         if contract is None:
@@ -45,7 +46,8 @@ def main(argv: list[str]) -> int:
             load_recipe(recipe_path)
         except Exception as exc:
             print(
-                f"recipe_contract_freshness: could not load recipe {recipe_path.name}: {exc}",
+                f"recipe_contract_freshness: could not load recipe {recipe_path.name}: "
+                f"{type(exc).__name__}: {exc}",
                 file=sys.stderr,
             )
             failed = True

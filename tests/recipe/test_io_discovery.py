@@ -59,6 +59,7 @@ class TestListRecipes:
             for r in result.items
             if r.source == RecipeSource.BUILTIN
             and not r.experimental
+            and r.requires_packs
             and all(p in CORE_PACKS for p in r.requires_packs)
         ]
         addon_names = [
@@ -66,7 +67,7 @@ class TestListRecipes:
             for r in result.items
             if r.source == RecipeSource.BUILTIN
             and not r.experimental
-            and not all(p in CORE_PACKS for p in r.requires_packs)
+            and (not r.requires_packs or not all(p in CORE_PACKS for p in r.requires_packs))
         ]
         # Registered entries appear first; the unregistered tail must be alphabetical
         unregistered_core = [n for n in core_names if n not in BUNDLED_RECIPE_ORDER]
@@ -174,7 +175,7 @@ class TestListRecipes:
                 rank = 3
             elif r.source == RecipeSource.PROJECT:
                 rank = 2
-            elif all(p in CORE_PACKS for p in r.requires_packs):
+            elif r.requires_packs and all(p in CORE_PACKS for p in r.requires_packs):
                 rank = 0
             else:
                 rank = 1
@@ -382,3 +383,78 @@ def test_research_recipe_declares_requires_packs():
     path = pkg_root() / "recipes" / "research.yaml"
     recipe = load_recipe(path)
     assert recipe.requires_packs == ["research", "exp-lens", "vis-lens"]
+
+
+# ---------------------------------------------------------------------------
+# Campaign discovery gap tests (Step 1 from architecture fix plan)
+# ---------------------------------------------------------------------------
+
+
+def test_find_recipe_by_name_finds_campaign_in_campaigns_subdir(tmp_path: Path) -> None:
+    """find_recipe_by_name must discover recipes in campaigns/ subdir."""
+    from autoskillit.recipe.io import find_recipe_by_name
+
+    campaigns_dir = tmp_path / ".autoskillit" / "recipes" / "campaigns"
+    campaigns_dir.mkdir(parents=True)
+    (campaigns_dir / "my-campaign.yaml").write_text(
+        "name: my-campaign\nkind: campaign\ndescription: test\nsteps:\n  s1:\n    skill: noop\n"
+    )
+    result = find_recipe_by_name("my-campaign", tmp_path)
+    assert result is not None
+    assert result.name == "my-campaign"
+
+
+def test_list_recipes_includes_campaigns_subdir(tmp_path: Path) -> None:
+    """list_recipes must scan campaigns/ subdirectory."""
+    campaigns_dir = tmp_path / ".autoskillit" / "recipes" / "campaigns"
+    campaigns_dir.mkdir(parents=True)
+    (campaigns_dir / "c1.yaml").write_text(
+        "name: c1\nkind: campaign\ndescription: test\nsteps:\n  s1:\n    skill: noop\n"
+    )
+    result = list_recipes(tmp_path)
+    names = [r.name for r in result.items]
+    assert "c1" in names
+
+
+def test_all_builtin_recipe_yamls_are_discoverable(tmp_path: Path) -> None:
+    """Every .yaml in a RECIPE_SCAN_DIR must appear in list_recipes results.
+
+    This is the structural guard: if a new subdirectory with recipes is added
+    but not registered in RECIPE_SCAN_DIRS, this test fails.
+    """
+    from autoskillit.recipe.io import RECIPE_SCAN_DIRS, builtin_recipes_dir
+
+    base = builtin_recipes_dir()
+    expected_paths: set[Path] = set()
+    for subdir in RECIPE_SCAN_DIRS:
+        scan_dir = base / subdir if subdir else base
+        if scan_dir.is_dir():
+            # Non-recursive: _collect_recipes scans only one level deep per RECIPE_SCAN_DIR.
+            # If recursion is ever added to the implementation, this test must be updated too.
+            for f in scan_dir.iterdir():
+                if f.suffix in (".yaml", ".yml") and f.is_file():
+                    expected_paths.add(f)
+
+    result = list_recipes(tmp_path)
+    discovered_paths = {r.path for r in result.items if r.source == RecipeSource.BUILTIN}
+
+    missing = expected_paths - discovered_paths
+    assert not missing, f"Recipe YAMLs not discoverable by list_recipes: {missing}"
+
+
+def test_non_recipe_dirs_covers_all_excluded_subdirs(tmp_path: Path) -> None:
+    """Every subdirectory under recipes/ must be in RECIPE_SCAN_DIRS or NON_RECIPE_DIRS.
+
+    Prevents silent omission when a new subdirectory is added.
+    """
+    from autoskillit.recipe.io import NON_RECIPE_DIRS, RECIPE_SCAN_DIRS, builtin_recipes_dir
+
+    base = builtin_recipes_dir()
+    all_subdirs = {d.name for d in base.iterdir() if d.is_dir()}
+    registered = {d for d in RECIPE_SCAN_DIRS if d} | NON_RECIPE_DIRS
+    unregistered = all_subdirs - registered
+    assert not unregistered, (
+        f"Subdirectories not in RECIPE_SCAN_DIRS or NON_RECIPE_DIRS: {unregistered}. "
+        f"Add each to RECIPE_SCAN_DIRS (if it contains user-facing recipes) "
+        f"or NON_RECIPE_DIRS (if not)."
+    )

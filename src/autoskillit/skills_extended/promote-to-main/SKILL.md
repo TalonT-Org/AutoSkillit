@@ -127,7 +127,6 @@ tl_path = pathlib.Path(log_root)
 if not tl_path.exists():
     sys.exit(0)
 
-# Aggregate token usage across all sessions in log_root
 total_input = total_output = 0
 session_count = 0
 for session_dir in sorted(tl_path.iterdir()):
@@ -149,7 +148,6 @@ for session_dir in sorted(tl_path.iterdir()):
 if session_count == 0:
     sys.exit(0)
 
-# Format as a markdown table
 header = "| Metric | Value |\n|---|---|\n"
 rows = (
     f"| Sessions | {session_count} |\n"

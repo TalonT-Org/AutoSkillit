@@ -85,7 +85,7 @@ def test_no_path_cwd_in_server_tools():
     """
     import autoskillit
 
-    pkg_root = Path(autoskillit.__file__).parent.parent
+    pkg_root = Path(autoskillit.__file__).parent.parent.parent
     violations = []
 
     for rel_path in ALL_FILES:

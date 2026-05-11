@@ -41,6 +41,7 @@ def test_close_kitchen_disables_gate(tmp_path, monkeypatch):
     """After _close_kitchen_handler(), gate is disabled."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
+    mock_ctx.project_dir = tmp_path
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
@@ -76,6 +77,7 @@ def test_close_kitchen_no_file_no_error(tmp_path, monkeypatch):
     """_close_kitchen_handler() doesn't raise when no gate file exists."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
+    mock_ctx.project_dir = tmp_path
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
@@ -112,6 +114,7 @@ async def test_open_kitchen_writes_hook_config_json(tmp_path, monkeypatch):
     """open_kitchen must write .autoskillit/.hook_config.json with user quota_guard values."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
+    mock_ctx.project_dir = tmp_path
     mock_ctx.config.quota_guard.short_window_threshold = 85.0
     mock_ctx.config.quota_guard.long_window_threshold = 98.0
     mock_ctx.config.quota_guard.long_window_patterns = ["weekly", "sonnet", "opus"]
@@ -168,6 +171,7 @@ async def test_open_kitchen_bridges_enabled_flag_as_disabled(
     """
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
+    mock_ctx.project_dir = tmp_path
     mock_ctx.config.quota_guard = QuotaGuardConfig(
         enabled=enabled, cache_max_age=300, cache_path="/p/q.json", buffer_seconds=60
     )
@@ -193,6 +197,7 @@ async def test_close_kitchen_removes_hook_config_json(tmp_path, monkeypatch):
     """close_kitchen must remove .autoskillit/.hook_config.json to prevent stale config."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
+    mock_ctx.project_dir = tmp_path
     mock_ctx.config.quota_guard.short_window_threshold = 85.0
     mock_ctx.config.quota_guard.long_window_threshold = 98.0
     mock_ctx.config.quota_guard.long_window_patterns = ["weekly", "sonnet", "opus"]

@@ -471,7 +471,7 @@ async def test_enrich_issues_uses_project_dir_as_subprocess_cwd(tmp_path, monkey
         with patch("autoskillit.server._state._get_ctx", return_value=mock_ctx):
             with patch("autoskillit.server.logger"):
                 await enrich_issues(
-                    issue_numbers=[123],
+                    issue_number=123,
                     repo="owner/repo",
                     dry_run=True,
                 )

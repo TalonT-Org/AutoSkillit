@@ -700,18 +700,22 @@ def _check_pass_through_validity(ctx: ValidationContext) -> list[RuleFinding]:
         if not step.pass_through:
             continue
         skill_command = (step.with_args or {}).get("skill_command", "")
+        if not isinstance(skill_command, str):
+            continue
         skill_name = resolve_skill_name(skill_command)
         if not skill_name:
             continue
         skill_contract = manifest.get("skills", {}).get(skill_name, {})
+        all_output_names: set[str] = set()
         outputs_with_allowed_values: dict[str, list[str]] = {}
         for output in skill_contract.get("outputs", []):
+            all_output_names.add(output["name"])
             if "allowed_values" in output:
                 outputs_with_allowed_values[output["name"]] = output["allowed_values"]
         captured_outputs: set[str] = set()
         if step.capture:
             for captured_var, capture_expr in step.capture.items():
-                for output_name in outputs_with_allowed_values:
+                for output_name in all_output_names:
                     if f"result.{output_name}" in capture_expr:
                         captured_outputs.add(output_name)
         used_in_when: set[str] = set()

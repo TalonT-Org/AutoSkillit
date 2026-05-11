@@ -561,7 +561,7 @@ def _ensure_list(value: Any) -> list[str]:
     if isinstance(value, str):
         return [value]
     if isinstance(value, list):
-        return value
+        return [str(v) for v in value]
     return []
 
 

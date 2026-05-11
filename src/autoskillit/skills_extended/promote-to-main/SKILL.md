@@ -143,7 +143,7 @@ for session_dir in sorted(tl_path.iterdir()):
         session_count += 1
         total_input += data.get("input_tokens", 0)
         total_output += data.get("output_tokens", 0)
-    except (json.JSONDecodeError, OSError):
+    except (json.JSONDecodeError, OSError, TypeError):
         continue
 
 if session_count == 0:

@@ -131,6 +131,9 @@
         "revision_guidance": "${{ result.revision_guidance }}",
         "classification_timestamp": "${{ result.classification_timestamp }}"
       },
+      "pass_through": [
+        "experiment_type"
+      ],
       "skip_when_false": "inputs.review_design",
       "retries": 2,
       "on_exhausted": "create_worktree",
@@ -869,6 +872,9 @@
       "capture": {
         "review_verdict": "${{ result.verdict }}"
       },
+      "pass_through": [
+        "verdict"
+      ],
       "skip_when_false": "inputs.review_pr",
       "on_context_limit": "audit_claims",
       "on_failure": "audit_claims",
@@ -890,6 +896,9 @@
       "capture": {
         "audit_verdict": "${{ result.verdict }}"
       },
+      "pass_through": [
+        "verdict"
+      ],
       "skip_when_false": "inputs.audit_claims",
       "retries": 1,
       "on_exhausted": "route_review_resolve",

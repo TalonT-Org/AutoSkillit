@@ -1,5 +1,5 @@
-generated_at: '2026-05-11T00:54:58.533267+00:00'
-recipe_source_hash: sha256:ed344cbcce49ceb9988434986fcc0c4ba100d7d9612f178bc8bafbce296d88c3
+generated_at: '2026-05-11T01:26:31.338572+00:00'
+recipe_source_hash: sha256:cfaa7e407aba93238c259e5079bfde5f3d04ad9bb96f5b757d01454699e968ee
 bundled_manifest_version: 0.1.0
 skill_hashes: {}
 skills:
@@ -1540,6 +1540,48 @@ dataflow:
   - worktree_path
   required: []
   produced: []
+- step: check_phase_loop
+  available:
+  - audit
+  - audit_claims
+  - base_branch
+  - classification_timestamp
+  - design_review_count
+  - disambiguation_rule_applied
+  - download_report
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_type
+  - group_files
+  - impl_base_sha
+  - implement_fix_count
+  - is_fixable
+  - issue_url
+  - methodology_tradition
+  - min_breadth
+  - output_mode
+  - phase_plan_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - retry_delay
+  - review_design
+  - review_pr
+  - revision_guidance
+  - scope_directions
+  - scope_report
+  - selected_directions
+  - source_dir
+  - task
+  - test_check_enabled
+  - tier_c_lens
+  - verdict
+  - visualization_plan_path
+  - visualization_plan_trace_path
+  - worktree_path
+  required: []
+  produced:
+  - phase_loop_count
 - step: audit_impl
   available:
   - audit
@@ -1560,6 +1602,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - report_plan_path
   - research_dir
@@ -1603,6 +1646,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - remediation_path
   - report_plan_path
@@ -1649,6 +1693,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - remediation_path
   - report_plan_path
@@ -1696,6 +1741,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - remediation_path
   - report_plan_path
@@ -1742,6 +1788,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - remediation_path
   - report_plan_path
@@ -1791,6 +1838,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - remediation_path
   - report_plan_path
@@ -1838,6 +1886,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - remediation_path
   - report_plan_path
@@ -1885,6 +1934,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - remediation_path
   - report_plan_path
@@ -1932,6 +1982,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - remediation_path
   - report_plan_path
@@ -1980,6 +2031,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - remediation_path
   - report_plan_path
@@ -2029,6 +2081,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - remediation_path
   - report_path
@@ -2079,6 +2132,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - remediation_path
   - report_path
@@ -2127,6 +2181,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - remediation_path
   - report_path
@@ -2179,6 +2234,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - remediation_path
   - report_path
@@ -2228,6 +2284,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - remediation_path
   - report_path
@@ -2277,6 +2334,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - remediation_path
   - report_path
@@ -2331,6 +2389,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - prep_path
   - remediation_path
@@ -2383,6 +2442,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - prep_path
   - remediation_path
@@ -2435,6 +2495,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - prep_path
   - remediation_path
@@ -2487,6 +2548,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - prep_path
   - remediation_path
@@ -2541,6 +2603,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - pr_url
   - prep_path
@@ -2594,6 +2657,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - pr_url
   - prep_path
@@ -2648,6 +2712,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - pr_url
   - prep_path
@@ -2704,6 +2769,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - pr_url
   - prep_path
@@ -2759,6 +2825,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - pr_url
   - prep_path
@@ -2815,6 +2882,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - pr_url
   - prep_path
@@ -2871,6 +2939,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - pr_url
   - prep_path
@@ -2929,6 +2998,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - pr_url
   - prep_path
@@ -2986,6 +3056,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - pr_url
   - prep_path
@@ -3045,6 +3116,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - pr_url
   - prep_path
@@ -3104,6 +3176,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - pr_url
   - prep_path
@@ -3161,6 +3234,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - pr_url
   - prep_path
@@ -3218,6 +3292,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - pr_url
   - prep_path
@@ -3275,6 +3350,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - pr_url
   - prep_path
@@ -3333,6 +3409,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - pr_url
   - prep_path
@@ -3394,6 +3471,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - pr_url
   - prep_path
@@ -3453,6 +3531,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - pr_url
   - prep_path
@@ -3514,6 +3593,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - pr_url
   - prep_path
@@ -3574,6 +3654,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - pr_url
   - prep_path
@@ -3636,6 +3717,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - pr_url
   - prep_path
@@ -3699,6 +3781,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - pr_url
   - prep_path
@@ -3763,6 +3846,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - pr_url
   - prep_path
@@ -3828,6 +3912,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - pr_url
   - prep_path
@@ -3892,6 +3977,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - pr_url
   - prep_path
@@ -3956,6 +4042,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - pr_url
   - prep_path
@@ -4020,6 +4107,7 @@ dataflow:
   - methodology_tradition
   - min_breadth
   - output_mode
+  - phase_loop_count
   - phase_plan_path
   - pr_url
   - prep_path

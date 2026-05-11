@@ -19,6 +19,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_bundled_model_field.py` | Tests that all run_skill steps declare a model: field across bundled recipes |
 | `test_bundled_recipe_hidden_policy.py` | Tests for hidden policy in bundled recipes |
 | `test_bundled_recipes_general.py` | General structural tests for all bundled recipes |
+| `test_bundled_recipes_dispatch_ready.py` | Universal dispatch-readiness gate for all bundled recipes and contract cards |
 | `test_bundled_recipes_no_inversions.py` | Guard: no inversion step order violations in bundled recipes |
 | `test_bundled_recipes_pipeline_structure.py` | Pipeline structure tests for bundled recipes |
 | `test_bundled_recipes_research.py` | Tests for research bundled recipe structure |

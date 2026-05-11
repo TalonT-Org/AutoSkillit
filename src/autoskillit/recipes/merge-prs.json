@@ -965,7 +965,7 @@
       "optional_context_refs": [
         "pr_merge_loop_count"
       ],
-      "note": "Guards the merge_pr → next_part_or_next_pr outer loop. The loop is data-bounded by the finite pr_order_file list; this provides a structural bound for the cycle validator. 50 iterations allows large batch runs.\n"
+      "note": "Guards the merge_pr → next_part_or_next_pr outer loop. The loop is data-bounded by the finite pr_order_file list; this provides a structural bound for the cycle validator. 50 iterations allows large batch runs. Unlike retry loops (capped at 3–15 attempts), this cap is an outer iteration over data items (PRs to merge), not a retry count — hence the higher bound is safe: it tracks distinct work units, not repeated attempts on the same operation.\n"
     },
     "push_batch_branch": {
       "tool": "push_to_remote",

@@ -623,6 +623,10 @@ def _check_skill_result_routing_gap(ctx: ValidationContext) -> list[RuleFinding]
                 for output_name in outputs_with_allowed_values:
                     if f"result.{output_name}" in capture_expr:
                         captured_outputs.add(output_name)
+        pass_through_set = set(step.pass_through)
+        captured_outputs -= pass_through_set
+        for pt_name in pass_through_set:
+            outputs_with_allowed_values.pop(pt_name, None)
         if not step.on_result or not step.on_result.conditions:
             if captured_outputs:
                 for output_name in captured_outputs:
@@ -671,6 +675,82 @@ def _check_skill_result_routing_gap(ctx: ValidationContext) -> list[RuleFinding]
                     ),
                 )
             )
+    return findings
+
+
+@semantic_rule(
+    name="pass-through-validity",
+    description=(
+        "A step's pass_through list must only reference outputs that are actually "
+        "captured by the step, and must not reference outputs used in on_result "
+        "when clauses (which indicates the output controls routing)."
+    ),
+    severity=Severity.WARNING,
+)
+def _check_pass_through_validity(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    try:
+        manifest = load_bundled_manifest()
+    except (FileNotFoundError, OSError, ValueError):
+        logger.warning("failed to load bundled manifest", exc_info=True)
+        return findings
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+        if not step.pass_through:
+            continue
+        skill_command = (step.with_args or {}).get("skill_command", "")
+        if not isinstance(skill_command, str):
+            continue
+        skill_name = resolve_skill_name(skill_command)
+        if not skill_name:
+            continue
+        skill_contract = manifest.get("skills", {}).get(skill_name, {})
+        all_output_names: set[str] = set()
+        outputs_with_allowed_values: dict[str, list[str]] = {}
+        for output in skill_contract.get("outputs", []):
+            all_output_names.add(output["name"])
+            if "allowed_values" in output:
+                outputs_with_allowed_values[output["name"]] = output["allowed_values"]
+        captured_outputs: set[str] = set()
+        if step.capture:
+            for captured_var, capture_expr in step.capture.items():
+                for output_name in all_output_names:
+                    if f"result.{output_name}" in capture_expr:
+                        captured_outputs.add(output_name)
+        used_in_when: set[str] = set()
+        if step.on_result and step.on_result.conditions:
+            for cond in step.on_result.conditions:
+                if cond.when:
+                    for output_name in all_output_names:
+                        if f"result.{output_name}" in cond.when:
+                            used_in_when.add(output_name)
+        for pt_name in step.pass_through:
+            if pt_name not in captured_outputs:
+                findings.append(
+                    RuleFinding(
+                        rule="pass-through-validity",
+                        severity=Severity.WARNING,
+                        step_name=step_name,
+                        message=(
+                            f"pass_through references '{pt_name}' but this output "
+                            f"is not captured by step '{step_name}'."
+                        ),
+                    )
+                )
+            elif pt_name in used_in_when:
+                findings.append(
+                    RuleFinding(
+                        rule="pass-through-validity",
+                        severity=Severity.WARNING,
+                        step_name=step_name,
+                        message=(
+                            f"pass_through references '{pt_name}' but this output "
+                            f"is used in a when clause of step '{step_name}' on_result, "
+                            f"indicating it controls routing."
+                        ),
+                    )
+                )
     return findings
 
 

@@ -6,9 +6,7 @@ from autoskillit.core.types import Severity
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.validator import RuleFinding, run_semantic_rules
 from tests.recipe.conftest import (
-    KNOWN_PART_B_VIOLATIONS as _KNOWN_PART_B_VIOLATIONS,
-)
-from tests.recipe.conftest import (
+    KNOWN_VIOLATIONS_BY_RECIPE,
     _make_workflow,
 )
 
@@ -60,7 +58,8 @@ def test_bundled_workflows_pass_semantic_rules() -> None:
         errors = [
             f
             for f in findings
-            if f.severity == Severity.ERROR and f.rule not in _KNOWN_PART_B_VIOLATIONS
+            if f.severity == Severity.ERROR
+            and f.rule not in KNOWN_VIOLATIONS_BY_RECIPE.get(path.stem, frozenset())
         ]
         assert not errors, (
             f"Bundled workflow {path.name} has error-severity semantic findings: {errors}"

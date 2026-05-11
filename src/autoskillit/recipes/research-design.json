@@ -103,6 +103,9 @@
         "evaluation_dashboard": "${{ result.evaluation_dashboard }}",
         "revision_guidance": "${{ result.revision_guidance }}"
       },
+      "pass_through": [
+        "experiment_type"
+      ],
       "skip_when_false": "inputs.review_design",
       "retries": 2,
       "on_exhausted": "plan_visualization",

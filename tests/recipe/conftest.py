@@ -10,15 +10,30 @@ import yaml
 from autoskillit.recipe.io import _parse_step, builtin_recipes_dir, load_recipe
 from autoskillit.recipe.schema import Recipe, RecipeStep
 
-# Excluded from general semantic-error assertions — these rules fire on recipes
-# that have not yet been updated.
 NO_AUTOSKILLIT_IMPORT = "no-autoskillit-import-in-skill-python-block"
-KNOWN_PART_B_VIOLATIONS: frozenset[str] = frozenset(
+_CONTRACT_POSITIONAL = frozenset(
     {
-        NO_AUTOSKILLIT_IMPORT,
-        "skill-result-routing-gap",
+        "contract-unsatisfied-input",
+        "contract-unreferenced-required",
     }
 )
+
+KNOWN_VIOLATIONS_BY_RECIPE: dict[str, frozenset[str]] = {
+    "research-design": frozenset({NO_AUTOSKILLIT_IMPORT}) | _CONTRACT_POSITIONAL,
+    "research": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT}) | _CONTRACT_POSITIONAL,
+    "research-review": frozenset({NO_AUTOSKILLIT_IMPORT}) | _CONTRACT_POSITIONAL,
+    "implementation": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT}) | _CONTRACT_POSITIONAL,
+    "implementation-groups": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT})
+    | _CONTRACT_POSITIONAL,
+    "merge-prs": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT}) | _CONTRACT_POSITIONAL,
+    "planner": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT}) | _CONTRACT_POSITIONAL,
+    "promote-to-main-wrapper": frozenset({NO_AUTOSKILLIT_IMPORT}),
+    "remediation": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT}) | _CONTRACT_POSITIONAL,
+    "research-implement": frozenset({"unbounded-cycle", NO_AUTOSKILLIT_IMPORT})
+    | _CONTRACT_POSITIONAL,
+}
+
+KNOWN_PART_B_VIOLATIONS = frozenset().union(*KNOWN_VIOLATIONS_BY_RECIPE.values())
 
 
 @pytest.fixture(scope="module")

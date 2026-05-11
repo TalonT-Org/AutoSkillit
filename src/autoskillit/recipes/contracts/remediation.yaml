@@ -1,5 +1,5 @@
-generated_at: '2026-05-11T00:54:58.491532+00:00'
-recipe_source_hash: sha256:6c124a9a8091f41ac3150d8fb4aa9fd6a0c4f28764e4eb1ca9747759d1323621
+generated_at: '2026-05-11T01:26:31.296828+00:00'
+recipe_source_hash: sha256:1f2f5c7133bd520c9ec25386fe7fadf75c4608928a3b0de591cfb788f78ca1f8
 bundled_manifest_version: 0.1.0
 skill_hashes: {}
 skills:
@@ -4375,6 +4375,72 @@ dataflow:
   - worktree_path
   required: []
   produced: []
+- step: check_ci_rebase_loop
+  available:
+  - active_trigger_count
+  - annotated_diff_path
+  - arch_lenses
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_event
+  - ci_failed_jobs
+  - ci_loop_count
+  - ci_post_queue_loop_count
+  - ci_timed_out_loop_count
+  - claimed
+  - cleanup_succeeded
+  - conflict_escalation_required
+  - depth
+  - diagnosis_path
+  - diff_metrics_path
+  - fixes_applied
+  - hunk_ranges_path
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - lens_context_paths
+  - local_review_rounds
+  - max_parallel
+  - merge_fix_count
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - phases_implemented
+  - plan_path
+  - pr_number
+  - pr_url
+  - prep_path
+  - push_error_type
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_loop_count
+  - review_max_retries
+  - review_mode
+  - review_path
+  - review_verdict
+  - run_mode
+  - run_name
+  - selected_lenses
+  - source_dir
+  - stall_loop_count
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced:
+  - ci_rebase_count
 - step: re_push
   available:
   - active_trigger_count
@@ -4390,6 +4456,7 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -4455,6 +4522,7 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -4520,6 +4588,7 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -4587,6 +4656,7 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -4652,6 +4722,7 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -4717,6 +4788,7 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -4782,6 +4854,7 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -4847,6 +4920,7 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -4912,6 +4986,7 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -4977,6 +5052,7 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded
@@ -5042,6 +5118,7 @@ dataflow:
   - ci_failed_jobs
   - ci_loop_count
   - ci_post_queue_loop_count
+  - ci_rebase_count
   - ci_timed_out_loop_count
   - claimed
   - cleanup_succeeded

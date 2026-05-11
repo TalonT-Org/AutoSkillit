@@ -10,6 +10,7 @@ import pytest
 from autoskillit.core.paths import pkg_root
 from autoskillit.recipe.io import builtin_recipes_dir, builtin_scripts_dir, load_recipe
 from autoskillit.recipe.validator import run_semantic_rules
+from tests.recipe.conftest import _make_workflow
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
@@ -96,4 +97,32 @@ def test_recipes_pass_inline_script_rule(recipe_name):
     ]
     assert inline_findings == [], (
         f"Recipe {recipe_name} has inline script findings: {inline_findings}"
+    )
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        "autoskillit init --path /home/user/.local/share/uv/tools/autoskillit",
+        "bash /home/user/.local/share/uv/tools/autoskillit/recipes/scripts/setup.sh",
+        "task install --dir /export/apps/autoskillit",
+    ],
+    ids=["uv-tool-local-path", "script-from-uv-tool-path", "export-dir-path"],
+)
+def test_inline_script_does_not_false_positive_on_keyword_in_path(cmd):
+    """Guard: inline-script rule must not false-positive on paths containing keyword substrings."""
+    recipe = _make_workflow(
+        {
+            "step_a": {
+                "tool": "run_cmd",
+                "with": {"cmd": cmd},
+                "on_success": "END",
+            },
+            "END": {"action": "stop", "message": "Done"},
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    assert not any(f.rule == "inline-script-in-cmd" for f in findings), (
+        f"False-positive on path-containing cmd '{cmd}': "
+        f"{[f for f in findings if f.rule == 'inline-script-in-cmd']}"
     )

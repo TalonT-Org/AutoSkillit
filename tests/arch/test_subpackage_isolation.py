@@ -109,6 +109,7 @@ _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
         "Lock",  # threading.Lock — safe module-level thread-safety primitive
         "version",
         "compile",
+        "cmd_keyword_pattern",  # recipe/_rule_helpers.py: regex factory returning compiled Pattern
         "object",
         "MappingProxyType",  # types.MappingProxyType — read-only view, no state
     }

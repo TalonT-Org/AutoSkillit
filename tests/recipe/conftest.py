@@ -18,15 +18,7 @@ def assert_no_rule_errors(
     *,
     context: str = "",
 ) -> None:
-    """Assert that findings contain no ERROR-severity violations.
-
-    This helper encapsulates the canonical pattern::
-
-        [f for f in findings if f.severity == Severity.ERROR]
-
-    Using this helper instead of inline filters prevents the StrEnum comparison bug
-    where ``f.severity == "ERROR"`` always returns False (StrEnum values are lowercase).
-    """
+    """Assert that findings contain no ERROR-severity violations."""
     errors = [f for f in findings if f.severity == Severity.ERROR]
     assert not errors, (
         f"Unexpected ERROR findings{f' in {context}' if context else ''}: "

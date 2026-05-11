@@ -306,6 +306,7 @@ def test_repository_cache_invalidates_on_campaign_subdir_change(
 
     repo._get_list(tmp_path)
     first_call_count = len(captured_results)
+    assert first_call_count == 1
 
     (project_campaigns / "new-campaign.yaml").write_text(
         "name: new-campaign\nkind: campaign\ndescription: test\nsteps:\n  s1:\n    skill: noop\n"

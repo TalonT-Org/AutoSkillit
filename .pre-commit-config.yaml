@@ -63,7 +63,7 @@ repos:
       - id: check-contract-freshness
         name: Check contract card freshness
         language: system
-        entry: python scripts/check_contract_freshness.py
+        entry: python3 scripts/check_contract_freshness.py
         files: ^src/autoskillit/recipes/(?!contracts/).*\.yaml$
         pass_filenames: false
 

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from autoskillit.core.types import Severity
 from autoskillit.recipe.registry import RuleFinding, compute_recipe_validity
 

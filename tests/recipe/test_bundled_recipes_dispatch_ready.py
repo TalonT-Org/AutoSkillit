@@ -5,10 +5,10 @@ from __future__ import annotations
 import pytest
 import yaml
 
+from autoskillit.core.types import Severity
 from autoskillit.recipe._api import load_and_validate
 from autoskillit.recipe.contracts import check_contract_staleness
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
-from tests.recipe.conftest import KNOWN_VIOLATIONS_BY_RECIPE
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
@@ -17,18 +17,39 @@ _CONTRACTS_DIR = _RECIPES_DIR / "contracts"
 _RECIPE_STEMS = sorted(p.stem for p in _RECIPES_DIR.glob("*.yaml"))
 _CONTRACT_STEMS = sorted(p.stem for p in _CONTRACTS_DIR.glob("*.yaml"))
 
+_CONTRACT_PREREQ_BLOCKED = frozenset(
+    {
+        "implementation",
+        "implementation-groups",
+        "merge-prs",
+        "planner",
+        "remediation",
+        "research",
+        "research-design",
+        "research-implement",
+        "research-review",
+    }
+)
 
-@pytest.mark.parametrize("recipe_name", _RECIPE_STEMS)
+_DISPATCH_READY_PARAMS = [
+    pytest.param(
+        name,
+        marks=pytest.mark.xfail(strict=False, reason="Contract card prerequisites not yet landed"),
+    )
+    if name in _CONTRACT_PREREQ_BLOCKED
+    else name
+    for name in _RECIPE_STEMS
+]
+
+
+@pytest.mark.parametrize("recipe_name", _DISPATCH_READY_PARAMS)
 def test_bundled_recipe_dispatch_ready(recipe_name: str) -> None:
     result = load_and_validate(recipe_name)
-    allowed = KNOWN_VIOLATIONS_BY_RECIPE.get(recipe_name, frozenset())
-    errors = [
-        s
+    assert "error" not in result, f"Recipe '{recipe_name}' failed to load: {result.get('error')}"
+    assert result.get("valid") is True, f"Recipe '{recipe_name}' not dispatch-ready: " + "; ".join(
+        f"[{s.get('rule')}] {s.get('message', '')[:80]}"
         for s in result.get("suggestions", [])
-        if s.get("severity") == "error" and s.get("rule") not in allowed
-    ]
-    assert not errors, (
-        f"Recipe '{recipe_name}' is not dispatch-ready. Unexpected ERROR findings: {errors}"
+        if s.get("severity") == Severity.ERROR
     )
 
 

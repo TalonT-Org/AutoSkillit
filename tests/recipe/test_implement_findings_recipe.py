@@ -8,7 +8,6 @@ from autoskillit.core.types import Severity
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.schema import RecipeKind
 from autoskillit.recipe.validator import run_semantic_rules
-from tests.recipe.conftest import NO_AUTOSKILLIT_IMPORT
 
 pytestmark = [
     pytest.mark.layer("recipe"),
@@ -38,9 +37,7 @@ def test_implement_findings_recipe_parses(recipe) -> None:
 # T3
 def test_implement_findings_recipe_validates_cleanly(recipe) -> None:
     findings = run_semantic_rules(recipe)
-    errors = [
-        f for f in findings if f.severity == Severity.ERROR and f.rule != NO_AUTOSKILLIT_IMPORT
-    ]
+    errors = [f for f in findings if f.severity == Severity.ERROR]
     assert errors == []
 
 

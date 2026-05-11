@@ -246,6 +246,9 @@ def test_pass_through_validity_fires_on_routing_output() -> None:
         "pass-through-validity must warn when output controls routing"
     )
     assert any("verdict" in f.message for f in validity_findings)
+    assert not any("experiment_type" in f.message for f in validity_findings), (
+        "experiment_type is not used in when clause and should not be flagged"
+    )
 
 
 # ---------------------------------------------------------------------------

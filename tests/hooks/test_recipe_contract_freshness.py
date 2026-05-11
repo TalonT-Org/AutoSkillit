@@ -60,6 +60,9 @@ steps:
         f"Expected non-zero exit for stale contract, got {result.returncode}\n"
         f"stdout: {result.stdout}\nstderr: {result.stderr}"
     )
+    assert "stale" in result.stderr, (
+        f"Expected 'stale' in stderr for contract staleness, got:\n{result.stderr}"
+    )
 
 
 def test_hook_passes_when_contract_is_fresh(tmp_path: Path) -> None:
@@ -101,7 +104,7 @@ steps:
     )
 
 
-def test_hook_passes_when_no_contract_exists_but_no_recipe_changed(tmp_path: Path) -> None:
+def test_hook_passes_when_no_recipe_args() -> None:
     """Hook should pass when no recipe files are passed (no recipe changes to check)."""
     result = subprocess.run(
         [sys.executable, str(_SCRIPT)],
@@ -109,3 +112,41 @@ def test_hook_passes_when_no_contract_exists_but_no_recipe_changed(tmp_path: Pat
         text=True,
     )
     assert result.returncode == 0, f"Expected zero exit with no args, got: {result.stderr}"
+
+
+def test_hook_fails_when_no_contract_exists(tmp_path: Path) -> None:
+    """Hook should fail when a recipe is passed but has no corresponding contract."""
+    recipe_content = """\
+name: test-no-contract
+recipe_version: "1.0.0"
+ingredients:
+  task:
+    description: A test task
+    required: true
+steps:
+  test_step:
+    tool: run_cmd
+    with:
+      cmd: echo test
+    on_success: done
+    on_failure: done
+  done:
+    action: stop
+    message: Done
+"""
+    recipe_file = tmp_path / "test-no-contract.yaml"
+    recipe_file.write_text(recipe_content)
+    (tmp_path / "contracts").mkdir()
+
+    result = subprocess.run(
+        [sys.executable, str(_SCRIPT), str(recipe_file)],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0, (
+        f"Expected non-zero exit for missing contract, got {result.returncode}\n"
+        f"stderr: {result.stderr}"
+    )
+    assert "missing contract" in result.stderr, (
+        f"Expected 'missing contract' in stderr, got:\n{result.stderr}"
+    )

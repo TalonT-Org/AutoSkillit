@@ -722,7 +722,7 @@ def _check_pass_through_validity(ctx: ValidationContext) -> list[RuleFinding]:
         if step.on_result and step.on_result.conditions:
             for cond in step.on_result.conditions:
                 if cond.when:
-                    for output_name in outputs_with_allowed_values:
+                    for output_name in all_output_names:
                         if f"result.{output_name}" in cond.when:
                             used_in_when.add(output_name)
         for pt_name in step.pass_through:

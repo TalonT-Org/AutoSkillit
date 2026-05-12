@@ -341,3 +341,88 @@ def test_v9_and_data_acquisition_source_type_consistency() -> None:
     assert any(s in da for s in placeholder_signals), (
         "data_acquisition must mention template/placeholder validation"
     )
+
+
+def test_always_block_references_ten_validation_rules() -> None:
+    """ALWAYS block must reference all 10 validation rules."""
+    text = SKILL_PATH.read_text()
+    assert "10 validation rules" in text.lower() or "all 10 validation" in text.lower(), (
+        "ALWAYS block must reference '10 validation rules'"
+    )
+
+
+def test_v10_citation_verification_rule() -> None:
+    """V10 rule must exist and mention core citation verification concepts."""
+    text = SKILL_PATH.read_text()
+    m = re.search(r"V10:.+?(?=\nV[0-9]+:|\n---|\Z)", text, re.DOTALL)
+    assert m, "V10 rule not found in SKILL.md"
+    v10_block = m.group(0).lower()
+    assert "accession" in v10_block, "V10 must mention accession"
+    assert "citation" in v10_block or "cited" in v10_block, "V10 must mention citation"
+    assert "http" in v10_block or "url" in v10_block, "V10 must mention http or url"
+    assert "author" in v10_block, "V10 must mention author"
+    assert "error" in v10_block, "V10 is ERROR-level and must contain the word error"
+
+
+def test_v10_is_error_level() -> None:
+    """V10 must be classified as ERROR-level in the ERRORs summary."""
+    text = SKILL_PATH.read_text()
+    errors_line_match = re.search(r"ERRORs?\s*\([^)]+\)", text)
+    assert errors_line_match, "ERRORs classification line not found in SKILL.md"
+    errors_text = errors_line_match.group(0)
+    assert "V10" in errors_text, "V10 must be listed as ERROR-level"
+
+
+def test_citation_verification_agents_defined() -> None:
+    """Citation Indexer, Link Validator, and Cross-Check Adversary must be defined."""
+    text = SKILL_PATH.read_text().lower()
+    assert "citation indexer" in text or "citation_indexer" in text, (
+        "Citation Indexer subagent not defined"
+    )
+    assert "link validator" in text or "link_validator" in text, (
+        "Link Validator subagent not defined"
+    )
+    assert "cross-check adversary" in text or "cross_check_adversary" in text, (
+        "Cross-Check Adversary subagent not defined"
+    )
+
+
+def test_v10_network_failure_is_warning_not_error() -> None:
+    """V10 must handle network failures as WARNING with verification: unverified."""
+    text = SKILL_PATH.read_text()
+    m = re.search(r"V10:.+?(?=\nV[0-9]+:|\n---|\Z)", text, re.DOTALL)
+    assert m, "V10 rule not found in SKILL.md"
+    v10_block = m.group(0).lower()
+    assert "warning" in v10_block, "V10 must handle network failure as warning"
+    assert "network" in v10_block or "unreachable" in v10_block or "unverified" in v10_block, (
+        "V10 must mention network failure or unverified status"
+    )
+
+
+def test_v1_requires_baselines_for_applicable_types() -> None:
+    """V1 must require baselines for applicable experiment types."""
+    text = SKILL_PATH.read_text()
+    m = re.search(r"V1:\s*([^\n]+)", text)
+    assert m, "V1 rule not found in SKILL.md"
+    v1_line = m.group(1).lower()
+    assert "baseline" in v1_line, "V1 must require baselines"
+
+
+def test_v2_requires_estimand_contrast() -> None:
+    """V2 must require estimand contrast for applicable experiment types."""
+    text = SKILL_PATH.read_text()
+    m = re.search(r"V2:\s*([^\n]+)", text)
+    assert m, "V2 rule not found in SKILL.md"
+    v2_line = m.group(1).lower()
+    assert "estimand" in v2_line or "contrast" in v2_line, "V2 must require estimand or contrast"
+
+
+def test_v4_requires_spec_path_for_custom_env() -> None:
+    """V4 must require spec_path for custom environment type."""
+    text = SKILL_PATH.read_text()
+    m = re.search(r"V4:\s*([^\n]+)", text)
+    assert m, "V4 rule not found in SKILL.md"
+    v4_line = m.group(1).lower()
+    assert "spec_path" in v4_line or "environment" in v4_line, (
+        "V4 must require spec_path or environment"
+    )

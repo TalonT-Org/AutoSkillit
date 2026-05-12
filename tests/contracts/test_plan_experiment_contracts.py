@@ -3,6 +3,8 @@
 import re
 from pathlib import Path
 
+from autoskillit.recipe._skill_placeholder_parser import extract_validation_rule_block
+
 SKILL_PATH = (
     Path(__file__).resolve().parent.parent.parent
     / "src"
@@ -172,9 +174,8 @@ def test_v9_mentions_literature_and_database_source_types() -> None:
     """V9 rule text mentions both literature and database source types."""
 
     text = SKILL_PATH.read_text()
-    m = re.search(r"V9:.+?(?=\nV[0-9]+:|\n---|\Z)", text, re.DOTALL)
-    assert m, "V9 rule not found in SKILL.md"
-    v9_block = m.group(0)
+    v9_block = extract_validation_rule_block(text, "V9")
+    assert v9_block is not None, "V9 rule not found in SKILL.md"
     assert "literature" in v9_block.lower(), "V9 must mention literature source type"
     assert "database" in v9_block.lower(), "V9 must mention database source type"
 
@@ -275,9 +276,9 @@ def test_v9_rejects_unresolved_template_placeholders() -> None:
     """
 
     text = SKILL_PATH.read_text()
-    m = re.search(r"V9:.+?(?=\nV[0-9]+:|\n---|\Z)", text, re.DOTALL)
-    assert m, "V9 rule block not found"
-    v9 = m.group(0).lower()
+    v9_block = extract_validation_rule_block(text, "V9")
+    assert v9_block is not None, "V9 rule block not found"
+    v9 = v9_block.lower()
     placeholder_signals = ["placeholder", "template", "unresolved", "brace expansion"]
     assert any(s in v9 for s in placeholder_signals), (
         "V9 must specify rejection of unresolved template/placeholder syntax in acquisition fields"
@@ -299,9 +300,9 @@ def test_v9_requires_gitignored_acquisition_command() -> None:
     """
 
     text = SKILL_PATH.read_text()
-    m = re.search(r"V9:.+?(?=\nV[0-9]+:|\n---|\Z)", text, re.DOTALL)
-    assert m, "V9 rule block not found"
-    v9 = m.group(0).lower()
+    v9_block = extract_validation_rule_block(text, "V9")
+    assert v9_block is not None, "V9 rule block not found"
+    v9 = v9_block.lower()
     assert "gitignored" in v9, "V9 must address source_type: gitignored entries"
     lines = v9.split("\n")
     has_gitignored_acquisition_line = any(
@@ -321,9 +322,9 @@ def test_v9_and_data_acquisition_source_type_consistency() -> None:
     pe_text = SKILL_PATH.read_text()
     rd_text = REVIEW_DESIGN_SKILL_PATH.read_text()
 
-    v9_match = re.search(r"V9:.+?(?=\nV[0-9]+:|\n---|\Z)", pe_text, re.DOTALL)
-    assert v9_match, "V9 block not found in plan-experiment"
-    v9 = v9_match.group(0).lower()
+    v9_block = extract_validation_rule_block(pe_text, "V9")
+    assert v9_block is not None, "V9 block not found in plan-experiment"
+    v9 = v9_block.lower()
 
     da_start = rd_text.lower().find("data_acquisition")
     assert da_start != -1, "data_acquisition not found in review-design"

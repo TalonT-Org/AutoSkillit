@@ -665,6 +665,25 @@ def test_orchestration_rules_include_stop_step_semantics():
     assert "done" in rules
 
 
+def test_build_stop_step_semantics_includes_sentinel_instruction():
+    """_build_stop_step_semantics() must inject sentinel emission instructions."""
+    from autoskillit.recipe._api import _build_stop_step_semantics
+    from autoskillit.recipe.schema import Recipe, RecipeStep
+
+    recipe = Recipe(
+        name="test",
+        description="test",
+        steps={
+            "done": RecipeStep(action="stop", message="Pipeline complete."),
+            "escalate_stop": RecipeStep(action="stop", message="Escalated."),
+        },
+    )
+    sem = _build_stop_step_semantics(recipe)
+    assert "sentinel" in sem.lower(), (
+        "_build_stop_step_semantics must inject sentinel instructions"
+    )
+
+
 def test_build_ingredient_rows_resolved_overrides_literal_default():
     """T1: config-resolved value wins over a non-empty YAML literal default."""
     from autoskillit.recipe._api import build_ingredient_rows

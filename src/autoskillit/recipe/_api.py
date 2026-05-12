@@ -261,17 +261,27 @@ def _build_stop_step_semantics(recipe: Recipe) -> str:
     stop_steps = {name: step for name, step in recipe.steps.items() if step.action == "stop"}
     if not stop_steps:
         return ""
-    names = ", ".join(f"'{n}'" for n in stop_steps)
     lines = [
         "ACTION: STOP STEP SEMANTICS:",
-        f"- Steps {names} are terminal stop steps.",
-        "- When routed to a stop step, display its message and TERMINATE immediately.",
+        "- Stop steps are terminal — the pipeline ends when routed to them.",
         "- Do NOT call any MCP tools after a stop step.",
         "- Do NOT attempt recovery, error reporting, or off-recipe actions.",
-        "- A stop step is an INTENTIONAL terminus — the recipe author designed this as"
-        " the endpoint.",
+        "- When routed to a stop step, emit the L3 sentinel block and TERMINATE.",
     ]
     for name, step in stop_steps.items():
+        is_failure = (
+            "escalate" in name.lower()
+            or "reject" in name.lower()
+            or (
+                step.message
+                and ("fail" in step.message.lower() or "error" in step.message.lower())
+            )
+        )
+        success_val = "false" if is_failure else "true"
+        lines.append(
+            f"- For stop step '{name}': emit the L3 sentinel block with "
+            f"success={success_val} and reason=<step message>. Then TERMINATE."
+        )
         if step.message:
             lines.append(f"  Stop step '{name}' message: {step.message!r}")
     return "\n".join(lines)

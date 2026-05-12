@@ -722,3 +722,33 @@ def test_requires_packs_covers_all_default_disabled_skill_categories() -> None:
             f"{path.name}: run_skill steps reference default-disabled packs {sorted(missing)} "
             f"but requires_packs={recipe.requires_packs!r} is missing them"
         )
+
+
+@pytest.mark.parametrize(
+    "recipe_name",
+    [
+        "research-design",
+        "research-implement",
+        "research-review",
+        "research-archive",
+        "research",
+        "full-audit",
+        "bem-wrapper",
+        "promote-to-main-wrapper",
+        "planner",
+        "implement-findings",
+        "merge-prs",
+        "implementation",
+        "implementation-groups",
+        "remediation",
+    ],
+)
+def test_recipe_all_stop_steps_have_sentinel_instructions(recipe_name: str) -> None:
+    """Every stop step in every bundled dispatchable recipe must include sentinel emission instructions."""
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    for step_name, step in recipe.steps.items():
+        if step.action == "stop":
+            assert step.message, f"{recipe_name}.yaml step '{step_name}' must have a message"
+            assert "sentinel" in step.message.lower(), (
+                f"{recipe_name}.yaml step '{step_name}' must instruct L3 sentinel emission in its message"
+            )

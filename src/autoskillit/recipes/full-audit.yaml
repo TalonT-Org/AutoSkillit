@@ -195,3 +195,5 @@ steps:
       Full audit pipeline failed — one or more audit chains could not complete.
       Check session logs and {{AUTOSKILLIT_TEMP}}/ directories for partial results.
       Individual chain failures are noted in the session output above.
+      Emit the L3 result sentinel JSON block now with success=false.
+      Example sentinel: {"success": false, "reason": "audit pipeline failed"}

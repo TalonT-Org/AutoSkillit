@@ -896,6 +896,8 @@ steps:
       ${{ context.pr_number }}. This typically means no workflow is
       configured to trigger on this branch pattern. Check .github/workflows/
       trigger configuration. This is NOT a test failure — CI never started.
+      Emit the L3 result sentinel JSON block now with success=false.
+      Example sentinel: {"success": false, "reason": "no CI checks configured"}
 
   check_repo_merge_state:
     tool: check_repo_merge_state
@@ -1699,9 +1701,15 @@ steps:
 
   done:
     action: stop
-    message: "Investigation complete. Fix implemented and PR opened."
+    message: >-
+      Investigation complete. Fix implemented and PR opened.
+      Emit the L3 result sentinel JSON block now with success=true.
+      Example sentinel: {"success": true, "reason": "remediation complete"}
 
   escalate_stop:
     action: stop
-    message: "Human intervention needed. Review the latest output for details."
+    message: >-
+      Human intervention needed. Review the latest output for details.
+      Emit the L3 result sentinel JSON block now with success=false.
+      Example sentinel: {"success": false, "reason": "remediation pipeline failed"}
 

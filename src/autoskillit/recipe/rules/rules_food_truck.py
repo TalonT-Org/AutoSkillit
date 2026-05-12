@@ -7,29 +7,35 @@ from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 from autoskillit.recipe.schema import RecipeKind
 
+_DISPATCHABLE_KINDS = frozenset({RecipeKind.FOOD_TRUCK, RecipeKind.STANDARD})
+
 
 @semantic_rule(
-    name="food-truck-has-sentinel-stop",
-    description="Food-truck recipes must have a stop step referencing L3 sentinel",
+    name="all-dispatchable-stops-have-sentinel",
+    description="All stop steps in dispatchable recipes must instruct L3 sentinel emission",
     severity=Severity.ERROR,
 )
-def _check_food_truck_has_sentinel_stop(ctx: ValidationContext) -> list[RuleFinding]:
-    if ctx.recipe.kind != RecipeKind.FOOD_TRUCK:
+def _check_all_dispatchable_stops_have_sentinel(ctx: ValidationContext) -> list[RuleFinding]:
+    if ctx.recipe.kind not in _DISPATCHABLE_KINDS:
         return []
+    findings: list[RuleFinding] = []
     for step_name, step in ctx.recipe.steps.items():
-        if step.action == "stop" and step.message and "sentinel" in step.message.lower():
-            return []
-    return [
-        RuleFinding(
-            rule="food-truck-has-sentinel-stop",
-            severity=Severity.ERROR,
-            step_name="(top-level)",
-            message=(
-                "Food-truck recipe has no stop step referencing L3 sentinel. "
-                "Food trucks must emit a sentinel JSON block on completion."
-            ),
-        )
-    ]
+        if step.action != "stop":
+            continue
+        if not step.message or "sentinel" not in step.message.lower():
+            findings.append(
+                RuleFinding(
+                    rule="all-dispatchable-stops-have-sentinel",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"Stop step '{step_name}' does not reference L3 sentinel in its message. "
+                        "All stop steps in dispatchable recipes must instruct sentinel emission "
+                        "with the appropriate success/failure status."
+                    ),
+                )
+            )
+    return findings
 
 
 @semantic_rule(

@@ -120,7 +120,9 @@ H3 — AUTO-ACCEPT CONFIRM STEPS:
 
 H3b — STOP STEP SEMANTICS:
   When you reach a step with action: "stop", the pipeline is TERMINATED.
-  Display the step's message in the sentinel block. Do NOT call any MCP tools.
+  Emit the L3 sentinel block with the step's message as the reason field.
+  Set success=true for completion terminals, success=false for failure/escalation terminals.
+  Do NOT call any MCP tools after a stop step.
   Do NOT attempt recovery, error reporting, or off-recipe actions after a stop step.
   A stop step is an INTENTIONAL terminus — the recipe author designed this as the endpoint.
 

@@ -23,7 +23,7 @@ from tests.cli.test_food_truck_prompt import (
 pytestmark = [
     pytest.mark.layer("fleet"),
     pytest.mark.small,
-    pytest.mark.feature("capture-sentinel-contract"),
+    pytest.mark.feature("fleet"),
 ]
 
 

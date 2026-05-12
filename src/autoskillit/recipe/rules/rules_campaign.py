@@ -616,20 +616,18 @@ def _check_dispatch_capture_field_in_sentinel(ctx: ValidationContext) -> list[Ru
             continue
         sentinel_fields = _extract_sentinel_fields(target)
         if not sentinel_fields:
-            if d.capture:
-                findings.append(
-                    RuleFinding(
-                        rule="dispatch-capture-field-in-sentinel",
-                        severity=Severity.ERROR,
-                        step_name="(top-level)",
-                        message=(
-                            f"Dispatch {d.name!r} has capture fields but target recipe "
-                            f"{d.recipe!r} has no parseable sentinel stop step. "
-                            f"Add an 'Example sentinel: {{...}}' JSON block to the target "
-                            f"recipe's success stop step message."
-                        ),
-                    )
+            findings.append(
+                RuleFinding(
+                    rule="dispatch-capture-field-in-sentinel",
+                    severity=Severity.ERROR,
+                    step_name="(top-level)",
+                    message=(
+                        f"Dispatch {d.name!r} has captures but target recipe "
+                        f"{d.recipe!r} has no parseable sentinel stop step. Add an "
+                        f"'Example sentinel: {{...}}' JSON block to the success stop step."
+                    ),
                 )
+            )
             continue
         for cap_key, cap_val in d.capture.items():
             match = _RESULT_FIELD_RE.match(cap_val.from_.strip())
@@ -645,9 +643,8 @@ def _check_dispatch_capture_field_in_sentinel(ctx: ValidationContext) -> list[Ru
                         message=(
                             f"Dispatch {d.name!r} captures {cap_key!r} as "
                             f"${{{{ result.{field_name} }}}} but target recipe "
-                            f"{d.recipe!r} has no sentinel stop step listing "
-                            f"field {field_name!r}. "
-                            f"Known sentinel fields: {sorted(sentinel_fields)}."
+                            f"{d.recipe!r} sentinel does not list field {field_name!r}. "
+                            f"Known: {sorted(sentinel_fields)}."
                         ),
                     )
                 )
@@ -721,11 +718,9 @@ def _check_dispatch_capture_field_in_all_sentinels(
                         step_name="(top-level)",
                         message=(
                             f"Dispatch {d.name!r} captures {cap_key!r} as "
-                            f"${{{{ result.{field_name} }}}} but not all sentinel "
-                            f"stop paths in target recipe {d.recipe!r} emit "
-                            f"field {field_name!r}. The field is missing from "
-                            f"{len(missing_in)} of {len(per_stop)} sentinel paths. "
-                            f"All sentinel paths must emit all captured fields."
+                            f"${{{{ result.{field_name} }}}} but not all sentinel stop "
+                            f"paths in {d.recipe!r} emit field {field_name!r}. Missing "
+                            f"from {len(missing_in)} of {len(per_stop)} paths."
                         ),
                     )
                 )
@@ -998,8 +993,7 @@ def _check_gate_dispatch_no_capture(ctx: ValidationContext) -> list[RuleFinding]
                     step_name="(top-level)",
                     message=(
                         f"Dispatch {d.name!r} has gate={d.gate!r} but also specifies "
-                        f"capture={d.capture!r}. Gate dispatches produce no L3 session "
-                        "output and must not specify capture."
+                        f"capture. Gate dispatches produce no L3 session output."
                     ),
                 )
             )

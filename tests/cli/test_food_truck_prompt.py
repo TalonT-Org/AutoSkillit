@@ -9,6 +9,8 @@ import re
 
 import pytest
 
+from autoskillit.core.types import CaptureEntrySpec
+
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small, pytest.mark.feature("fleet")]
 
 # --- Fixtures ---
@@ -232,12 +234,16 @@ class TestSentinelFormat:
     @pytest.mark.parametrize(
         "capture_arg",
         [
-            {"worktree_path": "${{ result.worktree_path }}"},
-            {"worktree_path": "${{ result.worktree_path }}", "pr_url": "${{ result.pr_url }}"},
+            {
+                "worktree_path": CaptureEntrySpec(from_="${{ result.worktree_path }}"),
+                "pr_url": CaptureEntrySpec(from_="${{ result.pr_url }}"),
+            },
         ],
-        ids=["1-key", "2-key"],
+        ids=["2-key"],
     )
-    def test_sentinel_capture_fields_injected(self, capture_arg: dict[str, str]) -> None:
+    def test_sentinel_capture_fields_injected(
+        self, capture_arg: dict[str, CaptureEntrySpec]
+    ) -> None:
         from autoskillit.fleet._prompts import _build_food_truck_prompt
 
         prompt = _build_food_truck_prompt(
@@ -251,15 +257,16 @@ class TestSentinelFormat:
             capture=capture_arg,
         )
         section8 = prompt[prompt.index("--- SECTION 8") :]
-        for key, description in capture_arg.items():
-            assert f"capture_{key}" in section8
-            assert description in section8
+        for entry in capture_arg.values():
+            field = entry.from_.split("result.")[1].strip().rstrip("}")
+            assert f'"{field}"' in section8
+            assert entry.from_ in section8
         assert '"success"' in section8
         assert '"reason"' in section8
 
     @pytest.mark.parametrize("capture_arg", [None, {}], ids=["none", "empty"])
     def test_sentinel_section8_unchanged_when_capture_none(
-        self, capture_arg: dict[str, str] | None
+        self, capture_arg: dict[str, CaptureEntrySpec] | None
     ) -> None:
         from autoskillit.fleet._prompts import _build_food_truck_prompt
 

@@ -14,8 +14,10 @@ import regex as re
 from autoskillit.core import (
     ADMIRAL_DISPATCH_SECTIONS,
     ROUTING_AUTHORITY_CLAUSE,
+    CaptureEntrySpec,
     get_logger,
     pkg_root,
+    resolve_payload_field,
 )
 from autoskillit.hooks import (
     QUOTA_BUDGET_EXCEEDED_TRIGGER,
@@ -62,7 +64,7 @@ def _build_food_truck_prompt(
     dispatch_id: str,
     campaign_id: str,
     l3_timeout_sec: int,
-    capture: dict[str, str] | None = None,
+    capture: dict[str, CaptureEntrySpec] | None = None,
 ) -> str:
     """Build the system prompt for an L2 food truck headless session.
 
@@ -72,9 +74,8 @@ def _build_food_truck_prompt(
     budget guidance, quota awareness, campaign task, ingredient values,
     and a sentinel-anchored result contract.
 
-    ``capture`` is an optional mapping of captured field names to their
-    descriptions, used to inject additional fields into the Section 8
-    sentinel format block.
+    ``capture`` is an optional mapping of capture entry keys to their specs,
+    used to inject additional fields into the Section 8 sentinel format block.
     """
     dispatch_id_short = dispatch_id[:8]
     ingredients_json = json.dumps(ingredients)
@@ -82,15 +83,25 @@ def _build_food_truck_prompt(
 
     admiral_block = _build_admiral_dispatch_block()
 
+    capture_field_pairs: list[tuple[str, str, str]] = []
+    if capture:
+        for key, entry in capture.items():
+            field = resolve_payload_field(entry) or key
+            capture_field_pairs.append((key, field, entry.from_))
+
     extra_fields_example = (
-        ", " + ", ".join(f'"capture_{k}": "<{k}_value>"' for k in capture) if capture else ""
+        ", " + ", ".join(f'"{field}": "<{field}_value>"' for _, field, _ in capture_field_pairs)
+        if capture_field_pairs
+        else ""
     )
     sentinel_json_example = (
         '{"success": <true|false>, "reason": "<completion_reason>",'
         ' "summary": "<one_line_summary>"' + extra_fields_example + "}"
     )
     extra_fields_docs = (
-        "\n" + "\n".join(f"- capture_{k}: {v}" for k, v in capture.items()) if capture else ""
+        "\n" + "\n".join(f"- {field}: {from_}" for _, field, from_ in capture_field_pairs)
+        if capture_field_pairs
+        else ""
     )
 
     return f"""\

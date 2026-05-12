@@ -7,7 +7,32 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-__all__ = ["CAPTURE_VALID_VALUE_TYPES", "CaptureEntrySpec", "CaptureValueTypeError"]
+__all__ = [
+    "CAPTURE_VALID_VALUE_TYPES",
+    "CaptureEntrySpec",
+    "CaptureValueTypeError",
+    "resolve_payload_field",
+]
+
+import re
+
+_RESULT_REF_RE = re.compile(r"^\$\{\{\s*result\.([\w-]+)\s*\}\}$")
+
+
+def resolve_payload_field(entry: CaptureEntrySpec) -> str | None:
+    """Extract the payload field name from a CaptureEntrySpec's ``from_`` template.
+
+    Parses the ``${{ result.<field_name> }}`` template string and returns the
+    bare field name. Returns ``None`` if the template does not match the expected
+    pattern.
+
+    This is the single source of truth for deriving the JSON field name that
+    L3 sessions should emit in the sentinel block and that the extractor
+    uses to look up values in the parsed payload.
+    """
+    m = _RESULT_REF_RE.match(entry.from_.strip())
+    return m.group(1) if m else None
+
 
 CAPTURE_VALID_VALUE_TYPES = frozenset({"path", "url", "string", "optional_string"})
 

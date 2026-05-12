@@ -26,6 +26,7 @@ from autoskillit.core import (
     claude_code_log_path,
     claude_code_project_dir,
     get_logger,
+    resolve_payload_field,
     truncate_text,
     write_versioned_json,
 )
@@ -51,7 +52,6 @@ class CaptureCompletenessError(RuntimeError):
 
 
 _CAMPAIGN_REF_RE = re.compile(r"\$\{\{\s*campaign\.(\w+)\s*\}\}")
-_RESULT_REF_RE = re.compile(r"^\$\{\{\s*result\.([\w-]+)\s*\}\}$")
 
 
 def _validate_capture_value(key: str, value: str, declared_type: str) -> None:
@@ -120,10 +120,9 @@ def _extract_captures(
     result: dict[str, str] = {}
     expected_fields: list[str] = []
     for key, entry in capture_spec.items():
-        m = _RESULT_REF_RE.match(entry.from_.strip())
-        if m is None:
+        field_name = resolve_payload_field(entry)
+        if field_name is None:
             continue
-        field_name = m.group(1)
         expected_fields.append(field_name)
         if field_name in payload:
             value: object = payload[field_name]
@@ -633,7 +632,7 @@ async def _run_dispatch(
         dispatch_id=dispatch_id,
         campaign_id=campaign_id,
         l3_timeout_sec=timeout_sec or 1800,
-        capture={k: e.from_ for k, e in capture.items()} if capture else None,
+        capture=capture,
     )
 
     if tool_ctx.executor is None:

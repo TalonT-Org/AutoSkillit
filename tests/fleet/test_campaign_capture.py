@@ -649,7 +649,7 @@ class TestCaptureFieldNameRoundTrip:
             assert field is not None
             assert f'"{field}"' in section8, f"Bare field name {field!r} not in Section 8"
             assert f"capture_{field}" not in section8, (
-                f"Prefix form capture_{field!r} found in Section 8 — extractor uses bare names"
+                f"Prefix form capture_{field} found in Section 8 — extractor uses bare names"
             )
 
     def test_synthetic_payload_round_trip(self) -> None:

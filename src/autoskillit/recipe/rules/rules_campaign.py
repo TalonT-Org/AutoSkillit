@@ -11,7 +11,10 @@ import regex as re
 
 from autoskillit.core import RECIPE_PACK_REGISTRY, DispatchGateType, Severity, get_logger
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe._rule_helpers import _SENTINEL_JSON_RE, _is_failure_sentinel_value
+from autoskillit.recipe._rule_helpers import (
+    _is_failure_sentinel_value,
+    extract_sentinel_json_blocks,
+)
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 from autoskillit.recipe.schema import CAMPAIGN_REF_RE, CampaignDispatch, RecipeKind
 
@@ -36,9 +39,9 @@ def _extract_sentinel_fields(recipe: Recipe) -> frozenset[str]:
             continue
         if "sentinel" not in step.message.lower():
             continue
-        for match in _SENTINEL_JSON_RE.finditer(step.message):
+        for block in extract_sentinel_json_blocks(step.message):
             try:
-                parsed = json.loads(match.group(1))
+                parsed = json.loads(block)
                 if isinstance(parsed, dict):
                     fields.update(parsed.keys())
             except (json.JSONDecodeError, ValueError):
@@ -613,6 +616,20 @@ def _check_dispatch_capture_field_in_sentinel(ctx: ValidationContext) -> list[Ru
             continue
         sentinel_fields = _extract_sentinel_fields(target)
         if not sentinel_fields:
+            if d.capture:
+                findings.append(
+                    RuleFinding(
+                        rule="dispatch-capture-field-in-sentinel",
+                        severity=Severity.ERROR,
+                        step_name="(top-level)",
+                        message=(
+                            f"Dispatch {d.name!r} has capture fields but target recipe "
+                            f"{d.recipe!r} has no parseable sentinel stop step. "
+                            f"Add an 'Example sentinel: {{...}}' JSON block to the target "
+                            f"recipe's success stop step message."
+                        ),
+                    )
+                )
             continue
         for cap_key, cap_val in d.capture.items():
             match = _RESULT_FIELD_RE.match(cap_val.from_.strip())
@@ -653,9 +670,9 @@ def _extract_sentinel_fields_per_stop(recipe: Recipe) -> list[frozenset[str]]:
             continue
         fields: set[str] = set()
         is_failure_sentinel = False
-        for match in _SENTINEL_JSON_RE.finditer(step.message):
+        for block in extract_sentinel_json_blocks(step.message):
             try:
-                parsed = json.loads(match.group(1))
+                parsed = json.loads(block)
                 if isinstance(parsed, dict):
                     _sv = parsed.get("success")
                     if _is_failure_sentinel_value(_sv):
@@ -663,7 +680,7 @@ def _extract_sentinel_fields_per_stop(recipe: Recipe) -> list[frozenset[str]]:
                         break
                     fields.update(parsed.keys())
             except (json.JSONDecodeError, ValueError):
-                logger.debug("sentinel_json_parse_failed", step=step.name, raw=match.group(1))
+                logger.debug("sentinel_json_parse_failed", step=step.name, raw=block)
                 continue
         if not is_failure_sentinel and fields:
             per_stop.append(frozenset(fields))

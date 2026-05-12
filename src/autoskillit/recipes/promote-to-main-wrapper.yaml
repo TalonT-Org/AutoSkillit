@@ -63,6 +63,7 @@ steps:
     message: >-
       Promotion complete. Emit your L3 sentinel JSON block now with
       success=true, pr_url, verdict, and category_summary.
+      Example sentinel: {"success": true, "pr_url": "https://github.com/org/repo/pull/123", "verdict": "approved", "category_summary": "All checks passed"}
 
   escalate_stop:
     action: stop

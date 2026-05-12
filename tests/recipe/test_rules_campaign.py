@@ -1306,7 +1306,12 @@ def test_dispatch_capture_field_in_sentinel_checks_any_sentinel(tmp_path: Path):
 
 
 def test_dispatch_capture_field_in_sentinel_skips_no_sentinel(tmp_path: Path):
-    """Rule silently skips when target has no sentinel stop step."""
+    """Rule emits ERROR when target has no sentinel stop step but dispatch has captures.
+
+    The old behavior was a silent skip — this was the root cause of 4 broken
+    campaign dispatches. Now the rule errors so recipe authors must add
+    proper sentinel examples.
+    """
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
     _write_recipe_yaml(
@@ -1331,7 +1336,9 @@ def test_dispatch_capture_field_in_sentinel_skips_no_sentinel(tmp_path: Path):
         ]
     )
     found = _findings(recipe, "dispatch-capture-field-in-sentinel", project_dir=tmp_path)
-    assert found == []
+    assert len(found) == 1
+    assert found[0].severity == Severity.ERROR
+    assert "no parseable sentinel" in found[0].message
 
 
 def test_dispatch_capture_field_in_sentinel_skips_no_capture(tmp_path: Path):
@@ -1377,6 +1384,161 @@ def test_dispatch_capture_field_in_sentinel_skips_gate_dispatches(tmp_path: Path
     )
     found = _findings(recipe, "dispatch-capture-field-in-sentinel", project_dir=tmp_path)
     assert found == []
+
+
+# ---------------------------------------------------------------------------
+# T-S2: Sentinel extraction robustness tests (Step 1b, 1c, 1d)
+# ---------------------------------------------------------------------------
+
+
+def test_extract_sentinel_fields_handles_nested_braces(tmp_path: Path):
+    """Sentinel JSON with nested arrays/objects must be fully parsed.
+
+    The old regex '[Ee]xample\\s+sentinel:\\s*(\\{[^}]+\\})' stops at the first
+    '}' inside a nested structure like dispatch_plan=[{"group": 1}...], producing
+    invalid JSON that json.loads() fails on. This should be silently caught,
+    leaving sentinel_fields empty — which is the bug.
+    """
+    from autoskillit.recipe.rules.rules_campaign import _extract_sentinel_fields
+
+    recipe = _campaign(
+        dispatches=[
+            CampaignDispatch(
+                name="phase-one",
+                recipe="target-recipe",
+                task="do it",
+                capture={"execution_map": _cap("${{ result.execution_map }}")},
+            ),
+        ],
+    )
+    # Override the recipe name for testing since _extract_sentinel_fields uses the recipe
+    # object directly, not the name
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    _write_recipe_yaml(
+        recipes_dir / "target-recipe.yaml",
+        {
+            "name": "target-recipe",
+            "description": "target",
+            "kind": "standard",
+            "kitchen_rules": ["NEVER"],
+            "ingredients": {"task": {"description": "t", "required": True}},
+            "steps": {
+                "done": {
+                    "action": "stop",
+                    "message": (
+                        "Emit the L3 result sentinel JSON block now. "
+                        'Example sentinel: {"success": true, "execution_map": "/path/map.json", '
+                        '"dispatch_plan": [{"group": 1, "parallel": true, "issues": "1155,1156"}]}'
+                    ),
+                }
+            },
+        },
+    )
+    from autoskillit.recipe.io import find_recipe_by_name, load_recipe
+
+    info = find_recipe_by_name("target-recipe", tmp_path)
+    assert info is not None
+    target = load_recipe(info.path)
+    sentinel_fields = _extract_sentinel_fields(target)
+    # After the fix, nested structures should be parseable and 'execution_map' should be found
+    assert "execution_map" in sentinel_fields, (
+        f"Nested-brace sentinel was not parseable. Got fields: {sentinel_fields}"
+    )
+
+
+def test_extract_sentinel_fields_handles_alternate_sentinel_phrasing(tmp_path: Path):
+    """Stop steps using 'sentinel JSON:' instead of 'Example sentinel:' must be parsed.
+
+    The regex only matches '[Ee]xample\\s+sentinel:' — it misses the
+    'include it directly in the sentinel JSON:' phrasing used by full-audit.yaml.
+    """
+    from autoskillit.recipe.rules.rules_campaign import _extract_sentinel_fields
+
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    _write_recipe_yaml(
+        recipes_dir / "target-recipe.yaml",
+        {
+            "name": "target-recipe",
+            "description": "target",
+            "kind": "standard",
+            "kitchen_rules": ["NEVER"],
+            "ingredients": {"task": {"description": "t", "required": True}},
+            "steps": {
+                "done": {
+                    "action": "stop",
+                    "message": (
+                        "Emit the L3 result sentinel JSON block now. "
+                        "include it directly in the sentinel JSON: "
+                        '{"success": true, "issue_urls": "https://..."}'
+                    ),
+                }
+            },
+        },
+    )
+    from autoskillit.recipe.io import find_recipe_by_name, load_recipe
+
+    info = find_recipe_by_name("target-recipe", tmp_path)
+    assert info is not None
+    target = load_recipe(info.path)
+    sentinel_fields = _extract_sentinel_fields(target)
+    # After the fix, alternate phrasing should be matched and 'issue_urls' should be found
+    assert "issue_urls" in sentinel_fields, (
+        f"Alternate phrasing 'sentinel JSON:' was not matched. Got fields: {sentinel_fields}"
+    )
+
+
+def test_dispatch_capture_field_in_sentinel_errors_when_sentinel_unparseable(tmp_path: Path):
+    """When a dispatch has captures but the target recipe's sentinel cannot be parsed,
+    the rule must emit an ERROR, not silently skip.
+
+    The old code has: if not sentinel_fields: continue
+    This silently passes when extraction fails for any reason.
+    """
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    _write_recipe_yaml(
+        recipes_dir / "target-recipe.yaml",
+        {
+            "name": "target-recipe",
+            "description": "target",
+            "kind": "standard",
+            "kitchen_rules": ["NEVER"],
+            "ingredients": {"task": {"description": "t", "required": True}},
+            "steps": {
+                "done": {
+                    "action": "stop",
+                    "message": (
+                        "Emit the L3 result sentinel JSON block now. "
+                        "Promotion complete with pr_url and verdict."
+                    ),
+                }
+            },
+        },
+    )
+    recipe = _campaign(
+        dispatches=[
+            CampaignDispatch(
+                name="promote",
+                recipe="target-recipe",
+                task="promote to main",
+                capture={
+                    "pr_url": _cap("${{ result.pr_url }}"),
+                    "verdict": _cap("${{ result.verdict }}"),
+                },
+            ),
+        ]
+    )
+    found = _findings(recipe, "dispatch-capture-field-in-sentinel", project_dir=tmp_path)
+    # After the fix, an unparseable sentinel with non-empty capture must error
+    assert len(found) >= 1, (
+        "Rule silently skipped when sentinel was unparseable. "
+        "Expected at least one ERROR finding when capture is non-empty "
+        "but target recipe has no parseable sentinel."
+    )
+    assert found[0].severity == Severity.ERROR
+    assert "pr_url" in found[0].message or "no parseable sentinel" in found[0].message.lower()
 
 
 def test_dispatch_capture_field_in_sentinel_skips_unloadable_target(tmp_path: Path):

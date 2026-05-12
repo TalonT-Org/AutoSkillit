@@ -28,6 +28,8 @@ IL-2 fleet campaign layer — parallel issue dispatch, semaphore, sidecar, liven
 |------|---------|
 | `tests/fleet/test_state_lock_contract.py` | Locking contract tests — AST scan for flock targets, flock acquisition per mutation, cross-caller concurrency |
 | `tests/fleet/test_state_recovery.py` | Tests for `derive_orchestrator_resume_spec` |
+| `tests/fleet/test_campaign_capture.py` | Campaign capture extraction and ingredient interpolation tests |
+| `tests/fleet/test_capture_roundtrip.py` | Prompt-extractor field name alignment tests — verifies sentinel example uses bare names matching `_extract_captures` expectations |
 
 ## Architecture Notes
 

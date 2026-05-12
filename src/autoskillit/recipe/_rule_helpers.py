@@ -8,7 +8,46 @@ import regex as re
 
 from autoskillit.recipe._analysis import ValidationContext
 
-_SENTINEL_JSON_RE = re.compile(r"[Ee]xample\s+sentinel:\s*(\{[^}]+\})", re.DOTALL)
+# Trigger regex: matches multiple sentinel-indicating phrases
+_SENTINEL_TRIGGER_RE = re.compile(
+    r"[Ee]xample\s+sentinel:|sentinel\s+JSON:|sentinel:\s*\{",
+    re.DOTALL,
+)
+
+
+def extract_sentinel_json_blocks(text: str) -> list[str]:
+    """Extract complete JSON object strings from a text using bracket-aware parsing.
+
+    Handles nested braces and arrays, unlike a simple regex that stops at the first `}`.
+    Matches any sentinel-indicating trigger phrase (e.g., "Example sentinel:",
+    "sentinel JSON:", "sentinel: {") and then uses bracket counting to find the matching
+    closing brace for the JSON object that follows.
+
+    Returns a list of raw JSON strings (still serialized) that can be passed to json.loads().
+    """
+    blocks: list[str] = []
+    for match in _SENTINEL_TRIGGER_RE.finditer(text):
+        # Position right after the trigger phrase
+        start = match.end()
+        # Find first non-whitespace character
+        while start < len(text) and text[start] in " \t\n\r":
+            start += 1
+        if start >= len(text) or text[start] != "{":
+            continue
+        # Bracket-counting scan to find matching closing brace
+        depth = 0
+        i = start
+        while i < len(text):
+            ch = text[i]
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    blocks.append(text[start : i + 1])
+                    break
+            i += 1
+    return blocks
 
 
 def _is_failure_sentinel_value(val: Any) -> bool:

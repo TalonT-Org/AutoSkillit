@@ -33,7 +33,10 @@ from autoskillit.recipe._recipe_ingredients import (
     build_ingredient_rows,  # noqa: F401
     format_ingredients_table,
 )
-from autoskillit.recipe._rule_helpers import _SENTINEL_JSON_RE, _is_failure_sentinel_value
+from autoskillit.recipe._rule_helpers import (
+    _is_failure_sentinel_value,
+    extract_sentinel_json_blocks,
+)
 from autoskillit.recipe.contracts import (
     check_contract_staleness,
     load_recipe_card,
@@ -265,13 +268,13 @@ def _infer_stop_failure(name: str, message: str | None) -> bool:
     Parses embedded sentinel JSON first; falls back to name-based heuristic.
     """
     if message:
-        for m in _SENTINEL_JSON_RE.finditer(message):
+        for block in extract_sentinel_json_blocks(message):
             try:
-                parsed = json.loads(m.group(1))
+                parsed = json.loads(block)
                 if isinstance(parsed, dict) and "success" in parsed:
                     return _is_failure_sentinel_value(parsed["success"])
             except (json.JSONDecodeError, ValueError):
-                logger.debug("sentinel_json_parse_failed", step=name, raw=m.group(1))
+                logger.debug("sentinel_json_parse_failed", step=name, raw=block)
                 continue
     return "escalate" in name.lower() or "reject" in name.lower()
 

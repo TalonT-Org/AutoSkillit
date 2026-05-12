@@ -11,7 +11,12 @@ import json
 
 import regex as re
 
-from autoskillit.core import ADMIRAL_DISPATCH_SECTIONS, get_logger, pkg_root
+from autoskillit.core import (
+    ADMIRAL_DISPATCH_SECTIONS,
+    ROUTING_AUTHORITY_CLAUSE,
+    get_logger,
+    pkg_root,
+)
 from autoskillit.hooks import (
     QUOTA_BUDGET_EXCEEDED_TRIGGER,
     QUOTA_GUARD_DENY_TRIGGER,
@@ -185,6 +190,8 @@ STEP EXECUTION IS NOT DISCRETIONARY:
   looks simple, or you judge the step unnecessary.
 - The ONLY mechanism for skipping a step is skip_when_false evaluating to false.
   When skip_when_false evaluates to true (or is absent), the step is MANDATORY.
+
+{ROUTING_AUTHORITY_CLAUSE}
 
 HOOK DENIAL COMPLIANCE — ALL HOOKS:
 - When a PreToolUse hook DENIES a tool call (permissionDecision: "deny"), the denial

@@ -8,6 +8,7 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 |------|---------|
 | `__init__.py` | empty |
 | `_anti_confirm_helpers.py` | Shared anti-confirmation regex for contract tests — mirrors production regex |
+| `_anti_fab_helpers.py` | Shared anti-fabrication regex for contract tests — mirrors production guard pattern |
 | `conftest.py` | Shared constants for contract tests — REFUSAL_SIGNALS |
 | `test_activate_deps_completeness.py` | Contracts: SKILL.md activate_deps must cover invoked Skill tool calls |
 | `test_advisory_coverage.py` | Contracts: SKILL_FILE_ADVISORY_MAP advisory hook coverage |

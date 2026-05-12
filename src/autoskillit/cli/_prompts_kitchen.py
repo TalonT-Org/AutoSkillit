@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from autoskillit.cli._prompts import _MCP_RETRY_INSTRUCTION, _read_full_sous_chef
-from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS
+from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, ROUTING_AUTHORITY_CLAUSE
 
 __all__ = [
     "_build_open_kitchen_prompt",
@@ -55,7 +55,8 @@ def _build_open_kitchen_prompt(mcp_prefix: str) -> str:
         "- The ONLY mechanism for skipping a step is skip_when_false evaluating to false.\n"
         "- Consequence: skipping PR review steps results in unreviewed code, missing diff\n"
         "  annotations, and no architectural lens analysis — code reaches main without\n"
-        "  quality gates." + sous_chef_content
+        "  quality gates.\n\n"
+        f"## ROUTING AUTHORITY\n\n{ROUTING_AUTHORITY_CLAUSE}\n" + sous_chef_content
     )
 
     scripts_dir = Path.cwd() / ".autoskillit" / "scripts"
@@ -103,6 +104,10 @@ TOOL SURFACE — these 10 tools are available in this session:
 - {mcp_prefix}fetch_github_issue      — retrieve issue context when dispatching issue work
 - {mcp_prefix}get_issue_title         — get the title of a GitHub issue
 {_food_truck_section}{admiral_section}
+## ROUTING AUTHORITY
+
+{ROUTING_AUTHORITY_CLAUSE}
+
 ## RECIPE DISCOVERY FLOW
 
 1. Call {mcp_prefix}list_recipes to see available recipes.

@@ -90,3 +90,47 @@ def test_food_truck_has_sentinel_stop_severity_is_error():
     rule = next((r for r in _RULE_REGISTRY if r.name == "food-truck-has-sentinel-stop"), None)
     assert rule is not None, "Rule 'food-truck-has-sentinel-stop' not found in registry"
     assert rule.severity == Severity.ERROR
+
+
+# ---------------------------------------------------------------------------
+# T20: escalate-route-coverage
+# ---------------------------------------------------------------------------
+
+
+def test_escalate_route_coverage_rule_fires_when_escalate_routes_present():
+    """Escalate routing targets in food-truck steps trigger WARNING findings."""
+    recipe = _food_truck_recipe(
+        steps={
+            "do": RecipeStep(
+                action="run_skill",
+                on_failure="escalate_stop",
+            ),
+        },
+    )
+    found = _findings(recipe, "escalate-route-coverage")
+    assert len(found) == 1
+    assert found[0].severity == Severity.WARNING
+    assert "escalate_stop" in found[0].message
+
+
+def test_escalate_route_coverage_rule_passes_when_no_escalate_routes():
+    """Food-truck recipe without escalate routes produces no findings."""
+    recipe = _food_truck_recipe()
+    found = _findings(recipe, "escalate-route-coverage")
+    assert found == []
+
+
+def test_escalate_route_coverage_rule_skips_standard():
+    """Standard recipe produces no findings for escalate-route-coverage rule."""
+    recipe = _standard_recipe()
+    found = _findings(recipe, "escalate-route-coverage")
+    assert found == []
+
+
+def test_escalate_route_coverage_severity_is_warning():
+    """Guard: escalate-route-coverage must be WARNING, not ERROR."""
+    from autoskillit.recipe.registry import _RULE_REGISTRY
+
+    rule = next((r for r in _RULE_REGISTRY if r.name == "escalate-route-coverage"), None)
+    assert rule is not None, "Rule 'escalate-route-coverage' not found in registry"
+    assert rule.severity == Severity.WARNING

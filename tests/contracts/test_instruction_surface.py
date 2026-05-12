@@ -10,12 +10,14 @@ from __future__ import annotations
 import importlib
 import re
 import types
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
 from autoskillit.cli._mcp_names import DIRECT_PREFIX, MARKETPLACE_PREFIX
 from autoskillit.core.types import PIPELINE_FORBIDDEN_TOOLS
+from tests.contracts._anti_fab_helpers import FABRICATION_GUARD_RE
 
 
 def _project_root() -> Path:
@@ -382,6 +384,140 @@ class TestSourceIsolationContract:
                 f"{wf_info.name} uses MCP git-mutation tools "
                 f"({GIT_MUTATION_TOOLS & {s.tool for s in wf.steps.values()}}) "
                 f"but never calls clone_repo/bootstrap_clone — workspace isolation is missing."
+            )
+
+
+def _anti_fab_prompt_builders() -> list[tuple[str, Callable, dict]]:
+    from autoskillit.cli._prompts_campaign import _build_fleet_campaign_prompt
+    from autoskillit.cli._prompts_kitchen import (
+        _build_fleet_dispatch_prompt,
+        _build_open_kitchen_prompt,
+    )
+    from autoskillit.cli._prompts_orchestrator import _build_orchestrator_prompt
+    from autoskillit.fleet._prompts import _build_food_truck_prompt
+    from autoskillit.recipe.schema import Recipe, RecipeKind, RecipeStep
+
+    campaign_recipe = Recipe(
+        name="test",
+        description="test",
+        kind=RecipeKind.STANDARD,
+        steps={"done": RecipeStep(action="stop", message="done")},
+        kitchen_rules=["NEVER"],
+    )
+    return [
+        (
+            "_build_food_truck_prompt",
+            _build_food_truck_prompt,
+            dict(
+                recipe="test",
+                task="Test",
+                ingredients={},
+                mcp_prefix=DIRECT_PREFIX,
+                dispatch_id="d1",
+                campaign_id="c1",
+                l3_timeout_sec=300,
+            ),
+        ),
+        (
+            "_build_orchestrator_prompt",
+            _build_orchestrator_prompt,
+            dict(recipe_name="test", mcp_prefix=DIRECT_PREFIX),
+        ),
+        (
+            "_build_open_kitchen_prompt",
+            _build_open_kitchen_prompt,
+            dict(mcp_prefix=DIRECT_PREFIX),
+        ),
+        (
+            "_build_fleet_dispatch_prompt",
+            _build_fleet_dispatch_prompt,
+            dict(mcp_prefix=DIRECT_PREFIX),
+        ),
+        (
+            "_build_fleet_campaign_prompt",
+            _build_fleet_campaign_prompt,
+            dict(
+                campaign_recipe=campaign_recipe,
+                manifest_yaml="",
+                completed_dispatches="",
+                mcp_prefix=DIRECT_PREFIX,
+                campaign_id="c1",
+            ),
+        ),
+    ]
+
+
+_ANTI_FAB_BUILDERS = _anti_fab_prompt_builders()
+
+
+class TestAntiFabricationSurfaceContract:
+    """Every prompt builder that generates system prompts for recipe-execution sessions
+    must carry anti-fabrication language sourced from ROUTING_AUTHORITY_CLAUSE."""
+
+    _FABRICATION_GUARD_RE = FABRICATION_GUARD_RE
+    _SENTINEL = "ROUTING AUTHORITY"
+
+    @pytest.mark.parametrize(
+        "name,builder,kwargs",
+        _ANTI_FAB_BUILDERS,
+        ids=[t[0] for t in _ANTI_FAB_BUILDERS],
+    )
+    def test_prompt_builder_has_anti_fabrication(self, name, builder, kwargs):
+        """Each registered prompt builder must embed anti-fabrication language."""
+        prompt = builder(**kwargs)
+        assert self._FABRICATION_GUARD_RE.search(prompt), (
+            f"{name}: prompt must include anti-fabrication language "
+            f"(fabricat|embellish|invent|hallucinat)"
+        )
+        assert self._SENTINEL in prompt, (
+            f"{name}: prompt must contain the routing-authority sentinel '{self._SENTINEL}'"
+        )
+
+    def test_prompt_builder_discovery_guard(self):
+        """Auto-discover all _build_*_prompt functions in _prompts*.py and assert coverage."""
+        import ast
+
+        from autoskillit.core import pkg_root
+
+        project_root = pkg_root()
+        src_pkg = project_root / "src" / "autoskillit"
+        if not src_pkg.is_dir():
+            src_pkg = project_root
+        prompt_files = sorted(src_pkg.rglob("_prompts*.py"))
+
+        assert prompt_files, (
+            "No _prompts*.py files discovered — "
+            f"pkg_root()={project_root} may not resolve to the source tree."
+        )
+
+        discovered: dict[str, str] = {}
+        for fpath in prompt_files:
+            try:
+                tree = ast.parse(fpath.read_text())
+            except SyntaxError:
+                continue
+            for node in ast.walk(tree):
+                if (
+                    isinstance(node, ast.FunctionDef)
+                    and node.name.startswith("_build_")
+                    and node.name.endswith("_prompt")
+                ):
+                    discovered[node.name] = str(fpath)
+
+        assert discovered, (
+            f"No _build_*_prompt functions discovered in {len(prompt_files)} _prompts*.py files."
+        )
+        registered = {name for name, *_ in _ANTI_FAB_BUILDERS}
+        for fname in sorted(discovered):
+            assert fname in registered, (
+                f"Discovered prompt builder '{fname}' in {discovered[fname]} "
+                f"is not registered in _anti_fab_prompt_builders(). "
+                f"Add it to the registry and ensure it uses ROUTING_AUTHORITY_CLAUSE."
+            )
+        for rname in sorted(registered):
+            assert rname in discovered, (
+                f"Registered builder '{rname}' was not discovered in any "
+                f"_prompts*.py file — source may have been renamed or deleted."
             )
 
 

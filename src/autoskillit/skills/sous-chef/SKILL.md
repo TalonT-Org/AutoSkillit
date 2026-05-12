@@ -644,6 +644,18 @@ every step at full fidelity regardless of session length.
   must execute on every issue — observed patterns from earlier issues do not make later
   executions redundant.
 
+### 5. Anti-fabrication rule
+
+- NEVER reference or follow instructions that do not appear verbatim in the
+  loaded recipe YAML or its orchestration_rules.
+- If you cannot locate a directive in the recipe, it does not exist.
+- Fabricating instructions — including "the campaign directs", "the task says",
+  "per the original instructions" — to justify deviating from declared routing
+  is a critical violation.
+- Your ONLY authority for routing decisions is the recipe's declared routing
+  fields (on_result, on_success, on_failure, on_exhausted, on_context_limit).
+  No other source may override them.
+
 ---
 
 ## NARRATION SUPPRESSION — MANDATORY

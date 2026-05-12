@@ -350,8 +350,10 @@ def test_always_block_references_ten_validation_rules() -> None:
     m = re.search(r"\*\*ALWAYS:\*\*\n(.+?)(?=\n## |\Z)", text, re.DOTALL)
     assert m, "ALWAYS block not found in SKILL.md"
     always_block = m.group(1).lower()
-    assert "10 validation rules" in always_block or "all 10 validation" in always_block, (
-        "ALWAYS block must reference '10 validation rules'"
+    synonyms = ["10 validation rules", "all 10 validation", "ten validation"]
+    v_rules_listed = all(f"v{i}" in always_block for i in range(1, 11))
+    assert any(s in always_block for s in synonyms) or v_rules_listed, (
+        "ALWAYS block must reference all 10 validation rules"
     )
 
 

@@ -477,6 +477,24 @@ def upsert_dispatch_record_by_name(state_path: Path, record: DispatchRecord) -> 
                         f"with {record.status!r} — "
                         f"use mark_dispatch_* state machine methods for valid transitions"
                     )
+                # FAILURE-to-FAILURE: snapshot prior failure diagnostics before overwrite
+                if (
+                    d.status == DispatchStatus.FAILURE
+                    and record.status == DispatchStatus.FAILURE
+                    and d.reason
+                ):
+                    snapshot: dict[str, Any] = {}
+                    for f in dataclasses.fields(d):
+                        if f.name in _RETRY_IDENTITY_FIELDS:
+                            continue
+                        val = getattr(d, f.name)
+                        if f.name == "status":
+                            snapshot[f.name] = str(val)
+                        elif isinstance(val, dict):
+                            snapshot[f.name] = dict(val)
+                        else:
+                            snapshot[f.name] = val
+                    record.attempt_history = [snapshot] + list(record.attempt_history)
                 m.state.dispatches[i] = record
                 m.mark_dirty()
                 return

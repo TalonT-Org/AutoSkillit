@@ -30,9 +30,9 @@ def make_stdout(payload_json: str, dispatch_id: str = DISPATCH_ID) -> str:
     )
 
 
-def make_jsonl_file(tmp_path, messages: list[str]) -> Path:
+def make_jsonl_file(tmp_path, messages: list[str], filename: str = "session.jsonl") -> Path:
     """Write a JSONL file with type=assistant records containing given text."""
-    path: Path = tmp_path / "session.jsonl"
+    path: Path = tmp_path / filename
     lines = []
     for text in messages:
         record = {
@@ -411,3 +411,110 @@ def test_parse_prior_dispatch_ids_jsonl_fallback(tmp_path: Path) -> None:
     )
     assert result.outcome == "completed_clean"
     assert result.payload["summary"] == "from_jsonl"
+
+
+def test_parse_recovers_sentinel_from_additional_jsonl_paths(tmp_path: Path) -> None:
+    """Sentinel in additional_jsonl_paths (prior session) is recovered on primary miss."""
+    original_session_jsonl = make_jsonl_file(
+        tmp_path,
+        [
+            f"---l3-result::{DISPATCH_ID}---\n"
+            f'{{"success": true, "summary": "from_original_session"}}\n'
+            f"---end-l3-result::{DISPATCH_ID}---"
+        ],
+        "original_session.jsonl",
+    )
+    result = parse_l3_result_block(
+        stdout="no sentinel here",
+        expected_dispatch_id=DISPATCH_ID,
+        assistant_messages_path=tmp_path / "empty_session.jsonl",
+        additional_jsonl_paths=[original_session_jsonl],
+    )
+    assert result.outcome == "completed_clean"
+    assert result.payload["summary"] == "from_original_session"
+    assert result.source == "assistant_messages_jsonl"
+
+
+def test_parse_additional_jsonl_paths_scanned_oldest_first(tmp_path: Path) -> None:
+    """Additional paths are scanned in order; _scan_for_sentinel returns the last sentinel in each file."""
+    older = make_jsonl_file(
+        tmp_path,
+        [
+            f"---l3-result::{DISPATCH_ID}---\n"
+            f'{{"summary": "older"}}\n'
+            f"---end-l3-result::{DISPATCH_ID}---"
+        ],
+        "older.jsonl",
+    )
+    newer = make_jsonl_file(
+        tmp_path,
+        [
+            f"---l3-result::{DISPATCH_ID}---\n"
+            f'{{"summary": "newer"}}\n'
+            f"---end-l3-result::{DISPATCH_ID}---"
+        ],
+        "newer.jsonl",
+    )
+    result = parse_l3_result_block(
+        stdout="",
+        expected_dispatch_id=DISPATCH_ID,
+        additional_jsonl_paths=[older, newer],
+    )
+    # _scan_for_sentinel uses rfind, returning the LAST sentinel in each file.
+    # Files are scanned in order; first match wins (iteration order).
+    # older.jsonl is scanned first and returns "older".
+    assert result.outcome == "completed_clean"
+    assert result.payload["summary"] == "older"
+
+
+def test_parse_primary_jsonl_wins_over_additional(tmp_path: Path) -> None:
+    """When primary JSONL has the sentinel, additional paths are not consulted."""
+    primary_jsonl = make_jsonl_file(
+        tmp_path,
+        [
+            f"---l3-result::{DISPATCH_ID}---\n"
+            f'{{"summary": "primary"}}\n'
+            f"---end-l3-result::{DISPATCH_ID}---"
+        ],
+        "primary.jsonl",
+    )
+    additional_jsonl = make_jsonl_file(
+        tmp_path,
+        [
+            f"---l3-result::{DISPATCH_ID}---\n"
+            f'{{"summary": "additional"}}\n'
+            f"---end-l3-result::{DISPATCH_ID}---"
+        ],
+        "additional.jsonl",
+    )
+    result = parse_l3_result_block(
+        stdout="",
+        expected_dispatch_id=DISPATCH_ID,
+        assistant_messages_path=primary_jsonl,
+        additional_jsonl_paths=[additional_jsonl],
+    )
+    assert result.outcome == "completed_clean"
+    assert result.payload["summary"] == "primary"
+
+
+def test_parse_additional_jsonl_paths_nonexistent_skipped(tmp_path: Path) -> None:
+    """Non-existent additional paths are skipped without error."""
+    existing_jsonl = make_jsonl_file(
+        tmp_path,
+        [
+            f"---l3-result::{DISPATCH_ID}---\n"
+            f'{{"summary": "existing"}}\n'
+            f"---end-l3-result::{DISPATCH_ID}---"
+        ],
+        "existing.jsonl",
+    )
+    result = parse_l3_result_block(
+        stdout="",
+        expected_dispatch_id=DISPATCH_ID,
+        additional_jsonl_paths=[
+            tmp_path / "does_not_exist.jsonl",
+            existing_jsonl,
+        ],
+    )
+    assert result.outcome == "completed_clean"
+    assert result.payload["summary"] == "existing"

@@ -1591,3 +1591,105 @@ class TestUpsertCannotOverwriteFailureWithSuccess:
             )
         assert "FAILURE" in str(exc_info.value)
         assert "run-implement" in str(exc_info.value)
+
+
+class TestUpsertFailureToFailureSnapshotsPrior:
+    """FAILURE-to-FAILURE overwrites must snapshot prior diagnostics to attempt_history."""
+
+    def test_upsert_failure_to_failure_snapshots_prior(self, tmp_path: Path) -> None:
+        """FAILURE record with non-empty reason is snapshotted before overwrite."""
+        from autoskillit.fleet import upsert_dispatch_record_by_name
+
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", [DispatchRecord(name="run-implement")])
+
+        upsert_dispatch_record_by_name(
+            sp,
+            DispatchRecord(
+                name="run-implement",
+                status=DispatchStatus.FAILURE,
+                reason="fleet_l3_parse_failed",
+                kill_reason="context_exhausted",
+            ),
+        )
+
+        upsert_dispatch_record_by_name(
+            sp,
+            DispatchRecord(
+                name="run-implement",
+                status=DispatchStatus.FAILURE,
+                reason="fleet_l3_no_result_block",
+            ),
+        )
+
+        state = read_state(sp)
+        assert state is not None
+        disp = next(d for d in state.dispatches if d.name == "run-implement")
+        assert len(disp.attempt_history) == 1
+        snapshot = disp.attempt_history[0]
+        assert snapshot["reason"] == "fleet_l3_parse_failed"
+        assert snapshot["kill_reason"] == "context_exhausted"
+        assert disp.status == DispatchStatus.FAILURE
+        assert disp.reason == "fleet_l3_no_result_block"
+
+    def test_upsert_failure_to_failure_no_snapshot_when_reason_empty(self, tmp_path: Path) -> None:
+        """No snapshot is taken when existing record has empty reason."""
+        from autoskillit.fleet import upsert_dispatch_record_by_name
+
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", [DispatchRecord(name="run-implement")])
+
+        upsert_dispatch_record_by_name(
+            sp,
+            DispatchRecord(
+                name="run-implement",
+                status=DispatchStatus.FAILURE,
+                reason="",
+            ),
+        )
+
+        upsert_dispatch_record_by_name(
+            sp,
+            DispatchRecord(
+                name="run-implement",
+                status=DispatchStatus.FAILURE,
+                reason="fleet_l3_no_result_block",
+            ),
+        )
+
+        state = read_state(sp)
+        assert state is not None
+        disp = next(d for d in state.dispatches if d.name == "run-implement")
+        assert len(disp.attempt_history) == 0
+
+    def test_upsert_failure_to_failure_preserves_existing_attempt_history(
+        self, tmp_path: Path
+    ) -> None:
+        """Pre-existing attempt_history is preserved when new snapshot is prepended."""
+        from autoskillit.fleet import upsert_dispatch_record_by_name
+
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", [DispatchRecord(name="run-implement")])
+
+        first_record = DispatchRecord(
+            name="run-implement",
+            status=DispatchStatus.FAILURE,
+            reason="first_failure",
+            attempt_history=[],
+        )
+        upsert_dispatch_record_by_name(sp, first_record)
+
+        second_record = DispatchRecord(
+            name="run-implement",
+            status=DispatchStatus.FAILURE,
+            reason="second_failure",
+            attempt_history=[{"dispatch_id": "prior-attempt", "status": "failure"}],
+        )
+        upsert_dispatch_record_by_name(sp, second_record)
+
+        state = read_state(sp)
+        assert state is not None
+        disp = next(d for d in state.dispatches if d.name == "run-implement")
+        assert len(disp.attempt_history) == 2
+        assert disp.attempt_history[0]["reason"] == "first_failure"
+        assert disp.attempt_history[1]["dispatch_id"] == "prior-attempt"

@@ -371,6 +371,8 @@ class TestClearDispatchFieldCoverage:
                 dirty_values[f.name] = 9999.0
             elif isinstance(default, dict):
                 dirty_values[f.name] = {"prompt_tokens": 500}
+            elif isinstance(default, list):
+                dirty_values[f.name] = ["sess-1", "sess-2"]
             elif default is None:
                 dirty_values[f.name] = "/dirty/path"
             elif isinstance(default, DispatchStatus):
@@ -420,6 +422,8 @@ class TestSnapshotCompleteness:
                 dirty_values[f.name] = 9999.0
             elif isinstance(default, dict):
                 dirty_values[f.name] = {"prompt_tokens": 500}
+            elif isinstance(default, list):
+                dirty_values[f.name] = ["sess-1", "sess-2"]
             elif default is None:
                 dirty_values[f.name] = "/dirty/path"
             elif isinstance(default, DispatchStatus):
@@ -466,6 +470,8 @@ class TestSnapshotCompleteness:
                 assert snapshot[key] == str(expected_val)
             elif isinstance(expected_val, dict):
                 assert snapshot[key] == dict(expected_val)
+            elif isinstance(expected_val, list):
+                assert snapshot[key] == list(expected_val)
             else:
                 assert snapshot[key] == expected_val, (
                     f"Snapshot[{key!r}] = {snapshot[key]!r}, expected {expected_val!r}"

@@ -335,6 +335,7 @@ class TestDispatchRecordToDict:
             "campaign_id",
             "caller_session_id",
             "dispatched_session_id",
+            "session_chain",
             "dispatched_session_log_dir",
             "dispatched_pid",
             "dispatched_starttime_ticks",
@@ -460,6 +461,26 @@ class TestDispatchRecordSchemaV3:
         sp.write_text(json.dumps(v1_payload))
         state = read_state(sp)
         assert state is None
+
+
+class TestSessionChainFields:
+    def test_session_chain_in_to_dict(self) -> None:
+        """to_dict includes session_chain."""
+        d = DispatchRecord(name="d1", session_chain=["sess-a", "sess-b"])
+        result = d.to_dict()
+        assert "session_chain" in result
+        assert result["session_chain"] == ["sess-a", "sess-b"]
+
+    def test_session_chain_from_dict_missing_defaults_empty(self) -> None:
+        """from_dict handles missing session_chain (v4 compat)."""
+        d = DispatchRecord.from_dict({"name": "d1"})
+        assert d.session_chain == []
+
+    def test_session_chain_round_trips_through_to_dict(self) -> None:
+        """session_chain survives to_dict round-trip."""
+        d = DispatchRecord(name="d1", session_chain=["sess-first", "sess-second"])
+        roundtripped = DispatchRecord.from_dict(d.to_dict())
+        assert roundtripped.session_chain == ["sess-first", "sess-second"]
 
 
 class TestAttemptHistoryFields:

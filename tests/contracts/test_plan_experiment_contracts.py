@@ -460,3 +460,14 @@ def test_review_design_wet_lab_stop_criterion() -> None:
     assert "stop" in section, (
         "The data_acquisition section containing wet_lab must be STOP-eligible"
     )
+
+
+def test_wet_lab_present_in_both_source_type_vocabularies() -> None:
+    """If scope defines wet_lab as a direction type, data_manifest must also have wet_lab."""
+    from autoskillit.core import DATA_MANIFEST_SOURCE_TYPES, SCOPE_DIRECTION_SOURCE_TYPES
+
+    if "wet_lab" in SCOPE_DIRECTION_SOURCE_TYPES:
+        assert "wet_lab" in DATA_MANIFEST_SOURCE_TYPES, (
+            "scope defines wet_lab as a direction source_type but data_manifest "
+            "vocabulary does not include wet_lab — pipeline will misclassify wet-lab data"
+        )

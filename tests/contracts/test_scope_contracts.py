@@ -64,3 +64,13 @@ class TestComputationalComplexitySection:
             "Step 1 subagent must instruct gathering of computational complexity "
             "fields including dominant operation (heading alone is not sufficient)"
         )
+
+
+def test_scope_source_type_matches_canonical() -> None:
+    """scope SKILL.md source_type enum must list all canonical direction source types."""
+    from autoskillit.core import SCOPE_DIRECTION_SOURCE_TYPES
+
+    text = _read_scope_skill_md()
+    lower = text.lower()
+    for st in SCOPE_DIRECTION_SOURCE_TYPES:
+        assert st in lower, f"scope SKILL.md missing direction source_type '{st}'"

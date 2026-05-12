@@ -66,6 +66,18 @@ def test_skill_filters_external_and_gitignored(skill_text: str) -> None:
     assert "gitignored" in lower
 
 
+def test_download_data_handles_all_source_types(skill_text: str) -> None:
+    """download-data must explicitly mention every canonical source_type (process or skip)."""
+    from autoskillit.core import DATA_MANIFEST_SOURCE_TYPES
+
+    lower = skill_text.lower()
+    missing = [st for st in DATA_MANIFEST_SOURCE_TYPES if st not in lower]
+    assert not missing, (
+        f"download-data SKILL.md does not mention source_type(s): {missing}. "
+        "Every canonical source_type must be explicitly handled (processed or skipped)."
+    )
+
+
 def test_skill_executes_acquisition_commands(skill_text: str) -> None:
     """Skill must execute acquisition commands."""
     assert "acquisition" in skill_text.lower()

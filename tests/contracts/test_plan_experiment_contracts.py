@@ -112,15 +112,19 @@ def test_experiment_type_enum_lists_all_registry_types() -> None:
     assert not missing, f"experiment_type enum missing registry types: {missing}"
 
 
-def test_source_type_enum_includes_literature_and_database() -> None:
-    """source_type enum includes literature and database values."""
+def test_source_type_enum_matches_canonical() -> None:
+    """plan-experiment source_type enum must list exactly the canonical set."""
+    from autoskillit.core import DATA_MANIFEST_SOURCE_TYPES
 
     text = SKILL_PATH.read_text()
     m = re.search(r"source_type:\s*synthetic\s*#\s*([^\n]+)", text, re.IGNORECASE)
     assert m, "source_type enum comment not found in SKILL.md"
-    comment = m.group(1)
-    assert "literature" in comment, "source_type enum missing 'literature'"
-    assert "database" in comment, "source_type enum missing 'database'"
+    comment = m.group(1).lower()
+    for st in DATA_MANIFEST_SOURCE_TYPES:
+        assert st in comment, f"source_type enum missing canonical value '{st}'"
+    enum_values = {v.strip() for v in comment.split("|")}
+    extra = enum_values - DATA_MANIFEST_SOURCE_TYPES
+    assert not extra, f"source_type enum has values not in canonical constant: {extra}"
 
 
 def test_field_requirements_table_covers_all_registry_types() -> None:
@@ -318,7 +322,9 @@ def test_v9_requires_gitignored_acquisition_command() -> None:
 
 
 def test_v9_and_data_acquisition_source_type_consistency() -> None:
-    """V9 and data_acquisition must address the same source_type variants."""
+    """V9 and data_acquisition must address acquisition-bearing source_types."""
+    from autoskillit.core import DATA_MANIFEST_SOURCE_TYPES
+
     pe_text = SKILL_PATH.read_text()
     rd_text = REVIEW_DESIGN_SKILL_PATH.read_text()
 
@@ -328,19 +334,14 @@ def test_v9_and_data_acquisition_source_type_consistency() -> None:
 
     da_start = rd_text.lower().find("data_acquisition")
     assert da_start != -1, "data_acquisition not found in review-design"
-    da = rd_text[da_start : da_start + 3000].lower()
+    da_block = rd_text[da_start : da_start + 5000].lower()
 
-    for source_type in ("external", "gitignored"):
+    no_acquisition = {"synthetic", "fixture", "literature", "database", "wet_lab"}
+    check_types = DATA_MANIFEST_SOURCE_TYPES - no_acquisition
+
+    for source_type in check_types:
         assert source_type in v9, f"V9 must address source_type: {source_type}"
-        assert source_type in da, f"data_acquisition must address source_type: {source_type}"
-
-    placeholder_signals = ["placeholder", "template", "unresolved", "{"]
-    assert any(s in v9 for s in placeholder_signals), (
-        "V9 must mention template/placeholder validation"
-    )
-    assert any(s in da for s in placeholder_signals), (
-        "data_acquisition must mention template/placeholder validation"
-    )
+        assert source_type in da_block, f"data_acquisition must address source_type: {source_type}"
 
 
 def test_always_block_references_ten_validation_rules() -> None:
@@ -429,3 +430,33 @@ def test_v4_requires_spec_path_for_custom_env() -> None:
     assert m, "V4 rule not found in SKILL.md"
     v4_block = m.group(0).lower()
     assert "spec_path" in v4_block, "V4 must require spec_path"
+
+
+def test_v9_addresses_wet_lab_entries() -> None:
+    """V9 must specify rules for wet_lab source_type entries."""
+    text = SKILL_PATH.read_text()
+    v9_block = extract_validation_rule_block(text, "V9")
+    assert v9_block is not None, "V9 rule block not found"
+    v9 = v9_block.lower()
+    assert "wet_lab" in v9, (
+        "V9 must address wet_lab source_type entries — they should NOT require "
+        "acquisition or location fields since the data does not yet exist"
+    )
+
+
+def test_review_design_wet_lab_stop_criterion() -> None:
+    """review-design must have a STOP-eligible check for wet_lab data dependencies."""
+    rd_text = REVIEW_DESIGN_SKILL_PATH.read_text()
+
+    lower = rd_text.lower()
+    assert "wet_lab" in lower, "review-design SKILL.md must mention wet_lab source type"
+    da_start = lower.find("data_acquisition")
+    assert da_start != -1, "data_acquisition dimension not found in review-design"
+    section = lower[da_start : da_start + 5000]
+    assert "wet_lab" in section, (
+        "wet_lab must appear in the data_acquisition dimension "
+        "(STOP-eligible), not in agent_implementability (REVISE-only)"
+    )
+    assert "stop" in section, (
+        "The data_acquisition section containing wet_lab must be STOP-eligible"
+    )

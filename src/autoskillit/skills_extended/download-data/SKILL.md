@@ -65,15 +65,17 @@ immediately.
 
 Read the experiment plan at the provided path (or default path). Parse the
 `data_manifest` YAML frontmatter section. Identify all entries where
-`source_type` is `"external"` or `"gitignored"`.
+`source_type` is `"external"` or `"gitignored"`. Skip `synthetic`, `fixture`,
+`literature`, `database`, and `wet_lab` entries — these do not require external
+data downloads.
 
 ### Step 2 — Short-Circuit for No-Downloads Plans
 
 If no `external` or `gitignored` entries with `acquisition` commands exist,
 emit `verdict = PASS` with a note that no external data downloads are required.
 Write a minimal download report and exit. This covers synthetic/fixture-only
-plans and plans with only `source_type: literature` or `source_type: database`
-entries that lack acquisition commands.
+plans and plans with only `source_type: literature`, `source_type: database`,
+or `source_type: wet_lab` entries.
 
 ### Step 3 — Execute Acquisition Commands Sequentially
 

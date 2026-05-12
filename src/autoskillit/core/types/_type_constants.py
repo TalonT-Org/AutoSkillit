@@ -66,6 +66,7 @@ __all__ = [
     "SOUS_CHEF_MANDATORY_SECTIONS",
     "ADMIRAL_DISPATCH_SECTIONS",
     "KNOWN_CI_EVENTS",
+    "DATA_MANIFEST_SOURCE_TYPES",
 ]
 
 AUTOSKILLIT_INSTALLED_VERSION: str = version("autoskillit")
@@ -665,5 +666,17 @@ KNOWN_CI_EVENTS: frozenset[str] = frozenset(
         "workflow_dispatch",
         "schedule",
         "workflow_call",
+    }
+)
+
+DATA_MANIFEST_SOURCE_TYPES: frozenset[str] = frozenset(
+    {
+        "synthetic",
+        "fixture",
+        "external",
+        "gitignored",
+        "literature",
+        "database",
+        "wet_lab",
     }
 )

@@ -113,12 +113,10 @@ def test_all_campaign_dispatches_have_parseable_sentinels():
         if campaign.kind == RecipeKind.CAMPAIGN and any(
             d.capture for d in campaign.dispatches if d.capture
         ):
-            campaigns_with_captures.append(campaign_path.stem)
+            campaigns_with_captures.append((campaign_path.stem, campaign))
 
     failures: list[str] = []
-    for campaign_name in campaigns_with_captures:
-        campaign_path = _RECIPES_DIR / "campaigns" / f"{campaign_name}.yaml"
-        campaign = load_recipe(campaign_path)
+    for campaign_name, campaign in campaigns_with_captures:
         for dispatch in campaign.dispatches:
             if not dispatch.capture:
                 continue

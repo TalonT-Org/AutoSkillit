@@ -26,7 +26,9 @@ def test_data_manifest_in_frontmatter_schema() -> None:
 
 def test_data_manifest_required_fields() -> None:
     text = SKILL_PATH.read_text()
-    after_manifest = text.lower().split("data_manifest")[1][:2000]
+    parts = text.lower().split("### data_manifest")
+    assert len(parts) > 1, "### data_manifest heading not found in SKILL.md"
+    after_manifest = parts[1][:2000]
     for field in ("source_type", "acquisition", "verification", "hypothesis"):
         assert field in after_manifest, f"data_manifest missing field: {field}"
 
@@ -171,3 +173,88 @@ def test_v9_mentions_literature_and_database_source_types() -> None:
     v9_block = m.group(0)
     assert "literature" in v9_block.lower(), "V9 must mention literature source type"
     assert "database" in v9_block.lower(), "V9 must mention database source type"
+
+
+def test_subagent_b_requires_accession_verification() -> None:
+    """Subagent B instructions must mandate web-search verification of database accessions."""
+    import re
+
+    text = SKILL_PATH.read_text()
+    m = re.search(
+        r"Subagent B.*?(?=\*\*Subagent C|\*\*Additional subagents)",
+        text,
+        re.DOTALL | re.IGNORECASE,
+    )
+    assert m, "Subagent B section not found in SKILL.md"
+    subagent_b = m.group(0).lower()
+    assert "web" in subagent_b, (
+        "Subagent B must mention web-based verification of database accessions"
+    )
+    assert "search" in subagent_b or "fetch" in subagent_b, (
+        "Subagent B must mandate web search or web fetch to verify database accessions "
+        "before including them in data_manifest"
+    )
+    assert "accession" in subagent_b or "identifier" in subagent_b, (
+        "Subagent B must reference accession or identifier verification"
+    )
+
+
+def test_v10_semantic_verification_rule_exists() -> None:
+    """V10 rule must enforce semantic verification of database/literature accessions."""
+    import re
+
+    text = SKILL_PATH.read_text()
+    m = re.search(r"V10:.+?(?=\nV[0-9]+:|\n---|\n```|\Z)", text, re.DOTALL)
+    assert m, (
+        "V10 semantic verification rule not found in SKILL.md — "
+        "add a V10 rule requiring web-search confirmation of database/literature accessions"
+    )
+    v10_block = m.group(0).lower()
+    assert "verification" in v10_block or "verified" in v10_block or "confirm" in v10_block, (
+        "V10 must reference verification or confirmation of accessions"
+    )
+    assert "database" in v10_block, "V10 must cover database source_type entries"
+
+
+def test_additional_subagents_includes_accession_verification() -> None:
+    """Additional subagents section must list accession/citation verification as a category."""
+    import re
+
+    text = SKILL_PATH.read_text()
+    m = re.search(
+        r"\*\*Additional subagents.*?(?=\n\*\*Breadth enforcement|\n###|## )",
+        text,
+        re.DOTALL | re.IGNORECASE,
+    )
+    assert m, "Additional subagents section not found in SKILL.md"
+    section = m.group(0).lower()
+    assert "accession" in section or "citation" in section or "identifier" in section, (
+        "Additional subagents must list accession/citation/identifier verification "
+        "as a sanctioned web-search category"
+    )
+
+
+def test_anti_fabrication_covers_accession_identifiers() -> None:
+    """NEVER block must explicitly cover fabrication of database accession identifiers."""
+    import re
+
+    text = SKILL_PATH.read_text()
+    m = re.search(r"\*\*NEVER:\*\*.*?(?=\*\*ALWAYS:\*\*)", text, re.DOTALL)
+    assert m, "NEVER block not found in SKILL.md"
+    never_block = m.group(0).lower()
+    assert "accession" in never_block or "identifier" in never_block, (
+        "NEVER block must explicitly prohibit fabrication of database accession identifiers "
+        "or external dataset identifiers from training knowledge"
+    )
+
+
+def test_data_manifest_verification_url_field() -> None:
+    """data_manifest field definitions must include a verification_url field."""
+    text = SKILL_PATH.read_text()
+    parts = text.lower().split("### data_manifest")
+    assert len(parts) > 1, "### data_manifest heading not found in SKILL.md"
+    after_manifest = parts[1][:3000]
+    assert "verification_url" in after_manifest, (
+        "data_manifest section must include a verification_url field "
+        "to record the URL used to confirm accession existence"
+    )

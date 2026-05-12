@@ -10,13 +10,17 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small, pytest.mark.feature(
 
 
 class TestResolvePayloadField:
-    def test_basic_field_extraction(self) -> None:
-        entry = CaptureEntrySpec(from_="${{ result.worktree_path }}")
-        assert resolve_payload_field(entry) == "worktree_path"
-
-    def test_pr_url_field_extraction(self) -> None:
-        entry = CaptureEntrySpec(from_="${{ result.pr_url }}")
-        assert resolve_payload_field(entry) == "pr_url"
+    @pytest.mark.parametrize(
+        ("template", "expected"),
+        [
+            ("${{ result.worktree_path }}", "worktree_path"),
+            ("${{ result.pr_url }}", "pr_url"),
+            ("${{ result.field_name }}", "field_name"),
+        ],
+    )
+    def test_basic_field_extraction(self, template: str, expected: str) -> None:
+        entry = CaptureEntrySpec(from_=template)
+        assert resolve_payload_field(entry) == expected
 
     def test_hyphenated_field_name(self) -> None:
         entry = CaptureEntrySpec(from_="${{ result.worktree-path }}")
@@ -26,16 +30,16 @@ class TestResolvePayloadField:
         entry = CaptureEntrySpec(from_="not a template")
         assert resolve_payload_field(entry) is None
 
-    def test_whitespace_variations(self) -> None:
-        entry = CaptureEntrySpec(from_="${{result.worktree_path}}")
+    @pytest.mark.parametrize(
+        "template",
+        [
+            "${{result.worktree_path}}",
+            "${{  result.worktree_path  }}",
+        ],
+    )
+    def test_whitespace_variations(self, template: str) -> None:
+        entry = CaptureEntrySpec(from_=template)
         assert resolve_payload_field(entry) == "worktree_path"
-
-        entry = CaptureEntrySpec(from_="${{  result.worktree_path  }}")
-        assert resolve_payload_field(entry) == "worktree_path"
-
-    def test_bare_field_name_in_template(self) -> None:
-        entry = CaptureEntrySpec(from_="${{ result.field_name }}")
-        assert resolve_payload_field(entry) == "field_name"
 
     def test_with_value_type(self) -> None:
         entry = CaptureEntrySpec(from_="${{ result.worktree_path }}", value_type="path")

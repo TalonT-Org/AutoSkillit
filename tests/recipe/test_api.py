@@ -682,6 +682,8 @@ def test_build_stop_step_semantics_includes_sentinel_instruction():
     assert "sentinel" in sem.lower(), (
         "_build_stop_step_semantics must inject sentinel instructions"
     )
+    assert "success=true" in sem, "Must include success=true for non-failure stop steps"
+    assert "success=false" in sem, "Must include success=false for failure stop steps"
 
 
 def test_build_ingredient_rows_resolved_overrides_literal_default():

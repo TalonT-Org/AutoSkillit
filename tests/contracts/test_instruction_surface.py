@@ -447,6 +447,9 @@ def _anti_fab_prompt_builders() -> list[tuple[str, Callable, dict]]:
     ]
 
 
+_ANTI_FAB_BUILDERS = _anti_fab_prompt_builders()
+
+
 class TestAntiFabricationSurfaceContract:
     """Every prompt builder that generates system prompts for recipe-execution sessions
     must carry anti-fabrication language sourced from ROUTING_AUTHORITY_CLAUSE."""
@@ -456,8 +459,8 @@ class TestAntiFabricationSurfaceContract:
 
     @pytest.mark.parametrize(
         "name,builder,kwargs",
-        _anti_fab_prompt_builders(),
-        ids=[t[0] for t in _anti_fab_prompt_builders()],
+        _ANTI_FAB_BUILDERS,
+        ids=[t[0] for t in _ANTI_FAB_BUILDERS],
     )
     def test_prompt_builder_has_anti_fabrication(self, name, builder, kwargs):
         """Each registered prompt builder must embed anti-fabrication language."""
@@ -493,12 +496,21 @@ class TestAntiFabricationSurfaceContract:
                 ):
                     discovered[node.name] = str(fpath)
 
-        registered = {name for name, *_ in _anti_fab_prompt_builders()}
+        assert discovered, (
+            "No _build_*_prompt functions discovered — "
+            "pkg_root() may not resolve to the source tree."
+        )
+        registered = {name for name, *_ in _ANTI_FAB_BUILDERS}
         for fname in sorted(discovered):
             assert fname in registered, (
                 f"Discovered prompt builder '{fname}' in {discovered[fname]} "
                 f"is not registered in _anti_fab_prompt_builders(). "
                 f"Add it to the registry and ensure it uses ROUTING_AUTHORITY_CLAUSE."
+            )
+        for rname in sorted(registered):
+            assert rname in discovered, (
+                f"Registered builder '{rname}' was not discovered in any "
+                f"_prompts*.py file — source may have been renamed or deleted."
             )
 
 

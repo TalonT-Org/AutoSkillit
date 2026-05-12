@@ -336,8 +336,7 @@ class TestSessionChainAccumulatesAcrossResume:
 
         from autoskillit.fleet.state_types import DispatchRejected
 
-        if isinstance(result, DispatchRejected):
-            return
+        assert not isinstance(result, DispatchRejected), f"Unexpected rejection: {result}"
 
         state = read_state(prior_state_path)
         assert state is not None
@@ -413,8 +412,7 @@ class TestDispatchedSessionLogDirPopulated:
 
         from autoskillit.fleet.state_types import DispatchRejected
 
-        if isinstance(result, DispatchRejected):
-            return
+        assert not isinstance(result, DispatchRejected), f"Unexpected rejection: {result}"
 
         state_files = list(dispatches_dir.glob("*.json"))
         assert len(state_files) == 1

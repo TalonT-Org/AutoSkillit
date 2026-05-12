@@ -5,6 +5,7 @@ Zero autoskillit imports outside this sub-package. IL-0 type contract.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 __all__ = [
@@ -13,8 +14,6 @@ __all__ = [
     "CaptureValueTypeError",
     "resolve_payload_field",
 ]
-
-import re
 
 _RESULT_REF_RE = re.compile(r"^\$\{\{\s*result\.([\w-]+)\s*\}\}$")
 

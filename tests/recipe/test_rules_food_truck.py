@@ -108,7 +108,7 @@ def test_escalate_route_coverage_rule_fires_when_escalate_routes_present():
         },
     )
     found = _findings(recipe, "escalate-route-coverage")
-    assert found
+    assert len(found) == 1
     assert found[0].severity == Severity.WARNING
     assert "escalate_stop" in found[0].message
 

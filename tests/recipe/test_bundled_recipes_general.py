@@ -744,11 +744,12 @@ def test_requires_packs_covers_all_default_disabled_skill_categories() -> None:
     ],
 )
 def test_recipe_all_stop_steps_have_sentinel_instructions(recipe_name: str) -> None:
-    """Every stop step in every bundled dispatchable recipe must include sentinel emission instructions."""
+    """Every stop step in bundled dispatchable recipes must include sentinel instructions."""
     recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
     for step_name, step in recipe.steps.items():
         if step.action == "stop":
             assert step.message, f"{recipe_name}.yaml step '{step_name}' must have a message"
             assert "sentinel" in step.message.lower(), (
-                f"{recipe_name}.yaml step '{step_name}' must instruct L3 sentinel emission in its message"
+                f"{recipe_name}.yaml step '{step_name}' must instruct "
+                f"L3 sentinel emission in its message"
             )

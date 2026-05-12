@@ -56,7 +56,7 @@ def test_fleet_prompt_contains_budget_exceeded_routing():
 
 
 def test_h3b_stop_step_semantics_references_sentinel_and_success():
-    """H3b section of the fleet prompt must instruct the model to emit sentinel block with success field."""
+    """H3b must instruct sentinel block emission with success field."""
     prompt = _build_food_truck_prompt(
         recipe="test-recipe",
         task="Test task",

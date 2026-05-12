@@ -642,8 +642,10 @@ def _check_dispatch_capture_field_in_sentinel(ctx: ValidationContext) -> list[Ru
 def _extract_sentinel_fields_per_stop(recipe: Recipe) -> list[frozenset[str]]:
     """Extract field sets from each individual sentinel stop step.
 
-    Returns a list of frozensets, one per sentinel stop, rather than
-    the union. This enables per-path validation.
+    Returns a list of frozensets, one per success sentinel stop, rather than
+    the union. This enables per-path validation. Failure-terminal sentinels
+    (those whose example JSON contains ``"success": false``) are excluded
+    because failure paths do not produce captured result fields.
     """
     per_stop: list[frozenset[str]] = []
     for step in recipe.steps.values():
@@ -652,14 +654,18 @@ def _extract_sentinel_fields_per_stop(recipe: Recipe) -> list[frozenset[str]]:
         if "sentinel" not in step.message.lower():
             continue
         fields: set[str] = set()
+        is_failure_sentinel = False
         for match in _SENTINEL_JSON_RE.finditer(step.message):
             try:
                 parsed = json.loads(match.group(1))
                 if isinstance(parsed, dict):
+                    if parsed.get("success") is False:
+                        is_failure_sentinel = True
+                        break
                     fields.update(parsed.keys())
             except (json.JSONDecodeError, ValueError):
                 continue
-        if fields:
+        if not is_failure_sentinel and fields:
             per_stop.append(frozenset(fields))
     return per_stop
 

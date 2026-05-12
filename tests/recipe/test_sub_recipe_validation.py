@@ -190,10 +190,12 @@ def test_dual_validation_runs_standalone_and_combined(tmp_path: Path) -> None:
             on_failure: escalate
           finish:
             action: stop
-            message: Done.
+            message: >-
+              Pipeline finished. Emit the L3 result sentinel JSON block now.
           escalate:
             action: stop
-            message: Failed.
+            message: >-
+              Pipeline failed. Emit the L3 result sentinel JSON block now.
     """)
     (recipes_dir / "test-recipe.yaml").write_text(recipe_content)
 

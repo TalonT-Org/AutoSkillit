@@ -53,6 +53,8 @@ class CaptureEntrySpec:
     value_type: str = "string"
 
     def __post_init__(self) -> None:
+        if not self.from_ or not self.from_.strip():
+            raise ValueError("CaptureEntrySpec.from_ must be a non-empty string")
         if self.value_type not in _VALID_VALUE_TYPES:
             raise ValueError(
                 f"CaptureEntrySpec.value_type must be one of {sorted(_VALID_VALUE_TYPES)}, "

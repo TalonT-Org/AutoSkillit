@@ -160,7 +160,12 @@ def test_escalate_route_coverage_rule_passes_when_no_escalate_routes():
 
 def test_escalate_route_coverage_rule_skips_standard():
     """Standard recipe produces no findings for escalate-route-coverage rule."""
-    recipe = _standard_recipe()
+    recipe = Recipe(
+        name="standard-test",
+        description="standard recipe",
+        steps={"done": RecipeStep(action="stop", message="done")},
+        kitchen_rules=["NEVER"],
+    )
     found = _findings(recipe, "escalate-route-coverage")
     assert found == []
 

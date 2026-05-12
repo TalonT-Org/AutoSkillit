@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core.types import CaptureEntrySpec
+from autoskillit.core.types import CaptureEntrySpec, resolve_payload_field
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -645,7 +645,8 @@ class TestCaptureFieldNameRoundTrip:
         section8 = prompt[prompt.index("--- SECTION 8") :]
 
         for key, entry in capture_spec.items():
-            field = entry.from_.split("result.")[1].strip().rstrip("}")
+            field = resolve_payload_field(entry)
+            assert field is not None
             assert f'"{field}"' in section8, f"Bare field name {field!r} not in Section 8"
             assert f"capture_{field}" not in section8, (
                 f"Prefix form capture_{field!r} found in Section 8 — extractor uses bare names"

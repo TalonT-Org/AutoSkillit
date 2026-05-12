@@ -9,7 +9,7 @@ import re
 
 import pytest
 
-from autoskillit.core.types import CaptureEntrySpec
+from autoskillit.core.types import CaptureEntrySpec, resolve_payload_field
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -258,7 +258,8 @@ class TestSentinelFormat:
         )
         section8 = prompt[prompt.index("--- SECTION 8") :]
         for entry in capture_arg.values():
-            field = entry.from_.split("result.")[1].strip().rstrip("}")
+            field = resolve_payload_field(entry)
+            assert field is not None
             assert f'"{field}"' in section8
             assert entry.from_ in section8
         assert '"success"' in section8

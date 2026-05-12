@@ -180,10 +180,10 @@ steps:
     action: stop
     message: >-
       Smoke test completed successfully — PR created and closed without merging.
-      Emit the L3 result sentinel JSON block now.
+      Emit the L3 result sentinel JSON block now with success=true.
 
   escalate:
     action: stop
     message: >-
       Smoke test failed — check step output for details.
-      Emit the L3 result sentinel JSON block now.
+      Emit the L3 result sentinel JSON block now with success=false.

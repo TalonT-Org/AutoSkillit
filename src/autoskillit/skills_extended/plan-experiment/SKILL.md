@@ -61,6 +61,10 @@ incorporate the feedback before writing the plan.
 - Omit YAML frontmatter unless a V1–V4 ERROR is triggered — every plan must have frontmatter
 - Write frontmatter after the `# Experiment Plan:` heading — it always goes BEFORE
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Include database accession identifiers (GEO GSE*, SRA SRR*/SRP*, ENCODE ENCSR*, or
+  any external dataset identifier) in the data_manifest without first confirming their
+  existence via web search — accession patterns learned during training are frequently
+  hallucinated
 
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
@@ -135,6 +139,20 @@ information gaps and produce the best possible experiment plan.
 > download or generation, include the exact commands in the `acquisition` field.
 > For `literature` or `database` source types, describe the extraction or query
 > method in `acquisition` — download commands are not required.
+>
+> **Accession Verification (mandatory for database and literature source types):** For
+> every data_manifest entry with `source_type: database` or `source_type: literature`
+> that references a specific database accession (GEO GSE*, SRA SRR*/SRP*, ENCODE ENCSR*,
+> UniProt, PDB, or any external identifier) or a specific publication (DOI, PMID, author-
+> year citation), launch a web-search or web-fetch subagent to confirm:
+> (a) the accession/DOI resolves to an existing record,
+> (b) the organism, data type, or subject matter matches the plan's description, and
+> (c) the contributor/author attribution matches the plan's citation.
+> Record the confirmation URL in a `verification_url` field on the manifest entry.
+> If the accession cannot be confirmed, either remove the entry, switch to
+> `source_type: synthetic` with a generation plan, or flag the entry with
+> `verified: false` and a note explaining the verification failure. Never include
+> an unverified accession as accepted fact.
 
 **Subagent C — Environment Assessment:**
 > Determine whether the experiment can run with the project's existing
@@ -149,6 +167,8 @@ information gaps and produce the best possible experiment plan.
 - Research into how similar experiments have been designed elsewhere
 - Investigation of specific technical constraints or requirements
 - Any other research that improves the experiment plan
+- Web searches to verify database accession identifiers and literature citations
+  referenced in the data manifest — confirm each accession resolves and metadata matches
 
 **Breadth enforcement (when scope_directions.json is available):**
 Each direction with `must_cover: true` must be assessed for feasibility by at least
@@ -408,6 +428,14 @@ data_manifest:                        # REQUIRED — one entry per hypothesis (o
   #   acquisition: "extract values from published table"
   #   location: null
   #   verification: "values match published Table 2"
+  #   verification_url: "https://doi.org/10.1234/example.2023.table2"
+  # - hypothesis: [H5]
+  #   source_type: database
+  #   description: "ENCODE ChIP-seq for H3K27ac in HepG2"
+  #   acquisition: "query ENCODE REST API: /search/?type=Experiment&accession=ENCSR000EJD"
+  #   location: null
+  #   verification: "JSON response contains 'status': 'released'"
+  #   verification_url: "https://www.encodeproject.org/ENCSR000EJD/"
 
 experiment_slug: "{YYYY-MM-DD-slug}"  # optional, derived from directory layout
 ---
@@ -443,6 +471,7 @@ A list of data source entries, one per hypothesis (or shared across hypotheses).
 | `location` | no | Filesystem path where data will reside (null for in-script) |
 | `verification` | yes | How to confirm the data is present and valid |
 | `depends_on` | no | Prerequisite acquisition step (e.g., download before subset) |
+| `verification_url` | conditional | URL confirming accession existence (required for database/literature with external identifiers) |
 
 Apply these validation rules in order before writing the frontmatter:
 
@@ -480,9 +509,22 @@ V9: data_manifest completeness
     - Any entry with `source_type: literature` lacks a non-null `description` (must identify the source publication)
     NOTE: `literature` and `database` entries do NOT require `depends_on` or download commands.
     ERROR: "Data Manifest incomplete: {specific missing field or hypothesis}"
+
+V10: data_manifest semantic verification
+    ERROR if:
+    - Any entry with `source_type: database` references a specific accession identifier
+      (matching patterns like GSE*, SRR*, SRP*, ENCSR*, or any alphanumeric database ID)
+      AND lacks a `verification_url` field with a resolvable URL
+    - Any entry with `source_type: literature` references a specific publication
+      (DOI, PMID, or author-year citation) AND lacks a `verification_url` field
+    NOTE: Entries with `verified: false` explicitly set are exempt from this error
+      (they will appear as a V10 WARNING instead, alerting review-design to scrutinize).
+    WARNING if:
+    - Any database/literature entry has `verified: false` — flag for review-design attention
+    ERROR: "Unverified accession in data_manifest: {entry.description} has no verification_url"
 ```
 
-- ERRORs (V1–V4, V9): Stop frontmatter generation, append the error message to the plan
+- ERRORs (V1–V4, V9, V10): Stop frontmatter generation, append the error message to the plan
   prose under a `## Frontmatter Validation Errors` section, and save the plan WITHOUT
   a frontmatter block. Emit the `experiment_plan` token as usual.
 - WARNINGs (V5–V8): Continue; log each as a `# WARNING: ...` YAML comment on the

@@ -407,27 +407,25 @@ def test_v10_network_failure_is_warning_not_error() -> None:
 def test_v1_requires_baselines_for_applicable_types() -> None:
     """V1 must require baselines for applicable experiment types."""
     text = SKILL_PATH.read_text()
-    m = re.search(r"V1:\s*([^\n]+)", text)
+    m = re.search(r"V1:.+?(?=\nV[0-9]+:|\n---|\Z)", text, re.DOTALL)
     assert m, "V1 rule not found in SKILL.md"
-    v1_line = m.group(1).lower()
-    assert "baseline" in v1_line, "V1 must require baselines"
+    v1_block = m.group(0).lower()
+    assert "baseline" in v1_block, "V1 must require baselines"
 
 
 def test_v2_requires_estimand_contrast() -> None:
     """V2 must require estimand contrast for applicable experiment types."""
     text = SKILL_PATH.read_text()
-    m = re.search(r"V2:\s*([^\n]+)", text)
+    m = re.search(r"V2:.+?(?=\nV[0-9]+:|\n---|\Z)", text, re.DOTALL)
     assert m, "V2 rule not found in SKILL.md"
-    v2_line = m.group(1).lower()
-    assert "estimand" in v2_line or "contrast" in v2_line, "V2 must require estimand or contrast"
+    v2_block = m.group(0).lower()
+    assert "estimand" in v2_block or "contrast" in v2_block, "V2 must require estimand or contrast"
 
 
 def test_v4_requires_spec_path_for_custom_env() -> None:
     """V4 must require spec_path for custom environment type."""
     text = SKILL_PATH.read_text()
-    m = re.search(r"V4:\s*([^\n]+)", text)
+    m = re.search(r"V4:.+?(?=\nV[0-9]+:|\n---|\Z)", text, re.DOTALL)
     assert m, "V4 rule not found in SKILL.md"
-    v4_line = m.group(1).lower()
-    assert "spec_path" in v4_line or "environment" in v4_line, (
-        "V4 must require spec_path or environment"
-    )
+    v4_block = m.group(0).lower()
+    assert "spec_path" in v4_block, "V4 must require spec_path"

@@ -345,8 +345,13 @@ def test_v9_and_data_acquisition_source_type_consistency() -> None:
 
 def test_always_block_references_ten_validation_rules() -> None:
     """ALWAYS block must reference all 10 validation rules."""
+    import re
+
     text = SKILL_PATH.read_text()
-    assert "10 validation rules" in text.lower() or "all 10 validation" in text.lower(), (
+    m = re.search(r"\*\*ALWAYS:\*\*\n(.+?)(?=\n## |\Z)", text, re.DOTALL)
+    assert m, "ALWAYS block not found in SKILL.md"
+    always_block = m.group(1).lower()
+    assert "10 validation rules" in always_block or "all 10 validation" in always_block, (
         "ALWAYS block must reference '10 validation rules'"
     )
 

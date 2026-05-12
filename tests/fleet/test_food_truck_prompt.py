@@ -55,6 +55,29 @@ def test_fleet_prompt_contains_budget_exceeded_routing():
     assert "QUOTA BUDGET EXCEEDED" in prompt
 
 
+def test_h3b_stop_step_semantics_references_sentinel_and_success():
+    """H3b must instruct sentinel block emission with success field."""
+    prompt = _build_food_truck_prompt(
+        recipe="test-recipe",
+        task="Test task",
+        ingredients={},
+        mcp_prefix=DIRECT_PREFIX,
+        dispatch_id="test-dispatch",
+        campaign_id="test-campaign",
+        l3_timeout_sec=300,
+    )
+    h3b_start = prompt.find("H3b — STOP STEP SEMANTICS:")
+    h3c_start = prompt.find("H3c — ROUTE STEP SEMANTICS:")
+    assert h3b_start != -1, "H3b STOP STEP SEMANTICS section not found in prompt"
+    h3b_section = prompt[h3b_start:h3c_start] if h3c_start != -1 else prompt[h3b_start:]
+    assert "sentinel" in h3b_section.lower(), (
+        "H3b must reference 'sentinel' for stop step handling"
+    )
+    assert "success" in h3b_section.lower(), (
+        "H3b must instruct setting success field in sentinel block"
+    )
+
+
 def test_fleet_prompt_contains_missing_on_failure_sentinel():
     """The L2 fleet prompt must instruct the model to emit missing_on_failure sentinel."""
     prompt = _build_food_truck_prompt(

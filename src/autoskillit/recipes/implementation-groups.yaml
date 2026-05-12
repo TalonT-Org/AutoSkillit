@@ -886,6 +886,8 @@ steps:
       ${{ context.pr_number }}. This typically means no workflow is
       configured to trigger on this branch pattern. Check .github/workflows/
       trigger configuration. This is NOT a test failure — CI never started.
+      Emit the L3 result sentinel JSON block now with success=false.
+      Example sentinel: {"success": false, "reason": "no CI checks configured"}
 
   diagnose_ci:
     tool: run_skill
@@ -1689,9 +1691,15 @@ steps:
 
   done:
     action: stop
-    message: "Implementation pipeline complete. All groups/tasks have been planned, implemented, tested, and merged."
+    message: >-
+      Implementation pipeline complete. All groups/tasks have been planned, implemented, tested, and merged.
+      Emit the L3 result sentinel JSON block now with success=true.
+      Example sentinel: {"success": true, "reason": "implementation-groups complete"}
 
   escalate_stop:
     action: stop
-    message: "Pipeline failed — human intervention needed. Check the worktree and plan for details."
+    message: >-
+      Pipeline failed — human intervention needed. Check the worktree and plan for details.
+      Emit the L3 result sentinel JSON block now with success=false.
+      Example sentinel: {"success": false, "reason": "implementation-groups pipeline failed"}
 

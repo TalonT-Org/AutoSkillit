@@ -73,7 +73,7 @@
     },
     "escalate_stop": {
       "action": "stop",
-      "message": "Promotion failed — escalating for manual review."
+      "message": "Promotion failed — escalating for manual review. Emit the L3 result sentinel JSON block now with success=false. Example sentinel: {\"success\": false, \"reason\": \"promotion failed\"}"
     }
   }
 }

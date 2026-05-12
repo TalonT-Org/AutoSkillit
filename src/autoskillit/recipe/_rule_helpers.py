@@ -2,9 +2,19 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import regex as re
 
 from autoskillit.recipe._analysis import ValidationContext
+
+_SENTINEL_JSON_RE = re.compile(r"[Ee]xample\s+sentinel:\s*(\{[^}]+\})", re.DOTALL)
+
+
+def _is_failure_sentinel_value(val: Any) -> bool:
+    """Return True if *val* represents a failure sentinel success field."""
+    return val is False or (isinstance(val, str) and val.lower() == "false")
+
 
 _PATH_SAFE_LOOKBEHIND = r"(?<![.a-zA-Z0-9_/])"
 _PATH_SAFE_LOOKAHEAD = r"(?![.a-zA-Z0-9_/])"

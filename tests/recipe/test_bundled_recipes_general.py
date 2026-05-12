@@ -722,3 +722,27 @@ def test_requires_packs_covers_all_default_disabled_skill_categories() -> None:
             f"{path.name}: run_skill steps reference default-disabled packs {sorted(missing)} "
             f"but requires_packs={recipe.requires_packs!r} is missing them"
         )
+
+
+def _dispatchable_recipe_names() -> list[str]:
+    from autoskillit.recipe.rules.rules_food_truck import _DISPATCHABLE_KINDS
+
+    names = []
+    for yaml_file in sorted(builtin_recipes_dir().glob("*.yaml")):
+        recipe = load_recipe(yaml_file)
+        if recipe.kind in _DISPATCHABLE_KINDS:
+            names.append(recipe.name)
+    return names
+
+
+@pytest.mark.parametrize("recipe_name", _dispatchable_recipe_names())
+def test_recipe_all_stop_steps_have_sentinel_instructions(recipe_name: str) -> None:
+    """Every stop step in bundled dispatchable recipes must include sentinel instructions."""
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    for step_name, step in recipe.steps.items():
+        if step.action == "stop":
+            assert step.message, f"{recipe_name}.yaml step '{step_name}' must have a message"
+            assert "sentinel" in step.message.lower(), (
+                f"{recipe_name}.yaml step '{step_name}' must instruct "
+                f"L3 sentinel emission in its message"
+            )

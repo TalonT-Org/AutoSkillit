@@ -1358,11 +1358,11 @@
     },
     "done": {
       "action": "stop",
-      "message": "PR consolidation complete."
+      "message": "PR consolidation complete. Emit the L3 result sentinel JSON block now with success=true. Example sentinel: {\"success\": true, \"reason\": \"merge complete\"}"
     },
     "escalate_stop": {
       "action": "stop",
-      "message": "Pipeline failed — human intervention needed. Check the integration branch and {{AUTOSKILLIT_TEMP}}/merge-prs/ for details.",
+      "message": "Pipeline failed — human intervention needed. Check the integration branch and {{AUTOSKILLIT_TEMP}}/merge-prs/ for details. Emit the L3 result sentinel JSON block now with success=false. Example sentinel: {\"success\": false, \"reason\": \"merge-prs pipeline failed\"}",
       "note": "context.task may be null when reached via escalation_required=true from merge_pr (merge-pr does not set conflict_report_path on escalation paths). Do not rely on context.task being populated when handling this stop.\n"
     }
   }

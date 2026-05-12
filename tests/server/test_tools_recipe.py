@@ -86,10 +86,10 @@ steps:
     on_failure: escalate
   done:
     action: stop
-    message: "Done."
+    message: "Done. Emit the L3 result sentinel JSON block now."
   escalate:
     action: stop
-    message: "Failed."
+    message: "Failed. Emit the L3 result sentinel JSON block now."
 kitchen_rules:
   - "Follow routing rules"
 """
@@ -123,7 +123,7 @@ class TestValidateRecipeTool:
             "    on_failure: escalate\n"
             "  done:\n"
             "    action: stop\n"
-            '    message: "Done."\n'
+            '    message: "Done. Emit the L3 result sentinel JSON block now."\n'
         )
         result = json.loads(await validate_recipe(script_path=str(script)))
         assert result["valid"] is True
@@ -180,7 +180,7 @@ class TestValidateRecipeTool:
             "    on_failure: done\n"
             "  done:\n"
             "    action: stop\n"
-            '    message: "Done."\n'
+            '    message: "Done. Emit the L3 result sentinel JSON block now."\n'
         )
         result = json.loads(await validate_recipe(script_path=str(script)))
         assert result["valid"] is True
@@ -203,7 +203,7 @@ class TestValidateRecipeTool:
             "    on_success: done\n"
             "  done:\n"
             "    action: stop\n"
-            '    message: "Done."\n'
+            '    message: "Done. Emit the L3 result sentinel JSON block now."\n'
         )
         result = json.loads(await validate_recipe(script_path=str(script)))
         assert result["valid"] is False
@@ -241,7 +241,7 @@ class TestValidateRecipeTool:
             "    on_failure: escalate\n"
             "  done:\n"
             "    action: stop\n"
-            '    message: "Done."\n'
+            '    message: "Done. Emit the L3 result sentinel JSON block now."\n'
         )
         result = json.loads(await validate_recipe(script_path=str(script)))
         assert "findings" in result

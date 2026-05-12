@@ -25,16 +25,6 @@ def _food_truck_recipe(**kwargs: object) -> Recipe:
     return Recipe(**defaults)
 
 
-def _standard_recipe(**kwargs: object) -> Recipe:
-    return Recipe(
-        name="standard",
-        description="standard recipe",
-        steps={"done": RecipeStep(action="stop", message="done")},
-        kitchen_rules=["NEVER"],
-        **kwargs,
-    )
-
-
 def _findings(recipe: Recipe, rule: str, **ctx_kwargs: object) -> list:
     ctx = make_validation_context(recipe, **ctx_kwargs)
     return [f for f in run_semantic_rules(ctx) if f.rule == rule]
@@ -45,50 +35,98 @@ def _findings(recipe: Recipe, rule: str, **ctx_kwargs: object) -> list:
 # ---------------------------------------------------------------------------
 
 
-def test_food_truck_has_sentinel_stop_rule_fires_on_missing_sentinel():
-    """food-truck recipe with no sentinel in stop message triggers a finding."""
+def test_dispatchable_sentinel_rule_fires_on_missing_sentinel():
+    """Dispatchable recipe with no sentinel in any stop message triggers a finding."""
     recipe = _food_truck_recipe(
         steps={"done": RecipeStep(action="stop", message="Promotion complete.")},
     )
-    found = _findings(recipe, "food-truck-has-sentinel-stop")
+    found = _findings(recipe, "all-dispatchable-stops-have-sentinel")
     assert found
     assert found[0].severity == Severity.ERROR
 
 
 # ---------------------------------------------------------------------------
-# T9: food-truck-has-sentinel-stop (passes when present)
+# T9: all-dispatchable-stops-have-sentinel (passes when present)
 # ---------------------------------------------------------------------------
 
 
-def test_food_truck_has_sentinel_stop_rule_passes_when_present():
-    """food-truck recipe with sentinel in stop message produces no findings."""
+def test_dispatchable_sentinel_rule_passes_when_present():
+    """Food-truck recipe with sentinel in stop message produces no findings."""
     recipe = _food_truck_recipe(
         steps={
             "done": RecipeStep(action="stop", message="Done. Emit your L3 sentinel JSON block.")
         },
     )
-    found = _findings(recipe, "food-truck-has-sentinel-stop")
+    found = _findings(recipe, "all-dispatchable-stops-have-sentinel")
     assert found == []
 
 
-# ---------------------------------------------------------------------------
-# T10: food-truck-has-sentinel-stop (skips standard)
-# ---------------------------------------------------------------------------
+def test_food_truck_sentinel_rule_fires_on_non_sentinel_stop_step():
+    """Multi-stop food-truck recipe: one sentinel stop, one plain stop -> fires for plain stop."""
+    recipe = _food_truck_recipe(
+        steps={
+            "done": RecipeStep(
+                action="stop",
+                message="Emit sentinel JSON block",
+            ),
+            "escalate_stop": RecipeStep(
+                action="stop",
+                message="This task cannot proceed.",
+            ),
+        },
+    )
+    found = _findings(recipe, "all-dispatchable-stops-have-sentinel")
+    assert found, "Rule must fire for stop step without sentinel in message"
+    escalate_findings = [f for f in found if f.step_name == "escalate_stop"]
+    assert escalate_findings, "Rule must produce a finding for escalate_stop specifically"
 
 
-def test_food_truck_has_sentinel_stop_rule_skips_standard():
-    """Standard recipe produces no findings for the food-truck sentinel rule."""
-    recipe = _standard_recipe()
-    found = _findings(recipe, "food-truck-has-sentinel-stop")
-    assert found == []
+def test_sentinel_rule_enforces_on_standard_dispatchable_recipe():
+    """Standard-kind dispatchable recipe with plain stop step triggers the sentinel rule."""
+    recipe = Recipe(
+        name="standard-test",
+        description="standard dispatchable recipe",
+        steps={
+            "done": RecipeStep(action="stop", message="done"),
+            "escalate_stop": RecipeStep(
+                action="stop",
+                message="Escalated.",
+            ),
+        },
+        kitchen_rules=["NEVER"],
+    )
+    found = _findings(recipe, "all-dispatchable-stops-have-sentinel")
+    assert found, "Standard recipe stop steps must have sentinel instructions"
+    escalate_findings = [f for f in found if f.step_name == "escalate_stop"]
+    assert escalate_findings, "Rule must fire for standard recipe's non-sentinel stop steps"
 
 
-def test_food_truck_has_sentinel_stop_severity_is_error():
-    """Guard: food-truck-has-sentinel-stop must be ERROR, not WARNING."""
+def test_food_truck_sentinel_rule_passes_when_all_stops_have_sentinel():
+    """Multi-stop food-truck recipe where all stop steps mention sentinel -> no findings."""
+    recipe = _food_truck_recipe(
+        steps={
+            "done": RecipeStep(
+                action="stop",
+                message="Done. Emit your L3 sentinel JSON block.",
+            ),
+            "escalate_stop": RecipeStep(
+                action="stop",
+                message="Escalate. Emit L3 sentinel JSON block with success=false.",
+            ),
+        },
+    )
+    found = _findings(recipe, "all-dispatchable-stops-have-sentinel")
+    assert found == [], "Rule must not fire when all stop steps have sentinel instructions"
+
+
+def test_dispatchable_sentinel_rule_severity_is_error():
+    """Guard: all-dispatchable-stops-have-sentinel must be ERROR, not WARNING."""
     from autoskillit.recipe.registry import _RULE_REGISTRY
 
-    rule = next((r for r in _RULE_REGISTRY if r.name == "food-truck-has-sentinel-stop"), None)
-    assert rule is not None, "Rule 'food-truck-has-sentinel-stop' not found in registry"
+    rule = next(
+        (r for r in _RULE_REGISTRY if r.name == "all-dispatchable-stops-have-sentinel"), None
+    )
+    assert rule is not None, "Rule 'all-dispatchable-stops-have-sentinel' not found in registry"
     assert rule.severity == Severity.ERROR
 
 
@@ -122,7 +160,12 @@ def test_escalate_route_coverage_rule_passes_when_no_escalate_routes():
 
 def test_escalate_route_coverage_rule_skips_standard():
     """Standard recipe produces no findings for escalate-route-coverage rule."""
-    recipe = _standard_recipe()
+    recipe = Recipe(
+        name="standard-test",
+        description="standard recipe",
+        steps={"done": RecipeStep(action="stop", message="done")},
+        kitchen_rules=["NEVER"],
+    )
     found = _findings(recipe, "escalate-route-coverage")
     assert found == []
 

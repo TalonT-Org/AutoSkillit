@@ -527,7 +527,10 @@ steps:
   # --- Terminal Stops ---
   escalate_stop:
     action: stop
-    message: "Implementation pipeline failed — human intervention needed. Check the latest step output for details."
+    message: >-
+      Implementation pipeline failed — human intervention needed. Check the latest step output for details.
+      Emit the L3 result sentinel JSON block now with success=false.
+      Example sentinel: {"success": false, "reason": "implementation pipeline failed"}
 
   implement_complete:
     action: stop

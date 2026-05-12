@@ -11,6 +11,7 @@ import regex as re
 
 from autoskillit.core import RECIPE_PACK_REGISTRY, DispatchGateType, Severity, get_logger
 from autoskillit.recipe._analysis import ValidationContext
+from autoskillit.recipe._rule_helpers import _SENTINEL_JSON_RE, _is_failure_sentinel_value
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 from autoskillit.recipe.schema import CAMPAIGN_REF_RE, CampaignDispatch, RecipeKind
 
@@ -25,9 +26,6 @@ _KEBAB_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 # dispatch task: field), so campaigns that rely on this injection pattern should not
 # be flagged for not explicitly forwarding them in the ingredients block.
 _AUTO_INJECTED_CAMPAIGN_INGREDIENTS: frozenset[str] = frozenset({"task"})
-
-
-_SENTINEL_JSON_RE = re.compile(r"[Ee]xample\s+sentinel:\s*(\{[^}]+\})", re.DOTALL)
 
 
 def _extract_sentinel_fields(recipe: Recipe) -> frozenset[str]:
@@ -642,8 +640,10 @@ def _check_dispatch_capture_field_in_sentinel(ctx: ValidationContext) -> list[Ru
 def _extract_sentinel_fields_per_stop(recipe: Recipe) -> list[frozenset[str]]:
     """Extract field sets from each individual sentinel stop step.
 
-    Returns a list of frozensets, one per sentinel stop, rather than
-    the union. This enables per-path validation.
+    Returns a list of frozensets, one per success sentinel stop, rather than
+    the union. This enables per-path validation. Failure-terminal sentinels
+    (those whose example JSON contains ``"success": false``) are excluded
+    because failure paths do not produce captured result fields.
     """
     per_stop: list[frozenset[str]] = []
     for step in recipe.steps.values():
@@ -652,14 +652,20 @@ def _extract_sentinel_fields_per_stop(recipe: Recipe) -> list[frozenset[str]]:
         if "sentinel" not in step.message.lower():
             continue
         fields: set[str] = set()
+        is_failure_sentinel = False
         for match in _SENTINEL_JSON_RE.finditer(step.message):
             try:
                 parsed = json.loads(match.group(1))
                 if isinstance(parsed, dict):
+                    _sv = parsed.get("success")
+                    if _is_failure_sentinel_value(_sv):
+                        is_failure_sentinel = True
+                        break
                     fields.update(parsed.keys())
             except (json.JSONDecodeError, ValueError):
+                logger.debug("sentinel_json_parse_failed", step=step.name, raw=match.group(1))
                 continue
-        if fields:
+        if not is_failure_sentinel and fields:
             per_stop.append(frozenset(fields))
     return per_stop
 

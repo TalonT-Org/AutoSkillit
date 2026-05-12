@@ -226,9 +226,13 @@ steps:
     message: >-
       implement-findings batch complete. All groups processed.
       See sidecar for per-issue outcomes.
+      Emit the L3 result sentinel JSON block now with success=true.
+      Example sentinel: {"success": true, "reason": "implement-findings complete"}
 
   escalate_stop:
     action: stop
     message: >-
       implement-findings batch failed at setup. Manual investigation required.
       Check the step that routed here for root cause.
+      Emit the L3 result sentinel JSON block now with success=false.
+      Example sentinel: {"success": false, "reason": "implement-findings batch failed"}

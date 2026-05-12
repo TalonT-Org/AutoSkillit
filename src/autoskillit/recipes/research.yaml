@@ -262,6 +262,8 @@ steps:
       All stop-trigger findings are structural — revision cannot address the identified flaws.
       Check {{AUTOSKILLIT_TEMP}}/resolve-design-review/ for the triage report and
       {{AUTOSKILLIT_TEMP}}/review-design/ for the evaluation dashboard.
+      Emit the L3 result sentinel JSON block now with success=false.
+      Example sentinel: {"success": false, "reason": "experiment design rejected"}
 
   # --- EXECUTION PHASE ---
   create_worktree:
@@ -1194,11 +1196,16 @@ steps:
 
   research_complete:
     action: stop
-    message: >
+    message: >-
       Research complete. pr mode: report added to research/ folder and PR opened for
       review. local mode: bundle exported to {source_dir}/research-bundles/{slug}/
       (context.local_bundle_path).
+      Emit the L3 result sentinel JSON block now with success=true.
+      Example sentinel: {"success": true, "reason": "research complete"}
 
   escalate_stop:
     action: stop
-    message: "Research pipeline failed — human intervention needed. Check the latest step output for details."
+    message: >-
+      Research pipeline failed — human intervention needed. Check the latest step output for details.
+      Emit the L3 result sentinel JSON block now with success=false.
+      Example sentinel: {"success": false, "reason": "research pipeline failed"}

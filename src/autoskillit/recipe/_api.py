@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import threading
 import time
 from collections.abc import Sequence
@@ -32,6 +33,7 @@ from autoskillit.recipe._recipe_ingredients import (
     build_ingredient_rows,  # noqa: F401
     format_ingredients_table,
 )
+from autoskillit.recipe._rule_helpers import _SENTINEL_JSON_RE, _is_failure_sentinel_value
 from autoskillit.recipe.contracts import (
     check_contract_staleness,
     load_recipe_card,
@@ -257,21 +259,41 @@ def validate_from_path(
     }
 
 
+def _infer_stop_failure(name: str, message: str | None) -> bool:
+    """Determine whether a stop step represents a failure outcome.
+
+    Parses embedded sentinel JSON first; falls back to name-based heuristic.
+    """
+    if message:
+        for m in _SENTINEL_JSON_RE.finditer(message):
+            try:
+                parsed = json.loads(m.group(1))
+                if isinstance(parsed, dict) and "success" in parsed:
+                    return _is_failure_sentinel_value(parsed["success"])
+            except (json.JSONDecodeError, ValueError):
+                logger.debug("sentinel_json_parse_failed", step=name, raw=m.group(1))
+                continue
+    return "escalate" in name.lower() or "reject" in name.lower()
+
+
 def _build_stop_step_semantics(recipe: Recipe) -> str:
     stop_steps = {name: step for name, step in recipe.steps.items() if step.action == "stop"}
     if not stop_steps:
         return ""
-    names = ", ".join(f"'{n}'" for n in stop_steps)
     lines = [
         "ACTION: STOP STEP SEMANTICS:",
-        f"- Steps {names} are terminal stop steps.",
-        "- When routed to a stop step, display its message and TERMINATE immediately.",
+        "- Stop steps are terminal — the pipeline ends when routed to them.",
         "- Do NOT call any MCP tools after a stop step.",
         "- Do NOT attempt recovery, error reporting, or off-recipe actions.",
-        "- A stop step is an INTENTIONAL terminus — the recipe author designed this as"
-        " the endpoint.",
+        "- When routed to a stop step, emit the L3 sentinel block and TERMINATE.",
     ]
     for name, step in stop_steps.items():
+        is_failure = _infer_stop_failure(name, step.message)
+        success_val = "false" if is_failure else "true"
+        lines.append(
+            f"- For stop step '{name}': emit the L3 sentinel block with "
+            f"success={success_val} and reason=<step message>. Then TERMINATE."
+        )
         if step.message:
             lines.append(f"  Stop step '{name}' message: {step.message!r}")
     return "\n".join(lines)

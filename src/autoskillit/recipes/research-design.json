@@ -215,7 +215,7 @@
     },
     "design_rejected": {
       "action": "stop",
-      "message": "Research pipeline halted: experiment design rejected (verdict=STOP, resolution=failed). All stop-trigger findings are structural — revision cannot address the identified flaws. Check {{AUTOSKILLIT_TEMP}}/resolve-design-review/ for the triage report and {{AUTOSKILLIT_TEMP}}/review-design/ for the evaluation dashboard.\n"
+      "message": "Research pipeline halted: experiment design rejected (verdict=STOP, resolution=failed). All stop-trigger findings are structural — revision cannot address the identified flaws. Check {{AUTOSKILLIT_TEMP}}/resolve-design-review/ for the triage report and {{AUTOSKILLIT_TEMP}}/review-design/ for the evaluation dashboard. Emit the L3 result sentinel JSON block now with success=false. Example sentinel: {\"success\": false, \"reason\": \"experiment design rejected\"}\n"
     },
     "create_worktree": {
       "tool": "run_cmd",
@@ -242,7 +242,7 @@
     },
     "escalate_stop": {
       "action": "stop",
-      "message": "Research pipeline failed — human intervention needed. Check the latest step output for details."
+      "message": "Research pipeline failed — human intervention needed. Check the latest step output for details. Emit the L3 result sentinel JSON block now with success=false. Example sentinel: {\"success\": false, \"reason\": \"research pipeline failed\"}"
     }
   }
 }

@@ -267,12 +267,11 @@ def test_data_manifest_verification_url_field() -> None:
 def test_v9_rejects_unresolved_template_placeholders() -> None:
     """V9 must contain language rejecting {variable} template syntax in acquisition fields.
 
-    Current V9 has no placeholder-rejection language at all — it only checks for
-    presence (non-null) of fields, not for content validity. The error template
-    ``{specific missing field or hypothesis}`` on line 482 is an authoring-time
-    placeholder for the LLM, not a validation criterion about runtime placeholders.
-    This test asserts that V9 explicitly addresses unresolved template placeholders
-    as a rejection criterion.
+    V9 must go beyond presence-only checks (non-null fields) and enforce content
+    validity. The error template ``{specific missing field or hypothesis}`` in V9 is
+    an authoring-time placeholder for the LLM, not a validation criterion about
+    runtime placeholders. This test asserts that V9 explicitly addresses unresolved
+    template placeholders as a rejection criterion.
     """
 
     text = SKILL_PATH.read_text()
@@ -292,11 +291,11 @@ def test_v9_rejects_unresolved_template_placeholders() -> None:
 def test_v9_requires_gitignored_acquisition_command() -> None:
     """V9 must require gitignored entries to have an executable acquisition command.
 
-    Current V9 only requires gitignored entries to have a non-null `location` (line 477)
-    but does NOT require an acquisition command — despite download-data executing
-    `acquisition` for gitignored entries identically to external entries.
-    This test asserts that V9 has a dedicated bullet/clause requiring gitignored
-    entries to have an acquisition command, separate from the external-only clause.
+    V9 must require gitignored entries to have an acquisition command — not just a
+    non-null `location` — since download-data executes `acquisition` for gitignored
+    entries identically to external entries. This test asserts that V9 has a dedicated
+    bullet/clause requiring gitignored entries to have an acquisition command,
+    separate from the external-only clause.
     """
 
     text = SKILL_PATH.read_text()

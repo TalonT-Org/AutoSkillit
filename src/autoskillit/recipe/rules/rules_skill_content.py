@@ -546,7 +546,9 @@ _EXECUTABLE_FIELD_SKILLS: frozenset[str] = frozenset(
 )
 
 _CONTENT_VALIDITY_SIGNALS_RE = re.compile(
-    r"placeholder|template|unresolved|\{[a-z]|must not contain|reject|invalid",
+    r"unresolved.{0,20}placeholder|template.{0,20}syntax|placeholder.{0,20}reject"
+    r"|must not contain.{0,20}placeholder|reject.{0,20}template|\{[a-z]"
+    r"|must not contain|reject.{0,10}invalid",
     re.IGNORECASE,
 )
 

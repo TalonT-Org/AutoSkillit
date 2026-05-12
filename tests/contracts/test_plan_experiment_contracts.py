@@ -1,5 +1,6 @@
 """Contract tests for plan-experiment SKILL.md — data provenance lifecycle."""
 
+import re
 from pathlib import Path
 
 SKILL_PATH = (
@@ -16,6 +17,14 @@ EXPERIMENT_TYPES_DIR = (
     / "autoskillit"
     / "recipes"
     / "experiment-types"
+)
+REVIEW_DESIGN_SKILL_PATH = (
+    Path(__file__).resolve().parent.parent.parent
+    / "src"
+    / "autoskillit"
+    / "skills_extended"
+    / "review-design"
+    / "SKILL.md"
 )
 
 
@@ -89,7 +98,6 @@ def test_plan_experiment_layout_includes_taskfile() -> None:
 
 def test_experiment_type_enum_lists_all_registry_types() -> None:
     """All experiment types from the registry appear in the template enum."""
-    import re
 
     registry_types = {p.stem for p in EXPERIMENT_TYPES_DIR.glob("*.yaml")}
     assert len(registry_types) > 0, "experiment-types registry dir is empty or missing"
@@ -104,7 +112,6 @@ def test_experiment_type_enum_lists_all_registry_types() -> None:
 
 def test_source_type_enum_includes_literature_and_database() -> None:
     """source_type enum includes literature and database values."""
-    import re
 
     text = SKILL_PATH.read_text()
     m = re.search(r"source_type:\s*synthetic\s*#\s*([^\n]+)", text, re.IGNORECASE)
@@ -116,7 +123,6 @@ def test_source_type_enum_includes_literature_and_database() -> None:
 
 def test_field_requirements_table_covers_all_registry_types() -> None:
     """Field requirements table has a column for every registry experiment type."""
-    import re
 
     registry_types = {p.stem for p in EXPERIMENT_TYPES_DIR.glob("*.yaml")}
     assert len(registry_types) > 0, "experiment-types registry dir is empty or missing"
@@ -152,7 +158,6 @@ def test_field_requirements_table_covers_all_registry_types() -> None:
 
 def test_v3_exempts_qualitative_interpretive() -> None:
     """V3 exempts qualitative_interpretive from statistical_plan requirement."""
-    import re
 
     text = SKILL_PATH.read_text()
     m = re.search(r"V3:\s*([^\n]+)", text)
@@ -165,7 +170,6 @@ def test_v3_exempts_qualitative_interpretive() -> None:
 
 def test_v9_mentions_literature_and_database_source_types() -> None:
     """V9 rule text mentions both literature and database source types."""
-    import re
 
     text = SKILL_PATH.read_text()
     m = re.search(r"V9:.+?(?=\nV[0-9]+:|\n---|\Z)", text, re.DOTALL)
@@ -270,7 +274,6 @@ def test_v9_rejects_unresolved_template_placeholders() -> None:
     This test asserts that V9 explicitly addresses unresolved template placeholders
     as a rejection criterion.
     """
-    import re
 
     text = SKILL_PATH.read_text()
     m = re.search(r"V9:.+?(?=\nV[0-9]+:|\n---|\Z)", text, re.DOTALL)
@@ -295,7 +298,6 @@ def test_v9_requires_gitignored_acquisition_command() -> None:
     This test asserts that V9 has a dedicated bullet/clause requiring gitignored
     entries to have an acquisition command, separate from the external-only clause.
     """
-    import re
 
     text = SKILL_PATH.read_text()
     m = re.search(r"V9:.+?(?=\nV[0-9]+:|\n---|\Z)", text, re.DOTALL)
@@ -312,4 +314,30 @@ def test_v9_requires_gitignored_acquisition_command() -> None:
     assert has_gitignored_acquisition_line, (
         "V9 must have a dedicated clause requiring gitignored entries to have an "
         "executable acquisition or generation command (not just a non-null location)"
+    )
+
+
+def test_v9_and_data_acquisition_source_type_consistency() -> None:
+    """V9 and data_acquisition must address the same source_type variants."""
+    pe_text = SKILL_PATH.read_text()
+    rd_text = REVIEW_DESIGN_SKILL_PATH.read_text()
+
+    v9_match = re.search(r"V9:.+?(?=\nV[0-9]+:|\n---|\Z)", pe_text, re.DOTALL)
+    assert v9_match, "V9 block not found in plan-experiment"
+    v9 = v9_match.group(0).lower()
+
+    da_start = rd_text.lower().find("data_acquisition")
+    assert da_start != -1, "data_acquisition not found in review-design"
+    da = rd_text[da_start : da_start + 3000].lower()
+
+    for source_type in ("external", "gitignored"):
+        assert source_type in v9, f"V9 must address source_type: {source_type}"
+        assert source_type in da, f"data_acquisition must address source_type: {source_type}"
+
+    placeholder_signals = ["placeholder", "template", "unresolved", "{"]
+    assert any(s in v9 for s in placeholder_signals), (
+        "V9 must mention template/placeholder validation"
+    )
+    assert any(s in da for s in placeholder_signals), (
+        "data_acquisition must mention template/placeholder validation"
     )

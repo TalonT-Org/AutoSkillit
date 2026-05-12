@@ -883,3 +883,118 @@ def test_rules_pass_ctx_skill_resolver_to_resolve_skill_md(tmp_path: Path) -> No
     assert all(r is resolver for r in non_none), (
         "Expected every non-None resolver to be the exact instance from ctx"
     )
+
+
+# ---------------------------------------------------------------------------
+# executable-field-content-validity tests
+# ---------------------------------------------------------------------------
+
+_EXEC_RULE_ID = "executable-field-content-validity"
+
+
+def test_executable_field_content_validity_fires_for_missing_criteria(tmp_path: Path) -> None:
+    """Rule fires when a V-rule block mentions acquisition without content-validity language."""
+    skill_dir = tmp_path / "plan-experiment"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        textwrap.dedent(
+            """\
+            # plan-experiment
+
+            V9: data manifest completeness
+              ERROR if source_type: external lacks acquisition.
+            """
+        )
+    )
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(_make_recipe_for_skill("plan-experiment", {}))
+    recipe = load_recipe(recipe_path)
+    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+        findings = run_semantic_rules(recipe)
+    assert _EXEC_RULE_ID in [f.rule for f in findings], (
+        "Rule must fire when V9 mentions acquisition but lacks content-validity criteria"
+    )
+
+
+def test_executable_field_content_validity_passes_when_criteria_present(tmp_path: Path) -> None:
+    """Rule does NOT fire when V9 mentions acquisition with content-validity language."""
+    skill_dir = tmp_path / "plan-experiment"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        textwrap.dedent(
+            """\
+            # plan-experiment
+
+            V9: data manifest completeness
+              ERROR if source_type: external lacks acquisition.
+              ERROR if acquisition contains placeholder tokens.
+              ERROR if acquisition contains unresolved template syntax.
+            """
+        )
+    )
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(_make_recipe_for_skill("plan-experiment", {}))
+    recipe = load_recipe(recipe_path)
+    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+        findings = run_semantic_rules(recipe)
+    assert _EXEC_RULE_ID not in [f.rule for f in findings], (
+        "Rule must not fire when V9 contains placeholder/template rejection language"
+    )
+
+
+def test_executable_field_content_validity_ignores_non_executable_skills(tmp_path: Path) -> None:
+    """Rule does NOT fire for skills not in _EXECUTABLE_FIELD_SKILLS."""
+    skill_dir = tmp_path / "other-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        textwrap.dedent(
+            """\
+            # other-skill
+
+            V9: some rule
+              ERROR if field lacks acquisition.
+            """
+        )
+    )
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(_make_recipe_for_skill("other-skill", {}))
+    recipe = load_recipe(recipe_path)
+    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+        findings = run_semantic_rules(recipe)
+    assert _EXEC_RULE_ID not in [f.rule for f in findings], (
+        "Rule must not fire for skills not in _EXECUTABLE_FIELD_SKILLS"
+    )
+
+
+def test_executable_field_content_validity_checks_all_v_rules(tmp_path: Path) -> None:
+    """Rule checks all V-rules that mention executable fields, not just V9."""
+    skill_dir = tmp_path / "plan-experiment"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        textwrap.dedent(
+            """\
+            # plan-experiment
+
+            V1: first rule
+              ERROR if something is missing.
+
+            V7: intermediate rule
+              ERROR if spec_path is not provided.
+
+            V9: data manifest completeness
+              ERROR if acquisition is present.
+            """
+        )
+    )
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(_make_recipe_for_skill("plan-experiment", {}))
+    recipe = load_recipe(recipe_path)
+    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+        findings = run_semantic_rules(recipe)
+    exec_findings = [f for f in findings if f.rule == _EXEC_RULE_ID]
+    # Both V7 (spec_path) and V9 (acquisition) should fire since neither
+    # has content-validity language
+    assert len(exec_findings) == 2, (
+        f"Expected 2 findings (V7 + V9), got {len(exec_findings)}: "
+        + "; ".join(f.message for f in exec_findings)
+    )

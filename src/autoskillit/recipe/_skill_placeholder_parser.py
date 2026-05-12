@@ -58,3 +58,21 @@ def shell_vars_assigned(bash_blocks: list[str]) -> set[str]:
             assigned.add(m.group(1))
             assigned.add(m.group(1).lower())
     return assigned
+
+
+_VRULE_RE = re.compile(
+    r"^(V\d+):\s*.+?(?=^V\d+:|\n---|\Z)",
+    re.DOTALL | re.MULTILINE,
+)
+
+
+def extract_validation_rule_block(content: str, rule_label: str) -> str | None:
+    """Extract a named validation rule block (e.g., 'V9') from SKILL.md content.
+
+    Returns the full block text from 'V9: ...' to the next V-rule label,
+    a '---' separator, or end of string. Returns None if the label is not found.
+    """
+    for m in _VRULE_RE.finditer(content):
+        if m.group(1) == rule_label:
+            return m.group(0).strip()
+    return None

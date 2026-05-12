@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import re
 import threading
 import time
 from collections.abc import Sequence
@@ -66,6 +68,8 @@ from autoskillit.recipe.validator import (
 )
 
 logger = get_logger(__name__)
+
+_SENTINEL_JSON_RE = re.compile(r"[Ee]xample\s+sentinel:\s*(\{[^}]+\})", re.DOTALL)
 
 # ---------------------------------------------------------------------------
 # Stage timing helper
@@ -257,6 +261,23 @@ def validate_from_path(
     }
 
 
+def _infer_stop_failure(name: str, message: str | None) -> bool:
+    """Determine whether a stop step represents a failure outcome.
+
+    Parses embedded sentinel JSON first; falls back to name-based heuristic.
+    """
+    if message:
+        for m in _SENTINEL_JSON_RE.finditer(message):
+            try:
+                parsed = json.loads(m.group(1))
+                if isinstance(parsed, dict) and "success" in parsed:
+                    val = parsed["success"]
+                    return val is False or (isinstance(val, str) and val.lower() == "false")
+            except (json.JSONDecodeError, ValueError):
+                continue
+    return "escalate" in name.lower() or "reject" in name.lower()
+
+
 def _build_stop_step_semantics(recipe: Recipe) -> str:
     stop_steps = {name: step for name, step in recipe.steps.items() if step.action == "stop"}
     if not stop_steps:
@@ -269,14 +290,7 @@ def _build_stop_step_semantics(recipe: Recipe) -> str:
         "- When routed to a stop step, emit the L3 sentinel block and TERMINATE.",
     ]
     for name, step in stop_steps.items():
-        is_failure = (
-            "escalate" in name.lower()
-            or "reject" in name.lower()
-            or (
-                step.message
-                and ("fail" in step.message.lower() or "error" in step.message.lower())
-            )
-        )
+        is_failure = _infer_stop_failure(name, step.message)
         success_val = "false" if is_failure else "true"
         lines.append(
             f"- For stop step '{name}': emit the L3 sentinel block with "

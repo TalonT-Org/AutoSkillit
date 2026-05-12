@@ -222,7 +222,7 @@ def test_additional_subagents_includes_accession_verification() -> None:
 
     text = SKILL_PATH.read_text()
     m = re.search(
-        r"\*\*Additional subagents.*?(?=\n\*\*Breadth enforcement|\n###|\n\*\*|## )",
+        r"\*\*Additional subagents.*?(?=\n\*\*Breadth enforcement|\n###|## )",
         text,
         re.DOTALL | re.IGNORECASE,
     )

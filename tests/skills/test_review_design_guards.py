@@ -32,9 +32,10 @@ def test_data_acquisition_not_l_weight() -> None:
 def test_data_acquisition_rejects_template_syntax() -> None:
     """data_acquisition dimension must specify a STOP for unresolved template tokens."""
     text = SKILL_PATH.read_text()
-    da_start = text.lower().find("data_acquisition")
+    da_start = text.find("#### `data_acquisition`")
     assert da_start != -1, "data_acquisition dimension not found"
-    da_section = text[da_start : da_start + 3000].lower()
+    next_dim = text.find("####", da_start + 1)
+    da_section = text[da_start:next_dim].lower() if next_dim != -1 else text[da_start:].lower()
     placeholder_signals = ["{", "placeholder", "template", "unresolved"]
     assert any(s in da_section for s in placeholder_signals), (
         "data_acquisition must specify template/placeholder syntax validation"
@@ -47,9 +48,10 @@ def test_data_acquisition_rejects_template_syntax() -> None:
 def test_data_acquisition_enumerates_sub_checks() -> None:
     """data_acquisition must enumerate all named sub-checks in SKILL.md."""
     text = SKILL_PATH.read_text()
-    da_start = text.lower().find("data_acquisition")
+    da_start = text.find("#### `data_acquisition`")
     assert da_start != -1
-    da_section = text[da_start : da_start + 3000].lower()
+    next_dim = text.find("####", da_start + 1)
+    da_section = text[da_start:next_dim].lower() if next_dim != -1 else text[da_start:].lower()
     required_checks = [
         "hypothesis coverage",
         "external source readiness",

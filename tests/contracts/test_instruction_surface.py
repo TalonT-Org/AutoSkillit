@@ -458,7 +458,7 @@ class TestAntiFabricationSurfaceContract:
     @pytest.mark.parametrize(
         "name,builder,kwargs",
         _anti_fab_prompt_builders(),
-        ids=lambda item: item[0],
+        ids=[t[0] for t in _anti_fab_prompt_builders()],
     )
     def test_prompt_builder_has_anti_fabrication(self, name, builder, kwargs):
         """Each registered prompt builder must embed anti-fabrication language."""

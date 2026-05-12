@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 import threading
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass as _dc
 from pathlib import Path
 from typing import Any
+
+import regex as re
 
 from autoskillit.core import (
     LoadResult,

@@ -187,7 +187,10 @@ def test_subagent_b_requires_accession_verification() -> None:
     )
     assert m, "Subagent B section not found in SKILL.md"
     subagent_b = m.group(0).lower()
-    assert "web" in subagent_b and ("search" in subagent_b or "fetch" in subagent_b), (
+    assert "web" in subagent_b, (
+        "Subagent B must mention web-based verification of database accessions"
+    )
+    assert "search" in subagent_b or "fetch" in subagent_b, (
         "Subagent B must mandate web search or web fetch to verify database accessions "
         "before including them in data_manifest"
     )

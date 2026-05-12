@@ -50,10 +50,17 @@ Does NOT invoke any exp-lens skills or create a PR.
 | experiment_type | Primary Lens | Secondary Lens (optional) |
 |---|---|---|
 | benchmark | exp-lens-fair-comparison | exp-lens-estimand-clarity |
-| configuration_study | exp-lens-iterative-learning | exp-lens-sensitivity-robustness |
 | causal_inference | exp-lens-causal-assumptions | exp-lens-estimand-clarity |
-| robustness_audit | exp-lens-severity-testing | exp-lens-validity-threats |
+| configuration_study | exp-lens-iterative-learning | exp-lens-sensitivity-robustness |
+| evidence_synthesis | exp-lens-estimand-clarity | exp-lens-exploratory-confirmatory |
 | exploratory | exp-lens-estimand-clarity | exp-lens-exploratory-confirmatory |
+| factorial_design | exp-lens-fair-comparison | exp-lens-sensitivity-robustness |
+| instrument_validation | exp-lens-validity-threats | exp-lens-estimand-clarity |
+| observational_correlational | exp-lens-estimand-clarity | exp-lens-causal-assumptions |
+| qualitative_interpretive | exp-lens-estimand-clarity | exp-lens-exploratory-confirmatory |
+| robustness_audit | exp-lens-severity-testing | exp-lens-validity-threats |
+| simulation_modeling | exp-lens-estimand-clarity | exp-lens-sensitivity-robustness |
+| single_subject | exp-lens-estimand-clarity | exp-lens-exploratory-confirmatory |
 
 ## Experiment Status Badges
 

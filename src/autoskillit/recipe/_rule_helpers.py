@@ -10,7 +10,7 @@ from autoskillit.recipe._analysis import ValidationContext
 
 # Trigger regex: matches multiple sentinel-indicating phrases
 _SENTINEL_TRIGGER_RE = re.compile(
-    r"[Ee]xample\s+sentinel:|sentinel\s+JSON:|sentinel:\s*\{",
+    r"[Ee]xample\s+sentinel:|sentinel\s+JSON:|sentinel:\s*(?=\{)",
     re.DOTALL,
 )
 
@@ -20,7 +20,7 @@ def extract_sentinel_json_blocks(text: str) -> list[str]:
 
     Handles nested braces and arrays, unlike a simple regex that stops at the first `}`.
     Matches any sentinel-indicating trigger phrase (e.g., "Example sentinel:",
-    "sentinel JSON:", "sentinel: {") and then uses bracket counting to find the matching
+    "sentinel JSON:", "sentinel: {…}") and then uses bracket counting to find the matching
     closing brace for the JSON object that follows.
 
     Returns a list of raw JSON strings (still serialized) that can be passed to json.loads().

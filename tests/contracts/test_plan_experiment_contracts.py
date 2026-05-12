@@ -372,9 +372,9 @@ def test_v10_citation_verification_rule() -> None:
 def test_v10_is_error_level() -> None:
     """V10 must be classified as ERROR-level in the ERRORs summary."""
     text = SKILL_PATH.read_text()
-    errors_line_match = re.search(r"ERRORs?\s*\([^)]+\)", text)
-    assert errors_line_match, "ERRORs classification line not found in SKILL.md"
-    errors_text = errors_line_match.group(0)
+    errors_line_match = re.search(r"^- ERRORs?\s*\(([^)]+)\)", text, re.MULTILINE)
+    assert errors_line_match, "ERRORs classification summary line not found in SKILL.md"
+    errors_text = errors_line_match.group(1)
     assert "V10" in errors_text, "V10 must be listed as ERROR-level"
 
 

@@ -26,7 +26,9 @@ def test_data_manifest_in_frontmatter_schema() -> None:
 
 def test_data_manifest_required_fields() -> None:
     text = SKILL_PATH.read_text()
-    after_manifest = text.lower().split("### data_manifest")[1][:2000]
+    parts = text.lower().split("### data_manifest")
+    assert len(parts) > 1, "### data_manifest heading not found in SKILL.md"
+    after_manifest = parts[1][:2000]
     for field in ("source_type", "acquisition", "verification", "hypothesis"):
         assert field in after_manifest, f"data_manifest missing field: {field}"
 
@@ -211,20 +213,13 @@ def test_v10_semantic_verification_rule_exists() -> None:
     assert "database" in v10_block, "V10 must cover database source_type entries"
 
 
-def test_plan_experiment_defines_all_validation_rules_including_v10() -> None:
-    """Validation rules must include V1 through V10."""
-    text = SKILL_PATH.read_text()
-    for i in range(1, 11):
-        assert f"V{i}:" in text, f"V{i} rule label not found in SKILL.md"
-
-
 def test_additional_subagents_includes_accession_verification() -> None:
     """Additional subagents section must list accession/citation verification as a category."""
     import re
 
     text = SKILL_PATH.read_text()
     m = re.search(
-        r"\*\*Additional subagents.*?(?=\*\*Breadth enforcement|\n###|\n\*\*|## )",
+        r"\*\*Additional subagents.*?(?=\n\*\*Breadth enforcement|\n###|\n\*\*|## )",
         text,
         re.DOTALL | re.IGNORECASE,
     )

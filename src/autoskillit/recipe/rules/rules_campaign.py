@@ -659,7 +659,8 @@ def _extract_sentinel_fields_per_stop(recipe: Recipe) -> list[frozenset[str]]:
             try:
                 parsed = json.loads(match.group(1))
                 if isinstance(parsed, dict):
-                    if parsed.get("success") is False:
+                    _sv = parsed.get("success")
+                    if _sv is False or (isinstance(_sv, str) and _sv.lower() == "false"):
                         is_failure_sentinel = True
                         break
                     fields.update(parsed.keys())

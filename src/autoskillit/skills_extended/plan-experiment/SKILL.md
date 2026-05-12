@@ -58,7 +58,7 @@ incorporate the feedback before writing the plan.
 - Leave success criteria vague — every criterion must be measurable
 - Omit the environment assessment — always explicitly state whether a custom
   environment is needed or not, and why
-- Omit YAML frontmatter unless a V1–V4, V9, V10 ERROR is triggered — every plan must have frontmatter
+- Omit YAML frontmatter unless a V1–V4, V9, or V10 ERROR is triggered — every plan must have frontmatter
 - Write frontmatter after the `# Experiment Plan:` heading — it always goes BEFORE
 - Run subagents in the background (`run_in_background: true` is prohibited)
 - Include database accession identifiers (GEO GSE*, SRA SRR*/SRP*, ENCODE ENCSR*, or
@@ -77,7 +77,7 @@ incorporate the feedback before writing the plan.
 - Write YAML frontmatter between --- delimiters BEFORE the # Experiment Plan: heading
 - Apply all 10 validation rules before writing the frontmatter block
 - Log V1–V4, V9, V10 ERRORs in a ## Frontmatter Validation Errors section instead of writing frontmatter
-- Log V5–V8, V10 WARNINGs as # WARNING: ... YAML comments on the relevant field lines
+- Log V5–V8, V10 network failure WARNINGs as # WARNING: ... YAML comments on the relevant field lines
 
 ## Workflow
 
@@ -512,24 +512,57 @@ V9: data_manifest completeness
     NOTE: `literature` and `database` entries do NOT require `depends_on` or download commands.
     ERROR: "Data Manifest incomplete: {specific missing field or hypothesis}"
 
-V10: data_manifest semantic verification
-    ERROR if:
-    - Any entry with `source_type: database` references a specific accession identifier
-      (matching patterns like GSE*, SRR*, SRP*, ENCSR*, or any alphanumeric database ID)
-      AND lacks a `verification_url` field with a resolvable URL
-    - Any entry with `source_type: literature` references a specific publication
-      (DOI, PMID, or author-year citation) AND lacks a `verification_url` field
-    NOTE: Entries with `verified: false` explicitly set are exempt from this error
-      (they will appear as a V10 WARNING instead, alerting review-design to scrutinize).
-    WARNING if:
-    - Any database/literature entry has `verified: false` — flag for review-design attention
-    ERROR: "Unverified accession in data_manifest: {entry.description} has no verification_url"
+V10: citation and external reference verification
+    Runs after V9 passes (V10 requires a structurally complete data_manifest).
+    Uses three verification subagents:
+
+    **Citation Indexer** (goes first — gates Link Validator and Cross-Check Adversary):
+    Input: complete plan prose + extracted YAML frontmatter.
+    Task: Extract every verifiable external reference into a structured manifest:
+    - Every `data_manifest` entry with `source_type: external` or `source_type: database`:
+      extract accession ID, claimed author, claimed organism, expected file format, download URL.
+    - Every `data_manifest` entry with `source_type: literature`:
+      extract paper title, authors, year, DOI/PMID if present.
+    - Every inline citation in Methods/Background sections:
+      extract paper title, authors, year.
+    Output: Structured JSON manifest of citations to verify, one entry per reference.
+
+    **Link Validator** (parallel after Citation Indexer):
+    Input: Citation Indexer's structured manifest.
+    Tools: WebSearch, WebFetch.
+    Task per entry:
+    - GEO/SRA/ENCODE accessions: WebSearch for the accession ID, verify result confirms it exists,
+      extract actual organism and contributor list.
+    - DOI/PMID: WebFetch the DOI URL or PMID page, verify HTTP 200.
+    - Direct URLs: WebFetch with HEAD request, verify HTTP 200 (not 404/410/301-to-unrelated).
+    - Paper citations: WebSearch for title + first author, verify the paper exists.
+    Output per entry: PASS / FAIL / UNVERIFIED with evidence (HTTP status, organism, author list).
+    Hold-firm: HTTP 404 is FAIL, period. Network timeout is UNVERIFIED (WARNING).
+
+    **Cross-Check Adversary** (parallel after Citation Indexer, no web access):
+    Input: Citation Indexer's structured manifest (same as Link Validator — independent analysis).
+    Tools: None (reasoning only — no web access).
+    Task per entry:
+    - Author-dataset consistency: Does the attributed author plausibly produce this type of data?
+    - Organism-hypothesis consistency: Does the claimed organism match the experiment hypothesis?
+    - Temporal plausibility: Is the cited publication date consistent with the claimed methodology?
+    - Format availability: Would the expected file format plausibly be available from this source?
+    Output per entry: PLAUSIBLE / IMPLAUSIBLE / UNCERTAIN with reasoning.
+
+    V10 merge: Combine Link Validator and Cross-Check Adversary findings per entry.
+    - Any Link Validator FAIL → entry FAILS V10.
+    - Cross-Check Adversary IMPLAUSIBLE findings are reported but do not override Link Validator PASS.
+    - Network failure (UNVERIFIED) → WARNING with `verification: unverified` status on that entry;
+      do NOT block plan emission. Plan proceeds with affected entries marked unverified.
+
+    ERROR: "Citation verification failed: {specific failures per entry}"
+    (Network failures are WARNING, not ERROR — plan is still emittable.)
 ```
 
 - ERRORs (V1–V4, V9, V10): Stop frontmatter generation, append the error message to the plan
   prose under a `## Frontmatter Validation Errors` section, and save the plan WITHOUT
   a frontmatter block. Emit the `experiment_plan` token as usual.
-- WARNINGs (V5–V8, V10): Continue; log each as a `# WARNING: ...` YAML comment on the
+- WARNINGs (V5–V8, V10 network failure): Continue; log each as a `# WARNING: ...` YAML comment on the
   relevant field line.
 
 Field requirements by experiment type:

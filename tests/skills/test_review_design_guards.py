@@ -29,6 +29,60 @@ def test_data_acquisition_not_l_weight() -> None:
     raise AssertionError("data_acquisition must have M or H weight in at least one bundled type")
 
 
+def test_data_acquisition_rejects_template_syntax() -> None:
+    """data_acquisition dimension must specify a STOP for unresolved template tokens."""
+    text = SKILL_PATH.read_text()
+    da_start = text.find("#### `data_acquisition`")
+    assert da_start != -1, "data_acquisition dimension not found"
+    next_dim = text.find("####", da_start + 1)
+    da_section = text[da_start:next_dim].lower() if next_dim != -1 else text[da_start:].lower()
+    placeholder_signals = ["{", "placeholder", "template", "unresolved"]
+    assert any(s in da_section for s in placeholder_signals), (
+        "data_acquisition must specify template/placeholder syntax validation"
+    )
+    assert "stop" in da_section, (
+        "data_acquisition must produce STOP for unresolvable template tokens"
+    )
+
+
+def test_data_acquisition_enumerates_sub_checks() -> None:
+    """data_acquisition must enumerate all named sub-checks in SKILL.md."""
+    text = SKILL_PATH.read_text()
+    da_start = text.find("#### `data_acquisition`")
+    assert da_start != -1
+    next_dim = text.find("####", da_start + 1)
+    da_section = text[da_start:next_dim].lower() if next_dim != -1 else text[da_start:].lower()
+    required_checks = [
+        "hypothesis coverage",
+        "external source readiness",
+        "gitignored path handling",
+        "dependency ordering",
+        "directive compliance",
+    ]
+    for check in required_checks:
+        assert check in da_section, f"data_acquisition must enumerate sub-check: {check}"
+
+
+def test_data_acquisition_has_stop_findings() -> None:
+    """data_acquisition findings format must include STOP-severity criteria.
+
+    data_acquisition is an L4 dimension — its critical findings produce REVISE via
+    the global verdict logic (not STOP via stop_triggers, which is L1+red_team only).
+    But the dimension's own findings format must still specify STOP-severity criteria
+    so the LLM executing review-design can flag catastrophic data gaps at the
+    dimension level.
+    """
+    text = SKILL_PATH.read_text()
+    # Find the section heading (#### heading with backtick-wrapped dimension name)
+    da_start = text.find("#### `data_acquisition`")
+    assert da_start != -1, "data_acquisition dimension not found"
+    next_dim = text.find("####", da_start + 1)
+    da_section = text[da_start:next_dim].lower() if next_dim != -1 else text[da_start:].lower()
+    assert "stop" in da_section, (
+        "data_acquisition findings format must specify STOP-severity criteria"
+    )
+
+
 def test_agent_implementability_dimension_exists() -> None:
     text = SKILL_PATH.read_text()
     assert "agent_implementability" in text

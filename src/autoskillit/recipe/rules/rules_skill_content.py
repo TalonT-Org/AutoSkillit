@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._git_helpers import _GIT_REMOTE_COMMAND_RE, _LITERAL_ORIGIN_RE
 from autoskillit.recipe._skill_placeholder_parser import (
+    _VRULE_RE,
     extract_bash_blocks,
     extract_bash_placeholders,
     extract_declared_ingredients,
@@ -535,4 +536,72 @@ def _check_transition_boundary_anti_confirmation(ctx: ValidationContext) -> list
                     ),
                 )
             )
+    return findings
+
+
+_EXECUTABLE_FIELD_SKILLS: frozenset[str] = frozenset(
+    {
+        "plan-experiment",
+    }
+)
+
+_CONTENT_VALIDITY_SIGNALS_RE = re.compile(
+    r"unresolved.{0,20}placeholder|template.{0,20}syntax|placeholder.{0,20}reject"
+    r"|must not contain.{0,20}placeholder|reject.{0,20}template|\{[a-z_][a-z0-9_]*\}"
+    r"|reject.{0,10}invalid",
+    re.IGNORECASE,
+)
+
+
+@semantic_rule(
+    name="executable-field-content-validity",
+    description=(
+        "Skills with validation rules for executable fields (acquisition, spec_path) "
+        "must include content-validity checks, not just presence checks. "
+        "Fires when a V-rule block mentions an executable field but contains no "
+        "placeholder/template rejection language."
+    ),
+    severity=Severity.WARNING,
+)
+def _check_executable_field_content_validity(
+    ctx: ValidationContext,
+) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+        skill_cmd = step.with_args.get("skill_command", "")
+        if not skill_cmd:
+            continue
+        skill_name = resolve_skill_name(skill_cmd)
+        if skill_name is None:
+            continue
+        if skill_name not in _EXECUTABLE_FIELD_SKILLS:
+            continue
+        skill_md = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
+        if skill_md is None:
+            continue
+        try:
+            content = skill_md.read_text(encoding="utf-8")
+        except OSError:
+            continue
+
+        for m in _VRULE_RE.finditer(content):
+            block = m.group(0)
+            block_lower = block.lower()
+            if "acquisition" not in block_lower and "spec_path" not in block_lower:
+                continue
+            if not _CONTENT_VALIDITY_SIGNALS_RE.search(block):
+                findings.append(
+                    RuleFinding(
+                        rule="executable-field-content-validity",
+                        severity=Severity.WARNING,
+                        step_name=step_name,
+                        message=(
+                            f"V-rule {m.group(1)} in {skill_name} mentions an executable "
+                            f"field but lacks content-validity criteria "
+                            f"(placeholder/template rejection language)."
+                        ),
+                    )
+                )
     return findings

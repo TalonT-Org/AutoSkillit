@@ -457,9 +457,13 @@ Validates that the experiment plan includes a complete data acquisition strategy
    B must be listed before A (or the dependency chain must be acyclic).
 5. **Directive compliance**: If the research task directive specifies particular data,
    the `data_manifest` must include acquisition steps for that data.
+6. **Template syntax validation**: Every `acquisition` command string is free of unresolved
+   template placeholders (`{variable_name}`, `${VAR}`, `$(command)` tokens). An acquisition
+   command containing unresolved placeholders is not executable and is functionally equivalent
+   to a missing acquisition command.
 
 **Findings format:**
-- STOP if: a hypothesis has no data source at all, or directive-specified data has no acquisition step
+- STOP if: a hypothesis has no data source at all, or directive-specified data has no acquisition step, or an acquisition command contains unresolved template placeholders
 - REVISE if: an external source lacks verification criteria, or gitignored path handling is unclear
 
 #### `agent_implementability` — Agent Execution Feasibility

@@ -505,6 +505,8 @@ V9: data_manifest completeness
     - Any hypothesis referenced in `success_criteria` has no entry in `data_manifest`
     - Any entry with `source_type: external` or `source_type: gitignored` lacks a non-null `location`
     - Any entry with `source_type: external` lacks a `depends_on` or explicit download command in `acquisition`
+    - Any entry with `source_type: external` or `source_type: gitignored` must not contain unresolved template placeholders in the `acquisition` value — specifically single-brace tokens like `{accession_id}` (shell brace expansions such as `{file1,file2}` are permitted), unexpanded `${VAR}` references, or unresolved `$(command)` substitutions
+    - Any entry with `source_type: gitignored` lacks an explicit, executable acquisition or generation command (descriptive prose such as "generate from upstream pipeline" is insufficient — download-data executes this field as a literal Bash command)
     - Any entry with `source_type: database` lacks a non-null `acquisition` (must describe query method)
     - Any entry with `source_type: literature` lacks a non-null `description` (must identify the source publication)
     NOTE: `literature` and `database` entries do NOT require `depends_on` or download commands.

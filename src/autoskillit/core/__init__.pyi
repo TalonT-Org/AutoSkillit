@@ -151,7 +151,6 @@ from .types import BackgroundSupervisor as BackgroundSupervisor
 from .types import BareResume as BareResume
 from .types import CampaignProtector as CampaignProtector
 from .types import CAPTURE_VALID_VALUE_TYPES as CAPTURE_VALID_VALUE_TYPES
-from .types import resolve_payload_field as resolve_payload_field
 from .types import CaptureEntrySpec as CaptureEntrySpec
 from .types import CaptureValueTypeError as CaptureValueTypeError
 from .types import ChannelBStatus as ChannelBStatus
@@ -244,6 +243,7 @@ from .types import assert_prompt_sentinel as assert_prompt_sentinel
 from .types import extract_path_arg as extract_path_arg
 from .types import extract_skill_name as extract_skill_name
 from .types import fleet_error as fleet_error
+from .types import resolve_payload_field as resolve_payload_field
 from .types import resolve_skill_name as resolve_skill_name
 from .types import resolve_target_skill as resolve_target_skill
 from .types import resume_spec_from_cli as resume_spec_from_cli

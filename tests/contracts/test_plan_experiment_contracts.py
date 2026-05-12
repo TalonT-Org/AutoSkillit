@@ -122,7 +122,7 @@ def test_source_type_enum_matches_canonical() -> None:
     comment = m.group(1).lower()
     for st in DATA_MANIFEST_SOURCE_TYPES:
         assert st in comment, f"source_type enum missing canonical value '{st}'"
-    enum_values = {v.strip() for v in comment.split("|")}
+    enum_values = {v.strip() for v in comment.split("|") if v.strip()}
     extra = enum_values - DATA_MANIFEST_SOURCE_TYPES
     assert not extra, f"source_type enum has values not in canonical constant: {extra}"
 

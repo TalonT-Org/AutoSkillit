@@ -75,9 +75,9 @@ incorporate the feedback before writing the plan.
 - Plan all artifacts into one self-contained `research/YYYY-MM-DD-{slug}/` folder
 - Include implementation phases that an implementer can follow step by step
 - Write YAML frontmatter between --- delimiters BEFORE the # Experiment Plan: heading
-- Apply all 9 validation rules before writing the frontmatter block
-- Log V1–V4, V9 ERRORs in a ## Frontmatter Validation Errors section instead of writing frontmatter
-- Log V5–V8 WARNINGs as # WARNING: ... YAML comments on the relevant field lines
+- Apply all 10 validation rules before writing the frontmatter block
+- Log V1–V4, V9, V10 ERRORs in a ## Frontmatter Validation Errors section instead of writing frontmatter
+- Log V5–V8, V10 WARNINGs as # WARNING: ... YAML comments on the relevant field lines
 
 ## Workflow
 
@@ -527,7 +527,7 @@ V10: data_manifest semantic verification
 - ERRORs (V1–V4, V9, V10): Stop frontmatter generation, append the error message to the plan
   prose under a `## Frontmatter Validation Errors` section, and save the plan WITHOUT
   a frontmatter block. Emit the `experiment_plan` token as usual.
-- WARNINGs (V5–V8): Continue; log each as a `# WARNING: ...` YAML comment on the
+- WARNINGs (V5–V8, V10): Continue; log each as a `# WARNING: ...` YAML comment on the
   relevant field line.
 
 Field requirements by experiment type:

@@ -345,7 +345,6 @@ def test_v9_and_data_acquisition_source_type_consistency() -> None:
 
 def test_always_block_references_ten_validation_rules() -> None:
     """ALWAYS block must reference all 10 validation rules."""
-    import re
 
     text = SKILL_PATH.read_text()
     m = re.search(r"\*\*ALWAYS:\*\*\n(.+?)(?=\n## |\Z)", text, re.DOTALL)

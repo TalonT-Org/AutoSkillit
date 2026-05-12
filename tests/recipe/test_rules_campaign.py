@@ -1532,13 +1532,13 @@ def test_dispatch_capture_field_in_sentinel_errors_when_sentinel_unparseable(tmp
     )
     found = _findings(recipe, "dispatch-capture-field-in-sentinel", project_dir=tmp_path)
     # After the fix, an unparseable sentinel with non-empty capture must error
-    assert len(found) >= 1, (
+    assert len(found) == 1, (
         "Rule silently skipped when sentinel was unparseable. "
-        "Expected at least one ERROR finding when capture is non-empty "
+        "Expected exactly one ERROR finding when capture is non-empty "
         "but target recipe has no parseable sentinel."
     )
     assert found[0].severity == Severity.ERROR
-    assert "pr_url" in found[0].message or "no parseable sentinel" in found[0].message.lower()
+    assert "no parseable sentinel" in found[0].message.lower()
 
 
 def test_dispatch_capture_field_in_sentinel_skips_unloadable_target(tmp_path: Path):

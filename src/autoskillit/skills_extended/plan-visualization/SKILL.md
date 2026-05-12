@@ -80,10 +80,17 @@ Experiment-type table (use when no override fires or to fill second Tier-B slot)
 | experiment_type | Primary lens | Secondary lens (optional) |
 |---|---|---|
 | benchmark | vis-lens-chart-select | vis-lens-uncertainty |
-| ablation | vis-lens-multi-compare | vis-lens-chart-select |
-| correlation | vis-lens-chart-select | vis-lens-figure-table |
-| regression | vis-lens-temporal | vis-lens-uncertainty |
-| classification | vis-lens-chart-select | vis-lens-uncertainty |
+| causal_inference | vis-lens-chart-select | vis-lens-figure-table |
+| configuration_study | vis-lens-chart-select | vis-lens-uncertainty |
+| evidence_synthesis | vis-lens-chart-select | vis-lens-figure-table |
+| exploratory | vis-lens-chart-select | vis-lens-uncertainty |
+| factorial_design | vis-lens-multi-compare | vis-lens-chart-select |
+| instrument_validation | vis-lens-multi-compare | vis-lens-uncertainty |
+| observational_correlational | vis-lens-chart-select | vis-lens-figure-table |
+| qualitative_interpretive | vis-lens-chart-select | vis-lens-uncertainty |
+| robustness_audit | vis-lens-chart-select | vis-lens-uncertainty |
+| simulation_modeling | vis-lens-temporal | vis-lens-chart-select |
+| single_subject | vis-lens-chart-select | vis-lens-uncertainty |
 | (default) | vis-lens-chart-select | — |
 
 Cap Tier B at 2 lenses total (overrides count toward this cap).

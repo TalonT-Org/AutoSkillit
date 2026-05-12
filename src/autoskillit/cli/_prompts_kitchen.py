@@ -55,7 +55,8 @@ def _build_open_kitchen_prompt(mcp_prefix: str) -> str:
         "- The ONLY mechanism for skipping a step is skip_when_false evaluating to false.\n"
         "- Consequence: skipping PR review steps results in unreviewed code, missing diff\n"
         "  annotations, and no architectural lens analysis — code reaches main without\n"
-        "  quality gates." + "\n\n" + ROUTING_AUTHORITY_CLAUSE + "\n" + sous_chef_content
+        "  quality gates.\n\n"
+        f"## ROUTING AUTHORITY\n\n{ROUTING_AUTHORITY_CLAUSE}\n" + sous_chef_content
     )
 
     scripts_dir = Path.cwd() / ".autoskillit" / "scripts"

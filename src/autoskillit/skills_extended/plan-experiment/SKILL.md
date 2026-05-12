@@ -58,7 +58,7 @@ incorporate the feedback before writing the plan.
 - Leave success criteria vague — every criterion must be measurable
 - Omit the environment assessment — always explicitly state whether a custom
   environment is needed or not, and why
-- Omit YAML frontmatter unless a V1–V4 ERROR is triggered — every plan must have frontmatter
+- Omit YAML frontmatter unless a V1–V4, V9, V10 ERROR is triggered — every plan must have frontmatter
 - Write frontmatter after the `# Experiment Plan:` heading — it always goes BEFORE
 - Run subagents in the background (`run_in_background: true` is prohibited)
 - Include database accession identifiers (GEO GSE*, SRA SRR*/SRP*, ENCODE ENCSR*, or

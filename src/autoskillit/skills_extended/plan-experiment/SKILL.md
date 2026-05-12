@@ -512,7 +512,7 @@ V9: data_manifest completeness
     - Any entry with `source_type: wet_lab` lacks a non-null `description` (must document the required laboratory procedure)
     - Any entry with `source_type: wet_lab` has an `acquisition` command or a `location` field (wet-lab data requires physical laboratory work and cannot be computationally acquired or pre-staged)
     NOTE: `literature` and `database` entries do NOT require `depends_on` or download commands.
-    NOTE: `wet_lab` entries do NOT require `acquisition` commands or `location` fields — the data does not yet exist.
+    NOTE: `wet_lab` entries MUST NOT have `acquisition` commands or `location` fields — the data does not yet exist.
     ERROR: "Data Manifest incomplete: {specific missing field or hypothesis}"
 
 V10: citation and external reference verification

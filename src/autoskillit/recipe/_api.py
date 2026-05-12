@@ -11,8 +11,6 @@ from dataclasses import dataclass as _dc
 from pathlib import Path
 from typing import Any
 
-import regex as re
-
 from autoskillit.core import (
     LoadResult,
     RecipeSource,
@@ -35,6 +33,7 @@ from autoskillit.recipe._recipe_ingredients import (
     build_ingredient_rows,  # noqa: F401
     format_ingredients_table,
 )
+from autoskillit.recipe._rule_helpers import _SENTINEL_JSON_RE, _is_failure_sentinel_value
 from autoskillit.recipe.contracts import (
     check_contract_staleness,
     load_recipe_card,
@@ -69,8 +68,6 @@ from autoskillit.recipe.validator import (
 )
 
 logger = get_logger(__name__)
-
-_SENTINEL_JSON_RE = re.compile(r"[Ee]xample\s+sentinel:\s*(\{[^}]+\})", re.DOTALL)
 
 # ---------------------------------------------------------------------------
 # Stage timing helper
@@ -272,9 +269,9 @@ def _infer_stop_failure(name: str, message: str | None) -> bool:
             try:
                 parsed = json.loads(m.group(1))
                 if isinstance(parsed, dict) and "success" in parsed:
-                    val = parsed["success"]
-                    return val is False or (isinstance(val, str) and val.lower() == "false")
+                    return _is_failure_sentinel_value(parsed["success"])
             except (json.JSONDecodeError, ValueError):
+                logger.debug("sentinel_json_parse_failed", step=name, raw=m.group(1))
                 continue
     return "escalate" in name.lower() or "reject" in name.lower()
 

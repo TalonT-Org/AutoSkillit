@@ -251,8 +251,10 @@ def test_anti_fabrication_covers_accession_identifiers() -> None:
 def test_data_manifest_verification_url_field() -> None:
     """data_manifest field definitions must include a verification_url field."""
     text = SKILL_PATH.read_text()
-    lower = text.lower()
-    assert "verification_url" in lower or "verification_source" in lower, (
-        "data_manifest must include a verification_url or verification_source field "
+    parts = text.lower().split("### data_manifest")
+    assert len(parts) > 1, "### data_manifest heading not found in SKILL.md"
+    after_manifest = parts[1][:3000]
+    assert "verification_url" in after_manifest, (
+        "data_manifest section must include a verification_url field "
         "to record the URL used to confirm accession existence"
     )

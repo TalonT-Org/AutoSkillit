@@ -236,10 +236,13 @@ class TestSentinelFormat:
         [
             {
                 "worktree_path": CaptureEntrySpec(from_="${{ result.worktree_path }}"),
+            },
+            {
+                "worktree_path": CaptureEntrySpec(from_="${{ result.worktree_path }}"),
                 "pr_url": CaptureEntrySpec(from_="${{ result.pr_url }}"),
             },
         ],
-        ids=["2-key"],
+        ids=["1-key", "2-key"],
     )
     def test_sentinel_capture_fields_injected(
         self, capture_arg: dict[str, CaptureEntrySpec]

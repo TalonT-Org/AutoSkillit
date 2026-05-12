@@ -11,6 +11,7 @@ import regex as re
 
 from autoskillit.core import RECIPE_PACK_REGISTRY, DispatchGateType, Severity, get_logger
 from autoskillit.recipe._analysis import ValidationContext
+from autoskillit.recipe._rule_helpers import _SENTINEL_JSON_RE, _is_failure_sentinel_value
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 from autoskillit.recipe.schema import CAMPAIGN_REF_RE, CampaignDispatch, RecipeKind
 
@@ -25,9 +26,6 @@ _KEBAB_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 # dispatch task: field), so campaigns that rely on this injection pattern should not
 # be flagged for not explicitly forwarding them in the ingredients block.
 _AUTO_INJECTED_CAMPAIGN_INGREDIENTS: frozenset[str] = frozenset({"task"})
-
-
-_SENTINEL_JSON_RE = re.compile(r"[Ee]xample\s+sentinel:\s*(\{[^}]+\})", re.DOTALL)
 
 
 def _extract_sentinel_fields(recipe: Recipe) -> frozenset[str]:
@@ -660,11 +658,12 @@ def _extract_sentinel_fields_per_stop(recipe: Recipe) -> list[frozenset[str]]:
                 parsed = json.loads(match.group(1))
                 if isinstance(parsed, dict):
                     _sv = parsed.get("success")
-                    if _sv is False or (isinstance(_sv, str) and _sv.lower() == "false"):
+                    if _is_failure_sentinel_value(_sv):
                         is_failure_sentinel = True
                         break
                     fields.update(parsed.keys())
             except (json.JSONDecodeError, ValueError):
+                logger.debug("sentinel_json_parse_failed", step=step.name, raw=match.group(1))
                 continue
         if not is_failure_sentinel and fields:
             per_stop.append(frozenset(fields))

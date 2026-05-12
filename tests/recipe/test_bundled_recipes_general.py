@@ -725,12 +725,12 @@ def test_requires_packs_covers_all_default_disabled_skill_categories() -> None:
 
 
 def _dispatchable_recipe_names() -> list[str]:
-    from autoskillit.recipe.schema import RecipeKind
+    from autoskillit.recipe.rules.rules_food_truck import _DISPATCHABLE_KINDS
 
     names = []
     for yaml_file in sorted(builtin_recipes_dir().glob("*.yaml")):
         recipe = load_recipe(yaml_file)
-        if recipe.kind in {RecipeKind.FOOD_TRUCK, RecipeKind.STANDARD}:
+        if recipe.kind in _DISPATCHABLE_KINDS:
             names.append(recipe.name)
     return names
 

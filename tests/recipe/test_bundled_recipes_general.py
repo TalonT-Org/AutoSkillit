@@ -724,25 +724,18 @@ def test_requires_packs_covers_all_default_disabled_skill_categories() -> None:
         )
 
 
-@pytest.mark.parametrize(
-    "recipe_name",
-    [
-        "research-design",
-        "research-implement",
-        "research-review",
-        "research-archive",
-        "research",
-        "full-audit",
-        "bem-wrapper",
-        "promote-to-main-wrapper",
-        "planner",
-        "implement-findings",
-        "merge-prs",
-        "implementation",
-        "implementation-groups",
-        "remediation",
-    ],
-)
+def _dispatchable_recipe_names() -> list[str]:
+    from autoskillit.recipe.schema import RecipeKind
+
+    names = []
+    for yaml_file in sorted(builtin_recipes_dir().glob("*.yaml")):
+        recipe = load_recipe(yaml_file)
+        if recipe.kind in {RecipeKind.FOOD_TRUCK, RecipeKind.STANDARD}:
+            names.append(recipe.name)
+    return names
+
+
+@pytest.mark.parametrize("recipe_name", _dispatchable_recipe_names())
 def test_recipe_all_stop_steps_have_sentinel_instructions(recipe_name: str) -> None:
     """Every stop step in bundled dispatchable recipes must include sentinel instructions."""
     recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")

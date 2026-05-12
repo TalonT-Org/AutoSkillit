@@ -480,7 +480,15 @@ class TestAntiFabricationSurfaceContract:
         from autoskillit.core import pkg_root
 
         project_root = pkg_root()
-        prompt_files = sorted((project_root / "src" / "autoskillit").rglob("_prompts*.py"))
+        src_pkg = project_root / "src" / "autoskillit"
+        if not src_pkg.is_dir():
+            src_pkg = project_root
+        prompt_files = sorted(src_pkg.rglob("_prompts*.py"))
+
+        assert prompt_files, (
+            "No _prompts*.py files discovered — "
+            f"pkg_root()={project_root} may not resolve to the source tree."
+        )
 
         discovered: dict[str, str] = {}
         for fpath in prompt_files:
@@ -497,8 +505,7 @@ class TestAntiFabricationSurfaceContract:
                     discovered[node.name] = str(fpath)
 
         assert discovered, (
-            "No _build_*_prompt functions discovered — "
-            "pkg_root() may not resolve to the source tree."
+            f"No _build_*_prompt functions discovered in {len(prompt_files)} _prompts*.py files."
         )
         registered = {name for name, *_ in _ANTI_FAB_BUILDERS}
         for fname in sorted(discovered):

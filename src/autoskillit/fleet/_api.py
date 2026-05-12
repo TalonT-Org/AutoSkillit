@@ -802,11 +802,12 @@ async def _run_dispatch(
 
     jsonl_path = claude_code_log_path(str(tool_ctx.project_dir), skill_result.session_id or "")
 
+    extended_chain = prior_session_chain[:]
+    if prior_dispatched_session_id and prior_dispatched_session_id not in extended_chain:
+        extended_chain.append(prior_dispatched_session_id)
+
     additional_jsonl_paths: list[Path] = []
-    session_ids_for_jsonl = prior_session_chain[:]
-    if prior_dispatched_session_id and prior_dispatched_session_id not in session_ids_for_jsonl:
-        session_ids_for_jsonl.append(prior_dispatched_session_id)
-    for sid in session_ids_for_jsonl:
+    for sid in extended_chain:
         path = claude_code_log_path(str(tool_ctx.project_dir), sid)
         if path is not None:
             additional_jsonl_paths.append(path)
@@ -836,16 +837,10 @@ async def _run_dispatch(
         checkpoint=dispatch_checkpoint,
     )
 
-    accumulated_session_chain = prior_session_chain[:]
-    if (
-        prior_dispatched_session_id
-        and prior_dispatched_session_id not in accumulated_session_chain
-    ):
-        accumulated_session_chain.append(prior_dispatched_session_id)
-
     try:
         project_log_dir = str(claude_code_project_dir(str(tool_ctx.project_dir)))
     except OSError:
+        logger.warning("failed to resolve project log dir", exc_info=True)
         project_log_dir = ""
 
     record = DispatchRecord(
@@ -855,7 +850,7 @@ async def _run_dispatch(
         campaign_id=campaign_id,
         caller_session_id=caller_session_id,
         dispatched_session_id=skill_result.session_id,
-        session_chain=accumulated_session_chain,
+        session_chain=extended_chain,
         dispatched_session_log_dir=project_log_dir,
         dispatched_pid=_dispatched_pid[0] if _dispatched_pid else 0,
         reason=reason,

@@ -432,11 +432,11 @@ def test_parse_recovers_sentinel_from_additional_jsonl_paths(tmp_path: Path) -> 
     )
     assert result.outcome == "completed_clean"
     assert result.payload["summary"] == "from_original_session"
-    assert result.source == "assistant_messages_jsonl"
+    assert result.source == "additional_jsonl"
 
 
 def test_parse_additional_jsonl_paths_scanned_oldest_first(tmp_path: Path) -> None:
-    """Additional paths are scanned in order; _scan_for_sentinel returns the last sentinel in each file."""
+    """Additional paths are scanned in order; _scan_for_sentinel returns last sentinel."""
     older = make_jsonl_file(
         tmp_path,
         [

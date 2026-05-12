@@ -10,6 +10,7 @@ from __future__ import annotations
 import importlib
 import re
 import types
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -385,6 +386,66 @@ class TestSourceIsolationContract:
             )
 
 
+def _anti_fab_prompt_builders() -> list[tuple[str, Callable, dict]]:
+    from autoskillit.cli._prompts_campaign import _build_fleet_campaign_prompt
+    from autoskillit.cli._prompts_kitchen import (
+        _build_fleet_dispatch_prompt,
+        _build_open_kitchen_prompt,
+    )
+    from autoskillit.cli._prompts_orchestrator import _build_orchestrator_prompt
+    from autoskillit.fleet._prompts import _build_food_truck_prompt
+    from autoskillit.recipe.schema import Recipe, RecipeKind, RecipeStep
+
+    campaign_recipe = Recipe(
+        name="test",
+        description="test",
+        kind=RecipeKind.STANDARD,
+        steps={"done": RecipeStep(action="stop", message="done")},
+        kitchen_rules=["NEVER"],
+    )
+    return [
+        (
+            "_build_food_truck_prompt",
+            _build_food_truck_prompt,
+            dict(
+                recipe="test",
+                task="Test",
+                ingredients={},
+                mcp_prefix=DIRECT_PREFIX,
+                dispatch_id="d1",
+                campaign_id="c1",
+                l3_timeout_sec=300,
+            ),
+        ),
+        (
+            "_build_orchestrator_prompt",
+            _build_orchestrator_prompt,
+            dict(recipe_name="test", mcp_prefix=DIRECT_PREFIX),
+        ),
+        (
+            "_build_open_kitchen_prompt",
+            _build_open_kitchen_prompt,
+            dict(mcp_prefix=DIRECT_PREFIX),
+        ),
+        (
+            "_build_fleet_dispatch_prompt",
+            _build_fleet_dispatch_prompt,
+            dict(mcp_prefix=DIRECT_PREFIX),
+        ),
+        (
+            "_build_fleet_campaign_prompt",
+            _build_fleet_campaign_prompt,
+            dict(
+                campaign_recipe=campaign_recipe,
+                manifest_yaml="",
+                completed_dispatches="",
+                mcp_prefix=DIRECT_PREFIX,
+                campaign_id="c1",
+            ),
+        ),
+    ]
+
+
 class TestAntiFabricationSurfaceContract:
     """Every prompt builder that generates system prompts for recipe-execution sessions
     must carry anti-fabrication language sourced from ROUTING_AUTHORITY_CLAUSE."""
@@ -394,66 +455,11 @@ class TestAntiFabricationSurfaceContract:
     )
     _SENTINEL = "ROUTING AUTHORITY"
 
-    def _prompt_builders(self) -> list[tuple[str, callable, dict]]:
-        from autoskillit.cli._prompts_campaign import _build_fleet_campaign_prompt
-        from autoskillit.cli._prompts_kitchen import (
-            _build_fleet_dispatch_prompt,
-            _build_open_kitchen_prompt,
-        )
-        from autoskillit.cli._prompts_orchestrator import _build_orchestrator_prompt
-        from autoskillit.fleet._prompts import _build_food_truck_prompt
-        from autoskillit.recipe.schema import Recipe, RecipeKind, RecipeStep
-
-        campaign_recipe = Recipe(
-            name="test",
-            description="test",
-            kind=RecipeKind.STANDARD,
-            steps={"done": RecipeStep(action="stop", message="done")},
-            kitchen_rules=["NEVER"],
-        )
-        return [
-            (
-                "fleet._prompts._build_food_truck_prompt",
-                _build_food_truck_prompt,
-                dict(
-                    recipe="test",
-                    task="Test",
-                    ingredients={},
-                    mcp_prefix=DIRECT_PREFIX,
-                    dispatch_id="d1",
-                    campaign_id="c1",
-                    l3_timeout_sec=300,
-                ),
-            ),
-            (
-                "cli._prompts_orchestrator._build_orchestrator_prompt",
-                _build_orchestrator_prompt,
-                dict(recipe_name="test", mcp_prefix=DIRECT_PREFIX),
-            ),
-            (
-                "cli._prompts_kitchen._build_open_kitchen_prompt",
-                _build_open_kitchen_prompt,
-                dict(mcp_prefix=DIRECT_PREFIX),
-            ),
-            (
-                "cli._prompts_kitchen._build_fleet_dispatch_prompt",
-                _build_fleet_dispatch_prompt,
-                dict(mcp_prefix=DIRECT_PREFIX),
-            ),
-            (
-                "cli._prompts_campaign._build_fleet_campaign_prompt",
-                _build_fleet_campaign_prompt,
-                dict(
-                    campaign_recipe=campaign_recipe,
-                    manifest_yaml="",
-                    completed_dispatches="",
-                    mcp_prefix=DIRECT_PREFIX,
-                    campaign_id="c1",
-                ),
-            ),
-        ]
-
-    @pytest.mark.parametrize("name,builder,kwargs", _prompt_builders(), ids=lambda item: item[0])
+    @pytest.mark.parametrize(
+        "name,builder,kwargs",
+        _anti_fab_prompt_builders(),
+        ids=lambda item: item[0],
+    )
     def test_prompt_builder_has_anti_fabrication(self, name, builder, kwargs):
         """Each registered prompt builder must embed anti-fabrication language."""
         prompt = builder(**kwargs)
@@ -488,11 +494,11 @@ class TestAntiFabricationSurfaceContract:
                 ):
                     discovered[node.name] = str(fpath)
 
-        registered = {name: True for name, *_ in self._prompt_builders()}
+        registered = {name for name, *_ in _anti_fab_prompt_builders()}
         for fname in sorted(discovered):
             assert fname in registered, (
                 f"Discovered prompt builder '{fname}' in {discovered[fname]} "
-                f"is not registered in TestAntiFabricationSurfaceContract._prompt_builders(). "
+                f"is not registered in _anti_fab_prompt_builders(). "
                 f"Add it to the registry and ensure it uses ROUTING_AUTHORITY_CLAUSE."
             )
 

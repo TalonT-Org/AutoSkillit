@@ -9,16 +9,13 @@ from __future__ import annotations
 
 import pytest
 
-# Import fixtures from the prompt test module where they live as module-level constants
-from tests.cli.test_food_truck_prompt import (
-    _CAMPAIGN_ID,
-    _DISPATCH_ID,
-    _INGREDIENTS,
-    _L3_TIMEOUT,
-    _MCP_PREFIX,
-    _RECIPE,
-    _TASK,
-)
+_RECIPE = "test-recipe"
+_TASK = "implement feature X"
+_INGREDIENTS = {"branch": "main", "issue_url": "https://github.com/org/repo/issues/1"}
+_MCP_PREFIX = "mcp__autoskillit__"
+_DISPATCH_ID = "abc12345deadbeef"
+_CAMPAIGN_ID = "camp-001"
+_L3_TIMEOUT = 3600
 
 pytestmark = [
     pytest.mark.layer("fleet"),

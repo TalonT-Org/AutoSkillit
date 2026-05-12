@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core.types import CaptureEntrySpec
+from autoskillit.core.types import CaptureEntrySpec, resolve_payload_field
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -611,6 +611,102 @@ def test_extract_captures_raises_on_complete_capture_miss():
 
     with pytest.raises(CaptureCompletenessError):
         _extract_captures(capture_spec, payload)
+
+
+# ---------------------------------------------------------------------------
+# Round-trip contract tests
+# ---------------------------------------------------------------------------
+
+
+class TestCaptureFieldNameRoundTrip:
+    """Verify the prompt builder and extractor agree on payload field names."""
+
+    def test_prompt_example_fields_match_extractor_keys(self) -> None:
+        """Prompt builder produces bare field names; extractor looks for bare names."""
+        from autoskillit.core.types import CaptureEntrySpec
+        from autoskillit.fleet._prompts import _build_food_truck_prompt
+
+        capture_spec = {
+            "worktree_path": CaptureEntrySpec(from_="${{ result.worktree_path }}"),
+            "pr_url": CaptureEntrySpec(from_="${{ result.pr_url }}"),
+        }
+
+        prompt = _build_food_truck_prompt(
+            recipe="test-recipe",
+            task="implement feature X",
+            ingredients={"branch": "main"},
+            mcp_prefix="mcp__autoskillit__",
+            dispatch_id="abc12345deadbeef",
+            campaign_id="camp-001",
+            l3_timeout_sec=3600,
+            capture=capture_spec,
+        )
+
+        section8 = prompt[prompt.index("--- SECTION 8") :]
+
+        for key, entry in capture_spec.items():
+            field = resolve_payload_field(entry)
+            assert field is not None
+            assert f'"{field}"' in section8, f"Bare field name {field!r} not in Section 8"
+            assert f"capture_{field}" not in section8, (
+                f"Prefix form capture_{field} found in Section 8 — extractor uses bare names"
+            )
+
+    def test_synthetic_payload_round_trip(self) -> None:
+        """Build synthetic L3 JSON using prompt field names; verify extractor finds all."""
+        from autoskillit.core.types import CaptureEntrySpec
+        from autoskillit.fleet._api import _extract_captures
+
+        capture_spec = {
+            "worktree_path": CaptureEntrySpec(from_="${{ result.worktree_path }}"),
+            "pr_url": CaptureEntrySpec(from_="${{ result.pr_url }}"),
+        }
+
+        synthetic_payload = {
+            "success": True,
+            "reason": "completed",
+            "summary": "done",
+            "worktree_path": "/home/user/worktrees/impl-feature-20260512",
+            "pr_url": "https://github.com/org/repo/pull/42",
+        }
+
+        result = _extract_captures(capture_spec, synthetic_payload)
+        assert result["worktree_path"] == "/home/user/worktrees/impl-feature-20260512"
+        assert result["pr_url"] == "https://github.com/org/repo/pull/42"
+
+    def test_hyphenated_field_name_round_trip(self) -> None:
+        """Field names with hyphens are handled correctly end-to-end."""
+        from autoskillit.core.types import CaptureEntrySpec
+        from autoskillit.fleet._api import _extract_captures
+        from autoskillit.fleet._prompts import _build_food_truck_prompt
+
+        capture_spec = {
+            "worktree-path": CaptureEntrySpec(from_="${{ result.worktree-path }}"),
+        }
+
+        prompt = _build_food_truck_prompt(
+            recipe="test-recipe",
+            task="implement feature X",
+            ingredients={"branch": "main"},
+            mcp_prefix="mcp__autoskillit__",
+            dispatch_id="abc12345deadbeef",
+            campaign_id="camp-001",
+            l3_timeout_sec=3600,
+            capture=capture_spec,
+        )
+
+        section8 = prompt[prompt.index("--- SECTION 8") :]
+        assert '"worktree-path"' in section8
+
+        synthetic_payload = {
+            "success": True,
+            "reason": "completed",
+            "summary": "done",
+            "worktree-path": "/home/user/worktree-path",
+        }
+
+        result = _extract_captures(capture_spec, synthetic_payload)
+        assert result["worktree-path"] == "/home/user/worktree-path"
 
 
 # ---------------------------------------------------------------------------

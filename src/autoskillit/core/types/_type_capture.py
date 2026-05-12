@@ -5,9 +5,33 @@ Zero autoskillit imports outside this sub-package. IL-0 type contract.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
-__all__ = ["CAPTURE_VALID_VALUE_TYPES", "CaptureEntrySpec", "CaptureValueTypeError"]
+__all__ = [
+    "CAPTURE_VALID_VALUE_TYPES",
+    "CaptureEntrySpec",
+    "CaptureValueTypeError",
+    "resolve_payload_field",
+]
+
+_RESULT_REF_RE = re.compile(r"^\$\{\{\s*result\.([\w-]+)\s*\}\}$")
+
+
+def resolve_payload_field(entry: CaptureEntrySpec) -> str | None:
+    """Extract the payload field name from a CaptureEntrySpec's ``from_`` template.
+
+    Parses the ``${{ result.<field_name> }}`` template string and returns the
+    bare field name. Returns ``None`` if the template does not match the expected
+    pattern.
+
+    This is the single source of truth for deriving the JSON field name that
+    L3 sessions should emit in the sentinel block and that the extractor
+    uses to look up values in the parsed payload.
+    """
+    m = _RESULT_REF_RE.match(entry.from_.strip())
+    return m.group(1) if m else None
+
 
 CAPTURE_VALID_VALUE_TYPES = frozenset({"path", "url", "string", "optional_string"})
 
@@ -29,6 +53,8 @@ class CaptureEntrySpec:
     value_type: str = "string"
 
     def __post_init__(self) -> None:
+        if not self.from_ or not self.from_.strip():
+            raise ValueError("CaptureEntrySpec.from_ must be a non-empty string")
         if self.value_type not in _VALID_VALUE_TYPES:
             raise ValueError(
                 f"CaptureEntrySpec.value_type must be one of {sorted(_VALID_VALUE_TYPES)}, "

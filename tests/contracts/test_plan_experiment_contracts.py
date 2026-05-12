@@ -258,3 +258,58 @@ def test_data_manifest_verification_url_field() -> None:
         "data_manifest section must include a verification_url field "
         "to record the URL used to confirm accession existence"
     )
+
+
+def test_v9_rejects_unresolved_template_placeholders() -> None:
+    """V9 must contain language rejecting {variable} template syntax in acquisition fields.
+
+    Current V9 has no placeholder-rejection language at all — it only checks for
+    presence (non-null) of fields, not for content validity. The error template
+    ``{specific missing field or hypothesis}`` on line 482 is an authoring-time
+    placeholder for the LLM, not a validation criterion about runtime placeholders.
+    This test asserts that V9 explicitly addresses unresolved template placeholders
+    as a rejection criterion.
+    """
+    import re
+
+    text = SKILL_PATH.read_text()
+    m = re.search(r"V9:.+?(?=\nV[0-9]+:|\n---|\Z)", text, re.DOTALL)
+    assert m, "V9 rule block not found"
+    v9 = m.group(0).lower()
+    placeholder_signals = ["placeholder", "template", "unresolved", "brace expansion"]
+    assert any(s in v9 for s in placeholder_signals), (
+        "V9 must specify rejection of unresolved template/placeholder syntax in acquisition fields"
+    )
+    reject_signals = ["must not contain", "not permitted", "reject", "must be"]
+    assert any(s in v9 for s in reject_signals), (
+        "V9 must specify a prohibition for placeholder syntax, not just mention it"
+    )
+
+
+def test_v9_requires_gitignored_acquisition_command() -> None:
+    """V9 must require gitignored entries to have an executable acquisition command.
+
+    Current V9 only requires gitignored entries to have a non-null `location` (line 477)
+    but does NOT require an acquisition command — despite download-data executing
+    `acquisition` for gitignored entries identically to external entries.
+    This test asserts that V9 has a dedicated bullet/clause requiring gitignored
+    entries to have an acquisition command, separate from the external-only clause.
+    """
+    import re
+
+    text = SKILL_PATH.read_text()
+    m = re.search(r"V9:.+?(?=\nV[0-9]+:|\n---|\Z)", text, re.DOTALL)
+    assert m, "V9 rule block not found"
+    v9 = m.group(0).lower()
+    assert "gitignored" in v9, "V9 must address source_type: gitignored entries"
+    lines = v9.split("\n")
+    has_gitignored_acquisition_line = any(
+        "gitignored" in line
+        and ("acquisition" in line or "generation" in line)
+        and "location" not in line
+        for line in lines
+    )
+    assert has_gitignored_acquisition_line, (
+        "V9 must have a dedicated clause requiring gitignored entries to have an "
+        "executable acquisition or generation command (not just a non-null location)"
+    )

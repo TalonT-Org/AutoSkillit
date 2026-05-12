@@ -25,16 +25,6 @@ def _food_truck_recipe(**kwargs: object) -> Recipe:
     return Recipe(**defaults)
 
 
-def _standard_recipe(**kwargs: object) -> Recipe:
-    return Recipe(
-        name="standard",
-        description="standard recipe",
-        steps={"done": RecipeStep(action="stop", message="done")},
-        kitchen_rules=["NEVER"],
-        **kwargs,
-    )
-
-
 def _findings(recipe: Recipe, rule: str, **ctx_kwargs: object) -> list:
     ctx = make_validation_context(recipe, **ctx_kwargs)
     return [f for f in run_semantic_rules(ctx) if f.rule == rule]

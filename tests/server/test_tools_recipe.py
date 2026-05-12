@@ -203,7 +203,7 @@ class TestValidateRecipeTool:
             "    on_success: done\n"
             "  done:\n"
             "    action: stop\n"
-            '    message: "Done."\n'
+            '    message: "Done. Emit the L3 result sentinel JSON block now."\n'
         )
         result = json.loads(await validate_recipe(script_path=str(script)))
         assert result["valid"] is False

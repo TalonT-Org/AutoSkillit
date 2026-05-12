@@ -35,7 +35,7 @@ def _findings(recipe: Recipe, rule: str, **ctx_kwargs: object) -> list:
 # ---------------------------------------------------------------------------
 
 
-def test_food_truck_has_sentinel_stop_rule_fires_on_missing_sentinel():
+def test_dispatchable_sentinel_rule_fires_on_missing_sentinel():
     """Dispatchable recipe with no sentinel in any stop message triggers a finding."""
     recipe = _food_truck_recipe(
         steps={"done": RecipeStep(action="stop", message="Promotion complete.")},
@@ -50,7 +50,7 @@ def test_food_truck_has_sentinel_stop_rule_fires_on_missing_sentinel():
 # ---------------------------------------------------------------------------
 
 
-def test_food_truck_has_sentinel_stop_rule_passes_when_present():
+def test_dispatchable_sentinel_rule_passes_when_present():
     """Food-truck recipe with sentinel in stop message produces no findings."""
     recipe = _food_truck_recipe(
         steps={
@@ -119,7 +119,7 @@ def test_food_truck_sentinel_rule_passes_when_all_stops_have_sentinel():
     assert found == [], "Rule must not fire when all stop steps have sentinel instructions"
 
 
-def test_food_truck_has_sentinel_stop_severity_is_error():
+def test_dispatchable_sentinel_rule_severity_is_error():
     """Guard: all-dispatchable-stops-have-sentinel must be ERROR, not WARNING."""
     from autoskillit.recipe.registry import _RULE_REGISTRY
 

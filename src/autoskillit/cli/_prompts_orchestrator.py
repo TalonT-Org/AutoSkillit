@@ -10,7 +10,7 @@ from autoskillit.cli._prompts import (
     _ingredient_table_display_instruction,
     _read_full_sous_chef,
 )
-from autoskillit.core import get_logger
+from autoskillit.core import ROUTING_AUTHORITY_CLAUSE, get_logger
 from autoskillit.hooks import QUOTA_GUARD_DENY_TRIGGER, QUOTA_POST_WARNING_TRIGGER
 
 logger = get_logger(__name__)
@@ -274,6 +274,8 @@ STEP EXECUTION IS NOT DISCRETIONARY:
 - Consequence: skipping PR review steps results in unreviewed code, missing diff
   annotations, and no architectural lens analysis — code reaches main without
   quality gates.
+
+{ROUTING_AUTHORITY_CLAUSE}
 
 ACTION: CONFIRM STEP SEMANTICS:
 - When you reach a step with action: "confirm", call AskUserQuestion with the

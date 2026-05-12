@@ -420,3 +420,21 @@ class TestWorktreeZeroWritesCarveout:
         assert "on_context_limit" in window, (
             "zero_writes with worktree_path must route to on_context_limit"
         )
+
+
+_FABRICATION_GUARD_RE = re.compile(
+    r"(?i)(?:fabricat|embellish|invent|hallucinat|attribute.*missing.*to)",
+)
+
+
+def test_step_execution_section_has_anti_fabrication() -> None:
+    """The STEP EXECUTION section in sous-chef SKILL.md must include anti-fabrication rules."""
+    content = _sous_chef_text()
+    idx = content.find("## STEP EXECUTION IS NOT DISCRETIONARY")
+    assert idx >= 0, "STEP EXECUTION section not found in sous-chef/SKILL.md"
+    next_section = content.find("\n---", idx)
+    section = content[idx:next_section] if next_section != -1 else content[idx:]
+    assert _FABRICATION_GUARD_RE.search(section), (
+        "STEP EXECUTION section in sous-chef/SKILL.md must include anti-fabrication language "
+        "(fabricat|embellish|invent|hallucinat)"
+    )

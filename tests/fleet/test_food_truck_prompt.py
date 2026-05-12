@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from autoskillit.core._plugin_ids import DIRECT_PREFIX
@@ -67,3 +69,25 @@ def test_fleet_prompt_contains_missing_on_failure_sentinel():
     )
     assert "recipe authoring error. Emit the sentinel block with success=false" in prompt
     assert 'reason="missing_on_failure"' in prompt
+
+
+_FABRICATION_GUARD_RE = re.compile(
+    r"(?i)(?:fabricat|embellish|invent|hallucinat|attribute.*missing.*to)",
+)
+
+
+def test_food_truck_prompt_has_anti_fabrication_guard():
+    """L3 food truck prompt must include anti-fabrication language."""
+    prompt = _build_food_truck_prompt(
+        recipe="test-recipe",
+        task="Test task",
+        ingredients={},
+        mcp_prefix=DIRECT_PREFIX,
+        dispatch_id="test-dispatch",
+        campaign_id="test-campaign",
+        l3_timeout_sec=300,
+    )
+    assert _FABRICATION_GUARD_RE.search(prompt), (
+        "Food truck prompt must include anti-fabrication language"
+    )
+    assert "ROUTING AUTHORITY" in prompt

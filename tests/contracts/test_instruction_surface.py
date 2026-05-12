@@ -385,6 +385,118 @@ class TestSourceIsolationContract:
             )
 
 
+class TestAntiFabricationSurfaceContract:
+    """Every prompt builder that generates system prompts for recipe-execution sessions
+    must carry anti-fabrication language sourced from ROUTING_AUTHORITY_CLAUSE."""
+
+    _FABRICATION_GUARD_RE = re.compile(
+        r"(?i)(?:fabricat|embellish|invent|hallucinat|attribute.*missing.*to)",
+    )
+    _SENTINEL = "ROUTING AUTHORITY"
+
+    def _prompt_builders(self) -> list[tuple[str, callable, dict]]:
+        from autoskillit.cli._prompts_campaign import _build_fleet_campaign_prompt
+        from autoskillit.cli._prompts_kitchen import (
+            _build_fleet_dispatch_prompt,
+            _build_open_kitchen_prompt,
+        )
+        from autoskillit.cli._prompts_orchestrator import _build_orchestrator_prompt
+        from autoskillit.fleet._prompts import _build_food_truck_prompt
+        from autoskillit.recipe.schema import Recipe, RecipeKind, RecipeStep
+
+        campaign_recipe = Recipe(
+            name="test",
+            description="test",
+            kind=RecipeKind.STANDARD,
+            steps={"done": RecipeStep(action="stop", message="done")},
+            kitchen_rules=["NEVER"],
+        )
+        return [
+            (
+                "fleet._prompts._build_food_truck_prompt",
+                _build_food_truck_prompt,
+                dict(
+                    recipe="test",
+                    task="Test",
+                    ingredients={},
+                    mcp_prefix=DIRECT_PREFIX,
+                    dispatch_id="d1",
+                    campaign_id="c1",
+                    l3_timeout_sec=300,
+                ),
+            ),
+            (
+                "cli._prompts_orchestrator._build_orchestrator_prompt",
+                _build_orchestrator_prompt,
+                dict(recipe_name="test", mcp_prefix=DIRECT_PREFIX),
+            ),
+            (
+                "cli._prompts_kitchen._build_open_kitchen_prompt",
+                _build_open_kitchen_prompt,
+                dict(mcp_prefix=DIRECT_PREFIX),
+            ),
+            (
+                "cli._prompts_kitchen._build_fleet_dispatch_prompt",
+                _build_fleet_dispatch_prompt,
+                dict(mcp_prefix=DIRECT_PREFIX),
+            ),
+            (
+                "cli._prompts_campaign._build_fleet_campaign_prompt",
+                _build_fleet_campaign_prompt,
+                dict(
+                    campaign_recipe=campaign_recipe,
+                    manifest_yaml="",
+                    completed_dispatches="",
+                    mcp_prefix=DIRECT_PREFIX,
+                    campaign_id="c1",
+                ),
+            ),
+        ]
+
+    @pytest.mark.parametrize("name,builder,kwargs", _prompt_builders(), ids=lambda item: item[0])
+    def test_prompt_builder_has_anti_fabrication(self, name, builder, kwargs):
+        """Each registered prompt builder must embed anti-fabrication language."""
+        prompt = builder(**kwargs)
+        assert self._FABRICATION_GUARD_RE.search(prompt), (
+            f"{name}: prompt must include anti-fabrication language "
+            f"(fabricat|embellish|invent|hallucinat)"
+        )
+        assert self._SENTINEL in prompt, (
+            f"{name}: prompt must contain the routing-authority sentinel '{self._SENTINEL}'"
+        )
+
+    def test_prompt_builder_discovery_guard(self):
+        """Auto-discover all _build_*_prompt functions in _prompts*.py and assert coverage."""
+        import ast
+
+        from autoskillit.core import pkg_root
+
+        project_root = pkg_root()
+        prompt_files = sorted((project_root / "src" / "autoskillit").rglob("_prompts*.py"))
+
+        discovered: dict[str, str] = {}
+        for fpath in prompt_files:
+            try:
+                tree = ast.parse(fpath.read_text())
+            except SyntaxError:
+                continue
+            for node in ast.walk(tree):
+                if (
+                    isinstance(node, ast.FunctionDef)
+                    and node.name.startswith("_build_")
+                    and node.name.endswith("_prompt")
+                ):
+                    discovered[node.name] = str(fpath)
+
+        registered = {name: True for name, *_ in self._prompt_builders()}
+        for fname in sorted(discovered):
+            assert fname in registered, (
+                f"Discovered prompt builder '{fname}' in {discovered[fname]} "
+                f"is not registered in TestAntiFabricationSurfaceContract._prompt_builders(). "
+                f"Add it to the registry and ensure it uses ROUTING_AUTHORITY_CLAUSE."
+            )
+
+
 class TestSousChefMergePhaseContract:
     """sous-chef/SKILL.md must carry a MERGE PHASE mandatory section."""
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from autoskillit.cli._prompts import _ingredient_table_display_instruction, _read_full_sous_chef
-from autoskillit.core import RetryReason
+from autoskillit.core import ROUTING_AUTHORITY_CLAUSE, RetryReason
 
 if TYPE_CHECKING:
     from autoskillit.recipe.schema import Recipe
@@ -270,6 +270,10 @@ After startup, only these tools should be used for all campaign operations:
 
 Explicitly FORBIDDEN: open_kitchen, close_kitchen, run_skill, and all GitHub/CI tools.
 Use ONLY {mcp_prefix}dispatch_food_truck to dispatch — never run_skill.
+
+## ROUTING AUTHORITY
+
+{ROUTING_AUTHORITY_CLAUSE}
 
 ## CAPTURE & DATA FLOW
 

@@ -17,6 +17,7 @@ import pytest
 
 from autoskillit.cli._mcp_names import DIRECT_PREFIX, MARKETPLACE_PREFIX
 from autoskillit.core.types import PIPELINE_FORBIDDEN_TOOLS
+from tests.contracts._anti_fab_helpers import FABRICATION_GUARD_RE
 
 
 def _project_root() -> Path:
@@ -450,9 +451,7 @@ class TestAntiFabricationSurfaceContract:
     """Every prompt builder that generates system prompts for recipe-execution sessions
     must carry anti-fabrication language sourced from ROUTING_AUTHORITY_CLAUSE."""
 
-    _FABRICATION_GUARD_RE = re.compile(
-        r"(?i)(?:fabricat|embellish|invent|hallucinat|attribute.*missing.*to)",
-    )
+    _FABRICATION_GUARD_RE = FABRICATION_GUARD_RE
     _SENTINEL = "ROUTING AUTHORITY"
 
     @pytest.mark.parametrize(

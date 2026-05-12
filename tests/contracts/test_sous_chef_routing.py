@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from tests.contracts._anti_fab_helpers import FABRICATION_GUARD_RE
+
 
 def _sous_chef_text() -> str:
     skill_md = (
@@ -422,9 +424,7 @@ class TestWorktreeZeroWritesCarveout:
         )
 
 
-_FABRICATION_GUARD_RE = re.compile(
-    r"(?i)(?:fabricat|embellish|invent|hallucinat|attribute.*missing.*to)",
-)
+_FABRICATION_GUARD_RE = FABRICATION_GUARD_RE
 
 
 def test_step_execution_section_has_anti_fabrication() -> None:

@@ -19,6 +19,7 @@ import pytest
 
 from autoskillit.core.paths import pkg_root
 from autoskillit.workspace.skills import DefaultSkillResolver
+from tests.contracts._anti_fab_helpers import FABRICATION_GUARD_RE
 
 _SKILLS_DIRS = [pkg_root() / "skills", pkg_root() / "skills_extended"]
 
@@ -334,9 +335,7 @@ next lens.
     assert not violations, f"Detector falsely flagged guarded loop: {violations}"
 
 
-_FABRICATION_GUARD_RE = re.compile(
-    r"(?i)(?:fabricat|embellish|invent|hallucinat|attribute.*missing.*to)",
-)
+_FABRICATION_GUARD_RE = FABRICATION_GUARD_RE
 
 
 @pytest.mark.parametrize("skill_dir", _all_skill_dirs(), ids=lambda d: d.name)

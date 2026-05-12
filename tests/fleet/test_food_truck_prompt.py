@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import re
-
 import pytest
 
 from autoskillit.core._plugin_ids import DIRECT_PREFIX
 from autoskillit.fleet._prompts import _build_food_truck_prompt
+from tests.contracts._anti_fab_helpers import FABRICATION_GUARD_RE
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -71,9 +70,7 @@ def test_fleet_prompt_contains_missing_on_failure_sentinel():
     assert 'reason="missing_on_failure"' in prompt
 
 
-_FABRICATION_GUARD_RE = re.compile(
-    r"(?i)(?:fabricat|embellish|invent|hallucinat|attribute.*missing.*to)",
-)
+_FABRICATION_GUARD_RE = FABRICATION_GUARD_RE
 
 
 def test_food_truck_prompt_has_anti_fabrication_guard():

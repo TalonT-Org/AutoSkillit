@@ -50,6 +50,16 @@ def test_bundled_recipe_dispatch_ready(recipe_name: str) -> None:
             )
         )
     else:
+        all_error_rules = {
+            s.get("rule")
+            for s in result.get("suggestions", [])
+            if s.get("severity") == Severity.ERROR
+        }
+        for rule_name in excluded:
+            assert rule_name in all_error_rules, (
+                f"Recipe '{recipe_name}': exclusion for '{rule_name}' is stale — "
+                f"rule no longer fires. Remove from _KNOWN_NON_CONFORMING_RULES."
+            )
         error_suggestions = [
             s
             for s in result.get("suggestions", [])

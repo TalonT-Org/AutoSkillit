@@ -152,7 +152,7 @@
       },
       "on_success": "implement_phase",
       "on_failure": "escalate_stop",
-      "note": "Plans the current setup phase. Replace ${{ context.group_files }} in the skill_command with the FIRST REMAINING phase file path from the list — do NOT pass the entire list. Pass the path directly to the skill (do not read it). Glob plan_dir for *_part_*.md or single plan file. ITERATION: After each implement_phase cycle, advance to the next entry in context.group_files for the following plan_phase iteration.\n"
+      "note": "Plans the current setup phase. Replace ${{ context.group_files }} in the skill_command with the FIRST REMAINING phase file path from the list — do NOT pass the entire list. Pass the path directly to the skill (do not read it). Glob plan_dir for *_part_*.md or single plan file. ITERATION: After each implement_phase cycle, advance to the next entry in context.group_files for the following plan_phase iteration. REMEDIATION MODE: context.remediation_path is available when the orchestrator re-enters plan_phase from the remediate step via check_audit_retry_loop; pass it inline in the skill_command rather than as a named with: key.\n"
     },
     "implement_phase": {
       "tool": "run_skill",
@@ -310,13 +310,50 @@
           "route": "run_experiment"
         },
         {
+          "when": "result.error",
           "route": "escalate_stop"
+        },
+        {
+          "route": "remediate"
         }
       ],
       "on_failure": "escalate_stop",
       "on_context_limit": "escalate_stop",
       "skip_when_false": "inputs.audit",
-      "note": "Diffs base_branch...HEAD and verifies all decomposed phases from group_files have corresponding implementation commits. Catches silent group abandonment when on_context_limit fires mid-iteration — reports exactly which phases were completed vs. skipped. On GO, proceeds to run_experiment. On NO GO, escalates with a remediation report detailing which phases are missing. If false (inputs.audit=false), skip directly to run_experiment.\n"
+      "note": "Diffs impl_base_sha..HEAD and verifies all decomposed phases from group_files have corresponding implementation commits. Catches silent group abandonment when on_context_limit fires mid-iteration — reports exactly which phases were completed vs. skipped. On GO, proceeds to run_experiment. On error, escalates immediately. On NO GO, routes to remediate which re-enters plan_phase via check_audit_retry_loop (max 2 cycles). If false (inputs.audit=false), skip directly to run_experiment.\n"
+    },
+    "remediate": {
+      "action": "route",
+      "with": {
+        "remediation_path": "${{ context.remediation_path }}"
+      },
+      "on_success": "check_audit_retry_loop",
+      "note": "Pure routing step carrying the remediation file path from audit_impl's capture into the retry cycle. The remediation_path contains the list of missing phases identified by audit-impl.\n"
+    },
+    "check_audit_retry_loop": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.smoke_utils.check_loop_iteration",
+        "current_iteration": "${{ context.audit_retry_count }}",
+        "max_iterations": "2"
+      },
+      "capture": {
+        "audit_retry_count": "${{ result.next_iteration }}"
+      },
+      "on_result": [
+        {
+          "when": "${{ result.max_exceeded }} == true",
+          "route": "escalate_stop"
+        },
+        {
+          "route": "plan_phase"
+        }
+      ],
+      "on_failure": "escalate_stop",
+      "optional_context_refs": [
+        "audit_retry_count"
+      ],
+      "note": "Guards the audit_impl → remediate → plan_phase remediation cycle. Allows up to 2 remediation attempts before escalating. This prevents unbounded re-planning when audit_impl repeatedly returns NO GO.\n"
     },
     "run_experiment": {
       "tool": "run_skill",

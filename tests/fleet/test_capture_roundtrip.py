@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import pytest
 
+from autoskillit.core import CaptureEntrySpec
+
 _RECIPE = "test-recipe"
 _TASK = "implement feature X"
 _INGREDIENTS = {"branch": "main", "issue_url": "https://github.com/org/repo/issues/1"}
@@ -35,7 +37,10 @@ def test_prompt_capture_fields_match_extractor_expectations():
     """
     from autoskillit.fleet._prompts import _build_food_truck_prompt
 
-    capture_arg = {"worktree_path": "path to worktree", "pr_url": "URL of the PR"}
+    capture_arg = {
+        "worktree_path": CaptureEntrySpec(from_="${{ result.worktree_path }}"),
+        "pr_url": CaptureEntrySpec(from_="${{ result.pr_url }}"),
+    }
 
     prompt = _build_food_truck_prompt(
         recipe=_RECIPE,
@@ -49,13 +54,12 @@ def test_prompt_capture_fields_match_extractor_expectations():
     )
     section8 = prompt[prompt.index("--- SECTION 8") :]
 
-    for key, description in capture_arg.items():
-        # The extractor looks for bare names — the prompt must emit them bare
+    for key, entry in capture_arg.items():
         assert f'"{key}"' in section8, (
             f"Expected bare key '{key}' in sentinel example; "
             f"this is what _extract_captures reads from the payload"
         )
-        assert description in section8
+        assert entry.from_ in section8
     assert '"success"' in section8
     assert '"reason"' in section8
 
@@ -69,7 +73,9 @@ def test_prompt_capture_fields_do_not_use_capture_prefix():
     """
     from autoskillit.fleet._prompts import _build_food_truck_prompt
 
-    capture_arg = {"worktree_path": "path to worktree"}
+    capture_arg = {
+        "worktree_path": CaptureEntrySpec(from_="${{ result.worktree_path }}"),
+    }
 
     prompt = _build_food_truck_prompt(
         recipe=_RECIPE,
@@ -83,7 +89,6 @@ def test_prompt_capture_fields_do_not_use_capture_prefix():
     )
     section8 = prompt[prompt.index("--- SECTION 8") :]
 
-    # The extractor reads bare names — the prompt must not use capture_ prefix
     assert '"capture_worktree_path"' not in section8, (
         "Prompt emits 'capture_worktree_path' but _extract_captures reads "
         "'worktree_path'. This mismatch causes all captures to fail."

@@ -40,7 +40,7 @@ def test_stage_data_skill_command_references_stage_data_skill(recipe) -> None:
 def test_stage_data_cwd_is_worktree_path(recipe) -> None:
     """stage_data cwd must reference context.worktree_path."""
     step = recipe.steps["stage_data"]
-    assert "worktree_path" in step.with_args.get("cwd", "")
+    assert step.with_args.get("cwd") == "${{ context.worktree_path }}"
 
 
 def test_stage_data_captures_verdict(recipe) -> None:

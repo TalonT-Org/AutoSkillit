@@ -13,6 +13,14 @@ class TestResearchRecipesAuditImpl:
     def recipe(self, request):
         return load_recipe(builtin_recipes_dir() / request.param)
 
+    @pytest.fixture()
+    def research_recipe(self):
+        return load_recipe(builtin_recipes_dir() / "research.yaml")
+
+    @pytest.fixture()
+    def research_implement_recipe(self):
+        return load_recipe(builtin_recipes_dir() / "research-implement.yaml")
+
     def test_has_audit_ingredient_defaulting_true(self, recipe) -> None:
         assert "audit" in recipe.ingredients
         assert recipe.ingredients["audit"].default == "true"
@@ -34,11 +42,32 @@ class TestResearchRecipesAuditImpl:
         step = recipe.steps["audit_impl"]
         assert step.on_failure == "escalate_stop"
 
-    def test_audit_impl_uses_impl_base_sha(self, recipe) -> None:
-        """audit_impl skill_command must reference context.impl_base_sha."""
+    def test_audit_impl_cwd_uses_context_worktree_path(self, recipe) -> None:
+        """audit_impl cwd must use context.worktree_path (not inputs)."""
         step = recipe.steps["audit_impl"]
+        assert step.with_args.get("cwd") == "${{ context.worktree_path }}"
+
+    def test_research_audit_impl_uses_impl_base_sha(self, research_recipe) -> None:
+        """research.yaml audit_impl skill_command must reference context.impl_base_sha."""
+        step = research_recipe.steps["audit_impl"]
         skill_cmd = step.with_args.get("skill_command", "")
         assert "context.impl_base_sha" in skill_cmd
+
+    def test_research_implement_audit_impl_has_no_impl_base_sha(
+        self, research_implement_recipe
+    ) -> None:
+        """research-implement.yaml audit_impl must NOT reference context.impl_base_sha."""
+        step = research_implement_recipe.steps["audit_impl"]
+        skill_cmd = step.with_args.get("skill_command", "")
+        assert "context.impl_base_sha" not in skill_cmd
+
+    def test_research_implement_audit_impl_uses_base_branch(
+        self, research_implement_recipe
+    ) -> None:
+        """research-implement.yaml audit_impl skill_command must reference inputs.base_branch."""
+        step = research_implement_recipe.steps["audit_impl"]
+        skill_cmd = step.with_args.get("skill_command", "")
+        assert "inputs.base_branch" in skill_cmd
 
     def test_audit_impl_uses_group_files(self, recipe) -> None:
         """audit_impl skill_command must reference context.group_files."""
@@ -91,18 +120,32 @@ class TestResearchRecipesAuditImpl:
         step = recipe.steps["check_implement_fix_loop"]
         assert step.on_failure == "audit_impl"
 
-    def test_has_capture_impl_base_step(self, recipe) -> None:
-        assert "capture_impl_base" in recipe.steps
+    def test_research_has_capture_impl_base_step(self, research_recipe) -> None:
+        """research.yaml must retain capture_impl_base."""
+        assert "capture_impl_base" in research_recipe.steps
 
-    def test_capture_impl_base_on_success_routes_to_plan_phase(self, recipe) -> None:
-        """capture_impl_base on_success must route to plan_phase."""
-        step = recipe.steps["capture_impl_base"]
+    def test_research_capture_impl_base_on_success_routes_to_plan_phase(
+        self, research_recipe
+    ) -> None:
+        """research.yaml capture_impl_base on_success must route to plan_phase."""
+        step = research_recipe.steps["capture_impl_base"]
         assert step.on_success == "plan_phase"
 
-    def test_decompose_phases_routes_to_capture_impl_base(self, recipe) -> None:
-        """decompose_phases on_success must route to capture_impl_base."""
-        step = recipe.steps["decompose_phases"]
+    def test_research_decompose_phases_routes_to_capture_impl_base(self, research_recipe) -> None:
+        """research.yaml decompose_phases on_success must route to capture_impl_base."""
+        step = research_recipe.steps["decompose_phases"]
         assert step.on_success == "capture_impl_base"
+
+    def test_research_implement_has_no_capture_impl_base(self, research_implement_recipe) -> None:
+        """research-implement.yaml must not have capture_impl_base."""
+        assert "capture_impl_base" not in research_implement_recipe.steps
+
+    def test_research_implement_decompose_phases_routes_to_plan_phase(
+        self, research_implement_recipe
+    ) -> None:
+        """research-implement.yaml decompose_phases on_success must route to plan_phase."""
+        step = research_implement_recipe.steps["decompose_phases"]
+        assert step.on_success == "plan_phase"
 
     def test_validates_clean(self, recipe) -> None:
         errors = validate_recipe_structure(recipe)

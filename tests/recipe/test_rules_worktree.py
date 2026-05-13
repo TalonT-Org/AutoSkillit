@@ -12,6 +12,7 @@ from autoskillit.recipe.io import (
 )
 from autoskillit.recipe.schema import (
     Recipe,
+    RecipeIngredient,
     RecipeStep,
 )
 from autoskillit.recipe.validator import (
@@ -749,3 +750,190 @@ def test_relative_worktree_path_warning_includes_step_name() -> None:
     matched = [f for f in findings if f.rule == "relative-worktree-path-in-cmd"]
     assert len(matched) >= 1
     assert "make_worktree" in matched[0].message
+
+
+# ---------------------------------------------------------------------------
+# superseded-input-after-capture tests
+# ---------------------------------------------------------------------------
+
+
+def test_superseded_input_after_capture_fires_error() -> None:
+    """Step using inputs.X as cwd after worktree-modifying skill captures context.X → ERROR."""
+    wf = Recipe(
+        name="test",
+        description="test",
+        ingredients={"worktree_path": RecipeIngredient(description="path", required=True)},
+        steps={
+            "implement": RecipeStep(
+                tool="run_skill",
+                with_args={
+                    "skill_command": "/autoskillit:implement-experiment plan.md",
+                    "cwd": "${{ inputs.worktree_path }}",
+                },
+                capture={"worktree_path": "${{ result.worktree_path }}"},
+                on_success="audit",
+                on_failure="done",
+            ),
+            "audit": RecipeStep(
+                tool="run_skill",
+                with_args={
+                    "skill_command": "/autoskillit:audit-impl manifest.json",
+                    "cwd": "${{ inputs.worktree_path }}",
+                },
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="Done."),
+        },
+        kitchen_rules=["test"],
+    )
+    findings = run_semantic_rules(wf)
+    errors = [f for f in findings if f.severity == Severity.ERROR]
+    assert any(
+        f.rule == "superseded-input-after-capture" and f.step_name == "audit" for f in errors
+    ), f"Expected superseded-input-after-capture ERROR on audit step, got: {findings}"
+
+
+def test_superseded_input_before_capture_no_finding() -> None:
+    """Step using inputs.X as cwd BEFORE the capture step → no finding."""
+    wf = Recipe(
+        name="test",
+        description="test",
+        ingredients={"worktree_path": RecipeIngredient(description="path", required=True)},
+        steps={
+            "pre_step": RecipeStep(
+                tool="run_skill",
+                with_args={
+                    "skill_command": "/autoskillit:stage-data plan.md",
+                    "cwd": "${{ inputs.worktree_path }}",
+                },
+                on_success="implement",
+                on_failure="done",
+            ),
+            "implement": RecipeStep(
+                tool="run_skill",
+                with_args={
+                    "skill_command": "/autoskillit:implement-experiment plan.md",
+                    "cwd": "${{ inputs.worktree_path }}",
+                },
+                capture={"worktree_path": "${{ result.worktree_path }}"},
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="Done."),
+        },
+        kitchen_rules=["test"],
+    )
+    findings = run_semantic_rules(wf)
+    assert not any(f.rule == "superseded-input-after-capture" for f in findings), (
+        f"Unexpected superseded-input-after-capture finding before capture: {findings}"
+    )
+
+
+def test_superseded_input_context_cwd_no_finding() -> None:
+    """Step using context.X as cwd after capture → no finding."""
+    wf = Recipe(
+        name="test",
+        description="test",
+        ingredients={"worktree_path": RecipeIngredient(description="path", required=True)},
+        steps={
+            "implement": RecipeStep(
+                tool="run_skill",
+                with_args={
+                    "skill_command": "/autoskillit:implement-experiment plan.md",
+                    "cwd": "${{ inputs.worktree_path }}",
+                },
+                capture={"worktree_path": "${{ result.worktree_path }}"},
+                on_success="audit",
+                on_failure="done",
+            ),
+            "audit": RecipeStep(
+                tool="run_skill",
+                with_args={
+                    "skill_command": "/autoskillit:audit-impl manifest.json",
+                    "cwd": "${{ context.worktree_path }}",
+                },
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="Done."),
+        },
+        kitchen_rules=["test"],
+    )
+    findings = run_semantic_rules(wf)
+    assert not any(f.rule == "superseded-input-after-capture" for f in findings), (
+        f"Unexpected superseded-input-after-capture finding with context.X cwd: {findings}"
+    )
+
+
+def test_superseded_input_non_worktree_skill_no_finding() -> None:
+    """Capture by non-worktree-modifying skill does not trigger the rule."""
+    wf = Recipe(
+        name="test",
+        description="test",
+        ingredients={"worktree_path": RecipeIngredient(description="path", required=True)},
+        steps={
+            "some_skill": RecipeStep(
+                tool="run_skill",
+                with_args={
+                    "skill_command": "/autoskillit:make-plan plan.md",
+                    "cwd": "${{ inputs.worktree_path }}",
+                },
+                capture={"worktree_path": "${{ result.worktree_path }}"},
+                on_success="audit",
+                on_failure="done",
+            ),
+            "audit": RecipeStep(
+                tool="run_skill",
+                with_args={
+                    "skill_command": "/autoskillit:audit-impl manifest.json",
+                    "cwd": "${{ inputs.worktree_path }}",
+                },
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="Done."),
+        },
+        kitchen_rules=["test"],
+    )
+    findings = run_semantic_rules(wf)
+    assert not any(f.rule == "superseded-input-after-capture" for f in findings), (
+        f"Unexpected superseded-input-after-capture finding for non-worktree skill: {findings}"
+    )
+
+
+def test_superseded_input_in_skill_command_fires_error() -> None:
+    """inputs.X in skill_command after capture also fires ERROR."""
+    wf = Recipe(
+        name="test",
+        description="test",
+        ingredients={"worktree_path": RecipeIngredient(description="path", required=True)},
+        steps={
+            "implement": RecipeStep(
+                tool="run_skill",
+                with_args={
+                    "skill_command": "/autoskillit:implement-experiment plan.md",
+                    "cwd": "${{ inputs.worktree_path }}",
+                },
+                capture={"worktree_path": "${{ result.worktree_path }}"},
+                on_success="audit",
+                on_failure="done",
+            ),
+            "audit": RecipeStep(
+                tool="run_skill",
+                with_args={
+                    "skill_command": "/autoskillit:audit-impl ${{ inputs.worktree_path }}",
+                    "cwd": "${{ context.worktree_path }}",
+                },
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="Done."),
+        },
+        kitchen_rules=["test"],
+    )
+    findings = run_semantic_rules(wf)
+    errors = [f for f in findings if f.severity == Severity.ERROR]
+    assert any(
+        f.rule == "superseded-input-after-capture" and f.step_name == "audit" for f in errors
+    ), f"Expected superseded-input-after-capture ERROR for skill_command ref, got: {findings}"

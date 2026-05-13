@@ -1,8 +1,11 @@
 """audit-impl remediation_path capture must have non-terminal non-GO route."""
 
+from __future__ import annotations
+
 from autoskillit.core import Severity, resolve_skill_name
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.schema import StepResultRoute
 
 TERMINAL_SENTINELS = frozenset(("done", "escalate"))
 
@@ -14,7 +17,9 @@ def _is_non_terminal_route(ctx: ValidationContext, target: str) -> bool:
     return step is not None and step.action != "stop"
 
 
-def _has_non_terminal_non_go_route(ctx: ValidationContext, on_result) -> bool:
+def _has_non_terminal_non_go_route(
+    ctx: ValidationContext, on_result: StepResultRoute | None
+) -> bool:
     if on_result is None:
         return False
 

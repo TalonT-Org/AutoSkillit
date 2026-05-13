@@ -14,6 +14,7 @@ from .kitchen_state import (
     is_marker_fresh,
     marker_path,
     read_marker,
+    resolve_kitchen_id,
     sweep_stale_markers,
     write_marker,
 )
@@ -47,6 +48,7 @@ __all__ = [
     "provenance_path",
     "read_boot_id",
     "read_marker",
+    "resolve_kitchen_id",
     "read_provenance_for_session",
     "read_registry",
     "read_starttime_ticks",

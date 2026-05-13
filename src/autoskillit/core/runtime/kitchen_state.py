@@ -13,6 +13,7 @@ import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from uuid import uuid4
 
 
 @dataclass(frozen=True, slots=True)
@@ -139,6 +140,16 @@ def sweep_stale_markers(ttl_hours: int = 24) -> int:
             except OSError:
                 pass
     return deleted
+
+
+def resolve_kitchen_id() -> str:
+    """Resolve kitchen identity: inherit campaign ID from environment, or mint fresh.
+
+    This is the SOLE legal assignment source for ctx.kitchen_id. All boot paths
+    and open_kitchen must call this function. The AST guard
+    test_kitchen_id_only_assigned_via_resolve_kitchen_id enforces this constraint.
+    """
+    return os.environ.get("AUTOSKILLIT_CAMPAIGN_ID") or str(uuid4())
 
 
 def find_caller_session_id(project_dir: Path | None = None) -> str:

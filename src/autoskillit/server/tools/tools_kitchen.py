@@ -23,6 +23,7 @@ from autoskillit.core import (
     find_latest_session_id,
     get_logger,
     pkg_root,
+    resolve_kitchen_id,
 )
 from autoskillit.pipeline import create_background_task
 from autoskillit.server import mcp
@@ -122,8 +123,6 @@ async def _open_kitchen_handler() -> str | None:
 
     ctx = _get_ctx()
     ctx.gate.enable()
-    from autoskillit.server._lifespan import resolve_kitchen_id  # noqa: PLC0415
-
     ctx.kitchen_id = resolve_kitchen_id()
     ctx.active_recipe_packs = frozenset()
     ctx.active_recipe_features = frozenset()

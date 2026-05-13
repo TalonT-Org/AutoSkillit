@@ -21,30 +21,18 @@ import os
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import Any
-from uuid import uuid4
 
 from autoskillit.core import (
-    CAMPAIGN_ID_ENV_VAR,
     SessionType,
     cleanup_readiness_sentinel,
     get_logger,
+    resolve_kitchen_id,
     write_readiness_sentinel,
 )
 from autoskillit.execution import RecordingSubprocessRunner
 from autoskillit.server._state import _get_ctx_or_none, deferred_initialize
 
 logger = get_logger(__name__)
-
-
-def resolve_kitchen_id() -> str:
-    """Resolve kitchen identity: inherit campaign ID from environment, or mint fresh.
-
-    This is the SOLE legal assignment source for ctx.kitchen_id. All boot paths
-    and open_kitchen must call this function. The AST guard
-    test_kitchen_id_only_assigned_via_resolve_kitchen_id enforces this constraint.
-    """
-
-    return os.environ.get(CAMPAIGN_ID_ENV_VAR) or str(uuid4())
 
 
 def run_startup_drift_check() -> None:

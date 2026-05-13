@@ -492,6 +492,8 @@ def upsert_dispatch_record_by_name(state_path: Path, record: DispatchRecord) -> 
                             snapshot[f.name] = str(val)
                         elif isinstance(val, dict):
                             snapshot[f.name] = dict(val)
+                        elif isinstance(val, list):
+                            snapshot[f.name] = list(val)
                         else:
                             snapshot[f.name] = val
                     record.attempt_history = [snapshot] + list(record.attempt_history)

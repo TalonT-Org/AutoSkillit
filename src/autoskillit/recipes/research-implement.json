@@ -312,7 +312,7 @@
       "model": "",
       "with": {
         "skill_command": "/autoskillit:audit-impl ${{ context.group_files }} ${{ context.impl_base_sha }} ${{ inputs.base_branch }}",
-        "cwd": "${{ inputs.worktree_path }}",
+        "cwd": "${{ context.worktree_path }}",
         "step_name": "audit_impl"
       },
       "capture": {

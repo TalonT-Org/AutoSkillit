@@ -464,6 +464,7 @@ Validates that the experiment plan includes a complete data acquisition strategy
 
 **Findings format:**
 - STOP if: a hypothesis has no data source at all, or directive-specified data has no acquisition step, or an acquisition command contains unresolved template placeholders
+- STOP if: the plan includes `wet_lab` data sources requiring physical laboratory work (downstream automation will stall unless this dependency is resolved before launch — wet-lab data cannot be auto-acquired)
 - REVISE if: an external source lacks verification criteria, or gitignored path handling is unclear
 
 #### `agent_implementability` — Agent Execution Feasibility

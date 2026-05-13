@@ -52,8 +52,9 @@ compute on doomed downloads.
 
 **ALWAYS:**
 - Read the `data_manifest` frontmatter section of the experiment plan
-- Check ONLY `external` and `gitignored` source_type entries (`synthetic` and
-  `fixture` entries require no disk space or network access)
+- Check ONLY `external` and `gitignored` source_type entries (`synthetic`,
+  `fixture`, `literature`, `database`, and `wet_lab` entries require no disk
+  space or network access)
 - Create data directories for every entry whose `location` field is non-null,
   using `mkdir -p`
 - Write the resource feasibility report before emitting the verdict token
@@ -67,11 +68,12 @@ Read the experiment plan at the provided path (or default path). Parse the
 `data_manifest` YAML frontmatter section. Identify all entries where
 `source_type` is `"external"` or `"gitignored"`.
 
-### Step 2 — Short-Circuit for Synthetic/Fixture-Only Plans
+### Step 2 — Short-Circuit for Non-Stageable Plans
 
 If no `external` or `gitignored` entries exist, skip disk and network checks.
 Create any data directories for entries with non-null `location`. Emit
-`verdict = PASS` and exit.
+`verdict = PASS` and exit. This covers plans containing only `synthetic`,
+`fixture`, `literature`, `database`, or `wet_lab` source types.
 
 ### Step 3 — Launch Parallel Resource Probe Subagents
 

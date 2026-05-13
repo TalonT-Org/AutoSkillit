@@ -112,3 +112,15 @@ def test_stage_data_probe_count_minimum(skill_text: str) -> None:
     ]
     count = sum(1 for src in known_sources if src.lower() in skill_text.lower())
     assert count >= 9
+
+
+def test_stage_data_handles_all_source_types(skill_text: str) -> None:
+    """stage-data must explicitly mention every canonical source_type (process or skip)."""
+    from autoskillit.core import DATA_MANIFEST_SOURCE_TYPES
+
+    lower = skill_text.lower()
+    missing = [st for st in DATA_MANIFEST_SOURCE_TYPES if st not in lower]
+    assert not missing, (
+        f"stage-data SKILL.md does not mention source_type(s): {missing}. "
+        "Every canonical source_type must be explicitly handled (processed or skipped)."
+    )

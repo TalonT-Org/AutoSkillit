@@ -410,7 +410,7 @@ success_criteria:                     # REQUIRED
 
 data_manifest:                        # REQUIRED — one entry per hypothesis (or shared)
   - hypothesis: [H1, H2]             # which hypotheses consume this data
-    source_type: synthetic            # synthetic | fixture | external | gitignored | literature | database
+    source_type: synthetic            # synthetic | fixture | external | gitignored | literature | database | wet_lab
     description: "Gaussian blobs, 10K-100K points"
     acquisition: "generate in-script via sklearn.datasets"
     location: null                    # null for in-script generation
@@ -465,7 +465,7 @@ A list of data source entries, one per hypothesis (or shared across hypotheses).
 | Field | Required | Description |
 |-------|----------|-------------|
 | `hypothesis` | yes | List of hypothesis IDs that consume this data |
-| `source_type` | yes | One of: `synthetic`, `fixture`, `external`, `gitignored`, `literature`, `database` |
+| `source_type` | yes | One of: `synthetic`, `fixture`, `external`, `gitignored`, `literature`, `database`, `wet_lab` |
 | `description` | yes | Human-readable description of the data |
 | `acquisition` | yes | Exact command or method to produce/retrieve the data |
 | `location` | no | Filesystem path where data will reside (null for in-script) |
@@ -509,7 +509,10 @@ V9: data_manifest completeness
     - Any entry with `source_type: gitignored` lacks an explicit, executable acquisition or generation command (descriptive prose such as "generate from upstream pipeline" is insufficient — download-data executes this field as a literal Bash command)
     - Any entry with `source_type: database` lacks a non-null `acquisition` (must describe query method)
     - Any entry with `source_type: literature` lacks a non-null `description` (must identify the source publication)
+    - Any entry with `source_type: wet_lab` lacks a non-null `description` (must document the required laboratory procedure)
+    - Any entry with `source_type: wet_lab` has an `acquisition` command or a `location` field (wet-lab data requires physical laboratory work and cannot be computationally acquired or pre-staged)
     NOTE: `literature` and `database` entries do NOT require `depends_on` or download commands.
+    NOTE: `wet_lab` entries MUST NOT have `acquisition` commands or `location` fields — the data does not yet exist.
     ERROR: "Data Manifest incomplete: {specific missing field or hypothesis}"
 
 V10: citation and external reference verification

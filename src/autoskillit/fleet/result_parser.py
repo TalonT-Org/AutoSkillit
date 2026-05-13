@@ -209,6 +209,7 @@ def parse_l3_result_block(
             positions = _scan_for_sentinel(additional_text, open_sentinel, close_sentinel)
             if positions is not None:
                 open_pos, close_pos = positions
+                logger.debug("cross-session recovery matched %s", jsonl_path)
                 return _parse_body(
                     additional_text,
                     open_pos,

@@ -946,7 +946,6 @@ class TestCrashPathDiagnosticPersistence:
         assert state is not None
         refused = [d for d in state.dispatches if d.status.value == "refused"]
         assert len(refused) == 1
-        assert refused[0].diagnostic_message != ""
         assert "RuntimeError" in refused[0].diagnostic_message
         assert "kaboom: database connection lost" in refused[0].diagnostic_message
         assert refused[0].reason == "fleet_l3_startup_or_crash"

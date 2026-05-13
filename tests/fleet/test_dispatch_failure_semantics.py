@@ -936,8 +936,6 @@ class TestCrashPathDiagnosticPersistence:
             campaign_state_path=campaign_state_path,
         )
 
-        import json
-
         envelope = json.loads(result.to_envelope())
         assert envelope["success"] is False
         assert envelope["error"] == "fleet_l3_startup_or_crash"
@@ -953,7 +951,7 @@ class TestCrashPathDiagnosticPersistence:
         assert "kaboom: database connection lost" in refused[0].diagnostic_message
         assert refused[0].reason == "fleet_l3_startup_or_crash"
 
-    async def test_crash_logs_structured_fields(self, tool_ctx, monkeypatch, caplog) -> None:
+    async def test_crash_logs_structured_fields(self, tool_ctx, monkeypatch) -> None:
         """WARNING log must include exc_type, dispatch_name, and campaign_state_path."""
         import structlog
 
@@ -988,8 +986,6 @@ class TestCrashPathDiagnosticPersistence:
                 quota_refresher=_noop_quota_refresher,
                 campaign_state_path=None,
             )
-
-        import json
 
         envelope = json.loads(result.to_envelope())
         assert envelope["error"] == "fleet_l3_startup_or_crash"
@@ -1059,7 +1055,6 @@ class TestCrashPathDiagnosticPersistence:
             _simple_prompt_builder,
         )
 
-        # Pass unknown ingredients to hit _reject_with_state (which is post-dispatch-id)
         result = await execute_dispatch(
             tool_ctx=tool_ctx,
             recipe="test-recipe",
@@ -1072,8 +1067,6 @@ class TestCrashPathDiagnosticPersistence:
             quota_refresher=_noop_quota_refresher,
             campaign_state_path=campaign_state_path,
         )
-
-        import json
 
         envelope = json.loads(result.to_envelope())
         assert envelope["success"] is False

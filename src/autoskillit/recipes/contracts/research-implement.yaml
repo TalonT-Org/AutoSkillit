@@ -545,9 +545,65 @@ dataflow:
   produced:
   - remediation_path
   positional_mapping: true
+- step: remediate
+  available:
+  - audit
+  - base_branch
+  - download_report
+  - experiment_plan
+  - group_files
+  - impl_base_sha
+  - implement_fix_count
+  - is_fixable
+  - issue_url
+  - output_mode
+  - phase_loop_count
+  - phase_plan_path
+  - remediation_path
+  - research_dir
+  - research_dir_rel
+  - resource_report
+  - retry_delay
+  - source_dir
+  - task
+  - test_check_enabled
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced: []
+- step: check_audit_retry_loop
+  available:
+  - audit
+  - base_branch
+  - download_report
+  - experiment_plan
+  - group_files
+  - impl_base_sha
+  - implement_fix_count
+  - is_fixable
+  - issue_url
+  - output_mode
+  - phase_loop_count
+  - phase_plan_path
+  - remediation_path
+  - research_dir
+  - research_dir_rel
+  - resource_report
+  - retry_delay
+  - source_dir
+  - task
+  - test_check_enabled
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced:
+  - audit_retry_count
 - step: run_experiment
   available:
   - audit
+  - audit_retry_count
   - base_branch
   - download_report
   - experiment_plan
@@ -575,6 +631,7 @@ dataflow:
 - step: troubleshoot_run_failure
   available:
   - audit
+  - audit_retry_count
   - base_branch
   - download_report
   - experiment_plan
@@ -605,6 +662,7 @@ dataflow:
 - step: route_run_failure
   available:
   - audit
+  - audit_retry_count
   - base_branch
   - download_report
   - experiment_plan
@@ -634,6 +692,7 @@ dataflow:
 - step: adjust_experiment
   available:
   - audit
+  - audit_retry_count
   - base_branch
   - download_report
   - experiment_plan
@@ -665,6 +724,7 @@ dataflow:
 - step: check_run_fix_loop
   available:
   - audit
+  - audit_retry_count
   - base_branch
   - download_report
   - experiment_plan
@@ -695,6 +755,7 @@ dataflow:
 - step: route_run_retry_delay
   available:
   - audit
+  - audit_retry_count
   - base_branch
   - download_report
   - experiment_plan
@@ -725,6 +786,7 @@ dataflow:
 - step: run_retry_delay
   available:
   - audit
+  - audit_retry_count
   - base_branch
   - download_report
   - experiment_plan
@@ -755,6 +817,7 @@ dataflow:
 - step: ensure_results
   available:
   - audit
+  - audit_retry_count
   - base_branch
   - download_report
   - experiment_plan
@@ -786,6 +849,7 @@ dataflow:
 - step: generate_report
   available:
   - audit
+  - audit_retry_count
   - base_branch
   - download_report
   - experiment_plan
@@ -818,6 +882,7 @@ dataflow:
 - step: generate_report_inconclusive
   available:
   - audit
+  - audit_retry_count
   - base_branch
   - download_report
   - experiment_plan
@@ -851,6 +916,7 @@ dataflow:
 - step: test
   available:
   - audit
+  - audit_retry_count
   - base_branch
   - download_report
   - experiment_plan
@@ -882,6 +948,7 @@ dataflow:
 - step: fix_tests
   available:
   - audit
+  - audit_retry_count
   - base_branch
   - download_report
   - experiment_plan
@@ -916,6 +983,7 @@ dataflow:
 - step: retest
   available:
   - audit
+  - audit_retry_count
   - base_branch
   - download_report
   - experiment_plan
@@ -948,6 +1016,7 @@ dataflow:
 - step: push_branch
   available:
   - audit
+  - audit_retry_count
   - base_branch
   - download_report
   - experiment_plan
@@ -980,6 +1049,7 @@ dataflow:
 - step: escalate_stop
   available:
   - audit
+  - audit_retry_count
   - base_branch
   - download_report
   - experiment_plan
@@ -1012,6 +1082,7 @@ dataflow:
 - step: implement_complete
   available:
   - audit
+  - audit_retry_count
   - base_branch
   - download_report
   - experiment_plan

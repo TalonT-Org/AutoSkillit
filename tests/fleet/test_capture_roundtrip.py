@@ -192,11 +192,14 @@ def test_prompt_to_extraction_round_trip_contract(capture_spec):
     )
 
     # Leg 3: Build synthetic payload and extract
+    fixed_fields = {"success", "reason", "summary"}
+    capture_only = parsed_fields - fixed_fields
+    synthetic_values = {f: f"test_{f}" for f in capture_only}
     synthetic_payload = {
         "success": True,
         "reason": "completed",
         "summary": "done",
-        **{f: f"test_{f}" for f in parsed_fields},
+        **synthetic_values,
     }
     result = _extract_captures(capture_spec, synthetic_payload)
 
@@ -204,8 +207,14 @@ def test_prompt_to_extraction_round_trip_contract(capture_spec):
         f"Expected {len(capture_spec)} captures, got {len(result)}. "
         f"Payload fields: {parsed_fields}, Result: {result}"
     )
-    for key in capture_spec:
+    for key, entry in capture_spec.items():
         assert key in result, f"Capture key '{key}' missing from extraction result: {result}"
+        field_name = resolve_payload_field(entry)
+        if field_name and field_name in synthetic_values:
+            assert result[key] == synthetic_values[field_name], (
+                f"Capture '{key}' value mismatch: got {result[key]!r}, "
+                f"expected {synthetic_values[field_name]!r}"
+            )
 
 
 @pytest.mark.parametrize(

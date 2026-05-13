@@ -34,7 +34,7 @@ Semantic validation rule modules for recipe analysis (29 rule files).
 | `rules_temp_path.py` | Rejects bare `{{AUTOSKILLIT_TEMP}}/` without scope prefix |
 | `rules_tools.py` | MCP tool name validity (must be in known tool sets) |
 | `rules_verdict.py` | Skill verdict routing completeness and cross-step consistency |
-| `rules_worktree.py` | Worktree and retry validation rules |
+| `rules_worktree.py` | Worktree and retry validation rules; superseded-input-after-capture detection |
 
 ## Architecture Notes
 

@@ -8,7 +8,8 @@ from autoskillit.core import (
     get_logger,
 )
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe.contracts import load_bundled_manifest, resolve_skill_name
+from autoskillit.recipe.contracts import INPUT_REF_RE, load_bundled_manifest, resolve_skill_name
+from autoskillit.recipe.io import iter_steps_with_context
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 logger = get_logger(__name__)
@@ -227,4 +228,47 @@ def _check_file_writing_skill_missing_context_limit(
                 ),
             )
         )
+    return findings
+
+
+@semantic_rule(
+    name="superseded-input-after-capture",
+    description=(
+        "A step uses inputs.X as cwd or in skill_command after a "
+        "worktree-modifying skill captured context.X. The context variable "
+        "holds the current worktree path; using the input references the "
+        "original (pre-capture) worktree."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_superseded_input_after_capture(ctx: ValidationContext) -> list[RuleFinding]:
+    wf = ctx.recipe
+    findings: list[RuleFinding] = []
+    superseded_keys: set[str] = set()
+
+    for step_name, step, _available in iter_steps_with_context(wf):
+        if superseded_keys:
+            for field_name in ("cwd", "skill_command"):
+                value = step.with_args.get(field_name, "")
+                for key in INPUT_REF_RE.findall(value):
+                    if key in superseded_keys:
+                        findings.append(
+                            RuleFinding(
+                                rule="superseded-input-after-capture",
+                                severity=Severity.ERROR,
+                                step_name=step_name,
+                                message=(
+                                    f"Step '{step_name}' references inputs.{key} in "
+                                    f"{field_name} after a worktree-modifying skill "
+                                    f"captured context.{key}. Use context.{key} instead."
+                                ),
+                            )
+                        )
+
+        if step.tool in SKILL_TOOLS and step.capture:
+            skill_cmd = step.with_args.get("skill_command", "")
+            skill = resolve_skill_name(skill_cmd)
+            if skill and skill in _WORKTREE_MODIFYING_SKILLS:
+                superseded_keys.update(step.capture.keys())
+
     return findings

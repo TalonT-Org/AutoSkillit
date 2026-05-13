@@ -29,3 +29,4 @@ src/autoskillit/hooks/hooks.json
 .autoskillit/validation-errors/
 .secrets.yaml
 .autoskillit/.secrets.yaml
+worktrees/

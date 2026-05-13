@@ -1076,5 +1076,4 @@ class TestCrashPathDiagnosticPersistence:
         assert campaign_state is not None
         refused_campaign = [d for d in campaign_state.dispatches if d.status.value == "refused"]
         assert len(refused_campaign) == 1
-        assert refused_campaign[0].diagnostic_message != ""
         assert "Unknown ingredient keys" in refused_campaign[0].diagnostic_message

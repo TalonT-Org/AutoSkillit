@@ -252,23 +252,14 @@ def _write_campaign_refusal(
         return
     from autoskillit.fleet.state import (  # noqa: PLC0415
         DispatchRecord,
-        DispatchStatus,
         upsert_dispatch_record_by_name,
     )
 
     try:
-        record = (
-            DispatchRecord.refused(
-                name=effective_name,
-                error_code=error_code,
-                diagnostic_message=message,
-            )
-            if message
-            else DispatchRecord(
-                name=effective_name,
-                status=DispatchStatus.REFUSED,
-                reason=error_code,
-            )
+        record = DispatchRecord.for_refusal(
+            name=effective_name,
+            error_code=error_code,
+            diagnostic_message=message,
         )
         upsert_dispatch_record_by_name(campaign_state_path, record)
     except Exception:

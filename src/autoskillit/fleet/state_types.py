@@ -166,6 +166,32 @@ class DispatchRecord:
             caller_session_id=caller_session_id,
         )
 
+    @classmethod
+    def for_refusal(
+        cls,
+        *,
+        name: str,
+        error_code: FleetErrorCode | str,
+        diagnostic_message: str = "",
+        dispatch_id: str = "",
+        caller_session_id: str = "",
+    ) -> DispatchRecord:
+        if diagnostic_message and diagnostic_message.strip():
+            return cls.refused(
+                name=name,
+                error_code=error_code,
+                diagnostic_message=diagnostic_message,
+                dispatch_id=dispatch_id,
+                caller_session_id=caller_session_id,
+            )
+        return cls(
+            name=name,
+            status=DispatchStatus.REFUSED,
+            reason=str(error_code),
+            dispatch_id=dispatch_id,
+            caller_session_id=caller_session_id,
+        )
+
 
 @dataclass
 class CampaignState:

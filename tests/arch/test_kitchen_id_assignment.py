@@ -51,10 +51,11 @@ def test_kitchen_id_only_assigned_via_resolve_kitchen_id():
                                 if getattr(node.value.func, "id", None) == "resolve_kitchen_id":
                                     canonical_assign_linenos.add(node.lineno)
                                 else:
+                                    rhs = ast.unparse(node.value)
                                     pytest.fail(
                                         f"{file_path}:{node.lineno}: "
-                                        f"ctx.kitchen_id assignment uses {ast.unparse(node.value)}, "
-                                        f"not resolve_kitchen_id()"
+                                        f"ctx.kitchen_id assignment uses "
+                                        f"{rhs}, not resolve_kitchen_id()"
                                     )
                             else:
                                 pytest.fail(

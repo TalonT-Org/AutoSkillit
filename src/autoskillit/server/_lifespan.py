@@ -42,7 +42,6 @@ def resolve_kitchen_id() -> str:
     and open_kitchen must call this function. The AST guard
     test_kitchen_id_only_assigned_via_resolve_kitchen_id enforces this constraint.
     """
-    import os
     from uuid import uuid4
 
     return os.environ.get(CAMPAIGN_ID_ENV_VAR) or str(uuid4())

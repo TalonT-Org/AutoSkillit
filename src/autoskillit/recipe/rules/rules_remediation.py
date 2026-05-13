@@ -1,7 +1,6 @@
 """audit-impl remediation_path capture must have non-terminal non-GO route."""
 
-from autoskillit.core import resolve_skill_name
-from autoskillit.core.types import Severity
+from autoskillit.core import Severity, resolve_skill_name
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 

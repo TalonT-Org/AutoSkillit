@@ -237,12 +237,13 @@ def test_audit_impl_remediation_route_message_names_step() -> None:
 
 def test_bundled_recipes_conforming_pass_audit_impl_remediation_route() -> None:
     recipes_dir = builtin_recipes_dir()
-    non_conforming = {"research.yaml", "research-implement.yaml"}
+    non_conforming = {"research.yaml"}
     conforming = {
         "implementation.yaml",
         "implementation-groups.yaml",
         "remediation.yaml",
         "merge-prs.yaml",
+        "research-implement.yaml",
     }
 
     for name in non_conforming:

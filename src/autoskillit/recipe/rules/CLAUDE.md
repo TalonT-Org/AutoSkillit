@@ -39,4 +39,4 @@ Semantic validation rule modules for recipe analysis (30 rule files).
 
 ## Architecture Notes
 
-Side-effect registration: callers import the package to trigger `@semantic_rule` decorator registration of all 29 rule modules. Each rule receives a `ValidationContext` argument. No cross-imports between rule modules.
+Side-effect registration: callers import the package to trigger `@semantic_rule` decorator registration of all 30 rule modules. Each rule receives a `ValidationContext` argument. No cross-imports between rule modules.

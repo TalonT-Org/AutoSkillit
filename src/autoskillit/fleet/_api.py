@@ -547,7 +547,7 @@ async def _run_dispatch(
                         prior_session_chain = list(d.session_chain)
                         prior_dispatched_session_id = d.dispatched_session_id
                         break
-        except Exception:
+        except (OSError, ValueError, KeyError, TypeError):
             logger.warning("failed to read prior session chain from state", exc_info=True)
     else:
         recipe_snapshot = {

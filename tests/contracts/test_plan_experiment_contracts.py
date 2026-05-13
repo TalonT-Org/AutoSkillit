@@ -122,7 +122,9 @@ def test_source_type_enum_matches_canonical() -> None:
     comment = m.group(1).lower()
     for st in DATA_MANIFEST_SOURCE_TYPES:
         assert st in comment, f"source_type enum missing canonical value '{st}'"
-    enum_values = {v.strip() for v in comment.split("|") if v.strip()}
+    enum_values = {
+        v.strip() for v in comment.split("|") if v.strip() and re.fullmatch(r"\w+", v.strip())
+    }
     extra = enum_values - DATA_MANIFEST_SOURCE_TYPES
     assert not extra, f"source_type enum has values not in canonical constant: {extra}"
 
@@ -337,6 +339,10 @@ def test_v9_and_data_acquisition_source_type_consistency() -> None:
     da_block = rd_text[da_start : da_start + 5000].lower()
 
     no_acquisition = {"synthetic", "fixture", "literature", "database", "wet_lab"}
+    assert no_acquisition <= DATA_MANIFEST_SOURCE_TYPES, (
+        f"no_acquisition has stale entries not in DATA_MANIFEST_SOURCE_TYPES: "
+        f"{no_acquisition - DATA_MANIFEST_SOURCE_TYPES}"
+    )
     check_types = DATA_MANIFEST_SOURCE_TYPES - no_acquisition
 
     for source_type in check_types:

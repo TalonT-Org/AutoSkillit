@@ -7,7 +7,6 @@ import os
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict
-from uuid import uuid4
 
 if TYPE_CHECKING:
     from autoskillit.config.settings import QuotaGuardConfig
@@ -123,7 +122,9 @@ async def _open_kitchen_handler() -> str | None:
 
     ctx = _get_ctx()
     ctx.gate.enable()
-    ctx.kitchen_id = os.environ.get("AUTOSKILLIT_CAMPAIGN_ID") or str(uuid4())
+    from autoskillit.server._lifespan import resolve_kitchen_id  # noqa: PLC0415
+
+    ctx.kitchen_id = resolve_kitchen_id()
     ctx.active_recipe_packs = frozenset()
     ctx.active_recipe_features = frozenset()
     logger.info("open_kitchen", gate_state="open", kitchen_id=ctx.kitchen_id)

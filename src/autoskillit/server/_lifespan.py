@@ -23,6 +23,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from autoskillit.core import (
+    CAMPAIGN_ID_ENV_VAR,
     SessionType,
     cleanup_readiness_sentinel,
     get_logger,
@@ -32,6 +33,19 @@ from autoskillit.execution import RecordingSubprocessRunner
 from autoskillit.server._state import _get_ctx_or_none, deferred_initialize
 
 logger = get_logger(__name__)
+
+
+def resolve_kitchen_id() -> str:
+    """Resolve kitchen identity: inherit campaign ID from environment, or mint fresh.
+
+    This is the SOLE legal assignment source for ctx.kitchen_id. All boot paths
+    and open_kitchen must call this function. The AST guard
+    test_kitchen_id_only_assigned_via_resolve_kitchen_id enforces this constraint.
+    """
+    import os
+    from uuid import uuid4
+
+    return os.environ.get(CAMPAIGN_ID_ENV_VAR) or str(uuid4())
 
 
 def run_startup_drift_check() -> None:
@@ -153,18 +167,7 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
     is open before any tool call arrives. Fails open: any step failure is
     logged as a warning and does not abort gate activation.
     """
-    import os as _os
-    from uuid import uuid4
-
-    from autoskillit.core import register_active_kitchen
-    from autoskillit.pipeline import create_background_task
-    from autoskillit.server._misc import (
-        _prime_quota_cache,
-        _quota_refresh_loop,
-    )
-    from autoskillit.server.tools.tools_kitchen import _write_hook_config
-
-    ctx.kitchen_id = str(uuid4())
+    ctx.kitchen_id = resolve_kitchen_id()
     ctx.active_recipe_packs = frozenset()
     ctx.active_recipe_features = frozenset()
     if ctx.gate is None:
@@ -174,8 +177,11 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
     logger.info("fleet_auto_gate_boot", gate_state="open", kitchen_id=ctx.kitchen_id)
 
     try:
-        from autoskillit.core import _collect_disabled_feature_tags
+        from autoskillit.core import _collect_disabled_feature_tags, register_active_kitchen
+        from autoskillit.pipeline import create_background_task
         from autoskillit.server import mcp as _mcp
+        from autoskillit.server._misc import _prime_quota_cache, _quota_refresh_loop
+        from autoskillit.server.tools.tools_kitchen import _write_hook_config
 
         _features = ctx.config.features if ctx.config is not None else {}
         _exp_enabled = ctx.config.experimental_enabled if ctx.config is not None else False
@@ -203,7 +209,7 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
         logger.warning("fleet_auto_gate_boot_quota_refresh_failed", exc_info=True)
 
     try:
-        register_active_kitchen(ctx.kitchen_id, _os.getpid(), str(ctx.project_dir))
+        register_active_kitchen(ctx.kitchen_id, os.getpid(), str(ctx.project_dir))
     except Exception:
         logger.warning("fleet_auto_gate_boot_registry_failed", exc_info=True)
 
@@ -215,10 +221,7 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
     AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS is set. No-ops for interactive
     ORCHESTRATOR sessions (open_kitchen handles the gate there).
     """
-    from uuid import uuid4
-
     from autoskillit.core import (
-        CAMPAIGN_ID_ENV_VAR,
         FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
         HEADLESS_ENV_VAR,
         register_active_kitchen,
@@ -237,7 +240,7 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
         return
 
     _packs = frozenset(p.strip() for p in _raw_tags.split(",") if p.strip())
-    ctx.kitchen_id = os.environ.get(CAMPAIGN_ID_ENV_VAR) or str(uuid4())
+    ctx.kitchen_id = resolve_kitchen_id()
     ctx.active_recipe_packs = _packs
     ctx.active_recipe_features = frozenset()
 

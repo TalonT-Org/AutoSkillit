@@ -138,6 +138,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_rules_predicate_routing.py` | Tests for predicate_routing semantic validation rule |
 | `test_rules_project_local_override.py` | Tests for project_local_override semantic validation rule |
 | `test_rules_reachability.py` | Tests for reachability semantic validation rule |
+| `test_rules_remediation.py` | Tests for audit-impl-remediation-route semantic validation rule |
 | `test_rules_review_loop_waypoint.py` | Tests for review-loop-waypoint-guard semantic rule |
 | `test_rules_recipe.py` | Tests for recipe-level semantic validation rule |
 | `test_rules_registry.py` | Tests for rule registry and decorator |

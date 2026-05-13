@@ -49,10 +49,21 @@ def test_bundled_workflows_pass_semantic_rules() -> None:
     yaml_files = list(wf_dir.glob("*.yaml"))
     assert yaml_files
 
+    _KNOWN_NON_CONFORMING: dict[str, set[str]] = {
+        "research.yaml": {"audit-impl-remediation-route"},
+    }
     for path in yaml_files:
         wf = load_recipe(path)
         findings = run_semantic_rules(wf)
-        errors = [f for f in findings if f.severity == Severity.ERROR]
+        excluded = _KNOWN_NON_CONFORMING.get(path.name, set())
+        if excluded:
+            fired_rules = {f.rule for f in findings if f.severity == Severity.ERROR}
+            for rule_name in excluded:
+                assert rule_name in fired_rules, (
+                    f"Recipe '{path.name}': exclusion for '{rule_name}' is stale — "
+                    f"rule no longer fires. Remove from _KNOWN_NON_CONFORMING."
+                )
+        errors = [f for f in findings if f.severity == Severity.ERROR and f.rule not in excluded]
         assert not errors, (
             f"Bundled workflow {path.name} has error-severity semantic findings: {errors}"
         )

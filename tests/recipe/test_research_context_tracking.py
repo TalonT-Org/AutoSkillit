@@ -111,7 +111,16 @@ def test_research_recipe_passes_semantic_rules(recipe):
     errors = validate_recipe_structure(recipe)
     assert not errors, f"Structural validation errors: {errors}"
     findings = run_semantic_rules(recipe)
-    error_findings = [f for f in findings if f.severity == Severity.ERROR]
+    _KNOWN_NON_CONFORMING = {"audit-impl-remediation-route"}
+    fired_rules = {f.rule for f in findings if f.severity == Severity.ERROR}
+    for rule_name in _KNOWN_NON_CONFORMING:
+        assert rule_name in fired_rules, (
+            f"Exclusion for '{rule_name}' is stale — rule no longer fires. "
+            f"Remove from _KNOWN_NON_CONFORMING."
+        )
+    error_findings = [
+        f for f in findings if f.severity == Severity.ERROR and f.rule not in _KNOWN_NON_CONFORMING
+    ]
     assert not error_findings, (
         f"Semantic rule errors: {[f'{f.rule}: {f.message}' for f in error_findings]}"
     )

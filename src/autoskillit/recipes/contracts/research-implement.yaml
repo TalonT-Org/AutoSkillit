@@ -1,4 +1,4 @@
-recipe_source_hash: sha256:c1f6c6f11a7ab6d234f3ebcc4df5135a146bbbb53e6892852ab8cff8c45bf9d2
+recipe_source_hash: sha256:e6f8b11f03d169f3dcce94a8e59c2ad17b42e81b6005d4d9719ed22d701948da
 bundled_manifest_version: 0.1.0
 skill_hashes: {}
 skills:
@@ -305,27 +305,6 @@ dataflow:
   produced:
   - group_files
   positional_mapping: true
-- step: capture_impl_base
-  available:
-  - audit
-  - base_branch
-  - download_report
-  - experiment_plan
-  - group_files
-  - issue_url
-  - output_mode
-  - research_dir
-  - research_dir_rel
-  - resource_report
-  - source_dir
-  - task
-  - test_check_enabled
-  - verdict
-  - visualization_plan_path
-  - worktree_path
-  required: []
-  produced:
-  - impl_base_sha
 - step: plan_phase
   available:
   - audit
@@ -333,7 +312,6 @@ dataflow:
   - download_report
   - experiment_plan
   - group_files
-  - impl_base_sha
   - issue_url
   - output_mode
   - research_dir
@@ -356,7 +334,6 @@ dataflow:
   - download_report
   - experiment_plan
   - group_files
-  - impl_base_sha
   - issue_url
   - output_mode
   - phase_plan_path
@@ -380,7 +357,6 @@ dataflow:
   - download_report
   - experiment_plan
   - group_files
-  - impl_base_sha
   - issue_url
   - output_mode
   - phase_plan_path
@@ -405,7 +381,6 @@ dataflow:
   - download_report
   - experiment_plan
   - group_files
-  - impl_base_sha
   - is_fixable
   - issue_url
   - output_mode
@@ -429,7 +404,6 @@ dataflow:
   - download_report
   - experiment_plan
   - group_files
-  - impl_base_sha
   - is_fixable
   - issue_url
   - output_mode
@@ -454,7 +428,6 @@ dataflow:
   - download_report
   - experiment_plan
   - group_files
-  - impl_base_sha
   - implement_fix_count
   - is_fixable
   - issue_url
@@ -479,7 +452,6 @@ dataflow:
   - download_report
   - experiment_plan
   - group_files
-  - impl_base_sha
   - implement_fix_count
   - is_fixable
   - issue_url
@@ -504,7 +476,6 @@ dataflow:
   - download_report
   - experiment_plan
   - group_files
-  - impl_base_sha
   - implement_fix_count
   - is_fixable
   - issue_url
@@ -529,7 +500,6 @@ dataflow:
   - download_report
   - experiment_plan
   - group_files
-  - impl_base_sha
   - implement_fix_count
   - is_fixable
   - issue_url
@@ -555,7 +525,6 @@ dataflow:
   - download_report
   - experiment_plan
   - group_files
-  - impl_base_sha
   - implement_fix_count
   - is_fixable
   - issue_url
@@ -583,7 +552,6 @@ dataflow:
   - download_report
   - experiment_plan
   - group_files
-  - impl_base_sha
   - implement_fix_count
   - is_fixable
   - issue_url
@@ -612,7 +580,6 @@ dataflow:
   - experiment_plan
   - experiment_results
   - group_files
-  - impl_base_sha
   - implement_fix_count
   - is_fixable
   - issue_url
@@ -643,7 +610,6 @@ dataflow:
   - experiment_plan
   - experiment_results
   - group_files
-  - impl_base_sha
   - implement_fix_count
   - is_fixable
   - issue_url
@@ -673,7 +639,6 @@ dataflow:
   - experiment_plan
   - experiment_results
   - group_files
-  - impl_base_sha
   - implement_fix_count
   - is_fixable
   - issue_url
@@ -705,7 +670,6 @@ dataflow:
   - experiment_plan
   - experiment_results
   - group_files
-  - impl_base_sha
   - implement_fix_count
   - is_fixable
   - issue_url
@@ -736,7 +700,6 @@ dataflow:
   - experiment_plan
   - experiment_results
   - group_files
-  - impl_base_sha
   - implement_fix_count
   - is_fixable
   - issue_url
@@ -767,7 +730,6 @@ dataflow:
   - experiment_plan
   - experiment_results
   - group_files
-  - impl_base_sha
   - implement_fix_count
   - is_fixable
   - issue_url
@@ -798,7 +760,6 @@ dataflow:
   - experiment_plan
   - experiment_results
   - group_files
-  - impl_base_sha
   - implement_fix_count
   - is_fixable
   - issue_url
@@ -830,7 +791,6 @@ dataflow:
   - experiment_plan
   - experiment_results
   - group_files
-  - impl_base_sha
   - implement_fix_count
   - is_fixable
   - issue_url
@@ -863,7 +823,6 @@ dataflow:
   - experiment_plan
   - experiment_results
   - group_files
-  - impl_base_sha
   - implement_fix_count
   - is_fixable
   - issue_url
@@ -897,7 +856,6 @@ dataflow:
   - experiment_plan
   - experiment_results
   - group_files
-  - impl_base_sha
   - implement_fix_count
   - is_fixable
   - issue_url
@@ -929,7 +887,6 @@ dataflow:
   - experiment_plan
   - experiment_results
   - group_files
-  - impl_base_sha
   - implement_fix_count
   - is_fixable
   - issue_url
@@ -965,7 +922,6 @@ dataflow:
   - experiment_results
   - fixes_applied
   - group_files
-  - impl_base_sha
   - implement_fix_count
   - is_fixable
   - issue_url
@@ -998,7 +954,6 @@ dataflow:
   - experiment_results
   - fixes_applied
   - group_files
-  - impl_base_sha
   - implement_fix_count
   - is_fixable
   - issue_url
@@ -1031,7 +986,6 @@ dataflow:
   - experiment_results
   - fixes_applied
   - group_files
-  - impl_base_sha
   - implement_fix_count
   - is_fixable
   - issue_url
@@ -1064,7 +1018,6 @@ dataflow:
   - experiment_results
   - fixes_applied
   - group_files
-  - impl_base_sha
   - implement_fix_count
   - is_fixable
   - issue_url

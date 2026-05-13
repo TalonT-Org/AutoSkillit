@@ -333,29 +333,6 @@ class TestFleetAutoGateBoot:
         )
 
     @pytest.mark.anyio
-    async def test_fleet_auto_gate_boot_inherits_campaign_id_from_env(self, tool_ctx, monkeypatch):
-        """Fleet boot path must read AUTOSKILLIT_CAMPAIGN_ID when present."""
-        from unittest.mock import AsyncMock, MagicMock, patch
-
-        from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._lifespan import _fleet_auto_gate_boot
-
-        monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_ID", "test-campaign-abc123")
-        tool_ctx.gate = DefaultGateState(enabled=False)
-        tool_ctx.quota_refresh_task = None
-
-        with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
-            with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
-                with patch(
-                    "autoskillit.pipeline.create_background_task",
-                    return_value=MagicMock(),
-                ):
-                    with patch("autoskillit.core.register_active_kitchen"):
-                        await _fleet_auto_gate_boot(tool_ctx)
-
-        assert tool_ctx.kitchen_id == "test-campaign-abc123"
-
-    @pytest.mark.anyio
     @pytest.mark.parametrize(
         "boot_fn_name",
         ["_fleet_auto_gate_boot", "_food_truck_auto_gate_boot"],

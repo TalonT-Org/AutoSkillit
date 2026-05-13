@@ -25,7 +25,7 @@ class L3ParseResult:
     payload: dict | None
     raw_body: str | None
     parse_error: str | None
-    source: Literal["stdout", "assistant_messages_jsonl"]
+    source: Literal["stdout", "assistant_messages_jsonl", "additional_jsonl"]
 
 
 def _extract_text_from_jsonl(path: Path) -> str:
@@ -96,7 +96,7 @@ def _parse_body(
     open_pos: int,
     close_pos: int,
     open_sentinel: str,
-    source: Literal["stdout", "assistant_messages_jsonl"],
+    source: Literal["stdout", "assistant_messages_jsonl", "additional_jsonl"],
 ) -> L3ParseResult:
     """Extract body between sentinels and attempt JSON decode."""
     after_open = open_pos + len(open_sentinel)
@@ -145,6 +145,7 @@ def parse_l3_result_block(
     expected_dispatch_id: str,
     assistant_messages_path: Path | None = None,
     prior_dispatch_ids: Sequence[str] | None = None,
+    additional_jsonl_paths: Sequence[Path] | None = None,
 ) -> L3ParseResult:
     """Parse an L3 result block from food truck dispatch output.
 
@@ -154,6 +155,9 @@ def parse_l3_result_block(
     When prior_dispatch_ids is provided, additional fallback scans are performed
     for each prior ID after the primary and JSONL scans fail — this handles
     the resume case where the LLM may emit a sentinel keyed to an earlier ID.
+    When additional_jsonl_paths is provided, those files are scanned after all
+    other stages fail — this handles the resume case where the sentinel lives
+    in a prior session's JSONL file rather than the current session's file.
     """
     open_sentinel = f"---l3-result::{expected_dispatch_id}---"
     close_sentinel = f"---end-l3-result::{expected_dispatch_id}---"
@@ -195,6 +199,24 @@ def parse_l3_result_block(
                         prior_open,
                         "assistant_messages_jsonl",
                     )
+
+    # Stage 4: scan additional JSONL paths (cross-session recovery for resume)
+    if additional_jsonl_paths:
+        for jsonl_path in additional_jsonl_paths:
+            additional_text = _extract_text_from_jsonl(jsonl_path)
+            if not additional_text:
+                continue
+            positions = _scan_for_sentinel(additional_text, open_sentinel, close_sentinel)
+            if positions is not None:
+                open_pos, close_pos = positions
+                logger.debug("cross-session recovery matched %s", jsonl_path)
+                return _parse_body(
+                    additional_text,
+                    open_pos,
+                    close_pos,
+                    open_sentinel,
+                    "additional_jsonl",
+                )
 
     return L3ParseResult(
         outcome="no_sentinel",

@@ -535,8 +535,20 @@ async def _run_dispatch(
     dispatches_dir.mkdir(parents=True, exist_ok=True)
     campaign_id = tool_ctx.kitchen_id
 
+    prior_session_chain: list[str] = []
+    prior_dispatched_session_id = ""
     if resume_session_id and prior_dispatch_id:
         handle = DispatchStateHandle.open_continued(dispatches_dir, prior_dispatch_id)
+        try:
+            prior_state = read_state(handle.state_path)
+            if prior_state:
+                for d in prior_state.dispatches:
+                    if d.name == effective_name:
+                        prior_session_chain = list(d.session_chain)
+                        prior_dispatched_session_id = d.dispatched_session_id
+                        break
+        except (OSError, ValueError, KeyError, TypeError):
+            logger.warning("failed to read prior session chain from state", exc_info=True)
     else:
         recipe_snapshot = {
             "recipe_name": recipe_obj.name,
@@ -790,11 +802,22 @@ async def _run_dispatch(
 
     jsonl_path = claude_code_log_path(str(tool_ctx.project_dir), skill_result.session_id or "")
 
+    extended_chain = prior_session_chain[:]
+    if prior_dispatched_session_id and prior_dispatched_session_id not in extended_chain:
+        extended_chain.append(prior_dispatched_session_id)
+
+    additional_jsonl_paths: list[Path] = []
+    for sid in extended_chain:
+        path = claude_code_log_path(str(tool_ctx.project_dir), sid)
+        if path is not None:
+            additional_jsonl_paths.append(path)
+
     parsed = parse_l3_result_block(
         stdout=skill_result.result or "",
         expected_dispatch_id=dispatch_id,
         assistant_messages_path=jsonl_path,
         prior_dispatch_ids=prior_ids or None,
+        additional_jsonl_paths=additional_jsonl_paths or None,
     )
 
     sidecar_file = Path(dispatch_sidecar_path)
@@ -814,6 +837,12 @@ async def _run_dispatch(
         checkpoint=dispatch_checkpoint,
     )
 
+    try:
+        project_log_dir = str(claude_code_project_dir(str(tool_ctx.project_dir)))
+    except OSError:
+        logger.warning("failed to resolve project log dir", exc_info=True)
+        project_log_dir = ""
+
     record = DispatchRecord(
         name=effective_name,
         status=final_status,
@@ -821,6 +850,8 @@ async def _run_dispatch(
         campaign_id=campaign_id,
         caller_session_id=caller_session_id,
         dispatched_session_id=skill_result.session_id,
+        session_chain=extended_chain,
+        dispatched_session_log_dir=project_log_dir,
         dispatched_pid=_dispatched_pid[0] if _dispatched_pid else 0,
         reason=reason,
         kill_reason=skill_result.retry_reason or "",

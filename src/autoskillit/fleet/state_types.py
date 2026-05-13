@@ -22,6 +22,7 @@ _RETRY_IDENTITY_FIELDS: frozenset[str] = frozenset(
         "campaign_id",
         "caller_session_id",
         "attempt_history",
+        "session_chain",
     }
 )
 
@@ -53,6 +54,7 @@ class DispatchRecord:
     campaign_id: str = ""
     caller_session_id: str = ""
     dispatched_session_id: str = ""
+    session_chain: list[str] = field(default_factory=list)
     dispatched_session_log_dir: str = ""
     dispatched_pid: int = 0
     dispatched_starttime_ticks: int = 0
@@ -75,6 +77,7 @@ class DispatchRecord:
             "campaign_id": self.campaign_id,
             "caller_session_id": self.caller_session_id,
             "dispatched_session_id": self.dispatched_session_id,
+            "session_chain": list(self.session_chain),
             "dispatched_session_log_dir": self.dispatched_session_log_dir,
             "dispatched_pid": self.dispatched_pid,
             "dispatched_starttime_ticks": self.dispatched_starttime_ticks,
@@ -105,6 +108,7 @@ class DispatchRecord:
                 or d.get("l3_session_id")
                 or d.get("l2_session_id", "")
             ),
+            session_chain=d.get("session_chain", []),
             dispatched_session_log_dir=(
                 d.get("dispatched_session_log_dir")
                 or d.get("l3_session_log_dir")

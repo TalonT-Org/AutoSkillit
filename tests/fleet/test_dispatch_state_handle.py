@@ -258,3 +258,166 @@ class TestCaptureChainAcrossResumeBoundary:
 
             assert isinstance(result, DispatchCompleted), f"Unexpected result type: {type(result)}"
             assert result.dispatch_id == prior_id
+
+
+class TestSessionChainAccumulatesAcrossResume:
+    @pytest.mark.anyio
+    async def test_session_chain_accumulates_across_resume(self, tool_ctx, monkeypatch):
+        """session_chain accumulates prior dispatched_session_id on resume."""
+        from autoskillit.core import RetryReason, SkillResult
+        from autoskillit.fleet._api import _run_dispatch
+        from autoskillit.fleet.state import read_state
+        from tests.fleet._helpers import (
+            _no_sleep_quota_checker,
+            _noop_quota_refresher,
+            _setup_dispatch,
+        )
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+
+        dispatches_dir = tool_ctx.temp_dir / "dispatches"
+        campaign_id = tool_ctx.kitchen_id
+
+        prior_id = "prior-dispatch-abc123"
+        prior_state_path = dispatches_dir / f"{prior_id}.json"
+        write_initial_state(
+            prior_state_path,
+            campaign_id,
+            "camp",
+            "",
+            [DispatchRecord(name="test-recipe", dispatched_session_id="sess-original")],
+        )
+
+        tool_ctx.executor.push(
+            SkillResult(
+                success=True,
+                result="ok",
+                session_id="sess-resume-1",
+                subtype="success",
+                is_error=False,
+                exit_code=0,
+                needs_retry=False,
+                retry_reason=RetryReason.NONE,
+                stderr="",
+                token_usage=None,
+            )
+        )
+
+        from autoskillit.fleet.result_parser import L3ParseResult
+
+        def _fake_parse(*args, **kwargs):
+            return L3ParseResult(
+                outcome="completed_clean",
+                payload={"success": True},
+                raw_body=None,
+                parse_error=None,
+                source="stdout",
+            )
+
+        def _fake_classify(*args, **kwargs):
+            return (DispatchStatus.SUCCESS, None)
+
+        monkeypatch.setattr("autoskillit.fleet._api.parse_l3_result_block", _fake_parse)
+        monkeypatch.setattr("autoskillit.fleet.classify_dispatch_outcome", _fake_classify)
+
+        result = await _run_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="do something",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=lambda **_: "prompt",
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+            resume_session_id="sess-resume-1",
+            prior_dispatch_id=prior_id,
+        )
+
+        from autoskillit.fleet.state_types import DispatchRejected
+
+        assert not isinstance(result, DispatchRejected), f"Unexpected rejection: {result}"
+
+        state = read_state(prior_state_path)
+        assert state is not None
+        disp = next(d for d in state.dispatches if d.dispatch_id == prior_id)
+        assert "sess-original" in disp.session_chain
+        assert disp.dispatched_session_id == "sess-resume-1"
+
+
+class TestDispatchedSessionLogDirPopulated:
+    @pytest.mark.anyio
+    async def test_dispatched_session_log_dir_populated(self, tool_ctx, monkeypatch):
+        """dispatched_session_log_dir is populated after _run_dispatch completes."""
+        from autoskillit.fleet import FleetSemaphore
+        from autoskillit.fleet._api import _run_dispatch
+        from autoskillit.fleet.state import read_state
+        from autoskillit.recipe.schema import Recipe, RecipeKind
+        from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
+        from tests.fleet._helpers import (
+            _make_recipe_info,
+            _no_sleep_quota_checker,
+            _noop_quota_refresher,
+        )
+
+        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        recipe_name = "test-recipe-logdir"
+        repo = InMemoryRecipeRepository()
+        recipe_info = _make_recipe_info(recipe_name)
+        repo.add_recipe(recipe_name, recipe_info)
+        repo.add_full_recipe(
+            recipe_info.path,
+            Recipe(
+                name=recipe_name,
+                description="test",
+                kind=RecipeKind.STANDARD,
+                ingredients={},
+                requires_packs=[],
+            ),
+        )
+        tool_ctx.recipes = repo
+        tool_ctx.executor = InMemoryHeadlessExecutor()
+
+        dispatches_dir = tool_ctx.temp_dir / "dispatches"
+        dispatches_dir.mkdir(parents=True, exist_ok=True)
+
+        from autoskillit.fleet.result_parser import L3ParseResult
+
+        def _fake_parse(*args, **kwargs):
+            return L3ParseResult(
+                outcome="completed_clean",
+                payload={"success": True},
+                raw_body=None,
+                parse_error=None,
+                source="stdout",
+            )
+
+        def _fake_classify(*args, **kwargs):
+            return (DispatchStatus.SUCCESS, None)
+
+        monkeypatch.setattr("autoskillit.fleet._api.parse_l3_result_block", _fake_parse)
+        monkeypatch.setattr("autoskillit.fleet.classify_dispatch_outcome", _fake_classify)
+
+        result = await _run_dispatch(
+            tool_ctx=tool_ctx,
+            recipe=recipe_name,
+            task="do something",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=lambda **_: "prompt",
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+        )
+
+        from autoskillit.fleet.state_types import DispatchRejected
+
+        assert not isinstance(result, DispatchRejected), f"Unexpected rejection: {result}"
+
+        state_files = list(dispatches_dir.glob("*.json"))
+        assert len(state_files) == 1
+        state = read_state(state_files[0])
+        assert state is not None
+        assert len(state.dispatches) == 1
+        disp = state.dispatches[0]
+        assert disp.dispatched_session_log_dir != ""

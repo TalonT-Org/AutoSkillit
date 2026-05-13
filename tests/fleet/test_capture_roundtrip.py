@@ -22,13 +22,7 @@ _SENTINEL_FIELD_RE = re.compile(r'"([\w-]+)":\s*"<[\w-]+_value>"')
 
 
 def _parse_section8_capture_fields(prompt: str) -> set[str]:
-    """Extract capture field names from the Section 8 sentinel JSON example.
-
-    Capture fields in the sentinel example follow the pattern:
-        "<field_name>": "<field_name_value>"
-    This distinguishes them from the fixed fields (success, reason, summary)
-    which use different placeholder formats.
-    """
+    """Extract capture field names from the Section 8 sentinel JSON example."""
     section8 = prompt[prompt.index("--- SECTION 8") :]
     return set(_SENTINEL_FIELD_RE.findall(section8))
 
@@ -117,15 +111,6 @@ def test_prompt_capture_fields_do_not_use_capture_prefix():
     )
 
 
-# ---------------------------------------------------------------------------
-# 3-Leg Round-Trip Contract Tests
-# ---------------------------------------------------------------------------
-# Leg 1: Build the prompt from a CaptureEntrySpec
-# Leg 2: Parse Section 8 to discover field names (not hardcoded)
-# Leg 3: Build a synthetic payload with those names, feed through extractor
-# ---------------------------------------------------------------------------
-
-
 def _build_prompt(capture_spec: dict[str, CaptureEntrySpec]) -> str:
     from autoskillit.fleet._prompts import _build_food_truck_prompt
 
@@ -167,15 +152,7 @@ def _build_prompt(capture_spec: dict[str, CaptureEntrySpec]) -> str:
     ids=["single", "two-fields", "hyphenated", "five-fields", "single-char"],
 )
 def test_prompt_to_extraction_round_trip_contract(capture_spec):
-    """3-leg contract: build prompt -> parse Section 8 -> extract from synthetic payload.
-
-    Leg 1: Call _build_food_truck_prompt with the capture spec.
-    Leg 2: Parse Section 8 sentinel JSON example to discover field names.
-    Leg 3: Build a synthetic payload using those names, run _extract_captures.
-
-    If the prompt emits field names that differ from what the extractor expects,
-    this test fails — catching prefix bugs, renaming bugs, and format drift.
-    """
+    """3-leg contract: build prompt -> parse Section 8 -> extract from synthetic payload."""
     from autoskillit.fleet._api import _extract_captures
 
     # Leg 1: Build prompt
@@ -261,13 +238,7 @@ def test_typed_capture_round_trip_contract(value_type, test_value, tmp_path):
 
 
 def test_non_result_template_fallback_asymmetry():
-    """When from_ is not a result.* template, prompt uses key, extractor skips.
-
-    This documents a known asymmetry: the prompt builder falls back to the
-    capture key name, but _extract_captures silently skips entries where
-    resolve_payload_field returns None. A future fix could unify this behavior,
-    but the test ensures the current contract is explicit and documented.
-    """
+    """When from_ is not a result.* template, prompt uses key, extractor skips."""
     from autoskillit.fleet._api import _extract_captures
 
     # Build a capture spec with a non-result.* template

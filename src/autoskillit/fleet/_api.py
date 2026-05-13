@@ -245,21 +245,23 @@ def _write_campaign_refusal(
     campaign_state_path: Path | None,
     effective_name: str,
     error_code: FleetErrorCode,
+    message: str = "",
 ) -> None:
     """Write a REFUSED dispatch record to the campaign state file."""
     if campaign_state_path is None:
         return
     from autoskillit.fleet.state import (  # noqa: PLC0415
         DispatchRecord,
-        DispatchStatus,
         upsert_dispatch_record_by_name,
     )
 
     try:
-        upsert_dispatch_record_by_name(
-            campaign_state_path,
-            DispatchRecord(name=effective_name, status=DispatchStatus.REFUSED, reason=error_code),
+        record = DispatchRecord.for_refusal(
+            name=effective_name,
+            error_code=error_code,
+            diagnostic_message=message,
         )
+        upsert_dispatch_record_by_name(campaign_state_path, record)
     except Exception:
         logger.warning("failed to record refusal to campaign state", exc_info=True)
 
@@ -328,7 +330,7 @@ async def execute_dispatch(
     def _reject(error_code: FleetErrorCode, message: str, **kwargs: Any) -> DispatchRejected:
         """Pre-lock, pre-dispatch-id rejection path — no per-dispatch state file exists yet."""
         rejection = DispatchRejected(error_code=error_code, message=message, **kwargs)
-        _write_campaign_refusal(campaign_state_path, effective_name, error_code)
+        _write_campaign_refusal(campaign_state_path, effective_name, error_code, message=message)
         return rejection
 
     if ingredients is not None:
@@ -387,10 +389,21 @@ async def execute_dispatch(
     except asyncio.CancelledError:
         raise
     except Exception as exc:
-        logger.error("execute_dispatch failed", exc_info=True)
+        # Unwrap ExceptionGroup from anyio task-group wrapping
+        if isinstance(exc, ExceptionGroup) and len(exc.exceptions) == 1:
+            underlying = exc.exceptions[0]
+        else:
+            underlying = exc
+        logger.warning(
+            "execute_dispatch crashed before dispatch completion",
+            exc_type=type(underlying).__name__,
+            dispatch_name=effective_name,
+            campaign_state_path=str(campaign_state_path),
+            exc_info=True,
+        )
         return _reject(
             error_code=FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
-            message=f"{type(exc).__name__}: {exc}",
+            message=f"{type(underlying).__name__}: {underlying}",
         )
     finally:
         lock.release()
@@ -575,15 +588,16 @@ async def _run_dispatch(
         try:
             append_dispatch_record(
                 state_path,
-                DispatchRecord(
+                DispatchRecord.refused(
                     name=effective_name,
-                    status=DispatchStatus.REFUSED,
-                    reason=error_code,
+                    error_code=error_code,
+                    diagnostic_message=message,
+                    dispatch_id=dispatch_id,
                 ),
             )
         except Exception:
             logger.warning("_reject_with_state: per-dispatch state write failed", exc_info=True)
-        _write_campaign_refusal(campaign_state_path, effective_name, error_code)
+        _write_campaign_refusal(campaign_state_path, effective_name, error_code, message=message)
         return DispatchRejected(error_code=error_code, message=message, dispatch_id=dispatch_id)
 
     if effective_ingredients:

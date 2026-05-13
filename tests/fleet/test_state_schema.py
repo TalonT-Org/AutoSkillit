@@ -342,6 +342,7 @@ class TestDispatchRecordToDict:
             "dispatched_boot_id",
             "dispatched_create_time",
             "reason",
+            "diagnostic_message",
             "kill_reason",
             "infra_exit_category",
             "token_usage",
@@ -505,3 +506,90 @@ class TestAttemptHistoryFields:
         )
         roundtripped = DispatchRecord.from_dict(d.to_dict())
         assert roundtripped.attempt_history == [{"dispatch_id": "attempt-1", "status": "failure"}]
+
+
+class TestTerminalRecordDiagnosticInvariant:
+    """Contract: any DispatchRecord with terminal status must have a non-empty diagnostic_message
+    when written via the refused() factory. Direct construction is allowed for backward
+    compatibility but the factory should be the standard path for refusal writes."""
+
+    def test_refused_factory_requires_diagnostic_message(self) -> None:
+        """DispatchRecord.refused() must require a non-empty diagnostic_message."""
+        from autoskillit.core import FleetErrorCode
+        from autoskillit.fleet import DispatchRecord
+
+        record = DispatchRecord.refused(
+            name="dispatch-x",
+            error_code=FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
+            diagnostic_message="RuntimeError: boom",
+        )
+        assert record.name == "dispatch-x"
+        assert record.status.value == "refused"
+        assert record.reason == "fleet_l3_startup_or_crash"
+        assert record.diagnostic_message == "RuntimeError: boom"
+
+    def test_refused_factory_rejects_empty_message(self) -> None:
+        """DispatchRecord.refused() must raise ValueError on empty diagnostic_message."""
+        from autoskillit.core import FleetErrorCode
+        from autoskillit.fleet import DispatchRecord
+
+        with pytest.raises(ValueError, match="diagnostic_message"):
+            DispatchRecord.refused(
+                name="dispatch-y",
+                error_code=FleetErrorCode.FLEET_QUOTA_EXHAUSTED,
+                diagnostic_message="",
+            )
+
+    def test_refused_factory_rejects_whitespace_only_message(self) -> None:
+        """DispatchRecord.refused() must raise ValueError on whitespace-only diagnostic_message."""
+        from autoskillit.core import FleetErrorCode
+        from autoskillit.fleet import DispatchRecord
+
+        with pytest.raises(ValueError, match="diagnostic_message"):
+            DispatchRecord.refused(
+                name="dispatch-z",
+                error_code=FleetErrorCode.FLEET_QUOTA_EXHAUSTED,
+                diagnostic_message="   ",
+            )
+
+    def test_refused_factory_accepts_string_error_code(self) -> None:
+        """DispatchRecord.refused() must accept a string error code."""
+        from autoskillit.fleet import DispatchRecord
+
+        record = DispatchRecord.refused(
+            name="dispatch-w",
+            error_code="fleet_quota_exhausted",
+            diagnostic_message="quota limit hit",
+        )
+        assert record.reason == "fleet_quota_exhausted"
+
+    def test_diagnostic_message_in_to_dict(self) -> None:
+        """to_dict must include diagnostic_message."""
+        d = DispatchRecord(name="x", diagnostic_message="test message")
+        raw = d.to_dict()
+        assert "diagnostic_message" in raw
+        assert raw["diagnostic_message"] == "test message"
+
+    def test_diagnostic_message_from_dict_missing_defaults_empty(self) -> None:
+        """from_dict handles missing diagnostic_message (backward compat)."""
+        d = DispatchRecord.from_dict({"name": "x"})
+        assert d.diagnostic_message == ""
+
+    def test_diagnostic_message_round_trips_through_to_dict(self) -> None:
+        """diagnostic_message survives to_dict round-trip."""
+        record = DispatchRecord(name="d1", diagnostic_message="kaboom: lost connection")
+        roundtripped = DispatchRecord.from_dict(record.to_dict())
+        assert roundtripped.diagnostic_message == "kaboom: lost connection"
+
+    def test_backward_compat_direct_construction_still_works(self) -> None:
+        """Direct DispatchRecord construction with status=REFUSED still works."""
+        from autoskillit.fleet import DispatchRecord, DispatchStatus
+
+        record = DispatchRecord(
+            name="legacy",
+            status=DispatchStatus.REFUSED,
+            reason="fleet_quota_exhausted",
+        )
+        assert record.status == DispatchStatus.REFUSED
+        assert record.reason == "fleet_quota_exhausted"
+        assert record.diagnostic_message == ""

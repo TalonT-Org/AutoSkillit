@@ -35,19 +35,18 @@ def _write_dispatch_to_campaign_state(
             DispatchCompleted,
             DispatchRecord,
             DispatchRejected,
-            DispatchStatus,
             normalize_dispatch_token_usage,
             upsert_dispatch_record_by_name,
         )
 
         match outcome:
-            case DispatchRejected(error_code=code):
+            case DispatchRejected(error_code=code, message=msg):
                 upsert_dispatch_record_by_name(
                     Path(campaign_state_path_str),
-                    DispatchRecord(
+                    DispatchRecord.for_refusal(
                         name=effective_name,
-                        status=DispatchStatus.REFUSED,
-                        reason=code,
+                        error_code=code,
+                        diagnostic_message=msg,
                     ),
                 )
             case DispatchCompleted() as completed:

@@ -1401,18 +1401,6 @@ def test_extract_sentinel_fields_handles_nested_braces(tmp_path: Path):
     """
     from autoskillit.recipe.rules.rules_campaign import _extract_sentinel_fields
 
-    recipe = _campaign(
-        dispatches=[
-            CampaignDispatch(
-                name="phase-one",
-                recipe="target-recipe",
-                task="do it",
-                capture={"execution_map": _cap("${{ result.execution_map }}")},
-            ),
-        ],
-    )
-    # Override the recipe name for testing since _extract_sentinel_fields uses the recipe
-    # object directly, not the name
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
     _write_recipe_yaml(

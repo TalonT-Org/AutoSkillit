@@ -784,3 +784,55 @@ def test_interpolate_rejects_empty_string_campaign_ref():
     msg = str(exc_info.value).lower()
     assert "empty" in msg
     assert "report_path" in msg
+
+
+# ---------------------------------------------------------------------------
+# Cross-session capture orphaning tests
+# ---------------------------------------------------------------------------
+
+
+def _make_success_state(state_path, campaign_id, captures):
+    """Helper: create a state file with one SUCCESS dispatch and captured values."""
+    from autoskillit.fleet.state import write_captured_values, write_initial_state
+    from autoskillit.fleet.state_types import DispatchRecord, DispatchStatus
+
+    dispatch = DispatchRecord(
+        name="test-dispatch-1",
+        status=DispatchStatus.SUCCESS,
+    )
+    write_initial_state(
+        state_path,
+        campaign_id=campaign_id,
+        campaign_name="test-campaign",
+        manifest_path="manifest.yaml",
+        dispatches=[dispatch],
+    )
+    write_captured_values(state_path, captures)
+
+
+def test_captures_from_prior_session_visible_with_same_campaign_id(tmp_path):
+    """Captures written under campaign_id X must be readable when kitchen_id == X."""
+    from autoskillit.fleet.state import read_all_campaign_captures
+
+    dispatches_dir = tmp_path / "dispatches"
+    dispatches_dir.mkdir()
+
+    state_path_1 = dispatches_dir / "dispatch_001.json"
+    _make_success_state(state_path_1, "campaign-original", {"output_url": "https://example.com"})
+
+    result = read_all_campaign_captures(dispatches_dir, "campaign-original")
+    assert result == {"output_url": "https://example.com"}
+
+
+def test_captures_from_prior_session_invisible_with_different_campaign_id(tmp_path):
+    """Different campaign_id = invisible captures (orphaned by namespace mismatch)."""
+    from autoskillit.fleet.state import read_all_campaign_captures
+
+    dispatches_dir = tmp_path / "dispatches"
+    dispatches_dir.mkdir()
+
+    state_path_1 = dispatches_dir / "dispatch_001.json"
+    _make_success_state(state_path_1, "kitchen-uuid-A", {"output_url": "https://example.com"})
+
+    result = read_all_campaign_captures(dispatches_dir, "kitchen-uuid-B")
+    assert result == {}  # orphaned — this is the bug we're preventing

@@ -33,6 +33,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_import_linter_contracts.py` | Tests verifying import-linter contract documentation (REQ-ARCH-007) |
 | `test_import_paths.py` | Structural import-path compliance tests (REQ-IMP-001, REQ-IMP-002) |
 | `test_kitchen_guard_scoping.py` | Architectural enforcement: any_kitchen_open call-site scoping and test helper isolation |
+| `test_kitchen_id_assignment.py` | AST guard: ctx.kitchen_id assignment only via resolve_kitchen_id() |
 | `test_layer_enforcement.py` | MCP tool registry + import layer contracts + cross-package rules |
 | `test_layer_markers.py` | Enforce pytestmark layer markers on all in-scope test files |
 | `test_never_raises_contracts.py` | Structural enforcement of 'Never raises' docstring contracts in server/ |

@@ -152,6 +152,71 @@ class TestResearchRecipesAuditImpl:
         assert errors == [], f"Validation errors: {errors}"
 
 
+class TestResearchImplementRemediationLoop:
+    """Tests for the audit_impl → remediate → plan_phase retry cycle."""
+
+    @pytest.fixture(scope="class")
+    def recipe(self):
+        return load_recipe(builtin_recipes_dir() / "research-implement.yaml")
+
+    def test_audit_impl_nogo_routes_to_remediate(self, recipe) -> None:
+        step = recipe.steps["audit_impl"]
+        conditions = step.on_result.conditions
+        default_cond = next((c for c in conditions if c.when is None), None)
+        assert default_cond is not None
+        assert default_cond.route == "remediate"
+
+    def test_audit_impl_error_routes_to_escalate_stop(self, recipe) -> None:
+        step = recipe.steps["audit_impl"]
+        conditions = step.on_result.conditions
+        error_cond = next((c for c in conditions if c.when and "result.error" in c.when), None)
+        assert error_cond is not None
+        assert error_cond.route == "escalate_stop"
+
+    def test_has_remediate_step(self, recipe) -> None:
+        assert "remediate" in recipe.steps
+        assert recipe.steps["remediate"].action == "route"
+
+    def test_remediate_carries_remediation_path(self, recipe) -> None:
+        step = recipe.steps["remediate"]
+        assert "remediation_path" in step.with_args
+        assert "context.remediation_path" in step.with_args["remediation_path"]
+
+    def test_remediate_routes_to_check_audit_retry_loop(self, recipe) -> None:
+        step = recipe.steps["remediate"]
+        assert step.on_success == "check_audit_retry_loop"
+
+    def test_has_check_audit_retry_loop_step(self, recipe) -> None:
+        step = recipe.steps["check_audit_retry_loop"]
+        assert step.tool == "run_python"
+        assert step.with_args["callable"] == "autoskillit.smoke_utils.check_loop_iteration"
+
+    def test_check_audit_retry_loop_max_iterations(self, recipe) -> None:
+        step = recipe.steps["check_audit_retry_loop"]
+        assert step.with_args["max_iterations"] == "2"
+
+    def test_check_audit_retry_loop_max_exceeded_routes_to_escalate_stop(self, recipe) -> None:
+        step = recipe.steps["check_audit_retry_loop"]
+        conditions = step.on_result.conditions
+        max_cond = next(
+            (c for c in conditions if c.when and "max_exceeded" in c.when and "== true" in c.when),
+            None,
+        )
+        assert max_cond is not None
+        assert max_cond.route == "escalate_stop"
+
+    def test_check_audit_retry_loop_default_routes_to_plan_phase(self, recipe) -> None:
+        step = recipe.steps["check_audit_retry_loop"]
+        conditions = step.on_result.conditions
+        default_cond = next((c for c in conditions if c.when is None), None)
+        assert default_cond is not None
+        assert default_cond.route == "plan_phase"
+
+    def test_check_audit_retry_loop_on_failure_escalates(self, recipe) -> None:
+        step = recipe.steps["check_audit_retry_loop"]
+        assert step.on_failure == "escalate_stop"
+
+
 class TestResearchCampaignAuditIngredient:
     """Tests for audit ingredient in research-campaign.yaml."""
 

@@ -344,6 +344,10 @@ def test_v9_and_data_acquisition_source_type_consistency() -> None:
         f"{no_acquisition - DATA_MANIFEST_SOURCE_TYPES}"
     )
     check_types = DATA_MANIFEST_SOURCE_TYPES - no_acquisition
+    assert check_types, (
+        "check_types is empty — no_acquisition equals DATA_MANIFEST_SOURCE_TYPES; "
+        "test would pass vacuously"
+    )
 
     for source_type in check_types:
         assert source_type in v9, f"V9 must address source_type: {source_type}"

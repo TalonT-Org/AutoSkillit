@@ -238,28 +238,19 @@ def test_audit_impl_remediation_route_message_names_step() -> None:
 def test_bundled_recipes_conforming_pass_audit_impl_remediation_route() -> None:
     recipes_dir = builtin_recipes_dir()
     non_conforming = {"research.yaml"}
-    conforming = {
-        "implementation.yaml",
-        "implementation-groups.yaml",
-        "remediation.yaml",
-        "merge-prs.yaml",
-        "research-implement.yaml",
-    }
+    all_recipes = sorted(p.name for p in recipes_dir.glob("*.yaml"))
 
-    for name in non_conforming:
+    for name in all_recipes:
         recipe = load_recipe(recipes_dir / name)
         findings = run_semantic_rules(recipe)
         rule_names = [f.rule for f in findings]
-        assert "audit-impl-remediation-route" in rule_names, (
-            f"{name} captures remediation_path but routes all non-GO to terminal "
-            f"(pending #2409 fix). Rule must fire."
-        )
-
-    for name in conforming:
-        recipe = load_recipe(recipes_dir / name)
-        findings = run_semantic_rules(recipe)
-        rule_names = [f.rule for f in findings]
-        assert "audit-impl-remediation-route" not in rule_names, (
-            f"{name} must not trigger audit-impl-remediation-route — it routes "
-            f"non-GO to a non-terminal step."
-        )
+        if name in non_conforming:
+            assert "audit-impl-remediation-route" in rule_names, (
+                f"{name} captures remediation_path but routes all non-GO to terminal "
+                f"(pending #2409 fix). Rule must fire."
+            )
+        else:
+            assert "audit-impl-remediation-route" not in rule_names, (
+                f"{name} must not trigger audit-impl-remediation-route — it routes "
+                f"non-GO to a non-terminal step."
+            )

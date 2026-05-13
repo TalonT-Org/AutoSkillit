@@ -12,6 +12,7 @@ Fleet campaign dispatch, state persistence, and sidecar tests.
 | `test_api.py` | Tests for fleet._api module (Group J) |
 | `test_api_dispatch_marker.py` | Tests for _run_dispatch marker lifecycle and _touch_dispatch_marker heartbeat |
 | `test_campaign_capture.py` | Tests for campaign capture extraction and ingredient interpolation (Group J) |
+| `test_capture_roundtrip.py` | Tests for prompt-extractor field name alignment — verifies sentinel examples use bare names matching `_extract_captures` expectations |
 | `test_checkpoint_bridge.py` | Tests for checkpoint_from_sidecar converting IssueSidecarEntry to SessionCheckpoint |
 | `test_dispatch_failure_semantics.py` | Group F: Timeout + No-Result-Block failure semantics for fleet dispatch |
 | `test_dispatch_identity_continuity.py` | Tests for dispatch_id identity continuity on resume — prior_dispatch_id threading through API layer |

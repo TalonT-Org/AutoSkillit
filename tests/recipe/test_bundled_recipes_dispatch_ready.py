@@ -51,20 +51,6 @@ def test_contract_card_fresh(contract_name: str) -> None:
 
 
 @pytest.mark.parametrize("contract_name", _CONTRACT_STEMS)
-def test_no_epoch_sentinel_in_contract(contract_name: str) -> None:
-    contract_path = _CONTRACTS_DIR / f"{contract_name}.yaml"
-    contract = yaml.safe_load(contract_path.read_text())
-    generated_at = contract.get("generated_at", "")
-    assert "1970-01-01" not in str(generated_at), (
-        f"Contract '{contract_name}' has epoch sentinel generated_at={generated_at}. "
-        f'Regenerate with: python -c "from autoskillit.recipe.contracts import '
-        f"generate_recipe_card; from autoskillit.recipe.io import builtin_recipes_dir; "
-        f"generate_recipe_card(builtin_recipes_dir()/'{contract_name}.yaml', "
-        f'builtin_recipes_dir())"'
-    )
-
-
-@pytest.mark.parametrize("contract_name", _CONTRACT_STEMS)
 def test_contract_covers_all_recipe_steps(contract_name: str) -> None:
     recipe_path = _RECIPES_DIR / f"{contract_name}.yaml"
     if not recipe_path.exists():

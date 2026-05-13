@@ -48,7 +48,7 @@ steps:
     contracts_dir.mkdir()
     (contracts_dir / "test-recipe.yaml").write_text(
         "schema_version: '1.0'\npipeline_hash: old_hash\nstep_fields_hash: old\n"
-        "block_fingerprints: {}\nskill_hashes: {}\ngenerated_at: '2020-01-01T00:00:00Z'\n"
+        "block_fingerprints: {}\nskill_hashes: {}\n"
     )
 
     result = subprocess.run(

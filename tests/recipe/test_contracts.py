@@ -239,7 +239,6 @@ def test_generate_recipe_card(tmp_path: Path) -> None:
     contract_path = recipes_dir / "contracts" / "test-pipeline.yaml"
     assert contract_path.exists()
     contract = yaml.safe_load(contract_path.read_text())
-    assert "generated_at" in contract
     assert "bundled_manifest_version" in contract
     assert "skill_hashes" in contract
     assert "skills" in contract
@@ -981,31 +980,13 @@ def test_wait_for_ci_conclusion_allowed_values() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_research_recipe_card_generated_at_is_iso8601() -> None:
-    """research.yaml card's generated_at is a parseable ISO-8601 timestamp."""
-    import datetime
-
-    from autoskillit.recipe.io import builtin_recipes_dir
-
-    card = load_recipe_card("research", builtin_recipes_dir())
-    assert card is not None
-    generated_at = card.get("generated_at", "")
-    assert isinstance(generated_at, str) and generated_at, (
-        "generated_at must be a non-empty string"
-    )
-    try:
-        datetime.datetime.fromisoformat(generated_at)
-    except ValueError as exc:
-        pytest.fail(f"generated_at is not a valid ISO-8601 datetime: {generated_at!r}: {exc}")
-
-
 def test_research_recipe_card_structure() -> None:
     """Research contract card contains all required top-level keys."""
     from autoskillit.recipe.io import builtin_recipes_dir
 
     card = load_recipe_card("research", builtin_recipes_dir())
     assert card is not None
-    for key in ("generated_at", "bundled_manifest_version", "skill_hashes", "skills", "dataflow"):
+    for key in ("bundled_manifest_version", "skill_hashes", "skills", "dataflow"):
         assert key in card, f"Missing key: {key}"
     assert card["bundled_manifest_version"] == "0.1.0"
     assert card["skill_hashes"] == {}

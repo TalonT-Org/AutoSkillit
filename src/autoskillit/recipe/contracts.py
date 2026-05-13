@@ -124,7 +124,6 @@ class BlockFingerprint:
 
 @dataclasses.dataclass
 class RecipeCard:
-    generated_at: str
     recipe_source_hash: str | None
     bundled_manifest_version: str
     skill_hashes: dict[str, str]
@@ -387,7 +386,6 @@ def _generate_recipe_card_for_recipe(recipe: Recipe) -> RecipeCard:
     fingerprints = tuple(_compute_block_fingerprint(b) for b in blocks)
     manifest = load_bundled_manifest()
     return RecipeCard(
-        generated_at=datetime.now(UTC).isoformat(),
         recipe_source_hash=None,
         bundled_manifest_version=manifest.get("version", ""),
         skill_hashes={},
@@ -504,7 +502,6 @@ def generate_recipe_card(
         dataflow.append(entry)
 
     contract_data = {
-        "generated_at": datetime.now(UTC).isoformat(),
         "recipe_source_hash": recipe_hash,
         "bundled_manifest_version": manifest["version"],
         "skill_hashes": skill_hashes,

@@ -1,5 +1,5 @@
 {
-  "recipe_source_hash": "sha256:e6f8b11f03d169f3dcce94a8e59c2ad17b42e81b6005d4d9719ed22d701948da",
+  "recipe_source_hash": "sha256:a11e3fee9bd871521ee5fb448723978c204588248148b91fc690b4262cfd72e5",
   "bundled_manifest_version": "0.1.0",
   "skill_hashes": {},
   "skills": {
@@ -690,7 +690,6 @@
         "download_report",
         "experiment_plan",
         "group_files",
-        "impl_base_sha",
         "implement_fix_count",
         "is_fixable",
         "issue_url",
@@ -720,7 +719,6 @@
         "download_report",
         "experiment_plan",
         "group_files",
-        "impl_base_sha",
         "implement_fix_count",
         "is_fixable",
         "issue_url",

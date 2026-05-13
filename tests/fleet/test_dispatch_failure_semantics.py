@@ -1010,15 +1010,11 @@ class TestCrashPathDiagnosticPersistence:
         """
         from autoskillit.fleet import (
             DispatchRecord,
-            DispatchStateHandle,
             read_state,
             write_initial_state,
         )
-        from tests.fakes import InMemoryHeadlessExecutor
 
         campaign_state_path = tmp_path / "campaign.json"
-        dispatches_dir = tmp_path / "dispatches"
-        dispatches_dir.mkdir()
         write_initial_state(
             campaign_state_path,
             "cmp-reject",
@@ -1026,26 +1022,9 @@ class TestCrashPathDiagnosticPersistence:
             "/m.yaml",
             [DispatchRecord(name="dispatch-b")],
         )
-        DispatchStateHandle.create_fresh(
-            dispatches_dir,
-            "cmp-reject",
-            "test-campaign",
-            "dispatch-b",
-            [DispatchRecord(name="dispatch-b")],
-            None,
-        )
 
         _setup_dispatch(tool_ctx, monkeypatch)
-        # Align kitchen_id with the test's campaign_id so execute_dispatch uses the same state file
         tool_ctx.kitchen_id = "cmp-reject"
-        executor = InMemoryHeadlessExecutor()
-
-        # Make executor raise on run so we hit _reject_with_state after state creation
-        async def bad_ingredients_run(*args, **kwargs):
-            raise ValueError("this won't reach the normal flow")
-
-        executor.dispatch_food_truck = bad_ingredients_run  # type: ignore[method-assign]
-        tool_ctx.executor = executor
 
         from autoskillit.fleet._api import execute_dispatch
         from tests.fleet._helpers import (

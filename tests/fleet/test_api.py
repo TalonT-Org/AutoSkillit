@@ -389,3 +389,72 @@ class TestDispatchMarkerLifecycle:
         assert "session_id" in data
         assert isinstance(data["orchestrator_pid"], int)
         assert isinstance(data["session_id"], str)
+
+
+class TestWriteCampaignRefusalDiagnosticMessage:
+    """_write_campaign_refusal must persist the diagnostic message, not just the error code."""
+
+    async def test_refusal_persists_diagnostic_message_to_campaign(self, tmp_path: Path) -> None:
+        """REFUSED records in campaign state must carry the human-readable diagnostic message."""
+        from autoskillit.core import FleetErrorCode
+        from autoskillit.fleet import (
+            DispatchRecord,
+            read_state,
+            write_initial_state,
+        )
+        from autoskillit.fleet._api import _write_campaign_refusal
+
+        campaign_state_path = tmp_path / "campaign.json"
+        write_initial_state(
+            campaign_state_path,
+            "cmp-refuse",
+            "test-campaign",
+            "/m.yaml",
+            [DispatchRecord(name="dispatch-1")],
+        )
+
+        _write_campaign_refusal(
+            campaign_state_path,
+            "dispatch-1",
+            FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
+            message="RuntimeError: database connection lost",
+        )
+
+        state = read_state(campaign_state_path)
+        assert state is not None
+        refused = [d for d in state.dispatches if d.status.value == "refused"]
+        assert len(refused) == 1
+        assert refused[0].diagnostic_message == "RuntimeError: database connection lost"
+        assert refused[0].reason == "fleet_l3_startup_or_crash"
+
+    async def test_refusal_without_message_defaults_empty(self, tmp_path: Path) -> None:
+        """Backward compatibility: omitting message defaults to empty string."""
+        from autoskillit.core import FleetErrorCode
+        from autoskillit.fleet import (
+            DispatchRecord,
+            read_state,
+            write_initial_state,
+        )
+        from autoskillit.fleet._api import _write_campaign_refusal
+
+        campaign_state_path = tmp_path / "campaign.json"
+        write_initial_state(
+            campaign_state_path,
+            "cmp-nomsg",
+            "test-campaign",
+            "/m.yaml",
+            [DispatchRecord(name="dispatch-2")],
+        )
+
+        _write_campaign_refusal(
+            campaign_state_path,
+            "dispatch-2",
+            FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
+        )
+
+        state = read_state(campaign_state_path)
+        assert state is not None
+        refused = [d for d in state.dispatches if d.status.value == "refused"]
+        assert len(refused) == 1
+        assert refused[0].diagnostic_message == ""
+        assert refused[0].reason == "fleet_unknown_ingredient"

@@ -61,6 +61,7 @@ class DispatchRecord:
     dispatched_boot_id: str = ""
     dispatched_create_time: float = 0.0
     reason: str = ""
+    diagnostic_message: str = ""
     kill_reason: str = ""
     infra_exit_category: str = ""
     token_usage: dict[str, Any] = field(default_factory=dict)
@@ -84,6 +85,7 @@ class DispatchRecord:
             "dispatched_boot_id": self.dispatched_boot_id,
             "dispatched_create_time": self.dispatched_create_time,
             "reason": self.reason,
+            "diagnostic_message": self.diagnostic_message,
             "kill_reason": self.kill_reason,
             "infra_exit_category": self.infra_exit_category,
             "token_usage": dict(self.token_usage),
@@ -133,6 +135,7 @@ class DispatchRecord:
             ),
             dispatched_create_time=d.get("dispatched_create_time", 0.0),
             reason=d.get("reason", ""),
+            diagnostic_message=d.get("diagnostic_message", ""),
             kill_reason=d.get("kill_reason", ""),
             infra_exit_category=d.get("infra_exit_category", ""),
             token_usage=d.get("token_usage", {}),
@@ -140,6 +143,27 @@ class DispatchRecord:
             ended_at=d.get("ended_at", 0.0),
             sidecar_path=d.get("sidecar_path"),
             attempt_history=d.get("attempt_history", []),
+        )
+
+    @classmethod
+    def refused(
+        cls,
+        *,
+        name: str,
+        error_code: FleetErrorCode | str,
+        diagnostic_message: str,
+        dispatch_id: str = "",
+        caller_session_id: str = "",
+    ) -> DispatchRecord:
+        if not diagnostic_message or not diagnostic_message.strip():
+            raise ValueError("diagnostic_message is required for refused records")
+        return cls(
+            name=name,
+            status=DispatchStatus.REFUSED,
+            reason=str(error_code),
+            diagnostic_message=diagnostic_message,
+            dispatch_id=dispatch_id,
+            caller_session_id=caller_session_id,
         )
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -881,3 +882,207 @@ class TestStderrEnvelopeForwarding:
 
         result = await _run(tool_ctx)
         assert result["stderr"] == ""
+
+
+class TestCrashPathDiagnosticPersistence:
+    """When _run_dispatch raises, the exception message must be persisted to campaign state."""
+
+    async def test_crash_persists_exception_message_to_campaign_state(
+        self, tool_ctx, monkeypatch, tmp_path: Path
+    ) -> None:
+        """Inject RuntimeError into _run_dispatch; verify campaign state carries the message."""
+        from autoskillit.fleet import (
+            DispatchRecord,
+            read_state,
+            write_initial_state,
+        )
+        from tests.fakes import InMemoryHeadlessExecutor
+
+        campaign_state_path = tmp_path / "campaign.json"
+        write_initial_state(
+            campaign_state_path,
+            "cmp-crash",
+            "test-campaign",
+            "/m.yaml",
+            [DispatchRecord(name="dispatch-a")],
+        )
+        _setup_dispatch(tool_ctx, monkeypatch)
+        executor = InMemoryHeadlessExecutor()
+
+        # Inject a crash: any dispatch result will be replaced with a raising call
+        async def crashing_run(*args, **kwargs):
+            raise RuntimeError("kaboom: database connection lost")
+
+        executor.dispatch_food_truck = crashing_run  # type: ignore[method-assign]
+        tool_ctx.executor = executor
+
+        from autoskillit.fleet._api import execute_dispatch
+        from tests.fleet._helpers import (
+            _no_sleep_quota_checker,
+            _noop_quota_refresher,
+            _simple_prompt_builder,
+        )
+
+        result = await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="do something",
+            ingredients=None,
+            dispatch_name="dispatch-a",
+            timeout_sec=None,
+            prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+            campaign_state_path=campaign_state_path,
+        )
+
+        import json
+
+        envelope = json.loads(result.to_envelope())
+        assert envelope["success"] is False
+        assert envelope["error"] == "fleet_l3_startup_or_crash"
+        assert "RuntimeError" in envelope["user_visible_message"]
+        assert "kaboom: database connection lost" in envelope["user_visible_message"]
+
+        state = read_state(campaign_state_path)
+        assert state is not None
+        refused = [d for d in state.dispatches if d.status.value == "refused"]
+        assert len(refused) == 1
+        assert refused[0].diagnostic_message != ""
+        assert "RuntimeError" in refused[0].diagnostic_message
+        assert "kaboom: database connection lost" in refused[0].diagnostic_message
+        assert refused[0].reason == "fleet_l3_startup_or_crash"
+
+    async def test_crash_logs_structured_fields(self, tool_ctx, monkeypatch, caplog) -> None:
+        """WARNING log must include exc_type, dispatch_name, and campaign_state_path."""
+        import structlog
+
+        from tests.fakes import InMemoryHeadlessExecutor
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+        executor = InMemoryHeadlessExecutor()
+
+        async def crashing_run(*args, **kwargs):
+            raise TypeError("unexpected None in argument")
+
+        executor.dispatch_food_truck = crashing_run  # type: ignore[method-assign]
+        tool_ctx.executor = executor
+
+        from autoskillit.fleet._api import execute_dispatch
+        from tests.fleet._helpers import (
+            _no_sleep_quota_checker,
+            _noop_quota_refresher,
+            _simple_prompt_builder,
+        )
+
+        with structlog.testing.capture_logs() as cap:
+            result = await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="do something",
+                ingredients=None,
+                dispatch_name="my-test-dispatch",
+                timeout_sec=None,
+                prompt_builder=_simple_prompt_builder,
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
+                campaign_state_path=None,
+            )
+
+        import json
+
+        envelope = json.loads(result.to_envelope())
+        assert envelope["error"] == "fleet_l3_startup_or_crash"
+
+        warning_logs = [
+            r
+            for r in cap
+            if r.get("event", "") == "execute_dispatch crashed before dispatch completion"
+        ]
+        assert len(warning_logs) >= 1
+        log_record = warning_logs[0]
+        assert log_record.get("exc_type") == "TypeError"
+        assert log_record.get("dispatch_name") == "my-test-dispatch"
+        assert "campaign_state_path" in log_record
+
+    async def test_reject_with_state_persists_message_to_both_states(
+        self, tool_ctx, monkeypatch, tmp_path: Path
+    ) -> None:
+        """_reject_with_state persists diagnostic message to both state files.
+
+        The diagnostic message should be written to both the per-dispatch state file
+        and the campaign state file when a dispatch is rejected.
+        """
+        from autoskillit.fleet import (
+            DispatchRecord,
+            DispatchStateHandle,
+            read_state,
+            write_initial_state,
+        )
+        from tests.fakes import InMemoryHeadlessExecutor
+
+        campaign_state_path = tmp_path / "campaign.json"
+        dispatches_dir = tmp_path / "dispatches"
+        dispatches_dir.mkdir()
+        write_initial_state(
+            campaign_state_path,
+            "cmp-reject",
+            "test-campaign",
+            "/m.yaml",
+            [DispatchRecord(name="dispatch-b")],
+        )
+        DispatchStateHandle.create_fresh(
+            dispatches_dir,
+            "cmp-reject",
+            "test-campaign",
+            "dispatch-b",
+            [DispatchRecord(name="dispatch-b")],
+            None,
+        )
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+        # Align kitchen_id with the test's campaign_id so execute_dispatch uses the same state file
+        tool_ctx.kitchen_id = "cmp-reject"
+        executor = InMemoryHeadlessExecutor()
+
+        # Make executor raise on run so we hit _reject_with_state after state creation
+        async def bad_ingredients_run(*args, **kwargs):
+            raise ValueError("this won't reach the normal flow")
+
+        executor.dispatch_food_truck = bad_ingredients_run  # type: ignore[method-assign]
+        tool_ctx.executor = executor
+
+        from autoskillit.fleet._api import execute_dispatch
+        from tests.fleet._helpers import (
+            _no_sleep_quota_checker,
+            _noop_quota_refresher,
+            _simple_prompt_builder,
+        )
+
+        # Pass unknown ingredients to hit _reject_with_state (which is post-dispatch-id)
+        result = await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="do something",
+            ingredients={"unknown_ingredient_key": "value"},
+            dispatch_name="dispatch-b",
+            timeout_sec=None,
+            prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+            campaign_state_path=campaign_state_path,
+        )
+
+        import json
+
+        envelope = json.loads(result.to_envelope())
+        assert envelope["success"] is False
+        assert "Unknown ingredient keys" in envelope["user_visible_message"]
+
+        # Campaign state should have diagnostic_message written by _reject_with_state
+        campaign_state = read_state(campaign_state_path)
+        assert campaign_state is not None
+        refused_campaign = [d for d in campaign_state.dispatches if d.status.value == "refused"]
+        assert len(refused_campaign) == 1
+        assert refused_campaign[0].diagnostic_message != ""
+        assert "Unknown ingredient keys" in refused_campaign[0].diagnostic_message

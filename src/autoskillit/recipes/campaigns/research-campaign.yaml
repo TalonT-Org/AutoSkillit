@@ -142,7 +142,9 @@ dispatches:
       review_pr: "${{ inputs.review_pr }}"
       audit_claims: "${{ inputs.audit_claims }}"
     capture:
-      pr_url: "${{ result.pr_url }}"
+      pr_url:
+        from: "${{ result.pr_url }}"
+        type: optional_string
       report_path_after_finalize: "${{ result.report_path_after_finalize }}"
     depends_on:
       - run-implement
@@ -150,6 +152,7 @@ dispatches:
   - name: run-archive
     recipe: research-archive
     task: "Archive research artifacts and close experiment PR."
+    skip_when: "${{ inputs.output_mode }} == local"
     ingredients:
       base_branch: "${{ inputs.base_branch }}"
       worktree_path: "${{ campaign.worktree_path }}"

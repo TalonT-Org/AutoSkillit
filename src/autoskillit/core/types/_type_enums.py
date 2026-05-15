@@ -412,6 +412,7 @@ class FleetErrorCode(StrEnum):
     FLEET_GATE_NO_CAMPAIGN = "fleet_gate_no_campaign"
     FLEET_ACQUIRE_TIMEOUT = "fleet_acquire_timeout"
     FLEET_RECIPE_INVALID = "fleet_recipe_invalid"
+    FLEET_DISPATCH_SKIPPED = "fleet_dispatch_skipped"
 
 
 class FeatureLifecycle(StrEnum):

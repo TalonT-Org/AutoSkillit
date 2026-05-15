@@ -90,6 +90,7 @@ async def dispatch_food_truck(
     resume_checkpoint: dict[str, object] | None = None,
     idle_output_timeout: int | None = None,
     prior_dispatch_id: str | None = None,
+    skip_when: str | None = None,
     ctx: Context = CurrentContext(),
 ) -> str:
     """Dispatch a single food truck L2 session for one recipe.
@@ -110,6 +111,9 @@ async def dispatch_food_truck(
         resume_checkpoint: Checkpoint dict from a prior RESUMABLE dispatch envelope.
             Pass the "resume_checkpoint" field from the prior result to inject completed
             items context into the resume prompt.
+        skip_when: Optional condition expression. If evaluation against accumulated
+            campaign captures returns true, the dispatch is recorded as SKIPPED without
+            executing the recipe.
 
     Never raises.
     """
@@ -176,8 +180,11 @@ async def dispatch_food_truck(
         from autoskillit.fleet import (  # noqa: PLC0415
             _INFRASTRUCTURE_FAILURE_REASONS,
             DispatchCompleted,
+            DispatchRecord,
             DispatchStatus,
             execute_dispatch,
+            read_all_campaign_captures,
+            upsert_dispatch_record_by_name,
         )
         from autoskillit.server import _get_ctx
         from autoskillit.server._misc import (  # noqa: PLC0415
@@ -194,6 +201,56 @@ async def dispatch_food_truck(
 
         caller_session_id = find_caller_session_id(project_dir=tool_ctx.project_dir)
         effective_name = dispatch_name or recipe
+
+        if skip_when:
+            import re
+
+            _SKIP_CAMPAIGN_REF_RE = re.compile(r"\$\{\{\s*campaign\.(\w+)\s*\}\}")
+            dispatches_dir = tool_ctx.temp_dir / "dispatches"
+            accumulated_captures = read_all_campaign_captures(dispatches_dir, tool_ctx.kitchen_id)
+
+            def _resolve_skip_ref(m: re.Match) -> str:
+                ref = m.group(1)
+                if ref not in accumulated_captures:
+                    return m.group(0)
+                return accumulated_captures[ref]
+
+            resolved_skip_when = _SKIP_CAMPAIGN_REF_RE.sub(_resolve_skip_ref, skip_when)
+            resolved_skip_when = resolved_skip_when.strip()
+
+            skip_condition_true = False
+            parts = resolved_skip_when.split()
+            if len(parts) == 3 and parts[1] in ("==", "!="):
+
+                def _strip_quotes(s: str) -> str:
+                    if (s.startswith("'") and s.endswith("'")) or (
+                        s.startswith('"') and s.endswith('"')
+                    ):
+                        return s[1:-1]
+                    return s
+
+                lhs = _strip_quotes(parts[0])
+                rhs = _strip_quotes(parts[2])
+                if parts[1] == "==":
+                    skip_condition_true = lhs == rhs
+                else:
+                    skip_condition_true = lhs != rhs
+
+            if skip_condition_true:
+                if campaign_state_path_str:
+                    upsert_dispatch_record_by_name(
+                        Path(campaign_state_path_str),
+                        DispatchRecord(
+                            name=effective_name,
+                            status=DispatchStatus.SKIPPED,
+                            reason="skip_when condition evaluated to true",
+                        ),
+                    )
+                return fleet_error(
+                    FleetErrorCode.FLEET_DISPATCH_SKIPPED,
+                    "Dispatch skipped: skip_when condition evaluated to true",
+                )
+
         result = await execute_dispatch(
             tool_ctx=tool_ctx,
             recipe=recipe,

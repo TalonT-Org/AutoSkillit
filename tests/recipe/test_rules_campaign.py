@@ -1724,3 +1724,92 @@ def test_dispatch_capture_field_in_all_sentinels_fires_on_path_exclusive_field(t
     assert found[0].severity == Severity.ERROR
     assert "pr_url" in found[0].message
     assert "not all sentinel" in found[0].message.lower()
+
+
+# ---------------------------------------------------------------------------
+# T?: dispatch-skip-when-valid-expression
+# ---------------------------------------------------------------------------
+
+
+def test_skip_when_refs_valid_input_no_finding():
+    """Rule passes when skip_when references a declared campaign ingredient."""
+    recipe = _campaign(
+        ingredients={"output_mode": {"description": "Output mode", "default": "local"}},
+        dispatches=[
+            CampaignDispatch(
+                name="phase-one",
+                recipe="impl",
+                task="do it",
+                skip_when="${{ inputs.output_mode }} == local",
+            ),
+        ],
+    )
+    found = _findings(recipe, "dispatch-skip-when-valid-expression")
+    assert not found
+
+
+def test_skip_when_refs_undefined_input_fires_error():
+    """Rule fires when skip_when references an undeclared campaign ingredient."""
+    recipe = _campaign(
+        ingredients={},
+        dispatches=[
+            CampaignDispatch(
+                name="phase-one",
+                recipe="impl",
+                task="do it",
+                skip_when="${{ inputs.nonexistent }} == x",
+            ),
+        ],
+    )
+    found = _findings(recipe, "dispatch-skip-when-valid-expression")
+    assert len(found) == 1
+    assert found[0].severity == Severity.ERROR
+    assert "nonexistent" in found[0].message
+
+
+def test_skip_when_refs_campaign_capture_from_ancestor():
+    """Rule passes when skip_when references a campaign capture from an ancestor dispatch."""
+    recipe = _campaign(
+        dispatches=[
+            CampaignDispatch(
+                name="phase-one",
+                recipe="impl",
+                task="do it",
+                capture={"pr_url": _cap("${{ result.pr_url }}")},
+            ),
+            CampaignDispatch(
+                name="phase-two",
+                recipe="impl",
+                task="do it again",
+                skip_when="${{ campaign.pr_url }} == ''",
+                depends_on=["phase-one"],
+            ),
+        ],
+    )
+    found = _findings(recipe, "dispatch-skip-when-valid-expression")
+    assert not found
+
+
+def test_skip_when_refs_missing_campaign_capture_fires_error():
+    """Rule fires when skip_when references a campaign capture not from any ancestor."""
+    recipe = _campaign(
+        dispatches=[
+            CampaignDispatch(
+                name="phase-one",
+                recipe="impl",
+                task="do it",
+                capture={"other_key": _cap("${{ result.other }}")},
+            ),
+            CampaignDispatch(
+                name="phase-two",
+                recipe="impl",
+                task="do it again",
+                skip_when="${{ campaign.pr_url }} == ''",
+                depends_on=["phase-one"],
+            ),
+        ],
+    )
+    found = _findings(recipe, "dispatch-skip-when-valid-expression")
+    assert len(found) == 1
+    assert found[0].severity == Severity.ERROR
+    assert "pr_url" in found[0].message

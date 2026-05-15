@@ -688,3 +688,42 @@ def test_parse_recipe_defaults_type_to_none_when_absent() -> None:
     }
     recipe = _parse_recipe(data)
     assert recipe.ingredients["base_branch"].type is None
+
+
+def test_campaign_dispatch_skip_when_parsed() -> None:
+    """_parse_recipe parses skip_when field from a campaign dispatch entry."""
+    data = {
+        "name": "test-campaign",
+        "kind": "campaign",
+        "dispatches": [
+            {
+                "name": "run-archive",
+                "recipe": "research-archive",
+                "task": "Archive artifacts",
+                "skip_when": "${{ inputs.output_mode }} == local",
+            }
+        ],
+        "steps": {},
+    }
+    recipe = _parse_recipe(data)
+    assert len(recipe.dispatches) == 1
+    assert recipe.dispatches[0].skip_when == "${{ inputs.output_mode }} == local"
+
+
+def test_campaign_dispatch_skip_when_default_none() -> None:
+    """A dispatch without skip_when has skip_when=None."""
+    data = {
+        "name": "test-campaign",
+        "kind": "campaign",
+        "dispatches": [
+            {
+                "name": "run-archive",
+                "recipe": "research-archive",
+                "task": "Archive artifacts",
+            }
+        ],
+        "steps": {},
+    }
+    recipe = _parse_recipe(data)
+    assert len(recipe.dispatches) == 1
+    assert recipe.dispatches[0].skip_when is None

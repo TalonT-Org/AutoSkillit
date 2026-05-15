@@ -59,7 +59,7 @@ def test_recipe_validates_clean(recipe):
 
 
 def test_done_unconfirmed_stop_exists(recipe) -> None:
-    """implementation-groups.yaml must have a done_unconfirmed stop step for merge-timeout paths."""
+    """implementation-groups.yaml needs done_unconfirmed stop for merge-timeout paths."""
     assert "done_unconfirmed" in recipe.steps
     step = recipe.steps["done_unconfirmed"]
     assert step.action == "stop"

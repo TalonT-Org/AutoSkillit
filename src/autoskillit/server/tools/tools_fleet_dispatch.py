@@ -203,7 +203,7 @@ async def dispatch_food_truck(
         effective_name = dispatch_name or recipe
 
         if skip_when:
-            import re
+            import regex as re
 
             _SKIP_CAMPAIGN_REF_RE = re.compile(r"\$\{\{\s*campaign\.(\w+)\s*\}\}")
             dispatches_dir = tool_ctx.temp_dir / "dispatches"

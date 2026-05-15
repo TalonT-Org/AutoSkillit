@@ -903,6 +903,12 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "splitting into sub-modules would obscure the check sequence and break the test "
         "filter cascade",
     ),
+    "rules_campaign.py": (
+        1100,
+        "REQ-CNST-010-E5: campaign validation rules — dispatch-skip-when-valid-expression "
+        "rule added alongside existing route-gate and dependency rules; single-file "
+        "co-location preserves rule cross-referencing and rule registration order",
+    ),
 }
 
 

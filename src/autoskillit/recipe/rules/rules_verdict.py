@@ -319,7 +319,7 @@ def _check_verdict_output_requires_on_result(ctx: ValidationContext) -> list[Rul
     for step_name, step in ctx.recipe.steps.items():
         if step.tool != "run_skill":
             continue
-        skill_command = (step.with_args or {}).get("skill_command", "")
+        skill_command = str((step.with_args or {}).get("skill_command") or "")
         skill_name = resolve_skill_name(skill_command)
         if not skill_name:
             continue
@@ -341,7 +341,7 @@ def _check_verdict_output_requires_on_result(ctx: ValidationContext) -> list[Rul
         # a verdict-declaring skill but don't capture the verdict are intentionally
         # ignoring it (e.g. routing on a different output like needs_rerun).
         capture = step.capture or {}
-        verdict_is_captured = any("result.verdict" in str(expr) for expr in capture.values())
+        verdict_is_captured = any("result.verdict" in expr for expr in capture.values())
         if not verdict_is_captured:
             continue
 

@@ -655,9 +655,9 @@ def _check_downstream_context_completeness(ctx: ValidationContext) -> list[RuleF
                     )
 
         if step.capture or step.capture_list:
-            for ctx_var in step.capture or {}:
+            for ctx_var in step.capture:
                 produced_context.add(ctx_var)
-            for ctx_var in step.capture_list or {}:
+            for ctx_var in step.capture_list:
                 produced_context.add(ctx_var)
 
     return findings

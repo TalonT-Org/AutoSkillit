@@ -6,7 +6,6 @@ import json
 
 import pytest
 
-from autoskillit.fleet.state_types import DispatchResult
 from tests.fleet._helpers import (
     _make_recipe_info,
     _no_sleep_quota_checker,
@@ -102,9 +101,7 @@ async def test_design_captured_values_propagate_to_implement_dispatch(tool_ctx, 
         quota_refresher=_noop_quota_refresher,
     )
 
-    if isinstance(raw, DispatchResult):
-        raw = raw.outcome
-    result = json.loads(raw.to_envelope())
+    result = json.loads(raw.outcome.to_envelope())
     assert result["success"] is True
 
     state_data = _read_state_file(tool_ctx)
@@ -173,9 +170,7 @@ async def test_missing_campaign_ref_returns_fleet_error(tool_ctx):
         quota_refresher=_noop_quota_refresher,
     )
 
-    if isinstance(raw, DispatchResult):
-        raw = raw.outcome
-    result = json.loads(raw.to_envelope())
+    result = json.loads(raw.outcome.to_envelope())
     assert result["success"] is False
     assert result["error"] == "fleet_unknown_ingredient"
     assert "campaign.worktree_path" in result["user_visible_message"]
@@ -213,9 +208,7 @@ async def test_partial_capture_propagates_only_captured_keys(tool_ctx, monkeypat
         quota_refresher=_noop_quota_refresher,
     )
 
-    if isinstance(raw, DispatchResult):
-        raw = raw.outcome
-    result = json.loads(raw.to_envelope())
+    result = json.loads(raw.outcome.to_envelope())
     assert result["success"] is True
 
     raw = await execute_dispatch(
@@ -234,9 +227,7 @@ async def test_partial_capture_propagates_only_captured_keys(tool_ctx, monkeypat
         quota_refresher=_noop_quota_refresher,
     )
 
-    if isinstance(raw, DispatchResult):
-        raw = raw.outcome
-    result = json.loads(raw.to_envelope())
+    result = json.loads(raw.outcome.to_envelope())
     assert result["success"] is False
     assert "error" in result
 
@@ -337,9 +328,7 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
         quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
-    if isinstance(raw, DispatchResult):
-        raw = raw.outcome
-    result = json.loads(raw.to_envelope())
+    result = json.loads(raw.outcome.to_envelope())
     assert result["success"] is True, f"run-design failed: {result}"
 
     # Verify design captures
@@ -404,9 +393,7 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
         quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
-    if isinstance(raw, DispatchResult):
-        raw = raw.outcome
-    result = json.loads(raw.to_envelope())
+    result = json.loads(raw.outcome.to_envelope())
     assert result["success"] is True, f"run-implement failed: {result}"
 
     # Verify implement resolved all campaign refs from design captures
@@ -487,9 +474,7 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
         quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
-    if isinstance(raw, DispatchResult):
-        raw = raw.outcome
-    result = json.loads(raw.to_envelope())
+    result = json.loads(raw.outcome.to_envelope())
     assert result["success"] is True, f"run-review failed: {result}"
 
     # Verify review resolved all campaign refs from prior captures
@@ -552,9 +537,7 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
         quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
-    if isinstance(raw, DispatchResult):
-        raw = raw.outcome
-    result = json.loads(raw.to_envelope())
+    result = json.loads(raw.outcome.to_envelope())
     assert result["success"] is True, f"run-archive failed: {result}"
 
     # Verify archive resolved pr_url from review captures
@@ -650,9 +633,7 @@ async def test_cross_phase_paths_are_coherent_when_implement_creates_new_worktre
         quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
-    if isinstance(raw, DispatchResult):
-        raw = raw.outcome
-    result = json.loads(raw.to_envelope())
+    result = json.loads(raw.outcome.to_envelope())
     assert result["success"] is True, f"run-design failed: {result}"
 
     state_files = list((tool_ctx.temp_dir / "dispatches").glob("*.json"))
@@ -714,9 +695,7 @@ async def test_cross_phase_paths_are_coherent_when_implement_creates_new_worktre
         quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
-    if isinstance(raw, DispatchResult):
-        raw = raw.outcome
-    result = json.loads(raw.to_envelope())
+    result = json.loads(raw.outcome.to_envelope())
     assert result["success"] is True, f"run-implement failed: {result}"
 
     # After implement, campaign.worktree_path should be /tmp/wt-B (updated anchor)
@@ -795,9 +774,7 @@ async def test_cross_phase_paths_are_coherent_when_implement_creates_new_worktre
         quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
-    if isinstance(raw, DispatchResult):
-        raw = raw.outcome
-    result = json.loads(raw.to_envelope())
+    result = json.loads(raw.outcome.to_envelope())
     assert result["success"] is True, f"run-review failed: {result}"
 
     # All paths must be coherent — rooted in the same worktree (/tmp/wt-B)

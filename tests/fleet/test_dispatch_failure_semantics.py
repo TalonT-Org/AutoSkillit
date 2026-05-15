@@ -9,7 +9,6 @@ import pytest
 
 from autoskillit.core.types import CliSubtype
 from autoskillit.fleet.result_parser import L3ParseResult
-from autoskillit.fleet.state_types import DispatchResult
 from tests.fakes import InMemoryHeadlessExecutor
 from tests.fleet._helpers import _setup_dispatch
 
@@ -39,7 +38,7 @@ async def _run(
 ) -> dict:
     from autoskillit.fleet._api import execute_dispatch
 
-    raw = await execute_dispatch(
+    result = await execute_dispatch(
         tool_ctx=tool_ctx,
         recipe=recipe,
         task="t",
@@ -50,9 +49,7 @@ async def _run(
         quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
-    if isinstance(raw, DispatchResult):
-        raw = raw.outcome
-    return json.loads(raw.to_envelope())
+    return json.loads(result.outcome.to_envelope())
 
 
 def _read_dispatch_record(tool_ctx) -> dict:
@@ -962,10 +959,13 @@ class TestCrashPathDiagnosticPersistence:
             quota_refresher=_noop_quota_refresher,
             campaign_state_path=campaign_state_path,
         )
+        from autoskillit.server.tools.tools_fleet_dispatch import _write_dispatch_to_campaign_state
 
-        if isinstance(result, DispatchResult):
-            result = result.outcome
-        envelope = json.loads(result.to_envelope())
+        _write_dispatch_to_campaign_state(
+            str(campaign_state_path), "dispatch-a", result.outcome, result.per_dispatch_state_path
+        )
+
+        envelope = json.loads(result.outcome.to_envelope())
         assert envelope["success"] is False
         assert envelope["error"] == "fleet_l3_startup_or_crash"
         assert "RuntimeError" in envelope["user_visible_message"]
@@ -1015,9 +1015,7 @@ class TestCrashPathDiagnosticPersistence:
                 campaign_state_path=None,
             )
 
-        if isinstance(result, DispatchResult):
-            result = result.outcome
-        envelope = json.loads(result.to_envelope())
+        envelope = json.loads(result.outcome.to_envelope())
         assert envelope["error"] == "fleet_l3_startup_or_crash"
 
         warning_logs = [
@@ -1076,14 +1074,16 @@ class TestCrashPathDiagnosticPersistence:
             quota_refresher=_noop_quota_refresher,
             campaign_state_path=campaign_state_path,
         )
+        from autoskillit.server.tools.tools_fleet_dispatch import _write_dispatch_to_campaign_state
 
-        if isinstance(result, DispatchResult):
-            result = result.outcome
-        envelope = json.loads(result.to_envelope())
+        _write_dispatch_to_campaign_state(
+            str(campaign_state_path), "dispatch-b", result.outcome, result.per_dispatch_state_path
+        )
+
+        envelope = json.loads(result.outcome.to_envelope())
         assert envelope["success"] is False
         assert "Unknown ingredient keys" in envelope["user_visible_message"]
 
-        # Campaign state should have diagnostic_message written by _reject_with_state
         campaign_state = read_state(campaign_state_path)
         assert campaign_state is not None
         refused_campaign = [d for d in campaign_state.dispatches if d.status.value == "refused"]

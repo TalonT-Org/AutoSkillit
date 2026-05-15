@@ -626,6 +626,7 @@
       "capture": {
         "experiment_results": "${{ result.results_path }}",
         "experiment_verdict": "${{ result.verdict }}",
+        "blocked_hypotheses": "${{ result.blocked_hypotheses }}",
         "group_manifest": "${{ result.group_manifest }}"
       },
       "on_result": [

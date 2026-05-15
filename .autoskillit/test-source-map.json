@@ -649,7 +649,7 @@
     "tests/infra/test_hook_executability.py",
     "tests/infra/test_hook_settings.py",
     "tests/infra/test_pretty_output_integration.py",
-    "tests/infra/test_quota_check.py",
+    "tests/hooks/test_quota_check.py",
     "tests/migration/test_api.py",
     "tests/migration/test_engine.py",
     "tests/migration/test_loader.py",
@@ -874,7 +874,7 @@
     "tests/infra/test_open_kitchen_guard.py",
     "tests/infra/test_pretty_output.py",
     "tests/infra/test_pretty_output_integration.py",
-    "tests/infra/test_quota_check.py",
+    "tests/hooks/test_quota_check.py",
     "tests/infra/test_token_summary_appender.py",
     "tests/migration/test_engine.py",
     "tests/pipeline/test_gate.py",
@@ -1317,7 +1317,7 @@
     "tests/execution/test_session_log.py",
     "tests/execution/test_session_log_integration.py",
     "tests/franchise/test_franchise_e2e.py",
-    "tests/infra/test_quota_check.py",
+    "tests/hooks/test_quota_check.py",
     "tests/server/test_factory_recording.py",
     "tests/server/test_headless_session.py",
     "tests/server/test_lifespan.py",
@@ -1427,7 +1427,7 @@
   "src/autoskillit/hooks/_hook_settings.py": [
     "tests/execution/test_quota.py",
     "tests/infra/test_hook_settings.py",
-    "tests/infra/test_quota_check.py",
+    "tests/hooks/test_quota_check.py",
     "tests/infra/test_quota_post_check.py"
   ],
   "src/autoskillit/hooks/franchise_dispatch_guard.py": [
@@ -1451,7 +1451,7 @@
   ],
   "src/autoskillit/hooks/quota_guard.py": [
     "tests/execution/test_quota.py",
-    "tests/infra/test_quota_check.py"
+    "tests/hooks/test_quota_check.py"
   ],
   "src/autoskillit/hooks/quota_post_hook.py": [
     "tests/infra/test_quota_post_check.py"

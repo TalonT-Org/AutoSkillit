@@ -26,6 +26,13 @@ def test_no_retired_skill_name_has_a_live_directory() -> None:
             )
 
 
+def test_audit_feature_gates_in_retired_skill_names() -> None:
+    """audit-feature-gates is in RETIRED_SKILL_NAMES after unbundling."""
+    from autoskillit.core.types._type_constants import RETIRED_SKILL_NAMES
+
+    assert "audit-feature-gates" in RETIRED_SKILL_NAMES
+
+
 def test_scan_directory_raises_on_retired_skill(tmp_path: Path) -> None:
     """DefaultSkillResolver raises RuntimeError if a retired skill directory is discovered."""
     from autoskillit.core import RETIRED_SKILL_NAMES

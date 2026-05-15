@@ -294,7 +294,7 @@ def _check_capture_list_requires_retries_zero(ctx: ValidationContext) -> list[Ru
                     step_name=step_name,
                     message=(
                         f"Step '{step_name}' uses capture_list (accumulated across "
-                        f"lens iterations) but has retries: {step.retries}. Each retry "
+                        f"pipeline iterations) but has retries: {step.retries}. Each retry "
                         f"re-initializes the list, producing duplicate entries. "
                         f"Set retries: 0 and use on_context_limit routing to resume "
                         f"in the existing worktree."

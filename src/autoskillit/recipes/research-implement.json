@@ -430,7 +430,8 @@
       },
       "capture": {
         "experiment_results": "${{ result.results_path }}",
-        "experiment_verdict": "${{ result.verdict }}"
+        "experiment_verdict": "${{ result.verdict }}",
+        "blocked_hypotheses": "${{ result.blocked_hypotheses }}"
       },
       "on_result": [
         {

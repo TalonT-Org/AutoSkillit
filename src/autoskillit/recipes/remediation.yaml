@@ -198,6 +198,7 @@ steps:
       plan_path: "${{ result.plan_path }}"
     capture_list:
       plan_parts: "${{ result.plan_parts }}"
+    retries: 0
     on_success: review
     on_failure: release_issue_failure
     note: >
@@ -379,6 +380,7 @@ steps:
       plan_path: "${{ result.plan_path }}"
     capture_list:
       plan_parts: "${{ result.plan_parts }}"
+    retries: 0
     on_success: dry_walkthrough
     on_failure: release_issue_failure
 

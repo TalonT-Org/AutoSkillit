@@ -136,6 +136,7 @@ steps:
       dispatch_items: "${{ context.phase_ids }}"
     capture_list:
       elab_result_path: "${{ result.elab_result_path }}"
+    retries: 0
     on_success: merge_phases
     on_failure: escalate_stop
     note: >
@@ -195,6 +196,7 @@ steps:
       dispatch_items: "${{ context.assignment_context_paths }}"
     capture_list:
       phase_assignments_result_dir: "${{ result.phase_assignments_result_dir }}"
+    retries: 0
     on_success: merge_assignments
     on_failure: escalate_stop
     note: >
@@ -227,6 +229,7 @@ steps:
       dispatch_items: "${{ context.refine_context_paths }}"
     capture_list:
       phase_refined_path: "${{ result.phase_refined_path }}"
+    retries: 0
     on_success: merge_refined_assignments
     on_failure: escalate_stop
     note: >
@@ -270,6 +273,7 @@ steps:
       dispatch_items: "${{ context.wp_context_paths }}"
     capture_list:
       phase_wps_result_dir: "${{ result.phase_wps_result_dir }}"
+    retries: 0
     on_success: finalize_wp_manifest
     on_failure: escalate_stop
     note: >

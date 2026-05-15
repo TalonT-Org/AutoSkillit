@@ -209,17 +209,26 @@ def _check_python_capture_output_coverage(ctx: ValidationContext) -> list[RuleFi
     severity=Severity.ERROR,
 )
 def _check_dead_output(ctx: ValidationContext) -> list[RuleFinding]:
-    """Error when any captured context variable is never consumed downstream."""
-    return [
-        RuleFinding(
-            rule="dead-output",
-            severity=Severity.ERROR,
-            step_name=w.step_name,
-            message=w.message,
+    """Error when a capture variable is never consumed downstream; warning for capture_list."""
+    findings: list[RuleFinding] = []
+    for w in ctx.dataflow.warnings:
+        if w.code != "DEAD_OUTPUT":
+            continue
+        step = ctx.recipe.steps.get(w.step_name)
+        is_capture_list_only = (
+            step is not None
+            and w.field in (step.capture_list or {})
+            and w.field not in (step.capture or {})
         )
-        for w in ctx.dataflow.warnings
-        if w.code == "DEAD_OUTPUT"
-    ]
+        findings.append(
+            RuleFinding(
+                rule="dead-output",
+                severity=Severity.WARNING if is_capture_list_only else Severity.ERROR,
+                step_name=w.step_name,
+                message=w.message,
+            )
+        )
+    return findings
 
 
 @semantic_rule(

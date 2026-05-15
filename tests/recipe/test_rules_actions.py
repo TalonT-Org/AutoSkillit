@@ -125,7 +125,7 @@ class TestSilentFailureSkillStep:
             {
                 "lens": {
                     "tool": "run_skill",
-                    "with": {"skill_command": "/autoskillit:exp-lens-diagram test"},
+                    "with_args": {"skill_command": "/autoskillit:exp-lens-diagram test"},
                     "on_success": "bundle",
                     "on_failure": "bundle",
                 },
@@ -143,7 +143,7 @@ class TestSilentFailureSkillStep:
             {
                 "lens": {
                     "tool": "run_skill",
-                    "with": {"skill_command": "/autoskillit:exp-lens-diagram test"},
+                    "with_args": {"skill_command": "/autoskillit:exp-lens-diagram test"},
                     "on_success": "bundle",
                     "on_failure": "bundle",
                     "note": "Partial results are acceptable.",
@@ -162,7 +162,7 @@ class TestSilentFailureSkillStep:
             {
                 "lens": {
                     "tool": "run_skill",
-                    "with": {"skill_command": "/autoskillit:exp-lens-diagram test"},
+                    "with_args": {"skill_command": "/autoskillit:exp-lens-diagram test"},
                     "on_success": "bundle",
                     "on_failure": "escalate",
                 },
@@ -181,7 +181,7 @@ class TestSilentFailureSkillStep:
             {
                 "cmd": {
                     "tool": "run_cmd",
-                    "with": {"cmd": "echo hello"},
+                    "with_args": {"cmd": "echo hello"},
                     "on_success": "done",
                     "on_failure": "done",
                 },

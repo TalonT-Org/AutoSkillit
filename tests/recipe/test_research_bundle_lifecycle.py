@@ -112,6 +112,7 @@ def test_finalize_bundle_script_manifest_idempotent(tmp_path):
     worktree_path.mkdir()
 
     (research_dir / "report.md").write_text("# Research Report\n\nSome content.\n")
+    (research_dir / "data.csv").write_text("col1,col2\nval1,val2\n")
 
     script_path = (
         Path(__file__).parent.parent.parent

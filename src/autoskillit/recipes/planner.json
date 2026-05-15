@@ -129,6 +129,7 @@
       "capture_list": {
         "elab_result_path": "${{ result.elab_result_path }}"
       },
+      "retries": 0,
       "on_success": "merge_phases",
       "on_failure": "escalate_stop",
       "note": "PARALLEL DISPATCH: context.phase_ids contains comma-separated phase IDs (e.g. \"P1,P2,P3\"). For each phase_id, substitute it into the {phase_id} placeholder in skill_command and issue one run_skill call. Run ALL elaborations in parallel (all run_skill calls in a single message). Accumulate each elab_result_path value via capture_list.\n"
@@ -189,6 +190,7 @@
       "capture_list": {
         "phase_assignments_result_dir": "${{ result.phase_assignments_result_dir }}"
       },
+      "retries": 0,
       "on_success": "merge_assignments",
       "on_failure": "escalate_stop",
       "note": "PARALLEL DISPATCH: context.assignment_context_paths contains comma-separated paths to per-phase context files. For each context_path, substitute it into the {context_path} placeholder in skill_command and issue one run_skill call. Run ALL elaborations in parallel. Accumulate results via capture_list.\n"
@@ -221,6 +223,7 @@
       "capture_list": {
         "phase_refined_path": "${{ result.phase_refined_path }}"
       },
+      "retries": 0,
       "on_success": "merge_refined_assignments",
       "on_failure": "escalate_stop",
       "note": "PARALLEL DISPATCH: context.refine_context_paths contains comma-separated paths to per-phase context files produced by merge_tier_results. For each context_path, substitute it into the {context_path} placeholder and issue one run_skill call. Run ALL refinements in parallel. Accumulate results via capture_list.\n"
@@ -263,6 +266,7 @@
       "capture_list": {
         "phase_wps_result_dir": "${{ result.phase_wps_result_dir }}"
       },
+      "retries": 0,
       "on_success": "finalize_wp_manifest",
       "on_failure": "escalate_stop",
       "note": "SEQUENTIAL DISPATCH: context.wp_context_paths contains comma-separated paths to per-phase WP context files. For each context_path, substitute it into the {context_path} placeholder in skill_command and issue one run_skill call. Wait for each elaboration to complete before starting the next. Accumulate results via capture_list.\n"

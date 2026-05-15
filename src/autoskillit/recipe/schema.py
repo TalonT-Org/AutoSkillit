@@ -121,7 +121,7 @@ class RecipeStep:
         default_factory=list
     )  # Captured output names used for informational propagation, not flow control
 
-    def __post_init(self) -> None:
+    def __post_init__(self) -> None:
         if self.capture_list and self.retries > 0:
             raise ValueError(
                 f"Step '{self.name}' uses capture_list (accumulated list items across "

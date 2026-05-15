@@ -182,6 +182,7 @@ class TestBuildTestScopeExecutionCascade:
         """headless.py change → skills compliance file; skills/ dir excluded."""
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         (tests_root / "skills" / "test_skill_output_compliance.py").touch()
+        (tests_root / "infra" / "test_pretty_output_hook_infra.py").touch()
         result = build_test_scope(
             changed_files={"src/autoskillit/execution/headless/__init__.py"},
             mode=FilterMode.CONSERVATIVE,
@@ -193,6 +194,9 @@ class TestBuildTestScopeExecutionCascade:
         assert any(p.name == "test_skill_output_compliance.py" for p in paths), (
             "headless change must include test_skill_output_compliance.py"
         )
+        assert any(p.name == "test_pretty_output_hook_infra.py" for p in paths), (
+            "headless change must include infra/test_pretty_output_hook_infra.py"
+        )
         assert "skills" not in path_names, (
             "headless change must NOT include the entire skills/ dir"
         )
@@ -201,6 +205,7 @@ class TestBuildTestScopeExecutionCascade:
         """process/*.py change → skills compliance file; skills/ dir excluded."""
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         (tests_root / "skills" / "test_skill_output_compliance.py").touch()
+        (tests_root / "infra" / "test_pretty_output_hook_infra.py").touch()
         result = build_test_scope(
             changed_files={"src/autoskillit/execution/process/runner.py"},
             mode=FilterMode.CONSERVATIVE,
@@ -210,6 +215,9 @@ class TestBuildTestScopeExecutionCascade:
         paths = {p for p in result}
         path_names = {p.name for p in paths}
         assert any(p.name == "test_skill_output_compliance.py" for p in paths)
+        assert any(p.name == "test_pretty_output_hook_infra.py" for p in paths), (
+            "process change must include infra/test_pretty_output_hook_infra.py"
+        )
         assert "skills" not in path_names
 
     def test_other_execution_module_excludes_skills(self, tmp_path: Path) -> None:

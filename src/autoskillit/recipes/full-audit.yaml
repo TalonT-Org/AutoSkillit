@@ -84,7 +84,7 @@ steps:
          - run_skill(skill_command="/autoskillit:audit-tests", cwd="${{ inputs.workspace }}", step_name="audit_tests")
          - run_skill(skill_command="/autoskillit:audit-cohesion", cwd="${{ inputs.workspace }}", step_name="audit_cohesion")
          - run_skill(skill_command="/autoskillit:audit-arch", cwd="${{ inputs.workspace }}", step_name="audit_arch")
-         - run_skill(skill_command="/audit-feature-gates", cwd="${{ inputs.workspace }}", step_name="audit_feature_gates")
+         - run_skill(skill_command="/audit-feature-gates", cwd="${{ inputs.workspace }}", step_name="audit_feature_gates")  # project-local skill (.autoskillit/skills/): bare /name invocation, no /autoskillit: prefix
          - run_skill(skill_command="/autoskillit:audit-docs", cwd="${{ inputs.workspace }}", step_name="audit_docs")
          - run_skill(skill_command="/autoskillit:audit-review-decisions", cwd="${{ inputs.workspace }}", step_name="audit_review_decisions")
 

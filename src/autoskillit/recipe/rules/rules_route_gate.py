@@ -9,7 +9,14 @@ from autoskillit.recipe.schema import RecipeKind
 
 
 def _reachable_stops(ctx: ValidationContext, target: str) -> set[str]:
-    """Return non-escalation stop steps reachable from target without crossing route gates."""
+    """Return non-escalation stop steps reachable from target without crossing route gates.
+
+    Returns an empty set when the target itself is a route gate — that gate manages its own
+    divergence and its paths are analyzed separately when the rule processes that gate.
+    """
+    target_step = ctx.recipe.steps.get(target)
+    if target_step is not None and target_step.action == "route":
+        return set()
     graph = ctx.step_graph
     visited: set[str] = {target}
     queue: list[str] = [target]
@@ -21,7 +28,7 @@ def _reachable_stops(ctx: ValidationContext, target: str) -> set[str]:
             continue
         if step.action == "stop" and not node.startswith("escalate"):
             stops.add(node)
-        if step.action == "route" and node != target:
+        if step.action == "route":
             continue
         for neighbor in graph.get(node, set()):
             if neighbor not in visited:

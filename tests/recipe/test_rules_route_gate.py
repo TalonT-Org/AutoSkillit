@@ -35,7 +35,7 @@ class TestRouteGateSharedStop:
         assert len(shared) == 1
         assert shared[0].severity == Severity.WARNING
         assert shared[0].step_name == "route_gate"
-        assert "shared" in shared[0].message.lower()
+        assert "same" in shared[0].message.lower()
 
     def test_disjoint_stops_no_finding(self) -> None:
         """Route gate with distinct stops for fallback and primary produces no finding."""
@@ -89,7 +89,7 @@ class TestRouteGateSharedStop:
             }
         )
         # Spoof as campaign
-        recipe._kind = RecipeKind.CAMPAIGN  # type: ignore[attr-defined]
+        recipe.kind = RecipeKind.CAMPAIGN
         findings = run_semantic_rules(recipe)
         shared = [f for f in findings if f.rule == "route-gate-shared-stop"]
         assert shared == []

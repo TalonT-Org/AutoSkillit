@@ -949,16 +949,20 @@ class TestCaptureListRequiresRetriesZero:
 
     def test_capture_list_with_default_retries_fires_error(self) -> None:
         """capture_list with no retries field (defaults to 3) must emit ERROR."""
-        steps = {
-            "lens": {
-                "tool": "run_skill",
-                "with": {"skill_command": "/autoskillit:exp-lens-diagram test"},
-                "capture_list": {"all_diagram_paths": "${{ result.diagram_path }}"},
-                "on_success": "done",
-            },
-            "done": {"action": "stop", "message": "Done."},
-        }
-        recipe = _make_workflow(steps)
+        step = RecipeStep(
+            name="lens",
+            tool="run_skill",
+            with_args={"skill_command": "/autoskillit:exp-lens-diagram test"},
+            capture_list={"all_diagram_paths": "${{ result.diagram_path }}"},
+            retries=0,
+            on_success="done",
+        )
+        step.retries = 3  # simulate missing retries: field (defaults to 3)
+        recipe = Recipe(
+            name="test",
+            description="test",
+            steps={"lens": step, "done": RecipeStep(action="stop", message="Done.")},
+        )
         findings = run_semantic_rules(recipe)
         errors = [f for f in findings if f.severity == Severity.ERROR]
         assert any(
@@ -987,17 +991,20 @@ class TestCaptureListRequiresRetriesZero:
 
     def test_capture_list_with_retries_explicit_fires_error(self) -> None:
         """capture_list with retries: 1 (explicit non-zero) must emit ERROR."""
-        steps = {
-            "audits": {
-                "tool": "run_skill",
-                "with": {"skill_command": "/autoskillit:audit-friction"},
-                "capture_list": {"audit_report_paths": "${{ result.audit_report_path }}"},
-                "retries": 1,
-                "on_success": "done",
-            },
-            "done": {"action": "stop", "message": "Done."},
-        }
-        recipe = _make_workflow(steps)
+        step = RecipeStep(
+            name="audits",
+            tool="run_skill",
+            with_args={"skill_command": "/autoskillit:audit-friction"},
+            capture_list={"audit_report_paths": "${{ result.audit_report_path }}"},
+            retries=0,
+            on_success="done",
+        )
+        step.retries = 1  # simulate explicit non-zero retries
+        recipe = Recipe(
+            name="test",
+            description="test",
+            steps={"audits": step, "done": RecipeStep(action="stop", message="Done.")},
+        )
         findings = run_semantic_rules(recipe)
         errors = [f for f in findings if f.severity == Severity.ERROR]
         assert any(

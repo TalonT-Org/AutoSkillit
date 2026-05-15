@@ -449,6 +449,7 @@ class TestDownstreamContextCompletenessRule:
                 "tool": "run_skill",
                 "with": {"skill_command": "/autoskillit:exp-lens-diagram test"},
                 "capture_list": {"all_diagram_paths": "${{ result.diagram_path }}"},
+                "retries": 0,
                 "on_success": "consume",
             },
             "consume": {
@@ -477,6 +478,7 @@ class TestDownstreamContextCompletenessRule:
                 "tool": "run_skill",
                 "with": {"skill_command": "/autoskillit:exp-lens-diagram test"},
                 "capture_list": {"all_diagram_paths": "${{ result.diagram_path }}"},
+                "retries": 0,
                 "on_success": "consume",
             },
             "consume": {

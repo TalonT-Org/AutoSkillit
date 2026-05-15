@@ -162,6 +162,7 @@ def compliant_multipart_recipe_with_list() -> Recipe:
                 with_args={"skill_command": "/autoskillit:make-plan inputs.task"},
                 capture={"plan_path": "${{ result.plan_path }}"},
                 capture_list={"plan_parts": "${{ result.plan_parts }}"},
+                retries=0,
                 note="Glob plan_dir for *_part_*.md or single plan file. Sort into plan_parts[].",
                 on_success="done",
             ),

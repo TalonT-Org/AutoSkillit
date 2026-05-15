@@ -65,6 +65,7 @@ def test_make_plan_with_plan_parts_capture_passes() -> None:
                     "cwd": "/tmp",
                 },
                 capture_list={"plan_parts": "${result.plan_parts}"},
+                retries=0,
             )
         }
     )

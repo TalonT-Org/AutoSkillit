@@ -570,24 +570,26 @@ def _on_result_recipe_with_verdict_skill() -> dict[str, RecipeStep]:
     }
 
 
+_VERDICT_SKILL_MANIFEST: dict = {
+    "version": "0.1.0",
+    "skills": {
+        "run-experiment": {
+            "inputs": [],
+            "outputs": [
+                {
+                    "name": "verdict",
+                    "type": "string",
+                    "allowed_values": ["CONCLUSIVE", "INCONCLUSIVE", "BLOCKED"],
+                }
+            ],
+        }
+    },
+}
+
+
 def test_verdict_output_requires_on_result_fires(monkeypatch: pytest.MonkeyPatch) -> None:
     """Rule must ERROR when a step uses on_success for a skill with verdict + allowed_values."""
-    manifest = {
-        "version": "0.1.0",
-        "skills": {
-            "run-experiment": {
-                "inputs": [],
-                "outputs": [
-                    {
-                        "name": "verdict",
-                        "type": "string",
-                        "allowed_values": ["CONCLUSIVE", "INCONCLUSIVE", "BLOCKED"],
-                    }
-                ],
-            }
-        },
-    }
-    monkeypatch.setattr(_rv, "load_bundled_manifest", lambda: manifest)
+    monkeypatch.setattr(_rv, "load_bundled_manifest", lambda: _VERDICT_SKILL_MANIFEST)
     findings = run_semantic_rules(_make_recipe(_on_success_recipe_with_verdict_skill()))
     rule_names = [f.rule for f in findings]
     assert "verdict-output-requires-on-result" in rule_names, (
@@ -603,22 +605,7 @@ def test_verdict_output_requires_on_result_passes_with_on_result(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Rule must not fire when step uses on_result with all verdict values covered."""
-    manifest = {
-        "version": "0.1.0",
-        "skills": {
-            "run-experiment": {
-                "inputs": [],
-                "outputs": [
-                    {
-                        "name": "verdict",
-                        "type": "string",
-                        "allowed_values": ["CONCLUSIVE", "INCONCLUSIVE", "BLOCKED"],
-                    }
-                ],
-            }
-        },
-    }
-    monkeypatch.setattr(_rv, "load_bundled_manifest", lambda: manifest)
+    monkeypatch.setattr(_rv, "load_bundled_manifest", lambda: _VERDICT_SKILL_MANIFEST)
     findings = run_semantic_rules(_make_recipe(_on_result_recipe_with_verdict_skill()))
     rule_names = [f.rule for f in findings]
     assert "verdict-output-requires-on-result" not in rule_names, (
@@ -631,22 +618,7 @@ def test_verdict_output_requires_on_result_reports_step_and_skill(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Rule finding must identify the step name and skill name."""
-    manifest = {
-        "version": "0.1.0",
-        "skills": {
-            "run-experiment": {
-                "inputs": [],
-                "outputs": [
-                    {
-                        "name": "verdict",
-                        "type": "string",
-                        "allowed_values": ["CONCLUSIVE", "BLOCKED", "INCONCLUSIVE"],
-                    }
-                ],
-            }
-        },
-    }
-    monkeypatch.setattr(_rv, "load_bundled_manifest", lambda: manifest)
+    monkeypatch.setattr(_rv, "load_bundled_manifest", lambda: _VERDICT_SKILL_MANIFEST)
     findings = run_semantic_rules(_make_recipe(_on_success_recipe_with_verdict_skill()))
     verdict_findings = [f for f in findings if f.rule == "verdict-output-requires-on-result"]
     assert len(verdict_findings) >= 1
@@ -662,13 +634,16 @@ def test_verdict_rule_blocks_binary_routing_on_bundled_recipes() -> None:
     bundled recipe has a step with the same binary routing bug.
     """
     yaml_files = list((builtin_recipes_dir()).glob("*.yaml"))
-    rule_names_on_bundled = []
+    violations: list[str] = []
     for recipe_path in yaml_files:
-        recipe = load_recipe(recipe_path)
+        try:
+            recipe = load_recipe(recipe_path)
+        except Exception as exc:
+            raise AssertionError(f"load_recipe failed for {recipe_path}: {exc}") from exc
         findings = run_semantic_rules(recipe)
-        rule_names_on_bundled.extend(
-            f.rule for f in findings if f.rule == "verdict-output-requires-on-result"
-        )
-    assert "verdict-output-requires-on-result" not in rule_names_on_bundled, (
-        f"verdict-output-requires-on-result fired on bundled recipes: {rule_names_on_bundled}"
+        for f in findings:
+            if f.rule == "verdict-output-requires-on-result":
+                violations.append(f"{recipe_path.name}: step={f.step_name}")
+    assert not violations, (
+        f"verdict-output-requires-on-result fired on bundled recipes: {violations}"
     )

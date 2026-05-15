@@ -532,6 +532,10 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "cli",
         }
     ),
+    # skills/test_skill_output_compliance.py is intentionally absent: headless and process
+    # subpackages carry it via SUBPKG_CASCADE_EXECUTION. The fallthrough path covers
+    # execution modules that are not headless/process, so skills compliance testing is
+    # out of scope for generic execution changes.
     "execution": frozenset(
         {
             "execution",

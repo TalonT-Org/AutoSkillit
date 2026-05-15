@@ -7,18 +7,20 @@ import json
 import os
 from collections.abc import Callable
 from pathlib import Path
+from typing import Final
 
 import regex as re
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import get_logger
-from autoskillit.recipe.schema import CAMPAIGN_REF_RE
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled, _require_fleet
 from autoskillit.server._notify import track_response_size
 
 logger = get_logger(__name__)
+
+_SKIP_CAMPAIGN_REF_RE: Final = re.compile(r"\$\{\{\s*campaign\.(\w+)\s*\}\}")
 
 
 def _write_dispatch_to_campaign_state(
@@ -215,7 +217,7 @@ async def dispatch_food_truck(
                 return accumulated_captures[ref]
 
             try:
-                resolved_skip_when = CAMPAIGN_REF_RE.sub(_resolve_skip_ref, skip_when)
+                resolved_skip_when = _SKIP_CAMPAIGN_REF_RE.sub(_resolve_skip_ref, skip_when)
             except KeyError as exc:
                 return fleet_error(
                     FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
@@ -233,14 +235,12 @@ async def dispatch_food_truck(
                 return s
 
             skip_condition_true = False
-            for op in ("==", "!="):
-                sep = f" {op} "
-                if sep in resolved_skip_when:
-                    lhs, rhs = resolved_skip_when.split(sep, 1)
-                    lhs = _strip_quotes(lhs.strip())
-                    rhs = _strip_quotes(rhs.strip())
-                    skip_condition_true = (lhs == rhs) if op == "==" else (lhs != rhs)
-                    break
+            if " == " in resolved_skip_when:
+                lhs, rhs = resolved_skip_when.split(" == ", 1)
+                skip_condition_true = _strip_quotes(lhs.strip()) == _strip_quotes(rhs.strip())
+            elif " != " in resolved_skip_when:
+                lhs, rhs = resolved_skip_when.split(" != ", 1)
+                skip_condition_true = _strip_quotes(lhs.strip()) != _strip_quotes(rhs.strip())
 
             if skip_condition_true:
                 if campaign_state_path_str:

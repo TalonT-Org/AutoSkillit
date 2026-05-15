@@ -323,9 +323,11 @@ class TestCampaignSummaryContract:
         )
         summary_section = prompt[start:end]
 
-        # PerDispatchEntry has these fields: name, status, elapsed_seconds, token_usage,
-        # dispatched_session_id, dispatch_id
-        for field in ("name", "status", "elapsed_seconds", "dispatched_session_id", "dispatch_id"):
+        import dataclasses
+
+        from autoskillit.fleet.summary import PerDispatchEntry
+
+        for field in (f.name for f in dataclasses.fields(PerDispatchEntry)):
             assert f'"{field}"' in summary_section, (
                 f"per_dispatch JSON example missing field: {field}"
             )

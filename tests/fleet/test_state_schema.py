@@ -600,17 +600,21 @@ class TestTerminalRecordDiagnosticInvariant:
 # ---------------------------------------------------------------------------
 
 
-# Fields that PerDispatchEntry reads from the dispatch_food_truck return envelope
-# (as opposed to fields the caller already knows from context).
-# These must be present in DispatchCompleted.to_envelope() output.
-ENVELOPE_SOURCED_PER_DISPATCH_FIELDS = frozenset(
-    {
-        "elapsed_seconds",
-        "token_usage",
-        "dispatched_session_id",
-        "dispatch_id",
-    }
-)
+def _compute_envelope_sourced_per_dispatch_fields() -> frozenset[str]:
+    """Derive envelope-sourced fields from PerDispatchEntry dataclass schema.
+
+    Excludes caller-provided fields (name, status) which are known before dispatch.
+    All remaining fields must appear in DispatchCompleted.to_envelope() output.
+    """
+    import dataclasses
+
+    from autoskillit.fleet.summary import PerDispatchEntry
+
+    _caller_provided = frozenset({"name", "status"})
+    return frozenset(f.name for f in dataclasses.fields(PerDispatchEntry)) - _caller_provided
+
+
+ENVELOPE_SOURCED_PER_DISPATCH_FIELDS = _compute_envelope_sourced_per_dispatch_fields()
 
 
 class TestDispatchCompletedEnvelopeCoverage:

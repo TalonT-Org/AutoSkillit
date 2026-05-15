@@ -502,6 +502,46 @@ class TestCampaignStateFieldCompleteness:
         assert d.reason == "my_reason", "reason must be preserved"
         assert d.token_usage.get("input") == 200, "token_usage must be preserved"
 
+    @pytest.mark.anyio
+    async def test_write_dispatch_to_campaign_state_fallback_reconstruction(
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path
+    ):
+        """Fallback reconstruction path: per_dispatch_state_path=None writes correct fields."""
+
+        sp = _init_state(tmp_path, "fallback-test")
+        monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(sp))
+        monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
+
+        async def _fake_execute(**kwargs):
+            return DispatchResult(
+                DispatchCompleted(
+                    success=True,
+                    dispatch_status=DispatchStatus.SUCCESS,
+                    dispatch_id="d-fallback",
+                    dispatched_session_id="s-fallback",
+                    reason="completed",
+                    token_usage={"input": 50, "output": 25, "cache_read": 0, "cache_creation": 0},
+                ),
+                per_dispatch_state_path=None,
+            )
+
+        import autoskillit.fleet
+
+        monkeypatch.setattr(autoskillit.fleet, "execute_dispatch", _fake_execute)
+
+        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+
+        await dispatch_food_truck(
+            recipe="fallback-test", task="run", dispatch_name="fallback-test"
+        )
+
+        state = read_state(sp)
+        assert state is not None
+        d = next(d for d in state.dispatches if d.name == "fallback-test")
+        assert d.status == DispatchStatus.SUCCESS
+        assert d.dispatch_id == "d-fallback"
+        assert d.dispatched_session_id == "s-fallback"
+
 
 # ---------------------------------------------------------------------------
 # Test 11: resume chain for promote-to-main shape

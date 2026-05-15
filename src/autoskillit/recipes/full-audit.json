@@ -74,7 +74,7 @@
       },
       "on_success": "validate_audits",
       "on_failure": "escalate_stop",
-      "retries": 1,
+      "retries": 0,
       "on_exhausted": "escalate_stop"
     },
     "validate_audits": {
@@ -92,7 +92,7 @@
       },
       "on_success": "create_issues",
       "on_failure": "escalate_stop",
-      "retries": 1,
+      "retries": 0,
       "on_exhausted": "escalate_stop"
     },
     "create_issues": {

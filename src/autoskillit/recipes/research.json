@@ -836,6 +836,7 @@
       "capture_list": {
         "all_diagram_paths": "${{ result.diagram_path }}"
       },
+      "retries": 0,
       "on_success": "stage_bundle",
       "on_failure": "stage_bundle",
       "note": "LENS ITERATION: context.selected_lenses contains comma-separated lens slugs (e.g. \"fair-comparison,estimand-clarity\"). context.lens_context_paths contains the corresponding comma-separated context file paths. For each lens slug, run:\n  /autoskillit:exp-lens-{slug} {matching_context_path} ${{ context.experiment_plan }}\nRun all selected lenses in parallel (multiple run_skill calls in a single assistant message). Accumulate each diagram_path value into context.all_diagram_paths using comma separation via capture_list. If a lens fails, continue with remaining lenses — partial diagrams are acceptable (compose_research_pr handles empty lists).\n"

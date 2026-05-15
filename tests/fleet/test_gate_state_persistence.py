@@ -11,6 +11,7 @@ from autoskillit.fleet import (
     DispatchCompleted,
     DispatchRecord,
     DispatchRejected,
+    DispatchResult,
     DispatchStatus,
     read_state,
     resume_campaign_from_state,
@@ -152,13 +153,16 @@ class TestDispatchFoodTruckCampaignState:
         monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
 
         async def _fake_execute(**kwargs):
-            return DispatchCompleted(
-                success=True,
-                dispatch_status=DispatchStatus.SUCCESS,
-                dispatch_id="d1",
-                dispatched_session_id="s1",
-                reason="",
-                token_usage={},
+            return DispatchResult(
+                DispatchCompleted(
+                    success=True,
+                    dispatch_status=DispatchStatus.SUCCESS,
+                    dispatch_id="d1",
+                    dispatched_session_id="s1",
+                    reason="",
+                    token_usage={},
+                ),
+                per_dispatch_state_path=None,
             )
 
         import autoskillit.fleet
@@ -183,13 +187,16 @@ class TestDispatchFoodTruckCampaignState:
         monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
 
         async def _fake_execute(**kwargs):
-            return DispatchCompleted(
-                success=False,
-                dispatch_status=DispatchStatus.FAILURE,
-                dispatch_id="d1",
-                dispatched_session_id="s1",
-                reason="l2_crashed",
-                token_usage={},
+            return DispatchResult(
+                DispatchCompleted(
+                    success=False,
+                    dispatch_status=DispatchStatus.FAILURE,
+                    dispatch_id="d1",
+                    dispatched_session_id="s1",
+                    reason="l2_crashed",
+                    token_usage={},
+                ),
+                per_dispatch_state_path=None,
             )
 
         import autoskillit.fleet
@@ -213,13 +220,16 @@ class TestDispatchFoodTruckCampaignState:
         monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
 
         async def _fake_execute(**kwargs):
-            return DispatchCompleted(
-                success=True,
-                dispatch_status=DispatchStatus.SUCCESS,
-                dispatch_id="d1",
-                dispatched_session_id="s1",
-                reason="",
-                token_usage={},
+            return DispatchResult(
+                DispatchCompleted(
+                    success=True,
+                    dispatch_status=DispatchStatus.SUCCESS,
+                    dispatch_id="d1",
+                    dispatched_session_id="s1",
+                    reason="",
+                    token_usage={},
+                ),
+                per_dispatch_state_path=None,
             )
 
         import autoskillit.fleet
@@ -246,13 +256,16 @@ class TestDispatchFoodTruckCampaignState:
         monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
 
         async def _fake_execute(**kwargs):
-            return DispatchCompleted(
-                success=True,
-                dispatch_status=DispatchStatus.SUCCESS,
-                dispatch_id="d1",
-                dispatched_session_id="s1",
-                reason="",
-                token_usage={},
+            return DispatchResult(
+                DispatchCompleted(
+                    success=True,
+                    dispatch_status=DispatchStatus.SUCCESS,
+                    dispatch_id="d1",
+                    dispatched_session_id="s1",
+                    reason="",
+                    token_usage={},
+                ),
+                per_dispatch_state_path=None,
             )
 
         import autoskillit.fleet
@@ -267,6 +280,227 @@ class TestDispatchFoodTruckCampaignState:
         assert state is not None
         d = next(d for d in state.dispatches if d.name == "full-audit")
         assert d.status == DispatchStatus.SUCCESS
+
+
+# ---------------------------------------------------------------------------
+# Tests: campaign state field completeness (immunity tests)
+# ---------------------------------------------------------------------------
+
+
+class TestCampaignStateFieldCompleteness:
+    """Structural immunity: no field silently dropped at campaign state boundary."""
+
+    @pytest.fixture(autouse=True)
+    def _set_fleet_session(self, monkeypatch):
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+
+    @pytest.mark.anyio
+    async def test_write_dispatch_to_campaign_state_preserves_timing(
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path
+    ):
+        """_write_dispatch_to_campaign_state must preserve started_at and ended_at.
+
+        Regression test: the old path reconstructed a DispatchRecord with only 6 fields,
+        defaulting started_at/ended_at to 0.0.
+        """
+
+        sp = _init_state(tmp_path, "timing-test")
+        monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(sp))
+        monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
+
+        dispatches_dir = tmp_path / "dispatches"
+        dispatches_dir.mkdir(parents=True, exist_ok=True)
+        per_dispatch_sp = dispatches_dir / "timing-test.json"
+        write_initial_state(
+            per_dispatch_sp,
+            "cid",
+            "test-campaign",
+            "/m.yaml",
+            [
+                DispatchRecord(
+                    name="timing-test",
+                    status=DispatchStatus.SUCCESS,
+                    dispatch_id="d-timing",
+                    started_at=1000.0,
+                    ended_at=1007.25,
+                )
+            ],
+        )
+
+        async def _fake_execute(**kwargs):
+            return DispatchResult(
+                DispatchCompleted(
+                    success=True,
+                    dispatch_status=DispatchStatus.SUCCESS,
+                    dispatch_id="d-timing",
+                    dispatched_session_id="s-timing",
+                    reason="",
+                    token_usage={
+                        "input": 100,
+                        "output": 50,
+                        "cache_read": 10,
+                        "cache_creation": 5,
+                    },
+                    elapsed_seconds=7.25,
+                ),
+                per_dispatch_state_path=per_dispatch_sp,
+            )
+
+        import autoskillit.fleet
+
+        monkeypatch.setattr(autoskillit.fleet, "execute_dispatch", _fake_execute)
+
+        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+
+        await dispatch_food_truck(recipe="timing-test", task="audit", dispatch_name="timing-test")
+
+        state = read_state(sp)
+        assert state is not None
+        d = next(d for d in state.dispatches if d.name == "timing-test")
+        assert d.started_at > 0, "started_at must be non-zero"
+        assert d.ended_at > d.started_at, "ended_at must be after started_at"
+
+    @pytest.mark.anyio
+    async def test_campaign_state_token_usage_nonzero(
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path
+    ):
+        """_write_dispatch_to_campaign_state must preserve non-zero token_usage.
+
+        Regression test: the old path called normalize_dispatch_token_usage() on
+        already-canonical keys (input/output), producing all-zero values.
+        """
+
+        sp = _init_state(tmp_path, "token-test")
+        monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(sp))
+        monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
+
+        dispatches_dir = tmp_path / "dispatches"
+        dispatches_dir.mkdir(parents=True, exist_ok=True)
+        per_dispatch_sp = dispatches_dir / "token-test.json"
+        write_initial_state(
+            per_dispatch_sp,
+            "cid",
+            "test-campaign",
+            "/m.yaml",
+            [
+                DispatchRecord(
+                    name="token-test",
+                    status=DispatchStatus.SUCCESS,
+                    dispatch_id="d-token",
+                    token_usage={
+                        "input": 100,
+                        "output": 50,
+                        "cache_read": 10,
+                        "cache_creation": 5,
+                    },
+                )
+            ],
+        )
+
+        async def _fake_execute(**kwargs):
+            return DispatchResult(
+                DispatchCompleted(
+                    success=True,
+                    dispatch_status=DispatchStatus.SUCCESS,
+                    dispatch_id="d-token",
+                    dispatched_session_id="s-token",
+                    reason="",
+                    token_usage={
+                        "input": 100,
+                        "output": 50,
+                        "cache_read": 10,
+                        "cache_creation": 5,
+                    },
+                ),
+                per_dispatch_state_path=per_dispatch_sp,
+            )
+
+        import autoskillit.fleet
+
+        monkeypatch.setattr(autoskillit.fleet, "execute_dispatch", _fake_execute)
+
+        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+
+        await dispatch_food_truck(recipe="token-test", task="audit", dispatch_name="token-test")
+
+        state = read_state(sp)
+        assert state is not None
+        d = next(d for d in state.dispatches if d.name == "token-test")
+        assert d.token_usage.get("input", 0) == 100, "token_usage input must be preserved"
+        assert d.token_usage.get("output", 0) == 50, "token_usage output must be preserved"
+
+    @pytest.mark.anyio
+    async def test_campaign_state_record_field_completeness(
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path
+    ):
+        """All non-default DispatchRecord fields from per-dispatch state must appear.
+
+        Structural immunity test: prevents silent field dropping at the campaign state boundary.
+        """
+
+        sp = _init_state(tmp_path, "field-test")
+        monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(sp))
+        monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
+
+        dispatches_dir = tmp_path / "dispatches"
+        dispatches_dir.mkdir(parents=True, exist_ok=True)
+        per_dispatch_sp = dispatches_dir / "field-test.json"
+        write_initial_state(
+            per_dispatch_sp,
+            "cid",
+            "test-campaign",
+            "/m.yaml",
+            [
+                DispatchRecord(
+                    name="field-test",
+                    status=DispatchStatus.SUCCESS,
+                    dispatch_id="d-field",
+                    dispatched_session_id="s-field",
+                    reason="my_reason",
+                    token_usage={
+                        "input": 200,
+                        "output": 100,
+                        "cache_read": 20,
+                        "cache_creation": 10,
+                    },
+                )
+            ],
+        )
+
+        async def _fake_execute(**kwargs):
+            return DispatchResult(
+                DispatchCompleted(
+                    success=True,
+                    dispatch_status=DispatchStatus.SUCCESS,
+                    dispatch_id="d-field",
+                    dispatched_session_id="s-field",
+                    reason="my_reason",
+                    token_usage={
+                        "input": 200,
+                        "output": 100,
+                        "cache_read": 20,
+                        "cache_creation": 10,
+                    },
+                    elapsed_seconds=15.0,
+                ),
+                per_dispatch_state_path=per_dispatch_sp,
+            )
+
+        import autoskillit.fleet
+
+        monkeypatch.setattr(autoskillit.fleet, "execute_dispatch", _fake_execute)
+
+        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+
+        await dispatch_food_truck(recipe="field-test", task="audit", dispatch_name="field-test")
+
+        state = read_state(sp)
+        assert state is not None
+        d = next(d for d in state.dispatches if d.name == "field-test")
+        assert d.dispatch_id == "d-field", "dispatch_id must be preserved"
+        assert d.dispatched_session_id == "s-field", "dispatched_session_id must be preserved"
+        assert d.reason == "my_reason", "reason must be preserved"
+        assert d.token_usage.get("input") == 200, "token_usage must be preserved"
 
 
 # ---------------------------------------------------------------------------
@@ -477,13 +711,16 @@ class TestValidationFailureCampaignState:
         monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
 
         async def _fake_execute(**kwargs):
-            return DispatchCompleted(
-                success=False,
-                dispatch_status=DispatchStatus.FAILURE,
-                dispatch_id="d1",
-                dispatched_session_id="s1",
-                reason="fleet_missing_ingredient",
-                token_usage={},
+            return DispatchResult(
+                DispatchCompleted(
+                    success=False,
+                    dispatch_status=DispatchStatus.FAILURE,
+                    dispatch_id="d1",
+                    dispatched_session_id="s1",
+                    reason="fleet_missing_ingredient",
+                    token_usage={},
+                ),
+                per_dispatch_state_path=None,
             )
 
         import autoskillit.fleet
@@ -565,5 +802,7 @@ class TestValidationFailureCampaignState:
             campaign_state_path=None,
         )
 
+        if isinstance(result, DispatchResult):
+            result = result.outcome
         assert isinstance(result, DispatchRejected)
         assert result.dispatch_id != ""

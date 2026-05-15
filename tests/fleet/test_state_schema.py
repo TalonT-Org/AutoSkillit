@@ -593,3 +593,50 @@ class TestTerminalRecordDiagnosticInvariant:
         assert record.status == DispatchStatus.REFUSED
         assert record.reason == "fleet_quota_exhausted"
         assert record.diagnostic_message == ""
+
+
+# ---------------------------------------------------------------------------
+# Envelope schema coverage tests
+# ---------------------------------------------------------------------------
+
+
+# Fields that PerDispatchEntry reads from the dispatch_food_truck return envelope
+# (as opposed to fields the caller already knows from context).
+# These must be present in DispatchCompleted.to_envelope() output.
+ENVELOPE_SOURCED_PER_DISPATCH_FIELDS = frozenset(
+    {
+        "elapsed_seconds",
+        "token_usage",
+        "dispatched_session_id",
+        "dispatch_id",
+    }
+)
+
+
+class TestDispatchCompletedEnvelopeCoverage:
+    """Structural immunity: to_envelope() must carry all PerDispatchEntry envelope fields."""
+
+    def test_dispatch_completed_fields_cover_envelope_needs(self):
+        """to_envelope() output must contain every field PerDispatchEntry reads from the envelope.
+
+        If PerDispatchEntry gains a new envelope-sourced field and this test is not updated,
+        the test fails — forcing the envelope to be updated alongside the schema.
+        """
+        from autoskillit.fleet import DispatchCompleted, DispatchStatus
+
+        completed = DispatchCompleted(
+            success=True,
+            dispatch_status=DispatchStatus.SUCCESS,
+            dispatch_id="test-dispatch-id",
+            dispatched_session_id="test-session-id",
+            reason="",
+            token_usage={"input": 100, "output": 50, "cache_read": 10, "cache_creation": 5},
+            elapsed_seconds=42.5,
+        )
+        envelope = json.loads(completed.to_envelope())
+
+        for field in ENVELOPE_SOURCED_PER_DISPATCH_FIELDS:
+            assert field in envelope, (
+                f"to_envelope() missing envelope-sourced PerDispatchEntry field: {field}. "
+                f"Update DispatchCompleted.to_envelope() and this test."
+            )

@@ -255,6 +255,7 @@ class FleetRuntime:
     ) -> dict[str, Any]:
         """Run execute_dispatch and return the parsed JSON envelope."""
         from autoskillit.fleet._api import execute_dispatch
+        from autoskillit.fleet.state_types import DispatchResult
 
         self.configure_shim(shim_mode, sleep_sec=sleep_sec)
         raw = await execute_dispatch(
@@ -268,6 +269,8 @@ class FleetRuntime:
             quota_checker=quota_checker if quota_checker is not None else _no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
+        if isinstance(raw, DispatchResult):
+            raw = raw.outcome
         return cast(dict[str, Any], json.loads(raw.to_envelope()))
 
     def dispatch_state_path(self, dispatch_id: str) -> Path:

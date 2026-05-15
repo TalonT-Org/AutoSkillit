@@ -23,19 +23,24 @@ def _write_dispatch_to_campaign_state(
     campaign_state_path_str: str,
     effective_name: str,
     outcome: object,
+    per_dispatch_state_path: Path | None = None,
 ) -> None:
     """Write the dispatch outcome to the campaign state file.
 
     Accepts a DispatchOutcome (DispatchCompleted or DispatchRejected) and persists
     the dispatch record to AUTOSKILLIT_CAMPAIGN_STATE_PATH. Never raises — state
     write failures are non-fatal.
+
+    When per_dispatch_state_path is provided, reads the authoritative DispatchRecord
+    from the per-dispatch state file and forwards it directly, avoiding manual
+    field reconstruction and eliminating double-normalization of token_usage.
     """
     try:
         from autoskillit.fleet import (  # noqa: PLC0415
             DispatchCompleted,
             DispatchRecord,
             DispatchRejected,
-            normalize_dispatch_token_usage,
+            read_state,
             upsert_dispatch_record_by_name,
         )
 
@@ -50,6 +55,16 @@ def _write_dispatch_to_campaign_state(
                     ),
                 )
             case DispatchCompleted() as completed:
+                if per_dispatch_state_path is not None:
+                    per_dispatch_state = read_state(per_dispatch_state_path)
+                    if per_dispatch_state:
+                        for d in per_dispatch_state.dispatches:
+                            if d.name == effective_name:
+                                upsert_dispatch_record_by_name(
+                                    Path(campaign_state_path_str),
+                                    d,
+                                )
+                                return
                 upsert_dispatch_record_by_name(
                     Path(campaign_state_path_str),
                     DispatchRecord(
@@ -58,7 +73,7 @@ def _write_dispatch_to_campaign_state(
                         dispatch_id=completed.dispatch_id,
                         dispatched_session_id=completed.dispatched_session_id,
                         reason=completed.reason,
-                        token_usage=normalize_dispatch_token_usage(completed.token_usage),
+                        token_usage=completed.token_usage,
                     ),
                 )
     except Exception:
@@ -181,6 +196,7 @@ async def dispatch_food_truck(
             _INFRASTRUCTURE_FAILURE_REASONS,
             DispatchCompleted,
             DispatchRecord,
+            DispatchResult,
             DispatchStatus,
             evaluate_skip_when,
             execute_dispatch,
@@ -247,12 +263,17 @@ async def dispatch_food_truck(
             prior_dispatch_id=prior_dispatch_id,
         )
 
-        if campaign_state_path_str and isinstance(result, DispatchCompleted):
+        if campaign_state_path_str and isinstance(result, DispatchResult):
             _write_dispatch_to_campaign_state(
                 campaign_state_path_str,
                 effective_name,
-                result,
+                result.outcome,
+                result.per_dispatch_state_path,
             )
+
+        # Unwrap DispatchResult to get the outcome for subsequent checks.
+        # _write_dispatch_to_campaign_state already consumed the result above.
+        outcome = result.outcome if isinstance(result, DispatchResult) else result
 
         # Post-dispatch halt: if continue_on_failure=false and the dispatch failed
         # (logic failure, not infrastructure), return FLEET_CAMPAIGN_HALTED immediately.
@@ -263,9 +284,9 @@ async def dispatch_food_truck(
         if (
             campaign_state_path_str
             and not continue_on_failure
-            and isinstance(result, DispatchCompleted)
-            and result.dispatch_status == DispatchStatus.FAILURE
-            and result.reason not in _INFRASTRUCTURE_FAILURE_REASONS
+            and isinstance(outcome, DispatchCompleted)
+            and outcome.dispatch_status == DispatchStatus.FAILURE
+            and outcome.reason not in _INFRASTRUCTURE_FAILURE_REASONS
             and not dispatch_name
         ):
             return fleet_error(
@@ -277,20 +298,20 @@ async def dispatch_food_truck(
 
         if (
             campaign_state_path_str
-            and isinstance(result, DispatchCompleted)
-            and result.dispatch_status != DispatchStatus.SUCCESS
+            and isinstance(outcome, DispatchCompleted)
+            and outcome.dispatch_status != DispatchStatus.SUCCESS
             and (continue_on_failure or dispatch_name)
         ):
             logger.warning(
                 "dispatch_non_success_allowed_past_halt_gate",
                 dispatch_name=effective_name,
-                dispatch_status=result.dispatch_status,
-                reason=result.reason,
+                dispatch_status=outcome.dispatch_status,
+                reason=outcome.reason,
                 continue_on_failure=continue_on_failure,
                 has_dispatch_name=bool(dispatch_name),
             )
 
-        return result.to_envelope()
+        return outcome.to_envelope()
     except Exception as exc:
         logger.error("dispatch_food_truck unhandled exception", exc_info=True)
         from autoskillit.core import FleetErrorCode, fleet_error

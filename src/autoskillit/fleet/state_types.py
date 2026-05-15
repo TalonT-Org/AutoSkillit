@@ -6,6 +6,7 @@ import json
 import threading
 from dataclasses import dataclass, field
 from enum import StrEnum
+from pathlib import Path
 from typing import Any
 
 from autoskillit.core import FleetErrorCode, RetryReason
@@ -327,6 +328,7 @@ class DispatchCompleted:
     l3_parse_error: str | None = None
     resume_checkpoint: dict[str, Any] | None = None
     stderr: str = ""
+    elapsed_seconds: float = 0.0
 
     def to_envelope(self) -> str:
         d: dict[str, Any] = {
@@ -340,6 +342,7 @@ class DispatchCompleted:
             "l3_parse_source": self.l3_parse_source,
             "lifespan_started": self.lifespan_started,
             "stderr": self.stderr,
+            "elapsed_seconds": self.elapsed_seconds,
         }
         if self.l3_raw_body is not None:
             d["l3_raw_body"] = self.l3_raw_body
@@ -351,6 +354,18 @@ class DispatchCompleted:
 
 
 DispatchOutcome = DispatchCompleted | DispatchRejected
+
+
+@dataclass(frozen=True, slots=True)
+class DispatchResult:
+    """Result of execute_dispatch: the outcome plus the per-dispatch state path.
+
+    The per_dispatch_state_path is None when the dispatch never reached
+    _run_dispatch (e.g., quota check failure, lock timeout).
+    """
+
+    outcome: DispatchOutcome
+    per_dispatch_state_path: Path | None = None
 
 
 _COMPLETED_STATUSES = frozenset(

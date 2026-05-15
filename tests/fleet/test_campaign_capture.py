@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core.types import CaptureEntrySpec, resolve_payload_field
+from autoskillit.fleet.state_types import DispatchResult
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -473,6 +474,8 @@ async def test_dispatch_captures_extracted_and_written_to_state(tool_ctx, monkey
         quota_refresher=_noop_quota_refresher,
     )
 
+    if isinstance(raw, DispatchResult):
+        raw = raw.outcome
     result = json.loads(raw.to_envelope())
     assert result["success"] is True
 
@@ -567,6 +570,8 @@ async def test_unresolved_campaign_ref_in_ingredients_returns_fleet_error(tool_c
         quota_refresher=_noop_quota_refresher,
     )
 
+    if isinstance(raw, DispatchResult):
+        raw = raw.outcome
     result = json.loads(raw.to_envelope())
     assert result["success"] is False
     assert "error" in result

@@ -6,6 +6,7 @@ import json
 
 import pytest
 
+from autoskillit.fleet.state_types import DispatchResult
 from tests.fleet._helpers import (
     _make_recipe_info,
     _no_sleep_quota_checker,
@@ -101,6 +102,8 @@ async def test_design_captured_values_propagate_to_implement_dispatch(tool_ctx, 
         quota_refresher=_noop_quota_refresher,
     )
 
+    if isinstance(raw, DispatchResult):
+        raw = raw.outcome
     result = json.loads(raw.to_envelope())
     assert result["success"] is True
 
@@ -170,6 +173,8 @@ async def test_missing_campaign_ref_returns_fleet_error(tool_ctx):
         quota_refresher=_noop_quota_refresher,
     )
 
+    if isinstance(raw, DispatchResult):
+        raw = raw.outcome
     result = json.loads(raw.to_envelope())
     assert result["success"] is False
     assert result["error"] == "fleet_unknown_ingredient"
@@ -208,6 +213,8 @@ async def test_partial_capture_propagates_only_captured_keys(tool_ctx, monkeypat
         quota_refresher=_noop_quota_refresher,
     )
 
+    if isinstance(raw, DispatchResult):
+        raw = raw.outcome
     result = json.loads(raw.to_envelope())
     assert result["success"] is True
 
@@ -227,6 +234,8 @@ async def test_partial_capture_propagates_only_captured_keys(tool_ctx, monkeypat
         quota_refresher=_noop_quota_refresher,
     )
 
+    if isinstance(raw, DispatchResult):
+        raw = raw.outcome
     result = json.loads(raw.to_envelope())
     assert result["success"] is False
     assert "error" in result
@@ -328,6 +337,8 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
         quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
+    if isinstance(raw, DispatchResult):
+        raw = raw.outcome
     result = json.loads(raw.to_envelope())
     assert result["success"] is True, f"run-design failed: {result}"
 
@@ -393,6 +404,8 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
         quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
+    if isinstance(raw, DispatchResult):
+        raw = raw.outcome
     result = json.loads(raw.to_envelope())
     assert result["success"] is True, f"run-implement failed: {result}"
 
@@ -474,6 +487,8 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
         quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
+    if isinstance(raw, DispatchResult):
+        raw = raw.outcome
     result = json.loads(raw.to_envelope())
     assert result["success"] is True, f"run-review failed: {result}"
 
@@ -537,6 +552,8 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
         quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
+    if isinstance(raw, DispatchResult):
+        raw = raw.outcome
     result = json.loads(raw.to_envelope())
     assert result["success"] is True, f"run-archive failed: {result}"
 
@@ -633,6 +650,8 @@ async def test_cross_phase_paths_are_coherent_when_implement_creates_new_worktre
         quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
+    if isinstance(raw, DispatchResult):
+        raw = raw.outcome
     result = json.loads(raw.to_envelope())
     assert result["success"] is True, f"run-design failed: {result}"
 
@@ -695,6 +714,8 @@ async def test_cross_phase_paths_are_coherent_when_implement_creates_new_worktre
         quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
+    if isinstance(raw, DispatchResult):
+        raw = raw.outcome
     result = json.loads(raw.to_envelope())
     assert result["success"] is True, f"run-implement failed: {result}"
 
@@ -774,6 +795,8 @@ async def test_cross_phase_paths_are_coherent_when_implement_creates_new_worktre
         quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
+    if isinstance(raw, DispatchResult):
+        raw = raw.outcome
     result = json.loads(raw.to_envelope())
     assert result["success"] is True, f"run-review failed: {result}"
 

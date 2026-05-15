@@ -9,6 +9,7 @@ import pytest
 
 from autoskillit.core.types import CliSubtype
 from autoskillit.fleet.result_parser import L3ParseResult
+from autoskillit.fleet.state_types import DispatchResult
 from tests.fakes import InMemoryHeadlessExecutor
 from tests.fleet._helpers import _setup_dispatch
 
@@ -49,6 +50,8 @@ async def _run(
         quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
+    if isinstance(raw, DispatchResult):
+        raw = raw.outcome
     return json.loads(raw.to_envelope())
 
 
@@ -336,6 +339,30 @@ class TestCompletedDirtyPath:
 
         record = _read_dispatch_record(tool_ctx)
         assert record["reason"] == "fleet_l3_parse_failed"
+
+
+class TestElapsedSecondsEnvelopeField:
+    @pytest.mark.anyio
+    async def test_dispatch_completed_envelope_contains_elapsed_seconds(self):
+        """DispatchCompleted.to_envelope() includes elapsed_seconds field.
+
+        Regression test: elapsed_seconds is computed in _run_dispatch() but never
+        added to DispatchCompleted, so the L3 agent has no timing source.
+        """
+        from autoskillit.fleet import DispatchCompleted, DispatchStatus
+
+        completed = DispatchCompleted(
+            success=True,
+            dispatch_status=DispatchStatus.SUCCESS,
+            dispatch_id="test-dispatch-id",
+            dispatched_session_id="test-session-id",
+            reason="",
+            token_usage={"input": 100, "output": 50, "cache_read": 10, "cache_creation": 5},
+            elapsed_seconds=42.5,
+        )
+        result = json.loads(completed.to_envelope())
+        assert "elapsed_seconds" in result, "to_envelope() must include elapsed_seconds"
+        assert result["elapsed_seconds"] == 42.5
 
 
 class TestDispatchStatusEnvelopeField:
@@ -936,6 +963,8 @@ class TestCrashPathDiagnosticPersistence:
             campaign_state_path=campaign_state_path,
         )
 
+        if isinstance(result, DispatchResult):
+            result = result.outcome
         envelope = json.loads(result.to_envelope())
         assert envelope["success"] is False
         assert envelope["error"] == "fleet_l3_startup_or_crash"
@@ -986,6 +1015,8 @@ class TestCrashPathDiagnosticPersistence:
                 campaign_state_path=None,
             )
 
+        if isinstance(result, DispatchResult):
+            result = result.outcome
         envelope = json.loads(result.to_envelope())
         assert envelope["error"] == "fleet_l3_startup_or_crash"
 
@@ -1046,6 +1077,8 @@ class TestCrashPathDiagnosticPersistence:
             campaign_state_path=campaign_state_path,
         )
 
+        if isinstance(result, DispatchResult):
+            result = result.outcome
         envelope = json.loads(result.to_envelope())
         assert envelope["success"] is False
         assert "Unknown ingredient keys" in envelope["user_visible_message"]

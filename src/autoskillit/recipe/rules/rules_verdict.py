@@ -341,7 +341,9 @@ def _check_verdict_output_requires_on_result(ctx: ValidationContext) -> list[Rul
         # a verdict-declaring skill but don't capture the verdict are intentionally
         # ignoring it (e.g. routing on a different output like needs_rerun).
         capture = step.capture or {}
-        verdict_is_captured = any("result.verdict" in expr for expr in capture.values())
+        verdict_is_captured = any(
+            isinstance(expr, str) and "result.verdict" in expr for expr in capture.values()
+        )
         if not verdict_is_captured:
             continue
 

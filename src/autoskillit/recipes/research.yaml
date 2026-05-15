@@ -575,9 +575,9 @@ steps:
       step_name: run_experiment
     capture:
       experiment_results: "${{ result.results_path }}"
-      group_manifest: "${{ result.group_manifest }}"
       experiment_verdict: "${{ result.verdict }}"
       blocked_hypotheses: "${{ result.blocked_hypotheses }}"
+      group_manifest: "${{ result.group_manifest }}"
     retries: 2
     on_result:
       - when: "${{ result.verdict }} == CONCLUSIVE"

@@ -1,5 +1,5 @@
 {
-  "recipe_source_hash": "sha256:9a5aa46910c33967aa1e832de36ed8a2866e155f2a19cea55b6a11d6d91a5434",
+  "recipe_source_hash": "sha256:b8cf6e8c3b07797d600c36ecce23d6441de09898e9ca7a3c5f59f9951d06b85c",
   "bundled_manifest_version": "0.1.0",
   "skill_hashes": {},
   "skills": {
@@ -1931,9 +1931,9 @@
       "required": [],
       "produced": [
         "experiment_results",
-        "group_manifest",
         "experiment_verdict",
-        "blocked_hypotheses"
+        "blocked_hypotheses",
+        "group_manifest"
       ]
     },
     {

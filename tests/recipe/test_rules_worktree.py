@@ -957,7 +957,7 @@ class TestCaptureListRequiresRetriesZero:
             retries=0,
             on_success="done",
         )
-        step.retries = 3  # simulate missing retries: field (defaults to 3)
+        step.retries = 3  # bypass __post_init__ guard: built with retries=0, mutated to non-zero
         recipe = Recipe(
             name="test",
             description="test",

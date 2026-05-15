@@ -9,11 +9,7 @@ from autoskillit.recipe.schema import RecipeKind
 
 
 def _reachable_stops(ctx: ValidationContext, target: str) -> set[str]:
-    """Return non-escalation stop steps reachable from target without crossing route gates.
-
-    Returns an empty set when the target itself is a route gate — that gate manages its own
-    divergence and its paths are analyzed separately when the rule processes that gate.
-    """
+    """Return non-escalation stop steps reachable from target without crossing route gates."""
     target_step = ctx.recipe.steps.get(target)
     if target_step is not None and target_step.action == "route":
         return set()

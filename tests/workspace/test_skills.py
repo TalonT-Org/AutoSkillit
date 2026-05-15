@@ -39,7 +39,6 @@ BUNDLED_SKILLS = [
     "audit-cohesion",
     "audit-defense-standards",
     "audit-docs",
-    "audit-feature-gates",
     "audit-friction",
     "audit-impl",
     "audit-review-decisions",

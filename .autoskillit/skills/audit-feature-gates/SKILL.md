@@ -28,7 +28,7 @@ surfaces, and ungated callables.
 
 ## Arguments
 
-No arguments required. Reads `FEATURE_REGISTRY` from `src/autoskillit/core/_type_constants.py`
+No arguments required. Reads `FEATURE_REGISTRY` from `src/autoskillit/core/types/_type_constants.py`
 to enumerate features.
 
 ## Critical Constraints
@@ -59,7 +59,7 @@ to enumerate features.
 
 ### Step 0: Pre-flight — Enumerate Features
 
-Read `src/autoskillit/core/_type_constants.py`. Extract **all** entries from `FEATURE_REGISTRY` exhaustively — do not assume a fixed list.
+Read `src/autoskillit/core/types/_type_constants.py`. Extract **all** entries from `FEATURE_REGISTRY` exhaustively — do not assume a fixed list.
 For each feature, note: `name`, `lifecycle`, `import_package`, `tool_tags`, `skill_categories`,
 `default_enabled`.
 
@@ -75,7 +75,7 @@ For each feature, note: `name`, `lifecycle`, `import_package`, `tool_tags`, `ski
 `{seq}` is a zero-padded sequence starting at 01 (e.g., `FG-D1-01`, `FG-D1-02`). Include
 the ID in every finding line. For inventory table rows, cite `file:line` for the config
 source (e.g., `src/autoskillit/config/defaults.yaml:NN` or
-`src/autoskillit/core/_type_constants.py:NN` for the registry entry).
+`src/autoskillit/core/types/_type_constants.py:NN` for the registry entry).
 
 For each feature in `FEATURE_REGISTRY`: do not output any prose between iterations — process all features and return findings as structured text only.
 - Parse `src/autoskillit/config/defaults.yaml` `features:` section
@@ -118,7 +118,7 @@ For each feature: do not output any prose between iterations — return findings
 - Find all `AUTOSKILLIT_FEATURES__{NAME}` env-var reads (bypass paths)
 - FLAG (BLOCK): env-var gate without a corresponding `is_feature_enabled()` in the same code path
 - FLAG (WARN): `_fleet_auto_gate_boot()` calling `mcp.enable()` without then calling `_redisable_subsets()` (`server/_lifespan.py`)
-- FLAG (BLOCK): tool handlers for feature-tagged tools without an in-handler `is_feature_enabled()` check (e.g., `dispatch_food_truck` in `server/tools_execution.py`)
+- FLAG (BLOCK): tool handlers for feature-tagged tools without an in-handler `is_feature_enabled()` check (e.g., `dispatch_food_truck` in `src/autoskillit/server/tools/tools_fleet_dispatch.py`)
 - FLAG (WARN): session-type checks that enable feature functionality without verifying the feature flag
 
 Return findings as structured text. Do NOT create any files.
@@ -131,10 +131,10 @@ Return findings as structured text. Do NOT create any files.
 `FG-D4-01`). Every BLOCK and WARN finding **must** include `file:line`.
 
 For each feature: do not output any prose between iterations — return findings as structured text only.
-- Cross-reference `feature_def.tool_tags` against `TOOL_SUBSET_TAGS` in `src/autoskillit/core/_type_constants.py`
+- Cross-reference `feature_def.tool_tags` against `TOOL_SUBSET_TAGS` in `src/autoskillit/core/types/_type_constants.py`
 - Grep skill bodies in `src/autoskillit/skills_extended/` for feature-specific references
 - FLAG (WARN): skills with feature references in body but missing the feature's category in frontmatter
-- Verify `_DISPLAY_CATEGORIES` in `cli/_cook.py` applies feature-check filtering before displaying
+- Verify `iter_display_categories` in `src/autoskillit/config/ingredient_defaults.py` applies feature-check filtering before displaying
 - Verify `list_recipes` in `server/tools_recipe.py` filters `kind: campaign` when fleet is disabled
 - FLAG (WARN): any `run_python` callable in `skill_contracts.yaml` whose package matches `feature_def.import_package` without a feature gate in the execution path
 
@@ -152,7 +152,7 @@ For each feature:
 - Grep `src/autoskillit/core/` (IL-0) for feature-specific constants or imports beyond `FeatureDef`/`FEATURE_REGISTRY`
 - Check `src/autoskillit/pipeline/context.py` for feature-specific fields unconditionally allocated on `ToolContext`
 - Check `src/autoskillit/config/settings.py` for feature-specific config dataclasses parsed without a validation gate
-- Check `src/autoskillit/execution/headless.py` for unconditional reads of feature config
+- Check `src/autoskillit/execution/headless/` for unconditional reads of feature config
 - Check `src/autoskillit/server/_factory.py` for unconditional feature-object allocation
 - Produce coupling table: `ID | LAYER | FEATURE | COUPLING TYPE | SEVERITY | file:line`
 

@@ -145,6 +145,12 @@ tests/recipe/fixtures/*:
 .autoskillit/recipes/diagrams/*.md:
   - recipe/
 
+# Project-local skills under .autoskillit/skills/
+.autoskillit/skills/*/SKILL.md:
+  - skills/
+  - contracts/
+  - arch/
+
 # External skills installed under .claude/skills/
 .claude/skills/*/SKILL.md:
   - skills/

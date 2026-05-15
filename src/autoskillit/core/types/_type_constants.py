@@ -552,6 +552,7 @@ RETIRED_SKILL_NAMES: frozenset[str] = frozenset(
         # Skill directory names that have been renamed or removed.
         # Append retired names here atomically with the rename/deletion commit.
         # DO NOT REMOVE entries — this registry is append-only.
+        "audit-feature-gates",  # Moved to .autoskillit/skills/; AutoSkillit-internal only
         "open-research-pr",  # Retired; replaced by decomposed skills
         "sprint-planner",  # Retired; no replacement
         "vis-lens-domain-norms",  # Retired; renamed to vis-lens-methodology-norms

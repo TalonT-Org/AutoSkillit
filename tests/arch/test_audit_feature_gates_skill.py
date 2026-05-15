@@ -5,16 +5,17 @@ from pathlib import Path
 
 import yaml
 
-_SKILLS_ROOT = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "skills_extended"
-_SKILL_DIR = _SKILLS_ROOT / "audit-feature-gates"
+_PROJECT_ROOT = Path(__file__).parent.parent.parent
+_SKILLS_ROOT = _PROJECT_ROOT / "src" / "autoskillit" / "skills_extended"
+_SKILL_DIR = _PROJECT_ROOT / ".autoskillit" / "skills" / "audit-feature-gates"
 _SKILL_FILE = _SKILL_DIR / "SKILL.md"
-_RECIPES_ROOT = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "recipes"
+_RECIPES_ROOT = _PROJECT_ROOT / "src" / "autoskillit" / "recipes"
 _FULL_AUDIT = _RECIPES_ROOT / "full-audit.yaml"
 _VALIDATE_SKILL = _SKILLS_ROOT / "validate-audit" / "SKILL.md"
 
 
 def test_audit_feature_gates_skill_dir_exists():
-    assert _SKILL_DIR.is_dir(), "skills_extended/audit-feature-gates/ directory must exist"
+    assert _SKILL_DIR.is_dir(), ".autoskillit/skills/audit-feature-gates/ directory must exist"
 
 
 def test_audit_feature_gates_skill_md_exists():

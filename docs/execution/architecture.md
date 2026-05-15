@@ -4,7 +4,7 @@ How AutoSkillit runs a recipe end to end: orchestrator, kitchen gating, clone an
 
 ## Overview
 
-AutoSkillit is a Claude Code plugin that orchestrates automated workflows using headless sessions. It provides 52 MCP tools and 136 bundled skills, organized into a gated visibility system.
+AutoSkillit is a Claude Code plugin that orchestrates automated workflows using headless sessions. It provides 52 MCP tools and 135 bundled skills, organized into a gated visibility system.
 
 ## Core Concepts
 

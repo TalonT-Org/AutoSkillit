@@ -79,6 +79,7 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 
 **ALWAYS:**
 - Use subagents for parallel exploration
+- Limit total subagent spawns to 9 across all batches (standard and deep mode). If the investigation requires more exploration vectors, consolidate related questions into fewer, broader subagent prompts rather than spawning additional agents.
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
 - Write findings as a markdown report with unique name to `{{AUTOSKILLIT_TEMP}}/investigate/` directory (relative to the current working directory)
 - After writing the investigation report, emit the **absolute path** as a structured output

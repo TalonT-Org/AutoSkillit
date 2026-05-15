@@ -418,7 +418,7 @@ steps:
       - when: "${{ result.verdict }} == INCONCLUSIVE"
         route: check_run_fix_loop
       - when: "${{ result.verdict }} == BLOCKED"
-        route: ensure_results
+        route: escalate_stop
     on_failure: ensure_results
     on_context_limit: ensure_results
 

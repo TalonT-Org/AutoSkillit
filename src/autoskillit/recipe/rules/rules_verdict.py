@@ -337,6 +337,14 @@ def _check_verdict_output_requires_on_result(ctx: ValidationContext) -> list[Rul
         if not verdict_outputs:
             continue
 
+        # Only fire when the step explicitly captures result.verdict. Steps that invoke
+        # a verdict-declaring skill but don't capture the verdict are intentionally
+        # ignoring it (e.g. routing on a different output like needs_rerun).
+        capture = step.capture or {}
+        verdict_is_captured = any("result.verdict" in str(expr) for expr in capture.values())
+        if not verdict_is_captured:
+            continue
+
         for output_name, allowed_values in verdict_outputs.items():
             findings.append(
                 RuleFinding(

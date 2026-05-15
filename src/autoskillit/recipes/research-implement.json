@@ -443,7 +443,7 @@
         },
         {
           "when": "${{ result.verdict }} == BLOCKED",
-          "route": "ensure_results"
+          "route": "escalate_stop"
         }
       ],
       "on_failure": "ensure_results",

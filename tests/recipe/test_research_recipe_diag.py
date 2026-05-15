@@ -164,9 +164,15 @@ def test_route_run_failure_default_escalates(recipe):
 
 
 def test_adjust_experiment_routing_unchanged(recipe):
-    """adjust_experiment routes through check_run_fix_loop guard before run_experiment."""
+    """adjust_experiment uses verdict-based routing: CONCLUSIVE/INCONCLUSIVE → check_run_fix_loop, BLOCKED → escalate_stop."""
     step = recipe.steps["adjust_experiment"]
-    assert step.on_success == "check_run_fix_loop"
+    assert step.on_result is not None, "adjust_experiment must use on_result for verdict routing"
+    assert step.on_success is None, "adjust_experiment must not use on_success"
+    conditions = step.on_result.conditions
+    conclusive = next((c for c in conditions if c.when and "CONCLUSIVE" in c.when), None)
+    assert conclusive is not None and conclusive.route == "check_run_fix_loop"
+    blocked = next((c for c in conditions if c.when and "BLOCKED" in c.when), None)
+    assert blocked is not None and blocked.route == "escalate_stop"
     assert step.on_failure == "ensure_results"
 
 

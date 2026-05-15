@@ -988,7 +988,7 @@ steps:
       - when: "${{ result.verdict }} == BLOCKED"
         route: escalate_stop
       - when: "${{ result.verdict }} == INCONCLUSIVE"
-        route: ensure_results
+        route: re_push_research
     on_failure: re_push_research
     on_context_limit: re_push_research
     note: >

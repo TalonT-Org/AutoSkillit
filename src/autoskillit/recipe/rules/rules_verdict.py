@@ -331,8 +331,13 @@ def _check_verdict_output_requires_on_result(ctx: ValidationContext) -> list[Rul
         if step.on_result is not None:
             continue  # Has on_result — this rule only fires when on_result is missing
 
-        # Skill has allowed_values but step uses on_success instead of on_result
-        for output_name, allowed_values in allowed_by_output.items():
+        # Only enforce for outputs specifically named 'verdict' — other outputs with
+        # allowed_values (e.g. failure_type, failure_subtype) use on_success legitimately.
+        verdict_outputs = {k: v for k, v in allowed_by_output.items() if k == "verdict"}
+        if not verdict_outputs:
+            continue
+
+        for output_name, allowed_values in verdict_outputs.items():
             findings.append(
                 RuleFinding(
                     rule="verdict-output-requires-on-result",

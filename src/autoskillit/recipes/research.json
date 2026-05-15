@@ -1029,7 +1029,7 @@
         },
         {
           "when": "${{ result.verdict }} == INCONCLUSIVE",
-          "route": "ensure_results"
+          "route": "re_push_research"
         }
       ],
       "on_failure": "re_push_research",

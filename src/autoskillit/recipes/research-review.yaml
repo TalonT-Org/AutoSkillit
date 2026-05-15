@@ -313,7 +313,15 @@ steps:
       step_name: re_run_experiment
     capture:
       experiment_results: "${{ result.results_path }}"
-    on_success: re_generate_report
+      experiment_verdict: "${{ result.verdict }}"
+      blocked_hypotheses: "${{ result.blocked_hypotheses }}"
+    on_result:
+      - when: "${{ result.verdict }} == CONCLUSIVE"
+        route: re_generate_report
+      - when: "${{ result.verdict }} == BLOCKED"
+        route: escalate_stop
+      - when: "${{ result.verdict }} == INCONCLUSIVE"
+        route: re_push_research
     on_failure: re_push_research
     on_context_limit: re_push_research
     note: >

@@ -170,7 +170,7 @@ def main() -> None:
     if len(sys.argv) < 3:
         sys.stdout.write("html_path = \n")
         sys.stdout.flush()
-        sys.exit(0)
+        sys.exit(1)
 
     research_dir = Path(sys.argv[1])
     research_dir.mkdir(parents=True, exist_ok=True)
@@ -181,7 +181,7 @@ def main() -> None:
     if not report_path.exists():
         sys.stdout.write("html_path = \n")
         sys.stdout.flush()
-        sys.exit(0)
+        sys.exit(1)
 
     validated_diagrams = _validate_diagram_paths(all_diagram_paths)
     mermaid_section = "\n".join(

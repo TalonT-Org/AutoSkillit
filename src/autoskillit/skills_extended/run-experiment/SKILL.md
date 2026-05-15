@@ -271,11 +271,13 @@ text output:
 ```
 results_path = {absolute_path_to_results_file}
 group_manifest = {absolute_path_to_group_manifest_json}
+verdict = CONCLUSIVE|INCONCLUSIVE|BLOCKED
 ```
 
 **When pre-flight blocks hypotheses due to missing planned data:**
 
 ```
+verdict = BLOCKED
 blocked_hypotheses = H5: MERFISH data missing at temp/merfish_100k/ (acquisition: generate_merfish_subset.py --n 100000)
 ```
 
@@ -283,7 +285,7 @@ This token is emitted ONLY when the pre-flight gate fails due to data declared i
 Data Manifest being inaccessible. It is NOT emitted during normal execution.
 
 When `blocked_hypotheses` is emitted, `results_path` still points to the results file
-with `## Status: FAILED`.
+with `## Status: FAILED` and `verdict = BLOCKED`.
 
 ## Adjust Mode (--adjust)
 

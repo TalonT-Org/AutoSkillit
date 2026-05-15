@@ -342,9 +342,24 @@
         "step_name": "re_run_experiment"
       },
       "capture": {
-        "experiment_results": "${{ result.results_path }}"
+        "experiment_results": "${{ result.results_path }}",
+        "experiment_verdict": "${{ result.verdict }}",
+        "blocked_hypotheses": "${{ result.blocked_hypotheses }}"
       },
-      "on_success": "re_generate_report",
+      "on_result": [
+        {
+          "when": "${{ result.verdict }} == CONCLUSIVE",
+          "route": "re_generate_report"
+        },
+        {
+          "when": "${{ result.verdict }} == BLOCKED",
+          "route": "escalate_stop"
+        },
+        {
+          "when": "${{ result.verdict }} == INCONCLUSIVE",
+          "route": "re_push_research"
+        }
+      ],
       "on_failure": "re_push_research",
       "on_context_limit": "re_push_research",
       "note": "Targeted re-run of affected benchmarks after review resolution applied code fixes. Uses --adjust to read previous results and re-run only what changed. Intentionally shadows the experiment_results ingredient (L58): after this step, context.experiment_results holds the re-run results_path so re_generate_report uses fresh data. on_failure falls through to push as best-effort — the code fixes from resolve are already committed and should still be pushed.\n"

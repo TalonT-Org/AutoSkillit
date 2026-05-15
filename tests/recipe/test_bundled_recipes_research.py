@@ -199,7 +199,12 @@ class TestResearchRecipeStructure:
         step = recipe.steps["re_run_experiment"]
         assert step.tool == "run_skill"
         assert "--adjust" in step.with_args.get("skill_command", "")
-        assert step.on_success == "re_generate_report"
+        assert step.on_result is not None, (
+            "re_run_experiment must use on_result for verdict routing"
+        )
+        assert step.on_success is None, (
+            "re_run_experiment must not use on_success (replaced by on_result)"
+        )
 
     def test_re_generate_report_step(self, recipe) -> None:
         assert "re_generate_report" in recipe.steps

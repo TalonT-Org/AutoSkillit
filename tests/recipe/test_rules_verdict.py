@@ -514,3 +514,161 @@ def test_unrouted_verdict_catches_bypass_to_non_terminal_even_when_single_value(
         "unrouted-verdict-value must fire when the single unrouted value falls "
         "through to a non-terminal catch-all step."
     )
+
+
+# ---------------------------------------------------------------------------
+# verdict-output-requires-on-result rule tests
+# ---------------------------------------------------------------------------
+
+
+def _on_success_recipe_with_verdict_skill() -> dict[str, RecipeStep]:
+    """Recipe that uses on_success for a skill with verdict + allowed_values — must fail."""
+    return {
+        "run_exp": RecipeStep(
+            tool="run_skill",
+            with_args={"skill_command": "/autoskillit:run-experiment /tmp"},
+            capture={"verdict": "${{ result.verdict }}"},
+            on_success="generate_report",  # wrong — should use on_result
+        ),
+        "generate_report": RecipeStep(
+            tool="run_skill",
+            with_args={"skill_command": "/autoskillit:smoke-task"},
+        ),
+    }
+
+
+def _on_result_recipe_with_verdict_skill() -> dict[str, RecipeStep]:
+    """Recipe that correctly uses on_result for a skill with verdict + allowed_values."""
+    return {
+        "run_exp": RecipeStep(
+            tool="run_skill",
+            with_args={"skill_command": "/autoskillit:run-experiment /tmp"},
+            capture={"verdict": "${{ result.verdict }}"},
+            on_result=StepResultRoute(
+                conditions=[
+                    StepResultCondition(
+                        route="generate_report",
+                        when="${{ result.verdict }} == CONCLUSIVE",
+                    ),
+                    StepResultCondition(
+                        route="escalate_stop",
+                        when="${{ result.verdict }} == BLOCKED",
+                    ),
+                    StepResultCondition(
+                        route="ensure_results",
+                        when="${{ result.verdict }} == INCONCLUSIVE",
+                    ),
+                ]
+            ),
+        ),
+        "generate_report": RecipeStep(
+            tool="run_skill",
+            with_args={"skill_command": "/autoskillit:smoke-task"},
+        ),
+        "escalate_stop": RecipeStep(),
+        "ensure_results": RecipeStep(),
+    }
+
+
+def test_verdict_output_requires_on_result_fires(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Rule must ERROR when a step uses on_success for a skill with verdict + allowed_values."""
+    manifest = {
+        "version": "0.1.0",
+        "skills": {
+            "run-experiment": {
+                "inputs": [],
+                "outputs": [
+                    {
+                        "name": "verdict",
+                        "type": "string",
+                        "allowed_values": ["CONCLUSIVE", "INCONCLUSIVE", "BLOCKED"],
+                    }
+                ],
+            }
+        },
+    }
+    monkeypatch.setattr(_rv, "load_bundled_manifest", lambda: manifest)
+    findings = run_semantic_rules(_make_recipe(_on_success_recipe_with_verdict_skill()))
+    rule_names = [f.rule for f in findings]
+    assert "verdict-output-requires-on-result" in rule_names, (
+        "verdict-output-requires-on-result must fire when a step uses on_success "
+        "for a skill with verdict + allowed_values"
+    )
+    verdict_findings = [f for f in findings if f.rule == "verdict-output-requires-on-result"]
+    assert len(verdict_findings) >= 1
+    assert verdict_findings[0].severity == Severity.ERROR
+
+
+def test_verdict_output_requires_on_result_passes_with_on_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Rule must not fire when step uses on_result with all verdict values covered."""
+    manifest = {
+        "version": "0.1.0",
+        "skills": {
+            "run-experiment": {
+                "inputs": [],
+                "outputs": [
+                    {
+                        "name": "verdict",
+                        "type": "string",
+                        "allowed_values": ["CONCLUSIVE", "INCONCLUSIVE", "BLOCKED"],
+                    }
+                ],
+            }
+        },
+    }
+    monkeypatch.setattr(_rv, "load_bundled_manifest", lambda: manifest)
+    findings = run_semantic_rules(_make_recipe(_on_result_recipe_with_verdict_skill()))
+    rule_names = [f.rule for f in findings]
+    assert "verdict-output-requires-on-result" not in rule_names, (
+        "verdict-output-requires-on-result must not fire when step uses on_result "
+        "with explicit conditions for all verdict values"
+    )
+
+
+def test_verdict_output_requires_on_result_reports_step_and_skill(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Rule finding must identify the step name and skill name."""
+    manifest = {
+        "version": "0.1.0",
+        "skills": {
+            "run-experiment": {
+                "inputs": [],
+                "outputs": [
+                    {
+                        "name": "verdict",
+                        "type": "string",
+                        "allowed_values": ["CONCLUSIVE", "BLOCKED", "INCONCLUSIVE"],
+                    }
+                ],
+            }
+        },
+    }
+    monkeypatch.setattr(_rv, "load_bundled_manifest", lambda: manifest)
+    findings = run_semantic_rules(_make_recipe(_on_success_recipe_with_verdict_skill()))
+    verdict_findings = [f for f in findings if f.rule == "verdict-output-requires-on-result"]
+    assert len(verdict_findings) >= 1
+    assert verdict_findings[0].step_name == "run_exp"
+    assert "run-experiment" in verdict_findings[0].message
+
+
+def test_verdict_rule_blocks_binary_routing_on_bundled_recipes() -> None:
+    """All bundled recipes must not trigger verdict-output-requires-on-result after the fix.
+
+    This is a regression guard: once research.yaml and research-review.yaml are updated
+    to use on_result for run_experiment/re_run_experiment, this test confirms no other
+    bundled recipe has a step with the same binary routing bug.
+    """
+    yaml_files = list((builtin_recipes_dir()).glob("*.yaml"))
+    rule_names_on_bundled = []
+    for recipe_path in yaml_files:
+        recipe = load_recipe(recipe_path)
+        findings = run_semantic_rules(recipe)
+        rule_names_on_bundled.extend(
+            f.rule for f in findings if f.rule == "verdict-output-requires-on-result"
+        )
+    assert "verdict-output-requires-on-result" not in rule_names_on_bundled, (
+        f"verdict-output-requires-on-result fired on bundled recipes: {rule_names_on_bundled}"
+    )

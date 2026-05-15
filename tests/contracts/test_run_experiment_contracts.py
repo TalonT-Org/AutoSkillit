@@ -12,9 +12,46 @@ SKILL_PATH = (
 )
 
 
-def test_blocked_hypotheses_token_documented() -> None:
-    text = SKILL_PATH.read_text()
-    assert "blocked_hypotheses" in text
+def test_blocked_hypotheses_declared_in_contract() -> None:
+    """run-experiment contract must declare blocked_hypotheses as an output."""
+    import yaml
+
+    contract_path = (
+        Path(__file__).resolve().parent.parent.parent
+        / "src"
+        / "autoskillit"
+        / "recipe"
+        / "skill_contracts.yaml"
+    )
+    manifest = yaml.safe_load(contract_path.read_text())
+    run_exp = manifest.get("skills", {}).get("run-experiment", {})
+    output_names = [out["name"] for out in run_exp.get("outputs", [])]
+    assert "blocked_hypotheses" in output_names, (
+        "run-experiment contract must declare blocked_hypotheses as an output"
+    )
+
+
+def test_verdict_declared_in_run_experiment_contract() -> None:
+    """run-experiment contract must declare verdict output with allowed_values."""
+    import yaml
+
+    contract_path = (
+        Path(__file__).resolve().parent.parent.parent
+        / "src"
+        / "autoskillit"
+        / "recipe"
+        / "skill_contracts.yaml"
+    )
+    manifest = yaml.safe_load(contract_path.read_text())
+    run_exp = manifest.get("skills", {}).get("run-experiment", {})
+    outputs = run_exp.get("outputs", [])
+    verdict_output = next((o for o in outputs if o.get("name") == "verdict"), None)
+    assert verdict_output is not None, "run-experiment contract must declare a verdict output"
+    assert "allowed_values" in verdict_output, "verdict output must have allowed_values"
+    allowed = verdict_output["allowed_values"]
+    assert "CONCLUSIVE" in allowed, "verdict allowed_values must include CONCLUSIVE"
+    assert "BLOCKED" in allowed, "verdict allowed_values must include BLOCKED"
+    assert "INCONCLUSIVE" in allowed, "verdict allowed_values must include INCONCLUSIVE"
 
 
 def test_data_manifest_preflight_check() -> None:

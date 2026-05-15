@@ -293,3 +293,58 @@ def _check_on_result_values_in_allowed_values(ctx: ValidationContext) -> list[Ru
                     )
 
     return findings
+
+
+@semantic_rule(
+    name="verdict-output-requires-on-result",
+    description=(
+        "Steps invoking a skill with allowed_values on any output must use on_result "
+        "routing, not on_success. Ensures verdict-declaring skills cannot silently "
+        "bypass result quality gating."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_verdict_output_requires_on_result(ctx: ValidationContext) -> list[RuleFinding]:
+    """Error when a step uses on_success for a skill that declares verdict + allowed_values.
+
+    For each step that:
+    - uses tool: run_skill
+    - invokes a skill with allowed_values on at least one output
+    - does NOT have an on_result block (uses on_success instead)
+
+    Fire an ERROR directing the author to replace on_success with on_result routing.
+    """
+    findings: list[RuleFinding] = []
+
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+        skill_command = (step.with_args or {}).get("skill_command", "")
+        skill_name = resolve_skill_name(skill_command)
+        if not skill_name:
+            continue
+
+        allowed_by_output = _get_allowed_values_for_skill(skill_name)
+        if not allowed_by_output:
+            continue
+
+        if step.on_result is not None:
+            continue  # Has on_result — this rule only fires when on_result is missing
+
+        # Skill has allowed_values but step uses on_success instead of on_result
+        for output_name, allowed_values in allowed_by_output.items():
+            findings.append(
+                RuleFinding(
+                    rule="verdict-output-requires-on-result",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' invokes '{skill_name}' which declares "
+                        f"output '{output_name}' with allowed_values {allowed_values}, "
+                        f"but uses on_success instead of on_result. Replace on_success "
+                        f"with on_result routing that dispatches on the declared verdict."
+                    ),
+                )
+            )
+
+    return findings

@@ -1001,6 +1001,8 @@ def _check_gate_dispatch_no_capture(ctx: ValidationContext) -> list[RuleFinding]
 
 
 _INPUTS_REF_RE = re.compile(r"\$\{\{\s*inputs\.(\w+)\s*\}\}")
+_ANY_TEMPLATE_REF_RE = re.compile(r"\$\{\{\s*(?:inputs|campaign)\.\w+\s*\}\}")
+_SKIP_EXPR_RE = re.compile(r"^.+\s+(?:==|!=)\s+.+$")
 
 
 @semantic_rule(
@@ -1057,4 +1059,18 @@ def _check_dispatch_skip_when_valid(ctx: ValidationContext) -> list[RuleFinding]
                         ),
                     )
                 )
+
+        normalized = _ANY_TEMPLATE_REF_RE.sub("X", d.skip_when).strip()
+        if not _SKIP_EXPR_RE.match(normalized):
+            findings.append(
+                RuleFinding(
+                    rule="dispatch-skip-when-valid-expression",
+                    severity=Severity.ERROR,
+                    step_name="(top-level)",
+                    message=(
+                        f"Dispatch {d.name!r} skip_when expression has invalid format: "
+                        f"{d.skip_when!r}. Expected: '<lhs> == <rhs>' or '<lhs> != <rhs>'."
+                    ),
+                )
+            )
     return findings

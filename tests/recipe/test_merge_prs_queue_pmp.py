@@ -291,7 +291,7 @@ def test_merge_prs_resolve_proactive_conflicts_routing(pmp_recipe) -> None:
     assert success_route == "push_rebased_next_pr"
 
 
-def test_merge_prs_resolve_proactive_conflicts_has_retries(pmp_recipe) -> None:
+def test_merge_prs_resolve_proactive_conflicts_retries_zero(pmp_recipe) -> None:
     step = pmp_recipe.steps["resolve_proactive_rebase_conflicts"]
     assert step.retries == 0
     assert step.on_exhausted == "enqueue_current_pr"

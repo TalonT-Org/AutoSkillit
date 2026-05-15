@@ -948,7 +948,12 @@ class TestCaptureListRequiresRetriesZero:
     """Tests for the capture-list-requires-retries-zero rule."""
 
     def test_capture_list_with_default_retries_fires_error(self) -> None:
-        """capture_list with no retries field (defaults to 3) must emit ERROR."""
+        """Validator fires ERROR when capture_list step has retries > 0.
+
+        Built with retries=0 to pass __post_init__, then mutated to retries=3
+        via direct assignment (RecipeStep is not frozen) to simulate a step
+        that bypassed the schema guard.
+        """
         step = RecipeStep(
             name="lens",
             tool="run_skill",

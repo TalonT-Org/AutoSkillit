@@ -102,7 +102,7 @@ For each feature's `import_package`: do not output any prose between iterations 
   - GUARDED: inside a function body, inside `if TYPE_CHECKING:`, or inside `if is_feature_enabled(...):`
   - UNGUARDED: top-level import in a module that is not itself the feature's package
 - FLAG (BLOCK) all UNGUARDED imports with `file:line`
-- Ground-truth targets: `tools_kitchen.py`, `src/autoskillit/cli/session/_cook.py`, `_prompts.py`, `_fleet.py`
+- Ground-truth targets: `tools_kitchen.py`, `_cook.py`, `_prompts.py`, `_fleet.py`
 
 Return findings as structured text. Do NOT create any files.
 

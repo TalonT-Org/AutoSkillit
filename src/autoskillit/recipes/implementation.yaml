@@ -469,6 +469,7 @@ steps:
       step_name: "run_arch_lenses"
     capture_list:
       all_diagram_paths: "${{ result.diagram_path }}"
+    retries: 0
     on_success: compose_pr
     on_failure: compose_pr
     on_context_limit: compose_pr

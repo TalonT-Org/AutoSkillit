@@ -795,6 +795,7 @@ steps:
       step_name: run_experiment_lenses
     capture_list:
       all_diagram_paths: "${{ result.diagram_path }}"
+    retries: 0
     on_success: stage_bundle
     on_failure: stage_bundle
     note: >

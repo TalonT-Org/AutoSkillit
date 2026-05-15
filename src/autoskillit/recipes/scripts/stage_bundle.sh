@@ -22,4 +22,9 @@ for f in "${WT_TEMP}"/make-groups/*.yaml; do [ -f "$f" ] && cp "$f" "${RESEARCH_
 for f in "${WT_TEMP}"/make-plan/*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/phase-plans/"; done
 for f in "${WT_TEMP}"/exp-lens-*/*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/images/"; done
 
+SCRIPT_SRC="${RESEARCH_DIR}/scripts"
+if [ -d "${SCRIPT_SRC}" ]; then
+    for f in "${SCRIPT_SRC}"/*; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/scripts/"; done
+fi
+
 echo "stage_bundle=done"

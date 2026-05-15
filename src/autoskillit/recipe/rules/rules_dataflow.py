@@ -373,7 +373,9 @@ def _check_merge_cleanup_captured(ctx: ValidationContext) -> list[RuleFinding]:
         if step.tool != "merge_worktree":
             continue
         # Check whether any capture value references cleanup_succeeded
-        captures_cleanup = any("result.cleanup_succeeded" in str(v) for v in step.capture.values())
+        captures_cleanup = any(
+            "result.cleanup_succeeded" in str(v) for v in (step.capture or {}).values()
+        ) or any("result.cleanup_succeeded" in str(v) for v in (step.capture_list or {}).values())
         if not captures_cleanup:
             findings.append(
                 RuleFinding(
@@ -643,8 +645,10 @@ def _check_downstream_context_completeness(ctx: ValidationContext) -> list[RuleF
                         )
                     )
 
-        if step.capture:
-            for ctx_var in step.capture:
+        if step.capture or step.capture_list:
+            for ctx_var in step.capture or {}:
+                produced_context.add(ctx_var)
+            for ctx_var in step.capture_list or {}:
                 produced_context.add(ctx_var)
 
     return findings

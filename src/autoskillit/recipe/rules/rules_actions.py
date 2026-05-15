@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from autoskillit.core import Severity, get_logger
+from autoskillit.core import SKILL_TOOLS, Severity, get_logger
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 from autoskillit.recipe.schema import RecipeKind
@@ -124,4 +124,46 @@ def _check_route_step_requires_on_result(ctx: ValidationContext) -> list[RuleFin
                     ),
                 )
             )
+    return findings
+
+
+_SILENT_FAILURE_INDICATIVE_PHRASES = frozenset({"partial", "acceptable", "continue"})
+
+
+@semantic_rule(
+    name="silent-failure-skill-step",
+    description=(
+        "A run_skill step routes both success and failure to the same target, "
+        "making failures invisible. If failure is intentional (partial results are "
+        "acceptable), add a note explaining this so the pattern is distinguishable "
+        "from an oversight."
+    ),
+    severity=Severity.WARNING,
+)
+def _check_silent_failure_skill_step(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool not in SKILL_TOOLS:
+            continue
+        if step.on_success is None or step.on_failure is None:
+            continue
+        if step.on_success != step.on_failure:
+            continue
+        note = (step.note or "").lower()
+        if any(phrase in note for phrase in _SILENT_FAILURE_INDICATIVE_PHRASES):
+            continue
+        findings.append(
+            RuleFinding(
+                rule="silent-failure-skill-step",
+                severity=Severity.WARNING,
+                step_name=step_name,
+                message=(
+                    f"Step '{step_name}' routes both success and failure to "
+                    f"'{step.on_success}'. Failure is therefore silent. "
+                    f"If this is intentional (partial results are acceptable), "
+                    f"add a note explaining why — e.g., 'Partial results are acceptable.' — "
+                    f"so the pattern is distinguishable from an oversight."
+                ),
+            )
+        )
     return findings

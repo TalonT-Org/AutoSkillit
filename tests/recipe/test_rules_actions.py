@@ -114,3 +114,81 @@ class TestStopStepMessageQuality:
         )
         findings = [f for f in run_semantic_rules(recipe) if f.rule == "stop-step-message-quality"]
         assert len(findings) == 0
+
+
+class TestSilentFailureSkillStep:
+    """Tests for the silent-failure-skill-step rule."""
+
+    def test_skill_step_same_success_failure_routes_fires_warning(self):
+        """run_skill with identical on_success and on_failure routes must fire WARNING."""
+        recipe = _make_recipe(
+            {
+                "lens": {
+                    "tool": "run_skill",
+                    "with": {"skill_command": "/autoskillit:exp-lens-diagram test"},
+                    "on_success": "bundle",
+                    "on_failure": "bundle",
+                },
+                "bundle": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == "silent-failure-skill-step"]
+        assert len(findings) == 1, f"Expected silent-failure-skill-step WARNING, got: {findings}"
+        assert findings[0].severity == Severity.WARNING
+        assert findings[0].step_name == "lens"
+
+    def test_skill_step_with_note_about_partial_results_is_clean(self):
+        """run_skill with note containing 'partial' or 'acceptable' must NOT fire."""
+        recipe = _make_recipe(
+            {
+                "lens": {
+                    "tool": "run_skill",
+                    "with": {"skill_command": "/autoskillit:exp-lens-diagram test"},
+                    "on_success": "bundle",
+                    "on_failure": "bundle",
+                    "note": "Partial results are acceptable.",
+                },
+                "bundle": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == "silent-failure-skill-step"]
+        assert findings == [], (
+            f"silent-failure-skill-step must not fire when note explains partial results: {findings}"
+        )
+
+    def test_skill_step_different_success_failure_is_clean(self):
+        """run_skill with different on_success and on_failure routes must NOT fire."""
+        recipe = _make_recipe(
+            {
+                "lens": {
+                    "tool": "run_skill",
+                    "with": {"skill_command": "/autoskillit:exp-lens-diagram test"},
+                    "on_success": "bundle",
+                    "on_failure": "escalate",
+                },
+                "bundle": {"action": "stop", "message": "Done."},
+                "escalate": {"action": "stop", "message": "Failed."},
+            }
+        )
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == "silent-failure-skill-step"]
+        assert findings == [], (
+            f"silent-failure-skill-step must not fire for different routes: {findings}"
+        )
+
+    def test_run_cmd_not_flagged(self):
+        """run_cmd (non-skill) step with identical success/failure routes must NOT fire."""
+        recipe = _make_recipe(
+            {
+                "cmd": {
+                    "tool": "run_cmd",
+                    "with": {"cmd": "echo hello"},
+                    "on_success": "done",
+                    "on_failure": "done",
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == "silent-failure-skill-step"]
+        assert findings == [], (
+            f"silent-failure-skill-step is skill-specific and must not fire for run_cmd: {findings}"
+        )

@@ -272,3 +272,33 @@ def _check_superseded_input_after_capture(ctx: ValidationContext) -> list[RuleFi
                 superseded_keys.update(step.capture.keys())
 
     return findings
+
+
+@semantic_rule(
+    name="capture-list-requires-retries-zero",
+    description=(
+        "capture_list steps must set retries: 0. "
+        "Each retry re-initializes the accumulated list, producing duplicates."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_capture_list_requires_retries_zero(ctx: ValidationContext) -> list[RuleFinding]:
+    wf = ctx.recipe
+    findings: list[RuleFinding] = []
+    for step_name, step in wf.steps.items():
+        if step.capture_list and step.retries > 0:
+            findings.append(
+                RuleFinding(
+                    rule="capture-list-requires-retries-zero",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' uses capture_list (accumulated across "
+                        f"lens iterations) but has retries: {step.retries}. Each retry "
+                        f"re-initializes the list, producing duplicate entries. "
+                        f"Set retries: 0 and use on_context_limit routing to resume "
+                        f"in the existing worktree."
+                    ),
+                )
+            )
+    return findings

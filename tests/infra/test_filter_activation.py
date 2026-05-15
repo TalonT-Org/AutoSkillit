@@ -84,6 +84,25 @@ def test_build_test_scope_returns_full_run_reason_for_bucket_a():
     assert result is FullRunReason.BUCKET_A
 
 
+def test_quota_check_not_in_infra() -> None:
+    """test_quota_check.py was moved to hooks/; assert no stale infra/ reference remains."""
+    assert not (REPO_ROOT / "tests/infra/test_quota_check.py").is_file()
+    assert (REPO_ROOT / "tests/hooks/test_quota_check.py").is_file()
+
+
+def test_source_map_quota_check_path_is_hooks() -> None:
+    """Committed source map must reference hooks/, not infra/, for test_quota_check.py."""
+    map_path = REPO_ROOT / ".autoskillit/test-source-map.json"
+    assert map_path.is_file(), "committed test-source-map.json must exist"
+    raw = map_path.read_text()
+    assert "tests/infra/test_quota_check.py" not in raw, (
+        "stale tests/infra/test_quota_check.py found in .autoskillit/test-source-map.json"
+    )
+    assert "tests/hooks/test_quota_check.py" in raw, (
+        "tests/hooks/test_quota_check.py not found in .autoskillit/test-source-map.json"
+    )
+
+
 def test_build_test_scope_returns_full_run_reason_for_unmapped():
     from tests._test_filter import FilterMode, FullRunReason, build_test_scope
 

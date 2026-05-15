@@ -287,7 +287,7 @@ MODULE_CASCADE_EXECUTION: dict[str, frozenset[str]] = {
             "execution",
             "server",
             "cli",
-            "infra/test_quota_check.py",
+            "hooks/test_quota_check.py",
         }
     ),
     "linux_tracing": frozenset(

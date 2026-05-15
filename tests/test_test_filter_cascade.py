@@ -241,6 +241,19 @@ class TestRecipeCascadeNarrowing:
         assert "test_fleet_cli.py" not in result_names
 
 
+def test_session_log_cascade_targets_hooks_quota_check() -> None:
+    """session_log cascade must point to hooks/ after test_quota_check.py was moved."""
+    from tests._test_filter import MODULE_CASCADE_EXECUTION
+
+    targets = MODULE_CASCADE_EXECUTION["session_log"]
+    assert "hooks/test_quota_check.py" in targets, (
+        "session_log cascade must include hooks/test_quota_check.py"
+    )
+    assert "infra/test_quota_check.py" not in targets, (
+        "stale infra/test_quota_check.py still present in session_log cascade"
+    )
+
+
 class TestServerFleetCascadeNarrowing:
     """REQ-FLEET-002: server cascade targets only fleet/test_pack_enforcement.py."""
 

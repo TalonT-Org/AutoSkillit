@@ -56,3 +56,19 @@ def test_run_arch_lenses_still_gated_on_open_pr(recipe):
 def test_recipe_validates_clean(recipe):
     errors = validate_recipe_structure(recipe)
     assert not errors, f"Validation errors: {errors}"
+
+
+def test_done_unconfirmed_stop_exists(recipe) -> None:
+    """implementation-groups.yaml must have a done_unconfirmed stop step for merge-timeout paths."""
+    assert "done_unconfirmed" in recipe.steps
+    step = recipe.steps["done_unconfirmed"]
+    assert step.action == "stop"
+    assert len(step.message) >= 10
+    assert "unconfirmed" in step.message.lower() or "timeout" in step.message.lower()
+
+
+def test_register_clone_unconfirmed_routes_to_done_unconfirmed(recipe) -> None:
+    """register_clone_unconfirmed must route to done_unconfirmed, not done."""
+    step = recipe.steps["register_clone_unconfirmed"]
+    assert step.on_success == "done_unconfirmed"
+    assert step.on_failure == "done_unconfirmed"

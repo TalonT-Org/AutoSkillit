@@ -1,9 +1,17 @@
-recipe_source_hash: sha256:f148cd2ff61ff07d49b8dc718680691f6d35ebf523b93e201503a2c49c8c8ef6
+recipe_source_hash: sha256:63c573e590abdfa59658e10b68864919a8483d50bccd97e20955002f2fd41719
 bundled_manifest_version: 0.1.0
 skill_hashes: {}
 skills: {}
 dataflow:
 - step: begin_archival
+  available:
+  - base_branch
+  - pr_url
+  - research_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: archive_skipped
   available:
   - base_branch
   - pr_url

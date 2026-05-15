@@ -277,6 +277,7 @@ verdict = CONCLUSIVE|INCONCLUSIVE|BLOCKED
 **When pre-flight blocks hypotheses due to missing planned data:**
 
 ```
+results_path = {absolute_path_to_results_file}
 verdict = BLOCKED
 blocked_hypotheses = H5: MERFISH data missing at temp/merfish_100k/ (acquisition: generate_merfish_subset.py --n 100000)
 ```

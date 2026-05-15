@@ -256,8 +256,7 @@
       "expected_output_patterns": [
         "results_path\\s*=\\s*/.+",
         "group_manifest\\s*=\\s*/.+",
-        "verdict\\s*=\\s*(CONCLUSIVE|INCONCLUSIVE|BLOCKED)",
-        "blocked_hypotheses\\s*="
+        "verdict\\s*=\\s*(CONCLUSIVE|INCONCLUSIVE|BLOCKED)"
       ],
       "pattern_examples": [
         "results_path = /tmp/run-experiment/results.md group_manifest = /tmp/run-experiment/group_manifest.json verdict = CONCLUSIVE\n%%ORDER_UP%%",

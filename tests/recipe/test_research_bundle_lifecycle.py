@@ -100,6 +100,7 @@ def test_re_push_research_on_success_routes_to_finalize_bundle_render(recipe):
     )
 
 
+@pytest.mark.medium
 def test_finalize_bundle_script_manifest_idempotent(tmp_path):
     """finalize_bundle.sh must not append ## Archive Manifest more than once.
 

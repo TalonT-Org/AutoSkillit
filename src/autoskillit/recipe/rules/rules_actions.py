@@ -127,7 +127,7 @@ def _check_route_step_requires_on_result(ctx: ValidationContext) -> list[RuleFin
     return findings
 
 
-_SILENT_FAILURE_INDICATIVE_PHRASES = frozenset({"partial", "acceptable", "continue"})
+_SILENT_FAILURE_INDICATIVE_PHRASES = frozenset({"partial", "acceptable"})
 
 
 @semantic_rule(

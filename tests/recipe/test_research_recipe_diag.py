@@ -173,6 +173,8 @@ def test_adjust_experiment_routing_unchanged(recipe):
     assert conclusive is not None and conclusive.route == "check_run_fix_loop"
     blocked = next((c for c in conditions if c.when and "BLOCKED" in c.when), None)
     assert blocked is not None and blocked.route == "escalate_stop"
+    inconclusive = next((c for c in conditions if c.when and "INCONCLUSIVE" in c.when), None)
+    assert inconclusive is not None and inconclusive.route == "check_run_fix_loop"
     assert step.on_failure == "ensure_results"
 
 

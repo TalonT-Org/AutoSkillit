@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import yaml
+
 SKILL_PATH = (
     Path(__file__).resolve().parent.parent.parent
     / "src"
@@ -11,19 +13,18 @@ SKILL_PATH = (
     / "SKILL.md"
 )
 
+_SKILL_CONTRACTS_PATH = (
+    Path(__file__).resolve().parent.parent.parent
+    / "src"
+    / "autoskillit"
+    / "recipe"
+    / "skill_contracts.yaml"
+)
+
 
 def test_blocked_hypotheses_declared_in_contract() -> None:
     """run-experiment contract must declare blocked_hypotheses as an output."""
-    import yaml
-
-    contract_path = (
-        Path(__file__).resolve().parent.parent.parent
-        / "src"
-        / "autoskillit"
-        / "recipe"
-        / "skill_contracts.yaml"
-    )
-    manifest = yaml.safe_load(contract_path.read_text())
+    manifest = yaml.safe_load(_SKILL_CONTRACTS_PATH.read_text())
     run_exp = manifest.get("skills", {}).get("run-experiment", {})
     output_names = [out["name"] for out in run_exp.get("outputs", [])]
     assert "blocked_hypotheses" in output_names, (
@@ -33,16 +34,7 @@ def test_blocked_hypotheses_declared_in_contract() -> None:
 
 def test_verdict_declared_in_run_experiment_contract() -> None:
     """run-experiment contract must declare verdict output with allowed_values."""
-    import yaml
-
-    contract_path = (
-        Path(__file__).resolve().parent.parent.parent
-        / "src"
-        / "autoskillit"
-        / "recipe"
-        / "skill_contracts.yaml"
-    )
-    manifest = yaml.safe_load(contract_path.read_text())
+    manifest = yaml.safe_load(_SKILL_CONTRACTS_PATH.read_text())
     run_exp = manifest.get("skills", {}).get("run-experiment", {})
     outputs = run_exp.get("outputs", [])
     verdict_output = next((o for o in outputs if o.get("name") == "verdict"), None)
@@ -74,8 +66,6 @@ def test_run_experiment_env_mode_dispatch() -> None:
 
 def test_run_experiment_group_manifest_output() -> None:
     """run-experiment contract must declare group_manifest as an output."""
-    import yaml
-
     contract_path = (
         Path(__file__).resolve().parent.parent.parent
         / "src"

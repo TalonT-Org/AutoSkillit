@@ -622,8 +622,15 @@ steps:
       step_name: adjust
     capture:
       experiment_results: "${{ result.results_path }}"
+      experiment_verdict: "${{ result.verdict }}"
       group_manifest: "${{ result.group_manifest }}"
-    on_success: check_run_fix_loop
+    on_result:
+      - when: "${{ result.verdict }} == CONCLUSIVE"
+        route: check_run_fix_loop
+      - when: "${{ result.verdict }} == INCONCLUSIVE"
+        route: check_run_fix_loop
+      - when: "${{ result.verdict }} == BLOCKED"
+        route: ensure_results
     on_failure: ensure_results
     on_context_limit: ensure_results
 
@@ -917,7 +924,8 @@ steps:
     retries: 2
     on_exhausted: route_claims_resolve
     on_context_limit: route_claims_resolve
-    on_success: route_claims_resolve
+    on_result:
+      - route: route_claims_resolve
     on_failure: route_claims_resolve
 
   route_claims_resolve:
@@ -946,7 +954,8 @@ steps:
     retries: 2
     on_exhausted: merge_escalations
     on_context_limit: merge_escalations
-    on_success: merge_escalations
+    on_result:
+      - route: merge_escalations
     on_failure: merge_escalations
 
   merge_escalations:

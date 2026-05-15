@@ -247,7 +247,8 @@ steps:
     retries: 2
     on_exhausted: route_claims_resolve
     on_context_limit: route_claims_resolve
-    on_success: route_claims_resolve
+    on_result:
+      - route: route_claims_resolve
     on_failure: route_claims_resolve
 
   route_claims_resolve:
@@ -277,7 +278,8 @@ steps:
     retries: 2
     on_exhausted: merge_escalations
     on_context_limit: merge_escalations
-    on_success: merge_escalations
+    on_result:
+      - route: merge_escalations
     on_failure: merge_escalations
 
   merge_escalations:

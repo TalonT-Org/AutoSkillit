@@ -1,4 +1,4 @@
-recipe_source_hash: sha256:dfbc30438b85b9b6b9749581964ebc46424e03ccbfd1257615d0a7ca58bdeae7
+recipe_source_hash: sha256:48b81a688f7a876915cefebb3f0e9b232dac0d0652dd60903a4aa90735ae9b0d
 bundled_manifest_version: 0.1.0
 skill_hashes: {}
 skills:
@@ -1836,6 +1836,7 @@ dataflow:
   required: []
   produced:
   - experiment_results
+  - experiment_verdict
   - group_manifest
   positional_args: 1
 - step: check_run_fix_loop

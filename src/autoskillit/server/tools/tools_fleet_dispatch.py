@@ -7,6 +7,10 @@ import json
 import os
 from collections.abc import Callable
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from autoskillit.fleet import DispatchOutcome
 
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
@@ -22,7 +26,7 @@ logger = get_logger(__name__)
 def _write_dispatch_to_campaign_state(
     campaign_state_path_str: str,
     effective_name: str,
-    outcome: object,
+    outcome: DispatchOutcome,
     per_dispatch_state_path: Path | None = None,
 ) -> None:
     """Write the dispatch outcome to the campaign state file.
@@ -65,6 +69,11 @@ def _write_dispatch_to_campaign_state(
                                     d,
                                 )
                                 return
+                    logger.warning(
+                        "_write_dispatch_to_campaign_state: no per-dispatch entry matched %r — "
+                        "falling back to manual reconstruction",
+                        effective_name,
+                    )
                 upsert_dispatch_record_by_name(
                     Path(campaign_state_path_str),
                     DispatchRecord(
@@ -271,9 +280,7 @@ async def dispatch_food_truck(
                 result.per_dispatch_state_path,
             )
 
-        # Unwrap DispatchResult to get the outcome for subsequent checks.
-        # _write_dispatch_to_campaign_state already consumed the result above.
-        outcome = result.outcome if isinstance(result, DispatchResult) else result
+        outcome = result.outcome
 
         # Post-dispatch halt: if continue_on_failure=false and the dispatch failed
         # (logic failure, not infrastructure), return FLEET_CAMPAIGN_HALTED immediately.

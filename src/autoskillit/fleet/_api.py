@@ -314,31 +314,6 @@ def _post_dispatch_cleanup(
             )
 
 
-def _write_campaign_refusal(
-    campaign_state_path: Path | None,
-    effective_name: str,
-    error_code: FleetErrorCode,
-    message: str = "",
-) -> None:
-    """Write a REFUSED dispatch record to the campaign state file."""
-    if campaign_state_path is None:
-        return
-    from autoskillit.fleet.state import (  # noqa: PLC0415
-        DispatchRecord,
-        upsert_dispatch_record_by_name,
-    )
-
-    try:
-        record = DispatchRecord.for_refusal(
-            name=effective_name,
-            error_code=error_code,
-            diagnostic_message=message,
-        )
-        upsert_dispatch_record_by_name(campaign_state_path, record)
-    except Exception:
-        logger.warning("failed to record refusal to campaign state", exc_info=True)
-
-
 def _normalize_capture_spec(
     capture: Mapping[str, str | CaptureEntrySpec] | None,
 ) -> dict[str, CaptureEntrySpec] | None:
@@ -403,7 +378,6 @@ async def execute_dispatch(
     def _reject(error_code: FleetErrorCode, message: str, **kwargs: Any) -> DispatchResult:
         """Pre-lock, pre-dispatch-id rejection path — no per-dispatch state file exists yet."""
         rejection = DispatchRejected(error_code=error_code, message=message, **kwargs)
-        _write_campaign_refusal(campaign_state_path, effective_name, error_code, message=message)
         return DispatchResult(rejection, per_dispatch_state_path=None)
 
     if ingredients is not None:
@@ -456,7 +430,6 @@ async def execute_dispatch(
             resume_checkpoint=resume_checkpoint,
             idle_output_timeout=idle_output_timeout,
             caller_session_id=caller_session_id,
-            campaign_state_path=campaign_state_path,
             prior_dispatch_id=prior_dispatch_id,
         )
     except asyncio.CancelledError:
@@ -542,7 +515,6 @@ async def _run_dispatch(
     resume_checkpoint: SessionCheckpoint | None = None,
     idle_output_timeout: int | None = None,
     caller_session_id: str = "",
-    campaign_state_path: Path | None = None,
     prior_dispatch_id: str | None = None,
 ) -> DispatchResult:
     """Inner dispatch body — called after lock acquisition."""
@@ -675,7 +647,10 @@ async def _run_dispatch(
     state_path = handle.state_path
 
     def _reject_with_state(error_code: FleetErrorCode, message: str) -> DispatchResult:
-        """Post-dispatch-id rejection path — writes both per-dispatch and campaign state."""
+        """Post-dispatch-id rejection path — writes per-dispatch state only.
+
+        Campaign state is written by the caller via _write_dispatch_to_campaign_state.
+        """
         rejection = DispatchRejected(
             error_code=error_code, message=message, dispatch_id=dispatch_id
         )
@@ -691,7 +666,6 @@ async def _run_dispatch(
             )
         except Exception:
             logger.warning("_reject_with_state: per-dispatch state write failed", exc_info=True)
-        _write_campaign_refusal(campaign_state_path, effective_name, error_code, message=message)
         return DispatchResult(rejection, per_dispatch_state_path=state_path)
 
     if effective_ingredients:

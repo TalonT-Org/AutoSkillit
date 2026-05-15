@@ -164,7 +164,7 @@ def test_route_run_failure_default_escalates(recipe):
 
 
 def test_adjust_experiment_routing_unchanged(recipe):
-    """adjust_experiment uses verdict-based routing: CONCLUSIVE/INCONCLUSIVE → check_run_fix_loop, BLOCKED → escalate_stop."""
+    """adjust_experiment uses on_result for all verdict values (not on_success)."""
     step = recipe.steps["adjust_experiment"]
     assert step.on_result is not None, "adjust_experiment must use on_result for verdict routing"
     assert step.on_success is None, "adjust_experiment must not use on_success"
@@ -351,6 +351,22 @@ def test_re_run_experiment_blocked_routes_to_escalate_stop(recipe):
     assert blocked is not None, "re_run_experiment on_result must have a BLOCKED verdict condition"
     assert blocked.route == "escalate_stop", (
         f"BLOCKED must route to escalate_stop, got {blocked.route}"
+    )
+
+
+def test_re_run_experiment_inconclusive_routes_to_re_push_research(recipe):
+    """INCONCLUSIVE verdict must route to re_push_research."""
+    step = recipe.steps["re_run_experiment"]
+    conditions = step.on_result.conditions
+    inconclusive = next(
+        (c for c in conditions if c.when and "INCONCLUSIVE" in c.when),
+        None,
+    )
+    assert inconclusive is not None, (
+        "re_run_experiment on_result must have an INCONCLUSIVE verdict condition"
+    )
+    assert inconclusive.route == "re_push_research", (
+        f"INCONCLUSIVE must route to re_push_research, got {inconclusive.route}"
     )
 
 

@@ -210,22 +210,33 @@ async def dispatch_food_truck(
             dispatches_dir = tool_ctx.temp_dir / "dispatches"
             accumulated_captures = read_all_campaign_captures(dispatches_dir, tool_ctx.kitchen_id)
 
-            def _resolve_skip_ref(m: re.Match) -> str:
-                ref = m.group(1)
-                if ref not in accumulated_captures:
-                    raise KeyError(ref)
-                return accumulated_captures[ref]
-
-            try:
-                resolved_skip_when = _SKIP_CAMPAIGN_REF_RE.sub(_resolve_skip_ref, skip_when)
-            except KeyError as exc:
+            missing_refs = [
+                ref
+                for ref in _SKIP_CAMPAIGN_REF_RE.findall(skip_when)
+                if ref not in accumulated_captures
+            ]
+            if missing_refs:
                 return fleet_error(
                     FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
-                    f"skip_when references campaign capture {exc.args[0]!r} which has not "
-                    f"been produced by any prior dispatch. "
+                    f"skip_when references campaign captures that have not been produced "
+                    f"by any prior dispatch: {missing_refs!r}. "
                     f"Available captures: {sorted(accumulated_captures)}",
                 )
-            resolved_skip_when = resolved_skip_when.strip()
+            resolved_skip_when = _SKIP_CAMPAIGN_REF_RE.sub(
+                lambda m: accumulated_captures[m.group(1)], skip_when
+            ).strip()
+            if not resolved_skip_when:
+                return fleet_error(
+                    FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
+                    "skip_when resolved to an empty expression after substitution",
+                )
+            op_count = resolved_skip_when.count(" == ") + resolved_skip_when.count(" != ")
+            if op_count != 1:
+                return fleet_error(
+                    FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
+                    f"skip_when resolved to a malformed expression: {resolved_skip_when!r}. "
+                    f"Expected exactly one '==' or '!=' comparison operator.",
+                )
 
             def _strip_quotes(s: str) -> str:
                 if (s.startswith("'") and s.endswith("'")) or (

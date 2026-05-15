@@ -240,6 +240,24 @@ class TestRecipeCascadeNarrowing:
             assert fname in result_names, f"{fname!r} missing from recipe cascade result"
         assert "test_fleet_cli.py" not in result_names
 
+    def test_recipe_layer_uses_hooks_file_not_dir(self, tmp_path: Path) -> None:
+        """recipe/__init__.py change → hooks/test_recipe_contract_freshness.py in scope; hooks/ dir NOT."""
+        tests_root = tmp_path / "tests"
+        hooks_dir = tests_root / "hooks"
+        hooks_dir.mkdir(parents=True, exist_ok=True)
+        (hooks_dir / "test_recipe_contract_freshness.py").touch()
+        result = build_test_scope(
+            changed_files={"src/autoskillit/recipe/__init__.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        path_names = {p.name for p in result}
+        assert "test_recipe_contract_freshness.py" in path_names, (
+            "recipe layer must include hooks/test_recipe_contract_freshness.py"
+        )
+        assert "hooks" not in path_names, "recipe layer must not include the entire hooks/ dir"
+
 
 def test_session_log_cascade_targets_hooks_quota_check() -> None:
     """session_log cascade must point to hooks/ after test_quota_check.py was moved."""

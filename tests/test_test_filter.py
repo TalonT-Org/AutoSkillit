@@ -229,6 +229,7 @@ class TestBuildTestScope:
             "docs",
         ]:
             (tests_root / d).mkdir(parents=True, exist_ok=True)
+        (tests_root / "infra" / "test_pretty_output_hook_infra.py").touch()
 
         result = build_test_scope(
             changed_files={"src/autoskillit/execution/headless.py"},
@@ -236,7 +237,7 @@ class TestBuildTestScope:
             tests_root=tests_root,
         )
         assert result is not None
-        dir_names = {p.name for p in result}
+        result_names = {p.name for p in result}
         for expected in [
             "execution",
             "core",
@@ -244,10 +245,13 @@ class TestBuildTestScope:
             "migration",
             "server",
             "cli",
-            "infra",
-            "skills",
         ]:
-            assert expected in dir_names, f"{expected} missing from cascade"
+            assert expected in result_names, f"{expected} missing from cascade"
+        assert "test_pretty_output_hook_infra.py" in result_names, (
+            "infra file missing from cascade"
+        )
+        assert "infra" not in result_names, "whole infra/ dir should not be in cascade"
+        assert "skills" not in result_names, "skills/ dir should not be in execution layer cascade"
 
     def test_scope_l2_recipe_conservative(self, tmp_path: Path) -> None:
         tests_root = tmp_path / "tests"
@@ -263,6 +267,7 @@ class TestBuildTestScope:
             "migration/test_api.py",
             "migration/test_engine.py",
             "hooks/test_recipe_write_advisor.py",
+            "hooks/test_recipe_contract_freshness.py",
             "infra/test_pretty_output_recipe.py",
             "skills/test_planner_skill_contracts.py",
             "skills/test_skill_placeholder_contracts.py",
@@ -293,14 +298,14 @@ class TestBuildTestScope:
             "test_zero_write_detection.py",
             "test_pretty_output_recipe.py",
             "test_skill_placeholder_contracts.py",
-            # hooks/test_recipe_write_advisor.py is covered by the directory-level "hooks" entry
-            "hooks",
+            "test_recipe_contract_freshness.py",
             "core",
             "migration",
         ]:
             assert expected in result_names, f"{expected} missing"
         for absent in [
             "execution",
+            "hooks",
             "infra",
             "skills",
             "server",

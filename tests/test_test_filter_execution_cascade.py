@@ -178,6 +178,84 @@ class TestBuildTestScopeExecutionCascade:
                 f"AGGRESSIVE mode should not widen execution cascade to {excluded}"
             )
 
+    def test_headless_includes_skills_compliance_test(self, tmp_path: Path) -> None:
+        """headless.py change → skills compliance file; skills/ dir excluded."""
+        tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
+        (tests_root / "skills" / "test_skill_output_compliance.py").touch()
+        (tests_root / "infra" / "test_pretty_output_hook_infra.py").touch()
+        result = build_test_scope(
+            changed_files={"src/autoskillit/execution/headless/__init__.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        paths = {p for p in result}
+        path_names = {p.name for p in paths}
+        assert any(p.name == "test_skill_output_compliance.py" for p in paths), (
+            "headless change must include test_skill_output_compliance.py"
+        )
+        assert any(p.name == "test_pretty_output_hook_infra.py" for p in paths), (
+            "headless change must include infra/test_pretty_output_hook_infra.py"
+        )
+        assert "skills" not in path_names, (
+            "headless change must NOT include the entire skills/ dir"
+        )
+
+    def test_process_includes_skills_compliance_test(self, tmp_path: Path) -> None:
+        """process/*.py change → skills compliance file; skills/ dir excluded."""
+        tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
+        (tests_root / "skills" / "test_skill_output_compliance.py").touch()
+        (tests_root / "infra" / "test_pretty_output_hook_infra.py").touch()
+        result = build_test_scope(
+            changed_files={"src/autoskillit/execution/process/runner.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        paths = {p for p in result}
+        path_names = {p.name for p in paths}
+        assert any(p.name == "test_skill_output_compliance.py" for p in paths)
+        assert any(p.name == "test_pretty_output_hook_infra.py" for p in paths), (
+            "process change must include infra/test_pretty_output_hook_infra.py"
+        )
+        assert "skills" not in path_names
+
+    def test_other_execution_module_excludes_skills(self, tmp_path: Path) -> None:
+        """anomaly_detection.py change → no skills/ path (neither dir nor compliance file)."""
+        tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
+        (tests_root / "skills" / "test_skill_output_compliance.py").touch()
+        result = build_test_scope(
+            changed_files={"src/autoskillit/execution/anomaly_detection.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        paths = {p for p in result}
+        path_names = {p.name for p in paths}
+        assert "skills" not in path_names
+        assert not any(p.name == "test_skill_output_compliance.py" for p in paths)
+
+    def test_execution_fallthrough_uses_infra_file_not_dir(self, tmp_path: Path) -> None:
+        """Execution-layer fallthrough uses infra file-level entry, not whole infra/ dir.
+
+        Uses execution/__init__.py: its stem (__init__) is absent from MODULE_CASCADE_EXECUTION
+        and the file is not inside a subdirectory covered by SUBPKG_CASCADE_EXECUTION, so it
+        truly falls through to LAYER_CASCADE_CONSERVATIVE["execution"].
+        """
+        tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
+        (tests_root / "infra" / "test_pretty_output_hook_infra.py").touch()
+        result = build_test_scope(
+            changed_files={"src/autoskillit/execution/__init__.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        path_names = {p.name for p in result}
+        assert "infra" not in path_names, "execution layer fallthrough must not include infra/ dir"
+        assert "test_pretty_output_hook_infra.py" in path_names, (
+            "execution layer fallthrough must include infra/test_pretty_output_hook_infra.py"
+        )
+
 
 class TestClosureExecutionNarrowCascade:
     """__init__.py closure expansion for execution package."""
@@ -386,3 +464,15 @@ class TestSubpkgCascadeExecution:
         """SUBPKG_CASCADE_EXECUTION is importable and contains 'merge_queue' key."""
         assert "merge_queue" in SUBPKG_CASCADE_EXECUTION
         assert SUBPKG_CASCADE_EXECUTION["merge_queue"] == frozenset({"execution"})
+
+
+def test_headless_and_process_in_subpkg_cascade() -> None:
+    """headless and process must be explicit entries in SUBPKG_CASCADE_EXECUTION.
+
+    Files inside execution/headless/ and execution/process/ are detected by
+    _file_to_execution_subpkg(), which returns the directory name. The router
+    checks SUBPKG_CASCADE_EXECUTION first — MODULE_CASCADE_EXECUTION (stem-keyed)
+    is never reached for subpackage files.
+    """
+    assert "headless" in SUBPKG_CASCADE_EXECUTION, "headless must have explicit cascade entry"
+    assert "process" in SUBPKG_CASCADE_EXECUTION, "process must have explicit cascade entry"

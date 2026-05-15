@@ -307,11 +307,38 @@ MODULE_CASCADE_EXECUTION: dict[str, frozenset[str]] = {
             "cli/test_reload_loop.py",
         }
     ),
-    # headless and process are NOT listed — they fall through to cascade_map["execution"]
 }
 
 SUBPKG_CASCADE_EXECUTION: dict[str, frozenset[str]] = {
     "merge_queue": frozenset({"execution"}),
+    "headless": frozenset(
+        {
+            "execution",
+            "core",
+            "workspace",
+            "migration",
+            "server",
+            "cli",
+            "infra/test_pretty_output_hook_infra.py",
+            "skills/test_skill_output_compliance.py",
+            "_llm_triage",
+            "smoke_utils",
+        }
+    ),
+    "process": frozenset(
+        {
+            "execution",
+            "core",
+            "workspace",
+            "migration",
+            "server",
+            "cli",
+            "infra/test_pretty_output_hook_infra.py",
+            "skills/test_skill_output_compliance.py",
+            "_llm_triage",
+            "smoke_utils",
+        }
+    ),
 }
 
 MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
@@ -505,6 +532,10 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "cli",
         }
     ),
+    # skills/test_skill_output_compliance.py is intentionally absent: headless and process
+    # subpackages carry it via SUBPKG_CASCADE_EXECUTION. The fallthrough path covers
+    # execution modules that are not headless/process, so skills compliance testing is
+    # out of scope for generic execution changes.
     "execution": frozenset(
         {
             "execution",
@@ -513,8 +544,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "migration",
             "server",
             "cli",
-            "infra",
-            "skills",
+            "infra/test_pretty_output_hook_infra.py",
             "_llm_triage",
             "smoke_utils",
         }
@@ -547,7 +577,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "recipe",
             "_llm_triage",
             "core",
-            "hooks",
+            "hooks/test_recipe_contract_freshness.py",
             "migration",
             # Server file-level entries (9 of 52 import autoskillit.recipe):
             "server/test_factory.py",
@@ -1242,7 +1272,7 @@ def build_test_scope(
                     else:
                         test_dirs.update(
                             cascade_map["execution"]
-                        )  # fail-open: headless, process, unknown
+                        )  # fail-open: unknown execution modules
             elif pkg == "recipe" and mode == FilterMode.CONSERVATIVE:
                 stem = Path(f).stem
                 if stem in MODULE_CASCADE_RECIPE:

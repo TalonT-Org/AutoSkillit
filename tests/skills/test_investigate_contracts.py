@@ -6,6 +6,8 @@ history scan, and conditional analysis between Step 3 (Synthesize) and
 Step 4 (Write Report).
 """
 
+import re
+
 import pytest
 
 
@@ -184,11 +186,14 @@ def test_investigate_always_caps_subagent_spawns(skill_text: str) -> None:
         if next_section_idx != -1
         else skill_text[always_idx:]
     )
-    has_numeric_cap = "9" in always_block
-    has_spawn_language = (
-        "subagent spawn" in always_block.lower() or "total subagent" in always_block.lower()
+    has_spawn_cap_nine = bool(
+        re.search(
+            r"(?:total\s+subagent\s+spawns|subagent\s+spawns).*?\b9\b"
+            r"|\b9\b.*?(?:total\s+subagent|subagent\s+spawn)",
+            always_block.lower(),
+        )
     )
-    assert has_numeric_cap and has_spawn_language, (
+    assert has_spawn_cap_nine, (
         "ALWAYS constraints must include a rule capping total subagent spawns at 9 "
         "across all batches (standard and deep mode)"
     )

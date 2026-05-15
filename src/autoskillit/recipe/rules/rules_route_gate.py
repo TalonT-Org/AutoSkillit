@@ -4,21 +4,29 @@ from __future__ import annotations
 
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe._analysis_bfs import bfs_reachable
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 from autoskillit.recipe.schema import RecipeKind
 
 
 def _reachable_stops(ctx: ValidationContext, target: str) -> set[str]:
-    """Return all non-escalation stop step names reachable from target (including target itself)."""
+    """Return non-escalation stop steps reachable from target without crossing route gates."""
     graph = ctx.step_graph
-    visited = bfs_reachable(graph, target)
-    visited.add(target)
+    visited: set[str] = {target}
+    queue: list[str] = [target]
     stops: set[str] = set()
-    for step_name in visited:
-        step = ctx.recipe.steps.get(step_name)
-        if step is not None and step.action == "stop" and not step_name.startswith("escalate"):
-            stops.add(step_name)
+    while queue:
+        node = queue.pop()
+        step = ctx.recipe.steps.get(node)
+        if step is None:
+            continue
+        if step.action == "stop" and not node.startswith("escalate"):
+            stops.add(node)
+        if step.action == "route" and node != target:
+            continue
+        for neighbor in graph.get(node, set()):
+            if neighbor not in visited:
+                visited.add(neighbor)
+                queue.append(neighbor)
     return stops
 
 

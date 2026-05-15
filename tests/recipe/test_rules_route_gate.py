@@ -23,12 +23,10 @@ class TestRouteGateSharedStop:
                 "start": {"action": "stop", "message": "done"},
                 "route_gate": {
                     "action": "route",
-                    "on_result": {
-                        "conditions": [
-                            {"when": "${{ context.x }}", "route": "start"},
-                            {"route": "start"},
-                        ]
-                    },
+                    "on_result": [
+                        {"when": "${{ context.x }}", "route": "start"},
+                        {"route": "start"},
+                    ],
                 },
             }
         )
@@ -47,12 +45,10 @@ class TestRouteGateSharedStop:
                 "success": {"action": "stop", "message": "success outcome"},
                 "route_gate": {
                     "action": "route",
-                    "on_result": {
-                        "conditions": [
-                            {"when": "${{ context.x }}", "route": "success"},
-                            {"route": "skipped"},
-                        ]
-                    },
+                    "on_result": [
+                        {"when": "${{ context.x }}", "route": "success"},
+                        {"route": "skipped"},
+                    ],
                 },
             }
         )
@@ -67,12 +63,10 @@ class TestRouteGateSharedStop:
                 "escalate_stop": {"action": "stop", "message": "escalate"},
                 "route_gate": {
                     "action": "route",
-                    "on_result": {
-                        "conditions": [
-                            {"when": "${{ context.x }}", "route": "escalate_stop"},
-                            {"route": "escalate_stop"},
-                        ]
-                    },
+                    "on_result": [
+                        {"when": "${{ context.x }}", "route": "escalate_stop"},
+                        {"route": "escalate_stop"},
+                    ],
                 },
             }
         )
@@ -87,12 +81,10 @@ class TestRouteGateSharedStop:
                 "done": {"action": "stop", "message": "done"},
                 "route_gate": {
                     "action": "route",
-                    "on_result": {
-                        "conditions": [
-                            {"when": "${{ context.x }}", "route": "done"},
-                            {"route": "done"},
-                        ]
-                    },
+                    "on_result": [
+                        {"when": "${{ context.x }}", "route": "done"},
+                        {"route": "done"},
+                    ],
                 },
             }
         )
@@ -110,12 +102,10 @@ class TestRouteGateSharedStop:
                 "target_b": {"action": "stop", "message": "target b"},
                 "route_gate": {
                     "action": "route",
-                    "on_result": {
-                        "conditions": [
-                            {"when": "${{ context.x == 'a' }}", "route": "target_a"},
-                            {"when": "${{ context.x == 'b' }}", "route": "target_b"},
-                        ]
-                    },
+                    "on_result": [
+                        {"when": "${{ context.x == 'a' }}", "route": "target_a"},
+                        {"when": "${{ context.x == 'b' }}", "route": "target_b"},
+                    ],
                 },
             }
         )
@@ -131,21 +121,17 @@ class TestRouteGateSharedStop:
                 "skipped": {"action": "stop", "message": "skipped"},
                 "route_gate_shared": {
                     "action": "route",
-                    "on_result": {
-                        "conditions": [
-                            {"when": "${{ context.x }}", "route": "done"},
-                            {"route": "done"},
-                        ]
-                    },
+                    "on_result": [
+                        {"when": "${{ context.x }}", "route": "done"},
+                        {"route": "done"},
+                    ],
                 },
                 "route_gate_clean": {
                     "action": "route",
-                    "on_result": {
-                        "conditions": [
-                            {"when": "${{ context.x }}", "route": "done"},
-                            {"route": "skipped"},
-                        ]
-                    },
+                    "on_result": [
+                        {"when": "${{ context.x }}", "route": "done"},
+                        {"route": "skipped"},
+                    ],
                 },
             }
         )

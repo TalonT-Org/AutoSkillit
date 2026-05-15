@@ -172,3 +172,23 @@ def test_investigate_historical_step_reads_prior_diffs(step_35_section: str) -> 
         "or 'git log -p' so it can compare the prior fix approach against the current "
         "root cause"
     )
+
+
+def test_investigate_always_caps_subagent_spawns(skill_text: str) -> None:
+    """ALWAYS constraints must cap total subagent spawns at 9 across all batches."""
+    always_idx = skill_text.find("**ALWAYS:**")
+    assert always_idx != -1, "ALWAYS constraints block not found in investigate SKILL.md"
+    next_section_idx = skill_text.find("\n## ", always_idx)
+    always_block = (
+        skill_text[always_idx:next_section_idx]
+        if next_section_idx != -1
+        else skill_text[always_idx:]
+    )
+    has_numeric_cap = "9" in always_block
+    has_spawn_language = (
+        "subagent spawn" in always_block.lower() or "total subagent" in always_block.lower()
+    )
+    assert has_numeric_cap and has_spawn_language, (
+        "ALWAYS constraints must include a rule capping total subagent spawns at 9 "
+        "across all batches (standard and deep mode)"
+    )

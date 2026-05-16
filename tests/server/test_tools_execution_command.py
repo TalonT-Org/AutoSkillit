@@ -211,7 +211,11 @@ class TestRunSkillModel:
     # MOD_S3
     @pytest.mark.anyio
     async def test_run_skill_no_model_flag_when_empty(self, tool_ctx_kitchen_open):
-        tool_ctx_kitchen_open.config.model.default = ""  # ← add this line
+        # Direct assignment bypasses CoreRunConfig.__post_init__ (which rejects empty
+        # default_model). Production config is always non-empty; this simulates the
+        # path where both the caller-supplied model param and the config default are
+        # empty, so _resolve_model returns "" and no --model flag is emitted.
+        tool_ctx_kitchen_open.config.model.default_model = ""
         tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx_kitchen_open.runner.push(_make_result(0, self._MOCK_STDOUT, ""))
         await run_skill("/investigate error", "/tmp", model="")

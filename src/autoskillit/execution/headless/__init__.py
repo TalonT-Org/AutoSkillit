@@ -131,15 +131,15 @@ def _session_log_dir(cwd: str) -> Path:
 
 def _resolve_model(step_model: str, config: AutomationConfig) -> str | None:
     """Resolve model selection: config override > step > config default."""
-    if config.model.override:
-        logger.debug("model_resolved", tier="override", model=config.model.override)
-        return config.model.override
+    if config.model.model_override:
+        logger.debug("model_resolved", tier="override", model=config.model.model_override)
+        return config.model.model_override
     if step_model:
         logger.debug("model_resolved", tier="step", model=step_model)
         return step_model
-    if config.model.default:
-        logger.debug("model_resolved", tier="default", model=config.model.default)
-        return config.model.default
+    if config.model.default_model:
+        logger.debug("model_resolved", tier="default", model=config.model.default_model)
+        return config.model.default_model
     logger.debug("model_resolved", tier="none", model=None)
     return None
 

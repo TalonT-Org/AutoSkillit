@@ -39,10 +39,10 @@ class TestDefaultConfig:
         assert cfg.worktree_setup.command is None
 
     def test_default_model_config(self):
-        """MOD_C1: ModelConfig.default is 'sonnet'; override defaults to None."""
+        """MOD_C1: CoreRunConfig.default_model is 'sonnet'; model_override defaults to None."""
         cfg = AutomationConfig()
-        assert cfg.model.default == "sonnet"
-        assert cfg.model.override is None
+        assert cfg.model.default_model == "sonnet"
+        assert cfg.model.model_override is None
 
 
 class TestLoadConfig:
@@ -188,24 +188,24 @@ class TestLoadConfig:
         assert isinstance(cfg.reset_workspace.preserve_dirs, set)
 
     def test_yaml_loads_model_config(self, tmp_path):
-        """MOD_C2: YAML with model section populates ModelConfig."""
+        """MOD_C2: YAML with model section populates CoreRunConfig."""
         config_dir = tmp_path / ".autoskillit"
         config_dir.mkdir()
         config_data = {"model": {"default": "sonnet"}}
         (config_dir / "config.yaml").write_text(yaml.dump(config_data))
         cfg = load_config(tmp_path)
-        assert cfg.model.default == "sonnet"
-        assert cfg.model.override is None
+        assert cfg.model.default_model == "sonnet"
+        assert cfg.model.model_override is None
 
     def test_partial_model_config(self, tmp_path):
-        """MOD_C3: YAML with only model.override preserves model.default from package defaults."""
+        """MOD_C3: YAML key 'override' maps to Python field model_override; unset default_model is preserved at its default."""
         config_dir = tmp_path / ".autoskillit"
         config_dir.mkdir()
         config_data = {"model": {"override": "haiku"}}
         (config_dir / "config.yaml").write_text(yaml.dump(config_data))
         cfg = load_config(tmp_path)
-        assert cfg.model.override == "haiku"
-        assert cfg.model.default == "sonnet"
+        assert cfg.model.model_override == "haiku"
+        assert cfg.model.default_model == "sonnet"
 
     def test_yaml_loads_worktree_setup_config(self, tmp_path):
         """WS_C2: YAML with worktree_setup section populates WorktreeSetupConfig."""

@@ -74,7 +74,7 @@ def test_execution_db_export() -> None:
 
 def test_config_settings_all_classes_exported() -> None:
     from autoskillit.config import (  # noqa: F401
-        ModelConfig,
+        CoreRunConfig,
         SafetyConfig,
         TestCheckConfig,
     )

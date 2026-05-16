@@ -126,9 +126,13 @@ class RunSkillConfig:
 
 
 @dataclass
-class ModelConfig:
-    default: str = "sonnet"
-    override: str | None = None
+class CoreRunConfig:
+    default_model: str = "sonnet"
+    model_override: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.default_model:
+            raise ValueError("CoreRunConfig.default_model must not be empty")
 
 
 @dataclass

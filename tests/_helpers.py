@@ -43,10 +43,13 @@ def make_quota_guard_config(**overrides):
 
 
 def make_model_config(**overrides):
-    """Build ModelConfig for tests without direct config imports."""
-    from autoskillit.config.settings import ModelConfig
+    """Build CoreRunConfig for tests; uses direct assignment to allow empty/None fields."""
+    from autoskillit.config.settings import CoreRunConfig
 
-    return ModelConfig(**overrides)
+    cfg = CoreRunConfig()
+    for k, v in overrides.items():
+        setattr(cfg, k, v)
+    return cfg
 
 
 def make_tracing_config(**overrides):

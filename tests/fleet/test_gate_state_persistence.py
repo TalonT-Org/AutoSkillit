@@ -856,7 +856,6 @@ class TestValidationFailureCampaignState:
             campaign_state_path=None,
         )
 
-        if isinstance(result, DispatchResult):
-            result = result.outcome
+        result = result.outcome
         assert isinstance(result, DispatchRejected)
         assert result.dispatch_id != ""

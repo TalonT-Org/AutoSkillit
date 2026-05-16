@@ -145,6 +145,28 @@ def _ratio(tokens: int, loc: int) -> str:
     return f"{tokens / loc:.1f}" if loc > 0 else "—"
 
 
+_LEGACY_TO_CANONICAL: dict[str, str] = {
+    "cache_creation_input_tokens": "cache_write_tokens",
+    "cache_read_input_tokens": "cache_read_tokens",
+}
+
+
+def _normalize_keys(d: dict) -> dict:
+    """Normalize legacy cache field names to canonical. Drop after P2-A4-WP1."""
+    out = dict(d)
+    for old, new in _LEGACY_TO_CANONICAL.items():
+        if old in out and new not in out:
+            out[new] = out.pop(old)
+    return out
+
+
+def _h_cache(val: int | None) -> str:
+    """Humanize a cache token count; None → '—' (provider lacks cache)."""
+    if val is None:
+        return "—"
+    return TelemetryFormatter._humanize(val)
+
+
 class TelemetryFormatter:
     """Stateless formatter for token and timing telemetry data."""
 
@@ -179,6 +201,8 @@ class TelemetryFormatter:
         """Produce a markdown table for token usage with timing column."""
         h = TelemetryFormatter._humanize
         fmt_dur = TelemetryFormatter._fmt_duration
+        steps = [_normalize_keys(s) for s in steps]
+        total = _normalize_keys(total)
 
         lines = [
             "## Token Usage Summary",
@@ -196,10 +220,10 @@ class TelemetryFormatter:
             count = step.get("invocation_count", 1)
             inp = h(step.get("input_tokens", 0))
             out = h(step.get("output_tokens", 0))
-            cache_rd = h(step.get("cache_read_tokens", 0))
+            cache_rd = _h_cache(step.get("cache_read_tokens"))
             peak_ctx = h(step.get("peak_context", 0))
             turns = step.get("turn_count", 0)
-            cache_wr = h(step.get("cache_write_tokens", 0))
+            cache_wr = _h_cache(step.get("cache_write_tokens"))
             wc = step.get("wall_clock_seconds", step.get("elapsed_seconds", 0.0))
             lines.append(
                 f"| {name} | {model} | {count} | {inp} | {out} | {cache_rd} | {peak_ctx}"
@@ -208,9 +232,9 @@ class TelemetryFormatter:
 
         total_in = h(total.get("input_tokens", 0))
         total_out = h(total.get("output_tokens", 0))
-        total_cache_rd = h(total.get("cache_read_tokens", 0))
+        total_cache_rd = _h_cache(total.get("cache_read_tokens"))
         total_peak = h(total.get("peak_context", 0))
-        total_cache_wr = h(total.get("cache_write_tokens", 0))
+        total_cache_wr = _h_cache(total.get("cache_write_tokens"))
         total_time = total.get("total_elapsed_seconds", 0.0)
         lines.append(
             f"| **Total** | | | {total_in} | {total_out} | {total_cache_rd}"
@@ -247,6 +271,8 @@ class TelemetryFormatter:
         """Produce a padded-column plain text table for token usage."""
         h = TelemetryFormatter._humanize
         fmt_dur = TelemetryFormatter._fmt_duration
+        steps = [_normalize_keys(s) for s in steps]
+        total = _normalize_keys(total)
 
         rows: list[tuple[str, str, str, str, str, str, str, str, str, str]] = []
         has_non_anthropic = False
@@ -263,10 +289,10 @@ class TelemetryFormatter:
                     str(step.get("invocation_count", 1)),
                     h(step.get("input_tokens", 0)),
                     h(step.get("output_tokens", 0)),
-                    h(step.get("cache_read_tokens", 0)),
+                    _h_cache(step.get("cache_read_tokens")),
                     h(step.get("peak_context", 0)),
                     str(step.get("turn_count", 0)),
-                    h(step.get("cache_write_tokens", 0)),
+                    _h_cache(step.get("cache_write_tokens")),
                     fmt_dur(step.get("wall_clock_seconds", step.get("elapsed_seconds", 0.0))),
                 )
             )
@@ -277,10 +303,10 @@ class TelemetryFormatter:
             "",
             h(total.get("input_tokens", 0)),
             h(total.get("output_tokens", 0)),
-            h(total.get("cache_read_tokens", 0)),
+            _h_cache(total.get("cache_read_tokens")),
             h(total.get("peak_context", 0)),
             "",
-            h(total.get("cache_write_tokens", 0)),
+            _h_cache(total.get("cache_write_tokens")),
             fmt_dur(total.get("total_elapsed_seconds", 0.0)),
         )
 
@@ -313,6 +339,8 @@ class TelemetryFormatter:
     ) -> str:
         """Produce compact Markdown-KV one-liners for PostToolUse hook display."""
         h = TelemetryFormatter._humanize
+        steps = [_normalize_keys(s) for s in steps]
+        total = _normalize_keys(total)
 
         lines = ["## token_summary", ""]
         has_non_anthropic = False
@@ -325,9 +353,9 @@ class TelemetryFormatter:
             count = step.get("invocation_count", 1)
             inp = h(step.get("input_tokens", 0))
             out = h(step.get("output_tokens", 0))
-            cache_rd = h(step.get("cache_read_tokens", 0))
+            cache_rd = _h_cache(step.get("cache_read_tokens"))
             peak_ctx = h(step.get("peak_context", 0))
-            cache_wr = h(step.get("cache_write_tokens", 0))
+            cache_wr = _h_cache(step.get("cache_write_tokens"))
             turns = step.get("turn_count", 0)
             wc = step.get("wall_clock_seconds", step.get("elapsed_seconds", 0.0))
             model_tag = f" model:{model}" if model else ""
@@ -340,9 +368,9 @@ class TelemetryFormatter:
             lines.append("")
             lines.append(f"total_uncached: {h(total.get('input_tokens', 0))}")
             lines.append(f"total_out: {h(total.get('output_tokens', 0))}")
-            lines.append(f"total_cache_read: {h(total.get('cache_read_tokens', 0))}")
+            lines.append(f"total_cache_read: {_h_cache(total.get('cache_read_tokens'))}")
             lines.append(f"total_peak_context: {h(total.get('peak_context', 0))}")
-            lines.append(f"total_cache_write: {h(total.get('cache_write_tokens', 0))}")
+            lines.append(f"total_cache_write: {_h_cache(total.get('cache_write_tokens'))}")
         if mcp_responses:
             mcp_total = mcp_responses.get("total", {})
             if mcp_total:
@@ -360,6 +388,8 @@ class TelemetryFormatter:
         """Produce a markdown Token Efficiency table. Returns '' when all LoC=0."""
         if not any(s.get("loc_insertions", 0) + s.get("loc_deletions", 0) > 0 for s in steps):
             return ""
+        steps = [_normalize_keys(s) for s in steps]
+        total = _normalize_keys(total)
 
         lines = [
             "## Token Efficiency",
@@ -369,23 +399,23 @@ class TelemetryFormatter:
         ]
         for step in steps:
             loc = step.get("loc_insertions", 0) + step.get("loc_deletions", 0)
-            cr = step.get("cache_read_tokens", 0)
-            cw = step.get("cache_write_tokens", 0)
+            cr = step.get("cache_read_tokens")
+            cw = step.get("cache_write_tokens")
             out = step.get("output_tokens", 0)
             lines.append(
                 f"| {step.get('step_name', '?')} | {loc}"
-                f" | {_ratio(cr, loc)}"
-                f" | {_ratio(cw, loc)} | {_ratio(out, loc)} |"
+                f" | {'—' if cr is None else _ratio(cr, loc)}"
+                f" | {'—' if cw is None else _ratio(cw, loc)} | {_ratio(out, loc)} |"
             )
 
         total_loc = total.get("loc_insertions", 0) + total.get("loc_deletions", 0)
-        total_cr = total.get("cache_read_tokens", 0)
-        total_cw = total.get("cache_write_tokens", 0)
+        total_cr = total.get("cache_read_tokens")
+        total_cw = total.get("cache_write_tokens")
         total_out = total.get("output_tokens", 0)
         lines.append(
             f"| **Total** | **{total_loc}**"
-            f" | {_ratio(total_cr, total_loc)}"
-            f" | {_ratio(total_cw, total_loc)} | {_ratio(total_out, total_loc)} |"
+            f" | {'—' if total_cr is None else _ratio(total_cr, total_loc)}"
+            f" | {'—' if total_cw is None else _ratio(total_cw, total_loc)} | {_ratio(total_out, total_loc)} |"
         )
         return "\n".join(lines)
 
@@ -396,6 +426,7 @@ class TelemetryFormatter:
             return ""
         h = TelemetryFormatter._humanize
         fmt_dur = TelemetryFormatter._fmt_duration
+        model_totals = [_normalize_keys(m) for m in model_totals]  # type: ignore[misc, arg-type]
         lines = [
             "## Model Usage Breakdown",
             "",
@@ -406,8 +437,8 @@ class TelemetryFormatter:
             lines.append(
                 f"| {m.get('model', '')} | {m.get('step_count', 0)}"
                 f" | {h(m.get('input_tokens', 0))} | {h(m.get('output_tokens', 0))}"
-                f" | {h(m.get('cache_read_tokens', 0))}"
-                f" | {h(m.get('cache_write_tokens', 0))}"
+                f" | {_h_cache(m.get('cache_read_tokens'))}"  # type: ignore[arg-type]
+                f" | {_h_cache(m.get('cache_write_tokens'))}"  # type: ignore[arg-type]
                 f" | {fmt_dur(m.get('elapsed_seconds', 0.0))} |"
             )
         return "\n".join(lines)
@@ -419,6 +450,7 @@ class TelemetryFormatter:
             return ""
         h = TelemetryFormatter._humanize
         fmt_dur = TelemetryFormatter._fmt_duration
+        model_totals = [_normalize_keys(m) for m in model_totals]  # type: ignore[misc, arg-type]
         rows: list[tuple[str, str, str, str, str, str, str]] = []
         for m in model_totals:
             rows.append(
@@ -427,8 +459,8 @@ class TelemetryFormatter:
                     str(m.get("step_count", 0)),
                     h(m.get("input_tokens", 0)),
                     h(m.get("output_tokens", 0)),
-                    h(m.get("cache_read_tokens", 0)),
-                    h(m.get("cache_write_tokens", 0)),
+                    _h_cache(m.get("cache_read_tokens")),  # type: ignore[arg-type]
+                    _h_cache(m.get("cache_write_tokens")),  # type: ignore[arg-type]
                     fmt_dur(m.get("elapsed_seconds", 0.0)),
                 )
             )
@@ -439,29 +471,33 @@ class TelemetryFormatter:
         """Produce a padded-column plain text efficiency table. Returns '' when all LoC=0."""
         if not any(s.get("loc_insertions", 0) + s.get("loc_deletions", 0) > 0 for s in steps):
             return ""
+        steps = [_normalize_keys(s) for s in steps]
+        total = _normalize_keys(total)
 
         rows: list[tuple[str, str, str, str, str]] = []
         for step in steps:
             loc = step.get("loc_insertions", 0) + step.get("loc_deletions", 0)
-            cr = step.get("cache_read_tokens", 0)
-            cw = step.get("cache_write_tokens", 0)
+            cr = step.get("cache_read_tokens")
+            cw = step.get("cache_write_tokens")
             out = step.get("output_tokens", 0)
             rows.append(
                 (
                     step.get("step_name", "?"),
                     str(loc),
-                    _ratio(cr, loc),
-                    _ratio(cw, loc),
+                    "—" if cr is None else _ratio(cr, loc),
+                    "—" if cw is None else _ratio(cw, loc),
                     _ratio(out, loc),
                 )
             )
 
         total_loc = total.get("loc_insertions", 0) + total.get("loc_deletions", 0)
+        total_cr = total.get("cache_read_tokens")
+        total_cw = total.get("cache_write_tokens")
         total_row = (
             "Total",
             str(total_loc),
-            _ratio(total.get("cache_read_tokens", 0), total_loc),
-            _ratio(total.get("cache_write_tokens", 0), total_loc),
+            "—" if total_cr is None else _ratio(total_cr, total_loc),
+            "—" if total_cw is None else _ratio(total_cw, total_loc),
             _ratio(total.get("output_tokens", 0), total_loc),
         )
         return _render_terminal_table(_EFFICIENCY_COLUMNS, rows + [total_row])

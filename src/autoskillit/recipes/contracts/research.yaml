@@ -1,4 +1,4 @@
-recipe_source_hash: sha256:b8cf6e8c3b07797d600c36ecce23d6441de09898e9ca7a3c5f59f9951d06b85c
+recipe_source_hash: sha256:d9f7755acbda94d372e84b8f15ba54efa2e84105986c5a92b62563faaef9d4c4
 bundled_manifest_version: 0.1.0
 skill_hashes: {}
 skills:
@@ -3724,6 +3724,7 @@ dataflow:
   - audit_claims
   - audit_verdict
   - base_branch
+  - blocked_hypotheses
   - claims_needs_rerun
   - classification_timestamp
   - design_review_count
@@ -3733,6 +3734,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - fixes_applied
   - group_files
   - group_manifest

@@ -20,6 +20,10 @@ CONTRACTS_PATH = (
 SKILL_MD_PATH = (
     Path(__file__).parent.parent.parent / f"src/autoskillit/skills_extended/{SKILL_NAME}/SKILL.md"
 )
+ASSIGN_SKILL_MD_PATH = (
+    Path(__file__).parent.parent.parent
+    / "src/autoskillit/skills_extended/planner-elaborate-assignments/SKILL.md"
+)
 
 
 @pytest.fixture(scope="module")
@@ -44,6 +48,15 @@ def skill_md() -> str:
         "Create src/autoskillit/skills_extended/planner-elaborate-wps/SKILL.md"
     )
     return SKILL_MD_PATH.read_text()
+
+
+@pytest.fixture(scope="module")
+def assign_skill_md() -> str:
+    assert ASSIGN_SKILL_MD_PATH.exists(), (
+        f"SKILL.md not found at {ASSIGN_SKILL_MD_PATH}. "
+        "Create src/autoskillit/skills_extended/planner-elaborate-assignments/SKILL.md"
+    )
+    return ASSIGN_SKILL_MD_PATH.read_text()
 
 
 class TestContractRegistration:
@@ -151,4 +164,18 @@ class TestSkillMdPresence:
     def test_has_wp_sentinels(self, skill_md: str) -> None:
         assert "wp_sentinels" in skill_md, (
             "SKILL.md must document the sentinel directory naming convention (wp_sentinels)."
+        )
+
+    def test_skill_md_contains_wp_id_format_constraint(self, skill_md: str) -> None:
+        assert "P{N}-A{N}-WP{N}" in skill_md, (
+            "SKILL.md must specify the WP ID format pattern P{N}-A{N}-WP{N}."
+        )
+        assert "numeric" in skill_md.lower(), (
+            "SKILL.md must specify that IDs must be numeric only."
+        )
+
+    def test_skill_md_contains_assignment_id_format_constraint(self, assign_skill_md: str) -> None:
+        assert "P{N}-A{N}" in assign_skill_md, (
+            "planner-elaborate-assignments/SKILL.md must specify "
+            "the Assignment ID format pattern P{N}-A{N}."
         )

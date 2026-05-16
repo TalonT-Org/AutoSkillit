@@ -110,6 +110,12 @@ For each phase, write to `$(dirname $1)/phases/{phase_id}_result.json`:
 }
 ```
 
+**CRITICAL — Phase ID Format Contract:**
+- Phase IDs MUST match the pattern `P{N}` where `{N}` is a positive integer
+- Examples: `P1`, `P2`, `P12`
+- INVALID: `Phase1`, `P_1`, `phase-1`
+- The result filename is `{phase_id}_result.json` — non-matching filenames are rejected
+
 The backend derives two additional fields at load time — do not write them:
 - `phase_number` (integer): derived from `ordering`
 - `name_slug` (string): derived by slugifying `name` (e.g., "Component Setup" → "component-setup")

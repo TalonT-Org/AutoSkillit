@@ -121,6 +121,12 @@ Expected L0 return schema:
 }
 ```
 
+**CRITICAL — WP ID Format Contract:**
+- WP IDs MUST match the pattern `P{N}-A{N}-WP{N}` where `{N}` is a positive integer (numeric only — no letters or hyphens in the number)
+- Examples: `P1-A2-WP1`, `P3-A1-WP12`
+- INVALID: `WP2a`, `WP3b`, `WP6-C`, `P1-A1-WP-1`, `wp1`
+- The result filename is `{wp_id}_result.json` — non-matching filenames are rejected
+
 ### Step 5: Collect and validate L0 responses
 
 For each L0 response:

@@ -343,6 +343,56 @@ def test_tier_filename_regexes_match_expected_patterns() -> None:
         assert not WP_RESULT_FILE_RE.match(name)
 
 
+@pytest.mark.parametrize(
+    "name",
+    [
+        "P1-A1-WP2a_result.json",
+        "P1-A1-WP3b_result.json",
+        "P1-A1-WP6-C_result.json",
+        "P1-A1-WP1v2_result.json",
+        "wp1_result.json",
+        "P1-A1-WP-1_result.json",
+    ],
+)
+def test_wp_result_file_re_rejects_plausible_llm_deviations(name: str) -> None:
+    """WP regex must reject common LLM-produced deviations."""
+    from autoskillit.planner.schema import WP_RESULT_FILE_RE
+
+    assert not WP_RESULT_FILE_RE.match(name), f"Should reject: {name}"
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "P1-A2b_result.json",
+        "P1-A2a_result.json",
+        "P1-setup_result.json",
+        "P1-A_result.json",
+    ],
+)
+def test_assign_result_file_re_rejects_plausible_llm_deviations(name: str) -> None:
+    """ASSIGN regex must reject common LLM-produced deviations."""
+    from autoskillit.planner.schema import ASSIGN_RESULT_FILE_RE
+
+    assert not ASSIGN_RESULT_FILE_RE.match(name), f"Should reject: {name}"
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "Phase1_result.json",
+        "phase_1_result.json",
+        "P_1_result.json",
+        "P1-phase_result.json",
+    ],
+)
+def test_phase_result_file_re_rejects_plausible_llm_deviations(name: str) -> None:
+    """PHASE regex must reject common LLM-produced deviations."""
+    from autoskillit.planner.schema import PHASE_RESULT_FILE_RE
+
+    assert not PHASE_RESULT_FILE_RE.match(name), f"Should reject: {name}"
+
+
 # ---------------------------------------------------------------------------
 # ID Contract Enforcement Tests (1h)
 # ---------------------------------------------------------------------------

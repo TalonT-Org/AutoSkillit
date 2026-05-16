@@ -25,6 +25,7 @@ Hook script behavior, registration, and bridge tests.
 | `test_skill_load_post_hook.py` | Tests for skill_load_post_hook.py PostToolUse hook |
 | `test_token_summary_appender.py` | Tests for the token_summary_appender PostToolUse hook |
 | `test_write_guard.py` | Tests for write_guard.py PreToolUse hook |
+| `test_planner_result_naming_guard.py` | Tests for planner_result_naming_guard.py PreToolUse hook |
 | `test_recipe_contract_freshness.py` | Tests for the recipe-contract-freshness pre-commit hook |
 
 ## Architecture Notes

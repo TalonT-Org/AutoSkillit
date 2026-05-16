@@ -10,7 +10,7 @@ from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import RecipeKind
 from tests.recipe.conftest import _make_workflow
 
-pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
 
 class TestRouteGateSharedStop:

@@ -96,25 +96,18 @@ class TestResearchArchiveRecipe:
         assert len(fallback) == 1
         assert fallback[0].route == "archive_skipped"
 
-    def test_archive_skipped_is_stop(self, recipe) -> None:
+    def test_archive_skipped_step(self, recipe) -> None:
         step = recipe.steps["archive_skipped"]
         assert step.action == "stop"
-        assert len(step.message) >= 10
-
-    def test_archive_skipped_message_mentions_no_pr(self, recipe) -> None:
-        step = recipe.steps["archive_skipped"]
         assert "pr" in step.message.lower()
-
-    def test_archive_skipped_message_contains_sentinel(self, recipe) -> None:
-        step = recipe.steps["archive_skipped"]
         assert "sentinel" in step.message.lower()
 
     def test_research_complete_not_reachable_from_archive_skipped(self, recipe) -> None:
+        from autoskillit.recipe import make_validation_context
         from autoskillit.recipe._analysis_bfs import bfs_reachable
-        from autoskillit.recipe._analysis_graph import _build_step_graph
 
-        graph = _build_step_graph(recipe)
-        reachable = bfs_reachable(graph, "archive_skipped")
+        ctx = make_validation_context(recipe)
+        reachable = bfs_reachable(ctx.step_graph, "archive_skipped")
         assert "research_complete" not in reachable
 
     def test_no_context_pr_url_in_recipe(self) -> None:

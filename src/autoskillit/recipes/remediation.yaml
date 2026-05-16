@@ -1645,7 +1645,7 @@ steps:
   done_unconfirmed:
     action: stop
     message: >-
-      Investigation pipeline finished but merge was not confirmed within the timeout
+      Implementation pipeline finished but merge was not confirmed within the timeout
       window. The PR is still open and the clone has been preserved for inspection.
       The in-progress label remains on the issue. Human operator should verify merge
       status.

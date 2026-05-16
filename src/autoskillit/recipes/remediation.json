@@ -1780,7 +1780,7 @@
     },
     "done_unconfirmed": {
       "action": "stop",
-      "message": "Investigation pipeline finished but merge was not confirmed within the timeout window. The PR is still open and the clone has been preserved for inspection. The in-progress label remains on the issue. Human operator should verify merge status. Emit the L3 result sentinel JSON block now with success=true and reason=\"merge_unconfirmed\". Example sentinel: {\"success\": true, \"reason\": \"merge_unconfirmed\"}"
+      "message": "Implementation pipeline finished but merge was not confirmed within the timeout window. The PR is still open and the clone has been preserved for inspection. The in-progress label remains on the issue. Human operator should verify merge status. Emit the L3 result sentinel JSON block now with success=true and reason=\"merge_unconfirmed\". Example sentinel: {\"success\": true, \"reason\": \"merge_unconfirmed\"}"
     },
     "release_issue_success": {
       "description": "Transition issue from in-progress to staged after successful pipeline completion",

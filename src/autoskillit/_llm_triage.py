@@ -29,7 +29,9 @@ logger = get_logger(__name__)
 _SKILL_MD_TRUNCATE = 1500
 
 
-async def triage_staleness(stale_items: list[StaleItem]) -> list[dict[str, Any]]:
+async def triage_staleness(
+    stale_items: list[StaleItem], *, agent_backend: str = "claude-code"
+) -> list[dict[str, Any]]:
     """Use Haiku to determine if stale contracts changed meaningfully.
 
     For each stale item with reason="hash_mismatch", reads the current
@@ -69,13 +71,13 @@ async def triage_staleness(stale_items: list[StaleItem]) -> list[dict[str, Any]]
             if skill_md_path.is_file():
                 skill_md_cache[item.skill] = skill_md_path.read_text()
 
-    results.extend(await _triage_batch(hash_items, skill_md_cache))
+    results.extend(await _triage_batch(hash_items, skill_md_cache, agent_backend=agent_backend))
 
     return results
 
 
 async def _triage_batch(
-    batch: list[StaleItem], skill_md_cache: dict[str, str]
+    batch: list[StaleItem], skill_md_cache: dict[str, str], *, agent_backend: str = "claude-code"
 ) -> list[dict[str, Any]]:
     """Triage one batch of hash_mismatch items with a single Haiku subprocess call.
 
@@ -100,6 +102,16 @@ async def _triage_batch(
 
     if not triageable:
         return pre_results
+
+    if agent_backend != "claude-code":
+        return pre_results + [
+            {
+                "skill": i.skill,
+                "meaningful": True,
+                "summary": f"Skipped LLM triage (backend={agent_backend}).",
+            }
+            for i in triageable
+        ]
 
     prompt = _build_batch_prompt(triageable, skill_md_cache)
 

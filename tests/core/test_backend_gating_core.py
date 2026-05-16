@@ -6,8 +6,6 @@ for non-claude-code backends without performing any I/O.
 
 from __future__ import annotations
 
-import json
-
 import pytest
 
 from autoskillit.core._version_snapshot import (
@@ -38,15 +36,15 @@ def test_claude_code_version_returns_empty_for_non_claude_code_backend(monkeypat
     assert _claude_code_version() == ""
 
 
-def test_plugins_returns_empty_for_non_claude_code_backend(monkeypatch, tmp_path):
+def test_plugins_returns_empty_for_non_claude_code_backend(monkeypatch):
     import autoskillit.core._version_snapshot as mod
 
     monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "headless")
-    plugins_dir = tmp_path / ".claude" / "plugins"
-    plugins_dir.mkdir(parents=True)
-    plugin_data = {"version": 2, "plugins": {"some-ref": [{"version": "1.0"}]}}
-    (plugins_dir / "installed_plugins.json").write_text(json.dumps(plugin_data), encoding="utf-8")
-    monkeypatch.setattr(mod.Path, "home", classmethod(lambda cls: tmp_path))
+
+    def _no_read(*args, **kwargs):
+        raise AssertionError("Path.home should not be called")
+
+    monkeypatch.setattr(mod.Path, "home", staticmethod(_no_read))
     assert _plugins() == []
 
 

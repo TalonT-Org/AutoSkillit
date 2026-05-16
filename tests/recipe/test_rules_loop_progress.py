@@ -184,7 +184,9 @@ def test_planner_refine_capture_compliant() -> None:
 
     from autoskillit.recipe.io import load_recipe
 
-    recipe_path = Path("src/autoskillit/recipes/planner.yaml")
+    recipe_path = (
+        Path(__file__).parent.parent.parent / "src" / "autoskillit" / "recipes" / "planner.yaml"
+    )
     recipe = load_recipe(recipe_path)
 
     # The rule should not fire for the refine step since it now has capture

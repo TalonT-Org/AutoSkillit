@@ -15,6 +15,7 @@ from autoskillit.planner.schema import (
     WP_RESULT_FILE_RE,
     RunDirResult,
     TaskResolutionResult,
+    collect_tier_result_files,
     make_canonical_assignment_id,
     validate_assignment_result,
     validate_phase_result,
@@ -60,16 +61,9 @@ def build_phase_assignment_manifest(phases_dir: str, output_dir: str) -> dict[st
     out_dir = Path(output_dir)
     assign_dir = out_dir.resolve()
 
-    all_phase_files = sorted(phases_path.glob("*_result.json"))
-    excluded = [f for f in all_phase_files if not PHASE_RESULT_FILE_RE.match(f.name)]
-    if excluded:
-        names = [f.name for f in excluded[:5]]
-        raise ValueError(
-            f"Result files in {phases_path} excluded by {PHASE_RESULT_FILE_RE.pattern}: {names}. "
-            f"This indicates non-canonical IDs were generated upstream."
-        )
+    phase_files = collect_tier_result_files(phases_path, PHASE_RESULT_FILE_RE)
     parsed_phases = []
-    for f in all_phase_files:
+    for f in phase_files:
         try:
             raw = json.loads(f.read_text())
         except json.JSONDecodeError as exc:
@@ -129,16 +123,9 @@ def build_phase_wp_manifest(
         else (out_dir / "work_packages").resolve()
     )
 
-    all_assign_files = sorted(assign_path.glob("*_result.json"))
-    excluded = [f for f in all_assign_files if not ASSIGN_RESULT_FILE_RE.match(f.name)]
-    if excluded:
-        names = [f.name for f in excluded[:5]]
-        raise ValueError(
-            f"Result files in {assign_path} excluded by {ASSIGN_RESULT_FILE_RE.pattern}: {names}. "
-            f"This indicates non-canonical IDs were generated upstream."
-        )
+    assign_files = collect_tier_result_files(assign_path, ASSIGN_RESULT_FILE_RE)
     parsed_assignments: list[dict] = []
-    for f in all_assign_files:
+    for f in assign_files:
         try:
             raw = json.loads(f.read_text())
         except json.JSONDecodeError as exc:
@@ -217,16 +204,8 @@ def finalize_wp_manifest(work_packages_dir: str, output_dir: str) -> dict[str, s
     if not wp_dir.is_dir():
         raise FileNotFoundError(f"work_packages_dir does not exist: {wp_dir}")
 
-    all_result_files = sorted(wp_dir.glob("*_result.json"))
-    excluded = [f for f in all_result_files if not WP_RESULT_FILE_RE.match(f.name)]
-    if excluded:
-        names = [f.name for f in excluded[:5]]
-        raise ValueError(
-            f"Result files in {wp_dir} excluded by {WP_RESULT_FILE_RE.pattern}: {names}. "
-            f"This indicates non-canonical IDs were generated upstream."
-        )
     result_files = sorted(
-        all_result_files,
+        collect_tier_result_files(wp_dir, WP_RESULT_FILE_RE),
         key=lambda p: _natural_sort_key(p.name),
     )
     items = []

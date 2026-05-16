@@ -427,6 +427,24 @@ def test_build_plan_snapshot_empty_dir_produces_empty_phases(tmp_path) -> None:
     assert result["phase_ids"] == ""
 
 
+def test_build_plan_snapshot_raises_on_non_canonical_phase_filename(tmp_path) -> None:
+    """Test 1d: Non-canonical phase file in phases/ raises instead of silent drop."""
+    phases_dir = tmp_path / "phases"
+    phases_dir.mkdir()
+    out = tmp_path / "snapshot.json"
+
+    (phases_dir / "P1_result.json").write_text(
+        json.dumps({"id": "P1", "name": "Phase 1", "ordering": 1})
+    )
+    # Non-canonical: matches *_result.json but NOT PHASE_RESULT_FILE_RE
+    (phases_dir / "Phase1_result.json").write_text(
+        json.dumps({"id": "Phase1", "name": "Phase One", "ordering": 1})
+    )
+
+    with pytest.raises(ValueError, match="Phase1_result.json"):
+        build_plan_snapshot(str(phases_dir), str(out))
+
+
 # ---------------------------------------------------------------------------
 # WP3: merge_tier_results tests
 # ---------------------------------------------------------------------------

@@ -12,6 +12,7 @@ from autoskillit.planner.schema import (
     ASSIGN_RESULT_FILE_RE,
     PHASE_RESULT_FILE_RE,
     WP_RESULT_FILE_RE,
+    collect_tier_result_files,
     validate_phase_result,
 )
 
@@ -238,20 +239,10 @@ def merge_tier_results(
     **kwargs: Any,
 ) -> dict[str, Any]:
     tier_re = _TIER_FILE_RE.get(key)
-    all_files = sorted(Path(results_dir).glob("*_result.json"))
     if tier_re is not None:
-        excluded = [f for f in all_files if not tier_re.match(f.name)]
-        if excluded:
-            names = [f.name for f in excluded]
-            display = names[:10]
-            suffix = f" and {len(names) - 10} more" if len(names) > 10 else ""
-            raise ValueError(
-                f"Result files in {results_dir} excluded by {tier_re.pattern}: {display}{suffix}. "
-                f"This indicates non-canonical IDs were generated upstream."
-            )
-        paths = [f for f in all_files if tier_re.match(f.name)]
+        paths = collect_tier_result_files(Path(results_dir), tier_re)
     else:
-        paths = all_files
+        paths = sorted(Path(results_dir).glob("*_result.json"))
     if not paths:
         raise ValueError(f"No *_result.json files found in {results_dir}")
     result = merge_files(
@@ -377,17 +368,8 @@ def build_plan_snapshot(
     **kwargs: Any,
 ) -> dict[str, Any]:
     task = Path(task_file_path).read_text(encoding="utf-8") if task_file_path else ""
-    phases_path = Path(phases_dir)
-    all_phase_files = sorted(phases_path.glob("*_result.json"))
-    excluded = [f for f in all_phase_files if not PHASE_RESULT_FILE_RE.match(f.name)]
-    if excluded:
-        names = [f.name for f in excluded[:5]]
-        raise ValueError(
-            f"Result files in {phases_path} excluded by {PHASE_RESULT_FILE_RE.pattern}: {names}. "
-            f"This indicates non-canonical IDs were generated upstream."
-        )
     phase_pairs: list[tuple[int, dict[str, Any]]] = []
-    for p in all_phase_files:
+    for p in collect_tier_result_files(Path(phases_dir), PHASE_RESULT_FILE_RE):
         try:
             raw = json.loads(p.read_text())
             validated = validate_phase_result(raw)

@@ -398,7 +398,32 @@ def test_phase_result_file_re_rejects_plausible_llm_deviations(name: str) -> Non
 # ---------------------------------------------------------------------------
 
 
-def test_wp_id_validation_raises_on_noncanonical(tmp_path: Path) -> None:
+def test_schema_tier_regex_rejects_alpha_suffix() -> None:
+    """Test 1h: Tier result-file regexes reject alpha-suffixed names like P1-A1-WPa_result.json."""
+    from autoskillit.planner.schema import (
+        ASSIGN_RESULT_FILE_RE,
+        PHASE_RESULT_FILE_RE,
+        WP_RESULT_FILE_RE,
+    )
+
+    # Alpha suffixes on phase
+    assert PHASE_RESULT_FILE_RE.match("P1a_result.json") is None
+    assert PHASE_RESULT_FILE_RE.match("P1_result.json") is not None
+
+    # Alpha suffixes on assignment
+    assert ASSIGN_RESULT_FILE_RE.match("P1-Aa_result.json") is None
+    assert ASSIGN_RESULT_FILE_RE.match("P1-A1_result.json") is not None
+
+    # Alpha suffixes on WP
+    assert WP_RESULT_FILE_RE.match("P1-A1-WPa_result.json") is None
+    assert WP_RESULT_FILE_RE.match("P1-A1-WP1a_result.json") is None
+    assert WP_RESULT_FILE_RE.match("P1-A1-WP1_result.json") is not None
+
+    # Bare alpha suffix on WP (trailing 'a' without number)
+    assert WP_RESULT_FILE_RE.match("P1-A1-WP_result.json") is None
+
+
+def test_wp_id_validation_raises_on_noncanonical() -> None:
     """Test 1h: validate_wp_result raises (not warns) for non-canonical WP IDs."""
     from autoskillit.planner.schema import validate_wp_result
 

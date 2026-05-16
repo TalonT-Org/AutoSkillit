@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import warnings
+from pathlib import Path
 from typing import Any, Literal, TypedDict
 
 import regex as re
@@ -174,6 +175,27 @@ WP_RESULT_FILE_RE = re.compile(r"^P\d+-A\d+-WP\d+_result\.json$")
 PHASE_REQUIRED_KEYS: frozenset[str] = frozenset({"id", "name", "ordering"})
 ASSIGNMENT_REQUIRED_KEYS: frozenset[str] = frozenset({"id", "name", "proposed_work_packages"})
 WP_REQUIRED_KEYS: frozenset[str] = frozenset({"id", "name", "deliverables"})
+
+
+def collect_tier_result_files(directory: Path, tier_re: re.Pattern[str]) -> list[Path]:
+    """Collect ``*_result.json`` files matching the tier regex.
+
+    Raises ``ValueError`` if any ``*_result.json`` file in ``directory`` is
+    excluded by ``tier_re``, listing all excluded names along with the
+    expected pattern. This prevents silent drops of non-canonical result files.
+    """
+    all_files = sorted(directory.glob("*_result.json"))
+    excluded = [f for f in all_files if not tier_re.match(f.name)]
+    if excluded:
+        names = [f.name for f in excluded]
+        display = names[:10]
+        suffix = f" and {len(names) - 10} more" if len(names) > 10 else ""
+        raise ValueError(
+            f"Result files in {directory} excluded by {tier_re.pattern}: {display}{suffix}. "
+            f"This indicates non-canonical IDs were generated upstream."
+        )
+    return [f for f in all_files if tier_re.match(f.name)]
+
 
 DELIVERABLE_BOUNDS: tuple[int, int] = (1, 5)
 

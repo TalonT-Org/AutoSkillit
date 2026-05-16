@@ -364,6 +364,116 @@ def test_finalize_wp_manifest_skips_non_result_files(tmp_path):
     assert manifest["items"][0]["id"] == wp_id
 
 
+def test_finalize_wp_manifest_raises_on_non_canonical_wp_filename(tmp_path):
+    """Test 1a: Non-canonical WP result file (matches glob but not tier regex) raises."""
+    from autoskillit.planner import finalize_wp_manifest
+
+    wp_dir = tmp_path / "work_packages"
+    wp_dir.mkdir()
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    (wp_dir / "P1-A1-WP1_result.json").write_text(json.dumps(make_wp_result("P1-A1-WP1")))
+    # Alpha-suffixed file matches *_result.json but NOT WP_RESULT_FILE_RE
+    (wp_dir / "P1-A1-WPa_result.json").write_text(
+        json.dumps(make_wp_result("P1-A1-WP1", name="NonCanonical"))
+    )
+
+    with pytest.raises(ValueError, match="P1-A1-WPa_result.json"):
+        finalize_wp_manifest(str(wp_dir), str(output_dir))
+
+
+def test_build_phase_assignment_manifest_raises_on_non_canonical_phase_filename(tmp_path):
+    """Test 1b: Non-canonical phase file in phases/ raises instead of silent drop."""
+    from autoskillit.planner import build_phase_assignment_manifest
+
+    phases_dir = tmp_path / "phases"
+    phases_dir.mkdir()
+    output_dir = tmp_path / "assignments"
+    output_dir.mkdir()
+
+    (phases_dir / "P1_result.json").write_text(
+        json.dumps(make_phase_result(1, assignments_preview=[]))
+    )
+    # Alpha-suffixed: matches *_result.json but NOT PHASE_RESULT_FILE_RE
+    (phases_dir / "P1a_result.json").write_text(
+        json.dumps({"id": "P1a", "name": "Phase 1a", "ordering": 1})
+    )
+
+    with pytest.raises(ValueError, match="P1a_result.json"):
+        build_phase_assignment_manifest(str(phases_dir), str(output_dir))
+
+
+def test_build_phase_wp_manifest_raises_on_non_canonical_assignment_filename(tmp_path):
+    """Test 1c: Non-canonical assignment file in assignments/ raises instead of silent drop."""
+    from autoskillit.planner import build_phase_wp_manifest
+
+    assign_dir = tmp_path / "assignments"
+    assign_dir.mkdir()
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+
+    (assign_dir / "P1-A1_result.json").write_text(
+        json.dumps(make_assignment_result(1, 1, proposed_work_packages=[]))
+    )
+    # Alpha-suffixed: matches *_result.json but NOT ASSIGN_RESULT_FILE_RE
+    (assign_dir / "P1-Aa_result.json").write_text(
+        json.dumps(
+            {"id": "P1-Aa", "phase_id": "P1", "name": "Assign A", "proposed_work_packages": []}
+        )
+    )
+
+    with pytest.raises(ValueError, match="P1-Aa_result.json"):
+        build_phase_wp_manifest(str(assign_dir), str(out_dir))
+
+
+def test_finalize_wp_manifest_tolerates_known_non_result_files(tmp_path):
+    """Test 1f: Known non-result files (not matching *_result.json) are fully ignored."""
+    from autoskillit.planner import finalize_wp_manifest
+
+    wp_dir = tmp_path / "work_packages"
+    wp_dir.mkdir()
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    (wp_dir / "P1-A1-WP1_result.json").write_text(json.dumps(make_wp_result("P1-A1-WP1")))
+    (wp_dir / "wp_manifest.json").write_text('{"pass_name": "old"}')
+    (wp_dir / "wp_index.json").write_text("[]")
+    (wp_dir / "context_P1.json").write_text('{"id": "P1"}')
+    sentinel_dir = wp_dir / "wp_sentinels"
+    sentinel_dir.mkdir()
+    (sentinel_dir / "P1_result.json").write_text('{"ok": true}')
+
+    # Must NOT raise — these files don't match *_result.json glob so are excluded before regex
+    result = finalize_wp_manifest(str(wp_dir), str(output_dir))
+    assert result["total_count"] == "1"
+
+
+def test_collect_tier_result_files_multiple_non_canonical(tmp_path):
+    """Test 1g: Multiple non-canonical files all appear in the error message."""
+    from autoskillit.planner.schema import WP_RESULT_FILE_RE
+
+    results_dir = tmp_path / "work_packages"
+    results_dir.mkdir()
+
+    (results_dir / "P1-A1-WP1_result.json").write_text(json.dumps(make_wp_result("P1-A1-WP1")))
+    (results_dir / "P1-A1-WPa_result.json").write_text(
+        json.dumps(make_wp_result("P1-A1-WP1", name="Alpha"))
+    )
+    (results_dir / "P1-A1-WP2a_result.json").write_text(
+        json.dumps(make_wp_result("P1-A1-WP1", name="Alpha2"))
+    )
+
+    from autoskillit.planner.schema import collect_tier_result_files
+
+    with pytest.raises(ValueError, match="P1-A1-WPa_result.json") as exc_info:
+        collect_tier_result_files(results_dir, WP_RESULT_FILE_RE)
+    # Both non-canonical names should be mentioned
+    error_msg = str(exc_info.value)
+    assert "P1-A1-WPa_result.json" in error_msg
+    assert "P1-A1-WP2a_result.json" in error_msg
+
+
 def test_finalize_wp_manifest_empty_dir(tmp_path):
     """T10: Empty work_packages/ produces manifest with items: []."""
     from autoskillit.planner import finalize_wp_manifest
@@ -591,6 +701,7 @@ def test_build_phase_wp_manifest_raises_on_non_canonical_in_assignments(tmp_path
     (assign_dir / "P1-A1_result.json").write_text(
         json.dumps(make_assignment_result(1, 1, proposed_work_packages=[]))
     )
+    # P1_result.json matches *_result.json but NOT ASSIGN_RESULT_FILE_RE — must raise
     (assign_dir / "P1_result.json").write_text(
         json.dumps({"id": "P1", "status": "complete", "assignment_count": 1, "failed_count": 0})
     )

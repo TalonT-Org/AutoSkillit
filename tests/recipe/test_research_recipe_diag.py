@@ -248,11 +248,6 @@ def test_check_run_fix_loop_routes_to_delay_gate(recipe):
     assert any(c.route == "route_run_retry_delay" for c in non_exhausted)
 
 
-# ---------------------------------------------------------------------------
-# run_experiment verdict routing tests
-# ---------------------------------------------------------------------------
-
-
 def test_run_experiment_uses_verdict_routing(recipe):
     """run_experiment must use on_result for verdict-based routing, not on_success."""
     step = recipe.steps["run_experiment"]
@@ -310,11 +305,6 @@ def test_run_experiment_inconclusive_routes_to_ensure_results(recipe):
     )
 
 
-# ---------------------------------------------------------------------------
-# re_run_experiment verdict routing tests (research.yaml)
-# ---------------------------------------------------------------------------
-
-
 def test_re_run_experiment_uses_verdict_routing(recipe):
     """re_run_experiment must use on_result for verdict-based routing, not on_success."""
     step = recipe.steps["re_run_experiment"]
@@ -370,11 +360,6 @@ def test_re_run_experiment_inconclusive_routes_to_re_push_research(recipe):
     assert inconclusive.route == "re_push_research", (
         f"INCONCLUSIVE must route to re_push_research, got {inconclusive.route}"
     )
-
-
-# ---------------------------------------------------------------------------
-# research-review.yaml re_run_experiment verdict routing tests
-# ---------------------------------------------------------------------------
 
 
 REVIEW_RECIPE_PATH = builtin_recipes_dir() / "research-review.yaml"

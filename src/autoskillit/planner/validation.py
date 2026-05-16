@@ -162,7 +162,7 @@ def _check_phase_completeness(
 def _check_assignment_completeness(
     assignment_results: dict[str, dict],
     wp_results: dict[str, dict],
-    absorption_registry: dict | None = None,
+    absorption_registry: dict[str, Any] | None = None,
 ) -> list[ValidationFinding]:
     findings: list[ValidationFinding] = []
     wp_pairs: set[tuple[int, int]] = set()

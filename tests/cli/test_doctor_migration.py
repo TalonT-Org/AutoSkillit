@@ -177,6 +177,160 @@ class TestCheckClaudeProcessStateBreakdown:
         assert "FileNotFoundError" in result.message
 
 
+class TestCheckStaleMcpServersBackendGuard:
+    def test_non_claude_code_backend_returns_ok_skip(self) -> None:
+        """Non-claude-code backend returns OK skip without filesystem access."""
+        from autoskillit.cli.doctor._doctor_mcp import _check_stale_mcp_servers
+        from autoskillit.core import Severity
+
+        results = _check_stale_mcp_servers(backend="aider")
+        assert len(results) == 1
+        assert results[0].severity == Severity.OK
+        assert results[0].check == "stale_mcp_servers"
+        assert "skipped" in results[0].message.lower()
+
+    def test_none_backend_preserves_existing_behavior(self, tmp_path: Path) -> None:
+        """Default None backend does NOT skip — existing behavior intact."""
+        from autoskillit.cli.doctor._doctor_mcp import _check_stale_mcp_servers
+        from autoskillit.core import Severity
+
+        claude_json = tmp_path / ".claude.json"
+        claude_json.write_text('{"mcpServers": {}}')
+        results = _check_stale_mcp_servers(claude_json_path=claude_json, backend=None)
+        assert len(results) == 1
+        assert results[0].severity == Severity.OK
+        assert "skipped" not in results[0].message.lower()
+
+    def test_claude_code_backend_preserves_existing_behavior(self, tmp_path: Path) -> None:
+        """Explicit claude-code backend does NOT skip — existing behavior intact."""
+        from autoskillit.cli.doctor._doctor_mcp import _check_stale_mcp_servers
+        from autoskillit.core import Severity
+
+        claude_json = tmp_path / ".claude.json"
+        claude_json.write_text('{"mcpServers": {}}')
+        results = _check_stale_mcp_servers(claude_json_path=claude_json, backend="claude-code")
+        assert len(results) == 1
+        assert results[0].severity == Severity.OK
+        assert "skipped" not in results[0].message.lower()
+
+
+class TestCheckMcpServerRegisteredBackendGuard:
+    def test_non_claude_code_backend_returns_ok_skip(self) -> None:
+        """Non-claude-code backend returns OK skip without filesystem/subprocess access."""
+        from autoskillit.cli.doctor._doctor_mcp import _check_mcp_server_registered
+        from autoskillit.core import Severity
+
+        result = _check_mcp_server_registered(backend="aider")
+        assert result.severity == Severity.OK
+        assert result.check == "mcp_server_registered"
+        assert "skipped" in result.message.lower()
+
+    def test_none_backend_preserves_existing_behavior(self, tmp_path: Path) -> None:
+        """Default None backend does NOT skip."""
+        from autoskillit.cli.doctor._doctor_mcp import _check_mcp_server_registered
+        from autoskillit.core import Severity
+
+        claude_json = tmp_path / ".claude.json"
+        claude_json.write_text('{"mcpServers": {"autoskillit": {"command": "x"}}}')
+        result = _check_mcp_server_registered(claude_json_path=claude_json, backend=None)
+        assert result.severity == Severity.OK
+        assert "skipped" not in result.message.lower()
+
+    def test_claude_code_backend_preserves_existing_behavior(self, tmp_path: Path) -> None:
+        """Explicit claude-code backend does NOT skip."""
+        from autoskillit.cli.doctor._doctor_mcp import _check_mcp_server_registered
+        from autoskillit.core import Severity
+
+        claude_json = tmp_path / ".claude.json"
+        claude_json.write_text('{"mcpServers": {"autoskillit": {"command": "x"}}}')
+        result = _check_mcp_server_registered(claude_json_path=claude_json, backend="claude-code")
+        assert result.severity == Severity.OK
+        assert "skipped" not in result.message.lower()
+
+
+class TestCheckClaudeProcessStateBreakdownBackendGuard:
+    def test_non_claude_code_backend_returns_ok_skip(self) -> None:
+        """Non-claude-code backend returns OK skip without subprocess access."""
+        from autoskillit.cli.doctor._doctor_runtime import _check_claude_process_state_breakdown
+        from autoskillit.core import Severity
+
+        result = _check_claude_process_state_breakdown(backend="aider")
+        assert result.severity == Severity.OK
+        assert result.check == "claude_process_state"
+        assert "skipped" in result.message.lower()
+
+    def test_none_backend_preserves_existing_behavior(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Default None backend does NOT skip — runs ps as before."""
+        import subprocess
+
+        from autoskillit.cli.doctor._doctor_runtime import _check_claude_process_state_breakdown
+        from autoskillit.core import Severity
+
+        header = "PID STAT %CPU COMMAND\n"
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            lambda *a, **kw: type(
+                "CP", (), {"returncode": 0, "stdout": header + "1234 S 0.5 claude"}
+            )(),
+        )
+        result = _check_claude_process_state_breakdown(backend=None)
+        assert result.severity == Severity.OK
+        assert "skipped" not in result.message.lower()
+
+    def test_claude_code_backend_preserves_existing_behavior(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Explicit claude-code backend does NOT skip."""
+        import subprocess
+
+        from autoskillit.cli.doctor._doctor_runtime import _check_claude_process_state_breakdown
+        from autoskillit.core import Severity
+
+        header = "PID STAT %CPU COMMAND\n"
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            lambda *a, **kw: type(
+                "CP", (), {"returncode": 0, "stdout": header + "1234 S 0.5 claude"}
+            )(),
+        )
+        result = _check_claude_process_state_breakdown(backend="claude-code")
+        assert result.severity == Severity.OK
+        assert "skipped" not in result.message.lower()
+
+
+class TestRunDoctorBackendWiring:
+    def test_run_doctor_passes_backend_to_guarded_checks(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """run_doctor passes cfg.agent_backend.backend to guarded checks."""
+        from unittest.mock import patch
+
+        from autoskillit.cli.doctor import run_doctor
+        from autoskillit.cli.doctor._doctor_types import DoctorResult
+        from autoskillit.core import Severity
+
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / ".autoskillit").mkdir()
+        (tmp_path / ".autoskillit" / "config.yaml").write_text(
+            "agent_backend:\n  backend: aider\n"
+        )
+
+        captured_backends: list[str | None] = []
+
+        def _capture_stale(*args: object, **kwargs: object) -> list[DoctorResult]:
+            captured_backends.append(kwargs.get("backend"))
+            return [DoctorResult(Severity.OK, "stale_mcp_servers", "captured")]
+
+        with patch("autoskillit.cli.doctor._check_stale_mcp_servers", side_effect=_capture_stale):
+            run_doctor()
+
+        assert captured_backends == ["aider"]
+
+
 class TestDoctorInstallClassification:
     """Tests for _check_install_classification doctor check."""
 

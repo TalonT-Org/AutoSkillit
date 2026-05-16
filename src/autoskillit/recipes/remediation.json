@@ -1774,9 +1774,13 @@
         "status": "unconfirmed",
         "step_name": "register_clone_unconfirmed"
       },
-      "on_success": "done",
-      "on_failure": "done",
+      "on_success": "done_unconfirmed",
+      "on_failure": "done_unconfirmed",
       "note": "Called when a merge-wait step times out before merge is confirmed. Does NOT call release_issue — the in-progress label stays on the issue so operators can see the PR is still actively queued. The clone is preserved (status: unconfirmed) for human inspection.\n"
+    },
+    "done_unconfirmed": {
+      "action": "stop",
+      "message": "Implementation pipeline finished but merge was not confirmed within the timeout window. The PR is still open and the clone has been preserved for inspection. The in-progress label remains on the issue. Human operator should verify merge status. Emit the L3 result sentinel JSON block now with success=true and reason=\"merge_unconfirmed\". Example sentinel: {\"success\": true, \"reason\": \"merge_unconfirmed\"}"
     },
     "release_issue_success": {
       "description": "Transition issue from in-progress to staged after successful pipeline completion",

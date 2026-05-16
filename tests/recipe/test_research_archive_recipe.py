@@ -64,6 +64,7 @@ class TestResearchArchiveRecipe:
     def test_step_names(self, recipe) -> None:
         expected = {
             "begin_archival",
+            "archive_skipped",
             "capture_experiment_branch",
             "create_artifact_branch",
             "open_artifact_pr",
@@ -88,12 +89,26 @@ class TestResearchArchiveRecipe:
         assert pr_cond is not None, "begin_archival must route on inputs.pr_url"
         assert pr_cond.route == "capture_experiment_branch"
 
-    def test_begin_archival_fallback_routes_to_patch(self, recipe) -> None:
+    def test_begin_archival_fallback_routes_to_archive_skipped(self, recipe) -> None:
         step = recipe.steps["begin_archival"]
         conditions = step.on_result.conditions
         fallback = [c for c in conditions if c.when is None]
         assert len(fallback) == 1
-        assert fallback[0].route == "patch_token_summary"
+        assert fallback[0].route == "archive_skipped"
+
+    def test_archive_skipped_step(self, recipe) -> None:
+        step = recipe.steps["archive_skipped"]
+        assert step.action == "stop"
+        assert "pr" in step.message.lower()
+        assert "sentinel" in step.message.lower()
+
+    def test_research_complete_not_reachable_from_archive_skipped(self, recipe) -> None:
+        from autoskillit.recipe import make_validation_context
+        from autoskillit.recipe._analysis_bfs import bfs_reachable
+
+        ctx = make_validation_context(recipe)
+        reachable = bfs_reachable(ctx.step_graph, "archive_skipped")
+        assert "research_complete" not in reachable
 
     def test_no_context_pr_url_in_recipe(self) -> None:
         # Intentionally does NOT use self.recipe fixture — validates raw file content

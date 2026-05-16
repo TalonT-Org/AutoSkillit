@@ -34,6 +34,7 @@ Fleet campaign dispatch, state persistence, and sidecar tests.
 | `test_research_campaign_dispatch.py` | Tests for multi-recipe research campaign dispatch capture propagation (Group J) |
 | `test_result_parser.py` | Tests for fleet.result_parser — L2 result block parsing |
 | `test_retry_failed_dispatch.py` | Tests for explicit retry of failed campaign dispatches via FAILURE → PENDING state transition |
+| `test_skip_when.py` | Unit tests for `evaluate_skip_when` — campaign/inputs ref resolution, expression validation, quote stripping |
 | `test_sidecar.py` | Sidecar tests |
 | `test_state.py` | Tests for fleet state module (Group J) |
 | `test_state_lock_contract.py` | Locking contract tests — AST scan for flock targets, flock acquisition per mutation, cross-caller concurrency |

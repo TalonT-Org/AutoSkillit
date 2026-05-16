@@ -7,7 +7,7 @@ IL-2 fleet campaign layer — parallel issue dispatch, semaphore, sidecar, liven
 | File | Purpose |
 |------|---------|
 | `__init__.py` | Re-exports `CampaignSummary`, `parse_campaign_summary`, and dispatch callables |
-| `_api.py` | Fleet campaign execution engine — dispatches L2 sessions, resolves campaign/result variable references |
+| `_api.py` | Fleet campaign execution engine — dispatches L2 sessions, resolves campaign/result variable references; `evaluate_skip_when` for conditional dispatch skipping |
 | `_prompts.py` | Prompt builder for L2 fleet dispatch sessions — assembles admiral dispatch instruction block from SKILL.md sections |
 | `result_parser.py` | L2 result block parser with Channel B JSONL fallback |
 | `sidecar.py` | Per-issue JSONL sidecar — `IssueSidecarEntry`, append/read/`compute_remaining` helpers |
@@ -30,6 +30,7 @@ IL-2 fleet campaign layer — parallel issue dispatch, semaphore, sidecar, liven
 | `tests/fleet/test_state_recovery.py` | Tests for `derive_orchestrator_resume_spec` |
 | `tests/fleet/test_campaign_capture.py` | Campaign capture extraction and ingredient interpolation tests |
 | `tests/fleet/test_capture_roundtrip.py` | Prompt-extractor field name alignment tests — verifies sentinel example uses bare names matching `_extract_captures` expectations |
+| `tests/fleet/test_skip_when.py` | `evaluate_skip_when` unit tests — campaign/inputs ref resolution, expression validation, quote stripping |
 
 ## Architecture Notes
 

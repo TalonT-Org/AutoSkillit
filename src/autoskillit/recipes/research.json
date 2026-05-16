@@ -1163,10 +1163,14 @@
           "route": "capture_experiment_branch"
         },
         {
-          "route": "patch_token_summary"
+          "route": "archive_skipped"
         }
       ],
-      "note": "Gate step for the archival phase. Routes to artifact extraction when a research PR exists, otherwise skips directly to patch_token_summary. All paths from review/resolve/re-push converge here.\n"
+      "note": "Gate step for the archival phase. Routes to artifact extraction when a research PR exists, otherwise skips directly to archive_skipped. All paths from review/resolve/re-push converge here.\n"
+    },
+    "archive_skipped": {
+      "action": "stop",
+      "message": "Research archival skipped — no PR URL was provided. This is expected when running in local output mode or when the upstream review phase did not produce a PR. No archival work was performed. Emit the L3 result sentinel JSON block now. The sentinel must include: success=true, reason=\"no_pr_url\". Example sentinel: {\"success\": true, \"reason\": \"no_pr_url\"}"
     },
     "capture_experiment_branch": {
       "tool": "run_cmd",

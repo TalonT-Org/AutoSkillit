@@ -11,7 +11,8 @@ def test_renderer_exits_nonzero_on_too_few_args(monkeypatch: pytest.MonkeyPatch)
     with pytest.raises(SystemExit) as exc_info:
         _renderer.main()
     assert exc_info.value.code != 0, (
-        f"renderer.main() must exit non-zero with too few args, got exit code {exc_info.value.code}"
+        "renderer.main() must exit non-zero with too few args, "
+        f"got exit code {exc_info.value.code}"
     )
 
 
@@ -27,5 +28,6 @@ def test_renderer_exits_nonzero_on_missing_report(
     with pytest.raises(SystemExit) as exc_info:
         _renderer.main()
     assert exc_info.value.code != 0, (
-        f"renderer.main() must exit non-zero when report does not exist, got exit code {exc_info.value.code}"
+        "renderer.main() must exit non-zero when report does not exist, "
+        f"got exit code {exc_info.value.code}"
     )

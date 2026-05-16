@@ -519,6 +519,7 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
                     capture=_parse_capture_spec(d.get("capture")),
                     gate=d_gate,
                     message=d.get("message") or None,
+                    skip_when=d.get("skip_when") or None,
                 )
             )
 

@@ -162,6 +162,7 @@ class CampaignDispatch:
     capture: dict[str, CaptureEntrySpec] = field(default_factory=dict)
     gate: DispatchGateType | None = None
     message: str | None = None
+    skip_when: str | None = None
 
 
 @dataclass

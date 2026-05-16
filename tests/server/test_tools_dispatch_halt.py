@@ -326,3 +326,110 @@ class TestDispatchFoodTruckRetryOnFailure:
         repo.add_full_recipe(recipe_info.path, _make_standard_recipe("test-recipe"))
         tool_ctx.recipes = repo
         tool_ctx.executor = InMemoryHeadlessExecutor()
+
+
+class TestDispatchFoodTruckSkipWhen:
+    @pytest.fixture(autouse=True)
+    def _set_fleet_session(self, monkeypatch):
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+
+    def _write_dispatch_capture(
+        self, dispatches_dir: Path, campaign_id: str, captured: dict
+    ) -> None:
+        """Write a dispatch capture JSON file with captured values for skip_when resolution."""
+        import time
+
+        from autoskillit.fleet import FLEET_STATE_SCHEMA_VERSION
+
+        dispatches_dir.mkdir(parents=True, exist_ok=True)
+        state_file = dispatches_dir / f"capture_{campaign_id}.json"
+        state_file.write_text(
+            json.dumps(
+                {
+                    "schema_version": FLEET_STATE_SCHEMA_VERSION,
+                    "campaign_id": campaign_id,
+                    "campaign_name": "test",
+                    "manifest_path": "/fake/manifest.yaml",
+                    "started_at": time.time(),
+                    "dispatches": [{"name": "prior-dispatch", "status": "success"}],
+                    "captured_values": captured,
+                }
+            )
+        )
+
+    @pytest.mark.anyio
+    async def test_skip_when_true_returns_skipped(
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path
+    ):
+        """skip_when=true returns FLEET_DISPATCH_SKIPPED without calling execute_dispatch."""
+        state_path = tmp_path / "state.json"
+        _write_campaign_state(state_path, [])
+        monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(state_path))
+        monkeypatch.setenv("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false")
+
+        self._setup_standard_dispatch(tool_ctx_kitchen_open, monkeypatch)
+        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+
+        result = json.loads(
+            await dispatch_food_truck(
+                recipe="test-recipe", task="t", skip_when="'local' == 'local'"
+            )
+        )
+        assert result["success"] is False
+        assert result["error"] == "fleet_dispatch_skipped"
+
+    @pytest.mark.anyio
+    async def test_skip_when_false_proceeds_normally(
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path
+    ):
+        """skip_when evaluating to false proceeds with execute_dispatch normally."""
+        state_path = tmp_path / "state.json"
+        _write_campaign_state(state_path, [])
+        monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(state_path))
+        monkeypatch.setenv("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false")
+
+        self._setup_standard_dispatch(tool_ctx_kitchen_open, monkeypatch)
+        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+
+        result = json.loads(
+            await dispatch_food_truck(recipe="test-recipe", task="t", skip_when="'pr' == 'local'")
+        )
+        assert "dispatch_id" in result
+
+    @pytest.mark.anyio
+    async def test_skip_when_resolves_campaign_ref(
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path
+    ):
+        """skip_when resolves ${{ campaign.X }} from accumulated captures."""
+        state_path = tmp_path / "state.json"
+        _write_campaign_state(state_path, [])
+        monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(state_path))
+        monkeypatch.setenv("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false")
+
+        dispatches_dir = tool_ctx_kitchen_open.temp_dir / "dispatches"
+        self._write_dispatch_capture(
+            dispatches_dir, tool_ctx_kitchen_open.kitchen_id, {"output_mode": "local"}
+        )
+        self._setup_standard_dispatch(tool_ctx_kitchen_open, monkeypatch)
+
+        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+
+        result = json.loads(
+            await dispatch_food_truck(
+                recipe="test-recipe",
+                task="t",
+                skip_when="${{ campaign.output_mode }} == 'local'",
+            )
+        )
+        assert result["success"] is False
+        assert result["error"] == "fleet_dispatch_skipped"
+
+    def _setup_standard_dispatch(self, tool_ctx, monkeypatch):
+        """Wire tool_ctx for a successful standard dispatch."""
+        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        repo = InMemoryRecipeRepository()
+        recipe_info = _make_recipe_info("test-recipe")
+        repo.add_recipe("test-recipe", recipe_info)
+        repo.add_full_recipe(recipe_info.path, _make_standard_recipe("test-recipe"))
+        tool_ctx.recipes = repo
+        tool_ctx.executor = InMemoryHeadlessExecutor()

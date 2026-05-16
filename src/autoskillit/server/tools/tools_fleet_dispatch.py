@@ -90,6 +90,7 @@ async def dispatch_food_truck(
     resume_checkpoint: dict[str, object] | None = None,
     idle_output_timeout: int | None = None,
     prior_dispatch_id: str | None = None,
+    skip_when: str | None = None,
     ctx: Context = CurrentContext(),
 ) -> str:
     """Dispatch a single food truck L2 session for one recipe.
@@ -110,6 +111,9 @@ async def dispatch_food_truck(
         resume_checkpoint: Checkpoint dict from a prior RESUMABLE dispatch envelope.
             Pass the "resume_checkpoint" field from the prior result to inject completed
             items context into the resume prompt.
+        skip_when: Optional condition expression. If evaluation against accumulated
+            campaign captures returns true, the dispatch is recorded as SKIPPED without
+            executing the recipe.
 
     Never raises.
     """
@@ -176,8 +180,12 @@ async def dispatch_food_truck(
         from autoskillit.fleet import (  # noqa: PLC0415
             _INFRASTRUCTURE_FAILURE_REASONS,
             DispatchCompleted,
+            DispatchRecord,
             DispatchStatus,
+            evaluate_skip_when,
             execute_dispatch,
+            read_all_campaign_captures,
+            upsert_dispatch_record_by_name,
         )
         from autoskillit.server import _get_ctx
         from autoskillit.server._misc import (  # noqa: PLC0415
@@ -194,6 +202,31 @@ async def dispatch_food_truck(
 
         caller_session_id = find_caller_session_id(project_dir=tool_ctx.project_dir)
         effective_name = dispatch_name or recipe
+
+        if skip_when:
+            dispatches_dir = tool_ctx.temp_dir / "dispatches"
+            accumulated_captures = read_all_campaign_captures(dispatches_dir, tool_ctx.kitchen_id)
+            error_code, error_message, skip_condition_true = evaluate_skip_when(
+                skip_when, accumulated_captures, ingredients
+            )
+            if error_code is not None:
+                return fleet_error(error_code, error_message or "")
+
+            if skip_condition_true:
+                if campaign_state_path_str:
+                    upsert_dispatch_record_by_name(
+                        Path(campaign_state_path_str),
+                        DispatchRecord(
+                            name=effective_name,
+                            status=DispatchStatus.SKIPPED,
+                            reason="skip_when condition evaluated to true",
+                        ),
+                    )
+                return fleet_error(
+                    FleetErrorCode.FLEET_DISPATCH_SKIPPED,
+                    "Dispatch skipped: skip_when condition evaluated to true",
+                )
+
         result = await execute_dispatch(
             tool_ctx=tool_ctx,
             recipe=recipe,

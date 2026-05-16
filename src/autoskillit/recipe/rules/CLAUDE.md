@@ -1,6 +1,6 @@
 # rules/
 
-Semantic validation rule modules for recipe analysis (30 rule files).
+Semantic validation rule modules for recipe analysis (31 rule files).
 
 ## Files
 
@@ -30,6 +30,7 @@ Semantic validation rule modules for recipe analysis (30 rule files).
 | `rules_reachability.py` | Symbolic BFS reachability; capture-inversion detection |
 | `rules_remediation.py` | audit-impl remediation_path capture must have non-terminal non-GO route |
 | `rules_recipe.py` | Sub-recipe reference validity and `with_args` hygiene |
+| `rules_route_gate.py` | Route gate shared-stop detection; fallback and primary path convergence |
 | `rules_skill_content.py` | Undefined bash placeholder detection in SKILL.md |
 | `rules_skills.py` | `skill_command` resolvability rules |
 | `rules_temp_path.py` | Rejects bare `{{AUTOSKILLIT_TEMP}}/` without scope prefix |
@@ -39,4 +40,4 @@ Semantic validation rule modules for recipe analysis (30 rule files).
 
 ## Architecture Notes
 
-Side-effect registration: callers import the package to trigger `@semantic_rule` decorator registration of all 30 rule modules. Each rule receives a `ValidationContext` argument. No cross-imports between rule modules.
+Side-effect registration: callers import the package to trigger `@semantic_rule` decorator registration of all 31 rule modules. Each rule receives a `ValidationContext` argument. No cross-imports between rule modules.

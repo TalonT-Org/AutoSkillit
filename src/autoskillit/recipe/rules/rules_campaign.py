@@ -998,3 +998,79 @@ def _check_gate_dispatch_no_capture(ctx: ValidationContext) -> list[RuleFinding]
                 )
             )
     return findings
+
+
+_INPUTS_REF_RE = re.compile(r"\$\{\{\s*inputs\.(\w+)\s*\}\}")
+_ANY_TEMPLATE_REF_RE = re.compile(r"\$\{\{\s*(?:inputs|campaign)\.\w+\s*\}\}")
+_SKIP_EXPR_RE = re.compile(r"^.+\s+(?:==|!=)\s+.+$")
+
+
+@semantic_rule(
+    name="dispatch-skip-when-valid-expression",
+    description="skip_when expressions must reference valid campaign inputs or ancestor captures",
+    severity=Severity.ERROR,
+)
+def _check_dispatch_skip_when_valid(ctx: ValidationContext) -> list[RuleFinding]:
+    if ctx.recipe.kind != RecipeKind.CAMPAIGN:
+        return []
+    findings: list[RuleFinding] = []
+    adjacency = {d.name: list(d.depends_on) for d in ctx.recipe.dispatches}
+    dispatch_by_name = {d.name: d for d in ctx.recipe.dispatches}
+    campaign_ingredients = set(ctx.recipe.ingredients.keys())
+
+    for d in ctx.recipe.dispatches:
+        if not d.skip_when:
+            continue
+
+        for ref in _INPUTS_REF_RE.findall(d.skip_when):
+            if ref not in campaign_ingredients:
+                findings.append(
+                    RuleFinding(
+                        rule="dispatch-skip-when-valid-expression",
+                        severity=Severity.ERROR,
+                        step_name="(top-level)",
+                        message=(
+                            f"Dispatch {d.name!r} skip_when references "
+                            f"${{{{ inputs.{ref} }}}} but {ref!r} is not a declared "
+                            f"campaign ingredient. Available: {sorted(campaign_ingredients)}"
+                        ),
+                    )
+                )
+
+        ancestors = _build_ancestors(d.name, adjacency)
+        available_captures: set[str] = set()
+        for ancestor_name in ancestors:
+            ancestor = dispatch_by_name.get(ancestor_name)
+            if ancestor:
+                available_captures.update(ancestor.capture.keys())
+
+        for ref in CAMPAIGN_REF_RE.findall(d.skip_when):
+            if ref not in available_captures:
+                findings.append(
+                    RuleFinding(
+                        rule="dispatch-skip-when-valid-expression",
+                        severity=Severity.ERROR,
+                        step_name="(top-level)",
+                        message=(
+                            f"Dispatch {d.name!r} skip_when references "
+                            f"${{{{ campaign.{ref} }}}} but no ancestor dispatch "
+                            f"(via depends_on) captures {ref!r}. "
+                            f"Available captured keys: {sorted(available_captures)}"
+                        ),
+                    )
+                )
+
+        normalized = _ANY_TEMPLATE_REF_RE.sub("X", d.skip_when).strip()
+        if not _SKIP_EXPR_RE.match(normalized):
+            findings.append(
+                RuleFinding(
+                    rule="dispatch-skip-when-valid-expression",
+                    severity=Severity.ERROR,
+                    step_name="(top-level)",
+                    message=(
+                        f"Dispatch {d.name!r} skip_when expression has invalid format: "
+                        f"{d.skip_when!r}. Expected: '<lhs> == <rhs>' or '<lhs> != <rhs>'."
+                    ),
+                )
+            )
+    return findings

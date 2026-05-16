@@ -322,13 +322,20 @@ class TestResearchRecipeStructure:
         assert truthy_route is not None
         assert truthy_route.route == "capture_experiment_branch"
 
-    def test_archival_begin_archival_default_to_complete(self, recipe) -> None:
-        """begin_archival default route goes to research_complete."""
+    def test_archival_begin_archival_default_to_archive_skipped(self, recipe) -> None:
+        """begin_archival default route goes to archive_skipped (not patch_token_summary)."""
         step = recipe.steps["begin_archival"]
         conditions = step.on_result.conditions
         default = next((c for c in conditions if not c.when), None)
         assert default is not None
-        assert default.route == "patch_token_summary"
+        assert default.route == "archive_skipped"
+
+    def test_archive_skipped_stop_exists(self, recipe) -> None:
+        """archive_skipped step must exist as a stop step in research.yaml."""
+        assert "archive_skipped" in recipe.steps
+        step = recipe.steps["archive_skipped"]
+        assert step.action == "stop"
+        assert len(step.message) >= 10
 
     def test_archival_capture_experiment_branch_step(self, recipe) -> None:
         """capture_experiment_branch captures experiment_branch from git rev-parse."""

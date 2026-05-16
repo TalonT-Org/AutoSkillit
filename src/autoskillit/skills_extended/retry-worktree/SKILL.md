@@ -102,28 +102,29 @@ occurring before the skill reached its Step 6 handoff report.
 
 ### Step 1: Assess Current State
 
-Discover the base branch from git's upstream tracking (primary) or the explicit
-base-branch store file written by `implement-worktree-no-merge` (fallback).
+Discover the base branch from the sidecar file (primary) or git's upstream tracking
+(fallback). The sidecar is the authoritative write-time record; git upstream tracking
+is a secondary signal that can silently fail.
 
 ```bash
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
-# Primary: read upstream tracking set by implement-worktree-no-merge
-BASE_BRANCH=$(git rev-parse --abbrev-ref @{upstream} 2>/dev/null | sed 's|^[^/]*/||')
+# Primary: read explicit sidecar file written by implement-worktree-no-merge
+MAIN_GIT_DIR="$(git rev-parse --path-format=absolute --git-common-dir)"
+MAIN_ROOT="$(dirname "$MAIN_GIT_DIR")"
+WORKTREE_DIR_NAME=$(basename "$(pwd)")
+STORE_FILE="${MAIN_ROOT}/{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_DIR_NAME}/base-branch"
+BASE_BRANCH=$(cat "${STORE_FILE}" 2>/dev/null)
 
 if [ -z "$BASE_BRANCH" ]; then
-    # Fallback: read explicit file store written by implement-worktree-no-merge
-    MAIN_GIT_DIR="$(git rev-parse --path-format=absolute --git-common-dir)"
-    MAIN_ROOT="$(dirname "$MAIN_GIT_DIR")"
-    WORKTREE_DIR_NAME=$(basename "$(pwd)")
-    STORE_FILE="${MAIN_ROOT}/{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_DIR_NAME}/base-branch"
-    BASE_BRANCH=$(cat "${STORE_FILE}" 2>/dev/null)
+    # Fallback: read upstream tracking set by implement-worktree-no-merge
+    BASE_BRANCH=$(git rev-parse --abbrev-ref @{upstream} 2>/dev/null | sed 's|^[^/]*/||')
 fi
 
 if [ -z "$BASE_BRANCH" ]; then
     # Last resort: project-level default from config (always available)
     BASE_BRANCH="{{DEFAULT_BASE_BRANCH}}"
-    echo "WARNING: Could not determine base branch from git upstream or sidecar file."
+    echo "WARNING: Could not determine base branch from sidecar file or git upstream."
     echo "Falling back to project default: ${BASE_BRANCH}"
 fi
 ```

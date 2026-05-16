@@ -19,6 +19,7 @@ PreToolUse guard scripts — standalone Python processes enforcing tool-call pol
 | `planner_gh_discovery_guard.py` | Blocks GitHub issue/PR listing in planner sessions |
 | `pr_create_guard.py` | Blocks `gh pr create` via `run_cmd` when kitchen is open |
 | `quota_guard.py` | Blocks `run_skill` when quota threshold exceeded; fails open on missing cache |
+| `rebase_target_guard.py` | Blocks `git rebase` to wrong branch in headless skill sessions; reads sidecar file |
 | `recipe_write_advisor.py` | Non-blocking advisory for recipe YAML writes |
 | `remove_clone_guard.py` | Blocks `remove_clone` if branch has unpushed commits |
 | `review_loop_gate.py` | Blocks `wait_for_ci`/`enqueue_pr` until `check_review_loop` is called |

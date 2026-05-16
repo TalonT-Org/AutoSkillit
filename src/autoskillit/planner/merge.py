@@ -132,7 +132,8 @@ def _write_refine_contexts(
         if missing:
             raise ValueError(
                 f"Phases {sorted(missing)} have no merged assignments — "
-                f"all result files may have been filtered out"
+                f"expected={sorted(expected_phase_ids)}, "
+                f"found={sorted(phase_groups)}"
             )
 
     contexts_dir = planner_dir / "refine_contexts"
@@ -242,8 +243,10 @@ def merge_tier_results(
         excluded = [f for f in all_files if not tier_re.match(f.name)]
         if excluded:
             names = [f.name for f in excluded]
+            display = names[:10]
+            suffix = f" and {len(names) - 10} more" if len(names) > 10 else ""
             raise ValueError(
-                f"Result files in {results_dir} excluded by {tier_re.pattern}: {names}. "
+                f"Result files in {results_dir} excluded by {tier_re.pattern}: {display}{suffix}. "
                 f"This indicates non-canonical IDs were generated upstream."
             )
         paths = [f for f in all_files if tier_re.match(f.name)]
@@ -270,7 +273,12 @@ def merge_tier_results(
         expected_phase_ids: frozenset[str] | None = None
         manifest_path = Path(results_dir) / "phase_assignment_manifest.json"
         if manifest_path.exists():
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            try:
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    f"Corrupted phase_assignment_manifest.json at {manifest_path}: {exc}"
+                ) from exc
             expected_phase_ids = frozenset(
                 item["id"] for item in manifest.get("items", []) if item.get("id")
             )

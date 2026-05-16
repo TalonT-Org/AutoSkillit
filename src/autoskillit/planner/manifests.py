@@ -68,7 +68,7 @@ def build_phase_assignment_manifest(phases_dir: str, output_dir: str) -> dict[st
             f"Result files in {phases_path} excluded by {PHASE_RESULT_FILE_RE.pattern}: {names}. "
             f"This indicates non-canonical IDs were generated upstream."
         )
-    phase_files = sorted(all_phase_files)
+    phase_files = all_phase_files
     parsed_phases = []
     for f in phase_files:
         try:
@@ -138,7 +138,7 @@ def build_phase_wp_manifest(
             f"Result files in {assign_path} excluded by {ASSIGN_RESULT_FILE_RE.pattern}: {names}. "
             f"This indicates non-canonical IDs were generated upstream."
         )
-    assign_files = sorted(all_assign_files)
+    assign_files = all_assign_files
     parsed_assignments: list[dict] = []
     for f in assign_files:
         try:
@@ -228,7 +228,7 @@ def finalize_wp_manifest(work_packages_dir: str, output_dir: str) -> dict[str, s
             f"This indicates non-canonical IDs were generated upstream."
         )
     result_files = sorted(
-        (f for f in all_result_files),
+        all_result_files,
         key=lambda p: _natural_sort_key(p.name),
     )
     items = []

@@ -387,7 +387,7 @@ def build_plan_snapshot(
             f"This indicates non-canonical IDs were generated upstream."
         )
     phase_pairs: list[tuple[int, dict[str, Any]]] = []
-    for p in sorted(all_phase_files):
+    for p in all_phase_files:
         try:
             raw = json.loads(p.read_text())
             validated = validate_phase_result(raw)

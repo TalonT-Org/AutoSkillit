@@ -275,7 +275,6 @@ async def dispatch_food_truck(
             resume_checkpoint=parsed_checkpoint,
             idle_output_timeout=idle_output_timeout,
             caller_session_id=caller_session_id,
-            campaign_state_path=Path(campaign_state_path_str) if campaign_state_path_str else None,
             prior_dispatch_id=prior_dispatch_id,
         )
 

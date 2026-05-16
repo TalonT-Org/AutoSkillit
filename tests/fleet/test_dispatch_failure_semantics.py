@@ -957,7 +957,6 @@ class TestCrashPathDiagnosticPersistence:
             prompt_builder=_simple_prompt_builder,
             quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
-            campaign_state_path=campaign_state_path,
         )
         from autoskillit.server.tools.tools_fleet_dispatch import _write_dispatch_to_campaign_state
 
@@ -980,7 +979,7 @@ class TestCrashPathDiagnosticPersistence:
         assert refused[0].reason == "fleet_l3_startup_or_crash"
 
     async def test_crash_logs_structured_fields(self, tool_ctx, monkeypatch) -> None:
-        """WARNING log must include exc_type, dispatch_name, and campaign_state_path."""
+        """WARNING log must include exc_type and dispatch_name."""
         import structlog
 
         from tests.fakes import InMemoryHeadlessExecutor
@@ -1012,7 +1011,6 @@ class TestCrashPathDiagnosticPersistence:
                 prompt_builder=_simple_prompt_builder,
                 quota_checker=_no_sleep_quota_checker,
                 quota_refresher=_noop_quota_refresher,
-                campaign_state_path=None,
             )
 
         envelope = json.loads(result.outcome.to_envelope())
@@ -1027,7 +1025,6 @@ class TestCrashPathDiagnosticPersistence:
         log_record = warning_logs[0]
         assert log_record.get("exc_type") == "TypeError"
         assert log_record.get("dispatch_name") == "my-test-dispatch"
-        assert "campaign_state_path" in log_record
 
     async def test_reject_with_state_persists_message_to_both_states(
         self, tool_ctx, monkeypatch, tmp_path: Path
@@ -1072,7 +1069,6 @@ class TestCrashPathDiagnosticPersistence:
             prompt_builder=_simple_prompt_builder,
             quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
-            campaign_state_path=campaign_state_path,
         )
         from autoskillit.server.tools.tools_fleet_dispatch import _write_dispatch_to_campaign_state
 

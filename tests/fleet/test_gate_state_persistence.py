@@ -620,7 +620,6 @@ class TestValidationFailureCampaignState:
             prompt_builder=lambda **kw: "",
             quota_checker=lambda **kw: {},
             quota_refresher=lambda **kw: None,
-            campaign_state_path=sp,
         )
         from autoskillit.server.tools.tools_fleet_dispatch import (
             _write_dispatch_to_campaign_state,
@@ -680,7 +679,6 @@ class TestValidationFailureCampaignState:
             prompt_builder=lambda **kw: "",
             quota_checker=lambda **kw: {},
             quota_refresher=lambda **kw: None,
-            campaign_state_path=None,
         )
 
         dispatches_dir = tool_ctx.temp_dir / "dispatches"
@@ -694,9 +692,7 @@ class TestValidationFailureCampaignState:
         assert refused[0].name == "step1"
 
     @pytest.mark.anyio
-    async def test_run_dispatch_writes_campaign_state_on_unknown_ingredient(
-        self, tool_ctx, tmp_path
-    ):
+    async def test_campaign_state_write_for_unknown_ingredient_rejection(self, tool_ctx, tmp_path):
         """T3: _run_dispatch writes REFUSED to campaign state on unknown ingredient."""
         from autoskillit.core import RecipeSource
         from autoskillit.fleet import FleetSemaphore
@@ -741,7 +737,6 @@ class TestValidationFailureCampaignState:
             prompt_builder=lambda **kw: "",
             quota_checker=lambda **kw: {},
             quota_refresher=lambda **kw: None,
-            campaign_state_path=sp,
         )
         from autoskillit.server.tools.tools_fleet_dispatch import (
             _write_dispatch_to_campaign_state,
@@ -853,7 +848,6 @@ class TestValidationFailureCampaignState:
             prompt_builder=lambda **kw: "",
             quota_checker=lambda **kw: {},
             quota_refresher=lambda **kw: None,
-            campaign_state_path=None,
         )
 
         result = result.outcome

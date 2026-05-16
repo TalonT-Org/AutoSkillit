@@ -365,7 +365,6 @@ async def execute_dispatch(
     resume_checkpoint: SessionCheckpoint | None = None,
     idle_output_timeout: int | None = None,
     caller_session_id: str = "",
-    campaign_state_path: Path | None = None,
     prior_dispatch_id: str | None = None,
 ) -> DispatchResult:
     """Execute a single food truck dispatch.
@@ -444,7 +443,6 @@ async def execute_dispatch(
             "execute_dispatch crashed before dispatch completion",
             exc_type=type(underlying).__name__,
             dispatch_name=effective_name,
-            campaign_state_path=str(campaign_state_path),
             exc_info=True,
         )
         return _reject(

@@ -61,7 +61,13 @@ def _write_dispatch_to_campaign_state(
             case DispatchCompleted() as completed:
                 if per_dispatch_state_path is not None:
                     per_dispatch_state = read_state(per_dispatch_state_path)
-                    if per_dispatch_state:
+                    if per_dispatch_state is None:
+                        logger.warning(
+                            "_write_dispatch_to_campaign_state: read_state(%s) returned None "
+                            "— falling back to manual reconstruction",
+                            per_dispatch_state_path,
+                        )
+                    elif per_dispatch_state:
                         for d in per_dispatch_state.dispatches:
                             if d.name == effective_name:
                                 upsert_dispatch_record_by_name(
@@ -69,11 +75,12 @@ def _write_dispatch_to_campaign_state(
                                     d,
                                 )
                                 return
-                    logger.warning(
-                        "_write_dispatch_to_campaign_state: no per-dispatch entry matched %r — "
-                        "falling back to manual reconstruction",
-                        effective_name,
-                    )
+                        logger.warning(
+                            "_write_dispatch_to_campaign_state: no dispatch named %r in %s "
+                            "— falling back to manual reconstruction",
+                            effective_name,
+                            per_dispatch_state_path,
+                        )
                 upsert_dispatch_record_by_name(
                     Path(campaign_state_path_str),
                     DispatchRecord(

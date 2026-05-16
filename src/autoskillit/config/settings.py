@@ -19,6 +19,7 @@ from autoskillit.config._config_dataclasses import (
     _COMMAND_UNSET,
     _METADATA_KEYS,
     _SECRETS_ONLY_KEYS,
+    AgentBackendConfig,
     BranchingConfig,
     CIConfig,
     ClassifyFixConfig,
@@ -110,6 +111,7 @@ def _timeout_coherence_gate(run_skill: RunSkillConfig) -> None:
 
 
 __all__ = [
+    "AgentBackendConfig",
     "AutomationConfig",
     "BranchingConfig",
     "CIConfig",
@@ -191,6 +193,7 @@ class AutomationConfig:
     workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig)
     fleet: FleetConfig = field(default_factory=FleetConfig)
     providers: ProvidersConfig = field(default_factory=ProvidersConfig)
+    agent_backend: AgentBackendConfig = field(default_factory=AgentBackendConfig)
     features: dict[str, bool] = field(default_factory=dict)
     experimental_enabled: bool = False
 
@@ -308,6 +311,7 @@ class AutomationConfig:
         ws_raw = sec("workspace")
         fr = sec("fleet")
         pvd = sec("providers")
+        ab = sec("agent_backend")
         feat = sec("features")
 
         _tc = _field_defaults(TestCheckConfig)
@@ -334,6 +338,7 @@ class AutomationConfig:
         _wsc = _field_defaults(WorkspaceConfig)
         _fr = _field_defaults(FleetConfig)
         _pvd = _field_defaults(ProvidersConfig)
+        _ab = _field_defaults(AgentBackendConfig)
 
         _features_dict, _exp_enabled = AutomationConfig._build_features_dict(
             dict(feat) if isinstance(feat, dict) else {}
@@ -525,6 +530,9 @@ class AutomationConfig:
                     val(pvd, "provider_retry_limit", _pvd["provider_retry_limit"]),
                     "providers.provider_retry_limit",
                 ),
+            ),
+            agent_backend=AgentBackendConfig(
+                backend=str(val(ab, "backend", _ab["backend"])),
             ),
             features=_features_dict,
             experimental_enabled=_exp_enabled,

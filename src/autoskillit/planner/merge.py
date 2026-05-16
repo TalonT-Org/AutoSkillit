@@ -279,9 +279,12 @@ def merge_tier_results(
                 raise ValueError(
                     f"Corrupted phase_assignment_manifest.json at {manifest_path}: {exc}"
                 ) from exc
-            expected_phase_ids = frozenset(
-                item["id"] for item in manifest.get("items", []) if item.get("id")
-            )
+            manifest_items = manifest.get("items", [])
+            if any(not item.get("id") for item in manifest_items):
+                raise ValueError(
+                    f"Manifest item has missing or empty 'id' field at {manifest_path}"
+                )
+            expected_phase_ids = frozenset(item["id"] for item in manifest_items)
         context_paths = _write_refine_contexts(
             planner_dir, assignments, task_file_path, expected_phase_ids=expected_phase_ids
         )

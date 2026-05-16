@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import subprocess
 
+import pytest
+
 from autoskillit.cli._init_helpers import _is_plugin_installed
+
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 
 class TestIsPluginInstalledBackendGuard:

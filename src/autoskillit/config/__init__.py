@@ -13,6 +13,7 @@ from autoskillit.config.settings import (
     _SECRETS_ONLY_KEYS as _SECRETS_ONLY_KEYS,
 )
 from autoskillit.config.settings import (
+    AgentBackendConfig,
     AutomationConfig,
     BranchingConfig,
     CIConfig,
@@ -47,6 +48,7 @@ from autoskillit.config.settings import (
 )
 
 __all__ = [
+    "AgentBackendConfig",
     "AutomationConfig",
     "BranchingConfig",
     "ConfigSchemaError",

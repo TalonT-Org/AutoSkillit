@@ -298,4 +298,7 @@ providers:
   step_overrides: {}
   provider_retry_limit: 2
 
+agent_backend:
+  backend: claude-code
+
 features: {}

@@ -417,3 +417,10 @@ class ProvidersConfig:
                     raise ValueError(
                         f"profiles[{name!r}][{k!r}] must be a string, got {type(v).__name__!r}"
                     )
+
+
+@dataclass
+class AgentBackendConfig:
+    """Configuration for the agent backend selection."""
+
+    backend: str = "claude-code"

@@ -7,6 +7,7 @@ Configuration loading, defaults, and schema tests.
 | File | Purpose |
 |------|---------|
 | `__init__.py` | empty |
+| `test_agent_backend_config.py` | Tests for AgentBackendConfig loading and validation |
 | `test_branching_config.py` | Tests for BranchingConfig and ReleaseReadinessConfig loading and validation |
 | `test_config.py` | Tests for configuration loading and resolution |
 | `test_config_split.py` | Structural guard for config split |

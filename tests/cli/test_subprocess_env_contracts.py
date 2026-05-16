@@ -14,7 +14,7 @@ Contract: each call site must satisfy BOTH conditions:
 
 Also contains ``test_no_raw_claude_env``: the sibling rule for claude-launching
 subprocess calls. Every claude-launching site must route its env through
-:func:`autoskillit.core.build_claude_env` (via ``spec.env`` from a
+:func:`autoskillit.core.build_agent_env` (via ``spec.env`` from a
 ``Claude*Cmd`` dataclass, or via a direct builder call). The rule bans
 ``env={**os.environ, ...}``, ``env=os.environ``, ``env=None``, missing ``env=``,
 and ``env=<literal dict>`` at every claude-launching site.
@@ -310,7 +310,7 @@ def test_run_subprocess_callers_use_safe_env_pattern() -> None:
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Sibling rule: claude-launching subprocess calls must route env through
-# build_claude_env() — enforced via intra-function AST walk.
+# build_agent_env() — enforced via intra-function AST walk.
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -347,7 +347,7 @@ class _ClaudeLaunchWalker:
     - ``Attribute(value=Name, attr="env")`` where Name was assigned from a
       ``build_interactive_cmd``/``build_headless_cmd``/``build_skill_session_cmd``
       call earlier in the same function body (spec.env pattern).
-    - ``Call(func=Name("build_claude_env") | Attribute(..., "build_claude_env"))``
+    - ``Call(func=Name("build_agent_env") | Attribute(..., "build_agent_env"))``
       (direct builder escape hatch).
     """
 
@@ -454,7 +454,7 @@ class _ClaudeLaunchWalker:
                 return True, ""
         if isinstance(env_val, ast.Call):
             fn = _call_func_name(env_val.func)
-            if fn == "build_claude_env":
+            if fn in {"build_claude_env", "build_agent_env"}:
                 return True, ""
         if isinstance(env_val, ast.Name):
             # Resolve one level of local binding to catch aliased os.environ.
@@ -488,7 +488,7 @@ class _ClaudeLaunchWalker:
 # concern. Each entry is (filename, enclosing_function_name).
 #
 # Adding a new entry requires a comment justifying why the call cannot use
-# build_claude_env — matching the convention in
+# build_agent_env — matching the convention in
 # ``tests/arch/test_ast_rules.py::test_no_raw_claude_list_construction``.
 _CLAUDE_ENV_RULE_ALLOWED: frozenset[tuple[str, str]] = frozenset(
     {
@@ -507,14 +507,14 @@ _CLAUDE_ENV_RULE_ALLOWED: frozenset[tuple[str, str]] = frozenset(
         ("__init__.py", "dispatch_food_truck"),
         # build_headless_resume_cmd constructs cmd = ["claude", ...] then calls
         # _apply_output_format(cmd, ...) — an in-place list mutation, not a subprocess
-        # launch. The function returns ClaudeHeadlessCmd(cmd=cmd, env=build_claude_env(...)).
+        # launch. The function returns ClaudeHeadlessCmd(cmd=cmd, env=build_agent_env(...)).
         ("commands.py", "build_headless_resume_cmd"),
     }
 )
 
 
 def test_no_raw_claude_env() -> None:
-    """Every claude-launching subprocess call must route env through build_claude_env()."""
+    """Every claude-launching subprocess call must route env through build_agent_env()."""
     if not SRC_ROOT.is_dir():
         pytest.skip("Source tree unavailable")
 
@@ -534,6 +534,6 @@ def test_no_raw_claude_env() -> None:
             violations.extend(walker.violations)
 
     assert not violations, (
-        "Found claude-launching subprocess calls that bypass build_claude_env():\n"
+        "Found claude-launching subprocess calls that bypass build_agent_env():\n"
         + "\n".join(f"  {v}" for v in violations)
     )

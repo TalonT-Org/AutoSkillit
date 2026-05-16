@@ -16,7 +16,7 @@ from autoskillit.core import (
     OutputFormat,
     SubprocessResult,
     TerminationReason,
-    build_claude_env,
+    build_agent_env,
     get_logger,
 )
 from autoskillit.execution import parse_session_result, run_managed_async
@@ -123,7 +123,7 @@ async def _triage_batch(
             cmd=triage_cmd,
             cwd=Path.cwd(),
             timeout=30.0,
-            env=build_claude_env(),
+            env=build_agent_env(),
             pty_mode=True,
         )
         if result.termination == TerminationReason.TIMED_OUT:

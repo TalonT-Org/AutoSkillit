@@ -1,3 +1,4 @@
+from ._claude_env import build_agent_env as build_agent_env
 from ._claude_env import build_claude_env as build_claude_env
 from ._install_detect import DirectUrlInfo as DirectUrlInfo
 from ._install_detect import _is_release_tag as _is_release_tag

@@ -10,7 +10,7 @@ Core layer (IL-0) unit tests — paths, IO, types, feature flags.
 | `test_add_dir_validation.py` | Tests for ValidatedAddDir and validate_add_dir |
 | `test_capture.py` | Tests for CaptureEntrySpec and resolve_payload_field |
 | `test_branch_guard.py` | Tests for core.branch_guard — protected-branch validation |
-| `test_claude_env.py` | Unit tests for build_claude_env() — IDE env scrubbing at the subprocess launch boundary |
+| `test_claude_env.py` | Unit tests for build_agent_env() — IDE env scrubbing at the subprocess launch boundary |
 | `test_core.py` | Tests for the core/ sub-package foundation layer |
 | `test_core_terminal_table.py` | Tests for core/_terminal_table.py — the L0 shared table primitive |
 | `test_ensure_project_temp_with_config.py` | Tests for ensure_project_temp with configurable override |

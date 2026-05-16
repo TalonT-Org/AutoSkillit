@@ -12,7 +12,7 @@ Sub-packages: types/ (see types/CLAUDE.md) and runtime/ (see runtime/CLAUDE.md).
 | `_json.py` | Fast JSON via orjson (with stdlib fallback) — `fast_loads`, `fast_dumps` |
 | `logging.py` | Logging configuration |
 | `paths.py` | `pkg_root()`, `is_git_worktree()` |
-| `_claude_env.py` | IDE-scrubbing canonical env builder for claude subprocesses |
+| `_claude_env.py` | IDE-scrubbing canonical env builder for agent subprocesses |
 | `_terminal_table.py` | IL-0 color-agnostic terminal table primitive |
 | `_version_snapshot.py` | Process-scoped version snapshot for session telemetry (`lru_cache`'d) |
 | `branch_guard.py` | Branch protection helpers |

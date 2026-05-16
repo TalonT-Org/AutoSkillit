@@ -516,11 +516,6 @@ def test_unrouted_verdict_catches_bypass_to_non_terminal_even_when_single_value(
     )
 
 
-# ---------------------------------------------------------------------------
-# verdict-output-requires-on-result rule tests
-# ---------------------------------------------------------------------------
-
-
 def _on_success_recipe_with_verdict_skill() -> dict[str, RecipeStep]:
     """Recipe that uses on_success for a skill with verdict + allowed_values — must fail."""
     return {
@@ -597,8 +592,9 @@ def test_verdict_output_requires_on_result_fires(monkeypatch: pytest.MonkeyPatch
         "for a skill with verdict + allowed_values"
     )
     verdict_findings = [f for f in findings if f.rule == "verdict-output-requires-on-result"]
-    assert len(verdict_findings) >= 1
     assert verdict_findings[0].severity == Severity.ERROR
+    assert verdict_findings[0].step_name == "run_exp"
+    assert "run-experiment" in verdict_findings[0].message
 
 
 def test_verdict_output_requires_on_result_passes_with_on_result(
@@ -612,18 +608,6 @@ def test_verdict_output_requires_on_result_passes_with_on_result(
         "verdict-output-requires-on-result must not fire when step uses on_result "
         "with explicit conditions for all verdict values"
     )
-
-
-def test_verdict_output_requires_on_result_reports_step_and_skill(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Rule finding must identify the step name and skill name."""
-    monkeypatch.setattr(_rv, "load_bundled_manifest", lambda: _VERDICT_SKILL_MANIFEST)
-    findings = run_semantic_rules(_make_recipe(_on_success_recipe_with_verdict_skill()))
-    verdict_findings = [f for f in findings if f.rule == "verdict-output-requires-on-result"]
-    assert len(verdict_findings) >= 1
-    assert verdict_findings[0].step_name == "run_exp"
-    assert "run-experiment" in verdict_findings[0].message
 
 
 def test_verdict_rule_blocks_binary_routing_on_bundled_recipes() -> None:

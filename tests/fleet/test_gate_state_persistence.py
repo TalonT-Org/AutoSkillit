@@ -610,7 +610,7 @@ class TestValidationFailureCampaignState:
         from autoskillit.fleet import execute_dispatch
 
         # Trigger FLEET_UNKNOWN_INGREDIENT (non-string ingredient value)
-        await execute_dispatch(
+        result = await execute_dispatch(
             tool_ctx=tool_ctx,
             recipe="test-recipe",
             task="t",
@@ -621,6 +621,13 @@ class TestValidationFailureCampaignState:
             quota_checker=lambda **kw: {},
             quota_refresher=lambda **kw: None,
             campaign_state_path=sp,
+        )
+        from autoskillit.server.tools.tools_fleet_dispatch import (
+            _write_dispatch_to_campaign_state,
+        )
+
+        _write_dispatch_to_campaign_state(
+            str(sp), "step1", result.outcome, result.per_dispatch_state_path
         )
         state = read_state(sp)
         d = next(d for d in state.dispatches if d.name == "step1")
@@ -724,7 +731,7 @@ class TestValidationFailureCampaignState:
 
         from autoskillit.fleet import execute_dispatch
 
-        await execute_dispatch(
+        result = await execute_dispatch(
             tool_ctx=tool_ctx,
             recipe="test-recipe",
             task="t",
@@ -735,6 +742,13 @@ class TestValidationFailureCampaignState:
             quota_checker=lambda **kw: {},
             quota_refresher=lambda **kw: None,
             campaign_state_path=sp,
+        )
+        from autoskillit.server.tools.tools_fleet_dispatch import (
+            _write_dispatch_to_campaign_state,
+        )
+
+        _write_dispatch_to_campaign_state(
+            str(sp), "step1", result.outcome, result.per_dispatch_state_path
         )
         state = read_state(sp)
         d = next(d for d in state.dispatches if d.name == "step1")

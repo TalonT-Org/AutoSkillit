@@ -135,22 +135,25 @@ class TestDispatchFoodTruckHaltEnforcement:
 
         write_initial_state(state_path, "cid", "camp", "/m.yaml", [])
 
-        from autoskillit.fleet import DispatchCompleted
+        from autoskillit.fleet import DispatchCompleted, DispatchResult
         from autoskillit.fleet import DispatchStatus as _DS
 
         monkeypatch.setattr(
             "autoskillit.fleet.execute_dispatch",
             AsyncMock(
-                return_value=DispatchCompleted(
-                    success=False,
-                    dispatch_status=_DS.RESUMABLE,
-                    dispatch_id="test-dispatch-id",
-                    dispatched_session_id="sess-abc",
-                    reason="fleet_l3_no_result_block",
-                    token_usage={},
-                    l3_parse_source="stdout",
-                    lifespan_started=True,
-                    l3_payload=None,
+                return_value=DispatchResult(
+                    outcome=DispatchCompleted(
+                        success=False,
+                        dispatch_status=_DS.RESUMABLE,
+                        dispatch_id="test-dispatch-id",
+                        dispatched_session_id="sess-abc",
+                        reason="fleet_l3_no_result_block",
+                        token_usage={},
+                        l3_parse_source="stdout",
+                        lifespan_started=True,
+                        l3_payload=None,
+                    ),
+                    per_dispatch_state_path=None,
                 )
             ),
         )

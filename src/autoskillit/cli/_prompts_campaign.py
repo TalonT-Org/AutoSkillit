@@ -373,7 +373,8 @@ Emit this EXACT block as your final output. No other text after the block.
         "cache_read": <int>,
         "cache_creation": <int>
       }},
-      "dispatched_session_id": "<session_id>"
+      "dispatched_session_id": "<session_id>",
+      "dispatch_id": "<dispatch_id>"
     }}
   ],
   "error_records": [
@@ -392,6 +393,8 @@ Fields:
 - dispatch_count / completed_count / failure_count / skipped_count: integer tallies
 - per_dispatch: one entry per dispatch, in execution order;
   status is one of success, failure, skipped
+- elapsed_seconds: use the elapsed_seconds field from the dispatch_food_truck return envelope
+- dispatch_id: use the dispatch_id field from the dispatch_food_truck return envelope
 - error_records: one entry per failed dispatch; empty list if no failures
 - NO aggregate token fields (no total_input_tokens, no total_output_tokens, no total_duration)
 

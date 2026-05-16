@@ -43,6 +43,7 @@ from autoskillit.fleet.state_types import (
     DispatchCompleted,
     DispatchRecord,
     DispatchRejected,
+    DispatchResult,
     DispatchStatus,
     GateRecordResult,
     ResumeDecision,
@@ -64,6 +65,7 @@ __all__ = [
     "DispatchCompleted",
     "DispatchRecord",
     "DispatchRejected",
+    "DispatchResult",
     "DispatchStatus",
     "GateRecordResult",
     "ResumeDecision",
@@ -614,10 +616,16 @@ def read_all_campaign_captures(
 
 
 def normalize_dispatch_token_usage(raw: dict[str, Any]) -> dict[str, int]:
-    """Map raw Claude session token keys to canonical DispatchTokenUsage key set."""
+    """Map raw Claude session token keys to canonical DispatchTokenUsage key set.
+
+    Idempotent: handles both raw keys (input_tokens/output_tokens) and canonical
+    keys (input/output) so that double-normalization is safe.
+    """
     return {
-        "input": int(raw.get("input_tokens", 0)),
-        "output": int(raw.get("output_tokens", 0)),
-        "cache_creation": int(raw.get("cache_creation_input_tokens", 0)),
-        "cache_read": int(raw.get("cache_read_input_tokens", 0)),
+        "input": int(raw.get("input_tokens", raw.get("input", 0))),
+        "output": int(raw.get("output_tokens", raw.get("output", 0))),
+        "cache_creation": int(
+            raw.get("cache_creation_input_tokens", raw.get("cache_creation", 0))
+        ),
+        "cache_read": int(raw.get("cache_read_input_tokens", raw.get("cache_read", 0))),
     }

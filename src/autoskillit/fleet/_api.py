@@ -35,8 +35,8 @@ from autoskillit.fleet.state import DispatchStatus
 from autoskillit.fleet.state_types import (
     _ABANDON_REASONS,
     DispatchCompleted,
-    DispatchOutcome,
     DispatchRejected,
+    DispatchResult,
 )
 
 if TYPE_CHECKING:
@@ -314,31 +314,6 @@ def _post_dispatch_cleanup(
             )
 
 
-def _write_campaign_refusal(
-    campaign_state_path: Path | None,
-    effective_name: str,
-    error_code: FleetErrorCode,
-    message: str = "",
-) -> None:
-    """Write a REFUSED dispatch record to the campaign state file."""
-    if campaign_state_path is None:
-        return
-    from autoskillit.fleet.state import (  # noqa: PLC0415
-        DispatchRecord,
-        upsert_dispatch_record_by_name,
-    )
-
-    try:
-        record = DispatchRecord.for_refusal(
-            name=effective_name,
-            error_code=error_code,
-            diagnostic_message=message,
-        )
-        upsert_dispatch_record_by_name(campaign_state_path, record)
-    except Exception:
-        logger.warning("failed to record refusal to campaign state", exc_info=True)
-
-
 def _normalize_capture_spec(
     capture: Mapping[str, str | CaptureEntrySpec] | None,
 ) -> dict[str, CaptureEntrySpec] | None:
@@ -390,21 +365,19 @@ async def execute_dispatch(
     resume_checkpoint: SessionCheckpoint | None = None,
     idle_output_timeout: int | None = None,
     caller_session_id: str = "",
-    campaign_state_path: Path | None = None,
     prior_dispatch_id: str | None = None,
-) -> DispatchOutcome:
+) -> DispatchResult:
     """Execute a single food truck dispatch.
 
     Orchestrates: lock → validate → quota → prompt → dispatch → parse → state → cleanup.
-    Returns DispatchOutcome (DispatchCompleted | DispatchRejected).
+    Returns DispatchResult wrapping the outcome plus the per-dispatch state path.
     """
     effective_name = dispatch_name or recipe
 
-    def _reject(error_code: FleetErrorCode, message: str, **kwargs: Any) -> DispatchRejected:
+    def _reject(error_code: FleetErrorCode, message: str, **kwargs: Any) -> DispatchResult:
         """Pre-lock, pre-dispatch-id rejection path — no per-dispatch state file exists yet."""
         rejection = DispatchRejected(error_code=error_code, message=message, **kwargs)
-        _write_campaign_refusal(campaign_state_path, effective_name, error_code, message=message)
-        return rejection
+        return DispatchResult(rejection, per_dispatch_state_path=None)
 
     if ingredients is not None:
         bad_vals = [k for k, v in ingredients.items() if not isinstance(v, str)]
@@ -456,7 +429,6 @@ async def execute_dispatch(
             resume_checkpoint=resume_checkpoint,
             idle_output_timeout=idle_output_timeout,
             caller_session_id=caller_session_id,
-            campaign_state_path=campaign_state_path,
             prior_dispatch_id=prior_dispatch_id,
         )
     except asyncio.CancelledError:
@@ -471,7 +443,6 @@ async def execute_dispatch(
             "execute_dispatch crashed before dispatch completion",
             exc_type=type(underlying).__name__,
             dispatch_name=effective_name,
-            campaign_state_path=str(campaign_state_path),
             exc_info=True,
         )
         return _reject(
@@ -542,9 +513,8 @@ async def _run_dispatch(
     resume_checkpoint: SessionCheckpoint | None = None,
     idle_output_timeout: int | None = None,
     caller_session_id: str = "",
-    campaign_state_path: Path | None = None,
     prior_dispatch_id: str | None = None,
-) -> DispatchOutcome:
+) -> DispatchResult:
     """Inner dispatch body — called after lock acquisition."""
     from autoskillit.fleet.state import (
         DispatchRecord,
@@ -558,16 +528,22 @@ async def _run_dispatch(
     )
 
     if tool_ctx.recipes is None:
-        return DispatchRejected(
-            error_code=FleetErrorCode.FLEET_MANIFEST_MISSING,
-            message="Recipe repository not configured.",
+        return DispatchResult(
+            DispatchRejected(
+                error_code=FleetErrorCode.FLEET_MANIFEST_MISSING,
+                message="Recipe repository not configured.",
+            ),
+            per_dispatch_state_path=None,
         )
 
     recipe_obj = tool_ctx.recipes.find(recipe, tool_ctx.project_dir)
     if recipe_obj is None:
-        return DispatchRejected(
-            error_code=FleetErrorCode.FLEET_RECIPE_NOT_FOUND,
-            message=f"Recipe '{recipe}' not found.",
+        return DispatchResult(
+            DispatchRejected(
+                error_code=FleetErrorCode.FLEET_RECIPE_NOT_FOUND,
+                message=f"Recipe '{recipe}' not found.",
+            ),
+            per_dispatch_state_path=None,
         )
 
     try:
@@ -579,37 +555,49 @@ async def _run_dispatch(
         )
     except Exception as exc:
         logger.warning("load_and_validate failed for '%s'", recipe, exc_info=True)
-        return DispatchRejected(
-            error_code=FleetErrorCode.FLEET_RECIPE_INVALID,
-            message=f"Recipe '{recipe}' could not be loaded: {exc}",
+        return DispatchResult(
+            DispatchRejected(
+                error_code=FleetErrorCode.FLEET_RECIPE_INVALID,
+                message=f"Recipe '{recipe}' could not be loaded: {exc}",
+            ),
+            per_dispatch_state_path=None,
         )
 
     if not validation_result.get("valid", False):
         error_findings = [
             s for s in validation_result.get("suggestions", []) if s.get("severity") == "error"
         ]
-        return DispatchRejected(
-            error_code=FleetErrorCode.FLEET_RECIPE_INVALID,
-            message=f"Recipe '{recipe}' has validation errors: "
-            + "; ".join(f"[{f['rule']}] {f['message']}" for f in error_findings[:3]),
+        return DispatchResult(
+            DispatchRejected(
+                error_code=FleetErrorCode.FLEET_RECIPE_INVALID,
+                message=f"Recipe '{recipe}' has validation errors: "
+                + "; ".join(f"[{f['rule']}] {f['message']}" for f in error_findings[:3]),
+            ),
+            per_dispatch_state_path=None,
         )
 
     try:
         full_recipe = tool_ctx.recipes.load(recipe_obj.path)
     except Exception as exc:
         logger.warning("load_recipe failed for '%s'", recipe, exc_info=True)
-        return DispatchRejected(
-            error_code=FleetErrorCode.FLEET_RECIPE_NOT_FOUND,
-            message=f"Recipe '{recipe}' could not be loaded: {exc}",
+        return DispatchResult(
+            DispatchRejected(
+                error_code=FleetErrorCode.FLEET_RECIPE_NOT_FOUND,
+                message=f"Recipe '{recipe}' could not be loaded: {exc}",
+            ),
+            per_dispatch_state_path=None,
         )
 
     _DISPATCHABLE_KINDS = frozenset({"standard", "food-truck"})
 
     if full_recipe.kind not in _DISPATCHABLE_KINDS:
-        return DispatchRejected(
-            error_code=FleetErrorCode.FLEET_INVALID_RECIPE_KIND,
-            message=f"Recipe '{recipe}' has kind '{full_recipe.kind}'. "
-            "Only standard and food-truck recipes can be dispatched.",
+        return DispatchResult(
+            DispatchRejected(
+                error_code=FleetErrorCode.FLEET_INVALID_RECIPE_KIND,
+                message=f"Recipe '{recipe}' has kind '{full_recipe.kind}'. "
+                "Only standard and food-truck recipes can be dispatched.",
+            ),
+            per_dispatch_state_path=None,
         )
 
     effective_ingredients = ingredients or {}
@@ -656,8 +644,14 @@ async def _run_dispatch(
     dispatch_id = identity.dispatch_id
     state_path = handle.state_path
 
-    def _reject_with_state(error_code: FleetErrorCode, message: str) -> DispatchRejected:
-        """Post-dispatch-id rejection path — writes both per-dispatch and campaign state."""
+    def _reject_with_state(error_code: FleetErrorCode, message: str) -> DispatchResult:
+        """Post-dispatch-id rejection path — writes per-dispatch state only.
+
+        Campaign state is written by the caller via _write_dispatch_to_campaign_state.
+        """
+        rejection = DispatchRejected(
+            error_code=error_code, message=message, dispatch_id=dispatch_id
+        )
         try:
             append_dispatch_record(
                 state_path,
@@ -670,8 +664,7 @@ async def _run_dispatch(
             )
         except Exception:
             logger.warning("_reject_with_state: per-dispatch state write failed", exc_info=True)
-        _write_campaign_refusal(campaign_state_path, effective_name, error_code, message=message)
-        return DispatchRejected(error_code=error_code, message=message, dispatch_id=dispatch_id)
+        return DispatchResult(rejection, per_dispatch_state_path=state_path)
 
     if effective_ingredients:
         unknown = set(effective_ingredients.keys()) - set(full_recipe.ingredients.keys())
@@ -876,15 +869,19 @@ async def _run_dispatch(
         )
         upsert_dispatch_record_by_name(state_path, record)
         _post_dispatch_cleanup(tool_ctx, skill_result, cache_invalidator, quota_refresher)
-        return DispatchCompleted(
-            success=False,
-            dispatch_status=DispatchStatus.FAILURE,
-            dispatch_id=dispatch_id,
-            dispatched_session_id=skill_result.session_id or "",
-            reason=FleetErrorCode.FLEET_L3_TIMEOUT,
-            token_usage=normalize_dispatch_token_usage(skill_result.token_usage or {}),
-            lifespan_started=skill_result.lifespan_started,
-            stderr=truncate_text(skill_result.stderr or "", ENVELOPE_STDERR_MAX),
+        return DispatchResult(
+            DispatchCompleted(
+                success=False,
+                dispatch_status=DispatchStatus.FAILURE,
+                dispatch_id=dispatch_id,
+                dispatched_session_id=skill_result.session_id or "",
+                reason=FleetErrorCode.FLEET_L3_TIMEOUT,
+                token_usage=normalize_dispatch_token_usage(skill_result.token_usage or {}),
+                lifespan_started=skill_result.lifespan_started,
+                stderr=truncate_text(skill_result.stderr or "", ENVELOPE_STDERR_MAX),
+                elapsed_seconds=ended_at - started_at,
+            ),
+            per_dispatch_state_path=state_path,
         )
 
     jsonl_path = claude_code_log_path(str(tool_ctx.project_dir), skill_result.session_id or "")
@@ -961,44 +958,56 @@ async def _run_dispatch(
 
     if parsed.outcome == "completed_clean":
         envelope_success = bool(parsed.payload and parsed.payload.get("success", False))
-        return DispatchCompleted(
-            success=envelope_success,
-            dispatch_status=final_status,
-            dispatch_id=dispatch_id,
-            dispatched_session_id=skill_result.session_id or "",
-            reason=reason,
-            token_usage=normalize_dispatch_token_usage(skill_result.token_usage or {}),
-            l3_payload=parsed.payload,
-            l3_parse_source=parsed.source,
-            lifespan_started=skill_result.lifespan_started,
-            stderr=truncate_text(skill_result.stderr or "", ENVELOPE_STDERR_MAX),
+        return DispatchResult(
+            DispatchCompleted(
+                success=envelope_success,
+                dispatch_status=final_status,
+                dispatch_id=dispatch_id,
+                dispatched_session_id=skill_result.session_id or "",
+                reason=reason,
+                token_usage=normalize_dispatch_token_usage(skill_result.token_usage or {}),
+                l3_payload=parsed.payload,
+                l3_parse_source=parsed.source,
+                lifespan_started=skill_result.lifespan_started,
+                stderr=truncate_text(skill_result.stderr or "", ENVELOPE_STDERR_MAX),
+                elapsed_seconds=ended_at - started_at,
+            ),
+            per_dispatch_state_path=state_path,
         )
     elif parsed.outcome == "completed_dirty":
-        return DispatchCompleted(
-            success=False,
-            dispatch_status=final_status,
-            dispatch_id=dispatch_id,
-            dispatched_session_id=skill_result.session_id or "",
-            reason=FleetErrorCode.FLEET_L3_PARSE_FAILED,
-            token_usage=normalize_dispatch_token_usage(skill_result.token_usage or {}),
-            l3_payload=None,
-            l3_raw_body=parsed.raw_body,
-            l3_parse_error=parsed.parse_error,
-            l3_parse_source=parsed.source,
-            lifespan_started=skill_result.lifespan_started,
-            stderr=truncate_text(skill_result.stderr or "", ENVELOPE_STDERR_MAX),
+        return DispatchResult(
+            DispatchCompleted(
+                success=False,
+                dispatch_status=final_status,
+                dispatch_id=dispatch_id,
+                dispatched_session_id=skill_result.session_id or "",
+                reason=FleetErrorCode.FLEET_L3_PARSE_FAILED,
+                token_usage=normalize_dispatch_token_usage(skill_result.token_usage or {}),
+                l3_payload=None,
+                l3_raw_body=parsed.raw_body,
+                l3_parse_error=parsed.parse_error,
+                l3_parse_source=parsed.source,
+                lifespan_started=skill_result.lifespan_started,
+                stderr=truncate_text(skill_result.stderr or "", ENVELOPE_STDERR_MAX),
+                elapsed_seconds=ended_at - started_at,
+            ),
+            per_dispatch_state_path=state_path,
         )
     else:
-        return DispatchCompleted(
-            success=False,
-            dispatch_status=final_status,
-            dispatch_id=dispatch_id,
-            dispatched_session_id=skill_result.session_id or "",
-            reason=FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK,
-            token_usage=normalize_dispatch_token_usage(skill_result.token_usage or {}),
-            l3_payload=None,
-            l3_parse_source=parsed.source,
-            lifespan_started=skill_result.lifespan_started,
-            resume_checkpoint=dispatch_checkpoint.to_dict() if dispatch_checkpoint else None,
-            stderr=truncate_text(skill_result.stderr or "", ENVELOPE_STDERR_MAX),
+        return DispatchResult(
+            DispatchCompleted(
+                success=False,
+                dispatch_status=final_status,
+                dispatch_id=dispatch_id,
+                dispatched_session_id=skill_result.session_id or "",
+                reason=FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK,
+                token_usage=normalize_dispatch_token_usage(skill_result.token_usage or {}),
+                l3_payload=None,
+                l3_parse_source=parsed.source,
+                lifespan_started=skill_result.lifespan_started,
+                resume_checkpoint=dispatch_checkpoint.to_dict() if dispatch_checkpoint else None,
+                stderr=truncate_text(skill_result.stderr or "", ENVELOPE_STDERR_MAX),
+                elapsed_seconds=ended_at - started_at,
+            ),
+            per_dispatch_state_path=state_path,
         )

@@ -249,6 +249,7 @@ class TestCaptureChainAcrossResumeBoundary:
             prior_dispatch_id=prior_id,
         )
 
+        result = result.outcome
         if isinstance(result, DispatchRejected):
             assert result.error_code != FleetErrorCode.FLEET_UNKNOWN_INGREDIENT, (
                 f"Campaign capture ref not resolved — captures lost: {result.message}"

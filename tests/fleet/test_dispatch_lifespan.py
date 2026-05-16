@@ -33,7 +33,7 @@ async def _noop_quota_refresher(config, **kwargs) -> None:
 async def _run(tool_ctx, recipe: str = "test-recipe") -> dict:
     from autoskillit.fleet._api import execute_dispatch
 
-    raw = await execute_dispatch(
+    result = await execute_dispatch(
         tool_ctx=tool_ctx,
         recipe=recipe,
         task="t",
@@ -44,7 +44,7 @@ async def _run(tool_ctx, recipe: str = "test-recipe") -> dict:
         quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
-    return json.loads(raw.to_envelope())
+    return json.loads(result.outcome.to_envelope())
 
 
 def _make_completed_clean(success: bool):

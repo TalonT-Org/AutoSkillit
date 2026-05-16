@@ -293,6 +293,45 @@ class TestCampaignSummaryContract:
         assert "total_input_tokens" not in summary_section
         assert "total_output_tokens" not in summary_section
 
+    def test_prompt_template_includes_dispatch_id(self) -> None:
+        """Prompt template per_dispatch JSON example must include dispatch_id field.
+
+        Regression test: the template omitted dispatch_id, but PerDispatchEntry requires it,
+        causing the parser to silently default to "".
+        """
+        prompt = _build()
+        start = prompt.index(f"---campaign-summary::{_CAMPAIGN_ID}---")
+        end = prompt.index(f"---end-campaign-summary::{_CAMPAIGN_ID}---") + len(
+            f"---end-campaign-summary::{_CAMPAIGN_ID}---"
+        )
+        summary_section = prompt[start:end]
+        assert '"dispatch_id"' in summary_section, (
+            "per_dispatch JSON example must include dispatch_id field"
+        )
+
+    def test_prompt_template_per_dispatch_fields_match_schema(self) -> None:
+        """PerDispatchEntry schema fields must all appear in the prompt template example.
+
+        Structural immunity test: prevents future drift where PerDispatchEntry gains a field
+        but the prompt template is not updated.
+        """
+
+        prompt = _build()
+        start = prompt.index(f"---campaign-summary::{_CAMPAIGN_ID}---")
+        end = prompt.index(f"---end-campaign-summary::{_CAMPAIGN_ID}---") + len(
+            f"---end-campaign-summary::{_CAMPAIGN_ID}---"
+        )
+        summary_section = prompt[start:end]
+
+        import dataclasses
+
+        from autoskillit.fleet.summary import PerDispatchEntry
+
+        for field in (f.name for f in dataclasses.fields(PerDispatchEntry)):
+            assert f'"{field}"' in summary_section, (
+                f"per_dispatch JSON example missing field: {field}"
+            )
+
 
 # --- K-11: TestProgressMarkers ---
 

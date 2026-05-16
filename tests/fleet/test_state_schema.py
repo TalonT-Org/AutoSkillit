@@ -593,3 +593,54 @@ class TestTerminalRecordDiagnosticInvariant:
         assert record.status == DispatchStatus.REFUSED
         assert record.reason == "fleet_quota_exhausted"
         assert record.diagnostic_message == ""
+
+
+# ---------------------------------------------------------------------------
+# Envelope schema coverage tests
+# ---------------------------------------------------------------------------
+
+
+def _compute_envelope_sourced_per_dispatch_fields() -> frozenset[str]:
+    """Derive envelope-sourced fields from PerDispatchEntry dataclass schema.
+
+    Excludes caller-provided fields (name, status) which are known before dispatch.
+    All remaining fields must appear in DispatchCompleted.to_envelope() output.
+    """
+    import dataclasses
+
+    from autoskillit.fleet.summary import PerDispatchEntry
+
+    _caller_provided = frozenset({"name", "status"})
+    return frozenset(f.name for f in dataclasses.fields(PerDispatchEntry)) - _caller_provided
+
+
+ENVELOPE_SOURCED_PER_DISPATCH_FIELDS = _compute_envelope_sourced_per_dispatch_fields()
+
+
+class TestDispatchCompletedEnvelopeCoverage:
+    """Structural immunity: to_envelope() must carry all PerDispatchEntry envelope fields."""
+
+    def test_dispatch_completed_fields_cover_envelope_needs(self):
+        """to_envelope() output must contain every field PerDispatchEntry reads from the envelope.
+
+        If PerDispatchEntry gains a new envelope-sourced field and this test is not updated,
+        the test fails — forcing the envelope to be updated alongside the schema.
+        """
+        from autoskillit.fleet import DispatchCompleted, DispatchStatus
+
+        completed = DispatchCompleted(
+            success=True,
+            dispatch_status=DispatchStatus.SUCCESS,
+            dispatch_id="test-dispatch-id",
+            dispatched_session_id="test-session-id",
+            reason="",
+            token_usage={"input": 100, "output": 50, "cache_read": 10, "cache_creation": 5},
+            elapsed_seconds=42.5,
+        )
+        envelope = json.loads(completed.to_envelope())
+
+        for field in ENVELOPE_SOURCED_PER_DISPATCH_FIELDS:
+            assert field in envelope, (
+                f"to_envelope() missing envelope-sourced PerDispatchEntry field: {field}. "
+                f"Update DispatchCompleted.to_envelope() and this test."
+            )

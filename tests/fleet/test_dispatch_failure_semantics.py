@@ -38,7 +38,7 @@ async def _run(
 ) -> dict:
     from autoskillit.fleet._api import execute_dispatch
 
-    raw = await execute_dispatch(
+    result = await execute_dispatch(
         tool_ctx=tool_ctx,
         recipe=recipe,
         task="t",
@@ -49,7 +49,7 @@ async def _run(
         quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
-    return json.loads(raw.to_envelope())
+    return json.loads(result.outcome.to_envelope())
 
 
 def _read_dispatch_record(tool_ctx) -> dict:
@@ -336,6 +336,30 @@ class TestCompletedDirtyPath:
 
         record = _read_dispatch_record(tool_ctx)
         assert record["reason"] == "fleet_l3_parse_failed"
+
+
+class TestElapsedSecondsEnvelopeField:
+    @pytest.mark.anyio
+    async def test_dispatch_completed_envelope_contains_elapsed_seconds(self):
+        """DispatchCompleted.to_envelope() includes elapsed_seconds field.
+
+        Regression test: elapsed_seconds is computed in _run_dispatch() but never
+        added to DispatchCompleted, so the L3 agent has no timing source.
+        """
+        from autoskillit.fleet import DispatchCompleted, DispatchStatus
+
+        completed = DispatchCompleted(
+            success=True,
+            dispatch_status=DispatchStatus.SUCCESS,
+            dispatch_id="test-dispatch-id",
+            dispatched_session_id="test-session-id",
+            reason="",
+            token_usage={"input": 100, "output": 50, "cache_read": 10, "cache_creation": 5},
+            elapsed_seconds=42.5,
+        )
+        result = json.loads(completed.to_envelope())
+        assert "elapsed_seconds" in result, "to_envelope() must include elapsed_seconds"
+        assert result["elapsed_seconds"] == 42.5
 
 
 class TestDispatchStatusEnvelopeField:
@@ -933,10 +957,14 @@ class TestCrashPathDiagnosticPersistence:
             prompt_builder=_simple_prompt_builder,
             quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
-            campaign_state_path=campaign_state_path,
+        )
+        from autoskillit.server.tools.tools_fleet_dispatch import _write_dispatch_to_campaign_state
+
+        _write_dispatch_to_campaign_state(
+            str(campaign_state_path), "dispatch-a", result.outcome, result.per_dispatch_state_path
         )
 
-        envelope = json.loads(result.to_envelope())
+        envelope = json.loads(result.outcome.to_envelope())
         assert envelope["success"] is False
         assert envelope["error"] == "fleet_l3_startup_or_crash"
         assert "RuntimeError" in envelope["user_visible_message"]
@@ -951,7 +979,7 @@ class TestCrashPathDiagnosticPersistence:
         assert refused[0].reason == "fleet_l3_startup_or_crash"
 
     async def test_crash_logs_structured_fields(self, tool_ctx, monkeypatch) -> None:
-        """WARNING log must include exc_type, dispatch_name, and campaign_state_path."""
+        """WARNING log must include exc_type and dispatch_name."""
         import structlog
 
         from tests.fakes import InMemoryHeadlessExecutor
@@ -983,10 +1011,9 @@ class TestCrashPathDiagnosticPersistence:
                 prompt_builder=_simple_prompt_builder,
                 quota_checker=_no_sleep_quota_checker,
                 quota_refresher=_noop_quota_refresher,
-                campaign_state_path=None,
             )
 
-        envelope = json.loads(result.to_envelope())
+        envelope = json.loads(result.outcome.to_envelope())
         assert envelope["error"] == "fleet_l3_startup_or_crash"
 
         warning_logs = [
@@ -998,7 +1025,6 @@ class TestCrashPathDiagnosticPersistence:
         log_record = warning_logs[0]
         assert log_record.get("exc_type") == "TypeError"
         assert log_record.get("dispatch_name") == "my-test-dispatch"
-        assert "campaign_state_path" in log_record
 
     async def test_reject_with_state_persists_message_to_both_states(
         self, tool_ctx, monkeypatch, tmp_path: Path
@@ -1043,14 +1069,17 @@ class TestCrashPathDiagnosticPersistence:
             prompt_builder=_simple_prompt_builder,
             quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
-            campaign_state_path=campaign_state_path,
+        )
+        from autoskillit.server.tools.tools_fleet_dispatch import _write_dispatch_to_campaign_state
+
+        _write_dispatch_to_campaign_state(
+            str(campaign_state_path), "dispatch-b", result.outcome, result.per_dispatch_state_path
         )
 
-        envelope = json.loads(result.to_envelope())
+        envelope = json.loads(result.outcome.to_envelope())
         assert envelope["success"] is False
         assert "Unknown ingredient keys" in envelope["user_visible_message"]
 
-        # Campaign state should have diagnostic_message written by _reject_with_state
         campaign_state = read_state(campaign_state_path)
         assert campaign_state is not None
         refused_campaign = [d for d in campaign_state.dispatches if d.status.value == "refused"]

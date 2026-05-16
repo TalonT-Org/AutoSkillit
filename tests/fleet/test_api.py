@@ -156,7 +156,7 @@ async def _noop_quota_refresher(config, **kwargs) -> None:
 async def _run(tool_ctx, recipe="test-recipe", ingredients=None):
     from autoskillit.fleet._api import execute_dispatch
 
-    raw = await execute_dispatch(
+    result = await execute_dispatch(
         tool_ctx=tool_ctx,
         recipe=recipe,
         task="t",
@@ -167,7 +167,7 @@ async def _run(tool_ctx, recipe="test-recipe", ingredients=None):
         quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
-    return json.loads(raw.to_envelope())
+    return json.loads(result.outcome.to_envelope())
 
 
 class TestRequiresPacksForwarding:
@@ -186,6 +186,35 @@ class TestRequiresPacksForwarding:
         await _run(tool_ctx)
         call = tool_ctx.executor.dispatch_calls[0]
         assert list(call.requires_packs) == ["kitchen-core"]
+
+
+class TestDispatchResultWrapper:
+    """execute_dispatch returns a DispatchResult with per_dispatch_state_path set on success."""
+
+    @pytest.mark.anyio
+    async def test_execute_dispatch_returns_dispatch_result_with_state_path_on_success(
+        self, tool_ctx, monkeypatch
+    ):
+        """execute_dispatch must return DispatchResult with non-None per_dispatch_state_path."""
+        from autoskillit.fleet import DispatchResult
+        from autoskillit.fleet._api import execute_dispatch
+        from tests.fleet._helpers import _no_sleep_quota_checker, _noop_quota_refresher
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+        result = await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="t",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=lambda **kwargs: "prompt",
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+        )
+        assert isinstance(result, DispatchResult)
+        assert result.per_dispatch_state_path is not None
+        assert result.per_dispatch_state_path.exists()
 
 
 class TestTouchDispatchMarker:
@@ -391,18 +420,19 @@ class TestDispatchMarkerLifecycle:
         assert isinstance(data["session_id"], str)
 
 
-class TestWriteCampaignRefusalDiagnosticMessage:
-    """_write_campaign_refusal must persist the diagnostic message, not just the error code."""
+class TestWriteDispatchToCampaignStateRefusal:
+    """_write_dispatch_to_campaign_state must persist the diagnostic message for rejections."""
 
-    async def test_refusal_persists_diagnostic_message_to_campaign(self, tmp_path: Path) -> None:
+    def test_refusal_persists_diagnostic_message_to_campaign(self, tmp_path: Path) -> None:
         """REFUSED records in campaign state must carry the human-readable diagnostic message."""
         from autoskillit.core import FleetErrorCode
         from autoskillit.fleet import (
             DispatchRecord,
+            DispatchRejected,
             read_state,
             write_initial_state,
         )
-        from autoskillit.fleet._api import _write_campaign_refusal
+        from autoskillit.server.tools.tools_fleet_dispatch import _write_dispatch_to_campaign_state
 
         campaign_state_path = tmp_path / "campaign.json"
         write_initial_state(
@@ -413,11 +443,13 @@ class TestWriteCampaignRefusalDiagnosticMessage:
             [DispatchRecord(name="dispatch-1")],
         )
 
-        _write_campaign_refusal(
-            campaign_state_path,
+        _write_dispatch_to_campaign_state(
+            str(campaign_state_path),
             "dispatch-1",
-            FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
-            message="RuntimeError: database connection lost",
+            DispatchRejected(
+                error_code=FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
+                message="RuntimeError: database connection lost",
+            ),
         )
 
         state = read_state(campaign_state_path)
@@ -427,15 +459,16 @@ class TestWriteCampaignRefusalDiagnosticMessage:
         assert refused[0].diagnostic_message == "RuntimeError: database connection lost"
         assert refused[0].reason == "fleet_l3_startup_or_crash"
 
-    async def test_refusal_without_message_defaults_empty(self, tmp_path: Path) -> None:
-        """Backward compatibility: omitting message defaults to empty string."""
+    def test_refusal_without_message_defaults_empty(self, tmp_path: Path) -> None:
+        """Omitting message defaults to empty string."""
         from autoskillit.core import FleetErrorCode
         from autoskillit.fleet import (
             DispatchRecord,
+            DispatchRejected,
             read_state,
             write_initial_state,
         )
-        from autoskillit.fleet._api import _write_campaign_refusal
+        from autoskillit.server.tools.tools_fleet_dispatch import _write_dispatch_to_campaign_state
 
         campaign_state_path = tmp_path / "campaign.json"
         write_initial_state(
@@ -446,10 +479,13 @@ class TestWriteCampaignRefusalDiagnosticMessage:
             [DispatchRecord(name="dispatch-2")],
         )
 
-        _write_campaign_refusal(
-            campaign_state_path,
+        _write_dispatch_to_campaign_state(
+            str(campaign_state_path),
             "dispatch-2",
-            FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
+            DispatchRejected(
+                error_code=FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
+                message="",
+            ),
         )
 
         state = read_state(campaign_state_path)

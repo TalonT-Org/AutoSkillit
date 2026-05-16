@@ -257,7 +257,7 @@ class FleetRuntime:
         from autoskillit.fleet._api import execute_dispatch
 
         self.configure_shim(shim_mode, sleep_sec=sleep_sec)
-        raw = await execute_dispatch(
+        result = await execute_dispatch(
             tool_ctx=self.tool_ctx,
             recipe=recipe,
             task=task,
@@ -268,7 +268,7 @@ class FleetRuntime:
             quota_checker=quota_checker if quota_checker is not None else _no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
-        return cast(dict[str, Any], json.loads(raw.to_envelope()))
+        return cast(dict[str, Any], json.loads(result.outcome.to_envelope()))
 
     def dispatch_state_path(self, dispatch_id: str) -> Path:
         """Path to per-dispatch state file created by execute_dispatch."""

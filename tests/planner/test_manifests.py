@@ -689,8 +689,8 @@ def test_resolve_task_input_long_inline_truncates_label(tmp_path):
     assert text.startswith(result["task_label"])
 
 
-def test_build_phase_wp_manifest_raises_on_non_canonical_in_assignments(tmp_path):
-    """Non-canonical files (e.g. phase sentinels) in assignments/ raise ValueError."""
+def test_build_phase_wp_manifest_ignores_non_canonical_in_assignments(tmp_path):
+    """Non-canonical files (e.g. phase sentinels) in assignments/ are silently skipped."""
     from autoskillit.planner import build_phase_wp_manifest
 
     assign_dir = tmp_path / "assignments"
@@ -706,8 +706,8 @@ def test_build_phase_wp_manifest_raises_on_non_canonical_in_assignments(tmp_path
         json.dumps({"id": "P1", "status": "complete", "assignment_count": 1, "failed_count": 0})
     )
 
-    with pytest.raises(ValueError, match="excluded"):
-        build_phase_wp_manifest(str(assign_dir), str(out_dir))
+    result = build_phase_wp_manifest(str(assign_dir), str(out_dir))
+    assert "manifest_path" in result
 
 
 def test_expand_wps_result_dir_points_to_wp_sentinels(tmp_path):

@@ -12,7 +12,6 @@ from autoskillit.planner.validation import (
     _check_dag_acyclic,
     _check_duplicate_deliverables,
     _check_sizing_bounds,
-    _iter_tier_files,
     _load_assignment_results,
     _load_phase_results,
     _load_wp_results,
@@ -745,43 +744,49 @@ def test_validate_plan_reads_finalized_manifest(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_iter_tier_files_raises_on_excluded_files(tmp_path: Path) -> None:
-    """_iter_tier_files raises ValueError when non-matching *_result.json files exist."""
+def test_discover_tier_files_places_non_canonical_in_rejected(tmp_path: Path) -> None:
+    """Non-canonical *_result.json files end up in the rejected list, not accepted."""
     from autoskillit.planner.schema import WP_RESULT_FILE_RE
+    from autoskillit.planner.validation import discover_tier_files
 
     wp_dir = tmp_path / "work_packages"
     wp_dir.mkdir()
     write_json(wp_dir / "P1-A1-WP1_result.json", make_wp_result("P1-A1-WP1"))
     write_json(wp_dir / "P1-A1-WP2a_result.json", {"id": "P1-A1-WP2a", "name": "bad"})
 
-    with pytest.raises(ValueError, match="excluded"):
-        list(_iter_tier_files(wp_dir, WP_RESULT_FILE_RE))
+    result = discover_tier_files(wp_dir, WP_RESULT_FILE_RE)
+    assert [f.name for f in result.accepted] == ["P1-A1-WP1_result.json"]
+    assert [f.name for f in result.rejected] == ["P1-A1-WP2a_result.json"]
 
 
-def test_load_wp_results_raises_on_non_canonical_filename(tmp_path: Path) -> None:
-    """_load_wp_results raises when a non-canonical WP file is present."""
+def test_load_wp_results_returns_non_canonical_in_rejected(tmp_path: Path) -> None:
+    """_load_wp_results returns non-canonical filenames in the rejected list."""
     wp_dir = tmp_path / "work_packages"
     wp_dir.mkdir()
     write_json(wp_dir / "P1-A1-WP1_result.json", make_wp_result("P1-A1-WP1"))
     write_json(wp_dir / "P1-A1-WP2a_result.json", {"id": "P1-A1-WP2a", "name": "bad"})
 
-    with pytest.raises(ValueError, match="excluded"):
-        _load_wp_results(tmp_path)
+    results, rejected = _load_wp_results(tmp_path)
+    assert "P1-A1-WP1" in results
+    assert len(rejected) == 1
+    assert rejected[0].name == "P1-A1-WP2a_result.json"
 
 
-def test_load_phase_results_raises_on_non_canonical_filename(tmp_path: Path) -> None:
-    """_load_phase_results raises when a non-canonical phase file is present."""
+def test_load_phase_results_returns_non_canonical_in_rejected(tmp_path: Path) -> None:
+    """_load_phase_results returns non-canonical filenames in the rejected list."""
     phases_dir = tmp_path / "phases"
     phases_dir.mkdir()
     write_json(phases_dir / "P1_result.json", make_phase_result(1))
     write_json(phases_dir / "Phase1_result.json", {"id": "P1", "name": "bad"})
 
-    with pytest.raises(ValueError, match="excluded"):
-        _load_phase_results(tmp_path)
+    results, rejected = _load_phase_results(tmp_path)
+    assert "P1" in results
+    assert len(rejected) == 1
+    assert rejected[0].name == "Phase1_result.json"
 
 
-def test_load_assignment_results_raises_on_non_canonical_filename(tmp_path: Path) -> None:
-    """_load_assignment_results raises when a non-canonical assignment file is present."""
+def test_load_assignment_results_returns_non_canonical_in_rejected(tmp_path: Path) -> None:
+    """_load_assignment_results returns non-canonical filenames in the rejected list."""
     assigns_dir = tmp_path / "assignments"
     assigns_dir.mkdir()
     write_json(
@@ -792,18 +797,25 @@ def test_load_assignment_results_raises_on_non_canonical_filename(tmp_path: Path
         assigns_dir / "P1-A2b_result.json", {"id": "P1-A2b", "phase_id": "P1", "name": "bad"}
     )
 
-    with pytest.raises(ValueError, match="excluded"):
-        _load_assignment_results(tmp_path)
+    results, rejected = _load_assignment_results(tmp_path)
+    assert "P1-A1" in results
+    assert len(rejected) == 1
+    assert rejected[0].name == "P1-A2b_result.json"
 
 
-def test_validate_plan_raises_on_non_canonical_wp_file(tmp_path: Path) -> None:
-    """validate_plan raises when a non-canonical WP file is present."""
+def test_validate_plan_emits_warning_for_non_canonical_wp_file(tmp_path: Path) -> None:
+    """validate_plan emits a file_discovery_miss warning for a non-canonical WP file."""
     _make_minimal_output_dir(tmp_path)
     wp_dir = tmp_path / "work_packages"
     write_json(wp_dir / "P1-A1-WP2a_result.json", {"id": "P1-A1-WP2a", "name": "bad"})
 
-    with pytest.raises(ValueError, match="excluded"):
-        validate_plan(str(tmp_path))
+    result = validate_plan(str(tmp_path))
+    assert result["verdict"] == "pass"
+    validation = json.loads((tmp_path / "validation.json").read_text())
+    assert any(
+        w["check"] == "file_discovery_miss" and "P1-A1-WP2a_result.json" in w["message"]
+        for w in validation["warnings"]
+    ), "Expected file_discovery_miss warning for P1-A1-WP2a_result.json"
 
 
 # ---------------------------------------------------------------------------

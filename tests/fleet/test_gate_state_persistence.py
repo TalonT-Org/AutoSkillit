@@ -357,8 +357,8 @@ class TestCampaignStateFieldCompleteness:
         state = read_state(sp)
         assert state is not None
         d = next(d for d in state.dispatches if d.name == "timing-test")
-        assert d.started_at > 0, "started_at must be non-zero"
-        assert d.ended_at > d.started_at, "ended_at must be after started_at"
+        assert d.started_at == 1000.0, "started_at must preserve seeded value"
+        assert d.ended_at == 1007.25, "ended_at must preserve seeded value"
 
     @pytest.mark.anyio
     async def test_campaign_state_token_usage_nonzero(

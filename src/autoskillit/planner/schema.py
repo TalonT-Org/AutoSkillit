@@ -152,6 +152,7 @@ class ValidationFinding(TypedDict):
 
 _PHASE_ID_RE = re.compile(r"^P\d+$")
 _ASSIGN_ID_RE = re.compile(r"^P\d+-A\d+$")
+ASSIGN_ID_RE = _ASSIGN_ID_RE
 _WP_ID_RE = re.compile(r"^P\d+-A\d+-WP\d+$")
 
 

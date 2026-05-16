@@ -85,6 +85,11 @@ HOOK_REGISTRY: list[HookDef] = [
     ),
     HookDef(
         matcher=r"Write|Edit",
+        scripts=["guards/planner_result_naming_guard.py"],
+        session_scope="headless_only",
+    ),
+    HookDef(
+        matcher=r"Write|Edit",
         scripts=["guards/recipe_write_advisor.py"],
         session_scope="interactive_only",
     ),
@@ -192,6 +197,7 @@ NEW_SUBDIR_BASENAMES: frozenset[str] = frozenset(
         "skill_orchestration_guard.py",
         "skill_load_guard.py",
         "resume_ownership_guard.py",
+        "planner_result_naming_guard.py",
     }
 )
 

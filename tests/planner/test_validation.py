@@ -11,6 +11,10 @@ from autoskillit.planner.schema import DELIVERABLE_BOUNDS
 from autoskillit.planner.validation import (
     _check_duplicate_deliverables,
     _check_sizing_bounds,
+    _iter_tier_files,
+    _load_assignment_results,
+    _load_phase_results,
+    _load_wp_results,
     validate_plan,
 )
 from tests.planner.conftest import (
@@ -522,21 +526,23 @@ def test_version_bump_step_via_summary(tmp_path: Path) -> None:
     assert any(w["check"] == "version_bump_step" for w in validation["warnings"])
 
 
-def test_validate_plan_ignores_phase_sentinel_in_assignments_dir(tmp_path: Path) -> None:
-    """Phase sentinel files in assignments/ must not crash validate_plan."""
+def test_validate_plan_ignores_phase_sentinel_in_subdirectory(tmp_path: Path) -> None:
+    """Phase sentinel files in a subdirectory of assignments/ must not crash validate_plan."""
     _make_minimal_output_dir(tmp_path)
     sentinel = {"id": "P1", "status": "complete", "assignment_count": 1, "failed_count": 0}
-    write_json(tmp_path / "assignments" / "P1_result.json", sentinel)
+    # Place in a subdirectory so _result.json suffix check is bypassed
+    write_json(tmp_path / "assignments" / "sentinels" / "P1_result.json", sentinel)
 
     result = validate_plan(str(tmp_path))
     assert result["verdict"] == "pass"
 
 
-def test_validate_plan_ignores_non_wp_file_in_work_packages_dir(tmp_path: Path) -> None:
+def test_validate_plan_ignores_non_wp_file_in_work_packages_subdir(tmp_path: Path) -> None:
     """Non-WP files at top level of work_packages/ must not crash validate_plan."""
     _make_minimal_output_dir(tmp_path)
     sentinel = {"id": "P1", "status": "complete", "assignment_count": 1, "failed_count": 0}
-    write_json(tmp_path / "work_packages" / "P1_result.json", sentinel)
+    # Place in wp_sentinels subdirectory so _result.json suffix check is bypassed
+    write_json(tmp_path / "work_packages" / "wp_sentinels" / "P1_result.json", sentinel)
 
     result = validate_plan(str(tmp_path))
     assert result["verdict"] == "pass"
@@ -657,3 +663,69 @@ def test_validate_plan_reads_finalized_manifest(tmp_path: Path) -> None:
 
     result = validate_plan(str(tmp_path))
     assert result["verdict"] == "pass"
+
+
+# ---------------------------------------------------------------------------
+# Silent-drop elimination — non-canonical filenames must raise, not silently drop
+# ---------------------------------------------------------------------------
+
+
+def test_iter_tier_files_raises_on_excluded_files(tmp_path: Path) -> None:
+    """_iter_tier_files raises ValueError when non-matching *_result.json files exist."""
+    from autoskillit.planner.schema import WP_RESULT_FILE_RE
+
+    wp_dir = tmp_path / "work_packages"
+    wp_dir.mkdir()
+    write_json(wp_dir / "P1-A1-WP1_result.json", make_wp_result("P1-A1-WP1"))
+    write_json(wp_dir / "P1-A1-WP2a_result.json", {"id": "P1-A1-WP2a", "name": "bad"})
+
+    with pytest.raises(ValueError, match="excluded"):
+        list(_iter_tier_files(wp_dir, WP_RESULT_FILE_RE))
+
+
+def test_load_wp_results_raises_on_non_canonical_filename(tmp_path: Path) -> None:
+    """_load_wp_results raises when a non-canonical WP file is present."""
+    wp_dir = tmp_path / "work_packages"
+    wp_dir.mkdir()
+    write_json(wp_dir / "P1-A1-WP1_result.json", make_wp_result("P1-A1-WP1"))
+    write_json(wp_dir / "P1-A1-WP2a_result.json", {"id": "P1-A1-WP2a", "name": "bad"})
+
+    with pytest.raises(ValueError, match="excluded"):
+        _load_wp_results(tmp_path)
+
+
+def test_load_phase_results_raises_on_non_canonical_filename(tmp_path: Path) -> None:
+    """_load_phase_results raises when a non-canonical phase file is present."""
+    phases_dir = tmp_path / "phases"
+    phases_dir.mkdir()
+    write_json(phases_dir / "P1_result.json", make_phase_result(1))
+    write_json(phases_dir / "Phase1_result.json", {"id": "P1", "name": "bad"})
+
+    with pytest.raises(ValueError, match="excluded"):
+        _load_phase_results(tmp_path)
+
+
+def test_load_assignment_results_raises_on_non_canonical_filename(tmp_path: Path) -> None:
+    """_load_assignment_results raises when a non-canonical assignment file is present."""
+    assigns_dir = tmp_path / "assignments"
+    assigns_dir.mkdir()
+    write_json(
+        assigns_dir / "P1-A1_result.json",
+        make_assignment_result(1, 1, name="Good"),
+    )
+    write_json(
+        assigns_dir / "P1-A2b_result.json", {"id": "P1-A2b", "phase_id": "P1", "name": "bad"}
+    )
+
+    with pytest.raises(ValueError, match="excluded"):
+        _load_assignment_results(tmp_path)
+
+
+def test_validate_plan_raises_on_non_canonical_wp_file(tmp_path: Path) -> None:
+    """validate_plan raises when a non-canonical WP file is present."""
+    _make_minimal_output_dir(tmp_path)
+    wp_dir = tmp_path / "work_packages"
+    write_json(wp_dir / "P1-A1-WP2a_result.json", {"id": "P1-A1-WP2a", "name": "bad"})
+
+    with pytest.raises(ValueError, match="excluded"):
+        validate_plan(str(tmp_path))

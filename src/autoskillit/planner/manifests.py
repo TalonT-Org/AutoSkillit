@@ -60,9 +60,15 @@ def build_phase_assignment_manifest(phases_dir: str, output_dir: str) -> dict[st
     out_dir = Path(output_dir)
     assign_dir = out_dir.resolve()
 
-    phase_files = [
-        f for f in sorted(phases_path.glob("*_result.json")) if PHASE_RESULT_FILE_RE.match(f.name)
-    ]
+    all_phase_files = sorted(phases_path.glob("*_result.json"))
+    excluded = [f for f in all_phase_files if not PHASE_RESULT_FILE_RE.match(f.name)]
+    if excluded:
+        names = [f.name for f in excluded[:5]]
+        raise ValueError(
+            f"Result files in {phases_path} excluded by {PHASE_RESULT_FILE_RE.pattern}: {names}. "
+            f"This indicates non-canonical IDs were generated upstream."
+        )
+    phase_files = sorted(all_phase_files)
     parsed_phases = []
     for f in phase_files:
         try:
@@ -124,9 +130,15 @@ def build_phase_wp_manifest(
         else (out_dir / "work_packages").resolve()
     )
 
-    assign_files = [
-        f for f in assign_path.glob("*_result.json") if ASSIGN_RESULT_FILE_RE.match(f.name)
-    ]
+    all_assign_files = sorted(assign_path.glob("*_result.json"))
+    excluded = [f for f in all_assign_files if not ASSIGN_RESULT_FILE_RE.match(f.name)]
+    if excluded:
+        names = [f.name for f in excluded[:5]]
+        raise ValueError(
+            f"Result files in {assign_path} excluded by {ASSIGN_RESULT_FILE_RE.pattern}: {names}. "
+            f"This indicates non-canonical IDs were generated upstream."
+        )
+    assign_files = sorted(all_assign_files)
     parsed_assignments: list[dict] = []
     for f in assign_files:
         try:
@@ -207,8 +219,16 @@ def finalize_wp_manifest(work_packages_dir: str, output_dir: str) -> dict[str, s
     if not wp_dir.is_dir():
         raise FileNotFoundError(f"work_packages_dir does not exist: {wp_dir}")
 
+    all_result_files = sorted(wp_dir.glob("*_result.json"))
+    excluded = [f for f in all_result_files if not WP_RESULT_FILE_RE.match(f.name)]
+    if excluded:
+        names = [f.name for f in excluded[:5]]
+        raise ValueError(
+            f"Result files in {wp_dir} excluded by {WP_RESULT_FILE_RE.pattern}: {names}. "
+            f"This indicates non-canonical IDs were generated upstream."
+        )
     result_files = sorted(
-        (f for f in wp_dir.glob("*_result.json") if WP_RESULT_FILE_RE.match(f.name)),
+        (f for f in all_result_files),
         key=lambda p: _natural_sort_key(p.name),
     )
     items = []

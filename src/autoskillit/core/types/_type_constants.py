@@ -109,7 +109,7 @@ AUTOSKILLIT_PRIVATE_ENV_VARS: frozenset[str] = frozenset(
         "AUTOSKILLIT_CAMPAIGN_STATE_PATH",
         "AUTOSKILLIT_PROJECT_DIR",
         FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
-        "AUTOSKILLIT_AGENT_BACKEND",
+        AGENT_BACKEND_ENV_VAR,
         "AUTOSKILLIT_LAUNCH_ID",
         "AUTOSKILLIT_SKILL_NAME",
         # Provider-routing vars — must not leak into user-code subprocesses

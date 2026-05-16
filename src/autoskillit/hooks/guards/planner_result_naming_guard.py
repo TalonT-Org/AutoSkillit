@@ -23,7 +23,9 @@ import sys
 
 PLANNER_NAMING_DENY_TRIGGER: str = "Non-canonical planner result filename"
 
-# Tier regex patterns (stdlib re, inlined to keep this guard self-contained)
+# Tier regex patterns (stdlib re, inlined to keep this guard self-contained).
+# Canonical counterparts: PHASE_RESULT_FILE_RE, ASSIGN_RESULT_FILE_RE, WP_RESULT_FILE_RE
+# in autoskillit.planner.schema — update both if the naming contract changes.
 _PHASE_RE = re.compile(r"^P\d+_result\.json$")
 _ASSIGN_RE = re.compile(r"^P\d+-A\d+_result\.json$")
 _WP_RE = re.compile(r"^P\d+-A\d+-WP\d+_result\.json$")
@@ -79,8 +81,10 @@ def main() -> None:
         sys.exit(0)
 
     # Skip files in subdirectories (e.g. wp_sentinels/P1_result.json)
+    # Filter empty strings to guard against double-slash paths (e.g. //file) where
+    # splitting produces [''] — any(['']) is False, bypassing this check incorrectly.
     subdir_parts = path_parts[dir_idx + 1 : -1]
-    if any(subdir_parts):
+    if any(p for p in subdir_parts if p):
         sys.exit(0)
 
     # Validate against the appropriate tier regex

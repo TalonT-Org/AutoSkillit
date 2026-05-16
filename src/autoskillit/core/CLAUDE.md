@@ -15,6 +15,7 @@ Sub-packages: types/ (see types/CLAUDE.md) and runtime/ (see runtime/CLAUDE.md).
 | `_claude_env.py` | IDE-scrubbing canonical env builder for agent subprocesses |
 | `_terminal_table.py` | IL-0 color-agnostic terminal table primitive |
 | `_version_snapshot.py` | Process-scoped version snapshot for session telemetry (`lru_cache`'d) |
+| `test_backend_gating_core.py` | Backend gating tests for _version_snapshot.py |
 | `branch_guard.py` | Branch protection helpers |
 | `claude_conventions.py` | Skill discovery directory layout constants |
 | `github_url.py` | `parse_github_repo` |

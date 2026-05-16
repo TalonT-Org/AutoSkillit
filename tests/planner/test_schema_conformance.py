@@ -399,7 +399,7 @@ def test_phase_result_file_re_rejects_plausible_llm_deviations(name: str) -> Non
 
 
 def test_schema_tier_regex_rejects_alpha_suffix() -> None:
-    """Test 1h: Tier result-file regexes reject alpha-suffixed names like P1-A1-WPa_result.json."""
+    """Test 1i: Tier result-file regexes reject alpha-suffixed names like P1-A1-WPa_result.json."""
     from autoskillit.planner.schema import (
         ASSIGN_RESULT_FILE_RE,
         PHASE_RESULT_FILE_RE,

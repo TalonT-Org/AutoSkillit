@@ -853,6 +853,10 @@ def test_consolidate_then_validate_cross_assignment_absorption(tmp_path: Path) -
         f["check"] == "assignment_completeness" and "P1-A2" in f["message"]
         for f in validation["findings"]
     ), "Assignment P1-A2 should be exempt due to cross-assignment absorption"
+    assert not any(
+        f["check"] == "assignment_completeness" and "P1-A2" in f["message"]
+        for f in validation.get("warnings", [])
+    ), "Assignment P1-A2 should not appear as a warning either"
 
 
 def test_consolidate_then_compile_emits_correct_issue_count(tmp_path: Path) -> None:

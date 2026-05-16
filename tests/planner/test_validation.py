@@ -617,6 +617,10 @@ def test_validate_plan_exempts_absorbed_assignments(tmp_path: Path) -> None:
         f["check"] == "assignment_completeness" and "P1-A2" in f["message"]
         for f in validation["findings"]
     ), "Assignment P1-A2 should be exempt due to absorption registry"
+    assert not any(
+        f["check"] == "assignment_completeness" and "P1-A2" in f["message"]
+        for f in validation.get("warnings", [])
+    ), "Assignment P1-A2 should not appear as a warning either"
 
 
 # ---------------------------------------------------------------------------

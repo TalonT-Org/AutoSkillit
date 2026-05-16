@@ -526,24 +526,34 @@ def test_version_bump_step_via_summary(tmp_path: Path) -> None:
     assert any(w["check"] == "version_bump_step" for w in validation["warnings"])
 
 
-def test_validate_plan_raises_on_phase_sentinel_in_assignments_dir(tmp_path: Path) -> None:
-    """Phase-tier result files in assignments/ must raise ValueError (non-canonical ID)."""
+def test_validate_plan_warns_on_phase_sentinel_in_assignments_dir(tmp_path: Path) -> None:
+    """Phase-tier result files in assignments/ emit a file_discovery_miss warning."""
     _make_minimal_output_dir(tmp_path)
     sentinel = {"id": "P1", "status": "complete", "assignment_count": 1, "failed_count": 0}
     write_json(tmp_path / "assignments" / "P1_result.json", sentinel)
 
-    with pytest.raises(ValueError, match="P1_result.json"):
-        validate_plan(str(tmp_path))
+    result = validate_plan(str(tmp_path))
+    assert result["verdict"] == "pass"
+    validation = json.loads((tmp_path / "validation.json").read_text())
+    assert any(
+        w["check"] == "file_discovery_miss" and w["severity"] == "warning"
+        for w in validation["warnings"]
+    )
 
 
-def test_validate_plan_raises_on_non_wp_result_file_in_work_packages_dir(tmp_path: Path) -> None:
-    """Non-WP result files in work_packages/ must raise ValueError (non-canonical ID)."""
+def test_validate_plan_warns_on_non_wp_result_file_in_work_packages_dir(tmp_path: Path) -> None:
+    """Non-WP result files in work_packages/ emit a file_discovery_miss warning."""
     _make_minimal_output_dir(tmp_path)
     sentinel = {"id": "P1", "status": "complete", "assignment_count": 1, "failed_count": 0}
     write_json(tmp_path / "work_packages" / "P1_result.json", sentinel)
 
-    with pytest.raises(ValueError, match="P1_result.json"):
-        validate_plan(str(tmp_path))
+    result = validate_plan(str(tmp_path))
+    assert result["verdict"] == "pass"
+    validation = json.loads((tmp_path / "validation.json").read_text())
+    assert any(
+        w["check"] == "file_discovery_miss" and w["severity"] == "warning"
+        for w in validation["warnings"]
+    )
 
 
 def test_validate_plan_emits_discovery_miss_warning_for_non_matching_files(tmp_path: Path) -> None:

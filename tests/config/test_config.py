@@ -198,7 +198,7 @@ class TestLoadConfig:
         assert cfg.model.model_override is None
 
     def test_partial_model_config(self, tmp_path):
-        """MOD_C3: YAML with only model.override preserves model.default_model."""
+        """MOD_C3: YAML key 'override' maps to Python field model_override; unset default_model is preserved at its default."""
         config_dir = tmp_path / ".autoskillit"
         config_dir.mkdir()
         config_data = {"model": {"override": "haiku"}}

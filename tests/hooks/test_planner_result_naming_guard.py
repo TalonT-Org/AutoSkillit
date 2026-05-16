@@ -46,27 +46,33 @@ class TestPlannerResultNamingGuardCanonical:
     """Canonical result files should always be allowed."""
 
     def test_allows_write_to_canonical_wp_result_file(self) -> None:
-        event = _build_event("Write", "/clone/planner/work_packages/P1-A1-WP1_result.json")
+        event = _build_event(
+            "Write", "/clone/.autoskillit/planner/work_packages/P1-A1-WP1_result.json"
+        )
         result = _run_hook(event)
         assert result == ""
 
     def test_allows_write_to_canonical_assign_result_file(self) -> None:
-        event = _build_event("Write", "/clone/planner/assignments/P1-A1_result.json")
+        event = _build_event("Write", "/clone/.autoskillit/planner/assignments/P1-A1_result.json")
         result = _run_hook(event)
         assert result == ""
 
     def test_allows_write_to_canonical_phase_result_file(self) -> None:
-        event = _build_event("Write", "/clone/planner/phases/P1_result.json")
+        event = _build_event("Write", "/clone/.autoskillit/planner/phases/P1_result.json")
         result = _run_hook(event)
         assert result == ""
 
     def test_allows_edit_to_canonical_result_file(self) -> None:
-        event = _build_event("Edit", "/clone/planner/work_packages/P1-A1-WP1_result.json")
+        event = _build_event(
+            "Edit", "/clone/.autoskillit/planner/work_packages/P1-A1-WP1_result.json"
+        )
         result = _run_hook(event)
         assert result == ""
 
     def test_allows_write_to_deeply_nested_canonical_file(self) -> None:
-        event = _build_event("Write", "/clone/planner/work_packages/P12-A99-WP34_result.json")
+        event = _build_event(
+            "Write", "/clone/.autoskillit/planner/work_packages/P12-A99-WP34_result.json"
+        )
         result = _run_hook(event)
         assert result == ""
 
@@ -75,50 +81,60 @@ class TestPlannerResultNamingGuardNonCanonical:
     """Non-canonical result files should be denied with a correction hint."""
 
     def test_denies_write_to_non_canonical_wp_result_file(self) -> None:
-        event = _build_event("Write", "/clone/planner/work_packages/P1-A1-WP2a_result.json")
+        event = _build_event(
+            "Write", "/clone/.autoskillit/planner/work_packages/P1-A1-WP2a_result.json"
+        )
         result = _run_hook(event)
         parsed = _parse_result(result)
         assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
 
     def test_denies_write_to_non_canonical_wp_result_file_alpha_suffix(self) -> None:
-        event = _build_event("Write", "/clone/planner/work_packages/P1-A1-WP3b_result.json")
+        event = _build_event(
+            "Write", "/clone/.autoskillit/planner/work_packages/P1-A1-WP3b_result.json"
+        )
         result = _run_hook(event)
         parsed = _parse_result(result)
         assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
 
     def test_denies_write_to_non_canonical_wp_result_file_letter_in_number(self) -> None:
-        event = _build_event("Write", "/clone/planner/work_packages/P1-A1-WP6-C_result.json")
+        event = _build_event(
+            "Write", "/clone/.autoskillit/planner/work_packages/P1-A1-WP6-C_result.json"
+        )
         result = _run_hook(event)
         parsed = _parse_result(result)
         assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
 
     def test_denies_write_to_non_canonical_assign_result_file(self) -> None:
-        event = _build_event("Write", "/clone/planner/assignments/P1-A2b_result.json")
+        event = _build_event("Write", "/clone/.autoskillit/planner/assignments/P1-A2b_result.json")
         result = _run_hook(event)
         parsed = _parse_result(result)
         assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
 
     def test_denies_write_to_non_canonical_phase_result_file(self) -> None:
-        event = _build_event("Write", "/clone/planner/phases/Phase1_result.json")
+        event = _build_event("Write", "/clone/.autoskillit/planner/phases/Phase1_result.json")
         result = _run_hook(event)
         parsed = _parse_result(result)
         assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
 
     def test_denies_edit_to_non_canonical_result_file(self) -> None:
-        event = _build_event("Edit", "/clone/planner/work_packages/P1-A1-WP3b_result.json")
+        event = _build_event(
+            "Edit", "/clone/.autoskillit/planner/work_packages/P1-A1-WP3b_result.json"
+        )
         result = _run_hook(event)
         parsed = _parse_result(result)
         assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
 
     def test_deny_message_includes_corrected_pattern(self) -> None:
-        event = _build_event("Write", "/clone/planner/work_packages/P1-A1-WP2a_result.json")
+        event = _build_event(
+            "Write", "/clone/.autoskillit/planner/work_packages/P1-A1-WP2a_result.json"
+        )
         result = _run_hook(event)
         parsed = _parse_result(result)
         reason = parsed["hookSpecificOutput"]["permissionDecisionReason"]
-        assert "P\\d+-A\\d+-WP\\d+" in reason or "P%d+-A%d+-WP%d+" in reason
+        assert "P\\d+-A\\d+-WP\\d+" in reason
 
     def test_denies_wp_result_file_without_phase_prefix(self) -> None:
-        event = _build_event("Write", "/clone/planner/work_packages/wp1_result.json")
+        event = _build_event("Write", "/clone/.autoskillit/planner/work_packages/wp1_result.json")
         result = _run_hook(event)
         parsed = _parse_result(result)
         assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
@@ -128,12 +144,12 @@ class TestPlannerResultNamingGuardNonResultFiles:
     """Non-result files in planner directories should be allowed."""
 
     def test_allows_write_to_non_result_file_in_planner_dir(self) -> None:
-        event = _build_event("Write", "/clone/planner/work_packages/wp_index.json")
+        event = _build_event("Write", "/clone/.autoskillit/planner/work_packages/wp_index.json")
         result = _run_hook(event)
         assert result == ""
 
     def test_allows_write_to_context_file(self) -> None:
-        event = _build_event("Write", "/clone/planner/assignments/context_P1.json")
+        event = _build_event("Write", "/clone/.autoskillit/planner/assignments/context_P1.json")
         result = _run_hook(event)
         assert result == ""
 
@@ -143,7 +159,9 @@ class TestPlannerResultNamingGuardNonResultFiles:
         assert result == ""
 
     def test_allows_write_to_manifest_file(self) -> None:
-        event = _build_event("Write", "/clone/planner/phases/phase_assignment_manifest.json")
+        event = _build_event(
+            "Write", "/clone/.autoskillit/planner/phases/phase_assignment_manifest.json"
+        )
         result = _run_hook(event)
         assert result == ""
 
@@ -152,7 +170,25 @@ class TestPlannerResultNamingGuardSentinels:
     """Sentinel files in subdirectories should be allowed (they are not tier result files)."""
 
     def test_allows_sentinel_files_in_subdirectory(self) -> None:
-        event = _build_event("Write", "/clone/planner/work_packages/wp_sentinels/P1_result.json")
+        event = _build_event(
+            "Write", "/clone/.autoskillit/planner/work_packages/wp_sentinels/P1_result.json"
+        )
+        result = _run_hook(event)
+        assert result == ""
+
+    def test_allows_wp_style_filename_in_subdirectory(self) -> None:
+        event = _build_event(
+            "Write",
+            "/clone/.autoskillit/planner/work_packages/wp_sentinels/P1-A1-WP1_result.json",
+        )
+        result = _run_hook(event)
+        assert result == ""
+
+    def test_allows_assign_style_filename_in_subdirectory(self) -> None:
+        event = _build_event(
+            "Write",
+            "/clone/.autoskillit/planner/assignments/sub/P1-A1_result.json",
+        )
         result = _run_hook(event)
         assert result == ""
 
@@ -169,12 +205,16 @@ class TestPlannerResultNamingGuardFailOpen:
         assert result == ""
 
     def test_failopen_on_missing_tool_name(self) -> None:
-        event = {"tool_input": {"file_path": "/clone/planner/work_packages/P1_result.json"}}
+        event = {
+            "tool_input": {"file_path": "/clone/.autoskillit/planner/work_packages/P1_result.json"}
+        }
         result = _run_hook(event)
         assert result == ""
 
     def test_failopen_on_non_write_edit_tool(self) -> None:
-        event = _build_event("Read", "/clone/planner/work_packages/P1-A1-WP1_result.json")
+        event = _build_event(
+            "Read", "/clone/.autoskillit/planner/work_packages/P1-A1-WP1_result.json"
+        )
         result = _run_hook(event)
         assert result == ""
 
@@ -188,12 +228,16 @@ class TestPlannerResultNamingGuardSessionScope:
     """Guard only fires in headless sessions (AUTOSKILLIT_HEADLESS=1)."""
 
     def test_denies_non_canonical_when_headless(self) -> None:
-        event = _build_event("Write", "/clone/planner/work_packages/P1-A1-WP2a_result.json")
+        event = _build_event(
+            "Write", "/clone/.autoskillit/planner/work_packages/P1-A1-WP2a_result.json"
+        )
         result = _run_hook(event, headless=True)
         parsed = json.loads(result)
         assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
 
     def test_allows_non_canonical_when_not_headless(self) -> None:
-        event = _build_event("Write", "/clone/planner/work_packages/P1-A1-WP2a_result.json")
+        event = _build_event(
+            "Write", "/clone/.autoskillit/planner/work_packages/P1-A1-WP2a_result.json"
+        )
         result = _run_hook(event, headless=False)
         assert result == ""

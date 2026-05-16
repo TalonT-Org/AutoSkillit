@@ -1,4 +1,4 @@
-"""Tests for core/types/_type_backend.py — BackendCapabilities and CLAUDE_CODE_CAPABILITIES."""
+"""Tests for BackendCapabilities frozen invariants and CLAUDE_CODE_CAPABILITIES field values."""
 
 from __future__ import annotations
 
@@ -18,6 +18,14 @@ def test_backend_capabilities_importable_from_core():
     assert isinstance(CLAUDE_CODE_CAPABILITIES, BackendCapabilities)
 
 
+def test_backend_capabilities_in_core_all():
+    """Both symbols appear in the core gateway __all__."""
+    from autoskillit.core import __all__ as core_all
+
+    assert "BackendCapabilities" in core_all
+    assert "CLAUDE_CODE_CAPABILITIES" in core_all
+
+
 def test_backend_capabilities_in_types_all():
     """Both symbols appear in the types hub __all__."""
     from autoskillit.core.types import __all__ as types_all
@@ -26,7 +34,7 @@ def test_backend_capabilities_in_types_all():
     assert "CLAUDE_CODE_CAPABILITIES" in types_all
 
 
-def test_backend_capabilities_frozen():
+def test_backend_capabilities_is_frozen_dataclass():
     """BackendCapabilities instances are immutable."""
     from autoskillit.core import CLAUDE_CODE_CAPABILITIES
 
@@ -54,7 +62,7 @@ def test_backend_capabilities_field_count():
     assert len(frozenset_fields) == 2
 
 
-def test_backend_capabilities_field_names():
+def test_backend_capabilities_field_names_locked():
     """Field names match the design specification."""
     from autoskillit.core import BackendCapabilities
 
@@ -72,7 +80,7 @@ def test_backend_capabilities_field_names():
     assert actual == expected
 
 
-def test_claude_code_capabilities_values():
+def test_claude_code_capabilities_field_values():
     """CLAUDE_CODE_CAPABILITIES field values match the Part 13.2 design."""
     from autoskillit.core import CLAUDE_CODE_CAPABILITIES
 
@@ -99,7 +107,7 @@ def test_no_autoskillit_imports():
             pytest.fail(f"IL-0 violation: {stripped}")
 
 
-def test_type_backend_all():
+def test_backend_capabilities_module_all():
     """__all__ contains exactly the two public symbols."""
     from autoskillit.core.types._type_backend import __all__
 

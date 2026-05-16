@@ -36,7 +36,7 @@ Core layer (IL-0) unit tests — paths, IO, types, feature flags.
 | `test_session_type.py` | Tests for SessionType resolver and constants |
 | `test_skill_command_parsing.py` | Unit tests for extract_path_arg in core._type_helpers |
 | `test_tool_sequence_analysis.py` | Tool sequence analysis tests |
-| `test_type_backend.py` | Tests for BackendCapabilities and CLAUDE_CODE_CAPABILITIES |
+| `test_backend_capabilities.py` | Tests for BackendCapabilities frozen invariants and CLAUDE_CODE_CAPABILITIES field values |
 | `test_type_constants.py` | Tests for PACK_REGISTRY and related constants in core._type_constants |
 | `test_type_protocol_shards.py` | Type protocol shards guard |
 | `test_types.py` | Tests for shared type contracts — enum exhaustiveness |

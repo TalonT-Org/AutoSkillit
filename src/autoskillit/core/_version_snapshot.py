@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from ._install_detect import parse_direct_url
+from .types._type_constants import AGENT_BACKEND_ENV_VAR
 
 logger = logging.getLogger(__name__)  # noqa: TID251 — IL-0 module, no autoskillit imports allowed
 
@@ -67,6 +68,9 @@ def _claude_code_version() -> str:
     launched the server is queried rather than whatever `claude` resolves to in
     the current PATH.
     """
+    backend = os.environ.get(AGENT_BACKEND_ENV_VAR, "claude-code")
+    if backend != "claude-code":
+        return ""
     exec_path = os.environ.get("CLAUDE_CODE_EXECPATH") or "claude"
     try:
         result = subprocess.run(
@@ -94,6 +98,9 @@ def _plugins() -> list[dict[str, Any]]:
     Each ref maps to a **list** of install-scope objects; each object carries a
     "version" field. We use the first entry (index 0) per ref.
     """
+    backend = os.environ.get(AGENT_BACKEND_ENV_VAR, "claude-code")
+    if backend != "claude-code":
+        return []
     try:
         path = Path.home() / ".claude" / "plugins" / "installed_plugins.json"
         if not path.exists():

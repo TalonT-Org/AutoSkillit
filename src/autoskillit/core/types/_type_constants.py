@@ -50,6 +50,7 @@ __all__ = [
     "KITCHEN_SESSION_ID_ENV_VAR",
     "LAUNCH_ID_ENV_VAR",
     "FOOD_TRUCK_TOOL_TAGS_ENV_VAR",
+    "AGENT_BACKEND_ENV_VAR",
     "FLEET_DISPATCH_TOOLS",
     "FLEET_ERROR_CODES",
     "FLEET_SESSION_REQUIRED_ENV",
@@ -87,6 +88,7 @@ DISPATCH_ID_ENV_VAR: str = "AUTOSKILLIT_DISPATCH_ID"
 KITCHEN_SESSION_ID_ENV_VAR: str = "AUTOSKILLIT_KITCHEN_SESSION_ID"
 LAUNCH_ID_ENV_VAR: str = "AUTOSKILLIT_LAUNCH_ID"
 FOOD_TRUCK_TOOL_TAGS_ENV_VAR: str = "AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS"
+AGENT_BACKEND_ENV_VAR: str = "AUTOSKILLIT_AGENT_BACKEND"
 
 # Env vars that control MCP server-level behavior and must not leak into
 # user-code subprocesses (pytest runs, shell commands, etc.).
@@ -107,6 +109,7 @@ AUTOSKILLIT_PRIVATE_ENV_VARS: frozenset[str] = frozenset(
         "AUTOSKILLIT_CAMPAIGN_STATE_PATH",
         "AUTOSKILLIT_PROJECT_DIR",
         FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
+        "AUTOSKILLIT_AGENT_BACKEND",
         "AUTOSKILLIT_LAUNCH_ID",
         "AUTOSKILLIT_SKILL_NAME",
         # Provider-routing vars — must not leak into user-code subprocesses

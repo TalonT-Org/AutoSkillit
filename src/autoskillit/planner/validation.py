@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import json
 from collections import deque
-from collections.abc import Iterator
 from pathlib import Path
+from typing import NamedTuple
 
 import regex as re
 
@@ -23,7 +23,6 @@ from autoskillit.planner.schema import (
     PHASE_RESULT_FILE_RE,
     WP_RESULT_FILE_RE,
     ValidationFinding,
-    collect_tier_result_files,
     validate_assignment_result,
     validate_phase_result,
     validate_wp_result,
@@ -48,14 +47,30 @@ _NEGATION_PREFIX_RE: re.Pattern[str] = re.compile(
 )
 
 
-def _iter_tier_files(directory: Path, filename_re: re.Pattern[str]) -> Iterator[Path]:
-    """Yield *_result.json files matching ``tier_re``; raises ValueError on non-canonical names."""
-    yield from collect_tier_result_files(directory, filename_re)
+class DiscoveryResult(NamedTuple):
+    accepted: list[Path]
+    rejected: list[Path]
 
 
-def _load_phase_results(root: Path) -> dict[str, dict]:
+def discover_tier_files(directory: Path, filename_re: re.Pattern[str]) -> DiscoveryResult:
+    """Partition *_result.json files into those matching the tier regex and those not."""
+    accepted: list[Path] = []
+    rejected: list[Path] = []
+    for f in sorted(directory.glob("*_result.json")):
+        if filename_re.match(f.name):
+            accepted.append(f)
+        else:
+            rejected.append(f)
+    return DiscoveryResult(accepted=accepted, rejected=rejected)
+
+
+def _load_phase_results(root: Path) -> tuple[dict[str, dict], list[Path]]:
     results: dict[str, dict] = {}
-    for f in _iter_tier_files(root / "phases", PHASE_RESULT_FILE_RE):
+    phases_dir = root / "phases"
+    if not phases_dir.exists():
+        return results, []
+    discovery = discover_tier_files(phases_dir, PHASE_RESULT_FILE_RE)
+    for f in discovery.accepted:
         try:
             raw = json.loads(f.read_text())
             data = validate_phase_result(raw)
@@ -63,15 +78,16 @@ def _load_phase_results(root: Path) -> dict[str, dict]:
         except (json.JSONDecodeError, KeyError, ValueError) as exc:
             raise RuntimeError(f"Malformed phase result file {f}: {exc}") from exc
         results[phase_id] = data
-    return results
+    return results, discovery.rejected
 
 
-def _load_assignment_results(root: Path) -> dict[str, dict]:
+def _load_assignment_results(root: Path) -> tuple[dict[str, dict], list[Path]]:
     results: dict[str, dict] = {}
     assign_dir = root / "assignments"
     if not assign_dir.exists():
-        return results
-    for f in _iter_tier_files(assign_dir, ASSIGN_RESULT_FILE_RE):
+        return results, []
+    discovery = discover_tier_files(assign_dir, ASSIGN_RESULT_FILE_RE)
+    for f in discovery.accepted:
         try:
             raw = json.loads(f.read_text())
             data = validate_assignment_result(raw)
@@ -79,22 +95,23 @@ def _load_assignment_results(root: Path) -> dict[str, dict]:
         except (json.JSONDecodeError, KeyError, ValueError) as exc:
             raise RuntimeError(f"Malformed assignment result file {f}: {exc}") from exc
         results[assign_id] = data
-    return results
+    return results, discovery.rejected
 
 
-def _load_wp_results(root: Path) -> dict[str, dict]:
+def _load_wp_results(root: Path) -> tuple[dict[str, dict], list[Path]]:
     results: dict[str, dict] = {}
     wp_dir = root / "work_packages"
     if not wp_dir.exists():
-        return results
-    for f in _iter_tier_files(wp_dir, WP_RESULT_FILE_RE):
+        return results, []
+    discovery = discover_tier_files(wp_dir, WP_RESULT_FILE_RE)
+    for f in discovery.accepted:
         try:
             raw = json.loads(f.read_text())
             data = validate_wp_result(raw, allow_stub=True)
             results[data["id"]] = data
         except (json.JSONDecodeError, KeyError, ValueError) as exc:
             raise RuntimeError(f"Malformed WP result file {f}: {exc}") from exc
-    return results
+    return results, discovery.rejected
 
 
 def _load_wp_manifest(root: Path) -> dict | None:
@@ -105,6 +122,16 @@ def _load_wp_manifest(root: Path) -> dict | None:
         return json.loads(manifest_path.read_text())
     except json.JSONDecodeError as exc:
         raise RuntimeError(f"Malformed WP manifest file {manifest_path}: {exc}") from exc
+
+
+def _load_absorption_registry(root: Path) -> dict | None:
+    registry_path = root / "work_packages" / "absorption_registry.json"
+    if not registry_path.exists():
+        return None
+    try:
+        return json.loads(registry_path.read_text())
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Malformed absorption registry {registry_path}: {exc}") from exc
 
 
 def _inject_backward_deps(wp_results: dict[str, dict], dep_graph: dict) -> None:
@@ -138,6 +165,7 @@ def _check_phase_completeness(
 def _check_assignment_completeness(
     assignment_results: dict[str, dict],
     wp_results: dict[str, dict],
+    absorption_registry: dict | None = None,
 ) -> list[ValidationFinding]:
     findings: list[ValidationFinding] = []
     wp_pairs: set[tuple[int, int]] = set()
@@ -155,8 +183,16 @@ def _check_assignment_completeness(
         phase_num = int(parts[0][1:])
         assign_num = int(parts[1][1:])
         wp_pairs.add((phase_num, assign_num))
+    absorbed_pairs: set[tuple[int, int]] = set()
+    if absorption_registry and "absorbed" in absorption_registry:
+        for absorbed_id in absorption_registry["absorbed"]:
+            parts = absorbed_id.split("-")
+            if len(parts) >= 2:
+                absorbed_pairs.add((int(parts[0][1:]), int(parts[1][1:])))
     for assign_id, assign in assignment_results.items():
         pair = (assign["phase_number"], assign["assignment_number"])
+        if pair in absorbed_pairs:
+            continue
         if pair not in wp_pairs:
             findings.append(
                 {
@@ -346,10 +382,11 @@ def _check_failed_wps(wp_manifest: dict | None) -> list[ValidationFinding]:
 
 def validate_plan(output_dir: str) -> dict[str, str]:
     root = Path(output_dir)
-    phase_results = _load_phase_results(root)
-    assignment_results = _load_assignment_results(root)
-    wp_results = _load_wp_results(root)
+    phase_results, phase_rejected = _load_phase_results(root)
+    assignment_results, assign_rejected = _load_assignment_results(root)
+    wp_results, wp_rejected = _load_wp_results(root)
     wp_manifest = _load_wp_manifest(root)
+    absorption_registry = _load_absorption_registry(root)
 
     dep_graph_path = root / "dep_graph.json"
     if dep_graph_path.exists():
@@ -361,7 +398,9 @@ def validate_plan(output_dir: str) -> dict[str, str]:
 
     all_findings: list[ValidationFinding] = []
     all_findings.extend(_check_phase_completeness(phase_results, assignment_results))
-    all_findings.extend(_check_assignment_completeness(assignment_results, wp_results))
+    all_findings.extend(
+        _check_assignment_completeness(assignment_results, wp_results, absorption_registry)
+    )
     all_findings.extend(_check_dep_references(wp_results))
     all_findings.extend(_check_dag_acyclic(wp_results))
     all_findings.extend(_check_sizing_bounds(wp_results))
@@ -369,6 +408,33 @@ def validate_plan(output_dir: str) -> dict[str, str]:
     all_findings.extend(_check_duplicate_files_touched(wp_results))
     all_findings.extend(_check_version_bump_steps(wp_results))
     all_findings.extend(_check_failed_wps(wp_manifest))
+
+    discovery_warnings: list[ValidationFinding] = []
+    for f in phase_rejected:
+        discovery_warnings.append(
+            {
+                "message": f"phase file {f.name} does not match phase naming pattern",
+                "severity": "warning",
+                "check": "file_discovery_miss",
+            }
+        )
+    for f in assign_rejected:
+        discovery_warnings.append(
+            {
+                "message": f"assignment file {f.name} does not match assignment naming pattern",
+                "severity": "warning",
+                "check": "file_discovery_miss",
+            }
+        )
+    for f in wp_rejected:
+        discovery_warnings.append(
+            {
+                "message": f"work package file {f.name} does not match WP naming pattern",
+                "severity": "warning",
+                "check": "file_discovery_miss",
+            }
+        )
+    all_findings.extend(discovery_warnings)
 
     errors = [f for f in all_findings if f["severity"] == "error"]
     warnings = [f for f in all_findings if f["severity"] == "warning"]

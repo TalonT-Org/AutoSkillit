@@ -127,9 +127,9 @@ def compile_plan(
     task_label = task_label or _derive_label(task, "")
     root = Path(output_dir)
 
-    phase_results = _load_phase_results(root)
-    assignment_results = _load_assignment_results(root)
-    wp_results = _load_wp_results(root)
+    phase_results, _phase_rejected = _load_phase_results(root)
+    assignment_results, _assign_rejected = _load_assignment_results(root)
+    wp_results, _wp_rejected = _load_wp_results(root)
 
     validation_path = root / "validation.json"
     if validation_path.exists():

@@ -15,6 +15,7 @@ from autoskillit.planner.schema import (
     collect_tier_result_files,
     validate_phase_result,
 )
+from autoskillit.planner.validation import discover_tier_files
 
 logger = get_logger(__name__)
 
@@ -370,8 +371,12 @@ def build_plan_snapshot(
     **kwargs: Any,
 ) -> dict[str, Any]:
     task = Path(task_file_path).read_text(encoding="utf-8") if task_file_path else ""
+    phases_path = Path(phases_dir)
+    discovery = discover_tier_files(phases_path, PHASE_RESULT_FILE_RE)
+    for p in discovery.rejected:
+        logger.warning("phase file %s does not match phase naming pattern", p.name)
     phase_pairs: list[tuple[int, dict[str, Any]]] = []
-    for p in collect_tier_result_files(Path(phases_dir), PHASE_RESULT_FILE_RE):
+    for p in sorted(discovery.accepted):
         try:
             raw = json.loads(p.read_text())
             validated = validate_phase_result(raw)

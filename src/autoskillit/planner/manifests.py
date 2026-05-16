@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TypedDict
 
-from autoskillit.core import atomic_write, write_versioned_json
+from autoskillit.core import atomic_write, get_logger, write_versioned_json
 from autoskillit.planner._sort_utils import _natural_sort_key
 from autoskillit.planner.schema import (
     ASSIGN_ID_RE,
@@ -15,7 +15,6 @@ from autoskillit.planner.schema import (
     WP_RESULT_FILE_RE,
     RunDirResult,
     TaskResolutionResult,
-    collect_tier_result_files,
     make_canonical_assignment_id,
     validate_assignment_result,
     validate_phase_result,
@@ -23,6 +22,9 @@ from autoskillit.planner.schema import (
     validate_refined_plan,
     validate_wp_result,
 )
+from autoskillit.planner.validation import discover_tier_files
+
+logger = get_logger(__name__)
 
 
 class _PhaseBucket(TypedDict):
@@ -61,7 +63,10 @@ def build_phase_assignment_manifest(phases_dir: str, output_dir: str) -> dict[st
     out_dir = Path(output_dir)
     assign_dir = out_dir.resolve()
 
-    phase_files = collect_tier_result_files(phases_path, PHASE_RESULT_FILE_RE)
+    discovery = discover_tier_files(phases_path, PHASE_RESULT_FILE_RE)
+    for f in discovery.rejected:
+        logger.warning("phase file %s does not match phase naming pattern", f.name)
+    phase_files = discovery.accepted
     parsed_phases = []
     for f in phase_files:
         try:
@@ -123,7 +128,10 @@ def build_phase_wp_manifest(
         else (out_dir / "work_packages").resolve()
     )
 
-    assign_files = collect_tier_result_files(assign_path, ASSIGN_RESULT_FILE_RE)
+    discovery = discover_tier_files(assign_path, ASSIGN_RESULT_FILE_RE)
+    for f in discovery.rejected:
+        logger.warning("assignment file %s does not match assignment naming pattern", f.name)
+    assign_files = discovery.accepted
     parsed_assignments: list[dict] = []
     for f in assign_files:
         try:
@@ -204,10 +212,10 @@ def finalize_wp_manifest(work_packages_dir: str, output_dir: str) -> dict[str, s
     if not wp_dir.is_dir():
         raise FileNotFoundError(f"work_packages_dir does not exist: {wp_dir}")
 
-    result_files = sorted(
-        collect_tier_result_files(wp_dir, WP_RESULT_FILE_RE),
-        key=lambda p: _natural_sort_key(p.name),
-    )
+    discovery = discover_tier_files(wp_dir, WP_RESULT_FILE_RE)
+    for f in discovery.rejected:
+        logger.warning("work package file %s does not match WP naming pattern", f.name)
+    result_files = sorted(discovery.accepted, key=lambda p: _natural_sort_key(p.name))
     items = []
     index_entries = []
     errors: list[str] = []

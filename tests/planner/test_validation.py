@@ -547,6 +547,78 @@ def test_validate_plan_raises_on_non_wp_result_file_in_work_packages_dir(tmp_pat
         validate_plan(str(tmp_path))
 
 
+def test_validate_plan_emits_discovery_miss_warning_for_non_matching_files(tmp_path: Path) -> None:
+    """When *_result.json files exist but don't match tier regex, a warning finding is emitted."""
+    _make_minimal_output_dir(tmp_path, num_phases=1, wps_per_assignment=1)
+    stray = {"id": "stray", "status": "complete", "assignment_count": 1, "failed_count": 0}
+    write_json(tmp_path / "work_packages" / "stray_result.json", stray)
+
+    result = validate_plan(str(tmp_path))
+    assert result["verdict"] == "pass"
+    validation = json.loads((tmp_path / "validation.json").read_text())
+    assert any(
+        w["check"] == "file_discovery_miss" and w["severity"] == "warning"
+        for w in validation["warnings"]
+    ), "Expected a file_discovery_miss warning for stray_result.json"
+
+
+def test_discover_tier_files_returns_accepted_and_rejected(tmp_path: Path) -> None:
+    """discover_tier_files returns both accepted files and rejected (non-matching) files."""
+    from autoskillit.planner.schema import PHASE_RESULT_FILE_RE
+    from autoskillit.planner.validation import DiscoveryResult, discover_tier_files
+
+    phases_dir = tmp_path / "phases"
+    phases_dir.mkdir(parents=True)
+    write_json(phases_dir / "P1_result.json", make_phase_result(1))
+    stray = {"id": "stray", "status": "complete"}
+    write_json(phases_dir / "stray_result.json", stray)
+
+    result = discover_tier_files(phases_dir, PHASE_RESULT_FILE_RE)
+    assert isinstance(result, DiscoveryResult)
+    assert len(result.accepted) == 1
+    assert result.accepted[0].name == "P1_result.json"
+    assert len(result.rejected) == 1
+    assert result.rejected[0].name == "stray_result.json"
+
+
+def test_validate_plan_exempts_absorbed_assignments(tmp_path: Path) -> None:
+    """When all WPs of an assignment are absorbed, no false completeness error fires."""
+    phases_dir = tmp_path / "phases"
+    assigns_dir = tmp_path / "assignments"
+    wps_dir = tmp_path / "work_packages"
+
+    write_json(phases_dir / "P1_result.json", make_phase_result(1))
+    write_json(
+        assigns_dir / "P1-A1_result.json",
+        make_assignment_result(1, 1, proposed_work_packages=["P1-A1-WP1"]),
+    )
+    write_json(
+        assigns_dir / "P1-A2_result.json",
+        make_assignment_result(1, 2, proposed_work_packages=["P1-A2-WP1"]),
+    )
+    write_json(
+        wps_dir / "P1-A1-WP1_result.json",
+        make_wp_result("P1-A1-WP1", deliverables=["src/a.py"]),
+    )
+    write_json(
+        wps_dir / "wp_manifest.json",
+        {"pass_name": "work_packages", "items": [{"id": "P1-A1-WP1", "status": "done"}]},
+    )
+    registry = {
+        "schema_version": 1,
+        "absorbed": {"P1-A2-WP1": {"merged_into": "P1-A1-WP1", "group_id": "P1-A1-WP1"}},
+    }
+    write_json(wps_dir / "absorption_registry.json", registry)
+
+    result = validate_plan(str(tmp_path))
+    assert result["verdict"] == "pass"
+    validation = json.loads((tmp_path / "validation.json").read_text())
+    assert not any(
+        f["check"] == "assignment_completeness" and "P1-A2" in f["message"]
+        for f in validation["findings"]
+    ), "Assignment P1-A2 should be exempt due to absorption registry"
+
+
 # ---------------------------------------------------------------------------
 # Direct unit tests for _check_sizing_bounds
 # ---------------------------------------------------------------------------

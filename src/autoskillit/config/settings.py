@@ -23,6 +23,7 @@ from autoskillit.config._config_dataclasses import (
     CIConfig,
     ClassifyFixConfig,
     ConfigSchemaError,
+    CoreRunConfig,
     FleetConfig,
     GitHubConfig,
     ImplementGateConfig,
@@ -30,7 +31,6 @@ from autoskillit.config._config_dataclasses import (
     LoggingConfig,
     McpResponseConfig,
     MigrationConfig,
-    ModelConfig,
     PacksConfig,
     ProvidersConfig,
     QuotaGuardConfig,
@@ -115,6 +115,7 @@ __all__ = [
     "CIConfig",
     "ClassifyFixConfig",
     "ConfigSchemaError",
+    "CoreRunConfig",
     "FleetConfig",
     "GitHubConfig",
     "ImplementGateConfig",
@@ -122,7 +123,6 @@ __all__ = [
     "LoggingConfig",
     "McpResponseConfig",
     "MigrationConfig",
-    "ModelConfig",
     "PacksConfig",
     "ProvidersConfig",
     "QuotaGuardConfig",
@@ -172,7 +172,7 @@ class AutomationConfig:
     safety: SafetyConfig = field(default_factory=SafetyConfig)
     read_db: ReadDbConfig = field(default_factory=ReadDbConfig)
     run_skill: RunSkillConfig = field(default_factory=RunSkillConfig)
-    model: ModelConfig = field(default_factory=ModelConfig)
+    model: CoreRunConfig = field(default_factory=CoreRunConfig)
     worktree_setup: WorktreeSetupConfig = field(default_factory=WorktreeSetupConfig)
     migration: MigrationConfig = field(default_factory=MigrationConfig)
     token_usage: TokenUsageConfig = field(default_factory=TokenUsageConfig)
@@ -317,7 +317,7 @@ class AutomationConfig:
         _sf = _field_defaults(SafetyConfig)
         _rd = _field_defaults(ReadDbConfig)
         _rs = _field_defaults(RunSkillConfig)
-        _mc = _field_defaults(ModelConfig)
+        _mc = _field_defaults(CoreRunConfig)
         _ws = _field_defaults(WorktreeSetupConfig)
         _mi = _field_defaults(MigrationConfig)
         _tu = _field_defaults(TokenUsageConfig)
@@ -394,9 +394,11 @@ class AutomationConfig:
                     val(rs, "stream_idle_timeout_ms", _rs["stream_idle_timeout_ms"])
                 ),
             ),
-            model=ModelConfig(
-                default=_d if (_d := val(mc, "default", None)) is not None else _mc["default"],
-                override=val(mc, "override", _mc["override"]) or None,
+            model=CoreRunConfig(
+                default_model=_d
+                if (_d := val(mc, "default", None)) is not None
+                else _mc["default_model"],
+                model_override=val(mc, "override", _mc["model_override"]) or None,
             ),
             worktree_setup=WorktreeSetupConfig(
                 command=_to_optional_list(val(ws, "command", _ws["command"])),

@@ -211,7 +211,7 @@ class TestRunSkillModel:
     # MOD_S3
     @pytest.mark.anyio
     async def test_run_skill_no_model_flag_when_empty(self, tool_ctx_kitchen_open):
-        tool_ctx_kitchen_open.config.model.default = ""  # ← add this line
+        tool_ctx_kitchen_open.config.model.default_model = ""  # ← add this line
         tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx_kitchen_open.runner.push(_make_result(0, self._MOCK_STDOUT, ""))
         await run_skill("/investigate error", "/tmp", model="")

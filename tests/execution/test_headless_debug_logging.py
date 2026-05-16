@@ -90,7 +90,7 @@ class TestResolveModelLogging:
         from tests._helpers import make_model_config, make_test_config
 
         cfg = make_test_config()
-        cfg.model = make_model_config(default=default, override=override)
+        cfg.model = make_model_config(default_model=default, model_override=override)
         return cfg
 
     def test_logs_override_tier(self):

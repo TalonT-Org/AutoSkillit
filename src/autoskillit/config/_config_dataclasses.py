@@ -126,9 +126,9 @@ class RunSkillConfig:
 
 
 @dataclass
-class ModelConfig:
-    default: str = "sonnet"
-    override: str | None = None
+class CoreRunConfig:
+    default_model: str = "sonnet"
+    model_override: str | None = None
 
 
 @dataclass

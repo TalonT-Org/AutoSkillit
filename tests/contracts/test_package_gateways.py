@@ -269,7 +269,7 @@ def test_config_all_complete():
     assert "AutomationConfig" in config_all
     assert "load_config" in config_all
     # Spot-check all sub-config classes are present
-    for cls in ["TestCheckConfig", "SafetyConfig", "ModelConfig", "TokenUsageConfig"]:
+    for cls in ["TestCheckConfig", "SafetyConfig", "CoreRunConfig", "TokenUsageConfig"]:
         assert cls in config_all, f"{cls} missing from config.__all__"
 
 

@@ -73,6 +73,55 @@ class TestDataFlowQuality:
         assert dead[0].step_name == "impl"
         assert dead[0].field == "worktree_path"
 
+    # DFQ2b
+    def test_dead_output_detected_for_capture_list(self) -> None:
+        """capture_list orphan vars must be flagged as DEAD_OUTPUT."""
+        wf = self._make_recipe(
+            {
+                "lens": {
+                    "tool": "run_skill",
+                    "with": {"skill_command": "/autoskillit:exp-lens-diagram test"},
+                    "capture_list": {"all_diagram_paths": "${{ result.diagram_path }}"},
+                    "retries": 0,
+                    "on_success": "finish",
+                },
+                "finish": {"action": "stop", "message": "Done"},
+            }
+        )
+        report = analyze_dataflow(wf)
+        dead = [w for w in report.warnings if w.code == "DEAD_OUTPUT"]
+        assert len(dead) == 1, f"expected 1 dead output for orphan capture_list var, got {dead}"
+        assert dead[0].step_name == "lens"
+        assert dead[0].field == "all_diagram_paths"
+
+    # DFQ2c
+    def test_consumed_capture_list_not_flagged(self) -> None:
+        """capture_list vars consumed downstream must NOT be flagged as DEAD_OUTPUT."""
+        wf = self._make_recipe(
+            {
+                "lens": {
+                    "tool": "run_skill",
+                    "with": {"skill_command": "/autoskillit:exp-lens-diagram test"},
+                    "capture_list": {"all_diagram_paths": "${{ result.diagram_path }}"},
+                    "retries": 0,
+                    "on_success": "bundle",
+                },
+                "bundle": {
+                    "tool": "run_skill",
+                    "with": {
+                        "skill_command": (
+                            "/autoskillit:prepare-research-pr ${{ context.all_diagram_paths }}"
+                        ),
+                    },
+                    "on_success": "finish",
+                },
+                "finish": {"action": "stop", "message": "Done"},
+            }
+        )
+        report = analyze_dataflow(wf)
+        dead = [w for w in report.warnings if w.code == "DEAD_OUTPUT"]
+        assert len(dead) == 0, f"expected 0 dead outputs for consumed capture_list var, got {dead}"
+
     # DFQ3
     def test_consumed_output_not_flagged(self) -> None:
         wf = self._make_recipe(

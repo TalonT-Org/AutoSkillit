@@ -440,3 +440,66 @@ class TestDownstreamContextCompletenessRule:
             f for f in findings if f.rule == "downstream-context-gap" and f.step_name == "consume"
         ]
         assert gap == [], f"downstream-context-gap must not fire for recipe input context: {gap}"
+
+    def test_dc5_capture_list_keys_registered_as_produced_context(self) -> None:
+        """T_DC5: downstream-context-gap does NOT fire when a downstream step references
+        a context variable produced by a prior step's capture_list block."""
+        steps = {
+            "produce": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:exp-lens-diagram test"},
+                "capture_list": {"all_diagram_paths": "${{ result.diagram_path }}"},
+                "retries": 0,
+                "on_success": "consume",
+            },
+            "consume": {
+                "tool": "run_skill",
+                "with": {
+                    "skill_command": (
+                        "/autoskillit:prepare-research-pr ${{ context.all_diagram_paths }}"
+                    )
+                },
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+        recipe = _make_workflow(steps)
+        findings = run_semantic_rules(recipe)
+        gap = [
+            f for f in findings if f.rule == "downstream-context-gap" and f.step_name == "consume"
+        ]
+        assert gap == [], (
+            f"downstream-context-gap must not fire for capture_list-produced context: {gap}"
+        )
+
+    def test_dc6_capture_list_does_not_silence_missing_var_gap(self) -> None:
+        """T_DC6: downstream-context-gap still fires for truly unwired context vars even
+        when the recipe also uses capture_list elsewhere."""
+        steps = {
+            "produce": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:exp-lens-diagram test"},
+                "capture_list": {"all_diagram_paths": "${{ result.diagram_path }}"},
+                "retries": 0,
+                "on_success": "consume",
+            },
+            "consume": {
+                "tool": "run_skill",
+                "with": {
+                    "skill_command": (
+                        "/autoskillit:prepare-research-pr"
+                        " ${{ context.all_diagram_paths }}"
+                        " ${{ context.missing_var }}"
+                    )
+                },
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+        recipe = _make_workflow(steps)
+        findings = run_semantic_rules(recipe)
+        gap = [
+            f for f in findings if f.rule == "downstream-context-gap" and f.step_name == "consume"
+        ]
+        assert len(gap) == 1, f"expected exactly 1 gap for missing_var, got {gap}"
+        assert "missing_var" in gap[0].message

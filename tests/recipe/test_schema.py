@@ -88,6 +88,38 @@ def test_recipe_step_retries_zero() -> None:
     assert step.retries == 0
 
 
+def test_recipe_step_capture_list_with_retries_raises() -> None:
+    """RecipeStep must raise ValueError when capture_list is non-empty and retries > 0."""
+    from autoskillit.recipe.schema import RecipeStep
+
+    with pytest.raises(ValueError, match="retries"):
+        RecipeStep(
+            capture_list={"all_diagram_paths": "${{ result.diagram_path }}"},
+            retries=3,
+        )
+
+
+def test_recipe_step_capture_list_retries_zero_ok() -> None:
+    """RecipeStep with capture_list and retries=0 must not raise."""
+    from autoskillit.recipe.schema import RecipeStep
+
+    step = RecipeStep(
+        capture_list={"all_diagram_paths": "${{ result.diagram_path }}"},
+        retries=0,
+    )
+    assert step.capture_list == {"all_diagram_paths": "${{ result.diagram_path }}"}
+    assert step.retries == 0
+
+
+def test_recipe_step_empty_capture_list_with_retries_ok() -> None:
+    """RecipeStep with empty capture_list and retries=3 must not raise."""
+    from autoskillit.recipe.schema import RecipeStep
+
+    step = RecipeStep(capture_list={}, retries=3)
+    assert step.capture_list == {}
+    assert step.retries == 3
+
+
 def test_recipe_step_has_on_exhausted_field() -> None:
     """RecipeStep must have an on_exhausted field defaulting to 'escalate'."""
     from autoskillit.recipe.schema import RecipeStep

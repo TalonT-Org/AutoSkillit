@@ -59,6 +59,29 @@ def test_every_bundled_recipe_declares_requires_packs() -> None:
         assert recipe.requires_packs, f"{path.name} does not declare requires_packs"
 
 
+@pytest.mark.parametrize(
+    "recipe_yaml",
+    sorted(builtin_recipes_dir().glob("*.yaml")),
+    ids=lambda p: p.stem,
+)
+def test_bundled_recipes_capture_list_retries_zero(recipe_yaml: Path) -> None:
+    """Every bundled recipe must have zero capture-list-requires-retries-zero ERROR findings.
+
+    Steps using capture_list must set retries: 0 to prevent retry-induced duplication
+    of accumulated list items.
+    """
+    recipe = load_recipe(recipe_yaml)
+    findings = run_semantic_rules(recipe)
+    errors = [
+        f
+        for f in findings
+        if f.rule == "capture-list-requires-retries-zero" and f.severity == Severity.ERROR
+    ]
+    assert errors == [], (
+        f"{recipe_yaml.stem}: {[f'{f.step_name}: {f.message[:80]}' for f in errors]}"
+    )
+
+
 def test_make_plan_contract_declares_plan_parts_output() -> None:
     """D4: make-plan contract must declare plan_parts as an output."""
     manifest = load_bundled_manifest()

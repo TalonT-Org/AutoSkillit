@@ -42,6 +42,8 @@ def _detect_ref_invalidations(recipe: Recipe, graph: dict[str, set[str]]) -> lis
     for step_name, step in recipe.steps.items():
         for cap_var in step.capture or {}:
             var_recapture_steps.setdefault(cap_var, set()).add(step_name)
+        for cap_var in step.capture_list or {}:
+            var_recapture_steps.setdefault(cap_var, set()).add(step_name)
 
     warnings: list[DataFlowWarning] = []
 
@@ -140,7 +142,7 @@ def _is_observability_capture(cap_key: str, step_name: str, step: RecipeStep) ->
     # merge_worktree cleanup_succeeded: matched by tool name + capture value,
     # not skill_command (merge_worktree is a direct tool, not a skill).
     if step.tool == "merge_worktree" and "result.cleanup_succeeded" in str(
-        step.capture.get(cap_key, "")
+        (step.capture or {}).get(cap_key, "") or (step.capture_list or {}).get(cap_key, "")
     ):
         return True
 
@@ -162,7 +164,7 @@ def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[Dat
     warnings: list[DataFlowWarning] = []
 
     for step_name, step in recipe.steps.items():
-        if not step.capture:
+        if not step.capture and not step.capture_list:
             continue
 
         # BFS: collect all steps reachable from this step
@@ -189,15 +191,18 @@ def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[Dat
         # as structural consumption of captured variables.
         if step.on_result:
             # Legacy field routing: field name matches a captured key
-            if step.on_result.field in step.capture:
+            if step.on_result.field in (step.capture or {}) or step.on_result.field in (
+                step.capture_list or {}
+            ):
                 consumed.add(step.on_result.field)
             # Predicate condition routing — conditions gate on step result;
             # treat all captured vars as structurally consumed.
             if step.on_result.conditions:
-                consumed.update(step.capture.keys())
+                consumed.update((step.capture or {}).keys())
+                consumed.update((step.capture_list or {}).keys())
 
         # Flag captured vars not consumed on any path
-        for cap_key in step.capture:
+        for cap_key in list(step.capture or {}) + list(step.capture_list or {}):
             if cap_key not in consumed:
                 if _is_observability_capture(cap_key, step_name, step):
                     continue
@@ -222,7 +227,7 @@ def _detect_implicit_handoffs(recipe: Recipe) -> list[DataFlowWarning]:
     warnings: list[DataFlowWarning] = []
 
     for step_name, step in recipe.steps.items():
-        if step.tool in SKILL_TOOLS and not step.capture:
+        if step.tool in SKILL_TOOLS and not step.capture and not step.capture_list:
             warnings.append(
                 DataFlowWarning(
                     code="IMPLICIT_HANDOFF",

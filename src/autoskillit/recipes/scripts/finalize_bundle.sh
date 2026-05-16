@@ -34,17 +34,19 @@ if [ ${#TAR_ITEMS[@]} -gt 0 ]; then
 fi
 
 if [ -f "${RESEARCH_DIR}/artifacts.tar.gz" ] && [ -f "${RESEARCH_DIR}/${REPORT_FILE}" ]; then
-    MANIFEST=$(tar tzf "${RESEARCH_DIR}/artifacts.tar.gz" | sort)
-    {
-        echo ""
-        echo "## Archive Manifest"
-        echo ""
-        echo "Contents of \`artifacts.tar.gz\`:"
-        echo ""
-        echo '```'
-        echo "${MANIFEST}"
-        echo '```'
-    } >> "${RESEARCH_DIR}/${REPORT_FILE}"
+    if ! grep -q '## Archive Manifest' "${RESEARCH_DIR}/${REPORT_FILE}" 2>/dev/null; then
+        MANIFEST=$(tar tzf "${RESEARCH_DIR}/artifacts.tar.gz" | sort)
+        {
+            echo ""
+            echo "## Archive Manifest"
+            echo ""
+            echo "Contents of \`artifacts.tar.gz\`:"
+            echo ""
+            echo '```'
+            echo "${MANIFEST}"
+            echo '```'
+        } >> "${RESEARCH_DIR}/${REPORT_FILE}"
+    fi
 fi
 
 [ -f "${RESEARCH_DIR}/artifacts.tar.gz" ] || \

@@ -338,7 +338,7 @@
         }
       ],
       "on_failure": "register_clone_failure",
-      "retries": 1,
+      "retries": 0,
       "on_exhausted": "register_clone_failure",
       "note": "Resolves git-level rebase conflicts between the ejected PR's branch and the current base_branch HEAD. Uses the same resolve-merge-conflicts skill as the classic path's integration conflict resolution.\n"
     },
@@ -568,7 +568,7 @@
         }
       ],
       "on_failure": "register_clone_failure",
-      "retries": 1,
+      "retries": 0,
       "on_exhausted": "enqueue_current_pr",
       "note": "Resolves git-level rebase conflicts between the next PR's branch and the current base_branch HEAD. Similar to resolve_ejected_conflicts but operates proactively before queue submission. Unresolvable conflicts (escalation_required=true) hard-stop at register_clone_failure. Retry exhaustion falls through to enqueue_current_pr — speculative rebase failure must not abort the current PR's queue cycle.\n"
     },
@@ -713,6 +713,7 @@
         "plan_parts": "${{ result.plan_parts }}",
         "all_plan_paths": "${{ result.plan_path }}"
       },
+      "retries": 0,
       "on_success": "verify",
       "on_failure": "register_clone_failure",
       "note": "Glob plan_dir for *_part_*.md or single plan file. Sort alphabetically into plan_parts[]. For a single-part plan, plan_parts has one entry equal to plan_path. PRIMARY PATH: context.task = conflict_report_path from merge_pr. REMEDIATION MODE: context.remediation_path is set when re-entering from the remediate step; pass it inline in the skill_command instead of context.task.\n"
@@ -1120,6 +1121,7 @@
           "route": "force_push_and_wait_mergeability"
         }
       ],
+      "retries": 0,
       "on_failure": "register_clone_failure",
       "note": "Automated conflict resolution when the integration PR is CONFLICTING (REQ-MERGE-003). Rebases context.batch_branch onto inputs.base_branch and resolves merge conflicts. Single attempt only — no retries — to prevent looping on unresolvable conflicts. On failure, escalates to register_clone_failure with diagnostics (REQ-MERGE-004).\n"
     },

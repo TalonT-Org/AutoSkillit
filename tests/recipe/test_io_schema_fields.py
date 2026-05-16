@@ -73,6 +73,7 @@ def test_recipe_step_accepts_capture_list_field() -> None:
         with_args={"skill_command": "/autoskillit:make-plan inputs.task"},
         capture={"plan_path": "${{ result.plan_path }}"},
         capture_list={"plan_parts": "${{ result.plan_parts }}"},
+        retries=0,
         on_success="verify",
     )
     assert step.capture_list == {"plan_parts": "${{ result.plan_parts }}"}
@@ -98,6 +99,7 @@ def test_recipe_yaml_with_capture_list_parses(tmp_path: Path) -> None:
                 "with": {"skill_command": "/autoskillit:make-plan inputs.task"},
                 "capture": {"plan_path": "${{ result.plan_path }}"},
                 "capture_list": {"plan_parts": "${{ result.plan_parts }}"},
+                "retries": 0,
                 "on_success": "done",
             },
             "done": {"action": "stop", "message": "Done"},
@@ -123,6 +125,7 @@ def test_iter_steps_with_context_includes_capture_list_keys() -> None:
                 with_args={"skill_command": "/autoskillit:make-plan t"},
                 capture={"plan_path": "${{ result.plan_path }}"},
                 capture_list={"plan_parts": "${{ result.plan_parts }}"},
+                retries=0,
                 on_success="verify",
             ),
             "verify": RecipeStep(

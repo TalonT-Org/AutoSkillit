@@ -360,7 +360,7 @@ steps:
         route: register_clone_failure
       - route: push_ejected_fix
     on_failure: register_clone_failure
-    retries: 1
+    retries: 0
     on_exhausted: register_clone_failure
     note: >
       Resolves git-level rebase conflicts between the ejected PR's branch and the
@@ -547,7 +547,7 @@ steps:
         route: register_clone_failure
       - route: push_rebased_next_pr
     on_failure: register_clone_failure
-    retries: 1
+    retries: 0
     on_exhausted: enqueue_current_pr
     note: >
       Resolves git-level rebase conflicts between the next PR's branch and the current
@@ -694,6 +694,7 @@ steps:
     capture_list:
       plan_parts: "${{ result.plan_parts }}"
       all_plan_paths: "${{ result.plan_path }}"
+    retries: 0
     on_success: verify
     on_failure: register_clone_failure
     note: >
@@ -1102,6 +1103,7 @@ steps:
       - when: "${{ result.escalation_required }} == true"
         route: register_clone_failure
       - route: force_push_and_wait_mergeability
+    retries: 0
     on_failure: register_clone_failure
     note: >
       Automated conflict resolution when the integration PR is CONFLICTING (REQ-MERGE-003).

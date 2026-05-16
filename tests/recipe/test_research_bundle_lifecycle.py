@@ -1,3 +1,6 @@
+import subprocess
+from pathlib import Path
+
 import pytest
 
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
@@ -94,4 +97,46 @@ def test_re_push_research_on_success_routes_to_finalize_bundle_render(recipe):
     step = recipe.steps["re_push_research"]
     assert step.on_success == "finalize_bundle_render", (
         "re_push_research.on_success must be finalize_bundle_render"
+    )
+
+
+@pytest.mark.medium
+def test_finalize_bundle_script_manifest_idempotent(tmp_path):
+    """finalize_bundle.sh must not append ## Archive Manifest more than once.
+
+    The idempotency guard checks for existing '## Archive Manifest' before appending,
+    so re-running the script produces the manifest section exactly once.
+    """
+    research_dir = tmp_path / "research"
+    research_dir.mkdir()
+    worktree_path = tmp_path / "worktree"
+    worktree_path.mkdir()
+
+    (research_dir / "report.md").write_text("# Research Report\n\nSome content.\n")
+    (research_dir / "data.csv").write_text("col1,col2\nval1,val2\n")
+
+    script_path = (
+        Path(__file__).parent.parent.parent
+        / "src/autoskillit/recipes/scripts"
+        / "finalize_bundle.sh"
+    )
+
+    def run_finalize():
+        result = subprocess.run(
+            [str(script_path), "local", str(research_dir), str(worktree_path)],
+            capture_output=True,
+            text=True,
+        )
+        return result
+
+    r1 = run_finalize()
+    assert r1.returncode == 0, f"first run failed: {r1.stderr}"
+
+    r2 = run_finalize()
+    assert r2.returncode == 0, f"second run failed: {r2.stderr}"
+
+    report_content = (research_dir / "report.md").read_text()
+    assert report_content.count("## Archive Manifest") == 1, (
+        "## Archive Manifest must appear exactly once after two script runs; "
+        f"found {report_content.count('## Archive Manifest')}"
     )

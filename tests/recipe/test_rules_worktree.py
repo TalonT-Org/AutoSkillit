@@ -937,3 +937,117 @@ def test_superseded_input_in_skill_command_fires_error() -> None:
     assert any(
         f.rule == "superseded-input-after-capture" and f.step_name == "audit" for f in errors
     ), f"Expected superseded-input-after-capture ERROR for skill_command ref, got: {findings}"
+
+
+class TestCaptureListRequiresRetriesZero:
+    """Tests for the capture-list-requires-retries-zero rule."""
+
+    def test_capture_list_with_default_retries_fires_error(self) -> None:
+        """Validator fires ERROR when capture_list step has retries > 0.
+
+        Built with retries=0 to pass __post_init__, then mutated to retries=3
+        via direct assignment (RecipeStep is not frozen) to simulate a step
+        that bypassed the schema guard.
+        """
+        step = RecipeStep(
+            name="lens",
+            tool="run_skill",
+            with_args={"skill_command": "/autoskillit:exp-lens-diagram test"},
+            capture_list={"all_diagram_paths": "${{ result.diagram_path }}"},
+            retries=0,
+            on_success="done",
+        )
+        step.retries = 3  # bypass __post_init__ guard: built with retries=0, mutated to non-zero
+        recipe = Recipe(
+            name="test",
+            description="test",
+            steps={"lens": step, "done": RecipeStep(action="stop", message="Done.")},
+        )
+        findings = run_semantic_rules(recipe)
+        errors = [f for f in findings if f.severity == Severity.ERROR]
+        assert any(
+            f.rule == "capture-list-requires-retries-zero" and f.step_name == "lens"
+            for f in errors
+        ), f"Expected capture-list-requires-retries-zero ERROR, got: {findings}"
+
+    def test_capture_list_with_retries_zero_is_clean(self) -> None:
+        """capture_list with retries: 0 must NOT emit capture-list-requires-retries-zero."""
+        steps = {
+            "lens": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:exp-lens-diagram test"},
+                "capture_list": {"all_diagram_paths": "${{ result.diagram_path }}"},
+                "retries": 0,
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+        recipe = _make_workflow(steps)
+        findings = run_semantic_rules(recipe)
+        rule_findings = [f for f in findings if f.rule == "capture-list-requires-retries-zero"]
+        assert rule_findings == [], (
+            f"capture-list-requires-retries-zero must not fire for retries:0, got: {rule_findings}"
+        )
+
+    def test_capture_list_with_retries_explicit_fires_error(self) -> None:
+        """capture_list with retries: 1 (explicit non-zero) must emit ERROR."""
+        step = RecipeStep(
+            name="audits",
+            tool="run_skill",
+            with_args={"skill_command": "/autoskillit:audit-friction"},
+            capture_list={"audit_report_paths": "${{ result.audit_report_path }}"},
+            retries=0,
+            on_success="done",
+        )
+        step.retries = 1  # simulate explicit non-zero retries
+        recipe = Recipe(
+            name="test",
+            description="test",
+            steps={"audits": step, "done": RecipeStep(action="stop", message="Done.")},
+        )
+        findings = run_semantic_rules(recipe)
+        errors = [f for f in findings if f.severity == Severity.ERROR]
+        assert any(
+            f.rule == "capture-list-requires-retries-zero" and f.step_name == "audits"
+            for f in errors
+        ), f"Expected capture-list-requires-retries-zero ERROR for retries:1, got: {findings}"
+
+    def test_capture_not_capture_list_with_retries_is_clean(self) -> None:
+        """capture (not capture_list) with retries: 3 must NOT emit the capture_list rule."""
+        steps = {
+            "impl": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:implement-worktree-no-merge plan"},
+                "capture": {"worktree_path": "${{ result.worktree_path }}"},
+                "retries": 3,
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+        recipe = _make_workflow(steps)
+        findings = run_semantic_rules(recipe)
+        rule_findings = [f for f in findings if f.rule == "capture-list-requires-retries-zero"]
+        assert rule_findings == [], (
+            "capture-list-requires-retries-zero is capture_list-specific and must not "
+            f"fire for regular capture with retries, got: {rule_findings}"
+        )
+
+    def test_empty_capture_list_with_retries_is_clean(self) -> None:
+        """capture_list: {} with retries: 3 must NOT emit the rule (empty = no accumulation)."""
+        steps = {
+            "step": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:some-skill"},
+                "capture_list": {},
+                "retries": 3,
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+        recipe = _make_workflow(steps)
+        findings = run_semantic_rules(recipe)
+        rule_findings = [f for f in findings if f.rule == "capture-list-requires-retries-zero"]
+        assert rule_findings == [], (
+            "capture-list-requires-retries-zero must not fire for empty capture_list, "
+            f"got: {rule_findings}"
+        )

@@ -164,6 +164,7 @@ steps:
       phase_plan_path: "${{ result.plan_path }}"
     capture_list:
       plan_parts: "${{ result.plan_parts }}"
+    retries: 0
     on_success: implement_phase
     on_failure: escalate_stop
     note: >

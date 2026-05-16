@@ -176,6 +176,7 @@ steps:
       all_plan_paths: "${{ result.plan_path }}"
     capture_list:
       plan_parts: "${{ result.plan_parts }}"
+    retries: 0
     on_success: review
     on_failure: release_issue_failure
     note: >
@@ -476,6 +477,7 @@ steps:
       step_name: "run_arch_lenses"
     capture_list:
       all_diagram_paths: "${{ result.diagram_path }}"
+    retries: 0
     on_success: compose_pr
     on_failure: compose_pr
     on_context_limit: compose_pr

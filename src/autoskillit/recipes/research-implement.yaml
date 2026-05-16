@@ -364,8 +364,16 @@ steps:
       step_name: run_experiment
     capture:
       experiment_results: "${{ result.results_path }}"
+      experiment_verdict: "${{ result.verdict }}"
+      blocked_hypotheses: "${{ result.blocked_hypotheses }}"
     retries: 2
-    on_success: generate_report
+    on_result:
+      - when: "${{ result.verdict }} == CONCLUSIVE"
+        route: generate_report
+      - when: "${{ result.verdict }} == BLOCKED"
+        route: escalate_stop
+      - when: "${{ result.verdict }} == INCONCLUSIVE"
+        route: ensure_results
     on_failure: troubleshoot_run_failure
     on_exhausted: ensure_results
     on_context_limit: ensure_results
@@ -403,7 +411,15 @@ steps:
       step_name: adjust
     capture:
       experiment_results: "${{ result.results_path }}"
-    on_success: check_run_fix_loop
+      experiment_verdict: "${{ result.verdict }}"
+      blocked_hypotheses: "${{ result.blocked_hypotheses }}"
+    on_result:
+      - when: "${{ result.verdict }} == CONCLUSIVE"
+        route: check_run_fix_loop
+      - when: "${{ result.verdict }} == INCONCLUSIVE"
+        route: check_run_fix_loop
+      - when: "${{ result.verdict }} == BLOCKED"
+        route: escalate_stop
     on_failure: ensure_results
     on_context_limit: ensure_results
 

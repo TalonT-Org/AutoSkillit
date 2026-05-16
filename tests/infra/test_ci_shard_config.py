@@ -21,6 +21,7 @@ KNOWN_GENERAL_SHARD_DIRS = {
     "hooks",
     "infra",
     "recipe",
+    "report",
     "server",
     "skills",
     "skills_extended",

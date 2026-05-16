@@ -1426,11 +1426,22 @@ skills:
       type: file_path
     - name: group_manifest
       type: file_path
+    - name: verdict
+      type: string
+      allowed_values:
+      - CONCLUSIVE
+      - INCONCLUSIVE
+      - BLOCKED
+    - name: blocked_hypotheses
+      type: string
     expected_output_patterns:
     - "results_path\\s*=\\s*/.+"
     - "group_manifest\\s*=\\s*/.+"
+    - "verdict\\s*=\\s*(CONCLUSIVE|INCONCLUSIVE|BLOCKED)"
     pattern_examples:
-    - "results_path = /tmp/run-experiment/results.md group_manifest = /tmp/run-experiment/group_manifest.json\n%%ORDER_UP%%"
+    - "results_path = /tmp/run-experiment/results.md group_manifest = /tmp/run-experiment/group_manifest.json verdict = CONCLUSIVE\n%%ORDER_UP%%"
+    - "results_path = /tmp/run-experiment/results.md group_manifest = /tmp/run-experiment/group_manifest.json verdict = INCONCLUSIVE\n%%ORDER_UP%%"
+    - "results_path = /tmp/run-experiment/results.md group_manifest = /tmp/run-experiment/group_manifest.json verdict = BLOCKED blocked_hypotheses = H5: MERFISH data missing\n%%ORDER_UP%%"
     write_behavior: always
 
   generate-report:

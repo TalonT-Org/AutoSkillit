@@ -293,3 +293,73 @@ def _check_on_result_values_in_allowed_values(ctx: ValidationContext) -> list[Ru
                     )
 
     return findings
+
+
+@semantic_rule(
+    name="verdict-output-requires-on-result",
+    description=(
+        "Steps invoking a skill with allowed_values on any output must use on_result "
+        "routing, not on_success. Ensures verdict-declaring skills cannot silently "
+        "bypass result quality gating."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_verdict_output_requires_on_result(ctx: ValidationContext) -> list[RuleFinding]:
+    """Error when a step uses on_success for a skill that declares verdict + allowed_values.
+
+    For each step that:
+    - uses tool: run_skill
+    - invokes a skill with allowed_values on at least one output
+    - does NOT have an on_result block (uses on_success instead)
+
+    Fire an ERROR directing the author to replace on_success with on_result routing.
+    """
+    findings: list[RuleFinding] = []
+
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+        skill_command = str((step.with_args or {}).get("skill_command") or "")
+        skill_name = resolve_skill_name(skill_command)
+        if not skill_name:
+            continue
+
+        allowed_by_output = _get_allowed_values_for_skill(skill_name)
+        if not allowed_by_output:
+            continue
+
+        if step.on_result is not None:
+            continue  # Has on_result — this rule only fires when on_result is missing
+
+        # Only enforce for outputs specifically named 'verdict' — other outputs with
+        # allowed_values (e.g. failure_type, failure_subtype) use on_success legitimately.
+        verdict_outputs = {k: v for k, v in allowed_by_output.items() if k == "verdict"}
+        if not verdict_outputs:
+            continue
+
+        # Only fire when the step explicitly captures result.verdict. Steps that invoke
+        # a verdict-declaring skill but don't capture the verdict are intentionally
+        # ignoring it (e.g. routing on a different output like needs_rerun).
+        capture = step.capture or {}
+        verdict_is_captured = any(
+            isinstance(expr, str) and "result.verdict" in expr for expr in capture.values()
+        )
+        if not verdict_is_captured:
+            continue
+
+        for output_name, allowed_values in verdict_outputs.items():
+            findings.append(
+                RuleFinding(
+                    rule="verdict-output-requires-on-result",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' invokes '{skill_name}' which declares "
+                        f"output '{output_name}' with allowed_values {allowed_values}, "
+                        f"but is missing on_result routing. Add on_result routing "
+                        f"that dispatches on the declared verdict."
+                    ),
+                )
+            )
+
+    return findings

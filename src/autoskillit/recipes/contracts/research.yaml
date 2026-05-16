@@ -1,4 +1,4 @@
-recipe_source_hash: sha256:c2619036cbe9baff01ec0ca58da9dfe94995afc276b1e18c028403015ebfe792
+recipe_source_hash: sha256:b8cf6e8c3b07797d600c36ecce23d6441de09898e9ca7a3c5f59f9951d06b85c
 bundled_manifest_version: 0.1.0
 skill_hashes: {}
 skills:
@@ -443,11 +443,25 @@ skills:
       type: file_path
     - name: group_manifest
       type: file_path
+    - name: verdict
+      type: string
+    - name: blocked_hypotheses
+      type: string
     expected_output_patterns:
     - results_path\s*=\s*/.+
     - group_manifest\s*=\s*/.+
+    - verdict\s*=\s*(CONCLUSIVE|INCONCLUSIVE|BLOCKED)
     pattern_examples:
     - 'results_path = /tmp/run-experiment/results.md group_manifest = /tmp/run-experiment/group_manifest.json
+      verdict = CONCLUSIVE
+
+      %%ORDER_UP%%'
+    - 'results_path = /tmp/run-experiment/results.md group_manifest = /tmp/run-experiment/group_manifest.json
+      verdict = INCONCLUSIVE
+
+      %%ORDER_UP%%'
+    - 'results_path = /tmp/run-experiment/results.md group_manifest = /tmp/run-experiment/group_manifest.json
+      verdict = BLOCKED blocked_hypotheses = H5: MERFISH data missing
 
       %%ORDER_UP%%'
     write_behavior: always
@@ -1670,12 +1684,15 @@ dataflow:
   required: []
   produced:
   - experiment_results
+  - experiment_verdict
+  - blocked_hypotheses
   - group_manifest
 - step: troubleshoot_run_failure
   available:
   - audit
   - audit_claims
   - base_branch
+  - blocked_hypotheses
   - classification_timestamp
   - design_review_count
   - disambiguation_rule_applied
@@ -1684,6 +1701,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - group_files
   - group_manifest
   - impl_base_sha
@@ -1724,6 +1742,7 @@ dataflow:
   - audit
   - audit_claims
   - base_branch
+  - blocked_hypotheses
   - classification_timestamp
   - design_review_count
   - disambiguation_rule_applied
@@ -1732,6 +1751,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - group_files
   - group_manifest
   - impl_base_sha
@@ -1771,6 +1791,7 @@ dataflow:
   - audit
   - audit_claims
   - base_branch
+  - blocked_hypotheses
   - classification_timestamp
   - design_review_count
   - disambiguation_rule_applied
@@ -1779,6 +1800,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - group_files
   - group_manifest
   - impl_base_sha
@@ -1814,6 +1836,8 @@ dataflow:
   required: []
   produced:
   - experiment_results
+  - experiment_verdict
+  - blocked_hypotheses
   - group_manifest
   positional_args: 1
 - step: check_run_fix_loop
@@ -1821,6 +1845,7 @@ dataflow:
   - audit
   - audit_claims
   - base_branch
+  - blocked_hypotheses
   - classification_timestamp
   - design_review_count
   - disambiguation_rule_applied
@@ -1829,6 +1854,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - group_files
   - group_manifest
   - impl_base_sha
@@ -1869,6 +1895,7 @@ dataflow:
   - audit
   - audit_claims
   - base_branch
+  - blocked_hypotheses
   - classification_timestamp
   - design_review_count
   - disambiguation_rule_applied
@@ -1877,6 +1904,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - group_files
   - group_manifest
   - impl_base_sha
@@ -1917,6 +1945,7 @@ dataflow:
   - audit
   - audit_claims
   - base_branch
+  - blocked_hypotheses
   - classification_timestamp
   - design_review_count
   - disambiguation_rule_applied
@@ -1925,6 +1954,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - group_files
   - group_manifest
   - impl_base_sha
@@ -1965,6 +1995,7 @@ dataflow:
   - audit
   - audit_claims
   - base_branch
+  - blocked_hypotheses
   - classification_timestamp
   - design_review_count
   - disambiguation_rule_applied
@@ -1973,6 +2004,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - group_files
   - group_manifest
   - impl_base_sha
@@ -2014,6 +2046,7 @@ dataflow:
   - audit
   - audit_claims
   - base_branch
+  - blocked_hypotheses
   - classification_timestamp
   - design_review_count
   - disambiguation_rule_applied
@@ -2022,6 +2055,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - group_files
   - group_manifest
   - impl_base_sha
@@ -2064,6 +2098,7 @@ dataflow:
   - audit
   - audit_claims
   - base_branch
+  - blocked_hypotheses
   - classification_timestamp
   - design_review_count
   - disambiguation_rule_applied
@@ -2072,6 +2107,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - group_files
   - group_manifest
   - impl_base_sha
@@ -2115,6 +2151,7 @@ dataflow:
   - audit
   - audit_claims
   - base_branch
+  - blocked_hypotheses
   - classification_timestamp
   - design_review_count
   - disambiguation_rule_applied
@@ -2123,6 +2160,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - group_files
   - group_manifest
   - impl_base_sha
@@ -2164,6 +2202,7 @@ dataflow:
   - audit
   - audit_claims
   - base_branch
+  - blocked_hypotheses
   - classification_timestamp
   - design_review_count
   - disambiguation_rule_applied
@@ -2172,6 +2211,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - group_files
   - group_manifest
   - impl_base_sha
@@ -2216,6 +2256,7 @@ dataflow:
   - audit
   - audit_claims
   - base_branch
+  - blocked_hypotheses
   - classification_timestamp
   - design_review_count
   - disambiguation_rule_applied
@@ -2224,6 +2265,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - fixes_applied
   - group_files
   - group_manifest
@@ -2266,6 +2308,7 @@ dataflow:
   - audit
   - audit_claims
   - base_branch
+  - blocked_hypotheses
   - classification_timestamp
   - design_review_count
   - disambiguation_rule_applied
@@ -2274,6 +2317,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - fixes_applied
   - group_files
   - group_manifest
@@ -2316,6 +2360,7 @@ dataflow:
   - audit
   - audit_claims
   - base_branch
+  - blocked_hypotheses
   - classification_timestamp
   - design_review_count
   - disambiguation_rule_applied
@@ -2324,6 +2369,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - fixes_applied
   - group_files
   - group_manifest
@@ -2370,6 +2416,7 @@ dataflow:
   - audit
   - audit_claims
   - base_branch
+  - blocked_hypotheses
   - classification_timestamp
   - design_review_count
   - disambiguation_rule_applied
@@ -2378,6 +2425,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - fixes_applied
   - group_files
   - group_manifest
@@ -2423,6 +2471,7 @@ dataflow:
   - audit
   - audit_claims
   - base_branch
+  - blocked_hypotheses
   - classification_timestamp
   - design_review_count
   - disambiguation_rule_applied
@@ -2431,6 +2480,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - fixes_applied
   - group_files
   - group_manifest
@@ -2476,6 +2526,7 @@ dataflow:
   - audit
   - audit_claims
   - base_branch
+  - blocked_hypotheses
   - classification_timestamp
   - design_review_count
   - disambiguation_rule_applied
@@ -2484,6 +2535,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - fixes_applied
   - group_files
   - group_manifest
@@ -2529,6 +2581,7 @@ dataflow:
   - audit
   - audit_claims
   - base_branch
+  - blocked_hypotheses
   - classification_timestamp
   - design_review_count
   - disambiguation_rule_applied
@@ -2537,6 +2590,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - fixes_applied
   - group_files
   - group_manifest
@@ -2584,6 +2638,7 @@ dataflow:
   - audit
   - audit_claims
   - base_branch
+  - blocked_hypotheses
   - classification_timestamp
   - design_review_count
   - disambiguation_rule_applied
@@ -2592,6 +2647,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - fixes_applied
   - group_files
   - group_manifest
@@ -2638,6 +2694,7 @@ dataflow:
   - audit
   - audit_claims
   - base_branch
+  - blocked_hypotheses
   - classification_timestamp
   - design_review_count
   - disambiguation_rule_applied
@@ -2646,6 +2703,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - fixes_applied
   - group_files
   - group_manifest
@@ -2693,6 +2751,7 @@ dataflow:
   - audit
   - audit_claims
   - base_branch
+  - blocked_hypotheses
   - classification_timestamp
   - design_review_count
   - disambiguation_rule_applied
@@ -2701,6 +2760,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - fixes_applied
   - group_files
   - group_manifest
@@ -2750,6 +2810,7 @@ dataflow:
   - audit_claims
   - audit_verdict
   - base_branch
+  - blocked_hypotheses
   - classification_timestamp
   - design_review_count
   - disambiguation_rule_applied
@@ -2758,6 +2819,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - fixes_applied
   - group_files
   - group_manifest
@@ -2806,6 +2868,7 @@ dataflow:
   - audit_claims
   - audit_verdict
   - base_branch
+  - blocked_hypotheses
   - classification_timestamp
   - design_review_count
   - disambiguation_rule_applied
@@ -2814,6 +2877,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - fixes_applied
   - group_files
   - group_manifest
@@ -2863,6 +2927,7 @@ dataflow:
   - audit_claims
   - audit_verdict
   - base_branch
+  - blocked_hypotheses
   - classification_timestamp
   - design_review_count
   - disambiguation_rule_applied
@@ -2871,6 +2936,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - fixes_applied
   - group_files
   - group_manifest
@@ -2920,6 +2986,7 @@ dataflow:
   - audit_claims
   - audit_verdict
   - base_branch
+  - blocked_hypotheses
   - classification_timestamp
   - design_review_count
   - disambiguation_rule_applied
@@ -2928,6 +2995,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - fixes_applied
   - group_files
   - group_manifest
@@ -2978,6 +3046,7 @@ dataflow:
   - audit_claims
   - audit_verdict
   - base_branch
+  - blocked_hypotheses
   - claims_needs_rerun
   - classification_timestamp
   - design_review_count
@@ -2987,6 +3056,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - fixes_applied
   - group_files
   - group_manifest
@@ -3036,6 +3106,7 @@ dataflow:
   - audit_claims
   - audit_verdict
   - base_branch
+  - blocked_hypotheses
   - claims_needs_rerun
   - classification_timestamp
   - design_review_count
@@ -3045,6 +3116,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - fixes_applied
   - group_files
   - group_manifest
@@ -3089,6 +3161,8 @@ dataflow:
   required: []
   produced:
   - experiment_results
+  - experiment_verdict
+  - blocked_hypotheses
   positional_args: 1
 - step: re_generate_report
   available:
@@ -3096,6 +3170,7 @@ dataflow:
   - audit_claims
   - audit_verdict
   - base_branch
+  - blocked_hypotheses
   - claims_needs_rerun
   - classification_timestamp
   - design_review_count
@@ -3105,6 +3180,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - fixes_applied
   - group_files
   - group_manifest
@@ -3156,6 +3232,7 @@ dataflow:
   - audit_claims
   - audit_verdict
   - base_branch
+  - blocked_hypotheses
   - claims_needs_rerun
   - classification_timestamp
   - design_review_count
@@ -3165,6 +3242,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - fixes_applied
   - group_files
   - group_manifest
@@ -3214,6 +3292,7 @@ dataflow:
   - audit_claims
   - audit_verdict
   - base_branch
+  - blocked_hypotheses
   - claims_needs_rerun
   - classification_timestamp
   - design_review_count
@@ -3223,6 +3302,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - fixes_applied
   - group_files
   - group_manifest
@@ -3272,6 +3352,7 @@ dataflow:
   - audit_claims
   - audit_verdict
   - base_branch
+  - blocked_hypotheses
   - claims_needs_rerun
   - classification_timestamp
   - design_review_count
@@ -3281,6 +3362,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - fixes_applied
   - group_files
   - group_manifest
@@ -3330,6 +3412,7 @@ dataflow:
   - audit_claims
   - audit_verdict
   - base_branch
+  - blocked_hypotheses
   - claims_needs_rerun
   - classification_timestamp
   - design_review_count
@@ -3339,6 +3422,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - fixes_applied
   - group_files
   - group_manifest
@@ -3389,6 +3473,7 @@ dataflow:
   - audit_claims
   - audit_verdict
   - base_branch
+  - blocked_hypotheses
   - claims_needs_rerun
   - classification_timestamp
   - design_review_count
@@ -3398,6 +3483,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - fixes_applied
   - group_files
   - group_manifest
@@ -3450,6 +3536,7 @@ dataflow:
   - audit_claims
   - audit_verdict
   - base_branch
+  - blocked_hypotheses
   - claims_needs_rerun
   - classification_timestamp
   - design_review_count
@@ -3459,6 +3546,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - fixes_applied
   - group_files
   - group_manifest
@@ -3510,6 +3598,7 @@ dataflow:
   - audit_claims
   - audit_verdict
   - base_branch
+  - blocked_hypotheses
   - claims_needs_rerun
   - classification_timestamp
   - design_review_count
@@ -3519,6 +3608,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - fixes_applied
   - group_files
   - group_manifest
@@ -3571,6 +3661,7 @@ dataflow:
   - audit_claims
   - audit_verdict
   - base_branch
+  - blocked_hypotheses
   - claims_needs_rerun
   - classification_timestamp
   - design_review_count
@@ -3580,6 +3671,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - fixes_applied
   - group_files
   - group_manifest
@@ -3632,6 +3724,7 @@ dataflow:
   - audit_claims
   - audit_verdict
   - base_branch
+  - blocked_hypotheses
   - claims_needs_rerun
   - classification_timestamp
   - design_review_count
@@ -3641,6 +3734,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - fixes_applied
   - group_files
   - group_manifest
@@ -3694,6 +3788,7 @@ dataflow:
   - audit_claims
   - audit_verdict
   - base_branch
+  - blocked_hypotheses
   - claims_needs_rerun
   - classification_timestamp
   - design_review_count
@@ -3704,6 +3799,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - fixes_applied
   - group_files
   - group_manifest
@@ -3758,6 +3854,7 @@ dataflow:
   - audit_claims
   - audit_verdict
   - base_branch
+  - blocked_hypotheses
   - claims_needs_rerun
   - classification_timestamp
   - design_review_count
@@ -3768,6 +3865,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - fixes_applied
   - group_files
   - group_manifest
@@ -3823,6 +3921,7 @@ dataflow:
   - audit_claims
   - audit_verdict
   - base_branch
+  - blocked_hypotheses
   - claims_needs_rerun
   - classification_timestamp
   - design_review_count
@@ -3833,6 +3932,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - fixes_applied
   - group_files
   - group_manifest
@@ -3889,6 +3989,7 @@ dataflow:
   - audit_claims
   - audit_verdict
   - base_branch
+  - blocked_hypotheses
   - claims_needs_rerun
   - classification_timestamp
   - design_review_count
@@ -3899,6 +4000,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - fixes_applied
   - group_files
   - group_manifest
@@ -3954,6 +4056,7 @@ dataflow:
   - audit_claims
   - audit_verdict
   - base_branch
+  - blocked_hypotheses
   - claims_needs_rerun
   - classification_timestamp
   - design_review_count
@@ -3964,6 +4067,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - fixes_applied
   - group_files
   - group_manifest
@@ -4019,6 +4123,7 @@ dataflow:
   - audit_claims
   - audit_verdict
   - base_branch
+  - blocked_hypotheses
   - claims_needs_rerun
   - classification_timestamp
   - design_review_count
@@ -4029,6 +4134,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - fixes_applied
   - group_files
   - group_manifest
@@ -4084,6 +4190,7 @@ dataflow:
   - audit_claims
   - audit_verdict
   - base_branch
+  - blocked_hypotheses
   - claims_needs_rerun
   - classification_timestamp
   - design_review_count
@@ -4094,6 +4201,7 @@ dataflow:
   - experiment_plan
   - experiment_results
   - experiment_type
+  - experiment_verdict
   - fixes_applied
   - group_files
   - group_manifest

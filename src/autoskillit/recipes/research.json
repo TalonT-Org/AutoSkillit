@@ -562,10 +562,25 @@
       },
       "capture": {
         "experiment_results": "${{ result.results_path }}",
+        "experiment_verdict": "${{ result.verdict }}",
+        "blocked_hypotheses": "${{ result.blocked_hypotheses }}",
         "group_manifest": "${{ result.group_manifest }}"
       },
       "retries": 2,
-      "on_success": "generate_report",
+      "on_result": [
+        {
+          "when": "${{ result.verdict }} == CONCLUSIVE",
+          "route": "generate_report"
+        },
+        {
+          "when": "${{ result.verdict }} == BLOCKED",
+          "route": "escalate_stop"
+        },
+        {
+          "when": "${{ result.verdict }} == INCONCLUSIVE",
+          "route": "ensure_results"
+        }
+      ],
       "on_failure": "troubleshoot_run_failure",
       "on_exhausted": "ensure_results"
     },
@@ -610,9 +625,24 @@
       },
       "capture": {
         "experiment_results": "${{ result.results_path }}",
+        "experiment_verdict": "${{ result.verdict }}",
+        "blocked_hypotheses": "${{ result.blocked_hypotheses }}",
         "group_manifest": "${{ result.group_manifest }}"
       },
-      "on_success": "check_run_fix_loop",
+      "on_result": [
+        {
+          "when": "${{ result.verdict }} == CONCLUSIVE",
+          "route": "check_run_fix_loop"
+        },
+        {
+          "when": "${{ result.verdict }} == INCONCLUSIVE",
+          "route": "check_run_fix_loop"
+        },
+        {
+          "when": "${{ result.verdict }} == BLOCKED",
+          "route": "escalate_stop"
+        }
+      ],
       "on_failure": "ensure_results",
       "on_context_limit": "ensure_results"
     },
@@ -999,9 +1029,24 @@
         "step_name": "re_run_experiment"
       },
       "capture": {
-        "experiment_results": "${{ result.results_path }}"
+        "experiment_results": "${{ result.results_path }}",
+        "experiment_verdict": "${{ result.verdict }}",
+        "blocked_hypotheses": "${{ result.blocked_hypotheses }}"
       },
-      "on_success": "re_generate_report",
+      "on_result": [
+        {
+          "when": "${{ result.verdict }} == CONCLUSIVE",
+          "route": "re_generate_report"
+        },
+        {
+          "when": "${{ result.verdict }} == BLOCKED",
+          "route": "escalate_stop"
+        },
+        {
+          "when": "${{ result.verdict }} == INCONCLUSIVE",
+          "route": "re_push_research"
+        }
+      ],
       "on_failure": "re_push_research",
       "on_context_limit": "re_push_research",
       "note": "Targeted re-run of affected benchmarks after review resolution applied code fixes. Uses --adjust to read previous results and re-run only what changed. Captures the updated results_path so re_generate_report uses the new results. on_failure falls through to push as best-effort — the code fixes from resolve are already committed and should still be pushed.\n"

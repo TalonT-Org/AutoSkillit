@@ -164,9 +164,17 @@ def test_route_run_failure_default_escalates(recipe):
 
 
 def test_adjust_experiment_routing_unchanged(recipe):
-    """adjust_experiment routes through check_run_fix_loop guard before run_experiment."""
+    """adjust_experiment uses on_result for all verdict values (not on_success)."""
     step = recipe.steps["adjust_experiment"]
-    assert step.on_success == "check_run_fix_loop"
+    assert step.on_result is not None, "adjust_experiment must use on_result for verdict routing"
+    assert step.on_success is None, "adjust_experiment must not use on_success"
+    conditions = step.on_result.conditions
+    conclusive = next((c for c in conditions if c.when and "CONCLUSIVE" in c.when), None)
+    assert conclusive is not None and conclusive.route == "check_run_fix_loop"
+    blocked = next((c for c in conditions if c.when and "BLOCKED" in c.when), None)
+    assert blocked is not None and blocked.route == "escalate_stop"
+    inconclusive = next((c for c in conditions if c.when and "INCONCLUSIVE" in c.when), None)
+    assert inconclusive is not None and inconclusive.route == "check_run_fix_loop"
     assert step.on_failure == "ensure_results"
 
 
@@ -238,3 +246,182 @@ def test_check_run_fix_loop_routes_to_delay_gate(recipe):
     assert conditions, "check_run_fix_loop on_result must have non-empty conditions"
     non_exhausted = [c for c in conditions if c.when is None or "max_exceeded" not in c.when]
     assert any(c.route == "route_run_retry_delay" for c in non_exhausted)
+
+
+def test_run_experiment_uses_verdict_routing(recipe):
+    """run_experiment must use on_result for verdict-based routing, not on_success."""
+    step = recipe.steps["run_experiment"]
+    assert step.on_result is not None, (
+        "run_experiment must have on_result block for verdict-based routing"
+    )
+    assert step.on_success is None, (
+        "run_experiment must not use on_success (replaced by on_result)"
+    )
+
+
+def test_run_experiment_conclusive_routes_to_generate_report(recipe):
+    """CONCLUSIVE verdict must route to generate_report."""
+    step = recipe.steps["run_experiment"]
+    conditions = step.on_result.conditions
+    conclusive = next(
+        (c for c in conditions if c.when and "CONCLUSIVE" in c.when),
+        None,
+    )
+    assert conclusive is not None, (
+        "run_experiment on_result must have a CONCLUSIVE verdict condition"
+    )
+    assert conclusive.route == "generate_report", (
+        f"CONCLUSIVE must route to generate_report, got {conclusive.route}"
+    )
+
+
+def test_run_experiment_blocked_routes_to_escalate_stop(recipe):
+    """BLOCKED verdict must route to escalate_stop."""
+    step = recipe.steps["run_experiment"]
+    conditions = step.on_result.conditions
+    blocked = next(
+        (c for c in conditions if c.when and "BLOCKED" in c.when),
+        None,
+    )
+    assert blocked is not None, "run_experiment on_result must have a BLOCKED verdict condition"
+    assert blocked.route == "escalate_stop", (
+        f"BLOCKED must route to escalate_stop, got {blocked.route}"
+    )
+
+
+def test_run_experiment_inconclusive_routes_to_ensure_results(recipe):
+    """INCONCLUSIVE verdict must route to ensure_results."""
+    step = recipe.steps["run_experiment"]
+    conditions = step.on_result.conditions
+    inconclusive = next(
+        (c for c in conditions if c.when and "INCONCLUSIVE" in c.when),
+        None,
+    )
+    assert inconclusive is not None, (
+        "run_experiment on_result must have an INCONCLUSIVE verdict condition"
+    )
+    assert inconclusive.route == "ensure_results", (
+        f"INCONCLUSIVE must route to ensure_results, got {inconclusive.route}"
+    )
+
+
+def test_re_run_experiment_uses_verdict_routing(recipe):
+    """re_run_experiment must use on_result for verdict-based routing, not on_success."""
+    step = recipe.steps["re_run_experiment"]
+    assert step.on_result is not None, (
+        "re_run_experiment must have on_result block for verdict-based routing"
+    )
+    assert step.on_success is None, (
+        "re_run_experiment must not use on_success (replaced by on_result)"
+    )
+
+
+def test_re_run_experiment_conclusive_routes_to_re_generate_report(recipe):
+    """CONCLUSIVE verdict must route to re_generate_report."""
+    step = recipe.steps["re_run_experiment"]
+    conditions = step.on_result.conditions
+    conclusive = next(
+        (c for c in conditions if c.when and "CONCLUSIVE" in c.when),
+        None,
+    )
+    assert conclusive is not None, (
+        "re_run_experiment on_result must have a CONCLUSIVE verdict condition"
+    )
+    assert conclusive.route == "re_generate_report", (
+        f"CONCLUSIVE must route to re_generate_report, got {conclusive.route}"
+    )
+
+
+def test_re_run_experiment_blocked_routes_to_escalate_stop(recipe):
+    """BLOCKED verdict must route to escalate_stop."""
+    step = recipe.steps["re_run_experiment"]
+    conditions = step.on_result.conditions
+    blocked = next(
+        (c for c in conditions if c.when and "BLOCKED" in c.when),
+        None,
+    )
+    assert blocked is not None, "re_run_experiment on_result must have a BLOCKED verdict condition"
+    assert blocked.route == "escalate_stop", (
+        f"BLOCKED must route to escalate_stop, got {blocked.route}"
+    )
+
+
+def test_re_run_experiment_inconclusive_routes_to_re_push_research(recipe):
+    """INCONCLUSIVE verdict must route to re_push_research."""
+    step = recipe.steps["re_run_experiment"]
+    conditions = step.on_result.conditions
+    inconclusive = next(
+        (c for c in conditions if c.when and "INCONCLUSIVE" in c.when),
+        None,
+    )
+    assert inconclusive is not None, (
+        "re_run_experiment on_result must have an INCONCLUSIVE verdict condition"
+    )
+    assert inconclusive.route == "re_push_research", (
+        f"INCONCLUSIVE must route to re_push_research, got {inconclusive.route}"
+    )
+
+
+REVIEW_RECIPE_PATH = builtin_recipes_dir() / "research-review.yaml"
+
+
+@pytest.fixture(scope="module")
+def review_recipe():
+    return load_recipe(REVIEW_RECIPE_PATH)
+
+
+def test_review_re_run_experiment_uses_verdict_routing(review_recipe):
+    """research-review re_run_experiment must use on_result, not on_success."""
+    step = review_recipe.steps["re_run_experiment"]
+    assert step.on_result is not None, (
+        "re_run_experiment in research-review must have on_result block"
+    )
+    assert step.on_success is None, "re_run_experiment in research-review must not use on_success"
+
+
+def test_review_re_run_experiment_conclusive_routes_to_re_generate_report(review_recipe):
+    """CONCLUSIVE verdict must route to re_generate_report in research-review."""
+    step = review_recipe.steps["re_run_experiment"]
+    conditions = step.on_result.conditions
+    conclusive = next(
+        (c for c in conditions if c.when and "CONCLUSIVE" in c.when),
+        None,
+    )
+    assert conclusive is not None, (
+        "re_run_experiment in research-review must have a CONCLUSIVE verdict condition"
+    )
+    assert conclusive.route == "re_generate_report", (
+        f"CONCLUSIVE must route to re_generate_report, got {conclusive.route}"
+    )
+
+
+def test_review_re_run_experiment_blocked_routes_to_escalate_stop(review_recipe):
+    """BLOCKED verdict must route to escalate_stop in research-review."""
+    step = review_recipe.steps["re_run_experiment"]
+    conditions = step.on_result.conditions
+    blocked = next(
+        (c for c in conditions if c.when and "BLOCKED" in c.when),
+        None,
+    )
+    assert blocked is not None, (
+        "re_run_experiment in research-review must have a BLOCKED verdict condition"
+    )
+    assert blocked.route == "escalate_stop", (
+        f"BLOCKED must route to escalate_stop, got {blocked.route}"
+    )
+
+
+def test_review_re_run_experiment_inconclusive_routes_to_re_push_research(review_recipe):
+    """INCONCLUSIVE verdict must route to re_push_research in research-review."""
+    step = review_recipe.steps["re_run_experiment"]
+    conditions = step.on_result.conditions
+    inconclusive = next(
+        (c for c in conditions if c.when and "INCONCLUSIVE" in c.when),
+        None,
+    )
+    assert inconclusive is not None, (
+        "re_run_experiment in research-review must have an INCONCLUSIVE verdict condition"
+    )
+    assert inconclusive.route == "re_push_research", (
+        f"INCONCLUSIVE must route to re_push_research, got {inconclusive.route}"
+    )

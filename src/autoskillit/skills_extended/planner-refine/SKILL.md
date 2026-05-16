@@ -135,15 +135,16 @@ Manual inspection of wp_manifest.json required.
 ```
 Write this to stdout. Do NOT attempt ID renaming.
 
-**DAG cycles** — escalate:
-- Findings matching `Cycle detected among WPs: ...` indicate a circular dependency in the
-  WP graph. Resolving cycles requires semantic understanding of the plan structure.
-```
-CRITICAL: Cannot auto-fix DAG cycle:
-- {finding text}
-Manual restructuring of depends_on relationships required.
-```
-Write this to stdout. Do NOT attempt cycle-breaking.
+**DAG cycles** — break 2-node mutual cycles; escalate larger:
+- If finding contains `cycle_size: 2` and `cycle_edges`:
+  - Identify the two WP IDs and their mutual dependency edges
+  - Remove the `depends_on` entry from the **higher-numbered WP** (lexicographic sort
+    of WP IDs — e.g., P1-A1-WP2 > P1-A1-WP1, so remove P1-A1-WP1 from P1-A1-WP2's deps)
+  - Update the WP's `_result.json` and `dep_graph.json` if it exists
+  - Count this toward `issues_fixed`
+- If finding contains `cycle_size: 3` or higher (or no `cycle_edges`):
+  - Escalate as CRITICAL (same as before)
+  - Do NOT attempt cycle-breaking for 3+ node cycles
 
 ### Step 4: Write corrected artifacts
 

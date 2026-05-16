@@ -27,6 +27,7 @@ Skill SKILL.md content compliance, placeholder contracts, and verdict guard test
 | `test_phase2_skills.py` | Phase 2 tests: open-kitchen and close-kitchen SKILL.md files |
 | `test_plan_experiment_schema_contracts.py` | Contract tests: plan-experiment YAML frontmatter schema and revision_guidance argument |
 | `test_planner_extract_domain.py` | Planner extract domain tests |
+| `test_planner_refine_cycle_breaking.py` | Tests for planner-refine SKILL.md 2-node cycle-breaking documentation |
 | `test_planner_skill_contracts.py` | Planner skill contract tests |
 | `test_project_local_audit_skill_content.py` | Tests for project-local audit skill content |
 | `test_promote_split_contracts.py` | Contract tests verifying the promote-to-main / review-promotion split |

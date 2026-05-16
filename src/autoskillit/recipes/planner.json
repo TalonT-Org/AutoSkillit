@@ -412,6 +412,9 @@
         "cwd": "${{ inputs.source_dir }}",
         "output_dir": "${{ context.planner_dir }}"
       },
+      "capture": {
+        "issues_fixed_count": "${{ result.issues_fixed }}"
+      },
       "retries": 2,
       "on_success": "check_refine_loop",
       "on_exhausted": "escalate_stop",
@@ -420,14 +423,21 @@
     "check_refine_loop": {
       "tool": "run_python",
       "with": {
-        "callable": "autoskillit.smoke_utils.check_loop_iteration",
+        "callable": "autoskillit.smoke_utils.check_loop_with_progress",
         "current_iteration": "${{ context.refine_loop_count }}",
-        "max_iterations": "5"
+        "max_iterations": "5",
+        "issues_fixed_count": "${{ context.issues_fixed_count }}",
+        "prev_issues_fixed_count": "${{ context.prev_issues_fixed_count }}"
       },
       "capture": {
-        "refine_loop_count": "${{ result.next_iteration }}"
+        "refine_loop_count": "${{ result.next_iteration }}",
+        "prev_issues_fixed_count": "${{ result.prev_issues_fixed_count }}"
       },
       "on_result": [
+        {
+          "when": "${{ result.zero_progress }} == true",
+          "route": "escalate_stop"
+        },
         {
           "when": "${{ result.max_exceeded }} == true",
           "route": "escalate_stop"
@@ -438,9 +448,10 @@
       ],
       "on_failure": "escalate_stop",
       "optional_context_refs": [
-        "refine_loop_count"
-      ],
-      "note": "Guards the validate → check_verdict → refine cycle. Caps at 5 refinement iterations. If the plan still fails validation after 5 refinements, escalates to human.\n"
+        "refine_loop_count",
+        "issues_fixed_count",
+        "prev_issues_fixed_count"
+      ]
     },
     "compile": {
       "tool": "run_python",

@@ -224,6 +224,45 @@ def check_loop_iteration(
     }
 
 
+def check_loop_with_progress(
+    current_iteration: str = "",
+    max_iterations: str = "5",
+    issues_fixed_count: str = "",
+    prev_issues_fixed_count: str = "",
+) -> dict[str, str]:
+    """Progress-aware loop iteration guard.
+
+    Extends check_loop_iteration with zero-progress detection: if
+    issues_fixed_count == "0" for two consecutive iterations (current and
+    previous), returns zero_progress="true" for early-exit routing.
+    """
+    current_iteration = current_iteration or ""
+    max_iterations = max_iterations or ""
+    issues_fixed_count = issues_fixed_count or ""
+    prev_issues_fixed_count = prev_issues_fixed_count or ""
+
+    try:
+        iteration = int(current_iteration.strip()) if current_iteration.strip() else 0
+    except ValueError as exc:
+        raise ValueError(f"current_iteration must be numeric, got: {current_iteration!r}") from exc
+    next_iteration = iteration + 1
+    try:
+        max_iter = int(max_iterations.strip()) if max_iterations.strip() else 5
+    except ValueError as exc:
+        raise ValueError(f"max_iterations must be numeric, got: {max_iterations!r}") from exc
+
+    current_fixed = issues_fixed_count.strip()
+    prev_fixed = prev_issues_fixed_count.strip()
+    zero_progress = current_fixed == "0" and prev_fixed == "0"
+
+    return {
+        "next_iteration": str(next_iteration),
+        "max_exceeded": "true" if next_iteration >= max_iter else "false",
+        "zero_progress": "true" if zero_progress else "false",
+        "prev_issues_fixed_count": current_fixed,
+    }
+
+
 def patch_pr_token_summary(
     pr_url: str,
     cwd: str = "",

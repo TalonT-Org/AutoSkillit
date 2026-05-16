@@ -168,8 +168,6 @@ def _find_mermaid_assets() -> tuple[Path | None, str]:
 
 def main() -> None:
     if len(sys.argv) < 3:
-        sys.stdout.write("html_path = \n")
-        sys.stdout.flush()
         sys.exit(1)
 
     research_dir = Path(sys.argv[1])
@@ -179,8 +177,6 @@ def main() -> None:
     viz_plan_path = sys.argv[4] if len(sys.argv) > 4 else ""
 
     if not report_path.exists():
-        sys.stdout.write("html_path = \n")
-        sys.stdout.flush()
         sys.exit(1)
 
     validated_diagrams = _validate_diagram_paths(all_diagram_paths)

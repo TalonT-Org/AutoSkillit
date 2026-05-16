@@ -109,3 +109,42 @@ def test_plugins_graceful_on_corrupt_json(monkeypatch, tmp_path):
     monkeypatch.setattr(mod.Path, "home", classmethod(lambda cls: tmp_path))
     result = collect_version_snapshot()
     assert result["plugins"] == []
+
+
+def test_claude_code_version_skipped_for_codex_backend(monkeypatch):
+    import autoskillit.core._version_snapshot as mod
+
+    monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "codex")
+    sentinel = object()
+    monkeypatch.setattr(mod.subprocess, "run", lambda *a, **kw: sentinel)
+    result = collect_version_snapshot()
+    assert result["claude_code_version"] == ""
+
+
+def test_plugins_skipped_for_codex_backend(monkeypatch, tmp_path):
+    import autoskillit.core._version_snapshot as mod
+
+    monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "codex")
+    plugins_dir = tmp_path / ".claude" / "plugins"
+    plugins_dir.mkdir(parents=True)
+    plugin_data = {"version": 2, "plugins": {"some-ref": [{"version": "1.0"}]}}
+    (plugins_dir / "installed_plugins.json").write_text(json.dumps(plugin_data), encoding="utf-8")
+    monkeypatch.setattr(mod.Path, "home", classmethod(lambda cls: tmp_path))
+    result = collect_version_snapshot()
+    assert result["plugins"] == []
+
+
+def test_subprocess_path_exercised_without_backend_env(monkeypatch):
+    import autoskillit.core._version_snapshot as mod
+
+    monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
+    called = []
+
+    def _fake_run(*args, **kwargs):
+        called.append(args)
+        raise FileNotFoundError("claude not found")
+
+    monkeypatch.setattr(mod.subprocess, "run", _fake_run)
+    result = collect_version_snapshot()
+    assert result["claude_code_version"] == ""
+    assert len(called) == 1

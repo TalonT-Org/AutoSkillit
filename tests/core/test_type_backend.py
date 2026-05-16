@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import typing
 
 import pytest
 
@@ -45,9 +46,10 @@ def test_backend_capabilities_field_count():
     from autoskillit.core import BackendCapabilities
 
     fields = dataclasses.fields(BackendCapabilities)
+    hints = typing.get_type_hints(BackendCapabilities)
     assert len(fields) == 8
-    bool_fields = [f for f in fields if f.type == "bool"]
-    frozenset_fields = [f for f in fields if f.type == "frozenset[str]"]
+    bool_fields = [f for f in fields if hints[f.name] is bool]
+    frozenset_fields = [f for f in fields if hints[f.name] == frozenset[str]]
     assert len(bool_fields) == 6
     assert len(frozenset_fields) == 2
 
@@ -89,6 +91,7 @@ def test_no_autoskillit_imports():
     from autoskillit.core import paths
 
     backend_path = paths.pkg_root() / "core" / "types" / "_type_backend.py"
+    assert backend_path.exists(), f"Source file not found: {backend_path}"
     source = backend_path.read_text()
     for line in source.splitlines():
         stripped = line.strip()

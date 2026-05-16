@@ -890,16 +890,14 @@ def test_merge_refined_assignments_writes_to_planner_dir(tmp_path):
     assert expected.exists()
 
 
-def test_merge_tier_results_skips_non_assignment_files(tmp_path):
-    """Canonical assignment files are merged; non-canonical files raise an error instead."""
+def test_merge_tier_results_merges_canonical_assignment_files(tmp_path):
+    """Canonical assignment files are merged into combined output successfully."""
     from tests.planner.conftest import make_assignment_result
 
     assign_dir = tmp_path / "assignments"
     assign_dir.mkdir()
     out = tmp_path / "combined.json"
 
-    # Only canonical assignment files — non-canonical files (e.g. phase files in
-    # assignments dir) now cause merge_tier_results to raise instead of silently skipping
     write_json(
         assign_dir / "P1-A1_result.json",
         make_assignment_result(1, 1),
@@ -965,7 +963,7 @@ def test_write_refine_contexts_detects_missing_expected_phases(tmp_path: Path) -
     ]
     expected_phase_ids = frozenset({"P1", "P2", "P3"})
 
-    with pytest.raises(ValueError, match="P2|P3"):
+    with pytest.raises(ValueError, match=r"P[23].*have no merged assignments"):
         _write_refine_contexts(
             tmp_path,
             assignments,

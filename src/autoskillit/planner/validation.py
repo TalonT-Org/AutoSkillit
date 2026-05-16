@@ -49,7 +49,7 @@ _NEGATION_PREFIX_RE: re.Pattern[str] = re.compile(
 
 
 def _iter_tier_files(directory: Path, filename_re: re.Pattern[str]) -> Iterator[Path]:
-    """Yield *_result.json files whose names match the tier's naming convention."""
+    """Yield *_result.json files matching ``tier_re``; raises ValueError on non-canonical names."""
     yield from collect_tier_result_files(directory, filename_re)
 
 

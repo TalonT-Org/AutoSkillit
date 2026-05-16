@@ -495,7 +495,7 @@ async def test_triage_command_includes_format_required_flags(
 
 @pytest.mark.anyio
 async def test_triage_env_excludes_ide_vars(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """triage_staleness must route env through build_claude_env() — no IDE leak."""
+    """triage_staleness must route env through build_agent_env() — no IDE leak."""
     from unittest.mock import AsyncMock
 
     from autoskillit._llm_triage import triage_staleness

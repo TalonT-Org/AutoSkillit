@@ -24,7 +24,7 @@ from autoskillit.core import (
     ResumeSpec,
     SessionCheckpoint,  # noqa: F401, TC001
     ValidatedAddDir,
-    build_claude_env,
+    build_agent_env,
     extract_skill_name,
     temp_dir_display_str,
 )
@@ -35,7 +35,7 @@ class ClaudeInteractiveCmd:
     """Resolved argv + env for a claude interactive subprocess.
 
     ``env`` is the fully resolved environment returned by
-    :func:`build_claude_env` — pass directly to ``subprocess.run(env=...)``.
+    :func:`build_agent_env` — pass directly to ``subprocess.run(env=...)``.
     Callers must NOT merge in ``os.environ`` again; the sanitization layer
     has already applied the denylist and the auto-connect suppressor.
     """
@@ -49,7 +49,7 @@ class ClaudeHeadlessCmd:
     """Resolved argv + env for a claude headless subprocess.
 
     ``env`` is the fully resolved environment returned by
-    :func:`build_claude_env`, including any headless-only extras such as
+    :func:`build_agent_env`, including any headless-only extras such as
     ``AUTOSKILLIT_HEADLESS=1``. Pass directly to the subprocess runner.
     """
 
@@ -126,9 +126,7 @@ def build_interactive_cmd(
     merged: dict[str, str] = dict(_SESSION_BASELINE_ENV)
     if env_extras:
         merged.update(env_extras)
-    return ClaudeInteractiveCmd(
-        cmd=cmd, env=build_claude_env(extras=merged, required=required_env)
-    )
+    return ClaudeInteractiveCmd(cmd=cmd, env=build_agent_env(extras=merged, required=required_env))
 
 
 def build_headless_cmd(
@@ -142,7 +140,7 @@ def build_headless_cmd(
     cmd = ["claude", ClaudeFlags.PRINT, prompt, ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS]
     if model:
         cmd += [ClaudeFlags.MODEL, model]
-    return ClaudeHeadlessCmd(cmd=cmd, env=build_claude_env(base=base, extras=env_extras))
+    return ClaudeHeadlessCmd(cmd=cmd, env=build_agent_env(base=base, extras=env_extras))
 
 
 # Injected into every AutoSkillit-launched headless and cook session.
@@ -169,7 +167,7 @@ _SESSION_BASELINE_ENV: Mapping[str, str] = MappingProxyType(
 # MAX_MCP_OUTPUT_TOKENS also overlap with IDE_ENV_DENYLIST in
 # core/_claude_env.py. AUTOSKILLIT_SESSION_TYPE, AUTOSKILLIT_CAMPAIGN_ID, and
 # AUTOSKILLIT_PROVIDER_PROFILE overlap with AUTOSKILLIT_PRIVATE_ENV_VARS
-# (scrubbed by build_claude_env).
+# (scrubbed by build_agent_env).
 # All lists must be kept in sync when adding new exclusive variables.
 _HEADLESS_EXCLUSIVE_VARS: frozenset[str] = frozenset(
     {
@@ -232,7 +230,7 @@ def build_headless_resume_cmd(
     merged: dict[str, str] = dict(_SESSION_BASELINE_ENV)
     if env_extras:
         merged.update(env_extras)
-    return ClaudeHeadlessCmd(cmd=cmd, env=build_claude_env(base={}, extras=merged))
+    return ClaudeHeadlessCmd(cmd=cmd, env=build_agent_env(base={}, extras=merged))
 
 
 def _ensure_skill_prefix(skill_command: str, *, provider_profile: str = "") -> str:

@@ -1,7 +1,7 @@
-"""Canonical env builder for claude-launching subprocesses.
+"""Canonical env builder for agent subprocesses.
 
 Every subprocess that invokes the ``claude`` CLI must route its environment
-through :func:`build_claude_env` so that host-process IDE state (VS Code,
+through :func:`build_agent_env` so that host-process IDE state (VS Code,
 Cursor, Zed, JetBrains, Neovim bridges) cannot leak across the trust
 boundary and silently widen the child's tool surface.
 
@@ -68,13 +68,13 @@ IDE_ENV_ALWAYS_EXTRAS: Mapping[str, str] = MappingProxyType(
 )
 
 
-def build_claude_env(
+def build_agent_env(
     base: Mapping[str, str] | None = None,
     *,
     extras: Mapping[str, str] | None = None,
     required: frozenset[str] | None = None,
 ) -> Mapping[str, str]:
-    """Return a scrubbed, sealed env dict suitable for a claude subprocess.
+    """Return a scrubbed, sealed env dict suitable for an agent subprocess.
 
     Parameters
     ----------
@@ -113,3 +113,6 @@ def build_claude_env(
         if missing:
             raise ValueError(f"Required env vars missing from session env: {sorted(missing)}")
     return MappingProxyType(out)
+
+
+build_claude_env = build_agent_env

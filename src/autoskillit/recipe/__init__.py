@@ -113,6 +113,7 @@ from autoskillit.recipe.rules import rules_graph as _rules_graph  # noqa: E402 F
 from autoskillit.recipe.rules import rules_inline_script as _rules_inline_script  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_inputs as _rules_inputs  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_isolation as _rules_isolation  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_loop_progress as _rules_loop_progress  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_merge as _rules_merge  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_merge_queue as _rules_merge_queue  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_packs as _rules_packs  # noqa: E402 F401

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import warnings
 from pathlib import Path
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, NotRequired, TypedDict
 
 import regex as re
 
@@ -149,6 +149,9 @@ class ValidationFinding(TypedDict):
     message: str
     severity: Literal["error", "warning"]
     check: str
+    cycle_size: NotRequired[int]
+    cycle_nodes: NotRequired[list[str]]
+    cycle_edges: NotRequired[list[list[str]]]
 
 
 _PHASE_ID_RE = re.compile(r"^P\d+$")

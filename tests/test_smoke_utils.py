@@ -11,6 +11,7 @@ from autoskillit.smoke_utils import (
     annotate_pr_diff,
     check_bug_report_non_empty,
     check_loop_iteration,
+    check_loop_with_progress,
     check_review_loop,
     enrich_diff_context,
     patch_pr_token_summary,
@@ -281,6 +282,64 @@ def test_check_loop_iteration_defaults() -> None:
     """No arguments → iteration=0, max=2 → next=1, max_exceeded=false."""
     result = check_loop_iteration()
     assert result == {"next_iteration": "1", "max_exceeded": "false"}
+
+
+# ---------------------------------------------------------------------------
+# T_SU_CL1–T_SU_CL4: check_loop_with_progress tests (progress-aware loop guard)
+# ---------------------------------------------------------------------------
+
+
+def test_check_loop_with_progress_zero_progress_first_iteration() -> None:
+    """First zero-progress iteration returns zero_progress=false (needs 2 consecutive)."""
+    result = check_loop_with_progress(
+        current_iteration="1",
+        max_iterations="5",
+        issues_fixed_count="0",
+        prev_issues_fixed_count="",
+    )
+    assert result["zero_progress"] == "false"
+    assert result["next_iteration"] == "2"
+    assert result["max_exceeded"] == "false"
+
+
+def test_check_loop_with_progress_two_consecutive_zero() -> None:
+    """Two consecutive zero-progress iterations returns zero_progress=true."""
+    result = check_loop_with_progress(
+        current_iteration="2",
+        max_iterations="5",
+        issues_fixed_count="0",
+        prev_issues_fixed_count="0",
+    )
+    assert result["zero_progress"] == "true"
+    assert result["next_iteration"] == "3"
+    assert result["max_exceeded"] == "false"
+
+
+def test_check_loop_with_progress_progress_after_zero() -> None:
+    """Progress after a zero-progress iteration resets the detection."""
+    result = check_loop_with_progress(
+        current_iteration="2",
+        max_iterations="5",
+        issues_fixed_count="3",
+        prev_issues_fixed_count="0",
+    )
+    assert result["zero_progress"] == "false"
+    assert result["next_iteration"] == "3"
+    assert result["max_exceeded"] == "false"
+
+
+def test_check_loop_with_progress_propagates_prev_count() -> None:
+    """zero_progress=false on first call propagates current as prev."""
+    result = check_loop_with_progress(
+        current_iteration="1",
+        max_iterations="5",
+        issues_fixed_count="2",
+        prev_issues_fixed_count="",
+    )
+    assert result["prev_issues_fixed_count"] == "2"
+    assert result["zero_progress"] == "false"
+    assert result["next_iteration"] == "2"
+    assert result["max_exceeded"] == "false"
 
 
 def test_subprocess_calls_have_timeout() -> None:

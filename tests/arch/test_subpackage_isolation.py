@@ -697,7 +697,10 @@ def test_no_subpackage_exceeds_10_files() -> None:
         rule enforcing scoped directory arguments for file-discovering callables,
         bringing the rules/ count to 29. rules/rules_remediation.py adds the
         audit-impl-remediation-route rule ensuring remediation_path captures have
-        non-terminal non-GO routes, bringing the rules/ count to 30. Exempt at 48 files.
+        non-terminal non-GO routes, bringing the rules/ count to 30.
+        rules/rules_loop_progress.py adds the loop-body-uncaptured-output rule
+        ensuring run_skill steps inside routing cycles capture declared outputs,
+        bringing the rules/ count to 31. Exempt at 48 files.
       execution/ — REQ-CNST-003-E3: execution/ decomposes process lifecycle into
         focused single-concern modules (_process_io, _process_kill, _process_race,
         etc.) that cannot be merged without re-introducing the coupling they isolate.
@@ -812,7 +815,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "hooks": 10,
         "pipeline": 12,
         "fleet": 15,
-        "recipe/rules": 31,
+        "recipe/rules": 32,
         "server/tools": 18,
         "hooks/guards": 22,
     }

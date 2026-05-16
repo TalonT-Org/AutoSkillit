@@ -204,11 +204,33 @@ def _check_dag_acyclic(wp_results: dict[str, dict]) -> list[ValidationFinding]:
 
     if len(sorted_nodes) < len(wp_results):
         cycle_nodes = [n for n in wp_results if n not in set(sorted_nodes)]
+
+        if len(cycle_nodes) == 2:
+            a, b = sorted(cycle_nodes)
+            a_deps = set(wp_results.get(a, {}).get("depends_on", []))
+            b_deps = set(wp_results.get(b, {}).get("depends_on", []))
+            if b in a_deps and a in b_deps:
+                return [
+                    {
+                        "message": f"Cycle detected among WPs: {a}, {b}",
+                        "severity": "error",
+                        "check": "dag_acyclic",
+                        "cycle_size": 2,
+                        "cycle_nodes": [a, b],
+                        "cycle_edges": [[a, b], [b, a]],
+                    }
+                ]
+        # 3+ node or non-mutual 2-node cycles omit cycle_edges — key absence is the
+        # contract signal for planner-refine to escalate rather than auto-fix (see
+        # planner-refine SKILL.md: "If finding contains cycle_size: 3 or higher (or no
+        # cycle_edges): Escalate as CRITICAL").
         return [
             {
                 "message": f"Cycle detected among WPs: {', '.join(sorted(cycle_nodes))}",
                 "severity": "error",
                 "check": "dag_acyclic",
+                "cycle_size": len(cycle_nodes),
+                "cycle_nodes": cycle_nodes,
             }
         ]
     return []

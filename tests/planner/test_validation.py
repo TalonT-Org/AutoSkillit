@@ -9,6 +9,7 @@ import pytest
 
 from autoskillit.planner.schema import DELIVERABLE_BOUNDS
 from autoskillit.planner.validation import (
+    _check_dag_acyclic,
     _check_duplicate_deliverables,
     _check_sizing_bounds,
     _iter_tier_files,
@@ -727,3 +728,39 @@ def test_validate_plan_raises_on_non_canonical_wp_file(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="excluded"):
         validate_plan(str(tmp_path))
+
+
+# ---------------------------------------------------------------------------
+# DAG cycle decomposition tests
+# ---------------------------------------------------------------------------
+
+
+def test_check_dag_acyclic_decomposes_2_node_cycle() -> None:
+    """2-node mutual cycles are reported with cycle_size=2 and edges."""
+    wp_results = {
+        "P1-A1-WP1": {"depends_on": ["P1-A1-WP2"]},
+        "P1-A1-WP2": {"depends_on": ["P1-A1-WP1"]},
+        "P1-A1-WP3": {"depends_on": []},
+    }
+    findings = _check_dag_acyclic(wp_results)
+    assert len(findings) == 1
+    assert findings[0]["cycle_size"] == 2
+    assert set(findings[0]["cycle_nodes"]) == {"P1-A1-WP1", "P1-A1-WP2"}
+    assert set(map(tuple, findings[0]["cycle_edges"])) == {
+        ("P1-A1-WP1", "P1-A1-WP2"),
+        ("P1-A1-WP2", "P1-A1-WP1"),
+    }
+
+
+def test_check_dag_acyclic_3_node_cycle_no_edges() -> None:
+    """3+ node cycles report cycle_size and cycle_nodes but no edges (not safe to auto-fix)."""
+    wp_results = {
+        "P1-A1-WP1": {"depends_on": ["P1-A1-WP3"]},
+        "P1-A1-WP2": {"depends_on": ["P1-A1-WP1"]},
+        "P1-A1-WP3": {"depends_on": ["P1-A1-WP2"]},
+    }
+    findings = _check_dag_acyclic(wp_results)
+    assert len(findings) == 1
+    assert findings[0]["cycle_size"] == 3
+    assert set(findings[0]["cycle_nodes"]) == {"P1-A1-WP1", "P1-A1-WP2", "P1-A1-WP3"}
+    assert "cycle_edges" not in findings[0]

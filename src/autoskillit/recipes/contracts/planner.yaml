@@ -1,4 +1,4 @@
-recipe_source_hash: sha256:01932623ed3af6c63f5034f5063b8df7d93a06045141330400f580e15e327773
+recipe_source_hash: sha256:17ffec6676f0d038086ac0b23e94add65edce5e0a68178ea8287c33517aeff61
 bundled_manifest_version: 0.1.0
 skill_hashes: {}
 skills:
@@ -232,9 +232,17 @@ skills:
     write_behavior: always
   planner-refine:
     inputs: []
-    outputs: []
+    outputs:
+    - name: issues_fixed
+      type: string
+    - name: refinement_complete
+      type: string
     expected_output_patterns: []
-    pattern_examples: []
+    pattern_examples:
+    - 'refinement_complete = true
+
+      issues_fixed = 3'
+    write_behavior: always
 dataflow:
 - step: init
   available:
@@ -721,7 +729,8 @@ dataflow:
   - verdict
   - wp_context_paths
   required: []
-  produced: []
+  produced:
+  - issues_fixed_count
   positional_args: 1
 - step: check_refine_loop
   available:
@@ -730,6 +739,7 @@ dataflow:
   - combined_phases_path
   - combined_wps_path
   - consolidated_wps_path
+  - issues_fixed_count
   - phase_ids
   - phase_manifest_path
   - plan_snapshot_path
@@ -749,6 +759,7 @@ dataflow:
   required: []
   produced:
   - refine_loop_count
+  - prev_issues_fixed_count
 - step: compile
   available:
   - alignment_findings_path
@@ -756,11 +767,13 @@ dataflow:
   - combined_phases_path
   - combined_wps_path
   - consolidated_wps_path
+  - issues_fixed_count
   - phase_ids
   - phase_manifest_path
   - plan_snapshot_path
   - planner_assess_review_approach
   - planner_dir
+  - prev_issues_fixed_count
   - refine_context_paths
   - refine_loop_count
   - refined_assignments_path
@@ -782,11 +795,13 @@ dataflow:
   - combined_phases_path
   - combined_wps_path
   - consolidated_wps_path
+  - issues_fixed_count
   - phase_ids
   - phase_manifest_path
   - plan_snapshot_path
   - planner_assess_review_approach
   - planner_dir
+  - prev_issues_fixed_count
   - refine_context_paths
   - refine_loop_count
   - refined_assignments_path
@@ -808,11 +823,13 @@ dataflow:
   - combined_phases_path
   - combined_wps_path
   - consolidated_wps_path
+  - issues_fixed_count
   - phase_ids
   - phase_manifest_path
   - plan_snapshot_path
   - planner_assess_review_approach
   - planner_dir
+  - prev_issues_fixed_count
   - refine_context_paths
   - refine_loop_count
   - refined_assignments_path

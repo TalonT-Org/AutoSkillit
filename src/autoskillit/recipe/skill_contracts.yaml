@@ -2016,7 +2016,14 @@ skills:
     outputs: []
   planner-refine:
     inputs: []
-    outputs: []
+    outputs:
+      - name: issues_fixed
+        type: string
+      - name: refinement_complete
+        type: string
+    pattern_examples:
+      - "refinement_complete = true\nissues_fixed = 3"
+    write_behavior: always
   planner-refine-phases:
     inputs:
       - name: combined_plan_path
@@ -2222,6 +2229,29 @@ callable_contracts:
     - name: next_iteration
       type: str
     - name: max_exceeded
+      type: str
+  autoskillit.smoke_utils.check_loop_with_progress:
+    inputs:
+    - name: current_iteration
+      type: str
+      required: false
+    - name: max_iterations
+      type: str
+      required: false
+    - name: issues_fixed_count
+      type: str
+      required: false
+    - name: prev_issues_fixed_count
+      type: str
+      required: false
+    outputs:
+    - name: next_iteration
+      type: str
+    - name: max_exceeded
+      type: str
+    - name: zero_progress
+      type: str
+    - name: prev_issues_fixed_count
       type: str
   autoskillit.smoke_utils.check_review_loop:
     inputs:

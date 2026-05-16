@@ -31,6 +31,7 @@ Semantic validation rule modules for recipe analysis (31 rule files).
 | `rules_remediation.py` | audit-impl remediation_path capture must have non-terminal non-GO route |
 | `rules_recipe.py` | Sub-recipe reference validity and `with_args` hygiene |
 | `rules_route_gate.py` | Route gate shared-stop detection; fallback and primary path convergence |
+| `rules_loop_progress.py` | Loop progress tracking: run_skill steps in cycles must capture declared outputs |
 | `rules_skill_content.py` | Undefined bash placeholder detection in SKILL.md |
 | `rules_skills.py` | `skill_command` resolvability rules |
 | `rules_temp_path.py` | Rejects bare `{{AUTOSKILLIT_TEMP}}/` without scope prefix |

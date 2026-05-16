@@ -326,10 +326,7 @@ class TestRunDoctorBackendWiring:
             return [DoctorResult(Severity.OK, "stale_mcp_servers", "captured")]
 
         with patch("autoskillit.cli.doctor._check_stale_mcp_servers", side_effect=_capture_stale):
-            try:
-                run_doctor()
-            except Exception:
-                pass
+            run_doctor()
 
         assert captured_backends == ["aider"]
 

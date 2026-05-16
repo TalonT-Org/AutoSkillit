@@ -422,3 +422,7 @@ class ProvidersConfig:
 @dataclass
 class AgentBackendConfig:
     backend: str = "claude-code"
+
+    def __post_init__(self) -> None:
+        if not self.backend:
+            raise ValueError("backend must not be empty")

@@ -134,10 +134,19 @@ async def _apply_triage_gate(
     if _ctx is None or _ctx.recipes is None:
         return result
 
+    import functools
+
     from autoskillit._llm_triage import triage_staleness
 
+    agent_backend = _ctx.config.agent_backend.backend
+
+    if agent_backend == "claude-code":
+        triage_fn = functools.partial(triage_staleness, agent_backend=agent_backend)
+    else:
+        triage_fn = None
+
     return await _ctx.recipes.apply_triage_gate(
-        result, name, recipe_info, _ctx.temp_dir, logger, triage_fn=triage_staleness
+        result, name, recipe_info, _ctx.temp_dir, logger, triage_fn=triage_fn
     )
 
 

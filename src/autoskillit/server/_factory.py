@@ -215,49 +215,63 @@ def make_context(
         runner = DefaultSubprocessRunner()
 
     if runner is not None and os.environ.get(REPLAY_SCENARIO_ENV):
-        replay_dir = os.environ.get(REPLAY_SCENARIO_DIR_ENV, "")
-        if not replay_dir:
+        if config.agent_backend.backend != "claude-code":
             logger.warning(
-                "REPLAY_SCENARIO is set but REPLAY_SCENARIO_DIR is empty — skipping replay"
-            )
-        elif not os.path.isdir(replay_dir):
-            logger.warning(
-                "REPLAY_SCENARIO_DIR=%r is not an existing directory — skipping replay",
-                replay_dir,
+                "REPLAY_SCENARIO is set but agent_backend=%r is not claude-code "
+                "— skipping replay runner construction",
+                config.agent_backend.backend,
             )
         else:
-            runner = build_replay_runner(replay_dir)
-
-    elif runner is not None and os.environ.get(RECORD_SCENARIO_ENV):
-        scenario_dir = os.environ.get(RECORD_SCENARIO_DIR_ENV, "")
-        recipe_name = os.environ.get(RECORD_SCENARIO_RECIPE_ENV, "unknown")
-        if scenario_dir:
-            if not os.path.isdir(scenario_dir):
+            replay_dir = os.environ.get(REPLAY_SCENARIO_DIR_ENV, "")
+            if not replay_dir:
                 logger.warning(
-                    "RECORD_SCENARIO_DIR=%r is not an existing directory — skipping recording",
-                    scenario_dir,
+                    "REPLAY_SCENARIO is set but REPLAY_SCENARIO_DIR is empty — skipping replay"
+                )
+            elif not os.path.isdir(replay_dir):
+                logger.warning(
+                    "REPLAY_SCENARIO_DIR=%r is not an existing directory — skipping replay",
+                    replay_dir,
                 )
             else:
-                try:
-                    from api_simulator.claude import make_scenario_recorder
-                except ImportError:
+                runner = build_replay_runner(replay_dir)
+
+    elif runner is not None and os.environ.get(RECORD_SCENARIO_ENV):
+        if config.agent_backend.backend != "claude-code":
+            logger.warning(
+                "RECORD_SCENARIO is set but agent_backend=%r is not claude-code "
+                "— skipping record runner construction",
+                config.agent_backend.backend,
+            )
+        else:
+            scenario_dir = os.environ.get(RECORD_SCENARIO_DIR_ENV, "")
+            recipe_name = os.environ.get(RECORD_SCENARIO_RECIPE_ENV, "unknown")
+            if scenario_dir:
+                if not os.path.isdir(scenario_dir):
                     logger.warning(
-                        "RECORD_SCENARIO is set but 'api_simulator' is not installed "
-                        "— skipping recording"
+                        "RECORD_SCENARIO_DIR=%r is not an existing directory — skipping recording",
+                        scenario_dir,
                     )
-                    make_scenario_recorder = None  # type: ignore[assignment]
+                else:
+                    try:
+                        from api_simulator.claude import make_scenario_recorder
+                    except ImportError:
+                        logger.warning(
+                            "RECORD_SCENARIO is set but 'api_simulator' is not installed "
+                            "— skipping recording"
+                        )
+                        make_scenario_recorder = None  # type: ignore[assignment]
 
-                if make_scenario_recorder is not None:
-                    from autoskillit.execution import RecordingSubprocessRunner
+                    if make_scenario_recorder is not None:
+                        from autoskillit.execution import RecordingSubprocessRunner
 
-                    recorder = make_scenario_recorder(
-                        output_dir=scenario_dir, recipe_name=recipe_name
-                    )
-                    runner = RecordingSubprocessRunner(
-                        recorder=recorder,
-                        inner=runner,
-                        scenario_dir=Path(scenario_dir),
-                    )
+                        recorder = make_scenario_recorder(
+                            output_dir=scenario_dir, recipe_name=recipe_name
+                        )
+                        runner = RecordingSubprocessRunner(
+                            recorder=recorder,
+                            inner=runner,
+                            scenario_dir=Path(scenario_dir),
+                        )
 
     # Lazy token resolution: config → GITHUB_TOKEN env var → gh CLI → None.
     # The _gh_cli_token() subprocess (up to 5s) is deferred until the first

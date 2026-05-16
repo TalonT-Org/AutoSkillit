@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
-from autoskillit.config import AutomationConfig
+from autoskillit.config import AgentBackendConfig, AutomationConfig
 from autoskillit.core.types import SkillResult, SubprocessResult, TerminationReason
 from autoskillit.execution.db import DefaultDatabaseReader
 from autoskillit.execution.github import DefaultGitHubFetcher
 from autoskillit.execution.headless import DefaultHeadlessExecutor
+from autoskillit.execution.process import DefaultSubprocessRunner
+from autoskillit.execution.recording import RecordingSubprocessRunner
 from autoskillit.execution.testing import DefaultTestRunner
 from autoskillit.migration.engine import DefaultMigrationService
 from autoskillit.pipeline.context import ToolContext
@@ -597,3 +600,30 @@ def test_minimal_ctx_fixture_gate_starts_closed(minimal_ctx) -> None:
 def test_tool_ctx_kitchen_open_fixture_gate_starts_open(tool_ctx_kitchen_open) -> None:
     """tool_ctx_kitchen_open must start with gate open."""
     assert tool_ctx_kitchen_open.gate.enabled is True
+
+
+def test_make_context_skips_replay_runner_for_non_claude_backend(monkeypatch, tmp_path):
+    monkeypatch.setenv("REPLAY_SCENARIO", "1")
+    monkeypatch.setenv("REPLAY_SCENARIO_DIR", str(tmp_path))
+    monkeypatch.delenv("RECORD_SCENARIO", raising=False)
+
+    mock_build = Mock()
+    monkeypatch.setattr("autoskillit.server._factory.build_replay_runner", mock_build)
+
+    cfg = AutomationConfig(agent_backend=AgentBackendConfig(backend="aider"))
+    ctx = make_context(cfg, plugin_dir=str(tmp_path))
+
+    assert mock_build.call_count == 0
+    assert isinstance(ctx.runner, DefaultSubprocessRunner)
+
+
+def test_make_context_skips_record_runner_for_non_claude_backend(monkeypatch, tmp_path):
+    monkeypatch.setenv("RECORD_SCENARIO", "1")
+    monkeypatch.setenv("RECORD_SCENARIO_DIR", str(tmp_path))
+    monkeypatch.delenv("REPLAY_SCENARIO", raising=False)
+
+    cfg = AutomationConfig(agent_backend=AgentBackendConfig(backend="aider"))
+    ctx = make_context(cfg, plugin_dir=str(tmp_path))
+
+    assert isinstance(ctx.runner, DefaultSubprocessRunner)
+    assert not isinstance(ctx.runner, RecordingSubprocessRunner)

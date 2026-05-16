@@ -42,6 +42,7 @@ CLI command, subcommand, and interactive workflow tests.
 | `test_food_truck_prompt.py` | Group E tests: L2 food truck prompt builder — sous-chef subset, inversions, budget guidance |
 | `test_init.py` | Tests for CLI init, config, and serve-related commands |
 | `test_input_tty_contracts.py` | Structural enforcement: every input() call in cli/ must go through timed_prompt() |
+| `test_init_helpers.py` | Unit tests for _is_plugin_installed backend guard |
 | `test_install.py` | Tests for CLI install, upgrade, and quota-related commands |
 | `test_install_info.py` | Tests for cli/_install_info.py — install classification and update policy |
 | `test_installed_plugins_file.py` | Unit tests for the InstalledPluginsFile repository |

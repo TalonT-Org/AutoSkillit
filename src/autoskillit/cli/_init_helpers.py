@@ -278,11 +278,14 @@ def _check_secret_scanning(project_dir: Path) -> _ScanResult:
     return _ScanResult(True, bypass_accepted=True)
 
 
-def _is_plugin_installed() -> bool:
+def _is_plugin_installed(*, agent_backend: str = "claude-code") -> bool:
     """Return True if autoskillit is installed as a Claude plugin.
 
     Returns False when claude CLI is not on PATH, times out, or is otherwise unavailable.
+    Non-claude-code backends return False immediately without subprocess.
     """
+    if agent_backend != "claude-code":
+        return False
     try:
         result = subprocess.run(
             ["claude", "plugin", "list"],

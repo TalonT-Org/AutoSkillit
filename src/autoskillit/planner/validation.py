@@ -23,6 +23,7 @@ from autoskillit.planner.schema import (
     PHASE_RESULT_FILE_RE,
     WP_RESULT_FILE_RE,
     ValidationFinding,
+    collect_tier_result_files,
     validate_assignment_result,
     validate_phase_result,
     validate_wp_result,
@@ -48,20 +49,8 @@ _NEGATION_PREFIX_RE: re.Pattern[str] = re.compile(
 
 
 def _iter_tier_files(directory: Path, filename_re: re.Pattern[str]) -> Iterator[Path]:
-    """Yield *_result.json files whose names match the tier's naming convention.
-
-    Raises ValueError if any *_result.json file is found that does not match
-    the expected pattern, indicating non-canonical IDs were generated upstream.
-    """
-    all_files = sorted(directory.glob("*_result.json"))
-    excluded = [f for f in all_files if not filename_re.match(f.name)]
-    if excluded:
-        names = [f.name for f in excluded[:5]]
-        raise ValueError(
-            f"Result files in {directory} excluded by {filename_re.pattern}: {names}. "
-            f"This indicates non-canonical IDs were generated upstream."
-        )
-    yield from all_files
+    """Yield *_result.json files matching ``tier_re``; raises ValueError on non-canonical names."""
+    yield from collect_tier_result_files(directory, filename_re)
 
 
 def _load_phase_results(root: Path) -> dict[str, dict]:

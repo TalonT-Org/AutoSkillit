@@ -391,18 +391,31 @@ def test_build_plan_snapshot_happy_path_two_phases_sorted(tmp_path) -> None:
     assert "P2" in result["phase_ids"]
 
 
-def test_build_plan_snapshot_corrupt_json_silently_drops_phase(tmp_path) -> None:
+def test_build_plan_snapshot_raises_on_unrecognized_result_filename(tmp_path) -> None:
     phases_dir = tmp_path / "phases"
     phases_dir.mkdir()
     (phases_dir / "P1_result.json").write_text(json.dumps(make_phase_result(1)))
-    (phases_dir / "P2_result.json").write_text("{not json")
+    (phases_dir / "bad_result.json").write_text("{not json")
+    out = tmp_path / "snapshot.json"
+
+    with pytest.raises(ValueError, match="bad_result.json"):
+        build_plan_snapshot(str(phases_dir), str(out))
+
+
+def test_build_plan_snapshot_skips_corrupt_canonical_json(tmp_path) -> None:
+    """Corrupt JSON in a canonical filename (P2_result.json) is silently skipped."""
+    phases_dir = tmp_path / "phases"
+    phases_dir.mkdir()
+    (phases_dir / "P1_result.json").write_text(json.dumps(make_phase_result(1)))
+    (phases_dir / "P2_result.json").write_text("{not valid json")
     out = tmp_path / "snapshot.json"
 
     result = build_plan_snapshot(str(phases_dir), str(out))
 
     data = json.loads(out.read_text())
     assert len(data["phases"]) == 1
-    assert result["phase_ids"] == "P1"
+    assert "P1" in result["phase_ids"]
+    assert "P2" not in result["phase_ids"]
 
 
 def test_build_plan_snapshot_nonexistent_phases_dir(tmp_path) -> None:
@@ -425,6 +438,24 @@ def test_build_plan_snapshot_empty_dir_produces_empty_phases(tmp_path) -> None:
     data = json.loads(out.read_text())
     assert data["phases"] == []
     assert result["phase_ids"] == ""
+
+
+def test_build_plan_snapshot_raises_on_non_canonical_phase_filename(tmp_path) -> None:
+    """Test 1d: Non-canonical phase file in phases/ raises instead of silent drop."""
+    phases_dir = tmp_path / "phases"
+    phases_dir.mkdir()
+    out = tmp_path / "snapshot.json"
+
+    (phases_dir / "P1_result.json").write_text(
+        json.dumps({"id": "P1", "name": "Phase 1", "ordering": 1})
+    )
+    # Non-canonical: matches *_result.json but NOT PHASE_RESULT_FILE_RE
+    (phases_dir / "Phase1_result.json").write_text(
+        json.dumps({"id": "Phase1", "name": "Phase One", "ordering": 1})
+    )
+
+    with pytest.raises(ValueError, match="Phase1_result.json"):
+        build_plan_snapshot(str(phases_dir), str(out))
 
 
 # ---------------------------------------------------------------------------

@@ -174,6 +174,80 @@ class TestCLIInstall:
         assert (tmp_path / ".autoskillit" / "marketplace" / "plugins" / "autoskillit").is_symlink()
 
     @patch("autoskillit.cli._marketplace.subprocess.run")
+    def test_install_backend_guard_returns_false_for_non_claude_code(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        """install() returns False with message when backend != 'claude-code'."""
+        from autoskillit.config import AgentBackendConfig, AutomationConfig
+
+        mock_cfg = AutomationConfig(agent_backend=AgentBackendConfig(backend="aider"))
+        monkeypatch.setattr("autoskillit.config.load_config", lambda _: mock_cfg)
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
+        monkeypatch.setattr(Path, "cwd", staticmethod(lambda: tmp_path))
+
+        from autoskillit.cli._marketplace import install
+
+        result = install(scope="user")
+
+        assert result is False
+        captured = capsys.readouterr()
+        assert "claude-code" in captured.out.lower() or "not supported" in captured.out.lower()
+
+    def test_install_backend_guard_allows_claude_code(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        """install() proceeds past backend guard when backend == 'claude-code'."""
+        from autoskillit.config import AgentBackendConfig, AutomationConfig
+
+        mock_cfg = AutomationConfig(agent_backend=AgentBackendConfig(backend="claude-code"))
+        monkeypatch.setattr("autoskillit.config.load_config", lambda _: mock_cfg)
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
+        monkeypatch.setattr(Path, "cwd", staticmethod(lambda: tmp_path))
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/claude")
+
+        _app_mod = importlib.import_module("autoskillit.cli._marketplace")
+        monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
+
+        # Patch subprocess to prevent actual CLI call, verify we got past the guard
+        called = []
+        monkeypatch.setattr(
+            "subprocess.run",
+            lambda *a, **kw: (
+                called.append(a),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout="ok", stderr=""),
+            )[1],
+        )
+        monkeypatch.setattr(_app_mod, "evict_direct_mcp_entry", lambda _: False)
+        monkeypatch.setattr(_app_mod, "sweep_all_scopes_for_orphans", lambda _: None)
+        monkeypatch.setattr(_app_mod, "sync_hooks_to_settings", lambda _: None)
+        monkeypatch.setattr(_app_mod, "generate_hooks_json", lambda: {})
+        monkeypatch.setattr(_app_mod, "atomic_write", lambda *a, **kw: None)
+
+        from autoskillit.cli._marketplace import install
+
+        result = install(scope="user")
+
+        assert result is True
+        assert len(called) >= 1  # subprocess was invoked (past the guard)
+
+    def test_install_backend_guard_no_new_module_level_imports(self) -> None:
+        """Verify load_config is NOT at module level in _marketplace.py."""
+        import ast
+
+        from autoskillit.core.paths import pkg_root
+
+        source = (pkg_root() / "cli" / "_marketplace.py").read_text()
+        tree = ast.parse(source)
+
+        # Check that no top-level import references autoskillit.config
+        for node in ast.iter_child_nodes(tree):
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                if isinstance(node, ast.ImportFrom) and node.module:
+                    assert "autoskillit.config" not in node.module, (
+                        "load_config must be a deferred import inside install(), not module-level"
+                    )
+
     def test_install_evicts_stale_direct_mcp_entry(
         self, mock_run: MagicMock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

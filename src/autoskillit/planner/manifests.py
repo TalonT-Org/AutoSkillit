@@ -9,11 +9,13 @@ from typing import TypedDict
 from autoskillit.core import atomic_write, write_versioned_json
 from autoskillit.planner._sort_utils import _natural_sort_key
 from autoskillit.planner.schema import (
+    _ASSIGN_ID_RE,
     ASSIGN_RESULT_FILE_RE,
     PHASE_RESULT_FILE_RE,
     WP_RESULT_FILE_RE,
     RunDirResult,
     TaskResolutionResult,
+    make_canonical_assignment_id,
     validate_assignment_result,
     validate_phase_result,
     validate_refined_assignments,
@@ -284,11 +286,17 @@ def expand_assignments(
         for idx, a in enumerate(previews, start=1):
             if isinstance(a, dict):
                 aid = a.get("id", "")
-                if not aid:
-                    aid = f"{phase_id}-A{idx}"
+                if not aid or not _ASSIGN_ID_RE.match(aid):
+                    aid = make_canonical_assignment_id(phase_id, idx)
                 assignment_ids.append(aid)
             else:
-                assignment_ids.append(str(a))
+                assignment_ids.append(make_canonical_assignment_id(phase_id, idx))
+        for aid in assignment_ids:
+            if not _ASSIGN_ID_RE.match(aid):
+                raise ValueError(
+                    f"Assignment ID {aid!r} in phase {phase_id} does not match "
+                    f"canonical format {_ASSIGN_ID_RE.pattern}"
+                )
         assignment_names = [a.get("name", "") if isinstance(a, dict) else str(a) for a in previews]
         metadata = {
             "assignment_count": len(previews),

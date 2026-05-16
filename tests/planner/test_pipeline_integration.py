@@ -217,3 +217,62 @@ def test_pipeline_factory_fixtures_are_schema_compliant(tmp_path: Path) -> None:
 
     milestones = json.loads((tmp_path / "milestones.json").read_text())
     assert milestones["milestones"][0]["name_slug"] == "schema-alignment"
+
+
+# ---------------------------------------------------------------------------
+# ID Contract Enforcement Tests (1f)
+# ---------------------------------------------------------------------------
+
+
+def test_pipeline_expand_through_merge_end_to_end(tmp_path: Path) -> None:
+    """Test 1f: WP-prefix plain-string previews survive expand→merge pipeline."""
+    from autoskillit.planner import expand_assignments, merge_tier_results
+    from tests.planner.conftest import make_assignment_result, write_json
+
+    # Create a refined_plan with plain-string previews (including WP-style prefixes)
+    write_json(
+        tmp_path / "refined_plan.json",
+        {
+            "phases": [
+                {
+                    "id": "P1",
+                    "name": "Foundation",
+                    "ordering": 1,
+                    "assignments_preview": ["WP-1: Define Backend", "WP-2: Implement API"],
+                },
+                {
+                    "id": "P2",
+                    "name": "Application",
+                    "ordering": 2,
+                    "assignments_preview": ["WP-3: Build UI"],
+                },
+            ]
+        },
+    )
+
+    # expand_assignments should normalize to canonical IDs
+    expand_assignments(str(tmp_path / "refined_plan.json"), str(tmp_path))
+
+    # Write canonical assignment result files using the IDs expand_assignments would produce
+    write_json(
+        tmp_path / "assignments" / "P1-A1_result.json",
+        make_assignment_result(1, 1, name="Define Backend"),
+    )
+    write_json(
+        tmp_path / "assignments" / "P1-A2_result.json",
+        make_assignment_result(1, 2, name="Implement API"),
+    )
+    write_json(
+        tmp_path / "assignments" / "P2-A1_result.json",
+        make_assignment_result(2, 1, name="Build UI"),
+    )
+
+    # merge_tier_results should find all three files — no silent drops
+    out = tmp_path / "merged.json"
+    merge_tier_results(str(tmp_path / "assignments"), str(out), "assignments")
+
+    merged = json.loads(out.read_text())
+    ids = {a["id"] for a in merged["assignments"]}
+    assert ids == {"P1-A1", "P1-A2", "P2-A1"}, (
+        f"All three canonical assignment IDs must survive merge, got {ids}"
+    )

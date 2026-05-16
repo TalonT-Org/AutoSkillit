@@ -114,6 +114,7 @@ def _write_refine_contexts(
     planner_dir: Path,
     assignments: list[dict[str, Any]],
     task_file_path: str,
+    expected_phase_ids: frozenset[str] | None = None,
 ) -> list[str]:
     phase_groups: dict[str, list[dict[str, Any]]] = {}
     for assignment in assignments:
@@ -124,6 +125,14 @@ def _write_refine_contexts(
             logger.warning(
                 "Assignment %r has no phase_id — skipped from refine contexts",
                 assignment.get("id", "<unknown>"),
+            )
+
+    if expected_phase_ids is not None:
+        missing = expected_phase_ids - frozenset(phase_groups)
+        if missing:
+            raise ValueError(
+                f"Phases {sorted(missing)} have no merged assignments — "
+                f"all result files may have been filtered out"
             )
 
     contexts_dir = planner_dir / "refine_contexts"
@@ -228,11 +237,18 @@ def merge_tier_results(
     **kwargs: Any,
 ) -> dict[str, Any]:
     tier_re = _TIER_FILE_RE.get(key)
-    paths = sorted(
-        f
-        for f in Path(results_dir).glob("*_result.json")
-        if tier_re is None or tier_re.match(f.name)
-    )
+    all_files = sorted(Path(results_dir).glob("*_result.json"))
+    if tier_re is not None:
+        excluded = [f for f in all_files if not tier_re.match(f.name)]
+        if excluded:
+            names = [f.name for f in excluded]
+            raise ValueError(
+                f"Result files in {results_dir} excluded by {tier_re.pattern}: {names}. "
+                f"This indicates non-canonical IDs were generated upstream."
+            )
+        paths = [f for f in all_files if tier_re.match(f.name)]
+    else:
+        paths = all_files
     if not paths:
         raise ValueError(f"No *_result.json files found in {results_dir}")
     result = merge_files(
@@ -251,7 +267,16 @@ def merge_tier_results(
                 output_path,
             )
         planner_dir = Path(output_path).parent
-        context_paths = _write_refine_contexts(planner_dir, assignments, task_file_path)
+        expected_phase_ids: frozenset[str] | None = None
+        manifest_path = Path(results_dir) / "phase_assignment_manifest.json"
+        if manifest_path.exists():
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            expected_phase_ids = frozenset(
+                item["id"] for item in manifest.get("items", []) if item.get("id")
+            )
+        context_paths = _write_refine_contexts(
+            planner_dir, assignments, task_file_path, expected_phase_ids=expected_phase_ids
+        )
         result["refine_context_paths"] = ",".join(context_paths)
     return result
 

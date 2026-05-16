@@ -891,20 +891,18 @@ def test_merge_refined_assignments_writes_to_planner_dir(tmp_path):
 
 
 def test_merge_tier_results_skips_non_assignment_files(tmp_path):
-    """Sentinel files in assignments/ must not be included in merge output."""
+    """Canonical assignment files are merged; non-canonical files raise an error instead."""
     from tests.planner.conftest import make_assignment_result
 
     assign_dir = tmp_path / "assignments"
     assign_dir.mkdir()
     out = tmp_path / "combined.json"
 
+    # Only canonical assignment files — non-canonical files (e.g. phase files in
+    # assignments dir) now cause merge_tier_results to raise instead of silently skipping
     write_json(
         assign_dir / "P1-A1_result.json",
         make_assignment_result(1, 1),
-    )
-    write_json(
-        assign_dir / "P1_result.json",
-        {"id": "P1", "status": "complete", "assignment_count": 1, "failed_count": 0},
     )
 
     task_file = write_task_file(tmp_path)
@@ -913,7 +911,6 @@ def test_merge_tier_results_skips_non_assignment_files(tmp_path):
     merged = json.loads(out.read_text())
     ids = [a["id"] for a in merged["assignments"]]
     assert "P1-A1" in ids
-    assert "P1" not in ids
 
 
 def test_merge_files_produces_indented_output(tmp_path: Path) -> None:
@@ -924,3 +921,54 @@ def test_merge_files_produces_indented_output(tmp_path: Path) -> None:
     raw = out.read_text(encoding="utf-8")
     lines = raw.strip().splitlines()
     assert len(lines) > 1, "merge_files output must be multi-line (indented)"
+
+
+# --- ID Contract Enforcement Tests (1d, 1e) ---
+
+
+def test_merge_tier_results_raises_on_excluded_assignment_files(tmp_path: Path) -> None:
+    """Test 1d: excluded files cause merge_tier_results to raise instead of silent drop."""
+    from tests.planner.conftest import make_assignment_result, write_json
+
+    results_dir = tmp_path / "assignments"
+    results_dir.mkdir()
+
+    # Write one canonical result file and one non-canonical that matches *_result.json
+    # but NOT ASSIGN_RESULT_FILE_RE (e.g., P1_result.json instead of P1-A1_result.json)
+    write_json(results_dir / "P1-A1_result.json", make_assignment_result(1, 1))
+    # This file matches *_result.json but NOT ASSIGN_RESULT_FILE_RE (missing -A{num})
+    write_json(
+        results_dir / "P1_result.json",
+        {"id": "P1", "name": "Phase 1", "ordering": 1, "goal": "x", "scope": []},
+    )
+
+    out = tmp_path / "combined.json"
+
+    with pytest.raises(ValueError, match="excluded"):
+        merge_tier_results(str(results_dir), str(out), "assignments")
+
+
+def test_write_refine_contexts_detects_missing_expected_phases(tmp_path: Path) -> None:
+    """Test 1e: _write_refine_contexts raises when an expected phase has zero assignments."""
+    from autoskillit.planner.merge import _write_refine_contexts
+
+    # Phase P1 and P2 are expected, but only P1 has assignments
+    assignments = [
+        {
+            "id": "P1-A1",
+            "phase_id": "P1",
+            "name": "Auth",
+            "goal": "Auth goal",
+            "technical_approach": "JWT",
+            "proposed_work_packages": [],
+        },
+    ]
+    expected_phase_ids = frozenset({"P1", "P2", "P3"})
+
+    with pytest.raises(ValueError, match="P2|P3"):
+        _write_refine_contexts(
+            tmp_path,
+            assignments,
+            task_file_path="",
+            expected_phase_ids=expected_phase_ids,
+        )

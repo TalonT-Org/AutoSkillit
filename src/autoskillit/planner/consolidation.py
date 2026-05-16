@@ -318,6 +318,7 @@ def consolidate_wps(
                         "group_id": source_to_merged[absorbed_id],
                     }
                     for absorbed_id in non_primary_sources
+                    if absorbed_id in source_to_merged
                 },
             }
             registry_path = wp_dir / "absorption_registry.json"

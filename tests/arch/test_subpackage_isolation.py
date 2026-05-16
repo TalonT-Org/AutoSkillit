@@ -909,6 +909,12 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "rule added alongside existing route-gate and dependency rules; single-file "
         "co-location preserves rule cross-referencing and rule registration order",
     ),
+    "_api.py": (
+        1100,
+        "REQ-CNST-010-E6: fleet dispatch engine — evaluate_skip_when inlined here to avoid "
+        "a 16th fleet/ module (sub-package file ceiling); keeps dispatch-related helpers "
+        "co-located with the execution engine that calls them",
+    ),
 }
 
 

@@ -553,6 +553,11 @@ def _build_config_schema() -> dict[str, frozenset[str]]:
                 {"experimental_enabled"}
             )
             continue
+        # Special case: CoreRunConfig uses YAML keys 'default' and 'override' which differ
+        # from the Python field names default_model and model_override.
+        if f.name == "model":
+            schema["model"] = frozenset({"default", "override"})
+            continue
         # Skip the scalar experimental_enabled field — it is handled under the features section
         if f.name == "experimental_enabled":
             continue

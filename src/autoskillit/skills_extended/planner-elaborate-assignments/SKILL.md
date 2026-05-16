@@ -123,8 +123,7 @@ Expected L0 return schema:
 
 **CRITICAL — Assignment ID Format Contract:**
 - Assignment IDs MUST match the pattern `P{N}-A{N}` where `{N}` is a positive integer
-- The `id_suffix` for work packages MUST be `WP{N}` (e.g., `WP1`, `WP2`)
-- INVALID: `A2b`, `setup-task`, `WP2a`
+- INVALID: `A2b`, `setup-task`
 - The result filename is `{assignment_id}_result.json` — non-matching filenames are rejected
 
 ### Step 5: Collect and validate L0 responses

@@ -190,7 +190,7 @@ class TestCLIInstall:
 
         assert result is False
         captured = capsys.readouterr()
-        assert "claude-code" in captured.out.lower() or "not supported" in captured.out.lower()
+        assert "only supported with the claude-code backend" in captured.out.lower()
 
     def test_install_backend_guard_allows_claude_code(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
@@ -241,9 +241,13 @@ class TestCLIInstall:
 
         # Check that no top-level import references autoskillit.config
         for node in ast.iter_child_nodes(tree):
-            if isinstance(node, (ast.Import, ast.ImportFrom)):
-                if isinstance(node, ast.ImportFrom) and node.module:
-                    assert "autoskillit.config" not in node.module, (
+            if isinstance(node, ast.ImportFrom) and node.module:
+                assert "autoskillit.config" not in node.module, (
+                    "load_config must be a deferred import inside install(), not module-level"
+                )
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    assert "autoskillit.config" not in alias.name, (
                         "load_config must be a deferred import inside install(), not module-level"
                     )
 

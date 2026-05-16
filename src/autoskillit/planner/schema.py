@@ -258,7 +258,9 @@ def validate_wp_result(
 
     wp_id = result["id"]
     if not _WP_ID_RE.match(wp_id):
-        raise ValueError(f"WP id {wp_id!r} does not match expected PX-AY-WPZ format")
+        raise ValueError(
+            f"validate_wp_result: WP id {wp_id!r} does not match expected PX-AY-WPZ format"
+        )
 
     if not allow_stub:
         count = len(result.get("deliverables", []))
@@ -292,7 +294,9 @@ def resolve_wp_id(wp: dict[str, Any], assign_id: str) -> str:
     wp_id = wp.get("id", "")
     if wp_id:
         if not _WP_ID_RE.match(wp_id):
-            raise ValueError(f"WP id {wp_id!r} does not match expected PX-AY-WPZ format")
+            raise ValueError(
+                f"resolve_wp_id: WP id {wp_id!r} does not match expected PX-AY-WPZ format"
+            )
         return wp_id
     id_suffix = wp.get("id_suffix", "")
     if id_suffix:

@@ -185,7 +185,10 @@ def _check_assignment_completeness(
         for absorbed_id in absorption_registry["absorbed"]:
             parts = absorbed_id.split("-")
             if len(parts) >= 2:
-                absorbed_pairs.add((int(parts[0][1:]), int(parts[1][1:])))
+                try:
+                    absorbed_pairs.add((int(parts[0][1:]), int(parts[1][1:])))
+                except ValueError:
+                    logger.warning("malformed_absorbed_id", absorbed_id=absorbed_id)
     for assign_id, assign in assignment_results.items():
         pair = (assign["phase_number"], assign["assignment_number"])
         if pair in absorbed_pairs:

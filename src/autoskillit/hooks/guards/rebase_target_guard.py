@@ -22,6 +22,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+REBASE_TARGET_DENY_TRIGGER: str = "rebase targets wrong branch"
+
 # Matches: git rebase origin/<branch> or git rebase upstream/<branch>
 # The branch group must not start with $ (skip variable expansions)
 _REBASE_PATTERN = re.compile(r"\bgit\s+rebase\s+(?:origin|upstream)/([^\s$\"\'\\]+)")

@@ -251,8 +251,11 @@ def check_loop_with_progress(
     except ValueError as exc:
         raise ValueError(f"max_iterations must be numeric, got: {max_iterations!r}") from exc
 
-    current_fixed = issues_fixed_count.strip()
+    current_fixed = issues_fixed_count.strip() or "0"
     prev_fixed = prev_issues_fixed_count.strip()
+    # Normalize current (missing capture → "0") but not prev: prev is legitimately ""
+    # on iteration 1, and normalizing it would trigger a false zero_progress on the first
+    # call with no prior value.
     zero_progress = current_fixed == "0" and prev_fixed == "0"
 
     return {

@@ -14,8 +14,12 @@ from ._doctor_types import DoctorResult
 logger = get_logger(__name__)
 
 
-def _check_stale_mcp_servers(claude_json_path: Path | None = None) -> list[DoctorResult]:
+def _check_stale_mcp_servers(
+    claude_json_path: Path | None = None, *, backend: str | None = None
+) -> list[DoctorResult]:
     """Check ~/.claude.json for stale autoskillit* MCP server entries with dead paths."""
+    if backend is not None and backend != "claude-code":
+        return [DoctorResult(Severity.OK, "stale_mcp_servers", f"Skipped (backend={backend})")]
     _path = claude_json_path or (Path.home() / ".claude.json")
     if not _path.is_file():
         return [DoctorResult(Severity.OK, "stale_mcp_servers", "No stale MCP servers detected")]
@@ -54,8 +58,12 @@ def _check_stale_mcp_servers(claude_json_path: Path | None = None) -> list[Docto
     return [DoctorResult(Severity.OK, "stale_mcp_servers", "No stale MCP servers detected")]
 
 
-def _check_mcp_server_registered(claude_json_path: Path | None = None) -> DoctorResult:
+def _check_mcp_server_registered(
+    claude_json_path: Path | None = None, *, backend: str | None = None
+) -> DoctorResult:
     """Check that autoskillit MCP server is registered (via mcpServers or plugin)."""
+    if backend is not None and backend != "claude-code":
+        return DoctorResult(Severity.OK, "mcp_server_registered", f"Skipped (backend={backend})")
     if claude_json_path is None:
         claude_json_path = Path.home() / ".claude.json"
 

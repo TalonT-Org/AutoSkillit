@@ -44,9 +44,11 @@ def _check_quota_cache_schema(cache_path: Path | None = None) -> DoctorResult:
     )
 
 
-def _check_claude_process_state_breakdown() -> DoctorResult:
+def _check_claude_process_state_breakdown(*, backend: str | None = None) -> DoctorResult:
     """Check current D-state and CPU usage of claude processes via ps."""
     check_name = "claude_process_state"
+    if backend is not None and backend != "claude-code":
+        return DoctorResult(Severity.OK, check_name, f"Skipped (backend={backend})")
     try:
         result = subprocess.run(
             ["ps", "-axo", "pid,state,pcpu,comm"],

@@ -73,10 +73,16 @@ def run_doctor(*, output_json: bool = False) -> None:
     results: list[DoctorResult] = []
 
     # Check 1: Stale MCP servers — dead binaries or nonexistent paths
-    results.extend(_check_stale_mcp_servers(Path.home() / ".claude.json"))
+    results.extend(
+        _check_stale_mcp_servers(Path.home() / ".claude.json", backend=cfg.agent_backend.backend)
+    )
 
     # Check 2: MCP server registered in ~/.claude.json or via plugin
-    results.append(_check_mcp_server_registered(claude_json_path=Path.home() / ".claude.json"))
+    results.append(
+        _check_mcp_server_registered(
+            claude_json_path=Path.home() / ".claude.json", backend=cfg.agent_backend.backend
+        )
+    )
 
     # Check 2b: Dual MCP registration — direct entry and marketplace plugin both present
     results.append(_check_dual_mcp_registration())
@@ -133,7 +139,7 @@ def run_doctor(*, output_json: bool = False) -> None:
     results.append(_check_quota_cache_schema())
 
     # Check 15: claude process state breakdown
-    results.append(_check_claude_process_state_breakdown())
+    results.append(_check_claude_process_state_breakdown(backend=cfg.agent_backend.backend))
 
     # Check 16: Install classification from direct_url.json
     results.append(_check_install_classification())

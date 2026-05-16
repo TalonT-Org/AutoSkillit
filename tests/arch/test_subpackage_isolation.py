@@ -87,7 +87,6 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_features",  # cli/_features.py: features_app = App(name="features", ...)
         "_sessions",  # cli/_sessions.py: sessions_app = App(name="sessions", ...)
         "_validate",  # cli/_validate.py: validate_app = App(name="validate", ...)
-        # CLAUDE_CODE_CAPABILITIES: BackendCapabilities — IL-0 frozen dataclass instance
         "_type_backend",  # core/types/_type_backend.py: CLAUDE_CODE_CAPABILITIES constant
     }
 )

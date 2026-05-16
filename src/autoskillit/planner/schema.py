@@ -152,7 +152,20 @@ class ValidationFinding(TypedDict):
 
 _PHASE_ID_RE = re.compile(r"^P\d+$")
 _ASSIGN_ID_RE = re.compile(r"^P\d+-A\d+$")
+ASSIGN_ID_RE = _ASSIGN_ID_RE
 _WP_ID_RE = re.compile(r"^P\d+-A\d+-WP\d+$")
+
+
+def make_canonical_assignment_id(phase_id: str, index: int) -> str:
+    """Generate a canonical assignment ID and validate it."""
+    aid = f"{phase_id}-A{index}"
+    if not _ASSIGN_ID_RE.match(aid):
+        raise ValueError(
+            f"Cannot construct canonical assignment ID from phase_id={phase_id!r}, "
+            f"index={index}: result {aid!r} does not match {_ASSIGN_ID_RE.pattern}"
+        )
+    return aid
+
 
 PHASE_RESULT_FILE_RE = re.compile(r"^P\d+_result\.json$")
 ASSIGN_RESULT_FILE_RE = re.compile(r"^P\d+-A\d+_result\.json$")
@@ -245,9 +258,8 @@ def validate_wp_result(
 
     wp_id = result["id"]
     if not _WP_ID_RE.match(wp_id):
-        warnings.warn(
-            f"WP id {wp_id!r} does not match expected PX-AY-WPZ format",
-            stacklevel=2,
+        raise ValueError(
+            f"validate_wp_result: WP id {wp_id!r} does not match expected PX-AY-WPZ format"
         )
 
     if not allow_stub:
@@ -281,10 +293,20 @@ def _reject_empty_string_ids(data: dict[str, Any], context: str) -> None:
 def resolve_wp_id(wp: dict[str, Any], assign_id: str) -> str:
     wp_id = wp.get("id", "")
     if wp_id:
+        if not _WP_ID_RE.match(wp_id):
+            raise ValueError(
+                f"resolve_wp_id: WP id {wp_id!r} does not match expected PX-AY-WPZ format"
+            )
         return wp_id
     id_suffix = wp.get("id_suffix", "")
     if id_suffix:
-        return f"{assign_id}-{id_suffix}"
+        resolved = f"{assign_id}-{id_suffix}"
+        if not _WP_ID_RE.match(resolved):
+            raise ValueError(
+                f"Resolved WP id {resolved!r} (from assign_id={assign_id!r}, "
+                f"id_suffix={id_suffix!r}) does not match expected PX-AY-WPZ format"
+            )
+        return resolved
     raise ValueError(f"Work package in assignment {assign_id!r} has neither 'id' nor 'id_suffix'")
 
 

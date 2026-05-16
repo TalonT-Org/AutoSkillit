@@ -289,7 +289,7 @@ class TestCompilePlanEdgeCases:
             {"id": "BADID", "name": "Bad", "deliverables": ["x.py"]},
         )
 
-        with pytest.raises(ValueError, match="Invalid WP id format"):
+        with pytest.raises(RuntimeError, match="does not match expected PX-AY-WPZ format"):
             compile_plan(str(tmp_path), write_task_file(tmp_path, "t"), "s")
 
 

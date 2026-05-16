@@ -570,3 +570,145 @@ def test_expand_wps_includes_task_file_path_in_context(tmp_path: Path) -> None:
         assert "task_file_path" in context, "Context file must include task_file_path field"
         assert context["task_file_path"] == str(task_file)
         assert "task" not in context, "Context file must not include inline task text"
+
+
+# --- ID Contract Enforcement Tests (1a, 1b, 1c, 1g) ---
+
+
+def test_expand_assignments_normalizes_plain_string_previews(tmp_path: Path) -> None:
+    """Test 1a: plain-string previews are normalized to canonical P{N}-A{M} IDs."""
+    from autoskillit.planner.manifests import expand_assignments
+
+    refined = tmp_path / "refined_plan.json"
+    refined.write_text(
+        json.dumps(
+            {
+                "phases": [
+                    {
+                        "id": "P3",
+                        "name": "Phase 3",
+                        "ordering": 3,
+                        "assignments_preview": ["WP-1: Define Backend", "WP-2: Implement API"],
+                    },
+                ]
+            }
+        )
+    )
+    result = expand_assignments(str(refined), str(tmp_path))
+    manifest = json.loads(Path(result["manifest_path"]).read_text())
+    assignment_ids = manifest["items"][0]["metadata"]["assignment_ids"]
+    assignment_names = manifest["items"][0]["metadata"]["assignment_names"]
+    assert assignment_ids == ["P3-A1", "P3-A2"], (
+        f"Expected canonical IDs ['P3-A1', 'P3-A2'], got {assignment_ids}"
+    )
+    assert assignment_names == ["WP-1: Define Backend", "WP-2: Implement API"], (
+        f"Raw string names should be preserved in assignment_names, got {assignment_names}"
+    )
+
+
+def test_expand_assignments_normalizes_dict_with_noncanonical_id(tmp_path: Path) -> None:
+    """Test 1b: dict previews with non-canonical id are normalized to canonical format."""
+    from autoskillit.planner.manifests import expand_assignments
+
+    refined = tmp_path / "refined_plan.json"
+    refined.write_text(
+        json.dumps(
+            {
+                "phases": [
+                    {
+                        "id": "P1",
+                        "name": "Phase 1",
+                        "ordering": 1,
+                        "assignments_preview": [{"id": "setup-infra", "name": "Setup Infra"}],
+                    },
+                ]
+            }
+        )
+    )
+    result = expand_assignments(str(refined), str(tmp_path))
+    manifest = json.loads(Path(result["manifest_path"]).read_text())
+    assignment_ids = manifest["items"][0]["metadata"]["assignment_ids"]
+    assert assignment_ids == ["P1-A1"], (
+        f"Expected canonical ['P1-A1'], got {assignment_ids} — non-canonical must be normalized"
+    )
+
+
+@pytest.mark.parametrize(
+    "preview_input,expected_ids",
+    [
+        # Plain strings with WP-style prefixes
+        (
+            ["WP-1: Task A", "WP-2: Task B"],
+            ["P1-A1", "P1-A2"],
+        ),
+        # Dicts with canonical IDs
+        (
+            [{"id": "P1-A1", "name": "A"}, {"id": "P1-A2", "name": "B"}],
+            ["P1-A1", "P1-A2"],
+        ),
+        # Dicts without IDs
+        (
+            [{"name": "First"}, {"name": "Second"}],
+            ["P1-A1", "P1-A2"],
+        ),
+        # Mixed: dict with canonical id + plain string
+        (
+            [{"id": "P1-A1", "name": "First"}, "Task B"],
+            ["P1-A1", "P1-A2"],
+        ),
+        # Dict with non-canonical id
+        (
+            [{"id": "setup-task", "name": "Setup"}],
+            ["P1-A1"],
+        ),
+    ],
+)
+def test_expand_assignments_post_generation_all_ids_match_regex(
+    tmp_path: Path, preview_input: list, expected_ids: list[str]
+) -> None:
+    """Test 1c: every generated assignment ID matches ASSIGN_ID_RE."""
+    from autoskillit.planner.manifests import expand_assignments
+    from autoskillit.planner.schema import ASSIGN_ID_RE
+
+    refined = tmp_path / "refined_plan.json"
+    refined.write_text(
+        json.dumps(
+            {
+                "phases": [
+                    {
+                        "id": "P1",
+                        "name": "Phase 1",
+                        "ordering": 1,
+                        "assignments_preview": preview_input,
+                    },
+                ]
+            }
+        )
+    )
+    result = expand_assignments(str(refined), str(tmp_path))
+    manifest = json.loads(Path(result["manifest_path"]).read_text())
+    assignment_ids = manifest["items"][0]["metadata"]["assignment_ids"]
+    assert assignment_ids == expected_ids, f"Expected {expected_ids}, got {assignment_ids}"
+    for aid in assignment_ids:
+        assert ASSIGN_ID_RE.match(aid), (
+            f"Assignment ID {aid!r} does not match canonical format ^P\\d+-A\\d+$"
+        )
+
+
+def test_validate_refined_plan_accepts_non_empty_plain_string_preview(tmp_path: Path) -> None:
+    """Test 1g: validate_refined_plan accepts plain-string entries that are non-empty strings."""
+    from autoskillit.planner.schema import validate_refined_plan
+
+    data = {
+        "phases": [
+            {
+                "id": "P1",
+                "name": "Phase 1",
+                "ordering": 1,
+                "assignments_preview": ["WP-1: Task A", {"id": "P1-A2", "name": "Task B"}],
+            },
+        ]
+    }
+    # Should not raise — plain strings are valid previews
+    result = validate_refined_plan(data)
+    assert result["phases"][0]["assignments_preview"] == data["phases"][0]["assignments_preview"]

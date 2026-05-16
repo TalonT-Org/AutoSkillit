@@ -343,6 +343,25 @@ def test_tier_filename_regexes_match_expected_patterns() -> None:
         assert not WP_RESULT_FILE_RE.match(name)
 
 
+# ---------------------------------------------------------------------------
+# ID Contract Enforcement Tests (1h)
+# ---------------------------------------------------------------------------
+
+
+def test_wp_id_validation_raises_on_noncanonical(tmp_path: Path) -> None:
+    """Test 1h: validate_wp_result raises (not warns) for non-canonical WP IDs."""
+    from autoskillit.planner.schema import validate_wp_result
+
+    data = {
+        "id": "WP-1: Define Backend",
+        "name": "Backend Definition",
+        "goal": "Define the backend API",
+        "deliverables": ["api.yaml"],
+    }
+    with pytest.raises(ValueError, match="does not match expected"):
+        validate_wp_result(data)
+
+
 def test_refine_wps_skill_md_no_prefix_derivation_instruction() -> None:
     """planner-refine-wps SKILL.md must not instruct derivation from id prefix."""
     skill_md = Path("src/autoskillit/skills_extended/planner-refine-wps/SKILL.md")

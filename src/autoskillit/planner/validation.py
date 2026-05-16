@@ -12,11 +12,11 @@ from __future__ import annotations
 import json
 from collections import deque
 from pathlib import Path
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 import regex as re
 
-from autoskillit.core import get_logger, write_versioned_json
+from autoskillit.core import get_logger, read_versioned_json, write_versioned_json
 from autoskillit.planner.schema import (
     ASSIGN_RESULT_FILE_RE,
     DELIVERABLE_BOUNDS,
@@ -124,14 +124,11 @@ def _load_wp_manifest(root: Path) -> dict | None:
         raise RuntimeError(f"Malformed WP manifest file {manifest_path}: {exc}") from exc
 
 
-def _load_absorption_registry(root: Path) -> dict | None:
+def _load_absorption_registry(root: Path) -> dict[str, Any] | None:
     registry_path = root / "work_packages" / "absorption_registry.json"
     if not registry_path.exists():
         return None
-    try:
-        return json.loads(registry_path.read_text())
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f"Malformed absorption registry {registry_path}: {exc}") from exc
+    return read_versioned_json(registry_path, 1)
 
 
 def _inject_backward_deps(wp_results: dict[str, dict], dep_graph: dict) -> None:

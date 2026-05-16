@@ -51,6 +51,7 @@ __all__ = [
     "LAUNCH_ID_ENV_VAR",
     "FOOD_TRUCK_TOOL_TAGS_ENV_VAR",
     "AGENT_BACKEND_ENV_VAR",
+    "AGENT_BACKEND_CLAUDE_CODE",
     "FLEET_DISPATCH_TOOLS",
     "FLEET_ERROR_CODES",
     "FLEET_SESSION_REQUIRED_ENV",
@@ -89,6 +90,7 @@ KITCHEN_SESSION_ID_ENV_VAR: str = "AUTOSKILLIT_KITCHEN_SESSION_ID"
 LAUNCH_ID_ENV_VAR: str = "AUTOSKILLIT_LAUNCH_ID"
 FOOD_TRUCK_TOOL_TAGS_ENV_VAR: str = "AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS"
 AGENT_BACKEND_ENV_VAR: str = "AUTOSKILLIT_AGENT_BACKEND"
+AGENT_BACKEND_CLAUDE_CODE: str = "claude-code"
 
 # Env vars that control MCP server-level behavior and must not leak into
 # user-code subprocesses (pytest runs, shell commands, etc.).

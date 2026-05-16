@@ -421,6 +421,4 @@ class ProvidersConfig:
 
 @dataclass
 class AgentBackendConfig:
-    """Configuration for the agent backend selection."""
-
     backend: str = "claude-code"

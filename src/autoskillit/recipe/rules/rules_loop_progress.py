@@ -44,12 +44,8 @@ def _find_cycle_members(
                 continue
             if neighbor not in visited:
                 dfs(neighbor, path + [neighbor])
-            elif neighbor in rec_stack:
-                if neighbor in path:
-                    cycle_steps = path[path.index(neighbor) :]
-                else:
-                    cycle_steps = path
-                cycles.append(frozenset(cycle_steps))
+            elif neighbor in rec_stack and neighbor in path:
+                cycles.append(frozenset(path[path.index(neighbor) :]))
         rec_stack.discard(node)
 
     for step_name in recipe_steps:

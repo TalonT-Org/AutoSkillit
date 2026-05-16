@@ -526,26 +526,24 @@ def test_version_bump_step_via_summary(tmp_path: Path) -> None:
     assert any(w["check"] == "version_bump_step" for w in validation["warnings"])
 
 
-def test_validate_plan_ignores_phase_sentinel_in_subdirectory(tmp_path: Path) -> None:
-    """Phase sentinel files in a subdirectory of assignments/ must not crash validate_plan."""
+def test_validate_plan_raises_on_phase_sentinel_in_assignments_dir(tmp_path: Path) -> None:
+    """Phase-tier result files in assignments/ must raise ValueError (non-canonical ID)."""
     _make_minimal_output_dir(tmp_path)
     sentinel = {"id": "P1", "status": "complete", "assignment_count": 1, "failed_count": 0}
-    # Place in a subdirectory so _result.json suffix check is bypassed
-    write_json(tmp_path / "assignments" / "sentinels" / "P1_result.json", sentinel)
+    write_json(tmp_path / "assignments" / "P1_result.json", sentinel)
 
-    result = validate_plan(str(tmp_path))
-    assert result["verdict"] == "pass"
+    with pytest.raises(ValueError, match="P1_result.json"):
+        validate_plan(str(tmp_path))
 
 
-def test_validate_plan_ignores_non_wp_file_in_work_packages_subdir(tmp_path: Path) -> None:
-    """Non-WP files at top level of work_packages/ must not crash validate_plan."""
+def test_validate_plan_raises_on_non_wp_result_file_in_work_packages_dir(tmp_path: Path) -> None:
+    """Non-WP result files in work_packages/ must raise ValueError (non-canonical ID)."""
     _make_minimal_output_dir(tmp_path)
     sentinel = {"id": "P1", "status": "complete", "assignment_count": 1, "failed_count": 0}
-    # Place in wp_sentinels subdirectory so _result.json suffix check is bypassed
-    write_json(tmp_path / "work_packages" / "wp_sentinels" / "P1_result.json", sentinel)
+    write_json(tmp_path / "work_packages" / "P1_result.json", sentinel)
 
-    result = validate_plan(str(tmp_path))
-    assert result["verdict"] == "pass"
+    with pytest.raises(ValueError, match="P1_result.json"):
+        validate_plan(str(tmp_path))
 
 
 # ---------------------------------------------------------------------------

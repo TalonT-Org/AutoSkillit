@@ -391,18 +391,15 @@ def test_build_plan_snapshot_happy_path_two_phases_sorted(tmp_path) -> None:
     assert "P2" in result["phase_ids"]
 
 
-def test_build_plan_snapshot_corrupt_json_silently_drops_phase(tmp_path) -> None:
+def test_build_plan_snapshot_raises_on_unrecognized_result_filename(tmp_path) -> None:
     phases_dir = tmp_path / "phases"
     phases_dir.mkdir()
     (phases_dir / "P1_result.json").write_text(json.dumps(make_phase_result(1)))
-    (phases_dir / "P2_result.json").write_text("{not json")
+    (phases_dir / "bad_result.json").write_text("{not json")
     out = tmp_path / "snapshot.json"
 
-    result = build_plan_snapshot(str(phases_dir), str(out))
-
-    data = json.loads(out.read_text())
-    assert len(data["phases"]) == 1
-    assert result["phase_ids"] == "P1"
+    with pytest.raises(ValueError, match="bad_result.json"):
+        build_plan_snapshot(str(phases_dir), str(out))
 
 
 def test_build_plan_snapshot_nonexistent_phases_dir(tmp_path) -> None:

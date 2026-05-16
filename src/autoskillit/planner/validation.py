@@ -205,9 +205,8 @@ def _check_dag_acyclic(wp_results: dict[str, dict]) -> list[ValidationFinding]:
     if len(sorted_nodes) < len(wp_results):
         cycle_nodes = [n for n in wp_results if n not in set(sorted_nodes)]
 
-        remaining = [n for n in wp_results if n not in set(sorted_nodes)]
-        if len(remaining) == 2:
-            a, b = sorted(remaining)
+        if len(cycle_nodes) == 2:
+            a, b = sorted(cycle_nodes)
             a_deps = set(wp_results.get(a, {}).get("depends_on", []))
             b_deps = set(wp_results.get(b, {}).get("depends_on", []))
             if b in a_deps and a in b_deps:

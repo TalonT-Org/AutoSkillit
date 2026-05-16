@@ -9,7 +9,7 @@ import pytest
 pytestmark = [pytest.mark.layer("skills"), pytest.mark.small]
 
 
-SKILLS_DIR = Path("src/autoskillit/skills_extended")
+SKILLS_DIR = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "skills_extended"
 
 
 class TestPlannerRefineCycleBreaking:

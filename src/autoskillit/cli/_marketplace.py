@@ -148,6 +148,16 @@ def install(*, scope: str = "user") -> bool:
         print(f"Invalid scope: {scope!r}. Must be one of: {', '.join(sorted(_VALID_SCOPES))}")
         sys.exit(1)
 
+    from autoskillit.config import load_config
+
+    cfg = load_config(Path.cwd())
+    if cfg.agent_backend.backend != "claude-code":
+        print(
+            f"\nautoskillit install is only supported with the claude-code backend.\n"
+            f"Current backend: {cfg.agent_backend.backend!r}\n"
+        )
+        return False
+
     marketplace_dir = _ensure_marketplace()
     plugin_ref = f"autoskillit@{_MARKETPLACE_NAME}"
     print(f"Marketplace prepared: {marketplace_dir}")

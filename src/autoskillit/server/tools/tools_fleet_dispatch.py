@@ -23,6 +23,10 @@ logger = get_logger(__name__)
 _SKIP_CAMPAIGN_REF_RE: Final = re.compile(r"\$\{\{\s*campaign\.(\w+)\s*\}\}")
 
 
+def _find_missing_campaign_refs(skip_when: str, captured: dict[str, str]) -> list[str]:
+    return [ref for ref in _SKIP_CAMPAIGN_REF_RE.findall(skip_when) if ref not in captured]
+
+
 def _write_dispatch_to_campaign_state(
     campaign_state_path_str: str,
     effective_name: str,
@@ -210,11 +214,7 @@ async def dispatch_food_truck(
             dispatches_dir = tool_ctx.temp_dir / "dispatches"
             accumulated_captures = read_all_campaign_captures(dispatches_dir, tool_ctx.kitchen_id)
 
-            missing_refs = [
-                ref
-                for ref in _SKIP_CAMPAIGN_REF_RE.findall(skip_when)
-                if ref not in accumulated_captures
-            ]
+            missing_refs = _find_missing_campaign_refs(skip_when, accumulated_captures)
             if missing_refs:
                 return fleet_error(
                     FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,

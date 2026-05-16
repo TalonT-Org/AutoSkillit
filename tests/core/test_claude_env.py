@@ -18,7 +18,7 @@ from autoskillit.core.types._type_constants import AUTOSKILLIT_PRIVATE_ENV_VARS
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
-def test_build_claude_env_strips_sse_port() -> None:
+def test_build_agent_env_strips_sse_port() -> None:
     base = {"CLAUDE_CODE_SSE_PORT": "23270", "HOME": "/tmp", "PATH": "/usr/bin"}
     result = build_agent_env(base=base)
     assert "CLAUDE_CODE_SSE_PORT" not in result
@@ -36,7 +36,7 @@ def test_build_claude_env_strips_sse_port() -> None:
         "CLAUDE_CODE_SSE_HOST",
     ],
 )
-def test_build_claude_env_strips_ide_prefix(key: str) -> None:
+def test_build_agent_env_strips_ide_prefix(key: str) -> None:
     result = build_agent_env(base={key: "value", "HOME": "/tmp"})
     assert key not in result
     assert "HOME" in result
@@ -53,13 +53,13 @@ def test_build_claude_env_strips_ide_prefix(key: str) -> None:
         "ZED_TERM",
     ],
 )
-def test_build_claude_env_strips_expanded_denylist(key: str) -> None:
+def test_build_agent_env_strips_expanded_denylist(key: str) -> None:
     result = build_agent_env(base={key: "value", "HOME": "/tmp"})
     assert key not in result
     assert "HOME" in result
 
 
-def test_build_claude_env_preserves_unrelated_claude_vars() -> None:
+def test_build_agent_env_preserves_unrelated_claude_vars() -> None:
     base = {
         "CLAUDE_CONFIG_DIR": "/home/user/.claude",
         "ANTHROPIC_API_KEY": "sk-...",
@@ -71,27 +71,27 @@ def test_build_claude_env_preserves_unrelated_claude_vars() -> None:
     assert result["ANTHROPIC_LOG"] == "debug"
 
 
-def test_build_claude_env_injects_auto_connect_off() -> None:
+def test_build_agent_env_injects_auto_connect_off() -> None:
     result = build_agent_env(base={})
     assert result["CLAUDE_CODE_AUTO_CONNECT_IDE"] == "0"
 
 
-def test_build_claude_env_caller_extras_can_override_auto_connect() -> None:
+def test_build_agent_env_caller_extras_can_override_auto_connect() -> None:
     result = build_agent_env(base={}, extras={"CLAUDE_CODE_AUTO_CONNECT_IDE": "1"})
     assert result["CLAUDE_CODE_AUTO_CONNECT_IDE"] == "1"
 
 
-def test_build_claude_env_applies_extras() -> None:
+def test_build_agent_env_applies_extras() -> None:
     result = build_agent_env(base={}, extras={"AUTOSKILLIT_HEADLESS": "1"})
     assert result["AUTOSKILLIT_HEADLESS"] == "1"
 
 
-def test_build_claude_env_extras_override_base() -> None:
+def test_build_agent_env_extras_override_base() -> None:
     result = build_agent_env(base={"FOO": "original"}, extras={"FOO": "overridden"})
     assert result["FOO"] == "overridden"
 
 
-def test_build_claude_env_defaults_to_os_environ(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_build_agent_env_defaults_to_os_environ(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AUTOSKILLIT_TEST_DEFAULT_ENV_MARKER", "present")
     monkeypatch.setenv("CLAUDE_CODE_SSE_PORT", "23270")
     result = build_agent_env()
@@ -99,7 +99,7 @@ def test_build_claude_env_defaults_to_os_environ(monkeypatch: pytest.MonkeyPatch
     assert "CLAUDE_CODE_SSE_PORT" not in result
 
 
-def test_build_claude_env_returns_mappingproxy() -> None:
+def test_build_agent_env_returns_mappingproxy() -> None:
     result = build_agent_env(base={"HOME": "/tmp"})
     assert isinstance(result, MappingProxyType)
     with pytest.raises(TypeError):
@@ -129,21 +129,21 @@ def test_ide_env_denylist_contains_max_mcp_output_tokens() -> None:
     assert "MAX_MCP_OUTPUT_TOKENS" in IDE_ENV_DENYLIST
 
 
-def test_build_claude_env_strips_max_mcp_output_tokens() -> None:
-    """MAX_MCP_OUTPUT_TOKENS must be stripped from base env by build_claude_env."""
+def test_build_agent_env_strips_max_mcp_output_tokens() -> None:
+    """MAX_MCP_OUTPUT_TOKENS must be stripped from base env by build_agent_env."""
     result = build_agent_env(base={"MAX_MCP_OUTPUT_TOKENS": "99999", "HOME": "/tmp"})
     assert "MAX_MCP_OUTPUT_TOKENS" not in result
     assert result["HOME"] == "/tmp"
 
 
 @pytest.mark.parametrize("var", sorted(AUTOSKILLIT_PRIVATE_ENV_VARS))
-def test_build_claude_env_scrubs_autoskillit_private_vars(var: str) -> None:
+def test_build_agent_env_scrubs_autoskillit_private_vars(var: str) -> None:
     result = build_agent_env(base={var: "leaked", "HOME": "/tmp"})
     assert var not in result
     assert result["HOME"] == "/tmp"
 
 
-def test_build_claude_env_extras_override_scrubbed_private_vars() -> None:
+def test_build_agent_env_extras_override_scrubbed_private_vars() -> None:
     result = build_agent_env(
         base={"AUTOSKILLIT_SESSION_TYPE": "franchise", "HOME": "/tmp"},
         extras={"AUTOSKILLIT_SESSION_TYPE": "skill"},
@@ -151,7 +151,7 @@ def test_build_claude_env_extras_override_scrubbed_private_vars() -> None:
     assert result["AUTOSKILLIT_SESSION_TYPE"] == "skill"
 
 
-def test_build_claude_env_subprocess_compatible() -> None:
+def test_build_agent_env_subprocess_compatible() -> None:
     """build_agent_env() result must be accepted by subprocess.Popen."""
     env = build_agent_env()
     proc = subprocess.Popen(
@@ -165,15 +165,15 @@ def test_build_claude_env_subprocess_compatible() -> None:
     assert b"ok" in stdout
 
 
-def test_build_claude_env_required_raises_on_missing() -> None:
-    """build_claude_env raises ValueError when required keys are absent."""
+def test_build_agent_env_required_raises_on_missing() -> None:
+    """build_agent_env raises ValueError when required keys are absent."""
     with pytest.raises(ValueError) as exc_info:
         build_agent_env(extras={"FOO": "bar"}, required=frozenset({"MISSING_KEY"}))
     assert "MISSING_KEY" in str(exc_info.value)
 
 
-def test_build_claude_env_required_passes_when_all_present() -> None:
-    """build_claude_env succeeds when all required keys are present."""
+def test_build_agent_env_required_passes_when_all_present() -> None:
+    """build_agent_env succeeds when all required keys are present."""
     result = build_agent_env(
         extras={"REQUIRED_KEY": "val"},
         required=frozenset({"REQUIRED_KEY"}),
@@ -181,13 +181,13 @@ def test_build_claude_env_required_passes_when_all_present() -> None:
     assert result["REQUIRED_KEY"] == "val"
 
 
-def test_build_claude_env_required_empty_set_succeeds() -> None:
+def test_build_agent_env_required_empty_set_succeeds() -> None:
     """required=frozenset() (empty) always passes."""
     result = build_agent_env(extras={"A": "1"}, required=frozenset())
     assert result["A"] == "1"
 
 
-def test_build_claude_env_required_none_defaults_to_no_check() -> None:
+def test_build_agent_env_required_none_defaults_to_no_check() -> None:
     """required=None (default) skips the check entirely."""
     result = build_agent_env(extras={"B": "2"})
     assert result["B"] == "2"

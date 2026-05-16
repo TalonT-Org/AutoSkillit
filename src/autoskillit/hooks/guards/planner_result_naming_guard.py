@@ -17,8 +17,11 @@ Stdlib-only — runs under any Python interpreter without the autoskillit packag
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
+
+PLANNER_NAMING_DENY_TRIGGER: str = "non-canonical planner result filename"
 
 # Tier regex patterns (stdlib re, inlined to keep this guard self-contained)
 _PHASE_RE = re.compile(r"^P\d+_result\.json$")
@@ -42,6 +45,9 @@ def _build_deny(corrector: str) -> str:
 
 
 def main() -> None:
+    if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
+        sys.exit(0)  # only enforce in headless planner sessions
+
     try:
         data = json.loads(sys.stdin.read())
     except (json.JSONDecodeError, ValueError, OSError):
@@ -82,8 +88,9 @@ def main() -> None:
         sys.stdout.write(
             _build_deny(
                 f"Non-canonical phase result filename: {filename!r}. "
-                f"Phase result files must match P<N>_result.json (e.g. P1_result.json, P12_result.json). "
-                f"The phase ID inside the file must be numeric only (e.g. P1, P2)."
+                "Phase result files must match P<N>_result.json "
+                "(e.g. P1_result.json, P12_result.json). "
+                "The phase ID inside the file must be numeric only (e.g. P1, P2)."
             )
         )
         sys.exit(0)
@@ -94,9 +101,9 @@ def main() -> None:
         sys.stdout.write(
             _build_deny(
                 f"Non-canonical assignment result filename: {filename!r}. "
-                f"Assignment result files must match P<N>-A<N>_result.json "
-                f"(e.g. P1-A1_result.json, P3-A12_result.json). "
-                f"The assignment ID inside the file must be numeric only (e.g. P1-A1, P2-A3)."
+                "Assignment result files must match P<N>-A<N>_result.json "
+                "(e.g. P1-A1_result.json, P3-A12_result.json). "
+                "The assignment ID inside the file must be numeric only (e.g. P1-A1, P2-A3)."
             )
         )
         sys.exit(0)
@@ -107,9 +114,10 @@ def main() -> None:
         sys.stdout.write(
             _build_deny(
                 f"Non-canonical work package result filename: {filename!r}. "
-                f"Work package result files must match P<N>-A<N>-WP<N>_result.json "
-                f"(e.g. P1-A1-WP1_result.json, P3-A2-WP12_result.json). "
-                f"The work package ID inside the file must be numeric only (e.g. P1-A1-WP1, P2-A3-WP4)."
+                r"Work package result files must match pattern P\d+-A\d+-WP\d+_result.json "
+                "(e.g. P1-A1-WP1_result.json, P3-A2-WP12_result.json). "
+                "The work package ID inside the file must be numeric only "
+                "(e.g. P1-A1-WP1, P2-A3-WP4)."
             )
         )
         sys.exit(0)

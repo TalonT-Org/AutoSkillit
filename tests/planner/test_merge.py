@@ -395,7 +395,7 @@ def test_build_plan_snapshot_corrupt_json_skipped(tmp_path) -> None:
     phases_dir = tmp_path / "phases"
     phases_dir.mkdir()
     (phases_dir / "P1_result.json").write_text(json.dumps(make_phase_result(1)))
-    (phases_dir / "bad_result.json").write_text("{not json")
+    (phases_dir / "P2_result.json").write_text("{not json")
     out = tmp_path / "snapshot.json"
 
     result = build_plan_snapshot(str(phases_dir), str(out))

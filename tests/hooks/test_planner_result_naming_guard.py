@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import io
 import json
+import os
+import unittest.mock
 from contextlib import redirect_stdout
-from unittest.mock import patch
 
 import pytest
 
@@ -16,19 +17,22 @@ def _build_event(tool_name: str, file_path: str) -> dict:
     return {"tool_name": tool_name, "tool_input": {"file_path": file_path}}
 
 
-def _run_hook(event: dict | str) -> str:
+def _run_hook(event: dict | str, headless: bool = True) -> str:
     from autoskillit.hooks.guards.planner_result_naming_guard import main
 
     stdin_text = json.dumps(event) if isinstance(event, dict) else event
+    if headless:
+        clean_env = {**os.environ, "AUTOSKILLIT_HEADLESS": "1"}
+    else:
+        clean_env = {k: v for k, v in os.environ.items() if k != "AUTOSKILLIT_HEADLESS"}
     buf = io.StringIO()
-    with (
-        patch("sys.stdin", io.StringIO(stdin_text)),
-        redirect_stdout(buf),
-    ):
-        try:
-            main()
-        except SystemExit:
-            pass
+    with redirect_stdout(buf):
+        with unittest.mock.patch("sys.stdin", io.StringIO(stdin_text)):
+            with unittest.mock.patch.dict(os.environ, clean_env, clear=True):
+                try:
+                    main()
+                except SystemExit:
+                    pass
     return buf.getvalue()
 
 
@@ -177,4 +181,19 @@ class TestPlannerResultNamingGuardFailOpen:
     def test_failopen_on_missing_file_path(self) -> None:
         event = {"tool_name": "Write", "tool_input": {}}
         result = _run_hook(event)
+        assert result == ""
+
+
+class TestPlannerResultNamingGuardSessionScope:
+    """Guard only fires in headless sessions (AUTOSKILLIT_HEADLESS=1)."""
+
+    def test_denies_non_canonical_when_headless(self) -> None:
+        event = _build_event("Write", "/clone/planner/work_packages/P1-A1-WP2a_result.json")
+        result = _run_hook(event, headless=True)
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_allows_non_canonical_when_not_headless(self) -> None:
+        event = _build_event("Write", "/clone/planner/work_packages/P1-A1-WP2a_result.json")
+        result = _run_hook(event, headless=False)
         assert result == ""

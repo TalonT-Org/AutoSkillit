@@ -580,7 +580,7 @@ def test_resolve_task_input_long_inline_truncates_label(tmp_path):
 
 
 def test_build_phase_wp_manifest_ignores_phase_sentinel_in_assignments(tmp_path):
-    """Phase sentinel files in assignments/ must not crash build_phase_wp_manifest."""
+    """Non-canonical files (e.g. phase sentinels) in assignments/ raise ValueError."""
     from autoskillit.planner import build_phase_wp_manifest
 
     assign_dir = tmp_path / "assignments"
@@ -595,8 +595,8 @@ def test_build_phase_wp_manifest_ignores_phase_sentinel_in_assignments(tmp_path)
         json.dumps({"id": "P1", "status": "complete", "assignment_count": 1, "failed_count": 0})
     )
 
-    result = build_phase_wp_manifest(str(assign_dir), str(out_dir))
-    assert "manifest_path" in result
+    with pytest.raises(ValueError, match="excluded"):
+        build_phase_wp_manifest(str(assign_dir), str(out_dir))
 
 
 def test_expand_wps_result_dir_points_to_wp_sentinels(tmp_path):

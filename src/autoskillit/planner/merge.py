@@ -242,6 +242,8 @@ def merge_tier_results(
     if tier_re is not None:
         paths = collect_tier_result_files(Path(results_dir), tier_re)
     else:
+        # No canonical regex defined for this key — accept all *_result.json files without
+        # tier validation. This is intentional: unknown key types have no naming constraint.
         paths = sorted(Path(results_dir).glob("*_result.json"))
     if not paths:
         raise ValueError(f"No *_result.json files found in {results_dir}")

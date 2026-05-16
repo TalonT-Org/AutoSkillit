@@ -18,8 +18,8 @@ def _make_usage_with_model(
     return {
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,
-        "cache_creation_input_tokens": 0,
-        "cache_read_input_tokens": 0,
+        "cache_creation": 0,
+        "cache_read": 0,
         "model_breakdown": {model: {"input_tokens": input_tokens, "output_tokens": output_tokens}},
     }
 
@@ -108,8 +108,8 @@ def test_load_from_log_dir_reads_model_identifier(tmp_path: Path, use_session_la
                 step_key: "plan",
                 "input_tokens": 100,
                 "output_tokens": 50,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
+                "cache_creation": 0,
+                "cache_read": 0,
                 "timing_seconds": 10.0,
                 "model_identifier": "claude-sonnet-4-6",
             }
@@ -134,8 +134,8 @@ def test_load_from_log_dir_no_model_identifier_defaults_empty(tmp_path: Path) ->
                 "session_label": "plan",
                 "input_tokens": 100,
                 "output_tokens": 50,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
+                "cache_creation": 0,
+                "cache_read": 0,
                 "timing_seconds": 10.0,
             }
         )

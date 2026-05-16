@@ -353,8 +353,8 @@ class ModelTotalEntry(TypedDict):
     step_count: int
     input_tokens: int
     output_tokens: int
-    cache_creation_input_tokens: int
-    cache_read_input_tokens: int
+    cache_creation: int
+    cache_read: int
     elapsed_seconds: float
 
 
@@ -364,8 +364,8 @@ class TokenUsageFileEntry(TypedDict):
     session_label: str
     input_tokens: int
     output_tokens: int
-    cache_creation_input_tokens: int
-    cache_read_input_tokens: int
+    cache_creation: int
+    cache_read: int
     peak_context: int
     turn_count: int
     timing_seconds: float
@@ -376,6 +376,7 @@ class TokenUsageFileEntry(TypedDict):
     model_identifier: str
     dispatch_id: str
     campaign_id: str
+    schema_version: int
 
 
 class SessionIndexEntry(TypedDict):
@@ -402,8 +403,8 @@ class SessionIndexEntry(TypedDict):
     step_name: str
     input_tokens: int
     output_tokens: int
-    cache_creation_input_tokens: int
-    cache_read_input_tokens: int
+    cache_creation: int
+    cache_read: int
     write_call_count: int
     tracked_comm: str | None
     tracked_comm_drift: bool

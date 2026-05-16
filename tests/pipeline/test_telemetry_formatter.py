@@ -18,8 +18,8 @@ _STEPS = [
         "step_name": "investigate",
         "input_tokens": 7000,
         "output_tokens": 5939,
-        "cache_creation_input_tokens": 8495,
-        "cache_read_input_tokens": 252179,
+        "cache_creation": 8495,
+        "cache_read": 252179,
         "invocation_count": 1,
         "wall_clock_seconds": 45.0,
         "elapsed_seconds": 40.0,
@@ -28,8 +28,8 @@ _STEPS = [
         "step_name": "implement",
         "input_tokens": 2031000,
         "output_tokens": 122306,
-        "cache_creation_input_tokens": 280601,
-        "cache_read_input_tokens": 19071323,
+        "cache_creation": 280601,
+        "cache_read": 19071323,
         "invocation_count": 3,
         "wall_clock_seconds": 492.0,
         "elapsed_seconds": 480.0,
@@ -39,8 +39,8 @@ _STEPS = [
 _TOTAL = {
     "input_tokens": 2038000,
     "output_tokens": 128245,
-    "cache_creation_input_tokens": 289096,
-    "cache_read_input_tokens": 19323502,
+    "cache_creation": 289096,
+    "cache_read": 19323502,
     "total_elapsed_seconds": 537.0,
 }
 
@@ -96,8 +96,8 @@ class TestFormatTokenTable:
                 "step_name": "plan",
                 "input_tokens": 100,
                 "output_tokens": 50,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
+                "cache_creation": 0,
+                "cache_read": 0,
                 "invocation_count": 1,
                 "elapsed_seconds": 30.0,
             },
@@ -114,8 +114,8 @@ class TestFormatTokenTable:
                 "model": "MiniMax-M2.7-highspeed",
                 "input_tokens": 307600,
                 "output_tokens": 3400,
-                "cache_read_input_tokens": 0,
-                "cache_creation_input_tokens": 0,
+                "cache_read": 0,
+                "cache_creation": 0,
                 "invocation_count": 1,
                 "wall_clock_seconds": 60.0,
             },
@@ -123,8 +123,8 @@ class TestFormatTokenTable:
         total = {
             "input_tokens": 307600,
             "output_tokens": 3400,
-            "cache_read_input_tokens": 0,
-            "cache_creation_input_tokens": 0,
+            "cache_read": 0,
+            "cache_creation": 0,
             "total_elapsed_seconds": 60.0,
         }
         result = TelemetryFormatter.format_token_table(steps, total)
@@ -138,8 +138,8 @@ class TestFormatTokenTable:
                 "model": "MiniMax-M2.7-highspeed",
                 "input_tokens": 1000,
                 "output_tokens": 500,
-                "cache_read_input_tokens": 0,
-                "cache_creation_input_tokens": 0,
+                "cache_read": 0,
+                "cache_creation": 0,
                 "invocation_count": 1,
                 "wall_clock_seconds": 10.0,
             },
@@ -147,8 +147,8 @@ class TestFormatTokenTable:
         total = {
             "input_tokens": 1000,
             "output_tokens": 500,
-            "cache_read_input_tokens": 0,
-            "cache_creation_input_tokens": 0,
+            "cache_read": 0,
+            "cache_creation": 0,
             "total_elapsed_seconds": 10.0,
         }
         result = TelemetryFormatter.format_token_table(steps, total)
@@ -163,8 +163,8 @@ class TestFormatTokenTable:
                 "model": "claude-sonnet-4-6",
                 "input_tokens": 1000,
                 "output_tokens": 500,
-                "cache_read_input_tokens": 200,
-                "cache_creation_input_tokens": 100,
+                "cache_read": 200,
+                "cache_creation": 100,
                 "invocation_count": 1,
                 "wall_clock_seconds": 10.0,
             },
@@ -172,8 +172,8 @@ class TestFormatTokenTable:
         total = {
             "input_tokens": 1000,
             "output_tokens": 500,
-            "cache_read_input_tokens": 200,
-            "cache_creation_input_tokens": 100,
+            "cache_read": 200,
+            "cache_creation": 100,
             "total_elapsed_seconds": 10.0,
         }
         result = TelemetryFormatter.format_token_table(steps, total)
@@ -189,8 +189,8 @@ class TestFormatTokenTable:
                 "model": "",
                 "input_tokens": 1000,
                 "output_tokens": 500,
-                "cache_read_input_tokens": 200,
-                "cache_creation_input_tokens": 100,
+                "cache_read": 200,
+                "cache_creation": 100,
                 "invocation_count": 1,
                 "wall_clock_seconds": 10.0,
             },
@@ -198,8 +198,8 @@ class TestFormatTokenTable:
         total = {
             "input_tokens": 1000,
             "output_tokens": 500,
-            "cache_read_input_tokens": 200,
-            "cache_creation_input_tokens": 100,
+            "cache_read": 200,
+            "cache_creation": 100,
             "total_elapsed_seconds": 10.0,
         }
         result = TelemetryFormatter.format_token_table(steps, total)
@@ -213,8 +213,8 @@ class TestFormatTokenTable:
                 "step_name": "plan",
                 "input_tokens": 1000,
                 "output_tokens": 500,
-                "cache_creation_input_tokens": 100,
-                "cache_read_input_tokens": 200,
+                "cache_creation": 100,
+                "cache_read": 200,
                 "peak_context": 200,
                 "turn_count": 5,
                 "invocation_count": 1,
@@ -224,8 +224,8 @@ class TestFormatTokenTable:
         total = {
             "input_tokens": 1000,
             "output_tokens": 500,
-            "cache_creation_input_tokens": 100,
-            "cache_read_input_tokens": 200,
+            "cache_creation": 100,
+            "cache_read": 200,
             "peak_context": 200,
             "total_elapsed_seconds": 45.7,
         }
@@ -454,8 +454,8 @@ def test_efficiency_table_omitted_when_no_loc() -> None:
     steps = [
         {
             "step_name": "plan",
-            "cache_read_input_tokens": 1000,
-            "cache_creation_input_tokens": 200,
+            "cache_read": 1000,
+            "cache_creation": 200,
             "output_tokens": 50,
             "loc_insertions": 0,
             "loc_deletions": 0,
@@ -464,8 +464,8 @@ def test_efficiency_table_omitted_when_no_loc() -> None:
     total = {
         "loc_insertions": 0,
         "loc_deletions": 0,
-        "cache_read_input_tokens": 1000,
-        "cache_creation_input_tokens": 200,
+        "cache_read": 1000,
+        "cache_creation": 200,
         "output_tokens": 50,
     }
     assert TelemetryFormatter.format_efficiency_table(steps, total) == ""
@@ -478,8 +478,8 @@ def test_efficiency_table_columns() -> None:
         {
             "step_name": "implement",
             "peak_context": 500,
-            "cache_read_input_tokens": 1000,
-            "cache_creation_input_tokens": 200,
+            "cache_read": 1000,
+            "cache_creation": 200,
             "output_tokens": 50,
             "loc_insertions": 80,
             "loc_deletions": 20,
@@ -489,8 +489,8 @@ def test_efficiency_table_columns() -> None:
         "loc_insertions": 80,
         "loc_deletions": 20,
         "peak_context": 500,
-        "cache_read_input_tokens": 1000,
-        "cache_creation_input_tokens": 200,
+        "cache_read": 1000,
+        "cache_creation": 200,
         "output_tokens": 50,
     }
     result = TelemetryFormatter.format_efficiency_table(steps, total)
@@ -509,7 +509,7 @@ def test_efficiency_table_ratios() -> None:
         {
             "step_name": "implement",
             "peak_context": 1000,
-            "cache_creation_input_tokens": 200,
+            "cache_creation": 200,
             "output_tokens": 50,
             "loc_insertions": 80,
             "loc_deletions": 20,
@@ -519,7 +519,7 @@ def test_efficiency_table_ratios() -> None:
         "loc_insertions": 80,
         "loc_deletions": 20,
         "peak_context": 1000,
-        "cache_creation_input_tokens": 200,
+        "cache_creation": 200,
         "output_tokens": 50,
     }
     result = TelemetryFormatter.format_efficiency_table(steps, total)
@@ -536,7 +536,7 @@ def test_efficiency_table_zero_loc_step_shows_dash() -> None:
         {
             "step_name": "no-change",
             "peak_context": 500,
-            "cache_creation_input_tokens": 100,
+            "cache_creation": 100,
             "output_tokens": 20,
             "loc_insertions": 0,
             "loc_deletions": 0,
@@ -544,7 +544,7 @@ def test_efficiency_table_zero_loc_step_shows_dash() -> None:
         {
             "step_name": "implement",
             "peak_context": 1000,
-            "cache_creation_input_tokens": 200,
+            "cache_creation": 200,
             "output_tokens": 50,
             "loc_insertions": 50,
             "loc_deletions": 10,
@@ -554,7 +554,7 @@ def test_efficiency_table_zero_loc_step_shows_dash() -> None:
         "loc_insertions": 50,
         "loc_deletions": 10,
         "peak_context": 1000,
-        "cache_creation_input_tokens": 300,
+        "cache_creation": 300,
         "output_tokens": 70,
     }
     result = TelemetryFormatter.format_efficiency_table(steps, total)
@@ -568,7 +568,7 @@ def test_efficiency_table_total_row_uses_aggregate_totals() -> None:
         {
             "step_name": "plan",
             "peak_context": 200,
-            "cache_creation_input_tokens": 0,
+            "cache_creation": 0,
             "output_tokens": 10,
             "loc_insertions": 10,
             "loc_deletions": 0,
@@ -576,7 +576,7 @@ def test_efficiency_table_total_row_uses_aggregate_totals() -> None:
         {
             "step_name": "implement",
             "peak_context": 800,
-            "cache_creation_input_tokens": 100,
+            "cache_creation": 100,
             "output_tokens": 40,
             "loc_insertions": 90,
             "loc_deletions": 10,
@@ -586,7 +586,7 @@ def test_efficiency_table_total_row_uses_aggregate_totals() -> None:
         "loc_insertions": 100,
         "loc_deletions": 10,
         "peak_context": 1000,
-        "cache_creation_input_tokens": 100,
+        "cache_creation": 100,
         "output_tokens": 50,
     }
     result = TelemetryFormatter.format_efficiency_table(steps, total)
@@ -602,7 +602,7 @@ def test_efficiency_table_terminal_no_markdown() -> None:
         {
             "step_name": "implement",
             "peak_context": 1000,
-            "cache_creation_input_tokens": 200,
+            "cache_creation": 200,
             "output_tokens": 50,
             "loc_insertions": 80,
             "loc_deletions": 20,
@@ -612,7 +612,7 @@ def test_efficiency_table_terminal_no_markdown() -> None:
         "loc_insertions": 80,
         "loc_deletions": 20,
         "peak_context": 1000,
-        "cache_creation_input_tokens": 200,
+        "cache_creation": 200,
         "output_tokens": 50,
     }
     result = TelemetryFormatter.format_efficiency_table_terminal(steps, total)
@@ -630,8 +630,8 @@ def test_efficiency_table_has_all_ratio_columns() -> None:
         {
             "step_name": "implement",
             "peak_context": 500,
-            "cache_read_input_tokens": 1000,
-            "cache_creation_input_tokens": 200,
+            "cache_read": 1000,
+            "cache_creation": 200,
             "output_tokens": 50,
             "loc_insertions": 80,
             "loc_deletions": 20,
@@ -641,8 +641,8 @@ def test_efficiency_table_has_all_ratio_columns() -> None:
         "loc_insertions": 80,
         "loc_deletions": 20,
         "peak_context": 500,
-        "cache_read_input_tokens": 1000,
-        "cache_creation_input_tokens": 200,
+        "cache_read": 1000,
+        "cache_creation": 200,
         "output_tokens": 50,
     }
     result = TelemetryFormatter.format_efficiency_table(steps, total)
@@ -660,8 +660,8 @@ def test_efficiency_table_terminal_has_all_columns() -> None:
         {
             "step_name": "implement",
             "peak_context": 1000,
-            "cache_read_input_tokens": 500,
-            "cache_creation_input_tokens": 200,
+            "cache_read": 500,
+            "cache_creation": 200,
             "output_tokens": 50,
             "loc_insertions": 80,
             "loc_deletions": 20,
@@ -671,8 +671,8 @@ def test_efficiency_table_terminal_has_all_columns() -> None:
         "loc_insertions": 80,
         "loc_deletions": 20,
         "peak_context": 1000,
-        "cache_read_input_tokens": 500,
-        "cache_creation_input_tokens": 200,
+        "cache_read": 500,
+        "cache_creation": 200,
         "output_tokens": 50,
     }
     result = TelemetryFormatter.format_efficiency_table_terminal(steps, total)
@@ -690,8 +690,8 @@ def test_efficiency_markdown_terminal_column_parity() -> None:
         {
             "step_name": "implement",
             "peak_context": 1000,
-            "cache_read_input_tokens": 500,
-            "cache_creation_input_tokens": 200,
+            "cache_read": 500,
+            "cache_creation": 200,
             "output_tokens": 50,
             "loc_insertions": 80,
             "loc_deletions": 20,
@@ -701,8 +701,8 @@ def test_efficiency_markdown_terminal_column_parity() -> None:
         "loc_insertions": 80,
         "loc_deletions": 20,
         "peak_context": 1000,
-        "cache_read_input_tokens": 500,
-        "cache_creation_input_tokens": 200,
+        "cache_read": 500,
+        "cache_creation": 200,
         "output_tokens": 50,
     }
     result = TelemetryFormatter.format_efficiency_table(steps, total)
@@ -753,8 +753,8 @@ def test_token_table_renders_invocation_count() -> None:
             "step_name": "fix",
             "input_tokens": 100,
             "output_tokens": 50,
-            "cache_read_input_tokens": 200,
-            "cache_creation_input_tokens": 10,
+            "cache_read": 200,
+            "cache_creation": 10,
             "peak_context": 500,
             "turn_count": 40,
             "invocation_count": 3,
@@ -764,8 +764,8 @@ def test_token_table_renders_invocation_count() -> None:
     total = {
         "input_tokens": 100,
         "output_tokens": 50,
-        "cache_read_input_tokens": 200,
-        "cache_creation_input_tokens": 10,
+        "cache_read": 200,
+        "cache_creation": 10,
         "peak_context": 500,
         "total_elapsed_seconds": 120.0,
         "invocation_count": 3,
@@ -784,8 +784,8 @@ def test_token_markdown_terminal_column_parity() -> None:
             "step_name": "plan",
             "input_tokens": 1000,
             "output_tokens": 500,
-            "cache_read_input_tokens": 200,
-            "cache_creation_input_tokens": 100,
+            "cache_read": 200,
+            "cache_creation": 100,
             "peak_context": 200,
             "turn_count": 5,
             "invocation_count": 1,
@@ -795,8 +795,8 @@ def test_token_markdown_terminal_column_parity() -> None:
     total = {
         "input_tokens": 1000,
         "output_tokens": 500,
-        "cache_read_input_tokens": 200,
-        "cache_creation_input_tokens": 100,
+        "cache_read": 200,
+        "cache_creation": 100,
         "peak_context": 200,
         "total_elapsed_seconds": 45.7,
     }
@@ -825,8 +825,8 @@ def test_efficiency_table_no_peak_ctx_ratio() -> None:
             "step_name": "fix",
             "input_tokens": 100,
             "output_tokens": 500,
-            "cache_read_input_tokens": 2000,
-            "cache_creation_input_tokens": 100,
+            "cache_read": 2000,
+            "cache_creation": 100,
             "peak_context": 5000,
             "loc_insertions": 10,
             "loc_deletions": 5,
@@ -835,8 +835,8 @@ def test_efficiency_table_no_peak_ctx_ratio() -> None:
     total = {
         "input_tokens": 100,
         "output_tokens": 500,
-        "cache_read_input_tokens": 2000,
-        "cache_creation_input_tokens": 100,
+        "cache_read": 2000,
+        "cache_creation": 100,
         "peak_context": 5000,
         "loc_insertions": 10,
         "loc_deletions": 5,
@@ -858,8 +858,8 @@ def test_format_token_table_includes_model_column() -> None:
             "model": "claude-sonnet-4-6",
             "input_tokens": 1000,
             "output_tokens": 500,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
+            "cache_creation": 0,
+            "cache_read": 0,
             "invocation_count": 1,
             "wall_clock_seconds": 60.0,
             "peak_context": 0,
@@ -869,8 +869,8 @@ def test_format_token_table_includes_model_column() -> None:
     total = {
         "input_tokens": 1000,
         "output_tokens": 500,
-        "cache_creation_input_tokens": 0,
-        "cache_read_input_tokens": 0,
+        "cache_creation": 0,
+        "cache_read": 0,
         "total_elapsed_seconds": 60.0,
         "peak_context": 0,
     }
@@ -891,8 +891,8 @@ def test_format_model_table() -> None:
             "step_count": 2,
             "input_tokens": 300,
             "output_tokens": 130,
-            "cache_read_input_tokens": 5000,
-            "cache_creation_input_tokens": 100,
+            "cache_read": 5000,
+            "cache_creation": 100,
             "elapsed_seconds": 120.0,
         },
         {
@@ -900,8 +900,8 @@ def test_format_model_table() -> None:
             "step_count": 1,
             "input_tokens": 500,
             "output_tokens": 200,
-            "cache_read_input_tokens": 1200,
-            "cache_creation_input_tokens": 0,
+            "cache_read": 1200,
+            "cache_creation": 0,
             "elapsed_seconds": 60.0,
         },
     ]
@@ -925,8 +925,8 @@ def test_format_model_table_all_unknown_returns_empty() -> None:
             "step_count": 1,
             "input_tokens": 100,
             "output_tokens": 0,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
+            "cache_creation": 0,
+            "cache_read": 0,
             "elapsed_seconds": 0.0,
         }
     ]
@@ -945,8 +945,8 @@ def test_compact_kv_includes_model() -> None:
             "model": "claude-sonnet-4-6",
             "input_tokens": 100,
             "output_tokens": 50,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
+            "cache_creation": 0,
+            "cache_read": 0,
             "invocation_count": 1,
             "turn_count": 0,
             "wall_clock_seconds": 10.0,
@@ -981,8 +981,8 @@ def test_non_anthropic_step_marked_terminal() -> None:
             "model": "MiniMax-M2.7-highspeed",
             "input_tokens": 307600,
             "output_tokens": 3400,
-            "cache_read_input_tokens": 0,
-            "cache_creation_input_tokens": 0,
+            "cache_read": 0,
+            "cache_creation": 0,
             "invocation_count": 1,
             "wall_clock_seconds": 60.0,
         },
@@ -990,8 +990,8 @@ def test_non_anthropic_step_marked_terminal() -> None:
     total = {
         "input_tokens": 307600,
         "output_tokens": 3400,
-        "cache_read_input_tokens": 0,
-        "cache_creation_input_tokens": 0,
+        "cache_read": 0,
+        "cache_creation": 0,
         "total_elapsed_seconds": 60.0,
     }
     result = TelemetryFormatter.format_token_table_terminal(steps, total)
@@ -1007,8 +1007,8 @@ def test_non_anthropic_step_marked_compact_kv() -> None:
             "model": "MiniMax-M2.7-highspeed",
             "input_tokens": 307600,
             "output_tokens": 3400,
-            "cache_read_input_tokens": 0,
-            "cache_creation_input_tokens": 0,
+            "cache_read": 0,
+            "cache_creation": 0,
             "invocation_count": 1,
             "wall_clock_seconds": 60.0,
         },
@@ -1016,8 +1016,8 @@ def test_non_anthropic_step_marked_compact_kv() -> None:
     total = {
         "input_tokens": 307600,
         "output_tokens": 3400,
-        "cache_read_input_tokens": 0,
-        "cache_creation_input_tokens": 0,
+        "cache_read": 0,
+        "cache_creation": 0,
         "total_elapsed_seconds": 60.0,
     }
     result = TelemetryFormatter.format_compact_kv(steps, total)

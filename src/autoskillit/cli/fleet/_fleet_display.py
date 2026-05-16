@@ -104,8 +104,8 @@ def _aggregate_totals(state: CampaignState) -> dict[str, int]:
         tu = d.token_usage
         totals["input_tokens"] += tu.get("input_tokens", 0)
         totals["output_tokens"] += tu.get("output_tokens", 0)
-        totals["cache_read"] += tu.get("cache_read_input_tokens", 0)
-        totals["cache_creation"] += tu.get("cache_creation_input_tokens", 0)
+        totals["cache_read"] += tu.get("cache_read", 0)
+        totals["cache_creation"] += tu.get("cache_creation", 0)
     return totals
 
 
@@ -121,8 +121,8 @@ def _build_status_rows(state: CampaignState) -> list[tuple[str, ...]]:
                 _fmt_elapsed(d),
                 _humanize(tu.get("input_tokens", 0)),
                 _humanize(tu.get("output_tokens", 0)),
-                _humanize(tu.get("cache_read_input_tokens", 0)),
-                _humanize(tu.get("cache_creation_input_tokens", 0)),
+                _humanize(tu.get("cache_read", 0)),
+                _humanize(tu.get("cache_creation", 0)),
                 d.dispatched_session_log_dir or "-",
             )
         )
@@ -170,8 +170,8 @@ def _cross_check_tokens(state: CampaignState, state_totals: dict[str, int]) -> N
     for label, state_key, log_key in [
         ("input_tokens", "input_tokens", "input_tokens"),
         ("output_tokens", "output_tokens", "output_tokens"),
-        ("cache_read", "cache_read", "cache_read_input_tokens"),
-        ("cache_creation", "cache_creation", "cache_creation_input_tokens"),
+        ("cache_read", "cache_read", "cache_read"),
+        ("cache_creation", "cache_creation", "cache_creation"),
     ]:
         sv = state_totals.get(state_key, 0)
         lv = log_totals.get(log_key, 0)

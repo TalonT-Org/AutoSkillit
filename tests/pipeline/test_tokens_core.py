@@ -17,8 +17,8 @@ def _make_usage(**overrides: int) -> dict[str, int]:
     defaults = {
         "input_tokens": 100,
         "output_tokens": 50,
-        "cache_creation_input_tokens": 10,
-        "cache_read_input_tokens": 5,
+        "cache_creation": 10,
+        "cache_read": 5,
     }
     return {**defaults, **overrides}
 
@@ -32,8 +32,8 @@ class TestTokenEntry:
             "model",
             "input_tokens",
             "output_tokens",
-            "cache_creation_input_tokens",
-            "cache_read_input_tokens",
+            "cache_creation",
+            "cache_read",
             "invocation_count",
             "elapsed_seconds",
             "loc_insertions",
@@ -46,8 +46,8 @@ class TestTokenEntry:
         entry = TokenEntry(step_name="plan")
         assert entry.input_tokens == 0
         assert entry.output_tokens == 0
-        assert entry.cache_creation_input_tokens == 0
-        assert entry.cache_read_input_tokens == 0
+        assert entry.cache_creation == 0
+        assert entry.cache_read == 0
         assert entry.invocation_count == 0
 
     def test_to_dict_is_json_serializable(self):
@@ -63,8 +63,8 @@ class TestTokenEntry:
             "model",
             "input_tokens",
             "output_tokens",
-            "cache_creation_input_tokens",
-            "cache_read_input_tokens",
+            "cache_creation",
+            "cache_read",
             "invocation_count",
             "elapsed_seconds",
             "loc_insertions",
@@ -89,8 +89,8 @@ class TestDefaultTokenLog:
         assert report[0]["step_name"] == "plan"
         assert report[0]["input_tokens"] == 100
         assert report[0]["output_tokens"] == 50
-        assert report[0]["cache_creation_input_tokens"] == 10
-        assert report[0]["cache_read_input_tokens"] == 5
+        assert report[0]["cache_creation"] == 10
+        assert report[0]["cache_read"] == 5
 
     def test_record_same_step_twice_accumulates(self):
         log = DefaultTokenLog()
@@ -144,8 +144,8 @@ class TestDefaultTokenLog:
         report = log.get_report()
         assert report[0]["input_tokens"] == 42
         assert report[0]["output_tokens"] == 0
-        assert report[0]["cache_creation_input_tokens"] == 0
-        assert report[0]["cache_read_input_tokens"] == 0
+        assert report[0]["cache_creation"] == 0
+        assert report[0]["cache_read"] == 0
 
     def test_compute_total_empty_log(self):
         log = DefaultTokenLog()
@@ -153,8 +153,8 @@ class TestDefaultTokenLog:
         assert total == {
             "input_tokens": 0,
             "output_tokens": 0,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
+            "cache_creation": 0,
+            "cache_read": 0,
             "total_elapsed_seconds": 0.0,
             "loc_insertions": 0,
             "loc_deletions": 0,
@@ -234,8 +234,8 @@ class TestDefaultTokenLog:
             {
                 "input_tokens": 10,
                 "output_tokens": 20,
-                "cache_creation_input_tokens": 5,
-                "cache_read_input_tokens": 3,
+                "cache_creation": 5,
+                "cache_read": 3,
             },
         )
         log.record(
@@ -243,15 +243,15 @@ class TestDefaultTokenLog:
             {
                 "input_tokens": 100,
                 "output_tokens": 200,
-                "cache_creation_input_tokens": 50,
-                "cache_read_input_tokens": 30,
+                "cache_creation": 50,
+                "cache_read": 30,
             },
         )
         total = log.compute_total()
         assert total["input_tokens"] == 110
         assert total["output_tokens"] == 220
-        assert total["cache_creation_input_tokens"] == 55
-        assert total["cache_read_input_tokens"] == 33
+        assert total["cache_creation"] == 55
+        assert total["cache_read"] == 33
 
     def test_record_backward_clock_elapsed_is_non_negative(self):
         """elapsed_seconds must never go negative even when end_ts < start_ts."""
@@ -316,8 +316,8 @@ class TestDefaultTokenLogLoadFromLogDir:
                 "step_name": "implement",
                 "input_tokens": 100,
                 "output_tokens": 50,
-                "cache_creation_input_tokens": 10,
-                "cache_read_input_tokens": 5,
+                "cache_creation": 10,
+                "cache_read": 5,
                 "timing_seconds": 30.0,
             },
         )
@@ -339,8 +339,8 @@ class TestDefaultTokenLogLoadFromLogDir:
                 "step_name": "implement",
                 "input_tokens": 100,
                 "output_tokens": 50,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
+                "cache_creation": 0,
+                "cache_read": 0,
                 "timing_seconds": 0.0,
             },
         )
@@ -360,8 +360,8 @@ class TestDefaultTokenLogLoadFromLogDir:
                 "step_name": "implement",
                 "input_tokens": 999,
                 "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
+                "cache_creation": 0,
+                "cache_read": 0,
                 "timing_seconds": 0.0,
             },
             timestamp="2025-01-01T00:00:00+00:00",
@@ -396,8 +396,8 @@ class TestDefaultTokenLogLoadFromLogDir:
                     "step_name": f"step{i}",
                     "input_tokens": 10,
                     "output_tokens": 5,
-                    "cache_creation_input_tokens": 0,
-                    "cache_read_input_tokens": 0,
+                    "cache_creation": 0,
+                    "cache_read": 0,
                     "timing_seconds": 0.0,
                 },
             )
@@ -420,8 +420,8 @@ class TestDefaultTokenLogLoadFromLogDir:
                 "step_name": "implement",
                 "input_tokens": 100,
                 "output_tokens": 50,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
+                "cache_creation": 0,
+                "cache_read": 0,
                 "timing_seconds": None,
             },
         )
@@ -454,8 +454,8 @@ def test_token_log_record_accumulates_loc():
         {
             "input_tokens": 100,
             "output_tokens": 10,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
+            "cache_creation": 0,
+            "cache_read": 0,
         },
         loc_insertions=50,
         loc_deletions=20,
@@ -465,8 +465,8 @@ def test_token_log_record_accumulates_loc():
         {
             "input_tokens": 200,
             "output_tokens": 20,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
+            "cache_creation": 0,
+            "cache_read": 0,
         },
         loc_insertions=30,
         loc_deletions=5,
@@ -485,8 +485,8 @@ def test_token_log_compute_total_includes_loc():
         {
             "input_tokens": 0,
             "output_tokens": 0,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
+            "cache_creation": 0,
+            "cache_read": 0,
         },
         loc_insertions=100,
         loc_deletions=30,
@@ -496,8 +496,8 @@ def test_token_log_compute_total_includes_loc():
         {
             "input_tokens": 0,
             "output_tokens": 0,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
+            "cache_creation": 0,
+            "cache_read": 0,
         },
         loc_insertions=20,
         loc_deletions=5,
@@ -530,8 +530,8 @@ def test_token_log_load_from_log_dir_reads_loc(tmp_path):
                 "step_name": "implement",
                 "input_tokens": 100,
                 "output_tokens": 10,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
+                "cache_creation": 0,
+                "cache_read": 0,
                 "timing_seconds": 5.0,
                 "order_id": "",
                 "loc_insertions": 42,
@@ -569,8 +569,8 @@ def test_token_log_load_from_log_dir_missing_loc_defaults_to_zero(tmp_path):
                 "step_name": "plan",
                 "input_tokens": 500,
                 "output_tokens": 50,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
+                "cache_creation": 0,
+                "cache_read": 0,
                 "timing_seconds": 3.0,
                 "order_id": "",
                 # NO loc_insertions or loc_deletions
@@ -597,24 +597,24 @@ def test_token_entry_has_peak_context_and_turn_count_fields():
 
 def test_record_peak_context_uses_max():
     log = DefaultTokenLog()
-    log.record("impl", {"cache_read_input_tokens": 100, "peak_context": 50000, "turn_count": 10})
-    log.record("impl", {"cache_read_input_tokens": 200, "peak_context": 80000, "turn_count": 15})
+    log.record("impl", {"cache_read": 100, "peak_context": 50000, "turn_count": 10})
+    log.record("impl", {"cache_read": 200, "peak_context": 80000, "turn_count": 15})
     report = log.get_report()
     assert report[0]["peak_context"] == 80000
 
 
 def test_record_turn_count_sums():
     log = DefaultTokenLog()
-    log.record("impl", {"cache_read_input_tokens": 100, "peak_context": 50000, "turn_count": 10})
-    log.record("impl", {"cache_read_input_tokens": 200, "peak_context": 80000, "turn_count": 15})
+    log.record("impl", {"cache_read": 100, "peak_context": 50000, "turn_count": 10})
+    log.record("impl", {"cache_read": 200, "peak_context": 80000, "turn_count": 15})
     report = log.get_report()
     assert report[0]["turn_count"] == 25
 
 
 def test_compute_total_peak_context_is_max_across_steps():
     log = DefaultTokenLog()
-    log.record("plan", {"cache_read_input_tokens": 100, "peak_context": 40000, "turn_count": 5})
-    log.record("impl", {"cache_read_input_tokens": 200, "peak_context": 70000, "turn_count": 18})
+    log.record("plan", {"cache_read": 100, "peak_context": 40000, "turn_count": 5})
+    log.record("impl", {"cache_read": 200, "peak_context": 70000, "turn_count": 18})
     total = log.compute_total()
     assert total["peak_context"] == 70000
     assert total["turn_count"] == 23
@@ -632,8 +632,8 @@ def test_load_from_log_dir_reads_peak_context_and_turn_count(tmp_path):
                 "step_name": "impl",
                 "input_tokens": 100,
                 "output_tokens": 50,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 200,
+                "cache_creation": 0,
+                "cache_read": 200,
                 "timing_seconds": 5.0,
                 "order_id": "",
                 "peak_context": 60000,
@@ -660,8 +660,8 @@ def test_load_from_log_dir_missing_peak_context_defaults_to_zero(tmp_path):
                 "step_name": "plan",
                 "input_tokens": 500,
                 "output_tokens": 50,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
+                "cache_creation": 0,
+                "cache_read": 0,
                 "timing_seconds": 3.0,
                 "order_id": "",
             }
@@ -679,13 +679,13 @@ def test_token_log_record_accepts_resolved_label():
     log = DefaultTokenLog()
     log.record(
         "dispatch:abc-123",
-        {"input_tokens": 100, "output_tokens": 50, "cache_read_input_tokens": 80},
+        {"input_tokens": 100, "output_tokens": 50, "cache_read": 80},
     )
     report = log.get_report()
     assert len(report) == 1
     assert report[0]["step_name"] == "dispatch:abc-123"
     assert report[0]["input_tokens"] == 100
-    assert report[0]["cache_read_input_tokens"] == 80
+    assert report[0]["cache_read"] == 80
 
 
 def test_load_from_log_dir_restores_orchestrator_sessions(tmp_path):
@@ -697,8 +697,8 @@ def test_load_from_log_dir_restores_orchestrator_sessions(tmp_path):
             "session_label": "(ad-hoc)",
             "input_tokens": 200,
             "output_tokens": 100,
-            "cache_creation_input_tokens": 30,
-            "cache_read_input_tokens": 70,
+            "cache_creation": 30,
+            "cache_read": 70,
             "timing_seconds": 5.0,
         },
     )
@@ -708,5 +708,5 @@ def test_load_from_log_dir_restores_orchestrator_sessions(tmp_path):
     report = log.get_report()
     assert len(report) == 1
     assert report[0]["input_tokens"] == 200
-    assert report[0]["cache_creation_input_tokens"] == 30
-    assert report[0]["cache_read_input_tokens"] == 70
+    assert report[0]["cache_creation"] == 30
+    assert report[0]["cache_read"] == 70

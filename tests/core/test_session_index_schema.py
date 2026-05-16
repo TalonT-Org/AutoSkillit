@@ -25,3 +25,41 @@ class TestSessionIndexEntryCompleteness:
         declared = set(SessionIndexEntry.__annotations__)
         missing = _REQUIRED_INDEX_FIELDS - declared
         assert not missing, f"SessionIndexEntry missing fields: {missing}"
+
+
+class TestCanonicalCacheFields:
+    """Token entry TypedDicts use canonical short-form field names."""
+
+    def test_canonical_cache_fields_in_model_total_entry(self):
+        from autoskillit.core.types._type_results import ModelTotalEntry
+
+        annotations = set(ModelTotalEntry.__annotations__)
+        assert "cache_creation" in annotations
+        assert "cache_read" in annotations
+        assert "cache_creation_input_tokens" not in annotations
+        assert "cache_read_input_tokens" not in annotations
+
+    def test_canonical_cache_fields_in_session_index_entry(self):
+        from autoskillit.core.types._type_results import SessionIndexEntry
+
+        annotations = set(SessionIndexEntry.__annotations__)
+        assert "cache_creation" in annotations
+        assert "cache_read" in annotations
+        assert "cache_creation_input_tokens" not in annotations
+        assert "cache_read_input_tokens" not in annotations
+
+    def test_canonical_cache_fields_in_token_usage_file_entry(self):
+        from autoskillit.core.types._type_results import TokenUsageFileEntry
+
+        annotations = set(TokenUsageFileEntry.__annotations__)
+        assert "cache_creation" in annotations
+        assert "cache_read" in annotations
+        assert "cache_creation_input_tokens" not in annotations
+        assert "cache_read_input_tokens" not in annotations
+
+    def test_schema_version_in_token_usage_file_entry(self):
+        from autoskillit.core.types._type_results import TokenUsageFileEntry
+
+        annotations = TokenUsageFileEntry.__annotations__
+        assert "schema_version" in annotations
+        assert annotations["schema_version"] is int

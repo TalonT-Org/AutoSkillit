@@ -71,8 +71,8 @@ class TokenEntry:
     model: str = ""
     input_tokens: int = 0
     output_tokens: int = 0
-    cache_creation_input_tokens: int = 0
-    cache_read_input_tokens: int = 0
+    cache_creation: int = 0
+    cache_read: int = 0
     invocation_count: int = 0
     elapsed_seconds: float = 0.0
     loc_insertions: int = 0
@@ -86,8 +86,8 @@ class TokenEntry:
             "model": self.model,
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
-            "cache_creation_input_tokens": self.cache_creation_input_tokens,
-            "cache_read_input_tokens": self.cache_read_input_tokens,
+            "cache_creation": self.cache_creation,
+            "cache_read": self.cache_read,
             "invocation_count": self.invocation_count,
             "elapsed_seconds": self.elapsed_seconds,
             "loc_insertions": self.loc_insertions,
@@ -144,8 +144,12 @@ class DefaultTokenLog:
             e.model = _model
         e.input_tokens += token_usage.get("input_tokens", 0)
         e.output_tokens += token_usage.get("output_tokens", 0)
-        e.cache_creation_input_tokens += token_usage.get("cache_creation_input_tokens", 0)
-        e.cache_read_input_tokens += token_usage.get("cache_read_input_tokens", 0)
+        e.cache_creation += token_usage.get(
+            "cache_creation", token_usage.get("cache_creation_input_tokens", 0)
+        )
+        e.cache_read += token_usage.get(
+            "cache_read", token_usage.get("cache_read_input_tokens", 0)
+        )
         e.invocation_count += 1
         e.loc_insertions += loc_insertions
         e.loc_deletions += loc_deletions
@@ -191,8 +195,8 @@ class DefaultTokenLog:
                 agg.model = e.model
             agg.input_tokens += e.input_tokens
             agg.output_tokens += e.output_tokens
-            agg.cache_creation_input_tokens += e.cache_creation_input_tokens
-            agg.cache_read_input_tokens += e.cache_read_input_tokens
+            agg.cache_creation += e.cache_creation
+            agg.cache_read += e.cache_read
             agg.elapsed_seconds += e.elapsed_seconds
             agg.invocation_count += e.invocation_count
             agg.loc_insertions += e.loc_insertions
@@ -211,8 +215,8 @@ class DefaultTokenLog:
         total: dict[str, Any] = {
             "input_tokens": 0,
             "output_tokens": 0,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
+            "cache_creation": 0,
+            "cache_read": 0,
             "total_elapsed_seconds": 0.0,
             "loc_insertions": 0,
             "loc_deletions": 0,
@@ -224,8 +228,8 @@ class DefaultTokenLog:
                 continue
             total["input_tokens"] += entry.input_tokens
             total["output_tokens"] += entry.output_tokens
-            total["cache_creation_input_tokens"] += entry.cache_creation_input_tokens
-            total["cache_read_input_tokens"] += entry.cache_read_input_tokens
+            total["cache_creation"] += entry.cache_creation
+            total["cache_read"] += entry.cache_read
             total["total_elapsed_seconds"] += entry.elapsed_seconds
             total["loc_insertions"] += entry.loc_insertions
             total["loc_deletions"] += entry.loc_deletions
@@ -247,16 +251,16 @@ class DefaultTokenLog:
                     "_steps": set(),
                     "input_tokens": 0,
                     "output_tokens": 0,
-                    "cache_creation_input_tokens": 0,
-                    "cache_read_input_tokens": 0,
+                    "cache_creation": 0,
+                    "cache_read": 0,
                     "elapsed_seconds": 0.0,
                 }
             md = model_data[model]
             md["_steps"].add(entry.step_name)
             md["input_tokens"] += entry.input_tokens
             md["output_tokens"] += entry.output_tokens
-            md["cache_creation_input_tokens"] += entry.cache_creation_input_tokens
-            md["cache_read_input_tokens"] += entry.cache_read_input_tokens
+            md["cache_creation"] += entry.cache_creation
+            md["cache_read"] += entry.cache_read
             md["elapsed_seconds"] += entry.elapsed_seconds
         result = []
         for md in model_data.values():
@@ -326,8 +330,8 @@ class DefaultTokenLog:
                 e.model = _model
             e.input_tokens += data.get("input_tokens", 0)
             e.output_tokens += data.get("output_tokens", 0)
-            e.cache_creation_input_tokens += data.get("cache_creation_input_tokens", 0)
-            e.cache_read_input_tokens += data.get("cache_read_input_tokens", 0)
+            e.cache_creation += data.get("cache_creation", 0)
+            e.cache_read += data.get("cache_read", 0)
             # timing_seconds is the on-disk key name written by session_log.py;
             # elapsed_seconds is the in-memory field name on TokenEntry.
             _raw_timing = data.get("timing_seconds")

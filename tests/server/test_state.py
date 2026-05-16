@@ -69,8 +69,8 @@ def test_initialize_does_not_load_token_log(tmp_path):
                 "step_name": "implement",
                 "input_tokens": 1000,
                 "output_tokens": 500,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
+                "cache_creation": 0,
+                "cache_read": 0,
                 "timing_seconds": 30.0,
             }
         )

@@ -67,8 +67,8 @@ class TestFormatterSchemaConsistency:
                 "step_name": "implement",
                 "input_tokens": 45000,
                 "output_tokens": 12000,
-                "cache_read_input_tokens": 0,
-                "cache_creation_input_tokens": 0,
+                "cache_read": 0,
+                "cache_creation": 0,
                 "invocation_count": 1,
                 "wall_clock_seconds": 120.0,
             }
@@ -76,8 +76,8 @@ class TestFormatterSchemaConsistency:
         total = {
             "input_tokens": 45000,
             "output_tokens": 12000,
-            "cache_read_input_tokens": 0,
-            "cache_creation_input_tokens": 0,
+            "cache_read": 0,
+            "cache_creation": 0,
             "total_elapsed_seconds": 120.0,
         }
         table_str = TelemetryFormatter.format_token_table(steps, total)

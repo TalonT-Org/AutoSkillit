@@ -388,8 +388,8 @@ def flush_session_log(
             "session_label": label,
             "input_tokens": token_usage.get("input_tokens", 0),
             "output_tokens": token_usage.get("output_tokens", 0),
-            "cache_creation_input_tokens": token_usage.get("cache_creation_input_tokens", 0),
-            "cache_read_input_tokens": token_usage.get("cache_read_input_tokens", 0),
+            "cache_creation": token_usage.get("cache_creation_input_tokens", 0),
+            "cache_read": token_usage.get("cache_read_input_tokens", 0),
             "timing_seconds": timing_seconds if timing_seconds is not None else 0.0,
             "order_id": order_id,
             "loc_insertions": loc_insertions,
@@ -400,6 +400,7 @@ def flush_session_log(
             "model_identifier": model_identifier or _primary_model_identifier(token_usage),
             "dispatch_id": dispatch_id,
             "campaign_id": campaign_id,
+            "schema_version": 2,
         }
         atomic_write(session_dir / "token_usage.json", _fast_dumps(tu_data))
 
@@ -441,12 +442,8 @@ def flush_session_log(
         "step_name": step_name,
         "input_tokens": token_usage.get("input_tokens", 0) if token_usage else 0,
         "output_tokens": token_usage.get("output_tokens", 0) if token_usage else 0,
-        "cache_creation_input_tokens": token_usage.get("cache_creation_input_tokens", 0)
-        if token_usage
-        else 0,
-        "cache_read_input_tokens": token_usage.get("cache_read_input_tokens", 0)
-        if token_usage
-        else 0,
+        "cache_creation": token_usage.get("cache_creation_input_tokens", 0) if token_usage else 0,
+        "cache_read": token_usage.get("cache_read_input_tokens", 0) if token_usage else 0,
         "write_call_count": write_call_count,
         "tracked_comm": _effective_tracked_comm,
         "tracked_comm_drift": _tracked_comm_drift,

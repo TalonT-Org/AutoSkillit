@@ -45,16 +45,16 @@ class TestLoadFromLogDirCwdFilter:
         "step_name": "plan",
         "input_tokens": 100,
         "output_tokens": 50,
-        "cache_creation_input_tokens": 0,
-        "cache_read_input_tokens": 0,
+        "cache_creation": 0,
+        "cache_read": 0,
         "timing_seconds": 10.0,
     }
     _IMPL_DATA = {
         "step_name": "implement",
         "input_tokens": 200,
         "output_tokens": 80,
-        "cache_creation_input_tokens": 0,
-        "cache_read_input_tokens": 0,
+        "cache_creation": 0,
+        "cache_read": 0,
         "timing_seconds": 20.0,
     }
 
@@ -140,8 +140,8 @@ class TestTokenLogStepNameNormalization:
         usage = {
             "input_tokens": 100,
             "output_tokens": 50,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
+            "cache_creation": 0,
+            "cache_read": 0,
         }
 
         log.record("plan-30", usage)
@@ -165,8 +165,8 @@ class TestTokenLogStepNameNormalization:
         usage = {
             "input_tokens": 100,
             "output_tokens": 50,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
+            "cache_creation": 0,
+            "cache_read": 0,
         }
 
         log.record("plan", usage)
@@ -185,8 +185,8 @@ class TestTokenLogStepNameNormalization:
         usage = {
             "input_tokens": 100,
             "output_tokens": 50,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
+            "cache_creation": 0,
+            "cache_read": 0,
         }
         log.record("open-pr", usage)
 
@@ -213,8 +213,8 @@ def test_load_from_log_dir_normalizes_suffixed_step_names(tmp_path):
             "step_name": step_name,
             "input_tokens": 100,
             "output_tokens": 50,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
+            "cache_creation": 0,
+            "cache_read": 0,
             "timing_seconds": 5.0,
         }
         (session_dir / "token_usage.json").write_text(json.dumps(tu_data))
@@ -240,8 +240,8 @@ class TestOrderIdScoping:
         base = {
             "input_tokens": 100,
             "output_tokens": 50,
-            "cache_creation_input_tokens": 10,
-            "cache_read_input_tokens": 5,
+            "cache_creation": 10,
+            "cache_read": 5,
         }
         return {**base, **overrides}
 
@@ -340,8 +340,8 @@ _TOKEN_DATA = {
     "step_name": "plan",
     "input_tokens": 10,
     "output_tokens": 5,
-    "cache_creation_input_tokens": 0,
-    "cache_read_input_tokens": 0,
+    "cache_creation": 0,
+    "cache_read": 0,
     "timing_seconds": 1.0,
 }
 
@@ -403,8 +403,8 @@ def _write_session_order_id(
         "step_name": step_name,
         "input_tokens": 100,
         "output_tokens": 50,
-        "cache_creation_input_tokens": 0,
-        "cache_read_input_tokens": 0,
+        "cache_creation": 0,
+        "cache_read": 0,
         "timing_seconds": 5.0,
         "order_id": order_id,
     }
@@ -450,8 +450,8 @@ def _write_token_session_dispatch_id(
         "step_name": "implement",
         "input_tokens": 100,
         "output_tokens": 50,
-        "cache_creation_input_tokens": 0,
-        "cache_read_input_tokens": 0,
+        "cache_creation": 0,
+        "cache_read": 0,
         "timing_seconds": 5.0,
     }
     (session_dir / "token_usage.json").write_text(json.dumps(tu_data))

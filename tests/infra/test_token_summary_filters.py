@@ -98,8 +98,8 @@ def test_e1_order_id_isolation_multi_issue_session(tmp_path: Path) -> None:
                     "session_label": step,
                     "input_tokens": 100,
                     "output_tokens": 50,
-                    "cache_creation_input_tokens": 0,
-                    "cache_read_input_tokens": 0,
+                    "cache_creation": 0,
+                    "cache_read": 0,
                     "timing_seconds": 5.0,
                     "order_id": dir_name.replace("sess-", "issue-"),
                 }
@@ -154,8 +154,8 @@ def test_e2_fallback_to_kitchen_id_when_no_order_id(tmp_path: Path) -> None:
                 "step_name": "plan",
                 "input_tokens": 100,
                 "output_tokens": 50,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
+                "cache_creation": 0,
+                "cache_read": 0,
                 "timing_seconds": 5.0,
             }
         ],
@@ -210,8 +210,8 @@ def test_e3_backward_compat_sessions_without_order_id_field(tmp_path: Path) -> N
                 "session_label": "plan",
                 "input_tokens": 100,
                 "output_tokens": 50,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
+                "cache_creation": 0,
+                "cache_read": 0,
                 "timing_seconds": 5.0,
             }
         )

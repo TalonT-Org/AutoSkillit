@@ -67,7 +67,7 @@ def _write_dispatch_to_campaign_state(
                             "— falling back to manual reconstruction",
                             per_dispatch_state_path,
                         )
-                    elif per_dispatch_state:
+                    else:
                         for d in per_dispatch_state.dispatches:
                             if d.name == effective_name:
                                 upsert_dispatch_record_by_name(

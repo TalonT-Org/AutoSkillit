@@ -4,11 +4,22 @@ from __future__ import annotations
 
 import pytest
 
+import autoskillit.recipe.rules.rules_loop_progress as _rlp
 from autoskillit.core import Severity
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeStep
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+
+_MOCK_MANIFEST = {
+    "version": "0.1.0",
+    "skills": {
+        "test-skill": {
+            "inputs": [],
+            "outputs": [{"name": "issues_fixed", "type": "string"}],
+        }
+    },
+}
 
 
 def _make_recipe(steps: dict[str, RecipeStep]) -> Recipe:
@@ -28,20 +39,8 @@ def _make_recipe(steps: dict[str, RecipeStep]) -> Recipe:
 
 
 def test_rule_fires_when_skill_in_cycle_has_no_capture(monkeypatch) -> None:
-    """Rule fires ERROR when a run_skill step in a cycle has no capture despite declared outputs."""
-    # Mock manifest with a skill that has outputs
-    mock_manifest = {
-        "version": "0.1.0",
-        "skills": {
-            "test-skill": {
-                "inputs": [],
-                "outputs": [{"name": "issues_fixed", "type": "string"}],
-            }
-        },
-    }
-    import autoskillit.recipe.rules.rules_loop_progress as _rlp
-
-    monkeypatch.setattr(_rlp, "load_bundled_manifest", lambda: mock_manifest)
+    """Rule fires ERROR when run_skill step in a cycle has no capture despite declared outputs."""
+    monkeypatch.setattr(_rlp, "load_bundled_manifest", lambda: _MOCK_MANIFEST)
 
     recipe = _make_recipe(
         {
@@ -74,18 +73,7 @@ def test_rule_fires_when_skill_in_cycle_has_no_capture(monkeypatch) -> None:
 
 def test_rule_no_fire_when_skill_in_cycle_has_capture(monkeypatch) -> None:
     """Rule does NOT fire when a run_skill step in a cycle has a capture block."""
-    mock_manifest = {
-        "version": "0.1.0",
-        "skills": {
-            "test-skill": {
-                "inputs": [],
-                "outputs": [{"name": "issues_fixed", "type": "string"}],
-            }
-        },
-    }
-    import autoskillit.recipe.rules.rules_loop_progress as _rlp
-
-    monkeypatch.setattr(_rlp, "load_bundled_manifest", lambda: mock_manifest)
+    monkeypatch.setattr(_rlp, "load_bundled_manifest", lambda: _MOCK_MANIFEST)
 
     recipe = _make_recipe(
         {
@@ -126,7 +114,6 @@ def test_rule_no_fire_when_skill_has_no_outputs(monkeypatch) -> None:
             }
         },
     }
-    import autoskillit.recipe.rules.rules_loop_progress as _rlp
 
     monkeypatch.setattr(_rlp, "load_bundled_manifest", lambda: mock_manifest)
 
@@ -154,18 +141,7 @@ def test_rule_no_fire_when_skill_has_no_outputs(monkeypatch) -> None:
 
 def test_rule_no_fire_for_non_skill_tool_in_cycle(monkeypatch) -> None:
     """Rule does NOT fire for run_cmd steps in cycles (only run_skill)."""
-    mock_manifest = {
-        "version": "0.1.0",
-        "skills": {
-            "test-skill": {
-                "inputs": [],
-                "outputs": [{"name": "issues_fixed", "type": "string"}],
-            }
-        },
-    }
-    import autoskillit.recipe.rules.rules_loop_progress as _rlp
-
-    monkeypatch.setattr(_rlp, "load_bundled_manifest", lambda: mock_manifest)
+    monkeypatch.setattr(_rlp, "load_bundled_manifest", lambda: _MOCK_MANIFEST)
 
     recipe = _make_recipe(
         {

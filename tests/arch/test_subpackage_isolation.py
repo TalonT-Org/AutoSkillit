@@ -87,6 +87,8 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_features",  # cli/_features.py: features_app = App(name="features", ...)
         "_sessions",  # cli/_sessions.py: sessions_app = App(name="sessions", ...)
         "_validate",  # cli/_validate.py: validate_app = App(name="validate", ...)
+        # CLAUDE_CODE_CAPABILITIES: BackendCapabilities — IL-0 frozen dataclass instance
+        "_type_backend",  # core/types/_type_backend.py: CLAUDE_CODE_CAPABILITIES constant
     }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
@@ -754,7 +756,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         bringing the count to 33.
         _type_session_env.py adds FleetSessionEnv frozen dataclass for typed env spec
         at the session launch boundary, bringing the count to 20.
-        Exempt at 34 files (core/types: 20).
+        _type_backend.py adds BackendCapabilities frozen dataclass and CLAUDE_CODE_CAPABILITIES
+        constant for backend capability declarations (IL-0), bringing the count to 21.
+        Exempt at 34 files (core/types: 21).
       cli/ — REQ-CNST-003-E5: cli/ retains _terminal_table.py as a re-export shim
         for backward-compatible cli/ imports; canonical implementation lives in
         core/_terminal_table.py. Also contains _terminal.py — the terminal state
@@ -810,7 +814,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "recipe": 31,
         "execution": 18,
         "core": 20,
-        "core/types": 20,
+        "core/types": 21,
         "cli": 20,
         "hooks": 10,
         "pipeline": 12,

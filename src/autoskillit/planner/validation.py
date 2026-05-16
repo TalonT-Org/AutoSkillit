@@ -181,7 +181,7 @@ def _check_assignment_completeness(
         assign_num = int(parts[1][1:])
         wp_pairs.add((phase_num, assign_num))
     absorbed_pairs: set[tuple[int, int]] = set()
-    if absorption_registry and "absorbed" in absorption_registry:
+    if absorption_registry and isinstance(absorption_registry.get("absorbed"), dict):
         for absorbed_id in absorption_registry["absorbed"]:
             parts = absorbed_id.split("-")
             if len(parts) >= 2:

@@ -310,6 +310,19 @@ def consolidate_wps(
             result_file = wp_dir / f"{absorbed_id}_result.json"
             if result_file.exists():
                 result_file.unlink()
+        if non_primary_sources:
+            registry: dict[str, Any] = {
+                "absorbed": {
+                    absorbed_id: {
+                        "merged_into": source_to_merged[absorbed_id],
+                        "group_id": source_to_merged[absorbed_id],
+                    }
+                    for absorbed_id in non_primary_sources
+                    if absorbed_id in source_to_merged
+                },
+            }
+            registry_path = wp_dir / "absorption_registry.json"
+            write_versioned_json(registry_path, registry, schema_version=1)
 
     return {
         "consolidated_wps_path": str(consolidated_path),

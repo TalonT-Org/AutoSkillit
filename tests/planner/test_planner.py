@@ -55,6 +55,8 @@ def test_planner_all_exports() -> None:
         "validate_refined_plan",
         "ValidationFinding",
         "resolve_task_input",
+        "DiscoveryResult",
+        "discover_tier_files",
     }
 
 

@@ -12,7 +12,6 @@ from autoskillit.planner.validation import (
     _check_dag_acyclic,
     _check_duplicate_deliverables,
     _check_sizing_bounds,
-    _iter_tier_files,
     _load_assignment_results,
     _load_phase_results,
     _load_wp_results,
@@ -527,24 +526,110 @@ def test_version_bump_step_via_summary(tmp_path: Path) -> None:
     assert any(w["check"] == "version_bump_step" for w in validation["warnings"])
 
 
-def test_validate_plan_raises_on_phase_sentinel_in_assignments_dir(tmp_path: Path) -> None:
-    """Phase-tier result files in assignments/ must raise ValueError (non-canonical ID)."""
+def test_validate_plan_warns_on_phase_sentinel_in_assignments_dir(tmp_path: Path) -> None:
+    """Phase-tier result files in assignments/ emit a file_discovery_miss warning."""
     _make_minimal_output_dir(tmp_path)
     sentinel = {"id": "P1", "status": "complete", "assignment_count": 1, "failed_count": 0}
     write_json(tmp_path / "assignments" / "P1_result.json", sentinel)
 
-    with pytest.raises(ValueError, match="P1_result.json"):
-        validate_plan(str(tmp_path))
+    result = validate_plan(str(tmp_path))
+    assert result["verdict"] == "pass"
+    validation = json.loads((tmp_path / "validation.json").read_text())
+    assert any(
+        w["check"] == "file_discovery_miss" and w["severity"] == "warning"
+        for w in validation["warnings"]
+    )
 
 
-def test_validate_plan_raises_on_non_wp_result_file_in_work_packages_dir(tmp_path: Path) -> None:
-    """Non-WP result files in work_packages/ must raise ValueError (non-canonical ID)."""
+def test_validate_plan_warns_on_non_wp_result_file_in_work_packages_dir(tmp_path: Path) -> None:
+    """Non-WP result files in work_packages/ emit a file_discovery_miss warning."""
     _make_minimal_output_dir(tmp_path)
     sentinel = {"id": "P1", "status": "complete", "assignment_count": 1, "failed_count": 0}
     write_json(tmp_path / "work_packages" / "P1_result.json", sentinel)
 
-    with pytest.raises(ValueError, match="P1_result.json"):
-        validate_plan(str(tmp_path))
+    result = validate_plan(str(tmp_path))
+    assert result["verdict"] == "pass"
+    validation = json.loads((tmp_path / "validation.json").read_text())
+    assert any(
+        w["check"] == "file_discovery_miss" and w["severity"] == "warning"
+        for w in validation["warnings"]
+    )
+
+
+def test_validate_plan_emits_discovery_miss_warning_for_non_matching_files(tmp_path: Path) -> None:
+    """When *_result.json files exist but don't match tier regex, a warning finding is emitted."""
+    _make_minimal_output_dir(tmp_path, num_phases=1, wps_per_assignment=1)
+    stray = {"id": "stray", "status": "complete", "assignment_count": 1, "failed_count": 0}
+    write_json(tmp_path / "work_packages" / "stray_result.json", stray)
+
+    result = validate_plan(str(tmp_path))
+    assert result["verdict"] == "pass"
+    validation = json.loads((tmp_path / "validation.json").read_text())
+    assert any(
+        w["check"] == "file_discovery_miss" and w["severity"] == "warning"
+        for w in validation["warnings"]
+    ), "Expected a file_discovery_miss warning for stray_result.json"
+
+
+def test_discover_tier_files_returns_accepted_and_rejected(tmp_path: Path) -> None:
+    """discover_tier_files returns both accepted files and rejected (non-matching) files."""
+    from autoskillit.planner.schema import PHASE_RESULT_FILE_RE
+    from autoskillit.planner.validation import DiscoveryResult, discover_tier_files
+
+    phases_dir = tmp_path / "phases"
+    phases_dir.mkdir(parents=True)
+    write_json(phases_dir / "P1_result.json", make_phase_result(1))
+    stray = {"id": "stray", "status": "complete"}
+    write_json(phases_dir / "stray_result.json", stray)
+
+    result = discover_tier_files(phases_dir, PHASE_RESULT_FILE_RE)
+    assert isinstance(result, DiscoveryResult)
+    assert len(result.accepted) == 1
+    assert result.accepted[0].name == "P1_result.json"
+    assert len(result.rejected) == 1
+    assert result.rejected[0].name == "stray_result.json"
+
+
+def test_validate_plan_exempts_absorbed_assignments(tmp_path: Path) -> None:
+    """When all WPs of an assignment are absorbed, no false completeness error fires."""
+    phases_dir = tmp_path / "phases"
+    assigns_dir = tmp_path / "assignments"
+    wps_dir = tmp_path / "work_packages"
+
+    write_json(phases_dir / "P1_result.json", make_phase_result(1))
+    write_json(
+        assigns_dir / "P1-A1_result.json",
+        make_assignment_result(1, 1, proposed_work_packages=["P1-A1-WP1"]),
+    )
+    write_json(
+        assigns_dir / "P1-A2_result.json",
+        make_assignment_result(1, 2, proposed_work_packages=["P1-A2-WP1"]),
+    )
+    write_json(
+        wps_dir / "P1-A1-WP1_result.json",
+        make_wp_result("P1-A1-WP1", deliverables=["src/a.py"]),
+    )
+    write_json(
+        wps_dir / "wp_manifest.json",
+        {"pass_name": "work_packages", "items": [{"id": "P1-A1-WP1", "status": "done"}]},
+    )
+    registry = {
+        "schema_version": 1,
+        "absorbed": {"P1-A2-WP1": {"merged_into": "P1-A1-WP1", "group_id": "P1-A1-WP1"}},
+    }
+    write_json(wps_dir / "absorption_registry.json", registry)
+
+    result = validate_plan(str(tmp_path))
+    assert result["verdict"] == "pass"
+    validation = json.loads((tmp_path / "validation.json").read_text())
+    assert not any(
+        f["check"] == "assignment_completeness" and "P1-A2" in f["message"]
+        for f in validation["findings"]
+    ), "Assignment P1-A2 should be exempt due to absorption registry"
+    assert not any(
+        f["check"] == "assignment_completeness" and "P1-A2" in f["message"]
+        for f in validation.get("warnings", [])
+    ), "Assignment P1-A2 should not appear as a warning either"
 
 
 # ---------------------------------------------------------------------------
@@ -669,43 +754,49 @@ def test_validate_plan_reads_finalized_manifest(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_iter_tier_files_raises_on_excluded_files(tmp_path: Path) -> None:
-    """_iter_tier_files raises ValueError when non-matching *_result.json files exist."""
+def test_discover_tier_files_places_non_canonical_in_rejected(tmp_path: Path) -> None:
+    """Non-canonical *_result.json files end up in the rejected list, not accepted."""
     from autoskillit.planner.schema import WP_RESULT_FILE_RE
+    from autoskillit.planner.validation import discover_tier_files
 
     wp_dir = tmp_path / "work_packages"
     wp_dir.mkdir()
     write_json(wp_dir / "P1-A1-WP1_result.json", make_wp_result("P1-A1-WP1"))
     write_json(wp_dir / "P1-A1-WP2a_result.json", {"id": "P1-A1-WP2a", "name": "bad"})
 
-    with pytest.raises(ValueError, match="excluded"):
-        list(_iter_tier_files(wp_dir, WP_RESULT_FILE_RE))
+    result = discover_tier_files(wp_dir, WP_RESULT_FILE_RE)
+    assert [f.name for f in result.accepted] == ["P1-A1-WP1_result.json"]
+    assert [f.name for f in result.rejected] == ["P1-A1-WP2a_result.json"]
 
 
-def test_load_wp_results_raises_on_non_canonical_filename(tmp_path: Path) -> None:
-    """_load_wp_results raises when a non-canonical WP file is present."""
+def test_load_wp_results_returns_non_canonical_in_rejected(tmp_path: Path) -> None:
+    """_load_wp_results returns non-canonical filenames in the rejected list."""
     wp_dir = tmp_path / "work_packages"
     wp_dir.mkdir()
     write_json(wp_dir / "P1-A1-WP1_result.json", make_wp_result("P1-A1-WP1"))
     write_json(wp_dir / "P1-A1-WP2a_result.json", {"id": "P1-A1-WP2a", "name": "bad"})
 
-    with pytest.raises(ValueError, match="excluded"):
-        _load_wp_results(tmp_path)
+    results, rejected = _load_wp_results(tmp_path)
+    assert "P1-A1-WP1" in results
+    assert len(rejected) == 1
+    assert rejected[0].name == "P1-A1-WP2a_result.json"
 
 
-def test_load_phase_results_raises_on_non_canonical_filename(tmp_path: Path) -> None:
-    """_load_phase_results raises when a non-canonical phase file is present."""
+def test_load_phase_results_returns_non_canonical_in_rejected(tmp_path: Path) -> None:
+    """_load_phase_results returns non-canonical filenames in the rejected list."""
     phases_dir = tmp_path / "phases"
     phases_dir.mkdir()
     write_json(phases_dir / "P1_result.json", make_phase_result(1))
     write_json(phases_dir / "Phase1_result.json", {"id": "P1", "name": "bad"})
 
-    with pytest.raises(ValueError, match="excluded"):
-        _load_phase_results(tmp_path)
+    results, rejected = _load_phase_results(tmp_path)
+    assert "P1" in results
+    assert len(rejected) == 1
+    assert rejected[0].name == "Phase1_result.json"
 
 
-def test_load_assignment_results_raises_on_non_canonical_filename(tmp_path: Path) -> None:
-    """_load_assignment_results raises when a non-canonical assignment file is present."""
+def test_load_assignment_results_returns_non_canonical_in_rejected(tmp_path: Path) -> None:
+    """_load_assignment_results returns non-canonical filenames in the rejected list."""
     assigns_dir = tmp_path / "assignments"
     assigns_dir.mkdir()
     write_json(
@@ -716,18 +807,25 @@ def test_load_assignment_results_raises_on_non_canonical_filename(tmp_path: Path
         assigns_dir / "P1-A2b_result.json", {"id": "P1-A2b", "phase_id": "P1", "name": "bad"}
     )
 
-    with pytest.raises(ValueError, match="excluded"):
-        _load_assignment_results(tmp_path)
+    results, rejected = _load_assignment_results(tmp_path)
+    assert "P1-A1" in results
+    assert len(rejected) == 1
+    assert rejected[0].name == "P1-A2b_result.json"
 
 
-def test_validate_plan_raises_on_non_canonical_wp_file(tmp_path: Path) -> None:
-    """validate_plan raises when a non-canonical WP file is present."""
+def test_validate_plan_emits_warning_for_non_canonical_wp_file(tmp_path: Path) -> None:
+    """validate_plan emits a file_discovery_miss warning for a non-canonical WP file."""
     _make_minimal_output_dir(tmp_path)
     wp_dir = tmp_path / "work_packages"
     write_json(wp_dir / "P1-A1-WP2a_result.json", {"id": "P1-A1-WP2a", "name": "bad"})
 
-    with pytest.raises(ValueError, match="excluded"):
-        validate_plan(str(tmp_path))
+    result = validate_plan(str(tmp_path))
+    assert result["verdict"] == "pass"
+    validation = json.loads((tmp_path / "validation.json").read_text())
+    assert any(
+        w["check"] == "file_discovery_miss" and "P1-A1-WP2a_result.json" in w["message"]
+        for w in validation["warnings"]
+    ), "Expected file_discovery_miss warning for P1-A1-WP2a_result.json"
 
 
 # ---------------------------------------------------------------------------

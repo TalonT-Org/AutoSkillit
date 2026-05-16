@@ -45,7 +45,7 @@ from autoskillit.planner.schema import (
     validate_refined_assignments,
     validate_refined_plan,
 )
-from autoskillit.planner.validation import validate_plan
+from autoskillit.planner.validation import DiscoveryResult, discover_tier_files, validate_plan
 
 __all__ = [
     "ASSIGN_RESULT_FILE_RE",
@@ -84,4 +84,6 @@ __all__ = [
     "validate_refined_assignments",
     "validate_refined_plan",
     "ValidationFinding",
+    "discover_tier_files",
+    "DiscoveryResult",
 ]

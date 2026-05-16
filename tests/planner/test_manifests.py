@@ -364,8 +364,8 @@ def test_finalize_wp_manifest_skips_non_result_files(tmp_path):
     assert manifest["items"][0]["id"] == wp_id
 
 
-def test_finalize_wp_manifest_raises_on_non_canonical_wp_filename(tmp_path):
-    """Test 1a: Non-canonical WP result file (matches glob but not tier regex) raises."""
+def test_finalize_wp_manifest_warns_on_non_canonical_wp_filename(tmp_path):
+    """Non-canonical WP result file (matches glob but not tier regex) emits a warning."""
     from autoskillit.planner import finalize_wp_manifest
 
     wp_dir = tmp_path / "work_packages"
@@ -374,17 +374,16 @@ def test_finalize_wp_manifest_raises_on_non_canonical_wp_filename(tmp_path):
     output_dir.mkdir()
 
     (wp_dir / "P1-A1-WP1_result.json").write_text(json.dumps(make_wp_result("P1-A1-WP1")))
-    # Alpha-suffixed file matches *_result.json but NOT WP_RESULT_FILE_RE
     (wp_dir / "P1-A1-WPa_result.json").write_text(
         json.dumps(make_wp_result("P1-A1-WP1", name="NonCanonical"))
     )
 
-    with pytest.raises(ValueError, match="P1-A1-WPa_result.json"):
-        finalize_wp_manifest(str(wp_dir), str(output_dir))
+    result = finalize_wp_manifest(str(wp_dir), str(output_dir))
+    assert result["total_count"] == "1"
 
 
-def test_build_phase_assignment_manifest_raises_on_non_canonical_phase_filename(tmp_path):
-    """Test 1b: Non-canonical phase file in phases/ raises instead of silent drop."""
+def test_build_phase_assignment_manifest_warns_on_non_canonical_phase_filename(tmp_path):
+    """Non-canonical phase file in phases/ emits a warning instead of raising."""
     from autoskillit.planner import build_phase_assignment_manifest
 
     phases_dir = tmp_path / "phases"
@@ -395,17 +394,16 @@ def test_build_phase_assignment_manifest_raises_on_non_canonical_phase_filename(
     (phases_dir / "P1_result.json").write_text(
         json.dumps(make_phase_result(1, assignments_preview=[]))
     )
-    # Alpha-suffixed: matches *_result.json but NOT PHASE_RESULT_FILE_RE
     (phases_dir / "P1a_result.json").write_text(
         json.dumps({"id": "P1a", "name": "Phase 1a", "ordering": 1})
     )
 
-    with pytest.raises(ValueError, match="P1a_result.json"):
-        build_phase_assignment_manifest(str(phases_dir), str(output_dir))
+    result = build_phase_assignment_manifest(str(phases_dir), str(output_dir))
+    assert result["total_count"] == "1"
 
 
-def test_build_phase_wp_manifest_raises_on_non_canonical_assignment_filename(tmp_path):
-    """Test 1c: Non-canonical assignment file in assignments/ raises instead of silent drop."""
+def test_build_phase_wp_manifest_warns_on_non_canonical_assignment_filename(tmp_path):
+    """Non-canonical assignment file in assignments/ emits a warning instead of raising."""
     from autoskillit.planner import build_phase_wp_manifest
 
     assign_dir = tmp_path / "assignments"
@@ -416,15 +414,14 @@ def test_build_phase_wp_manifest_raises_on_non_canonical_assignment_filename(tmp
     (assign_dir / "P1-A1_result.json").write_text(
         json.dumps(make_assignment_result(1, 1, proposed_work_packages=[]))
     )
-    # Alpha-suffixed: matches *_result.json but NOT ASSIGN_RESULT_FILE_RE
     (assign_dir / "P1-Aa_result.json").write_text(
         json.dumps(
             {"id": "P1-Aa", "phase_id": "P1", "name": "Assign A", "proposed_work_packages": []}
         )
     )
 
-    with pytest.raises(ValueError, match="P1-Aa_result.json"):
-        build_phase_wp_manifest(str(assign_dir), str(out_dir))
+    result = build_phase_wp_manifest(str(assign_dir), str(out_dir))
+    assert result["total_count"] == "1"
 
 
 def test_finalize_wp_manifest_tolerates_known_non_result_files(tmp_path):
@@ -689,8 +686,8 @@ def test_resolve_task_input_long_inline_truncates_label(tmp_path):
     assert text.startswith(result["task_label"])
 
 
-def test_build_phase_wp_manifest_raises_on_non_canonical_in_assignments(tmp_path):
-    """Non-canonical files (e.g. phase sentinels) in assignments/ raise ValueError."""
+def test_build_phase_wp_manifest_ignores_non_canonical_in_assignments(tmp_path):
+    """Non-canonical files (e.g. phase sentinels) in assignments/ are silently skipped."""
     from autoskillit.planner import build_phase_wp_manifest
 
     assign_dir = tmp_path / "assignments"
@@ -706,8 +703,8 @@ def test_build_phase_wp_manifest_raises_on_non_canonical_in_assignments(tmp_path
         json.dumps({"id": "P1", "status": "complete", "assignment_count": 1, "failed_count": 0})
     )
 
-    with pytest.raises(ValueError, match="excluded"):
-        build_phase_wp_manifest(str(assign_dir), str(out_dir))
+    result = build_phase_wp_manifest(str(assign_dir), str(out_dir))
+    assert "manifest_path" in result
 
 
 def test_expand_wps_result_dir_points_to_wp_sentinels(tmp_path):

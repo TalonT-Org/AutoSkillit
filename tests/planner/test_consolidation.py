@@ -755,6 +755,110 @@ def test_consolidate_then_validate_sees_merged_wps(tmp_path: Path) -> None:
     assert result["issue_count"] == "0"
 
 
+def test_consolidate_wps_writes_absorption_registry(tmp_path: Path) -> None:
+    """consolidate_wps writes absorption_registry.json listing absorbed WP mappings."""
+    wp1 = make_wp_result("P1-A1-WP1", deliverables=["src/a.py"])
+    wp2 = make_wp_result("P1-A2-WP1", deliverables=["src/b.py"])
+    refined_path = _make_refined_wps(tmp_path, [wp1, wp2])
+
+    phases_dir = tmp_path / "phases"
+    assigns_dir = tmp_path / "assignments"
+    wp_dir = tmp_path / "work_packages"
+
+    write_json(phases_dir / "P1_result.json", make_phase_result(1))
+    write_json(
+        assigns_dir / "P1-A1_result.json",
+        make_assignment_result(1, 1, proposed_work_packages=["P1-A1-WP1"]),
+    )
+    write_json(
+        assigns_dir / "P1-A2_result.json",
+        make_assignment_result(1, 2, proposed_work_packages=["P1-A2-WP1"]),
+    )
+    write_json(wp_dir / "P1-A1-WP1_result.json", wp1)
+    write_json(wp_dir / "P1-A2-WP1_result.json", wp2)
+    consolidation_dir = wp_dir / "consolidation"
+    _make_manifest(
+        consolidation_dir,
+        "P1",
+        [
+            {
+                "merged_id": "P1-A1-WP1",
+                "source_wp_ids": ["P1-A1-WP1", "P1-A2-WP1"],
+                "merge_order": ["P1-A1-WP1", "P1-A2-WP1"],
+                "name": None,
+                "goal": None,
+            }
+        ],
+    )
+
+    consolidate_wps(refined_wps_path=str(refined_path), planner_dir=str(tmp_path))
+
+    registry_path = wp_dir / "absorption_registry.json"
+    assert registry_path.exists(), "absorption_registry.json must be written"
+    registry = json.loads(registry_path.read_text())
+    assert "absorbed" in registry
+    assert "P1-A2-WP1" in registry["absorbed"]
+    assert registry["absorbed"]["P1-A2-WP1"]["merged_into"] == "P1-A1-WP1"
+
+
+def test_consolidate_then_validate_cross_assignment_absorption(tmp_path: Path) -> None:
+    """Full pipeline: consolidation absorbs ALL WPs of P1-A2, validation still passes."""
+    wp1 = make_wp_result("P1-A1-WP1", deliverables=["src/a.py"])
+    wp2 = make_wp_result("P1-A2-WP1", deliverables=["src/b.py"])
+    refined_path = _make_refined_wps(tmp_path, [wp1, wp2])
+
+    phases_dir = tmp_path / "phases"
+    assigns_dir = tmp_path / "assignments"
+    wp_dir = tmp_path / "work_packages"
+
+    write_json(phases_dir / "P1_result.json", make_phase_result(1))
+    write_json(
+        assigns_dir / "P1-A1_result.json",
+        make_assignment_result(1, 1, proposed_work_packages=["P1-A1-WP1"]),
+    )
+    write_json(
+        assigns_dir / "P1-A2_result.json",
+        make_assignment_result(1, 2, proposed_work_packages=["P1-A2-WP1"]),
+    )
+    write_json(wp_dir / "P1-A1-WP1_result.json", wp1)
+    write_json(wp_dir / "P1-A2-WP1_result.json", wp2)
+    write_json(
+        wp_dir / "wp_manifest.json",
+        {
+            "pass_name": "work_packages",
+            "items": [{"id": "P1-A1-WP1", "status": "done"}],
+        },
+    )
+    consolidation_dir = wp_dir / "consolidation"
+    _make_manifest(
+        consolidation_dir,
+        "P1",
+        [
+            {
+                "merged_id": "P1-A1-WP1",
+                "source_wp_ids": ["P1-A1-WP1", "P1-A2-WP1"],
+                "merge_order": ["P1-A1-WP1", "P1-A2-WP1"],
+                "name": None,
+                "goal": None,
+            }
+        ],
+    )
+
+    consolidate_wps(refined_wps_path=str(refined_path), planner_dir=str(tmp_path))
+    result = validate_plan(str(tmp_path))
+
+    assert result["verdict"] == "pass", f"Expected pass but got: {result}"
+    validation = json.loads((tmp_path / "validation.json").read_text())
+    assert not any(
+        f["check"] == "assignment_completeness" and "P1-A2" in f["message"]
+        for f in validation["findings"]
+    ), "Assignment P1-A2 should be exempt due to cross-assignment absorption"
+    assert not any(
+        f["check"] == "assignment_completeness" and "P1-A2" in f["message"]
+        for f in validation.get("warnings", [])
+    ), "Assignment P1-A2 should not appear as a warning either"
+
+
 def test_consolidate_then_compile_emits_correct_issue_count(tmp_path: Path) -> None:
     wp1 = make_wp_result("P1-A1-WP1", depends_on=[])
     wp2 = make_wp_result("P1-A1-WP2", depends_on=[])

@@ -666,9 +666,9 @@ def test_expand_assignments_normalizes_dict_with_noncanonical_id(tmp_path: Path)
 def test_expand_assignments_post_generation_all_ids_match_regex(
     tmp_path: Path, preview_input: list, expected_ids: list[str]
 ) -> None:
-    """Test 1c: every generated assignment ID matches _ASSIGN_ID_RE."""
+    """Test 1c: every generated assignment ID matches ASSIGN_ID_RE."""
     from autoskillit.planner.manifests import expand_assignments
-    from autoskillit.planner.schema import _ASSIGN_ID_RE
+    from autoskillit.planner.schema import ASSIGN_ID_RE
 
     refined = tmp_path / "refined_plan.json"
     refined.write_text(
@@ -690,7 +690,7 @@ def test_expand_assignments_post_generation_all_ids_match_regex(
     assignment_ids = manifest["items"][0]["metadata"]["assignment_ids"]
     assert assignment_ids == expected_ids, f"Expected {expected_ids}, got {assignment_ids}"
     for aid in assignment_ids:
-        assert _ASSIGN_ID_RE.match(aid), (
+        assert ASSIGN_ID_RE.match(aid), (
             f"Assignment ID {aid!r} does not match canonical format ^P\\d+-A\\d+$"
         )
 

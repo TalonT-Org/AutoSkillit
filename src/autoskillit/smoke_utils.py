@@ -236,11 +236,6 @@ def check_loop_with_progress(
     issues_fixed_count == "0" for two consecutive iterations (current and
     previous), returns zero_progress="true" for early-exit routing.
     """
-    current_iteration = current_iteration or ""
-    max_iterations = max_iterations or ""
-    issues_fixed_count = issues_fixed_count or ""
-    prev_issues_fixed_count = prev_issues_fixed_count or ""
-
     try:
         iteration = int(current_iteration.strip()) if current_iteration.strip() else 0
     except ValueError as exc:

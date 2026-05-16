@@ -391,7 +391,7 @@ def test_build_plan_snapshot_happy_path_two_phases_sorted(tmp_path) -> None:
     assert "P2" in result["phase_ids"]
 
 
-def test_build_plan_snapshot_corrupt_json_skipped(tmp_path) -> None:
+def test_build_plan_snapshot_corrupt_json_silently_drops_phase(tmp_path) -> None:
     phases_dir = tmp_path / "phases"
     phases_dir.mkdir()
     (phases_dir / "P1_result.json").write_text(json.dumps(make_phase_result(1)))

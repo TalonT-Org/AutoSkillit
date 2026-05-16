@@ -365,7 +365,7 @@ def test_assign_result_file_re_rejects_plausible_llm_deviations() -> None:
 
     invalid = [
         "P1-A2b_result.json",
-        "P1-A2b_result.json",
+        "P1-A2a_result.json",
         "P1-setup_result.json",
         "P1-A_result.json",
     ]

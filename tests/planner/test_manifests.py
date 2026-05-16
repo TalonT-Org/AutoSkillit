@@ -579,7 +579,7 @@ def test_resolve_task_input_long_inline_truncates_label(tmp_path):
     assert text.startswith(result["task_label"])
 
 
-def test_build_phase_wp_manifest_ignores_phase_sentinel_in_assignments(tmp_path):
+def test_build_phase_wp_manifest_raises_on_non_canonical_in_assignments(tmp_path):
     """Non-canonical files (e.g. phase sentinels) in assignments/ raise ValueError."""
     from autoskillit.planner import build_phase_wp_manifest
 

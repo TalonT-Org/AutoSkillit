@@ -455,7 +455,9 @@ class TestDownstreamContextCompletenessRule:
             "consume": {
                 "tool": "run_skill",
                 "with": {
-                    "skill_command": "/autoskillit:prepare-research-pr ${{ context.all_diagram_paths }}"
+                    "skill_command": (
+                        "/autoskillit:prepare-research-pr ${{ context.all_diagram_paths }}"
+                    )
                 },
                 "on_success": "done",
             },
@@ -484,7 +486,11 @@ class TestDownstreamContextCompletenessRule:
             "consume": {
                 "tool": "run_skill",
                 "with": {
-                    "skill_command": "/autoskillit:prepare-research-pr ${{ context.all_diagram_paths }} ${{ context.missing_var }}"
+                    "skill_command": (
+                        "/autoskillit:prepare-research-pr"
+                        " ${{ context.all_diagram_paths }}"
+                        " ${{ context.missing_var }}"
+                    )
                 },
                 "on_success": "done",
             },

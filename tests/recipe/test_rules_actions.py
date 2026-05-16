@@ -153,7 +153,8 @@ class TestSilentFailureSkillStep:
         )
         findings = [f for f in run_semantic_rules(recipe) if f.rule == "silent-failure-skill-step"]
         assert findings == [], (
-            f"silent-failure-skill-step must not fire when note explains partial results: {findings}"
+            "silent-failure-skill-step must not fire when note explains"
+            f" partial results: {findings}"
         )
 
     def test_skill_step_different_success_failure_is_clean(self):
@@ -190,5 +191,6 @@ class TestSilentFailureSkillStep:
         )
         findings = [f for f in run_semantic_rules(recipe) if f.rule == "silent-failure-skill-step"]
         assert findings == [], (
-            f"silent-failure-skill-step is skill-specific and must not fire for run_cmd: {findings}"
+            "silent-failure-skill-step is skill-specific and must not"
+            f" fire for run_cmd: {findings}"
         )

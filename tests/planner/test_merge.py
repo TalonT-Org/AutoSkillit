@@ -402,6 +402,22 @@ def test_build_plan_snapshot_raises_on_unrecognized_result_filename(tmp_path) ->
         build_plan_snapshot(str(phases_dir), str(out))
 
 
+def test_build_plan_snapshot_skips_corrupt_canonical_json(tmp_path) -> None:
+    """Corrupt JSON in a canonical filename (P2_result.json) is silently skipped."""
+    phases_dir = tmp_path / "phases"
+    phases_dir.mkdir()
+    (phases_dir / "P1_result.json").write_text(json.dumps(make_phase_result(1)))
+    (phases_dir / "P2_result.json").write_text("{not valid json")
+    out = tmp_path / "snapshot.json"
+
+    result = build_plan_snapshot(str(phases_dir), str(out))
+
+    data = json.loads(out.read_text())
+    assert len(data["phases"]) == 1
+    assert "P1" in result["phase_ids"]
+    assert "P2" not in result["phase_ids"]
+
+
 def test_build_plan_snapshot_nonexistent_phases_dir(tmp_path) -> None:
     out = tmp_path / "snapshot.json"
 

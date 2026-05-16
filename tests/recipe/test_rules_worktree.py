@@ -939,11 +939,6 @@ def test_superseded_input_in_skill_command_fires_error() -> None:
     ), f"Expected superseded-input-after-capture ERROR for skill_command ref, got: {findings}"
 
 
-# ---------------------------------------------------------------------------
-# capture-list-requires-retries-zero tests
-# ---------------------------------------------------------------------------
-
-
 class TestCaptureListRequiresRetriesZero:
     """Tests for the capture-list-requires-retries-zero rule."""
 

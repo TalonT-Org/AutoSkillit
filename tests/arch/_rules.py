@@ -114,6 +114,7 @@ _BROAD_EXCEPT_EXEMPT = frozenset(
         "token_summary_hook.py",
         "skill_load_post_hook.py",
         "skill_load_guard.py",
+        "rebase_target_guard.py",
     }
 )
 

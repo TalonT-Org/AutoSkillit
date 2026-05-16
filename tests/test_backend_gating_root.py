@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json as _json
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -19,7 +20,6 @@ async def test_triage_batch_non_claude_backend_returns_all_meaningful(
     monkeypatch: pytest.MonkeyPatch,
 ):
     """Non-claude-code backend returns meaningful=True without spawning a subprocess."""
-    from unittest.mock import AsyncMock
 
     skill_md_content = "# dummy\nContent."
     cache = {"my-skill": skill_md_content}
@@ -48,7 +48,6 @@ async def test_triage_staleness_non_claude_backend_returns_all_meaningful(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     """triage_staleness with non-claude-code backend skips subprocess and returns meaningful."""
-    from unittest.mock import AsyncMock
 
     skill_dir = tmp_path / "my-skill"
     skill_dir.mkdir()
@@ -80,7 +79,6 @@ async def test_triage_batch_claude_code_backend_does_call_subprocess(
     monkeypatch: pytest.MonkeyPatch,
 ):
     """claude-code backend reaches the subprocess call."""
-    from unittest.mock import AsyncMock
 
     skill_md_content = "# dummy\nContent."
     cache = {"my-skill": skill_md_content}
@@ -126,6 +124,9 @@ async def test_triage_batch_claude_code_backend_does_call_subprocess(
     mock_run = AsyncMock(return_value=fake_result)
     monkeypatch.setattr("autoskillit._llm_triage.run_managed_async", mock_run)
 
-    await _triage_batch(items, cache, agent_backend="claude-code")
+    results = await _triage_batch(items, cache, agent_backend="claude-code")
 
     mock_run.assert_called_once()
+    assert len(results) == 1
+    assert results[0]["meaningful"] is False
+    assert results[0]["summary"] == "no change"

@@ -173,7 +173,6 @@ class TestCLIInstall:
 
         assert (tmp_path / ".autoskillit" / "marketplace" / "plugins" / "autoskillit").is_symlink()
 
-    @patch("autoskillit.cli._marketplace.subprocess.run")
     def test_install_backend_guard_returns_false_for_non_claude_code(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
     ) -> None:
@@ -248,6 +247,7 @@ class TestCLIInstall:
                         "load_config must be a deferred import inside install(), not module-level"
                     )
 
+    @patch("autoskillit.cli._marketplace.subprocess.run")
     def test_install_evicts_stale_direct_mcp_entry(
         self, mock_run: MagicMock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

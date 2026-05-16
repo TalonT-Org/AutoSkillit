@@ -192,5 +192,5 @@ class TestStaleTokenUsagePropagation:
         tu = skill_result.token_usage
         assert tu["input_tokens"] == 100
         assert tu["output_tokens"] == 200
-        assert tu["cache_creation_input_tokens"] == 50
-        assert tu["cache_read_input_tokens"] == 75
+        assert tu["cache_write_tokens"] == 50
+        assert tu["cache_read_tokens"] == 75

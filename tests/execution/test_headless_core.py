@@ -2001,8 +2001,8 @@ class TestBuildSkillResultTokenUsage:
         assert usage is not None
         assert usage["input_tokens"] == 200
         assert usage["output_tokens"] == 80
-        assert usage["cache_creation_input_tokens"] == 8
-        assert usage["cache_read_input_tokens"] == 3
+        assert usage["cache_write_tokens"] == 8
+        assert usage["cache_read_tokens"] == 3
         assert "model_breakdown" in usage
         assert "claude-sonnet-4-6" in usage["model_breakdown"]
 

@@ -44,3 +44,4 @@ Core layer (IL-0) unit tests — paths, IO, types, feature flags.
 | `test_types_structure.py` | Tests for core/types.py split into focused sub-modules (P8-F2) |
 | `test_type_results_execution.py` | Tests for _type_results_execution.py — execution-scoped types |
 | `test_version_snapshot.py` | Tests for core/_version_snapshot.py |
+| `test_backend_gating_core.py` | Backend gating tests for _version_snapshot.py — verifies empty fallbacks for non-claude-code backends |

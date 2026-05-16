@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
@@ -11,6 +12,8 @@ from autoskillit.core.types import SkillResult, SubprocessResult, TerminationRea
 from autoskillit.execution.db import DefaultDatabaseReader
 from autoskillit.execution.github import DefaultGitHubFetcher
 from autoskillit.execution.headless import DefaultHeadlessExecutor
+from autoskillit.execution.process import DefaultSubprocessRunner
+from autoskillit.execution.recording import RecordingSubprocessRunner
 from autoskillit.execution.testing import DefaultTestRunner
 from autoskillit.migration.engine import DefaultMigrationService
 from autoskillit.pipeline.context import ToolContext
@@ -604,12 +607,8 @@ def test_make_context_skips_replay_runner_for_non_claude_backend(monkeypatch, tm
     monkeypatch.setenv("REPLAY_SCENARIO_DIR", str(tmp_path))
     monkeypatch.delenv("RECORD_SCENARIO", raising=False)
 
-    from unittest.mock import Mock
-
     mock_build = Mock()
     monkeypatch.setattr("autoskillit.server._factory.build_replay_runner", mock_build)
-
-    from autoskillit.execution.process import DefaultSubprocessRunner
 
     cfg = AutomationConfig(agent_backend=AgentBackendConfig(backend="aider"))
     ctx = make_context(cfg, plugin_dir=str(tmp_path))
@@ -623,9 +622,8 @@ def test_make_context_skips_record_runner_for_non_claude_backend(monkeypatch, tm
     monkeypatch.setenv("RECORD_SCENARIO_DIR", str(tmp_path))
     monkeypatch.delenv("REPLAY_SCENARIO", raising=False)
 
-    from autoskillit.execution.process import DefaultSubprocessRunner
-
     cfg = AutomationConfig(agent_backend=AgentBackendConfig(backend="aider"))
     ctx = make_context(cfg, plugin_dir=str(tmp_path))
 
     assert isinstance(ctx.runner, DefaultSubprocessRunner)
+    assert not isinstance(ctx.runner, RecordingSubprocessRunner)

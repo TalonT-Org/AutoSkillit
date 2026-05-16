@@ -7,7 +7,7 @@ and denies the call if the target does not match.
 
 Fails-open for:
 - Interactive sessions (AUTOSKILLIT_HEADLESS != "1")
-- Orchestrator / fleet tiers (SESSION_TYPE != "skill")
+- Orchestrator / fleet tiers (SESSION_TYPE not in {"skill", "leaf"})
 - Commands with no literal rebase target (e.g., variable expansion "$REMOTE/...")
 - Missing or unreadable sidecar (guard cannot validate)
 - git common-dir resolution failures
@@ -21,8 +21,6 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-
-REBASE_TARGET_DENY_TRIGGER: str = "rebase targets wrong branch"
 
 # Matches: git rebase origin/<branch> or git rebase upstream/<branch>
 # The branch group must not start with $ (skip variable expansions)
@@ -57,6 +55,9 @@ def main() -> None:
     try:
         data = json.loads(sys.stdin.read())
     except (json.JSONDecodeError, ValueError, OSError):
+        sys.exit(0)
+
+    if not isinstance(data, dict):
         sys.exit(0)
 
     # Interactive sessions always pass

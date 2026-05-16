@@ -204,25 +204,10 @@ def _check_dag_acyclic(wp_results: dict[str, dict]) -> list[ValidationFinding]:
 
     if len(sorted_nodes) < len(wp_results):
         cycle_nodes = [n for n in wp_results if n not in set(sorted_nodes)]
-        # Decompose cycle: Kahn's algorithm leaves cycle nodes with in-degree > 0
-        # Reconstruct in-degree state at detection time to identify cycle edges
-        in_degree_end: dict[str, int] = {}
-        for wp_id in wp_results:
-            in_degree_end[wp_id] = 0
-        for wp_id, wp in wp_results.items():
-            for dep in wp.get("depends_on", []):
-                if (
-                    dep in wp_results
-                    and dep not in set(sorted_nodes)
-                    and wp_id not in set(sorted_nodes)
-                ):
-                    in_degree_end[wp_id] += 1
 
         remaining = [n for n in wp_results if n not in set(sorted_nodes)]
         if len(remaining) == 2:
-            # 2-node mutual cycle: both nodes have in-degree > 0 from each other
             a, b = sorted(remaining)
-            # Check if a depends on b and b depends on a
             a_deps = set(wp_results.get(a, {}).get("depends_on", []))
             b_deps = set(wp_results.get(b, {}).get("depends_on", []))
             if b in a_deps and a in b_deps:
@@ -236,7 +221,10 @@ def _check_dag_acyclic(wp_results: dict[str, dict]) -> list[ValidationFinding]:
                         "cycle_edges": [[a, b], [b, a]],
                     }
                 ]
-        # 3+ nodes or non-mutual 2-node: report without edges
+        # 3+ node or non-mutual 2-node cycles omit cycle_edges — key absence is the
+        # contract signal for planner-refine to escalate rather than auto-fix (see
+        # planner-refine SKILL.md: "If finding contains cycle_size: 3 or higher (or no
+        # cycle_edges): Escalate as CRITICAL").
         return [
             {
                 "message": f"Cycle detected among WPs: {', '.join(sorted(cycle_nodes))}",

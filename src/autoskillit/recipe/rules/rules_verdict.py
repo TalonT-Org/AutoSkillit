@@ -356,8 +356,8 @@ def _check_verdict_output_requires_on_result(ctx: ValidationContext) -> list[Rul
                     message=(
                         f"Step '{step_name}' invokes '{skill_name}' which declares "
                         f"output '{output_name}' with allowed_values {allowed_values}, "
-                        f"but uses on_success instead of on_result. Replace on_success "
-                        f"with on_result routing that dispatches on the declared verdict."
+                        f"but is missing on_result routing. Add on_result routing "
+                        f"that dispatches on the declared verdict."
                     ),
                 )
             )

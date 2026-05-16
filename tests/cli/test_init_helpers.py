@@ -23,7 +23,7 @@ class TestIsPluginInstalledBackendGuard:
 
         def fake_run(*args, **kwargs):
             called.append(args)
-            return type("CP", (), {"returncode": 0, "stdout": "autoskillit\n"})()
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout="autoskillit\n")
 
         monkeypatch.setattr(subprocess, "run", fake_run)
         result = _is_plugin_installed(agent_backend="claude-code")

@@ -7,7 +7,7 @@ IL-2 fleet campaign layer — parallel issue dispatch, semaphore, sidecar, liven
 | File | Purpose |
 |------|---------|
 | `__init__.py` | Re-exports `CampaignSummary`, `parse_campaign_summary`, and dispatch callables |
-| `_api.py` | Fleet campaign execution engine — dispatches L2 sessions, resolves campaign/result variable references |
+| `_api.py` | Fleet campaign execution engine — dispatches L2 sessions, resolves campaign/result variable references; `evaluate_skip_when` for conditional dispatch skipping |
 | `_prompts.py` | Prompt builder for L2 fleet dispatch sessions — assembles admiral dispatch instruction block from SKILL.md sections |
 | `result_parser.py` | L2 result block parser with Channel B JSONL fallback |
 | `sidecar.py` | Per-issue JSONL sidecar — `IssueSidecarEntry`, append/read/`compute_remaining` helpers |
@@ -21,7 +21,6 @@ IL-2 fleet campaign layer — parallel issue dispatch, semaphore, sidecar, liven
 | `state_gates.py` | Gate dispatch recording — `record_gate_outcome` |
 | `state_recovery.py` | Crash recovery + resume — `classify_stale_dispatch`, `has_failed_dispatch`, `resume_campaign_from_state`, `derive_orchestrator_resume_spec` |
 | `summary.py` | Campaign summary schema v1: frozen dataclasses, sentinel parser, validator |
-| `_skip_when.py` | `evaluate_skip_when()` — resolves `${{ campaign.X }}` and `${{ inputs.X }}` refs, validates expression structure, evaluates skip condition |
 
 ## Test Files
 

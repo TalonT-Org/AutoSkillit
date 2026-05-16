@@ -4,14 +4,18 @@ Gateway exports per REQ-IMP-001 — consumers import from
 ``autoskillit.fleet``, not from sub-modules.
 """
 
-from ._api import CaptureCompletenessError, classify_dispatch_outcome, execute_dispatch
+from ._api import (
+    CaptureCompletenessError,
+    classify_dispatch_outcome,
+    evaluate_skip_when,
+    execute_dispatch,
+)
 from ._api import _write_pid as _write_pid
 from ._checkpoint_bridge import checkpoint_from_sidecar
 from ._liveness import is_dispatch_session_alive
 from ._prompts import _build_admiral_dispatch_block as _build_admiral_dispatch_block
 from ._prompts import _build_food_truck_prompt as _build_food_truck_prompt
 from ._semaphore import FleetSemaphore
-from ._skip_when import evaluate_skip_when
 from .result_parser import L3ParseResult, parse_l3_result_block
 from .sidecar import (
     IssueSidecarEntry,

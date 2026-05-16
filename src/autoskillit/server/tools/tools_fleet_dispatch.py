@@ -7,9 +7,7 @@ import json
 import os
 from collections.abc import Callable
 from pathlib import Path
-from typing import Final
 
-import regex as re
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
@@ -19,12 +17,6 @@ from autoskillit.server._guards import _require_enabled, _require_fleet
 from autoskillit.server._notify import track_response_size
 
 logger = get_logger(__name__)
-
-_SKIP_CAMPAIGN_REF_RE: Final = re.compile(r"\$\{\{\s*campaign\.(\w+)\s*\}\}")
-
-
-def _find_missing_campaign_refs(skip_when: str, captured: dict[str, str]) -> list[str]:
-    return [ref for ref in _SKIP_CAMPAIGN_REF_RE.findall(skip_when) if ref not in captured]
 
 
 def _write_dispatch_to_campaign_state(
@@ -190,6 +182,7 @@ async def dispatch_food_truck(
             DispatchCompleted,
             DispatchRecord,
             DispatchStatus,
+            evaluate_skip_when,
             execute_dispatch,
             read_all_campaign_captures,
             upsert_dispatch_record_by_name,
@@ -213,45 +206,11 @@ async def dispatch_food_truck(
         if skip_when:
             dispatches_dir = tool_ctx.temp_dir / "dispatches"
             accumulated_captures = read_all_campaign_captures(dispatches_dir, tool_ctx.kitchen_id)
-
-            missing_refs = _find_missing_campaign_refs(skip_when, accumulated_captures)
-            if missing_refs:
-                return fleet_error(
-                    FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
-                    f"skip_when references campaign captures that have not been produced "
-                    f"by any prior dispatch: {missing_refs!r}. "
-                    f"Available captures: {sorted(accumulated_captures)}",
-                )
-            resolved_skip_when = _SKIP_CAMPAIGN_REF_RE.sub(
-                lambda m: accumulated_captures[m.group(1)], skip_when
-            ).strip()
-            if not resolved_skip_when:
-                return fleet_error(
-                    FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
-                    "skip_when resolved to an empty expression after substitution",
-                )
-            op_count = resolved_skip_when.count(" == ") + resolved_skip_when.count(" != ")
-            if op_count != 1:
-                return fleet_error(
-                    FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
-                    f"skip_when resolved to a malformed expression: {resolved_skip_when!r}. "
-                    f"Expected exactly one '==' or '!=' comparison operator.",
-                )
-
-            def _strip_quotes(s: str) -> str:
-                if (s.startswith("'") and s.endswith("'")) or (
-                    s.startswith('"') and s.endswith('"')
-                ):
-                    return s[1:-1]
-                return s
-
-            skip_condition_true = False
-            if " == " in resolved_skip_when:
-                lhs, rhs = resolved_skip_when.split(" == ", 1)
-                skip_condition_true = _strip_quotes(lhs.strip()) == _strip_quotes(rhs.strip())
-            elif " != " in resolved_skip_when:
-                lhs, rhs = resolved_skip_when.split(" != ", 1)
-                skip_condition_true = _strip_quotes(lhs.strip()) != _strip_quotes(rhs.strip())
+            error_code, error_message, skip_condition_true = evaluate_skip_when(
+                skip_when, accumulated_captures, ingredients
+            )
+            if error_code is not None:
+                return fleet_error(error_code, error_message or "")
 
             if skip_condition_true:
                 if campaign_state_path_str:

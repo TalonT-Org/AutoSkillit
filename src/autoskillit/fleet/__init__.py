@@ -11,6 +11,7 @@ from ._liveness import is_dispatch_session_alive
 from ._prompts import _build_admiral_dispatch_block as _build_admiral_dispatch_block
 from ._prompts import _build_food_truck_prompt as _build_food_truck_prompt
 from ._semaphore import FleetSemaphore
+from ._skip_when import evaluate_skip_when
 from .result_parser import L3ParseResult, parse_l3_result_block
 from .sidecar import (
     IssueSidecarEntry,
@@ -75,6 +76,7 @@ from .summary import (
 
 __all__ = [
     "_write_pid",
+    "evaluate_skip_when",
     "CaptureCompletenessError",
     "classify_dispatch_outcome",
     "execute_dispatch",

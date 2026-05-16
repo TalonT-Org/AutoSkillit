@@ -21,6 +21,7 @@ IL-2 fleet campaign layer — parallel issue dispatch, semaphore, sidecar, liven
 | `state_gates.py` | Gate dispatch recording — `record_gate_outcome` |
 | `state_recovery.py` | Crash recovery + resume — `classify_stale_dispatch`, `has_failed_dispatch`, `resume_campaign_from_state`, `derive_orchestrator_resume_spec` |
 | `summary.py` | Campaign summary schema v1: frozen dataclasses, sentinel parser, validator |
+| `_skip_when.py` | `evaluate_skip_when()` — resolves `${{ campaign.X }}` and `${{ inputs.X }}` refs, validates expression structure, evaluates skip condition |
 
 ## Test Files
 
@@ -30,6 +31,7 @@ IL-2 fleet campaign layer — parallel issue dispatch, semaphore, sidecar, liven
 | `tests/fleet/test_state_recovery.py` | Tests for `derive_orchestrator_resume_spec` |
 | `tests/fleet/test_campaign_capture.py` | Campaign capture extraction and ingredient interpolation tests |
 | `tests/fleet/test_capture_roundtrip.py` | Prompt-extractor field name alignment tests — verifies sentinel example uses bare names matching `_extract_captures` expectations |
+| `tests/fleet/test_skip_when.py` | `evaluate_skip_when` unit tests — campaign/inputs ref resolution, expression validation, quote stripping |
 
 ## Architecture Notes
 

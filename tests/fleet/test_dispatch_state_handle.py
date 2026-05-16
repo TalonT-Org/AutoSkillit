@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.fleet import DispatchRecord, DispatchResult, DispatchStatus, write_initial_state
+from autoskillit.fleet import DispatchRecord, DispatchStatus, write_initial_state
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -249,8 +249,7 @@ class TestCaptureChainAcrossResumeBoundary:
             prior_dispatch_id=prior_id,
         )
 
-        if isinstance(result, DispatchResult):
-            result = result.outcome
+        result = result.outcome
         if isinstance(result, DispatchRejected):
             assert result.error_code != FleetErrorCode.FLEET_UNKNOWN_INGREDIENT, (
                 f"Campaign capture ref not resolved — captures lost: {result.message}"

@@ -337,6 +337,9 @@ def test_check_loop_with_progress_propagates_prev_count() -> None:
         prev_issues_fixed_count="",
     )
     assert result["prev_issues_fixed_count"] == "2"
+    assert result["zero_progress"] == "false"
+    assert result["next_iteration"] == "2"
+    assert result["max_exceeded"] == "false"
 
 
 def test_subprocess_calls_have_timeout() -> None:

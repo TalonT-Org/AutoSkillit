@@ -2,11 +2,11 @@
 
 import pytest
 
+import autoskillit.report.renderer as _renderer
+
 
 def test_renderer_exits_nonzero_on_too_few_args(monkeypatch: pytest.MonkeyPatch) -> None:
     """renderer.main() must exit non-zero when called with fewer than 3 arguments."""
-    import autoskillit.report.renderer as _renderer
-
     monkeypatch.setattr("sys.argv", ["renderer.py"])
     with pytest.raises(SystemExit) as exc_info:
         _renderer.main()
@@ -19,8 +19,6 @@ def test_renderer_exits_nonzero_on_missing_report(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
     """renderer.main() must exit non-zero when report_path does not exist."""
-    import autoskillit.report.renderer as _renderer
-
     nonexistent_report = tmp_path / "nonexistent" / "report.md"
     monkeypatch.setattr(
         "sys.argv",

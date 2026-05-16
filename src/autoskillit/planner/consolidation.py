@@ -313,7 +313,6 @@ def consolidate_wps(
 
     if non_primary_sources:
         registry: dict[str, Any] = {
-            "schema_version": 1,
             "absorbed": {
                 absorbed_id: {
                     "merged_into": source_to_merged[absorbed_id],
@@ -323,7 +322,7 @@ def consolidate_wps(
             },
         }
         registry_path = wp_dir / "absorption_registry.json"
-        atomic_write(registry_path, json.dumps(registry, indent=2))
+        write_versioned_json(registry_path, registry, schema_version=1)
 
     return {
         "consolidated_wps_path": str(consolidated_path),

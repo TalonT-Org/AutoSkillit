@@ -38,7 +38,7 @@ def test_skill_compliant_phase_data_accepted_and_normalized(tmp_path: Path) -> N
         },
     )
 
-    results = _load_phase_results(tmp_path)
+    results, _ = _load_phase_results(tmp_path)
 
     assert "P1" in results
     assert results["P1"]["phase_number"] == 1
@@ -69,7 +69,7 @@ def test_skill_compliant_assignment_data_accepted_and_normalized(tmp_path: Path)
         },
     )
 
-    results = _load_assignment_results(tmp_path)
+    results, _ = _load_assignment_results(tmp_path)
 
     assert "P1-A2" in results
     assert results["P1-A2"]["phase_number"] == 1

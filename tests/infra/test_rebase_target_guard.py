@@ -23,19 +23,31 @@ def _run_guard(
     session_type: str | None = None,
     git_common_dir: str | None = None,
     tmp_path: Path | None = None,
+    raw_stdin: str | None = None,
+    subprocess_raises: type[Exception] | None = None,
 ) -> str:
     """Run the guard and return stdout."""
-    stdin_content = json.dumps({"tool_name": tool_name, "tool_input": tool_input})
+    stdin_content = (
+        raw_stdin
+        if raw_stdin is not None
+        else json.dumps({"tool_name": tool_name, "tool_input": tool_input})
+    )
     env_updates: dict[str, str] = {}
     if headless:
         env_updates["AUTOSKILLIT_HEADLESS"] = "1"
+    else:
+        env_updates["AUTOSKILLIT_HEADLESS"] = ""
     if session_type is not None:
         env_updates["AUTOSKILLIT_SESSION_TYPE"] = session_type
+    else:
+        env_updates["AUTOSKILLIT_SESSION_TYPE"] = ""
 
     def _fake_run(cmd, **_kwargs):
+        if subprocess_raises is not None:
+            raise subprocess_raises()
         result = MagicMock()
         if "--git-common-dir" in cmd:
-            git_dir = git_common_dir if git_common_dir else str(tmp_path / "clone" / ".git")
+            git_dir = git_common_dir if git_common_dir else str(tmp_path / "clone" / ".git")  # type: ignore[operator]
             result.returncode = 0
             result.stdout = git_dir + "\n"
         else:
@@ -114,10 +126,10 @@ class TestRebaseTargetGuardPassthrough:
         assert _parse_decision(result) != "deny"
 
     def test_variable_pattern_passes(self) -> None:
-        """git rebase with shell variable — guard cannot validate, must fail-open."""
+        """git rebase with branch variable — guard cannot validate, must fail-open."""
         result = _run_guard(
             "Bash",
-            {"command": 'git rebase "$REMOTE/${BASE_BRANCH}"'},
+            {"command": "git rebase origin/$BASE_BRANCH"},
             headless=True,
             session_type="skill",
         )
@@ -136,20 +148,27 @@ class TestRebaseTargetGuardPassthrough:
         )
         assert _parse_decision(result) != "deny"
 
+    def test_git_resolution_failure_passes(self) -> None:
+        """subprocess.run raising during git common-dir resolution → fail-open."""
+        result = _run_guard(
+            "Bash",
+            {"command": "git rebase origin/main", "cwd": "/some/path"},
+            headless=True,
+            session_type="skill",
+            subprocess_raises=FileNotFoundError,
+        )
+        assert _parse_decision(result) != "deny"
+
     def test_malformed_json_passes(self) -> None:
         """Malformed stdin → fail-open."""
-        env_updates = {"AUTOSKILLIT_HEADLESS": "1", "AUTOSKILLIT_SESSION_TYPE": "skill"}
-        with (
-            patch.dict(os.environ, env_updates, clear=False),
-            patch("sys.stdin", io.StringIO("not json")),
-        ):
-            buf = io.StringIO()
-            with redirect_stdout(buf):
-                try:
-                    main()
-                except SystemExit:
-                    pass
-            assert _parse_decision(buf.getvalue()) != "deny"
+        result = _run_guard(
+            "Bash",
+            {},
+            headless=True,
+            session_type="skill",
+            raw_stdin="not json",
+        )
+        assert _parse_decision(result) != "deny"
 
     def test_correct_target_passes(self, tmp_path: Path) -> None:
         """Rebase target matches sidecar → allow."""

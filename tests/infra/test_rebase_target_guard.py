@@ -94,6 +94,16 @@ class TestRebaseTargetGuardPassthrough:
         )
         assert _parse_decision(result) != "deny"
 
+    def test_headless_unset_session_type_passes(self) -> None:
+        """Headless session with unset SESSION_TYPE fails open — only skill/leaf is constrained."""
+        result = _run_guard(
+            "Bash",
+            {"command": "git rebase origin/main"},
+            headless=True,
+            session_type=None,
+        )
+        assert _parse_decision(result) != "deny"
+
     def test_non_rebase_bash_passes(self) -> None:
         result = _run_guard(
             "Bash",

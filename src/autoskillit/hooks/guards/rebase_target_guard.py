@@ -65,7 +65,7 @@ def main() -> None:
 
     # Headless: only constrain skill sessions
     session_type = os.environ.get("AUTOSKILLIT_SESSION_TYPE", "").lower()
-    if session_type not in ("skill", "leaf", ""):
+    if session_type not in ("skill", "leaf"):
         sys.exit(0)
 
     tool_input: dict = data.get("tool_input", {})

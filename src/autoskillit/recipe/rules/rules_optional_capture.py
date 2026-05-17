@@ -34,10 +34,15 @@ def _has_guard_for_key(
 ) -> bool:
     """Check whether a truthiness guard for ``captured_key`` is interposed before the consumer.
 
-    Walks the route chain starting from ``step_name`` via ``on_success`` and ``on_result``.
+    BFS starts at ``step_name`` (the producer step itself). On the first visit the producer
+    is not a route step, so it falls into the on_result/on_success branch and enqueues its
+    downstream successors — the producer is never mistaken for a guard. Subsequent visits
+    inspect actual guard candidates in the route chain.
+
     Returns True if:
     - An ``action: route`` step is found whose ``on_result`` contains a
-      ``when: ${{ context.<captured_key> }}`` condition, OR
+      ``when: ${{ context.<captured_key> }}`` or ``when: ${{ result.<captured_key> }}``
+      condition, OR
     - A non-route step's own ``on_result`` gates on ``result.<captured_key>``
       (self-guard: consumers are only reachable when the value is truthy).
     """
@@ -56,7 +61,9 @@ def _has_guard_for_key(
         # Check if this step is a guard: action=route with on_result conditions
         if step.action == "route" and step.on_result and step.on_result.conditions:
             for cond in step.on_result.conditions:
-                if cond.when and f"context.{captured_key}" in cond.when:
+                if cond.when and (
+                    f"context.{captured_key}" in cond.when or f"result.{captured_key}" in cond.when
+                ):
                     return True
             # Guard not found here — continue BFS through all condition routes
             for cond in step.on_result.conditions:

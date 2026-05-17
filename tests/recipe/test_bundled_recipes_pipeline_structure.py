@@ -129,9 +129,15 @@ class TestPipelineVariantInvariants:
         assert "context.remote_url" in with_args["remote_url"]
 
     def test_compose_pr_routes_to_guard_pr_url(self, recipe) -> None:
-        """T_CI8: compose_pr.on_result gates on pr_url and routes to guard_pr_url, which guards extract_pr_number."""
+        """T_CI8: compose_pr.on_result gates on pr_url and routes to guard_pr_url.
+
+        guard_pr_url acts as the truthiness guard for extract_pr_number.
+        """
         step = recipe.steps["compose_pr"]
         assert step.on_result is not None, "compose_pr must have on_result for conditional gating"
+        assert len(step.on_result.conditions) >= 2, (
+            "compose_pr on_result must have at least 2 conditions (truthy + else)"
+        )
         # The first condition should route to guard_pr_url when result.pr_url is truthy
         truthy_cond = step.on_result.conditions[0]
         assert truthy_cond.when == "${{ result.pr_url }}", (

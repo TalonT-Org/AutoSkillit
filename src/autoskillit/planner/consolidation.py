@@ -10,6 +10,7 @@ from typing import Any
 import regex as re
 
 from autoskillit.core import atomic_write, write_versioned_json
+from autoskillit.planner._dag_ops import break_cycles_greedy_fas, filter_self_references
 from autoskillit.planner._sort_utils import _natural_sort_key
 from autoskillit.planner.schema import validate_wp_result
 
@@ -123,6 +124,8 @@ def _rewrite_deps(
         if dep in own_group_sources:
             continue
         canonical = source_to_merged.get(dep, dep)
+        if canonical == wp["id"]:
+            continue
         if canonical not in seen:
             result.append(canonical)
             seen.add(canonical)
@@ -281,6 +284,9 @@ def consolidate_wps(
             own_group_sources = set(merged_groups[wp_id].source_wp_ids)
         wp["depends_on"] = _rewrite_deps(wp, source_to_merged, own_group_sources)
 
+    filter_self_references(output_wps)
+    broken_edges = break_cycles_greedy_fas(output_wps)
+
     planner_path = Path(planner_dir)
     consolidated_path = planner_path / "consolidated_wps.json"
     write_versioned_json(
@@ -324,8 +330,13 @@ def consolidate_wps(
             registry_path = wp_dir / "absorption_registry.json"
             write_versioned_json(registry_path, registry, schema_version=1)
 
+    if broken_edges:
+        edges_path = planner_path / "broken_cycle_edges.json"
+        atomic_write(edges_path, json.dumps(broken_edges))
+
     return {
         "consolidated_wps_path": str(consolidated_path),
         "total_count": str(len(output_wps)),
         "merged_count": str(groups_applied),
+        "cycles_broken": str(len(broken_edges)),
     }

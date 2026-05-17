@@ -938,3 +938,300 @@ def test_consolidate_wps_wp_index_in_work_packages(tmp_path: Path) -> None:
 
     assert (tmp_path / "work_packages" / "wp_index.json").exists()
     assert not (tmp_path / "wp_index.json").exists()
+
+
+# ---------------------------------------------------------------------------
+# Cycle-breaking tests
+# ---------------------------------------------------------------------------
+
+
+def test_rewrite_deps_breaks_cross_group_mutual_cycle(tmp_path: Path) -> None:
+    """Two groups whose absorbed WPs have reciprocal cross-group deps must not produce a cycle."""
+    wp_a1 = make_wp_result("P2-A4-WP1")
+    wp_a2 = make_wp_result("P2-A4-WP2", depends_on=["P2-A9-WP1"])
+    wp_b1 = make_wp_result("P2-A9-WP1")
+    wp_b2 = make_wp_result("P2-A9-WP2", depends_on=["P2-A4-WP1"])
+    refined_path = _make_refined_wps(tmp_path, [wp_a1, wp_a2, wp_b1, wp_b2])
+
+    consolidation_dir = tmp_path / "work_packages" / "consolidation"
+    _make_manifest(
+        consolidation_dir,
+        "P2",
+        [
+            {
+                "merged_id": "P2-A4-WP1",
+                "source_wp_ids": ["P2-A4-WP1", "P2-A4-WP2"],
+                "merge_order": ["P2-A4-WP1", "P2-A4-WP2"],
+                "name": None,
+                "goal": None,
+            },
+        ],
+    )
+    _make_manifest(
+        consolidation_dir,
+        "P2",
+        [
+            {
+                "merged_id": "P2-A9-WP1",
+                "source_wp_ids": ["P2-A9-WP1", "P2-A9-WP2"],
+                "merge_order": ["P2-A9-WP1", "P2-A9-WP2"],
+                "name": None,
+                "goal": None,
+            },
+        ],
+    )
+
+    _ = consolidate_wps(refined_wps_path=str(refined_path), planner_dir=str(tmp_path))
+
+    consolidated = json.loads((tmp_path / "consolidated_wps.json").read_text())
+    output_ids = {wp["id"] for wp in consolidated["work_packages"]}
+    assert output_ids == {"P2-A4-WP1", "P2-A9-WP1"}
+    wp_a = next(wp for wp in consolidated["work_packages"] if wp["id"] == "P2-A4-WP1")
+    wp_b = next(wp for wp in consolidated["work_packages"] if wp["id"] == "P2-A9-WP1")
+    if "P2-A9-WP1" in wp_a["depends_on"] and "P2-A4-WP1" in wp_b["depends_on"]:
+        assert "P2-A9-WP1" not in wp_a["depends_on"] or "P2-A4-WP1" not in wp_b["depends_on"], (
+            "Mutual cycle must be broken: at least one edge must be removed"
+        )
+
+
+def test_rewrite_deps_breaks_three_node_cycle(tmp_path: Path) -> None:
+    """Three groups forming A→B→C→A after rewrite must have cycle broken."""
+    wp_a1 = make_wp_result("P1-A1-WP1")
+    wp_a2 = make_wp_result("P1-A1-WP2", depends_on=["P1-A2-WP1"])
+    wp_b1 = make_wp_result("P1-A2-WP1")
+    wp_b2 = make_wp_result("P1-A2-WP2", depends_on=["P1-A3-WP1"])
+    wp_c1 = make_wp_result("P1-A3-WP1")
+    wp_c2 = make_wp_result("P1-A3-WP2", depends_on=["P1-A1-WP1"])
+    refined_path = _make_refined_wps(tmp_path, [wp_a1, wp_a2, wp_b1, wp_b2, wp_c1, wp_c2])
+
+    consolidation_dir = tmp_path / "work_packages" / "consolidation"
+    for phase_id, prefix in [
+        ("P1", "P1-A1"),
+        ("P2", "P1-A2"),
+        ("P3", "P1-A3"),
+    ]:
+        _make_manifest(
+            consolidation_dir,
+            phase_id,
+            [
+                {
+                    "merged_id": f"{prefix}-WP1",
+                    "source_wp_ids": [f"{prefix}-WP1", f"{prefix}-WP2"],
+                    "merge_order": [f"{prefix}-WP1", f"{prefix}-WP2"],
+                    "name": None,
+                    "goal": None,
+                },
+            ],
+        )
+
+    consolidate_wps(refined_wps_path=str(refined_path), planner_dir=str(tmp_path))
+
+    consolidated = json.loads((tmp_path / "consolidated_wps.json").read_text())
+    output_ids = {wp["id"] for wp in consolidated["work_packages"]}
+    assert output_ids == {"P1-A1-WP1", "P1-A2-WP1", "P1-A3-WP1"}
+
+
+def test_rewrite_deps_removes_self_references(tmp_path: Path) -> None:
+    """A WP that depends on an absorbed source mapping back to itself must not self-loop."""
+    wp1 = make_wp_result("P1-A1-WP1")
+    wp2 = make_wp_result("P1-A1-WP2", depends_on=["P1-A1-WP1"])
+    wp3 = make_wp_result("P1-A1-WP3", depends_on=["P1-A1-WP2"])
+    refined_path = _make_refined_wps(tmp_path, [wp1, wp2, wp3])
+    consolidation_dir = tmp_path / "work_packages" / "consolidation"
+    _make_manifest(
+        consolidation_dir,
+        "P1",
+        [
+            {
+                "merged_id": "P1-A1-WP1",
+                "source_wp_ids": ["P1-A1-WP1", "P1-A1-WP2"],
+                "merge_order": ["P1-A1-WP1", "P1-A1-WP2"],
+                "name": None,
+                "goal": None,
+            },
+            {
+                "merged_id": "P1-A1-WP3",
+                "source_wp_ids": ["P1-A1-WP3"],
+                "merge_order": ["P1-A1-WP3"],
+                "name": None,
+                "goal": None,
+            },
+        ],
+    )
+
+    consolidate_wps(refined_wps_path=str(refined_path), planner_dir=str(tmp_path))
+
+    consolidated = json.loads((tmp_path / "consolidated_wps.json").read_text())
+    for wp in consolidated["work_packages"]:
+        assert wp["id"] not in wp.get("depends_on", []), (
+            f"Self-reference detected: {wp['id']} depends on itself"
+        )
+
+
+def test_consolidate_wps_returns_cycles_broken_count(tmp_path: Path) -> None:
+    """Result dict must include cycles_broken key as string."""
+    wp_a1 = make_wp_result("P2-A4-WP1")
+    wp_a2 = make_wp_result("P2-A4-WP2", depends_on=["P2-A9-WP1"])
+    wp_b1 = make_wp_result("P2-A9-WP1")
+    wp_b2 = make_wp_result("P2-A9-WP2", depends_on=["P2-A4-WP1"])
+    refined_path = _make_refined_wps(tmp_path, [wp_a1, wp_a2, wp_b1, wp_b2])
+
+    consolidation_dir = tmp_path / "work_packages" / "consolidation"
+    _make_manifest(
+        consolidation_dir,
+        "P2",
+        [
+            {
+                "merged_id": "P2-A4-WP1",
+                "source_wp_ids": ["P2-A4-WP1", "P2-A4-WP2"],
+                "merge_order": ["P2-A4-WP1", "P2-A4-WP2"],
+                "name": None,
+                "goal": None,
+            },
+        ],
+    )
+    _make_manifest(
+        consolidation_dir,
+        "P2",
+        [
+            {
+                "merged_id": "P2-A9-WP1",
+                "source_wp_ids": ["P2-A9-WP1", "P2-A9-WP2"],
+                "merge_order": ["P2-A9-WP1", "P2-A9-WP2"],
+                "name": None,
+                "goal": None,
+            },
+        ],
+    )
+
+    result = consolidate_wps(refined_wps_path=str(refined_path), planner_dir=str(tmp_path))
+
+    assert "cycles_broken" in result
+    assert isinstance(result["cycles_broken"], str)
+    assert int(result["cycles_broken"]) >= 1
+
+
+def test_consolidate_wps_writes_broken_cycle_edges_json(tmp_path: Path) -> None:
+    """When cycles are broken, broken_cycle_edges.json must be written in planner_dir."""
+    wp_a1 = make_wp_result("P2-A4-WP1")
+    wp_a2 = make_wp_result("P2-A4-WP2", depends_on=["P2-A9-WP1"])
+    wp_b1 = make_wp_result("P2-A9-WP1")
+    wp_b2 = make_wp_result("P2-A9-WP2", depends_on=["P2-A4-WP1"])
+    refined_path = _make_refined_wps(tmp_path, [wp_a1, wp_a2, wp_b1, wp_b2])
+
+    consolidation_dir = tmp_path / "work_packages" / "consolidation"
+    _make_manifest(
+        consolidation_dir,
+        "P2",
+        [
+            {
+                "merged_id": "P2-A4-WP1",
+                "source_wp_ids": ["P2-A4-WP1", "P2-A4-WP2"],
+                "merge_order": ["P2-A4-WP1", "P2-A4-WP2"],
+                "name": None,
+                "goal": None,
+            },
+        ],
+    )
+    _make_manifest(
+        consolidation_dir,
+        "P2",
+        [
+            {
+                "merged_id": "P2-A9-WP1",
+                "source_wp_ids": ["P2-A9-WP1", "P2-A9-WP2"],
+                "merge_order": ["P2-A9-WP1", "P2-A9-WP2"],
+                "name": None,
+                "goal": None,
+            },
+        ],
+    )
+
+    consolidate_wps(refined_wps_path=str(refined_path), planner_dir=str(tmp_path))
+
+    edges_path = tmp_path / "broken_cycle_edges.json"
+    assert edges_path.exists()
+    data = json.loads(edges_path.read_text())
+    assert len(data) >= 1
+
+
+def test_consolidate_wps_noop_cycles_broken_zero_for_acyclic(tmp_path: Path) -> None:
+    """Acyclic graphs must have cycles_broken == 0 and no broken_cycle_edges.json."""
+    wps = [make_wp_result(f"P1-A1-WP{i}") for i in range(1, 4)]
+    refined_path = _make_refined_wps(tmp_path, wps)
+
+    result = consolidate_wps(refined_wps_path=str(refined_path), planner_dir=str(tmp_path))
+
+    assert result["cycles_broken"] == "0"
+    assert not (tmp_path / "broken_cycle_edges.json").exists()
+
+
+def test_consolidate_then_validate_passes_for_previously_cyclic_input(tmp_path: Path) -> None:
+    """Full pipeline: consolidation with cycle-prone input → validate_plan returns pass."""
+    wp_a1 = make_wp_result("P2-A4-WP1")
+    wp_a2 = make_wp_result("P2-A4-WP2", depends_on=["P2-A9-WP1"])
+    wp_b1 = make_wp_result("P2-A9-WP1")
+    wp_b2 = make_wp_result("P2-A9-WP2", depends_on=["P2-A4-WP1"])
+    refined_path = _make_refined_wps(tmp_path, [wp_a1, wp_a2, wp_b1, wp_b2])
+
+    phases_dir = tmp_path / "phases"
+    assigns_dir = tmp_path / "assignments"
+    wp_dir = tmp_path / "work_packages"
+
+    write_json(phases_dir / "P2_result.json", make_phase_result(2))
+    write_json(
+        assigns_dir / "P2-A4_result.json",
+        make_assignment_result(2, 4, proposed_work_packages=["P2-A4-WP1", "P2-A4-WP2"]),
+    )
+    write_json(
+        assigns_dir / "P2-A9_result.json",
+        make_assignment_result(2, 9, proposed_work_packages=["P2-A9-WP1", "P2-A9-WP2"]),
+    )
+    write_json(wp_dir / "P2-A4-WP1_result.json", wp_a1)
+    write_json(wp_dir / "P2-A4-WP2_result.json", wp_a2)
+    write_json(wp_dir / "P2-A9-WP1_result.json", wp_b1)
+    write_json(wp_dir / "P2-A9-WP2_result.json", wp_b2)
+    write_json(
+        wp_dir / "wp_manifest.json",
+        {
+            "pass_name": "work_packages",
+            "items": [
+                {"id": "P2-A4-WP1", "status": "done"},
+                {"id": "P2-A4-WP2", "status": "done"},
+                {"id": "P2-A9-WP1", "status": "done"},
+                {"id": "P2-A9-WP2", "status": "done"},
+            ],
+        },
+    )
+    consolidation_dir = wp_dir / "consolidation"
+    _make_manifest(
+        consolidation_dir,
+        "P2",
+        [
+            {
+                "merged_id": "P2-A4-WP1",
+                "source_wp_ids": ["P2-A4-WP1", "P2-A4-WP2"],
+                "merge_order": ["P2-A4-WP1", "P2-A4-WP2"],
+                "name": None,
+                "goal": None,
+            },
+        ],
+    )
+    _make_manifest(
+        consolidation_dir,
+        "P2",
+        [
+            {
+                "merged_id": "P2-A9-WP1",
+                "source_wp_ids": ["P2-A9-WP1", "P2-A9-WP2"],
+                "merge_order": ["P2-A9-WP1", "P2-A9-WP2"],
+                "name": None,
+                "goal": None,
+            },
+        ],
+    )
+
+    consolidate_wps(refined_wps_path=str(refined_path), planner_dir=str(tmp_path))
+    result = validate_plan(str(tmp_path))
+
+    assert result["verdict"] == "pass"

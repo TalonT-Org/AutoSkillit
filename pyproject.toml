@@ -323,6 +323,24 @@ forbidden_modules = [
     "autoskillit.report",
 ]
 
+# IL-011 | _dag_ops: shared DAG primitives with no planner-internal imports
+# Rationale: _dag_ops is the single source of truth for graph operations in the
+# planner. It must not import from any planner-internal module so that it can serve
+# as the canonical implementation shared by consolidation.py, validation.py, and
+# compiler.py without creating circular dependencies.
+[[tool.importlinter.contracts]]
+name = "IL-011 _dag_ops has no planner-internal imports"
+type = "forbidden"
+source_modules = ["autoskillit.planner._dag_ops"]
+forbidden_modules = [
+    "autoskillit.planner.consolidation",
+    "autoskillit.planner.validation",
+    "autoskillit.planner.compiler",
+    "autoskillit.planner.manifests",
+    "autoskillit.planner.merge",
+    "autoskillit.planner.schema",
+]
+
 # IL-010 | Lens: module-dependency | DS-001
 # Rationale: report/ is an IL-1 package that renders research bundles. It must only
 # import from IL-0 (core) to remain a leaf service that can be tested without

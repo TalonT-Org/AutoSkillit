@@ -347,7 +347,12 @@ CloneResult = CloneSuccessResult | CloneGateUncommitted | CloneGateUnpublished
 
 
 class ModelTotalEntry(TypedDict):
-    """Per-model aggregate token counts produced by compute_model_totals()."""
+    """Per-model aggregate token counts produced by compute_model_totals().
+
+    In-memory only — never written to or read from disk; use TokenUsageFileEntry
+    for the on-disk schema. Unlike TokenUsageFileEntry, this type carries only
+    v2 canonical cache keys (cache_write_tokens, cache_read_tokens).
+    """
 
     model: str
     step_count: int

@@ -40,6 +40,13 @@ _TOKEN_NAME_RE: re.Pattern[str] = re.compile(r"^(\w+)")
 
 _NUDGE_TIMEOUT: float = 60.0
 
+_CANONICAL_TO_LEGACY: dict[str, str | None] = {
+    "input_tokens": None,
+    "output_tokens": None,
+    "cache_write_tokens": "cache_creation_input_tokens",
+    "cache_read_tokens": "cache_read_input_tokens",
+}
+
 
 def _is_path_capture_pattern(pattern: str) -> str | None:
     """Return the token name if pattern is a path-capture pattern, else None.
@@ -323,14 +330,18 @@ def _merge_token_usage(
     if nudge is None:
         return base
     merged = dict(base)
-    for key in (
-        "input_tokens",
-        "output_tokens",
-        "cache_creation_input_tokens",
-        "cache_read_input_tokens",
-    ):
-        base_val = base.get(key, 0)
-        nudge_val = nudge.get(key, 0)
+    for canonical, legacy in _CANONICAL_TO_LEGACY.items():
+        base_val = base.get(canonical) if canonical in base else base.get(legacy) if legacy else 0
+        nudge_val = (
+            nudge.get(canonical) if canonical in nudge else nudge.get(legacy) if legacy else 0
+        )
+        if base_val is None:
+            base_val = 0
+        if nudge_val is None:
+            nudge_val = 0
         if isinstance(base_val, (int, float)) and isinstance(nudge_val, (int, float)):
-            merged[key] = base_val + nudge_val
+            merged[canonical] = base_val + nudge_val
+    for legacy in _CANONICAL_TO_LEGACY.values():
+        if legacy and legacy in merged:
+            del merged[legacy]
     return merged

@@ -13,11 +13,24 @@ from _fmt_primitives import (  # type: ignore[import-not-found]
     _fmt_tokens,
 )
 
+_LEGACY_TO_CANONICAL: dict[str, str] = {
+    "cache_creation_input_tokens": "cache_write_tokens",
+    "cache_read_input_tokens": "cache_read_tokens",
+}
+
+
+def _normalize_cache_keys(d: dict) -> dict:
+    out = dict(d)
+    for old, new in _LEGACY_TO_CANONICAL.items():
+        if old in out and new not in out:
+            out[new] = out.pop(old)
+    return out
+
 
 def _fmt_get_token_summary(data: dict, _pipeline: bool) -> str:
     """Format get_token_summary compact Markdown-KV output (JSON payload only)."""
     lines = ["## token_summary", ""]
-    steps = data.get("steps", [])
+    steps = [_normalize_cache_keys(s) for s in data.get("steps", [])]
     has_non_anthropic = False
     for step in steps:
         name = step.get("step_name", "?")
@@ -39,7 +52,7 @@ def _fmt_get_token_summary(data: dict, _pipeline: bool) -> str:
             f" [uc:{inp} out:{out} cr:{cache_rd} pk:{peak_ctx} cw:{cache_wr}"
             f" turns:{turns} t:{wc:.1f}s{model_tag}]"
         )
-    total = data.get("total", {})
+    total = _normalize_cache_keys(data.get("total", {}))
     if total:
         lines.append("")
         lines.append(f"total_uncached: {_fmt_tokens(total.get('input_tokens', 0))}")

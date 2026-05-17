@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from autoskillit.cli._prompts import _ingredient_table_display_instruction, _read_full_sous_chef
 from autoskillit.core import ROUTING_AUTHORITY_CLAUSE, RetryReason
@@ -109,7 +109,7 @@ def _build_fleet_campaign_prompt(
     resume_kill_reason: str = "",
     ingredients_table: str | None = None,
     prior_dispatch_id: str = "",
-    resume_checkpoint: dict[str, object] | None = None,
+    resume_checkpoint: dict[str, Any] | None = None,
 ) -> str:
     """Build the system prompt for an L3 campaign dispatcher headless session.
 

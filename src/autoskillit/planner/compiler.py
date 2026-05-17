@@ -22,10 +22,6 @@ from autoskillit.planner.validation import (
 logger = get_logger(__name__)
 
 
-def _topological_sort(wp_results: dict[str, dict]) -> list[str]:
-    return topological_sort(wp_results)
-
-
 def _inject_forward_deps(wp_results: dict[str, dict], dep_graph: dict) -> None:
     for wp_id, dependents in dep_graph.get("forward_deps", {}).items():
         if wp_id in wp_results:
@@ -145,7 +141,7 @@ def compile_plan(
                 continue
             assessment_by_wp_id[wp_id] = entry
 
-    execution_order = _topological_sort(wp_results)
+    execution_order = topological_sort(wp_results)
     phase_lookup = _build_phase_lookup(phase_results)
     assign_lookup = _build_assignment_lookup(assignment_results)
 

@@ -903,7 +903,8 @@
         "event": "${{ context.ci_event }}",
         "timeout_seconds": 30,
         "cwd": "${{ context.work_dir }}",
-        "remote_url": "${{ context.remote_url }}"
+        "remote_url": "${{ context.remote_url }}",
+        "auto_trigger": "true"
       },
       "skip_when_false": "inputs.open_pr",
       "on_result": [

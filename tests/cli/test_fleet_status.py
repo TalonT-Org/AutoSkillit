@@ -107,8 +107,8 @@ def test_fleet_status_json_includes_totals(
         token_usage={
             "input_tokens": 100,
             "output_tokens": 50,
-            "cache_creation_input_tokens": 10,
-            "cache_read_input_tokens": 20,
+            "cache_creation": 10,
+            "cache_read": 20,
         },
     )
     monkeypatch.chdir(tmp_path)
@@ -188,8 +188,8 @@ def test_cross_check_warns_on_divergence(
         lambda self, **kw: {
             "input_tokens": 8000,
             "output_tokens": 0,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "cache_read_tokens": 0,
             "total_elapsed_seconds": 0.0,
         },
     )

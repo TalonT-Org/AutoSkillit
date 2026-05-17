@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
-pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
 
 def _run_hook_script(script_name: str, stdin_data: dict) -> tuple[str, int]:
@@ -22,7 +22,7 @@ def _run_hook_script(script_name: str, stdin_data: dict) -> tuple[str, int]:
     stdin_text = json.dumps(stdin_data)
     buf = io.StringIO()
     exit_code = 0
-    with patch("sys.stdin", io.StringIO(stdin_text)):
+    with patch("sys.stdin", io.StringIO(stdin_text)), patch("sys.stdout", buf):
         try:
             mod.main()
         except SystemExit as exc:
@@ -73,9 +73,7 @@ def test_hook_output_excludes_tool_response(
     if script_name == "lint_after_edit_hook":
         f = tmp_path / "bad_fmt.py"
         f.write_text("x=1\n")
-        event = _build_posttooluse_event(tool_response=marker_tool_response)
-    elif script_name == "quota_post_hook":
-        event = _build_posttooluse_event(tool_response=marker_tool_response)
+        event = _build_posttooluse_event(file_path=str(f), tool_response=marker_tool_response)
     else:
         event = _build_posttooluse_event(tool_response=marker_tool_response)
 

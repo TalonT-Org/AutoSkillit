@@ -238,12 +238,16 @@ tasks:
 
   regen-contracts:
     desc: Regenerate all bundled recipe contract cards
+    status:
+      - uv run python scripts/check_contract_freshness.py
     cmds:
       - uv run python scripts/regen_contracts.py
 
   compile-recipes:
     desc: Pre-compile bundled recipe YAML files to JSON
     deps: [regen-contracts]
+    status:
+      - uv run python scripts/compile_recipes.py --check
     cmds:
       - uv run python scripts/compile_recipes.py
 

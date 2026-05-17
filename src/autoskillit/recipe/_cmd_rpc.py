@@ -11,7 +11,7 @@ from pathlib import Path
 
 import regex as re
 
-from autoskillit.core import atomic_write
+from autoskillit.core import atomic_write, is_generated_path
 
 
 def compute_branch(
@@ -63,22 +63,42 @@ def check_dropped_healthy_loop(
 
 
 def commit_guard(worktree_path: str) -> dict[str, str]:
-    """Auto-commit pending changes if worktree is dirty."""
+    """Auto-commit pending changes if worktree is dirty, excluding generated files."""
     result = subprocess.run(
-        ["git", "status", "--porcelain"],
+        ["git", "status", "--porcelain=v1", "-z", "-uall"],
         cwd=worktree_path,
         capture_output=True,
-        text=True,
     )
-    if result.stdout.strip():
-        subprocess.run(["git", "add", "-A"], cwd=worktree_path, check=True)
-        subprocess.run(
-            ["git", "commit", "-m", "chore: commit pending session changes"],
-            cwd=worktree_path,
-            check=True,
+    if result.returncode != 0:
+        raise subprocess.CalledProcessError(
+            result.returncode, result.args, result.stdout, result.stderr
         )
-        return {"committed": "true"}
-    return {"committed": "false"}
+    files_to_add: list[str] = []
+    parts = result.stdout.decode("utf-8", errors="surrogateescape").split("\0")
+    i = 0
+    while i < len(parts):
+        entry = parts[i]
+        if len(entry) < 3:
+            i += 1
+            continue
+        xy = entry[:2]
+        path = entry[3:]
+        if xy[0] in "RC":
+            i += 1
+        if path and not is_generated_path(path):
+            files_to_add.append(path)
+        i += 1
+
+    if not files_to_add:
+        return {"committed": "false"}
+
+    subprocess.run(["git", "add", "--", *files_to_add], cwd=worktree_path, check=True)
+    subprocess.run(
+        ["git", "commit", "-m", "chore: commit pending session changes"],
+        cwd=worktree_path,
+        check=True,
+    )
+    return {"committed": "true"}
 
 
 def _detect_remote(cwd: str) -> str:

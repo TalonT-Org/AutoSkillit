@@ -511,9 +511,12 @@ def generate_recipe_card(
 
     card_path = recipes_dir / "contracts" / f"{pipeline_path.stem}.yaml"
     card_path.parent.mkdir(parents=True, exist_ok=True)
-    atomic_write(
-        card_path, dump_yaml_str(contract_data, default_flow_style=False, sort_keys=False)
-    )
+    new_content = dump_yaml_str(contract_data, default_flow_style=False, sort_keys=False)
+    if card_path.exists():
+        existing = card_path.read_text(encoding="utf-8")
+        if existing == new_content:
+            return contract_data
+    atomic_write(card_path, new_content)
     return contract_data
 
 

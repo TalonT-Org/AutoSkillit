@@ -227,7 +227,7 @@ class TestTouchDispatchMarker:
 
         marker = tmp_path / "test.marker"
         marker.touch()
-        original_mtime = marker.stat().st_mtime
+        original_mtime_ns = marker.stat().st_mtime_ns
 
         trigger = anyio.Event()
 
@@ -236,11 +236,13 @@ class TestTouchDispatchMarker:
 
         async with anyio.create_task_group() as tg:
             tg.start_soon(_heartbeat_wrapper)
-            await anyio.sleep(0.18)
+            # 1.0s gives ~20 heartbeat cycles; tolerates WSL2 CLOCK_REALTIME backward
+            # jumps of up to ~0.9s from NTP sync without causing a spurious failure.
+            await anyio.sleep(1.0)
             trigger.set()
 
-        new_mtime = marker.stat().st_mtime
-        assert new_mtime > original_mtime, "marker mtime should have been refreshed"
+        new_mtime_ns = marker.stat().st_mtime_ns
+        assert new_mtime_ns > original_mtime_ns, "marker mtime should have been refreshed"
 
     @pytest.mark.anyio
     async def test_touch_dispatch_marker_oserror_does_not_propagate(self, tmp_path: Path) -> None:

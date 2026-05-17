@@ -185,6 +185,8 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
             "report",
             "server",
             "workspace",
+            "infra/test_generated_file_write_guard.py",
+            "infra/test_generated_files.py",
         }
     ),
     "_claude_env": frozenset({"core", "execution", "_llm_triage", "cli"}),
@@ -613,6 +615,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "fleet/test_gate_state_persistence.py",
             # Other file-level entries:
             "infra/test_pretty_output_recipe.py",
+            "infra/test_generated_files.py",
             "skills/test_planner_skill_contracts.py",
             "skills/test_skill_placeholder_contracts.py",
             "skills/test_make_campaign_compliance.py",

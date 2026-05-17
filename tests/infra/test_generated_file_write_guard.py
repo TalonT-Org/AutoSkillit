@@ -56,6 +56,23 @@ def test_write_guard_allows_other_files():
     assert output is None, "Non-generated-file Write must pass through (no stdout)"
 
 
+def test_guard_suffixes_cover_generated_files():
+    """All GENERATED_FILES entries must be denied by the guard."""
+    from autoskillit.core.paths import GENERATED_FILES
+
+    for entry in GENERATED_FILES:
+        if entry.endswith("/"):
+            file_path = f"/repo/{entry}generated-file.yaml"
+        else:
+            file_path = f"/repo/{entry}"
+        event = {"tool_name": "Write", "tool_input": {"file_path": file_path}}
+        output = _run_guard(event)
+        assert output is not None, f"GENERATED_FILES entry {entry!r} must be denied by the guard"
+        assert output["hookSpecificOutput"]["permissionDecision"] == "deny", (
+            f"GENERATED_FILES entry {entry!r} must be denied"
+        )
+
+
 def test_write_guard_fail_open_on_invalid_json():
     script = pkg_root() / "hooks" / "guards" / "generated_file_write_guard.py"
     result = subprocess.run(

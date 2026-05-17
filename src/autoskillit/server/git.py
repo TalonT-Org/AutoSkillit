@@ -22,6 +22,7 @@ from autoskillit.core import (
     MergeState,
     SubprocessRunner,
     get_logger,
+    is_generated_path,
     is_protected_branch,
     resolve_main_worktree,
     truncate_text,
@@ -35,21 +36,6 @@ if TYPE_CHECKING:
     from autoskillit.core import TestRunner
 
 logger = get_logger(__name__)
-
-
-def _is_generated_path(file_path: str) -> bool:
-    """Return True if file_path matches any GENERATED_FILES entry.
-
-    Handles both exact-path entries (e.g. 'src/autoskillit/hooks/hooks.json')
-    and directory-prefix entries ending with '/' (e.g. 'src/autoskillit/recipes/diagrams/').
-    """
-    for entry in GENERATED_FILES:
-        if entry.endswith("/"):
-            if file_path.startswith(entry):
-                return True
-        elif file_path == entry:
-            return True
-    return False
 
 
 def _filter_changed_files(stdout: str, prefixes: list[str]) -> tuple[list[str], list[str]]:
@@ -258,7 +244,7 @@ async def perform_merge(
     if dirty_rc == 0 and dirty_out.strip():
         all_dirty = [line.strip() for line in dirty_out.strip().splitlines()]
         # Porcelain format: "XY path" — strip the 2-char status code + space
-        dirty_files = [line for line in all_dirty if not _is_generated_path(line[3:])]
+        dirty_files = [line for line in all_dirty if not is_generated_path(line[3:])]
         if dirty_files:
             return {
                 "error": (

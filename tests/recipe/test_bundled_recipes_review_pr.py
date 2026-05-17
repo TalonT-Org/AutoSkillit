@@ -38,7 +38,8 @@ class TestReviewPrRecipeIntegration:
             f"{recipe_name}: compose_pr on_result[0] must gate on result.pr_url"
         )
         assert truthy_cond.route == "guard_pr_url", (  # type: ignore[attr-defined]
-            f"{recipe_name}: compose_pr on_result[0] must route to guard_pr_url when pr_url is truthy"
+            f"{recipe_name}: compose_pr on_result[0] must route to guard_pr_url"
+            " when pr_url is truthy"
         )
         else_cond = step.on_result.conditions[1]  # type: ignore[attr-defined]
         assert else_cond.route == "release_issue_failure", (  # type: ignore[attr-defined]

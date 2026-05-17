@@ -42,7 +42,7 @@ def test_load_recipe_dict_prefers_json_when_fresh(tmp_path, monkeypatch):
     yaml_path = tmp_path / "recipe.yaml"
     _write_yaml(yaml_path, _MINIMAL_RECIPE)
     _compile_json(yaml_path)
-    # Ensure JSON mtime is strictly greater than YAML mtime (required by > freshness gate)
+    # Ensure JSON mtime is at least equal to YAML mtime (required by >= freshness gate)
     json_path = yaml_path.with_suffix(".json")
     future_mtime_ns = yaml_path.stat().st_mtime_ns + 10_000_000_000
     os.utime(json_path, ns=(future_mtime_ns, future_mtime_ns))
@@ -215,7 +215,38 @@ def test_bundled_json_files_are_fresh():
         yaml_data = yaml.safe_load(yaml_path.read_bytes())
         json_data = json.loads(json_path.read_text(encoding="utf-8"))
         assert json_data == yaml_data, f"JSON is stale for {yaml_path.name}"
-        assert json_path.stat().st_mtime_ns > yaml_path.stat().st_mtime_ns, (
+        assert json_path.stat().st_mtime_ns >= yaml_path.stat().st_mtime_ns, (
             f"JSON mtime is older than YAML mtime for {yaml_path.name}"
             " — fast-path would be bypassed"
         )
+
+
+def test_compile_recipes_skips_unchanged_files(tmp_path):
+    """_compile_one must not rewrite JSON when content is unchanged."""
+    import importlib.util
+    from pathlib import Path
+
+    scripts_dir = Path(__file__).parent.parent.parent / "scripts"
+    spec = importlib.util.spec_from_file_location(
+        "compile_recipes", scripts_dir / "compile_recipes.py"
+    )
+    assert spec is not None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    _compile_one = mod._compile_one
+
+    yaml_file = tmp_path / "test-recipe.yaml"
+    yaml_file.write_text("name: test-recipe\nversion: '1.0'\n")
+
+    # First compile
+    result1 = _compile_one(yaml_file)
+    assert result1 is True, "First compile should return True (file written)"
+    json_file = yaml_file.with_suffix(".json")
+    assert json_file.exists()
+    mtime1 = json_file.stat().st_mtime_ns
+
+    # Second compile — content unchanged
+    result2 = _compile_one(yaml_file)
+    assert result2 is False, "Second compile with unchanged content should return False"
+    mtime2 = json_file.stat().st_mtime_ns
+    assert mtime1 == mtime2, "mtime must not change when content is unchanged"

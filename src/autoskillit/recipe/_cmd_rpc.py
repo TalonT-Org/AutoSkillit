@@ -65,22 +65,23 @@ def check_dropped_healthy_loop(
 def commit_guard(worktree_path: str) -> dict[str, str]:
     """Auto-commit pending changes if worktree is dirty, excluding generated files."""
     result = subprocess.run(
-        ["git", "status", "--porcelain"],
+        ["git", "add", "-A", "--dry-run"],
         cwd=worktree_path,
         capture_output=True,
         text=True,
     )
-    if not result.stdout.strip():
-        return {"committed": "false"}
+    # git add --dry-run outputs "add 'path'" per file (to stderr/stdout depending on git version)
+    files_to_add: list[str] = []
+    for line in result.stdout.strip().splitlines():
+        line = line.strip()
+        if not line.startswith("add "):
+            continue
+        path = line[4:].strip("'")
+        if path and not _is_generated_path(path):
+            files_to_add.append(path)
 
-    dirty_lines = result.stdout.strip().splitlines()
-    files_to_add = [
-        line[3:]  # strip "XY " status prefix
-        for line in dirty_lines
-        if not _is_generated_path(line[3:])
-    ]
     if not files_to_add:
-        return {"committed": "false"}  # only generated files dirty
+        return {"committed": "false"}
 
     subprocess.run(["git", "add", "--", *files_to_add], cwd=worktree_path, check=True)
     subprocess.run(

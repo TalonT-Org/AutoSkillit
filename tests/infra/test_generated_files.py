@@ -83,8 +83,8 @@ def test_generated_files_covers_all_build_outputs():
 
 def test_regen_contracts_is_idempotent(tmp_path):
     """Running regen-contracts twice must produce identical output (no mtime changes)."""
-    from autoskillit.core.io import builtin_recipes_dir
     from autoskillit.recipe.contracts import generate_recipe_card
+    from autoskillit.recipe.io import builtin_recipes_dir
 
     recipes_dir = builtin_recipes_dir()
     # Test on one recipe
@@ -97,7 +97,7 @@ def test_regen_contracts_is_idempotent(tmp_path):
 
     # First run
     generate_recipe_card(test_yaml, recipes_dir=out_dir)
-    card1 = out_dir / "contracts" / test_yaml.stem
+    card1 = out_dir / "contracts" / f"{test_yaml.stem}.yaml"
     assert card1.exists(), f"Contract card not created: {card1}"
     content1 = card1.read_text()
 
@@ -117,7 +117,7 @@ def test_compile_recipes_is_idempotent(tmp_path):
     sys.path.insert(0, str(REPO_ROOT / "scripts"))
     from compile_recipes import _compile_one
 
-    from autoskillit.core.io import builtin_recipes_dir
+    from autoskillit.recipe.io import builtin_recipes_dir
 
     recipes_dir = builtin_recipes_dir()
     yaml_paths = sorted(recipes_dir.rglob("*.yaml"))

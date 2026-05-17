@@ -201,7 +201,7 @@
         "event": "${{ context.ci_event }}",
         "timeout_seconds": 600,
         "remote_url": "${{ context.remote_url }}",
-        "auto_trigger": "true",
+        "auto_trigger": true,
         "step_name": "wait_ci_pre_enqueue"
       },
       "on_result": [
@@ -603,11 +603,11 @@
           "route": "collect_and_check_impl_plans"
         },
         {
-          "route": "get_next_pr_branch"
+          "route": "get_current_pr_branch"
         }
       ],
       "on_failure": "register_clone_failure",
-      "note": "Advances to the next PR by looking up the current PR number in pr_order_file and returning the next entry. Outputs the next PR number (or \"done\"). The capture block sets current_pr_number at the recipe level — no agent-managed variable updates. Routes to get_next_pr_branch for proactive rebase, or collect_and_check_impl_plans when done.\n"
+      "note": "Advances to the next PR by looking up the current PR number in pr_order_file and returning the next entry. Outputs the next PR number (or \"done\"). The capture block sets current_pr_number at the recipe level — no agent-managed variable updates. Routes to get_current_pr_branch to enforce the CI gate before each enqueue, or collect_and_check_impl_plans when done.\n"
     },
     "get_next_pr_branch": {
       "tool": "run_cmd",

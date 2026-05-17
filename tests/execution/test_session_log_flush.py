@@ -576,6 +576,7 @@ def test_token_usage_json_schema(tmp_path):
     assert tu["turn_count"] == 0
     assert tu["dispatch_id"] == "disp-abc"
     assert tu["campaign_id"] == "camp-xyz"
+    assert tu["schema_version"] == 2
 
 
 def test_token_usage_json_includes_peak_context_and_turn_count(tmp_path):

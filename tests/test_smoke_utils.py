@@ -384,12 +384,13 @@ def _write_test_sessions(log_root: Path, entries: list[dict]) -> None:
             "session_label": _resolve_session_label(entry),
             "input_tokens": entry.get("input_tokens", 1000),
             "output_tokens": entry.get("output_tokens", 500),
-            "cache_creation_input_tokens": entry.get("cache_creation_input_tokens", 100),
-            "cache_read_input_tokens": entry.get("cache_read_input_tokens", 200),
+            "cache_write_tokens": entry.get("cache_write_tokens", 100),
+            "cache_read_tokens": entry.get("cache_read_tokens", 200),
             "timing_seconds": entry.get("timing_seconds", 10.0),
             "order_id": entry.get("order_id", ""),
             "loc_insertions": entry.get("loc_insertions", 0),
             "loc_deletions": entry.get("loc_deletions", 0),
+            "schema_version": 2,
         }
         (session_dir / "token_usage.json").write_text(json.dumps(token_data))
     (log_root / "sessions.jsonl").write_text("\n".join(lines) + "\n")

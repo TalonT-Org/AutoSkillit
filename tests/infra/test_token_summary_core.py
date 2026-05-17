@@ -99,8 +99,8 @@ def test_tsa5_matching_sessions_formats_table_and_edits_pr(tmp_path: Path) -> No
                 "step_name": "plan-1",
                 "input_tokens": 1000,
                 "output_tokens": 500,
-                "cache_creation_input_tokens": 100,
-                "cache_read_input_tokens": 200,
+                "cache_write_tokens": 100,
+                "cache_read_tokens": 200,
                 "timing_seconds": 10.0,
             },
             {
@@ -110,8 +110,8 @@ def test_tsa5_matching_sessions_formats_table_and_edits_pr(tmp_path: Path) -> No
                 "step_name": "plan-2",
                 "input_tokens": 1000,
                 "output_tokens": 500,
-                "cache_creation_input_tokens": 100,
-                "cache_read_input_tokens": 200,
+                "cache_write_tokens": 100,
+                "cache_read_tokens": 200,
                 "timing_seconds": 10.0,
             },
             {
@@ -121,8 +121,8 @@ def test_tsa5_matching_sessions_formats_table_and_edits_pr(tmp_path: Path) -> No
                 "step_name": "open-pr",
                 "input_tokens": 500,
                 "output_tokens": 250,
-                "cache_creation_input_tokens": 50,
-                "cache_read_input_tokens": 100,
+                "cache_write_tokens": 50,
+                "cache_read_tokens": 100,
                 "timing_seconds": 5.0,
             },
         ],
@@ -183,8 +183,8 @@ def test_tsa6_idempotency_skips_if_summary_present(tmp_path: Path) -> None:
                 "step_name": "plan",
                 "input_tokens": 1000,
                 "output_tokens": 500,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_read_tokens": 0,
                 "timing_seconds": 10.0,
             },
         ],
@@ -231,8 +231,8 @@ def test_tsa_kitchen_id_match_despite_cwd_mismatch(tmp_path: Path) -> None:
                 "step_name": "implement",
                 "input_tokens": 1000,
                 "output_tokens": 500,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_read_tokens": 0,
                 "timing_seconds": 20.0,
             }
         ],
@@ -278,8 +278,8 @@ def test_tsa_kitchen_id_mismatch_exits_zero(tmp_path: Path) -> None:
                 "step_name": "implement",
                 "input_tokens": 1000,
                 "output_tokens": 500,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_read_tokens": 0,
                 "timing_seconds": 10.0,
             }
         ],
@@ -308,8 +308,8 @@ def test_tsa8_gh_pr_edit_failure_exits_nonzero(tmp_path: Path) -> None:
                 "step_name": "plan",
                 "input_tokens": 1000,
                 "output_tokens": 500,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_read_tokens": 0,
                 "timing_seconds": 5.0,
             },
         ],
@@ -355,8 +355,8 @@ def test_tsa_gh_pr_edit_stderr_captured(tmp_path: Path) -> None:
                 "step_name": "plan",
                 "input_tokens": 100,
                 "output_tokens": 50,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_read_tokens": 0,
                 "timing_seconds": 5.0,
             }
         ],
@@ -409,8 +409,8 @@ def test_tsa_gh_pr_view_failure_emits_diagnostic(tmp_path: Path) -> None:
                 "step_name": "plan",
                 "input_tokens": 100,
                 "output_tokens": 50,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_read_tokens": 0,
                 "timing_seconds": 5.0,
             }
         ],
@@ -648,8 +648,8 @@ def test_format_table_includes_model_column() -> None:
             "model": "claude-sonnet-4-6",
             "input_tokens": 1000,
             "output_tokens": 500,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 200,
+            "cache_write_tokens": 0,
+            "cache_read_tokens": 200,
             "elapsed_seconds": 60.0,
             "invocation_count": 1,
             "loc_insertions": 0,
@@ -673,8 +673,8 @@ def test_hook_format_model_table() -> None:
             "model": "claude-sonnet-4-6",
             "input_tokens": 100,
             "output_tokens": 50,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "cache_read_tokens": 0,
             "elapsed_seconds": 30.0,
             "invocation_count": 1,
         },
@@ -683,8 +683,8 @@ def test_hook_format_model_table() -> None:
             "model": "MiniMax-M2.7",
             "input_tokens": 500,
             "output_tokens": 200,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "cache_read_tokens": 0,
             "elapsed_seconds": 60.0,
             "invocation_count": 1,
         },
@@ -708,8 +708,8 @@ def test_hook_format_model_table_no_model_returns_empty() -> None:
             "model": "",
             "input_tokens": 100,
             "output_tokens": 50,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "cache_read_tokens": 0,
             "elapsed_seconds": 30.0,
         }
     }
@@ -732,10 +732,11 @@ def test_load_sessions_reads_model_identifier(tmp_path: Path) -> None:
                 "session_label": "plan",
                 "input_tokens": 100,
                 "output_tokens": 50,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_read_tokens": 0,
                 "timing_seconds": 10.0,
                 "model_identifier": "claude-sonnet-4-6",
+                "schema_version": 2,
             }
         )
     )
@@ -812,3 +813,60 @@ def test_model_table_equivalence() -> None:
         f"Hook and canonical model tables diverged:"
         f"\nHOOK:\n{hook_table}\n\nCANONICAL:\n{canonical_table}"
     )
+
+
+class TestLoadSessionsSchemaVersionCompat:
+    """Backward compatibility: _load_sessions reads both v1 and v2 token_usage.json."""
+
+    _KITCHEN_ID = "test-kitchen-compat"
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            pytest.param(
+                {
+                    "session_label": "plan",
+                    "input_tokens": 100,
+                    "output_tokens": 50,
+                    "cache_creation_input_tokens": 10,
+                    "cache_read_input_tokens": 5,
+                    "timing_seconds": 30.0,
+                },
+                id="v1-legacy-keys",
+            ),
+            pytest.param(
+                {
+                    "session_label": "plan",
+                    "input_tokens": 100,
+                    "output_tokens": 50,
+                    "cache_write_tokens": 10,
+                    "cache_read_tokens": 5,
+                    "timing_seconds": 30.0,
+                    "schema_version": 2,
+                },
+                id="v2-canonical-keys",
+            ),
+        ],
+    )
+    def test_loads_both_schema_versions(self, tmp_path: Path, payload: dict) -> None:
+        from autoskillit.hooks.token_summary_hook import _load_sessions
+
+        log_root = tmp_path / "logs"
+        session_dir = log_root / "sessions" / "s001"
+        session_dir.mkdir(parents=True)
+        (session_dir / "token_usage.json").write_text(json.dumps(payload))
+        (log_root / "sessions.jsonl").write_text(
+            json.dumps(
+                {
+                    "dir_name": "s001",
+                    "kitchen_id": self._KITCHEN_ID,
+                    "timestamp": "2026-05-01T00:00:00+00:00",
+                }
+            )
+            + "\n"
+        )
+        result = _load_sessions(log_root, self._KITCHEN_ID)
+        assert len(result) == 1
+        entry = result["plan"]
+        assert entry["cache_write_tokens"] == 10
+        assert entry["cache_read_tokens"] == 5

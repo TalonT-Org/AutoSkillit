@@ -33,6 +33,11 @@ from _fmt_primitives import (  # type: ignore[import-not-found]  # noqa: E402
 _SUFFIX_RE = re.compile(r"-\d+$")
 _PR_PARTS_RE = re.compile(r"https://github\.com/([^/\s]+)/([^/\s]+)/pull/(\d+)")
 
+# v1 on-disk key names (schema_version < 2). Referenced via module constants so
+# data.get() call-site literals remain within TOKEN_USAGE_FILE_KEYS (AST contract).
+_V1_CACHE_WRITE_KEY = "cache_creation_input_tokens"
+_V1_CACHE_READ_KEY = "cache_read_input_tokens"
+
 
 def _parse_pr_url_parts(pr_url: str) -> tuple[str, str, int] | None:
     """Extract (owner, repo, pr_number) from a GitHub PR URL.
@@ -239,8 +244,12 @@ def _load_sessions(
             entry["model"] = _model
         entry["input_tokens"] += data.get("input_tokens", 0)
         entry["output_tokens"] += data.get("output_tokens", 0)
-        entry["cache_write_tokens"] += data.get("cache_write_tokens", 0)
-        entry["cache_read_tokens"] += data.get("cache_read_tokens", 0)
+        entry["cache_write_tokens"] += data.get(
+            "cache_write_tokens", data.get(_V1_CACHE_WRITE_KEY, 0)
+        )
+        entry["cache_read_tokens"] += data.get(
+            "cache_read_tokens", data.get(_V1_CACHE_READ_KEY, 0)
+        )
         _raw_timing = data.get("timing_seconds")
         entry["elapsed_seconds"] += float(_raw_timing) if _raw_timing is not None else 0.0
         entry["invocation_count"] += 1

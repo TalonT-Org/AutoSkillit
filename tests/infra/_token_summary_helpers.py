@@ -75,8 +75,8 @@ def _write_sessions(log_root: Path, entries: list[dict]) -> None:
             "session_label": _resolve_session_label(entry),
             "input_tokens": entry.get("input_tokens", 1000),
             "output_tokens": entry.get("output_tokens", 500),
-            "cache_creation_input_tokens": entry.get("cache_creation_input_tokens", 100),
-            "cache_read_input_tokens": entry.get("cache_read_input_tokens", 200),
+            "cache_write_tokens": entry.get("cache_write_tokens", 100),
+            "cache_read_tokens": entry.get("cache_read_tokens", 200),
             "timing_seconds": entry.get("timing_seconds", 10.0),
             "loc_insertions": entry.get("loc_insertions", 0),
             "loc_deletions": entry.get("loc_deletions", 0),
@@ -84,6 +84,7 @@ def _write_sessions(log_root: Path, entries: list[dict]) -> None:
             "turn_count": entry.get("turn_count", 0),
             "dispatch_id": entry.get("dispatch_id", ""),
             "campaign_id": entry.get("campaign_id", ""),
+            "schema_version": 2,
         }
         if "model_identifier" in entry:
             token_data["model_identifier"] = entry["model_identifier"]

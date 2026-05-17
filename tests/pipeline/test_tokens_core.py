@@ -313,12 +313,13 @@ class TestDefaultTokenLogLoadFromLogDir:
             tmp_path,
             "s001",
             {
-                "step_name": "implement",
+                "session_label": "implement",
                 "input_tokens": 100,
                 "output_tokens": 50,
-                "cache_creation_input_tokens": 10,
-                "cache_read_input_tokens": 5,
+                "cache_write_tokens": 10,
+                "cache_read_tokens": 5,
                 "timing_seconds": 30.0,
+                "schema_version": 2,
             },
         )
         log = DefaultTokenLog()
@@ -338,12 +339,13 @@ class TestDefaultTokenLogLoadFromLogDir:
             tmp_path,
             "s001",
             {
-                "step_name": "implement",
+                "session_label": "implement",
                 "input_tokens": 100,
                 "output_tokens": 50,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_read_tokens": 0,
                 "timing_seconds": 0.0,
+                "schema_version": 2,
             },
         )
         log = DefaultTokenLog()
@@ -359,12 +361,13 @@ class TestDefaultTokenLogLoadFromLogDir:
             tmp_path,
             "old",
             {
-                "step_name": "implement",
+                "session_label": "implement",
                 "input_tokens": 999,
                 "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_read_tokens": 0,
                 "timing_seconds": 0.0,
+                "schema_version": 2,
             },
             timestamp="2025-01-01T00:00:00+00:00",
         )
@@ -395,12 +398,13 @@ class TestDefaultTokenLogLoadFromLogDir:
                 tmp_path,
                 f"s{i:03d}",
                 {
-                    "step_name": f"step{i}",
+                    "session_label": f"step{i}",
                     "input_tokens": 10,
                     "output_tokens": 5,
-                    "cache_creation_input_tokens": 0,
-                    "cache_read_input_tokens": 0,
+                    "cache_write_tokens": 0,
+                    "cache_read_tokens": 0,
                     "timing_seconds": 0.0,
+                    "schema_version": 2,
                 },
             )
         log = DefaultTokenLog()
@@ -419,12 +423,13 @@ class TestDefaultTokenLogLoadFromLogDir:
             tmp_path,
             "s001",
             {
-                "step_name": "implement",
+                "session_label": "implement",
                 "input_tokens": 100,
                 "output_tokens": 50,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_read_tokens": 0,
                 "timing_seconds": None,
+                "schema_version": 2,
             },
         )
         log = DefaultTokenLog()
@@ -432,6 +437,71 @@ class TestDefaultTokenLogLoadFromLogDir:
         assert n == 1
         report = log.get_report()
         assert report[0]["elapsed_seconds"] == 0.0
+
+
+class TestLoadFromLogDirSchemaVersionCompat:
+    """Backward compatibility: load_from_log_dir reads both v1 and v2 token_usage.json."""
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            pytest.param(
+                {
+                    "step_name": "implement",
+                    "input_tokens": 100,
+                    "output_tokens": 50,
+                    "cache_creation_input_tokens": 10,
+                    "cache_read_input_tokens": 5,
+                    "timing_seconds": 30.0,
+                },
+                id="v1-legacy-keys",
+            ),
+            pytest.param(
+                {
+                    "session_label": "implement",
+                    "input_tokens": 100,
+                    "output_tokens": 50,
+                    "cache_write_tokens": 10,
+                    "cache_read_tokens": 5,
+                    "timing_seconds": 30.0,
+                    "schema_version": 2,
+                },
+                id="v2-canonical-keys",
+            ),
+        ],
+    )
+    def test_loads_both_schema_versions(self, tmp_path, payload):
+        _write_session(tmp_path, "s001", payload)
+        log = DefaultTokenLog()
+        n = log.load_from_log_dir(tmp_path)
+        assert n == 1
+        report = log.get_report()
+        assert len(report) == 1
+        assert report[0]["step_name"] == "implement"
+        assert report[0]["input_tokens"] == 100
+        assert report[0]["cache_write_tokens"] == 10
+        assert report[0]["cache_read_tokens"] == 5
+
+    def test_missing_schema_version_defaults_to_v1(self, tmp_path):
+        """A file with no schema_version field loads via v1 fallback keys."""
+        _write_session(
+            tmp_path,
+            "s001",
+            {
+                "step_name": "plan",
+                "input_tokens": 50,
+                "output_tokens": 25,
+                "cache_creation_input_tokens": 8,
+                "cache_read_input_tokens": 3,
+                "timing_seconds": 10.0,
+            },
+        )
+        log = DefaultTokenLog()
+        n = log.load_from_log_dir(tmp_path)
+        assert n == 1
+        report = log.get_report()
+        assert report[0]["cache_write_tokens"] == 8
+        assert report[0]["cache_read_tokens"] == 3
 
 
 # ---------------------------------------------------------------------------
@@ -639,15 +709,16 @@ def test_load_from_log_dir_reads_peak_context_and_turn_count(tmp_path):
     (sessions_dir / "token_usage.json").write_text(
         json.dumps(
             {
-                "step_name": "impl",
+                "session_label": "impl",
                 "input_tokens": 100,
                 "output_tokens": 50,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 200,
+                "cache_write_tokens": 0,
+                "cache_read_tokens": 200,
                 "timing_seconds": 5.0,
                 "order_id": "",
                 "peak_context": 60000,
                 "turn_count": 12,
+                "schema_version": 2,
             }
         )
     )
@@ -667,13 +738,14 @@ def test_load_from_log_dir_missing_peak_context_defaults_to_zero(tmp_path):
     (sessions_dir / "token_usage.json").write_text(
         json.dumps(
             {
-                "step_name": "plan",
+                "session_label": "plan",
                 "input_tokens": 500,
                 "output_tokens": 50,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_read_tokens": 0,
                 "timing_seconds": 3.0,
                 "order_id": "",
+                "schema_version": 2,
             }
         )
     )
@@ -708,9 +780,10 @@ def test_load_from_log_dir_restores_orchestrator_sessions(tmp_path):
             "session_label": "(ad-hoc)",
             "input_tokens": 200,
             "output_tokens": 100,
-            "cache_creation_input_tokens": 30,
-            "cache_read_input_tokens": 70,
+            "cache_write_tokens": 30,
+            "cache_read_tokens": 70,
             "timing_seconds": 5.0,
+            "schema_version": 2,
         },
     )
     log = DefaultTokenLog()

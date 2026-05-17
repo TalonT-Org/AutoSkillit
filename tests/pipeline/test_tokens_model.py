@@ -67,6 +67,8 @@ def test_compute_model_totals_single_model() -> None:
     assert totals[0]["model"] == "claude-sonnet-4-6"
     assert totals[0]["step_count"] == 2
     assert totals[0]["input_tokens"] == 300
+    assert totals[0]["cache_write_tokens"] == 0
+    assert totals[0]["cache_read_tokens"] == 0
 
 
 def test_compute_model_totals_mixed_models() -> None:

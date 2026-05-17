@@ -92,10 +92,10 @@ def _fmt_run_skill(data: dict, pipeline: bool) -> str:
         lines.append("")
         lines.append(f"tokens_uncached: {_fmt_tokens(token_usage.get('input_tokens'))}")
         lines.append(f"tokens_out: {_fmt_tokens(token_usage.get('output_tokens'))}")
-        cr = token_usage.get("cache_read_input_tokens", 0)
+        cr = token_usage.get("cache_read_tokens", 0)
         if cr:
             lines.append(f"tokens_cache_read: {_fmt_tokens(cr)}")
-        cw = token_usage.get("cache_creation_input_tokens", 0)
+        cw = token_usage.get("cache_write_tokens", 0)
         if cw:
             lines.append(f"tokens_cache_write: {_fmt_tokens(cw)}")
     result = data.get("result", "")

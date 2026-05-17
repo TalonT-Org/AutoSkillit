@@ -35,8 +35,8 @@ class TestGetTokenSummary:
         assert result["steps"] == []
         assert result["total"]["input_tokens"] == 0
         assert result["total"]["output_tokens"] == 0
-        assert result["total"]["cache_creation_input_tokens"] == 0
-        assert result["total"]["cache_read_input_tokens"] == 0
+        assert result["total"]["cache_write_tokens"] == 0
+        assert result["total"]["cache_read_tokens"] == 0
 
     @pytest.mark.anyio
     async def test_returns_entry_per_step_name(self, tool_ctx_kitchen_open):
@@ -102,8 +102,8 @@ class TestGetTokenSummary:
         result = json.loads(await get_token_summary())
         assert result["total"]["input_tokens"] == 300
         assert result["total"]["output_tokens"] == 130
-        assert result["total"]["cache_creation_input_tokens"] == 30
-        assert result["total"]["cache_read_input_tokens"] == 15
+        assert result["total"]["cache_write_tokens"] == 30
+        assert result["total"]["cache_read_tokens"] == 15
 
     @pytest.mark.anyio
     async def test_clear_true_resets_after_returning(self, tool_ctx_kitchen_open):
@@ -145,8 +145,8 @@ class TestGetTokenSummary:
         assert {
             "input_tokens",
             "output_tokens",
-            "cache_creation_input_tokens",
-            "cache_read_input_tokens",
+            "cache_write_tokens",
+            "cache_read_tokens",
         } <= total_keys
 
     @pytest.mark.anyio

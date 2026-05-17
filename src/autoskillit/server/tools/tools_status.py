@@ -157,10 +157,10 @@ async def get_token_summary(clear: bool = False, format: str = "json", order_id:
 
     Returns JSON with:
     - steps: list of {step_name, input_tokens, output_tokens,
-                       cache_creation_input_tokens, cache_read_input_tokens,
+                       cache_write_tokens, cache_read_tokens,
                        invocation_count, wall_clock_seconds}
-    - total: {input_tokens, output_tokens, cache_creation_input_tokens,
-               cache_read_input_tokens}
+    - total: {input_tokens, output_tokens, cache_write_tokens,
+               cache_read_tokens}
 
     This tool sends no MCP progress notifications.
 

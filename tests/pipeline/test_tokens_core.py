@@ -32,8 +32,8 @@ class TestTokenEntry:
             "model",
             "input_tokens",
             "output_tokens",
-            "cache_creation_input_tokens",
-            "cache_read_input_tokens",
+            "cache_write_tokens",
+            "cache_read_tokens",
             "invocation_count",
             "elapsed_seconds",
             "loc_insertions",
@@ -46,8 +46,8 @@ class TestTokenEntry:
         entry = TokenEntry(step_name="plan")
         assert entry.input_tokens == 0
         assert entry.output_tokens == 0
-        assert entry.cache_creation_input_tokens == 0
-        assert entry.cache_read_input_tokens == 0
+        assert entry.cache_write_tokens == 0
+        assert entry.cache_read_tokens == 0
         assert entry.invocation_count == 0
 
     def test_to_dict_is_json_serializable(self):
@@ -63,8 +63,8 @@ class TestTokenEntry:
             "model",
             "input_tokens",
             "output_tokens",
-            "cache_creation_input_tokens",
-            "cache_read_input_tokens",
+            "cache_write_tokens",
+            "cache_read_tokens",
             "invocation_count",
             "elapsed_seconds",
             "loc_insertions",
@@ -89,8 +89,8 @@ class TestDefaultTokenLog:
         assert report[0]["step_name"] == "plan"
         assert report[0]["input_tokens"] == 100
         assert report[0]["output_tokens"] == 50
-        assert report[0]["cache_creation_input_tokens"] == 10
-        assert report[0]["cache_read_input_tokens"] == 5
+        assert report[0]["cache_write_tokens"] == 10
+        assert report[0]["cache_read_tokens"] == 5
 
     def test_record_same_step_twice_accumulates(self):
         log = DefaultTokenLog()
@@ -144,8 +144,8 @@ class TestDefaultTokenLog:
         report = log.get_report()
         assert report[0]["input_tokens"] == 42
         assert report[0]["output_tokens"] == 0
-        assert report[0]["cache_creation_input_tokens"] == 0
-        assert report[0]["cache_read_input_tokens"] == 0
+        assert report[0]["cache_write_tokens"] == 0
+        assert report[0]["cache_read_tokens"] == 0
 
     def test_compute_total_empty_log(self):
         log = DefaultTokenLog()
@@ -153,8 +153,8 @@ class TestDefaultTokenLog:
         assert total == {
             "input_tokens": 0,
             "output_tokens": 0,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "cache_read_tokens": 0,
             "total_elapsed_seconds": 0.0,
             "loc_insertions": 0,
             "loc_deletions": 0,
@@ -250,8 +250,8 @@ class TestDefaultTokenLog:
         total = log.compute_total()
         assert total["input_tokens"] == 110
         assert total["output_tokens"] == 220
-        assert total["cache_creation_input_tokens"] == 55
-        assert total["cache_read_input_tokens"] == 33
+        assert total["cache_write_tokens"] == 55
+        assert total["cache_read_tokens"] == 33
 
     def test_record_backward_clock_elapsed_is_non_negative(self):
         """elapsed_seconds must never go negative even when end_ts < start_ts."""
@@ -329,6 +329,8 @@ class TestDefaultTokenLogLoadFromLogDir:
         assert report[0]["step_name"] == "implement"
         assert report[0]["input_tokens"] == 100
         assert report[0]["output_tokens"] == 50
+        assert report[0]["cache_write_tokens"] == 10
+        assert report[0]["cache_read_tokens"] == 5
 
     def test_accumulates_into_existing_entries(self, tmp_path):
         """Entries already in the store are summed with loaded data (same step_name merges)."""
@@ -474,6 +476,8 @@ def test_token_log_record_accumulates_loc():
     report = log.get_report()
     assert report[0]["loc_insertions"] == 80
     assert report[0]["loc_deletions"] == 25
+    assert report[0]["cache_write_tokens"] == 0
+    assert report[0]["cache_read_tokens"] == 0
 
 
 # T-LOC-3
@@ -601,6 +605,8 @@ def test_record_peak_context_uses_max():
     log.record("impl", {"cache_read_input_tokens": 200, "peak_context": 80000, "turn_count": 15})
     report = log.get_report()
     assert report[0]["peak_context"] == 80000
+    assert report[0]["cache_write_tokens"] == 0
+    assert report[0]["cache_read_tokens"] == 300
 
 
 def test_record_turn_count_sums():
@@ -609,6 +615,8 @@ def test_record_turn_count_sums():
     log.record("impl", {"cache_read_input_tokens": 200, "peak_context": 80000, "turn_count": 15})
     report = log.get_report()
     assert report[0]["turn_count"] == 25
+    assert report[0]["cache_write_tokens"] == 0
+    assert report[0]["cache_read_tokens"] == 300
 
 
 def test_compute_total_peak_context_is_max_across_steps():
@@ -618,6 +626,8 @@ def test_compute_total_peak_context_is_max_across_steps():
     total = log.compute_total()
     assert total["peak_context"] == 70000
     assert total["turn_count"] == 23
+    assert total["cache_write_tokens"] == 0
+    assert total["cache_read_tokens"] == 300
 
 
 def test_load_from_log_dir_reads_peak_context_and_turn_count(tmp_path):
@@ -685,7 +695,8 @@ def test_token_log_record_accepts_resolved_label():
     assert len(report) == 1
     assert report[0]["step_name"] == "dispatch:abc-123"
     assert report[0]["input_tokens"] == 100
-    assert report[0]["cache_read_input_tokens"] == 80
+    assert report[0]["cache_write_tokens"] == 0
+    assert report[0]["cache_read_tokens"] == 80
 
 
 def test_load_from_log_dir_restores_orchestrator_sessions(tmp_path):
@@ -708,5 +719,5 @@ def test_load_from_log_dir_restores_orchestrator_sessions(tmp_path):
     report = log.get_report()
     assert len(report) == 1
     assert report[0]["input_tokens"] == 200
-    assert report[0]["cache_creation_input_tokens"] == 30
-    assert report[0]["cache_read_input_tokens"] == 70
+    assert report[0]["cache_write_tokens"] == 30
+    assert report[0]["cache_read_tokens"] == 70

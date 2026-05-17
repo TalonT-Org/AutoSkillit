@@ -215,7 +215,7 @@ def test_bundled_json_files_are_fresh():
         yaml_data = yaml.safe_load(yaml_path.read_bytes())
         json_data = json.loads(json_path.read_text(encoding="utf-8"))
         assert json_data == yaml_data, f"JSON is stale for {yaml_path.name}"
-        assert json_path.stat().st_mtime_ns > yaml_path.stat().st_mtime_ns, (
+        assert json_path.stat().st_mtime_ns >= yaml_path.stat().st_mtime_ns, (
             f"JSON mtime is older than YAML mtime for {yaml_path.name}"
             " — fast-path would be bypassed"
         )

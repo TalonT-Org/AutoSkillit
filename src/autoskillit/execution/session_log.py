@@ -468,6 +468,7 @@ def flush_session_log(
         "provider_used": provider_outcome.provider_used,
         "provider_fallback": provider_outcome.fallback_activated,
         "caller_session_id": caller_session_id,
+        "schema_version": 2,
     }
     index_path = log_root / "sessions.jsonl"
     with index_path.open("a") as f:

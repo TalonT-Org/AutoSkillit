@@ -423,3 +423,5 @@ class SessionIndexEntry(TypedDict):
     github_api_requests: int
     provider_used: str
     provider_fallback: bool
+    caller_session_id: str
+    schema_version: int

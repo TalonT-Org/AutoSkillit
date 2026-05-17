@@ -13,6 +13,8 @@ _REQUIRED_INDEX_FIELDS = {
     "recipe_content_hash",
     "recipe_composite_hash",
     "recipe_version",
+    "schema_version",
+    "caller_session_id",
 }
 
 
@@ -25,6 +27,24 @@ class TestSessionIndexEntryCompleteness:
         declared = set(SessionIndexEntry.__annotations__)
         missing = _REQUIRED_INDEX_FIELDS - declared
         assert not missing, f"SessionIndexEntry missing fields: {missing}"
+
+    def test_has_schema_version(self):
+        from typing import get_type_hints
+
+        from autoskillit.core.types._type_results import SessionIndexEntry
+
+        hints = get_type_hints(SessionIndexEntry)
+        assert "schema_version" in hints
+        assert hints["schema_version"] is int
+
+    def test_has_caller_session_id(self):
+        from typing import get_type_hints
+
+        from autoskillit.core.types._type_results import SessionIndexEntry
+
+        hints = get_type_hints(SessionIndexEntry)
+        assert "caller_session_id" in hints
+        assert hints["caller_session_id"] is str
 
     def test_canonical_cache_fields(self):
         """SessionIndexEntry must use canonical cache field names, not v1 API names."""

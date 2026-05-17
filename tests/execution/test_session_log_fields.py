@@ -804,6 +804,20 @@ def test_parallel_lists_aligned_when_timestamp_missing(tmp_path, monkeypatch):
     assert summary["turn_tool_calls"] == [["Read"], ["Edit"]]
 
 
+def test_flush_index_includes_caller_session_id(tmp_path):
+    """sessions.jsonl index entry includes caller_session_id when provided."""
+    _flush(tmp_path, session_id="caller-test", caller_session_id="parent-abc")
+    entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip().split("\n")[-1])
+    assert entry["caller_session_id"] == "parent-abc"
+
+
+def test_flush_index_caller_session_id_defaults_to_empty(tmp_path):
+    """caller_session_id defaults to empty string in sessions.jsonl index entry."""
+    _flush(tmp_path, session_id="caller-default")
+    entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip().split("\n")[-1])
+    assert entry["caller_session_id"] == ""
+
+
 def test_flush_session_log_provider_used_defaults_to_empty_string(tmp_path):
     _flush(tmp_path, session_id="prov-def-001", proc_snapshots=None)
     entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip().split("\n")[-1])

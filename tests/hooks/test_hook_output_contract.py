@@ -43,22 +43,21 @@ def _build_posttooluse_event(
 
 
 # PostToolUse hooks that emit hookSpecificOutput with tool result replacement.
-# Each tuple: (module_name, output_field, extra_env_setup_fn or None)
+# Each tuple: (module_name, output_field)
 _POSTTOOLUSE_HOOKS_WITH_OUTPUT = [
-    ("lint_after_edit_hook", "updatedToolResult", None),
-    ("quota_post_hook", "updatedMCPToolOutput", None),
+    ("lint_after_edit_hook", "updatedToolResult"),
+    ("quota_post_hook", "updatedMCPToolOutput"),
 ]
 
 
 @pytest.mark.parametrize(
-    ("script_name", "output_field", "extra_setup"),
+    ("script_name", "output_field"),
     _POSTTOOLUSE_HOOKS_WITH_OUTPUT,
     ids=[h[0] for h in _POSTTOOLUSE_HOOKS_WITH_OUTPUT],
 )
 def test_hook_output_excludes_tool_response(
     script_name: str,
     output_field: str,
-    extra_setup,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -77,16 +76,12 @@ def test_hook_output_excludes_tool_response(
     else:
         event = _build_posttooluse_event(tool_response=marker_tool_response)
 
-    if extra_setup is not None:
-        extra_setup(monkeypatch)
-
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
     monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "implement-worktree")
 
     stdout, _ = _run_hook_script(script_name, event)
 
-    if not stdout.strip():
-        pytest.skip(f"{script_name} emitted no output for this event type")
+    assert stdout.strip(), f"{script_name} emitted no output — expected hookSpecificOutput"
 
     parsed = json.loads(stdout)
     hook_output = parsed.get("hookSpecificOutput", {})

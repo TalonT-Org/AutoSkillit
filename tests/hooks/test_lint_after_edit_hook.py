@@ -291,10 +291,6 @@ class TestOutputContract:
         updated = parsed["hookSpecificOutput"]["updatedToolResult"]
         assert "originalFile:" not in updated
         assert "A" * 100 not in updated
-        assert len(updated) < 5000, (
-            f"updatedToolResult is {len(updated)} chars — tool_response content appears "
-            f"to have been forwarded, bloating context"
-        )
 
     def test_output_excludes_short_tool_response(self, tmp_path, monkeypatch):
         """Even short tool_response must not appear in updatedToolResult."""

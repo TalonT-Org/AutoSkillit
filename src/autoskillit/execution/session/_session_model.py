@@ -257,7 +257,7 @@ def extract_token_usage(stdout: str) -> dict[str, Any] | None:
             bucket = model_buckets.setdefault(model, {f: 0 for f in _CANONICAL_TOKEN_FIELDS})
             for api_f, canon_f in zip(_API_TOKEN_FIELDS, _CANONICAL_TOKEN_FIELDS):
                 bucket[canon_f] += usage.get(api_f, 0)
-            cr = usage.get("cache_read_input_tokens", 0)
+            cr = bucket["cache_read_tokens"]
             if cr > peak_context:
                 peak_context = cr
             turn_count += 1

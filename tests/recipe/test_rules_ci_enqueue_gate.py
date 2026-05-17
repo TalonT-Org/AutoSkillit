@@ -100,7 +100,15 @@ def test_enqueue_with_ci_gate_on_only_one_path_fires() -> None:
         ),
         "enqueue_pr": RecipeStep(tool="enqueue_pr", with_args={"pr_number": "42"}),
     }
-    steps["route_decision"].on_result = type(steps["route_decision"]).on_result
+    steps["start"].on_success = "route_decision"
+    # Branch A goes through wait_for_ci; branch B (default) skips directly to enqueue_pr
+    steps["route_decision"].on_result = StepResultRoute(
+        conditions=[
+            StepResultCondition(route="wait_ci", when="${{ result.value }} == needs_ci"),
+            StepResultCondition(route="enqueue_pr"),
+        ]
+    )
+    steps["wait_ci"].on_success = "enqueue_pr"
 
     recipe = _make_recipe(steps)
     findings = run_semantic_rules(recipe)

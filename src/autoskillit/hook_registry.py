@@ -73,6 +73,8 @@ HOOK_REGISTRY: list[HookDef] = [
     HookDef(
         matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
         scripts=["guards/pr_create_guard.py"],
+        # Must stay in sync with _EXEMPT_SKILLS in guards/pr_create_guard.py —
+        # stdlib-only boundary on hook scripts prevents a shared import.
         exempt_skills=frozenset(
             {
                 "compose-pr",

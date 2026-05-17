@@ -26,6 +26,8 @@ _DENY_REASON = (
     "Direct gh pr create bypasses mandatory arch-lens, annotation, and review steps."
 )
 
+# Must stay in sync with the exempt_skills frozenset on the pr_create_guard HookDef
+# in hook_registry.py — stdlib-only boundary prevents a shared import.
 _EXEMPT_SKILLS: frozenset[str] = frozenset(
     {
         "compose-pr",

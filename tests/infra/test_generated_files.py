@@ -4,7 +4,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from autoskillit.core.paths import GENERATED_FILES
+from autoskillit.core.paths import GENERATED_FILES, _is_generated_path
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 
@@ -58,3 +58,81 @@ def test_generated_files_covers_precommit_pattern():
             f"GENERATED_FILES entry {path!r} does not match "
             f"no-generated-configs pattern {pattern!r}"
         )
+
+
+def test_generated_files_covers_all_build_outputs():
+    """Every file produced by build scripts must be covered by GENERATED_FILES."""
+    recipes_dir = REPO_ROOT / "src" / "autoskillit" / "recipes"
+
+    # Contract cards (YAML + JSON)
+    contract_files = list((recipes_dir / "contracts").rglob("*"))
+    for f in contract_files:
+        if f.is_file():
+            rel = str(f.relative_to(REPO_ROOT))
+            assert _is_generated_path(rel), (
+                f"Build output {rel} is not covered by GENERATED_FILES. "
+                "Add an entry or directory prefix."
+            )
+
+    # Diagram files
+    diagram_files = list((recipes_dir / "diagrams").rglob("*.md"))
+    for f in diagram_files:
+        rel = str(f.relative_to(REPO_ROOT))
+        assert _is_generated_path(rel), f"Diagram {rel} not in GENERATED_FILES"
+
+
+def test_regen_contracts_is_idempotent(tmp_path):
+    """Running regen-contracts twice must produce identical output (no mtime changes)."""
+    from autoskillit.core.io import builtin_recipes_dir
+    from autoskillit.recipe.contracts import generate_recipe_card
+
+    recipes_dir = builtin_recipes_dir()
+    # Test on one recipe
+    yaml_paths = sorted(recipes_dir.glob("*.yaml"))
+    assert yaml_paths, "No recipe YAML files found"
+
+    test_yaml = yaml_paths[0]
+    out_dir = tmp_path / "contracts"
+    out_dir.mkdir()
+
+    # First run
+    generate_recipe_card(test_yaml, recipes_dir=out_dir)
+    card1 = out_dir / "contracts" / test_yaml.stem
+    assert card1.exists(), f"Contract card not created: {card1}"
+    content1 = card1.read_text()
+
+    # Second run
+    generate_recipe_card(test_yaml, recipes_dir=out_dir)
+    content2 = card1.read_text()
+
+    assert content1 == content2, (
+        "regen_contracts is not idempotent: second run produced different content"
+    )
+
+
+def test_compile_recipes_is_idempotent(tmp_path):
+    """Running compile_recipes twice must not modify any JSON files when content is unchanged."""
+    import sys
+
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    from compile_recipes import _compile_one
+
+    from autoskillit.core.io import builtin_recipes_dir
+
+    recipes_dir = builtin_recipes_dir()
+    yaml_paths = sorted(recipes_dir.rglob("*.yaml"))
+    assert yaml_paths, "No recipe YAML files found"
+
+    test_yaml = yaml_paths[0]
+    json_path = test_yaml.with_suffix(".json")
+
+    # First compile
+    _compile_one(test_yaml)
+    assert json_path.exists(), f"JSON not created: {json_path}"
+    mtime1 = json_path.stat().st_mtime_ns
+
+    # Second compile
+    _compile_one(test_yaml)
+    mtime2 = json_path.stat().st_mtime_ns
+
+    assert mtime1 == mtime2, "compile_recipes is not idempotent: second run modified JSON mtime"

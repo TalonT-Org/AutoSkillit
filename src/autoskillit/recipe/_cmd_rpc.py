@@ -11,7 +11,7 @@ from pathlib import Path
 
 import regex as re
 
-from autoskillit.core import atomic_write
+from autoskillit.core import _is_generated_path, atomic_write
 
 
 def compute_branch(
@@ -63,22 +63,32 @@ def check_dropped_healthy_loop(
 
 
 def commit_guard(worktree_path: str) -> dict[str, str]:
-    """Auto-commit pending changes if worktree is dirty."""
+    """Auto-commit pending changes if worktree is dirty, excluding generated files."""
     result = subprocess.run(
         ["git", "status", "--porcelain"],
         cwd=worktree_path,
         capture_output=True,
         text=True,
     )
-    if result.stdout.strip():
-        subprocess.run(["git", "add", "-A"], cwd=worktree_path, check=True)
-        subprocess.run(
-            ["git", "commit", "-m", "chore: commit pending session changes"],
-            cwd=worktree_path,
-            check=True,
-        )
-        return {"committed": "true"}
-    return {"committed": "false"}
+    if not result.stdout.strip():
+        return {"committed": "false"}
+
+    dirty_lines = result.stdout.strip().splitlines()
+    files_to_add = [
+        line[3:]  # strip "XY " status prefix
+        for line in dirty_lines
+        if not _is_generated_path(line[3:])
+    ]
+    if not files_to_add:
+        return {"committed": "false"}  # only generated files dirty
+
+    subprocess.run(["git", "add", "--", *files_to_add], cwd=worktree_path, check=True)
+    subprocess.run(
+        ["git", "commit", "-m", "chore: commit pending session changes"],
+        cwd=worktree_path,
+        check=True,
+    )
+    return {"committed": "true"}
 
 
 def _detect_remote(cwd: str) -> str:

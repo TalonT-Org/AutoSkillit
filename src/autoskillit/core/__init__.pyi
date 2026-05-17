@@ -49,6 +49,7 @@ from .io import write_versioned_json as write_versioned_json
 from .logging import configure_logging as configure_logging
 from .logging import get_logger as get_logger
 from .paths import GENERATED_FILES as GENERATED_FILES
+from .paths import _is_generated_path as _is_generated_path
 from .paths import claude_code_log_path as claude_code_log_path
 from .paths import claude_code_project_dir as claude_code_project_dir
 from .paths import find_latest_session_id as find_latest_session_id

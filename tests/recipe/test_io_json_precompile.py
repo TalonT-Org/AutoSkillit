@@ -219,3 +219,30 @@ def test_bundled_json_files_are_fresh():
             f"JSON mtime is older than YAML mtime for {yaml_path.name}"
             " — fast-path would be bypassed"
         )
+
+
+def test_compile_recipes_skips_unchanged_files(tmp_path):
+    """_compile_one must not rewrite JSON when content is unchanged."""
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent / "scripts"))
+    from compile_recipes import _compile_one
+
+    # Create a temp YAML file with known content
+    yaml_content = {"name": "test-recipe", "version": "1.0"}
+    yaml_file = tmp_path / "test-recipe.yaml"
+    yaml_file.write_text("name: test-recipe\nversion: '1.0'\n")
+
+    # First compile
+    result1 = _compile_one(yaml_file)
+    assert result1 is True, "First compile should return True (file written)"
+    json_file = yaml_file.with_suffix(".json")
+    assert json_file.exists()
+    mtime1 = json_file.stat().st_mtime_ns
+
+    # Second compile — content unchanged
+    result2 = _compile_one(yaml_file)
+    assert result2 is False, "Second compile with unchanged content should return False"
+    mtime2 = json_file.stat().st_mtime_ns
+    assert mtime1 == mtime2, "mtime must not change when content is unchanged"

@@ -155,5 +155,22 @@ GENERATED_FILES: frozenset[str] = frozenset(
     {
         "src/autoskillit/hooks/hooks.json",
         ".claude/settings.json",
+        "src/autoskillit/recipes/contracts/",
+        "src/autoskillit/recipes/diagrams/",
     }
 )
+
+
+def _is_generated_path(file_path: str) -> bool:
+    """Return True if file_path matches any GENERATED_FILES entry.
+
+    Handles both exact-path entries (e.g. 'src/autoskillit/hooks/hooks.json')
+    and directory-prefix entries ending with '/' (e.g. 'src/autoskillit/recipes/diagrams/').
+    """
+    for entry in GENERATED_FILES:
+        if entry.endswith("/"):
+            if file_path.startswith(entry):
+                return True
+        elif file_path == entry:
+            return True
+    return False

@@ -20,7 +20,8 @@ class CompileError(Exception):
     """Raised when a single recipe file fails to compile."""
 
 
-def _compile_one(yaml_path: Path) -> None:
+def _compile_one(yaml_path: Path) -> bool:
+    """Compile one YAML to JSON. Returns True if file was actually written."""
     try:
         data = yaml.load(yaml_path.read_bytes(), Loader=Loader)
     except yaml.YAMLError as exc:
@@ -30,10 +31,13 @@ def _compile_one(yaml_path: Path) -> None:
             f"ERROR: {yaml_path} top-level value is {type(data).__name__}, expected mapping"
         )
     json_path = yaml_path.with_suffix(".json")
-    json_path.write_text(
-        json.dumps(data, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
+    new_content = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    if json_path.exists():
+        existing = json_path.read_text(encoding="utf-8")
+        if existing == new_content:
+            return False
+    json_path.write_text(new_content, encoding="utf-8")
+    return True
 
 
 def main() -> int:

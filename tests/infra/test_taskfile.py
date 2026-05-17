@@ -109,6 +109,25 @@ class TestTaskfile:
         data = self._load()
         assert "regen-contracts" in data["tasks"], "regen-contracts task missing from Taskfile.yml"
 
+    def test_regen_contracts_has_status_block(self):
+        """regen-contracts must have a status: block with at least one entry."""
+        data = self._load()
+        task = data["tasks"]["regen-contracts"]
+        assert "status" in task, "regen-contracts must have a status: block"
+        assert task["status"], "regen-contracts status: block must not be empty"
+
+    def test_compile_recipes_task_exists(self):
+        """compile-recipes task exists in Taskfile.yml."""
+        data = self._load()
+        assert "compile-recipes" in data["tasks"], "compile-recipes task missing from Taskfile.yml"
+
+    def test_compile_recipes_has_status_block(self):
+        """compile-recipes must have a status: block with at least one entry."""
+        data = self._load()
+        task = data["tasks"]["compile-recipes"]
+        assert "status" in task, "compile-recipes must have a status: block"
+        assert task["status"], "compile-recipes status: block must not be empty"
+
 
 def test_taskfile_pytest_paths_exist() -> None:
     """All pytest file paths in Taskfile.yml must exist."""

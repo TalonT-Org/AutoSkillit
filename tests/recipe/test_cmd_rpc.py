@@ -114,6 +114,33 @@ def test_commit_guard_dirty_tree(tmp_path):
     assert result["committed"] == "true"
 
 
+def test_commit_guard_excludes_generated_files(tmp_path):
+    """commit_guard must not commit files matching GENERATED_FILES patterns."""
+    _init_git_repo(tmp_path)
+    # A real dirty file — should be committed
+    (tmp_path / "real_change.py").write_text("print('hello')")
+    # A file matching a generated file path — should NOT be committed
+    contracts_dir = tmp_path / "src" / "autoskillit" / "recipes" / "contracts"
+    contracts_dir.mkdir(parents=True)
+    (contracts_dir / "some-recipe.yaml").write_text("name: test")
+    result = commit_guard(worktree_path=str(tmp_path))
+    assert result["committed"] == "true"
+    # Verify only the real file was committed
+    log_result = subprocess.run(
+        ["git", "log", "--oneline", "-1", "--name-only"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+    committed_files = log_result.stdout.splitlines()[1:]  # skip commit hash line
+    assert any("real_change.py" in f for f in committed_files), (
+        f"real_change.py should be committed, but committed files were: {committed_files}"
+    )
+    assert not any("contracts/" in f for f in committed_files), (
+        f"Generated contracts/ files should NOT be committed, but were: {committed_files}"
+    )
+
+
 def test_ensure_results_with_existing_path():
     result = ensure_results(experiment_results="/some/path.md", worktree_path="/tmp")
     assert result == {"experiment_results": "/some/path.md"}

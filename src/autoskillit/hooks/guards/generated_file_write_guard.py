@@ -13,6 +13,7 @@ import sys
 GENERATED_FILE_DENY_TRIGGER: str = "is a generated file"
 
 _GENERATED_FILE_SUFFIXES = ("/hooks/hooks.json", ".claude/settings.json")
+_GENERATED_DIR_INFIXES = ("/recipes/contracts/", "/recipes/diagrams/")
 
 
 def main() -> None:
@@ -31,7 +32,10 @@ def main() -> None:
 
     # Normalize to forward slashes for cross-platform suffix matching
     normalized = file_path.replace(os.sep, "/")
-    if not any(normalized.endswith(suffix) for suffix in _GENERATED_FILE_SUFFIXES):
+    if not (
+        any(normalized.endswith(suffix) for suffix in _GENERATED_FILE_SUFFIXES)
+        or any(infix in normalized for infix in _GENERATED_DIR_INFIXES)
+    ):
         sys.exit(0)
 
     payload = json.dumps(

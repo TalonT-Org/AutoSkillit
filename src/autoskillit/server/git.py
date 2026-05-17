@@ -21,6 +21,7 @@ from autoskillit.core import (
     MergeFailedStep,
     MergeState,
     SubprocessRunner,
+    _is_generated_path,
     get_logger,
     is_protected_branch,
     resolve_main_worktree,
@@ -35,21 +36,6 @@ if TYPE_CHECKING:
     from autoskillit.core import TestRunner
 
 logger = get_logger(__name__)
-
-
-def _is_generated_path(file_path: str) -> bool:
-    """Return True if file_path matches any GENERATED_FILES entry.
-
-    Handles both exact-path entries (e.g. 'src/autoskillit/hooks/hooks.json')
-    and directory-prefix entries ending with '/' (e.g. 'src/autoskillit/recipes/diagrams/').
-    """
-    for entry in GENERATED_FILES:
-        if entry.endswith("/"):
-            if file_path.startswith(entry):
-                return True
-        elif file_path == entry:
-            return True
-    return False
 
 
 def _filter_changed_files(stdout: str, prefixes: list[str]) -> tuple[list[str], list[str]]:

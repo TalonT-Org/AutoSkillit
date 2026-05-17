@@ -6,6 +6,9 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+# Directly testing private symbol: _query_merge_group_ci has no public caller wrapper.
+# This file exists solely as a regression guard for the .conclusion vs .state field bug —
+# testing the function directly gives the clearest failure signal without indirection.
 from autoskillit.execution.merge_queue._merge_queue_group_ci import _query_merge_group_ci
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]

@@ -878,7 +878,6 @@ async def _run_dispatch(
                     "dispatch_marker_unlink_failed", marker=str(marker_path), exc_info=True
                 )
 
-    # --- Collect evidence for ALL outcomes (timeout or not) ---
     sidecar_file = Path(dispatch_sidecar_path)
     dispatch_checkpoint: SessionCheckpoint | None = None
     if sidecar_file.exists():
@@ -889,7 +888,6 @@ async def _run_dispatch(
         if sidecar_entries:
             dispatch_checkpoint = checkpoint_from_sidecar(sidecar_entries)
 
-    # --- Classify outcome via single-path classifier (handles timeout too) ---
     extended_chain = prior_session_chain[:]
     additional_jsonl_paths: list[Path] = []
     if skill_result.subtype == "timeout":
@@ -961,7 +959,6 @@ async def _run_dispatch(
         write_captured_values(state_path, extracted)
     _post_dispatch_cleanup(tool_ctx, skill_result, cache_invalidator, quota_refresher)
 
-    # Route by outcome; timeout path has parsed_result=None → no_sentinel branch
     if parsed_result is not None and parsed_result.outcome == "completed_clean":
         envelope_success = bool(
             parsed_result.payload and parsed_result.payload.get("success", False)

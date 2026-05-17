@@ -11,7 +11,7 @@ from autoskillit.planner._dag_ops import (
     topological_sort,
 )
 
-pytestmark = [pytest.mark.layer("planner"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.feature("planner")]
 
 
 class TestTopologicalSort:

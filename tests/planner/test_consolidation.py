@@ -956,7 +956,7 @@ def test_rewrite_deps_breaks_cross_group_mutual_cycle(tmp_path: Path) -> None:
     consolidation_dir = tmp_path / "work_packages" / "consolidation"
     _make_manifest(
         consolidation_dir,
-        "P2",
+        "P2-A4",
         [
             {
                 "merged_id": "P2-A4-WP1",
@@ -969,7 +969,7 @@ def test_rewrite_deps_breaks_cross_group_mutual_cycle(tmp_path: Path) -> None:
     )
     _make_manifest(
         consolidation_dir,
-        "P2",
+        "P2-A9",
         [
             {
                 "merged_id": "P2-A9-WP1",
@@ -1079,7 +1079,7 @@ def test_consolidate_wps_returns_cycles_broken_count(tmp_path: Path) -> None:
     consolidation_dir = tmp_path / "work_packages" / "consolidation"
     _make_manifest(
         consolidation_dir,
-        "P2",
+        "P2-A4",
         [
             {
                 "merged_id": "P2-A4-WP1",
@@ -1092,7 +1092,7 @@ def test_consolidate_wps_returns_cycles_broken_count(tmp_path: Path) -> None:
     )
     _make_manifest(
         consolidation_dir,
-        "P2",
+        "P2-A9",
         [
             {
                 "merged_id": "P2-A9-WP1",
@@ -1122,7 +1122,7 @@ def test_consolidate_wps_writes_broken_cycle_edges_json(tmp_path: Path) -> None:
     consolidation_dir = tmp_path / "work_packages" / "consolidation"
     _make_manifest(
         consolidation_dir,
-        "P2",
+        "P2-A4",
         [
             {
                 "merged_id": "P2-A4-WP1",
@@ -1135,7 +1135,7 @@ def test_consolidate_wps_writes_broken_cycle_edges_json(tmp_path: Path) -> None:
     )
     _make_manifest(
         consolidation_dir,
-        "P2",
+        "P2-A9",
         [
             {
                 "merged_id": "P2-A9-WP1",
@@ -1206,7 +1206,7 @@ def test_consolidate_then_validate_passes_for_previously_cyclic_input(tmp_path: 
     consolidation_dir = wp_dir / "consolidation"
     _make_manifest(
         consolidation_dir,
-        "P2",
+        "P2-A4",
         [
             {
                 "merged_id": "P2-A4-WP1",
@@ -1219,7 +1219,7 @@ def test_consolidate_then_validate_passes_for_previously_cyclic_input(tmp_path: 
     )
     _make_manifest(
         consolidation_dir,
-        "P2",
+        "P2-A9",
         [
             {
                 "merged_id": "P2-A9-WP1",

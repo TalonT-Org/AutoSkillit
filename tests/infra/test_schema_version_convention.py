@@ -149,7 +149,9 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/smoke_utils.py", 415),
     ("src/autoskillit/smoke_utils.py", 463),
     # planner/consolidation.py — write-back of merged WP dicts to per-file results
-    ("src/autoskillit/planner/consolidation.py", 308),
+    ("src/autoskillit/planner/consolidation.py", 314),
+    # planner/consolidation.py — broken_cycle_edges.json (list payload; AST scanner catches it)
+    ("src/autoskillit/planner/consolidation.py", 335),
     # planner/manifests.py — finalize_wp_manifest: wp_index.json rebuild (list payload)
     ("src/autoskillit/planner/manifests.py", 262),
     # _cmd_rpc.py — emit_fallback_map: BEM fallback execution map (recipe-internal)

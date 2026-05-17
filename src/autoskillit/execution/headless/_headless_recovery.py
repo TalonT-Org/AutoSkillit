@@ -324,33 +324,14 @@ def _merge_token_usage(
         return base
     merged = dict(base)
     for canonical, legacy in _CANONICAL_TO_LEGACY.items():
-        in_base = canonical in base or (legacy is not None and legacy in base)
-        in_nudge = canonical in nudge or (legacy is not None and legacy in nudge)
-        if not in_base and not in_nudge:
+        b = base.get(canonical) if canonical in base else base.get(legacy) if legacy else None
+        n = nudge.get(canonical) if canonical in nudge else nudge.get(legacy) if legacy else None
+        if b is None and n is None:
             continue
-        if legacy is not None:
-            if canonical in base and legacy in base:
-                logger.debug(
-                    "Both canonical %r and legacy %r present in base; using canonical value",
-                    canonical,
-                    legacy,
-                )
-            if canonical in nudge and legacy in nudge:
-                logger.debug(
-                    "Both canonical %r and legacy %r present in nudge; using canonical value",
-                    canonical,
-                    legacy,
-                )
-        base_val = base.get(canonical) if canonical in base else base.get(legacy) if legacy else 0
-        nudge_val = (
-            nudge.get(canonical) if canonical in nudge else nudge.get(legacy) if legacy else 0
-        )
-        if base_val is None:
-            base_val = 0
-        if nudge_val is None:
-            nudge_val = 0
-        if isinstance(base_val, (int, float)) and isinstance(nudge_val, (int, float)):
-            merged[canonical] = base_val + nudge_val
+        bv = b if b is not None else 0
+        nv = n if n is not None else 0
+        if isinstance(bv, (int, float)) and isinstance(nv, (int, float)):
+            merged[canonical] = bv + nv
     for legacy in _CANONICAL_TO_LEGACY.values():
         if legacy and legacy in merged:
             del merged[legacy]

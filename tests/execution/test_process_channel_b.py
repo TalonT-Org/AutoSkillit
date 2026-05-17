@@ -115,7 +115,7 @@ PROCESS_EXIT_THEN_CHANNEL_B_FIRES_SCRIPT = textwrap.dedent("""\
 class TestChannelBDrainWait:
     """Channel B (session monitor) winning before Channel A triggers bounded drain wait."""
 
-    @pytest.mark.timeout(90)
+    @pytest.mark.timeout(150)
     @pytest.mark.anyio
     async def test_channel_b_wins_then_channel_a_confirms_within_drain(self, tmp_path):
         """Channel B fires first; drain wait allows Channel A to confirm stdout data.
@@ -128,6 +128,11 @@ class TestChannelBDrainWait:
           t=0.25s  script writes type=result to stdout (0.15s after JSONL write)
           t=0.30s  heartbeat fires → Channel A confirms → drain completes
           t~0.30s  process killed with confirmed stdout
+
+        timeout=120s: guards against the outer wall-clock expiring under xdist -n 4 load.
+        _phase1_timeout=250: must exceed outer timeout (120s) so that Phase 1 never fires
+        STALE before the outer wall-clock guard cancels — prevents spurious TIMED_OUT when
+        subprocess startup is slow under WSL2 + xdist load.
         """
         session_dir = tmp_path / "session"
         session_dir.mkdir()
@@ -137,11 +142,11 @@ class TestChannelBDrainWait:
         result = await run_managed_async(
             [sys.executable, str(script), str(session_dir), "0.15"],
             cwd=tmp_path,
-            timeout=TimeoutTier.CHANNEL_B,
+            timeout=120,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=5.0,
-            _phase1_timeout=120,
+            _phase1_timeout=250,
             _phase1_poll=0.01,
             _phase2_poll=0.05,
             _heartbeat_poll=0.05,

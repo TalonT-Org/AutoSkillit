@@ -139,7 +139,8 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/cli/update/_update_checks.py", 77),
     # _update_checks_fetch.py — fetch cache (extracted from _update_checks.py)
     ("src/autoskillit/cli/update/_update_checks_fetch.py", 58),
-    # smoke_utils.py — partitions, ranges, diff metrics, queue, enriched handoff
+    # smoke_utils.py — partitions, ranges, diff metrics, queue, enriched handoff,
+    # eval resolved/manifest/scorecard/eval_context
     ("src/autoskillit/smoke_utils.py", 57),
     ("src/autoskillit/smoke_utils.py", 126),
     # Lines 143 and 415 are list-payload write sites (dual membership: also in list_sites
@@ -148,6 +149,10 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/smoke_utils.py", 143),
     ("src/autoskillit/smoke_utils.py", 415),
     ("src/autoskillit/smoke_utils.py", 463),
+    ("src/autoskillit/smoke_utils.py", 477),
+    ("src/autoskillit/smoke_utils.py", 575),
+    ("src/autoskillit/smoke_utils.py", 646),
+    ("src/autoskillit/smoke_utils.py", 739),
     # planner/consolidation.py — write-back of merged WP dicts to per-file results
     ("src/autoskillit/planner/consolidation.py", 314),
     # planner/consolidation.py — broken_cycle_edges.json (list payload; AST scanner catches it)

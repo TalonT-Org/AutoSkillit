@@ -981,26 +981,27 @@ def test_annotate_pr_diff_int_pr_number(mock_run, tmp_path: Path) -> None:
 
 # T_PEM1
 def test_parse_eval_manifests_creates_directory_tree(tmp_path: Path) -> None:
-    """parse_eval_manifests creates {canary_id}/{variant_id}/ dirs for all combinations."""
-    canary_manifest = {
-        "canaries": [
-            {"id": "c1", "skill": "/autoskillit:research"},
-            {"id": "c2", "skill": "/autoskillit:research"},
-        ]
-    }
-    variant_manifest = {
-        "variants": [
-            {"id": "v1", "description": "variant 1"},
-            {"id": "v2", "description": "variant 2"},
-        ]
-    }
-    result = parse_eval_manifests(canary_manifest, variant_manifest, str(tmp_path))
+    """parse_eval_manifests creates {canary_id}/ dirs with resolved.json for all canaries."""
+    # Manifests are plain arrays, not wrapped in {"canaries": [...]}
+    task_file = tmp_path / "task.md"
+    task_file.write_text("Fix the bug.")
+    canary_manifest = [
+        {"id": "c1", "skill": "/autoskillit:research", "task_file": str(task_file)},
+        {"id": "c2", "skill": "/autoskillit:research", "task_file": str(task_file)},
+    ]
+    variant_manifest = [
+        {"id": "v1", "label": "variant 1"},
+        {"id": "v2", "label": "variant 2"},
+    ]
+    result = parse_eval_manifests(
+        json.dumps(canary_manifest), json.dumps(variant_manifest), str(tmp_path)
+    )
     assert result["success"] == "true"
     eval_run_dir = Path(result["eval_run_dir"])
     assert eval_run_dir.exists()
+    # resolved.json is written at {canary_id}/resolved.json, not {canary_id}/{variant_id}/
     for c in ("c1", "c2"):
-        for v in ("v1", "v2"):
-            assert (eval_run_dir / c / v).is_dir(), f"Missing {c}/{v}/"
+        assert (eval_run_dir / c / "resolved.json").is_file(), f"Missing {c}/resolved.json"
     manifest_index = json.loads((eval_run_dir / "manifest_index.json").read_text())
     assert manifest_index["canary_ids"] == ["c1", "c2"]
     assert manifest_index["variant_ids"] == ["v1", "v2"]
@@ -1011,67 +1012,77 @@ def test_parse_eval_manifests_writes_resolved_files(tmp_path: Path) -> None:
     """Resolved files contain inlined task_text, detection_criteria, and gap_description."""
     task_file = tmp_path / "task.md"
     task_file.write_text("Fix the bug in the login flow.")
-    canary_manifest = {
-        "canaries": [
-            {
-                "id": "c1",
-                "skill": "/autoskillit:research",
-                "task_file": str(task_file),
-                "gap_description": "login breaks on empty password",
-                "detection_criteria": "unit test passes",
-            }
-        ]
-    }
-    variant_manifest = {"variants": [{"id": "v1", "description": "baseline"}]}
-    result = parse_eval_manifests(canary_manifest, variant_manifest, str(tmp_path))
+    # detection_criteria is an array, not a string
+    canary_manifest = [
+        {
+            "id": "c1",
+            "skill": "/autoskillit:research",
+            "task_file": str(task_file),
+            "gap_description": "login breaks on empty password",
+            "detection_criteria": ["unit test passes", "integration test passes"],
+        }
+    ]
+    variant_manifest = [{"id": "v1", "label": "baseline"}]
+    result = parse_eval_manifests(
+        json.dumps(canary_manifest), json.dumps(variant_manifest), str(tmp_path)
+    )
     assert result["success"] == "true"
     eval_run_dir = Path(result["eval_run_dir"])
-    resolved = json.loads((eval_run_dir / "c1" / "v1" / "resolved.json").read_text())
+    # resolved.json lives at {canary_id}/resolved.json
+    resolved = json.loads((eval_run_dir / "c1" / "resolved.json").read_text())
     assert resolved["task_text"] == "Fix the bug in the login flow."
-    assert resolved["detection_criteria"] == "unit test passes"
+    assert resolved["detection_criteria"] == ["unit test passes", "integration test passes"]
     assert resolved["gap_description"] == "login breaks on empty password"
+    # Variants are stored as a dict keyed by variant_id
+    assert "v1" in resolved["variants"]
+    assert resolved["variants"]["v1"]["label"] == "baseline"
+    assert resolved["variants"]["v1"]["overlay_text"] is None
 
 
 # T_PEM3
 def test_parse_eval_manifests_inlines_overlay_content(tmp_path: Path) -> None:
     """Variant overlay_file content is inlined as overlay_text in resolved.json."""
+    task_file = tmp_path / "task.md"
+    task_file.write_text("Fix the bug.")
     overlay_file = tmp_path / "overlay.md"
     overlay_file.write_text("Custom instructions for variant.")
-    variant_manifest = {
-        "variants": [{"id": "v1", "description": "baseline", "overlay_file": str(overlay_file)}]
-    }
-    canary_manifest = {"canaries": [{"id": "c1", "skill": "/autoskillit:research"}]}
-    result = parse_eval_manifests(canary_manifest, variant_manifest, str(tmp_path))
+    variant_manifest = [{"id": "v1", "label": "baseline", "overlay_file": str(overlay_file)}]
+    canary_manifest = [{"id": "c1", "skill": "/autoskillit:research", "task_file": str(task_file)}]
+    result = parse_eval_manifests(
+        json.dumps(canary_manifest), json.dumps(variant_manifest), str(tmp_path)
+    )
     assert result["success"] == "true"
     eval_run_dir = Path(result["eval_run_dir"])
-    resolved = json.loads((eval_run_dir / "c1" / "v1" / "resolved.json").read_text())
-    assert resolved["overlay_text"] == "Custom instructions for variant."
+    resolved = json.loads((eval_run_dir / "c1" / "resolved.json").read_text())
+    assert resolved["variants"]["v1"]["overlay_text"] == "Custom instructions for variant."
 
 
 # T_PEM4
 def test_parse_eval_manifests_handles_null_overlay(tmp_path: Path) -> None:
     """Variant with overlay_file: null yields overlay_text: null in resolved.json."""
-    variant_manifest = {
-        "variants": [{"id": "v1", "description": "no overlay", "overlay_file": None}]
-    }
-    canary_manifest = {"canaries": [{"id": "c1", "skill": "/autoskillit:research"}]}
-    result = parse_eval_manifests(canary_manifest, variant_manifest, str(tmp_path))
+    task_file = tmp_path / "task.md"
+    task_file.write_text("Fix the bug.")
+    variant_manifest = [{"id": "v1", "label": "no overlay", "overlay_file": None}]
+    canary_manifest = [{"id": "c1", "skill": "/autoskillit:research", "task_file": str(task_file)}]
+    result = parse_eval_manifests(
+        json.dumps(canary_manifest), json.dumps(variant_manifest), str(tmp_path)
+    )
     assert result["success"] == "true"
     eval_run_dir = Path(result["eval_run_dir"])
-    resolved = json.loads((eval_run_dir / "c1" / "v1" / "resolved.json").read_text())
-    assert resolved["overlay_text"] is None
+    resolved = json.loads((eval_run_dir / "c1" / "resolved.json").read_text())
+    assert resolved["variants"]["v1"]["overlay_text"] is None
 
 
 # T_PEM5
 def test_parse_eval_manifests_missing_task_file(tmp_path: Path) -> None:
     """Missing task_file returns success: false with an error."""
-    canary_manifest = {
-        "canaries": [
-            {"id": "c1", "skill": "/autoskillit:research", "task_file": "/nonexistent/task.md"}
-        ]
-    }
-    variant_manifest = {"variants": [{"id": "v1", "description": "baseline"}]}
-    result = parse_eval_manifests(canary_manifest, variant_manifest, str(tmp_path))
+    canary_manifest = [
+        {"id": "c1", "skill": "/autoskillit:research", "task_file": "/nonexistent/task.md"}
+    ]
+    variant_manifest = [{"id": "v1", "label": "baseline"}]
+    result = parse_eval_manifests(
+        json.dumps(canary_manifest), json.dumps(variant_manifest), str(tmp_path)
+    )
     assert result["success"] == "false"
     assert "error" in result
 
@@ -1088,13 +1099,15 @@ def test_build_eval_context_writes_eval_context_json(tmp_path: Path) -> None:
     eval_run_dir.mkdir()
     canary_dir = eval_run_dir / "c1"
     canary_dir.mkdir()
+    # resolved.json lives at {canary_id}/resolved.json
+    # detection_criteria is an array; reference is an object with path/label/artifact_type
     (canary_dir / "resolved.json").write_text(
         json.dumps(
             {
                 "id": "c1",
                 "skill": "/autoskillit:research",
                 "gap_description": "login bug",
-                "detection_criteria": "test passes",
+                "detection_criteria": ["test passes", "build succeeds"],
                 "reference_path": "/path/to/reference",
                 "reference_type": "file",
             }
@@ -1111,17 +1124,20 @@ def test_build_eval_context_writes_eval_context_json(tmp_path: Path) -> None:
     eval_context_path = Path(result["eval_context_path"])
     ctx = json.loads(eval_context_path.read_text())
     assert ctx["eval_id"] == "c1"
-    assert ctx["subject"] == "research"  # strip_prefix /autoskillit:
+    assert ctx["subject"] == "research"  # strips /autoskillit: prefix
     assert ctx["gap_description"] == "login bug"
-    assert ctx["detection_criteria"] == "test passes"
+    assert ctx["detection_criteria"] == ["test passes", "build succeeds"]
+    # reference is an object, not top-level fields
     assert "reference" in ctx
+    assert ctx["reference"]["path"] == "/path/to/reference"
+    assert ctx["reference"]["artifact_type"] == "file"
     assert "candidates" in ctx
     assert "codebase_root" in ctx
     assert "eval_run_dir" in ctx
 
 
 # T_BEC2
-def test_build_eval_context_handles_failed_variant(tmp_path: Path) -> None:
+def test_build_eval_context_handles_null_plan_path(tmp_path: Path) -> None:
     """Candidate with null plan path gets status: failed and path: null."""
     eval_run_dir = tmp_path / "eval_run"
     eval_run_dir.mkdir()
@@ -1133,7 +1149,7 @@ def test_build_eval_context_handles_failed_variant(tmp_path: Path) -> None:
                 "id": "c1",
                 "skill": "/autoskillit:research",
                 "gap_description": "bug",
-                "detection_criteria": "test",
+                "detection_criteria": ["test"],
             }
         )
     )
@@ -1144,7 +1160,8 @@ def test_build_eval_context_handles_failed_variant(tmp_path: Path) -> None:
     )
     assert result["success"] == "true"
     ctx = json.loads(Path(result["eval_context_path"]).read_text())
-    candidate = next(c for c in ctx["candidates"] if c["variant"] == "baseline")
+    # Candidate id field is the variant id (e.g. "baseline"), not "variant"
+    candidate = next(c for c in ctx["candidates"] if c["id"] == "baseline")
     assert candidate["status"] == "failed"
     assert candidate["path"] is None
 
@@ -1162,7 +1179,7 @@ def test_build_eval_context_resolves_absolute_paths(tmp_path: Path) -> None:
                 "id": "c1",
                 "skill": "/autoskillit:research",
                 "gap_description": "bug",
-                "detection_criteria": "test",
+                "detection_criteria": ["test"],
             }
         )
     )
@@ -1170,7 +1187,7 @@ def test_build_eval_context_resolves_absolute_paths(tmp_path: Path) -> None:
     plan_file.write_text("# Plan")
     result = build_eval_context(
         canary_id="c1",
-        plan_paths_json=json.dumps({"baseline": "plan.md"}),  # relative path
+        plan_paths_json=json.dumps({"baseline": str(plan_file)}),
         eval_run_dir=str(eval_run_dir),
     )
     assert result["success"] == "true"
@@ -1205,24 +1222,36 @@ def test_compile_eval_scorecard_all_pass(tmp_path: Path) -> None:
     eval_run_dir.mkdir()
     canary_ids = ["c1", "c2"]
     variant_ids = ["v1", "v2"]
+    # verdict.json lives at {canary_id}/verdict.json (one per canary, not per canary×variant)
+    # Schema: {"verdicts": {variant_id: {"overall": "PASS"|"FAIL", "criteria": [...]}}}
     for c in canary_ids:
-        for v in variant_ids:
-            verdict_dir = eval_run_dir / c / v
-            verdict_dir.mkdir(parents=True)
-            (verdict_dir / "verdict.json").write_text(
-                json.dumps({"overall": "PASS", "canary_id": c, "variant_id": v})
+        canary_dir = eval_run_dir / c
+        canary_dir.mkdir(parents=True)
+        (canary_dir / "verdict.json").write_text(
+            json.dumps(
+                {
+                    "verdicts": {
+                        "v1": {"overall": "PASS", "criteria": [{"result": "PASS"}]},
+                        "v2": {"overall": "PASS", "criteria": [{"result": "PASS"}]},
+                    }
+                }
             )
-    canary_manifest = {"canaries": [{"id": cid} for cid in canary_ids]}
-    variant_manifest = {"variants": [{"id": vid} for vid in variant_ids]}
+        )
+    # compile_eval_scorecard takes file paths, not JSON strings
+    canary_manifest_file = tmp_path / "canary_manifest.json"
+    variant_manifest_file = tmp_path / "variant_manifest.json"
+    canary_manifest_file.write_text(json.dumps([{"id": cid} for cid in canary_ids]))
+    variant_manifest_file.write_text(json.dumps([{"id": vid} for vid in variant_ids]))
     result = compile_eval_scorecard(
-        json.dumps(canary_manifest), json.dumps(variant_manifest), str(eval_run_dir)
+        str(eval_run_dir), str(canary_manifest_file), str(variant_manifest_file)
     )
     assert result["success"] == "true"
     assert result["pass_rate"] == "1.0"
     assert result["passed_runs"] == "4"
     assert result["total_runs"] == "4"
-    assert Path(result["scorecard_json_path"]).exists()
-    assert Path(result["scorecard_md_path"]).exists()
+    # Return key is "scorecard_path", not "scorecard_json_path"
+    assert Path(result["scorecard_path"]).exists()
+    assert (eval_run_dir / "scorecard.md").exists()
 
 
 # T_CES2
@@ -1238,16 +1267,25 @@ def test_compile_eval_scorecard_mixed_results(tmp_path: Path) -> None:
         ("c2", "v1", "PASS"),
         ("c2", "v2", "FAIL"),
     ]
+    # verdict.json at {canary_id}/verdict.json with verdicts dict inside
+    verdict_by_canary: dict[str, dict] = {}
     for c, v, status in verdicts:
-        verdict_dir = eval_run_dir / c / v
-        verdict_dir.mkdir(parents=True)
-        (verdict_dir / "verdict.json").write_text(
-            json.dumps({"overall": status, "canary_id": c, "variant_id": v})
-        )
-    canary_manifest = {"canaries": [{"id": cid} for cid in canary_ids]}
-    variant_manifest = {"variants": [{"id": vid} for vid in variant_ids]}
+        if c not in verdict_by_canary:
+            verdict_by_canary[c] = {"verdicts": {}}
+        verdict_by_canary[c]["verdicts"][v] = {
+            "overall": status,
+            "criteria": [{"result": status}],
+        }
+    for c, vdata in verdict_by_canary.items():
+        verdict_path = eval_run_dir / c / "verdict.json"
+        verdict_path.parent.mkdir(parents=True, exist_ok=True)
+        verdict_path.write_text(json.dumps(vdata))
+    canary_manifest_file = tmp_path / "canary_manifest.json"
+    variant_manifest_file = tmp_path / "variant_manifest.json"
+    canary_manifest_file.write_text(json.dumps([{"id": cid} for cid in canary_ids]))
+    variant_manifest_file.write_text(json.dumps([{"id": vid} for vid in variant_ids]))
     result = compile_eval_scorecard(
-        json.dumps(canary_manifest), json.dumps(variant_manifest), str(eval_run_dir)
+        str(eval_run_dir), str(canary_manifest_file), str(variant_manifest_file)
     )
     assert result["success"] == "true"
     assert result["pass_rate"] == "0.5"
@@ -1260,22 +1298,33 @@ def test_compile_eval_scorecard_missing_verdict_counts_as_fail(tmp_path: Path) -
     """Missing verdict files count as failures toward the denominator."""
     eval_run_dir = tmp_path / "eval_run"
     eval_run_dir.mkdir()
-    # Only write verdict for c1/v1 (1 of 4 expected combinations)
-    verdict_dir = eval_run_dir / "c1" / "v1"
-    verdict_dir.mkdir(parents=True)
-    (verdict_dir / "verdict.json").write_text(
-        json.dumps({"overall": "PASS", "canary_id": "c1", "variant_id": "v1"})
-    )
     canary_ids = ["c1", "c2"]
     variant_ids = ["v1", "v2"]
-    canary_manifest = {"canaries": [{"id": cid} for cid in canary_ids]}
-    variant_manifest = {"variants": [{"id": vid} for vid in variant_ids]}
+    # Only write verdict for c1 (c1 has v1=PASS, v2 missing→FAIL); c2 has no verdict at all
+    c1_verdict = eval_run_dir / "c1"
+    c1_verdict.mkdir(parents=True)
+    (c1_verdict / "verdict.json").write_text(
+        json.dumps(
+            {
+                "verdicts": {
+                    "v1": {"overall": "PASS", "criteria": [{"result": "PASS"}]},
+                    # v2 missing → counts as FAIL
+                }
+            }
+        )
+    )
+    # c2 has no verdict.json → all its variants count as FAIL
+    canary_manifest_file = tmp_path / "canary_manifest.json"
+    variant_manifest_file = tmp_path / "variant_manifest.json"
+    canary_manifest_file.write_text(json.dumps([{"id": cid} for cid in canary_ids]))
+    variant_manifest_file.write_text(json.dumps([{"id": vid} for vid in variant_ids]))
     result = compile_eval_scorecard(
-        json.dumps(canary_manifest), json.dumps(variant_manifest), str(eval_run_dir)
+        str(eval_run_dir), str(canary_manifest_file), str(variant_manifest_file)
     )
     assert result["success"] == "true"
-    assert result["pass_rate"] == "0.0"
-    assert result["passed_runs"] == "0"
+    # c1/v1=PASS, c1/v2=FAIL, c2/v1=FAIL, c2/v2=FAIL → 1 pass out of 4
+    assert result["pass_rate"] == "0.25"
+    assert result["passed_runs"] == "1"
     assert result["total_runs"] == "4"
 
 
@@ -1286,10 +1335,12 @@ def test_compile_eval_scorecard_empty_run_dir(tmp_path: Path) -> None:
     eval_run_dir.mkdir()
     canary_ids = ["c1", "c2"]
     variant_ids = ["v1", "v2"]
-    canary_manifest = {"canaries": [{"id": cid} for cid in canary_ids]}
-    variant_manifest = {"variants": [{"id": vid} for vid in variant_ids]}
+    canary_manifest_file = tmp_path / "canary_manifest.json"
+    variant_manifest_file = tmp_path / "variant_manifest.json"
+    canary_manifest_file.write_text(json.dumps([{"id": cid} for cid in canary_ids]))
+    variant_manifest_file.write_text(json.dumps([{"id": vid} for vid in variant_ids]))
     result = compile_eval_scorecard(
-        json.dumps(canary_manifest), json.dumps(variant_manifest), str(eval_run_dir)
+        str(eval_run_dir), str(canary_manifest_file), str(variant_manifest_file)
     )
     assert result["success"] == "true"
     assert result["pass_rate"] == "0.0"

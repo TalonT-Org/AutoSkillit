@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING, Any
 
 from autoskillit.cli._prompts import _ingredient_table_display_instruction, _read_full_sous_chef
@@ -185,7 +186,7 @@ dispatch name NOT listed above.
             else ""
         )
         _resume_checkpoint_line = (
-            f" and pass resume_checkpoint={resume_checkpoint} to dispatch_food_truck"
+            f" and pass resume_checkpoint={json.dumps(resume_checkpoint)} to dispatch_food_truck"
             " to restore completed_items context from the prior session"
             if resume_checkpoint
             else ""

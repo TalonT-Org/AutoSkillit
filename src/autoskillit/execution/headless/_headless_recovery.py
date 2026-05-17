@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-# Drain-race recovery subtypes: TIMEOUT (genuine time limit) and UNKNOWN (unrecognised CLI) excluded.
+# Drain-race recovery subtypes: TIMEOUT and UNKNOWN excluded (time-limit breach; unrecognised CLI).
 _CHANNEL_B_RECOVERABLE_SUBTYPES: frozenset[CliSubtype] = frozenset(
     {CliSubtype.UNPARSEABLE, CliSubtype.EMPTY_OUTPUT}
 )
@@ -324,6 +324,23 @@ def _merge_token_usage(
         return base
     merged = dict(base)
     for canonical, legacy in _CANONICAL_TO_LEGACY.items():
+        in_base = canonical in base or (legacy is not None and legacy in base)
+        in_nudge = canonical in nudge or (legacy is not None and legacy in nudge)
+        if not in_base and not in_nudge:
+            continue
+        if legacy is not None:
+            if canonical in base and legacy in base:
+                logger.debug(
+                    "Both canonical %r and legacy %r present in base; using canonical value",
+                    canonical,
+                    legacy,
+                )
+            if canonical in nudge and legacy in nudge:
+                logger.debug(
+                    "Both canonical %r and legacy %r present in nudge; using canonical value",
+                    canonical,
+                    legacy,
+                )
         base_val = base.get(canonical) if canonical in base else base.get(legacy) if legacy else 0
         nudge_val = (
             nudge.get(canonical) if canonical in nudge else nudge.get(legacy) if legacy else 0

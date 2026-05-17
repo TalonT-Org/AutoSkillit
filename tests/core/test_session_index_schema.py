@@ -58,10 +58,12 @@ class TestCanonicalCacheFields:
         assert "cache_read_input_tokens" not in annotations
 
     def test_schema_version_in_token_usage_file_entry(self):
-        from typing import get_type_hints
+        from typing import NotRequired, get_args, get_origin
 
         from autoskillit.core.types._type_results import TokenUsageFileEntry
 
-        hints = get_type_hints(TokenUsageFileEntry)
-        assert "schema_version" in hints
-        assert hints["schema_version"] is int
+        annotations = TokenUsageFileEntry.__annotations__
+        assert "schema_version" in annotations
+        anno = annotations["schema_version"]
+        assert get_origin(anno) is NotRequired
+        assert get_args(anno)[0] is int

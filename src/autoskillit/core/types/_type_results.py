@@ -12,7 +12,7 @@ import json
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Generic, Literal, TypedDict, TypeVar
+from typing import Any, Generic, Literal, NotRequired, TypedDict, TypeVar
 
 from ._type_enums import KillReason, RetryReason, SessionOutcome
 
@@ -376,7 +376,7 @@ class TokenUsageFileEntry(TypedDict):
     model_identifier: str
     dispatch_id: str
     campaign_id: str
-    schema_version: int
+    schema_version: NotRequired[int]
 
 
 class SessionIndexEntry(TypedDict):

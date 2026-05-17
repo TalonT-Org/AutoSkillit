@@ -564,14 +564,14 @@ steps:
     on_result:
       - when: "${{ result.current_pr_number }} == done"
         route: collect_and_check_impl_plans
-      - route: get_current_pr_branch
+      - route: get_next_pr_branch
     on_failure: register_clone_failure
     note: >
       Advances to the next PR by looking up the current PR number in pr_order_file
       and returning the next entry. Outputs the next PR number (or "done").
       The capture block sets current_pr_number at the recipe level — no agent-managed
-      variable updates. Routes to get_current_pr_branch to enforce the CI gate before
-      each enqueue, or collect_and_check_impl_plans when done.
+      variable updates. Routes to get_next_pr_branch for proactive rebase, or
+      collect_and_check_impl_plans when done.
 
   get_next_pr_branch:
     tool: run_cmd
@@ -583,11 +583,11 @@ steps:
     capture:
       next_pr_branch: "${{ result.stdout | trim }}"
     on_success: proactive_rebase_next_pr
-    on_failure: enqueue_current_pr
+    on_failure: get_current_pr_branch
     note: >
       Fetches the headRefName for the next PR to be enqueued. Captured as next_pr_branch
       for use by proactive_rebase_next_pr. On failure (e.g. transient gh CLI error),
-      falls through to enqueue_current_pr — the queue cycle proceeds normally without rebase.
+      falls through to get_current_pr_branch to enforce the CI gate before enqueue.
 
   proactive_rebase_next_pr:
     tool: run_python
@@ -600,12 +600,12 @@ steps:
       - when: "${{ result.status }} == clean"
         route: push_rebased_next_pr
       - route: resolve_proactive_rebase_conflicts
-    on_failure: enqueue_current_pr
+    on_failure: get_current_pr_branch
     note: >
       Attempts a proactive rebase of the next PR branch onto the current base_branch HEAD
       before submitting to the merge queue. On clean rebase, skips conflict resolution
       entirely and proceeds to push. On conflict, routes to resolve_proactive_rebase_conflicts.
-      On git command failure, falls through to enqueue_current_pr (safety net).
+      On git command failure, falls through to get_current_pr_branch to enforce the CI gate.
 
   resolve_proactive_rebase_conflicts:
     tool: run_skill
@@ -625,13 +625,13 @@ steps:
       - route: push_rebased_next_pr
     on_failure: register_clone_failure
     retries: 0
-    on_exhausted: enqueue_current_pr
+    on_exhausted: get_current_pr_branch
     note: >
       Resolves git-level rebase conflicts between the next PR's branch and the current
       base_branch HEAD. Similar to resolve_ejected_conflicts but operates proactively
       before queue submission. Unresolvable conflicts (escalation_required=true) hard-stop
-      at register_clone_failure. Retry exhaustion falls through to enqueue_current_pr —
-      speculative rebase failure must not abort the current PR's queue cycle.
+      at register_clone_failure. Retry exhaustion falls through to get_current_pr_branch
+      to enforce the CI gate before enqueue.
 
   push_rebased_next_pr:
     tool: push_to_remote
@@ -640,11 +640,12 @@ steps:
       remote_url: "${{ context.remote_url }}"
       branch: "${{ context.next_pr_branch }}"
       force: "true"
-    on_success: enqueue_current_pr
+    on_success: get_current_pr_branch
     on_failure: register_clone_failure
     note: >
       Force-pushes the proactively rebased next PR branch. force=true is required because
-      rebase rewrites SHAs (non-fast-forward). Routes to enqueue_current_pr on success.
+      rebase rewrites SHAs (non-fast-forward). Routes to get_current_pr_branch to enforce
+      the CI gate before enqueue.
 
   diagnose_queue_ci:
     tool: run_skill

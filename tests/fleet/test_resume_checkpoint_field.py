@@ -35,8 +35,8 @@ class TestDispatchRecordResumeCheckpoint:
 
 
 class TestResumeDecisionHasCheckpoint:
-    def test_resume_decision_has_checkpoint_field(self):
-        """ResumeDecision must have a checkpoint field."""
+    def test_resume_decision_has_resume_checkpoint_field(self):
+        """ResumeDecision must have a resume_checkpoint field."""
         from autoskillit.fleet.state_types import ResumeDecision
 
         decision = ResumeDecision(
@@ -44,17 +44,17 @@ class TestResumeDecisionHasCheckpoint:
             completed_dispatches_block="",
             is_resumable=True,
         )
-        assert hasattr(decision, "checkpoint")
-        assert decision.checkpoint == {}
+        assert hasattr(decision, "resume_checkpoint")
+        assert decision.resume_checkpoint == {}
 
-    def test_resume_decision_checkpoint_accepts_dict(self):
-        """ResumeDecision.checkpoint must accept a dict with completed_items."""
+    def test_resume_decision_resume_checkpoint_accepts_dict(self):
+        """ResumeDecision.resume_checkpoint must accept a dict with completed_items."""
         from autoskillit.fleet.state_types import ResumeDecision
 
         decision = ResumeDecision(
             next_dispatch_name="step-2",
             completed_dispatches_block="",
             is_resumable=True,
-            checkpoint={"completed_items": ["issue-1"]},
+            resume_checkpoint={"completed_items": ["issue-1"]},
         )
-        assert decision.checkpoint["completed_items"] == ["issue-1"]
+        assert decision.resume_checkpoint["completed_items"] == ["issue-1"]

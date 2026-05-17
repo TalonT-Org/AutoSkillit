@@ -218,7 +218,9 @@ def _launch_fleet_session(
             )
             resume_dispatch_id = fresh_metadata.dispatch_id if fresh_metadata.is_resumable else ""
             resume_kill_reason = fresh_metadata.kill_reason if fresh_metadata.is_resumable else ""
-            resume_checkpoint = fresh_metadata.checkpoint if fresh_metadata.is_resumable else None
+            resume_checkpoint = (
+                fresh_metadata.resume_checkpoint if fresh_metadata.is_resumable else None
+            )
             prompt = _build_fleet_campaign_prompt(
                 campaign_recipe,
                 manifest_yaml,

@@ -269,7 +269,7 @@ class ResumeDecision:
     dispatched_session_id: str = ""
     dispatch_id: str = ""
     kill_reason: str = ""
-    checkpoint: dict[str, Any] = field(default_factory=dict)
+    resume_checkpoint: dict[str, Any] = field(default_factory=dict)
 
 
 _ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {

@@ -269,7 +269,7 @@ def resume_campaign_from_state(
             dispatched_session_id=resumable_dispatched_session_id,
             dispatch_id=resumable_dispatch_id,
             kill_reason=resumable_kill_reason,
-            checkpoint=resumable_checkpoint,
+            resume_checkpoint=resumable_checkpoint,
         )
 
 

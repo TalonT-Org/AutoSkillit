@@ -35,38 +35,46 @@ def _has_guard_for_key(
     """Check whether a truthiness guard for ``captured_key`` is interposed before the consumer.
 
     Walks the route chain starting from ``step_name`` via ``on_success`` and ``on_result``.
-    Returns True if an ``action: route`` step is found whose ``on_result`` contains a
-    ``when: ${{ context.<captured_key> }}`` condition.
+    Returns True if:
+    - An ``action: route`` step is found whose ``on_result`` contains a
+      ``when: ${{ context.<captured_key> }}`` condition, OR
+    - A non-route step's own ``on_result`` gates on ``result.<captured_key>``
+      (self-guard: consumers are only reachable when the value is truthy).
     """
     visited: set[str] = set()
-    current: str | None = step_name
+    to_visit: list[str] = [step_name]
 
-    while current:
+    while to_visit:
+        current = to_visit.pop(0)
         if current in visited:
-            break
+            continue
         visited.add(current)
         step = steps.get(current)
         if step is None:
-            break
+            continue
 
         # Check if this step is a guard: action=route with on_result conditions
         if step.action == "route" and step.on_result and step.on_result.conditions:
             for cond in step.on_result.conditions:
                 if cond.when and f"context.{captured_key}" in cond.when:
                     return True
+            # Route steps with conditions terminate the chain (they don't use on_success)
+            continue
 
-        # Follow on_success for terminal routing, but NOT for action=route
-        # (route steps handle routing via on_result, not on_success)
-        if step.action == "route":
-            # For route steps, the on_result determines routing; we still follow
-            # on_success as a fallback only when there are no conditions
-            if step.on_result and step.on_result.conditions:
-                current = None
-                continue
-            else:
-                current = step.on_success
-        else:
-            current = step.on_success
+        if step.on_result and step.on_result.conditions:
+            # Non-route step routing via on_result: self-guard if it gates on result.{key}
+            # before routing to consumers (only reachable when value is truthy).
+            if any(
+                cond.when and f"result.{captured_key}" in cond.when
+                for cond in step.on_result.conditions
+            ):
+                return True
+            # Follow each condition's route to find downstream guards
+            for cond in step.on_result.conditions:
+                if cond.route:
+                    to_visit.append(cond.route)
+        elif step.on_success:
+            to_visit.append(step.on_success)
 
     return False
 

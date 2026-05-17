@@ -140,7 +140,7 @@ def test_pr_create_guard_exempt_skills_matches_hookdef() -> None:
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)  # type: ignore[union-attr]
-    script_exempt: frozenset[str] = getattr(module, "_EXEMPT_SKILLS", None)
+    script_exempt: frozenset[str] | None = getattr(module, "_EXEMPT_SKILLS", None)
     assert script_exempt is not None, "_EXEMPT_SKILLS not found in pr_create_guard.py"
 
     hookdef_exempt: frozenset[str] | None = None

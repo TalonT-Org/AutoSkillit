@@ -236,10 +236,17 @@ def _check_dag_acyclic(wp_results: dict[str, dict]) -> list[ValidationFinding]:
 
     try:
         topological_sort(wp_results)
-    except RuntimeError:
+    except RuntimeError as exc:
+        logger.warning("topological_sort raised during DAG check: %s", exc)
         sccs = find_sccs(adjacency)
         if not sccs:
-            return []
+            return [
+                {
+                    "message": "Cycle detected among WPs (SCC analysis inconclusive)",
+                    "severity": "error",
+                    "check": "dag_acyclic",
+                }
+            ]
         cycle_nodes = sorted(set(node for scc in sccs for node in scc))
 
         if len(cycle_nodes) == 2:

@@ -146,6 +146,8 @@ def test_conditional_write_skills_have_verdict_or_fixes_applied_declared() -> No
         "retry-worktree",
         "prepare-pr",
         "bundle-local-report",
+        # compose-pr uses pr_url as the gating output (not verdict)
+        "compose-pr",
     }
     manifest = load_bundled_manifest()
     violations: list[str] = []

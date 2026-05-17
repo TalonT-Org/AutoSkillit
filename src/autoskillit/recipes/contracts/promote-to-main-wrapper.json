@@ -44,7 +44,10 @@
         "pr_url = \nverdict = dry_run\ncategory_summary = 14 fixes, 3 features\n%%ORDER_UP%%",
         "pr_url = \nverdict = preflight_failed\ncategory_summary = \n%%ORDER_UP%%"
       ],
-      "write_behavior": "always"
+      "write_behavior": "conditional",
+      "write_expected_when": [
+        "verdict\\s*=\\s*created"
+      ]
     }
   },
   "dataflow": [

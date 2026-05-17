@@ -128,10 +128,33 @@ class TestPipelineVariantInvariants:
         assert "remote_url" in with_args
         assert "context.remote_url" in with_args["remote_url"]
 
-    def test_compose_pr_routes_to_extract_pr_number(self, recipe) -> None:
-        """T_CI8: compose_pr.on_success routes to extract_pr_number before review_pr."""
+    def test_compose_pr_routes_to_guard_pr_url(self, recipe) -> None:
+        """T_CI8: compose_pr.on_result gates on pr_url and routes to guard_pr_url, which guards extract_pr_number."""
         step = recipe.steps["compose_pr"]
-        assert step.on_success == "extract_pr_number", "compose_pr must route to extract_pr_number"
+        assert step.on_result is not None, "compose_pr must have on_result for conditional gating"
+        # The first condition should route to guard_pr_url when result.pr_url is truthy
+        truthy_cond = step.on_result.conditions[0]
+        assert truthy_cond.when == "${{ result.pr_url }}", (
+            "compose_pr on_result[0] must gate on result.pr_url"
+        )
+        assert truthy_cond.route == "guard_pr_url", (
+            "compose_pr on_result[0] must route to guard_pr_url when pr_url is truthy"
+        )
+        # The else case should route to release_issue_failure
+        else_cond = step.on_result.conditions[1]
+        assert else_cond.route == "release_issue_failure", (
+            "compose_pr on_result else case must route to release_issue_failure"
+        )
+        guard = recipe.steps["guard_pr_url"]
+        assert guard.action == "route", "guard_pr_url must be a route action step"
+        # The guard should route to extract_pr_number on truthy pr_url
+        routes_to_extract = any(
+            c.route == "extract_pr_number"
+            for c in (guard.on_result.conditions or [])
+        )
+        assert routes_to_extract, (
+            "guard_pr_url must route to extract_pr_number when pr_url is truthy"
+        )
 
     def test_detect_ci_conflict_exists(self, recipe) -> None:
         assert "detect_ci_conflict" in recipe.steps

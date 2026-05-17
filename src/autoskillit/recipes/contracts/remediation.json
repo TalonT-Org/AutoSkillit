@@ -1,5 +1,5 @@
 {
-  "recipe_source_hash": "sha256:84224daa1c6b20cc9c8630df37915385ea216a5ec564b383a63262160a6af9a1",
+  "recipe_source_hash": "sha256:6632786f680c92a58e9a89fcfdf5edfa7b0d9a1f3ff3ae51661a29de68c3c0d5",
   "bundled_manifest_version": "0.1.0",
   "skill_hashes": {},
   "skills": {
@@ -426,7 +426,10 @@
         "pr_url = https://github.com/owner/repo/pull/42\n%%ORDER_UP%%",
         "pr_url = \n%%ORDER_UP%%"
       ],
-      "write_behavior": "always"
+      "write_behavior": "conditional",
+      "write_expected_when": [
+        "pr_url\\s*=\\s*https://"
+      ]
     },
     "review-pr": {
       "inputs": [
@@ -1499,6 +1502,53 @@
         "pr_url"
       ],
       "positional_args": 1
+    },
+    {
+      "step": "guard_pr_url",
+      "available": [
+        "arch_lenses",
+        "audit",
+        "auto_merge",
+        "base_branch",
+        "branch_name",
+        "claimed",
+        "cleanup_succeeded",
+        "conflict_escalation_required",
+        "depth",
+        "fixes_applied",
+        "implementation_ref",
+        "investigation_path",
+        "issue_number",
+        "issue_slug",
+        "issue_title",
+        "issue_url",
+        "lens_context_paths",
+        "local_review_rounds",
+        "max_parallel",
+        "merge_fix_count",
+        "merge_target",
+        "open_pr",
+        "phases_implemented",
+        "plan_path",
+        "pr_url",
+        "prep_path",
+        "remediation_path",
+        "remote_url",
+        "review_approach",
+        "review_max_retries",
+        "review_path",
+        "run_mode",
+        "run_name",
+        "selected_lenses",
+        "source_dir",
+        "task",
+        "upfront_claimed",
+        "verdict",
+        "work_dir",
+        "worktree_path"
+      ],
+      "required": [],
+      "produced": []
     },
     {
       "step": "extract_pr_number",

@@ -21,17 +21,39 @@ class TestReviewPrRecipeIntegration:
     def recipe(self, request: pytest.FixtureRequest) -> object:
         return load_recipe(builtin_recipes_dir() / request.param)
 
-    def test_compose_pr_routes_to_extract_pr_number(self, recipe: object) -> None:
-        """T_RP1: compose_pr.on_success routes per-recipe to extract_pr_number.
+    def test_compose_pr_routes_to_guard_pr_url(self, recipe: object) -> None:
+        """T_RP1: compose_pr.on_result gates on pr_url and routes to guard_pr_url.
 
         All queue-aware recipes (implementation, remediation, implementation-groups) insert
-        extract_pr_number between compose_pr and review_pr to capture the PR number for
-        merge queue support.
+        guard_pr_url between compose_pr and extract_pr_number to handle graceful degradation
+        when compose_pr emits an empty pr_url.
         """
         recipe_name = recipe.name  # type: ignore[attr-defined]
-        on_success = recipe.steps["compose_pr"].on_success  # type: ignore[attr-defined]
-        assert on_success == "extract_pr_number", (
-            f"{recipe_name}: compose_pr.on_success must be 'extract_pr_number', got {on_success!r}"
+        step = recipe.steps["compose_pr"]  # type: ignore[attr-defined]
+        assert step.on_result is not None, (
+            f"{recipe_name}: compose_pr must have on_result for conditional gating"
+        )
+        truthy_cond = step.on_result.conditions[0]  # type: ignore[attr-defined]
+        assert truthy_cond.when == "${{ result.pr_url }}", (  # type: ignore[attr-defined]
+            f"{recipe_name}: compose_pr on_result[0] must gate on result.pr_url"
+        )
+        assert truthy_cond.route == "guard_pr_url", (  # type: ignore[attr-defined]
+            f"{recipe_name}: compose_pr on_result[0] must route to guard_pr_url when pr_url is truthy"
+        )
+        else_cond = step.on_result.conditions[1]  # type: ignore[attr-defined]
+        assert else_cond.route == "release_issue_failure", (  # type: ignore[attr-defined]
+            f"{recipe_name}: compose_pr on_result else case must route to release_issue_failure"
+        )
+        guard = recipe.steps["guard_pr_url"]  # type: ignore[attr-defined]
+        assert guard.action == "route", (
+            f"{recipe_name}: guard_pr_url must be an action: route step"
+        )
+        routes_to_extract = any(
+            c.route == "extract_pr_number" for c in (guard.on_result.conditions or [])
+        )
+        assert routes_to_extract, (
+            f"{recipe_name}: guard_pr_url must route to extract_pr_number "
+            "when pr_url is truthy"
         )
 
     def test_review_pr_step_exists_and_is_run_skill(self, recipe: object) -> None:

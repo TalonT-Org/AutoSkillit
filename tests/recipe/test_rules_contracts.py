@@ -301,6 +301,62 @@ def test_unreadable_skill_md_emits_warning_finding(
     assert "fake-skill" in relevant[0].message
 
 
+def test_always_no_write_detects_degrade_gracefully(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """always-has-no-write-exit fires on 'degrade gracefully' phrase in SKILL.md."""
+    skill_dir = tmp_path / "skills" / "test-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "Degrade gracefully when all_diagram_paths is empty or invalid."
+    )
+
+    monkeypatch.setattr(_rc, "pkg_root", lambda: tmp_path)
+
+    recipe = _make_recipe_with_skill("/autoskillit:test-skill")
+    contract = _make_contract(write_behavior="always")
+    with patch(
+        "autoskillit.recipe.rules.rules_contracts.get_skill_contract", return_value=contract
+    ):
+        findings = run_semantic_rules(recipe)
+
+    exit_findings = [f for f in findings if f.rule == "always-has-no-write-exit"]
+    assert len(exit_findings) == 1, (
+        f"always-has-no-write-exit must fire on 'degrade gracefully' phrase, "
+        f"got findings: {[f.message for f in exit_findings]}"
+    )
+    assert exit_findings[0].severity == Severity.ERROR
+    assert exit_findings[0].step_name == "test_step"
+
+
+def test_always_no_write_detects_when_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """always-has-no-write-exit fires on 'when GitHub unavailable' phrase in SKILL.md."""
+    skill_dir = tmp_path / "skills" / "test-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "Emit pr_url token (empty string when GitHub unavailable)."
+    )
+
+    monkeypatch.setattr(_rc, "pkg_root", lambda: tmp_path)
+
+    recipe = _make_recipe_with_skill("/autoskillit:test-skill")
+    contract = _make_contract(write_behavior="always")
+    with patch(
+        "autoskillit.recipe.rules.rules_contracts.get_skill_contract", return_value=contract
+    ):
+        findings = run_semantic_rules(recipe)
+
+    exit_findings = [f for f in findings if f.rule == "always-has-no-write-exit"]
+    assert len(exit_findings) == 1, (
+        f"always-has-no-write-exit must fire on 'when unavailable' phrase, "
+        f"got findings: {[f.message for f in exit_findings]}"
+    )
+    assert exit_findings[0].severity == Severity.ERROR
+    assert exit_findings[0].step_name == "test_step"
+
+
 # ---------------------------------------------------------------------------
 # result-field-drift tests
 # ---------------------------------------------------------------------------

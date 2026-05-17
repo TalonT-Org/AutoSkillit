@@ -1,4 +1,4 @@
-recipe_source_hash: sha256:fba3a9f0df5a514e3f75ffdd5b556d8c37f4b0844b4c6da4386fa8d2479cb596
+recipe_source_hash: sha256:af7210525cb77e0edda2e2f4a18aa2f9cc882779f1f8cfb65d27f12f6b38c411
 bundled_manifest_version: 0.1.0
 skill_hashes: {}
 skills:
@@ -261,7 +261,9 @@ skills:
 
       %%ORDER_UP%%'
     - "pr_url = \n%%ORDER_UP%%"
-    write_behavior: always
+    write_behavior: conditional
+    write_expected_when:
+    - pr_url\s*=\s*https://
   review-pr:
     inputs:
     - name: feature_branch
@@ -1175,6 +1177,48 @@ dataflow:
   produced:
   - pr_url
   positional_args: 1
+- step: guard_pr_url
+  available:
+  - all_plan_paths
+  - arch_lenses
+  - audit
+  - auto_merge
+  - base_branch
+  - base_sha
+  - claimed
+  - cleanup_succeeded
+  - conflict_escalation_required
+  - fixes_applied
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - lens_context_paths
+  - local_review_rounds
+  - max_parallel
+  - merge_fix_count
+  - merge_target
+  - open_pr
+  - phases_implemented
+  - plan_path
+  - pr_url
+  - prep_path
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_max_retries
+  - review_path
+  - run_mode
+  - run_name
+  - selected_lenses
+  - source_dir
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
 - step: extract_pr_number
   available:
   - all_plan_paths

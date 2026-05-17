@@ -33,6 +33,7 @@ class TestCoreSubpackages:
             "_type_figure_spec",
             "_type_capture",
             "_type_session_env",
+            "_type_token",
         }
         actual = {p.stem for p in (SRC / "core" / "types").glob("_type_*.py")}
         assert actual == expected

@@ -114,6 +114,7 @@ def test_flush_to_hook_cross_seam(tmp_path):
         "output_tokens": 200,
         "cache_creation": 0,
         "cache_read": 0,
+        "schema_version": 2,
         "timing_seconds": 1.5,
         "order_id": "test-order",
         "loc_insertions": 10,

@@ -571,6 +571,7 @@ def test_token_usage_json_schema(tmp_path):
     assert tu["output_tokens"] == 5
     assert tu["cache_creation"] == 2
     assert tu["cache_read"] == 1
+    assert tu["schema_version"] == 2
     assert tu["timing_seconds"] == 15.0
     assert tu["peak_context"] == 0
     assert tu["turn_count"] == 0

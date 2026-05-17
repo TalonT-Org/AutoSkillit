@@ -895,7 +895,7 @@ class TestCacheColumnSuppression:
         }
         result = TelemetryFormatter.format_token_table(steps, total)
         # Should NOT contain — for zero values
-        lines = [l for l in result.splitlines() if "plan" in l]
+        lines = [row for row in result.splitlines() if "plan" in row]
         assert "—" not in lines[0]
 
 
@@ -908,14 +908,13 @@ def test_token_column_field_coverage() -> None:
     """Every TokenEntry field must be explicitly assigned to DISPLAY or EXCLUDED."""
     import dataclasses
 
-    from autoskillit.pipeline.telemetry_fmt import _TOKEN_DISPLAY_FIELDS, _TOKEN_EXCLUDED_FIELDS
+    from autoskillit.pipeline.telemetry_fmt import (
+        _LEGACY_TO_CANONICAL,
+        _TOKEN_DISPLAY_FIELDS,
+        _TOKEN_EXCLUDED_FIELDS,
+    )
     from autoskillit.pipeline.tokens import TokenEntry
 
-    # Bridge: TokenEntry still uses legacy names until P2-A4-WP1 lands
-    _LEGACY_TO_CANONICAL = {
-        "cache_creation_input_tokens": "cache_write_tokens",
-        "cache_read_input_tokens": "cache_read_tokens",
-    }
     all_fields = frozenset(
         _LEGACY_TO_CANONICAL.get(f.name, f.name) for f in dataclasses.fields(TokenEntry)
     )

@@ -242,7 +242,7 @@ def _check_dag_acyclic(wp_results: dict[str, dict]) -> list[ValidationFinding]:
         if not sccs:
             return [
                 {
-                    "message": "Cycle detected among WPs (SCC analysis inconclusive)",
+                    "message": f"Cycle detected among WPs (SCC analysis inconclusive): {exc}",
                     "severity": "error",
                     "check": "dag_acyclic",
                 }

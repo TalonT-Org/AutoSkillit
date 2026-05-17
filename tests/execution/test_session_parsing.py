@@ -288,6 +288,8 @@ class TestExtractTokenUsage:
         )
         result = extract_token_usage(stdout)
         assert result is not None
+        assert result["input_tokens"] == 100
+        assert result["output_tokens"] == 50
         assert result["cache_write_tokens"] == 15
         assert result["cache_read_tokens"] == 8
 

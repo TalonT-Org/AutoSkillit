@@ -444,8 +444,8 @@ def test_flush_writes_token_usage_json_when_step_name_empty(tmp_path):
     data = json.loads((session_dir / "token_usage.json").read_text())
     assert data["session_label"] == "(ad-hoc)"
     assert "step_name" not in data
-    assert data["cache_creation_input_tokens"] == 20
-    assert data["cache_read_input_tokens"] == 80
+    assert data["cache_write_tokens"] == 20
+    assert data["cache_read_tokens"] == 80
 
 
 def test_flush_writes_step_timing_json(tmp_path):
@@ -569,8 +569,8 @@ def test_token_usage_json_schema(tmp_path):
     assert tu["session_label"] == "plan"
     assert tu["input_tokens"] == 10
     assert tu["output_tokens"] == 5
-    assert tu["cache_creation_input_tokens"] == 2
-    assert tu["cache_read_input_tokens"] == 1
+    assert tu["cache_write_tokens"] == 2
+    assert tu["cache_read_tokens"] == 1
     assert tu["timing_seconds"] == 15.0
     assert tu["peak_context"] == 0
     assert tu["turn_count"] == 0
@@ -739,8 +739,8 @@ def test_flush_writes_token_usage_with_dispatch_label(tmp_path):
     assert (session_dir / "token_usage.json").exists()
     data = json.loads((session_dir / "token_usage.json").read_text())
     assert data["session_label"] == "dispatch:abc-123"
-    assert data["cache_creation_input_tokens"] == 20
-    assert data["cache_read_input_tokens"] == 80
+    assert data["cache_write_tokens"] == 20
+    assert data["cache_read_tokens"] == 80
 
 
 def test_token_usage_file_entry_type_matches_written_fields(tmp_path):

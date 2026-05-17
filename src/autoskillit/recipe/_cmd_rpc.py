@@ -65,7 +65,7 @@ def check_dropped_healthy_loop(
 def commit_guard(worktree_path: str) -> dict[str, str]:
     """Auto-commit pending changes if worktree is dirty, excluding generated files."""
     result = subprocess.run(
-        ["git", "status", "--porcelain=v1", "-z"],
+        ["git", "status", "--porcelain=v1", "-z", "-uall"],
         cwd=worktree_path,
         capture_output=True,
     )

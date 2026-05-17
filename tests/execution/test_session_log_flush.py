@@ -536,6 +536,14 @@ def test_flush_index_includes_step_name_and_token_fields(tmp_path):
     assert entry["cache_read_input_tokens"] == 80
 
 
+def test_flush_index_includes_schema_version_2(tmp_path):
+    """sessions.jsonl entry must contain schema_version: 2."""
+    _flush(tmp_path)
+    index_path = tmp_path / "sessions.jsonl"
+    entry = json.loads(index_path.read_text().strip().split("\n")[-1])
+    assert entry["schema_version"] == 2
+
+
 def test_flush_index_token_fields_zero_when_no_step(tmp_path):
     """sessions.jsonl entry has step_name='' and token fields=0 when no step telemetry."""
     _flush(tmp_path, proc_snapshots=None, success=False)  # no step_name

@@ -229,7 +229,7 @@ class TestChannelBDrainWait:
 
         Verifies that SubprocessResult.data_confirmed is False when the bounded
         drain wait times out — i.e. Channel A never confirmed stdout data.
-        timeout=120s / _phase1_timeout=250: outer timeout must exceed _phase1_timeout so
+        timeout=120s / _phase1_timeout=250: _phase1_timeout must exceed the outer timeout so
         Phase 1 never fires STALE before the outer guard under WSL2 + xdist load.
         completion_drain_timeout=0.5: 0.1s was too tight under xdist -n 4 load; the
         event loop may not process the drain callback before pytest-timeout fires.
@@ -475,7 +475,7 @@ class TestPostExitDrainWindow:
           30.0s provides ~15x headroom against Phase 1 jitter alone.
         - The test does NOT take 30s: channel_b_ready is set within ~2s normally
           and move_on_after exits as soon as the event fires.
-        timeout=120 / _phase1_timeout=250: outer timeout must exceed _phase1_timeout
+        timeout=120 / _phase1_timeout=250: _phase1_timeout must exceed the outer timeout
         so Phase 1 never fires STALE before the outer guard under WSL2 + xdist load.
         """
         session_dir = tmp_path / "session"

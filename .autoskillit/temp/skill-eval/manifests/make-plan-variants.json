@@ -1,0 +1,38 @@
+[
+  {
+    "id": "baseline",
+    "label": "Baseline",
+    "overlay_file": null,
+    "description": "No overlay — plain task text only"
+  },
+  {
+    "id": "consumer-contract",
+    "label": "Consumer contract",
+    "overlay_file": "/home/talon/projects/autoskillit-runs/worktrees/impl-skill-eval-framework-20260517-163540/.autoskillit/temp/skill-eval/overlays/consumer-contract.md",
+    "description": "Add consumer contract verification overlay"
+  },
+  {
+    "id": "infrastructure-audit",
+    "label": "Infrastructure audit",
+    "overlay_file": "/home/talon/projects/autoskillit-runs/worktrees/impl-skill-eval-framework-20260517-163540/.autoskillit/temp/skill-eval/overlays/infrastructure-audit.md",
+    "description": "Add infrastructure audit overlay"
+  },
+  {
+    "id": "migration-scope",
+    "label": "Migration scope",
+    "overlay_file": "/home/talon/projects/autoskillit-runs/worktrees/impl-skill-eval-framework-20260517-163540/.autoskillit/temp/skill-eval/overlays/migration-scope.md",
+    "description": "Add migration scope overlay"
+  },
+  {
+    "id": "adversarial-review",
+    "label": "Adversarial review",
+    "overlay_file": "/home/talon/projects/autoskillit-runs/worktrees/impl-skill-eval-framework-20260517-163540/.autoskillit/temp/skill-eval/overlays/adversarial-review.md",
+    "description": "Add adversarial review overlay"
+  },
+  {
+    "id": "full-adversarial",
+    "label": "Full adversarial",
+    "overlay_file": "/home/talon/projects/autoskillit-runs/worktrees/impl-skill-eval-framework-20260517-163540/.autoskillit/temp/skill-eval/overlays/full-adversarial.md",
+    "description": "All overlays combined"
+  }
+]

@@ -6,6 +6,7 @@ import regex as re
 
 from autoskillit.core import PRState, Severity
 from autoskillit.recipe._analysis import ValidationContext
+from autoskillit.recipe._analysis_graph import _extract_routing_edges
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 _NO_RUNS_RE = re.compile(r"""==\s*['"]?no_runs['"]?""")
@@ -641,12 +642,24 @@ def _check_enqueue_missing_ci_gate(ctx: ValidationContext) -> list[RuleFinding]:
         name for name, step in ctx.recipe.steps.items() if step.tool == "wait_for_ci"
     }
 
-    # Entry steps: steps with no predecessors (disconnected steps also included
-    # as they are trivially reachable without a CI gate).
-    all_steps = set(ctx.recipe.steps)
-    entry_steps = all_steps - set(ctx.predecessors)
+    # Build a direct routing graph without skip_when_false bypass edges.
+    # Bypass edges allow CI gates to be sidestepped in the compiled step_graph,
+    # which would produce false positives here (a wait_for_ci bypassed when
+    # open_pr=false is not a real ungated path to enqueue_pr).
+    step_names = set(ctx.recipe.steps)
+    direct_graph: dict[str, set[str]] = {name: set() for name in step_names}
+    for name, step in ctx.recipe.steps.items():
+        for edge in _extract_routing_edges(step):
+            if edge.edge_type == "exhausted" and step.action is not None:
+                continue
+            if edge.target in step_names:
+                direct_graph[name].add(edge.target)
+
+    # Entry steps: those not pointed to by any step in the direct graph.
+    has_predecessor: set[str] = {s for succs in direct_graph.values() for s in succs}
+    entry_steps = step_names - has_predecessor
     if not entry_steps:
-        entry_steps = all_steps
+        entry_steps = step_names
 
     # Forward BFS from all entry points; CI gates are barriers — visited but
     # not expanded. This yields every step reachable from the recipe entry
@@ -660,7 +673,7 @@ def _check_enqueue_missing_ci_gate(ctx: ValidationContext) -> list[RuleFinding]:
         reachable_without_gate.add(node)
         if node in ci_gate_steps:
             continue
-        for successor in ctx.step_graph.get(node, set()):
+        for successor in direct_graph.get(node, set()):
             if successor not in reachable_without_gate:
                 queue.append(successor)
 

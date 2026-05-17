@@ -248,8 +248,8 @@ def test_fmt_run_skill_interactive_shows_four_token_fields():
         "token_usage": {
             "input_tokens": 5000,
             "output_tokens": 3000,
-            "cache_read": 200000,
-            "cache_creation": 8000,
+            "cache_read_input_tokens": 200000,
+            "cache_creation_input_tokens": 8000,
         },
     }
     rendered = _format_response(

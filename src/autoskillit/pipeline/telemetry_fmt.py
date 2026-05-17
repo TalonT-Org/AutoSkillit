@@ -8,6 +8,8 @@ maintains an output-equivalent inline implementation guarded by test 1g.
 
 from __future__ import annotations
 
+from typing import Any
+
 from autoskillit.core import ModelTotalEntry, TerminalColumn, _render_terminal_table
 
 _TOKEN_COLUMNS = (
@@ -151,8 +153,8 @@ _LEGACY_TO_CANONICAL: dict[str, str] = {
 }
 
 
-def _normalize_keys(d: dict) -> dict:
-    """Normalize legacy cache field names to canonical. Drop after P2-A4-WP1."""
+def _normalize_keys(d: dict[str, Any]) -> dict[str, Any]:
+    """Normalize legacy cache field names to canonical. Drop after #2474 lands."""
     out = dict(d)
     for old, new in _LEGACY_TO_CANONICAL.items():
         if old in out and new not in out:
@@ -415,7 +417,8 @@ class TelemetryFormatter:
         lines.append(
             f"| **Total** | **{total_loc}**"
             f" | {'—' if total_cr is None else _ratio(total_cr, total_loc)}"
-            f" | {'—' if total_cw is None else _ratio(total_cw, total_loc)} | {_ratio(total_out, total_loc)} |"
+            f" | {'—' if total_cw is None else _ratio(total_cw, total_loc)}"
+            f" | {_ratio(total_out, total_loc)} |"
         )
         return "\n".join(lines)
 

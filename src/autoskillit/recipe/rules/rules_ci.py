@@ -51,7 +51,7 @@ def _check_ci_polling_inline_shell(ctx: ValidationContext) -> list[RuleFinding]:
                     ),
                 )
             )
-        if "gh api" in cmd and ("status" in cmd or "check-runs" in cmd):
+        if "gh api" in cmd and ("/status" in cmd or "/statuses" in cmd or "check-runs" in cmd):
             findings.append(
                 RuleFinding(
                     rule="ci-polling-inline-shell",

@@ -988,7 +988,7 @@ def test_rewrite_deps_breaks_cross_group_mutual_cycle(tmp_path: Path) -> None:
     output_ids = {wp["id"] for wp in consolidated["work_packages"]}
     assert output_ids == {"P2-A4-WP1", "P2-A9-WP1"}
     output_wps_dict = {wp["id"]: wp for wp in consolidated["work_packages"]}
-    topological_sort(output_wps_dict)  # raises RuntimeError if cycle remains
+    assert isinstance(topological_sort(output_wps_dict), list)
 
     assert "cycles_broken" in result
     assert int(result["cycles_broken"]) >= 1
@@ -1039,7 +1039,7 @@ def test_rewrite_deps_breaks_three_node_cycle(tmp_path: Path) -> None:
     output_ids = {wp["id"] for wp in consolidated["work_packages"]}
     assert output_ids == {"P1-A1-WP1", "P1-A2-WP1", "P1-A3-WP1"}
     output_wps_dict = {wp["id"]: wp for wp in consolidated["work_packages"]}
-    topological_sort(output_wps_dict)  # raises RuntimeError if cycle remains
+    assert isinstance(topological_sort(output_wps_dict), list)
 
 
 def test_rewrite_deps_removes_self_references(tmp_path: Path) -> None:

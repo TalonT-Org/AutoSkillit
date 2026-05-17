@@ -112,8 +112,8 @@ def test_flush_to_hook_cross_seam(tmp_path):
         "session_label": "plan",
         "input_tokens": 100,
         "output_tokens": 200,
-        "cache_creation_input_tokens": 0,
-        "cache_read_input_tokens": 0,
+        "cache_write_tokens": 0,
+        "cache_read_tokens": 0,
         "timing_seconds": 1.5,
         "order_id": "test-order",
         "loc_insertions": 10,
@@ -124,6 +124,7 @@ def test_flush_to_hook_cross_seam(tmp_path):
         "model_identifier": "test-model",
         "dispatch_id": "test-dispatch",
         "campaign_id": "test-campaign",
+        "schema_version": 2,
     }
     (session_dir / "token_usage.json").write_text(json.dumps(tu_data))
 

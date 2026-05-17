@@ -48,8 +48,6 @@ TOKEN_USAGE_FILE_KEYS: frozenset[str] = frozenset(
         "session_label",
         "input_tokens",
         "output_tokens",
-        "cache_creation_input_tokens",
-        "cache_read_input_tokens",
         "cache_write_tokens",
         "cache_read_tokens",
         "peak_context",
@@ -62,6 +60,7 @@ TOKEN_USAGE_FILE_KEYS: frozenset[str] = frozenset(
         "model_identifier",
         "dispatch_id",
         "campaign_id",
+        "schema_version",
     }
 )
 

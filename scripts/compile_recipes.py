@@ -48,6 +48,7 @@ def _is_current(yaml_path: Path) -> bool:
     try:
         data = yaml.load(yaml_path.read_bytes(), Loader=Loader)
     except yaml.YAMLError:
+        print(f"WARNING: {yaml_path} has invalid YAML", file=sys.stderr)
         return False
     expected = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
     return json_path.read_text(encoding="utf-8") == expected

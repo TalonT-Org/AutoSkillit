@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+from typing import Any
 
 import pytest
 
@@ -28,7 +29,7 @@ def _no_sentinel(
         parse_error=None,
         source="stdout",
     )
-    skill_result_kwargs: dict = dict(
+    skill_result_kwargs: dict[str, Any] = dict(
         session_id=session_id,
         lifespan_started=lifespan_started,
         retry_reason=retry_reason,
@@ -45,7 +46,7 @@ def _timeout_result(
     retry_reason: RetryReason = RetryReason.NONE,
     infra_exit_category: str = "",
 ) -> SkillResult:
-    kwargs: dict = dict(
+    kwargs: dict[str, Any] = dict(
         session_id=session_id,
         lifespan_started=lifespan_started,
         subtype="timeout",

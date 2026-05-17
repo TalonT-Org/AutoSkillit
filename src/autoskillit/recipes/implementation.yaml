@@ -727,7 +727,7 @@ steps:
       timeout_seconds: 600
       cwd: "${{ context.work_dir }}"
       remote_url: "${{ context.remote_url }}"
-      auto_trigger: "true"
+      auto_trigger: true
     capture:
       ci_conclusion: "${{ result.conclusion }}"
       ci_failed_jobs: "${{ result.failed_jobs }}"
@@ -851,33 +851,31 @@ steps:
       ci_watch still returns no_runs, escalates to escalate_stop_no_ci.
 
   check_ci_already_passed:
-    tool: run_cmd
+    tool: wait_for_ci
     with:
-      cmd: >-
-        gh pr view '${{ context.pr_number }}' --json statusCheckRollup
-        --jq '.statusCheckRollup | if length == 0 then "no_checks" elif
-        all(.state == "SUCCESS" or .state == "NEUTRAL" or .state == "SKIPPED")
-        then "passed" elif any(.state == "FAILURE" or .state == "ERROR")
-        then "failed" else "pending" end'
+      branch: "${{ context.merge_target }}"
+      event: "${{ context.ci_event }}"
+      timeout_seconds: 30
       cwd: "${{ context.work_dir }}"
-      step_name: "check_ci_already_passed"
+      remote_url: "${{ context.remote_url }}"
+      auto_trigger: true
+    skip_when_false: "inputs.open_pr"
     on_result:
-      - when: "${{ result.stdout | trim }} == passed"
+      - when: "${{ result.conclusion }} == success"
         route: check_repo_merge_state
-      - when: "${{ result.stdout | trim }} == failed"
+      - when: "${{ result.conclusion }} == failure"
         route: detect_ci_conflict
-      - when: "${{ result.stdout | trim }} == pending"
+      - when: "${{ result.conclusion }} == timed_out"
         route: ci_watch
       - route: mark_issue_failed_no_ci
     on_failure: mark_issue_failed_no_ci
-    skip_when_false: "inputs.open_pr"
     note: >
-      Safety net before terminal escalation: checks if CI already passed
-      despite the watcher failing to observe it (e.g. post-force-push SHA
-      staleness). Uses statusCheckRollup as the authoritative signal.
-      Outputs passed/failed/no_checks/pending: passed goes to merge gate,
-      failed routes to CI conflict remediation, pending re-enters the CI
-      watcher, no_checks falls through to terminal stop.
+      Safety net before terminal escalation: re-polls CI with a short timeout
+      to detect if CI has already passed or failed despite the watcher failing
+      to observe it. Uses wait_for_ci as the authoritative signal (30s timeout
+      for immediate state detection). success → merge gate, failure → conflict
+      remediation, timed_out (still pending) → ci_watch for re-poll,
+      no_runs → terminal escalation path.
 
   mark_issue_failed_no_ci:
     description: "Swap in-progress → fail label before CI failure escalation"
@@ -1206,7 +1204,7 @@ steps:
       timeout_seconds: 600
       cwd: "${{ context.work_dir }}"
       remote_url: "${{ context.remote_url }}"
-      auto_trigger: "true"
+      auto_trigger: true
     capture:
       ci_conclusion: "${{ result.conclusion }}"
       ci_failed_jobs: "${{ result.failed_jobs }}"

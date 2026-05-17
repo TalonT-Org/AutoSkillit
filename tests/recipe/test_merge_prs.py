@@ -654,7 +654,7 @@ def test_merge_pr_routes_merged_false_to_failure(recipe) -> None:
 def test_wait_for_conflict_ci_has_auto_trigger(recipe) -> None:
     """wait_for_conflict_ci has auto_trigger: true."""
     step = recipe.steps["wait_for_conflict_ci"]
-    assert step.with_args.get("auto_trigger") == "true"
+    assert step.with_args.get("auto_trigger") is True
 
 
 def test_wait_for_conflict_ci_timed_out_routes_to_guard(recipe) -> None:
@@ -688,7 +688,7 @@ def test_check_conflict_ci_loop_exists_with_correct_pattern(recipe) -> None:
 def test_ci_watch_pr_has_auto_trigger(recipe) -> None:
     """ci_watch_pr has auto_trigger: true."""
     step = recipe.steps["ci_watch_pr"]
-    assert step.with_args.get("auto_trigger") == "true"
+    assert step.with_args.get("auto_trigger") is True
 
 
 def test_ci_watch_pr_timed_out_routes_to_guard(recipe) -> None:

@@ -9,6 +9,7 @@ import pytest
 
 from autoskillit.core import PRState
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+from autoskillit.recipe.schema import Recipe
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -770,3 +771,103 @@ def test_unbounded_cycle_severity_downgraded_by_eject_limit(any_recipe) -> None:
         f"unbounded-cycle must not be ERROR for queue ejection cycle after check_eject_limit; "
         f"got ERROR on: {[f.step_name for f in queue_cycle_error_findings]}"
     )
+
+
+# ---------------------------------------------------------------------------
+# merge-prs.yaml specific structural tests — pre-enqueue CI gate
+# ---------------------------------------------------------------------------
+
+
+class TestMergePrsPreEnqueueCiGate:
+    """Structural tests for the merge-prs.yaml pre-enqueue CI gate (Steps 7a-7c + 8)."""
+
+    @pytest.fixture(scope="class")
+    def pmp(self, pmp_recipe) -> Recipe:
+        return pmp_recipe
+
+    def test_get_first_pr_number_routes_to_get_current_pr_branch(self, pmp) -> None:
+        """get_first_pr_number.on_success must route to get_current_pr_branch."""
+        step = pmp.steps["get_first_pr_number"]
+        assert step.on_success == "get_current_pr_branch", (
+            f"get_first_pr_number.on_success must be 'get_current_pr_branch', "
+            f"got: {step.on_success!r}"
+        )
+
+    def test_get_current_pr_branch_exists(self, pmp) -> None:
+        """get_current_pr_branch step must exist."""
+        assert "get_current_pr_branch" in pmp.steps
+
+    def test_get_current_pr_branch_uses_run_cmd(self, pmp) -> None:
+        """get_current_pr_branch must use run_cmd to fetch headRefName."""
+        step = pmp.steps["get_current_pr_branch"]
+        assert step.tool == "run_cmd"
+
+    def test_get_current_pr_branch_captures_current_pr_branch(self, pmp) -> None:
+        """get_current_pr_branch must capture current_pr_branch."""
+        step = pmp.steps["get_current_pr_branch"]
+        assert step.capture is not None
+        assert "current_pr_branch" in step.capture
+
+    def test_get_current_pr_branch_routes_to_wait_ci_pre_enqueue(self, pmp) -> None:
+        """get_current_pr_branch.on_success must route to wait_ci_pre_enqueue."""
+        step = pmp.steps["get_current_pr_branch"]
+        assert step.on_success == "wait_ci_pre_enqueue"
+
+    def test_wait_ci_pre_enqueue_exists(self, pmp) -> None:
+        """wait_ci_pre_enqueue step must exist."""
+        assert "wait_ci_pre_enqueue" in pmp.steps
+
+    def test_wait_ci_pre_enqueue_uses_wait_for_ci(self, pmp) -> None:
+        """wait_ci_pre_enqueue must use wait_for_ci tool."""
+        step = pmp.steps["wait_ci_pre_enqueue"]
+        assert step.tool == "wait_for_ci"
+
+    def test_wait_ci_pre_enqueue_routes_to_enqueue_current_pr_on_success(self, pmp) -> None:
+        """wait_ci_pre_enqueue must route to enqueue_current_pr on success."""
+        step = pmp.steps["wait_ci_pre_enqueue"]
+        assert step.on_result is not None
+        success_routes = [
+            c.route for c in step.on_result.conditions if c.when and "success" in c.when
+        ]
+        assert "enqueue_current_pr" in success_routes
+
+    def test_enqueue_current_pr_on_failure_routes_to_verify_queue_enrollment(self, pmp) -> None:
+        """enqueue_current_pr.on_failure must route to verify_queue_enrollment."""
+        step = pmp.steps["enqueue_current_pr"]
+        assert step.on_failure == "verify_queue_enrollment", (
+            f"enqueue_current_pr.on_failure must be 'verify_queue_enrollment', "
+            f"got: {step.on_failure!r}"
+        )
+
+    def test_verify_queue_enrollment_exists(self, pmp) -> None:
+        """verify_queue_enrollment step must exist in merge-prs.yaml."""
+        assert "verify_queue_enrollment" in pmp.steps
+
+    def test_verify_queue_enrollment_uses_wait_for_merge_queue(self, pmp) -> None:
+        """verify_queue_enrollment must use wait_for_merge_queue tool."""
+        step = pmp.steps["verify_queue_enrollment"]
+        assert step.tool == "wait_for_merge_queue"
+
+    def test_verify_queue_enrollment_covers_all_pr_states(self, pmp) -> None:
+        """verify_queue_enrollment must have routing arms for all non-error PRState values."""
+        step = pmp.steps["verify_queue_enrollment"]
+        assert step.on_result is not None and step.on_result.conditions
+        required = _REQUIRED_PR_STATE_VALUES
+        matched = set()
+        for c in step.on_result.conditions:
+            if c.when is None:
+                continue
+            m = _PR_STATE_WHEN_RE.search(c.when)
+            if m:
+                matched.add(m.group(1))
+        missing = required - matched
+        assert not missing, (
+            f"verify_queue_enrollment is missing routing for PRState values: {sorted(missing)}"
+        )
+
+    def test_reenter_queue_on_failure_routes_to_verify_queue_enrollment(self, pmp) -> None:
+        """reenter_queue.on_failure must route to verify_queue_enrollment."""
+        step = pmp.steps["reenter_queue"]
+        assert step.on_failure == "verify_queue_enrollment", (
+            f"reenter_queue.on_failure must be 'verify_queue_enrollment', got: {step.on_failure!r}"
+        )

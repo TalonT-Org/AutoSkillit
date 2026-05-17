@@ -5,7 +5,7 @@ from __future__ import annotations
 import regex as re
 
 from autoskillit.core import PRState, Severity
-from autoskillit.recipe._analysis import ValidationContext
+from autoskillit.recipe._analysis import ValidationContext, _extract_routing_edges
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 _NO_RUNS_RE = re.compile(r"""==\s*['"]?no_runs['"]?""")
@@ -33,6 +33,34 @@ def _check_ci_polling_inline_shell(ctx: ValidationContext) -> list[RuleFinding]:
                     step_name=name,
                     message=(
                         f"Step '{name}' uses inline 'gh run' commands in run_cmd. "
+                        "Use the wait_for_ci MCP tool instead for race-immune CI watching "
+                        "with structured output."
+                    ),
+                )
+            )
+        if "gh pr view" in cmd and (
+            "statusCheckRollup" in cmd or "--json checks" in cmd or ",checks" in cmd
+        ):
+            findings.append(
+                RuleFinding(
+                    rule="ci-polling-inline-shell",
+                    severity=Severity.WARNING,
+                    step_name=name,
+                    message=(
+                        f"Step '{name}' uses inline 'gh pr view --json statusCheckRollup' "
+                        "for CI polling. Use the wait_for_ci MCP tool instead for "
+                        "race-immune CI watching with structured output."
+                    ),
+                )
+            )
+        if "gh api" in cmd and ("/status" in cmd or "/statuses" in cmd or "check-runs" in cmd):
+            findings.append(
+                RuleFinding(
+                    rule="ci-polling-inline-shell",
+                    severity=Severity.WARNING,
+                    step_name=name,
+                    message=(
+                        f"Step '{name}' uses inline 'gh api' for CI status polling. "
                         "Use the wait_for_ci MCP tool instead for race-immune CI watching "
                         "with structured output."
                     ),
@@ -592,3 +620,77 @@ def _has_conflict_ancestor(
             return True
         queue.extend(ctx.predecessors.get(current, set()))
     return False
+
+
+@semantic_rule(
+    name="enqueue-missing-ci-gate",
+    description=(
+        "Flags enqueue_pr steps reachable from recipe entry without a wait_for_ci ancestor. "
+        "Premature queue enrollment (before CI passes) causes predictable GitHub rejection."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_enqueue_missing_ci_gate(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+
+    enqueue_steps: set[str] = {
+        name for name, step in ctx.recipe.steps.items() if step.tool == "enqueue_pr"
+    }
+    if not enqueue_steps:
+        return findings
+
+    ci_gate_steps: set[str] = {
+        name for name, step in ctx.recipe.steps.items() if step.tool == "wait_for_ci"
+    }
+
+    # Build a direct routing graph without skip_when_false bypass edges.
+    # Bypass edges allow CI gates to be sidestepped in the compiled step_graph,
+    # which would produce false positives here (a wait_for_ci bypassed when
+    # open_pr=false is not a real ungated path to enqueue_pr).
+    step_names = set(ctx.recipe.steps)
+    direct_graph: dict[str, set[str]] = {name: set() for name in step_names}
+    for name, step in ctx.recipe.steps.items():
+        for edge in _extract_routing_edges(step):
+            if edge.edge_type == "exhausted" and step.action is not None:
+                continue
+            if edge.target in step_names:
+                direct_graph[name].add(edge.target)
+
+    # Entry steps: those not pointed to by any step in the direct graph.
+    has_predecessor: set[str] = {s for succs in direct_graph.values() for s in succs}
+    entry_steps = step_names - has_predecessor
+    if not entry_steps:
+        entry_steps = step_names
+
+    # Forward BFS from all entry points; CI gates are barriers — visited but
+    # not expanded. This yields every step reachable from the recipe entry
+    # without every path first crossing a wait_for_ci guard.
+    reachable_without_gate: set[str] = set()
+    queue: list[str] = list(entry_steps)
+    while queue:
+        node = queue.pop()
+        if node in reachable_without_gate:
+            continue
+        reachable_without_gate.add(node)
+        if node in ci_gate_steps:
+            continue
+        for successor in direct_graph.get(node, set()):
+            if successor not in reachable_without_gate:
+                queue.append(successor)
+
+    for enqueue_name in enqueue_steps:
+        if enqueue_name in reachable_without_gate:
+            findings.append(
+                RuleFinding(
+                    rule="enqueue-missing-ci-gate",
+                    severity=Severity.ERROR,
+                    step_name=enqueue_name,
+                    message=(
+                        f"Step '{enqueue_name}' calls enqueue_pr but is reachable from "
+                        "recipe entry without passing through a wait_for_ci step. "
+                        "Add a CI gate (wait_for_ci) before enqueue to prevent premature "
+                        "queue enrollment."
+                    ),
+                )
+            )
+    return findings

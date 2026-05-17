@@ -927,36 +927,8 @@ def test_all_tiers_result_dir_points_to_sentinel_subdir(expand_fn, sentinel_subd
         result = expand_wps(str(refined_path), str(tmp_path))
 
     manifest = json.loads(Path(result["manifest_path"]).read_text())
-    assert manifest["result_dir"].endswith(sentinel_subdir), (
-        f"{expand_fn} result_dir was {manifest['result_dir']}, "
-        f"expected to end with {sentinel_subdir}"
-    )
     assert Path(manifest["result_dir"]).name == sentinel_subdir
     assert Path(manifest["result_dir"]).is_dir()
-
-
-def test_expand_assignments_result_dir_points_to_assign_sentinels(tmp_path):
-    """expand_assignments must create assign_sentinels/ and point result_dir there."""
-    from autoskillit.planner import expand_assignments
-
-    refined = {
-        "phases": [
-            {
-                "id": "P1",
-                "name": "Phase 1",
-                "assignments_preview": [{"id": "P1-A1", "name": "Assignment 1"}],
-            }
-        ],
-        "task": "test task",
-    }
-    refined_path = tmp_path / "refined_plan.json"
-    refined_path.write_text(json.dumps(refined))
-
-    result = expand_assignments(str(refined_path), str(tmp_path))
-
-    manifest = json.loads(Path(result["manifest_path"]).read_text())
-    assert manifest["result_dir"].endswith("assign_sentinels")
-    assert (tmp_path / "assignments" / "assign_sentinels").is_dir()
 
 
 def test_build_phase_assignment_manifest_result_dir_isolated(tmp_path):

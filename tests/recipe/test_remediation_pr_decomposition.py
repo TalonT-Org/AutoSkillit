@@ -40,7 +40,7 @@ def test_run_arch_lenses_routes_to_compose_on_failure(recipe):
     assert step.on_failure == "compose_pr"
 
 
-def test_compose_pr_routes_to_extract_pr_number(recipe):
+def test_compose_pr_routes_to_guard_pr_url(recipe):
     step = recipe.steps["compose_pr"]
     assert step.on_result is not None, "compose_pr must have on_result for conditional gating"
     assert len(step.on_result.conditions) >= 1, (

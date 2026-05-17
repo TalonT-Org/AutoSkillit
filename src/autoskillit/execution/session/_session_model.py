@@ -30,10 +30,6 @@ _API_TOKEN_FIELDS, _CANONICAL_TOKEN_FIELDS = (
 _CACHE_READ_TOKENS_API_FIELD = _API_TOKEN_FIELDS[
     _CANONICAL_TOKEN_FIELDS.index("cache_read_tokens")
 ]
-_CACHE_READ_TOKENS_CANON_FIELD = _CANONICAL_TOKEN_FIELDS[
-    _CANONICAL_TOKEN_FIELDS.index("cache_read_tokens")
-]
-
 FAILURE_SUBTYPES: frozenset[CliSubtype] = frozenset(
     {
         CliSubtype.UNKNOWN,
@@ -262,24 +258,19 @@ def extract_token_usage(stdout: str) -> dict[str, Any] | None:
             model = msg.get("model", "unknown")
             bucket = model_buckets.setdefault(model, {f: 0 for f in _CANONICAL_TOKEN_FIELDS})
             for api_f, canon_f in zip(_API_TOKEN_FIELDS, _CANONICAL_TOKEN_FIELDS):
-                canon_val: int = usage.get(api_f)  # type: ignore[assignment]
-                if canon_val is None:
-                    canon_val = usage.get(canon_f, 0) or 0
-                bucket[canon_f] += canon_val
-            cr_api = usage.get(_CACHE_READ_TOKENS_API_FIELD)
-            cr_canon: int = (
-                cr_api if cr_api is not None else usage.get(_CACHE_READ_TOKENS_CANON_FIELD, 0) or 0
+                bucket[canon_f] += int(usage.get(api_f) or usage.get(canon_f) or 0)
+            _cr = int(
+                usage.get(_CACHE_READ_TOKENS_API_FIELD) or usage.get("cache_read_tokens") or 0
             )
-            if cr_canon > peak_context:
-                peak_context = cr_canon
+            peak_context = max(peak_context, _cr)
             turn_count += 1
         elif record_type == "result":
             usage = obj.get("usage")
             if isinstance(usage, dict):
-                result_usage = {}
-                for api_f, canon_f in zip(_API_TOKEN_FIELDS, _CANONICAL_TOKEN_FIELDS):
-                    v: int | None = usage.get(api_f)  # type: ignore[assignment]
-                    result_usage[canon_f] = v if v is not None else usage.get(canon_f, 0) or 0
+                result_usage = {
+                    canon_f: int(usage.get(api_f) or usage.get(canon_f) or 0)
+                    for api_f, canon_f in zip(_API_TOKEN_FIELDS, _CANONICAL_TOKEN_FIELDS)
+                }
 
     if not model_buckets and result_usage is None:
         return None

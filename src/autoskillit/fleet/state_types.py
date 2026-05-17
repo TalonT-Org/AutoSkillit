@@ -42,6 +42,52 @@ class DispatchStatus(StrEnum):
     RELEASED = "released"
 
 
+class ErrorCodeCategory(StrEnum):
+    """Category for an error code — determines whether it halts a campaign."""
+
+    INFRASTRUCTURE = "infrastructure"
+    LOGIC = "logic"
+
+
+_ERROR_CODE_CATEGORIES: dict[str, ErrorCodeCategory] = {
+    FleetErrorCode.FLEET_L3_TIMEOUT: ErrorCodeCategory.INFRASTRUCTURE,
+    FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK: ErrorCodeCategory.INFRASTRUCTURE,
+    FleetErrorCode.FLEET_L3_PARSE_FAILED: ErrorCodeCategory.INFRASTRUCTURE,
+    FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH: ErrorCodeCategory.INFRASTRUCTURE,
+    FleetErrorCode.FLEET_QUOTA_EXHAUSTED: ErrorCodeCategory.INFRASTRUCTURE,
+    FleetErrorCode.FLEET_CLEANUP_FAILED: ErrorCodeCategory.INFRASTRUCTURE,
+    FleetErrorCode.FLEET_ACQUIRE_TIMEOUT: ErrorCodeCategory.INFRASTRUCTURE,
+    FleetErrorCode.FLEET_PARALLEL_REFUSED: ErrorCodeCategory.INFRASTRUCTURE,
+    FleetErrorCode.FLEET_HARD_REFUSAL_HEADLESS: ErrorCodeCategory.INFRASTRUCTURE,
+    FleetErrorCode.FLEET_MANIFEST_MISSING: ErrorCodeCategory.INFRASTRUCTURE,
+    FleetErrorCode.FLEET_MANIFEST_CORRUPTED: ErrorCodeCategory.INFRASTRUCTURE,
+    FleetErrorCode.FLEET_LOCK_NOT_INITIALIZED: ErrorCodeCategory.INFRASTRUCTURE,
+    FleetErrorCode.FLEET_RECIPE_INVALID: ErrorCodeCategory.INFRASTRUCTURE,
+    FleetErrorCode.FLEET_FEATURE_DISABLED: ErrorCodeCategory.INFRASTRUCTURE,
+    FleetErrorCode.FLEET_DISPATCH_SKIPPED: ErrorCodeCategory.INFRASTRUCTURE,
+    FleetErrorCode.FLEET_GATE_ALREADY_RECORDED: ErrorCodeCategory.INFRASTRUCTURE,
+    FleetErrorCode.FLEET_GATE_NO_CAMPAIGN: ErrorCodeCategory.INFRASTRUCTURE,
+    FleetErrorCode.FLEET_GATE_UNKNOWN_DISPATCH: ErrorCodeCategory.INFRASTRUCTURE,
+    FleetErrorCode.FLEET_BUDGET_EXCEEDED: ErrorCodeCategory.INFRASTRUCTURE,
+    FleetErrorCode.FLEET_UNKNOWN_INGREDIENT: ErrorCodeCategory.LOGIC,
+    FleetErrorCode.FLEET_MISSING_INGREDIENT: ErrorCodeCategory.LOGIC,
+    FleetErrorCode.FLEET_CAMPAIGN_HALTED: ErrorCodeCategory.LOGIC,
+    FleetErrorCode.FLEET_RECIPE_NOT_FOUND: ErrorCodeCategory.LOGIC,
+    FleetErrorCode.FLEET_INVALID_RECIPE_KIND: ErrorCodeCategory.LOGIC,
+}
+
+
+def get_error_category(code: str) -> ErrorCodeCategory:
+    """Return the category for an error code. Unrecognized codes default to LOGIC."""
+    return _ERROR_CODE_CATEGORIES.get(code, ErrorCodeCategory.LOGIC)
+
+
+# Derived from metadata for exhaustiveness
+_INFRASTRUCTURE_FAILURE_REASONS: frozenset[str] = frozenset(
+    code for code, cat in _ERROR_CODE_CATEGORIES.items() if cat == ErrorCodeCategory.INFRASTRUCTURE
+)
+
+
 @dataclass
 class DispatchRecord:
     """Runtime state of a single dispatch within a campaign.
@@ -70,6 +116,7 @@ class DispatchRecord:
     ended_at: float = 0.0
     sidecar_path: str | None = None
     attempt_history: list[dict[str, Any]] = field(default_factory=list)
+    resume_checkpoint: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -94,6 +141,7 @@ class DispatchRecord:
             "ended_at": self.ended_at,
             "sidecar_path": self.sidecar_path,
             "attempt_history": list(self.attempt_history),
+            "resume_checkpoint": dict(self.resume_checkpoint),
         }
 
     @classmethod
@@ -144,6 +192,7 @@ class DispatchRecord:
             ended_at=d.get("ended_at", 0.0),
             sidecar_path=d.get("sidecar_path"),
             attempt_history=d.get("attempt_history", []),
+            resume_checkpoint=d.get("resume_checkpoint", {}),
         )
 
     @classmethod
@@ -220,6 +269,7 @@ class ResumeDecision:
     dispatched_session_id: str = ""
     dispatch_id: str = ""
     kill_reason: str = ""
+    resume_checkpoint: dict[str, Any] = field(default_factory=dict)
 
 
 _ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
@@ -271,14 +321,6 @@ def _validate_transition(current: str, new: str, dispatch_name: str) -> None:
         raise ValueError(msg)
 
 
-_INFRASTRUCTURE_FAILURE_REASONS: frozenset[str] = frozenset(
-    {
-        FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK,
-        FleetErrorCode.FLEET_QUOTA_EXHAUSTED,
-    }
-)
-
-
 @dataclass(frozen=True, slots=True)
 class GateRecordResult:
     """Result of a gate dispatch recording attempt."""
@@ -326,7 +368,7 @@ class DispatchCompleted:
     lifespan_started: bool = False
     l3_raw_body: str | None = None
     l3_parse_error: str | None = None
-    resume_checkpoint: dict[str, Any] | None = None
+    resume_checkpoint: dict[str, Any] = field(default_factory=dict)
     stderr: str = ""
     elapsed_seconds: float = 0.0
 
@@ -348,7 +390,7 @@ class DispatchCompleted:
             d["l3_raw_body"] = self.l3_raw_body
         if self.l3_parse_error is not None:
             d["l3_parse_error"] = self.l3_parse_error
-        if self.resume_checkpoint is not None:
+        if self.resume_checkpoint:
             d["resume_checkpoint"] = self.resume_checkpoint
         return json.dumps(d)
 

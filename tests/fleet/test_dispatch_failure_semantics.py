@@ -99,7 +99,7 @@ def _make_completed_clean(success: bool, reason: str = ""):
 class TestTimeoutPath:
     @pytest.mark.anyio
     async def test_timeout_returns_fleet_error_envelope(self, tool_ctx, monkeypatch):
-        """skill_result.subtype == 'timeout' → fleet_error envelope with error='l3_timeout'."""
+        """Timeout without session/sidecar → FAILURE envelope with error='l3_timeout'."""
         import dataclasses
 
         from tests.fakes import _DEFAULT_SKILL_RESULT
@@ -115,7 +115,7 @@ class TestTimeoutPath:
 
     @pytest.mark.anyio
     async def test_timeout_writes_state_with_reason_l3_timeout(self, tool_ctx, monkeypatch):
-        """Timeout path writes DispatchRecord with status=failure and reason=l3_timeout."""
+        """Timeout without session/sidecar → DispatchRecord.status=failure, reason=l3_timeout."""
         import dataclasses
 
         from tests.fakes import _DEFAULT_SKILL_RESULT
@@ -239,12 +239,11 @@ class TestTimeoutPath:
     async def test_timed_out_session_never_reaches_parse_l3_result_block(
         self, tool_ctx, monkeypatch
     ):
-        """TIMED_OUT (subtype=timeout) must short-circuit before parse_l3_result_block.
+        """TIMED_OUT (subtype=timeout) must not call parse_l3_result_block.
 
-        The fleet timeout precheck at _api.py:476 is a short-circuit: it returns
-        DispatchCompleted(success=False, reason=FLEET_L3_TIMEOUT) before reaching
-        parse_l3_result_block (and therefore classify_dispatch_outcome). This test
-        verifies that parse_l3_result_block is NEVER called for timeout subtypes.
+        The fix routes all outcomes through classify_dispatch_outcome, which
+        handles timeout by setting parsed_result=None. The parse call is still
+        bypassed for timeout — but now the path goes through the classifier.
         """
         import dataclasses
 
@@ -273,7 +272,8 @@ class TestTimeoutPath:
         result = await _run(tool_ctx)
         assert not parse_calls, (
             "parse_l3_result_block should not be called for timeout subtype "
-            f"(timeout precheck should short-circuit). Got {len(parse_calls)} calls."
+            "(should go through classifier with parsed_result=None). "
+            f"Got {len(parse_calls)} calls."
         )
         assert result["success"] is False
         assert result["reason"] == "fleet_l3_timeout"

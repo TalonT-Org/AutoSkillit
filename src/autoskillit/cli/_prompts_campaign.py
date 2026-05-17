@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import json
+from typing import TYPE_CHECKING, Any
 
 from autoskillit.cli._prompts import _ingredient_table_display_instruction, _read_full_sous_chef
 from autoskillit.core import ROUTING_AUTHORITY_CLAUSE, RetryReason
@@ -109,6 +110,7 @@ def _build_fleet_campaign_prompt(
     resume_kill_reason: str = "",
     ingredients_table: str | None = None,
     prior_dispatch_id: str = "",
+    resume_checkpoint: dict[str, Any] | None = None,
 ) -> str:
     """Build the system prompt for an L3 campaign dispatcher headless session.
 
@@ -183,6 +185,12 @@ dispatch name NOT listed above.
             if resume_session_id
             else ""
         )
+        _resume_checkpoint_line = (
+            f" and pass resume_checkpoint={json.dumps(resume_checkpoint)} to dispatch_food_truck"
+            " to restore completed_items context from the prior session"
+            if resume_checkpoint
+            else ""
+        )
         _prior_dispatch_id_line = (
             f'and pass prior_dispatch_id="{prior_dispatch_id}" to dispatch_food_truck'
             if prior_dispatch_id
@@ -195,7 +203,7 @@ dispatch name NOT listed above.
         _reason_guidance = _resume_reason_guidance(resume_kill_reason)
         _reenter_clause = (
             f" issue_urls=<remaining> and allow_reentry=true as ingredient overrides"
-            f"{_resume_session_clause}{_prior_dispatch_id_clause}"
+            f"{_resume_session_clause}{_prior_dispatch_id_clause}{_resume_checkpoint_line}"
         )
         resumable_section = f"""\
 ## RESUMABLE DISPATCH: {resumable_dispatch_name}

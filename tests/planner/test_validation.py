@@ -558,10 +558,9 @@ def test_check_dep_id_format_rejects_malformed(bad_dep, reason, tmp_path: Path) 
         "P1-A1-WP2": {"id": "P1-A1-WP2", "depends_on": []},
     }
     findings = _check_dep_id_format(wp_results)
-    assert any(f["severity"] == "error" for f in findings), (
+    assert any(f["severity"] == "error" and bad_dep in f["message"] for f in findings), (
         f"Expected error for malformed dep {bad_dep!r}: {reason}"
     )
-    assert any(bad_dep in f["message"] for f in findings if f["severity"] == "error")
 
 
 def test_validate_plan_warns_on_non_wp_result_file_in_work_packages_dir(tmp_path: Path) -> None:

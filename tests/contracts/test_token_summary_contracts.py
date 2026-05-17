@@ -143,6 +143,51 @@ def test_flush_to_hook_cross_seam(tmp_path):
     assert entry["output_tokens"] == 200
 
 
+# ── Step 1d-alias: Bridge contract: _V1_TOKEN_FIELD_ALIASES structural correctness ──
+
+
+def test_v1_alias_map_structural_correctness():
+    """Bridge contract: _V1_TOKEN_FIELD_ALIASES must map exactly 2 old names to canonical names.
+
+    Structural invariants:
+    - Exactly 2 entries (one per renamed cache field).
+    - Every value is a canonical name in TOKEN_USAGE_FILE_KEYS.
+    - No key appears in TOKEN_USAGE_FILE_KEYS (old names are excluded).
+    """
+    from autoskillit.hooks._hook_settings import (
+        _V1_TOKEN_FIELD_ALIASES,
+        TOKEN_USAGE_FILE_KEYS,
+    )
+
+    assert len(_V1_TOKEN_FIELD_ALIASES) == 2, (
+        f"Expected exactly 2 alias entries, got {len(_V1_TOKEN_FIELD_ALIASES)}"
+    )
+    for old_name, canonical_name in _V1_TOKEN_FIELD_ALIASES.items():
+        assert isinstance(old_name, str) and old_name, (
+            f"Alias key must be non-empty str: {old_name!r}"
+        )
+        assert isinstance(canonical_name, str) and canonical_name, (
+            f"Alias value must be non-empty str: {canonical_name!r}"
+        )
+        assert canonical_name in TOKEN_USAGE_FILE_KEYS, (
+            f"Alias value {canonical_name!r} not in TOKEN_USAGE_FILE_KEYS"
+        )
+        assert old_name not in TOKEN_USAGE_FILE_KEYS, (
+            f"Alias key {old_name!r} must not be in TOKEN_USAGE_FILE_KEYS "
+            "(old name leaked into canonical set)"
+        )
+
+
+def test_v1_alias_map_covers_known_legacy_keys():
+    """Content-pinning: alias map must contain the exact known v1 -> v2 mappings."""
+    from autoskillit.hooks._hook_settings import _V1_TOKEN_FIELD_ALIASES
+
+    assert _V1_TOKEN_FIELD_ALIASES == {
+        "cache_creation_input_tokens": "cache_write_tokens",
+        "cache_read_input_tokens": "cache_read_tokens",
+    }
+
+
 # ── Step 1d: patch_pr_token_summary accepts timeout ──
 
 

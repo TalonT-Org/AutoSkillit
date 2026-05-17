@@ -868,66 +868,62 @@ def test_finalize_wp_manifest_upper_bound_violation_warns_not_fails(tmp_path: Pa
     assert "manifest_path" in result
 
 
-# ---------------------------------------------------------------------------
-# Sentinel isolation tests
-# ---------------------------------------------------------------------------
+def test_expand_assignments_result_dir_points_to_sentinel_subdir(tmp_path):
+    """expand_assignments result_dir MUST point to assign_sentinels/ subdirectory."""
+    from autoskillit.planner import expand_assignments
 
-
-@pytest.mark.parametrize(
-    "expand_fn,sentinel_subdir",
-    [
-        ("expand_assignments", "assign_sentinels"),
-        ("expand_wps", "wp_sentinels"),
-    ],
-)
-def test_all_tiers_result_dir_points_to_sentinel_subdir(expand_fn, sentinel_subdir, tmp_path):
-    """Every tier's manifest result_dir MUST point to an isolated sentinel subdirectory."""
-    from autoskillit.planner import expand_assignments, expand_wps
-
-    if expand_fn == "expand_assignments":
-        refined = {
-            "phases": [
-                {
-                    "id": "P1",
-                    "name": "Phase 1",
-                    "assignments_preview": [
-                        {"id": "P1-A1", "name": "Assignment 1"},
-                    ],
-                }
-            ],
-            "task": "test task",
-        }
-        refined_path = tmp_path / "refined_plan.json"
-        refined_path.write_text(json.dumps(refined))
-        result = expand_assignments(str(refined_path), str(tmp_path))
-    else:
-        refined = {
-            "assignments": [
-                {
-                    "id": "P1-A1",
-                    "name": "Assignment 1",
-                    "phase_id": "P1",
-                    "phase_name": "Phase 1",
-                    "goal": "test",
-                    "technical_approach": "test",
-                    "proposed_work_packages": [
-                        {
-                            "id_suffix": "WP1",
-                            "name": "WP 1",
-                            "scope": "core",
-                            "estimated_files": ["f.py"],
-                        }
-                    ],
-                }
-            ],
-            "task": "test task",
-        }
-        refined_path = tmp_path / "refined_assignments.json"
-        refined_path.write_text(json.dumps(refined))
-        result = expand_wps(str(refined_path), str(tmp_path))
+    refined = {
+        "phases": [
+            {
+                "id": "P1",
+                "name": "Phase 1",
+                "assignments_preview": [
+                    {"id": "P1-A1", "name": "Assignment 1"},
+                ],
+            }
+        ],
+        "task": "test task",
+    }
+    refined_path = tmp_path / "refined_plan.json"
+    refined_path.write_text(json.dumps(refined))
+    result = expand_assignments(str(refined_path), str(tmp_path))
 
     manifest = json.loads(Path(result["manifest_path"]).read_text())
-    assert Path(manifest["result_dir"]).name == sentinel_subdir
+    assert Path(manifest["result_dir"]).name == "assign_sentinels"
+    assert Path(manifest["result_dir"]).is_dir()
+
+
+def test_expand_wps_result_dir_points_to_sentinel_subdir(tmp_path):
+    """expand_wps result_dir MUST point to wp_sentinels/ subdirectory."""
+    from autoskillit.planner import expand_wps
+
+    refined = {
+        "assignments": [
+            {
+                "id": "P1-A1",
+                "name": "Assignment 1",
+                "phase_id": "P1",
+                "phase_name": "Phase 1",
+                "goal": "test",
+                "technical_approach": "test",
+                "proposed_work_packages": [
+                    {
+                        "id_suffix": "WP1",
+                        "name": "WP 1",
+                        "scope": "core",
+                        "estimated_files": ["f.py"],
+                    }
+                ],
+            }
+        ],
+        "task": "test task",
+    }
+    refined_path = tmp_path / "refined_assignments.json"
+    refined_path.write_text(json.dumps(refined))
+    result = expand_wps(str(refined_path), str(tmp_path))
+
+    manifest = json.loads(Path(result["manifest_path"]).read_text())
+    assert Path(manifest["result_dir"]).name == "wp_sentinels"
     assert Path(manifest["result_dir"]).is_dir()
 
 
@@ -947,5 +943,5 @@ def test_build_phase_assignment_manifest_result_dir_isolated(tmp_path):
     result = build_phase_assignment_manifest(str(phases_dir), str(output_dir))
 
     manifest = json.loads(Path(result["manifest_path"]).read_text())
-    assert manifest["result_dir"].endswith("assign_sentinels")
+    assert Path(manifest["result_dir"]).name == "assign_sentinels"
     assert (output_dir / "assign_sentinels").is_dir()

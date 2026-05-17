@@ -50,7 +50,7 @@ skills:
     - name: is_fixable
       type: string
     expected_output_patterns:
-    - "diagnosis_path\\s*="
+    - "diagnosis_path\\s*=\\s*(?:/.+)?"
     - "failure_subtype\\s*=\\s*(flaky|timing_race|deterministic|fixture|import|env|unknown)"
     pattern_examples:
     - "diagnosis_path = /tmp/diagnosis.md\nfailure_type = test\nfailure_subtype = deterministic\nis_fixable = true\n%%ORDER_UP%%"

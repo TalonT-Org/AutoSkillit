@@ -57,6 +57,12 @@ class CanonicalTokenUsage:
         if other is None:
             return base
 
+        if base.provider != other.provider:
+            raise ValueError(
+                f"Cannot merge CanonicalTokenUsage with mismatched providers: "
+                f"{base.provider!r} vs {other.provider!r}"
+            )
+
         def _add_optional(a: int | None, b: int | None) -> int | None:
             if a is None and b is None:
                 return None

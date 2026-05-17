@@ -162,6 +162,28 @@ class TestRawSnapshot:
         assert result.raw["input_tokens"] == 1
 
 
+class TestMergeProviderGuard:
+    def test_merge_raises_on_mismatched_providers(self):
+        a = CanonicalTokenUsage(
+            input_tokens=100,
+            output_tokens=50,
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider="anthropic",
+            raw={},
+        )
+        b = CanonicalTokenUsage(
+            input_tokens=200,
+            output_tokens=80,
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider="codex",
+            raw={},
+        )
+        with pytest.raises(ValueError, match="mismatched providers"):
+            CanonicalTokenUsage.merge(a, b)
+
+
 class TestFrozen:
     def test_cannot_mutate_fields(self):
         usage = CanonicalTokenUsage(

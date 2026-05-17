@@ -107,9 +107,10 @@ def build_phase_assignment_manifest(phases_dir: str, output_dir: str) -> dict[st
             }
         )
 
+    sentinel_dir = _ensure_sentinel_dir(assign_dir, "assign_sentinels")
     manifest = {
         "pass_name": "phase_assignments",
-        "result_dir": str(_ensure_sentinel_dir(assign_dir, "assign_sentinels")),
+        "result_dir": str(sentinel_dir),
         "created_at": datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "items": items,
     }
@@ -282,7 +283,6 @@ def expand_assignments(
     phases = plan.get("phases", [])
     task_file_path: str = str(kwargs.get("task_file_path") or "")
     assign_dir = Path(output_dir) / "assignments"
-    _ensure_sentinel_dir(assign_dir, "assign_sentinels")
 
     items: list[dict[str, object]] = []
     context_paths: list[str] = []
@@ -328,9 +328,10 @@ def expand_assignments(
         context_paths.append(str(ctx_path))
         item_ids.append(phase_id)
 
+    sentinel_dir = _ensure_sentinel_dir(assign_dir, "assign_sentinels")
     manifest = {
         "pass_name": "phase_assignments",
-        "result_dir": str(_ensure_sentinel_dir(assign_dir, "assign_sentinels")),
+        "result_dir": str(sentinel_dir),
         "created_at": datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "items": items,
     }

@@ -62,13 +62,10 @@ def test_guard_suffixes_cover_generated_files():
 
     for entry in GENERATED_FILES:
         if entry.endswith("/"):
-            # Directory prefix: construct a path that contains the directory
-            file_path = "/repo/src/autoskillit/recipes/contracts/some-recipe.yaml"
-            if "diagrams" in entry:
-                file_path = "/repo/src/autoskillit/recipes/diagrams/some-diagram.md"
-            event = {"tool_name": "Write", "tool_input": {"file_path": file_path}}
+            file_path = f"/repo/{entry}generated-file.yaml"
         else:
-            event = {"tool_name": "Write", "tool_input": {"file_path": f"/repo/{entry}"}}
+            file_path = f"/repo/{entry}"
+        event = {"tool_name": "Write", "tool_input": {"file_path": file_path}}
         output = _run_guard(event)
         assert output is not None, f"GENERATED_FILES entry {entry!r} must be denied by the guard"
         assert output["hookSpecificOutput"]["permissionDecision"] == "deny", (

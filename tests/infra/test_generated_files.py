@@ -112,6 +112,7 @@ def test_regen_contracts_is_idempotent(tmp_path):
 
 def test_compile_recipes_is_idempotent(tmp_path):
     """Running compile_recipes twice must not modify any JSON files when content is unchanged."""
+    import shutil
     import sys
 
     sys.path.insert(0, str(REPO_ROOT / "scripts"))
@@ -123,15 +124,15 @@ def test_compile_recipes_is_idempotent(tmp_path):
     yaml_paths = sorted(recipes_dir.rglob("*.yaml"))
     assert yaml_paths, "No recipe YAML files found"
 
-    test_yaml = yaml_paths[0]
+    src_yaml = yaml_paths[0]
+    test_yaml = tmp_path / src_yaml.name
+    shutil.copy2(src_yaml, test_yaml)
     json_path = test_yaml.with_suffix(".json")
 
-    # First compile
     _compile_one(test_yaml)
     assert json_path.exists(), f"JSON not created: {json_path}"
     mtime1 = json_path.stat().st_mtime_ns
 
-    # Second compile
     _compile_one(test_yaml)
     mtime2 = json_path.stat().st_mtime_ns
 

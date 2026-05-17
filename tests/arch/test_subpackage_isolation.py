@@ -757,7 +757,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         at the session launch boundary, bringing the count to 20.
         _type_backend.py adds BackendCapabilities frozen dataclass and CLAUDE_CODE_CAPABILITIES
         constant for backend capability declarations (IL-0), bringing the count to 21.
-        Exempt at 34 files (core/types: 21).
+        _type_token.py adds CanonicalTokenUsage frozen dataclass for provider-agnostic
+        token usage normalization (IL-0), bringing the count to 22.
+        Exempt at 34 files (core/types: 22).
       cli/ — REQ-CNST-003-E5: cli/ retains _terminal_table.py as a re-export shim
         for backward-compatible cli/ imports; canonical implementation lives in
         core/_terminal_table.py. Also contains _terminal.py — the terminal state
@@ -813,7 +815,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "recipe": 31,
         "execution": 18,
         "core": 20,
-        "core/types": 21,
+        "core/types": 22,
         "cli": 20,
         "hooks": 10,
         "pipeline": 12,

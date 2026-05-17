@@ -34,7 +34,10 @@ def _compile_one(yaml_path: Path) -> bool:
     new_content = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
     if json_path.exists():
         existing = json_path.read_text(encoding="utf-8")
-        if existing == new_content:
+        if (
+            existing == new_content
+            and json_path.stat().st_mtime_ns >= yaml_path.stat().st_mtime_ns
+        ):
             return False
     json_path.write_text(new_content, encoding="utf-8")
     return True
@@ -51,7 +54,9 @@ def _is_current(yaml_path: Path) -> bool:
         print(f"WARNING: {yaml_path} has invalid YAML", file=sys.stderr)
         return False
     expected = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
-    return json_path.read_text(encoding="utf-8") == expected
+    if json_path.read_text(encoding="utf-8") != expected:
+        return False
+    return json_path.stat().st_mtime_ns >= yaml_path.stat().st_mtime_ns
 
 
 def main() -> int:

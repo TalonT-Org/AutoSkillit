@@ -30,17 +30,6 @@ src/autoskillit/recipes/examples/*.yaml:
 src/autoskillit/recipes/examples/*.json:
   - recipe/
 
-src/autoskillit/recipes/diagrams/*.md:
-  - recipe/
-
-src/autoskillit/recipes/contracts/*.yaml:
-  - recipe/
-  - contracts/
-
-src/autoskillit/recipes/contracts/*.json:
-  - recipe/
-  - contracts/
-
 src/autoskillit/recipes/experiment-types/*.yaml:
   - recipe/
 

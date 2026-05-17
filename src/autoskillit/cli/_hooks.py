@@ -59,7 +59,6 @@ def sync_hooks_to_settings(settings_path: Path, *, force: bool = False) -> None:
     during install(), claude plugin list may not yet reflect the new installation.
     For all other callers (e.g. _register_all() from autokit init), force=False
     correctly checks plugin status before writing.
-    Each HookDef becomes one entry under its event_type with all its scripts as ordered commands.
     """
     from autoskillit.cli._init_helpers import _is_plugin_installed
     from autoskillit.hook_registry import HOOK_REGISTRY_HASH

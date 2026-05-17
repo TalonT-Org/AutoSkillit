@@ -243,7 +243,8 @@ class TestRunSkillMissingContextLimit:
             f.rule == "run-skill-missing-context-limit" and f.step_name == "resolve_review"
             for f in warnings
         ), (
-            f"Expected run-skill-missing-context-limit warning, got: {[f.to_dict() for f in findings]}"
+            f"Expected run-skill-missing-context-limit warning, got: "
+            f"{[f.to_dict() for f in findings]}"
         )
 
     def test_run_skill_with_on_context_limit_produces_no_warning(self) -> None:

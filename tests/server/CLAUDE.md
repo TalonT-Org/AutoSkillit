@@ -80,6 +80,8 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_tools_run_cmd.py` | Tests for run_cmd and run_python MCP tool handlers |
 | `test_tools_run_cmd_unit.py` | Unit tests for run_cmd: observability, timing, and headless gate enforcement |
 | `test_tools_run_python.py` | Unit tests for run_python: observability and headless gate enforcement |
+| `test_clone_result_exhaustiveness.py` | Structural test enforcing exhaustive CloneResult gate handling in _require_clone_success |
+| `test_subprocess_validation.py` | Tests for _run_subprocess cwd validation (empty, relative, nonexistent paths) |
 | `test_tools_bootstrap.py` | Tests for bootstrap composite MCP tools (bootstrap_clone, claim_and_resolve_issue, create_and_publish_branch) |
 | `test_tools_run_skill_retry.py` | Tests verifying run_skill_retry was removed and run_skill handles all sessions |
 | `test_tools_session_diagnostics.py` | Tests for session diagnostics helpers in tools_github |

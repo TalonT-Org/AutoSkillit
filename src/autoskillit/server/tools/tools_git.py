@@ -325,6 +325,11 @@ async def create_unique_branch(
         tool_ctx = _get_ctx()
         _start = time.monotonic()
 
+        if not cwd or not os.path.isdir(cwd):
+            return json.dumps(
+                {"success": False, "error": f"cwd is not a valid directory: {cwd!r}"}
+            )
+
         if base_branch_name:
             base_name = base_branch_name
         elif not slug:
@@ -387,6 +392,11 @@ async def check_pr_mergeable(
             "autoskillit.check_pr_mergeable",
             extra={"repo": repo},
         )
+
+        if not cwd or not os.path.isdir(cwd):
+            return json.dumps(
+                {"success": False, "error": f"cwd is not a valid directory: {cwd!r}"}
+            )
 
         cmd = ["gh", "pr", "view", str(pr_number), "--json", "mergeable,mergeStateStatus"]
         if repo:
@@ -535,6 +545,9 @@ async def create_and_publish_branch(
         clone_mgr = tool_ctx.clone_mgr
         if clone_mgr is None:
             return json.dumps({"error": "Clone manager not configured"})
+
+        if not work_dir or not os.path.isdir(work_dir):
+            return json.dumps({"error": f"work_dir is not a valid directory: {work_dir!r}"})
 
         _total_start = time.monotonic()
 

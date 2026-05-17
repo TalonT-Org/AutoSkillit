@@ -149,8 +149,7 @@ class TestPipelineVariantInvariants:
         assert guard.action == "route", "guard_pr_url must be a route action step"
         # The guard should route to extract_pr_number on truthy pr_url
         routes_to_extract = any(
-            c.route == "extract_pr_number"
-            for c in (guard.on_result.conditions or [])
+            c.route == "extract_pr_number" for c in (guard.on_result.conditions or [])
         )
         assert routes_to_extract, (
             "guard_pr_url must route to extract_pr_number when pr_url is truthy"

@@ -52,8 +52,7 @@ class TestReviewPrRecipeIntegration:
             c.route == "extract_pr_number" for c in (guard.on_result.conditions or [])
         )
         assert routes_to_extract, (
-            f"{recipe_name}: guard_pr_url must route to extract_pr_number "
-            "when pr_url is truthy"
+            f"{recipe_name}: guard_pr_url must route to extract_pr_number when pr_url is truthy"
         )
 
     def test_review_pr_step_exists_and_is_run_skill(self, recipe: object) -> None:

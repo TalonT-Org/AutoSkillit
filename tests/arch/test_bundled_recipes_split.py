@@ -12,7 +12,7 @@ import pytest
 _TRIPLICATED_TESTS = [
     "test_ci_step_structure",
     "test_re_push_has_explicit_remote_url",
-    "test_compose_pr_routes_to_extract_pr_number",
+    "test_compose_pr_routes_to_guard_pr_url",
     "test_detect_ci_conflict_exists",
     "test_detect_ci_conflict_uses_merge_base",
     "test_detect_ci_conflict_routing",

@@ -109,7 +109,8 @@ class TestBreakCyclesGreedyFas:
         ]
         broken_edges = break_cycles_greedy_fas(output_wps)
         assert len(broken_edges) >= 1
-        topological_sort({wp["id"]: wp for wp in output_wps})
+        result = topological_sort({wp["id"]: wp for wp in output_wps})
+        assert isinstance(result, list)
 
     def test_resolves_chain_cycle(self) -> None:
         output_wps = [
@@ -119,7 +120,8 @@ class TestBreakCyclesGreedyFas:
         ]
         broken_edges = break_cycles_greedy_fas(output_wps)
         assert len(broken_edges) >= 1
-        topological_sort({wp["id"]: wp for wp in output_wps})
+        result = topological_sort({wp["id"]: wp for wp in output_wps})
+        assert isinstance(result, list)
 
     def test_preserves_acyclic_edges(self) -> None:
         output_wps = [

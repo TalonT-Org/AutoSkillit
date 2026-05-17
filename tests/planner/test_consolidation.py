@@ -1033,13 +1033,25 @@ def test_rewrite_deps_breaks_three_node_cycle(tmp_path: Path) -> None:
             ],
         )
 
-    consolidate_wps(refined_wps_path=str(refined_path), planner_dir=str(tmp_path))
+    result = consolidate_wps(refined_wps_path=str(refined_path), planner_dir=str(tmp_path))
 
     consolidated = json.loads((tmp_path / "consolidated_wps.json").read_text())
     output_ids = {wp["id"] for wp in consolidated["work_packages"]}
     assert output_ids == {"P1-A1-WP1", "P1-A2-WP1", "P1-A3-WP1"}
     output_wps_dict = {wp["id"]: wp for wp in consolidated["work_packages"]}
     assert isinstance(topological_sort(output_wps_dict), list)
+
+    assert "cycles_broken" in result
+    assert int(result["cycles_broken"]) >= 1
+
+    edges_path = tmp_path / "broken_cycle_edges.json"
+    assert edges_path.exists()
+    edges_data = json.loads(edges_path.read_text())
+    assert len(edges_data) >= 1
+    assert all(
+        isinstance(e, list) and len(e) == 2 and all(isinstance(s, str) for s in e)
+        for e in edges_data
+    )
 
 
 def test_rewrite_deps_removes_self_references(tmp_path: Path) -> None:

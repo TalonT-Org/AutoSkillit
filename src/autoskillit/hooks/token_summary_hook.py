@@ -224,8 +224,8 @@ def _load_sessions(
                 "model": "",
                 "input_tokens": 0,
                 "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_read_tokens": 0,
                 "elapsed_seconds": 0.0,
                 "invocation_count": 0,
                 "loc_insertions": 0,
@@ -239,8 +239,12 @@ def _load_sessions(
             entry["model"] = _model
         entry["input_tokens"] += data.get("input_tokens", 0)
         entry["output_tokens"] += data.get("output_tokens", 0)
-        entry["cache_creation_input_tokens"] += data.get("cache_creation_input_tokens", 0)
-        entry["cache_read_input_tokens"] += data.get("cache_read_input_tokens", 0)
+        entry["cache_write_tokens"] += data.get(
+            "cache_write_tokens", data.get("cache_creation_input_tokens", 0)
+        )
+        entry["cache_read_tokens"] += data.get(
+            "cache_read_tokens", data.get("cache_read_input_tokens", 0)
+        )
         _raw_timing = data.get("timing_seconds")
         entry["elapsed_seconds"] += float(_raw_timing) if _raw_timing is not None else 0.0
         entry["invocation_count"] += 1
@@ -282,10 +286,10 @@ def _format_table(aggregated: dict[str, dict[str, Any]]) -> str:
         count = entry.get("invocation_count", 1)
         inp = entry["input_tokens"]
         out = entry["output_tokens"]
-        cache_rd = entry["cache_read_input_tokens"]
+        cache_rd = entry.get("cache_read_tokens", 0)
         peak_ctx = entry.get("peak_context", 0)
         turns = entry.get("turn_count", 0)
-        cache_wr = entry["cache_creation_input_tokens"]
+        cache_wr = entry.get("cache_write_tokens", 0)
         elapsed = entry["elapsed_seconds"]
 
         lines.append(
@@ -337,8 +341,8 @@ def _format_efficiency_table(aggregated: dict[str, dict[str, Any]]) -> str:
     total_loc = total_cr = total_cw = total_out = 0
     for entry in aggregated.values():
         loc = entry.get("loc_insertions", 0) + entry.get("loc_deletions", 0)
-        cr = entry.get("cache_read_input_tokens", 0)
-        cw = entry.get("cache_creation_input_tokens", 0)
+        cr = entry.get("cache_read_tokens", 0)
+        cw = entry.get("cache_write_tokens", 0)
         out = entry.get("output_tokens", 0)
         lines.append(
             f"| {entry['step_name']} | {loc}"
@@ -377,16 +381,16 @@ def _format_model_table(aggregated: dict[str, dict[str, Any]]) -> str:
                 "_steps": set(),
                 "input_tokens": 0,
                 "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_read_tokens": 0,
                 "elapsed_seconds": 0.0,
             }
         md = model_data[model]
         md["_steps"].add(entry.get("step_name", ""))
         md["input_tokens"] += entry.get("input_tokens", 0)
         md["output_tokens"] += entry.get("output_tokens", 0)
-        md["cache_creation_input_tokens"] += entry.get("cache_creation_input_tokens", 0)
-        md["cache_read_input_tokens"] += entry.get("cache_read_input_tokens", 0)
+        md["cache_write_tokens"] += entry.get("cache_write_tokens", 0)
+        md["cache_read_tokens"] += entry.get("cache_read_tokens", 0)
         md["elapsed_seconds"] += entry.get("elapsed_seconds", 0.0)
 
     if not model_data:
@@ -403,8 +407,8 @@ def _format_model_table(aggregated: dict[str, dict[str, Any]]) -> str:
         lines.append(
             f"| {md['model']} | {step_count}"
             f" | {_humanize(md['input_tokens'])} | {_humanize(md['output_tokens'])}"
-            f" | {_humanize(md['cache_read_input_tokens'])}"
-            f" | {_humanize(md['cache_creation_input_tokens'])}"
+            f" | {_humanize(md['cache_read_tokens'])}"
+            f" | {_humanize(md['cache_write_tokens'])}"
             f" | {_fmt_duration(md['elapsed_seconds'])} |"
         )
     return "\n".join(lines)

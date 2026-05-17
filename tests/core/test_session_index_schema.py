@@ -25,3 +25,35 @@ class TestSessionIndexEntryCompleteness:
         declared = set(SessionIndexEntry.__annotations__)
         missing = _REQUIRED_INDEX_FIELDS - declared
         assert not missing, f"SessionIndexEntry missing fields: {missing}"
+
+    def test_canonical_cache_fields(self):
+        """SessionIndexEntry must use canonical cache field names, not v1 API names."""
+        from autoskillit.core.types._type_results import SessionIndexEntry
+
+        declared = set(SessionIndexEntry.__annotations__)
+        assert "cache_write_tokens" in declared
+        assert "cache_read_tokens" in declared
+        assert "cache_creation_input_tokens" not in declared
+        assert "cache_read_input_tokens" not in declared
+
+
+class TestTokenUsageFileEntrySchema:
+    """TokenUsageFileEntry must use canonical cache fields and include schema_version."""
+
+    def test_canonical_cache_fields(self):
+        from autoskillit.core.types._type_results import TokenUsageFileEntry
+
+        declared = set(TokenUsageFileEntry.__annotations__)
+        assert "cache_write_tokens" in declared
+        assert "cache_read_tokens" in declared
+        assert "cache_creation_input_tokens" not in declared
+        assert "cache_read_input_tokens" not in declared
+
+    def test_has_schema_version(self):
+        from typing import get_type_hints
+
+        from autoskillit.core.types._type_results import TokenUsageFileEntry
+
+        hints = get_type_hints(TokenUsageFileEntry)
+        assert "schema_version" in hints
+        assert hints["schema_version"] is int

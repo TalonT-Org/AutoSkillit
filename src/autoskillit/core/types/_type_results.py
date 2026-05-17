@@ -364,19 +364,11 @@ class ModelTotalEntry(TypedDict):
 
 
 class TokenUsageFileEntry(TypedDict):
-    """Schema contract for token_usage.json written by flush_session_log.
-
-    v1 keys (cache_creation_input_tokens, cache_read_input_tokens) are retained
-    for backward compatibility with existing on-disk session files.
-    v2 canonical keys (cache_write_tokens, cache_read_tokens) are the new format
-    read with v1 fallback by load_from_log_dir and _load_sessions.
-    """
+    """Schema contract for token_usage.json written by flush_session_log."""
 
     session_label: str
     input_tokens: int
     output_tokens: int
-    cache_creation_input_tokens: int
-    cache_read_input_tokens: int
     cache_write_tokens: int
     cache_read_tokens: int
     peak_context: int
@@ -389,6 +381,7 @@ class TokenUsageFileEntry(TypedDict):
     model_identifier: str
     dispatch_id: str
     campaign_id: str
+    schema_version: int
 
 
 class SessionIndexEntry(TypedDict):
@@ -415,8 +408,8 @@ class SessionIndexEntry(TypedDict):
     step_name: str
     input_tokens: int
     output_tokens: int
-    cache_creation_input_tokens: int
-    cache_read_input_tokens: int
+    cache_write_tokens: int
+    cache_read_tokens: int
     write_call_count: int
     tracked_comm: str | None
     tracked_comm_drift: bool

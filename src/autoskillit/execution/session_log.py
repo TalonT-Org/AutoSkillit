@@ -384,14 +384,16 @@ def flush_session_log(
     # Write per-session telemetry files; gate on data presence, not session identity
     label = _resolve_session_label(step_name, dispatch_id)
     if token_usage is not None:
-        _cache_write = token_usage.get("cache_creation_input_tokens", 0)
-        _cache_read = token_usage.get("cache_read_input_tokens", 0)
+        _cache_write = token_usage.get(
+            "cache_write_tokens", token_usage.get("cache_creation_input_tokens", 0)
+        )
+        _cache_read = token_usage.get(
+            "cache_read_tokens", token_usage.get("cache_read_input_tokens", 0)
+        )
         tu_data = {
             "session_label": label,
             "input_tokens": token_usage.get("input_tokens", 0),
             "output_tokens": token_usage.get("output_tokens", 0),
-            "cache_creation_input_tokens": _cache_write,
-            "cache_read_input_tokens": _cache_read,
             "cache_write_tokens": _cache_write,
             "cache_read_tokens": _cache_read,
             "timing_seconds": timing_seconds if timing_seconds is not None else 0.0,
@@ -404,6 +406,7 @@ def flush_session_log(
             "model_identifier": model_identifier or _primary_model_identifier(token_usage),
             "dispatch_id": dispatch_id,
             "campaign_id": campaign_id,
+            "schema_version": 2,
         }
         atomic_write(session_dir / "token_usage.json", _fast_dumps(tu_data))
 

@@ -6,7 +6,7 @@ import pytest
 
 from autoskillit.core import Severity
 from autoskillit.recipe.registry import run_semantic_rules
-from autoskillit.recipe.schema import Recipe, RecipeStep
+from autoskillit.recipe.schema import Recipe, RecipeStep, StepResultCondition, StepResultRoute
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -19,17 +19,6 @@ def _make_recipe(steps: dict[str, RecipeStep]) -> Recipe:
         version="0.2.0",
         kitchen_rules=["Use wait_for_ci."],
         steps=steps,
-    )
-
-
-def _make_workflow(steps: dict[str, dict]) -> Recipe:
-    """Helper that accepts YAML-style step dicts and constructs a Recipe."""
-    return Recipe(
-        name="test-enqueue-gate",
-        description="Test recipe for enqueue-missing-ci-gate rule.",
-        version="0.2.0",
-        kitchen_rules=["Use wait_for_ci."],
-        steps={},
     )
 
 
@@ -84,9 +73,15 @@ def test_enqueue_with_ci_gate_on_all_paths_passes() -> None:
         "enqueue_pr": RecipeStep(tool="enqueue_pr", with_args={"pr_number": "42"}),
     }
     steps["start"].on_success = "route_decision"
-    steps["route_decision"].on_result = type(steps["route_decision"]).on_result
-    # Both branches converge on wait_for_ci before enqueue_pr
-    steps["route_decision"].on_success = None
+    # Both branches route through a wait_for_ci step before reaching enqueue_pr
+    steps["route_decision"].on_result = StepResultRoute(
+        conditions=[
+            StepResultCondition(route="wait_ci_a", when="${{ result.value }} == branch_a"),
+            StepResultCondition(route="wait_ci_b"),
+        ]
+    )
+    steps["wait_ci_a"].on_success = "enqueue_pr"
+    steps["wait_ci_b"].on_success = "enqueue_pr"
 
     recipe = _make_recipe(steps)
     findings = run_semantic_rules(recipe)

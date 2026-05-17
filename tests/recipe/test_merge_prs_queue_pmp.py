@@ -141,9 +141,9 @@ def test_merge_prs_get_first_pr_number_captures_pr_number(pmp_recipe) -> None:
 
 
 def test_merge_prs_get_first_pr_number_routes_to_enqueue(pmp_recipe) -> None:
-    """get_first_pr_number.on_success must route to enqueue_current_pr."""
+    """get_first_pr_number.on_success must route to get_current_pr_branch (CI gate added)."""
     step = pmp_recipe.steps["get_first_pr_number"]
-    assert step.on_success == "enqueue_current_pr"
+    assert step.on_success == "get_current_pr_branch"
 
 
 # ---------------------------------------------------------------------------

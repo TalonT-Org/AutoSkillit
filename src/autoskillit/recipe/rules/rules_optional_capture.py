@@ -58,7 +58,10 @@ def _has_guard_for_key(
             for cond in step.on_result.conditions:
                 if cond.when and f"context.{captured_key}" in cond.when:
                     return True
-            # Route steps with conditions terminate the chain (they don't use on_success)
+            # Guard not found here — continue BFS through all condition routes
+            for cond in step.on_result.conditions:
+                if cond.route:
+                    to_visit.append(cond.route)
             continue
 
         if step.on_result and step.on_result.conditions:

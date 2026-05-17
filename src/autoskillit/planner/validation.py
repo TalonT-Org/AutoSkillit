@@ -10,13 +10,13 @@ and are never consumed here.
 from __future__ import annotations
 
 import json
-from collections import deque
 from pathlib import Path
 from typing import Any, NamedTuple
 
 import regex as re
 
 from autoskillit.core import get_logger, read_versioned_json, write_versioned_json
+from autoskillit.planner._dag_ops import find_sccs, topological_sort
 from autoskillit.planner.schema import (
     ASSIGN_RESULT_FILE_RE,
     DELIVERABLE_BOUNDS,
@@ -216,33 +216,41 @@ def _check_dep_references(wp_results: dict[str, dict]) -> list[ValidationFinding
                         "check": "dep_references",
                     }
                 )
+            if dep == wp_id:
+                findings.append(
+                    {
+                        "message": f"WP {wp_id} depends on itself",
+                        "severity": "error",
+                        "check": "dep_references",
+                    }
+                )
     return findings
 
 
 def _check_dag_acyclic(wp_results: dict[str, dict]) -> list[ValidationFinding]:
-    in_degree: dict[str, int] = {wp_id: 0 for wp_id in wp_results}
     adjacency: dict[str, list[str]] = {wp_id: [] for wp_id in wp_results}
     for wp_id, wp in wp_results.items():
         for dep in wp.get("depends_on", []):
             if dep in wp_results:
                 adjacency[dep].append(wp_id)
-                in_degree[wp_id] += 1
 
-    queue: deque[str] = deque(k for k, v in in_degree.items() if v == 0)
-    sorted_nodes: list[str] = []
-    while queue:
-        node = queue.popleft()
-        sorted_nodes.append(node)
-        for neighbor in adjacency[node]:
-            in_degree[neighbor] -= 1
-            if in_degree[neighbor] == 0:
-                queue.append(neighbor)
-
-    if len(sorted_nodes) < len(wp_results):
-        cycle_nodes = [n for n in wp_results if n not in set(sorted_nodes)]
+    try:
+        topological_sort(wp_results)
+    except RuntimeError as exc:
+        logger.warning("topological_sort raised during DAG check: %s", exc)
+        sccs = find_sccs(adjacency)
+        if not sccs:
+            return [
+                {
+                    "message": f"Cycle detected among WPs (SCC analysis inconclusive): {exc}",
+                    "severity": "error",
+                    "check": "dag_acyclic",
+                }
+            ]
+        cycle_nodes = sorted(set(node for scc in sccs for node in scc))
 
         if len(cycle_nodes) == 2:
-            a, b = sorted(cycle_nodes)
+            a, b = cycle_nodes
             a_deps = set(wp_results.get(a, {}).get("depends_on", []))
             b_deps = set(wp_results.get(b, {}).get("depends_on", []))
             if b in a_deps and a in b_deps:
@@ -256,10 +264,6 @@ def _check_dag_acyclic(wp_results: dict[str, dict]) -> list[ValidationFinding]:
                         "cycle_edges": [[a, b], [b, a]],
                     }
                 ]
-        # 3+ node or non-mutual 2-node cycles omit cycle_edges — key absence is the
-        # contract signal for planner-refine to escalate rather than auto-fix (see
-        # planner-refine SKILL.md: "If finding contains cycle_size: 3 or higher (or no
-        # cycle_edges): Escalate as CRITICAL").
         return [
             {
                 "message": f"Cycle detected among WPs: {', '.join(sorted(cycle_nodes))}",

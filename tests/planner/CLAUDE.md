@@ -10,6 +10,7 @@ Planner manifest, validation, compilation, and merge tests.
 | `conftest.py` | Planner test helpers |
 | `test_compiler.py` | Tests for compile_plan callable |
 | `test_consolidation.py` | Tests for autoskillit.planner.consolidation.consolidate_wps |
+| `test_dag_ops.py` | Tests for autoskillit.planner._dag_ops: topological_sort, find_sccs, break_cycles_greedy_fas, filter_self_references |
 | `test_elaborate_wps_contract.py` | Contract conformance tests for planner-elaborate-wps skill registration |
 | `test_manifests.py` | Planner manifests tests |
 | `test_merge.py` | Planner merge tests |

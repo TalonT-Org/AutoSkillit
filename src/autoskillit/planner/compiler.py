@@ -7,11 +7,11 @@ docstring for the combined-document exclusion rationale.
 from __future__ import annotations
 
 import json
-from collections import deque
 from pathlib import Path
 from typing import Any
 
 from autoskillit.core import atomic_write, get_logger, write_versioned_json
+from autoskillit.planner._dag_ops import topological_sort
 from autoskillit.planner.manifests import _derive_label
 from autoskillit.planner.validation import (
     _load_assignment_results,
@@ -20,31 +20,6 @@ from autoskillit.planner.validation import (
 )
 
 logger = get_logger(__name__)
-
-
-def _topological_sort(wp_results: dict[str, dict]) -> list[str]:
-    in_degree: dict[str, int] = {wp_id: 0 for wp_id in wp_results}
-    adjacency: dict[str, list[str]] = {wp_id: [] for wp_id in wp_results}
-    for wp_id, wp in wp_results.items():
-        for dep in wp.get("depends_on", []):
-            if dep in wp_results:
-                adjacency[dep].append(wp_id)
-                in_degree[wp_id] += 1
-
-    queue: deque[str] = deque(sorted(k for k, v in in_degree.items() if v == 0))
-    order: list[str] = []
-    while queue:
-        node = queue.popleft()
-        order.append(node)
-        for neighbor in sorted(adjacency[node]):
-            in_degree[neighbor] -= 1
-            if in_degree[neighbor] == 0:
-                queue.append(neighbor)
-
-    if len(order) < len(wp_results):
-        cycle_nodes = [n for n in wp_results if n not in set(order)]
-        raise RuntimeError(f"Cycle detected among WPs: {', '.join(sorted(cycle_nodes))}")
-    return order
 
 
 def _inject_forward_deps(wp_results: dict[str, dict], dep_graph: dict) -> None:
@@ -166,7 +141,7 @@ def compile_plan(
                 continue
             assessment_by_wp_id[wp_id] = entry
 
-    execution_order = _topological_sort(wp_results)
+    execution_order = topological_sort(wp_results)
     phase_lookup = _build_phase_lookup(phase_results)
     assign_lookup = _build_assignment_lookup(assignment_results)
 

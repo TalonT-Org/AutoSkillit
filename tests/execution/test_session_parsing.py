@@ -270,6 +270,27 @@ class TestExtractTokenUsage:
         assert breakdown["cache_write_tokens"] == 0
         assert breakdown["cache_read_tokens"] == 0
 
+    def test_extracts_from_canonical_named_input(self):
+        """extract_token_usage handles NDJSON with canonical field names."""
+        stdout = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "model": "claude-sonnet-4-6",
+                    "usage": {
+                        "input_tokens": 100,
+                        "output_tokens": 50,
+                        "cache_write_tokens": 15,
+                        "cache_read_tokens": 8,
+                    },
+                },
+            }
+        )
+        result = extract_token_usage(stdout)
+        assert result is not None
+        assert result["cache_write_tokens"] == 15
+        assert result["cache_read_tokens"] == 8
+
     def test_ignores_non_assistant_non_result_records(self):
         """user and system records are skipped."""
         user_line = json.dumps({"type": "user", "message": {"content": "do something"}})
@@ -855,3 +876,16 @@ def test_skill_result_to_json_infra_exit_category_always_present():
     data = json.loads(sr.to_json())
     assert "infra_exit_category" in data
     assert data["infra_exit_category"] == ""
+
+
+def test_assistant_ndjson_uses_canonical_keys():
+    """_assistant_ndjson fixture produces JSON with canonical key names."""
+    raw = _assistant_ndjson(cache_create=10, cache_read=5)
+    obj = json.loads(raw)
+    usage = obj["message"]["usage"]
+    assert "cache_write_tokens" in usage
+    assert "cache_read_tokens" in usage
+    assert "cache_creation_input_tokens" not in usage
+    assert "cache_read_input_tokens" not in usage
+    assert usage["cache_write_tokens"] == 10
+    assert usage["cache_read_tokens"] == 5

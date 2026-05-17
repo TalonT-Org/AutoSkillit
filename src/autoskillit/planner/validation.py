@@ -46,6 +46,8 @@ _NEGATION_PREFIX_RE: re.Pattern[str] = re.compile(
     re.IGNORECASE,
 )
 
+_WP_DEP_RE: re.Pattern[str] = re.compile(r"^P\d+-A\d+-WP\d+$")
+
 
 class DiscoveryResult(NamedTuple):
     accepted: list[Path]
@@ -222,6 +224,22 @@ def _check_dep_references(wp_results: dict[str, dict]) -> list[ValidationFinding
                         "message": f"WP {wp_id} depends on itself",
                         "severity": "error",
                         "check": "dep_references",
+                    }
+                )
+    return findings
+
+
+def _check_dep_id_format(wp_results: dict[str, dict]) -> list[ValidationFinding]:
+    findings: list[ValidationFinding] = []
+    for wp_id, wp in wp_results.items():
+        for dep in wp.get("depends_on", []):
+            if not _WP_DEP_RE.match(dep):
+                findings.append(
+                    {
+                        "severity": "error",
+                        "check": "dep_id_format",
+                        "message": f"WP {wp_id} depends_on '{dep}' which does not match "
+                        f"WP ID format {_WP_DEP_RE.pattern}",
                     }
                 )
     return findings
@@ -406,6 +424,7 @@ def validate_plan(output_dir: str) -> dict[str, str]:
         _check_assignment_completeness(assignment_results, wp_results, absorption_registry)
     )
     all_findings.extend(_check_dep_references(wp_results))
+    all_findings.extend(_check_dep_id_format(wp_results))
     all_findings.extend(_check_dag_acyclic(wp_results))
     all_findings.extend(_check_sizing_bounds(wp_results))
     all_findings.extend(_check_duplicate_deliverables(wp_results))

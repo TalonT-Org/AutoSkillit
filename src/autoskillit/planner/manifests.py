@@ -37,6 +37,12 @@ class _PhaseBucket(TypedDict):
     wp_count: int
 
 
+def _ensure_sentinel_dir(tier_dir: Path, sentinel_name: str) -> Path:
+    sentinel_dir = tier_dir / sentinel_name
+    sentinel_dir.mkdir(parents=True, exist_ok=True)
+    return sentinel_dir
+
+
 def create_run_dir(temp_dir: str) -> RunDirResult:
     if not temp_dir:
         raise ValueError("temp_dir must be a non-empty path")
@@ -101,9 +107,10 @@ def build_phase_assignment_manifest(phases_dir: str, output_dir: str) -> dict[st
             }
         )
 
+    sentinel_dir = _ensure_sentinel_dir(assign_dir, "assign_sentinels")
     manifest = {
         "pass_name": "phase_assignments",
-        "result_dir": str(assign_dir),
+        "result_dir": str(sentinel_dir),
         "created_at": datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "items": items,
     }
@@ -189,8 +196,7 @@ def build_phase_wp_manifest(
             }
         )
 
-    sentinel_dir = wp_dir / "wp_sentinels"
-    sentinel_dir.mkdir(parents=True, exist_ok=True)
+    sentinel_dir = _ensure_sentinel_dir(wp_dir, "wp_sentinels")
 
     manifest = {
         "pass_name": "phase_work_packages",
@@ -277,7 +283,6 @@ def expand_assignments(
     phases = plan.get("phases", [])
     task_file_path: str = str(kwargs.get("task_file_path") or "")
     assign_dir = Path(output_dir) / "assignments"
-    assign_dir.mkdir(parents=True, exist_ok=True)
 
     items: list[dict[str, object]] = []
     context_paths: list[str] = []
@@ -323,9 +328,10 @@ def expand_assignments(
         context_paths.append(str(ctx_path))
         item_ids.append(phase_id)
 
+    sentinel_dir = _ensure_sentinel_dir(assign_dir, "assign_sentinels")
     manifest = {
         "pass_name": "phase_assignments",
-        "result_dir": str(assign_dir),
+        "result_dir": str(sentinel_dir),
         "created_at": datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "items": items,
     }
@@ -416,8 +422,7 @@ def expand_wps(refined_assignments_path: str, output_dir: str, **kwargs: object)
         context_paths.append(str(ctx_path))
         item_ids.append(str(phase_id))
 
-    sentinel_dir = wp_dir / "wp_sentinels"
-    sentinel_dir.mkdir(parents=True, exist_ok=True)
+    sentinel_dir = _ensure_sentinel_dir(wp_dir, "wp_sentinels")
     manifest = {
         "pass_name": "phase_work_packages",
         "result_dir": str(sentinel_dir),

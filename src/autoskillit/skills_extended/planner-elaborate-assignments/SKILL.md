@@ -154,13 +154,13 @@ After writing all assignment files, update `$2/work_packages/wp_index.json` by a
 for all **successful** results only (skip stubs). Read the current index, append, and write back
 atomically. L1 is the sole writer for this phase's assignments — no concurrent writes.
 
-Finally, write the phase sentinel file to `$2/assignments/{phase_id}_result.json`:
+Finally, write the phase sentinel file to `$2/assignments/assign_sentinels/{phase_id}_result.json`:
 ```json
 {"id": "<phase_id>", "status": "complete", "assignment_count": N, "failed_count": M}
 ```
 
-> The sentinel path MUST be `$2/assignments/{phase_id}_result.json`. The manifest's
-> `result_dir` points to `$2/assignments/`, and this path is used to detect phase
+> The sentinel path MUST be `$2/assignments/assign_sentinels/{phase_id}_result.json`. The manifest's
+> `result_dir` points to `$2/assignments/assign_sentinels/`, and this path is used to detect phase
 > completion. Verify the path before writing.
 
 ### Step 7: Emit output token

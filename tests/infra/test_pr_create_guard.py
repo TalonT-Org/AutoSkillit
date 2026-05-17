@@ -23,6 +23,15 @@ _BASH_TOOL_NAME = "Bash"
 _HOOK_CONFIG_RELPATH = ".autoskillit/temp/.hook_config.json"
 
 
+def _make_clean_env(skill_name: str | None) -> dict[str, str]:
+    env = {k: v for k, v in os.environ.items()}
+    if skill_name is not None:
+        env["AUTOSKILLIT_SKILL_NAME"] = skill_name
+    else:
+        env.pop("AUTOSKILLIT_SKILL_NAME", None)
+    return env
+
+
 def _run_guard(
     cmd: str,
     kitchen_open: bool,
@@ -45,11 +54,7 @@ def _run_guard(
         hook_cfg.parent.mkdir(parents=True, exist_ok=True)
         hook_cfg.write_text(json.dumps({"kitchen": "open"}))
 
-    clean_env: dict[str, str] = {k: v for k, v in os.environ.items()}
-    if skill_name is not None:
-        clean_env["AUTOSKILLIT_SKILL_NAME"] = skill_name
-    else:
-        clean_env.pop("AUTOSKILLIT_SKILL_NAME", None)
+    clean_env = _make_clean_env(skill_name)
 
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
@@ -86,11 +91,7 @@ def _run_bash_guard(
         hook_cfg.parent.mkdir(parents=True, exist_ok=True)
         hook_cfg.write_text(json.dumps({"kitchen": "open"}))
 
-    clean_env: dict[str, str] = {k: v for k, v in os.environ.items()}
-    if skill_name is not None:
-        clean_env["AUTOSKILLIT_SKILL_NAME"] = skill_name
-    else:
-        clean_env.pop("AUTOSKILLIT_SKILL_NAME", None)
+    clean_env = _make_clean_env(skill_name)
 
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):

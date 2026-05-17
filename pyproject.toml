@@ -324,10 +324,6 @@ forbidden_modules = [
 ]
 
 # IL-011 | _dag_ops: shared DAG primitives with no planner-internal imports
-# Rationale: _dag_ops is the single source of truth for graph operations in the
-# planner. It must not import from any planner-internal module so that it can serve
-# as the canonical implementation shared by consolidation.py, validation.py, and
-# compiler.py without creating circular dependencies.
 [[tool.importlinter.contracts]]
 name = "IL-011 _dag_ops has no planner-internal imports"
 type = "forbidden"

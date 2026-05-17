@@ -20,8 +20,8 @@ def _assistant(cache_read: int = 0) -> str:
                 "usage": {
                     "input_tokens": 100,
                     "output_tokens": 50,
-                    "cache_creation": 0,
-                    "cache_read": cache_read,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": cache_read,
                 },
             },
         }
@@ -40,8 +40,8 @@ def _result(cache_read: int = 0) -> str:
             "usage": {
                 "input_tokens": 100,
                 "output_tokens": 50,
-                "cache_creation": 0,
-                "cache_read": cache_read,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": cache_read,
             },
         }
     )

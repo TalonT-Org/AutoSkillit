@@ -106,11 +106,16 @@ def test_regen_contracts_is_idempotent(tmp_path):
 
 def test_compile_recipes_is_idempotent(tmp_path):
     """Running compile_recipes twice must not modify any JSON files when content is unchanged."""
+    import importlib.util
     import shutil
-    import sys
 
-    sys.path.insert(0, str(REPO_ROOT / "scripts"))
-    from compile_recipes import _compile_one
+    spec = importlib.util.spec_from_file_location(
+        "compile_recipes", REPO_ROOT / "scripts" / "compile_recipes.py"
+    )
+    assert spec is not None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    _compile_one = mod._compile_one
 
     from autoskillit.recipe.io import builtin_recipes_dir
 

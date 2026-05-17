@@ -223,14 +223,18 @@ def test_bundled_json_files_are_fresh():
 
 def test_compile_recipes_skips_unchanged_files(tmp_path):
     """_compile_one must not rewrite JSON when content is unchanged."""
-    import sys
+    import importlib.util
     from pathlib import Path
 
-    sys.path.insert(0, str(Path(__file__).parent.parent.parent / "scripts"))
-    from compile_recipes import _compile_one
+    scripts_dir = Path(__file__).parent.parent.parent / "scripts"
+    spec = importlib.util.spec_from_file_location(
+        "compile_recipes", scripts_dir / "compile_recipes.py"
+    )
+    assert spec is not None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    _compile_one = mod._compile_one
 
-    # Create a temp YAML file with known content
-    yaml_content = {"name": "test-recipe", "version": "1.0"}
     yaml_file = tmp_path / "test-recipe.yaml"
     yaml_file.write_text("name: test-recipe\nversion: '1.0'\n")
 

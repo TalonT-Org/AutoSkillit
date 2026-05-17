@@ -37,9 +37,10 @@ class TestMaxResumeAttemptsGuard:
             started_at=0.0,
             dispatches=dispatches,
         )
-        write_state(tmp_path / "state.json", state)
+        state_file = tmp_path / "state.json"
+        write_state(state_file, state)
 
-        decision = resume_campaign_from_state(tmp_path, continue_on_failure=False)
+        decision = resume_campaign_from_state(state_file, continue_on_failure=False)
         assert decision is not None
         assert decision.is_resumable
         assert decision.next_dispatch_name == "step_1"
@@ -67,9 +68,10 @@ class TestMaxResumeAttemptsGuard:
             started_at=0.0,
             dispatches=dispatches,
         )
-        write_state(tmp_path / "state.json", state)
+        state_file = tmp_path / "state.json"
+        write_state(state_file, state)
 
-        decision = resume_campaign_from_state(tmp_path, continue_on_failure=False)
+        decision = resume_campaign_from_state(state_file, continue_on_failure=False)
         assert decision is not None
         # Exceeded retry budget → halted
         assert decision.completed_dispatches_block == "fleet_halted_on_failure"
@@ -98,8 +100,9 @@ class TestMaxResumeAttemptsGuard:
             started_at=0.0,
             dispatches=dispatches,
         )
-        write_state(tmp_path / "state.json", state)
+        state_file = tmp_path / "state.json"
+        write_state(state_file, state)
 
-        decision = resume_campaign_from_state(tmp_path, continue_on_failure=False)
+        decision = resume_campaign_from_state(state_file, continue_on_failure=False)
         assert decision is not None
         assert decision.completed_dispatches_block == "fleet_halted_on_failure"

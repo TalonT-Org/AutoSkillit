@@ -60,13 +60,6 @@ def _count_consecutive_resumable_timeouts(history: list[dict[str, Any]]) -> int:
     return count
 
 
-def _is_resumable_timeout_entry(entry: dict[str, Any]) -> bool:
-    return (
-        entry.get("status") == str(DispatchStatus.RESUMABLE)
-        and entry.get("reason") == FleetErrorCode.FLEET_L3_TIMEOUT
-    )
-
-
 def has_failed_dispatch(state_path: Path) -> bool:
     """Check whether any dispatch has a FAILURE status attributable to logic (not infrastructure).
 
@@ -239,10 +232,13 @@ def resume_campaign_from_state(
             elif d.status == DispatchStatus.RESUMABLE and not next_name:
                 timeout_count = _count_consecutive_resumable_timeouts(d.attempt_history)
                 if timeout_count >= MAX_CONSECUTIVE_RESUME_ATTEMPTS:
-                    # Exceeded retry budget — convert to FAILURE so campaign halts
                     d.status = DispatchStatus.FAILURE
                     d.reason = FleetErrorCode.FLEET_L3_TIMEOUT
                     m.mark_dirty()
+                    return ResumeDecision(
+                        next_dispatch_name="",
+                        completed_dispatches_block=FLEET_HALTED_SENTINEL,
+                    )
                 else:
                     next_name = d.name
                     is_resumable = True

@@ -27,6 +27,9 @@ _API_TOKEN_FIELDS, _CANONICAL_TOKEN_FIELDS = (
     ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"),
     ("input_tokens", "output_tokens", "cache_write_tokens", "cache_read_tokens"),
 )
+_CACHE_READ_TOKENS_API_FIELD = _API_TOKEN_FIELDS[
+    _CANONICAL_TOKEN_FIELDS.index("cache_read_tokens")
+]
 
 FAILURE_SUBTYPES: frozenset[CliSubtype] = frozenset(
     {
@@ -257,7 +260,7 @@ def extract_token_usage(stdout: str) -> dict[str, Any] | None:
             bucket = model_buckets.setdefault(model, {f: 0 for f in _CANONICAL_TOKEN_FIELDS})
             for api_f, canon_f in zip(_API_TOKEN_FIELDS, _CANONICAL_TOKEN_FIELDS):
                 bucket[canon_f] += usage.get(api_f, 0)
-            cr = bucket["cache_read_tokens"]
+            cr = usage.get(_CACHE_READ_TOKENS_API_FIELD, 0)
             if cr > peak_context:
                 peak_context = cr
             turn_count += 1

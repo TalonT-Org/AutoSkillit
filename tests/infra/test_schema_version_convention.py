@@ -148,11 +148,11 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # them because it cannot distinguish list vs dict return types — intentional.
     ("src/autoskillit/smoke_utils.py", 143),
     ("src/autoskillit/smoke_utils.py", 415),
-    ("src/autoskillit/smoke_utils.py", 463),
-    ("src/autoskillit/smoke_utils.py", 477),
-    ("src/autoskillit/smoke_utils.py", 575),
-    ("src/autoskillit/smoke_utils.py", 646),
-    ("src/autoskillit/smoke_utils.py", 739),
+    ("src/autoskillit/smoke_utils.py", 485),
+    ("src/autoskillit/smoke_utils.py", 496),
+    ("src/autoskillit/smoke_utils.py", 583),
+    ("src/autoskillit/smoke_utils.py", 654),
+    ("src/autoskillit/smoke_utils.py", 747),
     # planner/consolidation.py — write-back of merged WP dicts to per-file results
     ("src/autoskillit/planner/consolidation.py", 314),
     # planner/consolidation.py — broken_cycle_edges.json (list payload; AST scanner catches it)

@@ -22,7 +22,7 @@ def _has_optional_capture_group(patterns: list[str]) -> bool:
     at the end of the pattern, e.g. ``(https://...)?`` makes the entire URL optional.
     """
     for pattern in patterns:
-        if re.search(r"\([^)]+\)\?$", pattern):
+        if re.search(r"\((?!\?:)[^)]+\)\?$", pattern):
             return True
     return False
 

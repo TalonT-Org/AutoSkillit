@@ -43,6 +43,8 @@ class TestMergeTokenUsageCanonical:
             "cache_read_input_tokens": 30,
         }
         result = _merge_token_usage(base, nudge)
+        assert result["input_tokens"] == 300
+        assert result["output_tokens"] == 150
         assert result["cache_write_tokens"] == 15
         assert result["cache_read_tokens"] == 50
         assert "cache_creation_input_tokens" not in result
@@ -63,6 +65,8 @@ class TestMergeTokenUsageCanonical:
             "cache_read_input_tokens": 30,
         }
         result = _merge_token_usage(base, nudge)
+        assert result["input_tokens"] == 300
+        assert result["output_tokens"] == 150
         assert result["cache_write_tokens"] == 15
         assert result["cache_read_tokens"] == 50
 
@@ -81,6 +85,8 @@ class TestMergeTokenUsageCanonical:
             "cache_read_tokens": 30,
         }
         result = _merge_token_usage(base, nudge)
+        assert result["input_tokens"] == 300
+        assert result["output_tokens"] == 150
         assert result["cache_write_tokens"] == 15
         assert result["cache_read_tokens"] == 50
 
@@ -111,9 +117,12 @@ class TestMergeTokenUsageCanonical:
         base = {"input_tokens": "not_a_number", "output_tokens": 50, "cache_write_tokens": 10}
         nudge = {"input_tokens": 200, "output_tokens": 100, "cache_write_tokens": 5}
         result = _merge_token_usage(base, nudge)
+        # base_val fails isinstance check → nudge's 200 is dropped; base value survives unchanged
         assert result["input_tokens"] == "not_a_number"
         assert result["output_tokens"] == 150
         assert result["cache_write_tokens"] == 15
+        # cache_read_tokens absent from both dicts → must not be injected as a spurious zero
+        assert "cache_read_tokens" not in result
 
     def test_extra_keys_preserved_from_base(self):
         """Extra keys in base dict are preserved in output."""
@@ -121,3 +130,6 @@ class TestMergeTokenUsageCanonical:
         nudge = {"input_tokens": 200, "output_tokens": 100}
         result = _merge_token_usage(base, nudge)
         assert result["provider"] == "anthropic"
+        # cache fields absent from both dicts → must not be injected as spurious zeros
+        assert "cache_write_tokens" not in result
+        assert "cache_read_tokens" not in result

@@ -137,7 +137,11 @@ def _launch_fleet_session(
             if resume_metadata is not None and resume_metadata.is_resumable
             else ""
         )
-        resume_checkpoint = None
+        resume_checkpoint = (
+            resume_metadata.resume_checkpoint
+            if resume_metadata is not None and resume_metadata.is_resumable
+            else None
+        )
         prompt = _build_fleet_campaign_prompt(
             campaign_recipe,
             manifest_yaml,

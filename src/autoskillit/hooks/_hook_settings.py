@@ -43,6 +43,9 @@ QUOTA_GUARD_HOOK_PAYLOAD_KEYS: frozenset[str] = frozenset(
 # The exact keys that appear in token_usage.json files written by flush_session_log.
 # The bridge contract test asserts equality between this set and TokenUsageFileEntry
 # annotations — update both together.
+#
+# v1 field aliases (Anthropic API names) are mapped in _V1_TOKEN_FIELD_ALIASES below.
+# Read-side consumers use the alias map for backward-compatible dual-key fallback.
 TOKEN_USAGE_FILE_KEYS: frozenset[str] = frozenset(
     {
         "session_label",
@@ -63,6 +66,14 @@ TOKEN_USAGE_FILE_KEYS: frozenset[str] = frozenset(
         "schema_version",
     }
 )
+
+# Mapping from v1 on-disk field names (Anthropic API names, schema_version < 2)
+# to their canonical v2 equivalents. Read-side consumers use this for dual-key
+# fallback when reading older token_usage.json files.
+_V1_TOKEN_FIELD_ALIASES: dict[str, str] = {
+    "cache_creation_input_tokens": "cache_write_tokens",
+    "cache_read_input_tokens": "cache_read_tokens",
+}
 
 
 @dataclass(frozen=True, slots=True)

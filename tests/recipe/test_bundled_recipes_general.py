@@ -630,6 +630,31 @@ def test_resolve_failures_steps_have_on_context_limit() -> None:
             )
 
 
+def test_resolve_review_steps_have_on_context_limit() -> None:
+    """Every step invoking resolve-review must declare on_context_limit.
+
+    When context is exhausted mid-review, the session terminates. Without
+    on_context_limit, on_failure is used as fallback — discarding all
+    uncommitted edits and losing partial progress. The recovery step should
+    be the corresponding re_push step (e.g. re_push_review).
+    """
+
+    for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):
+        recipe = load_recipe(yaml_path)
+        for step_name, step in recipe.steps.items():
+            if step.tool not in SKILL_TOOLS:
+                continue
+            skill_cmd = step.with_args.get("skill_command", "")
+            skill = resolve_skill_name(skill_cmd)
+            if skill not in ("resolve-review", "resolve-research-review"):
+                continue
+            assert step.on_context_limit is not None, (
+                f"{yaml_path.name}: step '{step_name}' invokes '{skill}' "
+                f"but has no on_context_limit. Context exhaustion will strand uncommitted "
+                f"edits on disk. Add on_context_limit: <recovery_step>."
+            )
+
+
 @pytest.mark.parametrize("recipe_path", _ALL_CLONE_RECIPE_PATHS, ids=lambda p: p.stem)
 def test_all_clone_recipes_use_context_cwd_after_clone(recipe_path: Path) -> None:
     """After clone_repo, no step should use inputs.* as cwd."""

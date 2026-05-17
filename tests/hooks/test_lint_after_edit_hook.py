@@ -271,6 +271,48 @@ class TestLintBehavior:
         assert LINT_ERROR_TRIGGER in updated
 
 
+class TestOutputContract:
+    """updatedToolResult must not contain the original tool_response content."""
+
+    def test_output_excludes_tool_response_content(self, tmp_path, monkeypatch):
+        """updatedToolResult must not contain tool_response content."""
+        f = tmp_path / "bad_fmt.py"
+        f.write_text("x=1\n")
+        large_tool_response = "The file was edited successfully. originalFile: " + "A" * 10000
+        out, code = _run_hook(
+            _build_event("Edit", str(f), tool_response=large_tool_response),
+            headless=True,
+            skill_name="implement-worktree",
+            monkeypatch=monkeypatch,
+        )
+        assert code == 0
+        assert out != "", "Hook should emit output for bad_fmt.py"
+        parsed = json.loads(out)
+        updated = parsed["hookSpecificOutput"]["updatedToolResult"]
+        assert "originalFile:" not in updated
+        assert "A" * 100 not in updated
+        assert len(updated) < 5000, (
+            f"updatedToolResult is {len(updated)} chars — tool_response content appears "
+            f"to have been forwarded, bloating context"
+        )
+
+    def test_output_excludes_short_tool_response(self, tmp_path, monkeypatch):
+        """Even short tool_response must not appear in updatedToolResult."""
+        f = tmp_path / "bad_fmt.py"
+        f.write_text("x=1\n")
+        out, code = _run_hook(
+            _build_event("Edit", str(f), tool_response="The file was edited."),
+            headless=True,
+            skill_name="implement-worktree",
+            monkeypatch=monkeypatch,
+        )
+        assert code == 0
+        assert out != ""
+        parsed = json.loads(out)
+        updated = parsed["hookSpecificOutput"]["updatedToolResult"]
+        assert "The file was edited." not in updated
+
+
 class TestRegistration:
     def test_hook_registered_in_registry(self):
         from autoskillit.hook_registry import HOOK_REGISTRY

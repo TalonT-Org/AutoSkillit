@@ -48,13 +48,20 @@ def _evict_stale_autoskillit_hooks(settings_path: Path) -> None:
     _write_settings_data(settings_path, data)
 
 
-def sync_hooks_to_settings(settings_path: Path) -> None:
+def sync_hooks_to_settings(settings_path: Path, *, force: bool = False) -> None:
     """Write all HOOK_REGISTRY hooks to settings.json.
 
-    Must be called after _evict_stale_autoskillit_hooks() — assumes no
-    autoskillit entries are present when this function runs.
+    When the plugin is installed, hooks are provided via hooks.json (plugin cache).
+    In that case, this function evicts any stale autoskillit entries from settings.json
+    rather than writing — preventing dual registration and double hook execution.
+
+    The force=True bypass flag exists for install() while the plugin is being activated:
+    during install(), claude plugin list may not yet reflect the new installation.
+    For all other callers (e.g. _register_all() from autokit init), force=False
+    correctly checks plugin status before writing.
     Each HookDef becomes one entry under its event_type with all its scripts as ordered commands.
     """
+    from autoskillit.cli._init_helpers import _is_plugin_installed
     from autoskillit.hook_registry import HOOK_REGISTRY_HASH
 
     root = pkg_root()
@@ -65,6 +72,11 @@ def sync_hooks_to_settings(settings_path: Path) -> None:
             f"dangling after worktree deletion. Use 'task install-worktree' instead "
             f"of 'autoskillit init' when working in a worktree."
         )
+
+    if not force and _is_plugin_installed():
+        _evict_stale_autoskillit_hooks(settings_path)
+        return
+
     hooks_dir = root / "hooks"
     data = _load_settings_data(settings_path)
     # Consolidate HookDef entries sharing the same (event_type, matcher) into a

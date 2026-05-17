@@ -368,7 +368,7 @@ class DispatchCompleted:
     lifespan_started: bool = False
     l3_raw_body: str | None = None
     l3_parse_error: str | None = None
-    resume_checkpoint: dict[str, Any] | None = None
+    resume_checkpoint: dict[str, Any] = field(default_factory=dict)
     stderr: str = ""
     elapsed_seconds: float = 0.0
 
@@ -390,7 +390,7 @@ class DispatchCompleted:
             d["l3_raw_body"] = self.l3_raw_body
         if self.l3_parse_error is not None:
             d["l3_parse_error"] = self.l3_parse_error
-        if self.resume_checkpoint is not None:
+        if self.resume_checkpoint:
             d["resume_checkpoint"] = self.resume_checkpoint
         return json.dumps(d)
 

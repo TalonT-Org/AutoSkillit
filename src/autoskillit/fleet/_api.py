@@ -1011,7 +1011,7 @@ async def _run_dispatch(
                 l3_payload=None,
                 l3_parse_source=parse_source,
                 lifespan_started=skill_result.lifespan_started,
-                resume_checkpoint=dispatch_checkpoint.to_dict() if dispatch_checkpoint else None,
+                resume_checkpoint=_checkpoint_to_dict(dispatch_checkpoint),
                 stderr=truncate_text(skill_result.stderr or "", ENVELOPE_STDERR_MAX),
                 elapsed_seconds=ended_at - started_at,
             ),

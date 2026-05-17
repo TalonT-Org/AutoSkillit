@@ -218,8 +218,9 @@ class TestCLIInstall:
             )[1],
         )
         monkeypatch.setattr(_app_mod, "evict_direct_mcp_entry", lambda _: False)
-        monkeypatch.setattr(_app_mod, "sweep_all_scopes_for_orphans", lambda _: None)
-        monkeypatch.setattr(_app_mod, "sync_hooks_to_settings", lambda _: None)
+        monkeypatch.setattr(
+            "autoskillit.cli._hooks._evict_stale_autoskillit_hooks", lambda _: None
+        )
         monkeypatch.setattr(_app_mod, "generate_hooks_json", lambda: {})
         monkeypatch.setattr(_app_mod, "atomic_write", lambda *a, **kw: None)
 
@@ -547,35 +548,15 @@ class TestGroupFInstall:
         ]
         assert any("pretty_output_hook" in cmd for cmd in posttooluse_commands)
 
-    def test_install_writes_pretooluse_hooks(self, tmp_path, monkeypatch):
-        """install must register the quota PreToolUse hook in .claude/settings.json."""
+    def test_install_writes_pretooluse_hooks(self):
+        """hooks.json must contain the quota PreToolUse hook via generate_hooks_json()."""
+        from autoskillit.hooks import generate_hooks_json
 
-        settings_path = tmp_path / ".claude" / "settings.json"
-        settings_path.parent.mkdir(parents=True)
-
-        # monkeypatch via the actual module object — string path resolves to the App object
-        # due to autoskillit.cli.__init__.py re-exporting `app = App(...)` as attribute `app`
-        app_module = importlib.import_module("autoskillit.cli._hooks")
-        monkeypatch.setattr(app_module, "_claude_settings_path", lambda scope: settings_path)
-        monkeypatch.setattr("subprocess.run", lambda *a, **kw: type("R", (), {"returncode": 0})())
-        monkeypatch.setattr("shutil.which", lambda cmd: f"/usr/bin/{cmd}")
-        # Clear CLAUDECODE env var so install doesn't short-circuit with the early-return path
-        monkeypatch.delenv("CLAUDECODE", raising=False)
-        import importlib as _importlib
-
-        _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
-        monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        from autoskillit.cli._marketplace import install
-
-        install(scope="local")
-
-        data = json.loads(settings_path.read_text())
-        hooks = data.get("hooks", {})
-        pretooluse = hooks.get("PreToolUse", [])
+        data = generate_hooks_json()
+        pretooluse = data.get("hooks", {}).get("PreToolUse", [])
         matchers = [h.get("matcher", "") for h in pretooluse]
         assert any("run_skill" in m for m in matchers), (
-            "PreToolUse hook for run_skill not found in settings.json"
+            "PreToolUse hook for run_skill not found in hooks.json"
         )
 
     def test_remove_clone_guard_script_exists(self):
@@ -586,59 +567,31 @@ class TestGroupFInstall:
         hook_script = pkg_dir / "hooks" / "guards" / "remove_clone_guard.py"
         assert hook_script.exists(), f"Expected hook script at {hook_script}"
 
-    def test_install_registers_remove_clone_guard_hook(self, tmp_path, monkeypatch):
-        """install must register the remove_clone_guard PreToolUse hook in settings.json."""
+    def test_install_registers_remove_clone_guard_hook(self):
+        """hooks.json must contain the remove_clone_guard PreToolUse hook."""
+        from autoskillit.hooks import generate_hooks_json
 
-        settings_path = tmp_path / ".claude" / "settings.json"
-        settings_path.parent.mkdir(parents=True)
-
-        app_module = importlib.import_module("autoskillit.cli._hooks")
-        monkeypatch.setattr(app_module, "_claude_settings_path", lambda scope: settings_path)
-        monkeypatch.setattr("subprocess.run", lambda *a, **kw: type("R", (), {"returncode": 0})())
-        monkeypatch.setattr("shutil.which", lambda cmd: f"/usr/bin/{cmd}")
-        monkeypatch.delenv("CLAUDECODE", raising=False)
-
-        _app_mod = importlib.import_module("autoskillit.cli._marketplace")
-        monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        from autoskillit.cli._marketplace import install
-
-        install(scope="local")
-
-        data = json.loads(settings_path.read_text())
-        hooks = data.get("hooks", {})
-        pretooluse = hooks.get("PreToolUse", [])
+        data = generate_hooks_json()
+        pretooluse = data.get("hooks", {}).get("PreToolUse", [])
         matchers = [h.get("matcher", "") for h in pretooluse]
         assert any("remove_clone" in m for m in matchers), (
-            "PreToolUse hook for remove_clone not found in settings.json"
+            "PreToolUse hook for remove_clone not found in hooks.json"
         )
 
-    def test_install_remove_clone_guard_hook_idempotent(self, tmp_path, monkeypatch):
-        """Running install twice must not duplicate the remove_clone_guard hook entry."""
+    def test_install_remove_clone_guard_hook_idempotent(self):
+        """generate_hooks_json() called twice produces identical remove_clone entries."""
+        from autoskillit.hooks import generate_hooks_json
 
-        settings_path = tmp_path / ".claude" / "settings.json"
-        settings_path.parent.mkdir(parents=True)
-
-        app_module = importlib.import_module("autoskillit.cli._hooks")
-        monkeypatch.setattr(app_module, "_claude_settings_path", lambda scope: settings_path)
-        monkeypatch.setattr("subprocess.run", lambda *a, **kw: type("R", (), {"returncode": 0})())
-        monkeypatch.setattr("shutil.which", lambda cmd: f"/usr/bin/{cmd}")
-        monkeypatch.delenv("CLAUDECODE", raising=False)
-
-        _app_mod = importlib.import_module("autoskillit.cli._marketplace")
-        monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        from autoskillit.cli._marketplace import install
-
-        install(scope="local")
-        install(scope="local")
-
-        data = json.loads(settings_path.read_text())
-        pretooluse = data.get("hooks", {}).get("PreToolUse", [])
-        remove_clone_entries = [h for h in pretooluse if "remove_clone" in h.get("matcher", "")]
-        assert len(remove_clone_entries) == 1, (
-            f"Expected exactly 1 remove_clone hook entry, got {len(remove_clone_entries)}"
+        data1 = generate_hooks_json()
+        data2 = generate_hooks_json()
+        pretooluse1 = data1.get("hooks", {}).get("PreToolUse", [])
+        pretooluse2 = data2.get("hooks", {}).get("PreToolUse", [])
+        remove_clone_1 = [h for h in pretooluse1 if "remove_clone" in h.get("matcher", "")]
+        remove_clone_2 = [h for h in pretooluse2 if "remove_clone" in h.get("matcher", "")]
+        assert len(remove_clone_1) == 1, (
+            f"Expected exactly 1 remove_clone hook entry, got {len(remove_clone_1)}"
         )
+        assert remove_clone_1 == remove_clone_2
 
 
 def test_clear_plugin_cache_preserves_plugins_entry(
@@ -806,10 +759,7 @@ def test_install_creates_autoskillit_gitignore(
         lambda *a, **kw: type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})(),
     )
     monkeypatch.setattr("autoskillit.cli._marketplace.evict_direct_mcp_entry", lambda _: False)
-    monkeypatch.setattr(
-        "autoskillit.cli._marketplace.sweep_all_scopes_for_orphans", lambda _: None
-    )
-    monkeypatch.setattr("autoskillit.cli._marketplace.sync_hooks_to_settings", lambda _: None)
+    monkeypatch.setattr("autoskillit.cli._hooks._evict_stale_autoskillit_hooks", lambda _: None)
     monkeypatch.setattr("autoskillit.cli._marketplace.generate_hooks_json", lambda: {})
     monkeypatch.setattr("autoskillit.cli._marketplace.atomic_write", lambda *a, **kw: None)
 
@@ -840,10 +790,7 @@ def test_install_calls_upgrade_when_scripts_dir_exists(
         lambda *a, **kw: type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})(),
     )
     monkeypatch.setattr("autoskillit.cli._marketplace.evict_direct_mcp_entry", lambda _: False)
-    monkeypatch.setattr(
-        "autoskillit.cli._marketplace.sweep_all_scopes_for_orphans", lambda _: None
-    )
-    monkeypatch.setattr("autoskillit.cli._marketplace.sync_hooks_to_settings", lambda _: None)
+    monkeypatch.setattr("autoskillit.cli._hooks._evict_stale_autoskillit_hooks", lambda _: None)
     monkeypatch.setattr("autoskillit.cli._marketplace.generate_hooks_json", lambda: {})
     monkeypatch.setattr("autoskillit.cli._marketplace.atomic_write", lambda *a, **kw: None)
 

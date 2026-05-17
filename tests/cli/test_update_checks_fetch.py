@@ -584,10 +584,7 @@ def test_install_invalidates_fetch_cache(monkeypatch: pytest.MonkeyPatch, tmp_pa
         lambda *a, **kw: type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})(),
     )
     monkeypatch.setattr("autoskillit.cli._marketplace.evict_direct_mcp_entry", lambda _: False)
-    monkeypatch.setattr(
-        "autoskillit.cli._marketplace.sweep_all_scopes_for_orphans", lambda _: None
-    )
-    monkeypatch.setattr("autoskillit.cli._marketplace.sync_hooks_to_settings", lambda _: None)
+    monkeypatch.setattr("autoskillit.cli._hooks._evict_stale_autoskillit_hooks", lambda _: None)
     monkeypatch.setattr("autoskillit.cli._marketplace.generate_hooks_json", lambda: {})
     monkeypatch.setattr("autoskillit.cli._marketplace.atomic_write", lambda *a, **kw: None)
 

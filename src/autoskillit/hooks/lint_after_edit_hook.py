@@ -121,16 +121,12 @@ def main() -> None:
     if not messages:
         sys.exit(0)
 
-    tool_response = data.get("tool_response", "")
-    separator = "\n\n" if tool_response else ""
-    updated = f"{tool_response}{separator}" + "\n\n".join(messages)
-
     print(
         json.dumps(
             {
                 "hookSpecificOutput": {
                     "hookEventName": "PostToolUse",
-                    "updatedToolResult": updated,
+                    "updatedToolResult": "\n\n".join(messages),
                 }
             }
         )

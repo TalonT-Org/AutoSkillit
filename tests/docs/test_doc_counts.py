@@ -246,8 +246,8 @@ def test_doctor_check_count_is_31() -> None:
     # appear as separate implementation markers but the docs present them as single
     # numbered entries that subsume their sub-variants.
     # Update both tests whenever a new doctor check is added.
-    assert _count_doctor_checks() == 35, (
-        f"Expected 35 doctor checks; found {_count_doctor_checks()}"
+    assert _count_doctor_checks() == 36, (
+        f"Expected 36 doctor checks; found {_count_doctor_checks()}"
     )
 
 

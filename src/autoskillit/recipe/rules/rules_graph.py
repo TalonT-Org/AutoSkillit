@@ -794,6 +794,55 @@ def _check_review_loop_waypoint(ctx: ValidationContext) -> list[RuleFinding]:
 
 
 @semantic_rule(
+    name="run-skill-missing-context-limit",
+    description=(
+        "All run_skill and run_python steps must declare on_context_limit. "
+        "When context is exhausted mid-execution, the orchestrator needs a "
+        "deterministic recovery path. Without it, on_failure is used as the "
+        "fallback — discarding all uncommitted edits and losing partial progress."
+    ),
+    severity=Severity.WARNING,
+)
+def _check_run_skill_missing_context_limit(ctx: ValidationContext) -> list[RuleFinding]:
+    recipe = ctx.recipe
+    findings: list[RuleFinding] = []
+
+    # Steps that are themselves on_context_limit targets are exempt — they ARE
+    # the recovery path and do not need to declare a recovery of their own.
+    context_limit_targets: set[str] = set()
+    for step in recipe.steps.values():
+        if step.on_context_limit and step.on_context_limit not in (
+            "escalate",
+            "release_issue_failure",
+        ):
+            context_limit_targets.add(step.on_context_limit)
+
+    for step_name, step in recipe.steps.items():
+        if step.tool not in SKILL_TOOLS:
+            continue
+        if step.action == "stop":
+            continue
+        if step.on_context_limit is not None:
+            continue
+        if step_name in context_limit_targets:
+            continue
+        findings.append(
+            RuleFinding(
+                rule="run-skill-missing-context-limit",
+                severity=Severity.WARNING,
+                step_name=step_name,
+                message=(
+                    f"Step '{step_name}' ({step.tool}) has no on_context_limit. "
+                    f"If context is exhausted mid-execution, on_failure is used as "
+                    f"fallback — discarding uncommitted edits and losing partial progress. "
+                    f"Add on_context_limit: <recovery_step>."
+                ),
+            )
+        )
+    return findings
+
+
+@semantic_rule(
     name="review-mode-reentry-waypoint-guard",
     description=(
         "review_pr must not be reachable from check_review_loop without "

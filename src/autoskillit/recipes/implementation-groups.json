@@ -653,6 +653,7 @@
       },
       "retries": 2,
       "on_exhausted": "release_issue_failure",
+      "on_context_limit": "re_push_review",
       "on_result": [
         {
           "when": "${{ result.verdict }} == 'real_fix'",

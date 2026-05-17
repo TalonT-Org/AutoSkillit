@@ -35,6 +35,7 @@ from ._doctor_fleet import (
     _check_stale_fleet_state,
 )
 from ._doctor_hooks import (
+    _check_dual_registration,
     _check_hook_health_all_scopes,
     _check_hook_registration,
     _check_hook_registry_drift_all_scopes,
@@ -116,6 +117,9 @@ def run_doctor(*, output_json: bool = False) -> None:
 
     # Check 7b: Hook registry drift (multi-scope)
     results.extend(_check_hook_registry_drift_all_scopes(Path.cwd()))
+
+    # Check 7c: Dual registration (plugin active + hooks in settings.json)
+    results.append(_check_dual_registration(_claude_settings_path("user")))
 
     # Check 8: Script version health
     results.append(_check_script_version_health())

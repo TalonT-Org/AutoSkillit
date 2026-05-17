@@ -16,6 +16,7 @@ Hook script behavior, registration, and bridge tests.
 | `test_hook_settings.py` | Tests for the shared stdlib-only quota hook settings resolver |
 | `test_hook_sync.py` | Sync tests: verify parallel stdlib-only hook scripts stay aligned with server code |
 | `test_lint_after_edit_hook.py` | Tests for lint_after_edit_hook.py PostToolUse hook |
+| `test_hook_output_contract.py` | Contract tests: no PostToolUse hook forwards raw tool_response in output |
 | `test_quota_check.py` | Tests for the quota_check PreToolUse hook |
 | `test_quota_post_check.py` | Tests for the quota_post_check PostToolUse hook |
 | `test_recipe_write_advisor.py` | Tests for autoskillit.hooks.guards.recipe_write_advisor |

@@ -127,3 +127,41 @@ def _check_hook_health_all_scopes(project_root: Path | None = None) -> list[Doct
             DoctorResult(Severity.OK, "hook_health", "All hook scripts accessible (all scopes)")
         )
     return results
+
+
+def _check_dual_registration(settings_path: Path) -> DoctorResult:
+    """Detect dual hook registration (plugin active + hooks in settings.json)."""
+    from autoskillit.cli._hooks import _load_settings_data
+    from autoskillit.cli._init_helpers import _is_plugin_installed
+
+    if not _is_plugin_installed():
+        return DoctorResult(
+            severity=Severity.OK,
+            check="dual_registration",
+            message="Plugin not active — no dual registration possible.",
+        )
+
+    data = _load_settings_data(settings_path)
+    all_commands = [
+        hook.get("command", "")
+        for event_entries in data.get("hooks", {}).values()
+        if isinstance(event_entries, list)
+        for entry in event_entries
+        for hook in entry.get("hooks", [])
+    ]
+    autoskillit_hooks = [c for c in all_commands if "_dispatch.py" in c]
+    if autoskillit_hooks:
+        return DoctorResult(
+            severity=Severity.WARNING,
+            check="dual_registration",
+            message=(
+                f"Plugin is active but {len(autoskillit_hooks)} autoskillit hook(s) "
+                f"are also present in settings.json. Hooks will fire twice. "
+                f"Run 'autoskillit install' to fix."
+            ),
+        )
+    return DoctorResult(
+        severity=Severity.OK,
+        check="dual_registration",
+        message="Plugin active — no duplicate hooks in settings.json.",
+    )

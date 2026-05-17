@@ -42,7 +42,7 @@ class TestTopologicalSort:
             "B": {"depends_on": []},
         }
         order = topological_sort(wp_results)
-        assert set(order) == {"A", "B"}
+        assert order == ["A", "B"]
 
     def test_empty_graph_returns_empty_list(self) -> None:
         assert topological_sort({}) == []
@@ -98,7 +98,7 @@ class TestFindSccs:
             "B": [],
         }
         sccs = find_sccs(adjacency)
-        assert all(len(scc) >= 2 for scc in sccs)
+        assert sccs == []
 
 
 class TestBreakCyclesGreedyFas:
@@ -119,8 +119,6 @@ class TestBreakCyclesGreedyFas:
         ]
         broken_edges = break_cycles_greedy_fas(output_wps)
         assert len(broken_edges) >= 1
-        from autoskillit.planner._dag_ops import topological_sort
-
         topological_sort({wp["id"]: wp for wp in output_wps})
 
     def test_preserves_acyclic_edges(self) -> None:

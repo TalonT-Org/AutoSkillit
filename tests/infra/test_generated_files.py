@@ -4,7 +4,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from autoskillit.core.paths import GENERATED_FILES, _is_generated_path
+from autoskillit.core.paths import GENERATED_FILES, is_generated_path
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 
@@ -69,7 +69,7 @@ def test_generated_files_covers_all_build_outputs():
     for f in contract_files:
         if f.is_file():
             rel = str(f.relative_to(REPO_ROOT))
-            assert _is_generated_path(rel), (
+            assert is_generated_path(rel), (
                 f"Build output {rel} is not covered by GENERATED_FILES. "
                 "Add an entry or directory prefix."
             )
@@ -78,7 +78,7 @@ def test_generated_files_covers_all_build_outputs():
     diagram_files = list((recipes_dir / "diagrams").rglob("*.md"))
     for f in diagram_files:
         rel = str(f.relative_to(REPO_ROOT))
-        assert _is_generated_path(rel), f"Diagram {rel} not in GENERATED_FILES"
+        assert is_generated_path(rel), f"Diagram {rel} not in GENERATED_FILES"
 
 
 def test_regen_contracts_is_idempotent(tmp_path):

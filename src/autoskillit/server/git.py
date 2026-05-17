@@ -21,8 +21,8 @@ from autoskillit.core import (
     MergeFailedStep,
     MergeState,
     SubprocessRunner,
-    _is_generated_path,
     get_logger,
+    is_generated_path,
     is_protected_branch,
     resolve_main_worktree,
     truncate_text,
@@ -244,7 +244,7 @@ async def perform_merge(
     if dirty_rc == 0 and dirty_out.strip():
         all_dirty = [line.strip() for line in dirty_out.strip().splitlines()]
         # Porcelain format: "XY path" — strip the 2-char status code + space
-        dirty_files = [line for line in all_dirty if not _is_generated_path(line[3:])]
+        dirty_files = [line for line in all_dirty if not is_generated_path(line[3:])]
         if dirty_files:
             return {
                 "error": (

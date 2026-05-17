@@ -11,7 +11,7 @@ from pathlib import Path
 
 import regex as re
 
-from autoskillit.core import _is_generated_path, atomic_write
+from autoskillit.core import atomic_write, is_generated_path
 
 
 def compute_branch(
@@ -70,14 +70,18 @@ def commit_guard(worktree_path: str) -> dict[str, str]:
         capture_output=True,
         text=True,
     )
-    # git add --dry-run outputs "add 'path'" per file (to stderr/stdout depending on git version)
+    if result.returncode != 0:
+        raise subprocess.CalledProcessError(
+            result.returncode, result.args, result.stdout, result.stderr
+        )
     files_to_add: list[str] = []
     for line in result.stdout.strip().splitlines():
         line = line.strip()
         if not line.startswith("add "):
             continue
-        path = line[4:].strip("'")
-        if path and not _is_generated_path(path):
+        raw = line[4:]
+        path = raw[1:-1] if raw.startswith("'") and raw.endswith("'") else raw
+        if path and not is_generated_path(path):
             files_to_add.append(path)
 
     if not files_to_add:

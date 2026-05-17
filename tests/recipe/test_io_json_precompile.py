@@ -42,7 +42,7 @@ def test_load_recipe_dict_prefers_json_when_fresh(tmp_path, monkeypatch):
     yaml_path = tmp_path / "recipe.yaml"
     _write_yaml(yaml_path, _MINIMAL_RECIPE)
     _compile_json(yaml_path)
-    # Ensure JSON mtime is strictly greater than YAML mtime (required by > freshness gate)
+    # Ensure JSON mtime is at least equal to YAML mtime (required by >= freshness gate)
     json_path = yaml_path.with_suffix(".json")
     future_mtime_ns = yaml_path.stat().st_mtime_ns + 10_000_000_000
     os.utime(json_path, ns=(future_mtime_ns, future_mtime_ns))
@@ -215,7 +215,7 @@ def test_bundled_json_files_are_fresh():
         yaml_data = yaml.safe_load(yaml_path.read_bytes())
         json_data = json.loads(json_path.read_text(encoding="utf-8"))
         assert json_data == yaml_data, f"JSON is stale for {yaml_path.name}"
-        assert json_path.stat().st_mtime_ns > yaml_path.stat().st_mtime_ns, (
+        assert json_path.stat().st_mtime_ns >= yaml_path.stat().st_mtime_ns, (
             f"JSON mtime is older than YAML mtime for {yaml_path.name}"
             " — fast-path would be bypassed"
         )

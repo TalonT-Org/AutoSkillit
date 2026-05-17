@@ -102,7 +102,7 @@ def _load_recipe_dict(
     """
     json_path = yaml_path.with_suffix(".json")
     try:
-        if json_path.stat().st_mtime_ns > yaml_path.stat().st_mtime_ns:
+        if json_path.stat().st_mtime_ns >= yaml_path.stat().st_mtime_ns:
             text = json_path.read_text(encoding="utf-8")
             if temp_dir_relpath is not None:
                 text = substitute_temp_placeholder(text, temp_dir_relpath)

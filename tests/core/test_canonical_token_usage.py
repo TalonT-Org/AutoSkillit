@@ -148,6 +148,20 @@ class TestNoneCacheFields:
         assert CanonicalTokenUsage.merge(a, None) is a
 
 
+class TestRawSnapshot:
+    def test_from_anthropic_dict_snapshots_raw(self):
+        raw = {"input_tokens": 1, "output_tokens": 2}
+        result = CanonicalTokenUsage.from_anthropic_dict(raw)
+        raw["input_tokens"] = 999
+        assert result.raw["input_tokens"] == 1
+
+    def test_from_codex_dict_snapshots_raw(self):
+        raw = {"input_tokens": 1, "output_tokens": 2}
+        result = CanonicalTokenUsage.from_codex_dict(raw)
+        raw["input_tokens"] = 999
+        assert result.raw["input_tokens"] == 1
+
+
 class TestFrozen:
     def test_cannot_mutate_fields(self):
         usage = CanonicalTokenUsage(

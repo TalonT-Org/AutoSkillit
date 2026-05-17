@@ -25,7 +25,7 @@ class CanonicalTokenUsage:
             cache_read_tokens=d.get("cache_read_input_tokens"),
             cache_write_tokens=d.get("cache_creation_input_tokens"),
             provider="anthropic",
-            raw=d,
+            raw=dict(d),
         )
 
     @classmethod
@@ -36,7 +36,7 @@ class CanonicalTokenUsage:
             cache_read_tokens=d.get("cached_input_tokens"),
             cache_write_tokens=None,
             provider="codex",
-            raw=d,
+            raw=dict(d),
         )
 
     def to_dict(self) -> dict[str, Any]:

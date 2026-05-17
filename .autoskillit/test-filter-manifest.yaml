@@ -176,3 +176,21 @@ src/autoskillit/core/__init__.pyi:
   - contracts/
 
 tests/**/CLAUDE.md: []
+
+# Eval framework files
+.autoskillit/recipes/eval/*.yaml:
+  - recipe/
+
+.autoskillit/skills/judge-eval/SKILL.md:
+  - skills/
+  - contracts/
+  - arch/
+
+.autoskillit/temp/skill-eval/**/*.json:
+  - infra/
+
+.autoskillit/temp/skill-eval/**/*.md:
+  - infra/
+
+.autoskillit/temp/plan-quality-audit/canaries/**/*:
+  - infra/

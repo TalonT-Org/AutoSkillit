@@ -26,7 +26,7 @@ def _make_recipe(steps: dict[str, RecipeStep]) -> Recipe:
 
 
 def test_detects_optional_pattern_without_guard(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Rule fires when a step with optional capture group routes on_success without a truthiness guard."""
+    """Rule fires when a step with optional capture group routes on_success without a guard."""
     manifest = {
         "version": "0.1.0",
         "skills": {
@@ -59,8 +59,9 @@ def test_detects_optional_pattern_without_guard(monkeypatch: pytest.MonkeyPatch)
 
     findings = run_semantic_rules(recipe)
     guard_findings = [f for f in findings if f.rule == "optional-capture-requires-guard"]
+    messages = [f.message for f in guard_findings]
     assert len(guard_findings) == 1, (
-        f"expected 1 optional-capture-requires-guard finding, got {[f.message for f in guard_findings]}"
+        f"expected 1 optional-capture-requires-guard finding, got {messages}"
     )
     assert guard_findings[0].severity == Severity.WARNING
     assert guard_findings[0].step_name == "producer"

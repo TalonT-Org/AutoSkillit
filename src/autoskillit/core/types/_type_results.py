@@ -359,13 +359,21 @@ class ModelTotalEntry(TypedDict):
 
 
 class TokenUsageFileEntry(TypedDict):
-    """Schema contract for token_usage.json written by flush_session_log."""
+    """Schema contract for token_usage.json written by flush_session_log.
+
+    v1 keys (cache_creation_input_tokens, cache_read_input_tokens) are retained
+    for backward compatibility with existing on-disk session files.
+    v2 canonical keys (cache_write_tokens, cache_read_tokens) are the new format
+    read with v1 fallback by load_from_log_dir and _load_sessions.
+    """
 
     session_label: str
     input_tokens: int
     output_tokens: int
     cache_creation_input_tokens: int
     cache_read_input_tokens: int
+    cache_write_tokens: int
+    cache_read_tokens: int
     peak_context: int
     turn_count: int
     timing_seconds: float

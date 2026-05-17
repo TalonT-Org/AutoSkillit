@@ -465,23 +465,51 @@ def _is_abandon_reason(skill_result: SkillResult) -> bool:
     return False
 
 
+def _checkpoint_to_dict(cp: SessionCheckpoint | None) -> dict[str, Any]:
+    """Convert SessionCheckpoint to a plain dict for DispatchRecord storage."""
+    if cp is None:
+        return {}
+    return {
+        "completed_items": list(cp.completed_items),
+        "step_name": cp.step_name,
+        "progress_pct": cp.progress_pct,
+        "ts": cp.ts,
+    }
+
+
 def classify_dispatch_outcome(
-    parsed: L3ParseResult,
+    parsed: L3ParseResult | None,
     skill_result: SkillResult,
     *,
     sidecar_exists: bool = False,
     checkpoint: SessionCheckpoint | None = None,
+    subtype: str = "",
 ) -> tuple[DispatchStatus, str]:
     """Map L2 food truck subprocess signals to a (DispatchStatus, reason) pair.
 
     Pure function — no filesystem access, no side effects.
     Rules applied in order:
+      0. timeout + session_id + lifespan_started + (checkpoint or sidecar)
+         + not abandon → RESUMABLE
+      0b. timeout (any other case) → FAILURE
       1. completed_clean + success flag → SUCCESS
       2. completed_clean + no success → FAILURE
       3. completed_dirty → FAILURE (fleet_l3_parse_failed)
-      4. no_sentinel + session_id + lifespan_started + (checkpoint or sidecar) → RESUMABLE
+      4. no_sentinel + session_id + lifespan_started + (checkpoint or sidecar)
+         + not abandon → RESUMABLE
       5. no_sentinel (any other case) → FAILURE (fleet_l3_no_result_block)
     """
+    if subtype == "timeout":
+        has_progress = checkpoint is not None or sidecar_exists
+        if skill_result.session_id and skill_result.lifespan_started and has_progress:
+            if _is_abandon_reason(skill_result):
+                return DispatchStatus.FAILURE, FleetErrorCode.FLEET_L3_TIMEOUT
+            return DispatchStatus.RESUMABLE, FleetErrorCode.FLEET_L3_TIMEOUT
+        return DispatchStatus.FAILURE, FleetErrorCode.FLEET_L3_TIMEOUT
+
+    if parsed is None:
+        return DispatchStatus.FAILURE, FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
+
     if parsed.outcome == "completed_clean" and parsed.payload and parsed.payload.get("success"):
         return DispatchStatus.SUCCESS, ""
     if parsed.outcome == "completed_clean":
@@ -850,60 +878,7 @@ async def _run_dispatch(
                     "dispatch_marker_unlink_failed", marker=str(marker_path), exc_info=True
                 )
 
-    # --- Timeout pre-check: short-circuit before result-block parsing ---
-    if skill_result.subtype == "timeout":
-        record = DispatchRecord(
-            name=effective_name,
-            status=DispatchStatus.FAILURE,
-            dispatch_id=dispatch_id,
-            campaign_id=campaign_id,
-            caller_session_id=caller_session_id,
-            dispatched_session_id=skill_result.session_id,
-            dispatched_pid=_dispatched_pid[0] if _dispatched_pid else 0,
-            reason=FleetErrorCode.FLEET_L3_TIMEOUT,
-            kill_reason=skill_result.retry_reason or "",
-            infra_exit_category=skill_result.infra.exit_category or "",
-            token_usage=normalize_dispatch_token_usage(skill_result.token_usage or {}),
-            started_at=started_at,
-            ended_at=ended_at,
-        )
-        upsert_dispatch_record_by_name(state_path, record)
-        _post_dispatch_cleanup(tool_ctx, skill_result, cache_invalidator, quota_refresher)
-        return DispatchResult(
-            DispatchCompleted(
-                success=False,
-                dispatch_status=DispatchStatus.FAILURE,
-                dispatch_id=dispatch_id,
-                dispatched_session_id=skill_result.session_id or "",
-                reason=FleetErrorCode.FLEET_L3_TIMEOUT,
-                token_usage=normalize_dispatch_token_usage(skill_result.token_usage or {}),
-                lifespan_started=skill_result.lifespan_started,
-                stderr=truncate_text(skill_result.stderr or "", ENVELOPE_STDERR_MAX),
-                elapsed_seconds=ended_at - started_at,
-            ),
-            per_dispatch_state_path=state_path,
-        )
-
-    jsonl_path = claude_code_log_path(str(tool_ctx.project_dir), skill_result.session_id or "")
-
-    extended_chain = prior_session_chain[:]
-    if prior_dispatched_session_id and prior_dispatched_session_id not in extended_chain:
-        extended_chain.append(prior_dispatched_session_id)
-
-    additional_jsonl_paths: list[Path] = []
-    for sid in extended_chain:
-        path = claude_code_log_path(str(tool_ctx.project_dir), sid)
-        if path is not None:
-            additional_jsonl_paths.append(path)
-
-    parsed = parse_l3_result_block(
-        stdout=skill_result.result or "",
-        expected_dispatch_id=dispatch_id,
-        assistant_messages_path=jsonl_path,
-        prior_dispatch_ids=prior_ids or None,
-        additional_jsonl_paths=additional_jsonl_paths or None,
-    )
-
+    # --- Collect evidence for ALL outcomes (timeout or not) ---
     sidecar_file = Path(dispatch_sidecar_path)
     dispatch_checkpoint: SessionCheckpoint | None = None
     if sidecar_file.exists():
@@ -914,11 +889,35 @@ async def _run_dispatch(
         if sidecar_entries:
             dispatch_checkpoint = checkpoint_from_sidecar(sidecar_entries)
 
+    # --- Classify outcome via single-path classifier (handles timeout too) ---
+    extended_chain = prior_session_chain[:]
+    additional_jsonl_paths: list[Path] = []
+    if skill_result.subtype == "timeout":
+        parsed_result = None
+    else:
+        if prior_dispatched_session_id and prior_dispatched_session_id not in extended_chain:
+            extended_chain.append(prior_dispatched_session_id)
+
+        for sid in extended_chain:
+            path = claude_code_log_path(str(tool_ctx.project_dir), sid)
+            if path is not None:
+                additional_jsonl_paths.append(path)
+
+        jsonl_path = claude_code_log_path(str(tool_ctx.project_dir), skill_result.session_id or "")
+        parsed_result = parse_l3_result_block(
+            stdout=skill_result.result or "",
+            expected_dispatch_id=dispatch_id,
+            assistant_messages_path=jsonl_path,
+            prior_dispatch_ids=prior_ids or None,
+            additional_jsonl_paths=additional_jsonl_paths or None,
+        )
+
     final_status, reason = classify_dispatch_outcome(
-        parsed,
+        parsed_result,
         skill_result,
         sidecar_exists=sidecar_file.exists(),
         checkpoint=dispatch_checkpoint,
+        subtype=skill_result.subtype,
     )
 
     try:
@@ -943,11 +942,17 @@ async def _run_dispatch(
         token_usage=normalize_dispatch_token_usage(skill_result.token_usage or {}),
         started_at=started_at,
         ended_at=ended_at,
+        resume_checkpoint=_checkpoint_to_dict(dispatch_checkpoint),
     )
 
     extracted: dict[str, str] = {}
-    if final_status == DispatchStatus.SUCCESS and capture and parsed.payload:
-        extracted = _extract_captures(capture, parsed.payload)
+    if (
+        final_status == DispatchStatus.SUCCESS
+        and capture
+        and parsed_result is not None
+        and parsed_result.payload
+    ):
+        extracted = _extract_captures(capture, parsed_result.payload)
 
     upsert_dispatch_record_by_name(state_path, record)
     if not state_path.exists():
@@ -956,8 +961,11 @@ async def _run_dispatch(
         write_captured_values(state_path, extracted)
     _post_dispatch_cleanup(tool_ctx, skill_result, cache_invalidator, quota_refresher)
 
-    if parsed.outcome == "completed_clean":
-        envelope_success = bool(parsed.payload and parsed.payload.get("success", False))
+    # Route by outcome; timeout path has parsed_result=None → no_sentinel branch
+    if parsed_result is not None and parsed_result.outcome == "completed_clean":
+        envelope_success = bool(
+            parsed_result.payload and parsed_result.payload.get("success", False)
+        )
         return DispatchResult(
             DispatchCompleted(
                 success=envelope_success,
@@ -966,15 +974,15 @@ async def _run_dispatch(
                 dispatched_session_id=skill_result.session_id or "",
                 reason=reason,
                 token_usage=normalize_dispatch_token_usage(skill_result.token_usage or {}),
-                l3_payload=parsed.payload,
-                l3_parse_source=parsed.source,
+                l3_payload=parsed_result.payload,
+                l3_parse_source=parsed_result.source,
                 lifespan_started=skill_result.lifespan_started,
                 stderr=truncate_text(skill_result.stderr or "", ENVELOPE_STDERR_MAX),
                 elapsed_seconds=ended_at - started_at,
             ),
             per_dispatch_state_path=state_path,
         )
-    elif parsed.outcome == "completed_dirty":
+    elif parsed_result is not None and parsed_result.outcome == "completed_dirty":
         return DispatchResult(
             DispatchCompleted(
                 success=False,
@@ -984,9 +992,9 @@ async def _run_dispatch(
                 reason=FleetErrorCode.FLEET_L3_PARSE_FAILED,
                 token_usage=normalize_dispatch_token_usage(skill_result.token_usage or {}),
                 l3_payload=None,
-                l3_raw_body=parsed.raw_body,
-                l3_parse_error=parsed.parse_error,
-                l3_parse_source=parsed.source,
+                l3_raw_body=parsed_result.raw_body,
+                l3_parse_error=parsed_result.parse_error,
+                l3_parse_source=parsed_result.source,
                 lifespan_started=skill_result.lifespan_started,
                 stderr=truncate_text(skill_result.stderr or "", ENVELOPE_STDERR_MAX),
                 elapsed_seconds=ended_at - started_at,
@@ -994,16 +1002,17 @@ async def _run_dispatch(
             per_dispatch_state_path=state_path,
         )
     else:
+        parse_source = parsed_result.source if parsed_result is not None else "stdout"
         return DispatchResult(
             DispatchCompleted(
                 success=False,
                 dispatch_status=final_status,
                 dispatch_id=dispatch_id,
                 dispatched_session_id=skill_result.session_id or "",
-                reason=FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK,
+                reason=reason,
                 token_usage=normalize_dispatch_token_usage(skill_result.token_usage or {}),
                 l3_payload=None,
-                l3_parse_source=parsed.source,
+                l3_parse_source=parse_source,
                 lifespan_started=skill_result.lifespan_started,
                 resume_checkpoint=dispatch_checkpoint.to_dict() if dispatch_checkpoint else None,
                 stderr=truncate_text(skill_result.stderr or "", ENVELOPE_STDERR_MAX),

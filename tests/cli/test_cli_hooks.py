@@ -174,58 +174,23 @@ def test_evict_stale_hooks_removes_legacy_formats(tmp_path):
 
 # T-REG-1
 def test_install_production_order_includes_quota_check(tmp_path, monkeypatch):
-    """install() must register quota_guard.py regardless of function call order."""
-    import importlib
+    """install() must register quota_guard.py in hooks.json (plugin authority path)."""
+    from autoskillit.hooks import generate_hooks_json
 
-    from autoskillit.cli._marketplace import install
-
-    settings_path = tmp_path / ".claude" / "settings.json"
-    settings_path.parent.mkdir(parents=True)
-
-    app_module = importlib.import_module("autoskillit.cli._hooks")
-    monkeypatch.setattr(app_module, "_claude_settings_path", lambda scope: settings_path)
-    monkeypatch.setattr("subprocess.run", lambda *a, **kw: type("R", (), {"returncode": 0})())
-    monkeypatch.setattr("shutil.which", lambda cmd: f"/usr/bin/{cmd}")
-    monkeypatch.delenv("CLAUDECODE", raising=False)
-
-    _app_mod = importlib.import_module("autoskillit.cli._marketplace")
-    monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-
-    install(scope="local")
-
-    data = json.loads(settings_path.read_text())
-    pretooluse = data.get("hooks", {}).get("PreToolUse", [])
+    hooks_data = generate_hooks_json()
+    pretooluse = hooks_data.get("hooks", {}).get("PreToolUse", [])
     all_commands = [h["command"] for e in pretooluse for h in e.get("hooks", [])]
     assert any("quota_guard" in c for c in all_commands), (
-        "quota_guard missing from settings.json after install() — silent drop bug present"
+        "quota_guard missing from hooks.json — silent drop bug present"
     )
 
 
 # T-REG-2
-def test_settings_json_matches_hook_registry_after_install(tmp_path, monkeypatch):
-    """After install(), settings.json must contain every script from HOOK_REGISTRY."""
-    import importlib
+def test_hooks_json_matches_hook_registry_after_generate():
+    """generate_hooks_json() must contain every script from HOOK_REGISTRY."""
+    from autoskillit.hooks import HOOK_REGISTRY, generate_hooks_json
 
-    from autoskillit.cli._marketplace import install
-    from autoskillit.hooks import HOOK_REGISTRY
-
-    settings_path = tmp_path / ".claude" / "settings.json"
-    settings_path.parent.mkdir(parents=True)
-
-    app_module = importlib.import_module("autoskillit.cli._hooks")
-    monkeypatch.setattr(app_module, "_claude_settings_path", lambda scope: settings_path)
-    monkeypatch.setattr("subprocess.run", lambda *a, **kw: type("R", (), {"returncode": 0})())
-    monkeypatch.setattr("shutil.which", lambda cmd: f"/usr/bin/{cmd}")
-    monkeypatch.delenv("CLAUDECODE", raising=False)
-
-    _app_mod = importlib.import_module("autoskillit.cli._marketplace")
-    monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-
-    install(scope="local")
-
-    data = json.loads(settings_path.read_text())
+    data = generate_hooks_json()
     for hook_def in HOOK_REGISTRY:
         event_entries = data.get("hooks", {}).get(hook_def.event_type, [])
         if hook_def.event_type == "SessionStart":
@@ -241,7 +206,7 @@ def test_settings_json_matches_hook_registry_after_install(tmp_path, monkeypatch
             logical_name = script.removesuffix(".py")
             assert any(logical_name in c for c in entry_commands), (
                 f"Script {script!r} missing from matcher {hook_def.matcher!r} "
-                f"in {hook_def.event_type} section of settings.json"
+                f"in {hook_def.event_type} section of hooks.json"
             )
 
 
@@ -436,9 +401,6 @@ def test_register_all_skips_hook_sync_when_plugin_active(tmp_path, monkeypatch):
         "autoskillit.cli._init_helpers._is_plugin_installed",
         lambda **kwargs: True,
     )
-    monkeypatch.setattr("autoskillit.cli._hooks.is_git_worktree", lambda path: False)
-    monkeypatch.setattr("autoskillit.cli._init_helpers.is_git_worktree", lambda path: False)
-
     from autoskillit.cli._init_helpers import _register_all
 
     _register_all(scope="user", project_dir=tmp_path)
@@ -473,8 +435,6 @@ def test_register_all_writes_hooks_when_plugin_not_active(tmp_path, monkeypatch)
         "autoskillit.cli._init_helpers._is_plugin_installed",
         lambda **kwargs: False,
     )
-    monkeypatch.setattr("autoskillit.cli._hooks.is_git_worktree", lambda path: False)
-    monkeypatch.setattr("autoskillit.cli._init_helpers.is_git_worktree", lambda path: False)
     monkeypatch.setattr("subprocess.run", lambda *a, **kw: type("R", (), {"returncode": 0})())
 
     from autoskillit.cli._init_helpers import _register_all

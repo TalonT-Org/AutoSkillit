@@ -15,7 +15,7 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _patch_worktree_guard_for_hooks(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Prevent the worktree guard from firing in tests running inside a worktree."""
+    """Prevent the worktree guard and plugin-installed check from firing in tests."""
     import autoskillit.cli._hooks as _hooks_mod
     import autoskillit.cli._marketplace as _mkt_mod
     import autoskillit.core.paths as _core_paths
@@ -23,6 +23,9 @@ def _patch_worktree_guard_for_hooks(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(_hooks_mod, "is_git_worktree", lambda path: False)
     monkeypatch.setattr(_core_paths, "is_git_worktree", lambda path: False)
     monkeypatch.setattr(_mkt_mod, "is_git_worktree", lambda path: False)
+    monkeypatch.setattr(
+        "autoskillit.cli._init_helpers._is_plugin_installed", lambda **kwargs: False
+    )
 
 
 @pytest.fixture(autouse=True)

@@ -339,7 +339,7 @@ class TestRunSkillMissingContextLimit:
         )
 
     def test_terminal_step_exempt_from_warning(self) -> None:
-        """A step with action=stop needs no on_context_limit."""
+        """A run_skill step with action=stop needs no on_context_limit."""
         recipe = Recipe(
             name="test",
             description="test",
@@ -349,11 +349,10 @@ class TestRunSkillMissingContextLimit:
             steps={
                 "implement": RecipeStep(
                     tool="run_skill",
-                    on_success="done",
-                    on_failure="done",
+                    action="stop",
+                    message="done",
                     with_args={"skill_command": "x", "cwd": "/tmp"},
                 ),
-                "done": RecipeStep(action="stop", message="done"),
             },
         )
         findings = run_semantic_rules(recipe)

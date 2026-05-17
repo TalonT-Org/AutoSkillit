@@ -132,9 +132,9 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # _installed_plugins.py — installed_plugins.json (co-owned with Claude plugin system)
     ("src/autoskillit/cli/_installed_plugins.py", 71),
     # _marketplace.py — marketplace.json (co-owned)
-    ("src/autoskillit/cli/_marketplace.py", 100),
+    ("src/autoskillit/cli/_marketplace.py", 96),
     # _marketplace.py — hooks.json (co-owned)
-    ("src/autoskillit/cli/_marketplace.py", 192),
+    ("src/autoskillit/cli/_marketplace.py", 188),
     # _update_checks.py — dismissal state file
     ("src/autoskillit/cli/update/_update_checks.py", 77),
     # _update_checks_fetch.py — fetch cache (extracted from _update_checks.py)

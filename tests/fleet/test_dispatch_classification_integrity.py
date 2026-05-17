@@ -29,7 +29,7 @@ class TestDispatchClassificationIntegrity:
         Allowed: status=final_status (variable from classifier)
         Forbidden: status=DispatchStatus.FAILURE (hardcoded bypass)
         """
-        source = pathlib.Path("src/autoskillit/fleet/_api.py").read_text()
+        source = (pathlib.Path(__file__).parents[2] / "src/autoskillit/fleet/_api.py").read_text()
         tree = ast.parse(source)
         for node in ast.walk(tree):
             if isinstance(node, ast.Call) and _is_dispatch_record_call(node):

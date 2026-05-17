@@ -10,6 +10,7 @@ stdlib-only; no autoskillit imports.
 from __future__ import annotations
 
 import json
+import os
 import shlex
 import sys
 from pathlib import Path
@@ -23,6 +24,18 @@ _DENY_REASON = (
     "PR creation via run_cmd is prohibited during recipe execution. "
     "Use the prepare_pr → compose_pr pipeline instead. "
     "Direct gh pr create bypasses mandatory arch-lens, annotation, and review steps."
+)
+
+# Must stay in sync with the exempt_skills frozenset on the pr_create_guard HookDef
+# in hook_registry.py — stdlib-only boundary prevents a shared import.
+_EXEMPT_SKILLS: frozenset[str] = frozenset(
+    {
+        "compose-pr",
+        "compose-research-pr",
+        "open-integration-pr",
+        "promote-to-main",
+        "pipeline-summary",
+    }
 )
 
 
@@ -57,6 +70,11 @@ def main() -> None:
 
     if not _is_gh_pr_create(cmd):
         sys.exit(0)
+
+    skill_name = os.environ.get("AUTOSKILLIT_SKILL_NAME", "")
+    if skill_name in _EXEMPT_SKILLS:
+        sys.exit(0)
+
     # Hook config file is written by open_kitchen and removed by close_kitchen.
     # Its presence reliably signals an open kitchen without needing session ID.
     try:

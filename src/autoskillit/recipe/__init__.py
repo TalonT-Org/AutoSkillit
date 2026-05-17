@@ -116,6 +116,9 @@ from autoskillit.recipe.rules import rules_isolation as _rules_isolation  # noqa
 from autoskillit.recipe.rules import rules_loop_progress as _rules_loop_progress  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_merge as _rules_merge  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_merge_queue as _rules_merge_queue  # noqa: E402 F401
+from autoskillit.recipe.rules import (
+    rules_optional_capture as _rules_optional_capture,  # noqa: E402 F401
+)
 from autoskillit.recipe.rules import rules_packs as _rules_packs  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_reachability as _rules_reachability  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_recipe as _rules_recipe  # noqa: E402 F401

@@ -26,6 +26,7 @@ Semantic validation rule modules for recipe analysis (31 rule files).
 | `rules_isolation.py` | Workspace isolation rules (prevents operating on source repo) |
 | `rules_merge.py` | `merge_worktree` routing completeness |
 | `rules_merge_queue.py` | Merge queue push routing: `queued_branch` error route enforcement |
+| `rules_optional_capture.py` | Optional capture guard enforcement: detect steps with optional output patterns routing to consumers without a truthiness guard |
 | `rules_packs.py` | Pack validation (names must exist in `PACK_REGISTRY`) |
 | `rules_reachability.py` | Symbolic BFS reachability; capture-inversion detection |
 | `rules_remediation.py` | audit-impl remediation_path capture must have non-terminal non-GO route |

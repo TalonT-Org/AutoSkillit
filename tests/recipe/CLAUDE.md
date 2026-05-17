@@ -61,6 +61,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_methodology_tradition_router.py` | Tests for `classify_methodology` two-stage Tier-C router: per-tradition classification, multi-match, union rules, determinism |
 | `test_methodology_venue_appendix.py` | Tests for Stage B venue appendix resolution: folding map, conditional branching, constraint evaluation |
 | `test_no_suppression_drift.py` | Anti-regression: prevents reintroduction of validation suppression dicts |
+| `test_optional_capture_guard_rule.py` | Tests for optional-capture-requires-guard semantic validation rule |
 | `test_merge_prs.py` | Tests for merge-prs recipe structure |
 | `test_merge_prs_queue_any.py` | Tests for merge-prs-queue (any strategy) recipe |
 | `test_merge_prs_queue_common.py` | Shared queue behavior tests across all queue-capable recipes |

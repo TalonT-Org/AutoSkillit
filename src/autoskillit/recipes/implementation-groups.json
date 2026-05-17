@@ -527,12 +527,33 @@
       "capture": {
         "pr_url": "${{ result.pr_url }}"
       },
-      "on_success": "extract_pr_number",
+      "on_result": [
+        {
+          "when": "${{ result.pr_url }}",
+          "route": "guard_pr_url"
+        },
+        {
+          "route": "release_issue_failure"
+        }
+      ],
       "on_failure": "release_issue_failure",
       "on_context_limit": "release_issue_failure",
       "optional": true,
       "skip_when_false": "inputs.open_pr",
       "note": "Reads the PR prep file, validates arch-lens diagrams (must contain ★ or ●), composes the PR body, and runs gh pr create. Degrades gracefully if gh is unavailable (emits pr_url=). If context.issue_number is set, append it as the 5th positional argument for Closes #N injection in the PR body.\n"
+    },
+    "guard_pr_url": {
+      "action": "route",
+      "on_result": [
+        {
+          "when": "${{ context.pr_url }}",
+          "route": "extract_pr_number"
+        },
+        {
+          "route": "release_issue_failure"
+        }
+      ],
+      "note": "Guard — skip PR extraction if pr_url is empty (graceful degradation from compose_pr)."
     },
     "extract_pr_number": {
       "tool": "run_cmd",

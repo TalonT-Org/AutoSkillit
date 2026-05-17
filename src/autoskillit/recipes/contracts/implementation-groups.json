@@ -1,5 +1,5 @@
 {
-  "recipe_source_hash": "sha256:f272d3a6f4da71ad48d359178d218f7d667607950c387c1a150298fcee46fbbd",
+  "recipe_source_hash": "sha256:5604fa1d350646444a73734591bc57561cc6f9a5c14192012238da2f22d2613c",
   "bundled_manifest_version": "0.1.0",
   "skill_hashes": {},
   "skills": {
@@ -407,7 +407,10 @@
         "pr_url = https://github.com/owner/repo/pull/42\n%%ORDER_UP%%",
         "pr_url = \n%%ORDER_UP%%"
       ],
-      "write_behavior": "always"
+      "write_behavior": "conditional",
+      "write_expected_when": [
+        "pr_url\\s*=\\s*https://"
+      ]
     },
     "review-pr": {
       "inputs": [
@@ -555,7 +558,7 @@
         }
       ],
       "expected_output_patterns": [
-        "diagnosis_path\\s*=\\s*(?:/.+)?",
+        "diagnosis_path\\s*=",
         "failure_subtype\\s*=\\s*(flaky|timing_race|deterministic|fixture|import|env|unknown)"
       ],
       "pattern_examples": [
@@ -1369,6 +1372,50 @@
         "pr_url"
       ],
       "positional_args": 1
+    },
+    {
+      "step": "guard_pr_url",
+      "available": [
+        "all_plan_paths",
+        "arch_lenses",
+        "audit",
+        "auto_merge",
+        "base_branch",
+        "base_sha",
+        "claimed",
+        "cleanup_succeeded",
+        "conflict_escalation_required",
+        "fixes_applied",
+        "group_files",
+        "issue_number",
+        "issue_slug",
+        "issue_title",
+        "issue_url",
+        "lens_context_paths",
+        "local_review_rounds",
+        "merge_fix_count",
+        "merge_target",
+        "open_pr",
+        "phases_implemented",
+        "plan_path",
+        "pr_url",
+        "prep_path",
+        "remediation_path",
+        "remote_url",
+        "review_approach",
+        "review_max_retries",
+        "review_path",
+        "run_name",
+        "selected_lenses",
+        "source_dir",
+        "source_doc",
+        "upfront_claimed",
+        "verdict",
+        "work_dir",
+        "worktree_path"
+      ],
+      "required": [],
+      "produced": []
     },
     {
       "step": "extract_pr_number",

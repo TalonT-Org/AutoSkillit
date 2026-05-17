@@ -40,9 +40,25 @@ def test_run_arch_lenses_routes_to_compose_on_failure(recipe):
     assert step.on_failure == "compose_pr"
 
 
-def test_compose_pr_routes_to_extract_pr_number(recipe):
+def test_compose_pr_routes_to_guard_pr_url(recipe):
     step = recipe.steps["compose_pr"]
-    assert step.on_success == "extract_pr_number"
+    assert step.on_result is not None, "compose_pr must have on_result for conditional gating"
+    assert len(step.on_result.conditions) >= 2, (
+        "compose_pr on_result must have at least 2 conditions (truthy + else)"
+    )
+    truthy_cond = step.on_result.conditions[0]
+    assert truthy_cond.when == "${{ result.pr_url }}"
+    assert truthy_cond.route == "guard_pr_url"
+    else_cond = step.on_result.conditions[-1]
+    assert else_cond.route == "release_issue_failure", (
+        "compose_pr on_result else case must route to release_issue_failure"
+    )
+    guard = recipe.steps["guard_pr_url"]
+    assert guard.action == "route"
+    routes_to_extract = any(
+        c.route == "extract_pr_number" for c in (guard.on_result.conditions or [])
+    )
+    assert routes_to_extract, "guard_pr_url must route to extract_pr_number when pr_url is truthy"
 
 
 def test_prepare_pr_captures_three_context_vars(recipe):

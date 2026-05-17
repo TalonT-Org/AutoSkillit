@@ -3,8 +3,16 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
-from autoskillit.core import InfraExitCategory, NamedResume, NoResume, RetryReason, get_logger
+from autoskillit.core import (
+    FleetErrorCode,
+    InfraExitCategory,
+    NamedResume,
+    NoResume,
+    RetryReason,
+    get_logger,
+)
 from autoskillit.fleet.state_types import (
     _ABANDON_REASONS,
     _INFRASTRUCTURE_FAILURE_REASONS,
@@ -15,6 +23,8 @@ from autoskillit.fleet.state_types import (
     DispatchStatus,
     ResumeDecision,
 )
+
+MAX_CONSECUTIVE_RESUME_ATTEMPTS = 3
 
 __all__ = [
     "classify_stale_dispatch",
@@ -34,6 +44,27 @@ _ALWAYS_BLOCKING_STATUSES = frozenset(
 )
 
 _RETRIABLE_NON_SUCCESS = _ALWAYS_BLOCKING_STATUSES | frozenset({DispatchStatus.FAILURE})
+
+
+def _count_consecutive_resumable_timeouts(history: list[dict[str, Any]]) -> int:
+    """Count consecutive RESUMABLE + FLEET_L3_TIMEOUT entries from the tail."""
+    count = 0
+    for entry in reversed(history):
+        if (
+            entry.get("status") == str(DispatchStatus.RESUMABLE)
+            and entry.get("reason") == FleetErrorCode.FLEET_L3_TIMEOUT
+        ):
+            count += 1
+        else:
+            break
+    return count
+
+
+def _is_resumable_timeout_entry(entry: dict[str, Any]) -> bool:
+    return (
+        entry.get("status") == str(DispatchStatus.RESUMABLE)
+        and entry.get("reason") == FleetErrorCode.FLEET_L3_TIMEOUT
+    )
 
 
 def has_failed_dispatch(state_path: Path) -> bool:
@@ -201,15 +232,24 @@ def resume_campaign_from_state(
         resumable_dispatched_session_id = ""
         resumable_dispatch_id = ""
         resumable_kill_reason = ""
+        resumable_checkpoint: dict[str, Any] = {}
         for d in m.state.dispatches:
             if d.status in _VISIBLE_IN_BLOCK_STATUSES:
                 completed_lines.append(f"- {d.name}: {d.status}")
             elif d.status == DispatchStatus.RESUMABLE and not next_name:
-                next_name = d.name
-                is_resumable = True
-                resumable_dispatched_session_id = d.dispatched_session_id
-                resumable_dispatch_id = d.dispatch_id
-                resumable_kill_reason = d.kill_reason
+                timeout_count = _count_consecutive_resumable_timeouts(d.attempt_history)
+                if timeout_count >= MAX_CONSECUTIVE_RESUME_ATTEMPTS:
+                    # Exceeded retry budget — convert to FAILURE so campaign halts
+                    d.status = DispatchStatus.FAILURE
+                    d.reason = FleetErrorCode.FLEET_L3_TIMEOUT
+                    m.mark_dirty()
+                else:
+                    next_name = d.name
+                    is_resumable = True
+                    resumable_dispatched_session_id = d.dispatched_session_id
+                    resumable_dispatch_id = d.dispatch_id
+                    resumable_kill_reason = d.kill_reason
+                    resumable_checkpoint = d.resume_checkpoint
             elif (
                 d.status
                 not in {
@@ -233,6 +273,7 @@ def resume_campaign_from_state(
             dispatched_session_id=resumable_dispatched_session_id,
             dispatch_id=resumable_dispatch_id,
             kill_reason=resumable_kill_reason,
+            checkpoint=resumable_checkpoint,
         )
 
 

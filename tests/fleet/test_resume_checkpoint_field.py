@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.fleet.state_types import (
-    CampaignState,
     DispatchRecord,
     DispatchStatus,
 )

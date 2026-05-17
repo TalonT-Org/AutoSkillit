@@ -68,8 +68,23 @@ def test_detects_optional_pattern_without_guard(monkeypatch: pytest.MonkeyPatch)
     assert "consumer" in guard_findings[0].message
 
 
-def test_allows_optional_pattern_with_guard() -> None:
+def test_allows_optional_pattern_with_guard(monkeypatch: pytest.MonkeyPatch) -> None:
     """Rule does NOT fire when a guard step with truthiness check is interposed."""
+    manifest = {
+        "version": "0.1.0",
+        "skills": {
+            "test-skill": {
+                "inputs": [],
+                "outputs": [{"name": "pr_url", "type": "string"}],
+                "expected_output_patterns": ["pr_url\\s*=\\s*(https://.*)?"],
+                "pattern_examples": ["pr_url = https://example.com/pull/1"],
+                "write_behavior": "conditional",
+                "write_expected_when": ["pr_url\\s*=\\s*https://"],
+            }
+        },
+    }
+    monkeypatch.setattr(_r, "load_bundled_manifest", lambda: manifest)
+
     recipe = _make_recipe(
         {
             "producer": RecipeStep(

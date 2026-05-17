@@ -99,6 +99,54 @@ def test_bundled_recipes_no_inline_ci_polling() -> None:
         )
 
 
+def test_gh_pr_view_status_check_fires_warning() -> None:
+    """run_cmd with 'gh pr view ... --json statusCheckRollup' must trigger WARNING."""
+    steps = {
+        "ci_check": RecipeStep(
+            tool="run_cmd",
+            with_args={"cmd": "gh pr view 42 --json statusCheckRollup -q '.statusCheckRollup'"},
+        ),
+    }
+    recipe = _make_recipe(steps)
+    findings = run_semantic_rules(recipe)
+    ci_findings = [f for f in findings if f.rule == "ci-polling-inline-shell"]
+    assert len(ci_findings) == 1
+    assert ci_findings[0].severity == Severity.WARNING
+    assert ci_findings[0].step_name == "ci_check"
+
+
+def test_gh_api_status_check_fires_warning() -> None:
+    """run_cmd with 'gh api .../status' must trigger WARNING."""
+    steps = {
+        "ci_check": RecipeStep(
+            tool="run_cmd",
+            with_args={"cmd": "gh api repos/owner/repo/commits/main/status"},
+        ),
+    }
+    recipe = _make_recipe(steps)
+    findings = run_semantic_rules(recipe)
+    ci_findings = [f for f in findings if f.rule == "ci-polling-inline-shell"]
+    assert len(ci_findings) == 1
+    assert ci_findings[0].severity == Severity.WARNING
+    assert ci_findings[0].step_name == "ci_check"
+
+
+def test_gh_api_check_runs_fires_warning() -> None:
+    """run_cmd with 'gh api .../check-runs' must trigger WARNING."""
+    steps = {
+        "ci_check": RecipeStep(
+            tool="run_cmd",
+            with_args={"cmd": "gh api repos/owner/repo/commits/main/check-runs"},
+        ),
+    }
+    recipe = _make_recipe(steps)
+    findings = run_semantic_rules(recipe)
+    ci_findings = [f for f in findings if f.rule == "ci-polling-inline-shell"]
+    assert len(ci_findings) == 1
+    assert ci_findings[0].severity == Severity.WARNING
+    assert ci_findings[0].step_name == "ci_check"
+
+
 # ---------------------------------------------------------------------------
 # ci-failure-missing-conflict-gate rule tests
 # ---------------------------------------------------------------------------

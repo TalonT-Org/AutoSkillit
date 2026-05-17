@@ -565,3 +565,95 @@ class TestEnqueueMethod:
         assert result["enrollment_method"] == "auto_merge"
         assert any("enablePullRequestAutoMerge" in b for b in posted_bodies)
         assert not any("enqueuePullRequest" in b for b in posted_bodies)
+
+    @pytest.mark.anyio
+    async def test_enqueue_direct_rejection_returns_failure(self) -> None:
+        """GraphQL mutation rejection (CI not passed) returns success=False with error."""
+        watcher = _make_watcher()
+        watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
+            return_value=_queue_state(pr_node_id="PR_kwDO_test123"),
+        )
+
+        async def _mock_post(*args, **kwargs):
+            return httpx.Response(
+                200,
+                json={
+                    "errors": [
+                        {
+                            "message": (
+                                "3 of 3 required status checks have not succeeded: "
+                                "2 expected, 1 failing"
+                            )
+                        }
+                    ]
+                },
+                request=httpx.Request("POST", "http://x"),
+            )
+
+        watcher._client.post = _mock_post  # type: ignore[method-assign]
+        result = await watcher.enqueue(
+            pr_number=42,
+            target_branch="main",
+            repo="owner/repo",
+            auto_merge_available=False,
+        )
+        assert result["success"] is False
+        assert "enqueue failed" in result["error"]
+        assert "3 of 3 required status checks" in result["error"]
+
+    @pytest.mark.anyio
+    async def test_enqueue_auto_merge_rejection_returns_failure(self) -> None:
+        """enablePullRequestAutoMerge mutation rejection returns success=False with error."""
+        watcher = _make_watcher()
+        watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
+            return_value=_queue_state(pr_node_id="PR_kwDO_test123"),
+        )
+
+        async def _mock_post(*args, **kwargs):
+            return httpx.Response(
+                200,
+                json={
+                    "errors": [
+                        {"message": "3 of 3 required status checks have not succeeded: 2 expected"}
+                    ]
+                },
+                request=httpx.Request("POST", "http://x"),
+            )
+
+        watcher._client.post = _mock_post  # type: ignore[method-assign]
+        result = await watcher.enqueue(
+            pr_number=42,
+            target_branch="main",
+            repo="owner/repo",
+            auto_merge_available=True,
+        )
+        assert result["success"] is False
+        assert "enqueue failed" in result["error"]
+        assert "3 of 3 required status checks" in result["error"]
+
+    @pytest.mark.anyio
+    async def test_enqueue_failure_error_message_contains_github_reason(self) -> None:
+        """Error message must include the GitHub rejection reason, not a generic message."""
+        watcher = _make_watcher()
+        watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
+            return_value=_queue_state(pr_node_id="PR_kwDO_test123"),
+        )
+
+        github_reason = "pull request is not in a mergeable state"
+
+        async def _mock_post(*args, **kwargs):
+            return httpx.Response(
+                200,
+                json={"errors": [{"message": github_reason}]},
+                request=httpx.Request("POST", "http://x"),
+            )
+
+        watcher._client.post = _mock_post  # type: ignore[method-assign]
+        result = await watcher.enqueue(
+            pr_number=42,
+            target_branch="main",
+            repo="owner/repo",
+            auto_merge_available=False,
+        )
+        assert result["success"] is False
+        assert github_reason in result["error"]

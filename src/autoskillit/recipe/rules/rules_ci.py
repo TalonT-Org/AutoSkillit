@@ -38,6 +38,32 @@ def _check_ci_polling_inline_shell(ctx: ValidationContext) -> list[RuleFinding]:
                     ),
                 )
             )
+        if "gh pr view" in cmd and ("statusCheckRollup" in cmd or "checks" in cmd):
+            findings.append(
+                RuleFinding(
+                    rule="ci-polling-inline-shell",
+                    severity=Severity.WARNING,
+                    step_name=name,
+                    message=(
+                        f"Step '{name}' uses inline 'gh pr view --json statusCheckRollup' "
+                        "for CI polling. Use the wait_for_ci MCP tool instead for "
+                        "race-immune CI watching with structured output."
+                    ),
+                )
+            )
+        if "gh api" in cmd and ("status" in cmd or "check-runs" in cmd):
+            findings.append(
+                RuleFinding(
+                    rule="ci-polling-inline-shell",
+                    severity=Severity.WARNING,
+                    step_name=name,
+                    message=(
+                        f"Step '{name}' uses inline 'gh api' for CI status polling. "
+                        "Use the wait_for_ci MCP tool instead for race-immune CI watching "
+                        "with structured output."
+                    ),
+                )
+            )
     return findings
 
 
@@ -592,3 +618,59 @@ def _has_conflict_ancestor(
             return True
         queue.extend(ctx.predecessors.get(current, set()))
     return False
+
+
+@semantic_rule(
+    name="enqueue-missing-ci-gate",
+    description=(
+        "Flags enqueue_pr steps reachable from recipe entry without a wait_for_ci ancestor. "
+        "Premature queue enrollment (before CI passes) causes predictable GitHub rejection."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_enqueue_missing_ci_gate(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+
+    # Find all enqueue_pr steps
+    enqueue_steps: set[str] = {
+        name for name, step in ctx.recipe.steps.items() if step.tool == "enqueue_pr"
+    }
+    if not enqueue_steps:
+        return findings
+
+    # Find all wait_for_ci steps — these act as CI gate barriers
+    ci_gate_steps: set[str] = {
+        name for name, step in ctx.recipe.steps.items() if step.tool == "wait_for_ci"
+    }
+
+    for enqueue_name in enqueue_steps:
+        # BFS backward through predecessors
+        visited: set[str] = set()
+        queue = list(ctx.predecessors.get(enqueue_name, set()))
+        guarded = False
+        while queue:
+            current = queue.pop()
+            if current in visited:
+                continue
+            visited.add(current)
+            if current in ci_gate_steps:
+                guarded = True
+                break
+            # Continue traversing backward
+            queue.extend(ctx.predecessors.get(current, set()))
+
+        if not guarded:
+            findings.append(
+                RuleFinding(
+                    rule="enqueue-missing-ci-gate",
+                    severity=Severity.ERROR,
+                    step_name=enqueue_name,
+                    message=(
+                        f"Step '{enqueue_name}' calls enqueue_pr but is reachable from "
+                        "recipe entry without passing through a wait_for_ci step. "
+                        "Add a CI gate (wait_for_ci) before enqueue to prevent premature "
+                        "queue enrollment."
+                    ),
+                )
+            )
+    return findings

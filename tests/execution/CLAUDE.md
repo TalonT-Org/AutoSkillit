@@ -45,6 +45,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_loc_capture.py` | Tests for LoC capture helpers in execution.headless (T-GIT-1..T-GIT-6) |
 | `test_merge_queue_classifier.py` | Tests for merge queue classifier: PendingCIGuard, InconclusiveBudget, ClassifierImmunity, VocabularyContract |
 | `test_merge_queue_ejection.py` | Tests for merge queue ejection: RelatedCoverage, EjectionEnrichment, FetchRepoMergeStateRetry |
+| `test_merge_queue_group_ci.py` | Unit tests for `_query_merge_group_ci` — regression guard for `conclusion` vs `state` field usage |
 | `test_merge_queue_polling.py` | Tests for DefaultMergeQueueWatcher polling state machine |
 | `test_normalize_subtype.py` | Unit tests for ClaudeSessionResult.normalize_subtype() normalization gate |
 | `test_on_spawn_timing.py` | Tests for on_pid_resolved callback timing in run_managed_async (Group J) |

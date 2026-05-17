@@ -175,9 +175,58 @@
       "capture": {
         "current_pr_number": "${{ result.stdout | trim }}"
       },
-      "on_success": "enqueue_current_pr",
+      "on_success": "get_current_pr_branch",
       "on_failure": "register_clone_failure",
       "note": "Queue mode only. Extracts the first PR's number from pr_order_file to initialize context.current_pr_number before the sequential enqueue loop.\n"
+    },
+    "get_current_pr_branch": {
+      "tool": "run_cmd",
+      "with": {
+        "cmd": "gh pr view '${{ context.current_pr_number }}' --json headRefName -q .headRefName",
+        "cwd": "${{ context.work_dir }}",
+        "step_name": "get_current_pr_branch"
+      },
+      "capture": {
+        "current_pr_branch": "${{ result.stdout | trim }}"
+      },
+      "on_success": "wait_ci_pre_enqueue",
+      "on_failure": "register_clone_failure",
+      "note": "Fetches the headRefName for the current PR to be enqueued. Captured as current_pr_branch for use by wait_ci_pre_enqueue. Follows the same pattern as get_ejected_pr_branch and get_next_pr_branch.\n"
+    },
+    "wait_ci_pre_enqueue": {
+      "tool": "wait_for_ci",
+      "with": {
+        "branch": "${{ context.current_pr_branch }}",
+        "cwd": "${{ context.work_dir }}",
+        "event": "${{ context.ci_event }}",
+        "timeout_seconds": 600,
+        "remote_url": "${{ context.remote_url }}",
+        "auto_trigger": "true",
+        "step_name": "wait_ci_pre_enqueue"
+      },
+      "on_result": [
+        {
+          "when": "${{ result.conclusion }} == success",
+          "route": "enqueue_current_pr"
+        },
+        {
+          "when": "${{ result.conclusion }} == no_runs",
+          "route": "register_clone_failure"
+        },
+        {
+          "when": "${{ result.conclusion }} == timed_out",
+          "route": "register_clone_failure"
+        },
+        {
+          "when": "${{ result.conclusion }} == failure",
+          "route": "register_clone_failure"
+        },
+        {
+          "route": "register_clone_failure"
+        }
+      ],
+      "on_failure": "register_clone_failure",
+      "note": "Waits for CI to pass on the PR branch before attempting queue enrollment. Prevents premature enqueue rejection by GitHub when required status checks have not yet completed.\n"
     },
     "enqueue_current_pr": {
       "tool": "enqueue_pr",
@@ -188,8 +237,8 @@
         "auto_merge_available": "${{ context.auto_merge_available }}"
       },
       "on_success": "wait_queue_pr",
-      "on_failure": "register_clone_failure",
-      "note": "Queue mode only. Submits a single PR to the merge queue via the unified enqueue_pr tool. Called once per PR in the sequential enqueue loop: get_first_pr_number → enqueue_current_pr → wait_queue_pr → (merged) → advance_queue_pr → enqueue_current_pr → ...\n"
+      "on_failure": "verify_queue_enrollment",
+      "note": "Queue mode only. Submits a single PR to the merge queue via the unified enqueue_pr tool. Called once per PR in the sequential enqueue loop: get_first_pr_number → get_current_pr_branch → wait_ci_pre_enqueue → enqueue_current_pr → wait_queue_pr → (merged) → advance_queue_pr → get_current_pr_branch → wait_ci_pre_enqueue → enqueue_current_pr → ...\n"
     },
     "wait_queue_pr": {
       "tool": "wait_for_merge_queue",
@@ -475,6 +524,57 @@
       ],
       "note": "Iteration guard for the ci_watch_post_queue_fix timed_out self-loop. Caps at 2 iterations. On budget exhaustion, routes to register_clone_failure.\n"
     },
+    "verify_queue_enrollment": {
+      "description": "Probe merge queue after enqueue command failure",
+      "tool": "wait_for_merge_queue",
+      "with": {
+        "pr_number": "${{ context.current_pr_number }}",
+        "target_branch": "${{ inputs.base_branch }}",
+        "cwd": "${{ context.work_dir }}",
+        "remote_url": "${{ context.remote_url }}",
+        "timeout_seconds": 60,
+        "poll_interval": 10
+      },
+      "on_result": [
+        {
+          "when": "${{ result.pr_state }} == merged",
+          "route": "advance_queue_pr"
+        },
+        {
+          "when": "${{ result.pr_state }} == ejected_ci_failure",
+          "route": "diagnose_queue_ci"
+        },
+        {
+          "when": "${{ result.pr_state }} == not_enrolled",
+          "route": "register_clone_failure"
+        },
+        {
+          "when": "${{ result.pr_state }} == dropped_healthy",
+          "route": "wait_queue_pr"
+        },
+        {
+          "when": "${{ result.pr_state }} == dropped_merge_group_ci",
+          "route": "diagnose_queue_ci"
+        },
+        {
+          "when": "${{ result.pr_state }} == ejected",
+          "route": "wait_queue_pr"
+        },
+        {
+          "when": "${{ result.pr_state }} == stalled",
+          "route": "wait_queue_pr"
+        },
+        {
+          "when": "${{ result.pr_state }} == timeout",
+          "route": "register_clone_failure"
+        },
+        {
+          "route": "register_clone_failure"
+        }
+      ],
+      "on_failure": "register_clone_failure",
+      "note": "Short probe (60s) after enqueue_current_pr failure. Distinguishes transient enqueue errors from actual configuration failures. Recoverable states route to wait_queue_pr; terminal failures route to register_clone_failure.\n"
+    },
     "reenter_queue": {
       "tool": "enqueue_pr",
       "with": {
@@ -484,7 +584,7 @@
         "auto_merge_available": "${{ context.auto_merge_available }}"
       },
       "on_success": "wait_queue_pr",
-      "on_failure": "register_clone_failure",
+      "on_failure": "verify_queue_enrollment",
       "note": "Re-submits the fixed PR to the merge queue after conflict resolution. Routes back to wait_queue_pr to continue monitoring.\n"
     },
     "advance_queue_pr": {

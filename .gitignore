@@ -19,8 +19,9 @@ temp/
 .claude/settings.json
 src/autoskillit/hooks/hooks.json
 
-# Generated contract cards — regenerated at install time via regen-contracts task
+# Generated contract cards and diagrams — regenerated at install time
 src/autoskillit/recipes/contracts/
+src/autoskillit/recipes/diagrams/
 
 
 # dynaconf secrets files — never commit

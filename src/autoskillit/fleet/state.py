@@ -619,13 +619,18 @@ def normalize_dispatch_token_usage(raw: dict[str, Any]) -> dict[str, int]:
     """Map raw Claude session token keys to canonical DispatchTokenUsage key set.
 
     Idempotent: handles both raw keys (input_tokens/output_tokens) and canonical
-    keys (input/output) so that double-normalization is safe.
+    keys (input/output) so that double-normalization is safe. Canonical keys take
+    priority when both are present.
     """
     return {
-        "input": int(raw.get("input_tokens", raw.get("input", 0))),
-        "output": int(raw.get("output_tokens", raw.get("output", 0))),
+        "input": int(raw["input"] if "input" in raw else raw.get("input_tokens", 0)),
+        "output": int(raw["output"] if "output" in raw else raw.get("output_tokens", 0)),
         "cache_creation": int(
-            raw.get("cache_creation_input_tokens", raw.get("cache_creation", 0))
+            raw["cache_creation"]
+            if "cache_creation" in raw
+            else raw.get("cache_creation_input_tokens", 0)
         ),
-        "cache_read": int(raw.get("cache_read_input_tokens", raw.get("cache_read", 0))),
+        "cache_read": int(
+            raw["cache_read"] if "cache_read" in raw else raw.get("cache_read_input_tokens", 0)
+        ),
     }

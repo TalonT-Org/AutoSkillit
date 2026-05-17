@@ -320,6 +320,37 @@ class TestNormalizeDispatchTokenUsage:
 
         assert "normalize_dispatch_token_usage" in autoskillit.fleet.__all__
 
+    def test_canonical_name_only(self) -> None:
+        result = normalize_dispatch_token_usage(
+            {"input": 10, "output": 5, "cache_creation": 2, "cache_read": 3}
+        )
+        assert result == {"input": 10, "output": 5, "cache_creation": 2, "cache_read": 3}
+
+    def test_mixed_old_and_new_canonical_wins(self) -> None:
+        result = normalize_dispatch_token_usage(
+            {
+                "input": 0,
+                "input_tokens": 99,
+                "output": 0,
+                "output_tokens": 88,
+                "cache_creation": 0,
+                "cache_creation_input_tokens": 77,
+                "cache_read": 0,
+                "cache_read_input_tokens": 66,
+            }
+        )
+        assert result == {"input": 0, "output": 0, "cache_creation": 0, "cache_read": 0}
+
+    def test_existing_full_mapping_unchanged(self) -> None:
+        raw = {
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "cache_creation_input_tokens": 20,
+            "cache_read_input_tokens": 30,
+        }
+        result = normalize_dispatch_token_usage(raw)
+        assert result == {"input": 100, "output": 50, "cache_creation": 20, "cache_read": 30}
+
 
 class TestDispatchRecordToDict:
     def test_dispatch_record_to_dict_all_fields(self) -> None:

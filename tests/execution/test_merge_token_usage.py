@@ -94,6 +94,14 @@ class TestMergeTokenUsageCanonical:
         base = {"input_tokens": 100, "output_tokens": 50}
         assert _merge_token_usage(base, None) is base
 
+    def test_none_base_legacy_keys_not_canonicalized(self):
+        """None base + legacy-keyed nudge → nudge returned as-is, no canonicalization."""
+        nudge = {"cache_creation_input_tokens": 5, "cache_read_input_tokens": 30}
+        result = _merge_token_usage(None, nudge)
+        assert result is nudge
+        assert "cache_creation_input_tokens" in result
+        assert "cache_read_input_tokens" in result
+
     def test_both_none_returns_none(self):
         """Both None → return None."""
         assert _merge_token_usage(None, None) is None
@@ -103,7 +111,7 @@ class TestMergeTokenUsageCanonical:
         base = {"input_tokens": "not_a_number", "output_tokens": 50, "cache_write_tokens": 10}
         nudge = {"input_tokens": 200, "output_tokens": 100, "cache_write_tokens": 5}
         result = _merge_token_usage(base, nudge)
-        assert result.get("input_tokens") == "not_a_number"
+        assert result["input_tokens"] == "not_a_number"
         assert result["output_tokens"] == 150
         assert result["cache_write_tokens"] == 15
 

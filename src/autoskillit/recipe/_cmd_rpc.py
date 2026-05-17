@@ -85,8 +85,6 @@ def commit_guard(worktree_path: str) -> dict[str, str]:
         path = entry[3:]
         if xy[0] in "RC":
             i += 1
-            if i < len(parts):
-                path = parts[i]
         if path and not is_generated_path(path):
             files_to_add.append(path)
         i += 1

@@ -67,14 +67,14 @@ class TestExtractTokenUsage:
         assert result is not None
         assert result["input_tokens"] == 100
         assert result["output_tokens"] == 50
-        assert result["cache_creation_input_tokens"] == 10
-        assert result["cache_read_input_tokens"] == 5
+        assert result["cache_write_tokens"] == 10
+        assert result["cache_read_tokens"] == 5
         assert result["model_breakdown"] == {
             "claude-sonnet-4-6": {
                 "input_tokens": 100,
                 "output_tokens": 50,
-                "cache_creation_input_tokens": 10,
-                "cache_read_input_tokens": 5,
+                "cache_write_tokens": 10,
+                "cache_read_tokens": 5,
             }
         }
 
@@ -113,8 +113,8 @@ class TestExtractTokenUsage:
         assert result is not None
         assert result["input_tokens"] == 300
         assert result["output_tokens"] == 100
-        assert result["cache_creation_input_tokens"] == 20
-        assert result["cache_read_input_tokens"] == 10
+        assert result["cache_write_tokens"] == 20
+        assert result["cache_read_tokens"] == 10
         assert "claude-sonnet-4-6" in result["model_breakdown"]
         assert result["model_breakdown"]["claude-sonnet-4-6"]["input_tokens"] == 300
 
@@ -196,8 +196,8 @@ class TestExtractTokenUsage:
         # result record totals take precedence over assistant sum
         assert result["input_tokens"] == 999
         assert result["output_tokens"] == 888
-        assert result["cache_creation_input_tokens"] == 50
-        assert result["cache_read_input_tokens"] == 25
+        assert result["cache_write_tokens"] == 50
+        assert result["cache_read_tokens"] == 25
         # model breakdown still comes from assistant records
         assert "claude-sonnet-4-6" in result["model_breakdown"]
 
@@ -264,11 +264,11 @@ class TestExtractTokenUsage:
         )
         result = extract_token_usage(stdout)
         assert result is not None
-        assert result["cache_creation_input_tokens"] == 0
-        assert result["cache_read_input_tokens"] == 0
+        assert result["cache_write_tokens"] == 0
+        assert result["cache_read_tokens"] == 0
         breakdown = result["model_breakdown"]["claude-sonnet-4-6"]
-        assert breakdown["cache_creation_input_tokens"] == 0
-        assert breakdown["cache_read_input_tokens"] == 0
+        assert breakdown["cache_write_tokens"] == 0
+        assert breakdown["cache_read_tokens"] == 0
 
     def test_ignores_non_assistant_non_result_records(self):
         """user and system records are skipped."""

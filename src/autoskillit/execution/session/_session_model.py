@@ -23,12 +23,13 @@ logger = get_logger(__name__)
 
 _ABS_PATH_RE: re.Pattern[str] = re.compile(r'(?:^|[\s="\'])(/(?:[a-zA-Z0-9._/~@+-]+))')
 
-_TOKEN_FIELDS = (
-    "input_tokens",
-    "output_tokens",
-    "cache_creation_input_tokens",
-    "cache_read_input_tokens",
+_API_TOKEN_FIELDS, _CANONICAL_TOKEN_FIELDS = (
+    ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"),
+    ("input_tokens", "output_tokens", "cache_write_tokens", "cache_read_tokens"),
 )
+_CACHE_READ_TOKENS_API_FIELD = _API_TOKEN_FIELDS[
+    _CANONICAL_TOKEN_FIELDS.index("cache_read_tokens")
+]
 
 FAILURE_SUBTYPES: frozenset[CliSubtype] = frozenset(
     {
@@ -256,17 +257,20 @@ def extract_token_usage(stdout: str) -> dict[str, Any] | None:
             if not isinstance(usage, dict):
                 continue
             model = msg.get("model", "unknown")
-            bucket = model_buckets.setdefault(model, {f: 0 for f in _TOKEN_FIELDS})
-            for f in _TOKEN_FIELDS:
-                bucket[f] += usage.get(f, 0)
-            cr = usage.get("cache_read_input_tokens", 0)
+            bucket = model_buckets.setdefault(model, {f: 0 for f in _CANONICAL_TOKEN_FIELDS})
+            for api_f, canon_f in zip(_API_TOKEN_FIELDS, _CANONICAL_TOKEN_FIELDS):
+                bucket[canon_f] += usage.get(api_f, 0)
+            cr = usage.get(_CACHE_READ_TOKENS_API_FIELD, 0)
             if cr > peak_context:
                 peak_context = cr
             turn_count += 1
         elif record_type == "result":
             usage = obj.get("usage")
             if isinstance(usage, dict):
-                result_usage = {f: usage.get(f, 0) for f in _TOKEN_FIELDS}
+                result_usage = {
+                    canon_f: usage.get(api_f, 0)
+                    for api_f, canon_f in zip(_API_TOKEN_FIELDS, _CANONICAL_TOKEN_FIELDS)
+                }
 
     if not model_buckets and result_usage is None:
         return None
@@ -274,9 +278,9 @@ def extract_token_usage(stdout: str) -> dict[str, Any] | None:
     if result_usage is not None:
         totals = dict(result_usage)
     else:
-        totals = {f: 0 for f in _TOKEN_FIELDS}
+        totals = {f: 0 for f in _CANONICAL_TOKEN_FIELDS}
         for bucket in model_buckets.values():
-            for f in _TOKEN_FIELDS:
+            for f in _CANONICAL_TOKEN_FIELDS:
                 totals[f] += bucket[f]
 
     return {

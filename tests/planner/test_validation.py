@@ -541,6 +541,29 @@ def test_validate_plan_warns_on_phase_sentinel_in_assignments_dir(tmp_path: Path
     )
 
 
+@pytest.mark.parametrize(
+    "bad_dep,reason",
+    [
+        ("P1-A1", "assignment-level ID in WP depends_on"),
+        ("P1", "phase-level ID in WP depends_on"),
+        ("WP1", "bare WP ID without phase/assignment prefix"),
+    ],
+)
+def test_check_dep_id_format_rejects_malformed(bad_dep, reason, tmp_path: Path) -> None:
+    """depends_on entries must match WP ID format (P\\d+-A\\d+-WP\\d+)."""
+    from autoskillit.planner.validation import _check_dep_id_format
+
+    wp_results = {
+        "P1-A1-WP1": {"id": "P1-A1-WP1", "depends_on": [bad_dep]},
+        "P1-A1-WP2": {"id": "P1-A1-WP2", "depends_on": []},
+    }
+    findings = _check_dep_id_format(wp_results)
+    assert any(f["severity"] == "error" for f in findings), (
+        f"Expected error for malformed dep {bad_dep!r}: {reason}"
+    )
+    assert any(bad_dep in f["message"] for f in findings if f["severity"] == "error")
+
+
 def test_validate_plan_warns_on_non_wp_result_file_in_work_packages_dir(tmp_path: Path) -> None:
     """Non-WP result files in work_packages/ emit a file_discovery_miss warning."""
     _make_minimal_output_dir(tmp_path)

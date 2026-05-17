@@ -13,7 +13,12 @@ from autoskillit.planner.merge import (
     merge_tier_results,
     replace_item,
 )
-from tests.planner.conftest import make_phase_result, write_json, write_task_file
+from tests.planner.conftest import (
+    make_assignment_result,
+    make_phase_result,
+    write_json,
+    write_task_file,
+)
 
 pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.feature("planner")]
 
@@ -1001,3 +1006,33 @@ def test_write_refine_contexts_detects_missing_expected_phases(tmp_path: Path) -
             task_file_path="",
             expected_phase_ids=expected_phase_ids,
         )
+
+
+def test_merge_assignments_succeeds_with_sentinels_present(tmp_path):
+    """merge_tier_results must succeed when sentinels exist in their isolated subdir."""
+    results_dir = tmp_path / "assignments"
+    results_dir.mkdir()
+
+    write_json(
+        results_dir / "P1-A1_result.json",
+        make_assignment_result(1, 1),
+    )
+    write_json(
+        results_dir / "P1-A2_result.json",
+        make_assignment_result(1, 2),
+    )
+    sentinel_dir = results_dir / "assign_sentinels"
+    sentinel_dir.mkdir()
+    write_json(
+        sentinel_dir / "P1_result.json",
+        {"id": "P1", "status": "complete", "assignment_count": 2, "failed_count": 0},
+    )
+
+    out = tmp_path / "combined.json"
+    result = merge_tier_results(str(results_dir), str(out), "assignments")
+
+    assert result["merged_path"] == str(out)
+    data = json.loads(out.read_text())
+    assert len(data["assignments"]) == 2
+    ids = {a["id"] for a in data["assignments"]}
+    assert ids == {"P1-A1", "P1-A2"}

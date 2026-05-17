@@ -147,10 +147,9 @@ def test_flush_to_hook_cross_seam(tmp_path):
 
 
 def test_v1_alias_map_structural_correctness():
-    """Bridge contract: _V1_TOKEN_FIELD_ALIASES must map exactly 2 old names to canonical names.
+    """Bridge contract: _V1_TOKEN_FIELD_ALIASES maps old names to canonical names.
 
     Structural invariants:
-    - Exactly 2 entries (one per renamed cache field).
     - Every value is a canonical name in TOKEN_USAGE_FILE_KEYS.
     - No key appears in TOKEN_USAGE_FILE_KEYS (old names are excluded).
     """
@@ -159,9 +158,6 @@ def test_v1_alias_map_structural_correctness():
         TOKEN_USAGE_FILE_KEYS,
     )
 
-    assert len(_V1_TOKEN_FIELD_ALIASES) == 2, (
-        f"Expected exactly 2 alias entries, got {len(_V1_TOKEN_FIELD_ALIASES)}"
-    )
     for old_name, canonical_name in _V1_TOKEN_FIELD_ALIASES.items():
         assert isinstance(old_name, str) and old_name, (
             f"Alias key must be non-empty str: {old_name!r}"

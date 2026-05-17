@@ -12,6 +12,7 @@ from autoskillit.recipe.contracts import (
     resolve_skill_name,
 )
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.schema import RecipeStep
 
 
 def _has_optional_capture_group(patterns: list[str]) -> bool:
@@ -105,9 +106,12 @@ def _check_optional_capture_requires_guard(ctx: ValidationContext) -> list[RuleF
         if not step.capture:
             continue
 
-        # The step must route somewhere on success
-        if not step.on_success:
+        # The step must route somewhere — either on_success or on_result
+        routes_via_on_result = bool(step.on_result and step.on_result.conditions)
+        if not step.on_success and not routes_via_on_result:
             continue
+
+        route_target = step.on_success or "(via on_result)"
 
         # For each captured key, check whether a guard is interposed
         for captured_key in step.capture:
@@ -120,7 +124,7 @@ def _check_optional_capture_requires_guard(ctx: ValidationContext) -> list[RuleF
                         message=(
                             f"Step '{step_name}' has an optional capture group in "
                             f"expected_output_patterns for skill '{name}' but routes "
-                            f"on_success to '{step.on_success}' without a truthiness guard "
+                            f"to '{route_target}' without a truthiness guard "
                             f"on the captured value '{captured_key}'. Add an action:route "
                             f"step with 'when: ${{ context.{captured_key} }}' before "
                             f"routing to a consumer."
@@ -129,7 +133,3 @@ def _check_optional_capture_requires_guard(ctx: ValidationContext) -> list[RuleF
                 )
 
     return findings
-
-
-# Re-export for import convenience in tests
-from autoskillit.recipe.schema import RecipeStep  # noqa: E402

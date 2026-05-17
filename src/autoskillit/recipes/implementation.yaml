@@ -727,7 +727,7 @@ steps:
       timeout_seconds: 600
       cwd: "${{ context.work_dir }}"
       remote_url: "${{ context.remote_url }}"
-      auto_trigger: "true"
+      auto_trigger: true
     capture:
       ci_conclusion: "${{ result.conclusion }}"
       ci_failed_jobs: "${{ result.failed_jobs }}"
@@ -858,7 +858,7 @@ steps:
       timeout_seconds: 30
       cwd: "${{ context.work_dir }}"
       remote_url: "${{ context.remote_url }}"
-      auto_trigger: "true"
+      auto_trigger: true
     skip_when_false: "inputs.open_pr"
     on_result:
       - when: "${{ result.conclusion }} == success"
@@ -1204,7 +1204,7 @@ steps:
       timeout_seconds: 600
       cwd: "${{ context.work_dir }}"
       remote_url: "${{ context.remote_url }}"
-      auto_trigger: "true"
+      auto_trigger: true
     capture:
       ci_conclusion: "${{ result.conclusion }}"
       ci_failed_jobs: "${{ result.failed_jobs }}"

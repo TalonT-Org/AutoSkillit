@@ -473,7 +473,7 @@
         "timeout_seconds": 600,
         "cwd": "${{ context.work_dir }}",
         "remote_url": "${{ context.remote_url }}",
-        "auto_trigger": "true"
+        "auto_trigger": true
       },
       "capture": {
         "ci_conclusion": "${{ result.conclusion }}",
@@ -911,7 +911,7 @@
         "event": "${{ context.ci_event }}",
         "timeout_seconds": 600,
         "cwd": "${{ context.work_dir }}",
-        "auto_trigger": "true"
+        "auto_trigger": true
       },
       "on_result": [
         {
@@ -1365,7 +1365,7 @@
         "timeout_seconds": 600,
         "cwd": "${{ context.work_dir }}",
         "pr_url": "${{ context.pr_url }}",
-        "auto_trigger": "true"
+        "auto_trigger": true
       },
       "on_result": [
         {

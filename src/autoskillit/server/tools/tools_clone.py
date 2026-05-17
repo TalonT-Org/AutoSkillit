@@ -7,9 +7,12 @@ import asyncio
 import json
 import os
 import time
-from typing import Literal
+from typing import TYPE_CHECKING, Literal, cast
 
 import structlog
+
+if TYPE_CHECKING:
+    from autoskillit.core.types import CloneResult, CloneSuccessResult
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
@@ -452,6 +455,33 @@ async def batch_cleanup_clones(
         return json.dumps({"deleted": [], "preserved": [], "error": str(exc)})
 
 
+def _require_clone_success(clone_result: CloneResult, source_dir: str) -> str | None:
+    """Return an error JSON string if clone_result is a gate condition, else None."""
+    if "uncommitted_changes" in clone_result:
+        return json.dumps(
+            {
+                "error": "Clone blocked: uncommitted changes in source repository",
+                "gate": "uncommitted_changes",
+                "changed_files": clone_result.get("changed_files", ""),
+                "total_changed": clone_result.get("total_changed", "0"),
+                "source_dir": clone_result.get("source_dir", source_dir),
+            }
+        )
+    if "unpublished_branch" in clone_result:
+        return json.dumps(
+            {
+                "error": (
+                    f"Clone blocked: branch '{clone_result.get('branch', '')}'"
+                    " not published to remote"
+                ),
+                "gate": "unpublished_branch",
+                "branch": clone_result.get("branch", ""),
+                "source_dir": clone_result.get("source_dir", source_dir),
+            }
+        )
+    return None
+
+
 @mcp.tool(tags={"autoskillit", "kitchen", "clone"}, annotations={"readOnlyHint": True})
 @track_response_size("bootstrap_clone")
 async def bootstrap_clone(
@@ -533,8 +563,13 @@ async def bootstrap_clone(
         finally:
             clone_ms = int((time.monotonic() - _clone_start) * 1000)
 
-        clone_path: str = str(clone_result.get("clone_path", ""))
-        resolved_remote_url: str = str(clone_result.get("remote_url", remote_url))
+        gate_error = _require_clone_success(clone_result, source_dir)
+        if gate_error is not None:
+            return gate_error
+
+        success = cast("CloneSuccessResult", clone_result)
+        clone_path: str = success["clone_path"]
+        resolved_remote_url: str = success.get("remote_url", remote_url)
 
         _revparse_start = time.monotonic()
         try:

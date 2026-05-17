@@ -104,6 +104,58 @@ class TestBootstrapClone:
         assert "clone_ms" in result["timings"]
         assert "rev_parse_ms" in result["timings"]
 
+    @pytest.mark.anyio
+    async def test_bootstrap_clone_uncommitted_changes_returns_error(self, tool_ctx_kitchen_open):
+        mock_mgr = MagicMock()
+        mock_mgr.clone_repo.return_value = {
+            "uncommitted_changes": "true",
+            "source_dir": "/src",
+            "branch": "main",
+            "changed_files": "file.py",
+            "total_changed": "1",
+        }
+        tool_ctx_kitchen_open.clone_mgr = mock_mgr
+        result = json.loads(
+            await bootstrap_clone(source_dir="/src", run_name="impl", base_branch="main")
+        )
+        assert "error" in result
+        assert "uncommitted changes" in result["error"]
+        assert result["gate"] == "uncommitted_changes"
+
+    @pytest.mark.anyio
+    async def test_bootstrap_clone_unpublished_branch_returns_error(self, tool_ctx_kitchen_open):
+        mock_mgr = MagicMock()
+        mock_mgr.clone_repo.return_value = {
+            "unpublished_branch": "true",
+            "branch": "feature-x",
+            "source_dir": "/src",
+        }
+        tool_ctx_kitchen_open.clone_mgr = mock_mgr
+        result = json.loads(
+            await bootstrap_clone(source_dir="/src", run_name="impl", base_branch="main")
+        )
+        assert "error" in result
+        assert "not published" in result["error"]
+        assert result["gate"] == "unpublished_branch"
+
+    @pytest.mark.anyio
+    async def test_bootstrap_clone_gate_preserves_diagnostics(self, tool_ctx_kitchen_open):
+        mock_mgr = MagicMock()
+        mock_mgr.clone_repo.return_value = {
+            "uncommitted_changes": "true",
+            "source_dir": "/src",
+            "branch": "develop",
+            "changed_files": "a.py\nb.py",
+            "total_changed": "2",
+        }
+        tool_ctx_kitchen_open.clone_mgr = mock_mgr
+        result = json.loads(
+            await bootstrap_clone(source_dir="/src", run_name="impl", base_branch="main")
+        )
+        assert result["changed_files"] == "a.py\nb.py"
+        assert result["total_changed"] == "2"
+        assert result["source_dir"] == "/src"
+
 
 class TestClaimAndResolveIssue:
     @pytest.mark.anyio
@@ -369,6 +421,36 @@ class TestCreateAndPublishBranch:
         assert "timings" in result
         assert "branch_create_ms" in result["timings"]
         assert "push_ms" in result["timings"]
+
+    @pytest.mark.anyio
+    async def test_create_and_publish_branch_empty_work_dir(self, tool_ctx_kitchen_open):
+        tool_ctx_kitchen_open.clone_mgr = MagicMock()
+        result = json.loads(
+            await create_and_publish_branch(
+                issue_slug="fix",
+                run_name="impl",
+                issue_number="1",
+                work_dir="",
+                remote_url="https://github.com/o/r.git",
+            )
+        )
+        assert "error" in result
+        assert "not a valid directory" in result["error"]
+
+    @pytest.mark.anyio
+    async def test_create_and_publish_branch_nonexistent_work_dir(self, tool_ctx_kitchen_open):
+        tool_ctx_kitchen_open.clone_mgr = MagicMock()
+        result = json.loads(
+            await create_and_publish_branch(
+                issue_slug="fix",
+                run_name="impl",
+                issue_number="1",
+                work_dir="/does/not/exist",
+                remote_url="https://github.com/o/r.git",
+            )
+        )
+        assert "error" in result
+        assert "not a valid directory" in result["error"]
 
 
 def test_implementation_recipe_valid():

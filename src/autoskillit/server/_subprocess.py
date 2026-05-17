@@ -55,6 +55,9 @@ async def _run_subprocess(
     Delegates to run_managed_async which uses temp file I/O (immune to
     pipe-blocking from child FD inheritance) and psutil process tree cleanup.
     """
+    if not cwd:
+        raise ValueError("_run_subprocess: cwd must not be empty")
+
     runner = _get_ctx().runner
     assert runner is not None, "No subprocess runner configured"
 

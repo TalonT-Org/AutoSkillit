@@ -1,8 +1,4 @@
-"""Shared DAG operations: topological sort, SCC detection, cycle breaking.
-
-All planner modules that need graph operations should import from here
-rather than implementing their own Kahn's algorithm.
-"""
+"""Shared DAG operations: topological sort, SCC detection, cycle breaking."""
 
 from __future__ import annotations
 
@@ -42,6 +38,7 @@ def find_sccs(adjacency: dict[str, list[str]]) -> list[set[str]]:
     """Return all SCCs with size >= 2 using Tarjan's algorithm via NetworkX."""
     graph: nx.DiGraph = nx.DiGraph()
     for node, neighbors in adjacency.items():
+        graph.add_node(node)
         for neighbor in neighbors:
             graph.add_edge(node, neighbor)
     sccs: list[set[str]] = [
@@ -83,8 +80,8 @@ def break_cycles_greedy_fas(output_wps: list[dict[str, Any]]) -> list[tuple[str,
         for scc in sccs:
             scc_list = sorted(scc)
             for node in reversed(scc_list):
-                for dep in incoming[node]:
-                    if dep in scc:
+                for dep in sorted(incoming[node]):
+                    if dep in scc and dep in wp_by_id[node].get("depends_on", []):
                         wp_by_id[node]["depends_on"].remove(dep)
                         broken_edges.append((node, dep))
                         break

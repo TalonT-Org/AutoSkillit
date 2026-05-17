@@ -631,35 +631,41 @@ def _has_conflict_ancestor(
 def _check_enqueue_missing_ci_gate(ctx: ValidationContext) -> list[RuleFinding]:
     findings: list[RuleFinding] = []
 
-    # Find all enqueue_pr steps
     enqueue_steps: set[str] = {
         name for name, step in ctx.recipe.steps.items() if step.tool == "enqueue_pr"
     }
     if not enqueue_steps:
         return findings
 
-    # Find all wait_for_ci steps — these act as CI gate barriers
     ci_gate_steps: set[str] = {
         name for name, step in ctx.recipe.steps.items() if step.tool == "wait_for_ci"
     }
 
-    for enqueue_name in enqueue_steps:
-        # BFS backward through predecessors
-        visited: set[str] = set()
-        queue = list(ctx.predecessors.get(enqueue_name, set()))
-        guarded = False
-        while queue:
-            current = queue.pop()
-            if current in visited:
-                continue
-            visited.add(current)
-            if current in ci_gate_steps:
-                guarded = True
-                break
-            # Continue traversing backward
-            queue.extend(ctx.predecessors.get(current, set()))
+    # Entry steps: steps with no predecessors (disconnected steps also included
+    # as they are trivially reachable without a CI gate).
+    all_steps = set(ctx.recipe.steps)
+    entry_steps = all_steps - set(ctx.predecessors)
+    if not entry_steps:
+        entry_steps = all_steps
 
-        if not guarded:
+    # Forward BFS from all entry points; CI gates are barriers — visited but
+    # not expanded. This yields every step reachable from the recipe entry
+    # without every path first crossing a wait_for_ci guard.
+    reachable_without_gate: set[str] = set()
+    queue: list[str] = list(entry_steps)
+    while queue:
+        node = queue.pop()
+        if node in reachable_without_gate:
+            continue
+        reachable_without_gate.add(node)
+        if node in ci_gate_steps:
+            continue
+        for successor in ctx.step_graph.get(node, set()):
+            if successor not in reachable_without_gate:
+                queue.append(successor)
+
+    for enqueue_name in enqueue_steps:
+        if enqueue_name in reachable_without_gate:
             findings.append(
                 RuleFinding(
                     rule="enqueue-missing-ci-gate",

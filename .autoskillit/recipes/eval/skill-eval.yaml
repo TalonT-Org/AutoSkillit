@@ -1,0 +1,160 @@
+name: skill-eval
+autoskillit_version: "0.10.112"
+description: >-
+  Test skill variants against known-answer canary test cases. For each canary,
+  clones or checks out the codebase at the pre-bug state, runs each variant of
+  the target skill, then invokes a judge to evaluate outputs against detection
+  criteria. Produces a comparative scorecard.
+summary: >-
+  parse_manifests > run_canaries > compile_scorecard > done
+
+ingredients:
+  canary_manifest:
+    description: >-
+      Path to JSON file defining canary test cases. Each entry has id,
+      before_commit or worktree_path, skill, task_file, reference_path,
+      reference_type, gap_description, and detection_criteria.
+    required: true
+  variant_manifest:
+    description: >-
+      Path to JSON file defining skill variants. Each entry has id, label,
+      overlay_file (or null for baseline), and description.
+    required: true
+  source_dir:
+    description: Path to the source project directory (for judge-eval CWD).
+    default: ""
+  output_dir:
+    description: >-
+      Base directory for eval run output. Defaults to
+      {{AUTOSKILLIT_TEMP}}/skill-eval.
+    default: "{{AUTOSKILLIT_TEMP}}/skill-eval"
+  max_parallel:
+    description: Max canaries to process in parallel (each gets its own clone).
+    default: "2"
+  judge_model:
+    description: Model to use for judge-eval sessions.
+    default: ""
+
+kitchen_rules:
+  - >-
+    NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
+    Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the orchestrator. All
+    file operations are delegated through run_skill, run_cmd, or run_python.
+  - >-
+    VARIANT ISOLATION: Variants run SEQUENTIALLY within each canary — they share
+    the same clone directory. Never run multiple variants in parallel for the
+    same canary.
+  - >-
+    JUDGE CWD: Always run /judge-eval with cwd set to the SOURCE PROJECT
+    directory (inputs.source_dir or the original project dir), NOT the clone.
+    The judge-eval skill is project-local and discovered via CWD.
+  - >-
+    FAILED VARIANTS: If a variant run_skill fails, record the variant as
+    {"variant_id": null} in the plan_paths accumulator. Do not abort the canary.
+  - >-
+    OUTPUT CAPTURE: After each variant run_skill, capture the plan_path= token
+    from the structured output. Copy the file to {eval_run_dir}/{canary_id}/{variant_id}/plan.md
+    using run_cmd.
+
+steps:
+  parse_manifests:
+    python: "autoskillit.smoke_utils.parse_eval_manifests"
+    with:
+      canary_manifest: "${{ inputs.canary_manifest }}"
+      variant_manifest: "${{ inputs.variant_manifest }}"
+      output_dir: "${{ inputs.output_dir }}"
+    capture:
+      eval_run_dir: "${{ result.eval_run_dir }}"
+      canary_count: "${{ result.canary_count }}"
+      variant_count: "${{ result.variant_count }}"
+      manifest_index_path: "${{ result.manifest_index_path }}"
+    on_success: run_canaries
+    on_failure: escalate
+    note: >-
+      Deterministic step. Reads canary and variant manifest JSON files, creates
+      the full eval run directory tree, writes per-canary resolved.json files
+      (with task_text and overlay_text inlined), and writes manifest_index.json.
+
+  run_canaries:
+    tool: run_skill
+    with:
+      skill_command: "placeholder — see note for orchestration logic"
+    on_success: compile_scorecard
+    on_failure: escalate
+    note: >-
+      LLM-ORCHESTRATED STEP — do NOT literally run the skill_command above.
+      Instead, follow these instructions using MCP tool calls directly:
+
+
+      1. Read the manifest index: run_cmd cat {context.manifest_index_path}
+         Parse the JSON to get canary_ids, variant_ids, and directory paths.
+
+
+      2. FOR EACH CANARY (up to inputs.max_parallel in parallel):
+
+         a. Read the canary's resolved data:
+            run_cmd cat {eval_run_dir}/{canary_id}/resolved.json
+
+         b. DECISION — check the resolved data:
+            - If before_commit is non-null:
+              clone_repo with strategy="proceed", no branch
+              run_cmd: git checkout {before_commit} (in clone)
+              run_cmd: task install-worktree (in clone)
+              work_dir = clone_path
+            - If worktree_path is non-null:
+              work_dir = worktree_path (skip clone entirely)
+
+         c. Initialize plan_paths accumulator: {}
+
+         d. FOR EACH VARIANT (sequentially — shared work_dir):
+            - Read variant's overlay_text from the resolved data
+            - Read task_text from the resolved data
+            - Construct skill command:
+              If overlay_text is null:
+                /autoskillit:make-plan {task_text}
+              Else:
+                /autoskillit:make-plan {task_text}\n\n{overlay_text}
+            - run_skill with skill_command above, cwd=work_dir
+            - If success: capture plan_path= from output,
+              run_cmd cp {plan_path} {eval_run_dir}/{canary_id}/{variant_id}/plan.md
+              Add to accumulator: {variant_id: copied_path}
+            - If failure: Add to accumulator: {variant_id: null}
+
+         e. After all variants complete:
+            run_python: autoskillit.smoke_utils.build_eval_context
+              canary_id={canary_id}
+              plan_paths_json={JSON string of accumulator}
+              eval_run_dir={eval_run_dir}
+
+         f. run_skill: /judge-eval {eval_run_dir}/{canary_id}/eval_context.json
+            cwd = source project dir (inputs.source_dir or original project dir)
+
+         g. If clone was created: register_clone_status + cleanup
+
+
+      3. After ALL canaries complete, this step is done — proceed to
+         compile_scorecard.
+
+  compile_scorecard:
+    python: "autoskillit.smoke_utils.compile_eval_scorecard"
+    with:
+      eval_run_dir: "${{ context.eval_run_dir }}"
+      canary_manifest: "${{ inputs.canary_manifest }}"
+      variant_manifest: "${{ inputs.variant_manifest }}"
+    capture:
+      scorecard_path: "${{ result.scorecard_path }}"
+      pass_rate: "${{ result.pass_rate }}"
+      total_runs: "${{ result.total_runs }}"
+      passed_runs: "${{ result.passed_runs }}"
+    on_success: done
+    on_failure: escalate
+    note: >-
+      Deterministic step. Walks verdict.json files in the eval run directory,
+      aggregates results, and produces scorecard.json + scorecard.md.
+
+  done:
+    action: stop
+    message: >-
+      Skill evaluation complete. Pass rate: ${{ context.pass_rate }}
+      (${{ context.passed_runs }}/${{ context.total_runs }}).
+      Scorecard: ${{ context.scorecard_path }}

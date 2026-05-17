@@ -458,3 +458,17 @@ def test_non_recipe_dirs_covers_all_excluded_subdirs(tmp_path: Path) -> None:
         f"Add each to RECIPE_SCAN_DIRS (if it contains user-facing recipes) "
         f"or NON_RECIPE_DIRS (if not)."
     )
+
+
+def test_eval_scan_dir_discoverable(tmp_path: Path) -> None:
+    """Recipe YAML in .autoskillit/recipes/eval/ must be discoverable via list_recipes."""
+    eval_dir = tmp_path / ".autoskillit" / "recipes" / "eval"
+    eval_dir.mkdir(parents=True)
+    (eval_dir / "test-eval.yaml").write_text(
+        "name: test-eval\ndescription: test eval recipe\n"
+        "steps:\n  done:\n    action: stop\n    message: test\n"
+    )
+    result = list_recipes(tmp_path)
+    r = next((x for x in result.items if x.name == "test-eval"), None)
+    assert r is not None
+    assert r.source == RecipeSource.PROJECT

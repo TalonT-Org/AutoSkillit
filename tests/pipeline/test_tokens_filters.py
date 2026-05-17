@@ -42,20 +42,22 @@ class TestLoadFromLogDirCwdFilter:
     """Tests for cwd_filter parameter on DefaultTokenLog.load_from_log_dir."""
 
     _PLAN_DATA = {
-        "step_name": "plan",
+        "session_label": "plan",
         "input_tokens": 100,
         "output_tokens": 50,
-        "cache_creation_input_tokens": 0,
-        "cache_read_input_tokens": 0,
+        "cache_write_tokens": 0,
+        "cache_read_tokens": 0,
         "timing_seconds": 10.0,
+        "schema_version": 2,
     }
     _IMPL_DATA = {
-        "step_name": "implement",
+        "session_label": "implement",
         "input_tokens": 200,
         "output_tokens": 80,
-        "cache_creation_input_tokens": 0,
-        "cache_read_input_tokens": 0,
+        "cache_write_tokens": 0,
+        "cache_read_tokens": 0,
         "timing_seconds": 20.0,
+        "schema_version": 2,
     }
 
     def test_cwd_filter_isolates_to_matching_cwd(self, tmp_path):
@@ -210,12 +212,13 @@ def test_load_from_log_dir_normalizes_suffixed_step_names(tmp_path):
         session_dir = sessions_dir / dir_name
         session_dir.mkdir(parents=True, exist_ok=True)
         tu_data = {
-            "step_name": step_name,
+            "session_label": step_name,
             "input_tokens": 100,
             "output_tokens": 50,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "cache_read_tokens": 0,
             "timing_seconds": 5.0,
+            "schema_version": 2,
         }
         (session_dir / "token_usage.json").write_text(json.dumps(tu_data))
         index_entry = {"dir_name": dir_name, "timestamp": timestamp, "cwd": cwd}
@@ -337,12 +340,13 @@ class TestOrderIdScoping:
 # --- Group N: campaign_id_filter tests ---
 
 _TOKEN_DATA = {
-    "step_name": "plan",
+    "session_label": "plan",
     "input_tokens": 10,
     "output_tokens": 5,
-    "cache_creation_input_tokens": 0,
-    "cache_read_input_tokens": 0,
+    "cache_write_tokens": 0,
+    "cache_read_tokens": 0,
     "timing_seconds": 1.0,
+    "schema_version": 2,
 }
 
 
@@ -400,13 +404,14 @@ def _write_session_order_id(
     session_dir = log_root / "sessions" / dir_name
     session_dir.mkdir(parents=True, exist_ok=True)
     tu_data = {
-        "step_name": step_name,
+        "session_label": step_name,
         "input_tokens": 100,
         "output_tokens": 50,
-        "cache_creation_input_tokens": 0,
-        "cache_read_input_tokens": 0,
+        "cache_write_tokens": 0,
+        "cache_read_tokens": 0,
         "timing_seconds": 5.0,
         "order_id": order_id,
+        "schema_version": 2,
     }
     (session_dir / "token_usage.json").write_text(json.dumps(tu_data))
     index_entry = {
@@ -447,12 +452,13 @@ def _write_token_session_dispatch_id(
     session_dir = log_root / "sessions" / dir_name
     session_dir.mkdir(parents=True, exist_ok=True)
     tu_data = {
-        "step_name": "implement",
+        "session_label": "implement",
         "input_tokens": 100,
         "output_tokens": 50,
-        "cache_creation_input_tokens": 0,
-        "cache_read_input_tokens": 0,
+        "cache_write_tokens": 0,
+        "cache_read_tokens": 0,
         "timing_seconds": 5.0,
+        "schema_version": 2,
     }
     (session_dir / "token_usage.json").write_text(json.dumps(tu_data))
     index_entry = {

@@ -239,8 +239,12 @@ def _load_sessions(
             entry["model"] = _model
         entry["input_tokens"] += data.get("input_tokens", 0)
         entry["output_tokens"] += data.get("output_tokens", 0)
-        entry["cache_write_tokens"] += data.get("cache_write_tokens", 0)
-        entry["cache_read_tokens"] += data.get("cache_read_tokens", 0)
+        entry["cache_write_tokens"] += data.get(
+            "cache_write_tokens", data.get("cache_creation_input_tokens", 0)
+        )
+        entry["cache_read_tokens"] += data.get(
+            "cache_read_tokens", data.get("cache_read_input_tokens", 0)
+        )
         _raw_timing = data.get("timing_seconds")
         entry["elapsed_seconds"] += float(_raw_timing) if _raw_timing is not None else 0.0
         entry["invocation_count"] += 1

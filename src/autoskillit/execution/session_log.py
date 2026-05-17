@@ -28,6 +28,7 @@ from autoskillit.core import (
     claude_code_log_path,
     get_logger,
     iter_merged_assistant_turns,
+    write_versioned_json,
 )
 from autoskillit.core import fast_dumps as _fast_dumps
 from autoskillit.execution.anomaly_detection import (
@@ -406,9 +407,8 @@ def flush_session_log(
             "model_identifier": model_identifier or _primary_model_identifier(token_usage),
             "dispatch_id": dispatch_id,
             "campaign_id": campaign_id,
-            "schema_version": 2,
         }
-        atomic_write(session_dir / "token_usage.json", _fast_dumps(tu_data))
+        write_versioned_json(session_dir / "token_usage.json", tu_data, schema_version=2)
 
     if timing_seconds is not None:
         atomic_write(

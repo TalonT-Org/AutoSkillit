@@ -25,6 +25,7 @@ class HookDef:
     scripts: list[str] = field(default_factory=list)
     timeout_seconds: int | None = None
     session_scope: Literal["any", "headless_only", "interactive_only"] = "any"
+    exempt_skills: frozenset[str] = field(default_factory=frozenset)
 
     def __post_init__(self) -> None:
         if self.event_type != "SessionStart" and not self.matcher:
@@ -67,7 +68,20 @@ HOOK_REGISTRY: list[HookDef] = [
     ),
     HookDef(
         matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
-        scripts=["guards/unsafe_install_guard.py", "guards/pr_create_guard.py"],
+        scripts=["guards/unsafe_install_guard.py"],
+    ),
+    HookDef(
+        matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
+        scripts=["guards/pr_create_guard.py"],
+        exempt_skills=frozenset(
+            {
+                "compose-pr",
+                "compose-research-pr",
+                "open-integration-pr",
+                "promote-to-main",
+                "pipeline-summary",
+            }
+        ),
     ),
     HookDef(
         matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
@@ -210,6 +224,7 @@ def _canonical_registry_payload(
         [
             {
                 "event_type": h.event_type,
+                "exempt_skills": sorted(h.exempt_skills),
                 "matcher": h.matcher,
                 "scripts": list(h.scripts),
                 "session_scope": h.session_scope,

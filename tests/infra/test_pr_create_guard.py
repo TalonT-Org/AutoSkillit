@@ -11,6 +11,7 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import os
 import unittest.mock
 
 import pytest
@@ -22,7 +23,13 @@ _BASH_TOOL_NAME = "Bash"
 _HOOK_CONFIG_RELPATH = ".autoskillit/temp/.hook_config.json"
 
 
-def _run_guard(cmd: str, kitchen_open: bool, tmpdir, raw_stdin: str | None = None) -> str:
+def _run_guard(
+    cmd: str,
+    kitchen_open: bool,
+    tmpdir,
+    raw_stdin: str | None = None,
+    skill_name: str | None = None,
+) -> str:
     """Invoke pr_create_guard.main() and return captured stdout."""
     from autoskillit.hooks.guards.pr_create_guard import main  # noqa: PLC0415
 
@@ -38,19 +45,32 @@ def _run_guard(cmd: str, kitchen_open: bool, tmpdir, raw_stdin: str | None = Non
         hook_cfg.parent.mkdir(parents=True, exist_ok=True)
         hook_cfg.write_text(json.dumps({"kitchen": "open"}))
 
+    clean_env: dict[str, str] = {k: v for k, v in os.environ.items()}
+    if skill_name is not None:
+        clean_env["AUTOSKILLIT_SKILL_NAME"] = skill_name
+    else:
+        clean_env.pop("AUTOSKILLIT_SKILL_NAME", None)
+
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
-        with unittest.mock.patch("sys.stdin", io.StringIO(stdin_content)):
-            with unittest.mock.patch("pathlib.Path.cwd", return_value=tmpdir):
-                try:
-                    main()
-                except SystemExit as exc:
-                    assert exc.code == 0, f"Guard exited non-zero: {exc.code!r}"
+        with unittest.mock.patch.dict(os.environ, clean_env, clear=True):
+            with unittest.mock.patch("sys.stdin", io.StringIO(stdin_content)):
+                with unittest.mock.patch("pathlib.Path.cwd", return_value=tmpdir):
+                    try:
+                        main()
+                    except SystemExit as exc:
+                        assert exc.code == 0, f"Guard exited non-zero: {exc.code!r}"
 
     return buf.getvalue()
 
 
-def _run_bash_guard(cmd: str, kitchen_open: bool, tmpdir, raw_stdin: str | None = None) -> str:
+def _run_bash_guard(
+    cmd: str,
+    kitchen_open: bool,
+    tmpdir,
+    raw_stdin: str | None = None,
+    skill_name: str | None = None,
+) -> str:
     """Invoke pr_create_guard.main() with Bash tool format and return captured stdout."""
     from autoskillit.hooks.guards.pr_create_guard import main  # noqa: PLC0415
 
@@ -66,14 +86,21 @@ def _run_bash_guard(cmd: str, kitchen_open: bool, tmpdir, raw_stdin: str | None 
         hook_cfg.parent.mkdir(parents=True, exist_ok=True)
         hook_cfg.write_text(json.dumps({"kitchen": "open"}))
 
+    clean_env: dict[str, str] = {k: v for k, v in os.environ.items()}
+    if skill_name is not None:
+        clean_env["AUTOSKILLIT_SKILL_NAME"] = skill_name
+    else:
+        clean_env.pop("AUTOSKILLIT_SKILL_NAME", None)
+
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
-        with unittest.mock.patch("sys.stdin", io.StringIO(stdin_content)):
-            with unittest.mock.patch("pathlib.Path.cwd", return_value=tmpdir):
-                try:
-                    main()
-                except SystemExit as exc:
-                    assert exc.code == 0, f"Guard exited non-zero: {exc.code!r}"
+        with unittest.mock.patch.dict(os.environ, clean_env, clear=True):
+            with unittest.mock.patch("sys.stdin", io.StringIO(stdin_content)):
+                with unittest.mock.patch("pathlib.Path.cwd", return_value=tmpdir):
+                    try:
+                        main()
+                    except SystemExit as exc:
+                        assert exc.code == 0, f"Guard exited non-zero: {exc.code!r}"
 
     return buf.getvalue()
 
@@ -184,3 +211,62 @@ class TestPrCreateGuardEdgeCases:
         stdin = json.dumps({"tool_name": _TOOL_NAME, "tool_input": {}})
         out = _run_guard("", kitchen_open=False, tmpdir=tmp_path, raw_stdin=stdin)
         assert out.strip() == ""
+
+
+# ---------------------------------------------------------------------------
+# Exempt skills: pipeline skills that legitimately call gh pr create
+# ---------------------------------------------------------------------------
+
+
+class TestExemptSkills:
+    """Tests that exempt pipeline skills are allowed to call gh pr create."""
+
+    @pytest.mark.parametrize(
+        "skill_name",
+        [
+            "compose-pr",
+            "compose-research-pr",
+            "open-integration-pr",
+            "promote-to-main",
+            "pipeline-summary",
+        ],
+    )
+    def test_allows_exempt_skill(self, tmp_path, skill_name: str) -> None:
+        """Exempt skills must be allowed even when kitchen is open."""
+        out = _run_guard(
+            "gh pr create --title foo --body bar",
+            kitchen_open=True,
+            tmpdir=tmp_path,
+            skill_name=skill_name,
+        )
+        assert out.strip() == "", f"Exempt skill {skill_name!r} must be allowed"
+
+    def test_still_blocks_unknown_skill(self, tmp_path) -> None:
+        """Non-exempt skills must still be denied when kitchen is open."""
+        out = _run_guard(
+            "gh pr create --title foo",
+            kitchen_open=True,
+            tmpdir=tmp_path,
+            skill_name="investigate",
+        )
+        assert _is_denied(out), "Non-exempt skill must be denied"
+
+    def test_still_blocks_no_skill_name(self, tmp_path) -> None:
+        """When AUTOSKILLIT_SKILL_NAME is absent, guard must deny."""
+        out = _run_guard(
+            "gh pr create --title foo",
+            kitchen_open=True,
+            tmpdir=tmp_path,
+            skill_name=None,
+        )
+        assert _is_denied(out), "Missing skill name must be denied"
+
+    def test_allows_exempt_skill_via_bash_tool(self, tmp_path) -> None:
+        """Exempt skills via Bash tool must also be allowed."""
+        out = _run_bash_guard(
+            "gh pr create --title foo --body bar",
+            kitchen_open=True,
+            tmpdir=tmp_path,
+            skill_name="compose-pr",
+        )
+        assert out.strip() == "", "Exempt skill via Bash tool must be allowed"

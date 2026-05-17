@@ -5,8 +5,7 @@ from __future__ import annotations
 import regex as re
 
 from autoskillit.core import PRState, Severity
-from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe._analysis_graph import _extract_routing_edges
+from autoskillit.recipe._analysis import ValidationContext, _extract_routing_edges
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 _NO_RUNS_RE = re.compile(r"""==\s*['"]?no_runs['"]?""")
@@ -39,7 +38,9 @@ def _check_ci_polling_inline_shell(ctx: ValidationContext) -> list[RuleFinding]:
                     ),
                 )
             )
-        if "gh pr view" in cmd and ("statusCheckRollup" in cmd or "checks" in cmd):
+        if "gh pr view" in cmd and (
+            "statusCheckRollup" in cmd or "--json checks" in cmd or ",checks" in cmd
+        ):
             findings.append(
                 RuleFinding(
                     rule="ci-polling-inline-shell",

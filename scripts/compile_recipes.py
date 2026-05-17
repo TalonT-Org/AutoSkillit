@@ -40,10 +40,31 @@ def _compile_one(yaml_path: Path) -> bool:
     return True
 
 
+def _is_current(yaml_path: Path) -> bool:
+    """Return True if the JSON counterpart is already up-to-date (content matches)."""
+    json_path = yaml_path.with_suffix(".json")
+    if not json_path.exists():
+        return False
+    try:
+        data = yaml.load(yaml_path.read_bytes(), Loader=Loader)
+    except yaml.YAMLError:
+        return False
+    expected = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    return json_path.read_text(encoding="utf-8") == expected
+
+
 def main() -> int:
+    check_only = "--check" in sys.argv
     if not RECIPES_DIR.is_dir():
         print(f"ERROR: recipes dir not found: {RECIPES_DIR}", file=sys.stderr)
         return 1
+    if check_only:
+        stale = [y for y in RECIPES_DIR.rglob("*.yaml") if not _is_current(y)]
+        if stale:
+            for y in sorted(stale):
+                print(f"STALE: {y}", file=sys.stderr)
+            return 1
+        return 0
     count = 0
     errors = 0
     for yaml_path in sorted(RECIPES_DIR.rglob("*.yaml")):

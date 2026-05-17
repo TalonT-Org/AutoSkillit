@@ -247,14 +247,7 @@ tasks:
     desc: Pre-compile bundled recipe YAML files to JSON
     deps: [regen-contracts]
     status:
-      - uv run python -c "
-          from pathlib import Path;
-          d = Path('src/autoskillit/recipes');
-          exit(0 if all(
-            y.with_suffix('.json').exists() and
-            y.with_suffix('.json').stat().st_mtime >= y.stat().st_mtime
-            for y in d.rglob('*.yaml')
-          ) else 1)"
+      - uv run python scripts/compile_recipes.py --check
     cmds:
       - uv run python scripts/compile_recipes.py
 

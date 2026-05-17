@@ -75,6 +75,7 @@ class TestMaxResumeAttemptsGuard:
         assert decision is not None
         # Exceeded retry budget → halted
         assert decision.completed_dispatches_block == "fleet_halted_on_failure"
+        assert decision.is_resumable is False
 
     def test_resumable_above_limit_is_converted_to_failure(self, tmp_path):
         """RESUMABLE with more than MAX attempts → FAILURE."""
@@ -106,3 +107,4 @@ class TestMaxResumeAttemptsGuard:
         decision = resume_campaign_from_state(state_file, continue_on_failure=False)
         assert decision is not None
         assert decision.completed_dispatches_block == "fleet_halted_on_failure"
+        assert decision.is_resumable is False

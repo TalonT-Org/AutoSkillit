@@ -140,6 +140,39 @@ If the Skill tool cannot be used (disable-model-invocation) or refuses this invo
 Include the diagram in the plan document under a "## Proposed Architecture" section.
 More than one lens diagram is okay if it is complex plan (don't do more than 3, and make sure to load each appropriate skill).
 
+6. **Adversarial Agent Review** - After drafting the plan (Steps 1-5), spawn 3 parallel adversarial subagents. Each receives the full draft plan text and the codebase root. Each attempts to find concrete ways the plan, if implemented literally, would introduce a bug or regression. They must NOT suggest scope expansion — only identify gaps in what the plan already claims to do.
+
+**Agent A — Contract Verifier:**
+For every function, field, or format the plan introduces or modifies, trace all downstream consumers in the codebase. Verify the plan accounts for each consumer's expectations. Report any consumer whose expectations are not addressed.
+
+**Agent B — Completeness Auditor:**
+For every grep-based, search-based, or pattern-matching operation the plan prescribes, identify entities that would be missed (fixtures, test factories, type registries, re-exports, indirect references). Report any entity category the plan fails to enumerate explicitly.
+
+**Agent C — Assumption Challenger:**
+Identify every implicit assumption the plan makes about naming conventions, field relationships, or type compatibility. For each assumption, verify it holds by reading the actual code. Report any assumption that does not hold.
+
+7. **Registry Wire Trace** - After the 3 adversarial agents complete (Step 6), spawn a single subagent specialized in hidden registration and sync relationships. For every file the plan modifies, check if it participates in any registry-sync patterns:
+
+   1. **RETIRED NAME SETS**: Renames must add old names to `RETIRED_SKILL_NAMES` or `RETIRED_SCRIPT_BASENAMES`.
+   2. **RE-EXPORT CHAINS**: New public symbols must be added to `core/__init__.pyi` and `types/__init__.py` `__all__`.
+   3. **TOOL REGISTRIES**: Tool changes must update `GATED_TOOLS`, `TOOL_SUBSET_TAGS`, `_DISPLAY_CATEGORIES`, and `mcp.tool()` decorators.
+   4. **RULE REGISTRATION**: New `rules_*.py` must be imported in `recipe/__init__.py`.
+   5. **DUAL-COPY CONSTANTS**: `SKILL_FILE_ADVISORY_MAP` changes must be mirrored in `hooks/guards/recipe_write_advisor.py`.
+   6. **IMPORT LAYER CONSTRAINTS**: No cross-IL imports, no `Default*` outside `_factory.py`.
+   7. **TYPED ALIASES**: Renames must introduce typed alias constants (e.g., `SKILL_ALIASES`) in `_type_constants.py` with `__all__` export and `core/__init__.pyi` stub. Migration YAML alone is NOT type-safe.
+   8. **DERIVED ARTIFACTS**: Check if test-source-map (`task coverage-audit`), contract cards, or derived YAML/JSON need regeneration. Search BOTH `src/autoskillit/` AND `.autoskillit/`.
+
+Report any sync relationship or derived artifact the plan does not address.
+
+8. **Plan Revision** - Read all four adversarial reports (3 from Step 6 + 1 from Step 7). For each valid finding (where the agent identified a real gap, not a hypothetical):
+   - Add missing consumers to implementation steps
+   - Add missing entity categories to search/update operations
+   - Replace invalid assumptions with verified facts
+   - Add missing registry updates and derived artifact regeneration steps
+   - Add typed migration mechanisms where the plan relies on documentation-only migration
+
+Then finalize the plan and emit `plan_path` as normal.
+
 ## Conflict-Resolution Plan Requirements
 
 When the task involves resolving conflicts to apply changes from one branch onto another
@@ -184,6 +217,7 @@ Before writing the final plan, verify:
 - [ ] Diagram uses ONLY the classDef styles from the mermaid skill (no invented colors)
 - [ ] Diagram includes a color legend table
 - [ ] Every new component, class, or function is wired into the call chain — nothing is created but left unconnected
+- [ ] Adversarial review pass completed (Steps 6-8) and valid findings incorporated into the plan
 
 ## Critical Constraints
 

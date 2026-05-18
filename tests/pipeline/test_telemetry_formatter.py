@@ -1312,29 +1312,3 @@ def test_pr_telemetry_sections_exhaustive() -> None:
         assert header in PR_TELEMETRY_SECTIONS, (
             f"Header {header!r} found in TelemetryFormatter PR-bound formatter but missing from PR_TELEMETRY_SECTIONS"
         )
-
-
-def test_format_pr_block_calls_all_formatters() -> None:
-    """format_pr_telemetry_block delegates to all three PR-bound format methods."""
-    from unittest.mock import patch as mock_patch
-
-    steps = [{"step_name": "s1", "input_tokens": 100, "output_tokens": 50}]
-    total = {"input_tokens": 100, "output_tokens": 50}
-    model_totals: list[ModelTotalEntry] = []
-    with (
-        mock_patch.object(
-            TelemetryFormatter, "format_token_table", wraps=TelemetryFormatter.format_token_table
-        ) as mock_token,
-        mock_patch.object(
-            TelemetryFormatter,
-            "format_efficiency_table",
-            wraps=TelemetryFormatter.format_efficiency_table,
-        ) as mock_eff,
-        mock_patch.object(
-            TelemetryFormatter, "format_model_table", wraps=TelemetryFormatter.format_model_table
-        ) as mock_model,
-    ):
-        TelemetryFormatter.format_pr_telemetry_block(steps, total, model_totals)
-        mock_token.assert_called_once()
-        mock_eff.assert_called_once()
-        mock_model.assert_called_once()

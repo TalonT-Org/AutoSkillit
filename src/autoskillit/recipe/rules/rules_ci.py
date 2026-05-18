@@ -694,3 +694,91 @@ def _check_enqueue_missing_ci_gate(ctx: ValidationContext) -> list[RuleFinding]:
                 )
             )
     return findings
+
+
+# ---------------------------------------------------------------------------
+# ci-cwd-branch-context-mismatch rule
+# ---------------------------------------------------------------------------
+
+_WORKTREE_BRANCH_PATTERNS: frozenset[str] = frozenset(
+    {
+        "worktree_branch_name",
+        "worktree_branch",
+    }
+)
+
+_WORKTREE_CWD_PATTERNS: frozenset[str] = frozenset(
+    {
+        "worktree_path",
+        "worktree_dir",
+    }
+)
+
+_CLONE_CWD_PATTERNS: frozenset[str] = frozenset(
+    {
+        "work_dir",
+        "clone_path",
+        "clone_dir",
+    }
+)
+
+_CONTEXT_VAR_RE = re.compile(r"\$\{\{\s*context\.(\w+)\s*\}\}")
+
+
+def _extract_context_var(value: str) -> str | None:
+    m = _CONTEXT_VAR_RE.search(value)
+    return m.group(1) if m else None
+
+
+def _is_worktree_branch_ref(var_name: str) -> bool:
+    return any(pat in var_name for pat in _WORKTREE_BRANCH_PATTERNS)
+
+
+def _is_clone_cwd_ref(var_name: str) -> bool:
+    return any(pat in var_name for pat in _CLONE_CWD_PATTERNS)
+
+
+@semantic_rule(
+    name="ci-cwd-branch-context-mismatch",
+    description=(
+        "wait_for_ci step watches a worktree branch but cwd references the clone root. "
+        "git rev-parse HEAD in the clone root returns the wrong SHA, causing "
+        "_validate_run_matches_scope to silently reject valid CI runs."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_ci_cwd_branch_context_mismatch(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "wait_for_ci":
+            continue
+        with_args = step.with_args or {}
+
+        if with_args.get("head_sha"):
+            continue
+
+        branch_val = with_args.get("branch", "")
+        cwd_val = with_args.get("cwd", "")
+
+        branch_var = _extract_context_var(str(branch_val))
+        cwd_var = _extract_context_var(str(cwd_val))
+
+        if not branch_var or not cwd_var:
+            continue
+
+        if _is_worktree_branch_ref(branch_var) and _is_clone_cwd_ref(cwd_var):
+            findings.append(
+                RuleFinding(
+                    rule="ci-cwd-branch-context-mismatch",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' watches worktree branch "
+                        f"(context.{branch_var}) but cwd uses clone root "
+                        f"(context.{cwd_var}). git rev-parse HEAD in the clone root "
+                        f"returns the batch/base branch SHA, not the worktree branch SHA. "
+                        f"Use cwd: '${{{{ context.worktree_path }}}}' or pass head_sha explicitly."
+                    ),
+                )
+            )
+    return findings

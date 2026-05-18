@@ -1014,3 +1014,104 @@ def test_timed_out_re_is_module_level_constant():
     assert hasattr(rules_ci, "_TIMED_OUT_RE")
     assert isinstance(rules_ci._TIMED_OUT_RE, regex.Pattern)
     assert rules_ci._TIMED_OUT_RE.pattern == r"""==\s*['"]?timed_out['"]?"""
+
+
+# ---------------------------------------------------------------------------
+# ci-cwd-branch-context-mismatch rule tests
+# ---------------------------------------------------------------------------
+
+_CWD_BRANCH_RULE = "ci-cwd-branch-context-mismatch"
+
+
+def test_ci_cwd_branch_context_mismatch_fires_on_worktree_branch_with_clone_cwd() -> None:
+    """Rule fires when wait_for_ci watches a worktree branch but cwd is the clone root."""
+    recipe = _make_workflow(
+        {
+            "wait_for_conflict_ci": {
+                "tool": "wait_for_ci",
+                "with": {
+                    "branch": "${{ context.worktree_branch_name }}",
+                    "cwd": "${{ context.work_dir }}",
+                    "event": "${{ context.ci_event }}",
+                    "auto_trigger": True,
+                },
+            },
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    matched = [f for f in findings if f.rule == _CWD_BRANCH_RULE]
+    assert len(matched) == 1
+    assert matched[0].severity == Severity.ERROR
+    assert "worktree" in matched[0].message.lower()
+
+
+def test_ci_cwd_branch_context_mismatch_passes_when_cwd_is_worktree() -> None:
+    """Rule passes when both branch and cwd reference worktree context."""
+    recipe = _make_workflow(
+        {
+            "wait_for_conflict_ci": {
+                "tool": "wait_for_ci",
+                "with": {
+                    "branch": "${{ context.worktree_branch_name }}",
+                    "cwd": "${{ context.worktree_path }}",
+                    "event": "${{ context.ci_event }}",
+                    "auto_trigger": True,
+                },
+            },
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    matched = [f for f in findings if f.rule == _CWD_BRANCH_RULE]
+    assert len(matched) == 0
+
+
+def test_ci_cwd_branch_context_mismatch_passes_with_explicit_head_sha() -> None:
+    """Rule passes when head_sha is explicit — cwd-based inference is bypassed."""
+    recipe = _make_workflow(
+        {
+            "wait_ci_pre_enqueue": {
+                "tool": "wait_for_ci",
+                "with": {
+                    "branch": "${{ context.current_pr_branch }}",
+                    "head_sha": "${{ context.current_pr_head_sha }}",
+                    "cwd": "${{ context.work_dir }}",
+                    "event": "${{ context.ci_event }}",
+                    "auto_trigger": True,
+                },
+            },
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    matched = [f for f in findings if f.rule == _CWD_BRANCH_RULE]
+    assert len(matched) == 0
+
+
+def test_ci_cwd_branch_context_mismatch_passes_for_batch_branch() -> None:
+    """Rule passes when both branch and cwd reference clone-root context."""
+    recipe = _make_workflow(
+        {
+            "ci_watch_pr": {
+                "tool": "wait_for_ci",
+                "with": {
+                    "branch": "${{ context.batch_branch }}",
+                    "cwd": "${{ context.work_dir }}",
+                    "event": "${{ context.ci_event }}",
+                },
+            },
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    matched = [f for f in findings if f.rule == _CWD_BRANCH_RULE]
+    assert len(matched) == 0
+
+
+def test_bundled_recipes_pass_ci_cwd_branch_context_mismatch() -> None:
+    """All bundled recipes must pass the ci-cwd-branch-context-mismatch rule."""
+    for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):
+        recipe = load_recipe(yaml_path)
+        findings = run_semantic_rules(recipe)
+        matched = [f for f in findings if f.rule == _CWD_BRANCH_RULE]
+        assert not matched, (
+            f"{yaml_path.stem}: ci-cwd-branch-context-mismatch fired: "
+            f"{[f.message for f in matched]}"
+        )

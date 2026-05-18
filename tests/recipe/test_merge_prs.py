@@ -761,3 +761,19 @@ def test_check_ci_watch_pr_loop_exists_with_correct_pattern(recipe) -> None:
     ]
     assert max_exceeded_conds, "check_ci_watch_pr_loop must route max_exceeded==true"
     assert max_exceeded_conds[0].route == "register_clone_failure"
+
+
+def test_wait_for_ci_steps_have_consistent_cwd(recipe) -> None:
+    """Every wait_for_ci step's cwd must be consistent with its branch parameter."""
+    for step_name, step in recipe.steps.items():
+        if step.tool != "wait_for_ci":
+            continue
+        branch = step.with_args.get("branch", "")
+        cwd = step.with_args.get("cwd", "")
+        head_sha = step.with_args.get("head_sha")
+
+        if "worktree_branch" in branch and not head_sha:
+            assert "worktree" in cwd, (
+                f"{step_name}: watches worktree branch ({branch}) "
+                f"but cwd ({cwd}) is not a worktree path and no head_sha is explicit"
+            )

@@ -17,8 +17,8 @@ def _make_usage(**overrides: int) -> dict[str, int]:
     defaults = {
         "input_tokens": 100,
         "output_tokens": 50,
-        "cache_creation_input_tokens": 10,
-        "cache_read_input_tokens": 5,
+        "cache_write_tokens": 10,
+        "cache_read_tokens": 5,
     }
     return {**defaults, **overrides}
 
@@ -234,8 +234,8 @@ class TestDefaultTokenLog:
             {
                 "input_tokens": 10,
                 "output_tokens": 20,
-                "cache_creation_input_tokens": 5,
-                "cache_read_input_tokens": 3,
+                "cache_write_tokens": 5,
+                "cache_read_tokens": 3,
             },
         )
         log.record(
@@ -243,8 +243,8 @@ class TestDefaultTokenLog:
             {
                 "input_tokens": 100,
                 "output_tokens": 200,
-                "cache_creation_input_tokens": 50,
-                "cache_read_input_tokens": 30,
+                "cache_write_tokens": 50,
+                "cache_read_tokens": 30,
             },
         )
         total = log.compute_total()
@@ -451,7 +451,7 @@ class TestLoadFromLogDirSchemaVersionCompat:
                     "input_tokens": 100,
                     "output_tokens": 50,
                     "cache_creation_input_tokens": 10,
-                    "cache_read_input_tokens": 5,
+                    "cache_read_tokens": 5,
                     "timing_seconds": 30.0,
                 },
                 id="v1-legacy-keys",
@@ -492,7 +492,7 @@ class TestLoadFromLogDirSchemaVersionCompat:
                 "input_tokens": 50,
                 "output_tokens": 25,
                 "cache_creation_input_tokens": 8,
-                "cache_read_input_tokens": 3,
+                "cache_read_tokens": 3,
                 "timing_seconds": 10.0,
             },
         )
@@ -526,8 +526,8 @@ def test_token_log_record_accumulates_loc():
         {
             "input_tokens": 100,
             "output_tokens": 10,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "cache_read_tokens": 0,
         },
         loc_insertions=50,
         loc_deletions=20,
@@ -537,8 +537,8 @@ def test_token_log_record_accumulates_loc():
         {
             "input_tokens": 200,
             "output_tokens": 20,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "cache_read_tokens": 0,
         },
         loc_insertions=30,
         loc_deletions=5,
@@ -559,8 +559,8 @@ def test_token_log_compute_total_includes_loc():
         {
             "input_tokens": 0,
             "output_tokens": 0,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "cache_read_tokens": 0,
         },
         loc_insertions=100,
         loc_deletions=30,
@@ -570,8 +570,8 @@ def test_token_log_compute_total_includes_loc():
         {
             "input_tokens": 0,
             "output_tokens": 0,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "cache_read_tokens": 0,
         },
         loc_insertions=20,
         loc_deletions=5,
@@ -601,15 +601,16 @@ def test_token_log_load_from_log_dir_reads_loc(tmp_path):
     (sessions_dir / "token_usage.json").write_text(
         json.dumps(
             {
-                "step_name": "implement",
+                "session_label": "implement",
                 "input_tokens": 100,
                 "output_tokens": 10,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_read_tokens": 0,
                 "timing_seconds": 5.0,
                 "order_id": "",
                 "loc_insertions": 42,
                 "loc_deletions": 8,
+                "schema_version": 2,
             }
         )
     )
@@ -640,13 +641,14 @@ def test_token_log_load_from_log_dir_missing_loc_defaults_to_zero(tmp_path):
     (sessions_dir / "token_usage.json").write_text(
         json.dumps(
             {
-                "step_name": "plan",
+                "session_label": "plan",
                 "input_tokens": 500,
                 "output_tokens": 50,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_read_tokens": 0,
                 "timing_seconds": 3.0,
                 "order_id": "",
+                "schema_version": 2,
                 # NO loc_insertions or loc_deletions
             }
         )
@@ -671,8 +673,8 @@ def test_token_entry_has_peak_context_and_turn_count_fields():
 
 def test_record_peak_context_uses_max():
     log = DefaultTokenLog()
-    log.record("impl", {"cache_read_input_tokens": 100, "peak_context": 50000, "turn_count": 10})
-    log.record("impl", {"cache_read_input_tokens": 200, "peak_context": 80000, "turn_count": 15})
+    log.record("impl", {"cache_read_tokens": 100, "peak_context": 50000, "turn_count": 10})
+    log.record("impl", {"cache_read_tokens": 200, "peak_context": 80000, "turn_count": 15})
     report = log.get_report()
     assert report[0]["peak_context"] == 80000
     assert report[0]["cache_write_tokens"] == 0
@@ -681,8 +683,8 @@ def test_record_peak_context_uses_max():
 
 def test_record_turn_count_sums():
     log = DefaultTokenLog()
-    log.record("impl", {"cache_read_input_tokens": 100, "peak_context": 50000, "turn_count": 10})
-    log.record("impl", {"cache_read_input_tokens": 200, "peak_context": 80000, "turn_count": 15})
+    log.record("impl", {"cache_read_tokens": 100, "peak_context": 50000, "turn_count": 10})
+    log.record("impl", {"cache_read_tokens": 200, "peak_context": 80000, "turn_count": 15})
     report = log.get_report()
     assert report[0]["turn_count"] == 25
     assert report[0]["cache_write_tokens"] == 0
@@ -691,8 +693,8 @@ def test_record_turn_count_sums():
 
 def test_compute_total_peak_context_is_max_across_steps():
     log = DefaultTokenLog()
-    log.record("plan", {"cache_read_input_tokens": 100, "peak_context": 40000, "turn_count": 5})
-    log.record("impl", {"cache_read_input_tokens": 200, "peak_context": 70000, "turn_count": 18})
+    log.record("plan", {"cache_read_tokens": 100, "peak_context": 40000, "turn_count": 5})
+    log.record("impl", {"cache_read_tokens": 200, "peak_context": 70000, "turn_count": 18})
     total = log.compute_total()
     assert total["peak_context"] == 70000
     assert total["turn_count"] == 23
@@ -761,7 +763,7 @@ def test_token_log_record_accepts_resolved_label():
     log = DefaultTokenLog()
     log.record(
         "dispatch:abc-123",
-        {"input_tokens": 100, "output_tokens": 50, "cache_read_input_tokens": 80},
+        {"input_tokens": 100, "output_tokens": 50, "cache_read_tokens": 80},
     )
     report = log.get_report()
     assert len(report) == 1

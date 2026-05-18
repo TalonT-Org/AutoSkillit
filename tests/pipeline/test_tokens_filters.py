@@ -142,8 +142,8 @@ class TestTokenLogStepNameNormalization:
         usage = {
             "input_tokens": 100,
             "output_tokens": 50,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "cache_read_tokens": 0,
         }
 
         log.record("plan-30", usage)
@@ -167,8 +167,8 @@ class TestTokenLogStepNameNormalization:
         usage = {
             "input_tokens": 100,
             "output_tokens": 50,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "cache_read_tokens": 0,
         }
 
         log.record("plan", usage)
@@ -187,8 +187,8 @@ class TestTokenLogStepNameNormalization:
         usage = {
             "input_tokens": 100,
             "output_tokens": 50,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "cache_read_tokens": 0,
         }
         log.record("open-pr", usage)
 
@@ -243,8 +243,8 @@ class TestOrderIdScoping:
         base = {
             "input_tokens": 100,
             "output_tokens": 50,
-            "cache_creation_input_tokens": 10,
-            "cache_read_input_tokens": 5,
+            "cache_write_tokens": 10,
+            "cache_read_tokens": 5,
         }
         return {**base, **overrides}
 

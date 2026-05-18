@@ -149,7 +149,10 @@ More than one lens diagram is okay if it is complex plan (don't do more than 3, 
 
    Parse each definition's YAML frontmatter for `tools`, `model`, `maxTurns`. Use the markdown body as the agent's system prompt.
 
-7. **Adversarial Agent Review** - Spawn 3 parallel subagents using the definitions read in Step 6 (Contract Verifier, Completeness Auditor, Assumption Challenger). Each receives the full draft plan text and the codebase root. Each attempts to find concrete ways the plan, if implemented literally, would introduce a bug or regression. They must NOT suggest scope expansion — only identify gaps in what the plan already claims to do.
+7. **Adversarial Agent Review** - Spawn 3 parallel subagents using the definitions read in Step 6. Each receives the full draft plan text and the codebase root. Each attempts to find concrete ways the plan, if implemented literally, would introduce a bug or regression. They must NOT suggest scope expansion — only identify gaps in what the plan already claims to do.
+   - **Contract Verifier** — traces downstream consumers of every function, field, or format the plan introduces or modifies
+   - **Completeness Auditor** — finds entities missed by plan search operations
+   - **Assumption Challenger** — verifies implicit assumptions against actual code
 
 8. **Registry Wire Trace** - Spawn 1 Registry Wire Tracer subagent. For every file the plan modifies, check if it participates in registry-sync patterns (RETIRED NAME SETS, RE-EXPORT CHAINS, TOOL REGISTRIES, RULE REGISTRATION, DUAL-COPY CONSTANTS, IMPORT LAYER CONSTRAINTS, TYPED ALIASES, DERIVED ARTIFACTS).
 

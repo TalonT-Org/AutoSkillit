@@ -6,8 +6,10 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 from fastmcp.exceptions import ResourceError
 
-from autoskillit.core import AGENT_PACK_REGISTRY, pkg_root
+from autoskillit.core import AGENT_PACK_REGISTRY, get_logger, pkg_root
 from autoskillit.server import mcp
+
+logger = get_logger(__name__)
 
 AGENT_PACK_TAGS: dict[str, frozenset[str]] = {
     name: frozenset({name}) for name in AGENT_PACK_REGISTRY
@@ -52,4 +54,5 @@ async def unlock_agent_pack(pack_name: str, ctx: Context = CurrentContext()) -> 
             {"success": True, "pack": pack_name, "uri_prefix": f"agent://{pack_name}/"}
         )
     except Exception as exc:
+        logger.warning("unlock_agent_pack failed", exc_info=True)
         return json.dumps({"success": False, "error": str(exc)})

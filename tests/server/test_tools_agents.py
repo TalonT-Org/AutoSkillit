@@ -143,7 +143,7 @@ async def test_unlock_agent_pack_session_scoped():
     # Session B (without unlock): check templates — should not see agent templates
     async with Client(mcp) as client_b:
         templates = await client_b.list_resource_templates()
-        uris = {t.uri_template for t in templates}
+        uris = {t.uriTemplate for t in templates}
         assert not any(u.startswith("agent://") for u in uris)
 
 

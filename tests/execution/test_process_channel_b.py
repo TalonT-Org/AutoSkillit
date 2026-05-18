@@ -175,6 +175,9 @@ class TestChannelBDrainWait:
         _phase1_timeout=250: must exceed outer timeout (120s) so that Phase 1 never fires
         first with STALE when subprocess startup is slow under WSL2 + xdist load; the
         outer 120s guard cancels all tasks before Phase 1 can timeout independently.
+        natural_exit_grace_seconds=0.1: script never exits naturally (time.sleep(300)),
+        so shorten grace window to reduce total test time and avoid asyncio-waitpid
+        thread contention under CI load (default 3.0s grace + 3.0s kill = 6s total).
         """
         session_dir = tmp_path / "session"
         session_dir.mkdir()
@@ -188,6 +191,7 @@ class TestChannelBDrainWait:
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=0.5,
+            natural_exit_grace_seconds=0.1,
             _phase1_poll=0.01,
             _phase2_poll=0.05,
             _session_id_timeout=0.01,

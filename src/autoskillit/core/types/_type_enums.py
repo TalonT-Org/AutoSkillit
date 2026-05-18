@@ -32,6 +32,7 @@ __all__ = [
     "DispatchGateType",
     "ClaudeContentBlockType",
     "InfraExitCategory",
+    "BackendEventKind",
 ]
 
 
@@ -477,3 +478,13 @@ class ClaudeContentBlockType(StrEnum):
             return cls(raw)
         except ValueError:
             return cls.UNKNOWN
+
+
+class BackendEventKind(StrEnum):
+    """Event kinds emitted by coding agent backends."""
+
+    COMPLETION = "completion"
+    SESSION_META = "session_meta"
+    TOOL_OUTPUT = "tool_output"
+    ERROR = "error"
+    IGNORED = "ignored"

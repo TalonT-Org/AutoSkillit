@@ -823,7 +823,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "recipe": 31,
         "execution": 18,
         "core": 20,
-        "core/types": 22,
+        "core/types": 23,
         "cli": 20,
         "hooks": 10,
         "pipeline": 12,
@@ -1080,6 +1080,7 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
         "core/types/_type_protocols_workspace.py",
         "core/types/_type_protocols_recipe.py",
         "core/types/_type_protocols_infra.py",
+        "core/types/_type_protocols_backend.py",
         "core/types/_type_subprocess.py",
     ):
         types_path = AUTOSKILLIT_ROOT / types_filename

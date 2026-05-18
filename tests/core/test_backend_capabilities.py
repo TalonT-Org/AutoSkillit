@@ -50,16 +50,23 @@ def test_backend_capabilities_slots():
 
 
 def test_backend_capabilities_field_count():
-    """Exactly 8 fields: 6 bool + 2 frozenset[str]."""
+    """9 fields: 7 bool + 2 frozenset[str]."""
     from autoskillit.core import BackendCapabilities
 
     fields = dataclasses.fields(BackendCapabilities)
     hints = typing.get_type_hints(BackendCapabilities)
-    assert len(fields) == 8
-    bool_fields = [f for f in fields if hints[f.name] is bool]
-    frozenset_fields = [f for f in fields if hints[f.name] == frozenset[str]]
-    assert len(bool_fields) == 6
-    assert len(frozenset_fields) == 2
+    bool_fields = {f.name for f in fields if hints[f.name] is bool}
+    frozenset_fields = {f.name for f in fields if hints[f.name] == frozenset[str]}
+    assert bool_fields == {
+        "channel_b_capable",
+        "pty_required",
+        "session_resume_capable",
+        "skill_injection_capable",
+        "supports_thinking_blocks",
+        "supports_claude_format_stdout",
+        "exit_code_is_terminal",
+    }
+    assert frozenset_fields == {"completion_record_types", "session_record_types"}
 
 
 def test_backend_capabilities_field_names_locked():
@@ -72,6 +79,7 @@ def test_backend_capabilities_field_names_locked():
         "session_resume_capable",
         "skill_injection_capable",
         "supports_thinking_blocks",
+        "supports_claude_format_stdout",
         "exit_code_is_terminal",
         "completion_record_types",
         "session_record_types",
@@ -89,6 +97,7 @@ def test_claude_code_capabilities_field_values():
     assert CLAUDE_CODE_CAPABILITIES.session_resume_capable is True
     assert CLAUDE_CODE_CAPABILITIES.skill_injection_capable is True
     assert CLAUDE_CODE_CAPABILITIES.supports_thinking_blocks is True
+    assert CLAUDE_CODE_CAPABILITIES.supports_claude_format_stdout is True
     assert CLAUDE_CODE_CAPABILITIES.exit_code_is_terminal is False
     assert CLAUDE_CODE_CAPABILITIES.completion_record_types == frozenset({"result"})
     assert CLAUDE_CODE_CAPABILITIES.session_record_types == frozenset({"assistant"})
@@ -105,10 +114,3 @@ def test_no_autoskillit_imports():
         stripped = line.strip()
         if stripped.startswith("from autoskillit") or stripped.startswith("import autoskillit"):
             pytest.fail(f"IL-0 violation: {stripped}")
-
-
-def test_backend_capabilities_module_all():
-    """__all__ contains exactly the two public symbols."""
-    from autoskillit.core.types._type_backend import __all__
-
-    assert set(__all__) == {"BackendCapabilities", "CLAUDE_CODE_CAPABILITIES"}

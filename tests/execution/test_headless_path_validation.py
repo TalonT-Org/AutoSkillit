@@ -1069,11 +1069,12 @@ class TestHeadlessExecutorIdleOutputTimeout:
 
     @pytest.mark.anyio
     async def test_default_headless_executor_falls_back_to_cfg_idle_output_timeout(
-        self, tool_ctx
+        self, tool_ctx, monkeypatch
     ) -> None:
         """idle_output_timeout=None falls back to float(cfg.idle_output_timeout)."""
         from autoskillit.execution.headless import run_headless_core
 
+        monkeypatch.delenv("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", raising=False)
         marker = tool_ctx.config.run_skill.completion_marker
         tool_ctx.runner.push(self._success_payload(marker))
         await run_headless_core(

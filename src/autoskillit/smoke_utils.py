@@ -14,10 +14,12 @@ from autoskillit.core import DISPATCH_ID_ENV_VAR, PR_TELEMETRY_SECTIONS, get_log
 
 logger = get_logger(__name__)
 
-_first = _regex.escape(PR_TELEMETRY_SECTIONS[0])
-_optional_parts = "".join(f"(?:\\n{_regex.escape(s)}\\n.*?)?" for s in PR_TELEMETRY_SECTIONS[1:])
 _PR_SECTION_RE = _regex.compile(
-    rf"\n*{_first}\n.*?{_optional_parts}(?=\n## |\Z)",
+    r"\n*"
+    + _regex.escape(PR_TELEMETRY_SECTIONS[0])
+    + r"\n.*?"
+    + "".join(f"(?:\\n{_regex.escape(s)}\\n.*?)?" for s in PR_TELEMETRY_SECTIONS[1:])
+    + r"(?=\n## |\Z)",
     _regex.DOTALL,
 )
 

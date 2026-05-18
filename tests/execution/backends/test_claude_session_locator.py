@@ -1,5 +1,3 @@
-"""Tests for ClaudeSessionLocator."""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -31,8 +29,10 @@ class TestClaudeSessionLocator:
     def test_locate_session_returns_none_for_missing(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        monkeypatch.setenv("HOME", str(tmp_path))
-        (tmp_path / ".claude" / "projects").mkdir(parents=True)
+        fake_home = tmp_path / "homedir"
+        fake_home.mkdir(parents=True)
+        monkeypatch.setattr(Path, "home", lambda: fake_home)
+        (fake_home / ".claude" / "projects").mkdir(parents=True)
 
         locator = ClaudeSessionLocator()
         result = locator.locate_session("nonexistent-session")
@@ -41,7 +41,7 @@ class TestClaudeSessionLocator:
     def test_locate_session_returns_none_for_empty_id(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
         locator = ClaudeSessionLocator()
         result = locator.locate_session("")
@@ -50,7 +50,7 @@ class TestClaudeSessionLocator:
     def test_locate_session_returns_none_for_fallback_id(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
         locator = ClaudeSessionLocator()
         assert locator.locate_session("no_session_abc123") is None

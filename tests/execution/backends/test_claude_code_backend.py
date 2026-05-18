@@ -1,5 +1,3 @@
-"""Tests for ClaudeCodeBackend."""
-
 from __future__ import annotations
 
 import pytest
@@ -7,6 +5,7 @@ import pytest
 from autoskillit.core import (
     AGENT_BACKEND_CLAUDE_CODE,
     CLAUDE_CODE_CAPABILITIES,
+    CmdSpec,
     CodingAgentBackend,
     EnvPolicy,
     ResultParser,
@@ -36,8 +35,7 @@ class TestClaudeCodeBackend:
 
     def test_build_cmd_returns_cmd_spec(self) -> None:
         result = ClaudeCodeBackend().build_cmd("say hello", "/tmp")
-        assert hasattr(result, "cmd")
-        assert hasattr(result, "env")
+        assert isinstance(result, CmdSpec)
 
     def test_build_cmd_cmd_is_tuple_not_list(self) -> None:
         result = ClaudeCodeBackend().build_cmd("say hello", "/tmp")

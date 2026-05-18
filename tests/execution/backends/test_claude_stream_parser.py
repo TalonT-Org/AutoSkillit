@@ -1,5 +1,3 @@
-"""Tests for ClaudeStreamParser."""
-
 from __future__ import annotations
 
 import pytest
@@ -50,6 +48,13 @@ class TestClaudeStreamParser:
         result = parser.parse_line(line)
         assert result is not None
         assert result.kind == BackendEventKind.TOOL_OUTPUT
+
+    def test_parse_line_assistant_with_message_key_and_zero_tokens_ignored(self) -> None:
+        parser = ClaudeStreamParser()
+        line = '{"type": "assistant", "message": {"content": "hello"}, "output_tokens": 0}'
+        result = parser.parse_line(line)
+        assert result is not None
+        assert result.kind == BackendEventKind.IGNORED
 
     def test_parse_line_regular_assistant_ignored(self) -> None:
         parser = ClaudeStreamParser()

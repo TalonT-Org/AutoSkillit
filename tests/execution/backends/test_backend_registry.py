@@ -1,12 +1,21 @@
-"""Tests for backends/__init__.py — BACKEND_REGISTRY and get_backend()."""
-
 from __future__ import annotations
 
 import pytest
 
+from autoskillit.core import (
+    CodingAgentBackend,
+    EnvPolicy,
+    ResultParser,
+    SessionLocator,
+    StreamParser,
+)
 from autoskillit.execution.backends import (
     BACKEND_REGISTRY,
     ClaudeCodeBackend,
+    ClaudeEnvPolicy,
+    ClaudeResultParser,
+    ClaudeSessionLocator,
+    ClaudeStreamParser,
     get_backend,
 )
 
@@ -29,21 +38,9 @@ class TestBackendRegistry:
     def test_backend_registry_value_type(self) -> None:
         assert BACKEND_REGISTRY["claude-code"] is ClaudeCodeBackend
 
-    def test_all_five_classes_importable(self) -> None:
-        from autoskillit.execution.backends import (
-            ClaudeEnvPolicy,
-            ClaudeResultParser,
-            ClaudeSessionLocator,
-            ClaudeStreamParser,
-        )
-
-        assert all(
-            callable(cls)
-            for cls in (
-                ClaudeCodeBackend,
-                ClaudeEnvPolicy,
-                ClaudeResultParser,
-                ClaudeSessionLocator,
-                ClaudeStreamParser,
-            )
-        )
+    def test_all_classes_importable(self) -> None:
+        assert isinstance(ClaudeCodeBackend(), CodingAgentBackend)
+        assert isinstance(ClaudeEnvPolicy(), EnvPolicy)
+        assert isinstance(ClaudeResultParser(), ResultParser)
+        assert isinstance(ClaudeSessionLocator(), SessionLocator)
+        assert isinstance(ClaudeStreamParser(), StreamParser)

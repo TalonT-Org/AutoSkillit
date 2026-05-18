@@ -1,5 +1,3 @@
-"""Tests for ClaudeEnvPolicy."""
-
 from __future__ import annotations
 
 from dataclasses import FrozenInstanceError

@@ -77,8 +77,7 @@ class CodexEventData:
     identifies the conversation thread and `item_type` carries the item kind.
     These differ from ClaudeEventData (which uses `session_id`/`subtype`)
     because each backend uses its own native terminology.
-    Mutation of `raw` is prohibited by convention — the frozen constraint
-    prevents field reassignment but not dict mutation.
+    See `ClaudeEventData` for the `raw`-field mutation convention.
     """
 
     record_type: str

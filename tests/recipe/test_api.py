@@ -751,8 +751,29 @@ def test_build_ingredient_rows_resolved_does_not_override_required_marker():
     assert any(r[0] == "x *" and r[2] == "(required)" for r in rows)
 
 
+@pytest.mark.parametrize("default_val", ["true", "false"])
+def test_build_ingredient_rows_boolean_default_preserves_raw_value(default_val):
+    """Display value for boolean-defaulted ingredients must equal the raw YAML string.
+
+    The round-trip invariant: ingredient.default → build_ingredient_rows output
+    must produce a value that is a valid operand in when: conditions that compare
+    against the raw YAML string. Breaking this invariant causes silent condition
+    mismatch (issue #2584).
+    """
+    from autoskillit.recipe._api import build_ingredient_rows
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    recipe = _make_recipe_with_ingredient(
+        "flag",
+        RecipeIngredient(description="A boolean flag", default=default_val),
+    )
+    rows = build_ingredient_rows(recipe)
+    display_values = {r[0]: r[2] for r in rows}
+    assert display_values["flag"] == default_val
+
+
 def test_build_ingredient_rows_resolved_overrides_boolean_literal():
-    """T6: resolved value wins over a boolean-literal default ('true'/'false' → 'on'/'off')."""
+    """T6: resolved value wins over a boolean-literal default."""
     from autoskillit.recipe._api import build_ingredient_rows
     from autoskillit.recipe.schema import RecipeIngredient
 

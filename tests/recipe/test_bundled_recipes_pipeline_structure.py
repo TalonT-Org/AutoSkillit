@@ -925,3 +925,48 @@ class TestInvestigateFirstStructure:
             f"remediation.yaml assess step must declare on_context_limit: test, "
             f"got: {assess.on_context_limit!r}"
         )
+
+
+class TestDisplayConditionContract:
+    """Cross-system contract guards: display table values must match condition operands."""
+
+    @pytest.fixture(scope="class")
+    def recipe_modules(self) -> dict:
+        return {
+            "implementation": load_recipe(builtin_recipes_dir() / "implementation.yaml"),
+            "remediation": load_recipe(builtin_recipes_dir() / "remediation.yaml"),
+            "implementation-groups": load_recipe(
+                builtin_recipes_dir() / "implementation-groups.yaml"
+            ),
+        }
+
+    def test_ingredient_display_values_match_condition_operands(self, recipe_modules) -> None:
+        """Every when: condition comparing inputs.<name> against a literal must use
+        a value that matches what build_ingredient_rows produces for that ingredient.
+
+        This is the cross-system contract guard: display table ↔ condition evaluation
+        must agree on the value domain. Mismatch causes silent condition routing failures
+        (issue #2584).
+        """
+        import re
+
+        from autoskillit.recipe._recipe_ingredients import build_ingredient_rows
+
+        for recipe_name, recipe in recipe_modules.items():
+            rows = build_ingredient_rows(recipe)
+            display = {r[0].rstrip(" *"): r[2] for r in rows}
+
+            for step_name, step in recipe.steps.items():
+                when = getattr(step, "skip_when_false", None) or ""
+                matches = re.findall(r"inputs\.(\w+)\s*(==|!=|>=|<=|>|<)\s*'([^']*)'", when)
+                for ing_name, op, operand in matches:
+                    name_key = ing_name if ing_name in display else None
+                    if name_key is None:
+                        continue
+                    display_val = display[name_key]
+                    assert display_val == operand, (
+                        f"{recipe_name}::{step_name}: condition uses "
+                        f"inputs.{ing_name} {op} '{operand}' but "
+                        f"build_ingredient_rows shows '{display_val}' — "
+                        f"display value must match condition operand"
+                    )

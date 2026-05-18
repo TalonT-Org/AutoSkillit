@@ -69,9 +69,9 @@ def build_ingredient_rows(
         elif default == "":
             default_str, name_str = "auto-detect", name
         elif default == "true":
-            default_str, name_str = "on", name
+            default_str, name_str = "true", name
         elif default == "false":
-            default_str, name_str = "off", name
+            default_str, name_str = "false", name
         elif default is None:
             default_str, name_str = "--", name
         else:

@@ -475,3 +475,62 @@ def _check_local_rounds_alignment(ctx: ValidationContext) -> list[RuleFinding]:
             ),
         )
     ]
+
+
+_DISPLAY_ONLY_VALUES: frozenset[str] = frozenset({"on", "off", "auto-detect"})
+
+_INPUTS_CONDITION_RE = re.compile(r"\$\{\{\s*inputs\.(\w+)\s*\}\}\s*(?:==|!=)\s*'([^']*)'")
+
+
+@semantic_rule(
+    name="ingredient-condition-value-domain",
+    description=(
+        "A when: condition compares inputs.<name> against a value that is not "
+        "in the ingredient's valid value domain, or uses a display-only value "
+        "('on', 'off', 'auto-detect') that diverges from the raw YAML default."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_ingredient_condition_value_domain(
+    ctx: ValidationContext,
+) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    ingredients = ctx.recipe.ingredients
+    for step_name, step in ctx.recipe.steps.items():
+        if not step.on_result:
+            continue
+        for cond in step.on_result.conditions:
+            if cond.when is None:
+                continue
+            for match in _INPUTS_CONDITION_RE.finditer(cond.when):
+                ing_name, operand = match.group(1), match.group(2)
+                ing = ingredients.get(ing_name)
+                if ing is None:
+                    continue
+                if operand in _DISPLAY_ONLY_VALUES:
+                    findings.append(
+                        RuleFinding(
+                            rule="ingredient-condition-value-domain",
+                            severity=Severity.ERROR,
+                            step_name=step_name,
+                            message=(
+                                f"Condition on inputs.{ing_name} uses display-only "
+                                f"value '{operand}' — use the raw YAML value instead "
+                                f"(ingredient default: '{ing.default}')."
+                            ),
+                        )
+                    )
+                elif ing.default in ("true", "false") and operand not in ("true", "false"):
+                    findings.append(
+                        RuleFinding(
+                            rule="ingredient-condition-value-domain",
+                            severity=Severity.ERROR,
+                            step_name=step_name,
+                            message=(
+                                f"Condition on inputs.{ing_name} uses '{operand}' "
+                                f"which is not in the boolean value domain "
+                                f"{{'true', 'false'}} (ingredient default: '{ing.default}')."
+                            ),
+                        )
+                    )
+    return findings

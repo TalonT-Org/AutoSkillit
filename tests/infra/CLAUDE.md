@@ -57,6 +57,7 @@ CI/CD configuration, security, guard coverage, and release sanity tests.
 | `test_testmon_eval.py` | Testmon eval tests |
 | `test_token_summary_core.py` | Tests: token_summary_appender core — existence, early-exit, happy path, session filtering |
 | `test_token_summary_filters.py` | Tests: token_summary_appender unit helpers and order_id isolation |
+| `test_token_summary_v1_compat.py` | Tests: token_summary_appender v1 sessions.jsonl and token_usage.json backward compatibility |
 | `test_unsafe_install_guard.py` | Tests for the unsafe_install_guard PreToolUse hook |
 
 ## Architecture Notes

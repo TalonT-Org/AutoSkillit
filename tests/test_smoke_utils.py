@@ -1151,6 +1151,7 @@ def test_build_eval_context_handles_null_plan_path(tmp_path: Path) -> None:
                 "skill": "/autoskillit:research",
                 "gap_description": "bug",
                 "detection_criteria": ["test"],
+                "reference_path": "/path/to/reference",
             }
         )
     )
@@ -1180,6 +1181,7 @@ def test_build_eval_context_resolves_absolute_paths(tmp_path: Path) -> None:
                 "skill": "/autoskillit:research",
                 "gap_description": "bug",
                 "detection_criteria": ["test"],
+                "reference_path": "/path/to/reference",
             }
         )
     )
@@ -1210,6 +1212,32 @@ def test_build_eval_context_missing_resolved_json(tmp_path: Path) -> None:
     )
     assert result["success"] == "false"
     assert isinstance(result["error"], str) and result["error"]
+
+
+# T_BEC5
+def test_build_eval_context_missing_reference_path(tmp_path: Path) -> None:
+    """Missing reference_path in resolved.json returns success: false."""
+    eval_run_dir = tmp_path / "eval_run"
+    eval_run_dir.mkdir()
+    canary_dir = eval_run_dir / "c1"
+    canary_dir.mkdir()
+    (canary_dir / "resolved.json").write_text(
+        json.dumps(
+            {
+                "id": "c1",
+                "skill": "/autoskillit:research",
+                "gap_description": "bug",
+                "detection_criteria": ["test"],
+            }
+        )
+    )
+    result = build_eval_context(
+        canary_id="c1",
+        plan_paths_json=json.dumps({"baseline": "/some/path"}),
+        eval_run_dir=str(eval_run_dir),
+    )
+    assert result["success"] == "false"
+    assert "reference_path" in result["error"]
 
 
 # ---------------------------------------------------------------------------

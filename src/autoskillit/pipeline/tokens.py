@@ -144,8 +144,12 @@ class DefaultTokenLog:
             e.model = _model
         e.input_tokens += token_usage.get("input_tokens", 0)
         e.output_tokens += token_usage.get("output_tokens", 0)
-        e.cache_write_tokens += token_usage.get("cache_creation_input_tokens", 0)
-        e.cache_read_tokens += token_usage.get("cache_read_input_tokens", 0)
+        e.cache_write_tokens += token_usage.get(
+            "cache_write_tokens", token_usage.get("cache_creation_input_tokens", 0)
+        )
+        e.cache_read_tokens += token_usage.get(
+            "cache_read_tokens", token_usage.get("cache_read_input_tokens", 0)
+        )
         e.invocation_count += 1
         e.loc_insertions += loc_insertions
         e.loc_deletions += loc_deletions

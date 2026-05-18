@@ -14,6 +14,9 @@ from autoskillit.core import DISPATCH_ID_ENV_VAR, PR_TELEMETRY_SECTIONS, get_log
 
 logger = get_logger(__name__)
 
+assert len(PR_TELEMETRY_SECTIONS) == 3, (  # noqa: S101
+    f"_PR_SECTION_RE assumes exactly 3 sections; got {len(PR_TELEMETRY_SECTIONS)}"
+)
 _PR_SECTION_RE = _regex.compile(
     r"\n*"
     + _regex.escape(PR_TELEMETRY_SECTIONS[0])
@@ -332,7 +335,7 @@ def patch_pr_token_summary(
         return {"success": "false", "error": "PR body is empty"}
 
     if _PR_SECTION_RE.search(current_body):
-        new_body = _PR_SECTION_RE.sub("\n\n" + combined, current_body)
+        new_body = _PR_SECTION_RE.sub("\n\n" + combined, current_body, count=1)
     else:
         new_body = current_body + "\n\n" + combined
 

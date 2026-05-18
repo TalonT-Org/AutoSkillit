@@ -104,6 +104,68 @@ async def test_open_kitchen_warns_on_missing_hook_scripts(tmp_path, monkeypatch)
     )
 
 
+# T-KITCHEN-3: Site 2 — _build_hook_diagnostic_warning skips missing when plugin marketplace-active
+@pytest.mark.anyio
+async def test_build_hook_diagnostic_warning_skips_missing_when_plugin_active(
+    tmp_path, monkeypatch
+):
+    """Site 2: _build_hook_diagnostic_warning returns None when plugin is marketplace-installed."""
+    from autoskillit.core._plugin_ids import MARKETPLACE_PREFIX
+
+    settings_dir = tmp_path / ".claude"
+    settings_dir.mkdir()
+    (settings_dir / "settings.json").write_text('{"hooks": {}}')
+
+    monkeypatch.setattr(
+        "autoskillit.hook_registry._claude_settings_path",
+        lambda scope: settings_dir / "settings.json",
+    )
+    monkeypatch.setattr("autoskillit.hook_registry.validate_plugin_cache_hooks", lambda **_: [])
+    monkeypatch.setattr(
+        "autoskillit.core.detect_autoskillit_mcp_prefix", lambda: MARKETPLACE_PREFIX
+    )
+
+    from autoskillit.server._misc import _build_hook_diagnostic_warning
+
+    result = _build_hook_diagnostic_warning()
+    assert result is None
+
+
+# T-KITCHEN-4: Site 2 — orphaned hook detection remains unconditional in MCP path
+@pytest.mark.anyio
+async def test_build_hook_diagnostic_warning_orphaned_still_fires_when_plugin_active(
+    tmp_path, monkeypatch
+):
+    """Site 2: orphaned detection remains unconditional even when plugin is marketplace-active."""
+    from autoskillit.core._plugin_ids import MARKETPLACE_PREFIX
+    from autoskillit.hook_registry import HookDriftResult
+
+    settings_dir = tmp_path / ".claude"
+    settings_dir.mkdir()
+    (settings_dir / "settings.json").write_text('{"hooks": {}}')
+
+    monkeypatch.setattr(
+        "autoskillit.hook_registry._claude_settings_path",
+        lambda scope: settings_dir / "settings.json",
+    )
+    monkeypatch.setattr(
+        "autoskillit.hook_registry._count_hook_registry_drift",
+        lambda _: HookDriftResult(missing=0, orphaned=1),
+    )
+    monkeypatch.setattr("autoskillit.hook_registry.find_broken_hook_scripts", lambda _: [])
+    monkeypatch.setattr("autoskillit.hook_registry.validate_plugin_cache_hooks", lambda **_: [])
+    monkeypatch.setattr(
+        "autoskillit.core.detect_autoskillit_mcp_prefix", lambda: MARKETPLACE_PREFIX
+    )
+
+    from autoskillit.server._misc import _build_hook_diagnostic_warning
+
+    result = _build_hook_diagnostic_warning()
+    assert result is not None
+    assert "orphan" in result.lower()
+    assert "1" in result
+
+
 @pytest.mark.anyio
 async def test_prime_quota_cache_catches_typeerror(monkeypatch):
     """_prime_quota_cache must catch TypeError and not propagate — 'fails open' contract."""

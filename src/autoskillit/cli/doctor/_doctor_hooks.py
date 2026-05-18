@@ -17,6 +17,15 @@ logger = get_logger(__name__)
 
 
 def _check_hook_registration(settings_path: Path) -> DoctorResult:
+    from autoskillit.cli._init_helpers import _is_plugin_installed
+
+    if _is_plugin_installed():
+        return DoctorResult(
+            severity=Severity.OK,
+            check="hook_registration",
+            message="Hooks delivered via plugin cache — settings.json check skipped.",
+        )
+
     from autoskillit.cli._hooks import _load_settings_data
 
     data = _load_settings_data(settings_path)
@@ -64,6 +73,17 @@ def _check_hook_registry_drift(
             msg = f"[{scope_label}] {msg}"
         return DoctorResult(Severity.ERROR, "hook_registry_drift", msg)
     if result.missing > 0:
+        from autoskillit.cli._init_helpers import _is_plugin_installed
+
+        if _is_plugin_installed():
+            msg = "Hooks delivered via plugin cache — settings.json drift is expected."
+            if scope_label:
+                msg = f"[{scope_label}] {msg}"
+            return DoctorResult(
+                severity=Severity.OK,
+                check="hook_registry_drift",
+                message=msg,
+            )
         msg = (
             f"Hook registry has changed since last install. "
             f"Run 'autoskillit install' to deploy {result.missing} new/changed hook(s)."

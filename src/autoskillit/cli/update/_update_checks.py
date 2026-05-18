@@ -148,10 +148,13 @@ def _hooks_signal(settings_path: Path) -> Signal | None:
                 f"will block tool calls with ENOENT — run 'autoskillit install' to fix",
             )
         if drift.missing > 0:
-            return Signal(
-                "hooks",
-                f"{drift.missing} new/changed hook(s) detected since last install",
-            )
+            from autoskillit.cli._init_helpers import _is_plugin_installed
+
+            if not _is_plugin_installed():
+                return Signal(
+                    "hooks",
+                    f"{drift.missing} new/changed hook(s) detected since last install",
+                )
     except Exception:
         logger.debug("hooks signal check failed", exc_info=True)
     return None

@@ -31,6 +31,7 @@ CLI command, subcommand, and interactive workflow tests.
 | `test_doctor_scripts.py` | Tests for doctor script/recipe version health checks |
 | `test_doctor_fleet.py` | Tests for fleet state schema version doctor check |
 | `test_doctor_split.py` | Structural guards: test_doctor.py split into three files (P1-F02) |
+| `test_hook_drift_plugin_guard.py` | Tests for hook drift false-positive fix when plugin is marketplace-installed |
 | `test_features_cli.py` | Tests for the features CLI subcommand |
 | `test_fleet_campaign.py` | Tests: fleet CLI campaign command |
 | `test_fleet_campaign_preview.py` | Tests: fleet_campaign shows preview + confirmation before launch |

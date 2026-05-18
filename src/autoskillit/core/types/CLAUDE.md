@@ -21,8 +21,9 @@ Type re-export hub and all typed building blocks for the autoskillit package (IL
 | `_type_protocols_workspace.py` | Protocols: `WorkspaceManager`, `CloneManager`, `SessionSkillManager`, `SkillLister`, `SkillResolver` |
 | `_type_protocols_recipe.py` | Protocols: `RecipeRepository`, `MigrationService`, `DatabaseReader`, `ReadOnlyResolver` |
 | `_type_protocols_infra.py` | Protocols: `GateState`, `BackgroundSupervisor`, `FleetLock`, `QuotaRefreshTask`, `TokenFactory`, `CampaignProtector` |
+| `_type_protocols_backend.py` | Protocols: `StreamParser`, `ResultParser`, `EnvPolicy`, `SessionLocator`, `CodingAgentBackend` |
 | `_type_checkpoint.py` | `SessionCheckpoint` frozen dataclass and `compute_remaining()` helper for session resume |
-| `_type_backend.py` | `BackendCapabilities` frozen dataclass and `CLAUDE_CODE_CAPABILITIES` constant |
+| `_type_backend.py` | `BackendCapabilities` frozen dataclass, `CLAUDE_CODE_CAPABILITIES` constant, `CmdSpec`, `ClaudeEventData`, `CodexEventData`, `SessionEvent`, `AgentSessionResult` |
 | `_type_capture.py` | `CaptureEntrySpec` and `CaptureValueTypeError` for typed capture contract enforcement |
 | `_type_dispatch_identity.py` | `DispatchIdentity` frozen value object, `PromptContractError`, and `assert_prompt_sentinel` for sentinel contract enforcement |
 | `_type_helpers.py` | Text processing and skill-name extraction utilities |

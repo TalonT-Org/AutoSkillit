@@ -70,6 +70,18 @@ def test_infra_shard_all():
     }
 
 
+def test_backend_shard_all():
+    from autoskillit.core.types._type_protocols_backend import __all__
+
+    assert set(__all__) == {
+        "StreamParser",
+        "ResultParser",
+        "EnvPolicy",
+        "SessionLocator",
+        "CodingAgentBackend",
+    }
+
+
 def test_all_protocols_reachable_via_types():
     from autoskillit.core import types
 
@@ -81,6 +93,8 @@ def test_all_protocols_reachable_via_types():
         "RecipeRepository",
         "WorkspaceManager",
         "CampaignProtector",
+        "CodingAgentBackend",
+        "StreamParser",
     ]:
         assert hasattr(types, name), f"Missing from types: {name}"
 

@@ -29,6 +29,7 @@ class TestCoreSubpackages:
             "_type_protocols_logging",
             "_type_protocols_recipe",
             "_type_protocols_workspace",
+            "_type_protocols_backend",
             "_type_results_execution",
             "_type_figure_spec",
             "_type_capture",

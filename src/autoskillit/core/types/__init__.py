@@ -24,6 +24,8 @@ from ._type_helpers import *  # noqa: F401, F403
 from ._type_helpers import __all__ as _helpers_all
 from ._type_plugin_source import *  # noqa: F401, F403
 from ._type_plugin_source import __all__ as _plugin_source_all
+from ._type_protocols_backend import *  # noqa: F401, F403
+from ._type_protocols_backend import __all__ as _protocols_backend_all
 from ._type_protocols_execution import *  # noqa: F401, F403
 from ._type_protocols_execution import __all__ as _protocols_execution_all
 from ._type_protocols_github import *  # noqa: F401, F403
@@ -65,6 +67,7 @@ __all__ = (
     + _protocols_workspace_all
     + _protocols_recipe_all
     + _protocols_infra_all
+    + _protocols_backend_all
     + _results_all
     + _results_execution_all
     + _resume_all

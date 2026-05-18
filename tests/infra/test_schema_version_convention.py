@@ -150,9 +150,9 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/smoke_utils.py", 415),
     ("src/autoskillit/smoke_utils.py", 497),
     ("src/autoskillit/smoke_utils.py", 508),
-    ("src/autoskillit/smoke_utils.py", 595),
-    ("src/autoskillit/smoke_utils.py", 671),
-    ("src/autoskillit/smoke_utils.py", 766),
+    ("src/autoskillit/smoke_utils.py", 601),
+    ("src/autoskillit/smoke_utils.py", 677),
+    ("src/autoskillit/smoke_utils.py", 772),
     # planner/consolidation.py — write-back of merged WP dicts to per-file results
     ("src/autoskillit/planner/consolidation.py", 314),
     # planner/consolidation.py — broken_cycle_edges.json (list payload; AST scanner catches it)

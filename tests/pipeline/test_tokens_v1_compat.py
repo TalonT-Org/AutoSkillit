@@ -12,9 +12,12 @@ from autoskillit.pipeline.tokens import DefaultTokenLog
 pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]
 
 
-def _write_v1_session(
+def _write_minimal_v1_session(
     log_root: Path, dir_name: str, tu_data: dict, timestamp: str = "2025-01-15T10:00:00+00:00"
 ) -> None:
+    # Writes only the fields DefaultTokenLog.load_from_log_dir() requires.
+    # Not suitable for testing filter paths (kitchen_id, pipeline_id, etc.) —
+    # use the infra helper in test_token_summary_v1_compat.py for those.
     session_dir = log_root / "sessions" / dir_name
     session_dir.mkdir(parents=True, exist_ok=True)
     (session_dir / "token_usage.json").write_text(json.dumps(tu_data))
@@ -35,7 +38,7 @@ def test_load_from_log_dir_v1_fields_no_double_count(tmp_path: Path) -> None:
         "timing_seconds": 8.0,
         "schema_version": 2,
     }
-    _write_v1_session(tmp_path, "s1", tu_data)
+    _write_minimal_v1_session(tmp_path, "s1", tu_data)
 
     log = DefaultTokenLog()
     n = log.load_from_log_dir(tmp_path)

@@ -74,7 +74,7 @@ def main_repo_guard(clone_path: str) -> dict[str, str]:
     )
     if result.returncode != 0:
         raise subprocess.CalledProcessError(
-            result.returncode, result.args, result.stdout.encode(), result.stderr.encode()
+            result.returncode, result.args, result.stdout, result.stderr
         )
 
     if not result.stdout.strip():
@@ -124,6 +124,8 @@ def main_repo_guard(clone_path: str) -> dict[str, str]:
                 cl.returncode,
                 cl.stderr.strip(),
             )
+        if co.returncode != 0 and cl.returncode != 0:
+            return {"cleaned": "failed"}
         return {"cleaned": "force"}
 
     return {"cleaned": "true"}

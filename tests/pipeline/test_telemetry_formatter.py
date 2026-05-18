@@ -1279,23 +1279,35 @@ def test_format_pr_block_section_order() -> None:
 
 
 def test_pr_telemetry_sections_exhaustive() -> None:
-    """Every format_* method producing a '## ' header has its header in PR_TELEMETRY_SECTIONS."""
+    """Every ## header produced by format_pr_telemetry_block's sub-formatters is in PR_TELEMETRY_SECTIONS."""
     import ast
     import inspect
 
     from autoskillit.core import PR_TELEMETRY_SECTIONS
 
-    source = inspect.getsource(TelemetryFormatter)
-    tree = ast.parse(source)
+    # Identify which TelemetryFormatter methods are called inside format_pr_telemetry_block.
+    # Only those methods are PR-bound; other formatters (e.g. format_timing_table) are not.
+    pr_block_source = inspect.getsource(TelemetryFormatter.format_pr_telemetry_block)
+    pr_block_tree = ast.parse(pr_block_source)
+    called_methods: set[str] = set()
+    for node in ast.walk(pr_block_tree):
+        if isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Load):
+            if node.attr.startswith("format_") and node.attr != "format_pr_telemetry_block":
+                called_methods.add(node.attr)
+
+    class_source = inspect.getsource(TelemetryFormatter)
+    class_tree = ast.parse(class_source)
     pr_headers: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Constant) and isinstance(node.value, str):
-            val = node.value.strip()
-            if val.startswith("## ") and "\n" not in val:
-                pr_headers.add(val)
+    for node in ast.walk(class_tree):
+        if isinstance(node, ast.FunctionDef) and node.name in called_methods:
+            for child in ast.walk(node):
+                if isinstance(child, ast.Constant) and isinstance(child.value, str):
+                    val = child.value.strip()
+                    if val.startswith("## ") and "\n" not in val:
+                        pr_headers.add(val)
     for header in pr_headers:
         assert header in PR_TELEMETRY_SECTIONS, (
-            f"Header {header!r} found in TelemetryFormatter but missing from PR_TELEMETRY_SECTIONS"
+            f"Header {header!r} found in TelemetryFormatter PR-bound formatter but missing from PR_TELEMETRY_SECTIONS"
         )
 
 

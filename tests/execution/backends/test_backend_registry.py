@@ -31,11 +31,19 @@ class TestBackendRegistry:
 
     def test_all_five_classes_importable(self) -> None:
         from autoskillit.execution.backends import (
-            ClaudeCodeBackend,
             ClaudeEnvPolicy,
             ClaudeResultParser,
             ClaudeSessionLocator,
             ClaudeStreamParser,
         )
 
-        assert True
+        assert all(
+            callable(cls)
+            for cls in (
+                ClaudeCodeBackend,
+                ClaudeEnvPolicy,
+                ClaudeResultParser,
+                ClaudeSessionLocator,
+                ClaudeStreamParser,
+            )
+        )

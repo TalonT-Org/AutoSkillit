@@ -140,7 +140,7 @@ generic_automation_mcp/
 | `core/` | IL-0 | Foundation — types/, runtime/, paths, IO, feature flags (zero autoskillit imports) |
 | `config/` | IL-1 | `AutomationConfig` + Dynaconf loader + 24 leaf dataclasses |
 | `pipeline/` | IL-1 | Pipeline state — `ToolContext` DI, gate, audit log, telemetry |
-| `execution/` | IL-1 | Headless sessions (headless/, process/, merge_queue/, session/), CI/GitHub |
+| `execution/` | IL-1 | Headless sessions (headless/, process/, merge_queue/, session/), backends/, CI/GitHub |
 | `workspace/` | IL-1 | Clone management, worktrees, skill resolution |
 | `planner/` | IL-1 | Progressive resolution planner — phases, assignments, WPs, validation |
 | `report/` | IL-1 | HTML report renderer — `renderer.py` uses `pkg_root()` for asset resolution |

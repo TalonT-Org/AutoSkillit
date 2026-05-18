@@ -451,7 +451,7 @@ class TestLoadFromLogDirSchemaVersionCompat:
                     "input_tokens": 100,
                     "output_tokens": 50,
                     "cache_creation_input_tokens": 10,
-                    "cache_read_tokens": 5,
+                    "cache_read_input_tokens": 5,
                     "timing_seconds": 30.0,
                 },
                 id="v1-legacy-keys",
@@ -492,7 +492,7 @@ class TestLoadFromLogDirSchemaVersionCompat:
                 "input_tokens": 50,
                 "output_tokens": 25,
                 "cache_creation_input_tokens": 8,
-                "cache_read_tokens": 3,
+                "cache_read_input_tokens": 3,
                 "timing_seconds": 10.0,
             },
         )

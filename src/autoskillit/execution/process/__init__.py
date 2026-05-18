@@ -243,6 +243,13 @@ async def run_managed_async(
             # uvloop's Cython layer requires type(env) is dict — coerce at
             # the external API boundary to preserve MappingProxyType internally.
             _env: dict[str, str] | None = dict(env) if env is not None else None
+            # Capture spawn_time before launching the subprocess so that the
+            # session JSONL file's ctime is always > spawn_time even when task
+            # group setup takes longer than the subprocess's initial sleep.
+            # Capturing it after open_process() creates a race: under CI load
+            # the subprocess writes its JSONL before time.time() is evaluated,
+            # causing st_ctime < spawn_time and Phase 1 to never find the file.
+            _spawn_time = time.time()
             proc = await anyio.open_process(
                 cmd,
                 stdout=stdout_file,
@@ -333,7 +340,7 @@ async def run_managed_async(
                         session_log_dir,
                         completion_marker,
                         stale_threshold,
-                        time.time(),
+                        _spawn_time,
                         session_record_types,
                         _observed_pid,
                         completion_drain_timeout,

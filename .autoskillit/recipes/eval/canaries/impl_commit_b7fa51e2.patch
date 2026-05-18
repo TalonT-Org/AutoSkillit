@@ -7,6 +7,6 @@ diff --git a/src/autoskillit/smoke_utils.py b/src/autoskillit/smoke_utils.py
 
 -    before_commit = canary.get("before_commit", "")
 +    checkout_ref = canary.get("checkout_ref", "")
-     if before_commit:
+     if checkout_ref:
          # ... use it
 --- end patch ---

@@ -290,7 +290,7 @@ steps:
     on_result:
       - when: "${{ result.max_exceeded }} == true"
         route: release_issue_failure
-      - route: commit_guard
+      - route: audit_impl
     on_failure: release_issue_failure
     optional_context_refs:
       - merge_fix_count

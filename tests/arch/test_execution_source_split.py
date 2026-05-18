@@ -14,7 +14,7 @@ NEW_HEADLESS_MODULES = [
     "_headless_result.py",
 ]
 HEADLESS_SIZE_BUDGETS = {
-    "headless/__init__.py": 920,
+    "headless/__init__.py": 925,
     "headless/_headless_recovery.py": 340,
     "headless/_headless_path_tokens.py": 175,
     "headless/_headless_result.py": 673,

@@ -293,7 +293,7 @@
           "route": "release_issue_failure"
         },
         {
-          "route": "commit_guard"
+          "route": "audit_impl"
         }
       ],
       "on_failure": "release_issue_failure",

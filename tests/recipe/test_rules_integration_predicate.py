@@ -21,7 +21,7 @@ class TestRecipeIntegrationPredicateRouting:
         """The merge step in remediation.yaml has predicate on_result."""
         step = self.if_recipe.steps["merge"]
         assert step.on_result is not None
-        assert len(step.on_result.conditions) == 6
+        assert len(step.on_result.conditions) == 7
 
         cond0 = step.on_result.conditions[0]
         assert cond0.when == "result.failed_step == 'dirty_tree'"
@@ -40,12 +40,16 @@ class TestRecipeIntegrationPredicateRouting:
         assert cond3.route == "rebase_conflict_fix"
 
         cond4 = step.on_result.conditions[4]
-        assert cond4.when == "result.error"
-        assert cond4.route == "release_issue_failure"
+        assert cond4.when == "result.failed_step == 'dirty_main_repo'"
+        assert cond4.route == "check_merge_fix_loop"
 
         cond5 = step.on_result.conditions[5]
-        assert cond5.when is None
-        assert cond5.route == "next_or_done"
+        assert cond5.when == "result.error"
+        assert cond5.route == "release_issue_failure"
+
+        cond6 = step.on_result.conditions[6]
+        assert cond6.when is None
+        assert cond6.route == "next_or_done"
 
     def test_investigate_first_merge_step_captures_worktree_path(self) -> None:
         """The merge step captures worktree_path from result.worktree_path."""
@@ -57,7 +61,7 @@ class TestRecipeIntegrationPredicateRouting:
         """The merge step in implementation.yaml has predicate on_result."""
         step = self.ip_recipe.steps["merge"]
         assert step.on_result is not None
-        assert len(step.on_result.conditions) == 6
+        assert len(step.on_result.conditions) == 7
 
         cond0 = step.on_result.conditions[0]
         assert cond0.when == "result.failed_step == 'dirty_tree'"
@@ -76,12 +80,16 @@ class TestRecipeIntegrationPredicateRouting:
         assert cond3.route == "rebase_conflict_fix"
 
         cond4 = step.on_result.conditions[4]
-        assert cond4.when == "result.error"
-        assert cond4.route == "release_issue_failure"
+        assert cond4.when == "result.failed_step == 'dirty_main_repo'"
+        assert cond4.route == "check_merge_fix_loop"
 
         cond5 = step.on_result.conditions[5]
-        assert cond5.when is None
-        assert cond5.route == "next_or_done"
+        assert cond5.when == "result.error"
+        assert cond5.route == "release_issue_failure"
+
+        cond6 = step.on_result.conditions[6]
+        assert cond6.when is None
+        assert cond6.route == "next_or_done"
 
     def test_implementation_pipeline_merge_step_captures_worktree_path(self) -> None:
         """The merge step in implementation.yaml captures worktree_path."""

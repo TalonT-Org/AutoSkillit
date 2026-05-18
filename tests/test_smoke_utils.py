@@ -778,8 +778,8 @@ def test_pts_includes_model_usage_breakdown(mock_run, _mock_sleep, tmp_path: Pat
     result = patch_pr_token_summary(PR_URL, cwd="/clone/test", log_dir=str(tmp_path))
     assert result["success"] == "true"
     patch_call = mock_run.call_args_list[-1]
-    body_arg = [a for a in patch_call[0][0] if a.startswith("body=")][0]
-    assert body_arg, "body= argument not found in gh patch call"
+    body_arg = next((a for a in patch_call[0][0] if a.startswith("body=")), None)
+    assert body_arg is not None, "body= argument not found in gh patch call"
     assert "## Token Usage Summary" in body_arg
     assert "## Token Efficiency" in body_arg
     assert "## Model Usage Breakdown" in body_arg

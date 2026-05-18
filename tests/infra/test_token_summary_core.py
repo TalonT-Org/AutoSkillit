@@ -884,10 +884,8 @@ def test_pr_telemetry_assembly_parity() -> None:
     ]
     canonical = TelemetryFormatter.format_pr_telemetry_block(steps, total, model_totals)
 
-    hook_sections = [s for s in hook_assembly.split("\n") if s.startswith("## ")]
-    canonical_sections = [s for s in canonical.split("\n") if s.startswith("## ")]
-    assert hook_sections == canonical_sections, (
-        f"Section header mismatch:\nHOOK: {hook_sections}\nCANONICAL: {canonical_sections}"
+    assert hook_assembly == canonical, (
+        f"Assembly mismatch:\nHOOK:\n{hook_assembly}\nCANONICAL:\n{canonical}"
     )
 
 

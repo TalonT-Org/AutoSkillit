@@ -225,6 +225,7 @@ _FMT_RUN_SKILL_SUPPRESSED: frozenset[str] = frozenset(
         "write_path_warnings",
         "write_call_count",
         "fs_writes_detected",
+        "git_writes_detected",
         "last_stop_reason",
         "lifespan_started",
         "order_id",

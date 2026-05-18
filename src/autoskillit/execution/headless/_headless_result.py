@@ -164,6 +164,7 @@ def _build_skill_result(
     cwd: str = "",
     write_behavior: WriteBehaviorSpec | None = None,
     fs_writes_detected: bool = False,
+    git_writes_detected: bool = False,
     prior_completion_markers: Sequence[str] | None = None,
     *,
     provider_used: str = "",
@@ -320,7 +321,7 @@ def _build_skill_result(
         session = parse_session_result(result.stdout)
 
     write_call_count = sum(1 for t in session.tool_uses if t.get("name") in {"Write", "Edit"})
-    _has_write_evidence = write_call_count >= 1 or fs_writes_detected
+    _has_write_evidence = write_call_count >= 1 or fs_writes_detected or git_writes_detected
 
     # Channel B drain-race: recover from assistant_messages if type=result was not flushed.
     match result.channel_confirmation:
@@ -542,6 +543,7 @@ def _build_skill_result(
             write_path_warnings=write_path_warnings,
             write_call_count=write_call_count,
             fs_writes_detected=fs_writes_detected,
+            git_writes_detected=git_writes_detected,
             kill_reason=result.kill_reason,
             last_stop_reason=session.last_stop_reason,
             lifespan_started=session.lifespan_started,
@@ -565,6 +567,7 @@ def _build_skill_result(
             write_path_warnings=write_path_warnings,
             write_call_count=write_call_count,
             fs_writes_detected=fs_writes_detected,
+            git_writes_detected=git_writes_detected,
             kill_reason=result.kill_reason,
             last_stop_reason=session.last_stop_reason,
             lifespan_started=session.lifespan_started,

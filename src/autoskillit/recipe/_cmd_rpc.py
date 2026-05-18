@@ -62,6 +62,41 @@ def check_dropped_healthy_loop(
     return {"status": status, "count": str(count)}
 
 
+def main_repo_guard(clone_path: str) -> dict[str, str]:
+    """Stash dirty state from the main repo before merge."""
+    result = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=clone_path,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise subprocess.CalledProcessError(
+            result.returncode, result.args, result.stdout.encode(), result.stderr.encode()
+        )
+
+    if not result.stdout.strip():
+        return {"cleaned": "false"}
+
+    stash_result = subprocess.run(
+        [
+            "git",
+            "stash",
+            "--include-untracked",
+            "-m",
+            "autoskillit: main_repo_guard pre-merge stash",
+        ],
+        cwd=clone_path,
+        capture_output=True,
+        text=True,
+    )
+    if stash_result.returncode != 0:
+        subprocess.run(["git", "checkout", "--", "."], cwd=clone_path, check=True)
+        subprocess.run(["git", "clean", "-fd"], cwd=clone_path, check=True)
+
+    return {"cleaned": "true"}
+
+
 def commit_guard(worktree_path: str) -> dict[str, str]:
     """Auto-commit pending changes if worktree is dirty, excluding generated files."""
     result = subprocess.run(

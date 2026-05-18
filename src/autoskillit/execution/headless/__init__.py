@@ -54,6 +54,7 @@ from autoskillit.execution.commands import (
 from autoskillit.execution.headless._headless_git import (
     _capture_git_head_sha,
     _compute_loc_changed,
+    _detect_branch_divergence,
 )
 from autoskillit.execution.headless._headless_path_tokens import (  # noqa: F401
     _INTENTIONALLY_EXCLUDED_PATH_TOKENS,
@@ -443,6 +444,10 @@ async def _execute_claude_headless(
                     _fs_writes_detected = True
                     break
 
+        _git_writes_detected = False
+        if not _fs_writes_detected and is_git_worktree(Path(cwd)):
+            _git_writes_detected = _detect_branch_divergence(cwd)
+
         audit_count_before = len(ctx.audit.get_report())
         skill_result = _build_skill_result(
             result,
@@ -453,6 +458,7 @@ async def _execute_claude_headless(
             cwd=cwd,
             write_behavior=write_behavior,
             fs_writes_detected=_fs_writes_detected,
+            git_writes_detected=_git_writes_detected,
             prior_completion_markers=prior_completion_markers,
             provider_used=current_provider_name,
         )

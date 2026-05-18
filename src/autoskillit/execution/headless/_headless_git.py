@@ -65,3 +65,46 @@ def _compute_loc_changed(cwd: str, pre_sha: str) -> tuple[int, int]:
     except Exception:
         logger.debug("compute_loc_changed_failed", cwd=cwd, pre_sha=pre_sha, exc_info=True)
         return 0, 0
+
+
+def _detect_branch_divergence(cwd: str) -> bool:
+    """Check if current branch has commits ahead of the remote default branch.
+
+    Tries origin/HEAD, origin/main, origin/master as base references.
+    Returns False on any error or non-git directory.
+    """
+    for ref in ("origin/HEAD", "origin/main", "origin/master"):
+        try:
+            mb = subprocess.run(
+                ["git", "merge-base", "HEAD", ref],
+                cwd=cwd,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if mb.returncode != 0:
+                continue
+            merge_base_sha = mb.stdout.strip()
+            if not merge_base_sha:
+                continue
+
+            rl = subprocess.run(
+                ["git", "rev-list", "--count", f"{merge_base_sha}..HEAD"],
+                cwd=cwd,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if rl.returncode == 0:
+                count = int(rl.stdout.strip())
+                return count > 0
+        except Exception:
+            logger.debug(
+                "detect_branch_divergence_failed",
+                cwd=cwd,
+                ref=ref,
+                exc_info=True,
+            )
+            continue
+
+    return False

@@ -661,3 +661,68 @@ class TestSkillResultExtensionBundles:
         )
         assert sr2.provider.provider_used == "vertex"
         assert sr2.provider.fallback_activated is True
+
+
+# ---------------------------------------------------------------------------
+# T-ZW-6: git_writes_detected in has_progress_evidence
+# ---------------------------------------------------------------------------
+
+
+def test_git_writes_detected_in_has_progress_evidence() -> None:
+    """SkillResult with git_writes_detected=True has has_progress_evidence=True
+    even when worktree_path=None and write_call_count=0."""
+    sr = SkillResult(
+        success=True,
+        result="done",
+        session_id="s1",
+        subtype="success",
+        is_error=False,
+        exit_code=0,
+        needs_retry=False,
+        retry_reason=RetryReason.NONE,
+        stderr="",
+        worktree_path=None,
+        fs_writes_detected=False,
+        write_call_count=0,
+        git_writes_detected=True,
+    )
+    assert sr.has_progress_evidence is True
+
+
+# T-DM-6
+def test_skill_result_git_writes_detected_in_json() -> None:
+    """to_json() must include git_writes_detected when True."""
+    sr = SkillResult(
+        success=True,
+        result="done",
+        session_id="s1",
+        subtype="success",
+        is_error=False,
+        exit_code=0,
+        needs_retry=False,
+        retry_reason=RetryReason.NONE,
+        stderr="",
+        git_writes_detected=True,
+    )
+    data = json.loads(sr.to_json())
+    assert data["git_writes_detected"] is True
+
+
+def test_skill_result_git_writes_detected_false_omitted() -> None:
+    """to_json() must omit git_writes_detected when False (matches fs_writes_detected pattern)."""
+    sr = SkillResult(
+        success=True,
+        result="done",
+        session_id="s1",
+        subtype="success",
+        is_error=False,
+        exit_code=0,
+        needs_retry=False,
+        retry_reason=RetryReason.NONE,
+        stderr="",
+        git_writes_detected=False,
+    )
+    data = json.loads(sr.to_json())
+    # git_writes_detected=False is the default; key should be absent in JSON output
+    # (mirrors the fs_writes_detected omission pattern)
+    assert data.get("git_writes_detected", False) is False

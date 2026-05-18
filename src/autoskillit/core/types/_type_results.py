@@ -192,6 +192,7 @@ class SkillResult:
     write_path_warnings: list[str] = field(default_factory=list)
     write_call_count: int = 0
     fs_writes_detected: bool = False
+    git_writes_detected: bool = False
     order_id: str = ""
     kill_reason: KillReason = KillReason.NATURAL_EXIT
     """Why the subprocess was (or was not) killed after the race loop.
@@ -224,6 +225,7 @@ class SkillResult:
             "write_path_warnings": self.write_path_warnings,
             "write_call_count": self.write_call_count,
             "fs_writes_detected": self.fs_writes_detected,
+            "git_writes_detected": self.git_writes_detected,
             "has_progress_evidence": self.has_progress_evidence,
             "last_stop_reason": self.last_stop_reason,
             "lifespan_started": self.lifespan_started,
@@ -288,7 +290,10 @@ class SkillResult:
         checking individual artifact fields.
         """
         return (
-            self.worktree_path is not None or self.fs_writes_detected or self.write_call_count > 0
+            self.worktree_path is not None
+            or self.fs_writes_detected
+            or self.write_call_count > 0
+            or self.git_writes_detected
         )
 
 

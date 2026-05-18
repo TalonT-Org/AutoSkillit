@@ -160,6 +160,15 @@ def test_main_repo_guard_cleans_dirty_state(tmp_path):
     assert status_result.stdout.strip() == "", (
         f"main_repo_guard should leave repo clean, but status was: {status_result.stdout!r}"
     )
+    stash_list = subprocess.run(
+        ["git", "stash", "list"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+    assert "autoskillit: main_repo_guard pre-merge stash" in stash_list.stdout, (
+        f"stash entry not found; git stash list output: {stash_list.stdout!r}"
+    )
 
 
 # T-DM-4

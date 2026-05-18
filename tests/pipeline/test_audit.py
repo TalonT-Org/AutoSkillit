@@ -377,8 +377,8 @@ def test_iter_session_log_entries_kitchen_id_filter(tmp_path):
                     "step_name": e["step_name"],
                     "input_tokens": 1,
                     "output_tokens": 1,
-                    "cache_creation_input_tokens": 0,
-                    "cache_read_input_tokens": 0,
+                    "cache_write_tokens": 0,
+                    "cache_read_tokens": 0,
                     "timing_seconds": 1.0,
                 }
             )
@@ -435,8 +435,8 @@ def test_iter_session_log_entries_kitchen_id_backward_compat(tmp_path):
                     "step_name": e["step_name"],
                     "input_tokens": 1,
                     "output_tokens": 1,
-                    "cache_creation_input_tokens": 0,
-                    "cache_read_input_tokens": 0,
+                    "cache_write_tokens": 0,
+                    "cache_read_tokens": 0,
                     "timing_seconds": 0.5,
                 }
             )

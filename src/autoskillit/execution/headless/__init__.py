@@ -445,7 +445,7 @@ async def _execute_claude_headless(
                     break
 
         _git_writes_detected = False
-        if not _fs_writes_detected and is_git_worktree(Path(cwd)):
+        if is_git_worktree(Path(cwd)):
             _git_writes_detected = _detect_branch_divergence(cwd)
 
         audit_count_before = len(ctx.audit.get_report())

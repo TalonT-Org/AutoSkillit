@@ -16,7 +16,12 @@ from autoskillit.core import (
     BackendEventKind,
     ClaudeEventData,
     CmdSpec,
+    NoResume,
+    OutputFormat,
+    PluginSource,
+    ResumeSpec,
     SessionEvent,
+    ValidatedAddDir,
     build_agent_env,
     fast_loads,
 )
@@ -43,7 +48,7 @@ def _marker_is_standalone(text: str, marker: str) -> bool:
 
 def _extract_write_artifacts(tool_uses: list[dict[str, Any]]) -> list[str]:
     return [
-        t["file_path"]
+        t.get("file_path", "")
         for t in tool_uses
         if t.get("name") in {"Write", "Edit"} and t.get("file_path")
     ]
@@ -260,18 +265,44 @@ class ClaudeCodeBackend:
 
     def build_interactive_cmd(
         self,
-        **kwargs: Any,
+        *,
+        initial_prompt: str | None = None,
+        model: str | None = None,
+        plugin_source: PluginSource | None = None,
+        add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
+        resume_spec: ResumeSpec = NoResume(),
+        env_extras: Mapping[str, str] | None = None,
+        required_env: frozenset[str] | None = None,
     ) -> CmdSpec:
         from autoskillit.execution.commands import build_interactive_cmd as _build
 
-        spec = _build(**kwargs)
+        spec = _build(
+            initial_prompt=initial_prompt,
+            model=model,
+            plugin_source=plugin_source,
+            add_dirs=add_dirs,
+            resume_spec=resume_spec,
+            env_extras=env_extras,
+            required_env=required_env,
+        )
         return CmdSpec(cmd=tuple(spec.cmd), env=spec.env)
 
     def build_resume_cmd(
         self,
-        **kwargs: Any,
+        *,
+        resume_session_id: str,
+        prompt: str,
+        output_format: OutputFormat = OutputFormat.JSON,
+        plugin_source: PluginSource | None = None,
+        env_extras: Mapping[str, str] | None = None,
     ) -> CmdSpec:
         from autoskillit.execution.commands import build_headless_resume_cmd as _build
 
-        spec = _build(**kwargs)
+        spec = _build(
+            resume_session_id=resume_session_id,
+            prompt=prompt,
+            output_format=output_format,
+            plugin_source=plugin_source,
+            env_extras=env_extras,
+        )
         return CmdSpec(cmd=tuple(spec.cmd), env=spec.env)

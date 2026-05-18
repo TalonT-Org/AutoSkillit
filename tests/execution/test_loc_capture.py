@@ -228,9 +228,28 @@ def test_detect_branch_divergence_at_merge_base(tmp_path: Path):
     repo_path = tmp_path / "repo"
     _setup_git_repo(repo_path)
 
+    bare_remote = tmp_path / "bare.git"
+    subprocess.run(
+        ["git", "clone", "--bare", str(repo_path), str(bare_remote)],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "remote", "add", "origin", str(bare_remote)],
+        cwd=repo_path,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "fetch", "origin"],
+        cwd=repo_path,
+        check=True,
+        capture_output=True,
+    )
+
     worktree_path = tmp_path / "worktree"
     subprocess.run(
-        ["git", "worktree", "add", str(worktree_path)],
+        ["git", "worktree", "add", "-b", "at-base", str(worktree_path)],
         cwd=repo_path,
         check=True,
         capture_output=True,

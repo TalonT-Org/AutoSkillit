@@ -93,6 +93,7 @@ def main_repo_guard(clone_path: str) -> dict[str, str]:
     if stash_result.returncode != 0:
         subprocess.run(["git", "checkout", "--", "."], cwd=clone_path, check=True)
         subprocess.run(["git", "clean", "-fd"], cwd=clone_path, check=True)
+        return {"cleaned": "force"}
 
     return {"cleaned": "true"}
 

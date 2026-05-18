@@ -19,3 +19,4 @@ Audit log, gate state, token tracking, and PR-gate tests.
 | `test_tokens_core.py` | Tests for pipeline.tokens — TokenEntry, DefaultTokenLog core, and log-dir loading |
 | `test_tokens_filters.py` | Tests for pipeline.tokens — cwd filter, step name normalization, order/campaign ID scoping |
 | `test_tokens_model.py` | Tests for pipeline.tokens — model field capture, compute_model_totals, and load_from_log_dir model reading |
+| `test_tokens_v1_compat.py` | Tests for pipeline.tokens — v1 token_usage.json backward compatibility |

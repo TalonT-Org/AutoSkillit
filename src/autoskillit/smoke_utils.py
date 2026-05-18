@@ -450,8 +450,11 @@ def parse_eval_manifests(
     except (OSError, json.JSONDecodeError) as exc:
         return {"success": "false", "error": f"Failed to read manifest: {exc}"}
 
-    canary_ids = [c["id"] for c in canaries]
-    variant_ids = [v["id"] for v in variants]
+    try:
+        canary_ids = [c["id"] for c in canaries]
+        variant_ids = [v["id"] for v in variants]
+    except (KeyError, TypeError) as exc:
+        return {"success": "false", "error": f"Invalid manifest schema: {exc}"}
 
     for canary in canaries:
         canary_dir = eval_run_dir / canary["id"]
@@ -461,8 +464,14 @@ def parse_eval_manifests(
         resolved["variants"] = {}
         resolved["task_text"] = ""
 
+        task_file = canary.get("task_file")
+        if not task_file:
+            return {
+                "success": "false",
+                "error": f"Canary {canary.get('id', '?')} missing task_file",
+            }
         try:
-            resolved["task_text"] = Path(canary["task_file"]).read_text()
+            resolved["task_text"] = Path(task_file).read_text()
         except OSError as exc:
             return {"success": "false", "error": f"Failed to read task_file: {exc}"}
 
@@ -474,8 +483,8 @@ def parse_eval_manifests(
             if variant.get("overlay_file"):
                 try:
                     overlay_text = Path(variant["overlay_file"]).read_text()
-                except OSError:
-                    pass
+                except OSError as exc:
+                    return {"success": "false", "error": f"Failed to read overlay_file: {exc}"}
 
             resolved["variants"][variant["id"]] = {
                 "label": variant.get("label", variant["id"]),
@@ -607,6 +616,8 @@ def compile_eval_scorecard(
 
     canary_ids = [c["id"] for c in canaries]
     variant_ids = [v["id"] for v in variants]
+    if not canary_ids or not variant_ids:
+        return {"success": "false", "error": "Empty canary or variant manifest"}
     total_runs = len(canary_ids) * len(variant_ids)
     passed_runs = 0
 
@@ -627,7 +638,7 @@ def compile_eval_scorecard(
 
         for variant in variants:
             vid = variant["id"]
-            if verdict_data and verdict_data.get("verdicts", {}).get(vid):
+            if verdict_data and verdict_data.get("verdicts", {}).get(vid) is not None:
                 overall = verdict_data["verdicts"][vid].get("overall", "FAIL")
             else:
                 overall = "FAIL"
@@ -653,6 +664,10 @@ def compile_eval_scorecard(
     scorecard_json_path = eval_run_path / "scorecard.json"
     atomic_write(scorecard_json_path, json.dumps(scorecard, indent=2))
 
+    verdict_cache: dict[str, dict | None] = {}
+    for canary in canaries:
+        verdict_cache[canary["id"]] = try_load_json(eval_run_path / canary["id"] / "verdict.json")
+
     rows = []
     for canary in canaries:
         cid = canary["id"]
@@ -661,10 +676,8 @@ def compile_eval_scorecard(
             overall = canary_results[cid].get(vid, "FAIL")
             criteria = ""
             if overall == "PASS":
-                if verdict_data := try_load_json(
-                    verdict_path := eval_run_path / cid / "verdict.json"
-                ):
-                    verdicts_for_variant = verdict_data.get("verdicts", {}).get(vid, {})
+                if vd := verdict_cache.get(cid):
+                    verdicts_for_variant = vd.get("verdicts", {}).get(vid, {})
                     pass_count = sum(
                         1
                         for c in verdicts_for_variant.get("criteria", [])

@@ -30,6 +30,7 @@ _API_TOKEN_FIELDS, _CANONICAL_TOKEN_FIELDS = (
 _CACHE_READ_TOKENS_API_FIELD = _API_TOKEN_FIELDS[
     _CANONICAL_TOKEN_FIELDS.index("cache_read_tokens")
 ]
+_CACHE_READ_CANON = "cache_read_tokens"
 FAILURE_SUBTYPES: frozenset[CliSubtype] = frozenset(
     {
         CliSubtype.UNKNOWN,
@@ -258,17 +259,15 @@ def extract_token_usage(stdout: str) -> dict[str, Any] | None:
             model = msg.get("model", "unknown")
             bucket = model_buckets.setdefault(model, {f: 0 for f in _CANONICAL_TOKEN_FIELDS})
             for api_f, canon_f in zip(_API_TOKEN_FIELDS, _CANONICAL_TOKEN_FIELDS):
-                bucket[canon_f] += int(usage.get(api_f) or usage.get(canon_f) or 0)
-            _cr = int(
-                usage.get(_CACHE_READ_TOKENS_API_FIELD) or usage.get("cache_read_tokens") or 0
-            )
+                bucket[canon_f] += int(usage.get(api_f, usage.get(canon_f, 0)) or 0)
+            _cr = int(usage.get(_CACHE_READ_TOKENS_API_FIELD) or usage.get(_CACHE_READ_CANON) or 0)
             peak_context = max(peak_context, _cr)
             turn_count += 1
         elif record_type == "result":
             usage = obj.get("usage")
             if isinstance(usage, dict):
                 result_usage = {
-                    canon_f: int(usage.get(api_f) or usage.get(canon_f) or 0)
+                    canon_f: int(usage.get(api_f, usage.get(canon_f, 0)) or 0)
                     for api_f, canon_f in zip(_API_TOKEN_FIELDS, _CANONICAL_TOKEN_FIELDS)
                 }
 

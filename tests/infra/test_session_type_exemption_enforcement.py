@@ -137,10 +137,10 @@ def test_exempt_session_type_guard_has_test_cases(guard_script: str) -> None:
         f"{test_file.name} must test the exempt session-type path for guard '{guard_script}'. "
         f"Add 'session_type=' to _run_guard/_run_bash_guard calls."
     )
-    has_orchestrator = "orchestrator" in code_lines or "exempt" in code_lines.lower()
+    has_orchestrator = "orchestrator" in code_lines
     assert has_orchestrator, (
         f"{test_file.name} must have at least one test case covering an exempt session type "
-        f"(e.g., session_type='orchestrator' or method name containing 'exempt')."
+        f"(e.g., session_type='orchestrator')."
     )
 
 

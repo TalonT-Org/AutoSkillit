@@ -103,13 +103,13 @@ class TestProvidersConfig:
     def test_recipe_overrides_non_string_value_raises(self) -> None:
         from autoskillit.config.settings import ProvidersConfig
 
-        with pytest.raises(ValueError, match="recipe_overrides"):
+        with pytest.raises(ValueError, match=r"recipe_overrides\[.+\]\[.+\] must be a string"):
             ProvidersConfig(recipe_overrides={"remediation": {"implement": 42}})  # type: ignore[arg-type]
 
     def test_recipe_overrides_non_dict_inner_value_raises(self) -> None:
         from autoskillit.config.settings import ProvidersConfig
 
-        with pytest.raises(ValueError, match="recipe_overrides"):
+        with pytest.raises(ValueError, match=r"recipe_overrides\[.+\] must be a dict"):
             ProvidersConfig(recipe_overrides={"remediation": "not_a_dict"})  # type: ignore[arg-type]
 
 

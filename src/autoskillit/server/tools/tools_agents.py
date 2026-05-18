@@ -31,15 +31,25 @@ def list_plan_review_agents() -> str:
     return json.dumps(agents)
 
 
-@mcp.tool(tags={"kitchen", "kitchen-core", "headless"})
+@mcp.tool(
+    tags={"autoskillit", "kitchen", "kitchen-core", "headless"},
+    annotations={"readOnlyHint": True},
+)
 async def unlock_agent_pack(pack_name: str, ctx: Context = CurrentContext()) -> str:
     """Unlock bundled agent definitions for this session.
 
     Makes agent definition resources readable via ReadMcpResourceTool.
     Scoped to this session only - does not affect other sessions.
+
+    Never raises.
     """
-    if pack_name not in AGENT_PACK_TAGS:
-        return json.dumps({"success": False, "error": f"Unknown agent pack: {pack_name}"})
-    tags = AGENT_PACK_TAGS[pack_name]
-    await ctx.enable_components(tags=set(tags))
-    return json.dumps({"success": True, "pack": pack_name, "uri_prefix": f"agent://{pack_name}/"})
+    try:
+        if pack_name not in AGENT_PACK_TAGS:
+            return json.dumps({"success": False, "error": f"Unknown agent pack: {pack_name}"})
+        tags = AGENT_PACK_TAGS[pack_name]
+        await ctx.enable_components(tags=set(tags))
+        return json.dumps(
+            {"success": True, "pack": pack_name, "uri_prefix": f"agent://{pack_name}/"}
+        )
+    except Exception as exc:
+        return json.dumps({"success": False, "error": str(exc)})

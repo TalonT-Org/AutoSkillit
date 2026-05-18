@@ -2,6 +2,15 @@
 
 Bundled agent definition markdown files served as MCP resources.
 
+## Files
+
+| File | Purpose |
+|------|---------|
+| `plan-assumption-challenger.md` | Adversarial agent: verifies implicit assumptions against actual code |
+| `plan-completeness-auditor.md` | Adversarial agent: finds entities missed by plan search operations |
+| `plan-contract-verifier.md` | Adversarial agent: traces downstream consumers of plan-introduced changes |
+| `plan-registry-wire-tracer.md` | Adversarial agent: checks plan-touched files against registry sync patterns |
+
 ## Layout
 
 Each `.md` file defines one agent with YAML frontmatter (`name`, `description`,

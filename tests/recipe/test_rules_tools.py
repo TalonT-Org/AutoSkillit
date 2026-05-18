@@ -347,6 +347,7 @@ _SERVER_TOOL_MODULES = [
     "autoskillit.server.tools.tools_issue_lifecycle",
     "autoskillit.server.tools.tools_pr_ops",
     "autoskillit.server.tools.tools_workspace",
+    "autoskillit.server.tools.tools_agents",
 ]
 
 _FRAMEWORK_PARAMS = frozenset({"ctx"})

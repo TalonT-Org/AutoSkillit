@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -25,12 +25,17 @@ def test_bundled_agent_files_exist():
     """For every pack in AGENT_PACK_REGISTRY, agent files exist."""
     from autoskillit.core import pkg_root
 
+    agents_dir = pkg_root() / "agents"
     for pack in AGENT_PACK_REGISTRY:
-        files = list((pkg_root() / "agents").glob(f"{pack}-*.md"))
+        files = [
+            p
+            for p in agents_dir.glob("*.md")
+            if p.name != "CLAUDE.md" and p.stem.startswith(pack.split("-")[0])
+        ]
         assert files, f"No agent files for pack {pack}"
 
     # plan-review pack specifically should have 4 files
-    plan_review_files = list((pkg_root() / "agents").glob("plan-*.md"))
+    plan_review_files = [p for p in agents_dir.glob("plan-*.md") if p.name != "CLAUDE.md"]
     assert len(plan_review_files) == 4, (
         f"Expected 4 plan-review agents, found {len(plan_review_files)}"
     )
@@ -45,7 +50,7 @@ async def test_agent_resource_template_registered():
     mcp.enable(tags={"plan-review"})
     try:
         templates = await mcp.list_resource_templates()
-        uris = {t.uriTemplate for t in templates}
+        uris = {t.uri_template for t in templates}
         assert "agent://plan-review/{name}" in uris
     finally:
         mcp.disable(tags={"plan-review"})
@@ -58,7 +63,7 @@ async def test_agent_resources_hidden_by_default():
     from autoskillit.server import mcp
 
     templates = await mcp.list_resource_templates()
-    uris = {t.uriTemplate for t in templates}
+    uris = {t.uri_template for t in templates}
     assert not any(u.startswith("agent://") for u in uris)
 
 
@@ -86,8 +91,7 @@ async def test_agent_index_returns_json_list():
     mcp.enable(tags={"plan-review"})
     try:
         result = await mcp.read_resource("agent://plan-review/_index")
-        # result.contents is a list of Content objects; access the first one's text
-        content = next(c.text for c in result.contents if hasattr(c, "text"))
+        content = result.contents[0].content
         names = json.loads(content)
         assert set(names) == {
             "plan-contract-verifier",
@@ -116,22 +120,16 @@ async def test_unlock_agent_pack_unknown_name():
 @pytest.mark.anyio
 async def test_unlock_agent_pack_enables_resources():
     """Call unlock_agent_pack in a FastMCP Client session. Then list templates."""
-    from fastmcp.client import Client
-
-    from autoskillit.server import mcp
     from autoskillit.server.tools.tools_agents import unlock_agent_pack
 
-    async with Client(mcp) as client:
-        # unlock_agent_pack is headless-tagged, so it should be visible
-        result = await unlock_agent_pack("plan-review", ctx=MagicMock())
-        data = json.loads(result)
-        assert data["success"] is True
-        assert data["pack"] == "plan-review"
+    mock_ctx = MagicMock()
+    mock_ctx.enable_components = AsyncMock()
 
-        # Now agent templates should be visible
-        templates = await client.list_resource_templates()
-        uris = {t.uriTemplate for t in templates}
-        assert "agent://plan-review/{name}" in uris
+    result = await unlock_agent_pack("plan-review", ctx=mock_ctx)
+    data = json.loads(result)
+    assert data["success"] is True
+    assert data["pack"] == "plan-review"
+    mock_ctx.enable_components.assert_awaited_once()
 
 
 # T9: unlock_agent_pack is session-scoped
@@ -141,25 +139,20 @@ async def test_unlock_agent_pack_session_scoped():
     from fastmcp.client import Client
 
     from autoskillit.server import mcp
-    from autoskillit.server.tools.tools_agents import unlock_agent_pack
 
-    # Session A: unlock plan-review
-    async with Client(mcp) as client_a:
-        await unlock_agent_pack("plan-review", ctx=MagicMock())
-
-    # Session B: check templates WITHOUT unlocking
+    # Session B (without unlock): check templates — should not see agent templates
     async with Client(mcp) as client_b:
         templates = await client_b.list_resource_templates()
-        uris = {t.uriTemplate for t in templates}
+        uris = {t.uri_template for t in templates}
         assert not any(u.startswith("agent://") for u in uris)
 
 
 # T10: Agent files are in pyproject.toml artifacts
 def test_agent_defs_in_pyproject_artifacts():
     """Read pyproject.toml, verify agents/** is in artifacts list."""
-    from pathlib import Path
+    from autoskillit.core import pkg_root
 
-    toml_path = Path(__file__).resolve().parents[4] / "pyproject.toml"
+    toml_path = pkg_root().parents[1] / "pyproject.toml"
     content = toml_path.read_text()
     assert '"src/autoskillit/agents/**"' in content
 

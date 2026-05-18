@@ -380,6 +380,8 @@ class TestIngredientConditionValueDomain:
         findings = run_semantic_rules(recipe)
         rule_findings = [f for f in findings if f.rule == "ingredient-condition-value-domain"]
         assert len(rule_findings) == 1
+        assert rule_findings[0].step_name == "check"
+        assert rule_findings[0].severity == Severity.ERROR
         assert "on" in rule_findings[0].message
         assert "flag" in rule_findings[0].message
 

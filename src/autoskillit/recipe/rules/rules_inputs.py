@@ -520,7 +520,7 @@ def _check_ingredient_condition_value_domain(
                             ),
                         )
                     )
-                elif ing.default in ("true", "false") and operand not in ("true", "false"):
+                elif ing.default in ("true", "false") and operand.lower() not in ("true", "false"):
                     findings.append(
                         RuleFinding(
                             rule="ingredient-condition-value-domain",

@@ -114,7 +114,9 @@ def test_make_plan_adversarial_agents_downstream_consumer_instruction(
     assert step6_idx != -1 and step7_idx != -1
     agent_a_start = make_plan_text.find("Contract Verifier", step6_idx)
     assert agent_a_start != -1
-    agent_a_section = make_plan_text[agent_a_start:step7_idx].lower()
+    agent_b_start = make_plan_text.find("Completeness Auditor", agent_a_start)
+    assert agent_b_start != -1
+    agent_a_section = make_plan_text[agent_a_start:agent_b_start].lower()
     assert "downstream consumer" in agent_a_section or "consumer" in agent_a_section, (
         "Agent A (Contract Verifier) must instruct tracing downstream consumers"
     )

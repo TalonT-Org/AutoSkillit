@@ -155,7 +155,7 @@ Identify every implicit assumption the plan makes about naming conventions, fiel
 
    1. **RETIRED NAME SETS**: Renames must add old names to `RETIRED_SKILL_NAMES` or `RETIRED_SCRIPT_BASENAMES`.
    2. **RE-EXPORT CHAINS**: New public symbols must be added to `core/__init__.pyi` and `types/__init__.py` `__all__`.
-   3. **TOOL REGISTRIES**: Tool changes must update `GATED_TOOLS`, `TOOL_SUBSET_TAGS`, `_DISPLAY_CATEGORIES`, and `@mcp.tool` decorators.
+   3. **TOOL REGISTRIES**: Tool changes must update `GATED_TOOLS`, `TOOL_SUBSET_TAGS`, `_DISPLAY_CATEGORIES`, and `mcp.tool()` decorators.
    4. **RULE REGISTRATION**: New `rules_*.py` must be imported in `recipe/__init__.py`.
    5. **DUAL-COPY CONSTANTS**: `SKILL_FILE_ADVISORY_MAP` changes must be mirrored in `hooks/guards/recipe_write_advisor.py`.
    6. **IMPORT LAYER CONSTRAINTS**: No cross-IL imports, no `Default*` outside `_factory.py`.

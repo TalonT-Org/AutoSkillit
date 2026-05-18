@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from autoskillit.core import CodingAgentBackend
+
 from .claude import (
     ClaudeCodeBackend,
     ClaudeEnvPolicy,
@@ -15,7 +17,7 @@ BACKEND_REGISTRY: dict[str, type] = {
 }
 
 
-def get_backend(name: str) -> ClaudeCodeBackend:
+def get_backend(name: str) -> CodingAgentBackend:
     try:
         cls = BACKEND_REGISTRY[name]
     except KeyError:

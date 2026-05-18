@@ -412,12 +412,24 @@ class TestJsonlHasRecordTypeResultContent:
             line, frozenset({"system"}), completion_marker="%%ORDER_UP%%"
         )
 
+    def test_fallback_record_type_no_content_not_confirmed(self):
+        """System record without content field must NOT confirm."""
+        line = json.dumps({"type": "system"}) + "\n"
+        assert not _jsonl_has_record_type(
+            line, frozenset({"system"}), completion_marker="%%ORDER_UP%%"
+        )
+
     def test_assistant_null_message_no_crash(self):
         """Assistant record with message=None must not crash, returns False with marker."""
         line = json.dumps({"type": "assistant", "message": None}) + "\n"
         assert not _jsonl_has_record_type(
             line, frozenset({"assistant"}), completion_marker="%%ORDER_UP%%"
         )
+
+    def test_assistant_null_message_no_marker_accepted(self):
+        """Assistant record with message=None and no marker configured must return True."""
+        line = json.dumps({"type": "assistant", "message": None}) + "\n"
+        assert _jsonl_has_record_type(line, frozenset({"assistant"}), completion_marker="")
 
     def test_marker_in_thinking_block_not_detected(self):
         """Marker inside a thinking block must NOT trigger confirmation."""

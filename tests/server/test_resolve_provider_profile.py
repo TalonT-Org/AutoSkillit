@@ -184,6 +184,19 @@ def test_recipe_override_requires_step_name():
 
     cfg = _make_config(
         recipe_overrides={"remediation": {"implement": "vertex"}},
+        profiles={"vertex": {"K": "V"}},
     )
     result = _resolve_provider_profile("", "remediation", cfg)
     assert result == ("anthropic", {})
+    assert result[0] != "vertex"  # override bypassed because step_name is empty
+
+
+def test_recipe_override_requires_step_name_with_step_name():
+    from autoskillit.server._guards import _resolve_provider_profile
+
+    cfg = _make_config(
+        recipe_overrides={"remediation": {"implement": "vertex"}},
+        profiles={"vertex": {"K": "V"}},
+    )
+    result = _resolve_provider_profile("implement", "remediation", cfg)
+    assert result == ("vertex", {"K": "V"})

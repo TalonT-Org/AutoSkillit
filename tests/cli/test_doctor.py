@@ -718,6 +718,61 @@ def test_doctor_json_output_includes_hook_registry_drift(
     assert drift["severity"] == Severity.WARNING
 
 
+# DC-14: _check_hook_registration — plugin installed → OK (plugin delivers via cache)
+def test_check_hook_registration_ok_when_plugin_installed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from autoskillit.cli.doctor._doctor_hooks import _check_hook_registration
+    from autoskillit.core import Severity
+
+    monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda **_: True)
+    settings = tmp_path / "settings.json"
+    settings.write_text('{"hooks": {}}')
+    result = _check_hook_registration(settings)
+    assert result.severity == Severity.OK
+    assert result.check == "hook_registration"
+    assert "plugin" in result.message
+
+
+# DC-15: _check_hook_registry_drift — plugin installed → OK (missing drift expected)
+def test_check_hook_registry_drift_ok_when_plugin_installed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from autoskillit.cli.doctor._doctor_hooks import _check_hook_registry_drift
+    from autoskillit.core import Severity
+
+    monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda **_: True)
+    settings = tmp_path / "settings.json"
+    settings.write_text('{"hooks": {}}')
+    result = _check_hook_registry_drift(settings)
+    assert result.severity == Severity.OK
+    assert result.check == "hook_registry_drift"
+    assert "plugin" in result.message
+
+
+# DC-16: _check_hook_registry_drift — orphaned still fires when plugin installed
+def test_check_hook_registry_drift_orphaned_still_fires_when_plugin_installed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from autoskillit.cli.doctor._doctor_hooks import _check_hook_registry_drift
+    from autoskillit.core import Severity
+    from autoskillit.hook_registry import HookDriftResult
+
+    monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda **_: True)
+    monkeypatch.setattr(
+        "autoskillit.hook_registry._count_hook_registry_drift",
+        lambda _path: HookDriftResult(
+            missing=0, orphaned=1, orphaned_cmds=frozenset(["fake_orphan_dispatch.py"])
+        ),
+    )
+    settings = tmp_path / "settings.json"
+    settings.write_text('{"hooks": {}}')
+    result = _check_hook_registry_drift(settings)
+    assert result.severity == Severity.ERROR
+    assert result.check == "hook_registry_drift"
+    assert "orphaned" in result.message
+
+
 class TestEditableInstallSourceExistsCheck:
     """Tests for the editable_install_source_exists doctor check."""
 

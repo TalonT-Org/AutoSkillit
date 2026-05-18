@@ -77,7 +77,11 @@ def _extract_block(text: str, start_delim: str, end_delim: str) -> list[str]:
 
 def _build_hook_diagnostic_warning() -> str | None:
     """Run hook health and drift checks. Return a warning string if issues are found."""
-    from autoskillit.core import DIRECT_INSTALL_CACHE_SUBDIR
+    from autoskillit.core import (
+        DIRECT_INSTALL_CACHE_SUBDIR,
+        MARKETPLACE_PREFIX,
+        detect_autoskillit_mcp_prefix,
+    )
     from autoskillit.hook_registry import (
         _claude_settings_path,
         _count_hook_registry_drift,
@@ -98,7 +102,7 @@ def _build_hook_diagnostic_warning() -> str | None:
                 f"{drift.orphaned} orphaned hook entry(ies) in settings.json are not in "
                 f"HOOK_REGISTRY — every matching tool call will be denied with ENOENT."
             )
-        if drift.missing > 0:
+        if drift.missing > 0 and detect_autoskillit_mcp_prefix() != MARKETPLACE_PREFIX:
             issues.append(
                 f"{drift.missing} hook(s) from HOOK_REGISTRY are not deployed in settings.json."
             )

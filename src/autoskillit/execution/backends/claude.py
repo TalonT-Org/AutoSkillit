@@ -230,7 +230,7 @@ class ClaudeCodeBackend:
         from autoskillit.execution.commands import build_headless_cmd
 
         spec = build_headless_cmd(skill_command)
-        return CmdSpec(cmd=tuple(spec.cmd), env=spec.env)
+        return CmdSpec(cmd=tuple(spec.cmd), env=spec.env, cwd=cwd)
 
     def stream_parser(self) -> ClaudeStreamParser:
         return ClaudeStreamParser()

@@ -49,6 +49,7 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
 class CmdSpec:
     cmd: tuple[str, ...]
     env: Mapping[str, str]
+    cwd: str = ""
 
 
 @dataclass(frozen=True, slots=True)

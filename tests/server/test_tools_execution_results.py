@@ -135,8 +135,8 @@ class TestRunSkillStepName:
                 "usage": {
                     "input_tokens": 200,
                     "output_tokens": 80,
-                    "cache_creation_input_tokens": 8,
-                    "cache_read_input_tokens": 3,
+                    "cache_write_tokens": 8,
+                    "cache_read_tokens": 3,
                 },
             }
         )
@@ -525,8 +525,8 @@ class TestRunHeadlessCoreFlushTelemetry:
                     "usage": {
                         "input_tokens": 200,
                         "output_tokens": 100,
-                        "cache_creation_input_tokens": 0,
-                        "cache_read_input_tokens": 0,
+                        "cache_write_tokens": 0,
+                        "cache_read_tokens": 0,
                     }
                 },
                 "model": "claude-opus-4-6",
@@ -542,8 +542,8 @@ class TestRunHeadlessCoreFlushTelemetry:
                 "usage": {
                     "input_tokens": 200,
                     "output_tokens": 100,
-                    "cache_creation_input_tokens": 0,
-                    "cache_read_input_tokens": 0,
+                    "cache_write_tokens": 0,
+                    "cache_read_tokens": 0,
                 },
             }
         )

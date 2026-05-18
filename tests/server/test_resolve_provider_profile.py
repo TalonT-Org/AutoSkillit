@@ -1,4 +1,4 @@
-"""Tests for _resolve_provider_profile four-tier provider resolution."""
+"""Tests for _resolve_provider_profile six-tier provider resolution."""
 
 from __future__ import annotations
 
@@ -100,3 +100,90 @@ def test_no_recipe_name_skips_step_override():
     )
     result = _resolve_provider_profile("bedrock", "", cfg)
     assert result == ("bedrock", {"X": "Y"})
+
+
+def test_recipe_override_wins_over_global_step_override():
+    from autoskillit.server._guards import _resolve_provider_profile
+
+    cfg = _make_config(
+        recipe_overrides={"remediation": {"implement": "anthropic"}},
+        step_overrides={"implement": "minimax"},
+    )
+    result = _resolve_provider_profile("implement", "remediation", cfg)
+    assert result == ("anthropic", {})
+
+
+def test_recipe_override_does_not_affect_other_recipes():
+    from autoskillit.server._guards import _resolve_provider_profile
+
+    cfg = _make_config(
+        recipe_overrides={"remediation": {"implement": "anthropic"}},
+        step_overrides={"implement": "minimax"},
+        profiles={"minimax": {"K": "V"}},
+    )
+    result = _resolve_provider_profile("implement", "implementation", cfg)
+    assert result == ("minimax", {"K": "V"})
+
+
+def test_recipe_override_step_beats_recipe_wildcard():
+    from autoskillit.server._guards import _resolve_provider_profile
+
+    cfg = _make_config(
+        recipe_overrides={"remediation": {"implement": "anthropic", "*": "vertex"}},
+    )
+    result = _resolve_provider_profile("implement", "remediation", cfg)
+    assert result == ("anthropic", {})
+
+
+def test_recipe_wildcard_override_wins_over_global_step():
+    from autoskillit.server._guards import _resolve_provider_profile
+
+    cfg = _make_config(
+        recipe_overrides={"remediation": {"*": "anthropic"}},
+        step_overrides={"implement": "minimax"},
+    )
+    result = _resolve_provider_profile("implement", "remediation", cfg)
+    assert result == ("anthropic", {})
+
+
+def test_recipe_wildcard_override_applies_to_all_steps():
+    from autoskillit.server._guards import _resolve_provider_profile
+
+    cfg = _make_config(
+        recipe_overrides={"remediation": {"*": "vertex"}},
+        profiles={"vertex": {"K": "V"}},
+    )
+    result = _resolve_provider_profile("investigate", "remediation", cfg)
+    assert result == ("vertex", {"K": "V"})
+
+
+def test_recipe_override_non_anthropic_returns_env_dict():
+    from autoskillit.server._guards import _resolve_provider_profile
+
+    cfg = _make_config(
+        recipe_overrides={"remediation": {"implement": "bedrock"}},
+        profiles={"bedrock": {"AWS_REGION": "us-east-1"}},
+    )
+    result = _resolve_provider_profile("implement", "remediation", cfg)
+    assert result == ("bedrock", {"AWS_REGION": "us-east-1"})
+
+
+def test_recipe_override_requires_recipe_context():
+    from autoskillit.server._guards import _resolve_provider_profile
+
+    cfg = _make_config(
+        recipe_overrides={"remediation": {"implement": "vertex"}},
+        profiles={"vertex": {"K": "V"}},
+    )
+    result = _resolve_provider_profile("implement", "", cfg)
+    assert result == ("implement", {})
+
+
+def test_recipe_override_requires_step_name():
+    from autoskillit.server._guards import _resolve_provider_profile
+
+    cfg = _make_config(
+        recipe_overrides={"remediation": {"implement": "vertex"}},
+    )
+    result = _resolve_provider_profile("", "remediation", cfg)
+    assert result == ("anthropic", {})

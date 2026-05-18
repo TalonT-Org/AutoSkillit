@@ -48,6 +48,7 @@ class TestProvidersConfig:
         assert cfg.providers.default_provider is None
         assert cfg.providers.profiles == {}
         assert cfg.providers.step_overrides == {}
+        assert cfg.providers.recipe_overrides == {}
         assert cfg.providers.provider_retry_limit == 2
 
     def test_providers_config_defaults(self) -> None:
@@ -57,6 +58,7 @@ class TestProvidersConfig:
         assert cfg.default_provider is None
         assert cfg.profiles == {}
         assert cfg.step_overrides == {}
+        assert cfg.recipe_overrides == {}
         assert cfg.provider_retry_limit == 2
 
     def test_providers_config_is_mutable(self) -> None:
@@ -76,6 +78,7 @@ class TestProvidersConfig:
             "default_provider",
             "profiles",
             "step_overrides",
+            "recipe_overrides",
             "provider_retry_limit",
         }
 
@@ -96,6 +99,18 @@ class TestProvidersConfig:
 
         with pytest.raises(ValueError, match=r"profiles\[.+\]\[.+\] must be a string"):
             ProvidersConfig(profiles={"my_profile": {"model": 42}})  # type: ignore[arg-type]
+
+    def test_recipe_overrides_non_string_value_raises(self) -> None:
+        from autoskillit.config.settings import ProvidersConfig
+
+        with pytest.raises(ValueError, match="recipe_overrides"):
+            ProvidersConfig(recipe_overrides={"remediation": {"implement": 42}})  # type: ignore[arg-type]
+
+    def test_recipe_overrides_non_dict_inner_value_raises(self) -> None:
+        from autoskillit.config.settings import ProvidersConfig
+
+        with pytest.raises(ValueError, match="recipe_overrides"):
+            ProvidersConfig(recipe_overrides={"remediation": "not_a_dict"})  # type: ignore[arg-type]
 
 
 class TestProvidersConfigYaml:
@@ -143,3 +158,41 @@ class TestProvidersConfigYaml:
         (config_dir / "config.yaml").write_text("providers:\n  provider_retry_limit: 5\n")
         cfg = load_config(tmp_path)
         assert cfg.providers.provider_retry_limit == 5
+
+    def test_load_config_recipe_overrides_parsing(self, tmp_path) -> None:
+        from autoskillit.config import load_config
+
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        config_data = {
+            "providers": {"recipe_overrides": {"remediation": {"implement": "anthropic"}}}
+        }
+        (config_dir / "config.yaml").write_text(yaml.dump(config_data))
+        cfg = load_config(tmp_path)
+        assert cfg.providers.recipe_overrides == {"remediation": {"implement": "anthropic"}}
+
+    def test_load_config_recipe_overrides_merges_across_layers(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        from autoskillit.config import load_config
+
+        monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path / "home")
+        user_config_dir = tmp_path / "home" / ".autoskillit"
+        user_config_dir.mkdir(parents=True)
+        project_config_dir = tmp_path / ".autoskillit"
+        project_config_dir.mkdir()
+        (user_config_dir / "config.yaml").write_text(
+            yaml.dump(
+                {"providers": {"recipe_overrides": {"remediation": {"implement": "anthropic"}}}}
+            )
+        )
+        (project_config_dir / "config.yaml").write_text(
+            yaml.dump(
+                {"providers": {"recipe_overrides": {"implementation": {"implement": "minimax"}}}}
+            )
+        )
+        cfg = load_config(tmp_path)
+        assert cfg.providers.recipe_overrides == {
+            "remediation": {"implement": "anthropic"},
+            "implementation": {"implement": "minimax"},
+        }

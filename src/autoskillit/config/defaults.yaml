@@ -296,6 +296,7 @@ providers:
   default_provider: null
   profiles: {}
   step_overrides: {}
+  recipe_overrides: {}
   provider_retry_limit: 2
 
 agent_backend:

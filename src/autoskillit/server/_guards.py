@@ -160,6 +160,39 @@ def _resolve_provider_profile(
     config_providers: ProvidersConfig,
 ) -> tuple[str, dict[str, str]]:
 
+    # Tier 0: per-recipe per-step override (highest specificity)
+    if recipe_name and step_name:
+        recipe_map = config_providers.recipe_overrides.get(recipe_name)
+        if recipe_map:
+            recipe_step_override = recipe_map.get(step_name)
+            if recipe_step_override:
+                logger.debug(
+                    "provider_profile_resolved",
+                    tier="recipe_step_override",
+                    profile=recipe_step_override,
+                )
+                if recipe_step_override == "anthropic":
+                    return ("anthropic", {})
+                return (
+                    recipe_step_override,
+                    config_providers.profiles.get(recipe_step_override, {}),
+                )
+
+    # Tier 0W: per-recipe wildcard override
+    if recipe_name:
+        recipe_map = config_providers.recipe_overrides.get(recipe_name)
+        if recipe_map:
+            recipe_wildcard = recipe_map.get("*")
+            if recipe_wildcard:
+                logger.debug(
+                    "provider_profile_resolved",
+                    tier="recipe_wildcard_override",
+                    profile=recipe_wildcard,
+                )
+                if recipe_wildcard == "anthropic":
+                    return ("anthropic", {})
+                return (recipe_wildcard, config_providers.profiles.get(recipe_wildcard, {}))
+
     # Tier 1: per-step config override (requires recipe context)
     if recipe_name and step_name:
         step_override = config_providers.step_overrides.get(step_name)

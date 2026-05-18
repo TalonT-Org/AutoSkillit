@@ -528,6 +528,7 @@ class AutomationConfig:
                 default_provider=val(pvd, "default_provider", _pvd["default_provider"]),
                 profiles=val(pvd, "profiles", _pvd["profiles"]),
                 step_overrides=val(pvd, "step_overrides", _pvd["step_overrides"]),
+                recipe_overrides=val(pvd, "recipe_overrides", _pvd["recipe_overrides"]),
                 provider_retry_limit=_parse_int_field(
                     val(pvd, "provider_retry_limit", _pvd["provider_retry_limit"]),
                     "providers.provider_retry_limit",

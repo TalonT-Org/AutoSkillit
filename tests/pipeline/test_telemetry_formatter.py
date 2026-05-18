@@ -1217,3 +1217,109 @@ def test_non_anthropic_step_marked_compact_kv() -> None:
     result = TelemetryFormatter.format_compact_kv(steps, total)
     assert "implement*" in result
     assert "non-Anthropic provider" in result
+
+
+# ---------------------------------------------------------------------------
+# format_pr_telemetry_block
+# ---------------------------------------------------------------------------
+
+
+def test_pr_telemetry_sections_constant_matches_formatter_output() -> None:
+    """Every section in PR_TELEMETRY_SECTIONS appears in format_pr_telemetry_block output."""
+    from autoskillit.core import PR_TELEMETRY_SECTIONS
+
+    model_totals: list[ModelTotalEntry] = [
+        {
+            "model": "claude-sonnet-4-6",
+            "step_count": 2,
+            "input_tokens": 300,
+            "output_tokens": 130,
+            "cache_read_tokens": 5000,
+            "cache_write_tokens": 100,
+            "elapsed_seconds": 10.0,
+        },
+    ]
+    steps_with_loc = [
+        {**_STEPS[0], "loc_insertions": 50, "loc_deletions": 10},
+        {**_STEPS[1], "loc_insertions": 200, "loc_deletions": 30},
+    ]
+    total_with_loc = {**_TOTAL, "loc_insertions": 250, "loc_deletions": 40}
+    result = TelemetryFormatter.format_pr_telemetry_block(
+        steps_with_loc, total_with_loc, model_totals
+    )
+    for section in PR_TELEMETRY_SECTIONS:
+        assert section in result, f"{section} missing from format_pr_telemetry_block output"
+
+
+def test_format_pr_block_section_order() -> None:
+    """Sections in format_pr_telemetry_block appear in PR_TELEMETRY_SECTIONS order."""
+    from autoskillit.core import PR_TELEMETRY_SECTIONS
+
+    model_totals: list[ModelTotalEntry] = [
+        {
+            "model": "claude-sonnet-4-6",
+            "step_count": 2,
+            "input_tokens": 300,
+            "output_tokens": 130,
+            "cache_read_tokens": 5000,
+            "cache_write_tokens": 100,
+            "elapsed_seconds": 10.0,
+        },
+    ]
+    steps_with_loc = [
+        {**_STEPS[0], "loc_insertions": 50, "loc_deletions": 10},
+        {**_STEPS[1], "loc_insertions": 200, "loc_deletions": 30},
+    ]
+    total_with_loc = {**_TOTAL, "loc_insertions": 250, "loc_deletions": 40}
+    result = TelemetryFormatter.format_pr_telemetry_block(
+        steps_with_loc, total_with_loc, model_totals
+    )
+    positions = [result.index(section) for section in PR_TELEMETRY_SECTIONS]
+    assert positions == sorted(positions), "Sections are not in PR_TELEMETRY_SECTIONS order"
+
+
+def test_pr_telemetry_sections_exhaustive() -> None:
+    """Every format_* method producing a '## ' header has its header in PR_TELEMETRY_SECTIONS."""
+    import ast
+    import inspect
+
+    from autoskillit.core import PR_TELEMETRY_SECTIONS
+
+    source = inspect.getsource(TelemetryFormatter)
+    tree = ast.parse(source)
+    pr_headers: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            val = node.value.strip()
+            if val.startswith("## ") and "\n" not in val:
+                pr_headers.add(val)
+    for header in pr_headers:
+        assert header in PR_TELEMETRY_SECTIONS, (
+            f"Header {header!r} found in TelemetryFormatter but missing from PR_TELEMETRY_SECTIONS"
+        )
+
+
+def test_format_pr_block_calls_all_formatters() -> None:
+    """format_pr_telemetry_block delegates to all three PR-bound format methods."""
+    from unittest.mock import patch as mock_patch
+
+    steps = [{"step_name": "s1", "input_tokens": 100, "output_tokens": 50}]
+    total = {"input_tokens": 100, "output_tokens": 50}
+    model_totals: list[ModelTotalEntry] = []
+    with (
+        mock_patch.object(
+            TelemetryFormatter, "format_token_table", wraps=TelemetryFormatter.format_token_table
+        ) as mock_token,
+        mock_patch.object(
+            TelemetryFormatter,
+            "format_efficiency_table",
+            wraps=TelemetryFormatter.format_efficiency_table,
+        ) as mock_eff,
+        mock_patch.object(
+            TelemetryFormatter, "format_model_table", wraps=TelemetryFormatter.format_model_table
+        ) as mock_model,
+    ):
+        TelemetryFormatter.format_pr_telemetry_block(steps, total, model_totals)
+        mock_token.assert_called_once()
+        mock_eff.assert_called_once()
+        mock_model.assert_called_once()

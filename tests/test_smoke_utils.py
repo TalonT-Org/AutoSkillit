@@ -395,6 +395,8 @@ def _write_test_sessions(log_root: Path, entries: list[dict]) -> None:
             "loc_deletions": entry.get("loc_deletions", 0),
             "schema_version": 2,
         }
+        if "model_identifier" in entry:
+            token_data["model_identifier"] = entry["model_identifier"]
         (session_dir / "token_usage.json").write_text(json.dumps(token_data))
     (log_root / "sessions.jsonl").write_text("\n".join(lines) + "\n")
 
@@ -739,6 +741,105 @@ def test_pts_reads_order_id_from_dispatch_env(
     result = patch_pr_token_summary(PR_URL, cwd="", log_dir=str(tmp_path))
     assert result["success"] == "true"
     assert result["sessions_loaded"] == "2"
+
+
+# ---------------------------------------------------------------------------
+# T_PTS12–T_PTS14: model usage breakdown + section_re coverage
+# ---------------------------------------------------------------------------
+
+
+# T_PTS12
+@patch("time.sleep")
+@patch("subprocess.run")
+def test_pts_includes_model_usage_breakdown(mock_run, _mock_sleep, tmp_path: Path) -> None:
+    """patch_pr_token_summary produces all 3 telemetry sections when model data is present."""
+    existing_body = (
+        "## Summary\nSome text\n\n"
+        "## Token Usage Summary\n\n| Step | old |\n\n"
+        "## Token Efficiency\n\n| Step | old eff |\n\n"
+        "## Model Usage Breakdown\n\n| Model | old model |\n\n"
+        "## Next Section\nFollowing content"
+    )
+    _write_test_sessions(
+        tmp_path,
+        [
+            {
+                "dir_name": "s1",
+                "cwd": "/clone/test",
+                "step_name": "implement",
+                "input_tokens": 1000,
+                "output_tokens": 500,
+                "loc_insertions": 120,
+                "model_identifier": "claude-sonnet-4-6",
+            },
+        ],
+    )
+    mock_run.side_effect = _make_gh_mock(get_body=existing_body)
+    result = patch_pr_token_summary(PR_URL, cwd="/clone/test", log_dir=str(tmp_path))
+    assert result["success"] == "true"
+    patch_call = mock_run.call_args_list[-1]
+    body_arg = [a for a in patch_call[0][0] if a.startswith("body=")][0]
+    assert "## Token Usage Summary" in body_arg
+    assert "## Token Efficiency" in body_arg
+    assert "## Model Usage Breakdown" in body_arg
+    assert body_arg.count("## Token Usage Summary") == 1
+    assert body_arg.count("## Token Efficiency") == 1
+    assert body_arg.count("## Model Usage Breakdown") == 1
+    assert "claude-sonnet-4-6" in body_arg
+    assert "## Next Section" in body_arg
+
+
+# T_PTS13
+def test_section_re_consumes_all_three_sections() -> None:
+    """section_re matches across all three telemetry sections."""
+    import regex as re
+
+    from autoskillit.core import PR_TELEMETRY_SECTIONS
+
+    body = (
+        "## Summary\nIntro\n\n"
+        "## Token Usage Summary\n\n| Step | data |\n\n"
+        "## Token Efficiency\n\n| Step | eff |\n\n"
+        "## Model Usage Breakdown\n\n| Model | model data |\n\n"
+        "## Next Section\nMore"
+    )
+    section_re = re.compile(
+        r"\n*## Token Usage Summary\n.*?"
+        r"(?:\n## Token Efficiency\n.*?)?"
+        r"(?:\n## Model Usage Breakdown\n.*?)?"
+        r"(?=\n## |\Z)",
+        re.DOTALL,
+    )
+    m = section_re.search(body)
+    assert m is not None
+    matched = m.group(0)
+    for section in PR_TELEMETRY_SECTIONS:
+        assert section in matched
+
+
+# T_PTS14
+def test_section_re_covers_all_pr_telemetry_sections() -> None:
+    """Every section in PR_TELEMETRY_SECTIONS is consumed by section_re when all are present."""
+    import regex as re
+
+    from autoskillit.core import PR_TELEMETRY_SECTIONS
+
+    parts = []
+    for section in PR_TELEMETRY_SECTIONS:
+        parts.append(f"{section}\n\n| data | here |")
+    body = "## Summary\nIntro\n\n" + "\n\n".join(parts) + "\n\n## Other\nEnd"
+    section_re = re.compile(
+        r"\n*## Token Usage Summary\n.*?"
+        r"(?:\n## Token Efficiency\n.*?)?"
+        r"(?:\n## Model Usage Breakdown\n.*?)?"
+        r"(?=\n## |\Z)",
+        re.DOTALL,
+    )
+    m = section_re.search(body)
+    assert m is not None
+    matched = m.group(0)
+    for section in PR_TELEMETRY_SECTIONS:
+        assert section in matched, f"{section} not consumed by section_re"
 
 
 # ---------------------------------------------------------------------------

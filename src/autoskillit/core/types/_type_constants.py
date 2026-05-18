@@ -67,6 +67,7 @@ __all__ = [
     "SKILL_ACTIVATE_DEPS_REQUIRED",
     "SOUS_CHEF_MANDATORY_SECTIONS",
     "ADMIRAL_DISPATCH_SECTIONS",
+    "PR_TELEMETRY_SECTIONS",
     "KNOWN_CI_EVENTS",
     "DATA_MANIFEST_SOURCE_TYPES",
     "SCOPE_DIRECTION_SOURCE_TYPES",
@@ -663,6 +664,12 @@ ADMIRAL_DISPATCH_SECTIONS: tuple[str, ...] = (
     "QUOTA WAIT PROTOCOL",
 )
 assert set(ADMIRAL_DISPATCH_SECTIONS).issubset(set(SOUS_CHEF_MANDATORY_SECTIONS))
+
+PR_TELEMETRY_SECTIONS: tuple[str, ...] = (
+    "## Token Usage Summary",
+    "## Token Efficiency",
+    "## Model Usage Breakdown",
+)
 
 KNOWN_CI_EVENTS: frozenset[str] = frozenset(
     {

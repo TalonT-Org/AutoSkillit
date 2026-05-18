@@ -423,6 +423,22 @@ class TelemetryFormatter:
         return "\n".join(lines)
 
     @staticmethod
+    def format_pr_telemetry_block(
+        steps: list[dict],
+        total: dict,
+        model_totals: list[ModelTotalEntry],
+    ) -> str:
+        token = TelemetryFormatter.format_token_table(steps, total)
+        efficiency = TelemetryFormatter.format_efficiency_table(steps, total)
+        model = TelemetryFormatter.format_model_table(model_totals)
+        parts = [token]
+        if efficiency:
+            parts.append(efficiency)
+        if model:
+            parts.append(model)
+        return "\n\n".join(parts)
+
+    @staticmethod
     def format_model_table(model_totals: list[ModelTotalEntry]) -> str:
         """Produce markdown ## Model Usage Breakdown table. Returns '' when empty."""
         if not model_totals or all(m.get("model", "") == "unknown" for m in model_totals):

@@ -139,6 +139,23 @@ class TestWriteTelemetryFiles:
         assert Path(result["timing_summary_path"]).exists()
 
     @pytest.mark.anyio
+    async def test_writes_efficiency_table_when_loc_present(self, tool_ctx_kitchen_open, tmp_path):
+        tool_ctx_kitchen_open.token_log.record(
+            "implement",
+            {
+                "input_tokens": 1000,
+                "output_tokens": 500,
+                "cache_write_tokens": 100,
+                "cache_read_tokens": 200,
+            },
+            loc_insertions=120,
+            loc_deletions=30,
+        )
+        result = json.loads(await write_telemetry_files(str(tmp_path)))
+        content = Path(result["token_summary_path"]).read_text()
+        assert "## Token Efficiency" in content
+
+    @pytest.mark.anyio
     async def test_gate_closed_returns_gate_error(self, tool_ctx, tmp_path):
         tool_ctx.gate.disable()
         result = json.loads(await write_telemetry_files(str(tmp_path)))

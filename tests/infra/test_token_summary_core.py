@@ -815,6 +815,82 @@ def test_model_table_equivalence() -> None:
     )
 
 
+def test_pr_telemetry_assembly_parity() -> None:
+    """Hook inline assembly and TelemetryFormatter.format_pr_telemetry_block agree on sections."""
+    from autoskillit.hooks.token_summary_hook import (
+        _format_efficiency_table,
+        _format_model_table,
+        _format_table,
+    )
+    from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
+
+    aggregated = {
+        "plan": {
+            "step_name": "plan",
+            "model": "claude-sonnet-4-6",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "cache_write_tokens": 100,
+            "cache_read_tokens": 200,
+            "elapsed_seconds": 60.0,
+            "invocation_count": 1,
+            "loc_insertions": 50,
+            "loc_deletions": 10,
+        },
+        "implement": {
+            "step_name": "implement",
+            "model": "claude-sonnet-4-6",
+            "input_tokens": 5000,
+            "output_tokens": 2000,
+            "cache_write_tokens": 500,
+            "cache_read_tokens": 1000,
+            "elapsed_seconds": 120.0,
+            "invocation_count": 2,
+            "loc_insertions": 200,
+            "loc_deletions": 30,
+        },
+    }
+
+    hook_token = _format_table(aggregated)
+    hook_efficiency = _format_efficiency_table(aggregated)
+    hook_model = _format_model_table(aggregated)
+    hook_parts = [hook_token]
+    if hook_efficiency:
+        hook_parts.append(hook_efficiency)
+    if hook_model:
+        hook_parts.append(hook_model)
+    hook_assembly = "\n\n".join(hook_parts)
+
+    steps = list(aggregated.values())
+    total = {
+        "input_tokens": sum(s["input_tokens"] for s in steps),
+        "output_tokens": sum(s["output_tokens"] for s in steps),
+        "cache_write_tokens": sum(s["cache_write_tokens"] for s in steps),
+        "cache_read_tokens": sum(s["cache_read_tokens"] for s in steps),
+        "total_elapsed_seconds": sum(s["elapsed_seconds"] for s in steps),
+        "loc_insertions": sum(s["loc_insertions"] for s in steps),
+        "loc_deletions": sum(s["loc_deletions"] for s in steps),
+    }
+    model_totals = [
+        {
+            "model": "claude-sonnet-4-6",
+            "step_count": 2,
+            "input_tokens": 6000,
+            "output_tokens": 2500,
+            "cache_write_tokens": 600,
+            "cache_read_tokens": 1200,
+            "elapsed_seconds": 180.0,
+        },
+    ]
+    canonical = TelemetryFormatter.format_pr_telemetry_block(steps, total, model_totals)
+
+    hook_sections = [s for s in hook_assembly.split("\n") if s.startswith("## ")]
+    canonical_sections = [s for s in canonical.split("\n") if s.startswith("## ")]
+    assert hook_sections == canonical_sections, (
+        f"Section header mismatch:\nHOOK: {hook_sections}\nCANONICAL: {canonical_sections}"
+    )
+
+
 class TestLoadSessionsSchemaVersionCompat:
     """Backward compatibility: _load_sessions reads both v1 and v2 token_usage.json."""
 

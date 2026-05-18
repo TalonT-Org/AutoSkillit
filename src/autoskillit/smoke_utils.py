@@ -302,9 +302,8 @@ def patch_pr_token_summary(
     scope_kwargs: dict[str, str] = {"order_id": effective_order_id} if effective_order_id else {}
     steps = token_log.get_report(**scope_kwargs)
     total = token_log.compute_total(**scope_kwargs)
-    table = TelemetryFormatter.format_token_table(steps, total)
-    efficiency = TelemetryFormatter.format_efficiency_table(steps, total)
-    combined = table + ("\n\n" + efficiency if efficiency else "")
+    model_totals = token_log.compute_model_totals(**scope_kwargs)
+    combined = TelemetryFormatter.format_pr_telemetry_block(steps, total, model_totals)
 
     try:
         read_result = subprocess.run(
@@ -323,10 +322,11 @@ def patch_pr_token_summary(
     if not current_body or current_body == "null":
         return {"success": "false", "error": "PR body is empty"}
 
-    # Match from "## Token Usage Summary" through an optional "## Token Efficiency"
-    # block, stopping at the next "## " heading or end-of-string.
     section_re = re.compile(
-        r"\n*## Token Usage Summary\n.*?(?:\n## Token Efficiency\n.*?)?(?=\n## |\Z)",
+        r"\n*## Token Usage Summary\n.*?"
+        r"(?:\n## Token Efficiency\n.*?)?"
+        r"(?:\n## Model Usage Breakdown\n.*?)?"
+        r"(?=\n## |\Z)",
         re.DOTALL,
     )
     if section_re.search(current_body):

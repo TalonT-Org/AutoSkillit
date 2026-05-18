@@ -1126,7 +1126,14 @@ def test_build_eval_context_writes_eval_context_json(tmp_path: Path) -> None:
     assert ctx["reference"]["artifact_type"] == "file"
     assert len(ctx["candidates"]) == 1
     assert ctx["candidates"][0]["path"] == str(plan_file.resolve())
-    assert ctx["codebase_root"] != ""
+    (tmp_path / ".git").mkdir()
+    result2 = build_eval_context(
+        canary_id="c1",
+        plan_paths_json=json.dumps({"baseline": str(plan_file)}),
+        eval_run_dir=str(eval_run_dir),
+    )
+    ctx2 = json.loads(Path(result2["eval_context_path"]).read_text())
+    assert ctx2["codebase_root"] == str(tmp_path)
     assert ctx["eval_run_dir"] == str(eval_run_dir.resolve())
 
 

@@ -8,9 +8,23 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from autoskillit.core import DISPATCH_ID_ENV_VAR, get_logger
+import regex as _regex
+
+from autoskillit.core import DISPATCH_ID_ENV_VAR, PR_TELEMETRY_SECTIONS, get_logger
 
 logger = get_logger(__name__)
+
+assert len(PR_TELEMETRY_SECTIONS) == 3, (  # noqa: S101
+    f"_PR_SECTION_RE assumes exactly 3 sections; got {len(PR_TELEMETRY_SECTIONS)}"
+)
+_PR_SECTION_RE = _regex.compile(
+    r"\n*"
+    + _regex.escape(PR_TELEMETRY_SECTIONS[0])
+    + r"\n.*?"
+    + "".join(f"(?:\\n{_regex.escape(s)}\\n.*?)?" for s in PR_TELEMETRY_SECTIONS[1:])
+    + r"(?=\n## |\Z)",
+    _regex.DOTALL,
+)
 
 
 def check_bug_report_non_empty(workspace: str) -> dict[str, str]:
@@ -272,12 +286,10 @@ def patch_pr_token_summary(
     import subprocess  # noqa: PLC0415
     import time  # noqa: PLC0415
 
-    import regex as re  # noqa: PLC0415
-
     from autoskillit.execution import resolve_log_dir  # noqa: PLC0415
     from autoskillit.pipeline import DefaultTokenLog, TelemetryFormatter  # noqa: PLC0415
 
-    m = re.match(r"https://github\.com/([^/]+)/([^/]+)/pull/(\d+)", pr_url)
+    m = _regex.match(r"https://github\.com/([^/]+)/([^/]+)/pull/(\d+)", pr_url)
     if not m:
         return {"success": "false", "error": f"Invalid PR URL: {pr_url}"}
 
@@ -302,9 +314,8 @@ def patch_pr_token_summary(
     scope_kwargs: dict[str, str] = {"order_id": effective_order_id} if effective_order_id else {}
     steps = token_log.get_report(**scope_kwargs)
     total = token_log.compute_total(**scope_kwargs)
-    table = TelemetryFormatter.format_token_table(steps, total)
-    efficiency = TelemetryFormatter.format_efficiency_table(steps, total)
-    combined = table + ("\n\n" + efficiency if efficiency else "")
+    model_totals = token_log.compute_model_totals(**scope_kwargs)
+    combined = TelemetryFormatter.format_pr_telemetry_block(steps, total, model_totals)
 
     try:
         read_result = subprocess.run(
@@ -323,14 +334,8 @@ def patch_pr_token_summary(
     if not current_body or current_body == "null":
         return {"success": "false", "error": "PR body is empty"}
 
-    # Match from "## Token Usage Summary" through an optional "## Token Efficiency"
-    # block, stopping at the next "## " heading or end-of-string.
-    section_re = re.compile(
-        r"\n*## Token Usage Summary\n.*?(?:\n## Token Efficiency\n.*?)?(?=\n## |\Z)",
-        re.DOTALL,
-    )
-    if section_re.search(current_body):
-        new_body = section_re.sub("\n\n" + combined, current_body)
+    if _PR_SECTION_RE.search(current_body):
+        new_body = _PR_SECTION_RE.sub("\n\n" + combined, current_body, count=1)
     else:
         new_body = current_body + "\n\n" + combined
 

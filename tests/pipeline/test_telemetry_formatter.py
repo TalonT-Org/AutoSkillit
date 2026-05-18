@@ -1217,3 +1217,98 @@ def test_non_anthropic_step_marked_compact_kv() -> None:
     result = TelemetryFormatter.format_compact_kv(steps, total)
     assert "implement*" in result
     assert "non-Anthropic provider" in result
+
+
+# ---------------------------------------------------------------------------
+# format_pr_telemetry_block
+# ---------------------------------------------------------------------------
+
+
+def test_pr_telemetry_sections_constant_matches_formatter_output() -> None:
+    """Every section in PR_TELEMETRY_SECTIONS appears in format_pr_telemetry_block output."""
+    from autoskillit.core import PR_TELEMETRY_SECTIONS
+
+    model_totals: list[ModelTotalEntry] = [
+        {
+            "model": "claude-sonnet-4-6",
+            "step_count": 2,
+            "input_tokens": 300,
+            "output_tokens": 130,
+            "cache_read_tokens": 5000,
+            "cache_write_tokens": 100,
+            "elapsed_seconds": 10.0,
+        },
+    ]
+    steps_with_loc = [
+        {**_STEPS[0], "loc_insertions": 50, "loc_deletions": 10},
+        {**_STEPS[1], "loc_insertions": 200, "loc_deletions": 30},
+    ]
+    total_with_loc = {**_TOTAL, "loc_insertions": 250, "loc_deletions": 40}
+    result = TelemetryFormatter.format_pr_telemetry_block(
+        steps_with_loc, total_with_loc, model_totals
+    )
+    for section in PR_TELEMETRY_SECTIONS:
+        assert section in result, f"{section} missing from format_pr_telemetry_block output"
+
+
+def test_format_pr_block_section_order() -> None:
+    """Sections in format_pr_telemetry_block appear in PR_TELEMETRY_SECTIONS order."""
+    from autoskillit.core import PR_TELEMETRY_SECTIONS
+
+    model_totals: list[ModelTotalEntry] = [
+        {
+            "model": "claude-sonnet-4-6",
+            "step_count": 2,
+            "input_tokens": 300,
+            "output_tokens": 130,
+            "cache_read_tokens": 5000,
+            "cache_write_tokens": 100,
+            "elapsed_seconds": 10.0,
+        },
+    ]
+    steps_with_loc = [
+        {**_STEPS[0], "loc_insertions": 50, "loc_deletions": 10},
+        {**_STEPS[1], "loc_insertions": 200, "loc_deletions": 30},
+    ]
+    total_with_loc = {**_TOTAL, "loc_insertions": 250, "loc_deletions": 40}
+    result = TelemetryFormatter.format_pr_telemetry_block(
+        steps_with_loc, total_with_loc, model_totals
+    )
+    positions = [result.index(section) for section in PR_TELEMETRY_SECTIONS]
+    assert positions == sorted(positions), "Sections are not in PR_TELEMETRY_SECTIONS order"
+
+
+def test_pr_telemetry_sections_exhaustive() -> None:
+    """Every ## header produced by format_pr_telemetry_block's sub-formatters is in PR_TELEMETRY_SECTIONS."""
+    import ast
+    import inspect
+    import textwrap
+
+    from autoskillit.core import PR_TELEMETRY_SECTIONS
+
+    # Identify which TelemetryFormatter methods are called inside format_pr_telemetry_block.
+    # Only those methods are PR-bound; other formatters (e.g. format_timing_table) are not.
+    pr_block_source = textwrap.dedent(
+        inspect.getsource(TelemetryFormatter.format_pr_telemetry_block)
+    )
+    pr_block_tree = ast.parse(pr_block_source)
+    called_methods: set[str] = set()
+    for node in ast.walk(pr_block_tree):
+        if isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Load):
+            if node.attr.startswith("format_") and node.attr != "format_pr_telemetry_block":
+                called_methods.add(node.attr)
+
+    class_source = inspect.getsource(TelemetryFormatter)
+    class_tree = ast.parse(class_source)
+    pr_headers: set[str] = set()
+    for node in ast.walk(class_tree):
+        if isinstance(node, ast.FunctionDef) and node.name in called_methods:
+            for child in ast.walk(node):
+                if isinstance(child, ast.Constant) and isinstance(child.value, str):
+                    val = child.value.strip()
+                    if val.startswith("## ") and "\n" not in val:
+                        pr_headers.add(val)
+    for header in pr_headers:
+        assert header in PR_TELEMETRY_SECTIONS, (
+            f"Header {header!r} found in TelemetryFormatter PR-bound formatter but missing from PR_TELEMETRY_SECTIONS"
+        )

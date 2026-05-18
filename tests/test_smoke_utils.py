@@ -999,7 +999,6 @@ def test_parse_eval_manifests_creates_directory_tree(tmp_path: Path) -> None:
     assert result["success"] == "true"
     eval_run_dir = Path(result["eval_run_dir"])
     assert eval_run_dir.exists()
-    # resolved.json is written at {canary_id}/resolved.json, not {canary_id}/{variant_id}/
     for c in ("c1", "c2"):
         assert (eval_run_dir / c / "resolved.json").is_file(), f"Missing {c}/resolved.json"
     manifest_index = json.loads((eval_run_dir / "manifest_index.json").read_text())
@@ -1028,12 +1027,10 @@ def test_parse_eval_manifests_writes_resolved_files(tmp_path: Path) -> None:
     )
     assert result["success"] == "true"
     eval_run_dir = Path(result["eval_run_dir"])
-    # resolved.json lives at {canary_id}/resolved.json
     resolved = json.loads((eval_run_dir / "c1" / "resolved.json").read_text())
     assert resolved["task_text"] == "Fix the bug in the login flow."
     assert resolved["detection_criteria"] == ["unit test passes", "integration test passes"]
     assert resolved["gap_description"] == "login breaks on empty password"
-    # Variants are stored as a dict keyed by variant_id
     assert "v1" in resolved["variants"]
     assert resolved["variants"]["v1"]["label"] == "baseline"
     assert resolved["variants"]["v1"]["overlay_text"] is None
@@ -1099,8 +1096,6 @@ def test_build_eval_context_writes_eval_context_json(tmp_path: Path) -> None:
     eval_run_dir.mkdir()
     canary_dir = eval_run_dir / "c1"
     canary_dir.mkdir()
-    # resolved.json lives at {canary_id}/resolved.json
-    # detection_criteria is an array; reference is an object with path/label/artifact_type
     (canary_dir / "resolved.json").write_text(
         json.dumps(
             {
@@ -1124,16 +1119,15 @@ def test_build_eval_context_writes_eval_context_json(tmp_path: Path) -> None:
     eval_context_path = Path(result["eval_context_path"])
     ctx = json.loads(eval_context_path.read_text())
     assert ctx["eval_id"] == "c1"
-    assert ctx["subject"] == "research"  # strips /autoskillit: prefix
+    assert ctx["subject"] == "research"
     assert ctx["gap_description"] == "login bug"
     assert ctx["detection_criteria"] == ["test passes", "build succeeds"]
-    # reference is an object, not top-level fields
-    assert "reference" in ctx
     assert ctx["reference"]["path"] == "/path/to/reference"
     assert ctx["reference"]["artifact_type"] == "file"
-    assert "candidates" in ctx
-    assert "codebase_root" in ctx
-    assert "eval_run_dir" in ctx
+    assert len(ctx["candidates"]) == 1
+    assert ctx["candidates"][0]["path"] == str(plan_file.resolve())
+    assert ctx["codebase_root"] != ""
+    assert ctx["eval_run_dir"] == str(eval_run_dir.resolve())
 
 
 # T_BEC2
@@ -1160,7 +1154,6 @@ def test_build_eval_context_handles_null_plan_path(tmp_path: Path) -> None:
     )
     assert result["success"] == "true"
     ctx = json.loads(Path(result["eval_context_path"]).read_text())
-    # Candidate id field is the variant id (e.g. "baseline"), not "variant"
     candidate = next(c for c in ctx["candidates"] if c["id"] == "baseline")
     assert candidate["status"] == "failed"
     assert candidate["path"] is None
@@ -1192,8 +1185,10 @@ def test_build_eval_context_resolves_absolute_paths(tmp_path: Path) -> None:
     )
     assert result["success"] == "true"
     ctx = json.loads(Path(result["eval_context_path"]).read_text())
+    assert len(ctx["candidates"]) > 0, "candidates list must be non-empty"
     for candidate in ctx["candidates"]:
         assert Path(candidate["path"]).is_absolute(), f"Path not absolute: {candidate['path']}"
+        assert candidate["path"] == str(plan_file.resolve())
 
 
 # T_BEC4
@@ -1222,8 +1217,6 @@ def test_compile_eval_scorecard_all_pass(tmp_path: Path) -> None:
     eval_run_dir.mkdir()
     canary_ids = ["c1", "c2"]
     variant_ids = ["v1", "v2"]
-    # verdict.json lives at {canary_id}/verdict.json (one per canary, not per canary×variant)
-    # Schema: {"verdicts": {variant_id: {"overall": "PASS"|"FAIL", "criteria": [...]}}}
     for c in canary_ids:
         canary_dir = eval_run_dir / c
         canary_dir.mkdir(parents=True)
@@ -1237,7 +1230,6 @@ def test_compile_eval_scorecard_all_pass(tmp_path: Path) -> None:
                 }
             )
         )
-    # compile_eval_scorecard takes file paths, not JSON strings
     canary_manifest_file = tmp_path / "canary_manifest.json"
     variant_manifest_file = tmp_path / "variant_manifest.json"
     canary_manifest_file.write_text(json.dumps([{"id": cid} for cid in canary_ids]))
@@ -1249,7 +1241,6 @@ def test_compile_eval_scorecard_all_pass(tmp_path: Path) -> None:
     assert result["pass_rate"] == "1.0"
     assert result["passed_runs"] == "4"
     assert result["total_runs"] == "4"
-    # Return key is "scorecard_path", not "scorecard_json_path"
     assert Path(result["scorecard_path"]).exists()
     assert (eval_run_dir / "scorecard.md").exists()
 

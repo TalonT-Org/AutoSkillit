@@ -183,8 +183,8 @@ class TestStaleTokenUsagePropagation:
         usage = {
             "input_tokens": 100,
             "output_tokens": 200,
-            "cache_creation_input_tokens": 50,
-            "cache_read_input_tokens": 75,
+            "cache_write_tokens": 50,
+            "cache_read_tokens": 75,
         }
         result = _stale_result_with_token_usage(usage, kill_reason=KillReason.INFRA_KILL)
         skill_result = _build_skill_result(result)

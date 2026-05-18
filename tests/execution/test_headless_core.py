@@ -1968,8 +1968,8 @@ class TestBuildSkillResultTokenUsage:
                     "usage": {
                         "input_tokens": 120,
                         "output_tokens": 45,
-                        "cache_creation_input_tokens": 8,
-                        "cache_read_input_tokens": 3,
+                        "cache_write_tokens": 8,
+                        "cache_read_tokens": 3,
                     },
                 },
             }
@@ -1984,8 +1984,8 @@ class TestBuildSkillResultTokenUsage:
                 "usage": {
                     "input_tokens": 200,
                     "output_tokens": 80,
-                    "cache_creation_input_tokens": 8,
-                    "cache_read_input_tokens": 3,
+                    "cache_write_tokens": 8,
+                    "cache_read_tokens": 3,
                 },
             }
         )

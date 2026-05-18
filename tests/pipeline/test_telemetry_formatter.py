@@ -1282,12 +1282,15 @@ def test_pr_telemetry_sections_exhaustive() -> None:
     """Every ## header produced by format_pr_telemetry_block's sub-formatters is in PR_TELEMETRY_SECTIONS."""
     import ast
     import inspect
+    import textwrap
 
     from autoskillit.core import PR_TELEMETRY_SECTIONS
 
     # Identify which TelemetryFormatter methods are called inside format_pr_telemetry_block.
     # Only those methods are PR-bound; other formatters (e.g. format_timing_table) are not.
-    pr_block_source = inspect.getsource(TelemetryFormatter.format_pr_telemetry_block)
+    pr_block_source = textwrap.dedent(
+        inspect.getsource(TelemetryFormatter.format_pr_telemetry_block)
+    )
     pr_block_tree = ast.parse(pr_block_source)
     called_methods: set[str] = set()
     for node in ast.walk(pr_block_tree):

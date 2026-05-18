@@ -1,5 +1,3 @@
-"""Backend registry and re-exports."""
-
 from __future__ import annotations
 
 from autoskillit.core import CodingAgentBackend
@@ -12,7 +10,7 @@ from .claude import (
     ClaudeStreamParser,
 )
 
-BACKEND_REGISTRY: dict[str, type] = {
+BACKEND_REGISTRY: dict[str, type[CodingAgentBackend]] = {
     "claude-code": ClaudeCodeBackend,
 }
 

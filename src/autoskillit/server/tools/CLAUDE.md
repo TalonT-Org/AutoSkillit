@@ -1,6 +1,6 @@
 # tools/
 
-MCP `@mcp.tool()` handlers registered on import (15 tool modules).
+MCP `@mcp.tool()` handlers registered on import (16 tool modules).
 
 ## Files
 
@@ -9,6 +9,7 @@ MCP `@mcp.tool()` handlers registered on import (15 tool modules).
 | `__init__.py` | Docstring-only — tools register via `@mcp.tool()` on import |
 | `_types.py` | TypedDict definitions for server tool JSON responses (RunSkillResult, RunCmdResult, etc.) |
 | `tools_kitchen.py` | `open_kitchen`, `close_kitchen` (gate lifecycle), `recipe://` MCP resource |
+| `tools_agents.py` | `unlock_agent_pack` tool + `agent://` resource templates |
 | `tools_ci.py` | `set_commit_status`, `check_repo_merge_state` |
 | `tools_ci_watch.py` | `wait_for_ci`, `get_ci_status`, `_auto_trigger_ci` |
 | `tools_ci_merge_queue.py` | `toggle_auto_merge`, `enqueue_pr`, `wait_for_merge_queue` |
@@ -24,6 +25,12 @@ MCP `@mcp.tool()` handlers registered on import (15 tool modules).
 | `tools_recipe.py` | `load_recipe`, `list_recipes`, `validate_recipe`, `migrate_recipe` |
 | `tools_status.py` | `kitchen_status`, `get_pipeline_report`, `get_token_summary`, `get_timing_summary`, `analyze_tool_sequences`, `get_quota_events`, `write_telemetry_files`, `read_db` |
 | `tools_workspace.py` | `test_check`, `reset_test_dir`, `reset_workspace` |
+
+## Test Files
+
+| File | Purpose |
+|------|---------|
+| `test_tools_agents.py` | Tests for agent pack registry, MCP resources, and `unlock_agent_pack` |
 
 ## Architecture Notes
 

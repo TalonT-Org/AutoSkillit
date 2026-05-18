@@ -829,7 +829,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "pipeline": 12,
         "fleet": 15,
         "recipe/rules": 33,
-        "server/tools": 18,
+        "server/tools": 19,
         "hooks/guards": 22,
     }
     violations: list[str] = []
@@ -862,7 +862,7 @@ def test_data_directories_are_not_python_packages() -> None:
     contain __init__.py — that turns them into phantom Python packages
     distinct from the real IL-2 module of similar name."""
     src = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
-    data_dirs = {"migrations", "recipes", "skills", "skills_extended"}
+    data_dirs = {"migrations", "recipes", "skills", "skills_extended", "agents"}
     offenders: list[str] = []
     for name in data_dirs:
         d = src / name

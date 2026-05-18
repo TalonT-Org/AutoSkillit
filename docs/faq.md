@@ -34,7 +34,7 @@ and `research`. See [recipes/overview.md](recipes/overview.md).
 
 ### Why are some MCP tools hidden by default?
 
-To keep normal Claude Code sessions clean. The 37 kitchen-tagged tools only
+To keep normal Claude Code sessions clean. The 38 kitchen-tagged tools only
 appear after the orchestrator calls `open_kitchen`. See
 [execution/tool-access.md](execution/tool-access.md).
 

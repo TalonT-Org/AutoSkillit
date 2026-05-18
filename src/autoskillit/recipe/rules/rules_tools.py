@@ -176,6 +176,7 @@ _TOOL_PARAMS: dict[str, frozenset[str]] = {
     "write_telemetry_files": frozenset({"output_dir"}),
     "get_pr_reviews": frozenset({"pr_number", "cwd", "repo"}),
     "bulk_close_issues": frozenset({"issue_numbers", "comment", "cwd"}),
+    "unlock_agent_pack": frozenset({"pack_name"}),
 }
 
 

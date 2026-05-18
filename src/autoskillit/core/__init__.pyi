@@ -215,6 +215,8 @@ from .types import PRState as PRState
 from .types import PromptContractError as PromptContractError
 from .types import QuotaRefreshTask as QuotaRefreshTask
 from .types import ReadOnlyResolver as ReadOnlyResolver
+from .types import AgentPackDef as AgentPackDef
+from .types import AGENT_PACK_REGISTRY as AGENT_PACK_REGISTRY
 from .types import RecipePackDef as RecipePackDef
 from .types import RecipeRepository as RecipeRepository
 from .types import RecipeSource as RecipeSource

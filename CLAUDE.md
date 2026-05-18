@@ -150,6 +150,7 @@ generic_automation_mcp/
 | `server/` | IL-3 | FastMCP server — tools/, kitchen gating, session-type dispatch |
 | `cli/` | IL-3 | CLI — doctor/, update/, fleet/ subcommands, ui/, session/ management |
 | `hooks/` | — | Claude Code hook scripts — guards/, formatters/ |
+| `agents/` | — | Bundled agent definition markdown files served as MCP resources |
 | `recipes/` | — | Bundled recipe YAML + contracts, diagrams, sub-recipes |
 | `skills/` | — | Tier 1 skills: open-kitchen, close-kitchen, sous-chef |
 | `skills_extended/` | — | Tier 2 (interactive) + Tier 3 (pipeline) skills, incl. arch-lens-* (13), exp-lens-* (18), vis-lens-* (12) |

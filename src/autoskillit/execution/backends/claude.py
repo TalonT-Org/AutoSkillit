@@ -1,11 +1,9 @@
-"""Claude Code backend implementation."""
-
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from autoskillit.core import (
     AGENT_BACKEND_CLAUDE_CODE,
@@ -26,9 +24,6 @@ from autoskillit.core import (
     fast_loads,
 )
 from autoskillit.execution.session import parse_session_result
-
-if TYPE_CHECKING:
-    from autoskillit.core import CodingAgentBackend as _CodingAgentBackend  # noqa: F401
 
 __all__ = [
     "ClaudeCodeBackend",
@@ -183,7 +178,7 @@ class ClaudeResultParser:
         return AgentSessionResult(
             success=success,
             exit_code=0 if success else 1,
-            backend_name="claude-code",
+            backend_name=AGENT_BACKEND_CLAUDE_CODE,
             elapsed_seconds=0.0,
             session_id=session_id,
             output=output if isinstance(output, str) else "",
@@ -196,7 +191,7 @@ class ClaudeResultParser:
         return AgentSessionResult(
             success=result.session_complete,
             exit_code=0 if result.session_complete else 1,
-            backend_name="claude-code",
+            backend_name=AGENT_BACKEND_CLAUDE_CODE,
             elapsed_seconds=0.0,
             session_id=result.session_id or None,
             output=result.result,

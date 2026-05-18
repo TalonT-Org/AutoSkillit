@@ -1,0 +1,1 @@
+For rename migrations, trace all fixtures that construct objects containing the renamed field and verify all sibling fields remain type-correct.

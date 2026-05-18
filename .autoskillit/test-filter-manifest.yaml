@@ -194,3 +194,12 @@ tests/**/CLAUDE.md: []
 
 .autoskillit/temp/plan-quality-audit/canaries/**/*:
   - infra/
+
+.autoskillit/recipes/eval/canaries/**/*:
+  - recipe/
+
+.autoskillit/recipes/eval/overlays/**/*:
+  - recipe/
+
+.autoskillit/recipes/eval/manifests/**/*:
+  - recipe/

@@ -20,6 +20,7 @@ from autoskillit.core import (
     build_agent_env,
     fast_loads,
 )
+from autoskillit.execution.session import parse_session_result
 
 if TYPE_CHECKING:
     from autoskillit.core import CodingAgentBackend as _CodingAgentBackend  # noqa: F401
@@ -184,7 +185,6 @@ class ClaudeResultParser:
         )
 
     def parse_stdout(self, stdout: str) -> AgentSessionResult:
-        from autoskillit.execution.session import parse_session_result
 
         result = parse_session_result(stdout)
         write_artifacts = _extract_write_artifacts(result.tool_uses)

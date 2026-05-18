@@ -38,6 +38,10 @@ _EXEMPT_SKILLS: frozenset[str] = frozenset(
     }
 )
 
+# Must stay in sync with the exempt_session_types frozenset on the pr_create_guard HookDef
+# in hook_registry.py — stdlib-only boundary prevents a shared import.
+_EXEMPT_SESSION_TYPES: frozenset[str] = frozenset({"orchestrator"})
+
 
 def _is_gh_pr_create(cmd: str) -> bool:
     """Return True only when `gh pr create` appears as an actual subcommand.
@@ -73,6 +77,10 @@ def main() -> None:
 
     skill_name = os.environ.get("AUTOSKILLIT_SKILL_NAME", "")
     if skill_name in _EXEMPT_SKILLS:
+        sys.exit(0)
+
+    session_type = os.environ.get("AUTOSKILLIT_SESSION_TYPE", "")
+    if session_type in _EXEMPT_SESSION_TYPES:
         sys.exit(0)
 
     # Hook config file is written by open_kitchen and removed by close_kitchen.

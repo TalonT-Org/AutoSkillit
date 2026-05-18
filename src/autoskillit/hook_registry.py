@@ -26,6 +26,7 @@ class HookDef:
     timeout_seconds: int | None = None
     session_scope: Literal["any", "headless_only", "interactive_only"] = "any"
     exempt_skills: frozenset[str] = field(default_factory=frozenset)
+    exempt_session_types: frozenset[str] = field(default_factory=frozenset)
 
     def __post_init__(self) -> None:
         if self.event_type != "SessionStart" and not self.matcher:
@@ -84,6 +85,9 @@ HOOK_REGISTRY: list[HookDef] = [
                 "pipeline-summary",
             }
         ),
+        # Must stay in sync with _EXEMPT_SESSION_TYPES in guards/pr_create_guard.py —
+        # stdlib-only boundary on hook scripts prevents a shared import.
+        exempt_session_types=frozenset({"orchestrator"}),
     ),
     HookDef(
         matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
@@ -226,6 +230,7 @@ def _canonical_registry_payload(
         [
             {
                 "event_type": h.event_type,
+                "exempt_session_types": sorted(h.exempt_session_types),
                 "exempt_skills": sorted(h.exempt_skills),
                 "matcher": h.matcher,
                 "scripts": list(h.scripts),

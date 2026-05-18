@@ -472,3 +472,83 @@ def test_eval_scan_dir_discoverable(tmp_path: Path) -> None:
     r = next((x for x in result.items if x.name == "test-eval"), None)
     assert r is not None
     assert r.source == RecipeSource.PROJECT
+
+
+def test_eval_fixture_inventory() -> None:
+    """All eval fixture files must exist at their canonical .autoskillit/recipes/eval/ location.
+
+    This is a regression guard: if a file is accidentally deleted or moved back to temp/,
+    this test fails immediately rather than silently breaking the eval pipeline.
+    """
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    eval_dir = repo_root / ".autoskillit" / "recipes" / "eval"
+
+    expected_canaries = [
+        "C1-task.md",
+        "C1-reference.md",
+        "C4-task.md",
+        "C7-task.md",
+        "C7-reference.md",
+        "impl_commit_b7fa51e2.patch",
+    ]
+    expected_overlays = [
+        "baseline.md",
+        "consumer-contract.md",
+        "infrastructure-audit.md",
+        "migration-scope.md",
+        "adversarial-review.md",
+        "full-adversarial.md",
+    ]
+    expected_manifests = [
+        "make-plan-canaries.json",
+        "make-plan-variants.json",
+    ]
+
+    missing = []
+    for name in expected_canaries:
+        if not (eval_dir / "canaries" / name).exists():
+            missing.append(f"canaries/{name}")
+    for name in expected_overlays:
+        if not (eval_dir / "overlays" / name).exists():
+            missing.append(f"overlays/{name}")
+    for name in expected_manifests:
+        if not (eval_dir / "manifests" / name).exists():
+            missing.append(f"manifests/{name}")
+
+    assert not missing, (
+        f"Eval fixture files missing from .autoskillit/recipes/eval/: {missing}. "
+        "These files must be tracked at this canonical location, not under temp/."
+    )
+
+
+def test_eval_manifest_paths_point_to_recipes_eval() -> None:
+    """Manifest JSON files must reference fixture paths under .autoskillit/recipes/eval/,
+    not temp/.
+
+    Verifies that after relocation the canary_manifest and variant_manifest path fields
+    no longer contain 'temp/' — a stale reference would silently fail at eval runtime.
+    """
+    import json
+
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    manifests_dir = repo_root / ".autoskillit" / "recipes" / "eval" / "manifests"
+
+    canary_manifest = json.loads((manifests_dir / "make-plan-canaries.json").read_text())
+    for entry in canary_manifest:
+        if entry.get("task_file"):
+            assert "temp/" not in entry["task_file"], (
+                f"Canary {entry['id']} task_file still points to temp/: {entry['task_file']!r}"
+            )
+        if entry.get("reference_path"):
+            assert "temp/" not in entry["reference_path"], (
+                f"Canary {entry['id']} reference_path still points to temp/: "
+                f"{entry['reference_path']!r}"
+            )
+
+    variant_manifest = json.loads((manifests_dir / "make-plan-variants.json").read_text())
+    for entry in variant_manifest:
+        if entry.get("overlay_file"):
+            assert "temp/" not in entry["overlay_file"], (
+                f"Variant {entry['id']} overlay_file still points to temp/: "
+                f"{entry['overlay_file']!r}"
+            )

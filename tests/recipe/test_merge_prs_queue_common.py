@@ -808,10 +808,10 @@ class TestMergePrsPreEnqueueCiGate:
         assert step.capture is not None
         assert "current_pr_branch" in step.capture
 
-    def test_get_current_pr_branch_routes_to_wait_ci_pre_enqueue(self, pmp) -> None:
-        """get_current_pr_branch.on_success must route to wait_ci_pre_enqueue."""
+    def test_get_current_pr_branch_routes_to_capture_pr_head_sha(self, pmp) -> None:
+        """get_current_pr_branch.on_success must route to capture_pr_head_sha."""
         step = pmp.steps["get_current_pr_branch"]
-        assert step.on_success == "wait_ci_pre_enqueue"
+        assert step.on_success == "capture_pr_head_sha"
 
     def test_wait_ci_pre_enqueue_exists(self, pmp) -> None:
         """wait_ci_pre_enqueue step must exist."""

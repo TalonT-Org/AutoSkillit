@@ -144,7 +144,7 @@ async def wait_for_ci(
                             cwd=cwd,
                         )
             except Exception:
-                pass
+                logger.warning("wait_for_ci: failed to check cwd branch", exc_info=True)
 
         scope = CIRunScope(
             workflow=workflow or tool_ctx.default_ci_scope.workflow,

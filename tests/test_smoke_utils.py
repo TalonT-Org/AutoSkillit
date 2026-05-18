@@ -793,9 +793,8 @@ def test_pts_includes_model_usage_breakdown(mock_run, _mock_sleep, tmp_path: Pat
 # T_PTS13
 def test_section_re_consumes_all_three_sections() -> None:
     """section_re matches across all three telemetry sections."""
-    import regex as re
-
     from autoskillit.core import PR_TELEMETRY_SECTIONS
+    from autoskillit.smoke_utils import _PR_SECTION_RE
 
     body = (
         "## Summary\nIntro\n\n"
@@ -804,14 +803,7 @@ def test_section_re_consumes_all_three_sections() -> None:
         "## Model Usage Breakdown\n\n| Model | model data |\n\n"
         "## Next Section\nMore"
     )
-    section_re = re.compile(
-        r"\n*## Token Usage Summary\n.*?"
-        r"(?:\n## Token Efficiency\n.*?)?"
-        r"(?:\n## Model Usage Breakdown\n.*?)?"
-        r"(?=\n## |\Z)",
-        re.DOTALL,
-    )
-    m = section_re.search(body)
+    m = _PR_SECTION_RE.search(body)
     assert m is not None
     matched = m.group(0)
     for section in PR_TELEMETRY_SECTIONS:
@@ -821,22 +813,14 @@ def test_section_re_consumes_all_three_sections() -> None:
 # T_PTS14
 def test_section_re_covers_all_pr_telemetry_sections() -> None:
     """Every section in PR_TELEMETRY_SECTIONS is consumed by section_re when all are present."""
-    import regex as re
-
     from autoskillit.core import PR_TELEMETRY_SECTIONS
+    from autoskillit.smoke_utils import _PR_SECTION_RE
 
     parts = []
     for section in PR_TELEMETRY_SECTIONS:
         parts.append(f"{section}\n\n| data | here |")
     body = "## Summary\nIntro\n\n" + "\n\n".join(parts) + "\n\n## Other\nEnd"
-    section_re = re.compile(
-        r"\n*## Token Usage Summary\n.*?"
-        r"(?:\n## Token Efficiency\n.*?)?"
-        r"(?:\n## Model Usage Breakdown\n.*?)?"
-        r"(?=\n## |\Z)",
-        re.DOTALL,
-    )
-    m = section_re.search(body)
+    m = _PR_SECTION_RE.search(body)
     assert m is not None
     matched = m.group(0)
     for section in PR_TELEMETRY_SECTIONS:

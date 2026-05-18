@@ -8,9 +8,18 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from autoskillit.core import DISPATCH_ID_ENV_VAR, get_logger
+import regex as _regex
+
+from autoskillit.core import DISPATCH_ID_ENV_VAR, PR_TELEMETRY_SECTIONS, get_logger
 
 logger = get_logger(__name__)
+
+_first = _regex.escape(PR_TELEMETRY_SECTIONS[0])
+_optional_parts = "".join(f"(?:\\n{_regex.escape(s)}\\n.*?)?" for s in PR_TELEMETRY_SECTIONS[1:])
+_PR_SECTION_RE = _regex.compile(
+    rf"\n*{_first}\n.*?{_optional_parts}(?=\n## |\Z)",
+    _regex.DOTALL,
+)
 
 
 def check_bug_report_non_empty(workspace: str) -> dict[str, str]:
@@ -272,12 +281,10 @@ def patch_pr_token_summary(
     import subprocess  # noqa: PLC0415
     import time  # noqa: PLC0415
 
-    import regex as re  # noqa: PLC0415
-
     from autoskillit.execution import resolve_log_dir  # noqa: PLC0415
     from autoskillit.pipeline import DefaultTokenLog, TelemetryFormatter  # noqa: PLC0415
 
-    m = re.match(r"https://github\.com/([^/]+)/([^/]+)/pull/(\d+)", pr_url)
+    m = _regex.match(r"https://github\.com/([^/]+)/([^/]+)/pull/(\d+)", pr_url)
     if not m:
         return {"success": "false", "error": f"Invalid PR URL: {pr_url}"}
 
@@ -322,15 +329,8 @@ def patch_pr_token_summary(
     if not current_body or current_body == "null":
         return {"success": "false", "error": "PR body is empty"}
 
-    section_re = re.compile(
-        r"\n*## Token Usage Summary\n.*?"
-        r"(?:\n## Token Efficiency\n.*?)?"
-        r"(?:\n## Model Usage Breakdown\n.*?)?"
-        r"(?=\n## |\Z)",
-        re.DOTALL,
-    )
-    if section_re.search(current_body):
-        new_body = section_re.sub("\n\n" + combined, current_body)
+    if _PR_SECTION_RE.search(current_body):
+        new_body = _PR_SECTION_RE.sub("\n\n" + combined, current_body)
     else:
         new_body = current_body + "\n\n" + combined
 

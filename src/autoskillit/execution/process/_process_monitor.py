@@ -42,8 +42,8 @@ async def _heartbeat(
     This guards against confirming on empty-result envelopes flushed before content
     is populated (drain-race false negative).
 
-    When *completion_marker* is non-empty, ``type=result`` records additionally
-    require the marker as a standalone line in the ``result`` field before Channel A
+    When *completion_marker* is non-empty, all matching record types additionally
+    require the marker as a standalone line in their text content before Channel A
     fires — preventing premature confirmation on partial output.
 
     *_on_poll* is a test-only callback invoked after each sleep iteration. Pass

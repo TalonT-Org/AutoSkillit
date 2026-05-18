@@ -612,7 +612,8 @@ def test_merge_worktree_has_commit_guard_predecessor() -> None:
                     frontier.extend(ctx.predecessors.get(p, set()))
             assert has_guard, (
                 f"{yaml_path.name}: merge_worktree step '{step_name}' has no commit_guard "
-                f"in its predecessor chain. Predecessors: {sorted(ctx.predecessors.get(step_name, set()))}"
+                f"in its predecessor chain. "
+                f"Predecessors: {sorted(ctx.predecessors.get(step_name, set()))}"
             )
 
 

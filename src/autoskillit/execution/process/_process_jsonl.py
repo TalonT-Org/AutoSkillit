@@ -16,6 +16,26 @@ def _marker_is_standalone(text: str, marker: str) -> bool:
     return False
 
 
+def _extract_record_text(obj: dict, record_type: str) -> str:
+    if record_type == "assistant":
+        raw = (obj.get("message") or {}).get("content", "")
+    elif record_type == "result":
+        raw = obj.get("result", "")
+    else:
+        raw = " ".join(v for v in obj.values() if isinstance(v, str))
+
+    if isinstance(raw, list):
+        return "\n".join(
+            b.get("text", "")
+            for b in raw
+            if isinstance(b, dict)
+            and ClaudeContentBlockType.from_api(b.get("type", "")) == ClaudeContentBlockType.TEXT
+        )
+    if not isinstance(raw, str):
+        return "" if raw is None else str(raw)
+    return raw
+
+
 def _jsonl_contains_marker(
     content: str,
     marker: str,
@@ -47,25 +67,7 @@ def _jsonl_contains_marker(
         if record_type not in record_types:
             continue
 
-        if record_type == "assistant":
-            raw = (obj.get("message") or {}).get("content", "")
-        elif record_type == "result":
-            raw = obj.get("result", "")
-        else:
-            raw = " ".join(v for v in obj.values() if isinstance(v, str))
-
-        if isinstance(raw, list):
-            text = "\n".join(
-                b.get("text", "")
-                for b in raw
-                if isinstance(b, dict)
-                and ClaudeContentBlockType.from_api(b.get("type", ""))
-                == ClaudeContentBlockType.TEXT
-            )
-        elif not isinstance(raw, str):
-            text = "" if raw is None else str(raw)
-        else:
-            text = raw
+        text = _extract_record_text(obj, record_type)
         if _marker_is_standalone(text, marker):
             return True
     return False
@@ -78,15 +80,17 @@ def _jsonl_has_record_type(
 ) -> bool:
     """Check if any JSONL record of an allowed type exists in content.
 
-    Used by the heartbeat to detect when Claude CLI emits a result record
+    Used by the heartbeat to detect when Claude CLI emits a completion record
     to stdout. For ``type=result`` records, additionally requires the ``result``
     field to be a non-empty string — confirming on an empty-result envelope
     is the source of the drain-race false negative.
 
-    When *completion_marker* is non-empty, ``type=result`` records additionally
-    require the marker to appear as a standalone line in the ``result`` field.
-    This prevents Channel A from confirming on premature exits where the model
-    produced output but did not complete its task.
+    When *completion_marker* is non-empty, all matching record types additionally
+    require the marker to appear as a standalone line in the record's text
+    content. Text is extracted per record type: ``message.content`` for
+    assistant records, ``result`` for result records, joined string values
+    for other types. This prevents Channel A from confirming on premature
+    exits where the model produced output but did not complete its task.
     """
     for line in content.splitlines():
         line = line.strip()
@@ -104,9 +108,13 @@ def _jsonl_has_record_type(
         if record_type == "result":
             result_field = obj.get("result", "")
             if not (isinstance(result_field, str) and result_field.strip()):
-                continue  # result absent, null, or empty — do not confirm
-            if completion_marker and not _marker_is_standalone(result_field, completion_marker):
-                continue  # marker configured but absent — do not confirm
+                continue
+
+        if completion_marker:
+            text = _extract_record_text(obj, record_type)
+            if not _marker_is_standalone(text, completion_marker):
+                continue
+
         return True
     return False
 

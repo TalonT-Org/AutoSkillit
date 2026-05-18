@@ -581,8 +581,8 @@ class TestChannelBSubSkillCollision:
     async def test_channel_b_ignores_sub_skill_marker(self, tmp_path):
         """Channel B must not trigger on a sub-skill's static %%ORDER_UP%% marker.
 
-        timeout=120s: outer timeout must exceed _phase1_timeout=250 so Phase 1 never
-        fires STALE before the outer guard under WSL2 + xdist load.
+        timeout=120s / _phase1_timeout=250: _phase1_timeout must exceed the outer timeout so
+        Phase 1 never fires STALE before the outer guard under WSL2 + xdist load.
         _session_id_timeout=5.0 gives the stdout reader enough headroom under
         heavy parallel load so Channel B monitoring always starts before the
         JSONL markers are written.

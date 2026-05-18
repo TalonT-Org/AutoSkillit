@@ -71,6 +71,8 @@ def _detect_branch_divergence(cwd: str) -> bool:
     """Check if current branch has commits ahead of the remote default branch.
 
     Tries origin/HEAD, origin/main, origin/master as base references.
+    Returns the result from the first ref that resolves successfully;
+    remaining refs are only tried when merge-base or rev-list fails.
     Returns False on any error or non-git directory.
     """
     for ref in ("origin/HEAD", "origin/main", "origin/master"):

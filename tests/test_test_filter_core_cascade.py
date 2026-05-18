@@ -92,6 +92,12 @@ class TestModuleCascadeCore:
             "_type_checkpoint",
             "_type_results",
             "_type_results_execution",
+            "_type_backend",
+            "_type_dispatch_identity",
+            "_type_figure_spec",
+            "_type_session_env",
+            "_type_capture",
+            "_type_token",
         }
         assert set(MODULE_CASCADE_CORE.keys()) == expected_stems
 
@@ -135,6 +141,28 @@ class TestModuleCascadeCore:
             }
         )
 
+    def test_type_backend_cascade(self) -> None:
+        assert MODULE_CASCADE_CORE["_type_backend"] == frozenset({"core"})
+
+    def test_type_dispatch_identity_cascade(self) -> None:
+        assert MODULE_CASCADE_CORE["_type_dispatch_identity"] == frozenset(
+            {"core", "fleet", "execution"}
+        )
+
+    def test_type_figure_spec_cascade(self) -> None:
+        assert MODULE_CASCADE_CORE["_type_figure_spec"] == frozenset({"core", "report"})
+
+    def test_type_session_env_cascade(self) -> None:
+        assert MODULE_CASCADE_CORE["_type_session_env"] == frozenset({"core", "cli"})
+
+    def test_type_capture_cascade(self) -> None:
+        assert MODULE_CASCADE_CORE["_type_capture"] == frozenset(
+            {"core", "fleet", "recipe", "cli"}
+        )
+
+    def test_type_token_cascade(self) -> None:
+        assert MODULE_CASCADE_CORE["_type_token"] == frozenset({"core"})
+
 
 class TestBuildTestScopeCoreCascade:
     """REQ-CORE-003/004: build_test_scope routes core modules correctly."""
@@ -159,6 +187,7 @@ class TestBuildTestScopeCoreCascade:
         "hooks",
         "skills",
         "planner",
+        "report",
         "arch",
         "contracts",
         "infra",
@@ -385,6 +414,94 @@ class TestBuildTestScopeCoreCascade:
             assert excluded not in dir_names, (
                 f"_type_results cascade should not include {excluded}"
             )
+
+    def test_type_backend_narrow_cascade(self, tmp_path: Path) -> None:
+        """_type_backend → narrow cascade of {"core"} only."""
+        tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
+        result = build_test_scope(
+            changed_files={"src/autoskillit/core/types/_type_backend.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        dir_names = {p.name for p in result}
+        assert "core" in dir_names
+        for excluded in ["config", "execution", "pipeline", "fleet", "migration", "workspace"]:
+            assert excluded not in dir_names, f"narrow cascade should not include {excluded}"
+
+    def test_type_capture_narrow_cascade(self, tmp_path: Path) -> None:
+        """_type_capture → narrow cascade of {"core", "fleet", "recipe", "cli"}."""
+        tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
+        result = build_test_scope(
+            changed_files={"src/autoskillit/core/types/_type_capture.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        dir_names = {p.name for p in result}
+        for pkg in ["core", "fleet", "recipe", "cli"]:
+            assert pkg in dir_names, f"narrow cascade should include {pkg}"
+        for excluded in ["execution", "pipeline", "hooks", "migration", "workspace"]:
+            assert excluded not in dir_names, f"narrow cascade should not include {excluded}"
+
+    def test_type_dispatch_identity_narrow_cascade(self, tmp_path: Path) -> None:
+        """_type_dispatch_identity → narrow cascade of {"core", "fleet", "execution"}."""
+        tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
+        result = build_test_scope(
+            changed_files={"src/autoskillit/core/types/_type_dispatch_identity.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        dir_names = {p.name for p in result}
+        for pkg in ["core", "fleet", "execution"]:
+            assert pkg in dir_names, f"narrow cascade should include {pkg}"
+        for excluded in ["config", "pipeline", "migration", "workspace", "report", "hooks"]:
+            assert excluded not in dir_names, f"narrow cascade should not include {excluded}"
+
+    def test_type_figure_spec_narrow_cascade(self, tmp_path: Path) -> None:
+        """_type_figure_spec → narrow cascade of {"core", "report"}."""
+        tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
+        result = build_test_scope(
+            changed_files={"src/autoskillit/core/types/_type_figure_spec.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        dir_names = {p.name for p in result}
+        for pkg in ["core", "report"]:
+            assert pkg in dir_names, f"narrow cascade should include {pkg}"
+        for excluded in ["config", "execution", "pipeline", "fleet", "migration", "workspace"]:
+            assert excluded not in dir_names, f"narrow cascade should not include {excluded}"
+
+    def test_type_session_env_narrow_cascade(self, tmp_path: Path) -> None:
+        """_type_session_env → narrow cascade of {"core", "cli"}."""
+        tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
+        result = build_test_scope(
+            changed_files={"src/autoskillit/core/types/_type_session_env.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        dir_names = {p.name for p in result}
+        for pkg in ["core", "cli"]:
+            assert pkg in dir_names, f"narrow cascade should include {pkg}"
+        for excluded in ["config", "execution", "pipeline", "fleet", "migration", "workspace"]:
+            assert excluded not in dir_names, f"narrow cascade should not include {excluded}"
+
+    def test_type_token_narrow_cascade(self, tmp_path: Path) -> None:
+        """_type_token → narrow cascade of {"core"} only."""
+        tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
+        result = build_test_scope(
+            changed_files={"src/autoskillit/core/types/_type_token.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        dir_names = {p.name for p in result}
+        assert "core" in dir_names
+        for excluded in ["config", "execution", "pipeline", "fleet", "migration", "workspace"]:
+            assert excluded not in dir_names, f"narrow cascade should not include {excluded}"
 
 
 class TestClosureCoreNarrowCascade:

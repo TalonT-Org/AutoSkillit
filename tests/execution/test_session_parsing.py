@@ -57,8 +57,8 @@ class TestExtractTokenUsage:
                     "usage": {
                         "input_tokens": 100,
                         "output_tokens": 50,
-                        "cache_creation_input_tokens": 10,
-                        "cache_read_input_tokens": 5,
+                        "cache_write_tokens": 10,
+                        "cache_read_tokens": 5,
                     },
                 },
             }
@@ -88,8 +88,8 @@ class TestExtractTokenUsage:
                     "usage": {
                         "input_tokens": 100,
                         "output_tokens": 40,
-                        "cache_creation_input_tokens": 0,
-                        "cache_read_input_tokens": 0,
+                        "cache_write_tokens": 0,
+                        "cache_read_tokens": 0,
                     },
                 },
             }
@@ -102,8 +102,8 @@ class TestExtractTokenUsage:
                     "usage": {
                         "input_tokens": 200,
                         "output_tokens": 60,
-                        "cache_creation_input_tokens": 20,
-                        "cache_read_input_tokens": 10,
+                        "cache_write_tokens": 20,
+                        "cache_read_tokens": 10,
                     },
                 },
             }
@@ -128,8 +128,8 @@ class TestExtractTokenUsage:
                     "usage": {
                         "input_tokens": 100,
                         "output_tokens": 30,
-                        "cache_creation_input_tokens": 0,
-                        "cache_read_input_tokens": 0,
+                        "cache_write_tokens": 0,
+                        "cache_read_tokens": 0,
                     },
                 },
             }
@@ -142,8 +142,8 @@ class TestExtractTokenUsage:
                     "usage": {
                         "input_tokens": 200,
                         "output_tokens": 70,
-                        "cache_creation_input_tokens": 5,
-                        "cache_read_input_tokens": 15,
+                        "cache_write_tokens": 5,
+                        "cache_read_tokens": 15,
                     },
                 },
             }
@@ -169,8 +169,8 @@ class TestExtractTokenUsage:
                     "usage": {
                         "input_tokens": 100,
                         "output_tokens": 40,
-                        "cache_creation_input_tokens": 0,
-                        "cache_read_input_tokens": 0,
+                        "cache_write_tokens": 0,
+                        "cache_read_tokens": 0,
                     },
                 },
             }
@@ -185,8 +185,8 @@ class TestExtractTokenUsage:
                 "usage": {
                     "input_tokens": 999,
                     "output_tokens": 888,
-                    "cache_creation_input_tokens": 50,
-                    "cache_read_input_tokens": 25,
+                    "cache_write_tokens": 50,
+                    "cache_read_tokens": 25,
                 },
             }
         )
@@ -211,8 +211,8 @@ class TestExtractTokenUsage:
                     "usage": {
                         "input_tokens": 150,
                         "output_tokens": 60,
-                        "cache_creation_input_tokens": 0,
-                        "cache_read_input_tokens": 0,
+                        "cache_write_tokens": 0,
+                        "cache_read_tokens": 0,
                     },
                 },
             }
@@ -364,8 +364,8 @@ class TestParseSessionResult:
             usage={
                 "input_tokens": 200,
                 "output_tokens": 80,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_read_tokens": 0,
             }
         )
         stdout = assistant + "\n" + result_rec
@@ -464,8 +464,8 @@ class TestExtractTokenUsageArchitecture:
             usage={
                 "input_tokens": 999,
                 "output_tokens": 888,
-                "cache_creation_input_tokens": 10,
-                "cache_read_input_tokens": 0,
+                "cache_write_tokens": 10,
+                "cache_read_tokens": 0,
             }
         )
         stdout = assistant + "\n" + result_rec

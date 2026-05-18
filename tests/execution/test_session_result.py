@@ -349,8 +349,8 @@ class TestClaudeSessionResultTokenUsage:
         usage = {
             "input_tokens": 100,
             "output_tokens": 50,
-            "cache_creation_input_tokens": 10,
-            "cache_read_input_tokens": 5,
+            "cache_write_tokens": 10,
+            "cache_read_tokens": 5,
             "model_breakdown": {"claude-sonnet-4-6": {"input_tokens": 100, "output_tokens": 50}},
         }
         session = ClaudeSessionResult(
@@ -415,7 +415,7 @@ class TestClaudeSessionResultContextExhausted:
                 "content": [{"type": "text", "text": "Prompt is too long"}],
                 "output_tokens": 0,
                 "input_tokens": 0,
-                "cache_read_input_tokens": 0,
+                "cache_read_tokens": 0,
             }
         )
         result_record = json.dumps(

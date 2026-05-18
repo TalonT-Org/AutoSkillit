@@ -839,8 +839,8 @@ def test_token_usage_json_includes_model_identifier(tmp_path):
         token_usage={
             "input_tokens": 100,
             "output_tokens": 50,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "cache_read_tokens": 0,
             "model_breakdown": {"claude-sonnet-4-6": {"input_tokens": 100, "output_tokens": 50}},
         },
     )
@@ -860,8 +860,8 @@ def test_token_usage_json_model_identifier_empty_when_no_breakdown(tmp_path):
         token_usage={
             "input_tokens": 100,
             "output_tokens": 50,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "cache_read_tokens": 0,
         },
     )
     tu_path = tmp_path / "sessions" / "model-id-002" / "token_usage.json"

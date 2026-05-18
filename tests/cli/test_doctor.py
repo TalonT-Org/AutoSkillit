@@ -770,7 +770,7 @@ def test_check_hook_registry_drift_orphaned_still_fires_when_plugin_installed(
     result = _check_hook_registry_drift(settings)
     assert result.severity == Severity.ERROR
     assert result.check == "hook_registry_drift"
-    assert "orphaned" in result.message
+    assert "orphaned" in result.message.lower()
 
 
 class TestEditableInstallSourceExistsCheck:

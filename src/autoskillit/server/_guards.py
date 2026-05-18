@@ -154,6 +154,15 @@ def _check_dry_walkthrough(skill_command: str, cwd: str) -> str | None:
     return None
 
 
+def _provider_result(
+    provider: str,
+    profiles: dict[str, dict[str, str]],
+) -> tuple[str, dict[str, str]]:
+    if provider == "anthropic":
+        return ("anthropic", {})
+    return (provider, profiles.get(provider, {}))
+
+
 def _resolve_provider_profile(
     step_name: str,
     recipe_name: str,
@@ -173,12 +182,7 @@ def _resolve_provider_profile(
                         tier="recipe_step_override",
                         profile=recipe_step_override,
                     )
-                    if recipe_step_override == "anthropic":
-                        return ("anthropic", {})
-                    return (
-                        recipe_step_override,
-                        config_providers.profiles.get(recipe_step_override, {}),
-                    )
+                    return _provider_result(recipe_step_override, config_providers.profiles)
 
             # Tier 0W: per-recipe wildcard override
             recipe_wildcard = recipe_map.get("*")
@@ -188,9 +192,7 @@ def _resolve_provider_profile(
                     tier="recipe_wildcard_override",
                     profile=recipe_wildcard,
                 )
-                if recipe_wildcard == "anthropic":
-                    return ("anthropic", {})
-                return (recipe_wildcard, config_providers.profiles.get(recipe_wildcard, {}))
+                return _provider_result(recipe_wildcard, config_providers.profiles)
 
     # Tier 1: per-step config override (requires recipe context)
     if recipe_name and step_name:

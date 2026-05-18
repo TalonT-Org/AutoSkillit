@@ -237,8 +237,8 @@ def _assistant_ndjson(
                 "usage": {
                     "input_tokens": input_tokens,
                     "output_tokens": output_tokens,
-                    "cache_creation_input_tokens": cache_create,
-                    "cache_read_input_tokens": cache_read,
+                    "cache_write_tokens": cache_create,
+                    "cache_read_tokens": cache_read,
                 },
             },
         }

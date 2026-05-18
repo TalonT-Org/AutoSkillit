@@ -119,7 +119,7 @@ class TestClaudeResultParser:
             seen_block_types=frozenset({"text", "tool_use"}),
         )
         with patch(
-            "autoskillit.execution.session.parse_session_result",
+            "autoskillit.execution.backends.claude.parse_session_result",
             return_value=mock_result,
         ):
             parser = ClaudeResultParser()
@@ -145,7 +145,7 @@ class TestClaudeResultParser:
             errors=["empty output"],
         )
         with patch(
-            "autoskillit.execution.session.parse_session_result",
+            "autoskillit.execution.backends.claude.parse_session_result",
             return_value=mock_result,
         ):
             parser = ClaudeResultParser()
@@ -169,7 +169,7 @@ class TestClaudeResultParser:
             ],
         )
         with patch(
-            "autoskillit.execution.session.parse_session_result",
+            "autoskillit.execution.backends.claude.parse_session_result",
             return_value=mock_result,
         ):
             parser = ClaudeResultParser()
@@ -188,7 +188,7 @@ class TestClaudeResultParser:
             token_usage={"input_tokens": 10},
         )
         with patch(
-            "autoskillit.execution.session.parse_session_result",
+            "autoskillit.execution.backends.claude.parse_session_result",
             return_value=mock_result,
         ) as mock_parse:
             parser = ClaudeResultParser()

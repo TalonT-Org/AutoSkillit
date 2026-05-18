@@ -241,17 +241,29 @@ steps:
       step_name: "get_current_pr_branch"
     capture:
       current_pr_branch: "${{ result.stdout | trim }}"
-    on_success: wait_ci_pre_enqueue
+    on_success: capture_pr_head_sha
     on_failure: register_clone_failure
     note: >
       Fetches the headRefName for the current PR to be enqueued. Captured as
       current_pr_branch for use by wait_ci_pre_enqueue. Follows the same
       pattern as get_ejected_pr_branch and get_next_pr_branch.
 
+  capture_pr_head_sha:
+    tool: run_cmd
+    with:
+      cmd: "gh pr view '${{ context.current_pr_number }}' --json headRefOid -q .headRefOid"
+      cwd: "${{ context.work_dir }}"
+      step_name: "capture_pr_head_sha"
+    capture:
+      current_pr_head_sha: "${{ result.stdout | trim }}"
+    on_success: wait_ci_pre_enqueue
+    on_failure: register_clone_failure
+
   wait_ci_pre_enqueue:
     tool: wait_for_ci
     with:
       branch: "${{ context.current_pr_branch }}"
+      head_sha: "${{ context.current_pr_head_sha }}"
       cwd: "${{ context.work_dir }}"
       event: "${{ context.ci_event }}"
       timeout_seconds: 600
@@ -890,7 +902,7 @@ steps:
       branch: "${{ context.worktree_branch_name }}"
       event: "${{ context.ci_event }}"
       timeout_seconds: 600
-      cwd: "${{ context.work_dir }}"
+      cwd: "${{ context.worktree_path }}"
       auto_trigger: true
     on_result:
       - when: "${{ result.conclusion }} == 'success'"

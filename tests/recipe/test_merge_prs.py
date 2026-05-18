@@ -651,6 +651,50 @@ def test_merge_pr_routes_merged_false_to_failure(recipe) -> None:
     )
 
 
+def test_wait_for_conflict_ci_uses_worktree_cwd(recipe) -> None:
+    """wait_for_conflict_ci must use worktree_path, not work_dir, for correct SHA inference."""
+    step = recipe.steps["wait_for_conflict_ci"]
+    cwd = step.with_args.get("cwd", "")
+    assert "worktree_path" in cwd, (
+        f"wait_for_conflict_ci cwd must reference worktree_path for correct SHA inference, "
+        f"got: {cwd}"
+    )
+    assert "work_dir" not in cwd, (
+        f"wait_for_conflict_ci cwd must NOT use work_dir (clone root has wrong branch), got: {cwd}"
+    )
+
+
+def test_wait_ci_pre_enqueue_has_explicit_head_sha_or_matching_cwd(recipe) -> None:
+    """wait_ci_pre_enqueue: cwd must match branch or head_sha must be explicit."""
+    step = recipe.steps["wait_ci_pre_enqueue"]
+    cwd = step.with_args.get("cwd", "")
+    head_sha = step.with_args.get("head_sha")
+    branch = step.with_args.get("branch", "")
+
+    if "current_pr_branch" in branch and "work_dir" in cwd:
+        assert head_sha is not None, (
+            "wait_ci_pre_enqueue watches current_pr_branch but uses work_dir as cwd. "
+            "The PR branch is not checked out in work_dir on the first-PR path. "
+            "Pass head_sha explicitly via a capture step."
+        )
+
+
+def test_capture_pr_head_sha_step_exists(recipe) -> None:
+    """capture_pr_head_sha step must exist and route to wait_ci_pre_enqueue."""
+    assert "capture_pr_head_sha" in recipe.steps
+    step = recipe.steps["capture_pr_head_sha"]
+    assert step.tool == "run_cmd"
+    assert step.on_success == "wait_ci_pre_enqueue"
+
+
+def test_get_current_pr_branch_routes_to_capture(recipe) -> None:
+    """get_current_pr_branch must route to capture_pr_head_sha."""
+    step = recipe.steps["get_current_pr_branch"]
+    assert step.on_success == "capture_pr_head_sha", (
+        f"get_current_pr_branch.on_success must be 'capture_pr_head_sha', got {step.on_success!r}"
+    )
+
+
 def test_wait_for_conflict_ci_has_auto_trigger(recipe) -> None:
     """wait_for_conflict_ci has auto_trigger: true."""
     step = recipe.steps["wait_for_conflict_ci"]

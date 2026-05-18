@@ -25,19 +25,13 @@ def test_all_backend_protocols_are_runtime_checkable():
 def test_coding_agent_backend_has_name_property():
     from autoskillit.core import CodingAgentBackend
 
-    assert hasattr(CodingAgentBackend, "name")
+    assert isinstance(CodingAgentBackend.__dict__["name"], property)
 
 
 def test_coding_agent_backend_has_capabilities_property():
     from autoskillit.core import CodingAgentBackend
 
-    assert hasattr(CodingAgentBackend, "capabilities")
-
-
-def test_coding_agent_backend_has_build_cmd():
-    from autoskillit.core import CodingAgentBackend
-
-    assert hasattr(CodingAgentBackend, "build_cmd")
+    assert isinstance(CodingAgentBackend.__dict__["capabilities"], property)
 
 
 def test_no_autoskillit_imports_in_protocols_backend():

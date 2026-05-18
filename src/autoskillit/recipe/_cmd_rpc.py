@@ -98,18 +98,32 @@ def main_repo_guard(clone_path: str) -> dict[str, str]:
             stash_result.returncode,
             stash_result.stderr.strip(),
         )
-        subprocess.run(
+        co = subprocess.run(
             ["git", "checkout", "--", "."],
             cwd=clone_path,
             capture_output=True,
+            text=True,
             check=False,
         )
-        subprocess.run(
+        if co.returncode != 0:
+            logger.warning(
+                "git checkout force-clean failed (rc=%d): %s",
+                co.returncode,
+                co.stderr.strip(),
+            )
+        cl = subprocess.run(
             ["git", "clean", "-fd"],
             cwd=clone_path,
             capture_output=True,
+            text=True,
             check=False,
         )
+        if cl.returncode != 0:
+            logger.warning(
+                "git clean force-clean failed (rc=%d): %s",
+                cl.returncode,
+                cl.stderr.strip(),
+            )
         return {"cleaned": "force"}
 
     return {"cleaned": "true"}

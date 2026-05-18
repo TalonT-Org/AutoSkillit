@@ -163,6 +163,7 @@ async def test_build_hook_diagnostic_warning_orphaned_still_fires_when_plugin_ac
     result = _build_hook_diagnostic_warning()
     assert result is not None
     assert "orphan" in result.lower()
+    assert "1" in result
 
 
 @pytest.mark.anyio

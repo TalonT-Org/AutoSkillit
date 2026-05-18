@@ -37,7 +37,7 @@ def test_hooks_signal_orphaned_still_fires_when_plugin_installed(
     monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda **_: True)
     monkeypatch.setattr(
         "autoskillit.cli.update._update_checks._count_hook_registry_drift",
-        lambda _path: HookDriftResult(missing=5, orphaned=2),
+        lambda _path: HookDriftResult(missing=0, orphaned=2),
     )
     settings = tmp_path / "settings.json"
     settings.write_text('{"hooks": {}}')
@@ -46,3 +46,4 @@ def test_hooks_signal_orphaned_still_fires_when_plugin_installed(
     assert sig is not None
     assert sig.kind == "hooks"
     assert "orphaned" in sig.message.lower()
+    assert "2" in sig.message

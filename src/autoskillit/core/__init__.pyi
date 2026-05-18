@@ -156,8 +156,8 @@ from .types import UNGATED_TOOLS as UNGATED_TOOLS
 from .types import AgentPackDef as AgentPackDef
 from .types import AgentSessionResult as AgentSessionResult
 from .types import AuditLog as AuditLog
-from .types import BackendEventKind as BackendEventKind
 from .types import BackendCapabilities as BackendCapabilities
+from .types import BackendEventKind as BackendEventKind
 from .types import BackgroundSupervisor as BackgroundSupervisor
 from .types import BareResume as BareResume
 from .types import CampaignProtector as CampaignProtector

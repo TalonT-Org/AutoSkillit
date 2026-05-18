@@ -1081,7 +1081,7 @@ def test_parse_eval_manifests_missing_task_file(tmp_path: Path) -> None:
         json.dumps(canary_manifest), json.dumps(variant_manifest), str(tmp_path)
     )
     assert result["success"] == "false"
-    assert "error" in result
+    assert isinstance(result["error"], str) and result["error"]
 
 
 # ---------------------------------------------------------------------------
@@ -1134,7 +1134,7 @@ def test_build_eval_context_writes_eval_context_json(tmp_path: Path) -> None:
     )
     ctx2 = json.loads(Path(result2["eval_context_path"]).read_text())
     assert ctx2["codebase_root"] == str(tmp_path)
-    assert ctx["eval_run_dir"] == str(eval_run_dir.resolve())
+    assert ctx2["eval_run_dir"] == str(eval_run_dir.resolve())
 
 
 # T_BEC2
@@ -1209,7 +1209,7 @@ def test_build_eval_context_missing_resolved_json(tmp_path: Path) -> None:
         eval_run_dir=str(eval_run_dir),
     )
     assert result["success"] == "false"
-    assert "error" in result
+    assert isinstance(result["error"], str) and result["error"]
 
 
 # ---------------------------------------------------------------------------

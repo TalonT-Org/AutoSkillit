@@ -28,8 +28,10 @@ def test_make_plan_step6_adversarial_review_exists(make_plan_text: str) -> None:
 
 
 def test_make_plan_step6_agents_are_parallel(make_plan_text: str) -> None:
-    step6_idx = make_plan_text.find("**Adversarial Agent Review")
-    step7_idx = make_plan_text.find("**Registry Wire Trace")
+    planning_idx = make_plan_text.find("## Planning Steps")
+    assert planning_idx != -1
+    step6_idx = make_plan_text.find("**Adversarial Agent Review", planning_idx)
+    step7_idx = make_plan_text.find("**Registry Wire Trace", planning_idx)
     assert step6_idx != -1 and step7_idx != -1
     step6_section = make_plan_text[step6_idx:step7_idx].lower()
     assert "parallel" in step6_section, (
@@ -38,8 +40,10 @@ def test_make_plan_step6_agents_are_parallel(make_plan_text: str) -> None:
 
 
 def test_make_plan_step6_no_scope_expansion(make_plan_text: str) -> None:
-    step6_idx = make_plan_text.find("**Adversarial Agent Review")
-    step7_idx = make_plan_text.find("**Registry Wire Trace")
+    planning_idx = make_plan_text.find("## Planning Steps")
+    assert planning_idx != -1
+    step6_idx = make_plan_text.find("**Adversarial Agent Review", planning_idx)
+    step7_idx = make_plan_text.find("**Registry Wire Trace", planning_idx)
     assert step6_idx != -1 and step7_idx != -1
     step6_section = make_plan_text[step6_idx:step7_idx].lower()
     assert "scope expansion" in step6_section or (
@@ -92,8 +96,10 @@ def test_make_plan_checklist_includes_adversarial_review(make_plan_text: str) ->
 
 
 def test_make_plan_step7_runs_after_step6(make_plan_text: str) -> None:
-    step6_idx = make_plan_text.find("**Adversarial Agent Review")
-    step7_idx = make_plan_text.find("**Registry Wire Trace")
+    planning_idx = make_plan_text.find("## Planning Steps")
+    assert planning_idx != -1
+    step6_idx = make_plan_text.find("**Adversarial Agent Review", planning_idx)
+    step7_idx = make_plan_text.find("**Registry Wire Trace", planning_idx)
     assert step6_idx != -1 and step7_idx != -1
     assert step7_idx > step6_idx, "Step 7 must appear after Step 6 in the document"
 
@@ -101,8 +107,10 @@ def test_make_plan_step7_runs_after_step6(make_plan_text: str) -> None:
 def test_make_plan_adversarial_agents_downstream_consumer_instruction(
     make_plan_text: str,
 ) -> None:
-    step6_idx = make_plan_text.find("**Adversarial Agent Review")
-    step7_idx = make_plan_text.find("**Registry Wire Trace")
+    planning_idx = make_plan_text.find("## Planning Steps")
+    assert planning_idx != -1
+    step6_idx = make_plan_text.find("**Adversarial Agent Review", planning_idx)
+    step7_idx = make_plan_text.find("**Registry Wire Trace", planning_idx)
     assert step6_idx != -1 and step7_idx != -1
     agent_a_start = make_plan_text.find("Contract Verifier", step6_idx)
     assert agent_a_start != -1

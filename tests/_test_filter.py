@@ -222,6 +222,12 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
         }
     ),
     "_type_results_execution": frozenset({"core", "execution", "server", "pipeline"}),
+    "_type_backend": frozenset({"core"}),
+    "_type_dispatch_identity": frozenset({"core", "fleet", "execution"}),
+    "_type_figure_spec": frozenset({"core", "report"}),
+    "_type_session_env": frozenset({"core", "cli"}),
+    "_type_capture": frozenset({"core", "fleet", "recipe", "cli"}),
+    "_type_token": frozenset({"core"}),
 }
 
 # Narrow per-module cascade for execution/. Modules not listed here fall through

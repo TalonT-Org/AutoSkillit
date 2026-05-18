@@ -617,8 +617,11 @@ def compile_eval_scorecard(
     except (OSError, json.JSONDecodeError) as exc:
         return {"success": "false", "error": f"Failed to read manifest: {exc}"}
 
-    canary_ids = [c["id"] for c in canaries]
-    variant_ids = [v["id"] for v in variants]
+    try:
+        canary_ids = [c["id"] for c in canaries]
+        variant_ids = [v["id"] for v in variants]
+    except (KeyError, TypeError) as exc:
+        return {"success": "false", "error": f"Invalid manifest schema: {exc}"}
     if not canary_ids or not variant_ids:
         return {"success": "false", "error": "Empty canary or variant manifest"}
     total_runs = len(canary_ids) * len(variant_ids)

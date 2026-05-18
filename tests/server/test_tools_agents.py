@@ -159,7 +159,10 @@ def test_agent_defs_in_pyproject_artifacts():
 
 # T11: make-plan SKILL.md activate_agents references valid packs
 def test_make_plan_activate_agents_resolves():
-    """Parse activate_agents from make-plan SKILL.md. All packs should exist in AGENT_PACK_REGISTRY."""
+    """Parse activate_agents from make-plan SKILL.md.
+
+    All packs should exist in AGENT_PACK_REGISTRY.
+    """
     import re
 
     from autoskillit.core import pkg_root

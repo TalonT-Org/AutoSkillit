@@ -14,9 +14,9 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 def test_cmd_spec_frozen():
     from autoskillit.core import CmdSpec
 
-    spec = CmdSpec(cmd=["claude", "--model", "opus"], env={"FOO": "bar"})
+    spec = CmdSpec(cmd=("claude", "--model", "opus"), env={"FOO": "bar"})
     with pytest.raises(FrozenInstanceError):
-        spec.cmd = []
+        spec.cmd = ()  # type: ignore[misc]
 
 
 def test_cmd_spec_fields():
@@ -38,8 +38,7 @@ def test_cmd_spec_env_accepts_mapping():
 def test_cmd_spec_slots():
     from autoskillit.core import CmdSpec
 
-    spec = CmdSpec(cmd=["x"], env={})
-    assert not hasattr(spec, "__dict__")
+    assert hasattr(CmdSpec, "__slots__")
 
 
 def test_claude_event_data_frozen():
@@ -47,7 +46,7 @@ def test_claude_event_data_frozen():
 
     ev = ClaudeEventData(record_type="assistant", subtype="text", session_id="s1")
     with pytest.raises(FrozenInstanceError):
-        ev.record_type = "x"
+        ev.record_type = "x"  # type: ignore[misc]
 
 
 def test_claude_event_data_raw_default():
@@ -62,7 +61,7 @@ def test_codex_event_data_frozen():
 
     ev = CodexEventData(record_type="item", thread_id="t1", item_type="msg")
     with pytest.raises(FrozenInstanceError):
-        ev.record_type = "x"
+        ev.record_type = "x"  # type: ignore[misc]
 
 
 def test_codex_event_data_raw_default():
@@ -77,7 +76,7 @@ def test_session_event_frozen():
 
     ev = SessionEvent(kind=BackendEventKind.COMPLETION, is_terminal=False, has_marker=False)
     with pytest.raises(FrozenInstanceError):
-        ev.kind = BackendEventKind.ERROR
+        ev.kind = BackendEventKind.ERROR  # type: ignore[misc]
 
 
 def test_session_event_backend_data_union_type():
@@ -103,7 +102,7 @@ def test_agent_session_result_frozen():
         success=True, exit_code=0, session_id="s1", backend_name="claude-code", elapsed_seconds=5.0
     )
     with pytest.raises(FrozenInstanceError):
-        r.success = False
+        r.success = False  # type: ignore[misc]
 
 
 def test_agent_session_result_raw_default():
@@ -117,17 +116,18 @@ def test_agent_session_result_raw_default():
     assert r.raw == {}
 
 
-def test_all_new_dataclasses_in_backend_module_all():
+def test_backend_module_all_exhaustive():
     from autoskillit.core.types._type_backend import __all__
 
-    for name in [
+    assert set(__all__) == {
+        "BackendCapabilities",
+        "CLAUDE_CODE_CAPABILITIES",
         "CmdSpec",
         "ClaudeEventData",
         "CodexEventData",
         "SessionEvent",
         "AgentSessionResult",
-    ]:
-        assert name in __all__
+    }
 
 
 def test_no_autoskillit_imports_in_backend():

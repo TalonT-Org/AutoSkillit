@@ -152,8 +152,10 @@ from .types import ADMIRAL_DISPATCH_SECTIONS as ADMIRAL_DISPATCH_SECTIONS
 from .types import ROUTING_AUTHORITY_CLAUSE as ROUTING_AUTHORITY_CLAUSE
 from .types import SOUS_CHEF_MANDATORY_SECTIONS as SOUS_CHEF_MANDATORY_SECTIONS
 from .types import TOOL_SUBSET_TAGS as TOOL_SUBSET_TAGS
+from .types import UNGATED_TOOLS as UNGATED_TOOLS
 from .types import AgentPackDef as AgentPackDef
 from .types import AgentSessionResult as AgentSessionResult
+from .types import AuditLog as AuditLog
 from .types import BackendEventKind as BackendEventKind
 from .types import BackendCapabilities as BackendCapabilities
 from .types import BackgroundSupervisor as BackgroundSupervisor

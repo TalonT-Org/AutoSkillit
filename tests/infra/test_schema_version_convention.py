@@ -141,18 +141,18 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/cli/update/_update_checks_fetch.py", 58),
     # smoke_utils.py — partitions, ranges, diff metrics, queue, enriched handoff,
     # eval resolved/manifest/scorecard/eval_context
-    ("src/autoskillit/smoke_utils.py", 68),
-    ("src/autoskillit/smoke_utils.py", 137),
-    # Lines 154 and 417 are list-payload write sites (dual membership: also in list_sites
+    ("src/autoskillit/smoke_utils.py", 71),
+    ("src/autoskillit/smoke_utils.py", 140),
+    # Lines 157 and 420 are list-payload write sites (dual membership: also in list_sites
     # in test_allowlist_includes_list_payloads_as_documented). The AST scanner catches
     # them because it cannot distinguish list vs dict return types — intentional.
-    ("src/autoskillit/smoke_utils.py", 154),
-    ("src/autoskillit/smoke_utils.py", 417),
-    ("src/autoskillit/smoke_utils.py", 499),
-    ("src/autoskillit/smoke_utils.py", 510),
-    ("src/autoskillit/smoke_utils.py", 603),
-    ("src/autoskillit/smoke_utils.py", 679),
-    ("src/autoskillit/smoke_utils.py", 774),
+    ("src/autoskillit/smoke_utils.py", 157),
+    ("src/autoskillit/smoke_utils.py", 420),
+    ("src/autoskillit/smoke_utils.py", 502),
+    ("src/autoskillit/smoke_utils.py", 513),
+    ("src/autoskillit/smoke_utils.py", 606),
+    ("src/autoskillit/smoke_utils.py", 682),
+    ("src/autoskillit/smoke_utils.py", 777),
     # planner/consolidation.py — write-back of merged WP dicts to per-file results
     ("src/autoskillit/planner/consolidation.py", 314),
     # planner/consolidation.py — broken_cycle_edges.json (list payload; AST scanner catches it)
@@ -221,8 +221,8 @@ class TestSchemaVersionConvention:
         """List-payload sites are included since the AST scanner can't distinguish return types."""
         # These sites write list payloads through function calls but are caught by the scanner
         list_sites = [
-            ("src/autoskillit/smoke_utils.py", 154),
-            ("src/autoskillit/smoke_utils.py", 417),
+            ("src/autoskillit/smoke_utils.py", 157),
+            ("src/autoskillit/smoke_utils.py", 420),
         ]
         for site in list_sites:
             assert site in _LEGACY_JSON_WRITES, (

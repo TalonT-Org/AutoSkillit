@@ -11,7 +11,9 @@ from pathlib import Path
 
 import regex as re
 
-from autoskillit.core import atomic_write, is_generated_path
+from autoskillit.core import atomic_write, get_logger, is_generated_path
+
+logger = get_logger(__name__)
 
 
 def compute_branch(
@@ -91,6 +93,11 @@ def main_repo_guard(clone_path: str) -> dict[str, str]:
         text=True,
     )
     if stash_result.returncode != 0:
+        logger.warning(
+            "git stash failed (rc=%d) — falling back to force-clean: %s",
+            stash_result.returncode,
+            stash_result.stderr.strip(),
+        )
         subprocess.run(
             ["git", "checkout", "--", "."],
             cwd=clone_path,

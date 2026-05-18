@@ -50,7 +50,7 @@ def test_bundled_recipes_route_dirty_main_repo(recipe_name: str) -> None:
         for cond in step.on_result.conditions:
             if cond.when is None:
                 continue
-            if "dirty_main_repo" in cond.when.lower() or "DIRTY_MAIN_REPO" in cond.when:
+            if "dirty_main_repo" in cond.when.lower():
                 matched.add(MergeFailedStep.DIRTY_MAIN_REPO)
         assert MergeFailedStep.DIRTY_MAIN_REPO in matched, (
             f"{recipe_name}: merge_worktree step '{step_name}' does not route "

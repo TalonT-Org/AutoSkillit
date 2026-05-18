@@ -49,7 +49,7 @@ def test_hookdef_has_exempt_session_types() -> None:
 def test_exempt_session_types_default_is_empty() -> None:
     """The default exempt_session_types must be empty so existing entries are unchanged."""
     default_def = HookDef(matcher="test.*", scripts=["test.py"])
-    assert default_def.exempt_session_types == frozenset()  # type: ignore[attr-defined]
+    assert default_def.exempt_session_types == frozenset()
 
 
 def _exempt_session_type_hooks() -> list[tuple[HookDef, str]]:
@@ -182,6 +182,6 @@ def test_canonical_registry_payload_includes_exempt_session_types() -> None:
     payload = json.loads(payload_str)
     for row in payload["registry"]:
         assert "exempt_session_types" in row, (
-            f"Registry row for matcher={row.get('matcher')!r} is missing 'exempt_session_types'. "
-            "Add 'exempt_session_types': sorted(h.exempt_session_types) to _canonical_registry_payload."
+            f"Registry row for matcher={row.get('matcher')!r} is missing"
+            " 'exempt_session_types'. Add it to _canonical_registry_payload."
         )

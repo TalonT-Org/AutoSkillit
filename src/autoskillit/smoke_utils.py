@@ -420,8 +420,11 @@ def _load_json(src: str) -> list | dict:
     """Load JSON from a string or file path. Returns a list or dict."""
     try:
         return json.loads(src)
-    except (json.JSONDecodeError, TypeError):
-        return json.loads(Path(src).read_text())
+    except (json.JSONDecodeError, TypeError) as string_err:
+        try:
+            return json.loads(Path(src).read_text())
+        except (OSError, json.JSONDecodeError) as file_err:
+            raise file_err from string_err
 
 
 def parse_eval_manifests(

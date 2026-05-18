@@ -160,28 +160,27 @@ def _resolve_provider_profile(
     config_providers: ProvidersConfig,
 ) -> tuple[str, dict[str, str]]:
 
-    # Tier 0: per-recipe per-step override (highest specificity)
-    if recipe_name and step_name:
-        recipe_map = config_providers.recipe_overrides.get(recipe_name)
-        if recipe_map:
-            recipe_step_override = recipe_map.get(step_name)
-            if recipe_step_override:
-                logger.debug(
-                    "provider_profile_resolved",
-                    tier="recipe_step_override",
-                    profile=recipe_step_override,
-                )
-                if recipe_step_override == "anthropic":
-                    return ("anthropic", {})
-                return (
-                    recipe_step_override,
-                    config_providers.profiles.get(recipe_step_override, {}),
-                )
-
-    # Tier 0W: per-recipe wildcard override
+    # Tiers 0/0W: recipe-scoped overrides — single lookup shared by both tiers
     if recipe_name:
         recipe_map = config_providers.recipe_overrides.get(recipe_name)
         if recipe_map:
+            # Tier 0: per-recipe per-step override (highest specificity)
+            if step_name:
+                recipe_step_override = recipe_map.get(step_name)
+                if recipe_step_override:
+                    logger.debug(
+                        "provider_profile_resolved",
+                        tier="recipe_step_override",
+                        profile=recipe_step_override,
+                    )
+                    if recipe_step_override == "anthropic":
+                        return ("anthropic", {})
+                    return (
+                        recipe_step_override,
+                        config_providers.profiles.get(recipe_step_override, {}),
+                    )
+
+            # Tier 0W: per-recipe wildcard override
             recipe_wildcard = recipe_map.get("*")
             if recipe_wildcard:
                 logger.debug(

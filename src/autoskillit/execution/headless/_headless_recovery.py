@@ -24,14 +24,7 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-# Subtypes eligible for Channel B drain-race recovery.
-#
-# These are the failure subtypes that can arise when Claude Code defers ``type=result``
-# until all background agents finish.  The deferred record is never flushed if the
-# process tree is killed after Channel B fires on the session JSONL marker.
-#
-# TIMEOUT is excluded — it indicates a genuine time limit breach, not a drain-race.
-# UNKNOWN is excluded — it indicates unrecognised CLI behaviour, not a missing record.
+# Drain-race recovery subtypes: TIMEOUT and UNKNOWN excluded (time-limit breach; unrecognised CLI).
 _CHANNEL_B_RECOVERABLE_SUBTYPES: frozenset[CliSubtype] = frozenset(
     {CliSubtype.UNPARSEABLE, CliSubtype.EMPTY_OUTPUT}
 )
@@ -39,6 +32,13 @@ _CHANNEL_B_RECOVERABLE_SUBTYPES: frozenset[CliSubtype] = frozenset(
 _TOKEN_NAME_RE: re.Pattern[str] = re.compile(r"^(\w+)")
 
 _NUDGE_TIMEOUT: float = 60.0
+
+_CANONICAL_TO_LEGACY: dict[str, str | None] = {
+    "input_tokens": None,
+    "output_tokens": None,
+    "cache_write_tokens": "cache_creation_input_tokens",
+    "cache_read_tokens": "cache_read_input_tokens",
+}
 
 
 def _is_path_capture_pattern(pattern: str) -> str | None:
@@ -323,14 +323,16 @@ def _merge_token_usage(
     if nudge is None:
         return base
     merged = dict(base)
-    for key in (
-        "input_tokens",
-        "output_tokens",
-        "cache_creation_input_tokens",
-        "cache_read_input_tokens",
-    ):
-        base_val = base.get(key, 0)
-        nudge_val = nudge.get(key, 0)
-        if isinstance(base_val, (int, float)) and isinstance(nudge_val, (int, float)):
-            merged[key] = base_val + nudge_val
+    for canonical, legacy in _CANONICAL_TO_LEGACY.items():
+        b = base.get(canonical) if canonical in base else base.get(legacy) if legacy else None
+        n = nudge.get(canonical) if canonical in nudge else nudge.get(legacy) if legacy else None
+        if b is None and n is None:
+            continue
+        bv = b if b is not None else 0
+        nv = n if n is not None else 0
+        if isinstance(bv, (int, float)) and isinstance(nv, (int, float)):
+            merged[canonical] = bv + nv
+    for legacy in _CANONICAL_TO_LEGACY.values():
+        if legacy and legacy in merged:
+            del merged[legacy]
     return merged

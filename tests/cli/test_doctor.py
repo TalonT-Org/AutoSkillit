@@ -760,7 +760,7 @@ def test_check_hook_registry_drift_orphaned_still_fires_when_plugin_installed(
 
     monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda **_: True)
     monkeypatch.setattr(
-        "autoskillit.hook_registry._count_hook_registry_drift",
+        "autoskillit.cli.doctor._doctor_hooks._count_hook_registry_drift",
         lambda _path: HookDriftResult(
             missing=0, orphaned=1, orphaned_cmds=frozenset(["fake_orphan_dispatch.py"])
         ),

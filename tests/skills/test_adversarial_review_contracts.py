@@ -69,7 +69,7 @@ def test_make_plan_step7_registry_wire_trace_exists(make_plan_text: str) -> None
     gated_tools = "GATED_TOOLS" in step7_section or "TOOL REGISTRIES" in step7_section
     dual_copy = "DUAL-COPY" in step7_section or "SKILL_FILE_ADVISORY_MAP" in step7_section
     found += int(gated_tools) + int(dual_copy)
-    assert found >= 6, f"Step 7 must contain at least 6 of 8 sync pattern names, found {found}"
+    assert found >= 7, f"Step 7 must contain at least 7 of 8 sync pattern names, found {found}"
 
 
 def test_make_plan_step8_plan_revision_exists(make_plan_text: str) -> None:

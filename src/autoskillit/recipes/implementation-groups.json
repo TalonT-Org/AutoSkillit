@@ -248,6 +248,7 @@
           "route": "test"
         }
       ],
+      "on_context_limit": "test",
       "on_exhausted": "release_issue_failure",
       "on_failure": "release_issue_failure"
     },
@@ -290,9 +291,19 @@
         "callable": "autoskillit.recipe._cmd_rpc.commit_guard",
         "worktree_path": "${{ context.worktree_path }}"
       },
+      "on_success": "main_repo_guard",
+      "on_failure": "main_repo_guard",
+      "note": "Belt-and-suspenders guard: auto-commits any uncommitted changes before merge. Catches dirty state from context-exhausted skills, cascading pre-commit auto-fixes, or any other source. Routes to main_repo_guard to handle dirty main repo state.\n"
+    },
+    "main_repo_guard": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.recipe._cmd_rpc.main_repo_guard",
+        "clone_path": "${{ context.work_dir }}"
+      },
       "on_success": "merge",
       "on_failure": "merge",
-      "note": "Belt-and-suspenders guard: auto-commits any uncommitted changes before merge. Catches dirty state from context-exhausted skills, cascading pre-commit auto-fixes, or any other source. on_failure routes to merge (dirty-tree gate will catch real issues).\n"
+      "note": "Stashes uncommitted changes in the main repo before merge. Catches dirty state from infrastructure-terminated sessions that left artifacts in the clone. Routes to merge on both success and failure (merge's dirty_main_repo gate handles persistent issues).\n"
     },
     "merge": {
       "tool": "merge_worktree",
@@ -320,6 +331,10 @@
         {
           "when": "result.failed_step == 'rebase'",
           "route": "rebase_conflict_fix"
+        },
+        {
+          "when": "result.failed_step == 'dirty_main_repo'",
+          "route": "check_merge_fix_loop"
         },
         {
           "when": "result.error",

@@ -661,3 +661,67 @@ class TestSkillResultExtensionBundles:
         )
         assert sr2.provider.provider_used == "vertex"
         assert sr2.provider.fallback_activated is True
+
+
+# ---------------------------------------------------------------------------
+# T-ZW-6: git_writes_detected in has_progress_evidence
+# ---------------------------------------------------------------------------
+
+
+def test_git_writes_detected_in_has_progress_evidence() -> None:
+    """SkillResult with git_writes_detected=True has has_progress_evidence=True
+    even when worktree_path=None and write_call_count=0."""
+    sr = SkillResult(
+        success=True,
+        result="done",
+        session_id="s1",
+        subtype="success",
+        is_error=False,
+        exit_code=0,
+        needs_retry=False,
+        retry_reason=RetryReason.NONE,
+        stderr="",
+        worktree_path=None,
+        fs_writes_detected=False,
+        write_call_count=0,
+        git_writes_detected=True,
+    )
+    assert sr.has_progress_evidence is True
+
+
+# T-DM-6
+def test_skill_result_git_writes_detected_in_json() -> None:
+    """to_json() must include git_writes_detected when True."""
+    sr = SkillResult(
+        success=True,
+        result="done",
+        session_id="s1",
+        subtype="success",
+        is_error=False,
+        exit_code=0,
+        needs_retry=False,
+        retry_reason=RetryReason.NONE,
+        stderr="",
+        git_writes_detected=True,
+    )
+    data = json.loads(sr.to_json())
+    assert data["git_writes_detected"] is True
+
+
+def test_skill_result_git_writes_detected_false_included() -> None:
+    """to_json() unconditionally includes git_writes_detected (even when False)."""
+    sr = SkillResult(
+        success=True,
+        result="done",
+        session_id="s1",
+        subtype="success",
+        is_error=False,
+        exit_code=0,
+        needs_retry=False,
+        retry_reason=RetryReason.NONE,
+        stderr="",
+        git_writes_detected=False,
+    )
+    data = json.loads(sr.to_json())
+    assert "git_writes_detected" in data
+    assert data["git_writes_detected"] is False

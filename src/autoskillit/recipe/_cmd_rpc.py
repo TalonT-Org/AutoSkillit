@@ -11,7 +11,9 @@ from pathlib import Path
 
 import regex as re
 
-from autoskillit.core import atomic_write, is_generated_path
+from autoskillit.core import atomic_write, get_logger, is_generated_path
+
+logger = get_logger(__name__)
 
 
 def compute_branch(
@@ -60,6 +62,73 @@ def check_dropped_healthy_loop(
     atomic_write(path, str(count))
     status = "DROPPED_LIMIT_EXCEEDED" if count > int(max_drops) else "DROPPED_OK"
     return {"status": status, "count": str(count)}
+
+
+def main_repo_guard(clone_path: str) -> dict[str, str]:
+    """Stash dirty state from the main repo before merge."""
+    result = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=clone_path,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise subprocess.CalledProcessError(
+            result.returncode, result.args, result.stdout, result.stderr
+        )
+
+    if not result.stdout.strip():
+        return {"cleaned": "false"}
+
+    stash_result = subprocess.run(
+        [
+            "git",
+            "stash",
+            "--include-untracked",
+            "-m",
+            "autoskillit: main_repo_guard pre-merge stash",
+        ],
+        cwd=clone_path,
+        capture_output=True,
+        text=True,
+    )
+    if stash_result.returncode != 0:
+        logger.warning(
+            "git stash failed (rc=%d) — falling back to force-clean: %s",
+            stash_result.returncode,
+            stash_result.stderr.strip(),
+        )
+        co = subprocess.run(
+            ["git", "checkout", "--", "."],
+            cwd=clone_path,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if co.returncode != 0:
+            logger.warning(
+                "git checkout force-clean failed (rc=%d): %s",
+                co.returncode,
+                co.stderr.strip(),
+            )
+        cl = subprocess.run(
+            ["git", "clean", "-fd"],
+            cwd=clone_path,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if cl.returncode != 0:
+            logger.warning(
+                "git clean force-clean failed (rc=%d): %s",
+                cl.returncode,
+                cl.stderr.strip(),
+            )
+        if co.returncode != 0 and cl.returncode != 0:
+            return {"cleaned": "failed"}
+        return {"cleaned": "force"}
+
+    return {"cleaned": "true"}
 
 
 def commit_guard(worktree_path: str) -> dict[str, str]:

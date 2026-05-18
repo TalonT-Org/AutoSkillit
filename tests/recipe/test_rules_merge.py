@@ -13,6 +13,53 @@ from autoskillit.recipe.schema import Recipe, RecipeStep, StepResultCondition, S
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
+# ---------------------------------------------------------------------------
+# T-DM-1: DIRTY_MAIN_REPO in _RECOVERABLE_FAILED_STEPS
+# ---------------------------------------------------------------------------
+
+
+def test_dirty_main_repo_in_recoverable_steps() -> None:
+    """MergeFailedStep.DIRTY_MAIN_REPO must be in _RECOVERABLE_FAILED_STEPS."""
+    from autoskillit.core.types import MergeFailedStep
+
+    assert MergeFailedStep.DIRTY_MAIN_REPO in _RECOVERABLE_FAILED_STEPS, (
+        "DIRTY_MAIN_REPO must be recoverable so the merge worktree can be retried "
+        "after main_repo_guard cleans dirty state"
+    )
+
+
+# T-DM-2
+@pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "implementation-groups"])
+def test_bundled_recipes_route_dirty_main_repo(recipe_name: str) -> None:
+    """All bundled recipes must route DIRTY_MAIN_REPO in their merge_worktree on_result."""
+    from autoskillit.core.types import MergeFailedStep
+
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+
+    merge_steps = {
+        name: step
+        for name, step in recipe.steps.items()
+        if getattr(step, "tool", None) == "merge_worktree"
+    }
+    assert merge_steps, f"{recipe_name}: no merge_worktree step found"
+
+    for step_name, step in merge_steps.items():
+        if step.on_result is None:
+            continue  # tested separately by other rules
+        matched = set()
+        for cond in step.on_result.conditions:
+            if cond.when is None:
+                continue
+            if "dirty_main_repo" in cond.when.lower():
+                matched.add(MergeFailedStep.DIRTY_MAIN_REPO)
+        assert MergeFailedStep.DIRTY_MAIN_REPO in matched, (
+            f"{recipe_name}: merge_worktree step '{step_name}' does not route "
+            f"DIRTY_MAIN_REPO in on_result. Add a condition like "
+            f"${{{{ result.failed_step == 'DIRTY_MAIN_REPO' }}}} to route to the "
+            f"appropriate recovery step."
+        )
+
+
 def _make_recipe(steps: dict[str, RecipeStep]) -> Recipe:
     """Minimal recipe factory for rules_merge tests."""
     return Recipe(

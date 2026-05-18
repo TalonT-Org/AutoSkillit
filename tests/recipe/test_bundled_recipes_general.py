@@ -598,12 +598,21 @@ def test_merge_worktree_has_commit_guard_predecessor() -> None:
             continue
         ctx = make_validation_context(recipe)
         for step_name in merge_steps:
-            preds = ctx.predecessors.get(step_name, set())
-            has_guard = any(_is_commit_guard(p, ctx) for p in preds)
+            visited: set[str] = set()
+            frontier = list(ctx.predecessors.get(step_name, set()))
+            has_guard = False
+            while frontier and not has_guard:
+                p = frontier.pop()
+                if p in visited:
+                    continue
+                visited.add(p)
+                if _is_commit_guard(p, ctx):
+                    has_guard = True
+                else:
+                    frontier.extend(ctx.predecessors.get(p, set()))
             assert has_guard, (
                 f"{yaml_path.name}: merge_worktree step '{step_name}' has no commit_guard "
-                f"predecessor. Add a commit_guard run_cmd step immediately before merge. "
-                f"Predecessors: {sorted(preds)}"
+                f"in its predecessor chain. Predecessors: {sorted(ctx.predecessors.get(step_name, set()))}"
             )
 
 

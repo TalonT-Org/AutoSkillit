@@ -159,6 +159,105 @@ def test_compute_loc_changed_clone_root_vs_worktree(tmp_path: Path):
     assert wt_del == 0
 
 
+# T-ZW-4
+@pytest.mark.medium
+def test_detect_branch_divergence_with_commits_ahead(tmp_path: Path):
+    """_detect_branch_divergence returns True when current branch has commits ahead of remote."""
+    from autoskillit.execution.headless._headless_git import _detect_branch_divergence
+
+    repo_path = tmp_path / "repo"
+    _setup_git_repo(repo_path)
+
+    # Set up a bare remote so origin/* refs exist for _detect_branch_divergence
+    bare_remote = tmp_path / "bare.git"
+    subprocess.run(
+        ["git", "clone", "--bare", str(repo_path), str(bare_remote)],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "remote", "add", "origin", str(bare_remote)],
+        cwd=repo_path,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "fetch", "origin"],
+        cwd=repo_path,
+        check=True,
+        capture_output=True,
+    )
+
+    worktree_path = tmp_path / "worktree"
+    subprocess.run(
+        ["git", "worktree", "add", "-b", "feature-branch", str(worktree_path)],
+        cwd=repo_path,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "test@test.com"],
+        cwd=worktree_path,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test"],
+        cwd=worktree_path,
+        check=True,
+        capture_output=True,
+    )
+    (worktree_path / "feature.txt").write_text("new content\n")
+    subprocess.run(["git", "add", "."], cwd=worktree_path, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-m", "add feature"],
+        cwd=worktree_path,
+        check=True,
+        capture_output=True,
+    )
+
+    assert _detect_branch_divergence(str(worktree_path)) is True
+
+
+# T-ZW-5
+@pytest.mark.medium
+def test_detect_branch_divergence_at_merge_base(tmp_path: Path):
+    """_detect_branch_divergence returns False when at merge base (0 commits ahead)."""
+    from autoskillit.execution.headless._headless_git import _detect_branch_divergence
+
+    repo_path = tmp_path / "repo"
+    _setup_git_repo(repo_path)
+
+    bare_remote = tmp_path / "bare.git"
+    subprocess.run(
+        ["git", "clone", "--bare", str(repo_path), str(bare_remote)],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "remote", "add", "origin", str(bare_remote)],
+        cwd=repo_path,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "fetch", "origin"],
+        cwd=repo_path,
+        check=True,
+        capture_output=True,
+    )
+
+    worktree_path = tmp_path / "worktree"
+    subprocess.run(
+        ["git", "worktree", "add", "-b", "at-base", str(worktree_path)],
+        cwd=repo_path,
+        check=True,
+        capture_output=True,
+    )
+
+    assert _detect_branch_divergence(str(worktree_path)) is False
+
+
 # T-GIT-6
 def test_post_session_metrics_effective_cwd_resolution(tmp_path: Path):
     """PostSessionMetrics resolves effective_cwd from worktree_path when set."""

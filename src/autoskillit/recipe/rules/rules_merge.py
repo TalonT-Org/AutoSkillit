@@ -34,6 +34,7 @@ _RECOVERABLE_FAILED_STEPS: frozenset[str] = frozenset(
         MergeFailedStep.TEST_GATE,
         MergeFailedStep.POST_REBASE_TEST_GATE,
         MergeFailedStep.REBASE,
+        MergeFailedStep.DIRTY_MAIN_REPO,
     }
 )
 

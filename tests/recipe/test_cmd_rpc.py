@@ -20,6 +20,7 @@ from autoskillit.recipe._cmd_rpc import (
     ensure_results,
     export_local_bundle,
     force_push_and_wait_mergeability,
+    main_repo_guard,
     refetch_issues,
     wait_for_direct_merge,
 )
@@ -139,6 +140,44 @@ def test_commit_guard_excludes_generated_files(tmp_path):
     assert not any("contracts/" in f for f in committed_files), (
         f"Generated contracts/ files should NOT be committed, but were: {committed_files}"
     )
+
+
+# T-DM-3
+@pytest.mark.medium
+def test_main_repo_guard_cleans_dirty_state(tmp_path):
+    """main_repo_guard stashes dirty state and returns cleaned=true."""
+    _init_git_repo(tmp_path)
+    (tmp_path / "uncommitted.txt").write_text("dirty content")
+    result = main_repo_guard(clone_path=str(tmp_path))
+    assert result["cleaned"] == "true"
+    # git status --porcelain must be empty after stash
+    status_result = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+    assert status_result.stdout.strip() == "", (
+        f"main_repo_guard should leave repo clean, but status was: {status_result.stdout!r}"
+    )
+    stash_list = subprocess.run(
+        ["git", "stash", "list"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+    assert "autoskillit: main_repo_guard pre-merge stash" in stash_list.stdout, (
+        f"stash entry not found; git stash list output: {stash_list.stdout!r}"
+    )
+
+
+# T-DM-4
+@pytest.mark.medium
+def test_main_repo_guard_clean_repo_noop(tmp_path):
+    """main_repo_guard returns cleaned=false when repo is already clean."""
+    _init_git_repo(tmp_path)
+    result = main_repo_guard(clone_path=str(tmp_path))
+    assert result["cleaned"] == "false"
 
 
 def test_ensure_results_with_existing_path():

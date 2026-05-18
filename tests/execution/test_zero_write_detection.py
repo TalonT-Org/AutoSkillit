@@ -708,6 +708,55 @@ class TestTempDirSnapshot:
         assert post - pre == set()
 
 
+class TestGitWritesDetection:
+    """Git-level write detection suppresses zero_writes false positives."""
+
+    def test_git_writes_detected_suppresses_zero_writes_gate(self) -> None:
+        """When git_writes_detected=True, zero_writes gate must NOT fire
+        even when write_call_count == 0."""
+        stdout = _ndjson_with_tool_uses(["Read", "Grep"])
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/make-plan task",
+            write_behavior=WriteBehaviorSpec(mode="always"),
+            git_writes_detected=True,
+        )
+        assert sr.success is True
+        assert sr.subtype != "zero_writes"
+        assert sr.git_writes_detected is True
+
+    def test_git_writes_detected_false_still_allows_gate(self) -> None:
+        """When git_writes_detected=False and write_call_count == 0,
+        zero_writes gate must fire as before."""
+        stdout = _ndjson_with_tool_uses(["Read", "Grep"])
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/make-plan task",
+            write_behavior=WriteBehaviorSpec(mode="always"),
+            git_writes_detected=False,
+        )
+        assert sr.success is False
+        assert sr.subtype == "zero_writes"
+
+    def test_git_writes_detected_suppresses_conditional_zero_writes(self) -> None:
+        """Conditional skill, zero writes, git_writes_detected=True → success preserved."""
+        stdout = _ndjson_with_tool_uses(["Read", "Grep"])
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:resolve-failures /tmp/wt /tmp/plan.md main",
+            write_behavior=WriteBehaviorSpec(
+                mode="conditional",
+                expected_when=(r"verdict\s*=\s*real_fix",),
+            ),
+            git_writes_detected=True,
+        )
+        assert sr.success is True, (
+            "git_writes_detected=True must suppress zero_writes gate even when "
+            "write_behavior is conditional and pattern matches"
+        )
+        assert sr.subtype != "zero_writes"
+
+
 class TestWriteExpectedWhenPatternSync:
     """write_expected_when patterns in tests must match skill_contracts.yaml."""
 

@@ -213,3 +213,33 @@ def test_register_clone_unconfirmed_routes_to_done_unconfirmed(recipe) -> None:
     step = recipe.steps["register_clone_unconfirmed"]
     assert step.on_success == "done_unconfirmed"
     assert step.on_failure == "done_unconfirmed"
+
+
+# ---------------------------------------------------------------------------
+# T-ZW-7: retry_worktree on_context_limit
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "implementation-groups"])
+def test_retry_worktree_has_on_context_limit(recipe_name: str) -> None:
+    """retry_worktree step must have on_context_limit set for EARLY_STOP retry routing."""
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    assert "retry_worktree" in recipe.steps, f"{recipe_name}: retry_worktree step not found"
+    step = recipe.steps["retry_worktree"]
+    assert step.on_context_limit is not None, (
+        f"{recipe_name}: retry_worktree.on_context_limit must not be None "
+        f"to support EARLY_STOP retry routing"
+    )
+
+
+# T-DM-5
+@pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "implementation-groups"])
+def test_main_repo_guard_step_exists(recipe_name: str) -> None:
+    """main_repo_guard step must exist with tool=run_python for dirty main repo recovery."""
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    assert "main_repo_guard" in recipe.steps, f"{recipe_name}: main_repo_guard step not found"
+    step = recipe.steps["main_repo_guard"]
+    assert step.tool == "run_python", f"{recipe_name}: main_repo_guard must use run_python tool"
+    assert "main_repo_guard" in step.with_args.get("callable", ""), (
+        f"{recipe_name}: main_repo_guard callable must reference main_repo_guard"
+    )

@@ -529,6 +529,7 @@ class TestSkillResult:
             "write_path_warnings",
             "write_call_count",
             "fs_writes_detected",
+            "git_writes_detected",
             "has_progress_evidence",
             "infra_exit_category",
         }

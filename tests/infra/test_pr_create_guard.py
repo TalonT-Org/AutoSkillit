@@ -23,12 +23,16 @@ _BASH_TOOL_NAME = "Bash"
 _HOOK_CONFIG_RELPATH = ".autoskillit/temp/.hook_config.json"
 
 
-def _make_clean_env(skill_name: str | None) -> dict[str, str]:
+def _make_clean_env(skill_name: str | None, session_type: str | None = None) -> dict[str, str]:
     env = {k: v for k, v in os.environ.items()}
     if skill_name is not None:
         env["AUTOSKILLIT_SKILL_NAME"] = skill_name
     else:
         env.pop("AUTOSKILLIT_SKILL_NAME", None)
+    if session_type is not None:
+        env["AUTOSKILLIT_SESSION_TYPE"] = session_type
+    else:
+        env.pop("AUTOSKILLIT_SESSION_TYPE", None)
     return env
 
 
@@ -38,6 +42,7 @@ def _run_guard(
     tmpdir,
     raw_stdin: str | None = None,
     skill_name: str | None = None,
+    session_type: str | None = None,
 ) -> str:
     """Invoke pr_create_guard.main() and return captured stdout."""
     from autoskillit.hooks.guards.pr_create_guard import main  # noqa: PLC0415
@@ -54,7 +59,7 @@ def _run_guard(
         hook_cfg.parent.mkdir(parents=True, exist_ok=True)
         hook_cfg.write_text(json.dumps({"kitchen": "open"}))
 
-    clean_env = _make_clean_env(skill_name)
+    clean_env = _make_clean_env(skill_name, session_type)
 
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
@@ -75,6 +80,7 @@ def _run_bash_guard(
     tmpdir,
     raw_stdin: str | None = None,
     skill_name: str | None = None,
+    session_type: str | None = None,
 ) -> str:
     """Invoke pr_create_guard.main() with Bash tool format and return captured stdout."""
     from autoskillit.hooks.guards.pr_create_guard import main  # noqa: PLC0415
@@ -91,7 +97,7 @@ def _run_bash_guard(
         hook_cfg.parent.mkdir(parents=True, exist_ok=True)
         hook_cfg.write_text(json.dumps({"kitchen": "open"}))
 
-    clean_env = _make_clean_env(skill_name)
+    clean_env = _make_clean_env(skill_name, session_type)
 
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
@@ -271,3 +277,57 @@ class TestExemptSkills:
             skill_name="compose-pr",
         )
         assert out.strip() == "", "Exempt skill via Bash tool must be allowed"
+
+
+# ---------------------------------------------------------------------------
+# Orchestrator session exemption
+# ---------------------------------------------------------------------------
+
+
+class TestOrchestratorSessionExemption:
+    """Orchestrator sessions may call gh pr create even with kitchen open."""
+
+    def test_orchestrator_session_allowed_run_cmd(self, tmp_path):
+        out = _run_guard(
+            "gh pr create --base main --head feat",
+            kitchen_open=True,
+            tmpdir=tmp_path,
+            session_type="orchestrator",
+        )
+        assert out.strip() == "", "Orchestrator session must be allowed"
+
+    def test_orchestrator_session_allowed_bash(self, tmp_path):
+        out = _run_bash_guard(
+            "gh pr create --base main --head feat",
+            kitchen_open=True,
+            tmpdir=tmp_path,
+            session_type="orchestrator",
+        )
+        assert out.strip() == "", "Orchestrator session via Bash must be allowed"
+
+    def test_skill_session_still_denied(self, tmp_path):
+        out = _run_guard(
+            "gh pr create --base main --head feat",
+            kitchen_open=True,
+            tmpdir=tmp_path,
+            session_type="skill",
+        )
+        assert _is_denied(out), "Skill session must be denied"
+
+    def test_fleet_session_still_denied(self, tmp_path):
+        out = _run_guard(
+            "gh pr create --base main --head feat",
+            kitchen_open=True,
+            tmpdir=tmp_path,
+            session_type="fleet",
+        )
+        assert _is_denied(out), "Fleet session must be denied"
+
+    def test_no_session_type_still_denied(self, tmp_path):
+        out = _run_guard(
+            "gh pr create --base main --head feat",
+            kitchen_open=True,
+            tmpdir=tmp_path,
+            session_type=None,
+        )
+        assert _is_denied(out), "Missing session type must be denied"

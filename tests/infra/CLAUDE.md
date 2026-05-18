@@ -49,6 +49,7 @@ CI/CD configuration, security, guard coverage, and release sanity tests.
 | `test_schema_read_convention.py` | Read-side ratchet: enforce that write_versioned_json callers have corresponding read-side validation |
 | `test_security_config.py` | Structural tests for security configuration integrity |
 | `test_session_scope_enforcement.py` | Structural enforcement tests: session-scope metadata on HookDef |
+| `test_session_type_exemption_enforcement.py` | Structural enforcement tests: session-type exemption metadata on HookDef |
 | `test_skill_exemption_enforcement.py` | Structural enforcement tests: skill-exemption metadata on HookDef |
 | `test_skill_cmd_check.py` | Unit tests for the skill_cmd_check PreToolUse hook |
 | `test_skill_load_guard.py` | Tests for guards/skill_load_guard.py PreToolUse hook — denies native tools until Skill called |

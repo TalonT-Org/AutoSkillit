@@ -708,8 +708,8 @@ def test_skill_result_git_writes_detected_in_json() -> None:
     assert data["git_writes_detected"] is True
 
 
-def test_skill_result_git_writes_detected_false_omitted() -> None:
-    """to_json() must omit git_writes_detected when False (matches fs_writes_detected pattern)."""
+def test_skill_result_git_writes_detected_false_included() -> None:
+    """to_json() unconditionally includes git_writes_detected (even when False)."""
     sr = SkillResult(
         success=True,
         result="done",
@@ -723,6 +723,5 @@ def test_skill_result_git_writes_detected_false_omitted() -> None:
         git_writes_detected=False,
     )
     data = json.loads(sr.to_json())
-    # git_writes_detected=False is the default; key should be absent in JSON output
-    # (mirrors the fs_writes_detected omission pattern)
-    assert data.get("git_writes_detected", False) is False
+    assert "git_writes_detected" in data
+    assert data["git_writes_detected"] is False

@@ -15,9 +15,6 @@ pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]
 def _write_minimal_v1_session(
     log_root: Path, dir_name: str, tu_data: dict, timestamp: str = "2025-01-15T10:00:00+00:00"
 ) -> None:
-    # Writes only the fields DefaultTokenLog.load_from_log_dir() requires.
-    # Not suitable for testing filter paths (kitchen_id, pipeline_id, etc.) —
-    # use the infra helper in test_token_summary_v1_compat.py for those.
     session_dir = log_root / "sessions" / dir_name
     session_dir.mkdir(parents=True, exist_ok=True)
     (session_dir / "token_usage.json").write_text(json.dumps(tu_data))

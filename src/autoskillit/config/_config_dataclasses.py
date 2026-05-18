@@ -410,6 +410,7 @@ class ProvidersConfig:
     default_provider: str | None = None
     profiles: dict[str, dict[str, str]] = field(default_factory=dict)
     step_overrides: dict[str, str] = field(default_factory=dict)
+    recipe_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
     provider_retry_limit: int = 2
 
     def __post_init__(self) -> None:
@@ -420,6 +421,18 @@ class ProvidersConfig:
                 if not isinstance(v, str):
                     raise ValueError(
                         f"profiles[{name!r}][{k!r}] must be a string, got {type(v).__name__!r}"
+                    )
+        for recipe, overrides in self.recipe_overrides.items():
+            if not isinstance(overrides, dict):
+                raise ValueError(
+                    f"recipe_overrides[{recipe!r}] must be a dict, "
+                    f"got {type(overrides).__name__!r}"
+                )
+            for step, provider in overrides.items():
+                if not isinstance(provider, str):
+                    raise ValueError(
+                        f"recipe_overrides[{recipe!r}][{step!r}] must be a string, "
+                        f"got {type(provider).__name__!r}"
                     )
 
 

@@ -948,25 +948,27 @@ class TestDisplayConditionContract:
         must agree on the value domain. Mismatch causes silent condition routing failures
         (issue #2584).
         """
-        import re
-
         from autoskillit.recipe._recipe_ingredients import build_ingredient_rows
+        from autoskillit.recipe.rules.rules_inputs import _INPUTS_CONDITION_RE
 
         for recipe_name, recipe in recipe_modules.items():
             rows = build_ingredient_rows(recipe)
             display = {r[0].rstrip(" *"): r[2] for r in rows}
 
             for step_name, step in recipe.steps.items():
-                when = getattr(step, "skip_when_false", None) or ""
-                matches = re.findall(r"inputs\.(\w+)\s*(==|!=|>=|<=|>|<)\s*'([^']*)'", when)
-                for ing_name, op, operand in matches:
-                    name_key = ing_name if ing_name in display else None
-                    if name_key is None:
+                if not step.on_result:
+                    continue
+                for cond in step.on_result.conditions:
+                    if cond.when is None:
                         continue
-                    display_val = display[name_key]
-                    assert display_val == operand, (
-                        f"{recipe_name}::{step_name}: condition uses "
-                        f"inputs.{ing_name} {op} '{operand}' but "
-                        f"build_ingredient_rows shows '{display_val}' — "
-                        f"display value must match condition operand"
-                    )
+                    for match in _INPUTS_CONDITION_RE.finditer(cond.when):
+                        ing_name, operand = match.group(1), match.group(2)
+                        if ing_name not in display:
+                            continue
+                        display_val = display[ing_name]
+                        assert display_val == operand, (
+                            f"{recipe_name}::{step_name}: condition uses "
+                            f"inputs.{ing_name} == '{operand}' but "
+                            f"build_ingredient_rows shows '{display_val}' — "
+                            f"display value must match condition operand"
+                        )

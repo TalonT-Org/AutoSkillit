@@ -90,6 +90,19 @@ class TestMergeTokenUsageCanonical:
         assert result["cache_write_tokens"] == 15
         assert result["cache_read_tokens"] == 50
 
+    def test_canonical_wins_when_both_canonical_and_legacy_coexist(self):
+        """Coexistent canonical + legacy keys: canonical wins, legacy is discarded."""
+        base = {
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "cache_write_tokens": 10,
+            "cache_creation_input_tokens": 5,
+        }
+        nudge = {"input_tokens": 200, "output_tokens": 100, "cache_write_tokens": 3}
+        result = _merge_token_usage(base, nudge)
+        assert result["cache_write_tokens"] == 13
+        assert "cache_creation_input_tokens" not in result
+
     def test_none_base_returns_nudge(self):
         """None base → return nudge unchanged."""
         nudge = {"input_tokens": 200, "output_tokens": 100}

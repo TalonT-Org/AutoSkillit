@@ -98,7 +98,13 @@ def _detect_branch_divergence(cwd: str) -> bool:
                 timeout=10,
             )
             if rl.returncode == 0:
-                count = int(rl.stdout.strip())
+                raw = rl.stdout.strip()
+                if not raw:
+                    continue
+                try:
+                    count = int(raw)
+                except ValueError:
+                    continue
                 return count > 0
         except Exception:
             logger.debug(

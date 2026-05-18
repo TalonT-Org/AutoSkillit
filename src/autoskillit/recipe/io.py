@@ -39,6 +39,7 @@ logger = get_logger(__name__)
 RECIPE_SCAN_DIRS: tuple[str, ...] = (
     ".",  # root — standard recipes
     "campaigns",  # campaign recipes
+    "eval",  # eval recipes
 )
 
 NON_RECIPE_DIRS: frozenset[str] = frozenset(

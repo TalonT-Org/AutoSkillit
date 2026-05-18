@@ -1,0 +1,1 @@
+Implement a feature that adds a new `_extract_captures` function to the smoke_utils module, exporting capture data for downstream analysis tools.

@@ -1,0 +1,1 @@
+For each data type introduced or governed by a new rule, verify it appears in the type registry of every downstream analysis tool.

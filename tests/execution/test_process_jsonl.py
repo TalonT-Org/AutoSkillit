@@ -322,6 +322,122 @@ class TestJsonlHasRecordTypeResultContent:
             line, frozenset({"result"}), completion_marker="%%ORDER_UP%%"
         )
 
+    def test_rejects_assistant_without_marker_when_marker_configured(self):
+        """Non-result record missing the marker must NOT confirm when marker is set."""
+        line = (
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {"content": [{"type": "text", "text": "Task done."}]},
+                }
+            )
+            + "\n"
+        )
+        assert not _jsonl_has_record_type(
+            line, frozenset({"assistant"}), completion_marker="%%ORDER_UP%%"
+        )
+
+    def test_accepts_assistant_with_marker_when_marker_configured(self):
+        """Non-result record with standalone marker must confirm."""
+        line = (
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {"content": [{"type": "text", "text": "Done.\n%%ORDER_UP%%"}]},
+                }
+            )
+            + "\n"
+        )
+        assert _jsonl_has_record_type(
+            line, frozenset({"assistant"}), completion_marker="%%ORDER_UP%%"
+        )
+
+    def test_assistant_without_marker_accepted_when_no_marker_configured(self):
+        """Empty completion_marker skips marker check — backward-compatible for all types."""
+        line = (
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {"content": [{"type": "text", "text": "hi"}]},
+                }
+            )
+            + "\n"
+        )
+        assert _jsonl_has_record_type(line, frozenset({"assistant"}), completion_marker="")
+
+    def test_rejects_assistant_with_embedded_marker(self):
+        """Marker in prose (not standalone) must NOT confirm for assistant records."""
+        line = (
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {
+                        "content": [{"type": "text", "text": "I will emit %%ORDER_UP%% soon"}]
+                    },
+                }
+            )
+            + "\n"
+        )
+        assert not _jsonl_has_record_type(
+            line, frozenset({"assistant"}), completion_marker="%%ORDER_UP%%"
+        )
+
+    def test_fallback_record_type_with_marker(self):
+        """Non-assistant, non-result types use fallback text extraction for marker check."""
+        line = (
+            json.dumps(
+                {
+                    "type": "system",
+                    "content": "Setup complete.\n%%ORDER_UP%%",
+                }
+            )
+            + "\n"
+        )
+        assert _jsonl_has_record_type(
+            line, frozenset({"system"}), completion_marker="%%ORDER_UP%%"
+        )
+
+    def test_fallback_record_type_without_marker_rejected(self):
+        """Fallback record type missing marker must NOT confirm."""
+        line = (
+            json.dumps(
+                {
+                    "type": "system",
+                    "content": "Setup complete.",
+                }
+            )
+            + "\n"
+        )
+        assert not _jsonl_has_record_type(
+            line, frozenset({"system"}), completion_marker="%%ORDER_UP%%"
+        )
+
+    def test_assistant_null_message_no_crash(self):
+        """Assistant record with message=None must not crash, returns False with marker."""
+        line = json.dumps({"type": "assistant", "message": None}) + "\n"
+        assert not _jsonl_has_record_type(
+            line, frozenset({"assistant"}), completion_marker="%%ORDER_UP%%"
+        )
+
+    def test_marker_in_thinking_block_not_detected(self):
+        """Marker inside a thinking block must NOT trigger confirmation."""
+        line = (
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {
+                        "content": [
+                            {"type": "thinking", "thinking": "%%ORDER_UP%%"},
+                        ]
+                    },
+                }
+            )
+            + "\n"
+        )
+        assert not _jsonl_has_record_type(
+            line, frozenset({"assistant"}), completion_marker="%%ORDER_UP%%"
+        )
+
 
 class TestMarkerDiscrimination:
     """Regression guards: per-invocation markers are structurally incompatible with static ones."""

@@ -22,7 +22,7 @@ Semantic validation rule modules for recipe analysis (31 rule files).
 | `rules_fixing.py` | Conditional-write skill must gate on declared verdict output |
 | `rules_graph.py` | Graph/routing analysis rules |
 | `rules_inline_script.py` | Detects inline shell scripts in `run_cmd` cmd fields |
-| `rules_inputs.py` | Input/ingredient validation; version compatibility checks |
+| `rules_inputs.py` | Input/ingredient validation; version compatibility checks; condition-value-domain checks |
 | `rules_isolation.py` | Workspace isolation rules (prevents operating on source repo) |
 | `rules_merge.py` | `merge_worktree` routing completeness |
 | `rules_merge_queue.py` | Merge queue push routing: `queued_branch` error route enforcement |

@@ -9,7 +9,13 @@ import pytest
 
 from autoskillit.core import Severity
 from autoskillit.recipe.registry import run_semantic_rules
-from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeStep
+from autoskillit.recipe.schema import (
+    Recipe,
+    RecipeIngredient,
+    RecipeStep,
+    StepResultCondition,
+    StepResultRoute,
+)
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -351,3 +357,72 @@ class TestIngredientTypeDefaultInvalid:
         findings = run_semantic_rules(recipe)
         rule_findings = [f for f in findings if f.rule == "ingredient-type-default-invalid"]
         assert len(rule_findings) == 0
+
+
+class TestIngredientConditionValueDomain:
+    def test_fires_on_display_value_operand(self):
+        recipe = Recipe(
+            name="test-recipe",
+            description="test",
+            ingredients={"flag": RecipeIngredient(description="A flag", default="true")},
+            steps={
+                "check": RecipeStep(
+                    name="check",
+                    on_result=StepResultRoute(
+                        conditions=[
+                            StepResultCondition(when="${{ inputs.flag }} == 'on'", route="a"),
+                            StepResultCondition(when="true", route="b"),
+                        ]
+                    ),
+                ),
+            },
+        )
+        findings = run_semantic_rules(recipe)
+        rule_findings = [f for f in findings if f.rule == "ingredient-condition-value-domain"]
+        assert len(rule_findings) == 1
+        assert rule_findings[0].step_name == "check"
+        assert rule_findings[0].severity == Severity.ERROR
+        assert "on" in rule_findings[0].message
+        assert "flag" in rule_findings[0].message
+
+    def test_passes_for_raw_values(self):
+        recipe = Recipe(
+            name="test-recipe",
+            description="test",
+            ingredients={"flag": RecipeIngredient(description="A flag", default="true")},
+            steps={
+                "check": RecipeStep(
+                    name="check",
+                    on_result=StepResultRoute(
+                        conditions=[
+                            StepResultCondition(when="${{ inputs.flag }} != 'true'", route="a"),
+                            StepResultCondition(when="true", route="b"),
+                        ]
+                    ),
+                ),
+            },
+        )
+        findings = run_semantic_rules(recipe)
+        rule_findings = [f for f in findings if f.rule == "ingredient-condition-value-domain"]
+        assert rule_findings == []
+
+    def test_skips_none_when(self):
+        recipe = Recipe(
+            name="test-recipe",
+            description="test",
+            ingredients={"flag": RecipeIngredient(description="A flag", default="true")},
+            steps={
+                "check": RecipeStep(
+                    name="check",
+                    on_result=StepResultRoute(
+                        conditions=[
+                            StepResultCondition(when="${{ inputs.flag }} == 'true'", route="a"),
+                            StepResultCondition(when=None, route="b"),
+                        ]
+                    ),
+                ),
+            },
+        )
+        findings = run_semantic_rules(recipe)
+        rule_findings = [f for f in findings if f.rule == "ingredient-condition-value-domain"]
+        assert rule_findings == []

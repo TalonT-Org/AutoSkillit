@@ -79,6 +79,47 @@ def test_hook_load_sessions_reads_only_declared_keys():
         raise AssertionError("_load_sessions function not found in token_summary_hook.py")
 
 
+def test_format_functions_use_no_legacy_cache_keys():
+    """AST contract: format functions must not contain legacy cache field name literals.
+
+    Guards against re-introducing cache_creation_input_tokens or cache_read_input_tokens
+    in _format_table, _format_efficiency_table, and _format_model_table after the
+    canonical migration (P2-A14-WP1).
+    """
+    from autoskillit.hooks._hook_settings import _V1_TOKEN_FIELD_ALIASES
+
+    hook_path = (
+        Path(__file__).resolve().parents[2]
+        / "src"
+        / "autoskillit"
+        / "hooks"
+        / "token_summary_hook.py"
+    )
+    tree = ast.parse(hook_path.read_text())
+
+    target_functions = {"_format_table", "_format_efficiency_table", "_format_model_table"}
+    found: set[str] = set()
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name in target_functions:
+            found.add(node.name)
+            for const in ast.walk(node):
+                if (
+                    isinstance(const, ast.Constant)
+                    and isinstance(const.value, str)
+                    and const.value in _V1_TOKEN_FIELD_ALIASES
+                ):
+                    pytest.fail(
+                        f"{node.name} contains legacy key literal {const.value!r} "
+                        f"(maps to {_V1_TOKEN_FIELD_ALIASES[const.value]!r})"
+                    )
+
+    assert found == target_functions, (
+        f"Expected to find functions {target_functions}, found {found}. "
+        "One or more format functions were renamed."
+    )
+
+
 # ── Step 1c: Cross-seam integration test ──
 
 

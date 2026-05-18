@@ -941,19 +941,32 @@ class TestDisplayConditionContract:
         }
 
     def test_ingredient_display_values_match_condition_operands(self, recipe_modules) -> None:
-        """Every when: condition comparing inputs.<name> against a literal must use
-        a value that matches what build_ingredient_rows produces for that ingredient.
+        """Boolean display values must not be normalized, and condition
+        operands must not use display-only values.
 
-        This is the cross-system contract guard: display table ↔ condition evaluation
-        must agree on the value domain. Mismatch causes silent condition routing failures
-        (issue #2584).
+        Guards against issue #2584: display normalization (true→on) caused
+        condition operands to silently diverge from raw YAML values.
         """
         from autoskillit.recipe._recipe_ingredients import build_ingredient_rows
-        from autoskillit.recipe.rules.rules_inputs import _INPUTS_CONDITION_RE
+        from autoskillit.recipe.rules.rules_inputs import (
+            _DISPLAY_ONLY_VALUES,
+            _INPUTS_CONDITION_RE,
+        )
 
         for recipe_name, recipe in recipe_modules.items():
             rows = build_ingredient_rows(recipe)
             display = {r[0].rstrip(" *"): r[2] for r in rows}
+
+            for name, ing in recipe.ingredients.items():
+                if getattr(ing, "hidden", False) or name not in display:
+                    continue
+                if ing.default in ("true", "false"):
+                    assert display[name] == ing.default, (
+                        f"{recipe_name}: boolean ingredient {name} has "
+                        f"default '{ing.default}' but display shows "
+                        f"'{display[name]}' — boolean normalization "
+                        f"must not occur"
+                    )
 
             for step_name, step in recipe.steps.items():
                 if not step.on_result:
@@ -965,10 +978,8 @@ class TestDisplayConditionContract:
                         ing_name, operand = match.group(1), match.group(2)
                         if ing_name not in display:
                             continue
-                        display_val = display[ing_name]
-                        assert display_val == operand, (
+                        assert operand not in _DISPLAY_ONLY_VALUES, (
                             f"{recipe_name}::{step_name}: condition uses "
-                            f"inputs.{ing_name} == '{operand}' but "
-                            f"build_ingredient_rows shows '{display_val}' — "
-                            f"display value must match condition operand"
+                            f"display-only value '{operand}' for "
+                            f"inputs.{ing_name} — use raw YAML value instead"
                         )

@@ -545,7 +545,13 @@ def build_eval_context(
     if skill_name.startswith("autoskillit:"):
         skill_name = skill_name[len("autoskillit:") :]
 
-    reference_path = Path(resolved.get("reference_path", "")).resolve()
+    reference_path_raw = resolved.get("reference_path")
+    if not reference_path_raw:
+        return {
+            "success": "false",
+            "error": f"Canary {canary_id} resolved.json missing reference_path",
+        }
+    reference_path = Path(reference_path_raw).resolve()
     candidates = []
     for variant_id, path in plan_paths.items():
         variant_meta = resolved.get("variants", {}).get(variant_id, {})

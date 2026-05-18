@@ -30,8 +30,8 @@ def test_load_from_log_dir_v1_fields_no_double_count(tmp_path: Path) -> None:
         "output_tokens": 50,
         "cache_write_tokens": 10,
         "cache_read_tokens": 5,
-        "cache_creation_input_tokens": 10,
-        "cache_read_input_tokens": 5,
+        "cache_creation_input_tokens": 99,
+        "cache_read_input_tokens": 88,
         "timing_seconds": 8.0,
         "schema_version": 2,
     }

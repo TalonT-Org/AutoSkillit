@@ -101,6 +101,7 @@ class TestToolRegistration:
             "bootstrap_clone",
             "claim_and_resolve_issue",
             "create_and_publish_branch",
+            "unlock_agent_pack",
         }
         assert expected == tool_names
 

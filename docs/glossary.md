@@ -79,13 +79,13 @@ need to run outside the local machine.
 
 ### kitchen
 
-The collection of 37 kitchen-tagged MCP tools that the orchestrator must
+The collection of 38 kitchen-tagged MCP tools that the orchestrator must
 explicitly reveal via `open_kitchen` before they can be called. Hidden at
 server startup via `mcp.disable(tags={'kitchen'})`.
 
 ### kitchen tools
 
-Synonym for the 37 kitchen-tagged MCP tools. Two words, no hyphen.
+Synonym for the 38 kitchen-tagged MCP tools. Two words, no hyphen.
 
 ### kitchen_id
 

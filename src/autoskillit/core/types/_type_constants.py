@@ -31,6 +31,8 @@ __all__ = [
     "RecipePackDef",
     "RECIPE_PACK_REGISTRY",
     "RECIPE_PACK_TAGS",
+    "AgentPackDef",
+    "AGENT_PACK_REGISTRY",
     "CORE_PACKS",
     "CATEGORY_TAGS",
     "TOOL_SUBSET_TAGS",
@@ -242,7 +244,7 @@ GATED_TOOLS: frozenset[str] = frozenset(
     }
 )
 
-HEADLESS_TOOLS: frozenset[str] = frozenset({"test_check"})
+HEADLESS_TOOLS: frozenset[str] = frozenset({"test_check", "unlock_agent_pack"})
 
 FLEET_TOOLS: frozenset[str] = frozenset(
     {
@@ -315,6 +317,24 @@ RECIPE_PACK_REGISTRY: dict[str, RecipePackDef] = {
 }
 
 RECIPE_PACK_TAGS: frozenset[str] = frozenset(RECIPE_PACK_REGISTRY.keys())
+
+
+class AgentPackDef(NamedTuple):
+    """Definition of a named agent pack with default visibility state."""
+
+    default_enabled: bool
+    description: str
+
+
+AGENT_PACK_REGISTRY: dict[str, AgentPackDef] = {
+    "plan-review": AgentPackDef(False, "Adversarial plan review agents for make-plan"),
+}
+
+if any(k != k.lower() for k in AGENT_PACK_REGISTRY):
+    raise AssertionError(
+        "AGENT_PACK_REGISTRY keys must be lowercase. "
+        f"Offending: {sorted(k for k in AGENT_PACK_REGISTRY if k != k.lower())}"
+    )
 
 CORE_PACKS: frozenset[str] = frozenset({"github", "ci", "clone", "telemetry"})
 
@@ -390,10 +410,11 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     "record_gate_dispatch": frozenset({"kitchen-core", "fleet"}),
     # kitchen-core — git
     "merge_worktree": frozenset({"kitchen-core"}),
+    "unlock_agent_pack": frozenset({"kitchen-core"}),
 }
 
 ALL_VISIBILITY_TAGS: frozenset[str] = frozenset(
-    {"kitchen", "headless", "fleet", "fleet-dispatch", "kitchen-core"}
+    {"kitchen", "headless", "fleet", "fleet-dispatch", "kitchen-core", "plan-review"}
 )
 
 if not TOOL_SUBSET_TAGS:

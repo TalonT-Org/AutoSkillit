@@ -72,6 +72,9 @@ from autoskillit.server import (  # noqa: E402, F401
 from autoskillit.server._factory import make_context  # noqa: E402, F401
 from autoskillit.server._session_type import _apply_session_type_visibility  # noqa: E402, F401
 from autoskillit.server.tools import (  # noqa: E402, F401
+    tools_agents as _tools_agents,
+)
+from autoskillit.server.tools import (  # noqa: E402, F401
     tools_ci as _tools_ci,
 )
 from autoskillit.server.tools import (  # noqa: E402, F401
@@ -121,6 +124,7 @@ from autoskillit.server.tools.tools_kitchen import _build_tool_category_listing 
 # Apply global visibility transform: all sessions start with kitchen tools hidden.
 # Must appear after all tool module imports so the registered tools are in place.
 mcp.disable(tags={"kitchen"})
+mcp.disable(tags={"plan-review"})
 
 # Wire-format sanitization: strip fields that trigger Claude Code #25081
 # (silent full-tool-list rejection when outputSchema/annotations are present).

@@ -23,6 +23,7 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     ("Recipes", ("migrate_recipe", "list_recipes", "load_recipe", "validate_recipe")),
+    ("Agents", ("unlock_agent_pack",)),
     (
         "Clone & Remote",
         (

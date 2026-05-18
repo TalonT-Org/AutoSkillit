@@ -37,12 +37,13 @@ EXPECTED_SUB_CLAUDE_MDS = [
     "fleet/CLAUDE.md",
     "cli/CLAUDE.md",
     "hooks/CLAUDE.md",
+    "agents/CLAUDE.md",
 ]
 
 
-def test_all_27_sub_claude_md_files_exist():
-    assert len(EXPECTED_SUB_CLAUDE_MDS) == 27, (
-        f"Expected 27 entries, got {len(EXPECTED_SUB_CLAUDE_MDS)}"
+def test_all_28_sub_claude_md_files_exist():
+    assert len(EXPECTED_SUB_CLAUDE_MDS) == 28, (
+        f"Expected 28 entries, got {len(EXPECTED_SUB_CLAUDE_MDS)}"
     )
     assert len(EXPECTED_SUB_CLAUDE_MDS) == len(set(EXPECTED_SUB_CLAUDE_MDS)), (
         "Duplicate entries in EXPECTED_SUB_CLAUDE_MDS"

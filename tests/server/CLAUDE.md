@@ -91,6 +91,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_tools_status_summaries.py` | Tests for server status tools: token and timing summaries |
 | `test_tools_types_module.py` | Tests for server/tools/_types.py TypedDict imports |
 | `test_tools_workspace.py` | Tests for autoskillit server workspace tools |
+| `test_tools_agents.py` | Tests for agent pack registry, MCP resources, and `unlock_agent_pack` |
 | `test_track_response_size.py` | Tests for the track_response_size decorator in autoskillit.server._notify |
 | `test_wire_compat.py` | Wire compatibility tests |
 

@@ -88,6 +88,11 @@ src/autoskillit/.claude-plugin/plugin.json:
 src/autoskillit/migrations/*.yaml:
   - migration/
 
+src/autoskillit/agents/**:
+  - server/
+  - arch/
+  - contracts/
+
 .github/workflows/*.yml:
   - infra/
 

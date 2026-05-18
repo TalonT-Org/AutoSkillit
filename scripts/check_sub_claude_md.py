@@ -42,6 +42,7 @@ SRC_EXPECTED = [
     "fleet/CLAUDE.md",
     "cli/CLAUDE.md",
     "hooks/CLAUDE.md",
+    "agents/CLAUDE.md",
 ]
 
 TESTS_EXPECTED = [

@@ -106,6 +106,7 @@ from .types import AUTOSKILLIT_INSTALLED_VERSION as AUTOSKILLIT_INSTALLED_VERSIO
 from .types import AUTOSKILLIT_PRIVATE_ENV_VARS as AUTOSKILLIT_PRIVATE_ENV_VARS
 from .types import AUTOSKILLIT_SKILL_PREFIX as AUTOSKILLIT_SKILL_PREFIX
 from .types import AGENT_BACKEND_ENV_VAR as AGENT_BACKEND_ENV_VAR
+from .types import AGENT_PACK_REGISTRY as AGENT_PACK_REGISTRY
 from .types import CAMPAIGN_ID_ENV_VAR as CAMPAIGN_ID_ENV_VAR
 from .types import CATEGORY_TAGS as CATEGORY_TAGS
 from .types import CONTEXT_EXHAUSTION_MARKER as CONTEXT_EXHAUSTION_MARKER
@@ -152,6 +153,7 @@ from .types import ROUTING_AUTHORITY_CLAUSE as ROUTING_AUTHORITY_CLAUSE
 from .types import SOUS_CHEF_MANDATORY_SECTIONS as SOUS_CHEF_MANDATORY_SECTIONS
 from .types import TOOL_SUBSET_TAGS as TOOL_SUBSET_TAGS
 from .types import UNGATED_TOOLS as UNGATED_TOOLS
+from .types import AgentPackDef as AgentPackDef
 from .types import AuditLog as AuditLog
 from .types import BackendCapabilities as BackendCapabilities
 from .types import BackgroundSupervisor as BackgroundSupervisor

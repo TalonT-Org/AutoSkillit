@@ -106,7 +106,7 @@ UNGATED_PAT = re.compile(
 )
 # Broader check: does the line discuss a tier/subset (not total tools)?
 TIER_CONTEXT_PAT = re.compile(
-    r"kitchen|gated|always\s+visible|tier\s+[012]|ungated|pipeline\s+tools\s+hidden",
+    r"kitchen|gated|always\s+visible|tier\s+[012]|ungated|pipeline\s+tools\s+hidden|headless",
     re.IGNORECASE,
 )
 

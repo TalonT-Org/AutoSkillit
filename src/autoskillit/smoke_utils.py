@@ -416,6 +416,14 @@ def fetch_merge_queue_data(base_branch: str, cwd: str, output_dir: str) -> dict[
     return {"merge_queue_data_path": str(out_path)}
 
 
+def _load_json(src: str) -> list | dict:
+    """Load JSON from a string or file path. Returns a list or dict."""
+    try:
+        return json.loads(src)
+    except (json.JSONDecodeError, TypeError):
+        return json.loads(Path(src).read_text())
+
+
 def parse_eval_manifests(
     canary_manifest: str,
     variant_manifest: str,
@@ -437,8 +445,8 @@ def parse_eval_manifests(
     eval_run_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        canaries = json.loads(Path(canary_manifest).read_text())
-        variants = json.loads(Path(variant_manifest).read_text())
+        canaries = _load_json(canary_manifest)
+        variants = _load_json(variant_manifest)
     except (OSError, json.JSONDecodeError) as exc:
         return {"success": "false", "error": f"Failed to read manifest: {exc}"}
 
@@ -592,8 +600,8 @@ def compile_eval_scorecard(
     eval_run_path = Path(eval_run_dir)
 
     try:
-        canaries = json.loads(Path(canary_manifest).read_text())
-        variants = json.loads(Path(variant_manifest).read_text())
+        canaries = _load_json(canary_manifest)
+        variants = _load_json(variant_manifest)
     except (OSError, json.JSONDecodeError) as exc:
         return {"success": "false", "error": f"Failed to read manifest: {exc}"}
 

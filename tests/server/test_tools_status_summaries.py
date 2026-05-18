@@ -45,8 +45,8 @@ class TestGetTokenSummary:
             {
                 "input_tokens": 100,
                 "output_tokens": 50,
-                "cache_creation_input_tokens": 10,
-                "cache_read_input_tokens": 5,
+                "cache_write_tokens": 10,
+                "cache_read_tokens": 5,
             },
         )
         tool_ctx_kitchen_open.token_log.record(
@@ -54,8 +54,8 @@ class TestGetTokenSummary:
             {
                 "input_tokens": 200,
                 "output_tokens": 80,
-                "cache_creation_input_tokens": 20,
-                "cache_read_input_tokens": 10,
+                "cache_write_tokens": 20,
+                "cache_read_tokens": 10,
             },
         )
         result = json.loads(await get_token_summary())
@@ -68,8 +68,8 @@ class TestGetTokenSummary:
         usage = {
             "input_tokens": 100,
             "output_tokens": 50,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "cache_read_tokens": 0,
         }
         tool_ctx_kitchen_open.token_log.record("implement", usage)
         tool_ctx_kitchen_open.token_log.record("implement", usage)
@@ -86,8 +86,8 @@ class TestGetTokenSummary:
             {
                 "input_tokens": 100,
                 "output_tokens": 50,
-                "cache_creation_input_tokens": 10,
-                "cache_read_input_tokens": 5,
+                "cache_write_tokens": 10,
+                "cache_read_tokens": 5,
             },
         )
         tool_ctx_kitchen_open.token_log.record(
@@ -95,8 +95,8 @@ class TestGetTokenSummary:
             {
                 "input_tokens": 200,
                 "output_tokens": 80,
-                "cache_creation_input_tokens": 20,
-                "cache_read_input_tokens": 10,
+                "cache_write_tokens": 20,
+                "cache_read_tokens": 10,
             },
         )
         result = json.loads(await get_token_summary())
@@ -112,8 +112,8 @@ class TestGetTokenSummary:
             {
                 "input_tokens": 100,
                 "output_tokens": 50,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_read_tokens": 0,
             },
         )
         result = json.loads(await get_token_summary(clear=True))
@@ -128,8 +128,8 @@ class TestGetTokenSummary:
             {
                 "input_tokens": 10,
                 "output_tokens": 5,
-                "cache_creation_input_tokens": 1,
-                "cache_read_input_tokens": 2,
+                "cache_write_tokens": 1,
+                "cache_read_tokens": 2,
             },
         )
         result = json.loads(await get_token_summary())
@@ -321,8 +321,8 @@ class TestTokenSummaryWallClock:
             {
                 "input_tokens": 100,
                 "output_tokens": 50,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_read_tokens": 0,
             },
             elapsed_seconds=8.0,
         )
@@ -345,8 +345,8 @@ class TestTokenSummaryWallClock:
             {
                 "input_tokens": 200,
                 "output_tokens": 100,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_read_tokens": 0,
             },
             elapsed_seconds=5.0,
         )
@@ -376,8 +376,8 @@ class TestTokenSummaryWallClock:
         usage = {
             "input_tokens": 100,
             "output_tokens": 50,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "cache_read_tokens": 0,
         }
         tool_ctx_kitchen_open.token_log.record("implement-30", usage)
         tool_ctx_kitchen_open.token_log.record("implement-31", usage)
@@ -468,8 +468,8 @@ async def test_get_token_summary_not_contaminated_by_prior_pipeline(
                 "step_name": "implement",
                 "input_tokens": 9999,
                 "output_tokens": 4444,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_read_tokens": 0,
                 "timing_seconds": 120.0,
             }
         )
@@ -492,8 +492,8 @@ async def test_get_token_summary_not_contaminated_by_prior_pipeline(
         {
             "input_tokens": 100,
             "output_tokens": 50,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "cache_read_tokens": 0,
         },
     )
 
@@ -526,8 +526,8 @@ class TestOrderIdFilterOnSummaryTools:
         usage = {
             "input_tokens": 100,
             "output_tokens": 50,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "cache_read_tokens": 0,
         }
         tool_ctx_kitchen_open.token_log.record("plan", usage, order_id="issue-185")
         tool_ctx_kitchen_open.token_log.record("implement", usage, order_id="issue-186")
@@ -549,8 +549,8 @@ class TestOrderIdFilterOnSummaryTools:
         usage = {
             "input_tokens": 100,
             "output_tokens": 50,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "cache_read_tokens": 0,
         }
         tool_ctx_kitchen_open.token_log.record("plan", usage, order_id="issue-185")
         tool_ctx_kitchen_open.token_log.record("implement", usage, order_id="issue-186")

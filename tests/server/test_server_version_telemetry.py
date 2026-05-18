@@ -180,8 +180,8 @@ class TestInitializeClearMarker:
                 token_usage={
                     "input_tokens": 1000,
                     "output_tokens": 500,
-                    "cache_creation_input_tokens": 0,
-                    "cache_read_input_tokens": 0,
+                    "cache_write_tokens": 0,
+                    "cache_read_tokens": 0,
                 },
                 timing_seconds=10.0,
                 audit_record=None,

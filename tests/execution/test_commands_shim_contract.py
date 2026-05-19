@@ -37,4 +37,12 @@ class TestCommandsShimContract:
     def test_builder_delegates_to_backend(self, name: str):
         """Each builder body must reference ClaudeCodeBackend."""
         source = inspect.getsource(getattr(commands, name))
-        assert "ClaudeCodeBackend" in source, f"{name} does not delegate to ClaudeCodeBackend"
+        tree = ast.parse(source)
+        func = tree.body[0]
+        assert isinstance(func, ast.FunctionDef)
+        ast_names = {
+            node.id if isinstance(node, ast.Name) else node.attr
+            for node in ast.walk(func)
+            if isinstance(node, (ast.Name, ast.Attribute))
+        }
+        assert "ClaudeCodeBackend" in ast_names, f"{name} does not delegate to ClaudeCodeBackend"

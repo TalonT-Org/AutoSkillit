@@ -85,6 +85,7 @@ from autoskillit.execution.headless._headless_result import (
     _build_session_telemetry,
     _build_skill_result,
     _capture_failure,  # noqa: F401
+    _parse_stdout,  # noqa: F401
     _resolve_skill_session_id,  # noqa: F401
 )
 from autoskillit.execution.headless._headless_scan import _scan_jsonl_write_paths  # noqa: F401
@@ -461,6 +462,11 @@ async def _execute_claude_headless(
             _git_writes_detected = _detect_branch_divergence(cwd)
 
         audit_count_before = len(ctx.audit.get_report())
+        _supports_fmt = (
+            ctx.backend.capabilities.supports_claude_format_stdout
+            if ctx.backend is not None
+            else True
+        )
         skill_result = _build_skill_result(
             result,
             completion_marker=completion_marker,
@@ -473,6 +479,8 @@ async def _execute_claude_headless(
             git_writes_detected=_git_writes_detected,
             prior_completion_markers=prior_completion_markers,
             provider_used=current_provider_name,
+            supports_claude_format_stdout=_supports_fmt,
+            backend=ctx.backend,
         )
 
         if (

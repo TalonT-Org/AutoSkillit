@@ -48,7 +48,7 @@ from autoskillit.execution.session._session_outcome import (
 )
 
 if TYPE_CHECKING:
-    from autoskillit.core import AuditLog, GitHubApiLog, SubprocessResult
+    from autoskillit.core import AuditLog, CodingAgentBackend, GitHubApiLog, SubprocessResult
 
 logger = get_logger(__name__)
 _truncate = truncate_text
@@ -124,6 +124,10 @@ def _resolve_skill_session_id(
     return result.session_id or result.channel_b_session_id
 
 
+def _parse_stdout(stdout: str) -> ClaudeSessionResult:
+    return parse_session_result(stdout)
+
+
 def _make_terminated_result(
     *,
     result: SubprocessResult,
@@ -168,6 +172,8 @@ def _build_skill_result(
     prior_completion_markers: Sequence[str] | None = None,
     *,
     provider_used: str = "",
+    supports_claude_format_stdout: bool = True,
+    backend: CodingAgentBackend | None = None,
 ) -> SkillResult:
     """Route SubprocessResult fields into the standard run_skill response."""
     branch = (
@@ -191,7 +197,7 @@ def _build_skill_result(
     )
     if result.termination == TerminationReason.STALE:
         # Attempt to recover from stdout before declaring stale failure.
-        stale_session = parse_session_result(result.stdout)
+        stale_session = _parse_stdout(result.stdout)
         stale_returncode = result.returncode if result.returncode is not None else -1
         can_attempt_stale_recovery = (
             stale_session.subtype == CliSubtype.SUCCESS
@@ -246,7 +252,7 @@ def _build_skill_result(
         return _apply_budget_guard(stale_sr, skill_command, audit, max_consecutive_retries)
 
     if result.termination == TerminationReason.IDLE_STALL:
-        idle_session = parse_session_result(result.stdout)
+        idle_session = _parse_stdout(result.stdout)
         idle_returncode = result.returncode if result.returncode is not None else -1
         can_attempt_idle_stall_recovery = (
             idle_session.subtype == CliSubtype.SUCCESS
@@ -305,7 +311,7 @@ def _build_skill_result(
     if result.termination == TerminationReason.TIMED_OUT:
         returncode = -1
         if result.stdout.strip():
-            session = parse_session_result(result.stdout)
+            session = _parse_stdout(result.stdout)
             if session.subtype != CliSubtype.TIMEOUT:
                 session = dataclasses.replace(session, subtype=CliSubtype.TIMEOUT, is_error=True)
         else:
@@ -318,9 +324,12 @@ def _build_skill_result(
             )
     else:
         returncode = result.returncode if result.returncode is not None else -1
-        session = parse_session_result(result.stdout)
+        session = _parse_stdout(result.stdout)
 
-    write_call_count = sum(1 for t in session.tool_uses if t.get("name") in {"Write", "Edit"})
+    write_names = (
+        backend.write_tool_names() if backend is not None else frozenset({"Write", "Edit"})
+    )
+    write_call_count = sum(1 for t in session.tool_uses if t.get("name") in write_names)
     _has_write_evidence = write_call_count >= 1 or fs_writes_detected or git_writes_detected
 
     # Channel B drain-race: recover from assistant_messages if type=result was not flushed.
@@ -516,7 +525,7 @@ def _build_skill_result(
             logger.warning("path_contamination_detected", detail=path_contamination, cwd=cwd)
 
     write_path_warnings: list[str] = []
-    if cwd:
+    if cwd and supports_claude_format_stdout:
         write_path_warnings = _scan_jsonl_write_paths(result.stdout, cwd)
         if write_path_warnings:
             logger.warning(

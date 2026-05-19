@@ -238,6 +238,9 @@ class ClaudeCodeBackend:
     def session_locator(self) -> ClaudeSessionLocator:
         return ClaudeSessionLocator()
 
+    def write_tool_names(self) -> frozenset[str]:
+        return frozenset({"Write", "Edit"})
+
     def binary_name(self) -> str:
         return "claude"
 

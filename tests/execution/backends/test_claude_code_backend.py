@@ -73,3 +73,7 @@ class TestClaudeCodeBackend:
         backend = ClaudeCodeBackend()
         result = backend.session_locator()
         assert isinstance(result, SessionLocator)
+
+    def test_write_tool_names_returns_write_edit(self) -> None:
+        backend = ClaudeCodeBackend()
+        assert backend.write_tool_names() == frozenset({"Write", "Edit"})

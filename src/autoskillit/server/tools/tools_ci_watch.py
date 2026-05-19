@@ -117,7 +117,8 @@ async def wait_for_ci(
             )
 
         # Infer head_sha from cwd if not provided
-        if head_sha is None and cwd:
+        _sha_inferred = head_sha is None
+        if _sha_inferred and cwd:
             try:
                 rc, stdout, _ = await _run_subprocess(
                     ["git", "rev-parse", "HEAD"], cwd=cwd, timeout=5.0
@@ -127,7 +128,7 @@ async def wait_for_ci(
             except Exception:
                 logger.warning("git rev-parse HEAD failed", exc_info=True)
 
-        if head_sha and cwd:
+        if _sha_inferred and head_sha and cwd:
             try:
                 rc_b, branch_out, _ = await _run_subprocess(
                     ["git", "branch", "--show-current"], cwd=cwd, timeout=5.0

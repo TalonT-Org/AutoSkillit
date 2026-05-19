@@ -416,9 +416,9 @@ def test_no_raw_claude_list_construction() -> None:
         ("_marketplace.py", "install"),
         ("_cook.py", "cook"),
         ("_llm_triage.py", "_triage_batch"),
-        ("commands.py", "build_interactive_cmd"),
-        ("commands.py", "build_headless_cmd"),
-        ("commands.py", "build_headless_resume_cmd"),
+        ("claude.py", "build_interactive_cmd"),
+        ("claude.py", "build_headless_cmd"),
+        ("claude.py", "build_resume_cmd"),
         ("_init_helpers.py", "_is_plugin_installed"),
         ("_doctor_mcp.py", "_check_mcp_server_registered"),
     }

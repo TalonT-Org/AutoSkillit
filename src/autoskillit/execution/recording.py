@@ -106,6 +106,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
         max_extension_seconds: float = 7200,
         marker_dir: Path | None = None,
         session_id: str | None = None,
+        stream_parser: Any | None = None,
     ) -> SubprocessResult:
         step_name = (env or {}).get(SCENARIO_STEP_NAME_ENV, "")
 
@@ -136,6 +137,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
             max_extension_seconds=max_extension_seconds,
             marker_dir=marker_dir,
             session_id=session_id,
+            stream_parser=stream_parser,
         )
 
         if step_name:
@@ -255,6 +257,7 @@ class ReplayingSubprocessRunner(SubprocessRunner):
         max_extension_seconds: float = 7200,
         marker_dir: Path | None = None,
         session_id: str | None = None,
+        stream_parser: Any | None = None,
     ) -> SubprocessResult:
         step_name = (env or {}).get(SCENARIO_STEP_NAME_ENV, "")
 

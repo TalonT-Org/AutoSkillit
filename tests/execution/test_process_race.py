@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import dataclasses
+from pathlib import Path
 
+import anyio
 import pytest
 
 from autoskillit.core.types import (
@@ -14,6 +16,7 @@ from autoskillit.core.types import (
 from autoskillit.execution.process._process_race import (
     RaceAccumulator,
     RaceSignals,
+    _extract_stdout_session_id,
     resolve_termination,
 )
 
@@ -273,8 +276,6 @@ class TestExitSnapshot:
         """_watch_process populates acc.exit_snapshot after process exits."""
         import sys
 
-        import anyio
-
         from autoskillit.execution.process._process_race import _watch_process
 
         acc = RaceAccumulator()
@@ -296,8 +297,6 @@ class TestExitSnapshot:
     async def test_watch_process_exit_snapshot_has_event_marker(self) -> None:
         """If exit_snapshot was captured, it carries event='exit_snapshot'."""
         import sys
-
-        import anyio
 
         from autoskillit.execution.process._process_race import _watch_process
 
@@ -323,8 +322,6 @@ class TestProcessExitedEvent:
         """_watch_process must set acc.process_exited=True AND process_exited_event."""
         import sys
 
-        import anyio
-
         from autoskillit.execution.process._process_race import _watch_process
 
         acc = RaceAccumulator()
@@ -347,8 +344,6 @@ class TestProcessExitedEvent:
     async def test_process_exited_event_fires_before_trigger(self, tmp_path) -> None:
         """When trigger fires due to process exit, process_exited_event must already be set."""
         import sys
-
-        import anyio
 
         from autoskillit.execution.process._process_race import _watch_process
 
@@ -380,3 +375,115 @@ class TestProcessExitedEvent:
         # After setting the event, it is set on both
         acc.process_exited_event.set()
         assert signals.process_exited_event.is_set()
+
+
+@pytest.mark.anyio
+class TestExtractStdoutSessionIdStreamParser:
+    """_extract_stdout_session_id branching: StreamParser path vs fallback."""
+
+    async def test_stream_parser_extracts_session_id(self, tmp_path: Path) -> None:
+        from autoskillit.execution.backends import ClaudeStreamParser
+
+        path = tmp_path / "stdout"
+        path.write_text('{"type": "system", "session_id": "sp-test-123"}\n')
+
+        acc = RaceAccumulator()
+        ready = anyio.Event()
+        parser = ClaudeStreamParser()
+
+        await _extract_stdout_session_id(
+            path,
+            acc,
+            ready,
+            _poll_interval=0.05,
+            _timeout=1.0,
+            stream_parser=parser,
+        )
+
+        assert acc.stdout_session_id == "sp-test-123"
+        assert ready.is_set()
+
+    async def test_none_stream_parser_uses_fallback(self, tmp_path: Path) -> None:
+        path = tmp_path / "stdout"
+        path.write_text('{"type": "system", "session_id": "fallback-456"}\n')
+
+        acc = RaceAccumulator()
+        ready = anyio.Event()
+
+        await _extract_stdout_session_id(
+            path,
+            acc,
+            ready,
+            _poll_interval=0.05,
+            _timeout=1.0,
+            stream_parser=None,
+        )
+
+        assert acc.stdout_session_id == "fallback-456"
+        assert ready.is_set()
+
+    async def test_stream_parser_timeout_no_system_record(self, tmp_path: Path) -> None:
+        from autoskillit.execution.backends import ClaudeStreamParser
+
+        path = tmp_path / "stdout"
+        path.write_text('{"type": "assistant", "message": "hello"}\n')
+
+        acc = RaceAccumulator()
+        ready = anyio.Event()
+        parser = ClaudeStreamParser()
+
+        await _extract_stdout_session_id(
+            path,
+            acc,
+            ready,
+            _poll_interval=0.05,
+            _timeout=0.2,
+            stream_parser=parser,
+        )
+
+        assert acc.stdout_session_id is None
+        assert ready.is_set()
+
+    async def test_stream_parser_skips_malformed_json(self, tmp_path: Path) -> None:
+        from autoskillit.execution.backends import ClaudeStreamParser
+
+        path = tmp_path / "stdout"
+        path.write_text("not json at all\n")
+
+        acc = RaceAccumulator()
+        ready = anyio.Event()
+        parser = ClaudeStreamParser()
+
+        await _extract_stdout_session_id(
+            path,
+            acc,
+            ready,
+            _poll_interval=0.05,
+            _timeout=0.2,
+            stream_parser=parser,
+        )
+
+        assert acc.stdout_session_id is None
+        assert ready.is_set()
+
+    async def test_stream_parser_empty_session_id_skipped(self, tmp_path: Path) -> None:
+        from autoskillit.execution.backends import ClaudeStreamParser
+
+        path = tmp_path / "stdout"
+        path.write_text('{"type": "system", "session_id": ""}\n')
+
+        acc = RaceAccumulator()
+        ready = anyio.Event()
+        parser = ClaudeStreamParser()
+
+        await _extract_stdout_session_id(
+            path,
+            acc,
+            ready,
+            _poll_interval=0.05,
+            _timeout=0.2,
+            stream_parser=parser,
+        )
+
+        assert acc.stdout_session_id is None
+        assert ready.is_set()

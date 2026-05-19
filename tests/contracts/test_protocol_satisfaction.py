@@ -359,6 +359,7 @@ class TestGroupDApiContractPreservation:
             "max_extension_seconds",
             "marker_dir",
             "session_id",
+            "stream_parser",
         }
         assert expected == public_params, (
             f"run_managed_async public params changed.\n"
@@ -425,6 +426,7 @@ class TestGroupDApiContractPreservation:
             "max_extension_seconds",
             "marker_dir",
             "session_id",
+            "stream_parser",
         }
         assert expected == actual, (
             f"DefaultSubprocessRunner.__call__ params changed.\n"

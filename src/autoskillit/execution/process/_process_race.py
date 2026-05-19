@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import assert_never
+from typing import TYPE_CHECKING, assert_never
 
 import anyio
 import anyio.abc
@@ -18,6 +18,9 @@ from autoskillit.execution.process._process_monitor import (
     _heartbeat,
     _session_log_monitor,
 )
+
+if TYPE_CHECKING:
+    from autoskillit.core import StreamParser
 
 logger = get_logger(__name__)
 
@@ -265,6 +268,7 @@ async def _extract_stdout_session_id(
     ready: anyio.Event,
     _poll_interval: float = 0.3,
     _timeout: float = 10.0,
+    stream_parser: StreamParser | None = None,
 ) -> None:
     """Extract session ID from stdout type=system record and deposit on accumulator.
 
@@ -291,17 +295,23 @@ async def _extract_stdout_session_id(
             line = line.strip()
             if not line:
                 continue
-            try:
-                obj = _fast_loads(line)
-            except ValueError:
-                continue
-            if isinstance(obj, dict) and obj.get("type") == "system":
-                sid = obj.get("session_id")
-                if sid:
-                    acc.stdout_session_id = sid
-                    logger.debug("stdout_session_id_extracted", session_id=sid)
-                    ready.set()
-                    return
+            sid: str | None = None
+            if stream_parser is not None:
+                event = stream_parser.parse_line(line)
+                if event is not None:
+                    sid = event.session_id
+            else:
+                try:
+                    obj = _fast_loads(line)
+                except ValueError:
+                    continue
+                if isinstance(obj, dict) and obj.get("type") == "system":
+                    sid = obj.get("session_id")
+            if sid:
+                acc.stdout_session_id = sid
+                logger.debug("stdout_session_id_extracted", session_id=sid)
+                ready.set()
+                return
     logger.debug("stdout_session_id_extraction_timeout", timeout=_timeout)
     ready.set()
 

@@ -559,3 +559,167 @@ async def test_execute_claude_headless_forwards_marker_dir_to_runner(
 
     assert runner_kwargs["marker_dir"] == Path("/custom/markers")
     assert runner_kwargs["session_id"] == "sess-abc"
+
+
+# ── pty_mode / session_log_dir capability forwarding tests ───────────────────────
+
+
+def _mock_backend(*, pty_required: bool = True, channel_b_capable: bool = True, **kw):
+    """Build a mock backend with configurable capabilities."""
+    from dataclasses import replace
+    from unittest.mock import Mock
+
+    from autoskillit.core import CLAUDE_CODE_CAPABILITIES, CmdSpec
+
+    caps = replace(
+        CLAUDE_CODE_CAPABILITIES,
+        pty_required=pty_required,
+        channel_b_capable=channel_b_capable,
+        **kw,
+    )
+    backend = Mock()
+    backend.capabilities = caps
+    backend.build_resume_cmd.return_value = CmdSpec(
+        cmd=("claude", "--print", "emit marker", "--resume", "test-session"),
+        env={},
+    )
+    return backend
+
+
+@pytest.mark.anyio
+async def test_execute_claude_headless_pty_mode_from_backend(
+    minimal_ctx, tmp_path, monkeypatch
+) -> None:
+
+    from autoskillit.execution.commands import ClaudeHeadlessCmd
+    from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
+    from tests.execution.conftest import _sr
+
+    spec = ClaudeHeadlessCmd(cmd=["echo", "test"], env={})
+    runner_kwargs: dict = {}
+
+    async def fake_runner(cmd, **kwargs):
+        runner_kwargs.update(kwargs)
+        return _sr()
+
+    minimal_ctx.runner = fake_runner
+    minimal_ctx.backend = _mock_backend(pty_required=False)
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._build_skill_result",
+        lambda *a, **kw: SkillResult(
+            success=True,
+            result="ok",
+            session_id="s1",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        ),
+    )
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._compute_post_session_metrics",
+        lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),
+    )
+    monkeypatch.setattr("autoskillit.execution.headless._capture_git_head_sha", lambda *a: "")
+
+    await _execute_claude_headless(
+        spec,
+        str(tmp_path),
+        minimal_ctx,
+        timeout=60,
+        stale_threshold=30,
+    )
+
+    assert runner_kwargs["pty_mode"] is False
+
+
+@pytest.mark.anyio
+async def test_execute_claude_headless_session_log_dir_none_when_no_channel_b(
+    minimal_ctx, tmp_path, monkeypatch
+) -> None:
+
+    from autoskillit.execution.commands import ClaudeHeadlessCmd
+    from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
+    from tests.execution.conftest import _sr
+
+    spec = ClaudeHeadlessCmd(cmd=["echo", "test"], env={})
+    runner_kwargs: dict = {}
+
+    async def fake_runner(cmd, **kwargs):
+        runner_kwargs.update(kwargs)
+        return _sr()
+
+    minimal_ctx.runner = fake_runner
+    minimal_ctx.backend = _mock_backend(channel_b_capable=False)
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._build_skill_result",
+        lambda *a, **kw: SkillResult(
+            success=True,
+            result="ok",
+            session_id="s1",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        ),
+    )
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._compute_post_session_metrics",
+        lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),
+    )
+    monkeypatch.setattr("autoskillit.execution.headless._capture_git_head_sha", lambda *a: "")
+
+    await _execute_claude_headless(
+        spec,
+        str(tmp_path),
+        minimal_ctx,
+        timeout=60,
+        stale_threshold=30,
+    )
+
+    assert runner_kwargs["session_log_dir"] is None
+
+
+@pytest.mark.anyio
+async def test_dispatch_food_truck_marker_dir_none_when_no_channel_b(
+    minimal_ctx, tmp_path, monkeypatch
+) -> None:
+    execute_kwargs: dict = {}
+
+    async def fake_execute(spec, cwd, ctx, **kwargs):
+        execute_kwargs.update(kwargs)
+        return SkillResult(
+            success=True,
+            result="ok",
+            session_id="s1",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        )
+
+    monkeypatch.setattr("autoskillit.execution.headless._execute_claude_headless", fake_execute)
+    monkeypatch.setattr("autoskillit.execution.headless._capture_git_head_sha", lambda *a: "")
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._compute_post_session_metrics",
+        lambda *a, **kw: object(),
+    )
+
+    minimal_ctx.backend = _mock_backend(channel_b_capable=False)
+
+    from autoskillit.execution.headless import DefaultHeadlessExecutor
+
+    executor = DefaultHeadlessExecutor(minimal_ctx)
+    await executor.dispatch_food_truck(
+        "prompt",
+        str(tmp_path),
+        completion_marker="%%DONE%%",
+    )
+
+    assert execute_kwargs["marker_dir"] is None

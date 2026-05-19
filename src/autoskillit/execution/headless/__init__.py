@@ -130,6 +130,18 @@ def _session_log_dir(cwd: str) -> Path:
     return log_dir
 
 
+def _resolve_pty_mode(ctx: ToolContext) -> bool:
+    if ctx.backend is None:
+        return True
+    return ctx.backend.capabilities.pty_required
+
+
+def _resolve_session_log_dir(cwd: str, ctx: ToolContext) -> Path | None:
+    if ctx.backend is not None and not ctx.backend.capabilities.channel_b_capable:
+        return None
+    return _session_log_dir(cwd)
+
+
 def _resolve_model(step_model: str, config: AutomationConfig) -> str | None:
     """Resolve model selection: config override > step > config default."""
     if config.model.model_override:
@@ -312,8 +324,8 @@ async def _execute_claude_headless(
                 cwd=Path(cwd),
                 timeout=timeout,
                 env=spec.env,
-                pty_mode=True,
-                session_log_dir=_session_log_dir(cwd),
+                pty_mode=_resolve_pty_mode(ctx),
+                session_log_dir=_resolve_session_log_dir(cwd, ctx),
                 completion_marker=completion_marker,
                 stale_threshold=stale_threshold,
                 completion_drain_timeout=cfg.completion_drain_timeout,
@@ -476,6 +488,7 @@ async def _execute_claude_headless(
                 completion_marker,
                 cwd,
                 runner,
+                backend=ctx.backend,
                 provider_extras=provider_extras,
                 retry_reason=skill_result.retry_reason,
             )
@@ -892,7 +905,7 @@ class DefaultHeadlessExecutor:
         )
 
         effective_marker_dir: Path | None = marker_dir or (
-            claude_code_project_dir(cwd) if cwd else None
+            _resolve_session_log_dir(cwd, self._ctx) if cwd else None
         )
 
         return await _execute_claude_headless(

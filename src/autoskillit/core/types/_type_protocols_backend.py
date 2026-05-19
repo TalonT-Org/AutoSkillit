@@ -12,6 +12,8 @@ from ._type_backend import (
     CmdSpec,
     SessionEvent,
 )
+from ._type_enums import OutputFormat
+from ._type_plugin_source import PluginSource
 
 __all__ = [
     "StreamParser",
@@ -77,3 +79,13 @@ class CodingAgentBackend(Protocol):
     def env_policy(self) -> EnvPolicy: ...
 
     def session_locator(self) -> SessionLocator: ...
+
+    def build_resume_cmd(
+        self,
+        *,
+        resume_session_id: str,
+        prompt: str,
+        output_format: OutputFormat = OutputFormat.JSON,
+        plugin_source: PluginSource | None = None,
+        env_extras: Mapping[str, str] | None = None,
+    ) -> CmdSpec: ...

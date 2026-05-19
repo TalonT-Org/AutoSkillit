@@ -65,14 +65,20 @@ def cook(
     *, resume: bool = False, session_id: str | None = None, profile: str | None = None
 ) -> None:
     """Launch Claude with all bundled AutoSkillit skills as slash commands."""
+    from autoskillit.execution import ClaudeCodeBackend
     from autoskillit.workspace import (
         DefaultSessionSkillManager,
         SkillsDirectoryProvider,
         resolve_ephemeral_root,
     )
 
-    if not shutil.which("claude"):
-        print("'claude' not found on PATH. Install Claude Code to use cook.")
+    backend = ClaudeCodeBackend()
+
+    if shutil.which(backend.binary_name()) is None:
+        print(
+            f"ERROR: '{backend.binary_name()}' not found. "
+            "Install: https://docs.anthropic.com/en/docs/claude-code"
+        )
         raise SystemExit(1)
 
     from autoskillit import __version__
@@ -153,7 +159,6 @@ def cook(
     )
 
     logger = get_logger(__name__)
-    from autoskillit.execution import build_interactive_cmd
 
     configure_logging()
 
@@ -211,7 +216,7 @@ def cook(
     _max_reloads = 10
     seen_reload_ids: set[str] = set()
     while True:
-        spec = build_interactive_cmd(
+        spec = backend.build_interactive_cmd(
             plugin_source=plugin_source,
             add_dirs=[skills_dir],
             initial_prompt=_current_initial_prompt,
@@ -219,7 +224,7 @@ def cook(
             env_extras=_cook_env_extras,
         )
         reload_session_id = _run_cook_session(
-            cmd=spec.cmd,
+            cmd=[*spec.cmd],
             env=spec.env,
             _first_run=_current_first_run,
             initial_prompt=_current_initial_prompt,

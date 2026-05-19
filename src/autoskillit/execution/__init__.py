@@ -16,6 +16,9 @@ from autoskillit.execution.anomaly_detection import (
     AnomalySeverity,
     detect_anomalies,
 )
+from autoskillit.execution.backends import (
+    ClaudeCodeBackend,
+)
 from autoskillit.execution.ci import DefaultCIWatcher
 from autoskillit.execution.commands import (
     _MAX_MCP_OUTPUT_TOKENS_VALUE,  # noqa: F401
@@ -203,6 +206,8 @@ __all__ = [
     "read_boot_id",
     "read_starttime_ticks",
     "start_linux_tracing",
+    # backends
+    "ClaudeCodeBackend",
     # anomaly_detection
     "detect_anomalies",
     "AnomalyKind",

@@ -119,7 +119,7 @@ def test_cook_session_sentinel_consumed_after_reload(
 def test_cook_reload_loop_uses_named_resume(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from autoskillit.execution.commands import ClaudeInteractiveCmd
+    from autoskillit.core import CmdSpec
 
     run_count = [0]
     captured_resume_specs: list = []
@@ -130,9 +130,13 @@ def test_cook_reload_loop_uses_named_resume(
             return "sess-001"
         return None
 
-    def fake_build_interactive_cmd(**kwargs):
-        captured_resume_specs.append(kwargs.get("resume_spec"))
-        return ClaudeInteractiveCmd(cmd=["claude"], env={})
+    class _MockBackend:
+        def binary_name(self) -> str:
+            return "claude"
+
+        def build_interactive_cmd(self, **kwargs):
+            captured_resume_specs.append(kwargs.get("resume_spec"))
+            return CmdSpec(cmd=("claude",), env={})
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(shutil, "which", lambda x: "/usr/bin/claude")
@@ -140,7 +144,7 @@ def test_cook_reload_loop_uses_named_resume(
     monkeypatch.setattr("builtins.input", lambda _prompt="": "")
     monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _: False)
     monkeypatch.setattr("autoskillit.cli.session._cook._run_cook_session", fake_run_cook_session)
-    monkeypatch.setattr("autoskillit.execution.build_interactive_cmd", fake_build_interactive_cmd)
+    monkeypatch.setattr("autoskillit.execution.ClaudeCodeBackend", _MockBackend)
 
     from autoskillit.workspace.session_skills import DefaultSessionSkillManager
 

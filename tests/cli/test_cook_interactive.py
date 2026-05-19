@@ -566,24 +566,28 @@ class TestCookInteractive:
         """cook() passes AUTOSKILLIT_SESSION_TYPE=cook in env_extras."""
         from unittest.mock import MagicMock, patch
 
+        from autoskillit.core import CmdSpec
+
         fake_skills_dir = tmp_path / "skills"
         fake_skills_dir.mkdir()
         mock_mgr = MagicMock()
         mock_mgr.init_session.return_value = fake_skills_dir
         captured_env_extras: list = []
 
-        from autoskillit.execution.commands import ClaudeInteractiveCmd
+        class _MockBackend:
+            def binary_name(self) -> str:
+                return "claude"
 
-        def fake_build_interactive_cmd(**kwargs):
-            captured_env_extras.append(kwargs.get("env_extras", {}))
-            return ClaudeInteractiveCmd(cmd=["claude", "--dangerously-skip-permissions"], env={})
+            def build_interactive_cmd(self, **kwargs):
+                captured_env_extras.append(kwargs.get("env_extras", {}))
+                return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
 
         with (
             patch("shutil.which", return_value="/usr/bin/claude"),
             patch("builtins.input", return_value=""),
             patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
             patch("subprocess.run", return_value=MagicMock(returncode=0)),
-            patch("autoskillit.execution.build_interactive_cmd", fake_build_interactive_cmd),
+            patch("autoskillit.execution.ClaudeCodeBackend", _MockBackend),
             patch("autoskillit.core.write_registry_entry"),
         ):
             import autoskillit.cli.session._cook as module
@@ -600,24 +604,28 @@ class TestCookInteractive:
         """cook() passes AUTOSKILLIT_LAUNCH_ID in env_extras."""
         from unittest.mock import MagicMock, patch
 
+        from autoskillit.core import CmdSpec
+
         fake_skills_dir = tmp_path / "skills"
         fake_skills_dir.mkdir()
         mock_mgr = MagicMock()
         mock_mgr.init_session.return_value = fake_skills_dir
         captured_env_extras: list = []
 
-        from autoskillit.execution.commands import ClaudeInteractiveCmd
+        class _MockBackend:
+            def binary_name(self) -> str:
+                return "claude"
 
-        def fake_build_interactive_cmd(**kwargs):
-            captured_env_extras.append(kwargs.get("env_extras", {}))
-            return ClaudeInteractiveCmd(cmd=["claude", "--dangerously-skip-permissions"], env={})
+            def build_interactive_cmd(self, **kwargs):
+                captured_env_extras.append(kwargs.get("env_extras", {}))
+                return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
 
         with (
             patch("shutil.which", return_value="/usr/bin/claude"),
             patch("builtins.input", return_value=""),
             patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
             patch("subprocess.run", return_value=MagicMock(returncode=0)),
-            patch("autoskillit.execution.build_interactive_cmd", fake_build_interactive_cmd),
+            patch("autoskillit.execution.ClaudeCodeBackend", _MockBackend),
             patch("autoskillit.core.write_registry_entry"),
         ):
             import autoskillit.cli.session._cook as module
@@ -626,3 +634,84 @@ class TestCookInteractive:
 
         assert captured_env_extras, "build_interactive_cmd must have been called"
         assert "AUTOSKILLIT_LAUNCH_ID" in captured_env_extras[0]
+
+    def test_cook_uses_backend_binary_name(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """cook() calls shutil.which with the backend's binary_name()."""
+        from unittest.mock import MagicMock, patch
+
+        from autoskillit.core import CmdSpec
+
+        fake_skills_dir = tmp_path / "skills"
+        fake_skills_dir.mkdir()
+        mock_mgr = MagicMock()
+        mock_mgr.init_session.return_value = fake_skills_dir
+        captured_which: list = []
+
+        class _CustomBackend:
+            def binary_name(self) -> str:
+                return "my-test-claude"
+
+            def build_interactive_cmd(self, **kwargs):
+                return CmdSpec(cmd=("my-test-claude", "--dangerously-skip-permissions"), env={})
+
+        def tracking_which(binary):
+            captured_which.append(binary)
+            return "/usr/bin/my-test-claude" if binary == "my-test-claude" else None
+
+        with (
+            patch("shutil.which", side_effect=tracking_which),
+            patch("builtins.input", return_value=""),
+            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
+            patch("subprocess.run", return_value=MagicMock(returncode=0)),
+            patch("autoskillit.execution.ClaudeCodeBackend", _CustomBackend),
+            patch("autoskillit.core.write_registry_entry"),
+        ):
+            import autoskillit.cli.session._cook as module
+
+            module.cook()
+
+        assert "my-test-claude" in captured_which
+
+    def test_cook_calls_backend_build_interactive_cmd_with_expected_kwargs(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """cook() calls backend.build_interactive_cmd() with expected kwargs."""
+        from unittest.mock import MagicMock, patch
+
+        from autoskillit.core import CmdSpec
+
+        fake_skills_dir = tmp_path / "skills"
+        fake_skills_dir.mkdir()
+        mock_mgr = MagicMock()
+        mock_mgr.init_session.return_value = fake_skills_dir
+        captured_kwargs: list = []
+
+        class _CapturingBackend:
+            def binary_name(self) -> str:
+                return "claude"
+
+            def build_interactive_cmd(self, **kwargs):
+                captured_kwargs.append(kwargs)
+                return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
+
+        with (
+            patch("shutil.which", return_value="/usr/bin/claude"),
+            patch("builtins.input", return_value=""),
+            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
+            patch("subprocess.run", return_value=MagicMock(returncode=0)),
+            patch("autoskillit.execution.ClaudeCodeBackend", _CapturingBackend),
+            patch("autoskillit.core.write_registry_entry"),
+        ):
+            import autoskillit.cli.session._cook as module
+
+            module.cook()
+
+        assert len(captured_kwargs) == 1, "build_interactive_cmd must have been called"
+        call_kwargs = captured_kwargs[0]
+        assert "plugin_source" in call_kwargs
+        assert "add_dirs" in call_kwargs
+        assert "initial_prompt" in call_kwargs
+        assert "resume_spec" in call_kwargs
+        assert "env_extras" in call_kwargs

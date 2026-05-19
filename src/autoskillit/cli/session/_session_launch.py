@@ -37,8 +37,14 @@ def _run_interactive_session(
         _InfraExitSignal — when an infrastructure exit is detected
         None — clean exit
     """
-    if shutil.which("claude") is None:
-        print("ERROR: 'claude' not found. Install: https://docs.anthropic.com/en/docs/claude-code")
+    from autoskillit.execution import ClaudeCodeBackend, read_session_state
+
+    backend = ClaudeCodeBackend()
+    if shutil.which(backend.binary_name()) is None:
+        print(
+            f"ERROR: '{backend.binary_name()}' not found. "
+            "Install: https://docs.anthropic.com/en/docs/claude-code"
+        )
         sys.exit(1)
     from autoskillit.cli.session._reload import consume_reload_sentinel
     from autoskillit.cli.ui._terminal import terminal_guard
@@ -52,28 +58,30 @@ def _run_interactive_session(
         detect_autoskillit_mcp_prefix,
         pkg_root,
     )
-    from autoskillit.execution import build_interactive_cmd, read_session_state
 
     _project_dir = project_dir if project_dir is not None else Path.cwd()
-    spec = build_interactive_cmd(
+    spec = backend.build_interactive_cmd(
         initial_prompt=initial_message,
         resume_spec=resume_spec if resume_spec is not None else NoResume(),
         env_extras=extra_env,
         required_env=required_env,
     )
-    plugin_flags = (
-        []
-        if detect_autoskillit_mcp_prefix() == MARKETPLACE_PREFIX
-        else [ClaudeFlags.PLUGIN_DIR, str(pkg_root())]
-    )
-    _is_resume = isinstance(resume_spec, (BareResume, NamedResume))
-    cmd = [
-        *spec.cmd,
-        *plugin_flags,
-        ClaudeFlags.TOOLS,
-        "AskUserQuestion",
-        *([] if _is_resume else [ClaudeFlags.APPEND_SYSTEM_PROMPT, system_prompt]),
-    ]
+    if backend.capabilities.skill_injection_capable:
+        plugin_flags = (
+            []
+            if detect_autoskillit_mcp_prefix() == MARKETPLACE_PREFIX
+            else [ClaudeFlags.PLUGIN_DIR, str(pkg_root())]
+        )
+        _is_resume = isinstance(resume_spec, (BareResume, NamedResume))
+        cmd = [
+            *spec.cmd,
+            *plugin_flags,
+            ClaudeFlags.TOOLS,
+            "AskUserQuestion",
+            *([] if _is_resume else [ClaudeFlags.APPEND_SYSTEM_PROMPT, system_prompt]),
+        ]
+    else:
+        cmd = [*spec.cmd]
     with terminal_guard():
         result = subprocess.run(cmd, env=spec.env)
     reload_session_id = consume_reload_sentinel(_project_dir)

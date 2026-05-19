@@ -314,9 +314,7 @@ def make_context(
     ephemeral_root = resolve_ephemeral_root()
     session_mgr = DefaultSessionSkillManager(provider, ephemeral_root)
 
-    from autoskillit.execution.backends import (
-        get_backend,
-    )  # lazy: avoids backends init on server import
+    from autoskillit.execution import get_backend  # lazy: avoids execution init on server import
     from autoskillit.fleet import (  # lazy: avoids fleet init on server import
         FleetSemaphore,
         build_protected_campaign_ids,

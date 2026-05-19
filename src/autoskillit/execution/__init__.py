@@ -18,6 +18,7 @@ from autoskillit.execution.anomaly_detection import (
 )
 from autoskillit.execution.backends import (
     ClaudeCodeBackend,
+    get_backend,
 )
 from autoskillit.execution.ci import DefaultCIWatcher
 from autoskillit.execution.commands import (
@@ -223,4 +224,6 @@ __all__ = [
     "extract_linked_issues",
     "is_valid_fidelity_finding",
     "partition_files_by_domain",
+    # backends
+    "get_backend",
 ]

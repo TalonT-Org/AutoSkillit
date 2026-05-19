@@ -9,7 +9,6 @@ from unittest.mock import Mock
 import pytest
 
 from autoskillit.core import CLAUDE_CODE_CAPABILITIES, CmdSpec
-from tests.conftest import _make_result
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 

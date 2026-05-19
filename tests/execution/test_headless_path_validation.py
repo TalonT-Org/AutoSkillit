@@ -1728,13 +1728,17 @@ class TestNudgeBackendGuard:
     @pytest.mark.anyio
     async def test_nudge_skips_when_not_session_resume_capable(self, tool_ctx):
         from dataclasses import replace
+        from unittest.mock import Mock
 
+        from autoskillit.core import CLAUDE_CODE_CAPABILITIES
         from autoskillit.core.types import RetryReason
         from autoskillit.execution.headless import run_headless_core
 
         marker = tool_ctx.config.run_skill.completion_marker
-        # tool_ctx has a real backend; replace its capabilities
-        tool_ctx.backend = replace(tool_ctx.backend, session_resume_capable=False)
+        caps = replace(CLAUDE_CODE_CAPABILITIES, session_resume_capable=False)
+        mock_backend = Mock()
+        mock_backend.capabilities = caps
+        tool_ctx.backend = mock_backend
         tool_ctx.runner.push(self._main_subprocess_result(marker))
         tool_ctx.runner.push(self._nudge_response(marker))
         result = await run_headless_core(
@@ -1749,8 +1753,10 @@ class TestNudgeBackendGuard:
 
     @pytest.mark.anyio
     async def test_nudge_uses_backend_build_resume_cmd(self, tool_ctx):
+        from dataclasses import replace
+        from unittest.mock import Mock
 
-        from autoskillit.core import CmdSpec
+        from autoskillit.core import CLAUDE_CODE_CAPABILITIES, CmdSpec
         from autoskillit.execution.headless import run_headless_core
 
         marker = tool_ctx.config.run_skill.completion_marker
@@ -1758,7 +1764,11 @@ class TestNudgeBackendGuard:
             cmd=("claude", "--resume", "sess-main", "--print", "emit marker"),
             env={"TEST": "val"},
         )
-        tool_ctx.backend.build_resume_cmd.return_value = expected_cmd
+        caps = replace(CLAUDE_CODE_CAPABILITIES, session_resume_capable=True)
+        mock_backend = Mock()
+        mock_backend.capabilities = caps
+        mock_backend.build_resume_cmd.return_value = expected_cmd
+        tool_ctx.backend = mock_backend
         tool_ctx.runner.push(self._main_subprocess_result(marker, session_id="sess-main"))
         tool_ctx.runner.push(self._nudge_response(marker))
         await run_headless_core(
@@ -1767,9 +1777,8 @@ class TestNudgeBackendGuard:
             ctx=tool_ctx,
             expected_output_patterns=[r"plan_path\s*=\s*/.+"],
         )
-        # Verify backend.build_resume_cmd was called
-        tool_ctx.backend.build_resume_cmd.assert_called_once()
-        call_kwargs = tool_ctx.backend.build_resume_cmd.call_args
+        mock_backend.build_resume_cmd.assert_called_once()
+        call_kwargs = mock_backend.build_resume_cmd.call_args
         assert call_kwargs.kwargs["resume_session_id"] == "sess-main"
 
 

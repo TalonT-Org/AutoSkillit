@@ -222,7 +222,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
         }
     ),
     "_type_results_execution": frozenset({"core", "execution", "server", "pipeline"}),
-    "_type_backend": frozenset({"core"}),
+    "_type_backend": frozenset({"core", "execution"}),
     "_type_dispatch_identity": frozenset({"core", "fleet", "execution"}),
     "_type_figure_spec": frozenset({"core", "report"}),
     "_type_session_env": frozenset({"core", "cli"}),
@@ -347,6 +347,7 @@ SUBPKG_CASCADE_EXECUTION: dict[str, frozenset[str]] = {
             "smoke_utils",
         }
     ),
+    "backends": frozenset({"execution"}),
 }
 
 MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {

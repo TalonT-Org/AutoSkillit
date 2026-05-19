@@ -509,6 +509,11 @@ _CLAUDE_ENV_RULE_ALLOWED: frozenset[tuple[str, str]] = frozenset(
         # _apply_output_format(cmd, ...) — an in-place list mutation, not a subprocess
         # launch. The function returns ClaudeHeadlessCmd(cmd=cmd, env=build_agent_env(...)).
         ("commands.py", "build_headless_resume_cmd"),
+        # build_cmd constructs CmdSpec(cmd=tuple(spec.cmd), env=spec.env, cwd=cwd) — a
+        # dataclass constructor, not a subprocess launch. The checker misidentifies
+        # tuple(spec.cmd) as a claude-launching call because spec was bound to a
+        # build_headless_cmd() return value. env IS properly forwarded via spec.env.
+        ("claude.py", "build_cmd"),
     }
 )
 

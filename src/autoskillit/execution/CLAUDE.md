@@ -2,7 +2,8 @@
 
 IL-1 execution layer — headless Claude sessions, process lifecycle, CI/GitHub integration.
 Sub-packages: headless/ (see headless/CLAUDE.md), process/ (see process/CLAUDE.md),
-merge_queue/ (see merge_queue/CLAUDE.md), session/ (see session/CLAUDE.md).
+merge_queue/ (see merge_queue/CLAUDE.md), session/ (see session/CLAUDE.md),
+backends/ (see backends/CLAUDE.md).
 
 ## Files
 

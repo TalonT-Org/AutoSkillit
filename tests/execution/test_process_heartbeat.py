@@ -673,10 +673,8 @@ class TestHeartbeatStreamParser:
                 )
 
         # Append a record WITH the marker — should fire immediately
-        stdout_path.write_text(
-            '{"type":"result","result":"Done.\\n%%DONE%%","session_id":"s1"}\n',
-            mode="a",
-        )
+        with stdout_path.open("a") as f:
+            f.write('{"type":"result","result":"Done.\\n%%DONE%%","session_id":"s1"}\n')
         with anyio.fail_after(1.0):
             result = await _heartbeat(
                 stdout_path,

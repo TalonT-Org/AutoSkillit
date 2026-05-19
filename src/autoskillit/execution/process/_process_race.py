@@ -130,6 +130,7 @@ async def _watch_heartbeat(
     acc: RaceAccumulator,
     trigger: anyio.Event,
     _poll_interval: float,
+    stream_parser: StreamParser | None = None,
 ) -> None:
     """Poll stdout NDJSON for a result record and deposit the Channel A signal."""
     await _heartbeat(
@@ -137,6 +138,7 @@ async def _watch_heartbeat(
         heartbeat_record_types,
         completion_marker=completion_marker,
         _poll_interval=_poll_interval,
+        stream_parser=stream_parser,
     )
     logger.debug(
         "channel_a_confirmed",

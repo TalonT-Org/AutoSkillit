@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 
 import anyio
 import psutil
@@ -16,6 +16,9 @@ from autoskillit.execution.process._process_jsonl import (
     _jsonl_has_record_type,
     _jsonl_last_record_type,
 )
+
+if TYPE_CHECKING:
+    from autoskillit.core import StreamParser
 
 logger = get_logger(__name__)
 
@@ -34,6 +37,7 @@ async def _heartbeat(
     completion_marker: str = "",
     _poll_interval: float = 0.5,
     _on_poll: Callable[[], None] | None = None,
+    stream_parser: StreamParser | None = None,
 ) -> str:
     """Poll session NDJSON output for a result-type record with non-empty content.
 
@@ -66,7 +70,15 @@ async def _heartbeat(
         new_raw = raw[scan_pos:]
         scan_pos = len(raw)
         new_content = new_raw.decode("utf-8", errors="replace")
-        if _jsonl_has_record_type(new_content, record_types, completion_marker=completion_marker):
+        if stream_parser is not None:
+            for line in new_content.splitlines():
+                event = stream_parser.parse_line(line)
+                if event is not None and event.is_terminal:
+                    if not completion_marker or event.has_marker:
+                        return "completion"
+        elif _jsonl_has_record_type(
+            new_content, record_types, completion_marker=completion_marker
+        ):
             return "completion"
 
 

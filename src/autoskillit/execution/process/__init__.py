@@ -322,7 +322,10 @@ async def run_managed_async(
             async with anyio.create_task_group() as tg:
                 tg.start_soon(_watch_process, proc, acc, trigger)
                 tg.start_soon(
-                    _watch_heartbeat,
+                    functools.partial(
+                        _watch_heartbeat,
+                        stream_parser=stream_parser,
+                    ),
                     stdout_path,
                     heartbeat_record_types,
                     completion_marker,

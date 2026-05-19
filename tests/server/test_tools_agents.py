@@ -157,24 +157,38 @@ def test_agent_defs_in_pyproject_artifacts():
     assert '"src/autoskillit/agents/**"' in content
 
 
-# T11: make-plan SKILL.md activate_agents references valid packs
-def test_make_plan_activate_agents_resolves():
-    """Parse activate_agents from make-plan SKILL.md.
+# T11: make-plan SKILL.md subagent_type references resolve to agent files
+def test_make_plan_subagent_type_refs_resolve():
+    """Grep SKILL.md for autoskillit:plan-* subagent_type refs.
 
-    All packs should exist in AGENT_PACK_REGISTRY.
+    Each must correspond to an agent definition file in agents/.
     """
     import re
 
     from autoskillit.core import pkg_root
 
     content = (pkg_root() / "skills_extended" / "make-plan" / "SKILL.md").read_text()
-    m = re.search(r"^activate_agents:\s*\[([^\]]*)\]", content, re.MULTILINE)
-    assert m is not None, "activate_agents not found in make-plan SKILL.md frontmatter"
-    packs = [p.strip() for p in m.group(1).split(",") if p.strip()]
-    for pack in packs:
-        assert pack in AGENT_PACK_REGISTRY, (
-            f"Pack '{pack}' from activate_agents not in AGENT_PACK_REGISTRY"
+    refs = re.findall(r"autoskillit:(plan-[a-z-]+)", content)
+    assert len(refs) >= 4, f"Expected >=4 autoskillit:plan-* refs in SKILL.md, found {len(refs)}"
+
+    agents_dir = pkg_root() / "agents"
+    for agent_name in set(refs):
+        agent_file = agents_dir / f"{agent_name}.md"
+        assert agent_file.exists(), (
+            f"SKILL.md references autoskillit:{agent_name} but {agent_file} does not exist"
         )
+
+
+# T11b: make-plan SKILL.md no longer has activate_agents frontmatter
+def test_make_plan_no_activate_agents():
+    """SKILL.md frontmatter must not contain activate_agents."""
+    import re
+
+    from autoskillit.core import pkg_root
+
+    content = (pkg_root() / "skills_extended" / "make-plan" / "SKILL.md").read_text()
+    m = re.search(r"^activate_agents:", content, re.MULTILINE)
+    assert m is None, "activate_agents found in SKILL.md frontmatter — should have been removed"
 
 
 # T12: Agent definition frontmatter has required fields

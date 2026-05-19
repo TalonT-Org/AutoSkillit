@@ -599,6 +599,113 @@ class TestOrphanedToolResultDetection:
         assert result.orphaned_tool_result is False
 
 
+class TestHeartbeatStreamParser:
+    """_heartbeat dual-path: StreamParser vs legacy _jsonl_has_record_type."""
+
+    @pytest.mark.anyio
+    async def test_stream_parser_detects_completion(self, tmp_path):
+        """StreamParser path fires when type=result with non-empty result is written."""
+        from autoskillit.execution.backends import ClaudeStreamParser
+
+        stdout_path = tmp_path / "stdout.tmp"
+        stdout_path.write_text('{"type":"result","result":"Done","session_id":"s1"}\n')
+
+        with anyio.fail_after(5.0):
+            result = await _heartbeat(
+                stdout_path,
+                stream_parser=ClaudeStreamParser(),
+                _poll_interval=0.05,
+            )
+        assert result == "completion"
+
+    @pytest.mark.anyio
+    async def test_none_stream_parser_uses_legacy_path(self, tmp_path):
+        """stream_parser=None falls back to _jsonl_has_record_type."""
+        import json
+
+        stdout_path = tmp_path / "stdout.tmp"
+        result_record = json.dumps(
+            {"type": "result", "result": "Done", "session_id": "s1"},
+            separators=(",", ":"),
+        )
+        stdout_path.write_text(result_record + "\n")
+
+        with anyio.fail_after(5.0):
+            result = await _heartbeat(
+                stdout_path,
+                stream_parser=None,
+                record_types=frozenset({"result"}),
+                _poll_interval=0.05,
+            )
+        assert result == "completion"
+
+    @pytest.mark.anyio
+    async def test_stream_parser_ignores_non_terminal_records(self, tmp_path):
+        """StreamParser ignores type=assistant (non-terminal) — heartbeat stays silent."""
+        from autoskillit.execution.backends import ClaudeStreamParser
+
+        stdout_path = tmp_path / "stdout.tmp"
+        stdout_path.write_text('{"type":"assistant","message":{"content":"thinking"}}\n')
+
+        with pytest.raises(TimeoutError):
+            with anyio.fail_after(0.3):
+                await _heartbeat(
+                    stdout_path,
+                    stream_parser=ClaudeStreamParser(),
+                    _poll_interval=0.05,
+                )
+
+    @pytest.mark.anyio
+    async def test_stream_parser_rejects_terminal_without_marker(self, tmp_path):
+        """StreamParser with completion_marker rejects terminal event when marker is absent."""
+        from autoskillit.execution.backends import ClaudeStreamParser
+
+        stdout_path = tmp_path / "stdout.tmp"
+        stdout_path.write_text('{"type":"result","result":"Partial","session_id":"s1"}\n')
+
+        with pytest.raises(TimeoutError):
+            with anyio.fail_after(0.3):
+                await _heartbeat(
+                    stdout_path,
+                    stream_parser=ClaudeStreamParser(completion_marker="%%DONE%%"),
+                    completion_marker="%%DONE%%",
+                    _poll_interval=0.05,
+                )
+
+    @pytest.mark.anyio
+    async def test_stream_parser_fires_when_marker_present(self, tmp_path):
+        """StreamParser fires when terminal event contains the required completion marker."""
+        from autoskillit.execution.backends import ClaudeStreamParser
+
+        stdout_path = tmp_path / "stdout.tmp"
+        stdout_path.write_text('{"type":"result","result":"Done.\\n%%DONE%%","session_id":"s1"}\n')
+
+        with anyio.fail_after(1.0):
+            result = await _heartbeat(
+                stdout_path,
+                stream_parser=ClaudeStreamParser(completion_marker="%%DONE%%"),
+                completion_marker="%%DONE%%",
+                _poll_interval=0.05,
+            )
+        assert result == "completion"
+
+    @pytest.mark.anyio
+    async def test_stream_parser_skips_empty_result(self, tmp_path):
+        """StreamParser skips type=result with empty result field — heartbeat stays silent."""
+        from autoskillit.execution.backends import ClaudeStreamParser
+
+        stdout_path = tmp_path / "stdout.tmp"
+        stdout_path.write_text('{"type":"result","result":"","session_id":"s1"}\n')
+
+        with pytest.raises(TimeoutError):
+            with anyio.fail_after(0.3):
+                await _heartbeat(
+                    stdout_path,
+                    stream_parser=ClaudeStreamParser(),
+                    _poll_interval=0.05,
+                )
+
+
 class TestHasActiveDispatchMarker:
     """Unit tests for _has_active_dispatch_marker."""
 

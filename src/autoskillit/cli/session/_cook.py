@@ -74,8 +74,11 @@ def cook(
 
     backend = ClaudeCodeBackend()
 
-    if not shutil.which(backend.binary_name()):
-        print(f"'{backend.binary_name()}' not found on PATH. Install Claude Code to use cook.")
+    if shutil.which(backend.binary_name()) is None:
+        print(
+            f"ERROR: '{backend.binary_name()}' not found. "
+            "Install: https://docs.anthropic.com/en/docs/claude-code"
+        )
         raise SystemExit(1)
 
     from autoskillit import __version__

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from unittest.mock import Mock
 
 import pytest
 
@@ -215,7 +216,6 @@ class TestBackendDelegatedWriteToolNames:
 
     def test_backend_provides_custom_tool_names(self):
         """Custom backend.write_tool_names() overrides the tool name set."""
-        from unittest.mock import Mock
 
         mock_backend = Mock()
         mock_backend.write_tool_names.return_value = frozenset({"CustomWrite"})
@@ -241,6 +241,90 @@ class TestBackendDelegatedWriteToolNames:
         sr = _build_skill_result(result, backend=None)
         assert sr.write_call_count == 0
 
+    def test_build_skill_result_threads_backend_to_parse_stdout(self, monkeypatch):
+        """_build_skill_result passes backend to _parse_stdout on normal exit."""
+
+        from autoskillit.execution.headless import _headless_result
+
+        captured: dict = {}
+        original_parse = _headless_result._parse_stdout
+
+        def spy(stdout, backend=None):
+            captured["backend"] = backend
+            return original_parse(stdout, backend=backend)
+
+        monkeypatch.setattr(_headless_result, "_parse_stdout", spy)
+
+        mock_backend = Mock()
+        stdout = _success_session_json("Done")
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        _build_skill_result(result, backend=mock_backend)
+        assert "backend" in captured, "_parse_stdout was not called"
+        assert captured["backend"] is mock_backend
+
+    def test_build_skill_result_stale_threads_backend_to_parse_stdout(self, monkeypatch):
+        """_build_skill_result passes backend to _parse_stdout on stale branch."""
+
+        from autoskillit.execution.headless import _headless_result
+
+        captured: dict = {}
+        original_parse = _headless_result._parse_stdout
+
+        def spy(stdout, backend=None):
+            captured["backend"] = backend
+            return original_parse(stdout, backend=backend)
+
+        monkeypatch.setattr(_headless_result, "_parse_stdout", spy)
+
+        mock_backend = Mock()
+        stdout = _success_session_json("Done")
+        result = _sr(0, stdout, "", TerminationReason.STALE)
+        _build_skill_result(result, backend=mock_backend)
+        assert "backend" in captured, "_parse_stdout was not called"
+        assert captured["backend"] is mock_backend
+
+    def test_build_skill_result_idle_stall_threads_backend_to_parse_stdout(self, monkeypatch):
+        """_build_skill_result passes backend to _parse_stdout on idle_stall branch."""
+
+        from autoskillit.execution.headless import _headless_result
+
+        captured: dict = {}
+        original_parse = _headless_result._parse_stdout
+
+        def spy(stdout, backend=None):
+            captured["backend"] = backend
+            return original_parse(stdout, backend=backend)
+
+        monkeypatch.setattr(_headless_result, "_parse_stdout", spy)
+
+        mock_backend = Mock()
+        stdout = _success_session_json("Done")
+        result = _sr(0, stdout, "", TerminationReason.IDLE_STALL)
+        _build_skill_result(result, backend=mock_backend)
+        assert "backend" in captured, "_parse_stdout was not called"
+        assert captured["backend"] is mock_backend
+
+    def test_build_skill_result_timed_out_threads_backend_to_parse_stdout(self, monkeypatch):
+        """_build_skill_result passes backend to _parse_stdout on timed_out branch."""
+
+        from autoskillit.execution.headless import _headless_result
+
+        captured: dict = {}
+        original_parse = _headless_result._parse_stdout
+
+        def spy(stdout, backend=None):
+            captured["backend"] = backend
+            return original_parse(stdout, backend=backend)
+
+        monkeypatch.setattr(_headless_result, "_parse_stdout", spy)
+
+        mock_backend = Mock()
+        stdout = _success_session_json("Done")
+        result = _sr(0, stdout, "", TerminationReason.TIMED_OUT)
+        _build_skill_result(result, backend=mock_backend)
+        assert "backend" in captured, "_parse_stdout was not called"
+        assert captured["backend"] is mock_backend
+
 
 class TestParseStdout:
     def test_backend_none_calls_parse_session_result(self):
@@ -264,3 +348,28 @@ class TestParseStdout:
         result = _parse_stdout(stdout)
         assert isinstance(result, ClaudeSessionResult)
         assert result.result == "test result"
+
+    def test_parse_stdout_accepts_backend_kwarg(self):
+        """_parse_stdout accepts an optional backend keyword argument."""
+
+        from autoskillit.execution.headless import _parse_stdout
+        from autoskillit.execution.session import ClaudeSessionResult
+
+        mock_backend = Mock()
+        stdout = _success_session_json("test result")
+        result = _parse_stdout(stdout, backend=mock_backend)
+        assert isinstance(result, ClaudeSessionResult)
+        assert result.result == "test result"
+
+    def test_parse_stdout_with_backend_matches_fallback(self):
+        """_parse_stdout with backend produces same result as without."""
+
+        from autoskillit.execution.headless import _parse_stdout
+
+        mock_backend = Mock()
+        stdout = _success_session_json("test result")
+        with_backend = _parse_stdout(stdout, backend=mock_backend)
+        without_backend = _parse_stdout(stdout)
+        assert with_backend.result == without_backend.result
+        assert with_backend.session_id == without_backend.session_id
+        assert with_backend.session_complete == without_backend.session_complete

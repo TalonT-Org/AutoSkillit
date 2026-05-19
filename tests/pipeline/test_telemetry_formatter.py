@@ -1279,7 +1279,9 @@ def test_format_pr_block_section_order() -> None:
 
 
 def test_pr_telemetry_sections_exhaustive() -> None:
-    """Every ## header produced by format_pr_telemetry_block's sub-formatters is in PR_TELEMETRY_SECTIONS."""
+    """Every ## header produced by format_pr_telemetry_block's sub-formatters
+    is in PR_TELEMETRY_SECTIONS.
+    """
     import ast
     import inspect
     import textwrap
@@ -1310,5 +1312,6 @@ def test_pr_telemetry_sections_exhaustive() -> None:
                         pr_headers.add(val)
     for header in pr_headers:
         assert header in PR_TELEMETRY_SECTIONS, (
-            f"Header {header!r} found in TelemetryFormatter PR-bound formatter but missing from PR_TELEMETRY_SECTIONS"
+            f"Header {header!r} found in TelemetryFormatter PR-bound formatter"
+            " but missing from PR_TELEMETRY_SECTIONS"
         )

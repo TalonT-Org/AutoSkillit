@@ -44,7 +44,10 @@ class TestClaudeStreamParser:
 
     def test_parse_line_assistant_context_exhaustion(self) -> None:
         parser = ClaudeStreamParser()
-        line = '{"type": "assistant", "output_tokens": 0, "content": [{"type": "text", "text": "prompt is too long"}]}'
+        line = (
+            '{"type": "assistant", "output_tokens": 0,'
+            ' "content": [{"type": "text", "text": "prompt is too long"}]}'
+        )
         result = parser.parse_line(line)
         assert result is not None
         assert result.kind == BackendEventKind.TOOL_OUTPUT

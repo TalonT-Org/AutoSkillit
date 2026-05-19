@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING
 import regex as re
 
 from autoskillit.core import CliSubtype, OutputFormat, RetryReason, SkillResult, get_logger
-from autoskillit.execution.commands import build_headless_resume_cmd
 from autoskillit.execution.headless._headless_path_tokens import _RECOVERABLE_PATH_TOKENS
 from autoskillit.execution.process import _marker_is_standalone
 from autoskillit.execution.session import (
@@ -20,7 +19,7 @@ from autoskillit.execution.session import (
 )
 
 if TYPE_CHECKING:
-    from autoskillit.core import SubprocessResult, SubprocessRunner
+    from autoskillit.core import CodingAgentBackend, SubprocessResult, SubprocessRunner
 
 logger = get_logger(__name__)
 
@@ -200,6 +199,7 @@ async def _attempt_contract_nudge(
     cwd: str,
     runner: SubprocessRunner,
     *,
+    backend: CodingAgentBackend | None = None,
     provider_extras: Mapping[str, str] | None = None,
     retry_reason: RetryReason = RetryReason.CONTRACT_RECOVERY,
 ) -> SkillResult | None:
@@ -215,6 +215,9 @@ async def _attempt_contract_nudge(
     Returns a patched SkillResult(success=True) on success, or None to indicate the
     nudge failed and the caller should fall through to the original path.
     """
+    if backend is None or not backend.capabilities.session_resume_capable:
+        return None
+
     if retry_reason == RetryReason.EARLY_STOP:
         prompt = (
             "Your response was complete but you omitted the required completion marker. "
@@ -237,7 +240,7 @@ async def _attempt_contract_nudge(
         )
         patterns_to_check = list(expected_output_patterns)
 
-    spec = build_headless_resume_cmd(
+    spec = backend.build_resume_cmd(
         resume_session_id=skill_result.session_id,
         prompt=prompt,
         output_format=OutputFormat.JSON,
@@ -246,7 +249,7 @@ async def _attempt_contract_nudge(
 
     try:
         nudge_result = await runner(
-            spec.cmd,
+            list(spec.cmd),
             cwd=Path(cwd),
             timeout=_NUDGE_TIMEOUT,
             env=spec.env,

@@ -1636,6 +1636,152 @@ class TestEarlyStopRecovery:
         assert result.success is True
 
 
+class TestNudgeBackendGuard:
+    """Backend capability guard for _attempt_contract_nudge nudge recovery."""
+
+    def _main_subprocess_result(
+        self, marker: str, session_id: str = "sess-main"
+    ) -> SubprocessResult:
+
+        result_text = f"plan summary\n{marker}"
+        # Re-build with Write evidence to trigger CONTRACT_RECOVERY
+        import json
+
+        records = [
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {
+                        "content": [
+                            {
+                                "type": "tool_use",
+                                "name": "Write",
+                                "id": "t0",
+                                "input": {"file_path": "/tmp/out.md"},
+                            }
+                        ],
+                    },
+                }
+            ),
+            json.dumps(
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "is_error": False,
+                    "result": result_text,
+                    "session_id": session_id,
+                }
+            ),
+        ]
+        from autoskillit.core.types import ChannelConfirmation, TerminationReason
+
+        return SubprocessResult(
+            returncode=0,
+            stdout="\n".join(records),
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1,
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
+        )
+
+    def _nudge_response(self, marker: str) -> SubprocessResult:
+        import json
+
+        from autoskillit.core.types import TerminationReason
+
+        return SubprocessResult(
+            0,
+            json.dumps(
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "is_error": False,
+                    "result": f"plan_path = /tmp/out.md\n{marker}",
+                    "session_id": "sess-main",
+                    "usage": {"input_tokens": 100, "output_tokens": 50},
+                }
+            ),
+            "",
+            TerminationReason.NATURAL_EXIT,
+            pid=2,
+        )
+
+    @pytest.mark.anyio
+    async def test_nudge_skips_when_backend_none(self, tool_ctx):
+        from autoskillit.core.types import RetryReason
+        from autoskillit.execution.headless import run_headless_core
+
+        marker = tool_ctx.config.run_skill.completion_marker
+        tool_ctx.backend = None
+        tool_ctx.runner.push(self._main_subprocess_result(marker))
+        tool_ctx.runner.push(self._nudge_response(marker))
+        result = await run_headless_core(
+            "/autoskillit:make-plan foo",
+            cwd="/tmp",
+            ctx=tool_ctx,
+            expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+        )
+        # Without backend, nudge is skipped - CONTRACT_RECOVERY persists
+        assert result.retry_reason == RetryReason.CONTRACT_RECOVERY
+        assert len(tool_ctx.runner.call_args_list) == 1
+
+    @pytest.mark.anyio
+    async def test_nudge_skips_when_not_session_resume_capable(self, tool_ctx):
+        from dataclasses import replace
+        from unittest.mock import Mock
+
+        from autoskillit.core import CLAUDE_CODE_CAPABILITIES
+        from autoskillit.core.types import RetryReason
+        from autoskillit.execution.headless import run_headless_core
+
+        marker = tool_ctx.config.run_skill.completion_marker
+        caps = replace(CLAUDE_CODE_CAPABILITIES, session_resume_capable=False)
+        mock_backend = Mock()
+        mock_backend.capabilities = caps
+        tool_ctx.backend = mock_backend
+        tool_ctx.runner.push(self._main_subprocess_result(marker))
+        tool_ctx.runner.push(self._nudge_response(marker))
+        result = await run_headless_core(
+            "/autoskillit:make-plan foo",
+            cwd="/tmp",
+            ctx=tool_ctx,
+            expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+        )
+        # Without session_resume_capable, nudge is skipped
+        assert result.retry_reason == RetryReason.CONTRACT_RECOVERY
+        assert len(tool_ctx.runner.call_args_list) == 1
+
+    @pytest.mark.anyio
+    async def test_nudge_uses_backend_build_resume_cmd(self, tool_ctx):
+        from dataclasses import replace
+        from unittest.mock import Mock
+
+        from autoskillit.core import CLAUDE_CODE_CAPABILITIES, CmdSpec
+        from autoskillit.execution.headless import run_headless_core
+
+        marker = tool_ctx.config.run_skill.completion_marker
+        expected_cmd = CmdSpec(
+            cmd=("claude", "--resume", "sess-main", "--print", "emit marker"),
+            env={"TEST": "val"},
+        )
+        caps = replace(CLAUDE_CODE_CAPABILITIES, session_resume_capable=True)
+        mock_backend = Mock()
+        mock_backend.capabilities = caps
+        mock_backend.build_resume_cmd.return_value = expected_cmd
+        tool_ctx.backend = mock_backend
+        tool_ctx.runner.push(self._main_subprocess_result(marker, session_id="sess-main"))
+        tool_ctx.runner.push(self._nudge_response(marker))
+        await run_headless_core(
+            "/autoskillit:make-plan foo",
+            cwd="/tmp",
+            ctx=tool_ctx,
+            expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+        )
+        mock_backend.build_resume_cmd.assert_called_once()
+        call_kwargs = mock_backend.build_resume_cmd.call_args
+        assert call_kwargs.kwargs["resume_session_id"] == "sess-main"
+
+
 class TestEarlyStopDetection:
     """MiniMax-shaped result (substantive output, no marker) produces EARLY_STOP, not success."""
 

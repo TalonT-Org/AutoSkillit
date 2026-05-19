@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import pytest
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
@@ -61,6 +63,8 @@ def test_stub_class_satisfies_coding_agent_backend():
         CmdSpec,
         CodingAgentBackend,
         EnvPolicy,
+        OutputFormat,
+        PluginSource,
         ResultParser,
         SessionLocator,
         StreamParser,
@@ -83,5 +87,15 @@ def test_stub_class_satisfies_coding_agent_backend():
         def env_policy(self) -> EnvPolicy: ...
 
         def session_locator(self) -> SessionLocator: ...
+
+        def build_resume_cmd(
+            self,
+            *,
+            resume_session_id: str,
+            prompt: str,
+            output_format: OutputFormat = OutputFormat.JSON,
+            plugin_source: PluginSource | None = None,
+            env_extras: Mapping[str, str] | None = None,
+        ) -> CmdSpec: ...
 
     assert isinstance(_Backend(), CodingAgentBackend)

@@ -6,14 +6,41 @@ import json
 import pathlib
 import textwrap
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
 
+from autoskillit.core import CLAUDE_CODE_CAPABILITIES, CmdSpec
 from autoskillit.core.types import SubprocessResult, TerminationReason
 from autoskillit.execution.session import ClaudeSessionResult
 from tests._helpers import make_tracing_config
+
+
+def _mock_backend(
+    *,
+    pty_required: bool = True,
+    channel_b_capable: bool = True,
+    session_resume_capable: bool = True,
+    **kw: object,
+) -> Mock:
+    """Build a mock backend with configurable capabilities."""
+    caps = replace(
+        CLAUDE_CODE_CAPABILITIES,
+        pty_required=pty_required,
+        channel_b_capable=channel_b_capable,
+        session_resume_capable=session_resume_capable,
+        **kw,
+    )
+    backend = Mock()
+    backend.capabilities = caps
+    backend.build_resume_cmd.return_value = CmdSpec(
+        cmd=("claude", "--print", "emit marker", "--resume", "test-session"),
+        env={},
+    )
+    return backend
 
 
 def _success_session_json(result_text: str) -> str:

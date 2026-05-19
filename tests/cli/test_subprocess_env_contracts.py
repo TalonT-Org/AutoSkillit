@@ -522,7 +522,9 @@ _CLAUDE_ENV_RULE_ALLOWED: frozenset[tuple[str, str]] = frozenset(
         # the shim's list(spec.cmd) is an intermediate copy, not a subprocess launch.
         ("commands.py", "build_interactive_cmd"),
         ("commands.py", "build_headless_cmd"),
+        ("commands.py", "build_headless_resume_cmd"),
         ("commands.py", "build_skill_session_cmd"),
+        ("commands.py", "build_food_truck_cmd"),
     }
 )
 

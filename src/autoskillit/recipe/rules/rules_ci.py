@@ -707,13 +707,6 @@ _WORKTREE_BRANCH_PATTERNS: frozenset[str] = frozenset(
     }
 )
 
-_WORKTREE_CWD_PATTERNS: frozenset[str] = frozenset(
-    {
-        "worktree_path",
-        "worktree_dir",
-    }
-)
-
 _CLONE_CWD_PATTERNS: frozenset[str] = frozenset(
     {
         "work_dir",

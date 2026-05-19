@@ -124,6 +124,27 @@ class TestWaitForCiAutoTrigger:
         assert not any(cmd[0] == "git" and cmd[1] == "push" for cmd in commands if len(cmd) > 1)
 
     @pytest.mark.anyio
+    async def test_auto_trigger_rejects_when_branch_check_fails(self, tool_ctx_kitchen_open):
+        """auto_trigger must refuse to commit/push when git branch --show-current fails."""
+        watcher = InMemoryCIWatcher(wait_result=_NO_RUNS)
+        tool_ctx_kitchen_open.ci_watcher = watcher
+        tool_ctx_kitchen_open.runner.push(_sub(0, "abc123\n"))  # git rev-parse HEAD
+        tool_ctx_kitchen_open.runner.push(
+            _sub(0, "feature/conflict-fix\n")
+        )  # git rev-parse --abbrev-ref HEAD (diagnostic)
+        tool_ctx_kitchen_open.runner.push(_sub(1, ""))  # git branch --show-current (fails)
+
+        result = json.loads(
+            await wait_for_ci("feature/conflict-fix", cwd="/repo", auto_trigger=True)
+        )
+
+        assert result["conclusion"] == "branch_check_failed"
+        assert result["triggered"] is False
+        commands = [call[0] for call in tool_ctx_kitchen_open.runner.call_args_list]
+        assert not any(cmd[0] == "git" and cmd[1] == "commit" for cmd in commands if len(cmd) > 1)
+        assert not any(cmd[0] == "git" and cmd[1] == "push" for cmd in commands if len(cmd) > 1)
+
+    @pytest.mark.anyio
     async def test_auto_trigger_proceeds_when_cwd_branch_matches(self, tool_ctx_kitchen_open):
         """auto_trigger proceeds when cwd's current branch matches the target branch."""
         watcher = InMemoryCIWatcher(wait_results=[_NO_RUNS, _SUCCESS])

@@ -309,25 +309,39 @@ async def _auto_trigger_ci(
     rc_bg, branch_out, _ = await _run_subprocess(
         ["git", "branch", "--show-current"], cwd=cwd, timeout=5.0
     )
-    if rc_bg == 0:
-        current_branch = branch_out.strip()
-        if current_branch != branch:
-            logger.error(
-                "auto_trigger: cwd branch mismatch — refusing to commit/push",
-                cwd_branch=current_branch,
-                target_branch=branch,
-                cwd=cwd,
-            )
-            return {
-                **result,
-                "conclusion": "branch_mismatch",
-                "triggered": False,
-                "error": (
-                    f"cwd is on branch '{current_branch}' but target is '{branch}'. "
-                    f"Empty commit would land on the wrong branch. "
-                    f"Fix the recipe to pass the correct cwd for this branch."
-                ),
-            }
+    if rc_bg != 0:
+        logger.error(
+            "auto_trigger: git branch --show-current failed — refusing to commit/push",
+            rc=rc_bg,
+            cwd=cwd,
+        )
+        return {
+            **result,
+            "conclusion": "branch_check_failed",
+            "triggered": False,
+            "error": (
+                f"Could not determine current branch in cwd (rc={rc_bg}). "
+                f"Refusing to commit/push without branch verification."
+            ),
+        }
+    current_branch = branch_out.strip()
+    if current_branch != branch:
+        logger.error(
+            "auto_trigger: cwd branch mismatch — refusing to commit/push",
+            cwd_branch=current_branch,
+            target_branch=branch,
+            cwd=cwd,
+        )
+        return {
+            **result,
+            "conclusion": "branch_mismatch",
+            "triggered": False,
+            "error": (
+                f"cwd is on branch '{current_branch}' but target is '{branch}'. "
+                f"Empty commit would land on the wrong branch. "
+                f"Fix the recipe to pass the correct cwd for this branch."
+            ),
+        }
 
     rc_m, out_m, _ = await _run_subprocess(
         ["gh", "pr", "view", branch, "--json", "mergeable"],

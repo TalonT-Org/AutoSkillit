@@ -60,7 +60,7 @@ class TestWaitForCiAutoTrigger:
         watcher = InMemoryCIWatcher(wait_result=_NO_RUNS)
         tool_ctx_kitchen_open.ci_watcher = watcher
         tool_ctx_kitchen_open.runner.push(_sub(0, "abc123\n"))  # git rev-parse HEAD
-        tool_ctx_kitchen_open.runner.push(_sub(0, "branch\n"))  # git rev-parse --abbrev-ref HEAD
+        tool_ctx_kitchen_open.runner.push(_sub(0, "branch\n"))  # git branch --show-current
 
         result = json.loads(await wait_for_ci("branch", cwd="/repo"))
 
@@ -78,7 +78,7 @@ class TestWaitForCiAutoTrigger:
         )  # git rev-parse HEAD — wait_for_ci initial HEAD inference
         tool_ctx_kitchen_open.runner.push(
             _sub(0, "feature-branch\n")
-        )  # git rev-parse --abbrev-ref HEAD (diagnostic)
+        )  # git branch --show-current (diagnostic)
         tool_ctx_kitchen_open.runner.push(
             _sub(0, "feature-branch\n")
         )  # git branch --show-current (guard)
@@ -108,7 +108,7 @@ class TestWaitForCiAutoTrigger:
         tool_ctx_kitchen_open.runner.push(_sub(0, "abc123\n"))  # git rev-parse HEAD
         tool_ctx_kitchen_open.runner.push(
             _sub(0, "integration/batch-branch\n")
-        )  # git rev-parse --abbrev-ref HEAD (diagnostic)
+        )  # git branch --show-current (diagnostic)
         tool_ctx_kitchen_open.runner.push(
             _sub(0, "integration/batch-branch\n")
         )  # git branch --show-current (guard)
@@ -131,7 +131,7 @@ class TestWaitForCiAutoTrigger:
         tool_ctx_kitchen_open.runner.push(_sub(0, "abc123\n"))  # git rev-parse HEAD
         tool_ctx_kitchen_open.runner.push(
             _sub(0, "feature/conflict-fix\n")
-        )  # git rev-parse --abbrev-ref HEAD (diagnostic)
+        )  # git branch --show-current (diagnostic)
         tool_ctx_kitchen_open.runner.push(_sub(1, ""))  # git branch --show-current (fails)
 
         result = json.loads(
@@ -152,7 +152,7 @@ class TestWaitForCiAutoTrigger:
         tool_ctx_kitchen_open.runner.push(_sub(0, "abc123\n"))  # git rev-parse HEAD
         tool_ctx_kitchen_open.runner.push(
             _sub(0, "feature-branch\n")
-        )  # git rev-parse --abbrev-ref HEAD (diagnostic)
+        )  # git branch --show-current (diagnostic)
         tool_ctx_kitchen_open.runner.push(
             _sub(0, "feature-branch\n")
         )  # git branch --show-current (guard, matches)
@@ -174,7 +174,7 @@ class TestWaitForCiAutoTrigger:
         watcher = InMemoryCIWatcher(wait_result=_NO_RUNS)
         tool_ctx_kitchen_open.ci_watcher = watcher
         tool_ctx_kitchen_open.runner.push(_sub(0, "abc123\n"))  # git rev-parse HEAD
-        tool_ctx_kitchen_open.runner.push(_sub(0, "branch\n"))  # git rev-parse --abbrev-ref HEAD
+        tool_ctx_kitchen_open.runner.push(_sub(0, "branch\n"))  # git branch --show-current
         tool_ctx_kitchen_open.runner.push(_sub(0, "branch\n"))  # git branch --show-current
         tool_ctx_kitchen_open.runner.push(_sub(0, '{"mergeable":"CONFLICTING"}\n'))  # gh pr view
 
@@ -191,7 +191,7 @@ class TestWaitForCiAutoTrigger:
         watcher = InMemoryCIWatcher(wait_result=_NO_RUNS)
         tool_ctx_kitchen_open.ci_watcher = watcher
         tool_ctx_kitchen_open.runner.push(_sub(0, "abc123\n"))  # git rev-parse HEAD (initial)
-        tool_ctx_kitchen_open.runner.push(_sub(0, "branch\n"))  # git rev-parse --abbrev-ref HEAD
+        tool_ctx_kitchen_open.runner.push(_sub(0, "branch\n"))  # git branch --show-current
         tool_ctx_kitchen_open.runner.push(_sub(0, "branch\n"))  # git branch --show-current
         tool_ctx_kitchen_open.runner.push(_sub(1))  # gh pr view — CLI failure (no PR)
 
@@ -206,7 +206,7 @@ class TestWaitForCiAutoTrigger:
         watcher = InMemoryCIWatcher(wait_result=_NO_RUNS)
         tool_ctx_kitchen_open.ci_watcher = watcher
         tool_ctx_kitchen_open.runner.push(_sub(0, "abc123\n"))  # git rev-parse HEAD
-        tool_ctx_kitchen_open.runner.push(_sub(0, "branch\n"))  # git rev-parse --abbrev-ref HEAD
+        tool_ctx_kitchen_open.runner.push(_sub(0, "branch\n"))  # git branch --show-current
         tool_ctx_kitchen_open.runner.push(_sub(0, "branch\n"))  # git branch --show-current
         tool_ctx_kitchen_open.runner.push(_sub(0, '{"mergeable":"MERGEABLE"}\n'))  # gh pr view
         tool_ctx_kitchen_open.runner.push(
@@ -224,7 +224,7 @@ class TestWaitForCiAutoTrigger:
         watcher = InMemoryCIWatcher(wait_result=_NO_RUNS)
         tool_ctx_kitchen_open.ci_watcher = watcher
         tool_ctx_kitchen_open.runner.push(_sub(0, "abc123\n"))  # git rev-parse HEAD
-        tool_ctx_kitchen_open.runner.push(_sub(0, "branch\n"))  # git rev-parse --abbrev-ref HEAD
+        tool_ctx_kitchen_open.runner.push(_sub(0, "branch\n"))  # git branch --show-current
         tool_ctx_kitchen_open.runner.push(_sub(0, "branch\n"))  # git branch --show-current
         tool_ctx_kitchen_open.runner.push(_sub(0, '{"mergeable":"MERGEABLE"}\n'))  # gh pr view
         tool_ctx_kitchen_open.runner.push(_sub(0))  # git commit --allow-empty
@@ -265,7 +265,7 @@ class TestWaitForCiAutoTrigger:
         tool_ctx_kitchen_open.runner.push(
             _sub(0, "abc123\n")
         )  # git rev-parse HEAD — wait_for_ci initial HEAD inference
-        tool_ctx_kitchen_open.runner.push(_sub(0, "branch\n"))  # git rev-parse --abbrev-ref HEAD
+        tool_ctx_kitchen_open.runner.push(_sub(0, "branch\n"))  # git branch --show-current
         tool_ctx_kitchen_open.runner.push(_sub(0, "branch\n"))  # git branch --show-current
         tool_ctx_kitchen_open.runner.push(_sub(0, '{"mergeable":"MERGEABLE"}\n'))  # gh pr view
         tool_ctx_kitchen_open.runner.push(_sub(0))  # git commit --allow-empty
@@ -289,7 +289,7 @@ class TestWaitForCiAutoTrigger:
         watcher = InMemoryCIWatcher(wait_results=[_NO_RUNS, _SUCCESS])
         tool_ctx_kitchen_open.ci_watcher = watcher
         tool_ctx_kitchen_open.runner.push(_sub(0, "abc123\n"))  # git rev-parse HEAD
-        tool_ctx_kitchen_open.runner.push(_sub(0, "branch\n"))  # git rev-parse --abbrev-ref HEAD
+        tool_ctx_kitchen_open.runner.push(_sub(0, "branch\n"))  # git branch --show-current
         tool_ctx_kitchen_open.runner.push(_sub(0, "branch\n"))  # git branch --show-current
         tool_ctx_kitchen_open.runner.push(_sub(0, '{"mergeable":"MERGEABLE"}\n'))  # gh pr view
         tool_ctx_kitchen_open.runner.push(_sub(0))  # git commit --allow-empty

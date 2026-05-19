@@ -130,11 +130,11 @@ async def wait_for_ci(
         if head_sha and cwd:
             try:
                 rc_b, branch_out, _ = await _run_subprocess(
-                    ["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=cwd, timeout=5.0
+                    ["git", "branch", "--show-current"], cwd=cwd, timeout=5.0
                 )
                 if rc_b == 0:
                     cwd_branch = branch_out.strip()
-                    if cwd_branch != "HEAD" and cwd_branch != branch:
+                    if cwd_branch and cwd_branch != branch:
                         logger.warning(
                             "wait_for_ci: cwd branch does not match watched branch — "
                             "head_sha may be from wrong branch",

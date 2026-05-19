@@ -306,7 +306,9 @@ async def _extract_stdout_session_id(
                 except ValueError:
                     continue
                 if isinstance(obj, dict) and obj.get("type") == "system":
-                    sid = obj.get("session_id")
+                    raw_sid = obj.get("session_id")
+                    if isinstance(raw_sid, str):
+                        sid = raw_sid
             if sid:
                 acc.stdout_session_id = sid
                 logger.debug("stdout_session_id_extracted", session_id=sid)

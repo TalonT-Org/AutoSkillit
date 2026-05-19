@@ -23,7 +23,7 @@ def test_cmd_spec_fields():
     from autoskillit.core import CmdSpec
 
     fields = {f.name for f in dataclasses.fields(CmdSpec)}
-    assert fields == {"cmd", "env"}
+    assert fields == {"cmd", "env", "cwd"}
 
 
 def test_cmd_spec_env_accepts_mapping():

@@ -1,6 +1,8 @@
 # agents/
 
-Bundled agent definition markdown files served as MCP resources.
+Bundled agent definition markdown files that serve as both **plugin agents**
+(discovered natively by Claude Code at session start) and **MCP resources**
+(available via `unlock_agent_pack`).
 
 ## Files
 
@@ -16,17 +18,35 @@ Bundled agent definition markdown files served as MCP resources.
 Each `.md` file defines one agent with YAML frontmatter (`name`, `description`,
 `tools`, `model`, `maxTurns`) and a markdown body containing the agent's system prompt.
 
+## Invocation
+
+### Native `subagent_type` (preferred)
+
+Agent definitions in this directory are discovered at session start by Claude Code's
+plugin agent system. They are registered as `autoskillit:{agent-name}` in the
+subagent registry and invoked via:
+
+```
+Agent(subagent_type="autoskillit:{agent-name}", prompt="...")
+```
+
+Claude Code automatically applies tool restrictions, model, maxTurns, and the
+markdown body as the system prompt from the agent definition frontmatter.
+
+**Used by:** make-plan Steps 6-7
+
+### MCP Resource path (available for programmatic access)
+
+Agent resources are hidden at startup via `mcp.disable(tags={pack_tag})`.
+Sessions unlock them by calling `unlock_agent_pack(pack_name)`, which calls
+`ctx.enable_components(tags={pack_tag})` — per-session, not global. Once unlocked,
+agent definitions are readable via `ReadMcpResourceTool` at `agent://{pack}/{name}`.
+
 ## Agent Packs
 
 | Pack | Tag | Agents | Used By |
 |------|-----|--------|---------|
 | `plan-review` | `plan-review` | 4 adversarial reviewers | make-plan Steps 6-8 |
-
-## Visibility
-
-Agent resources are hidden at startup via `mcp.disable(tags={pack_tag})`.
-Sessions unlock them by calling `unlock_agent_pack(pack_name)`, which calls
-`ctx.enable_components(tags={pack_tag})` — per-session, not global.
 
 ## Adding Agents
 

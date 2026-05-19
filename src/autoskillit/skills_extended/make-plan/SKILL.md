@@ -1,7 +1,6 @@
 ---
 name: make-plan
 activate_deps: [arch-lens, write-recipe]
-activate_agents: [plan-review]
 description: Planning executor. ALWAYS invoke this skill when instructed to create, devise, or write an implementation plan. Do not explore the codebase or draft a plan directly — use this skill first to load the planning workflow.
 hooks:
   PreToolUse:
@@ -141,22 +140,16 @@ If the Skill tool cannot be used (disable-model-invocation) or refuses this invo
 Include the diagram in the plan document under a "## Proposed Architecture" section.
 More than one lens diagram is okay if it is complex plan (don't do more than 3, and make sure to load each appropriate skill).
 
-6. **Unlock and Read Agent Definitions** - After drafting the plan (Steps 1-5), call `unlock_agent_pack("plan-review")` to make agent resources visible for this session. Then read each agent definition via `ReadMcpResourceTool`:
-   - `agent://plan-review/plan-contract-verifier`
-   - `agent://plan-review/plan-completeness-auditor`
-   - `agent://plan-review/plan-assumption-challenger`
-   - `agent://plan-review/plan-registry-wire-tracer`
+6. **Adversarial Agent Review** - After drafting the plan (Steps 1-5), spawn 3 parallel adversarial agents. Each receives the full draft plan text and the codebase root. Each attempts to find concrete ways the plan, if implemented literally, would introduce a bug or regression. They must NOT suggest scope expansion — only identify gaps in what the plan already claims to do.
 
-   Parse each definition's YAML frontmatter for `tools`, `model`, `maxTurns`. Use the markdown body as the agent's system prompt.
+   Spawn using `Agent(subagent_type=...)`:
+   - `autoskillit:plan-contract-verifier` — Contract Verifier: traces downstream consumers of every function, field, or format the plan introduces or modifies
+   - `autoskillit:plan-completeness-auditor` — Completeness Auditor: finds entities missed by plan search operations
+   - `autoskillit:plan-assumption-challenger` — Assumption Challenger: verifies implicit assumptions against actual code
 
-7. **Adversarial Agent Review** - Spawn 3 parallel subagents using the definitions read in Step 6. Each receives the full draft plan text and the codebase root. Each attempts to find concrete ways the plan, if implemented literally, would introduce a bug or regression. They must NOT suggest scope expansion — only identify gaps in what the plan already claims to do.
-   - **Contract Verifier** — traces downstream consumers of every function, field, or format the plan introduces or modifies
-   - **Completeness Auditor** — finds entities missed by plan search operations
-   - **Assumption Challenger** — verifies implicit assumptions against actual code
+7. **Registry Wire Trace** - Spawn 1 Registry Wire Tracer via `Agent(subagent_type="autoskillit:plan-registry-wire-tracer")`. For every file the plan modifies, check if it participates in registry-sync patterns (RETIRED NAME SETS, RE-EXPORT CHAINS, TOOL REGISTRIES, RULE REGISTRATION, DUAL-COPY CONSTANTS, IMPORT LAYER CONSTRAINTS, TYPED ALIASES, DERIVED ARTIFACTS).
 
-8. **Registry Wire Trace** - Spawn 1 Registry Wire Tracer subagent. For every file the plan modifies, check if it participates in registry-sync patterns (RETIRED NAME SETS, RE-EXPORT CHAINS, TOOL REGISTRIES, RULE REGISTRATION, DUAL-COPY CONSTANTS, IMPORT LAYER CONSTRAINTS, TYPED ALIASES, DERIVED ARTIFACTS).
-
-9. **Plan Revision** - Read all 4 adversarial reports. For each valid finding (where the agent identified a real gap, not a hypothetical):
+8. **Plan Revision** - Read all 4 adversarial reports. For each valid finding (where the agent identified a real gap, not a hypothetical):
    - Add missing consumers to implementation steps
    - Add missing entity categories to search/update operations
    - Replace invalid assumptions with verified facts
@@ -208,7 +201,7 @@ Before writing the final plan, verify:
 - [ ] Diagram uses ONLY the classDef styles from the mermaid skill (no invented colors)
 - [ ] Diagram includes a color legend table
 - [ ] Every new component, class, or function is wired into the call chain — nothing is created but left unconnected
-- [ ] Adversarial review pass completed (Steps 7-9) and valid findings incorporated into the plan
+- [ ] Adversarial review pass completed (Steps 6-8) and valid findings incorporated into the plan
 
 ## Critical Constraints
 

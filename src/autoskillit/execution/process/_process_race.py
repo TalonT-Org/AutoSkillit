@@ -129,8 +129,8 @@ async def _watch_heartbeat(
     completion_marker: str,
     acc: RaceAccumulator,
     trigger: anyio.Event,
-    _poll_interval: float,
     stream_parser: StreamParser | None = None,
+    _poll_interval: float = 0.5,
 ) -> None:
     """Poll stdout NDJSON for a result record and deposit the Channel A signal."""
     await _heartbeat(
@@ -268,9 +268,9 @@ async def _extract_stdout_session_id(
     stdout_path: Path,
     acc: RaceAccumulator,
     ready: anyio.Event,
+    stream_parser: StreamParser | None = None,
     _poll_interval: float = 0.3,
     _timeout: float = 10.0,
-    stream_parser: StreamParser | None = None,
 ) -> None:
     """Extract session ID from stdout type=system record and deposit on accumulator.
 

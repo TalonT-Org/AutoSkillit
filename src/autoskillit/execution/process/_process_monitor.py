@@ -35,9 +35,9 @@ async def _heartbeat(
     stdout_path: Path,
     record_types: frozenset[str] = frozenset({"result"}),
     completion_marker: str = "",
+    stream_parser: StreamParser | None = None,
     _poll_interval: float = 0.5,
     _on_poll: Callable[[], None] | None = None,
-    stream_parser: StreamParser | None = None,
 ) -> str:
     """Poll session NDJSON output for a result-type record with non-empty content.
 

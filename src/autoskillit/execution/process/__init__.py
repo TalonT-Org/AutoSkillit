@@ -325,13 +325,13 @@ async def run_managed_async(
                     functools.partial(
                         _watch_heartbeat,
                         stream_parser=stream_parser,
+                        _poll_interval=_heartbeat_poll,
                     ),
                     stdout_path,
                     heartbeat_record_types,
                     completion_marker,
                     acc,
                     trigger,
-                    _heartbeat_poll,
                 )
                 if session_log_dir is not None:
                     tg.start_soon(

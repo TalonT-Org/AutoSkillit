@@ -40,6 +40,7 @@ def _mock_backend(
         cmd=("claude", "--print", "emit marker", "--resume", "test-session"),
         env={},
     )
+    backend.write_tool_names.return_value = frozenset({"Write", "Edit"})
     return backend
 
 

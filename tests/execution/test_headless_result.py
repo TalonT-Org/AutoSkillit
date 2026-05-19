@@ -8,6 +8,7 @@ import pytest
 
 from autoskillit.core.types import KillReason, SubprocessResult, TerminationReason
 from autoskillit.execution.headless import _build_skill_result
+from tests.execution.conftest import _make_tool_use_line, _sr, _success_session_json
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -194,3 +195,71 @@ class TestStaleTokenUsagePropagation:
         assert tu["output_tokens"] == 200
         assert tu["cache_write_tokens"] == 50
         assert tu["cache_read_tokens"] == 75
+
+
+class TestBackendDelegatedWriteToolNames:
+    def test_backend_none_uses_fallback_write_edit(self):
+        """backend=None falls back to frozenset({'Write', 'Edit'})."""
+        stdout = (
+            _make_tool_use_line("Write", {"file_path": "/a/b.py", "content": "x"})
+            + "\n"
+            + _make_tool_use_line(
+                "Edit", {"file_path": "/a/c.py", "old_string": "a", "new_string": "b"}
+            )
+            + "\n"
+            + _success_session_json("Done")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(result, backend=None)
+        assert sr.write_call_count == 2
+
+    def test_backend_provides_custom_tool_names(self):
+        """Custom backend.write_tool_names() overrides the tool name set."""
+        from unittest.mock import Mock
+
+        mock_backend = Mock()
+        mock_backend.write_tool_names.return_value = frozenset({"CustomWrite"})
+        stdout = (
+            _make_tool_use_line("CustomWrite", {"file_path": "/a/b.py", "content": "x"})
+            + "\n"
+            + _make_tool_use_line("Write", {"file_path": "/a/c.py", "content": "x"})
+            + "\n"
+            + _success_session_json("Done")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(result, backend=mock_backend)
+        assert sr.write_call_count == 1
+
+    def test_backend_none_default_preserves_behavior(self):
+        """backend=None with no Write/Edit tools yields write_call_count=0."""
+        stdout = (
+            _make_tool_use_line("Read", {"file_path": "/a/b.py"})
+            + "\n"
+            + _success_session_json("Done")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(result, backend=None)
+        assert sr.write_call_count == 0
+
+
+class TestParseStdout:
+    def test_backend_none_calls_parse_session_result(self):
+        """_parse_stdout with backend=None returns the same result as parse_session_result."""
+        from autoskillit.execution.headless import _parse_stdout
+        from autoskillit.execution.session import parse_session_result
+
+        stdout = _success_session_json("test result")
+        result = _parse_stdout(stdout, backend=None)
+        expected = parse_session_result(stdout)
+        assert result.result == expected.result
+        assert result.session_id == expected.session_id
+        assert result.session_complete == expected.session_complete
+
+    def test_default_backend_returns_claude_session_result(self):
+        """_parse_stdout with no backend arg returns a ClaudeSessionResult."""
+        from autoskillit.execution.headless import _parse_stdout
+
+        stdout = _success_session_json("test result")
+        result = _parse_stdout(stdout)
+        assert result is not None
+        assert result.result == "test result"

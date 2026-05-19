@@ -540,3 +540,31 @@ class TestBuildSkillResultChannelBPatternRecovery:
         )
         assert sr.success is False
         assert "plan_path" not in sr.result
+
+
+class TestCapabilityGatedWritePathScan:
+    def test_false_returns_empty_write_path_warnings(self):
+        """supports_claude_format_stdout=False skips the JSONL write-path scan."""
+        stdout = (
+            _make_tool_use_line(
+                "Write", {"file_path": "/source/repo/.autoskillit/temp/stolen.md", "content": "x"}
+            )
+            + "\n"
+            + _success_session_json("Done %%DONE%%")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(result, cwd="/some/path", supports_claude_format_stdout=False)
+        assert sr.write_path_warnings == []
+
+    def test_true_default_preserves_existing_behavior(self):
+        """supports_claude_format_stdout=True (default) runs the scan as before."""
+        stdout = (
+            _make_tool_use_line(
+                "Write", {"file_path": "/source/repo/.autoskillit/temp/stolen.md", "content": "x"}
+            )
+            + "\n"
+            + _success_session_json("Done %%DONE%%")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(result, cwd="/some/path", supports_claude_format_stdout=True)
+        assert len(sr.write_path_warnings) == 1

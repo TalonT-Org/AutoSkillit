@@ -1738,6 +1738,7 @@ class TestNudgeBackendGuard:
         caps = replace(CLAUDE_CODE_CAPABILITIES, session_resume_capable=False)
         mock_backend = Mock()
         mock_backend.capabilities = caps
+        mock_backend.write_tool_names.return_value = frozenset({"Write", "Edit"})
         tool_ctx.backend = mock_backend
         tool_ctx.runner.push(self._main_subprocess_result(marker))
         tool_ctx.runner.push(self._nudge_response(marker))
@@ -1767,6 +1768,7 @@ class TestNudgeBackendGuard:
         caps = replace(CLAUDE_CODE_CAPABILITIES, session_resume_capable=True)
         mock_backend = Mock()
         mock_backend.capabilities = caps
+        mock_backend.write_tool_names.return_value = frozenset({"Write", "Edit"})
         mock_backend.build_resume_cmd.return_value = expected_cmd
         tool_ctx.backend = mock_backend
         tool_ctx.runner.push(self._main_subprocess_result(marker, session_id="sess-main"))

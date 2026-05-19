@@ -121,11 +121,12 @@ steps:
     on_success: check_integration_exists
     on_failure: check_integration_exists
     note: >
-      Detects whether the repository's CI triggers on push or merge_group events.
-      Captures ci_event for use by wait_for_ci steps (wait_for_conflict_ci, ci_watch_pr)
-      and diagnose-ci skill invocations downstream. Routes to check_integration_exists
-      regardless of outcome — non-blocking gate: ci_event defaults to null (match-any)
-      on failure, which matches the ci.py scope.event=None behavior.
+      Detects whether the repository's CI triggers on push or merge_group events
+      for the base branch. Each downstream wait_for_ci step re-derives ci_event
+      for its own watched branch via a dedicated derive_*_ci_event step. The global
+      ci_event captured here is used only by diagnose-ci skill invocations.
+      Routes to check_integration_exists regardless of outcome — non-blocking gate:
+      ci_event defaults to null (match-any) on failure.
 
   check_integration_exists:
     tool: run_cmd
@@ -256,8 +257,26 @@ steps:
       step_name: "capture_pr_head_sha"
     capture:
       current_pr_head_sha: "${{ result.stdout | trim }}"
-    on_success: wait_ci_pre_enqueue
+    on_success: derive_pre_enqueue_ci_event
     on_failure: register_clone_failure
+
+  derive_pre_enqueue_ci_event:
+    tool: check_repo_merge_state
+    with:
+      branch: "${{ context.current_pr_branch }}"
+      cwd: "${{ context.work_dir }}"
+      remote_url: "${{ context.remote_url }}"
+      step_name: "derive_pre_enqueue_ci_event"
+    capture:
+      pre_enqueue_ci_event: "${{ result.ci_event }}"
+    on_success: wait_ci_pre_enqueue
+    on_failure: wait_ci_pre_enqueue
+    note: >
+      Re-derives ci_event for the actual PR branch before the pre-enqueue CI wait.
+      The global check_repo_ci_event evaluates CI triggers against inputs.base_branch
+      (main), but wait_ci_pre_enqueue watches context.current_pr_branch where different
+      CI rules may apply. Non-blocking: on_failure routes to wait_ci_pre_enqueue with
+      pre_enqueue_ci_event=null (match-any fallback).
 
   wait_ci_pre_enqueue:
     tool: wait_for_ci
@@ -265,7 +284,7 @@ steps:
       branch: "${{ context.current_pr_branch }}"
       head_sha: "${{ context.current_pr_head_sha }}"
       cwd: "${{ context.work_dir }}"
-      event: "${{ context.ci_event }}"
+      event: "${{ context.pre_enqueue_ci_event }}"
       timeout_seconds: 600
       remote_url: "${{ context.remote_url }}"
       auto_trigger: true
@@ -432,8 +451,26 @@ steps:
       push_error_type: "${{ result.error_type }}"
     retries: 2
     on_exhausted: register_clone_failure
-    on_success: ci_watch_post_queue_fix
+    on_success: derive_post_queue_ci_event
     on_failure: classify_push_failure
+
+  derive_post_queue_ci_event:
+    tool: check_repo_merge_state
+    with:
+      branch: "${{ context.ejected_pr_branch }}"
+      cwd: "${{ context.work_dir }}"
+      remote_url: "${{ context.remote_url }}"
+      step_name: "derive_post_queue_ci_event"
+    capture:
+      post_queue_ci_event: "${{ result.ci_event }}"
+    on_success: ci_watch_post_queue_fix
+    on_failure: ci_watch_post_queue_fix
+    note: >
+      Re-derives ci_event for the actual ejected PR branch before the post-queue-fix CI wait.
+      The global check_repo_ci_event evaluates CI triggers against inputs.base_branch
+      (main), but ci_watch_post_queue_fix watches context.ejected_pr_branch where different
+      CI rules may apply. Non-blocking: on_failure routes to ci_watch_post_queue_fix with
+      post_queue_ci_event=null (match-any fallback).
 
   classify_push_failure:
     action: route
@@ -473,7 +510,7 @@ steps:
     tool: wait_for_ci
     with:
       branch: "${{ context.ejected_pr_branch }}"
-      event: "${{ context.ci_event }}"
+      event: "${{ context.post_queue_ci_event }}"
       timeout_seconds: 600
       cwd: "${{ context.work_dir }}"
       remote_url: "${{ context.remote_url }}"
@@ -886,7 +923,7 @@ steps:
       step_name: "create_conflict_pr"
     capture:
       conflict_pr_number: "${{ result.stdout | trim }}"
-    on_success: wait_for_conflict_ci
+    on_success: derive_conflict_ci_event
     on_failure: register_clone_failure
     note: >
       Creates a GitHub PR from the worktree branch into the integration batch branch.
@@ -896,17 +933,37 @@ steps:
       and propagate silently to merge_conflict_pr. Verify conflict_pr_number is a
       non-empty integer before use.
 
+  derive_conflict_ci_event:
+    tool: check_repo_merge_state
+    with:
+      branch: "${{ context.worktree_branch_name }}"
+      cwd: "${{ context.work_dir }}"
+      remote_url: "${{ context.remote_url }}"
+      step_name: "derive_conflict_ci_event"
+    capture:
+      conflict_ci_event: "${{ result.ci_event }}"
+    on_success: wait_for_conflict_ci
+    on_failure: wait_for_conflict_ci
+    note: >
+      Re-derives ci_event for the ACTUAL conflict resolution branch, not inputs.base_branch.
+      The original check_repo_ci_event evaluates CI triggers against main, but conflict PRs
+      target pr-batch/* branches where different CI rules may apply. Non-blocking: on_failure
+      routes to wait_for_conflict_ci with conflict_ci_event=null (match-any fallback).
+
   wait_for_conflict_ci:
     tool: wait_for_ci
     with:
       branch: "${{ context.worktree_branch_name }}"
-      event: "${{ context.ci_event }}"
+      event: "${{ context.conflict_ci_event }}"
       timeout_seconds: 600
       cwd: "${{ context.worktree_path }}"
+      remote_url: "${{ context.remote_url }}"
       auto_trigger: true
     on_result:
       - when: "${{ result.conclusion }} == 'success'"
         route: merge_conflict_pr
+      - when: "${{ result.conclusion }} == 'no_runs'"
+        route: handle_conflict_no_runs
       - when: "${{ result.conclusion }} == 'timed_out'"
         route: check_conflict_ci_loop
       - route: register_clone_failure
@@ -914,8 +971,10 @@ steps:
     note: >
       Waits for CI to pass on the worktree branch before merging.
       600 second timeout matches the merge-pr skill poll timeout.
-      Routes on result.conclusion: success → merge_conflict_pr,
-      timed_out → check_conflict_ci_loop (iteration guard), no_runs/failure → register_clone_failure.
+      Uses conflict_ci_event (derived for the actual worktree branch) instead of
+      the global ci_event (derived for inputs.base_branch). Routes on result.conclusion:
+      success → merge_conflict_pr, no_runs → handle_conflict_no_runs (recovery path),
+      timed_out → check_conflict_ci_loop (iteration guard), failure → register_clone_failure.
 
   check_conflict_ci_loop:
     tool: run_python
@@ -936,6 +995,27 @@ steps:
       Caps the wait_for_conflict_ci re-poll loop at 2 iterations.
       After 2 timed_out results (1200s total), routes to register_clone_failure
       instead of spinning indefinitely.
+
+  handle_conflict_no_runs:
+    tool: check_repo_merge_state
+    with:
+      branch: "${{ context.worktree_branch_name }}"
+      cwd: "${{ context.work_dir }}"
+      remote_url: "${{ context.remote_url }}"
+      step_name: "handle_conflict_no_runs"
+    capture:
+      conflict_ci_event: "${{ result.ci_event }}"
+    on_success: merge_conflict_pr
+    on_failure: register_clone_failure
+    retries: 1
+    on_exhausted: register_clone_failure
+    note: >
+      Intercepts no_runs from wait_for_conflict_ci. Re-derives ci_event for the worktree
+      branch. Since this step is reached only after auto_trigger has already attempted to
+      trigger CI (empty commit + force-push) and wait_for_conflict_ci still saw no_runs,
+      the branch genuinely has no applicable CI. Routes unconditionally to merge_conflict_pr
+      on tool success — skipping CI is correct because all recovery options have been
+      exhausted. retries: 1 bounds the tool-call retry for transient API failures.
 
   merge_conflict_pr:
     tool: run_cmd
@@ -1272,18 +1352,18 @@ steps:
       - when: "${{ result.verdict }} == approved_with_comments"
         route: resolve_review_integration
       - when: "${{ result.verdict }} == needs_human"
-        route: ci_watch_pr
+        route: derive_batch_ci_event
       - when: "${{ result.verdict }} == approved"
-        route: ci_watch_pr
+        route: derive_batch_ci_event
       - when: "true"
-        route: ci_watch_pr
+        route: derive_batch_ci_event
     on_failure: resolve_review_integration
     note: >
       Automated review of the integration PR (REQ-REVIEW-001). Invokes review-pr against
       context.batch_branch. All four verdicts have explicit routes: changes_requested
       → resolve_review_integration, approved_with_comments → resolve_review_integration,
-      needs_human → ci_watch_pr (human reviews inline), approved → ci_watch_pr. On
-      tool-level failure, routes to resolve_review_integration (matches implementation.yaml
+      needs_human → derive_batch_ci_event (human reviews inline), approved → derive_batch_ci_event.
+      On tool-level failure, routes to resolve_review_integration (matches implementation.yaml
       pattern). needs_human is explicitly routed to satisfy the unrouted-verdict-value
       semantic rule.
 
@@ -1322,19 +1402,39 @@ steps:
       clone_path: "${{ context.work_dir }}"
       remote_url: "${{ context.remote_url }}"
       branch: "${{ context.batch_branch }}"
-    on_success: ci_watch_pr
+    on_success: derive_batch_ci_event
     on_failure: register_clone_failure
     note: >
       Pushes the review-fixed integration branch to the remote (REQ-REVIEW-003). Routes to
-      ci_watch_pr for final CI validation. On push failure, escalates to register_clone_failure.
+      derive_batch_ci_event for branch-specific CI event derivation before final CI validation.
+      On push failure, escalates to register_clone_failure.
+
+  derive_batch_ci_event:
+    tool: check_repo_merge_state
+    with:
+      branch: "${{ context.batch_branch }}"
+      cwd: "${{ context.work_dir }}"
+      remote_url: "${{ context.remote_url }}"
+      step_name: "derive_batch_ci_event"
+    capture:
+      batch_ci_event: "${{ result.ci_event }}"
+    on_success: ci_watch_pr
+    on_failure: ci_watch_pr
+    note: >
+      Re-derives ci_event for the actual batch branch before the final CI watch.
+      The global check_repo_ci_event evaluates CI triggers against inputs.base_branch
+      (main), but ci_watch_pr watches context.batch_branch where different CI rules
+      may apply. Non-blocking: on_failure routes to ci_watch_pr with
+      batch_ci_event=null (match-any fallback).
 
   ci_watch_pr:
     tool: wait_for_ci
     with:
       branch: "${{ context.batch_branch }}"
-      event: "${{ context.ci_event }}"
+      event: "${{ context.batch_ci_event }}"
       timeout_seconds: 600
       cwd: "${{ context.work_dir }}"
+      remote_url: "${{ context.remote_url }}"
       pr_url: "${{ context.pr_url }}"
       auto_trigger: true
     on_result:

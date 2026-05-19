@@ -319,6 +319,32 @@ async def test_push_trigger_branch_filter_matches_target_branch(httpx_mock):
 
 
 @pytest.mark.anyio
+async def test_main_only_push_returns_none_for_pr_batch_branch(httpx_mock):
+    """push: branches: [main] must return ci_event=None for pr-batch/* branches.
+
+    This documents the exact failure mode from issue #2599: the recipe called
+    fetch_repo_merge_state(branch="main") → ci_event="push", then reused that
+    value for pr-batch/pr-merge-* branches where CI never fires.
+    """
+    workflow_text = textwrap.dedent("""\
+        on:
+          push:
+            branches: [main]
+    """)
+    httpx_mock.add_response(
+        url="https://api.github.com/graphql",
+        json=_make_repo_state_response([("tests.yml", workflow_text)]),
+    )
+    result = await fetch_repo_merge_state(
+        owner="org",
+        repo="repo",
+        branch="pr-batch/pr-merge-20260518-194529",
+        token=None,
+    )
+    assert result["ci_event"] is None
+
+
+@pytest.mark.anyio
 async def test_push_trigger_branches_ignore_allows_feature_branch(httpx_mock):
     """branches-ignore: [main, stable] → push fires on feature branches → ci_event='push'."""
     workflow_text = textwrap.dedent("""\

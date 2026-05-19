@@ -241,6 +241,50 @@ class TestBackendDelegatedWriteToolNames:
         sr = _build_skill_result(result, backend=None)
         assert sr.write_call_count == 0
 
+    def test_build_skill_result_threads_backend_to_parse_stdout(self, monkeypatch):
+        """_build_skill_result passes backend to _parse_stdout on normal exit."""
+        from unittest.mock import Mock
+
+        from autoskillit.execution.headless import _headless_result
+
+        captured: dict = {}
+        original_parse = _headless_result._parse_stdout
+
+        def spy(stdout, backend=None):
+            captured["backend"] = backend
+            return original_parse(stdout)
+
+        monkeypatch.setattr(_headless_result, "_parse_stdout", spy)
+
+        mock_backend = Mock()
+        mock_backend.write_tool_names.return_value = frozenset({"Write", "Edit"})
+        stdout = _success_session_json("Done")
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        _build_skill_result(result, backend=mock_backend)
+        assert captured["backend"] is mock_backend
+
+    def test_build_skill_result_stale_threads_backend_to_parse_stdout(self, monkeypatch):
+        """_build_skill_result passes backend to _parse_stdout on stale branch."""
+        from unittest.mock import Mock
+
+        from autoskillit.execution.headless import _headless_result
+
+        captured: dict = {}
+        original_parse = _headless_result._parse_stdout
+
+        def spy(stdout, backend=None):
+            captured["backend"] = backend
+            return original_parse(stdout)
+
+        monkeypatch.setattr(_headless_result, "_parse_stdout", spy)
+
+        mock_backend = Mock()
+        mock_backend.write_tool_names.return_value = frozenset({"Write", "Edit"})
+        stdout = _success_session_json("Done")
+        result = _sr(0, stdout, "", TerminationReason.STALE)
+        _build_skill_result(result, backend=mock_backend)
+        assert captured["backend"] is mock_backend
+
 
 class TestParseStdout:
     def test_backend_none_calls_parse_session_result(self):
@@ -264,3 +308,30 @@ class TestParseStdout:
         result = _parse_stdout(stdout)
         assert isinstance(result, ClaudeSessionResult)
         assert result.result == "test result"
+
+    def test_parse_stdout_accepts_backend_kwarg(self):
+        """_parse_stdout accepts an optional backend keyword argument."""
+        from unittest.mock import Mock
+
+        from autoskillit.execution.headless import _parse_stdout
+        from autoskillit.execution.session import ClaudeSessionResult
+
+        mock_backend = Mock()
+        stdout = _success_session_json("test result")
+        result = _parse_stdout(stdout, backend=mock_backend)
+        assert isinstance(result, ClaudeSessionResult)
+        assert result.result == "test result"
+
+    def test_parse_stdout_with_backend_matches_fallback(self):
+        """_parse_stdout with backend produces same result as without."""
+        from unittest.mock import Mock
+
+        from autoskillit.execution.headless import _parse_stdout
+
+        mock_backend = Mock()
+        stdout = _success_session_json("test result")
+        with_backend = _parse_stdout(stdout, backend=mock_backend)
+        without_backend = _parse_stdout(stdout)
+        assert with_backend.result == without_backend.result
+        assert with_backend.session_id == without_backend.session_id
+        assert with_backend.session_complete == without_backend.session_complete

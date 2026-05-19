@@ -45,18 +45,6 @@ __all__ = [
     "ClaudeResultParser",
     "ClaudeSessionLocator",
     "ClaudeStreamParser",
-    # Re-exports for backwards compatibility — helpers and constants originally
-    # defined in commands.py, now owned by this module.
-    "_HEADLESS_EXCLUSIVE_VARS",
-    "_MAX_MCP_OUTPUT_TOKENS_VALUE",
-    "_SESSION_BASELINE_ENV",
-    "_apply_output_format",
-    "_build_resume_context",
-    "_ensure_skill_prefix",
-    "_inject_completion_directive",
-    "_inject_completion_reminder",
-    "_inject_cwd_anchor",
-    "_inject_narration_suppression",
 ]
 
 

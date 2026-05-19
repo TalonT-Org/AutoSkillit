@@ -765,24 +765,6 @@ def test_check_ci_watch_pr_loop_exists_with_correct_pattern(recipe) -> None:
     assert max_exceeded_conds[0].route == "register_clone_failure"
 
 
-def test_wait_for_conflict_ci_has_remote_url(recipe) -> None:
-    """wait_for_conflict_ci must include remote_url to avoid file:// clone path fallback."""
-    step = recipe.steps["wait_for_conflict_ci"]
-    assert "remote_url" in step.with_args, (
-        "wait_for_conflict_ci must pass remote_url — without it, repo resolution falls back "
-        "to git remote get-url in the cwd, which may resolve to a file:// clone path"
-    )
-
-
-def test_ci_watch_pr_has_remote_url(recipe) -> None:
-    """ci_watch_pr must include remote_url to avoid file:// clone path fallback."""
-    step = recipe.steps["ci_watch_pr"]
-    assert "remote_url" in step.with_args, (
-        "ci_watch_pr must pass remote_url — without it, repo resolution falls back "
-        "to git remote get-url in the cwd, which may resolve to a file:// clone path"
-    )
-
-
 def test_all_wait_for_ci_steps_have_remote_url(recipe) -> None:
     """Every wait_for_ci step must include remote_url in its with_args."""
     for step_name, step in recipe.steps.items():
@@ -809,6 +791,10 @@ def test_wait_for_conflict_ci_uses_dedicated_ci_event(recipe) -> None:
         "inputs.base_branch (main), not the worktree branch being watched. "
         "Use a dedicated context.conflict_ci_event instead."
     )
+    assert "context.conflict_ci_event" in event, (
+        "wait_for_conflict_ci must use context.conflict_ci_event — "
+        "the ci_event derived for the actual worktree branch"
+    )
 
 
 def test_ci_watch_pr_uses_dedicated_ci_event(recipe) -> None:
@@ -819,6 +805,10 @@ def test_ci_watch_pr_uses_dedicated_ci_event(recipe) -> None:
         "ci_watch_pr must NOT use context.ci_event — it was derived for "
         "inputs.base_branch (main), not context.batch_branch being watched. "
         "Use a dedicated context.batch_ci_event instead."
+    )
+    assert "context.batch_ci_event" in event, (
+        "ci_watch_pr must use context.batch_ci_event — "
+        "the ci_event derived for the actual batch branch"
     )
 
 
@@ -831,6 +821,10 @@ def test_wait_ci_pre_enqueue_uses_dedicated_ci_event(recipe) -> None:
         "inputs.base_branch (main), not context.current_pr_branch being watched. "
         "Use a dedicated context.pre_enqueue_ci_event instead."
     )
+    assert "context.pre_enqueue_ci_event" in event, (
+        "wait_ci_pre_enqueue must use context.pre_enqueue_ci_event — "
+        "the ci_event derived for the actual PR branch"
+    )
 
 
 def test_ci_watch_post_queue_fix_uses_dedicated_ci_event(recipe) -> None:
@@ -841,6 +835,10 @@ def test_ci_watch_post_queue_fix_uses_dedicated_ci_event(recipe) -> None:
         "ci_watch_post_queue_fix must NOT use context.ci_event — it was derived for "
         "inputs.base_branch (main), not context.ejected_pr_branch being watched. "
         "Use a dedicated context.post_queue_ci_event instead."
+    )
+    assert "context.post_queue_ci_event" in event, (
+        "ci_watch_post_queue_fix must use context.post_queue_ci_event — "
+        "the ci_event derived for the actual ejected PR branch"
     )
 
 
@@ -855,11 +853,45 @@ def test_derive_conflict_ci_event_step_exists(recipe) -> None:
     assert "worktree_branch_name" in step.with_args.get("branch", "")
 
 
+def test_derive_pre_enqueue_ci_event_step_exists(recipe) -> None:
+    """derive_pre_enqueue_ci_event must exist to re-derive ci_event for the PR branch."""
+    assert "derive_pre_enqueue_ci_event" in recipe.steps, (
+        "derive_pre_enqueue_ci_event step is missing — needed to derive ci_event for the "
+        "actual PR branch before wait_ci_pre_enqueue runs"
+    )
+    step = recipe.steps["derive_pre_enqueue_ci_event"]
+    assert step.tool == "check_repo_merge_state"
+    assert "current_pr_branch" in step.with_args.get("branch", "")
+
+
+def test_derive_post_queue_ci_event_step_exists(recipe) -> None:
+    """derive_post_queue_ci_event must exist to re-derive ci_event for the ejected PR branch."""
+    assert "derive_post_queue_ci_event" in recipe.steps, (
+        "derive_post_queue_ci_event step is missing — needed to derive ci_event for the "
+        "actual ejected PR branch before ci_watch_post_queue_fix runs"
+    )
+    step = recipe.steps["derive_post_queue_ci_event"]
+    assert step.tool == "check_repo_merge_state"
+    assert "ejected_pr_branch" in step.with_args.get("branch", "")
+
+
+def test_derive_batch_ci_event_step_exists(recipe) -> None:
+    """derive_batch_ci_event must exist to re-derive ci_event for the batch branch."""
+    assert "derive_batch_ci_event" in recipe.steps, (
+        "derive_batch_ci_event step is missing — needed to derive ci_event for the "
+        "actual batch branch before ci_watch_pr runs"
+    )
+    step = recipe.steps["derive_batch_ci_event"]
+    assert step.tool == "check_repo_merge_state"
+    assert "batch_branch" in step.with_args.get("branch", "")
+
+
 def test_create_conflict_pr_routes_to_derive_conflict_ci_event(recipe) -> None:
-    """create_conflict_pr.on_success must route to derive_conflict_ci_event, not directly to wait_for_conflict_ci."""
+    """create_conflict_pr.on_success must route to derive_conflict_ci_event."""
     step = recipe.steps["create_conflict_pr"]
     assert step.on_success == "derive_conflict_ci_event", (
-        f"create_conflict_pr.on_success must be 'derive_conflict_ci_event', got {step.on_success!r}"
+        f"create_conflict_pr.on_success must be "
+        f"'derive_conflict_ci_event', got {step.on_success!r}"
     )
 
 
@@ -874,7 +906,7 @@ def test_handle_conflict_no_runs_step_exists(recipe) -> None:
 
 
 def test_wait_for_conflict_ci_routes_no_runs_to_handler(recipe) -> None:
-    """wait_for_conflict_ci must route no_runs to handle_conflict_no_runs, not register_clone_failure."""
+    """wait_for_conflict_ci must route no_runs to handle_conflict_no_runs."""
     step = recipe.steps["wait_for_conflict_ci"]
     assert step.on_result is not None
     no_runs_conds = [c for c in step.on_result.conditions if c.when and "no_runs" in c.when]

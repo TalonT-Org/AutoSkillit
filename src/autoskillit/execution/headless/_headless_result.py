@@ -326,10 +326,10 @@ def _build_skill_result(
         returncode = result.returncode if result.returncode is not None else -1
         session = _parse_stdout(result.stdout)
 
-    _write_names = (
+    write_names = (
         backend.write_tool_names() if backend is not None else frozenset({"Write", "Edit"})
     )
-    write_call_count = sum(1 for t in session.tool_uses if t.get("name") in _write_names)
+    write_call_count = sum(1 for t in session.tool_uses if t.get("name") in write_names)
     _has_write_evidence = write_call_count >= 1 or fs_writes_detected or git_writes_detected
 
     # Channel B drain-race: recover from assistant_messages if type=result was not flushed.

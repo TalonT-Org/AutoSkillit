@@ -11,7 +11,6 @@ backends/ (see backends/CLAUDE.md).
 |------|---------|
 | `__init__.py` | Re-exports `DefaultHeadlessExecutor`, `run_headless_core` |
 | `commands.py` | `ClaudeInteractiveCmd`, `ClaudeHeadlessCmd` builders |
-| `test_commands_shim_contract.py` | Structural contract tests for commands.py forwarding shims |
 | `db.py` | Read-only SQLite with defence-in-depth |
 | `diff_annotator.py` | Diff annotation + findings filter for review-pr |
 | `linux_tracing.py` | `/proc` + psutil process tracing (Linux) |

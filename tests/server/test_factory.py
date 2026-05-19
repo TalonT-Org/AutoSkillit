@@ -602,17 +602,22 @@ def test_tool_ctx_kitchen_open_fixture_gate_starts_open(tool_ctx_kitchen_open) -
     assert tool_ctx_kitchen_open.gate.enabled is True
 
 
-def test_make_context_skips_replay_runner_for_non_claude_backend(monkeypatch, tmp_path):
+@pytest.fixture()
+def _register_aider_backend(monkeypatch):
+    from autoskillit.execution.backends import BACKEND_REGISTRY, ClaudeCodeBackend
+
+    monkeypatch.setitem(BACKEND_REGISTRY, "aider", ClaudeCodeBackend)
+
+
+def test_make_context_skips_replay_runner_for_non_claude_backend(
+    monkeypatch, tmp_path, _register_aider_backend
+):
     monkeypatch.setenv("REPLAY_SCENARIO", "1")
     monkeypatch.setenv("REPLAY_SCENARIO_DIR", str(tmp_path))
     monkeypatch.delenv("RECORD_SCENARIO", raising=False)
 
     mock_build = Mock()
     monkeypatch.setattr("autoskillit.server._factory.build_replay_runner", mock_build)
-
-    from autoskillit.execution.backends import BACKEND_REGISTRY, ClaudeCodeBackend
-
-    monkeypatch.setitem(BACKEND_REGISTRY, "aider", ClaudeCodeBackend)
 
     cfg = AutomationConfig(agent_backend=AgentBackendConfig(backend="aider"))
     ctx = make_context(cfg, plugin_dir=str(tmp_path))
@@ -621,14 +626,12 @@ def test_make_context_skips_replay_runner_for_non_claude_backend(monkeypatch, tm
     assert isinstance(ctx.runner, DefaultSubprocessRunner)
 
 
-def test_make_context_skips_record_runner_for_non_claude_backend(monkeypatch, tmp_path):
+def test_make_context_skips_record_runner_for_non_claude_backend(
+    monkeypatch, tmp_path, _register_aider_backend
+):
     monkeypatch.setenv("RECORD_SCENARIO", "1")
     monkeypatch.setenv("RECORD_SCENARIO_DIR", str(tmp_path))
     monkeypatch.delenv("REPLAY_SCENARIO", raising=False)
-
-    from autoskillit.execution.backends import BACKEND_REGISTRY, ClaudeCodeBackend
-
-    monkeypatch.setitem(BACKEND_REGISTRY, "aider", ClaudeCodeBackend)
 
     cfg = AutomationConfig(agent_backend=AgentBackendConfig(backend="aider"))
     ctx = make_context(cfg, plugin_dir=str(tmp_path))

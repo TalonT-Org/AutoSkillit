@@ -610,6 +610,10 @@ def test_make_context_skips_replay_runner_for_non_claude_backend(monkeypatch, tm
     mock_build = Mock()
     monkeypatch.setattr("autoskillit.server._factory.build_replay_runner", mock_build)
 
+    from autoskillit.execution.backends import BACKEND_REGISTRY, ClaudeCodeBackend
+
+    monkeypatch.setitem(BACKEND_REGISTRY, "aider", ClaudeCodeBackend)
+
     cfg = AutomationConfig(agent_backend=AgentBackendConfig(backend="aider"))
     ctx = make_context(cfg, plugin_dir=str(tmp_path))
 
@@ -622,8 +626,35 @@ def test_make_context_skips_record_runner_for_non_claude_backend(monkeypatch, tm
     monkeypatch.setenv("RECORD_SCENARIO_DIR", str(tmp_path))
     monkeypatch.delenv("REPLAY_SCENARIO", raising=False)
 
+    from autoskillit.execution.backends import BACKEND_REGISTRY, ClaudeCodeBackend
+
+    monkeypatch.setitem(BACKEND_REGISTRY, "aider", ClaudeCodeBackend)
+
     cfg = AutomationConfig(agent_backend=AgentBackendConfig(backend="aider"))
     ctx = make_context(cfg, plugin_dir=str(tmp_path))
 
     assert isinstance(ctx.runner, DefaultSubprocessRunner)
     assert not isinstance(ctx.runner, RecordingSubprocessRunner)
+
+
+def test_make_context_backend_is_coding_agent_backend() -> None:
+    """make_context() sets ctx.backend to a CodingAgentBackend instance."""
+    from autoskillit.core import CodingAgentBackend
+
+    ctx = make_context(AutomationConfig(), runner=_runner())
+    assert isinstance(ctx.backend, CodingAgentBackend)
+
+
+def test_make_context_default_backend_is_claude_code() -> None:
+    """Default config (agent_backend.backend='claude-code') produces ClaudeCodeBackend."""
+    from autoskillit.execution.backends import ClaudeCodeBackend
+
+    ctx = make_context(AutomationConfig(), runner=_runner())
+    assert isinstance(ctx.backend, ClaudeCodeBackend)
+
+
+def test_make_context_unknown_backend_raises_value_error() -> None:
+    """Unknown agent_backend key raises ValueError with supported keys."""
+    cfg = AutomationConfig(agent_backend=AgentBackendConfig(backend="nonexistent"))
+    with pytest.raises(ValueError, match="nonexistent"):
+        make_context(cfg, runner=_runner())

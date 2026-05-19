@@ -162,4 +162,5 @@ class SubprocessRunner(Protocol):
         max_extension_seconds: float = 7200,
         marker_dir: Path | None = None,
         session_id: str | None = None,
+        stream_parser: Any | None = None,
     ) -> Awaitable[SubprocessResult]: ...

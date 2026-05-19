@@ -67,6 +67,7 @@ if TYPE_CHECKING:
     import structlog
 
     from autoskillit.config import LinuxTracingConfig
+    from autoskillit.core import StreamParser
     from autoskillit.execution.linux_tracing import TraceTarget
 
 logger = get_logger(__name__)
@@ -211,6 +212,7 @@ async def run_managed_async(
     _session_id_timeout: float = 1.0,
     marker_dir: Path | None = None,
     session_id: str | None = None,
+    stream_parser: StreamParser | None = None,
 ) -> SubprocessResult:
     """Async subprocess execution with temp file I/O and process tree cleanup.
 
@@ -330,7 +332,10 @@ async def run_managed_async(
                 )
                 if session_log_dir is not None:
                     tg.start_soon(
-                        _extract_stdout_session_id,
+                        functools.partial(
+                            _extract_stdout_session_id,
+                            stream_parser=stream_parser,
+                        ),
                         stdout_path,
                         acc,
                         stdout_session_id_ready,
@@ -598,6 +603,7 @@ class DefaultSubprocessRunner:
         max_extension_seconds: float = 7200,
         marker_dir: Path | None = None,
         session_id: str | None = None,
+        stream_parser: StreamParser | None = None,
     ) -> SubprocessResult:
         return await run_managed_async(
             cmd,
@@ -618,4 +624,5 @@ class DefaultSubprocessRunner:
             max_extension_seconds=max_extension_seconds,
             marker_dir=marker_dir,
             session_id=session_id,
+            stream_parser=stream_parser,
         )

@@ -505,15 +505,24 @@ _CLAUDE_ENV_RULE_ALLOWED: frozenset[tuple[str, str]] = frozenset(
         # as a direct subprocess call because `spec` resolves to a builder return value.
         ("__init__.py", "run_headless_core"),
         ("__init__.py", "dispatch_food_truck"),
-        # build_headless_resume_cmd constructs cmd = ["claude", ...] then calls
-        # _apply_output_format(cmd, ...) — an in-place list mutation, not a subprocess
-        # launch. The function returns ClaudeHeadlessCmd(cmd=cmd, env=build_agent_env(...)).
-        ("commands.py", "build_headless_resume_cmd"),
         # build_cmd constructs CmdSpec(cmd=tuple(spec.cmd), env=spec.env, cwd=cwd) — a
         # dataclass constructor, not a subprocess launch. The checker misidentifies
         # tuple(spec.cmd) as a claude-launching call because spec was bound to a
         # build_headless_cmd() return value. env IS properly forwarded via spec.env.
         ("claude.py", "build_cmd"),
+        # Backend builders construct CmdSpec(cmd=tuple(spec.cmd), ...) where spec.cmd
+        # is a tuple starting with "claude". The checker flags tuple(...) inside the
+        # backend method body as a subprocess launch — the actual env= is in the caller.
+        ("claude.py", "build_resume_cmd"),
+        ("claude.py", "build_interactive_cmd"),
+        ("claude.py", "build_headless_cmd"),
+        ("claude.py", "build_food_truck_cmd"),
+        # Shim functions delegate to ClaudeCodeBackend and forward the returned spec.
+        # The spec.cmd construction in the backend is already allowlisted above;
+        # the shim's list(spec.cmd) is an intermediate copy, not a subprocess launch.
+        ("commands.py", "build_interactive_cmd"),
+        ("commands.py", "build_headless_cmd"),
+        ("commands.py", "build_skill_session_cmd"),
     }
 )
 

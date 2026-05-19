@@ -16,6 +16,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_clone_guard.py` | Tests for clone contamination guard — detect and revert direct changes |
 | `test_conftest_import_guard.py` | Structural guard: conftest.py must not import merge_queue at module level |
 | `test_commands.py` | Tests for execution/commands.py — ClaudeInteractiveCmd / ClaudeHeadlessCmd builders |
+| `test_commands_shim_contract.py` | Structural contract tests verifying commands.py builders are thin forwarding shims |
 | `test_db.py` | L1 unit tests for execution/db.py — SQL validation and authorizer |
 | `test_api_error_signal_invariants.py` | API error signal invariants: API errors detected regardless of channel (PTY vs non-PTY) |
 | `test_diff_annotator.py` | Behavioral tests for execution/diff_annotator.py |

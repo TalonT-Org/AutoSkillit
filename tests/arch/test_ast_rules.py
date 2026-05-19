@@ -408,9 +408,9 @@ def test_arch007_channel_confirmation_dispatch_uses_match_case() -> None:
 def test_no_raw_claude_list_construction() -> None:
     """No list literal starting with 'claude' may be constructed outside the ALLOWED set.
 
-    Enforces that all claude command construction goes through the canonical
-    builders in execution/commands.py, preventing ad-hoc command assembly
-    that bypasses established safety flags.
+    Enforces that all claude command construction goes through
+    ClaudeCodeBackend in execution/backends/claude.py, preventing ad-hoc
+    command assembly that bypasses established safety flags.
     """
     ALLOWED = {
         ("_marketplace.py", "install"),
@@ -895,19 +895,23 @@ def test_fcntl_import_allowlist() -> None:
 
 def test_no_build_cmd_accepts_output_format_value_string() -> None:
     """No cmd builder should accept output_format_value: str — use OutputFormat enum (ARCH-011)."""
-    source = (SRC_ROOT / "execution" / "commands.py").read_text()
-    tree = ast.parse(source)
-    for node in ast.walk(tree):
-        if (
-            isinstance(node, ast.FunctionDef)
-            and node.name.startswith("build_")
-            and node.name.endswith("_cmd")
-        ):
-            param_names = [a.arg for a in node.args.args + node.args.kwonlyargs]
-            assert "output_format_value" not in param_names, (
-                f"{node.name} still accepts 'output_format_value' (raw string). "
-                f"Use 'output_format: OutputFormat' instead."
-            )
+    for src_path in (
+        SRC_ROOT / "execution" / "commands.py",
+        SRC_ROOT / "execution" / "backends" / "claude.py",
+    ):
+        source = src_path.read_text()
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.FunctionDef)
+                and node.name.startswith("build_")
+                and node.name.endswith("_cmd")
+            ):
+                param_names = [a.arg for a in node.args.args + node.args.kwonlyargs]
+                assert "output_format_value" not in param_names, (
+                    f"{node.name} in {src_path.name} still accepts 'output_format_value' (raw string). "
+                    f"Use 'output_format: OutputFormat' instead."
+                )
 
 
 # ── ARCH-010: StrEnum-to-string comparison ────────────────────────────────────

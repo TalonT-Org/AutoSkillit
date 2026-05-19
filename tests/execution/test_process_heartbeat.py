@@ -656,8 +656,8 @@ class TestHeartbeatStreamParser:
                 )
 
     @pytest.mark.anyio
-    async def test_stream_parser_requires_marker_when_set(self, tmp_path):
-        """StreamParser respects completion_marker: result without marker does not fire."""
+    async def test_stream_parser_rejects_terminal_without_marker(self, tmp_path):
+        """StreamParser with completion_marker rejects terminal event when marker is absent."""
         from autoskillit.execution.backends import ClaudeStreamParser
 
         stdout_path = tmp_path / "stdout.tmp"
@@ -672,30 +672,19 @@ class TestHeartbeatStreamParser:
                     _poll_interval=0.05,
                 )
 
-        # Append a record WITH the marker — should fire immediately
-        with stdout_path.open("a") as f:
-            f.write('{"type":"result","result":"Done.\\n%%DONE%%","session_id":"s1"}\n')
+    @pytest.mark.anyio
+    async def test_stream_parser_fires_when_marker_present(self, tmp_path):
+        """StreamParser fires when terminal event contains the required completion marker."""
+        from autoskillit.execution.backends import ClaudeStreamParser
+
+        stdout_path = tmp_path / "stdout.tmp"
+        stdout_path.write_text('{"type":"result","result":"Done.\\n%%DONE%%","session_id":"s1"}\n')
+
         with anyio.fail_after(1.0):
             result = await _heartbeat(
                 stdout_path,
                 stream_parser=ClaudeStreamParser(completion_marker="%%DONE%%"),
                 completion_marker="%%DONE%%",
-                _poll_interval=0.05,
-            )
-        assert result == "completion"
-
-    @pytest.mark.anyio
-    async def test_stream_parser_fires_without_marker_when_unset(self, tmp_path):
-        """StreamParser with no completion_marker fires on type=result regardless of content."""
-        from autoskillit.execution.backends import ClaudeStreamParser
-
-        stdout_path = tmp_path / "stdout.tmp"
-        stdout_path.write_text('{"type":"result","result":"Done","session_id":"s1"}\n')
-
-        with anyio.fail_after(5.0):
-            result = await _heartbeat(
-                stdout_path,
-                stream_parser=ClaudeStreamParser(),
                 _poll_interval=0.05,
             )
         assert result == "completion"

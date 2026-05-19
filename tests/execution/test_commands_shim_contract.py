@@ -24,8 +24,7 @@ class TestCommandsShimContract:
         """Each builder body must have <= 3 statements (forwarding shim)."""
         source = inspect.getsource(getattr(commands, name))
         tree = ast.parse(source)
-        func = tree.body[0]
-        assert isinstance(func, ast.FunctionDef)
+        func = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == name)
         body_stmts = [
             s
             for s in func.body
@@ -38,8 +37,7 @@ class TestCommandsShimContract:
         """Each builder body must reference ClaudeCodeBackend."""
         source = inspect.getsource(getattr(commands, name))
         tree = ast.parse(source)
-        func = tree.body[0]
-        assert isinstance(func, ast.FunctionDef)
+        func = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == name)
         ast_names = {
             node.id if isinstance(node, ast.Name) else node.attr
             for node in ast.walk(func)

@@ -708,7 +708,7 @@ class TestCookInteractive:
 
             module.cook()
 
-        assert len(captured_kwargs) >= 1, "build_interactive_cmd must have been called"
+        assert len(captured_kwargs) == 1, "build_interactive_cmd must have been called"
         call_kwargs = captured_kwargs[0]
         assert "plugin_source" in call_kwargs
         assert "add_dirs" in call_kwargs

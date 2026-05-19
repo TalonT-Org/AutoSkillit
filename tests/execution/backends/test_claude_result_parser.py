@@ -227,8 +227,12 @@ class TestClaudeResultParser:
         tool_uses = [
             {"name": "Write", "id": "1", "file_path": "/a.py"},
             {"name": "Bash", "id": "2"},
-            {"name": "Edit", "id": "3", "file_path": "/b.py"},
-            {"name": "Write", "id": "4"},
+            {
+                "name": "Edit",
+                "id": "3",
+                "file_path": "/b.py",
+            },  # Edit modifies files — counts as write artifact
+            {"name": "Write", "id": "4"},  # no file_path — silently skipped
             {"name": "Read", "id": "5", "file_path": "/c.py"},
         ]
         assert _extract_write_artifacts(tool_uses) == ["/a.py", "/b.py"]

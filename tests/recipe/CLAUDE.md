@@ -71,6 +71,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_plan_visualization_step.py` | Tests for plan visualization step in recipes |
 | `test_planner_recipe.py` | Tests for the planner recipe structure |
 | `test_promote_to_main_wrapper.py` | Tests for the promote-to-main wrapper recipe |
+| `test_recipe_ci_contracts.py` | Cross-recipe ci_event/branch coherence and remote_url structural tests |
 | `test_recipe_ci_watch_event.py` | Tests for CI watch event in recipe steps |
 | `test_recipe_order.py` | Tests for BUNDLED_RECIPE_ORDER stable display order registry |
 | `test_report_frontmatter_schema.py` | Tests for report.md YAML frontmatter audit-trail schema |

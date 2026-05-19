@@ -63,6 +63,23 @@ def test_yaml_parse_failure_falls_back_to_heuristic_safe():
     assert _push_trigger_applies_to_branch(": [\n", "main") is False
 
 
+def test_main_only_push_excludes_pr_batch_branch():
+    """push: branches: [main] must NOT fire for pr-batch/* branches.
+
+    This is the exact failure mode from issue #2599: the recipe derived
+    ci_event='push' for main, then reused it for pr-batch/pr-merge-* branches
+    where GitHub Actions never fires.
+    """
+    text = "on:\n  push:\n    branches:\n      - main\n"
+    assert _push_trigger_applies_to_branch(text, "pr-batch/pr-merge-20260518-194529") is False
+
+
+def test_main_only_push_excludes_worktree_branch():
+    """push: branches: [main] must NOT fire for impl-* worktree branches."""
+    text = "on:\n  push:\n    branches:\n      - main\n"
+    assert _push_trigger_applies_to_branch(text, "impl-rectify-ci-event-20260518-180226") is False
+
+
 # ---------------------------------------------------------------------------
 # _has_merge_group_trigger tests
 # ---------------------------------------------------------------------------

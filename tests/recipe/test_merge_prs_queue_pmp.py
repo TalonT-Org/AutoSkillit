@@ -307,10 +307,10 @@ def test_merge_prs_ci_watch_post_queue_fix_exists(pmp_recipe) -> None:
     assert "ci_watch_post_queue_fix" in pmp_recipe.steps
 
 
-def test_merge_prs_push_ejected_fix_routes_to_ci_watch(pmp_recipe) -> None:
-    """push_ejected_fix.on_success must route to ci_watch_post_queue_fix."""
+def test_merge_prs_push_ejected_fix_routes_to_derive_post_queue_ci_event(pmp_recipe) -> None:
+    """push_ejected_fix.on_success must route through derive_post_queue_ci_event."""
     step = pmp_recipe.steps["push_ejected_fix"]
-    assert step.on_success == "ci_watch_post_queue_fix"
+    assert step.on_success == "derive_post_queue_ci_event"
 
 
 def test_merge_prs_ci_watch_routes_to_reenter(pmp_recipe) -> None:

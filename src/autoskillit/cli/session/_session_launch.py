@@ -37,7 +37,7 @@ def _run_interactive_session(
         _InfraExitSignal — when an infrastructure exit is detected
         None — clean exit
     """
-    from autoskillit.execution import ClaudeCodeBackend
+    from autoskillit.execution import ClaudeCodeBackend, read_session_state
 
     backend = ClaudeCodeBackend()
     if shutil.which(backend.binary_name()) is None:
@@ -58,7 +58,6 @@ def _run_interactive_session(
         detect_autoskillit_mcp_prefix,
         pkg_root,
     )
-    from autoskillit.execution import read_session_state
 
     _project_dir = project_dir if project_dir is not None else Path.cwd()
     spec = backend.build_interactive_cmd(

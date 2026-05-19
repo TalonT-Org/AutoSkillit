@@ -181,3 +181,106 @@ def test_run_interactive_session_appends_system_prompt_on_fresh_session(
     assert ClaudeFlags.APPEND_SYSTEM_PROMPT in captured["cmd"]
     idx = captured["cmd"].index(ClaudeFlags.APPEND_SYSTEM_PROMPT)
     assert captured["cmd"][idx + 1] == "my-prompt"
+
+
+# ---------------------------------------------------------------------------
+# New tests — backend binary_name() and capability gate
+# ---------------------------------------------------------------------------
+
+
+def test_skill_injection_disabled_omits_flags(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When skill_injection_capable=False, no plugin/tools/system-prompt flags are injected."""
+    from autoskillit.core import BackendCapabilities, CmdSpec
+
+    no_inject_caps = BackendCapabilities(
+        channel_b_capable=True,
+        pty_required=True,
+        session_resume_capable=True,
+        skill_injection_capable=False,
+        supports_thinking_blocks=True,
+        supports_claude_format_stdout=True,
+        exit_code_is_terminal=False,
+        completion_record_types=frozenset({"result"}),
+        session_record_types=frozenset({"assistant"}),
+    )
+
+    class _NoInjectBackend:
+        def binary_name(self) -> str:
+            return "claude"
+
+        @property
+        def capabilities(self):
+            return no_inject_caps
+
+        def build_interactive_cmd(self, **kwargs):
+            return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
+
+    from autoskillit.cli.session._session_launch import _run_interactive_session
+
+    captured: dict = {}
+    monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/claude")
+
+    def mock_run(cmd, **kwargs):
+        captured["cmd"] = list(cmd)
+        captured["env"] = kwargs.get("env", {}) or {}
+        return type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+    monkeypatch.setattr(subprocess, "run", mock_run)
+    monkeypatch.setattr("autoskillit.execution.backends.ClaudeCodeBackend", _NoInjectBackend)
+    _run_interactive_session(system_prompt="test")
+    assert ClaudeFlags.PLUGIN_DIR not in captured["cmd"]
+    assert ClaudeFlags.TOOLS not in captured["cmd"]
+    assert ClaudeFlags.APPEND_SYSTEM_PROMPT not in captured["cmd"]
+
+
+def test_skill_injection_enabled_preserves_flags(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When skill_injection_capable=True, plugin/tools/system-prompt flags are present."""
+    _stub_plugin_installed(monkeypatch)
+    captured = _capture_subprocess(monkeypatch)
+    _run_interactive_session(system_prompt="test")
+    assert ClaudeFlags.TOOLS in captured["cmd"]
+    idx = captured["cmd"].index(ClaudeFlags.TOOLS)
+    assert captured["cmd"][idx + 1] == "AskUserQuestion"
+    assert ClaudeFlags.APPEND_SYSTEM_PROMPT in captured["cmd"]
+
+
+def test_binary_name_from_backend_used_in_which(monkeypatch: pytest.MonkeyPatch) -> None:
+    """shutil.which is called with the backend's binary_name(), not a hardcoded literal."""
+    from autoskillit.core import BackendCapabilities, CmdSpec
+
+    captured_which_arg: list = []
+
+    class _CustomBinaryBackend:
+        def binary_name(self) -> str:
+            return "test-agent-binary"
+
+        @property
+        def capabilities(self):
+            return BackendCapabilities(
+                channel_b_capable=True,
+                pty_required=True,
+                session_resume_capable=True,
+                skill_injection_capable=True,
+                supports_thinking_blocks=True,
+                supports_claude_format_stdout=True,
+                exit_code_is_terminal=False,
+                completion_record_types=frozenset({"result"}),
+                session_record_types=frozenset({"assistant"}),
+            )
+
+        def build_interactive_cmd(self, **kwargs):
+            return CmdSpec(cmd=("test-agent-binary", "--dangerously-skip-permissions"), env={})
+
+    def tracking_which(binary: str):
+        captured_which_arg.append(binary)
+        if binary == "test-agent-binary":
+            return "/usr/bin/test-agent-binary"
+        return None
+
+    monkeypatch.setattr(shutil, "which", tracking_which)
+    monkeypatch.setattr("autoskillit.execution.backends.ClaudeCodeBackend", _CustomBinaryBackend)
+    monkeypatch.setattr(subprocess, "run", lambda *a, **kw: type("R", (), {"returncode": 0})())
+    from autoskillit.cli.session._session_launch import _run_interactive_session
+
+    _run_interactive_session(system_prompt="test")
+    assert "test-agent-binary" in captured_which_arg

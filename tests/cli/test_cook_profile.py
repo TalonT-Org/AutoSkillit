@@ -7,19 +7,23 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 import autoskillit.cli.session._cook as cook_module
-from autoskillit.execution.commands import ClaudeInteractiveCmd
+from autoskillit.core import CmdSpec
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
 
-def _fake_build_cmd():
+def _make_mock_backend_class():
     captured = []
 
-    def fake(**kwargs):
-        captured.append(kwargs.get("env_extras", {}))
-        return ClaudeInteractiveCmd(cmd=["claude"], env={})
+    class _MockBackend:
+        def binary_name(self) -> str:
+            return "claude"
 
-    return fake, captured
+        def build_interactive_cmd(self, **kwargs):
+            captured.append(kwargs.get("env_extras", {}))
+            return CmdSpec(cmd=("claude",), env={})
+
+    return _MockBackend, captured
 
 
 @pytest.fixture()
@@ -28,13 +32,13 @@ def _mock_mgr():
 
 
 def _run_cook(profile, cfg, mock_mgr):
-    fake_build, captured = _fake_build_cmd()
+    mock_backend_cls, captured = _make_mock_backend_class()
     with (
         patch("shutil.which", return_value="/usr/bin/claude"),
         patch("builtins.input", return_value=""),
         patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
         patch("subprocess.run", return_value=MagicMock(returncode=0)),
-        patch("autoskillit.execution.build_interactive_cmd", fake_build),
+        patch("autoskillit.execution.backends.ClaudeCodeBackend", mock_backend_cls),
         patch("autoskillit.core.write_registry_entry"),
         patch("autoskillit.config.load_config", return_value=cfg),
         patch(
@@ -88,11 +92,11 @@ def test_profile_feature_disabled_exits(capsys, _mock_mgr):
     cfg = MagicMock()
     cfg.experimental_enabled = False
     cfg.providers.profiles = {"minimax": {}}
-    fake_build, _ = _fake_build_cmd()
+    mock_backend_cls, _ = _make_mock_backend_class()
     with (
         patch("shutil.which", return_value="/usr/bin/claude"),
         patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=_mock_mgr),
-        patch("autoskillit.execution.build_interactive_cmd", fake_build),
+        patch("autoskillit.execution.backends.ClaudeCodeBackend", mock_backend_cls),
         patch("autoskillit.config.load_config", return_value=cfg),
         patch("autoskillit.cli.session._cook.is_feature_enabled", return_value=False),
     ):
@@ -107,11 +111,11 @@ def test_profile_unknown_exits(capsys, _mock_mgr):
     cfg = MagicMock()
     cfg.experimental_enabled = True
     cfg.providers.profiles = {"anthropic": {}, "openai": {}}
-    fake_build, _ = _fake_build_cmd()
+    mock_backend_cls, _ = _make_mock_backend_class()
     with (
         patch("shutil.which", return_value="/usr/bin/claude"),
         patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=_mock_mgr),
-        patch("autoskillit.execution.build_interactive_cmd", fake_build),
+        patch("autoskillit.execution.backends.ClaudeCodeBackend", mock_backend_cls),
         patch("autoskillit.config.load_config", return_value=cfg),
         patch("autoskillit.cli.session._cook.is_feature_enabled", return_value=True),
     ):

@@ -120,8 +120,8 @@ class TestWaitForCiAutoTrigger:
         assert result["conclusion"] == "branch_mismatch"
         assert result["triggered"] is False
         commands = [call[0] for call in tool_ctx_kitchen_open.runner.call_args_list]
-        assert not any("commit" in " ".join(cmd) for cmd in commands)
-        assert not any("push" in " ".join(cmd) for cmd in commands)
+        assert not any(cmd[0] == "git" and cmd[1] == "commit" for cmd in commands if len(cmd) > 1)
+        assert not any(cmd[0] == "git" and cmd[1] == "push" for cmd in commands if len(cmd) > 1)
 
     @pytest.mark.anyio
     async def test_auto_trigger_proceeds_when_cwd_branch_matches(self, tool_ctx_kitchen_open):

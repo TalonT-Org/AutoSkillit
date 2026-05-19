@@ -26,3 +26,17 @@ class TestBackendRegistry:
 
     def test_backend_registry_value_type(self) -> None:
         assert BACKEND_REGISTRY["claude-code"] is ClaudeCodeBackend
+
+    def test_all_exports_complete(self) -> None:
+        from autoskillit.execution.backends import __all__ as all_exports
+
+        expected = {
+            "BACKEND_REGISTRY",
+            "ClaudeCodeBackend",
+            "ClaudeEnvPolicy",
+            "ClaudeResultParser",
+            "ClaudeSessionLocator",
+            "ClaudeStreamParser",
+            "get_backend",
+        }
+        assert set(all_exports) == expected

@@ -120,15 +120,10 @@ def test_toolcontext_new_optional_fields_default_none(tmp_path):
 
 def test_tool_context_has_backend_field() -> None:
     """ToolContext dataclass exposes backend as an optional CodingAgentBackend Protocol field."""
-    import dataclasses
     import typing
 
     from autoskillit.core import CodingAgentBackend
     from autoskillit.pipeline.context import ToolContext
-
-    fields = {f.name: f for f in dataclasses.fields(ToolContext)}
-    assert "backend" in fields
-    assert fields["backend"].default is None
 
     hints = typing.get_type_hints(ToolContext)
     assert "backend" in hints

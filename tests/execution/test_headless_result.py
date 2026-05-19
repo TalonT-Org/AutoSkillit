@@ -258,8 +258,9 @@ class TestParseStdout:
     def test_default_backend_returns_claude_session_result(self):
         """_parse_stdout with no backend arg returns a ClaudeSessionResult."""
         from autoskillit.execution.headless import _parse_stdout
+        from autoskillit.execution.session import ClaudeSessionResult
 
         stdout = _success_session_json("test result")
         result = _parse_stdout(stdout)
-        assert result is not None
+        assert isinstance(result, ClaudeSessionResult)
         assert result.result == "test result"

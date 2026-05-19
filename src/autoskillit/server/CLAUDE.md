@@ -9,7 +9,7 @@ Sub-package: tools/ (see tools/CLAUDE.md).
 |------|---------|
 | `__init__.py` | Re-exports `mcp`, `ToolContext`, `make_context`; applies `mcp.disable(tags={'kitchen'})` at import |
 | `_editable_guard.py` | Pre-deletion editable install guard for `perform_merge()` — scans site-packages for PEP 610 direct_url.json links into the worktree |
-| `_factory.py` | Composition root — `make_context()` is the sole legal instantiation point for all 22 service contracts |
+| `_factory.py` | Composition root — `make_context()` is the sole legal instantiation point for all 23 service contracts |
 | `_guards.py` | Orchestration-level gate functions for MCP tool access control |
 | `_lifespan.py` | FastMCP lifespan context manager — deferred startup (recovery, audit loading, stale cleanup, drift check) |
 | `_misc.py` | Quota, hook-config, triage, and miscellaneous server utilities; re-exports selected execution/workspace symbols for tools |

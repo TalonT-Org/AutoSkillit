@@ -19,6 +19,7 @@ from autoskillit.core import (
     CIRunScope,
     CIWatcher,
     CloneManager,
+    CodingAgentBackend,
     DatabaseReader,
     FleetLock,
     GateState,
@@ -70,6 +71,10 @@ class ToolContext:
                           Encodes how autoskillit is loaded into Claude Code sessions.
     runner:               SubprocessRunner implementation (DefaultSubprocessRunner in production,
                           MockSubprocessRunner in tests)
+    backend:              CodingAgentBackend — the coding agent backend resolved from
+                          config.agent_backend. Provides command building, stream/result
+                          parsing, env policy, and session location. None in test
+                          ToolContext instances unless explicitly provided.
     executor:             HeadlessExecutor — runs headless Claude Code sessions
     tester:               TestRunner — runs the project test suite
     recipes:              RecipeRepository — loads and lists pipeline recipes
@@ -125,6 +130,7 @@ class ToolContext:
     output_pattern_resolver: OutputPatternResolver | None = field(default=None)
     write_expected_resolver: WriteExpectedResolver | None = field(default=None)
     read_only_resolver: ReadOnlyResolver | None = field(default=None)
+    backend: CodingAgentBackend | None = field(default=None)
     session_skill_manager: SessionSkillManager | None = field(default=None)
     skill_resolver: SkillResolver | None = field(default=None)
     recipe_name: str = field(default="")

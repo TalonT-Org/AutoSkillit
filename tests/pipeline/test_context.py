@@ -115,6 +115,22 @@ def test_toolcontext_new_optional_fields_default_none(tmp_path):
     assert ctx.workspace_mgr is None
     assert ctx.clone_mgr is None
     assert ctx.github_client is None
+    assert ctx.backend is None
+
+
+def test_tool_context_has_backend_field() -> None:
+    """ToolContext dataclass exposes backend as an optional CodingAgentBackend Protocol field."""
+    import typing
+
+    from autoskillit.core import CodingAgentBackend
+    from autoskillit.pipeline.context import ToolContext
+
+    hints = typing.get_type_hints(ToolContext)
+    assert "backend" in hints
+    args = typing.get_args(hints["backend"])
+    assert CodingAgentBackend in args, (
+        f"backend type hint {hints['backend']} does not include CodingAgentBackend Protocol"
+    )
 
 
 def test_toolcontext_optional_fields_all_have_protocol_annotations() -> None:

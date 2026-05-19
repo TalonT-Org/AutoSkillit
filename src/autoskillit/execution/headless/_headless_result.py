@@ -124,7 +124,7 @@ def _resolve_skill_session_id(
     return result.session_id or result.channel_b_session_id
 
 
-def _parse_stdout(stdout: str, backend: CodingAgentBackend | None = None) -> ClaudeSessionResult:
+def _parse_stdout(stdout: str) -> ClaudeSessionResult:
     return parse_session_result(stdout)
 
 
@@ -197,7 +197,7 @@ def _build_skill_result(
     )
     if result.termination == TerminationReason.STALE:
         # Attempt to recover from stdout before declaring stale failure.
-        stale_session = _parse_stdout(result.stdout, backend)
+        stale_session = _parse_stdout(result.stdout)
         stale_returncode = result.returncode if result.returncode is not None else -1
         can_attempt_stale_recovery = (
             stale_session.subtype == CliSubtype.SUCCESS
@@ -252,7 +252,7 @@ def _build_skill_result(
         return _apply_budget_guard(stale_sr, skill_command, audit, max_consecutive_retries)
 
     if result.termination == TerminationReason.IDLE_STALL:
-        idle_session = _parse_stdout(result.stdout, backend)
+        idle_session = _parse_stdout(result.stdout)
         idle_returncode = result.returncode if result.returncode is not None else -1
         can_attempt_idle_stall_recovery = (
             idle_session.subtype == CliSubtype.SUCCESS
@@ -311,7 +311,7 @@ def _build_skill_result(
     if result.termination == TerminationReason.TIMED_OUT:
         returncode = -1
         if result.stdout.strip():
-            session = _parse_stdout(result.stdout, backend)
+            session = _parse_stdout(result.stdout)
             if session.subtype != CliSubtype.TIMEOUT:
                 session = dataclasses.replace(session, subtype=CliSubtype.TIMEOUT, is_error=True)
         else:
@@ -324,7 +324,7 @@ def _build_skill_result(
             )
     else:
         returncode = result.returncode if result.returncode is not None else -1
-        session = _parse_stdout(result.stdout, backend)
+        session = _parse_stdout(result.stdout)
 
     _write_names = (
         backend.write_tool_names() if backend is not None else frozenset({"Write", "Edit"})

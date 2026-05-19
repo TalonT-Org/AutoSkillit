@@ -249,7 +249,7 @@ class TestParseStdout:
         from autoskillit.execution.session import parse_session_result
 
         stdout = _success_session_json("test result")
-        result = _parse_stdout(stdout, backend=None)
+        result = _parse_stdout(stdout)
         expected = parse_session_result(stdout)
         assert result.result == expected.result
         assert result.session_id == expected.session_id

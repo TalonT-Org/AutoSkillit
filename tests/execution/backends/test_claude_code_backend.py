@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from autoskillit.core import (
@@ -33,23 +35,24 @@ class TestClaudeCodeBackend:
     def test_version_cmd(self) -> None:
         assert ClaudeCodeBackend().version_cmd() == ("claude", "--version")
 
-    def test_build_cmd_returns_cmd_spec(self) -> None:
-        result = ClaudeCodeBackend().build_cmd("say hello", "/tmp")
+    def test_build_cmd_returns_cmd_spec(self, tmp_path: Path) -> None:
+        result = ClaudeCodeBackend().build_cmd("say hello", str(tmp_path))
         assert isinstance(result, CmdSpec)
 
-    def test_build_cmd_cmd_is_tuple_not_list(self) -> None:
-        result = ClaudeCodeBackend().build_cmd("say hello", "/tmp")
+    def test_build_cmd_cmd_is_tuple_not_list(self, tmp_path: Path) -> None:
+        result = ClaudeCodeBackend().build_cmd("say hello", str(tmp_path))
         assert isinstance(result.cmd, tuple)
 
-    def test_build_cmd_matches_build_headless_cmd(self) -> None:
+    def test_build_cmd_matches_build_headless_cmd(self, tmp_path: Path) -> None:
         from autoskillit.execution.commands import build_headless_cmd
 
         backend = ClaudeCodeBackend()
         skill_cmd = "say hello"
         direct = build_headless_cmd(skill_cmd)
-        result = backend.build_cmd(skill_cmd, "/tmp")
+        result = backend.build_cmd(skill_cmd, str(tmp_path))
         assert tuple(direct.cmd) == result.cmd
         assert direct.env == result.env
+        assert result.cwd == str(tmp_path)
 
     def test_stream_parser_returns_stream_parser(self) -> None:
         backend = ClaudeCodeBackend()

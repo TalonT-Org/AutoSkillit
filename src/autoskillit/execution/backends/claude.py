@@ -185,7 +185,6 @@ class ClaudeResultParser:
         )
 
     def parse_stdout(self, stdout: str) -> AgentSessionResult:
-
         result = parse_session_result(stdout)
         write_artifacts = _extract_write_artifacts(result.tool_uses)
         return AgentSessionResult(

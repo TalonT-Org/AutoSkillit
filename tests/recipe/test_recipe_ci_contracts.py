@@ -26,9 +26,7 @@ def _extract_ref(template: str) -> str | None:
     return m.group(1) if m else None
 
 
-def _find_capture_source(
-    steps: dict, capture_name: str
-) -> tuple[str, dict] | None:
+def _find_capture_source(steps: dict, capture_name: str) -> tuple[str, dict] | None:
     """Find the step that captures a given context variable name."""
     for step_name, step_data in steps.items():
         capture = step_data.get("capture") or {}
@@ -54,9 +52,7 @@ def test_wait_for_ci_event_branch_coherence(recipe_data) -> None:
     steps = data.get("steps") or {}
 
     wait_steps = {
-        name: step
-        for name, step in steps.items()
-        if (step.get("tool") or "") == "wait_for_ci"
+        name: step for name, step in steps.items() if (step.get("tool") or "") == "wait_for_ci"
     }
 
     if not wait_steps:
@@ -83,7 +79,10 @@ def test_wait_for_ci_event_branch_coherence(recipe_data) -> None:
 
         source_name, source_step = source
         source_tool = source_step.get("tool") or source_step.get("python") or ""
-        if "check_repo_merge_state" not in source_tool and "fetch_repo_merge_state" not in source_tool:
+        if (
+            "check_repo_merge_state" not in source_tool
+            and "fetch_repo_merge_state" not in source_tool
+        ):
             continue
 
         source_with = source_step.get("with") or {}
@@ -97,9 +96,8 @@ def test_wait_for_ci_event_branch_coherence(recipe_data) -> None:
                 f"branch: {branch_ref}"
             )
 
-    assert not violations, (
-        f"{recipe_name}: ci_event/branch mismatch detected:\n"
-        + "\n".join(f"  - {v}" for v in violations)
+    assert not violations, f"{recipe_name}: ci_event/branch mismatch detected:\n" + "\n".join(
+        f"  - {v}" for v in violations
     )
 
 
@@ -109,9 +107,7 @@ def test_wait_for_ci_steps_have_remote_url(recipe_data) -> None:
     steps = data.get("steps") or {}
 
     wait_steps = {
-        name: step
-        for name, step in steps.items()
-        if (step.get("tool") or "") == "wait_for_ci"
+        name: step for name, step in steps.items() if (step.get("tool") or "") == "wait_for_ci"
     }
 
     if not wait_steps:
@@ -123,6 +119,4 @@ def test_wait_for_ci_steps_have_remote_url(recipe_data) -> None:
         if "remote_url" not in with_args:
             missing.append(step_name)
 
-    assert not missing, (
-        f"{recipe_name}: wait_for_ci steps missing remote_url: {missing}"
-    )
+    assert not missing, f"{recipe_name}: wait_for_ci steps missing remote_url: {missing}"

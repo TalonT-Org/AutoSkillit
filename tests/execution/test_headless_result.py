@@ -261,6 +261,7 @@ class TestBackendDelegatedWriteToolNames:
         stdout = _success_session_json("Done")
         result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
         _build_skill_result(result, backend=mock_backend)
+        assert "backend" in captured, "_parse_stdout was not called"
         assert captured["backend"] is mock_backend
 
     def test_build_skill_result_stale_threads_backend_to_parse_stdout(self, monkeypatch):
@@ -283,6 +284,53 @@ class TestBackendDelegatedWriteToolNames:
         stdout = _success_session_json("Done")
         result = _sr(0, stdout, "", TerminationReason.STALE)
         _build_skill_result(result, backend=mock_backend)
+        assert "backend" in captured, "_parse_stdout was not called"
+        assert captured["backend"] is mock_backend
+
+    def test_build_skill_result_idle_stall_threads_backend_to_parse_stdout(self, monkeypatch):
+        """_build_skill_result passes backend to _parse_stdout on idle_stall branch."""
+        from unittest.mock import Mock
+
+        from autoskillit.execution.headless import _headless_result
+
+        captured: dict = {}
+        original_parse = _headless_result._parse_stdout
+
+        def spy(stdout, backend=None):
+            captured["backend"] = backend
+            return original_parse(stdout)
+
+        monkeypatch.setattr(_headless_result, "_parse_stdout", spy)
+
+        mock_backend = Mock()
+        mock_backend.write_tool_names.return_value = frozenset({"Write", "Edit"})
+        stdout = _success_session_json("Done")
+        result = _sr(0, stdout, "", TerminationReason.IDLE_STALL)
+        _build_skill_result(result, backend=mock_backend)
+        assert "backend" in captured, "_parse_stdout was not called"
+        assert captured["backend"] is mock_backend
+
+    def test_build_skill_result_timed_out_threads_backend_to_parse_stdout(self, monkeypatch):
+        """_build_skill_result passes backend to _parse_stdout on timed_out branch."""
+        from unittest.mock import Mock
+
+        from autoskillit.execution.headless import _headless_result
+
+        captured: dict = {}
+        original_parse = _headless_result._parse_stdout
+
+        def spy(stdout, backend=None):
+            captured["backend"] = backend
+            return original_parse(stdout)
+
+        monkeypatch.setattr(_headless_result, "_parse_stdout", spy)
+
+        mock_backend = Mock()
+        mock_backend.write_tool_names.return_value = frozenset({"Write", "Edit"})
+        stdout = _success_session_json("Done")
+        result = _sr(0, stdout, "", TerminationReason.TIMED_OUT)
+        _build_skill_result(result, backend=mock_backend)
+        assert "backend" in captured, "_parse_stdout was not called"
         assert captured["backend"] is mock_backend
 
 

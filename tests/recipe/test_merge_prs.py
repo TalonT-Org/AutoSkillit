@@ -671,12 +671,14 @@ def test_wait_ci_pre_enqueue_has_explicit_head_sha_or_matching_cwd(recipe) -> No
     head_sha = step.with_args.get("head_sha")
     branch = step.with_args.get("branch", "")
 
-    if "current_pr_branch" in branch and "work_dir" in cwd:
-        assert head_sha is not None, (
-            "wait_ci_pre_enqueue watches current_pr_branch but uses work_dir as cwd. "
-            "The PR branch is not checked out in work_dir on the first-PR path. "
-            "Pass head_sha explicitly via a capture step."
-        )
+    cwd_matches_branch = (
+        branch and cwd and (branch.split(".")[-1] in cwd.split(".")[-1] or "worktree" in cwd)
+    )
+    assert cwd_matches_branch or head_sha is not None, (
+        f"wait_ci_pre_enqueue watches branch={branch!r} but cwd={cwd!r} does not "
+        f"reference the same context and head_sha is not explicit. "
+        f"Either cwd must check out the watched branch or head_sha must be provided."
+    )
 
 
 def test_capture_pr_head_sha_step_exists(recipe) -> None:

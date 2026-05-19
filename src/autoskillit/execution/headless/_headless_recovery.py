@@ -316,7 +316,6 @@ async def _attempt_contract_nudge(
     )
 
 
-# Group B migration target: move to backend-agnostic token aggregation layer.
 def _merge_token_usage(
     base: dict[str, object] | None,
     nudge: dict[str, object] | None,

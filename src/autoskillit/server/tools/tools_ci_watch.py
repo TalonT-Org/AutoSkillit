@@ -326,6 +326,20 @@ async def _auto_trigger_ci(
             ),
         }
     current_branch = branch_out.strip()
+    if not current_branch:
+        logger.error(
+            "auto_trigger: detached HEAD — refusing to commit/push",
+            cwd=cwd,
+        )
+        return {
+            **result,
+            "conclusion": "detached_head",
+            "triggered": False,
+            "error": (
+                "cwd is in detached HEAD state (no branch checked out). "
+                "Refusing to commit/push without a named branch."
+            ),
+        }
     if current_branch != branch:
         logger.error(
             "auto_trigger: cwd branch mismatch — refusing to commit/push",

@@ -6,6 +6,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.core.types import RetryReason, SkillResult
+from tests.execution.conftest import _mock_backend
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -562,28 +563,6 @@ async def test_execute_claude_headless_forwards_marker_dir_to_runner(
 
 
 # ── pty_mode / session_log_dir capability forwarding tests ───────────────────────
-
-
-def _mock_backend(*, pty_required: bool = True, channel_b_capable: bool = True, **kw):
-    """Build a mock backend with configurable capabilities."""
-    from dataclasses import replace
-    from unittest.mock import Mock
-
-    from autoskillit.core import CLAUDE_CODE_CAPABILITIES, CmdSpec
-
-    caps = replace(
-        CLAUDE_CODE_CAPABILITIES,
-        pty_required=pty_required,
-        channel_b_capable=channel_b_capable,
-        **kw,
-    )
-    backend = Mock()
-    backend.capabilities = caps
-    backend.build_resume_cmd.return_value = CmdSpec(
-        cmd=("claude", "--print", "emit marker", "--resume", "test-session"),
-        env={},
-    )
-    return backend
 
 
 @pytest.mark.anyio

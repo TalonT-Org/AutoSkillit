@@ -38,7 +38,7 @@ def _run_cook(profile, cfg, mock_mgr):
         patch("builtins.input", return_value=""),
         patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
         patch("subprocess.run", return_value=MagicMock(returncode=0)),
-        patch("autoskillit.execution.backends.ClaudeCodeBackend", mock_backend_cls),
+        patch("autoskillit.execution.ClaudeCodeBackend", mock_backend_cls),
         patch("autoskillit.core.write_registry_entry"),
         patch("autoskillit.config.load_config", return_value=cfg),
         patch(
@@ -96,7 +96,7 @@ def test_profile_feature_disabled_exits(capsys, _mock_mgr):
     with (
         patch("shutil.which", return_value="/usr/bin/claude"),
         patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=_mock_mgr),
-        patch("autoskillit.execution.backends.ClaudeCodeBackend", mock_backend_cls),
+        patch("autoskillit.execution.ClaudeCodeBackend", mock_backend_cls),
         patch("autoskillit.config.load_config", return_value=cfg),
         patch("autoskillit.cli.session._cook.is_feature_enabled", return_value=False),
     ):
@@ -115,7 +115,7 @@ def test_profile_unknown_exits(capsys, _mock_mgr):
     with (
         patch("shutil.which", return_value="/usr/bin/claude"),
         patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=_mock_mgr),
-        patch("autoskillit.execution.backends.ClaudeCodeBackend", mock_backend_cls),
+        patch("autoskillit.execution.ClaudeCodeBackend", mock_backend_cls),
         patch("autoskillit.config.load_config", return_value=cfg),
         patch("autoskillit.cli.session._cook.is_feature_enabled", return_value=True),
     ):

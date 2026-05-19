@@ -587,7 +587,7 @@ class TestCookInteractive:
             patch("builtins.input", return_value=""),
             patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
             patch("subprocess.run", return_value=MagicMock(returncode=0)),
-            patch("autoskillit.execution.backends.ClaudeCodeBackend", _MockBackend),
+            patch("autoskillit.execution.ClaudeCodeBackend", _MockBackend),
             patch("autoskillit.core.write_registry_entry"),
         ):
             import autoskillit.cli.session._cook as module
@@ -625,7 +625,7 @@ class TestCookInteractive:
             patch("builtins.input", return_value=""),
             patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
             patch("subprocess.run", return_value=MagicMock(returncode=0)),
-            patch("autoskillit.execution.backends.ClaudeCodeBackend", _MockBackend),
+            patch("autoskillit.execution.ClaudeCodeBackend", _MockBackend),
             patch("autoskillit.core.write_registry_entry"),
         ):
             import autoskillit.cli.session._cook as module
@@ -665,7 +665,7 @@ class TestCookInteractive:
             patch("builtins.input", return_value=""),
             patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
             patch("subprocess.run", return_value=MagicMock(returncode=0)),
-            patch("autoskillit.execution.backends.ClaudeCodeBackend", _CustomBackend),
+            patch("autoskillit.execution.ClaudeCodeBackend", _CustomBackend),
             patch("autoskillit.core.write_registry_entry"),
         ):
             import autoskillit.cli.session._cook as module
@@ -701,7 +701,7 @@ class TestCookInteractive:
             patch("builtins.input", return_value=""),
             patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
             patch("subprocess.run", return_value=MagicMock(returncode=0)),
-            patch("autoskillit.execution.backends.ClaudeCodeBackend", _CapturingBackend),
+            patch("autoskillit.execution.ClaudeCodeBackend", _CapturingBackend),
             patch("autoskillit.core.write_registry_entry"),
         ):
             import autoskillit.cli.session._cook as module

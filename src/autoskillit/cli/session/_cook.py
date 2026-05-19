@@ -65,7 +65,7 @@ def cook(
     *, resume: bool = False, session_id: str | None = None, profile: str | None = None
 ) -> None:
     """Launch Claude with all bundled AutoSkillit skills as slash commands."""
-    from autoskillit.execution.backends import ClaudeCodeBackend
+    from autoskillit.execution import ClaudeCodeBackend
     from autoskillit.workspace import (
         DefaultSessionSkillManager,
         SkillsDirectoryProvider,
@@ -221,7 +221,7 @@ def cook(
             env_extras=_cook_env_extras,
         )
         reload_session_id = _run_cook_session(
-            cmd=list(spec.cmd),
+            cmd=[*spec.cmd],
             env=spec.env,
             _first_run=_current_first_run,
             initial_prompt=_current_initial_prompt,

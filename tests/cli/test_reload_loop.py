@@ -144,7 +144,7 @@ def test_cook_reload_loop_uses_named_resume(
     monkeypatch.setattr("builtins.input", lambda _prompt="": "")
     monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _: False)
     monkeypatch.setattr("autoskillit.cli.session._cook._run_cook_session", fake_run_cook_session)
-    monkeypatch.setattr("autoskillit.execution.backends.ClaudeCodeBackend", _MockBackend)
+    monkeypatch.setattr("autoskillit.execution.ClaudeCodeBackend", _MockBackend)
 
     from autoskillit.workspace.session_skills import DefaultSessionSkillManager
 

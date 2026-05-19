@@ -37,7 +37,7 @@ def _run_interactive_session(
         _InfraExitSignal — when an infrastructure exit is detected
         None — clean exit
     """
-    from autoskillit.execution.backends import ClaudeCodeBackend
+    from autoskillit.execution import ClaudeCodeBackend
 
     backend = ClaudeCodeBackend()
     if shutil.which(backend.binary_name()) is None:
@@ -82,7 +82,7 @@ def _run_interactive_session(
             *([] if _is_resume else [ClaudeFlags.APPEND_SYSTEM_PROMPT, system_prompt]),
         ]
     else:
-        cmd = list(spec.cmd)
+        cmd = [*spec.cmd]
     with terminal_guard():
         result = subprocess.run(cmd, env=spec.env)
     reload_session_id = consume_reload_sentinel(_project_dir)

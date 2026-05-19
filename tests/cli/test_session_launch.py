@@ -226,7 +226,7 @@ def test_skill_injection_disabled_omits_flags(monkeypatch: pytest.MonkeyPatch) -
         return type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
 
     monkeypatch.setattr(subprocess, "run", mock_run)
-    monkeypatch.setattr("autoskillit.execution.backends.ClaudeCodeBackend", _NoInjectBackend)
+    monkeypatch.setattr("autoskillit.execution.ClaudeCodeBackend", _NoInjectBackend)
     _run_interactive_session(system_prompt="test")
     assert ClaudeFlags.PLUGIN_DIR not in captured["cmd"]
     assert ClaudeFlags.TOOLS not in captured["cmd"]
@@ -278,7 +278,7 @@ def test_binary_name_from_backend_used_in_which(monkeypatch: pytest.MonkeyPatch)
         return None
 
     monkeypatch.setattr(shutil, "which", tracking_which)
-    monkeypatch.setattr("autoskillit.execution.backends.ClaudeCodeBackend", _CustomBinaryBackend)
+    monkeypatch.setattr("autoskillit.execution.ClaudeCodeBackend", _CustomBinaryBackend)
     monkeypatch.setattr(subprocess, "run", lambda *a, **kw: type("R", (), {"returncode": 0})())
     from autoskillit.cli.session._session_launch import _run_interactive_session
 

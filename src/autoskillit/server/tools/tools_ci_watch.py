@@ -117,7 +117,8 @@ async def wait_for_ci(
             )
 
         # Infer head_sha from cwd if not provided
-        if head_sha is None and cwd:
+        _sha_inferred = head_sha is None
+        if _sha_inferred and cwd:
             try:
                 rc, stdout, _ = await _run_subprocess(
                     ["git", "rev-parse", "HEAD"], cwd=cwd, timeout=5.0
@@ -126,6 +127,25 @@ async def wait_for_ci(
                     head_sha = stdout.strip()
             except Exception:
                 logger.warning("git rev-parse HEAD failed", exc_info=True)
+
+        if _sha_inferred and head_sha and cwd:
+            try:
+                rc_b, branch_out, _ = await _run_subprocess(
+                    ["git", "branch", "--show-current"], cwd=cwd, timeout=5.0
+                )
+                if rc_b == 0:
+                    cwd_branch = branch_out.strip()
+                    if cwd_branch and cwd_branch != branch:
+                        logger.warning(
+                            "wait_for_ci: cwd branch does not match watched branch — "
+                            "head_sha may be from wrong branch",
+                            cwd_branch=cwd_branch,
+                            watched_branch=branch,
+                            inferred_sha=head_sha[:12],
+                            cwd=cwd,
+                        )
+            except Exception:
+                logger.warning("wait_for_ci: failed to check cwd branch", exc_info=True)
 
         scope = CIRunScope(
             workflow=workflow or tool_ctx.default_ci_scope.workflow,
@@ -287,6 +307,57 @@ async def _auto_trigger_ci(
     On any failure (merge conflict, push rejected, etc.) returns original
     no_runs result so the recipe routes to handle_no_ci_runs as fallback.
     """
+    rc_bg, branch_out, _ = await _run_subprocess(
+        ["git", "branch", "--show-current"], cwd=cwd, timeout=5.0
+    )
+    if rc_bg != 0:
+        logger.error(
+            "auto_trigger: git branch --show-current failed — refusing to commit/push",
+            rc=rc_bg,
+            cwd=cwd,
+        )
+        return {
+            **result,
+            "conclusion": "branch_check_failed",
+            "triggered": False,
+            "error": (
+                f"Could not determine current branch in cwd (rc={rc_bg}). "
+                f"Refusing to commit/push without branch verification."
+            ),
+        }
+    current_branch = branch_out.strip()
+    if not current_branch:
+        logger.error(
+            "auto_trigger: detached HEAD — refusing to commit/push",
+            cwd=cwd,
+        )
+        return {
+            **result,
+            "conclusion": "detached_head",
+            "triggered": False,
+            "error": (
+                "cwd is in detached HEAD state (no branch checked out). "
+                "Refusing to commit/push without a named branch."
+            ),
+        }
+    if current_branch != branch:
+        logger.error(
+            "auto_trigger: cwd branch mismatch — refusing to commit/push",
+            cwd_branch=current_branch,
+            target_branch=branch,
+            cwd=cwd,
+        )
+        return {
+            **result,
+            "conclusion": "branch_mismatch",
+            "triggered": False,
+            "error": (
+                f"cwd is on branch '{current_branch}' but target is '{branch}'. "
+                f"Empty commit would land on the wrong branch. "
+                f"Fix the recipe to pass the correct cwd for this branch."
+            ),
+        }
+
     rc_m, out_m, _ = await _run_subprocess(
         ["gh", "pr", "view", branch, "--json", "mergeable"],
         cwd=cwd,

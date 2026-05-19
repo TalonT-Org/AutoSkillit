@@ -651,6 +651,52 @@ def test_merge_pr_routes_merged_false_to_failure(recipe) -> None:
     )
 
 
+def test_wait_for_conflict_ci_uses_worktree_cwd(recipe) -> None:
+    """wait_for_conflict_ci must use worktree_path, not work_dir, for correct SHA inference."""
+    step = recipe.steps["wait_for_conflict_ci"]
+    cwd = step.with_args.get("cwd", "")
+    assert "worktree_path" in cwd, (
+        f"wait_for_conflict_ci cwd must reference worktree_path for correct SHA inference, "
+        f"got: {cwd}"
+    )
+    assert "work_dir" not in cwd, (
+        f"wait_for_conflict_ci cwd must NOT use work_dir (clone root has wrong branch), got: {cwd}"
+    )
+
+
+def test_wait_ci_pre_enqueue_has_explicit_head_sha_or_matching_cwd(recipe) -> None:
+    """wait_ci_pre_enqueue: cwd must match branch or head_sha must be explicit."""
+    step = recipe.steps["wait_ci_pre_enqueue"]
+    cwd = step.with_args.get("cwd", "")
+    head_sha = step.with_args.get("head_sha")
+    branch = step.with_args.get("branch", "")
+
+    cwd_matches_branch = (
+        branch and cwd and (branch.split(".")[-1] in cwd.split(".")[-1] or "worktree" in cwd)
+    )
+    assert cwd_matches_branch or head_sha is not None, (
+        f"wait_ci_pre_enqueue watches branch={branch!r} but cwd={cwd!r} does not "
+        f"reference the same context and head_sha is not explicit. "
+        f"Either cwd must check out the watched branch or head_sha must be provided."
+    )
+
+
+def test_capture_pr_head_sha_step_exists(recipe) -> None:
+    """capture_pr_head_sha step must exist and route to wait_ci_pre_enqueue."""
+    assert "capture_pr_head_sha" in recipe.steps
+    step = recipe.steps["capture_pr_head_sha"]
+    assert step.tool == "run_cmd"
+    assert step.on_success == "wait_ci_pre_enqueue"
+
+
+def test_get_current_pr_branch_routes_to_capture(recipe) -> None:
+    """get_current_pr_branch must route to capture_pr_head_sha."""
+    step = recipe.steps["get_current_pr_branch"]
+    assert step.on_success == "capture_pr_head_sha", (
+        f"get_current_pr_branch.on_success must be 'capture_pr_head_sha', got {step.on_success!r}"
+    )
+
+
 def test_wait_for_conflict_ci_has_auto_trigger(recipe) -> None:
     """wait_for_conflict_ci has auto_trigger: true."""
     step = recipe.steps["wait_for_conflict_ci"]
@@ -717,3 +763,19 @@ def test_check_ci_watch_pr_loop_exists_with_correct_pattern(recipe) -> None:
     ]
     assert max_exceeded_conds, "check_ci_watch_pr_loop must route max_exceeded==true"
     assert max_exceeded_conds[0].route == "register_clone_failure"
+
+
+def test_wait_for_ci_steps_have_consistent_cwd(recipe) -> None:
+    """Every wait_for_ci step's cwd must be consistent with its branch parameter."""
+    for step_name, step in recipe.steps.items():
+        if step.tool != "wait_for_ci":
+            continue
+        branch = step.with_args.get("branch", "")
+        cwd = step.with_args.get("cwd", "")
+        head_sha = step.with_args.get("head_sha")
+
+        if "worktree_branch" in branch and not head_sha:
+            assert "worktree" in cwd, (
+                f"{step_name}: watches worktree branch ({branch}) "
+                f"but cwd ({cwd}) is not a worktree path and no head_sha is explicit"
+            )

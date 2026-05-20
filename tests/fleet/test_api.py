@@ -183,6 +183,9 @@ class TestExecuteDispatchCancelledErrorLockRelease:
             )
 
         swap_labels_mock.assert_called_once()
+        call = swap_labels_mock.call_args
+        assert "in-progress" in call.kwargs["remove_labels"]
+        assert "fail" in call.kwargs["add_labels"]
 
 
 # ---------------------------------------------------------------------------

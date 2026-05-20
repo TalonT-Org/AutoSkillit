@@ -93,6 +93,16 @@ def main() -> None:
             sys.exit(0)  # kitchen not open; fail-open
     except OSError:
         sys.exit(0)
+
+    # Recipe-level authorization: recipes that legitimately create PRs set
+    # recipe_allows_pr_create=true in .hook_config.json after loading.
+    try:
+        hook_data = json.loads(cfg_path.read_text())
+        if hook_data.get("recipe_allows_pr_create"):
+            sys.exit(0)
+    except (OSError, json.JSONDecodeError, AttributeError, TypeError):
+        pass  # fail-closed: parse error → continue to deny
+
     # Kitchen is open and command matches: deny
     payload = json.dumps(
         {

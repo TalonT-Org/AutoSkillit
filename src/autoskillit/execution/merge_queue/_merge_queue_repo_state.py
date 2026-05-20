@@ -261,10 +261,12 @@ async def fetch_repo_merge_state(
                 has_push_trigger = True
 
     ci_event: Literal["push"] | None = "push" if has_push_trigger else None
+    ci_applicable: bool = has_push_trigger or merge_group_trigger
 
     return {
         "queue_available": queue_available,
         "merge_group_trigger": merge_group_trigger,
         "auto_merge_available": auto_merge_available,
         "ci_event": ci_event,
+        "ci_applicable": ci_applicable,
     }

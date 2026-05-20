@@ -942,13 +942,25 @@ steps:
       step_name: "derive_conflict_ci_event"
     capture:
       conflict_ci_event: "${{ result.ci_event }}"
-    on_success: wait_for_conflict_ci
-    on_failure: wait_for_conflict_ci
+      conflict_ci_applicable: "${{ result.ci_applicable }}"
+    on_success: route_conflict_ci
+    on_failure: route_conflict_ci
     note: >
       Re-derives ci_event for the ACTUAL conflict resolution branch, not inputs.base_branch.
       The original check_repo_ci_event evaluates CI triggers against main, but conflict PRs
       target pr-batch/* branches where different CI rules may apply. Non-blocking: on_failure
-      routes to wait_for_conflict_ci with conflict_ci_event=null (match-any fallback).
+      routes to route_conflict_ci with conflict_ci_event=null (match-any fallback).
+
+  route_conflict_ci:
+    action: route
+    on_result:
+      - when: "${{ context.conflict_ci_applicable }} == false"
+        route: merge_conflict_pr
+      - route: wait_for_conflict_ci
+    note: >
+      Short-circuits CI wait when no workflow trigger matches the conflict resolution
+      branch. ci_applicable=false means neither push nor merge_group triggers apply,
+      so wait_for_ci would exhaust its timeout budget with zero CI runs.
 
   wait_for_conflict_ci:
     tool: wait_for_ci

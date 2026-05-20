@@ -484,6 +484,73 @@ def _check_ci_event_literal_merge_group(ctx: ValidationContext) -> list[RuleFind
     return findings
 
 
+_CI_APPLICABLE_RE = re.compile(r"ci_applicable")
+
+
+@semantic_rule(
+    name="ci-wait-requires-applicability-guard",
+    description=(
+        "A wait_for_ci step whose event comes from check_repo_merge_state must have "
+        "an upstream action:route step that checks ci_applicable to prevent timeout "
+        "waste when no CI workflows apply."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_ci_wait_requires_applicability_guard(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "wait_for_ci":
+            continue
+        event_val = (step.with_args or {}).get("event", "")
+        if not isinstance(event_val, str) or "ci_event" not in event_val:
+            continue
+        has_guard = False
+        for pred_name in ctx.predecessors.get(step_name, set()):
+            pred_step = ctx.recipe.steps.get(pred_name)
+            if pred_step is None:
+                continue
+            if getattr(pred_step, "action", None) == "route":
+                if pred_step.on_result and pred_step.on_result.conditions:
+                    for cond in pred_step.on_result.conditions:
+                        if cond.when and _CI_APPLICABLE_RE.search(cond.when):
+                            has_guard = True
+                            break
+            if has_guard:
+                break
+        if not has_guard:
+            for ancestor_name in ctx.predecessors.get(step_name, set()):
+                for grand_pred_name in ctx.predecessors.get(ancestor_name, set()):
+                    grand_pred_step = ctx.recipe.steps.get(grand_pred_name)
+                    if grand_pred_step is None:
+                        continue
+                    if getattr(grand_pred_step, "action", None) == "route":
+                        if grand_pred_step.on_result and grand_pred_step.on_result.conditions:
+                            for cond in grand_pred_step.on_result.conditions:
+                                if cond.when and _CI_APPLICABLE_RE.search(cond.when):
+                                    has_guard = True
+                                    break
+                    if has_guard:
+                        break
+                if has_guard:
+                    break
+        if not has_guard:
+            findings.append(
+                RuleFinding(
+                    rule="ci-wait-requires-applicability-guard",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' calls wait_for_ci with a ci_event from "
+                        f"check_repo_merge_state but has no upstream action:route step "
+                        f"that checks ci_applicable. When ci_applicable=false, "
+                        f"wait_for_ci will exhaust its timeout budget polling for CI runs "
+                        f"that will never appear."
+                    ),
+                )
+            )
+    return findings
+
+
 _CI_TIMEOUT_MINIMUM = 600
 
 

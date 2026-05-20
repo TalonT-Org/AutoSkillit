@@ -9,8 +9,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit.core import _parse_issue_ref, get_logger
-from autoskillit.core.types import LABEL_LIFECYCLE_REGISTRY, IssueLabelState
+from autoskillit.core import (
+    LABEL_LIFECYCLE_REGISTRY,
+    IssueLabelState,
+    _parse_issue_ref,
+    get_logger,
+)
 from autoskillit.fleet._liveness import is_dispatch_session_alive
 from autoskillit.fleet.sidecar import read_sidecar_from_path
 from autoskillit.fleet.state import CampaignStateMutator, DispatchStatus

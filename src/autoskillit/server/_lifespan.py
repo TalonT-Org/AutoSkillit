@@ -201,7 +201,7 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
         logger.warning("fleet_auto_gate_boot_registry_failed", exc_info=True)
 
     try:
-        from autoskillit.fleet._label_cleanup import (  # noqa: PLC0415
+        from autoskillit.fleet import (  # noqa: PLC0415
             discover_campaign_state_files,
             sweep_stale_dispatch_labels,
         )

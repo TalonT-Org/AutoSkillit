@@ -164,7 +164,9 @@ def main_repo_guard(clone_path: str) -> dict[str, str]:
             check=False,
         )
         if verify.returncode == 0 and verify.stdout.strip():
-            remaining = ", ".join(l.strip() for l in verify.stdout.splitlines() if l.strip())[:200]
+            remaining = ", ".join(ln.strip() for ln in verify.stdout.splitlines() if ln.strip())[
+                :200
+            ]
             return {"cleaned": "failed", "remaining": remaining}
         return {"cleaned": "force"}
 
@@ -176,7 +178,7 @@ def main_repo_guard(clone_path: str) -> dict[str, str]:
         check=False,
     )
     if verify.returncode == 0 and verify.stdout.strip():
-        remaining = ", ".join(l.strip() for l in verify.stdout.splitlines() if l.strip())[:200]
+        remaining = ", ".join(ln.strip() for ln in verify.stdout.splitlines() if ln.strip())[:200]
         return {"cleaned": "failed", "remaining": remaining}
     return {"cleaned": "true"}
 

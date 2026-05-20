@@ -8,15 +8,6 @@ import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
-# Git environment for deterministic identity in tests.
-_GIT_ENV = {
-    **os.environ,
-    "GIT_AUTHOR_NAME": "test",
-    "GIT_AUTHOR_EMAIL": "test@test.local",
-    "GIT_COMMITTER_NAME": "test",
-    "GIT_COMMITTER_EMAIL": "test@test.local",
-}
-
 import pytest
 
 from autoskillit.recipe._cmd_rpc import (
@@ -34,6 +25,15 @@ from autoskillit.recipe._cmd_rpc import (
     refetch_issues,
     wait_for_direct_merge,
 )
+
+# Git environment for deterministic identity in tests.
+_GIT_ENV = {
+    **os.environ,
+    "GIT_AUTHOR_NAME": "test",
+    "GIT_AUTHOR_EMAIL": "test@test.local",
+    "GIT_COMMITTER_NAME": "test",
+    "GIT_COMMITTER_EMAIL": "test@test.local",
+}
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 

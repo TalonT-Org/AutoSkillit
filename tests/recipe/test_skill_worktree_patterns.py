@@ -53,7 +53,6 @@ class TestImplementWorktreeSkillAbsoluteResolution:
     def test_implement_worktree_skill_uses_absolute_resolution(self) -> None:
         """implement-worktree Step 1 bash block delegates to create_impl_worktree.sh."""
         skill_md = pkg_root() / "skills_extended" / "implement-worktree" / "SKILL.md"
-        text = skill_md.read_text()
         block = self._step1_bash_block(skill_md)
 
         # Must not contain the fragile relative path pattern
@@ -86,7 +85,8 @@ class TestImplementWorktreeSkillAbsoluteResolution:
 
         if "../worktrees/" in block:
             pytest.fail(
-                "implement-worktree-no-merge/SKILL.md Step 1 contains fragile '../worktrees/' pattern. "
+                "implement-worktree-no-merge/SKILL.md Step 1 contains "
+                "fragile '../worktrees/' pattern. "
                 "Worktree creation must use create_impl_worktree.sh."
             )
 
@@ -94,7 +94,8 @@ class TestImplementWorktreeSkillAbsoluteResolution:
             "implement-worktree-no-merge/SKILL.md Step 1 must invoke create_impl_worktree.sh"
         )
         assert "MAIN_GIT_DIR=" not in block, (
-            "implement-worktree-no-merge/SKILL.md Step 1 must not contain MAIN_GIT_DIR= assignment; "
+            "implement-worktree-no-merge/SKILL.md Step 1 must not contain "
+            "MAIN_GIT_DIR= assignment; "
             "that is handled inside create_impl_worktree.sh"
         )
         assert "--path-format=absolute --git-common-dir" not in block, (

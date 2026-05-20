@@ -93,6 +93,7 @@ def test_backend_data_accepts_claude_event_data() -> None:
         backend_data=data,
     )
     assert ev.backend_data is data
+    assert isinstance(ev.backend_data, ClaudeEventData)
     assert ev.backend_data.record_type == "assistant"
 
 
@@ -105,6 +106,7 @@ def test_backend_data_accepts_codex_event_data() -> None:
         backend_data=data,
     )
     assert ev.backend_data is data
+    assert isinstance(ev.backend_data, CodexEventData)
     assert ev.backend_data.thread_id == "t1"
 
 

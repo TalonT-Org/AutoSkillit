@@ -7,6 +7,7 @@ from autoskillit.core import get_logger
 logger = get_logger(__name__)
 
 # Rule registration — import triggers @semantic_rule registration.
+from autoskillit.recipe import registry as _reg  # noqa: E402, PLC0415
 from autoskillit.recipe._api import (  # noqa: E402
     format_recipe_list_response,
     list_all,
@@ -158,6 +159,9 @@ from autoskillit.recipe.validator import (  # noqa: E402
     run_semantic_rules,
     validate_recipe_structure,
 )
+
+_reg._finalize_registry()  # pyright: ignore[reportAttributeAccessIssue]
+del _reg
 
 __all__ = [
     "GROUP_LABELS",

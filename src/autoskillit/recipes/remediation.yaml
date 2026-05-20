@@ -814,6 +814,7 @@ steps:
       step_name: "handle_no_ci_runs"
     capture:
       ci_event: "${{ result.ci_event }}"
+      ci_applicable: "${{ result.ci_applicable }}"
     on_success: check_ci_loop
     on_failure: release_issue_failure
     retries: 1
@@ -954,6 +955,7 @@ steps:
       merge_group_trigger: "${{ result.merge_group_trigger }}"
       auto_merge_available: "${{ result.auto_merge_available }}"
       ci_event: "${{ result.ci_event }}"
+      ci_applicable: "${{ result.ci_applicable }}"
     on_success: route_queue_mode
     on_failure: immediate_merge
     skip_when_false: "inputs.open_pr"

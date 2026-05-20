@@ -717,7 +717,14 @@ def test_pre_ci_watch_mergeable_check_exists(recipe_name: str) -> None:
     assert conflicting_routes, "CONFLICTING condition must be handled"
     assert "ci_watch" not in conflicting_routes, "CONFLICTING must not route to ci_watch"
     ci_event_step = recipe.steps["check_repo_ci_event"]
-    assert ci_event_step.on_success == "check_pr_state"
+    next_step = ci_event_step.on_success
+    if next_step == "route_ci_applicable":
+        route_step = recipe.steps["route_ci_applicable"]
+        assert route_step.action == "route"
+        route_targets = {c.route for c in route_step.on_result.conditions}
+        assert "check_pr_state" in route_targets
+    else:
+        assert next_step == "check_pr_state"
 
 
 @pytest.mark.parametrize("recipe_name", ["remediation", "implementation", "implementation-groups"])

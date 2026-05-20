@@ -498,6 +498,8 @@ _PRIMARY_CI_EVENT_RE = re.compile(r"context\.(conflict_)?ci_event\s*\}\}")
     severity=Severity.ERROR,
 )
 def _check_ci_wait_requires_applicability_guard(ctx: ValidationContext) -> list[RuleFinding]:
+    from collections import deque
+
     findings: list[RuleFinding] = []
     for step_name, step in ctx.recipe.steps.items():
         if step.tool != "wait_for_ci":
@@ -506,34 +508,27 @@ def _check_ci_wait_requires_applicability_guard(ctx: ValidationContext) -> list[
         if not isinstance(event_val, str) or not _PRIMARY_CI_EVENT_RE.search(event_val):
             continue
         has_guard = False
-        for pred_name in ctx.predecessors.get(step_name, set()):
-            pred_step = ctx.recipe.steps.get(pred_name)
+        visited: set[str] = set()
+        queue: deque[str] = deque(ctx.predecessors.get(step_name, set()))
+        while queue and not has_guard:
+            node = queue.popleft()
+            if node in visited:
+                continue
+            visited.add(node)
+            pred_step = ctx.recipe.steps.get(node)
             if pred_step is None:
                 continue
+            if pred_step.tool == "wait_for_ci":
+                has_guard = True
+                break
             if getattr(pred_step, "action", None) == "route":
                 if pred_step.on_result and pred_step.on_result.conditions:
                     for cond in pred_step.on_result.conditions:
                         if cond.when and _CI_APPLICABLE_RE.search(cond.when):
                             has_guard = True
                             break
-            if has_guard:
-                break
-        if not has_guard:
-            for ancestor_name in ctx.predecessors.get(step_name, set()):
-                for grand_pred_name in ctx.predecessors.get(ancestor_name, set()):
-                    grand_pred_step = ctx.recipe.steps.get(grand_pred_name)
-                    if grand_pred_step is None:
-                        continue
-                    if getattr(grand_pred_step, "action", None) == "route":
-                        if grand_pred_step.on_result and grand_pred_step.on_result.conditions:
-                            for cond in grand_pred_step.on_result.conditions:
-                                if cond.when and _CI_APPLICABLE_RE.search(cond.when):
-                                    has_guard = True
-                                    break
-                    if has_guard:
-                        break
-                if has_guard:
-                    break
+            if not has_guard:
+                queue.extend(ctx.predecessors.get(node, set()) - visited)
         if not has_guard:
             findings.append(
                 RuleFinding(

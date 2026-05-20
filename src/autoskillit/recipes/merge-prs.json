@@ -970,13 +970,38 @@
       "on_result": [
         {
           "when": "${{ context.conflict_ci_applicable }} == false",
-          "route": "merge_conflict_pr"
+          "route": "guard_ci_skip_conflict"
         },
         {
           "route": "wait_for_conflict_ci"
         }
       ],
       "note": "Short-circuits CI wait when no workflow trigger matches the conflict resolution branch. ci_applicable=false means neither push nor merge_group triggers apply, so wait_for_ci would exhaust its timeout budget with zero CI runs.\n"
+    },
+    "guard_ci_skip_conflict": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.smoke_utils.check_loop_iteration",
+        "current_iteration": "${{ context.ci_skip_conflict_count }}",
+        "max_iterations": "50"
+      },
+      "capture": {
+        "ci_skip_conflict_count": "${{ result.next_iteration }}"
+      },
+      "on_result": [
+        {
+          "when": "${{ result.max_exceeded }} == true",
+          "route": "register_clone_failure"
+        },
+        {
+          "route": "merge_conflict_pr"
+        }
+      ],
+      "on_failure": "register_clone_failure",
+      "optional_context_refs": [
+        "ci_skip_conflict_count"
+      ],
+      "note": "Structural bound for the ci_applicable=false shortcut path. Uses check_loop_iteration to satisfy the unbounded-cycle semantic rule — the on_result exit to register_clone_failure provides a structural termination guarantee. Cap of 50 matches check_pr_merge_loop budget; in practice never exceeded because the PR merge loop terminates when all PRs are processed.\n"
     },
     "wait_for_conflict_ci": {
       "tool": "wait_for_ci",
@@ -1042,7 +1067,8 @@
         "step_name": "handle_conflict_no_runs"
       },
       "capture": {
-        "conflict_ci_event": "${{ result.ci_event }}"
+        "conflict_ci_event": "${{ result.ci_event }}",
+        "conflict_ci_applicable": "${{ result.ci_applicable }}"
       },
       "on_success": "merge_conflict_pr",
       "on_failure": "register_clone_failure",

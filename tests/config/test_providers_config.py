@@ -385,7 +385,7 @@ class TestProviderProfileDef:
 
         env = {"CUSTOM_VAR": "value"}
         p = ProviderProfileDef(name="test", raw_env=env)
-        assert p.raw_env is env
+        assert p.raw_env == env
 
     def test_importability_from_autoskillit_config(self) -> None:
         from autoskillit.config import ProviderProfileDef

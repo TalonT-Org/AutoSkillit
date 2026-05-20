@@ -6,8 +6,38 @@ import pytest
 
 from autoskillit.core import BackendEventKind, ClaudeEventData, ResultParser, SessionEvent
 from autoskillit.execution.backends import ClaudeResultParser
+from autoskillit.execution.session import ClaudeSessionResult, CliSubtype
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+
+def _make_completion_event(
+    *,
+    has_marker: bool = True,
+    result: str = "done",
+    subtype: str = "success",
+    session_id: str = "s1",
+) -> SessionEvent:
+    return SessionEvent(
+        kind=BackendEventKind.COMPLETION,
+        is_terminal=True,
+        has_marker=has_marker,
+        backend_data=ClaudeEventData(
+            record_type="result",
+            subtype=subtype,
+            session_id=session_id,
+            raw={"result": result, "subtype": subtype},
+        ),
+    )
+
+
+def _make_meta_event(*, session_id: str = "s1") -> SessionEvent:
+    return SessionEvent(
+        kind=BackendEventKind.SESSION_META,
+        is_terminal=False,
+        has_marker=False,
+        session_id=session_id,
+    )
 
 
 class TestClaudeResultParser:
@@ -100,8 +130,6 @@ class TestClaudeResultParser:
         assert result.output == "task completed"
 
     def test_parse_stdout_maps_all_fields(self) -> None:
-        from autoskillit.execution.session import ClaudeSessionResult, CliSubtype
-
         mock_result = ClaudeSessionResult(
             subtype=CliSubtype.SUCCESS,
             is_error=False,
@@ -139,8 +167,6 @@ class TestClaudeResultParser:
             assert set(raw["seen_block_types"]) == {"text", "tool_use"}
 
     def test_parse_stdout_empty_output_error(self) -> None:
-        from autoskillit.execution.session import ClaudeSessionResult, CliSubtype
-
         mock_result = ClaudeSessionResult(
             subtype=CliSubtype.EMPTY_OUTPUT,
             is_error=True,
@@ -161,8 +187,6 @@ class TestClaudeResultParser:
             assert raw["is_error"] is True
 
     def test_parse_stdout_write_artifacts_in_raw(self) -> None:
-        from autoskillit.execution.session import ClaudeSessionResult, CliSubtype
-
         mock_result = ClaudeSessionResult(
             subtype=CliSubtype.SUCCESS,
             is_error=False,
@@ -184,8 +208,6 @@ class TestClaudeResultParser:
             assert result.raw["write_artifacts"] == ["/a/b.py", "/c/d.py"]
 
     def test_parse_stdout_no_double_token_extraction(self) -> None:
-        from autoskillit.execution.session import ClaudeSessionResult, CliSubtype
-
         mock_result = ClaudeSessionResult(
             subtype=CliSubtype.SUCCESS,
             is_error=False,
@@ -203,8 +225,6 @@ class TestClaudeResultParser:
             mock_parse.assert_called_once()
 
     def test_parse_stdout_seen_block_types_is_list(self) -> None:
-        from autoskillit.execution.session import ClaudeSessionResult, CliSubtype
-
         mock_result = ClaudeSessionResult(
             subtype=CliSubtype.SUCCESS,
             is_error=False,
@@ -244,3 +264,128 @@ class TestClaudeResultParser:
 
     def test_structural_conformance_result_parser(self) -> None:
         assert isinstance(ClaudeResultParser(), ResultParser)
+
+
+class TestClaudeResultParserTokenExtraction:
+    def test_token_usage_dict_preserved(self) -> None:
+        mock_result = ClaudeSessionResult(
+            subtype=CliSubtype.SUCCESS,
+            is_error=False,
+            result="done",
+            session_id="",
+            errors=[],
+            token_usage={"input_tokens": 500, "output_tokens": 200},
+        )
+        with patch(
+            "autoskillit.execution.backends.claude.parse_session_result",
+            return_value=mock_result,
+        ):
+            parser = ClaudeResultParser()
+            result = parser.parse_stdout('{"type": "result"}')
+            assert result.raw["token_usage"] == {"input_tokens": 500, "output_tokens": 200}
+
+    def test_token_usage_none_preserved(self) -> None:
+        mock_result = ClaudeSessionResult(
+            subtype=CliSubtype.SUCCESS,
+            is_error=False,
+            result="done",
+            session_id="",
+            errors=[],
+        )
+        with patch(
+            "autoskillit.execution.backends.claude.parse_session_result",
+            return_value=mock_result,
+        ):
+            parser = ClaudeResultParser()
+            result = parser.parse_stdout('{"type": "result"}')
+            assert result.raw["token_usage"] is None
+
+    def test_token_usage_empty_dict(self) -> None:
+        mock_result = ClaudeSessionResult(
+            subtype=CliSubtype.SUCCESS,
+            is_error=False,
+            result="done",
+            session_id="",
+            errors=[],
+            token_usage={},
+        )
+        with patch(
+            "autoskillit.execution.backends.claude.parse_session_result",
+            return_value=mock_result,
+        ):
+            parser = ClaudeResultParser()
+            result = parser.parse_stdout('{"type": "result"}')
+            assert result.raw["token_usage"] == {}
+
+    def test_token_usage_with_cache_fields(self) -> None:
+        mock_result = ClaudeSessionResult(
+            subtype=CliSubtype.SUCCESS,
+            is_error=False,
+            result="done",
+            session_id="",
+            errors=[],
+            token_usage={
+                "input_tokens": 100,
+                "cache_creation_input_tokens": 50,
+                "cache_read_input_tokens": 25,
+            },
+        )
+        with patch(
+            "autoskillit.execution.backends.claude.parse_session_result",
+            return_value=mock_result,
+        ):
+            parser = ClaudeResultParser()
+            result = parser.parse_stdout('{"type": "result"}')
+            raw_tu = result.raw["token_usage"]
+            assert "input_tokens" in raw_tu
+            assert "cache_creation_input_tokens" in raw_tu
+            assert "cache_read_input_tokens" in raw_tu
+
+
+class TestClaudeResultParserMarkerDetection:
+    def test_standalone_marker_yields_success(self) -> None:
+        parser = ClaudeResultParser()
+        events = [_make_completion_event(has_marker=True)]
+        result = parser.parse_result(events)
+        assert result.success is True
+
+    def test_embedded_marker_absent_yields_failure(self) -> None:
+        parser = ClaudeResultParser()
+        events = [_make_completion_event(has_marker=False)]
+        result = parser.parse_result(events)
+        assert result.success is False
+
+    def test_no_completion_event_yields_failure(self) -> None:
+        parser = ClaudeResultParser()
+        events = [_make_meta_event()]
+        result = parser.parse_result(events)
+        assert result.success is False
+
+    def test_any_completion_marker_yields_success(self) -> None:
+        parser = ClaudeResultParser()
+        events = [
+            _make_completion_event(has_marker=False),
+            _make_completion_event(has_marker=True),
+        ]
+        result = parser.parse_result(events)
+        assert result.success is True
+
+
+@pytest.mark.parametrize("subtype", list(CliSubtype))
+def test_cli_subtype_round_trip_through_parse_stdout(subtype: CliSubtype) -> None:
+    mock_result = ClaudeSessionResult(
+        subtype=subtype,
+        is_error=False,
+        result="done",
+        session_id="",
+        errors=[],
+    )
+    with patch(
+        "autoskillit.execution.backends.claude.parse_session_result",
+        return_value=mock_result,
+    ):
+        parser = ClaudeResultParser()
+        result = parser.parse_stdout('{"type": "result"}')
+        raw = dict(result.raw)
+        assert raw["subtype"] == subtype.value
+        assert CliSubtype.from_cli(raw["subtype"]) == subtype

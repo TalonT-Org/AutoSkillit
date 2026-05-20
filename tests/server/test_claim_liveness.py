@@ -68,11 +68,11 @@ class TestClaimIssueLiveness:
     @pytest.mark.anyio
     async def test_claim_issue_blocks_when_owning_session_is_alive(self, tool_ctx_kitchen_open):
         """When dispatch is alive, claiming is blocked (claimed=False)."""
-        alive_dispatch = _make_dead_dispatch()
+        dispatch = _make_dead_dispatch()
         tool_ctx_kitchen_open.github_client = _mock_client_with_in_progress_label()
 
         with (
-            patch(f"{_HELPERS_MODULE}.find_dispatch_for_issue", return_value=alive_dispatch),
+            patch(f"{_HELPERS_MODULE}.find_dispatch_for_issue", return_value=dispatch),
             patch(f"{_HELPERS_MODULE}.is_dispatch_session_alive", return_value=True),
             patch(f"{_HELPERS_MODULE}.cleanup_orphaned_labels", AsyncMock()),
         ):
@@ -96,12 +96,12 @@ class TestClaimIssueLiveness:
     @pytest.mark.anyio
     async def test_cleanup_not_called_when_dispatch_is_alive(self, tool_ctx_kitchen_open):
         """cleanup_orphaned_labels is NOT called when the owning session is alive."""
-        alive_dispatch = _make_dead_dispatch()
+        dispatch = _make_dead_dispatch()
         cleanup_mock = AsyncMock()
         tool_ctx_kitchen_open.github_client = _mock_client_with_in_progress_label()
 
         with (
-            patch(f"{_HELPERS_MODULE}.find_dispatch_for_issue", return_value=alive_dispatch),
+            patch(f"{_HELPERS_MODULE}.find_dispatch_for_issue", return_value=dispatch),
             patch(f"{_HELPERS_MODULE}.is_dispatch_session_alive", return_value=True),
             patch(f"{_HELPERS_MODULE}.cleanup_orphaned_labels", cleanup_mock),
         ):
@@ -136,11 +136,11 @@ class TestClaimAndResolveIssueLiveness:
         self, tool_ctx_kitchen_open
     ):
         """claim_and_resolve_issue: alive dispatch → claimed=False with issue metadata."""
-        alive_dispatch = _make_dead_dispatch()
+        dispatch = _make_dead_dispatch()
         tool_ctx_kitchen_open.github_client = _mock_client_with_in_progress_label()
 
         with (
-            patch(f"{_HELPERS_MODULE}.find_dispatch_for_issue", return_value=alive_dispatch),
+            patch(f"{_HELPERS_MODULE}.find_dispatch_for_issue", return_value=dispatch),
             patch(f"{_HELPERS_MODULE}.is_dispatch_session_alive", return_value=True),
             patch(f"{_HELPERS_MODULE}.cleanup_orphaned_labels", AsyncMock()),
         ):
@@ -185,10 +185,10 @@ class TestClaimHelperParity:
         """_try_claim_with_liveness directly: alive dispatch → claimed=False."""
         from autoskillit.server.tools._claim_helpers import _try_claim_with_liveness
 
-        alive_dispatch = _make_dead_dispatch()
+        dispatch = _make_dead_dispatch()
 
         with (
-            patch(f"{_HELPERS_MODULE}.find_dispatch_for_issue", return_value=alive_dispatch),
+            patch(f"{_HELPERS_MODULE}.find_dispatch_for_issue", return_value=dispatch),
             patch(f"{_HELPERS_MODULE}.is_dispatch_session_alive", return_value=True),
         ):
             decision = await _try_claim_with_liveness(

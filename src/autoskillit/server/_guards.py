@@ -175,7 +175,7 @@ def _profile_to_env(profile: ProviderProfileDef) -> dict[str, str]:
         if val:
             env["ANTHROPIC_API_KEY"] = val
         else:
-            logger.warning("provider_api_key_env_missing", api_key_env=profile.api_key_env)
+            logger.warning("provider_api_key_env_missing", env_var_name=profile.api_key_env)
     env.update(profile.raw_env)
     return env
 

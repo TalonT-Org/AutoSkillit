@@ -54,7 +54,7 @@ def test_api_key_env_absent_warns(monkeypatch):
         result = _profile_to_env(profile)
     assert "ANTHROPIC_API_KEY" not in result
     assert any(
-        log["event"] == "provider_api_key_env_missing" and log["api_key_env"] == "MISSING_KEY"
+        log["event"] == "provider_api_key_env_missing" and log["env_var_name"] == "MISSING_KEY"
         for log in logs
     )
 

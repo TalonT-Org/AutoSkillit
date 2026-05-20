@@ -202,6 +202,42 @@ def _inject_completion_reminder(prompt: str, marker: str) -> str:
     return f"{prompt}\nRemember: end your final response with {marker}"
 
 
+def _compose_resume_prompt(
+    *,
+    base_prompt: str,
+    resume_checkpoint: SessionCheckpoint | None,
+    sentinel_contract: str = "",
+    resume_message: str | None = None,
+) -> str:
+    """Compose resume directives ON TOP of the caller's base prompt.
+
+    Never discards ``base_prompt`` — resume adds context layers, not substitutes.
+    """
+    sections: list[str] = []
+
+    sections.append(
+        "RESUME SESSION: Your previous session was interrupted before completion. "
+        "Continue your work from where you left off. "
+        "Do NOT restart from scratch — pick up exactly where you stopped. "
+        "Do NOT re-emit any prior failure, exhaustion, or error sentinels from "
+        "your conversation history. Conditions may have changed since the prior "
+        "session — re-attempt the next pending operation."
+    )
+
+    if resume_message:
+        sections.append(f"CALLER CONTEXT: {resume_message}")
+
+    if resume_checkpoint and resume_checkpoint.completed_items:
+        sections.append(_build_resume_context(resume_checkpoint))
+
+    if sentinel_contract:
+        sections.append(sentinel_contract)
+
+    sections.append(f"ORIGINAL TASK CONTEXT:\n{base_prompt}")
+
+    return "\n\n".join(sections)
+
+
 def _build_resume_context(checkpoint: SessionCheckpoint) -> str:
     lines = [
         "RESUME CONTEXT: The following items were completed in the previous session "
@@ -552,43 +588,34 @@ class ClaudeCodeBackend:
         profile_name: str = "",
         resume_session_id: str = "",
         resume_checkpoint: SessionCheckpoint | None = None,
+        resume_message: str | None = None,
     ) -> CmdSpec:
+        _has_prefix = bool(profile_name) and skill_command.strip().startswith("/")
+
         if resume_session_id:
-            _resume_instruction = (
-                "Your previous session was interrupted before completion. "
-                "Continue your work from where you left off. "
-                "Do NOT restart from scratch — pick up exactly where you stopped."
-            )
-            if resume_checkpoint and resume_checkpoint.completed_items:
-                _resume_instruction += "\n\n" + _build_resume_context(resume_checkpoint)
-            prompt = _inject_completion_reminder(
-                _inject_narration_suppression(
-                    _inject_cwd_anchor(
-                        _inject_completion_directive(_resume_instruction, completion_marker),
-                        cwd,
-                        temp_dir_relpath=temp_dir_relpath,
-                    )
+            effective_prompt = _compose_resume_prompt(
+                base_prompt=_ensure_skill_prefix(
+                    skill_command, provider_profile=profile_name or ""
                 ),
-                completion_marker,
+                resume_checkpoint=resume_checkpoint,
+                resume_message=resume_message,
             )
         else:
-            _has_prefix = bool(profile_name) and skill_command.strip().startswith("/")
-            prompt = _inject_completion_reminder(
-                _inject_narration_suppression(
-                    _inject_cwd_anchor(
-                        _inject_completion_directive(
-                            _ensure_skill_prefix(
-                                skill_command, provider_profile=profile_name or ""
-                            ),
-                            completion_marker,
-                        ),
-                        cwd,
-                        temp_dir_relpath=temp_dir_relpath,
-                    ),
-                    has_skill_prefix=_has_prefix,
-                ),
-                completion_marker,
+            effective_prompt = _ensure_skill_prefix(
+                skill_command, provider_profile=profile_name or ""
             )
+
+        prompt = _inject_completion_reminder(
+            _inject_narration_suppression(
+                _inject_cwd_anchor(
+                    _inject_completion_directive(effective_prompt, completion_marker),
+                    cwd,
+                    temp_dir_relpath=temp_dir_relpath,
+                ),
+                has_skill_prefix=_has_prefix,
+            ),
+            completion_marker,
+        )
         extras: dict[str, str] = {
             "AUTOSKILLIT_HEADLESS": "1",
             "AUTOSKILLIT_SESSION_TYPE": SESSION_TYPE_SKILL,
@@ -654,38 +681,28 @@ class ClaudeCodeBackend:
         temp_dir_relpath: str | None = None,
         allowed_write_prefix: str = "",
         sentinel_contract: str = "",
+        resume_message: str | None = None,
     ) -> CmdSpec:
         if resume_session_id:
-            _resume_instruction = (
-                "Your previous session was interrupted before completion. "
-                "Continue your work from where you left off. "
-                "Do NOT restart from scratch — pick up exactly where you stopped."
-            )
-            if resume_checkpoint and resume_checkpoint.completed_items:
-                _resume_instruction += "\n\n" + _build_resume_context(resume_checkpoint)
-            if sentinel_contract:
-                _resume_instruction += "\n\n" + sentinel_contract
-            prompt = _inject_completion_reminder(
-                _inject_narration_suppression(
-                    _inject_cwd_anchor(
-                        _inject_completion_directive(_resume_instruction, completion_marker),
-                        cwd,
-                        temp_dir_relpath=temp_dir_relpath,
-                    )
-                ),
-                completion_marker,
+            effective_prompt = _compose_resume_prompt(
+                base_prompt=orchestrator_prompt,
+                resume_checkpoint=resume_checkpoint,
+                sentinel_contract=sentinel_contract,
+                resume_message=resume_message,
             )
         else:
-            prompt = _inject_completion_reminder(
-                _inject_narration_suppression(
-                    _inject_cwd_anchor(
-                        _inject_completion_directive(orchestrator_prompt, completion_marker),
-                        cwd,
-                        temp_dir_relpath=temp_dir_relpath,
-                    )
-                ),
-                completion_marker,
-            )
+            effective_prompt = orchestrator_prompt
+
+        prompt = _inject_completion_reminder(
+            _inject_narration_suppression(
+                _inject_cwd_anchor(
+                    _inject_completion_directive(effective_prompt, completion_marker),
+                    cwd,
+                    temp_dir_relpath=temp_dir_relpath,
+                )
+            ),
+            completion_marker,
+        )
 
         extras: dict[str, str] = {
             "AUTOSKILLIT_HEADLESS": "1",

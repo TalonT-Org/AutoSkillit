@@ -366,6 +366,7 @@ async def execute_dispatch(
     idle_output_timeout: int | None = None,
     caller_session_id: str = "",
     prior_dispatch_id: str | None = None,
+    resume_message: str | None = None,
 ) -> DispatchResult:
     """Execute a single food truck dispatch.
 
@@ -430,6 +431,7 @@ async def execute_dispatch(
             idle_output_timeout=idle_output_timeout,
             caller_session_id=caller_session_id,
             prior_dispatch_id=prior_dispatch_id,
+            resume_message=resume_message,
         )
     except asyncio.CancelledError:
         raise
@@ -542,6 +544,7 @@ async def _run_dispatch(
     idle_output_timeout: int | None = None,
     caller_session_id: str = "",
     prior_dispatch_id: str | None = None,
+    resume_message: str | None = None,
 ) -> DispatchResult:
     """Inner dispatch body — called after lock acquisition."""
     from autoskillit.fleet.state import (
@@ -864,6 +867,7 @@ async def _run_dispatch(
                     requires_packs=list(full_recipe.requires_packs) or ["kitchen-core"],
                     on_spawn=_on_spawn,
                     sentinel_contract=sentinel_contract,
+                    resume_message=resume_message,
                 )
             finally:
                 _hb_trigger.set()

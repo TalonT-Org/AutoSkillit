@@ -85,6 +85,7 @@ class ExecutorCall:
     profile_name: str = ""
     resume_session_id: str = ""
     resume_checkpoint: SessionCheckpoint | None = None
+    resume_message: str | None = None
 
 
 @dataclasses.dataclass
@@ -115,6 +116,7 @@ class DispatchFoodTruckCall:
     prior_completion_markers: Sequence[str] | None = None
     marker_dir: Path | None = None
     session_id: str | None = None
+    resume_message: str | None = None
 
 
 _DEFAULT_SKILL_RESULT = SkillResult(
@@ -175,6 +177,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         profile_name: str = "",
         resume_session_id: str = "",
         resume_checkpoint: SessionCheckpoint | None = None,
+        resume_message: str | None = None,
     ) -> SkillResult:
         self.calls.append(
             ExecutorCall(
@@ -202,6 +205,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 profile_name=profile_name,
                 resume_session_id=resume_session_id,
                 resume_checkpoint=resume_checkpoint,
+                resume_message=resume_message,
             )
         )
         if self._queue:
@@ -240,6 +244,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         prior_completion_markers: Sequence[str] | None = None,
         marker_dir: Path | None = None,
         session_id: str | None = None,
+        resume_message: str | None = None,
     ) -> SkillResult:
         self.dispatch_calls.append(
             DispatchFoodTruckCall(
@@ -267,6 +272,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 prior_completion_markers=prior_completion_markers,
                 marker_dir=marker_dir,
                 session_id=session_id,
+                resume_message=resume_message,
             )
         )
         if self._queue:

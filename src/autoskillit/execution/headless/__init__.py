@@ -674,6 +674,7 @@ async def run_headless_core(
     provider_fallback_name: str = "",
     resume_session_id: str = "",
     resume_checkpoint: SessionCheckpoint | None = None,
+    resume_message: str | None = None,
 ) -> SkillResult:
     """Shared headless runner used by run_skill.
 
@@ -709,6 +710,7 @@ async def run_headless_core(
             profile_name=profile_name,
             resume_session_id=resume_session_id,
             resume_checkpoint=resume_checkpoint,
+            resume_message=resume_message,
         )
 
         effective_timeout = timeout if timeout is not None else cfg.timeout
@@ -790,6 +792,7 @@ class DefaultHeadlessExecutor:
         provider_fallback_name: str = "",
         resume_session_id: str = "",
         resume_checkpoint: SessionCheckpoint | None = None,
+        resume_message: str | None = None,
     ) -> SkillResult:
         cfg = self._ctx.config.run_skill
         effective_timeout = timeout if timeout is not None else cfg.timeout
@@ -823,6 +826,7 @@ class DefaultHeadlessExecutor:
             provider_fallback_name=provider_fallback_name,
             resume_session_id=resume_session_id,
             resume_checkpoint=resume_checkpoint,
+            resume_message=resume_message,
         )
 
     async def dispatch_food_truck(
@@ -855,6 +859,7 @@ class DefaultHeadlessExecutor:
         sentinel_contract: str = "",
         marker_dir: Path | None = None,
         session_id: str | None = None,
+        resume_message: str | None = None,
     ) -> SkillResult:
         cfg = self._ctx.config
         resolved_model = _resolve_model(model, cfg)
@@ -895,6 +900,7 @@ class DefaultHeadlessExecutor:
             temp_dir_relpath=temp_dir_display_str(cfg.workspace.temp_dir),
             allowed_write_prefix=allowed_write_prefix,
             sentinel_contract=sentinel_contract,
+            resume_message=resume_message,
         )
 
         effective_timeout = timeout if timeout is not None else fleet_cfg.default_timeout_sec

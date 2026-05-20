@@ -17,7 +17,10 @@ from autoskillit.config.settings import AutomationConfig
 _SUBCONFIG_DATACLASSES = [
     cls
     for cls in vars(settings_mod).values()
-    if isinstance(cls, type) and dataclasses.is_dataclass(cls) and cls is not AutomationConfig
+    if isinstance(cls, type)
+    and dataclasses.is_dataclass(cls)
+    and cls is not AutomationConfig
+    and not cls.__dataclass_params__.frozen  # type: ignore[attr-defined]
 ]
 
 

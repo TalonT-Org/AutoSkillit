@@ -138,7 +138,7 @@ generic_automation_mcp/
 |---|---|---|
 | `./` | — | Package root: `__init__`, `__main__`, `hook_registry`, `version`, `_test_filter`, `_llm_triage`, `smoke_utils` |
 | `core/` | IL-0 | Foundation — types/, runtime/, paths, IO, feature flags (zero autoskillit imports) |
-| `config/` | IL-1 | `AutomationConfig` + Dynaconf loader + 24 leaf dataclasses |
+| `config/` | IL-1 | `AutomationConfig` + Dynaconf loader + 27 leaf dataclasses |
 | `pipeline/` | IL-1 | Pipeline state — `ToolContext` DI, gate, audit log, telemetry |
 | `execution/` | IL-1 | Headless sessions (headless/, process/, merge_queue/, session/), backends/, CI/GitHub |
 | `workspace/` | IL-1 | Clone management, worktrees, skill resolution |

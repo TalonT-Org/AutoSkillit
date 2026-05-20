@@ -30,10 +30,10 @@ def test_claude_md_architecture_tree_has_subpackages() -> None:
         assert subpkg in content, f"CLAUDE.md tree missing {subpkg}"
 
 
-def test_claude_md_dataclass_count_is_24() -> None:
+def test_claude_md_dataclass_count_is_27() -> None:
     content = CLAUDE_MD.read_text()
-    assert "24 leaf dataclasses" in content
-    assert "22 leaf dataclasses" not in content
+    assert "27 leaf dataclasses" in content
+    assert "24 leaf dataclasses" not in content
 
 
 def test_claude_md_has_lsp_section() -> None:

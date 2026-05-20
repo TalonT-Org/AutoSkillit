@@ -191,7 +191,7 @@ async def test_perform_merge_returns_success_on_green_tests(
         for args in conftest_mock_runner.call_args_list
         if len(args[0]) > 1 and args[0][1] == "merge"
     )
-    assert merge_call[1] == Path(fake_wt)
+    assert merge_call[1] == Path("/nonexistent-main-repo")
 
 
 @pytest.mark.anyio

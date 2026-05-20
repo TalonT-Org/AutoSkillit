@@ -880,6 +880,34 @@ async def test_dispatch_food_truck_tool_passes_resume_session_id_to_executor(
 
 
 @pytest.mark.anyio
+async def test_dispatch_food_truck_tool_passes_resume_message_to_executor(
+    tool_ctx_kitchen_open, monkeypatch
+):
+    """dispatch_food_truck MCP tool forwards resume_message all the way to the executor."""
+    from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+    tool_ctx_kitchen_open.fleet_lock = FleetSemaphore(max_concurrent=1)
+    repo = InMemoryRecipeRepository()
+    recipe_info = _make_recipe_info("test-recipe")
+    repo.add_recipe("test-recipe", recipe_info)
+    repo.add_full_recipe(recipe_info.path, _make_standard_recipe("test-recipe"))
+    tool_ctx_kitchen_open.recipes = repo
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+
+    await dispatch_food_truck(
+        recipe="test-recipe",
+        task="do-work",
+        resume_session_id="sess-resume-123",
+        resume_message="retry with new quota",
+    )
+
+    assert executor.dispatch_calls, "dispatch_food_truck executor was never called"
+    assert executor.dispatch_calls[0].resume_message == "retry with new quota"
+
+
+@pytest.mark.anyio
 async def test_dispatch_food_truck_marketplace_install_succeeds(tool_ctx_marketplace, monkeypatch):
     """dispatch_food_truck does not raise when plugin_source is MarketplaceInstall.
 

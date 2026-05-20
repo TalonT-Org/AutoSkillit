@@ -141,10 +141,6 @@ class _LoadCacheEntry:
 _LOAD_CACHE: dict[tuple, _LoadCacheEntry] = {}
 _LOAD_CACHE_LOCK = threading.Lock()
 
-# ---------------------------------------------------------------------------
-# Process staleness guard
-# ---------------------------------------------------------------------------
-
 _PROCESS_START_PKG_MTIME: int | None = None
 _staleness_last_check: float = 0.0
 _staleness_is_stale: bool = False

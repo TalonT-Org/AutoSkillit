@@ -958,11 +958,6 @@ def test_load_and_validate_skips_list_recipes_when_recipe_list_provided(tmp_path
     assert result.get("content_hash") is not None
 
 
-# ---------------------------------------------------------------------------
-# Rule registry hash cache invalidation tests
-# ---------------------------------------------------------------------------
-
-
 def test_load_and_validate_cache_invalidated_on_rule_registry_change(tmp_path, monkeypatch):
     """Changing the rule registry hash invalidates the cache."""
     import autoskillit.recipe._api as api_mod
@@ -1021,11 +1016,6 @@ def test_load_cache_entry_rule_registry_hash_checked_in_hit_path():
             break
     else:
         raise AssertionError("load_and_validate function not found")
-
-
-# ---------------------------------------------------------------------------
-# Process staleness detection tests
-# ---------------------------------------------------------------------------
 
 
 def test_load_and_validate_detects_stale_process(tmp_path, monkeypatch):

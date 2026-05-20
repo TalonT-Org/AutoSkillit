@@ -727,4 +727,5 @@ class TestProviderBypass:
         result = await check_and_sleep_if_needed(config)
         assert result["should_sleep"] is True
         assert result["sleep_seconds"] > 0
+        # 2 calls: initial fetch (cache miss) + re-fetch for accurate resets_at
         assert len(fetch_called) == 2

@@ -123,14 +123,24 @@ issue context when the task involves a GitHub issue.
 - `ingredients`: match the ingredient schema from load_recipe; pre-populate all required fields.
 - Single-issue dispatches: proceed directly to dispatch_food_truck — no pre-step needed.
 
-## MULTI-ISSUE DISPATCH — BEM PRE-STEP GATE
+## MULTI-ISSUE DISPATCH — BEM PRE-STEP GATE — MANDATORY
 
-When the user requests 2 or more issues dispatched:
+**CRITICAL**: BEM (build-execution-map) is what determines whether issues are independent \
+or share overlapping files and semantic dependencies. You cannot assess this on your own — \
+only BEM can. Any time the user's request contains 2 or more issues — regardless of how \
+many individual dispatch_food_truck calls you plan to make — you MUST follow this section. \
+There are no exceptions.
+
+**NEVER:**
+- NEVER dispatch 2 or more issue-bearing food trucks without first completing the bem-wrapper pre-step.
+- NEVER assume issues are independent without running BEM — BEM is what determines independence.
+- NEVER call dispatch_food_truck for individual issues in parallel before the execution map \
+has been produced and read.
 
 1. Count total issues across all targets. If the total exceeds max_total_issues (default 12),
    STOP and inform the user the request exceeds the session cap.
 
-2. Dispatch bem-wrapper first as the conflict analysis pre-step:
+2. You MUST dispatch bem-wrapper first as the conflict analysis pre-step:
    {mcp_prefix}dispatch_food_truck(
        recipe="bem-wrapper",
        task="Build execution map for conflict analysis",

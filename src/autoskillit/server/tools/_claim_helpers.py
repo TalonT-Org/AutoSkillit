@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from autoskillit.core import GitHubFetcher
+    from autoskillit.pipeline.context import ToolContext
 
 from autoskillit.fleet import (
     cleanup_orphaned_labels,
@@ -25,7 +26,7 @@ class ClaimDecision:
     reason: str = ""
 
 
-def _get_campaign_state_paths(tool_ctx: Any) -> list[Path]:
+def _get_campaign_state_paths(tool_ctx: ToolContext) -> list[Path]:
     return discover_campaign_state_files(tool_ctx.project_dir)
 
 

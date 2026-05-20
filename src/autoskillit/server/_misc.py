@@ -165,6 +165,11 @@ async def resolve_repo_from_remote(cwd: str, hint: str | None = None) -> str:
     return await resolve_remote_repo(cwd, hint=hint) or ""
 
 
+def resolve_provider(default_provider: str | None) -> str:
+    """Return the effective provider name, falling back to ``"anthropic"``."""
+    return default_provider if default_provider else "anthropic"
+
+
 async def _prime_quota_cache() -> None:
     """Fetch quota from the Anthropic API and write the local cache.
 
@@ -174,12 +179,16 @@ async def _prime_quota_cache() -> None:
     from autoskillit.server._state import _get_ctx as _ctx_fn
 
     try:
-        await check_and_sleep_if_needed(_ctx_fn().config.quota_guard)
+        _ctx = _ctx_fn()
+        await check_and_sleep_if_needed(
+            _ctx.config.quota_guard,
+            provider=resolve_provider(_ctx.config.providers.default_provider),
+        )
     except Exception:
         logger.warning("quota_prime_failed", exc_info=True)
 
 
-async def _quota_refresh_loop(config: QuotaGuardConfig) -> None:
+async def _quota_refresh_loop(config: QuotaGuardConfig, *, provider: str = "anthropic") -> None:
     """Long-running coroutine: refreshes the quota cache every cache_refresh_interval seconds.
 
     Designed to run as a background asyncio.Task for the duration of a kitchen session.
@@ -190,7 +199,14 @@ async def _quota_refresh_loop(config: QuotaGuardConfig) -> None:
     Guarantee: with cache_refresh_interval < cache_max_age, the cache written by any
     loop tick will still be fresh when the next tick fires. The hook never sees a stale
     cache as long as this loop is running.
+
+    Args:
+        config: QuotaGuardConfig instance.
+        provider: Provider name. Non-anthropic providers skip the refresh loop entirely.
     """
+    if provider.casefold() != "anthropic":
+        return
+
     while True:
         await asyncio.sleep(config.cache_refresh_interval)
         try:

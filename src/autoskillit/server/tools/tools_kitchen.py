@@ -34,6 +34,7 @@ from autoskillit.server._misc import (
     _hook_config_path,
     _prime_quota_cache,
     _quota_refresh_loop,
+    resolve_provider,
 )
 from autoskillit.server._notify import track_response_size
 
@@ -169,7 +170,10 @@ async def _open_kitchen_handler() -> str | None:
         ctx.quota_refresh_task.cancel()
     try:
         ctx.quota_refresh_task = create_background_task(
-            _quota_refresh_loop(ctx.config.quota_guard),
+            _quota_refresh_loop(
+                ctx.config.quota_guard,
+                provider=resolve_provider(ctx.config.providers.default_provider),
+            ),
             label="quota_refresh_loop",
         )
     except Exception as exc:

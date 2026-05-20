@@ -1,0 +1,273 @@
+"""Tests for fleet._label_cleanup module — infra-level label cleanup (Group J)."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+from pathlib import Path
+from unittest.mock import AsyncMock
+
+import pytest
+
+from tests.fleet._helpers import _no_sleep_quota_checker, _noop_quota_refresher, _setup_dispatch
+
+pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
+
+
+class TestDispatchSidecarCleanupOnCrash:
+    """Tests for label cleanup injected into _run_dispatch finally block."""
+
+    @pytest.mark.anyio
+    async def test_dispatch_sidecar_cleanup_on_cancellation(
+        self, tool_ctx, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """_run_dispatch finally block calls swap_labels when CancelledError occurs."""
+        from autoskillit.fleet import execute_dispatch
+        from autoskillit.fleet.sidecar import sidecar_path as make_sidecar_path
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+        swap_labels_mock = AsyncMock(return_value={"success": True})
+        github_client = AsyncMock()
+        github_client.swap_labels = swap_labels_mock
+        tool_ctx.github_client = github_client
+
+        async def _write_sidecar_then_cancel(**kwargs):
+            sidecar = make_sidecar_path(kwargs["dispatch_id"], tool_ctx.project_dir)
+            sidecar.write_text(
+                json.dumps(
+                    {
+                        "issue_url": "https://github.com/owner/repo/issues/1",
+                        "status": "completed",
+                        "ts": "2026-01-01T00:00:00Z",
+                    }
+                )
+                + "\n"
+            )
+            raise asyncio.CancelledError
+
+        tool_ctx.executor.dispatch_food_truck = _write_sidecar_then_cancel
+
+        with pytest.raises(asyncio.CancelledError):
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="t",
+                ingredients=None,
+                dispatch_name=None,
+                timeout_sec=None,
+                prompt_builder=lambda **kw: "prompt",
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
+            )
+
+        swap_labels_mock.assert_called_once()
+        call = swap_labels_mock.call_args
+        assert call.args[0] == "owner"
+        assert call.args[1] == "repo"
+        assert call.args[2] == 1
+        assert "in-progress" in call.kwargs["remove_labels"]
+        assert "fail" in call.kwargs["add_labels"]
+
+    @pytest.mark.anyio
+    async def test_dispatch_sidecar_cleanup_on_runtime_exception(
+        self, tool_ctx, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """_run_dispatch finally block calls swap_labels when RuntimeError occurs."""
+        from autoskillit.fleet import execute_dispatch
+        from autoskillit.fleet.sidecar import sidecar_path as make_sidecar_path
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+        swap_labels_mock = AsyncMock(return_value={"success": True})
+        github_client = AsyncMock()
+        github_client.swap_labels = swap_labels_mock
+        tool_ctx.github_client = github_client
+
+        async def _write_sidecar_then_raise(**kwargs):
+            sidecar = make_sidecar_path(kwargs["dispatch_id"], tool_ctx.project_dir)
+            sidecar.write_text(
+                json.dumps(
+                    {
+                        "issue_url": "https://github.com/owner/repo/issues/2",
+                        "status": "completed",
+                        "ts": "2026-01-01T00:00:00Z",
+                    }
+                )
+                + "\n"
+            )
+            raise RuntimeError("infra crash")
+
+        tool_ctx.executor.dispatch_food_truck = _write_sidecar_then_raise
+
+        result = await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="t",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=lambda **kw: "prompt",
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+        )
+
+        envelope = json.loads(result.outcome.to_envelope())
+        assert envelope.get("success") is False
+        swap_labels_mock.assert_called_once()
+
+    @pytest.mark.anyio
+    async def test_dispatch_sidecar_cleanup_skips_when_no_sidecar(
+        self, tool_ctx, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """swap_labels NOT called when no sidecar file exists."""
+        from autoskillit.fleet import execute_dispatch
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+        swap_labels_mock = AsyncMock(return_value={"success": True})
+        github_client = AsyncMock()
+        github_client.swap_labels = swap_labels_mock
+        tool_ctx.github_client = github_client
+
+        async def _cancel_without_sidecar(**kwargs):
+            raise asyncio.CancelledError
+
+        tool_ctx.executor.dispatch_food_truck = _cancel_without_sidecar
+
+        with pytest.raises(asyncio.CancelledError):
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="t",
+                ingredients=None,
+                dispatch_name=None,
+                timeout_sec=None,
+                prompt_builder=lambda **kw: "prompt",
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
+            )
+
+        swap_labels_mock.assert_not_called()
+
+    @pytest.mark.anyio
+    async def test_dispatch_sidecar_cleanup_skips_when_github_client_none(
+        self, tool_ctx, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """No AttributeError when github_client is None and sidecar exists."""
+        from autoskillit.fleet import execute_dispatch
+        from autoskillit.fleet.sidecar import sidecar_path as make_sidecar_path
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+        tool_ctx.github_client = None
+
+        async def _write_sidecar_then_cancel(**kwargs):
+            sidecar = make_sidecar_path(kwargs["dispatch_id"], tool_ctx.project_dir)
+            sidecar.write_text(
+                json.dumps(
+                    {
+                        "issue_url": "https://github.com/owner/repo/issues/1",
+                        "status": "completed",
+                        "ts": "2026-01-01T00:00:00Z",
+                    }
+                )
+                + "\n"
+            )
+            raise asyncio.CancelledError
+
+        tool_ctx.executor.dispatch_food_truck = _write_sidecar_then_cancel
+
+        with pytest.raises(asyncio.CancelledError):
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="t",
+                ingredients=None,
+                dispatch_name=None,
+                timeout_sec=None,
+                prompt_builder=lambda **kw: "prompt",
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
+            )
+
+    @pytest.mark.anyio
+    async def test_dispatch_sidecar_cleanup_handles_multiple_issues(
+        self, tool_ctx, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """swap_labels called once per issue_url in sidecar."""
+        from autoskillit.fleet import execute_dispatch
+        from autoskillit.fleet.sidecar import sidecar_path as make_sidecar_path
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+        swap_labels_mock = AsyncMock(return_value={"success": True})
+        github_client = AsyncMock()
+        github_client.swap_labels = swap_labels_mock
+        tool_ctx.github_client = github_client
+
+        async def _write_three_issues_then_cancel(**kwargs):
+            sidecar = make_sidecar_path(kwargs["dispatch_id"], tool_ctx.project_dir)
+            lines = [
+                json.dumps(
+                    {
+                        "issue_url": f"https://github.com/owner/repo/issues/{i}",
+                        "status": "completed",
+                        "ts": "2026-01-01T00:00:00Z",
+                    }
+                )
+                for i in [1, 2, 3]
+            ]
+            sidecar.write_text("\n".join(lines) + "\n")
+            raise asyncio.CancelledError
+
+        tool_ctx.executor.dispatch_food_truck = _write_three_issues_then_cancel
+
+        with pytest.raises(asyncio.CancelledError):
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="t",
+                ingredients=None,
+                dispatch_name=None,
+                timeout_sec=None,
+                prompt_builder=lambda **kw: "prompt",
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
+            )
+
+        assert swap_labels_mock.call_count == 3
+
+
+class TestCleanupOrphanedLabelsUnit:
+    """Direct unit tests for cleanup_orphaned_labels helper."""
+
+    @pytest.mark.anyio
+    async def test_cleanup_orphaned_labels_uses_registry_transitions(self, tmp_path: Path) -> None:
+        """remove_labels must be derived from LABEL_LIFECYCLE_REGISTRY, not hardcoded."""
+        from autoskillit.fleet._label_cleanup import cleanup_orphaned_labels
+
+        from autoskillit.core import LABEL_LIFECYCLE_REGISTRY, IssueLabelState
+
+        sidecar = tmp_path / "test_issues.jsonl"
+        sidecar.write_text(
+            json.dumps(
+                {
+                    "issue_url": "https://github.com/owner/repo/issues/1",
+                    "status": "completed",
+                    "ts": "2026-01-01T00:00:00Z",
+                }
+            )
+            + "\n"
+        )
+
+        swap_labels_mock = AsyncMock(return_value={"success": True})
+        github_client = AsyncMock()
+        github_client.swap_labels = swap_labels_mock
+
+        await cleanup_orphaned_labels(str(sidecar), github_client)
+
+        swap_labels_mock.assert_called_once()
+        call = swap_labels_mock.call_args
+        expected_remove = sorted(
+            s.value
+            for s in LABEL_LIFECYCLE_REGISTRY[IssueLabelState.FAIL].removes_on_entry
+            | {IssueLabelState.IN_PROGRESS}
+        )
+        assert sorted(call.kwargs["remove_labels"]) == expected_remove
+        assert call.kwargs["add_labels"] == [IssueLabelState.FAIL.value]

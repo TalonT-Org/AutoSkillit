@@ -33,6 +33,7 @@ Fleet campaign dispatch, state persistence, and sidecar tests.
 | `test_food_truck_prompt.py` | Tests for fleet/_prompts.py: _build_food_truck_prompt behavioral semantics |
 | `test_gate_state_persistence.py` | Tests for gate dispatch state persistence and campaign state writes |
 | `test_helpers_exports.py` | Tests that shared helpers are importable from tests.fleet._helpers |
+| `test_label_cleanup.py` | Tests for fleet._label_cleanup — finally block cleanup on CancelledError, RuntimeError, no-sidecar, no-client, multiple issues; direct unit tests for cleanup_orphaned_labels |
 | `test_liveness.py` | Liveness tests for Linux proc helpers |
 | `test_pack_enforcement.py` | Fleet per-recipe tool-surface enforcement tests |
 | `test_pack_enforcement_e2e.py` | Fleet per-recipe tool-surface e2e tests using a real MCP server subprocess |
@@ -41,6 +42,7 @@ Fleet campaign dispatch, state persistence, and sidecar tests.
 | `test_retry_failed_dispatch.py` | Tests for explicit retry of failed campaign dispatches via FAILURE → PENDING state transition |
 | `test_skip_when.py` | Unit tests for `evaluate_skip_when` — campaign/inputs ref resolution, expression validation, quote stripping |
 | `test_sidecar.py` | Sidecar tests |
+| `test_startup_label_recovery.py` | Tests for sweep_stale_dispatch_labels — dead dispatch label cleanup, alive dispatch skip, missing sidecar, multi-campaign |
 | `test_state.py` | Tests for fleet state module (Group J) |
 | `test_state_lock_contract.py` | Locking contract tests — AST scan for flock targets, flock acquisition per mutation, cross-caller concurrency |
 | `test_state_protection.py` | Tests for fleet.state.build_protected_campaign_ids (PROT_1–PROT_9) |

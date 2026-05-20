@@ -371,21 +371,22 @@ class TestClaudeResultParserMarkerDetection:
         assert result.success is True
 
 
-@pytest.mark.parametrize("subtype", list(CliSubtype))
-def test_cli_subtype_round_trip_through_parse_stdout(subtype: CliSubtype) -> None:
-    mock_result = ClaudeSessionResult(
-        subtype=subtype,
-        is_error=False,
-        result="done",
-        session_id="",
-        errors=[],
-    )
-    with patch(
-        "autoskillit.execution.backends.claude.parse_session_result",
-        return_value=mock_result,
-    ):
-        parser = ClaudeResultParser()
-        result = parser.parse_stdout('{"type": "result"}')
-        raw = dict(result.raw)
-        assert raw["subtype"] == subtype.value
-        assert CliSubtype.from_cli(raw["subtype"]) == subtype
+class TestCliSubtypeRoundTrip:
+    @pytest.mark.parametrize("subtype", list(CliSubtype))
+    def test_round_trip_through_parse_stdout(self, subtype: CliSubtype) -> None:
+        mock_result = ClaudeSessionResult(
+            subtype=subtype,
+            is_error=False,
+            result="done",
+            session_id="",
+            errors=[],
+        )
+        with patch(
+            "autoskillit.execution.backends.claude.parse_session_result",
+            return_value=mock_result,
+        ):
+            parser = ClaudeResultParser()
+            result = parser.parse_stdout('{"type": "result"}')
+            raw = dict(result.raw)
+            assert raw["subtype"] == subtype.value
+            assert CliSubtype.from_cli(raw["subtype"]) == subtype

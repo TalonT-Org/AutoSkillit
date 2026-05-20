@@ -1,6 +1,7 @@
 """Tests for configuration loading and resolution."""
 
 from dataclasses import fields as dc_fields
+from pathlib import Path
 
 import pytest
 import yaml
@@ -43,6 +44,16 @@ class TestDefaultConfig:
         cfg = AutomationConfig()
         assert cfg.model.default_model == "sonnet"
         assert cfg.model.model_override is None
+        assert cfg.model.provider == "anthropic"
+
+    def test_model_provider_custom(self):
+        """MOD_C4: CoreRunConfig accepts custom provider."""
+        from autoskillit.config import CoreRunConfig
+
+        cfg = CoreRunConfig(provider="openai")
+        assert cfg.provider == "openai"
+        assert cfg.default_model == "sonnet"
+        assert cfg.model_override is None
 
 
 class TestLoadConfig:
@@ -196,6 +207,17 @@ class TestLoadConfig:
         cfg = load_config(tmp_path)
         assert cfg.model.default_model == "sonnet"
         assert cfg.model.model_override is None
+        assert cfg.model.provider == "anthropic"
+
+    def test_yaml_loads_model_provider(self, tmp_path):
+        """MOD_C5: YAML model.provider loads into CoreRunConfig.provider."""
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        config_data = {"model": {"provider": "openai"}}
+        (config_dir / "config.yaml").write_text(yaml.dump(config_data))
+        cfg = load_config(tmp_path)
+        assert cfg.model.provider == "openai"
+        assert cfg.model.default_model == "sonnet"
 
     def test_partial_model_config(self, tmp_path):
         """MOD_C3: YAML key 'override' maps to Python field model_override;
@@ -207,6 +229,24 @@ class TestLoadConfig:
         cfg = load_config(tmp_path)
         assert cfg.model.model_override == "haiku"
         assert cfg.model.default_model == "sonnet"
+        assert cfg.model.provider == "anthropic"
+
+    def test_validate_layer_keys_accepts_model_provider(self):
+        """MOD_C6: validate_layer_keys does not reject model.provider."""
+        from autoskillit.config import validate_layer_keys
+
+        validate_layer_keys(
+            {"model": {"provider": "openai"}},
+            layer_path=Path("test"),
+            is_secrets_layer=False,
+        )
+
+    def test_model_provider_defaults_match_yaml(self, tmp_path):
+        """MOD_C7: CoreRunConfig.provider default matches defaults.yaml loaded value."""
+        from autoskillit.config import CoreRunConfig
+
+        cfg = load_config(tmp_path)
+        assert cfg.model.provider == CoreRunConfig().provider
 
     def test_yaml_loads_worktree_setup_config(self, tmp_path):
         """WS_C2: YAML with worktree_setup section populates WorktreeSetupConfig."""

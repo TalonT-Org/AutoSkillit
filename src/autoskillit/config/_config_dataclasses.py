@@ -129,6 +129,7 @@ class RunSkillConfig:
 class CoreRunConfig:
     default_model: str = "sonnet"
     model_override: str | None = None
+    provider: str = "anthropic"
 
     def __post_init__(self) -> None:
         if not self.default_model:

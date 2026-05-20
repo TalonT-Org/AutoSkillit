@@ -79,7 +79,7 @@ def test_fleet_prompt_bem_gate_uses_must_directive(fleet_prompt: str) -> None:
     parts = fleet_prompt.split("## MULTI-ISSUE")
     assert len(parts) >= 2, "Fleet prompt must contain ## MULTI-ISSUE heading"
     bem_section = parts[1].split("## DISPATCHER DISCIPLINE")[0]
-    assert "MUST" in bem_section.upper(), (
+    assert "MUST" in bem_section, (
         "BEM gate section must contain at least one MUST directive — "
         "soft imperative language is insufficient for LLM compliance"
     )

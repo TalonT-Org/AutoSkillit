@@ -101,7 +101,7 @@ def main() -> None:
         if hook_data.get("recipe_allows_pr_create"):
             sys.exit(0)
     except (OSError, json.JSONDecodeError, AttributeError, TypeError) as exc:
-        print(f"pr_create_guard: config read error: {exc}", file=sys.stderr)
+        sys.stderr.write(f"pr_create_guard: config read error: {exc}\n")
 
     # Kitchen is open and command matches: deny
     payload = json.dumps(

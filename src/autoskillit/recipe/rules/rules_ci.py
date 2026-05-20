@@ -508,13 +508,11 @@ def _check_ci_wait_requires_applicability_guard(ctx: ValidationContext) -> list[
         if not isinstance(event_val, str) or not _PRIMARY_CI_EVENT_RE.search(event_val):
             continue
         has_guard = False
-        visited: set[str] = set()
-        queue: deque[str] = deque(ctx.predecessors.get(step_name, set()))
+        initial_preds = ctx.predecessors.get(step_name, set())
+        visited: set[str] = set(initial_preds)
+        queue: deque[str] = deque(initial_preds)
         while queue and not has_guard:
             node = queue.popleft()
-            if node in visited:
-                continue
-            visited.add(node)
             pred_step = ctx.recipe.steps.get(node)
             if pred_step is None:
                 continue

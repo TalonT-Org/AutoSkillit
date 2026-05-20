@@ -705,6 +705,12 @@ def _check_enqueue_missing_ci_gate(ctx: ValidationContext) -> list[RuleFinding]:
     ci_gate_steps: set[str] = {
         name for name, step in ctx.recipe.steps.items() if step.tool == "wait_for_ci"
     }
+    for name, step in ctx.recipe.steps.items():
+        if getattr(step, "action", None) == "route" and step.on_result:
+            if step.on_result.conditions and any(
+                c.when and _CI_APPLICABLE_RE.search(c.when) for c in step.on_result.conditions
+            ):
+                ci_gate_steps.add(name)
 
     # Build a direct routing graph without skip_when_false bypass edges.
     # Bypass edges allow CI gates to be sidestepped in the compiled step_graph,

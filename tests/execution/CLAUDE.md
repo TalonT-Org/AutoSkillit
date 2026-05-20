@@ -105,3 +105,15 @@ Subprocess integration, headless session, process lifecycle, and session result 
 ## Architecture Notes
 
 `conftest.py` provides shared fixtures for the execution test suite. The headless tests are split across multiple files by concern (dispatch, synthesis, path validation, env injection, ordering) following the P1-F01 audit fix.
+
+### `backends/`
+
+| File | Purpose |
+|------|---------|
+| `test_claude_backend.py` | Equivalence tests: ClaudeCodeBackend cmd builders vs commands.py forwarding shims |
+| `test_claude_code_backend.py` | Structural tests for ClaudeCodeBackend |
+| `test_claude_env_policy.py` | Tests for ClaudeEnvPolicy |
+| `test_claude_result_parser.py` | Tests for ClaudeResultParser |
+| `test_claude_session_locator.py` | Tests for ClaudeSessionLocator |
+| `test_claude_stream_parser.py` | Tests for ClaudeStreamParser |
+| `test_backend_registry.py` | Tests for backend registry |

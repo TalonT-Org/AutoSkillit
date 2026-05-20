@@ -430,7 +430,7 @@ class ProvidersConfig:
     """
 
     default_provider: str | None = None
-    profiles: dict[str, dict[str, str]] = field(default_factory=dict)
+    profiles: dict[str, dict[str, str | None]] = field(default_factory=dict)
     step_overrides: dict[str, str] = field(default_factory=dict)
     recipe_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
     provider_retry_limit: int = 2
@@ -440,9 +440,10 @@ class ProvidersConfig:
             raise ValueError(f"provider_retry_limit must be >= 1, got {self.provider_retry_limit}")
         for name, profile in self.profiles.items():
             for k, v in profile.items():
-                if not isinstance(v, str):
+                if v is not None and not isinstance(v, str):
                     raise ValueError(
-                        f"profiles[{name!r}][{k!r}] must be a string, got {type(v).__name__!r}"
+                        f"profiles[{name!r}][{k!r}] must be a string or null, "
+                        f"got {type(v).__name__!r}"
                     )
         for recipe, overrides in self.recipe_overrides.items():
             if not isinstance(overrides, dict):
@@ -461,7 +462,7 @@ class ProvidersConfig:
     def resolved_profiles(self) -> dict[str, ProviderProfileDef]:
         result: dict[str, ProviderProfileDef] = {}
         for name, raw_dict in self.profiles.items():
-            copy = dict(raw_dict)
+            copy = {k: v for k, v in raw_dict.items() if v is not None}
             base_url = copy.pop("base_url", None)
             timeout_str = copy.pop("timeout_seconds", None)
             api_key_env = copy.pop("api_key_env", None)

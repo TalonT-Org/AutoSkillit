@@ -207,7 +207,9 @@ def cook(
     }
     if profile is not None:
         _cook_env_extras["AUTOSKILLIT_PROVIDER_PROFILE"] = profile
-        _cook_env_extras.update(config.providers.profiles[profile])
+        _cook_env_extras.update(
+            {k: v for k, v in config.providers.profiles[profile].items() if v is not None}
+        )
 
     current_resume_spec = resume_spec
     _current_first_run = _first_run

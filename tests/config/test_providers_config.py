@@ -46,7 +46,13 @@ class TestProvidersConfig:
 
         cfg = load_config(tmp_path)
         assert cfg.providers.default_provider is None
-        assert cfg.providers.profiles == {}
+        assert "anthropic" in cfg.providers.profiles
+        assert cfg.providers.profiles["anthropic"] == {
+            "base_url": None,
+            "timeout_seconds": None,
+            "api_key_env": None,
+            "context_window": None,
+        }
         assert cfg.providers.step_overrides == {}
         assert cfg.providers.recipe_overrides == {}
         assert cfg.providers.provider_retry_limit == 2
@@ -97,7 +103,7 @@ class TestProvidersConfig:
     def test_providers_config_profiles_non_string_value_raises(self) -> None:
         from autoskillit.config.settings import ProvidersConfig
 
-        with pytest.raises(ValueError, match=r"profiles\[.+\]\[.+\] must be a string"):
+        with pytest.raises(ValueError, match=r"profiles\[.+\]\[.+\] must be a string or null"):
             ProvidersConfig(profiles={"my_profile": {"model": 42}})  # type: ignore[arg-type]
 
     def test_recipe_overrides_non_string_value_raises(self) -> None:
@@ -111,6 +117,13 @@ class TestProvidersConfig:
 
         with pytest.raises(ValueError, match=r"recipe_overrides\[.+\] must be a dict"):
             ProvidersConfig(recipe_overrides={"remediation": "not_a_dict"})  # type: ignore[arg-type]
+
+    def test_providers_config_profiles_none_value_accepted(self) -> None:
+        from autoskillit.config.settings import ProvidersConfig
+
+        cfg = ProvidersConfig(profiles={"sentinel": {"base_url": None, "api_key_env": None}})  # type: ignore[arg-type]
+        assert cfg.profiles["sentinel"]["base_url"] is None
+        assert cfg.profiles["sentinel"]["api_key_env"] is None
 
 
 class TestProvidersConfigYaml:
@@ -146,9 +159,12 @@ class TestProvidersConfigYaml:
         }
         (config_dir / "config.yaml").write_text(yaml.dump(config_data))
         cfg = load_config(tmp_path)
-        assert cfg.providers.profiles == {
-            "fast": {"model": "gpt-4o-mini", "api_base": "https://api.openai.com"},
+        # Defaults (anthropic sentinel) are merged with user-provided profiles
+        assert cfg.providers.profiles["fast"] == {
+            "model": "gpt-4o-mini",
+            "api_base": "https://api.openai.com",
         }
+        assert "anthropic" in cfg.providers.profiles
 
     def test_load_config_provider_retry_limit_override(self, tmp_path) -> None:
         from autoskillit.config import load_config
@@ -170,6 +186,20 @@ class TestProvidersConfigYaml:
         (config_dir / "config.yaml").write_text(yaml.dump(config_data))
         cfg = load_config(tmp_path)
         assert cfg.providers.recipe_overrides == {"remediation": {"implement": "anthropic"}}
+
+    def test_defaults_yaml_anthropic_sentinel_profile(self) -> None:
+        from autoskillit.core.io import load_yaml
+        from autoskillit.core.paths import pkg_root
+
+        defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
+        profile = defaults["providers"]["profiles"]["anthropic"]
+        assert set(profile.keys()) == {
+            "base_url",
+            "timeout_seconds",
+            "api_key_env",
+            "context_window",
+        }
+        assert all(v is None for v in profile.values())
 
     def test_load_config_recipe_overrides_merges_across_layers(
         self, tmp_path, monkeypatch
@@ -282,3 +312,27 @@ class TestResolvedProfiles:
         assert result["fast"].raw_env == {"model": "gpt-4o-mini"}
         assert result["large"].context_window == 200000
         assert result["large"].raw_env == {"model": "gpt-4o"}
+
+    def test_resolved_profiles_null_sentinel(self) -> None:
+        from autoskillit.config._config_dataclasses import ProviderProfileDef
+        from autoskillit.config.settings import ProvidersConfig
+
+        cfg = ProvidersConfig(
+            profiles={
+                "anthropic": {
+                    "base_url": None,
+                    "timeout_seconds": None,
+                    "api_key_env": None,
+                    "context_window": None,
+                }
+            }  # type: ignore[arg-type]
+        )
+        result = cfg.resolved_profiles
+        assert "anthropic" in result
+        profile = result["anthropic"]
+        assert isinstance(profile, ProviderProfileDef)
+        assert profile.base_url is None
+        assert profile.timeout_seconds is None
+        assert profile.api_key_env is None
+        assert profile.context_window is None
+        assert profile.raw_env == {}

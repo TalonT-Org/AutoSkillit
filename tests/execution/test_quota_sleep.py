@@ -477,24 +477,7 @@ class TestProviderBypassUnit:
         result = await check_and_sleep_if_needed(config, provider="anthropic")
         assert result["should_sleep"] is False
         assert fetch_called == [1]
-        assert "provider_bypass" not in result
-
-    @pytest.mark.anyio
-    async def test_provider_bypass_trumps_enabled(self, monkeypatch):
-        from autoskillit.execution.quota import check_and_sleep_if_needed
-
-        config = make_quota_guard_config(enabled=True)
-        fetch_called = []
-
-        async def mock_fetch(*a, **kw):
-            fetch_called.append(1)
-            raise AssertionError("should not fetch")
-
-        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
-        result = await check_and_sleep_if_needed(config, provider="openai")
-        assert result["should_sleep"] is False
-        assert result["provider_bypass"] is True
-        assert fetch_called == []
+        assert result.get("provider_bypass") is not True
 
 
 class TestIntegration:

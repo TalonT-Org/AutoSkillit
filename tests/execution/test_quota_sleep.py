@@ -641,3 +641,91 @@ class TestFetchQuotaNovelWindowWarning:
         assert not novel_warnings, (
             f"Unexpected novel-window warnings for known windows: {novel_warnings}"
         )
+
+
+class TestProviderBypass:
+    """Integration tests: provider bypass with live cache and anthropic full-path exercise."""
+
+    @pytest.mark.anyio
+    async def test_non_anthropic_provider_bypasses_above_threshold_cache(
+        self, monkeypatch, tmp_path
+    ):
+        from autoskillit.execution.quota import (
+            QuotaFetchResult,
+            QuotaStatus,
+            QuotaWindowEntry,
+            _write_cache,
+            check_and_sleep_if_needed,
+        )
+
+        resets_at = datetime.now(UTC) + timedelta(hours=2)
+        cache_path = tmp_path / "cache.json"
+        _write_cache(
+            str(cache_path),
+            QuotaFetchResult(
+                windows={"five_hour": QuotaWindowEntry(utilization=95.0, resets_at=resets_at)},
+                binding=QuotaStatus(
+                    utilization=95.0,
+                    resets_at=resets_at,
+                    window_name="five_hour",
+                    should_block=True,
+                    effective_threshold=85.0,
+                ),
+            ),
+        )
+
+        config = make_quota_guard_config(
+            enabled=True,
+            credentials_path=str(tmp_path / ".credentials.json"),
+            cache_path=str(cache_path),
+        )
+        fetch_called = []
+
+        async def mock_fetch(*a, **kw):
+            fetch_called.append(1)
+            raise AssertionError("should not fetch")
+
+        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
+        result = await check_and_sleep_if_needed(config, provider="minimax")
+        assert result["should_sleep"] is False
+        assert result.get("provider_bypass") is True
+        assert fetch_called == []
+
+    @pytest.mark.anyio
+    async def test_anthropic_provider_default_exercises_full_blocking_path(
+        self, monkeypatch, tmp_path
+    ):
+        from autoskillit.execution.quota import (
+            QuotaFetchResult,
+            QuotaStatus,
+            QuotaWindowEntry,
+            check_and_sleep_if_needed,
+        )
+
+        resets_at = datetime.now(UTC) + timedelta(hours=2)
+        config = make_quota_guard_config(
+            enabled=True,
+            credentials_path=str(tmp_path / ".credentials.json"),
+            cache_path=str(tmp_path / "cache.json"),
+        )
+        fetch_called = []
+
+        async def mock_fetch(path, **kwargs):
+            fetch_called.append(1)
+            return QuotaFetchResult(
+                windows={"five_hour": QuotaWindowEntry(utilization=95.0, resets_at=resets_at)},
+                binding=QuotaStatus(
+                    utilization=95.0,
+                    resets_at=resets_at,
+                    window_name="five_hour",
+                    should_block=True,
+                    effective_threshold=85.0,
+                ),
+            )
+
+        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
+        result = await check_and_sleep_if_needed(config)
+        assert result["should_sleep"] is True
+        assert result["sleep_seconds"] > 0
+        # 2 calls: initial fetch (cache miss) + re-fetch for accurate resets_at
+        assert len(fetch_called) == 2

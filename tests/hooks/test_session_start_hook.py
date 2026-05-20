@@ -51,6 +51,7 @@ def test_session_start_hook_fires_for_interactive_sessions(tmp_path: Path) -> No
     env["AUTOSKILLIT_STATE_DIR"] = str(tmp_path / "empty_state")
     rc, out = _run(payload, env=env)
     assert rc == 0
+    assert out.strip(), "hook produced no output for interactive session"
     data = json.loads(out.strip())
     assert "additionalContext" in data
     assert "open-kitchen" in data["additionalContext"]

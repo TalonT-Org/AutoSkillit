@@ -222,7 +222,6 @@ def test_emit_fallback_map_no_urls(tmp_path):
         emit_fallback_map(issue_urls="", temp_dir=str(tmp_path))
 
 
-# T3
 @pytest.mark.medium
 def test_main_repo_guard_removes_embedded_worktree(tmp_path):
     """main_repo_guard detects and removes a linked worktree embedded inside the clone."""
@@ -262,7 +261,6 @@ def test_main_repo_guard_removes_embedded_worktree(tmp_path):
     )
 
 
-# T4
 @pytest.mark.medium
 def test_main_repo_guard_removes_multiple_embedded_worktrees(tmp_path):
     """main_repo_guard removes all embedded linked worktrees before merging."""
@@ -303,7 +301,7 @@ def test_main_repo_guard_removes_multiple_embedded_worktrees(tmp_path):
     )
 
 
-# T5
+@pytest.mark.skipif(os.getuid() == 0, reason="chmod restrictions ignored when running as root")
 @pytest.mark.medium
 def test_main_repo_guard_post_clean_verify_catches_persistent_dirt(tmp_path):
     """When neither stash nor force-clean can succeed, main_repo_guard returns failed."""
@@ -348,7 +346,6 @@ def test_main_repo_guard_post_clean_verify_catches_persistent_dirt(tmp_path):
         git_dir.chmod(0o755)
 
 
-# T6
 @pytest.mark.medium
 def test_main_repo_guard_post_clean_verify_on_stash_success(tmp_path):
     """When stash succeeds and post-clean verify confirms clean, cleaned=true is returned."""

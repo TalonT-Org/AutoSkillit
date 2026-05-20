@@ -582,7 +582,14 @@ async def disable_quota_guard() -> str:
             )
         overlay_path = _hook_config_overlay_path(ctx.project_dir)
         overlay_path.parent.mkdir(parents=True, exist_ok=True)
-        atomic_write(overlay_path, json.dumps({"quota_guard": {"disabled": True}}))
+        existing = {}
+        if overlay_path.exists():
+            try:
+                existing = json.loads(overlay_path.read_text())
+            except (json.JSONDecodeError, OSError):
+                pass
+        existing["quota_guard"] = {"disabled": True}
+        atomic_write(overlay_path, json.dumps(existing))
         return json.dumps(
             {
                 "success": True,

@@ -145,10 +145,17 @@ _LOAD_CACHE_LOCK = threading.Lock()
 # Process staleness guard
 # ---------------------------------------------------------------------------
 
-_PROCESS_START_PKG_MTIME: int = _path_mtime_ns(pkg_root())
+_PROCESS_START_PKG_MTIME: int | None = None
 _staleness_last_check: float = 0.0
 _staleness_is_stale: bool = False
 _STALENESS_TTL: float = 30.0
+
+
+def _get_process_start_mtime() -> int:
+    global _PROCESS_START_PKG_MTIME  # noqa: PLW0603
+    if _PROCESS_START_PKG_MTIME is None:
+        _PROCESS_START_PKG_MTIME = _path_mtime_ns(pkg_root())
+    return _PROCESS_START_PKG_MTIME
 
 
 def _check_process_staleness() -> bool:
@@ -158,7 +165,7 @@ def _check_process_staleness() -> bool:
     if now - _staleness_last_check < _STALENESS_TTL:
         return _staleness_is_stale
     _staleness_last_check = now
-    _staleness_is_stale = _path_mtime_ns(pkg_root()) != _PROCESS_START_PKG_MTIME
+    _staleness_is_stale = _path_mtime_ns(pkg_root()) != _get_process_start_mtime()
     return _staleness_is_stale
 
 

@@ -89,6 +89,8 @@ def semantic_rule(
         fn: Callable[[ValidationContext], list[RuleFinding]],
     ) -> Callable[[ValidationContext], list[RuleFinding]]:
         if _REGISTRY_FINALIZED:
+            if any(r.name == name for r in _RULE_REGISTRY):
+                return fn
             raise RuntimeError(f"Cannot register rule {name!r} after registry finalization")
         _RULE_REGISTRY.append(
             RuleDef(name=name, description=description, severity=severity, check=fn)
@@ -114,6 +116,8 @@ def block_rule(
         fn: Callable[[BlockContext], list[RuleFinding]],
     ) -> Callable[[BlockContext], list[RuleFinding]]:
         if _REGISTRY_FINALIZED:
+            if any(r.name == name for r in _BLOCK_RULE_REGISTRY):
+                return fn
             raise RuntimeError(f"Cannot register block rule {name!r} after registry finalization")
         _BLOCK_RULE_REGISTRY.append(
             BlockRuleDef(name=name, description=description, severity=severity, check=fn)

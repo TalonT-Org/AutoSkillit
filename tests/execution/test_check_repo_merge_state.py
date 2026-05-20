@@ -363,3 +363,47 @@ async def test_push_trigger_branches_ignore_allows_feature_branch(httpx_mock):
         token=None,
     )
     assert result["ci_event"] == "push"
+
+
+# ---------------------------------------------------------------------------
+# ci_applicable field tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_ci_applicable_true_when_push_trigger(httpx_mock):
+    """ci_applicable=True when push trigger matches the branch."""
+    workflow_text = "on:\n  push:\n    branches: [main]\n"
+    httpx_mock.add_response(
+        url="https://api.github.com/graphql",
+        json=_make_repo_state_response([("tests.yml", workflow_text)]),
+    )
+    result = await fetch_repo_merge_state(owner="o", repo="r", branch="main", token=None)
+    assert result["ci_applicable"] is True
+    assert result["ci_event"] == "push"
+
+
+@pytest.mark.anyio
+async def test_ci_applicable_true_when_merge_group_only(httpx_mock):
+    """ci_applicable=True when merge_group trigger exists but push doesn't match."""
+    workflow_text = "on:\n  merge_group:\n"
+    httpx_mock.add_response(
+        url="https://api.github.com/graphql",
+        json=_make_repo_state_response([("tests.yml", workflow_text)]),
+    )
+    result = await fetch_repo_merge_state(owner="o", repo="r", branch="feature/x", token=None)
+    assert result["ci_applicable"] is True
+    assert result["ci_event"] is None
+
+
+@pytest.mark.anyio
+async def test_ci_applicable_false_when_no_triggers(httpx_mock):
+    """ci_applicable=False when no push or merge_group triggers exist."""
+    workflow_text = "on:\n  schedule:\n    - cron: '0 0 * * *'\n"
+    httpx_mock.add_response(
+        url="https://api.github.com/graphql",
+        json=_make_repo_state_response([("tests.yml", workflow_text)]),
+    )
+    result = await fetch_repo_merge_state(owner="o", repo="r", branch="main", token=None)
+    assert result["ci_applicable"] is False
+    assert result["ci_event"] is None

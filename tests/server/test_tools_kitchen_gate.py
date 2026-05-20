@@ -857,3 +857,74 @@ def test_get_recipe_uses_project_dir(tmp_path, monkeypatch):
     assert "test-get-recipe-project-dir" in result, (
         f"get_recipe did not return the recipe from project_dir. Result: {result}"
     )
+
+
+# ---------------------------------------------------------------------------
+# _update_hook_config_with_recipe — recipe authorization in hook config
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_update_hook_config_with_recipe_includes_recipe_allows_pr_create(
+    tmp_path, monkeypatch
+):
+    """_update_hook_config_with_recipe adds recipe_allows_pr_create for PR-creating recipes."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.project_dir = tmp_path
+    mock_ctx.recipe_name = "merge-prs"
+    mock_ctx.kitchen_id = "test-kitchen-id"
+    mock_ctx.config.quota_guard.cache_max_age = 300
+    mock_ctx.config.quota_guard.cache_path = "/p/q.json"
+    mock_ctx.config.quota_guard.buffer_seconds = 60
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                from autoskillit.server.tools.tools_kitchen import (
+                    _open_kitchen_handler,
+                    _update_hook_config_with_recipe,
+                )
+
+                await _open_kitchen_handler()
+                _update_hook_config_with_recipe()
+
+    hook_cfg = tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS)
+    data = json.loads(hook_cfg.read_text())
+    assert data["recipe_allows_pr_create"] is True
+    assert "quota_guard" in data
+    assert "kitchen_id" in data
+
+
+@pytest.mark.anyio
+async def test_update_hook_config_with_recipe_excludes_pr_create_for_non_pr_recipes(
+    tmp_path, monkeypatch
+):
+    """_update_hook_config_with_recipe does NOT set recipe_allows_pr_create for non-PR recipes."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.project_dir = tmp_path
+    mock_ctx.recipe_name = "smoke-test"
+    mock_ctx.kitchen_id = "test-kitchen-id"
+    mock_ctx.config.quota_guard.cache_max_age = 300
+    mock_ctx.config.quota_guard.cache_path = "/p/q.json"
+    mock_ctx.config.quota_guard.buffer_seconds = 60
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                from autoskillit.server.tools.tools_kitchen import (
+                    _open_kitchen_handler,
+                    _update_hook_config_with_recipe,
+                )
+
+                await _open_kitchen_handler()
+                _update_hook_config_with_recipe()
+
+    hook_cfg = tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS)
+    data = json.loads(hook_cfg.read_text())
+    assert "recipe_allows_pr_create" not in data

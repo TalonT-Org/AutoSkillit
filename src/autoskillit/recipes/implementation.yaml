@@ -709,7 +709,8 @@ steps:
       step_name: "check_repo_ci_event"
     capture:
       ci_event: "${{ result.ci_event }}"
-    on_success: check_pr_state
+      ci_applicable: "${{ result.ci_applicable }}"
+    on_success: route_ci_applicable
     on_failure: ci_watch
     skip_when_false: "inputs.open_pr"
     note: >
@@ -717,6 +718,18 @@ steps:
       Uses context.merge_target (feature branch) so push.branches filter
       is evaluated against the actual branch being pushed, not the base branch.
       Non-blocking: on_failure routes to ci_watch with ci_event=null (match-any).
+
+  route_ci_applicable:
+    action: route
+    on_result:
+      - when: "${{ context.ci_applicable }} == false"
+        route: check_repo_merge_state
+      - route: check_pr_state
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Short-circuits CI wait when no workflow trigger matches the feature branch.
+      ci_applicable=false means neither push nor merge_group triggers apply,
+      so wait_for_ci would exhaust its timeout budget with zero CI runs.
 
   check_pr_state:
     tool: check_pr_mergeable
@@ -798,6 +811,7 @@ steps:
       step_name: "handle_no_ci_runs"
     capture:
       ci_event: "${{ result.ci_event }}"
+      ci_applicable: "${{ result.ci_applicable }}"
     on_success: check_ci_loop
     on_failure: release_issue_failure
     retries: 1
@@ -938,6 +952,7 @@ steps:
       merge_group_trigger: "${{ result.merge_group_trigger }}"
       auto_merge_available: "${{ result.auto_merge_available }}"
       ci_event: "${{ result.ci_event }}"
+      ci_applicable: "${{ result.ci_applicable }}"
     on_success: route_queue_mode
     on_failure: immediate_merge
     skip_when_false: "inputs.open_pr"

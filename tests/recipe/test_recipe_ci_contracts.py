@@ -15,6 +15,13 @@ import yaml
 
 from autoskillit.recipe.io import builtin_recipes_dir
 
+from .conftest import (
+    PRIMARY_CI_EVENT_KEYS,
+    build_reverse_graph,
+    has_wait_for_ci_predecessor,
+    reaches_wait_for_ci,
+)
+
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 _TEMPLATE_RE = re.compile(r"\$\{\{\s*(.+?)\s*\}\}")
@@ -120,3 +127,46 @@ def test_wait_for_ci_steps_have_remote_url(recipe_data) -> None:
             missing.append(step_name)
 
     assert not missing, f"{recipe_name}: wait_for_ci steps missing remote_url: {missing}"
+
+
+def test_ci_event_capture_has_ci_applicable_guard(recipe_data) -> None:
+    """Steps capturing a primary ci_event from check_repo_merge_state must also
+    capture the corresponding ci_applicable field when they route to wait_for_ci.
+
+    Only checks ci_event and conflict_ci_event — secondary variants like
+    pre_enqueue_ci_event and batch_ci_event have independent derivation chains.
+    Excludes re-derivation steps downstream of a wait_for_ci step and
+    diagnostic-only captures that don't feed into a CI wait chain.
+    """
+    recipe_name, data = recipe_data
+    steps = data.get("steps") or {}
+    reverse_graph = build_reverse_graph(steps)
+
+    ci_event_capture_steps = []
+    for step_name, step in steps.items():
+        tool = step.get("tool", "")
+        if "check_repo_merge_state" not in tool:
+            continue
+        capture = step.get("capture") or {}
+        if not (capture.keys() & PRIMARY_CI_EVENT_KEYS):
+            continue
+        if has_wait_for_ci_predecessor(steps, step_name, reverse_graph):
+            continue
+        if not reaches_wait_for_ci(steps, step_name):
+            continue
+        ci_event_capture_steps.append(step_name)
+
+    if not ci_event_capture_steps:
+        pytest.skip(f"{recipe_name}: no check_repo_merge_state steps feeding wait_for_ci")
+
+    violations = []
+    for step_name in ci_event_capture_steps:
+        step = steps[step_name]
+        capture = step.get("capture") or {}
+        has_applicable_capture = any("ci_applicable" in k for k in capture)
+        if not has_applicable_capture:
+            violations.append(f"{step_name}: captures ci_event but not ci_applicable")
+
+    assert not violations, f"{recipe_name}: ci_event capture without ci_applicable:\n" + "\n".join(
+        f"  - {v}" for v in violations
+    )

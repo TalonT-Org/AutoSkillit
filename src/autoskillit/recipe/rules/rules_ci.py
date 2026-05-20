@@ -484,6 +484,69 @@ def _check_ci_event_literal_merge_group(ctx: ValidationContext) -> list[RuleFind
     return findings
 
 
+_CI_APPLICABLE_RE = re.compile(r"ci_applicable")
+_PRIMARY_CI_EVENT_RE = re.compile(r"context\.(conflict_)?ci_event\s*\}\}")
+
+
+@semantic_rule(
+    name="ci-wait-requires-applicability-guard",
+    description=(
+        "A wait_for_ci step whose event comes from check_repo_merge_state must have "
+        "an upstream action:route step that checks ci_applicable to prevent timeout "
+        "waste when no CI workflows apply."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_ci_wait_requires_applicability_guard(ctx: ValidationContext) -> list[RuleFinding]:
+    from collections import deque
+
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "wait_for_ci":
+            continue
+        event_val = (step.with_args or {}).get("event", "")
+        if not isinstance(event_val, str) or not _PRIMARY_CI_EVENT_RE.search(event_val):
+            continue
+        has_guard = False
+        initial_preds = ctx.predecessors.get(step_name, set())
+        visited: set[str] = set(initial_preds)
+        queue: deque[str] = deque(initial_preds)
+        while queue and not has_guard:
+            node = queue.popleft()
+            pred_step = ctx.recipe.steps.get(node)
+            if pred_step is None:
+                continue
+            if pred_step.tool == "wait_for_ci":
+                has_guard = True
+                break
+            if getattr(pred_step, "action", None) == "route":
+                if pred_step.on_result and pred_step.on_result.conditions:
+                    for cond in pred_step.on_result.conditions:
+                        if cond.when and _CI_APPLICABLE_RE.search(cond.when):
+                            has_guard = True
+                            break
+            if not has_guard:
+                new_preds = ctx.predecessors.get(node, set()) - visited
+                visited.update(new_preds)
+                queue.extend(new_preds)
+        if not has_guard:
+            findings.append(
+                RuleFinding(
+                    rule="ci-wait-requires-applicability-guard",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' calls wait_for_ci with a ci_event from "
+                        f"check_repo_merge_state but has no upstream action:route step "
+                        f"that checks ci_applicable. When ci_applicable=false, "
+                        f"wait_for_ci will exhaust its timeout budget polling for CI runs "
+                        f"that will never appear."
+                    ),
+                )
+            )
+    return findings
+
+
 _CI_TIMEOUT_MINIMUM = 600
 
 
@@ -642,6 +705,12 @@ def _check_enqueue_missing_ci_gate(ctx: ValidationContext) -> list[RuleFinding]:
     ci_gate_steps: set[str] = {
         name for name, step in ctx.recipe.steps.items() if step.tool == "wait_for_ci"
     }
+    for name, step in ctx.recipe.steps.items():
+        if getattr(step, "action", None) == "route" and step.on_result:
+            if step.on_result.conditions and any(
+                c.when and _CI_APPLICABLE_RE.search(c.when) for c in step.on_result.conditions
+            ):
+                ci_gate_steps.add(name)
 
     # Build a direct routing graph without skip_when_false bypass edges.
     # Bypass edges allow CI gates to be sidestepped in the compiled step_graph,

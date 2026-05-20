@@ -39,6 +39,10 @@ from autoskillit.server._notify import track_response_size
 
 logger = get_logger(__name__)
 
+_PR_CREATE_RECIPES: frozenset[str] = frozenset(
+    {"merge-prs", "implementation", "implementation-groups", "remediation"}
+)
+
 
 def _kitchen_failure_envelope(
     exc: BaseException,
@@ -112,6 +116,25 @@ def _write_hook_config() -> None:
         atomic_write(hook_cfg_path, json.dumps(payload))
     except OSError:
         logger.warning("hook_config_write_failed", path=str(hook_cfg_path))
+
+
+def _update_hook_config_with_recipe() -> None:
+    """Enrich .hook_config.json with recipe-level authorization after recipe loading."""
+    from autoskillit.server import _get_ctx, logger
+
+    ctx = _get_ctx()
+    hook_cfg_path = _hook_config_path(ctx.project_dir)
+    try:
+        payload = json.loads(hook_cfg_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        logger.warning("hook_config_recipe_update_read_failed", path=str(hook_cfg_path))
+        return
+    if ctx.recipe_name in _PR_CREATE_RECIPES:
+        payload["recipe_allows_pr_create"] = True
+    try:
+        atomic_write(hook_cfg_path, json.dumps(payload))
+    except OSError:
+        logger.warning("hook_config_recipe_update_write_failed", path=str(hook_cfg_path))
 
 
 async def _open_kitchen_handler() -> str | None:
@@ -393,6 +416,13 @@ async def open_kitchen(
             tool_ctx.recipe_content_hash = result.get("content_hash", "")
             tool_ctx.recipe_composite_hash = result.get("composite_hash", "")
             tool_ctx.recipe_version = result.get("recipe_version") or ""
+
+            try:
+                _update_hook_config_with_recipe()
+            except Exception:
+                logger.warning(
+                    "open_kitchen_failure", stage="update_hook_config_recipe", exc_info=True
+                )
 
             composite = result.get("composite_hash", "")
             from autoskillit.server._state import _check_rerun  # noqa: PLC0415

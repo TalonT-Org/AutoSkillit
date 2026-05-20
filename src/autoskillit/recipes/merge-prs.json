@@ -89,7 +89,7 @@
       },
       "on_success": "check_integration_exists",
       "on_failure": "check_integration_exists",
-      "note": "Detects whether the repository's CI triggers on push or merge_group events for the base branch. Each downstream wait_for_ci step re-derives ci_event for its own watched branch via a dedicated derive_*_ci_event step. The global ci_event captured here is used only by diagnose-ci skill invocations. Routes to check_integration_exists regardless of outcome — non-blocking gate: ci_event defaults to null (match-any) on failure.\n"
+      "note": "Detects whether the repository's CI triggers on push or merge_group events for the base branch. Each downstream wait_for_ci step re-derives ci_event for its own watched branch via a dedicated derive_*_ci_event step. The global ci_event captured here is used by diagnostic skill invocations. ci_applicable is captured per-branch by derive_conflict_ci_event instead. Routes to check_integration_exists regardless of outcome — non-blocking gate: ci_event defaults to null (match-any) on failure.\n"
     },
     "check_integration_exists": {
       "tool": "run_cmd",
@@ -957,11 +957,50 @@
         "step_name": "derive_conflict_ci_event"
       },
       "capture": {
-        "conflict_ci_event": "${{ result.ci_event }}"
+        "conflict_ci_event": "${{ result.ci_event }}",
+        "conflict_ci_applicable": "${{ result.ci_applicable }}"
       },
-      "on_success": "wait_for_conflict_ci",
-      "on_failure": "wait_for_conflict_ci",
-      "note": "Re-derives ci_event for the ACTUAL conflict resolution branch, not inputs.base_branch. The original check_repo_ci_event evaluates CI triggers against main, but conflict PRs target pr-batch/* branches where different CI rules may apply. Non-blocking: on_failure routes to wait_for_conflict_ci with conflict_ci_event=null (match-any fallback).\n"
+      "on_success": "route_conflict_ci",
+      "on_failure": "route_conflict_ci",
+      "note": "Re-derives ci_event for the ACTUAL conflict resolution branch, not inputs.base_branch. The original check_repo_ci_event evaluates CI triggers against main, but conflict PRs target pr-batch/* branches where different CI rules may apply. Non-blocking: on_failure routes to route_conflict_ci with conflict_ci_event=null (match-any fallback).\n"
+    },
+    "route_conflict_ci": {
+      "action": "route",
+      "on_result": [
+        {
+          "when": "${{ context.conflict_ci_applicable }} == false",
+          "route": "guard_ci_skip_conflict"
+        },
+        {
+          "route": "wait_for_conflict_ci"
+        }
+      ],
+      "note": "Short-circuits CI wait when no workflow trigger matches the conflict resolution branch. ci_applicable=false means neither push nor merge_group triggers apply, so wait_for_ci would exhaust its timeout budget with zero CI runs.\n"
+    },
+    "guard_ci_skip_conflict": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.smoke_utils.check_loop_iteration",
+        "current_iteration": "${{ context.ci_skip_conflict_count }}",
+        "max_iterations": "50"
+      },
+      "capture": {
+        "ci_skip_conflict_count": "${{ result.next_iteration }}"
+      },
+      "on_result": [
+        {
+          "when": "${{ result.max_exceeded }} == true",
+          "route": "register_clone_failure"
+        },
+        {
+          "route": "merge_conflict_pr"
+        }
+      ],
+      "on_failure": "register_clone_failure",
+      "optional_context_refs": [
+        "ci_skip_conflict_count"
+      ],
+      "note": "Structural bound for the ci_applicable=false shortcut path. Uses check_loop_iteration to satisfy the unbounded-cycle semantic rule — the on_result exit to register_clone_failure provides a structural termination guarantee. Cap of 50 matches check_pr_merge_loop budget; in practice never exceeded because the PR merge loop terminates when all PRs are processed.\n"
     },
     "wait_for_conflict_ci": {
       "tool": "wait_for_ci",
@@ -1027,7 +1066,8 @@
         "step_name": "handle_conflict_no_runs"
       },
       "capture": {
-        "conflict_ci_event": "${{ result.ci_event }}"
+        "conflict_ci_event": "${{ result.ci_event }}",
+        "conflict_ci_applicable": "${{ result.ci_applicable }}"
       },
       "on_success": "merge_conflict_pr",
       "on_failure": "register_clone_failure",

@@ -168,8 +168,13 @@ async def _open_kitchen_handler() -> str | None:
     if ctx.quota_refresh_task is not None:
         ctx.quota_refresh_task.cancel()
     try:
+        _provider = (
+            ctx.config.providers.default_provider
+            if ctx.config.providers.default_provider
+            else "anthropic"
+        )
         ctx.quota_refresh_task = create_background_task(
-            _quota_refresh_loop(ctx.config.quota_guard),
+            _quota_refresh_loop(ctx.config.quota_guard, provider=_provider),
             label="quota_refresh_loop",
         )
     except Exception as exc:

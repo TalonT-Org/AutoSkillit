@@ -400,6 +400,26 @@ class FleetConfig:
             )
 
 
+@dataclass(frozen=True, slots=True)
+class ProviderProfileDef:
+    """Static definition of a named LLM provider profile.
+
+    Used as an element in a provider registry. Immutable after construction.
+    """
+
+    name: str
+    base_url: str | None = None
+    timeout_seconds: int | None = None
+    api_key_env: str | None = None
+    context_window: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.timeout_seconds is not None and self.timeout_seconds < 0:
+            raise ValueError(f"timeout_seconds must be non-negative, got {self.timeout_seconds}")
+        if self.context_window is not None and self.context_window <= 0:
+            raise ValueError(f"context_window must be positive, got {self.context_window}")
+
+
 @dataclass
 class ProvidersConfig:
     """Configuration for alternative LLM provider routing.

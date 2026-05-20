@@ -180,7 +180,8 @@ def _clear_stale_caches() -> None:
     _block_budgets.cache_clear()
     load_bundled_manifest.cache_clear()
     load_ml_sub_area_folding.cache_clear()
-    _LOAD_CACHE.clear()
+    with _LOAD_CACHE_LOCK:
+        _LOAD_CACHE.clear()
 
 
 def format_recipe_list_response(result: LoadResult[RecipeInfo]) -> dict[str, object]:

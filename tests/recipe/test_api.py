@@ -956,3 +956,145 @@ def test_load_and_validate_skips_list_recipes_when_recipe_list_provided(tmp_path
 
     assert "error" not in result
     assert result.get("content_hash") is not None
+
+
+# ---------------------------------------------------------------------------
+# Rule registry hash cache invalidation tests
+# ---------------------------------------------------------------------------
+
+
+def test_load_and_validate_cache_invalidated_on_rule_registry_change(tmp_path, monkeypatch):
+    """Changing the rule registry hash invalidates the cache."""
+    import autoskillit.recipe._api as api_mod
+
+    monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
+    monkeypatch.setattr(api_mod, "_staleness_is_stale", False)
+    monkeypatch.setattr(api_mod, "_staleness_last_check", 0.0)
+
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    (recipes_dir / "myrecipe.yaml").write_text(MINIMAL_RECIPE_YAML)
+
+    calls: list[int] = []
+    real_validate = api_mod.validate_recipe_structure
+
+    def counting_validate(recipe):
+        calls.append(1)
+        return real_validate(recipe)
+
+    monkeypatch.setattr(api_mod, "validate_recipe_structure", counting_validate)
+
+    api_mod.load_and_validate("myrecipe", tmp_path)
+
+    from autoskillit.recipe import registry as reg_mod
+
+    monkeypatch.setattr(reg_mod, "RULE_REGISTRY_HASH", "changed-hash-value")
+    api_mod.load_and_validate("myrecipe", tmp_path)
+
+    assert len(calls) == 2
+
+
+def test_load_cache_entry_includes_rule_registry_hash():
+    """_LoadCacheEntry dataclass has a rule_registry_hash field."""
+    import dataclasses
+
+    from autoskillit.recipe._api import _LoadCacheEntry
+
+    field_names = {f.name for f in dataclasses.fields(_LoadCacheEntry)}
+    assert "rule_registry_hash" in field_names
+
+
+def test_load_cache_entry_rule_registry_hash_checked_in_hit_path():
+    """The cache hit validation block references rule_registry_hash."""
+    import ast
+    from pathlib import Path
+
+    api_src = Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "recipe" / "_api.py"
+    tree = ast.parse(api_src.read_text())
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "load_and_validate":
+            src_lines = ast.get_source_segment(api_src.read_text(), node) or ""
+            assert "rule_registry_hash" in src_lines, (
+                "load_and_validate must reference rule_registry_hash in cache validation"
+            )
+            break
+    else:
+        raise AssertionError("load_and_validate function not found")
+
+
+# ---------------------------------------------------------------------------
+# Process staleness detection tests
+# ---------------------------------------------------------------------------
+
+
+def test_load_and_validate_detects_stale_process(tmp_path, monkeypatch):
+    """Stale process returns error result instead of evaluating recipes."""
+    import autoskillit.recipe._api as api_mod
+
+    monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
+    monkeypatch.setattr(api_mod, "_PROCESS_START_PKG_MTIME", 1000)
+    monkeypatch.setattr(api_mod, "_staleness_last_check", 0.0)
+    monkeypatch.setattr(api_mod, "_staleness_is_stale", False)
+
+    real_mtime = api_mod._path_mtime_ns
+
+    def fake_mtime(path):
+        from autoskillit.core import pkg_root
+
+        if path == pkg_root():
+            return 2000
+        return real_mtime(path)
+
+    monkeypatch.setattr(api_mod, "_path_mtime_ns", fake_mtime)
+
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    (recipes_dir / "myrecipe.yaml").write_text(MINIMAL_RECIPE_YAML)
+
+    result = api_mod.load_and_validate("myrecipe", tmp_path)
+
+    assert result.get("valid") is False
+    assert "stale" in result.get("error", "").lower()
+
+
+def test_lru_cache_helpers_cleared_on_process_staleness(tmp_path, monkeypatch):
+    """Staleness detection clears lru_cache helpers."""
+    import autoskillit.recipe._api as api_mod
+    from autoskillit.recipe.contracts import load_bundled_manifest
+    from autoskillit.recipe.methodology_venue_appendix import load_ml_sub_area_folding
+    from autoskillit.recipe.rules.rules_blocks import _block_budgets
+
+    monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
+
+    _block_budgets()
+    load_bundled_manifest()
+    load_ml_sub_area_folding()
+    assert _block_budgets.cache_info().currsize > 0
+    assert load_bundled_manifest.cache_info().currsize > 0
+    assert load_ml_sub_area_folding.cache_info().currsize > 0
+
+    monkeypatch.setattr(api_mod, "_PROCESS_START_PKG_MTIME", 1000)
+    monkeypatch.setattr(api_mod, "_staleness_last_check", 0.0)
+    monkeypatch.setattr(api_mod, "_staleness_is_stale", False)
+
+    real_mtime = api_mod._path_mtime_ns
+
+    def fake_mtime(path):
+        from autoskillit.core import pkg_root
+
+        if path == pkg_root():
+            return 2000
+        return real_mtime(path)
+
+    monkeypatch.setattr(api_mod, "_path_mtime_ns", fake_mtime)
+
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    (recipes_dir / "myrecipe.yaml").write_text(MINIMAL_RECIPE_YAML)
+
+    api_mod.load_and_validate("myrecipe", tmp_path)
+
+    assert _block_budgets.cache_info().currsize == 0
+    assert load_bundled_manifest.cache_info().currsize == 0
+    assert load_ml_sub_area_folding.cache_info().currsize == 0

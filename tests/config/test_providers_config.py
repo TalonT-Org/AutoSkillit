@@ -336,3 +336,168 @@ class TestResolvedProfiles:
         assert profile.api_key_env is None
         assert profile.context_window is None
         assert profile.raw_env == {}
+
+
+class TestProviderProfileDef:
+    def test_creation_with_all_valid_fields(self) -> None:
+        from autoskillit.config._config_dataclasses import ProviderProfileDef
+
+        env = {"custom": "val"}
+        p = ProviderProfileDef(
+            name="openai",
+            base_url="https://api.openai.com",
+            timeout_seconds=30,
+            api_key_env="OPENAI_API_KEY",
+            context_window=128000,
+            raw_env=env,
+        )
+        assert p.name == "openai"
+        assert p.base_url == "https://api.openai.com"
+        assert p.timeout_seconds == 30
+        assert p.api_key_env == "OPENAI_API_KEY"
+        assert p.context_window == 128000
+        assert p.raw_env == {"custom": "val"}
+
+    def test_frozen_enforcement(self) -> None:
+        import dataclasses
+
+        from autoskillit.config._config_dataclasses import ProviderProfileDef
+
+        p = ProviderProfileDef(name="test")
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            p.name = "other"  # type: ignore[misc]
+
+    def test_timeout_seconds_negative_raises(self) -> None:
+        from autoskillit.config._config_dataclasses import ProviderProfileDef
+
+        with pytest.raises(ValueError, match="timeout_seconds must be non-negative"):
+            ProviderProfileDef(name="x", timeout_seconds=-1)
+
+    @pytest.mark.parametrize("val", [0, -1])
+    def test_context_window_zero_or_negative_raises(self, val: int) -> None:
+        from autoskillit.config._config_dataclasses import ProviderProfileDef
+
+        with pytest.raises(ValueError, match="context_window must be positive"):
+            ProviderProfileDef(name="x", context_window=val)
+
+    def test_raw_env_passthrough(self) -> None:
+        from autoskillit.config._config_dataclasses import ProviderProfileDef
+
+        env = {"CUSTOM_VAR": "value"}
+        p = ProviderProfileDef(name="test", raw_env=env)
+        assert p.raw_env is env
+
+    def test_importability_from_autoskillit_config(self) -> None:
+        from autoskillit.config import ProviderProfileDef
+        from autoskillit.config.settings import ProviderProfileDef as SettingsPPD
+
+        assert SettingsPPD is ProviderProfileDef
+
+    def test_defaults_yaml_anthropic_sentinel(self) -> None:
+        from autoskillit.core.io import load_yaml
+        from autoskillit.core.paths import pkg_root
+
+        defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
+        profile = defaults["providers"]["profiles"]["anthropic"]
+        assert set(profile.keys()) == {
+            "base_url",
+            "timeout_seconds",
+            "api_key_env",
+            "context_window",
+        }
+        assert all(v is None for v in profile.values())
+
+
+class TestProvidersConfigCoercion:
+    def test_resolved_profiles_empty_returns_empty_dict(self) -> None:
+        from autoskillit.config.settings import ProvidersConfig
+
+        cfg = ProvidersConfig()
+        assert cfg.resolved_profiles == {}
+
+    def test_resolved_profiles_raw_dict_coerces(self) -> None:
+        from autoskillit.config._config_dataclasses import ProviderProfileDef
+        from autoskillit.config.settings import ProvidersConfig
+
+        cfg = ProvidersConfig(profiles={"fast": {"timeout_seconds": "30"}})
+        result = cfg.resolved_profiles["fast"]
+        assert isinstance(result, ProviderProfileDef)
+        assert result.timeout_seconds == 30
+        assert isinstance(result.timeout_seconds, int)
+
+    def test_resolved_profiles_typed_keys_extracted(self) -> None:
+        from autoskillit.config.settings import ProvidersConfig
+
+        cfg = ProvidersConfig(
+            profiles={
+                "test": {"base_url": "https://example.com", "api_key_env": "MY_KEY"},
+            }
+        )
+        profile = cfg.resolved_profiles["test"]
+        assert profile.base_url == "https://example.com"
+        assert profile.api_key_env == "MY_KEY"
+
+    def test_resolved_profiles_does_not_mutate_profiles(self) -> None:
+        from autoskillit.config.settings import ProvidersConfig
+
+        cfg = ProvidersConfig(profiles={"test": {"model": "gpt-4", "timeout_seconds": "30"}})
+        cfg.resolved_profiles
+        assert cfg.profiles == {"test": {"model": "gpt-4", "timeout_seconds": "30"}}
+
+    def test_resolved_profiles_mixed_profiles(self) -> None:
+        from autoskillit.config._config_dataclasses import ProviderProfileDef
+        from autoskillit.config.settings import ProvidersConfig
+
+        cfg = ProvidersConfig(
+            profiles={
+                "fast": {"timeout_seconds": "10"},
+                "large": {
+                    "context_window": "200000",
+                    "base_url": "https://api.example.com",
+                },
+            }
+        )
+        result = cfg.resolved_profiles
+        assert len(result) == 2
+        assert isinstance(result["fast"], ProviderProfileDef)
+        assert isinstance(result["large"], ProviderProfileDef)
+        assert result["fast"].timeout_seconds == 10
+        assert result["large"].context_window == 200000
+        assert result["large"].base_url == "https://api.example.com"
+
+
+class TestModelConfigProvider:
+    def test_model_config_defaults_provider_to_anthropic(self) -> None:
+        from autoskillit.config import CoreRunConfig
+
+        cfg = CoreRunConfig()
+        assert cfg.provider == "anthropic"
+
+    def test_model_config_explicit_provider(self) -> None:
+        from autoskillit.config import CoreRunConfig
+
+        cfg = CoreRunConfig(provider="openai")
+        assert cfg.provider == "openai"
+
+    def test_model_config_has_provider_field(self) -> None:
+        import dataclasses
+
+        from autoskillit.config import CoreRunConfig
+
+        field_names = {f.name for f in dataclasses.fields(CoreRunConfig)}
+        assert "provider" in field_names
+
+    def test_load_config_no_overrides(self, tmp_path) -> None:
+        from autoskillit.config import load_config
+
+        cfg = load_config(tmp_path)
+        assert cfg.model.provider == "anthropic"
+
+    def test_load_config_provider_override(self, tmp_path) -> None:
+        from autoskillit.config import load_config
+
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text("model:\n  provider: openai\n")
+        cfg = load_config(tmp_path)
+        assert cfg.model.provider == "openai"

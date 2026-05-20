@@ -64,6 +64,9 @@ def test_fleet_prompt_references_max_total_issues_cap(fleet_prompt: str) -> None
 
 def test_fleet_prompt_bem_gate_uses_mandatory_heading(fleet_prompt: str) -> None:
     """BEM gate heading must include MANDATORY to match sous-chef standard."""
+    assert "## DISPATCHER DISCIPLINE" in fleet_prompt, (
+        "Fleet prompt must contain ## DISPATCHER DISCIPLINE heading"
+    )
     bem_to_discipline = fleet_prompt.split("## DISPATCHER DISCIPLINE")[0]
     assert "MANDATORY" in bem_to_discipline, (
         "BEM pre-step gate heading must include 'MANDATORY' — weak headings "

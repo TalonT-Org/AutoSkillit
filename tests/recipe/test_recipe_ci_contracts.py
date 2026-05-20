@@ -163,13 +163,48 @@ def _has_wait_for_ci_predecessor(steps: dict, step_name: str, reverse_graph: dic
     return False
 
 
+def _reaches_wait_for_ci(steps: dict, start: str, depth: int = 5) -> bool:
+    """BFS from start to check if wait_for_ci is reachable within depth hops."""
+    visited: set[str] = set()
+    queue = [start]
+    for _ in range(depth):
+        next_queue: list[str] = []
+        for node in queue:
+            if node in visited:
+                continue
+            visited.add(node)
+            node_step = steps.get(node, {})
+            if node_step.get("tool") == "wait_for_ci":
+                return True
+            for key in ("on_success", "on_failure"):
+                target = node_step.get(key)
+                if target and target in steps and target not in visited:
+                    next_queue.append(target)
+            on_result = node_step.get("on_result", [])
+            if isinstance(on_result, list):
+                for cond in on_result:
+                    if isinstance(cond, dict):
+                        target = cond.get("route")
+                        if target and target in steps and target not in visited:
+                            next_queue.append(target)
+            elif isinstance(on_result, dict):
+                for target in on_result.get("routes", {}).values():
+                    if target and target in steps and target not in visited:
+                        next_queue.append(target)
+        queue = next_queue
+        if not queue:
+            break
+    return False
+
+
 def test_ci_event_capture_has_ci_applicable_guard(recipe_data) -> None:
     """Steps capturing a primary ci_event from check_repo_merge_state must also
-    capture the corresponding ci_applicable field.
+    capture the corresponding ci_applicable field when they route to wait_for_ci.
 
     Only checks ci_event and conflict_ci_event — secondary variants like
     pre_enqueue_ci_event and batch_ci_event have independent derivation chains.
-    Excludes re-derivation steps downstream of a wait_for_ci step.
+    Excludes re-derivation steps downstream of a wait_for_ci step and
+    diagnostic-only captures that don't feed into a CI wait chain.
     """
     recipe_name, data = recipe_data
     steps = data.get("steps") or {}
@@ -185,10 +220,12 @@ def test_ci_event_capture_has_ci_applicable_guard(recipe_data) -> None:
             continue
         if _has_wait_for_ci_predecessor(steps, step_name, reverse_graph):
             continue
+        if not _reaches_wait_for_ci(steps, step_name):
+            continue
         ci_event_capture_steps.append(step_name)
 
     if not ci_event_capture_steps:
-        pytest.skip(f"{recipe_name}: no check_repo_merge_state steps capturing primary ci_event")
+        pytest.skip(f"{recipe_name}: no check_repo_merge_state steps feeding wait_for_ci")
 
     violations = []
     for step_name in ci_event_capture_steps:

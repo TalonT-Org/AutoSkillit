@@ -20,21 +20,22 @@ MAIN_ROOT="$(dirname "$MAIN_GIT_DIR")"
 WORKTREE_DIR="${MAIN_ROOT}/../worktrees"
 WORKTREE_PATH="${WORKTREE_DIR}/${WORKTREE_NAME}"
 
+mkdir -p "$WORKTREE_DIR"
+
 # Placement assertion: verify worktree lands outside the main repo clone.
-CANONICAL_WORKTREE="$(cd "$WORKTREE_PATH" 2>/dev/null && pwd -P)" || CANONICAL_WORKTREE=""
+# Resolve from WORKTREE_DIR (exists after mkdir) to handle fresh worktree creation.
+CANONICAL_WORKTREE="$(cd "$WORKTREE_DIR" && pwd -P)/${WORKTREE_NAME}"
 CANONICAL_MAIN="$(cd "$MAIN_ROOT" 2>/dev/null && pwd -P)" || CANONICAL_MAIN=""
 
-if [ -n "$CANONICAL_WORKTREE" ] && [ -n "$CANONICAL_MAIN" ]; then
+if [ -n "$CANONICAL_MAIN" ]; then
     case "$CANONICAL_WORKTREE" in
-        "${CANONICAL_MAIN}"*)
+        "${CANONICAL_MAIN}"/*)
             echo "ERROR: worktree path ${CANONICAL_WORKTREE} is nested inside main repo ${CANONICAL_MAIN}" >&2
             echo "ERROR: The worktree must be created outside the clone directory (e.g., ../worktrees/)" >&2
             exit 1
             ;;
     esac
 fi
-
-mkdir -p "$WORKTREE_DIR"
 
 CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 git worktree add -b "$WORKTREE_NAME" "$WORKTREE_PATH" >&2

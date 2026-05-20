@@ -450,6 +450,8 @@ def load_and_validate(
     from autoskillit.recipe import registry as _registry  # noqa: PLC0415
 
     _rule_hash: str = _registry.RULE_REGISTRY_HASH  # pyright: ignore[reportAttributeAccessIssue]
+    if not _rule_hash:
+        logger.warning("RULE_REGISTRY_HASH is empty — _finalize_registry() was never called")
     if (
         cached is not None
         and cached.pkg_version == pkg_version

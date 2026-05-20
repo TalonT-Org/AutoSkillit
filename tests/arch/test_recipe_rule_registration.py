@@ -34,3 +34,44 @@ def test_every_rules_module_imported_by_recipe_init() -> None:
         f"recipe/__init__.py must import these rules modules so their "
         f"@semantic_rule decorators register: {missing}"
     )
+
+
+def test_load_cache_entry_has_rule_registry_hash_guard() -> None:
+    """_LoadCacheEntry must have a rule_registry_hash field and the cache hit
+    validation must reference it — prevents silent removal in future refactors."""
+    import dataclasses
+
+    src = Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "recipe"
+    api_src = src / "_api.py"
+
+    from autoskillit.recipe._api import _LoadCacheEntry
+
+    field_names = {f.name for f in dataclasses.fields(_LoadCacheEntry)}
+    assert "rule_registry_hash" in field_names, (
+        "_LoadCacheEntry must have a rule_registry_hash field"
+    )
+
+    api_text = api_src.read_text()
+    tree = ast.parse(api_text)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "load_and_validate":
+            fn_src = ast.get_source_segment(api_text, node) or ""
+            assert "rule_registry_hash" in fn_src, (
+                "load_and_validate must reference rule_registry_hash in cache hit validation"
+            )
+            break
+    else:
+        raise AssertionError("load_and_validate not found in _api.py")
+
+
+def test_rule_registry_hash_nonempty_after_recipe_import() -> None:
+    """RULE_REGISTRY_HASH must be non-empty after `import autoskillit.recipe`."""
+    from autoskillit.recipe.registry import (
+        RULE_REGISTRY_HASH,  # pyright: ignore[reportAttributeAccessIssue]
+    )
+
+    assert RULE_REGISTRY_HASH, (
+        "RULE_REGISTRY_HASH is empty — _finalize_registry() may have been removed or "
+        "called before rules registered"
+    )
+    assert len(RULE_REGISTRY_HASH) == 64, "RULE_REGISTRY_HASH must be a sha256 hex digest"

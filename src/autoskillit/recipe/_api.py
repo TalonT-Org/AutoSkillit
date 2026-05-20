@@ -134,11 +134,57 @@ class _LoadCacheEntry:
     project_dir_mtime: int
     builtin_dir_mtime: int
     pkg_version: str
+    rule_registry_hash: str
     result: LoadRecipeResult
 
 
 _LOAD_CACHE: dict[tuple, _LoadCacheEntry] = {}
 _LOAD_CACHE_LOCK = threading.Lock()
+
+_PROCESS_START_PKG_MTIME: int | None = None
+_STALENESS_LAST_CHECK: float = 0.0
+_STALENESS_IS_STALE: bool = False
+_STALENESS_CACHES_CLEARED: bool = False
+_STALENESS_TTL: float = 30.0
+
+
+def _get_process_start_mtime() -> int:
+    global _PROCESS_START_PKG_MTIME  # noqa: PLW0603
+    if _PROCESS_START_PKG_MTIME is None:
+        _PROCESS_START_PKG_MTIME = _path_mtime_ns(pkg_root())
+    return _PROCESS_START_PKG_MTIME
+
+
+def _check_process_staleness() -> bool:
+    """Return True if the package directory was modified after process start."""
+    global _STALENESS_LAST_CHECK, _STALENESS_IS_STALE  # noqa: PLW0603
+    now = time.monotonic()
+    if now - _STALENESS_LAST_CHECK < _STALENESS_TTL:
+        return _STALENESS_IS_STALE
+    _STALENESS_LAST_CHECK = now
+    try:
+        _STALENESS_IS_STALE = _path_mtime_ns(pkg_root()) != _get_process_start_mtime()
+    except (OSError, RuntimeError):
+        logger.warning("pkg_root() unavailable during staleness check; assuming non-stale")
+        _STALENESS_IS_STALE = False
+    return _STALENESS_IS_STALE
+
+
+def _clear_stale_caches() -> None:
+    """Clear all lru_cache helpers and the load cache when staleness is detected."""
+    global _STALENESS_CACHES_CLEARED  # noqa: PLW0603
+    from autoskillit.recipe.contracts import load_bundled_manifest  # noqa: PLC0415
+    from autoskillit.recipe.methodology_venue_appendix import (  # noqa: PLC0415
+        load_ml_sub_area_folding,
+    )
+    from autoskillit.recipe.rules.rules_blocks import _block_budgets  # noqa: PLC0415
+
+    _block_budgets.cache_clear()
+    load_bundled_manifest.cache_clear()
+    load_ml_sub_area_folding.cache_clear()
+    with _LOAD_CACHE_LOCK:
+        _LOAD_CACHE.clear()
+    _STALENESS_CACHES_CLEARED = True
 
 
 def format_recipe_list_response(result: LoadResult[RecipeInfo]) -> dict[str, object]:
@@ -357,6 +403,17 @@ def load_and_validate(
         {"content": str, "suggestions": list, "valid": bool}
         On not-found: {"error": str}
     """
+    if _check_process_staleness():
+        if not _STALENESS_CACHES_CLEARED:
+            _clear_stale_caches()
+        return {
+            "error": (
+                "Process is running stale code — package directory was modified on disk "
+                "since server startup. Restart the MCP server via reload_session."
+            ),
+            "valid": False,
+        }
+
     _pdir = project_dir if project_dir is not None else Path.cwd()
     pkg_version = _get_pkg_version()
     project_recipes_dir = _pdir / ".autoskillit" / "recipes"
@@ -390,7 +447,16 @@ def load_and_validate(
     with _LOAD_CACHE_LOCK:
         cached = _LOAD_CACHE.get(cache_key)
 
-    if cached is not None and cached.pkg_version == pkg_version:
+    from autoskillit.recipe import registry as _registry  # noqa: PLC0415
+
+    _rule_hash: str = _registry.RULE_REGISTRY_HASH  # pyright: ignore[reportAttributeAccessIssue]
+    if not _rule_hash:
+        logger.warning("RULE_REGISTRY_HASH is empty — _finalize_registry() was never called")
+    if (
+        cached is not None
+        and cached.pkg_version == pkg_version
+        and cached.rule_registry_hash == _rule_hash
+    ):
         pm = _path_mtime_ns(project_recipes_dir)
         bm = _path_mtime_ns(_builtin_dir)
         rm = _path_mtime_ns(cached.recipe_path)
@@ -619,6 +685,7 @@ def load_and_validate(
             project_dir_mtime=_path_mtime_ns(project_recipes_dir),
             builtin_dir_mtime=_path_mtime_ns(_builtin_dir),
             pkg_version=pkg_version,
+            rule_registry_hash=_rule_hash,
             result=result,
         )
         with _LOAD_CACHE_LOCK:

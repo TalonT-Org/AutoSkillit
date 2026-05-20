@@ -38,6 +38,50 @@ def test_rule_finding_to_dict() -> None:
     }
 
 
+def test_rule_registry_hash_changes_on_rule_addition(monkeypatch) -> None:
+    """Adding a rule to the registry changes the computed hash."""
+    from autoskillit.recipe.registry import (
+        _RULE_REGISTRY,
+        RuleDef,
+        compute_rule_registry_hash,
+    )
+
+    h1 = compute_rule_registry_hash()
+
+    dummy = RuleDef(
+        name="test-dummy-rule",
+        description="dummy",
+        severity=Severity.WARNING,
+        check=lambda ctx: [],
+    )
+    monkeypatch.setattr(
+        "autoskillit.recipe.registry._RULE_REGISTRY",
+        list(_RULE_REGISTRY) + [dummy],
+    )
+
+    h2 = compute_rule_registry_hash()
+    assert h1 != h2
+
+
+def test_rule_registry_hash_stable_across_calls() -> None:
+    """Hash is deterministic — same input produces same output."""
+    from autoskillit.recipe.registry import compute_rule_registry_hash
+
+    assert compute_rule_registry_hash() == compute_rule_registry_hash()
+
+
+def test_semantic_rule_after_finalization_raises() -> None:
+    """Registering a rule after finalization raises RuntimeError."""
+    from autoskillit.recipe.registry import _REGISTRY_FINALIZED, semantic_rule
+
+    assert _REGISTRY_FINALIZED, "Registry should be finalized after import"
+    with pytest.raises(RuntimeError, match="after registry finalization"):
+
+        @semantic_rule(name="post-finalize-test", description="should fail")
+        def _check(ctx):
+            return []
+
+
 def test_old_rule_removed() -> None:
     from autoskillit.recipe.validator import _RULE_REGISTRY
 

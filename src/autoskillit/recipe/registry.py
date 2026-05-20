@@ -7,6 +7,8 @@ prevents that file from exceeding the 1000-line architecture limit.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -86,6 +88,10 @@ def semantic_rule(
     def decorator(
         fn: Callable[[ValidationContext], list[RuleFinding]],
     ) -> Callable[[ValidationContext], list[RuleFinding]]:
+        if _REGISTRY_FINALIZED:
+            if any(r.name == name for r in _RULE_REGISTRY):
+                return fn
+            raise RuntimeError(f"Cannot register rule {name!r} after registry finalization")
         _RULE_REGISTRY.append(
             RuleDef(name=name, description=description, severity=severity, check=fn)
         )
@@ -109,12 +115,38 @@ def block_rule(
     def decorator(
         fn: Callable[[BlockContext], list[RuleFinding]],
     ) -> Callable[[BlockContext], list[RuleFinding]]:
+        if _REGISTRY_FINALIZED:
+            if any(r.name == name for r in _BLOCK_RULE_REGISTRY):
+                return fn
+            raise RuntimeError(f"Cannot register block rule {name!r} after registry finalization")
         _BLOCK_RULE_REGISTRY.append(
             BlockRuleDef(name=name, description=description, severity=severity, check=fn)
         )
         return fn
 
     return decorator
+
+
+_REGISTRY_FINALIZED: bool = False
+RULE_REGISTRY_HASH: str = ""
+
+
+def compute_rule_registry_hash() -> str:
+    """Compute a stable sha256 over _RULE_REGISTRY + _BLOCK_RULE_REGISTRY."""
+    rows = sorted(
+        [(r.name, r.severity.value) for r in _RULE_REGISTRY]
+        + [(r.name, r.severity.value) for r in _BLOCK_RULE_REGISTRY],
+        key=lambda t: t[0],
+    )
+    payload = json.dumps(rows, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _finalize_registry() -> None:
+    """Compute RULE_REGISTRY_HASH after all rule modules have been imported."""
+    global _REGISTRY_FINALIZED, RULE_REGISTRY_HASH  # noqa: PLW0603
+    RULE_REGISTRY_HASH = compute_rule_registry_hash()
+    _REGISTRY_FINALIZED = True
 
 
 def run_semantic_rules(wf: Recipe | ValidationContext) -> list[RuleFinding]:

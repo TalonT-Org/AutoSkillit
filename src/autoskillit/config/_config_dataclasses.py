@@ -412,6 +412,7 @@ class ProviderProfileDef:
     timeout_seconds: int | None = None
     api_key_env: str | None = None
     context_window: int | None = None
+    raw_env: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.timeout_seconds is not None and self.timeout_seconds < 0:
@@ -455,6 +456,25 @@ class ProvidersConfig:
                         f"recipe_overrides[{recipe!r}][{step!r}] must be a string, "
                         f"got {type(provider).__name__!r}"
                     )
+
+    @property
+    def resolved_profiles(self) -> dict[str, ProviderProfileDef]:
+        result: dict[str, ProviderProfileDef] = {}
+        for name, raw_dict in self.profiles.items():
+            copy = dict(raw_dict)
+            base_url = copy.pop("base_url", None)
+            timeout_str = copy.pop("timeout_seconds", None)
+            api_key_env = copy.pop("api_key_env", None)
+            context_str = copy.pop("context_window", None)
+            result[name] = ProviderProfileDef(
+                name=name,
+                base_url=base_url,
+                timeout_seconds=int(timeout_str) if timeout_str else None,
+                api_key_env=api_key_env,
+                context_window=int(context_str) if context_str else None,
+                raw_env=copy,
+            )
+        return result
 
 
 @dataclass

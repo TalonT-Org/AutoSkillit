@@ -43,17 +43,18 @@ class TestProviderProfileDefImports:
 
 
 class TestProviderProfileDefFields:
-    def test_has_exactly_five_fields(self) -> None:
+    def test_has_exactly_six_fields(self) -> None:
         from autoskillit.config._config_dataclasses import ProviderProfileDef
 
         fields = dataclasses.fields(ProviderProfileDef)
-        assert len(fields) == 5
+        assert len(fields) == 6
         assert [f.name for f in fields] == [
             "name",
             "base_url",
             "timeout_seconds",
             "api_key_env",
             "context_window",
+            "raw_env",
         ]
 
     def test_defaults_with_name_only(self) -> None:
@@ -65,6 +66,7 @@ class TestProviderProfileDefFields:
         assert p.timeout_seconds is None
         assert p.api_key_env is None
         assert p.context_window is None
+        assert p.raw_env == {}
 
     def test_all_fields_populated(self) -> None:
         from autoskillit.config._config_dataclasses import ProviderProfileDef
@@ -75,12 +77,14 @@ class TestProviderProfileDefFields:
             timeout_seconds=30,
             api_key_env="OPENAI_API_KEY",
             context_window=128000,
+            raw_env={"custom_key": "custom_val"},
         )
         assert p.name == "openai"
         assert p.base_url == "https://api.openai.com"
         assert p.timeout_seconds == 30
         assert p.api_key_env == "OPENAI_API_KEY"
         assert p.context_window == 128000
+        assert p.raw_env == {"custom_key": "custom_val"}
 
 
 class TestProviderProfileDefFrozen:

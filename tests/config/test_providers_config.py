@@ -196,3 +196,89 @@ class TestProvidersConfigYaml:
             "remediation": {"implement": "anthropic"},
             "implementation": {"implement": "minimax"},
         }
+
+
+class TestResolvedProfiles:
+    def test_resolved_profiles_empty(self) -> None:
+        from autoskillit.config.settings import ProvidersConfig
+
+        cfg = ProvidersConfig()
+        assert cfg.resolved_profiles == {}
+
+    def test_resolved_profiles_typed_fields(self) -> None:
+        from autoskillit.config._config_dataclasses import ProviderProfileDef
+        from autoskillit.config.settings import ProvidersConfig
+
+        cfg = ProvidersConfig(
+            profiles={
+                "openai": {
+                    "base_url": "https://api.openai.com",
+                    "api_key_env": "OPENAI_API_KEY",
+                }
+            }
+        )
+        result = cfg.resolved_profiles
+        assert "openai" in result
+        profile = result["openai"]
+        assert isinstance(profile, ProviderProfileDef)
+        assert profile.base_url == "https://api.openai.com"
+        assert profile.api_key_env == "OPENAI_API_KEY"
+        assert profile.timeout_seconds is None
+        assert profile.context_window is None
+        assert profile.raw_env == {}
+
+    def test_resolved_profiles_int_coercion_timeout(self) -> None:
+        from autoskillit.config.settings import ProvidersConfig
+
+        cfg = ProvidersConfig(profiles={"fast": {"timeout_seconds": "30"}})
+        assert cfg.resolved_profiles["fast"].timeout_seconds == 30
+
+    def test_resolved_profiles_int_coercion_context_window(self) -> None:
+        from autoskillit.config.settings import ProvidersConfig
+
+        cfg = ProvidersConfig(profiles={"large": {"context_window": "128000"}})
+        assert cfg.resolved_profiles["large"].context_window == 128000
+
+    def test_resolved_profiles_empty_string_numeric_is_none(self) -> None:
+        from autoskillit.config.settings import ProvidersConfig
+
+        cfg = ProvidersConfig(profiles={"test": {"timeout_seconds": ""}})
+        assert cfg.resolved_profiles["test"].timeout_seconds is None
+
+    def test_resolved_profiles_extra_keys_in_raw_env(self) -> None:
+        from autoskillit.config.settings import ProvidersConfig
+
+        cfg = ProvidersConfig(
+            profiles={
+                "test": {
+                    "base_url": "https://example.com",
+                    "model": "gpt-4",
+                    "extra_flag": "true",
+                }
+            }
+        )
+        raw = cfg.resolved_profiles["test"].raw_env
+        assert raw == {"model": "gpt-4", "extra_flag": "true"}
+
+    def test_resolved_profiles_no_mutation(self) -> None:
+        from autoskillit.config.settings import ProvidersConfig
+
+        cfg = ProvidersConfig(profiles={"test": {"model": "gpt-4"}})
+        cfg.resolved_profiles
+        assert cfg.profiles == {"test": {"model": "gpt-4"}}
+
+    def test_resolved_profiles_multiple_profiles(self) -> None:
+        from autoskillit.config.settings import ProvidersConfig
+
+        cfg = ProvidersConfig(
+            profiles={
+                "fast": {"timeout_seconds": "10", "model": "gpt-4o-mini"},
+                "large": {"context_window": "200000", "model": "gpt-4o"},
+            }
+        )
+        result = cfg.resolved_profiles
+        assert len(result) == 2
+        assert result["fast"].timeout_seconds == 10
+        assert result["fast"].raw_env == {"model": "gpt-4o-mini"}
+        assert result["large"].context_window == 200000
+        assert result["large"].raw_env == {"model": "gpt-4o"}

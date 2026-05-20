@@ -142,8 +142,8 @@ _LOAD_CACHE: dict[tuple, _LoadCacheEntry] = {}
 _LOAD_CACHE_LOCK = threading.Lock()
 
 _PROCESS_START_PKG_MTIME: int | None = None
-_staleness_last_check: float = 0.0
-_staleness_is_stale: bool = False
+_STALENESS_LAST_CHECK: float = 0.0
+_STALENESS_IS_STALE: bool = False
 _STALENESS_TTL: float = 30.0
 
 
@@ -156,17 +156,17 @@ def _get_process_start_mtime() -> int:
 
 def _check_process_staleness() -> bool:
     """Return True if the package directory was modified after process start."""
-    global _staleness_last_check, _staleness_is_stale  # noqa: PLW0603
+    global _STALENESS_LAST_CHECK, _STALENESS_IS_STALE  # noqa: PLW0603
     now = time.monotonic()
-    if now - _staleness_last_check < _STALENESS_TTL:
-        return _staleness_is_stale
-    _staleness_last_check = now
+    if now - _STALENESS_LAST_CHECK < _STALENESS_TTL:
+        return _STALENESS_IS_STALE
+    _STALENESS_LAST_CHECK = now
     try:
-        _staleness_is_stale = _path_mtime_ns(pkg_root()) != _get_process_start_mtime()
+        _STALENESS_IS_STALE = _path_mtime_ns(pkg_root()) != _get_process_start_mtime()
     except (OSError, RuntimeError):
         logger.warning("pkg_root() unavailable during staleness check; assuming non-stale")
-        _staleness_is_stale = False
-    return _staleness_is_stale
+        _STALENESS_IS_STALE = False
+    return _STALENESS_IS_STALE
 
 
 def _clear_stale_caches() -> None:

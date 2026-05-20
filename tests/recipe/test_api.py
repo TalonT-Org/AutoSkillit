@@ -963,8 +963,8 @@ def test_load_and_validate_cache_invalidated_on_rule_registry_change(tmp_path, m
     import autoskillit.recipe._api as api_mod
 
     monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
-    monkeypatch.setattr(api_mod, "_staleness_is_stale", False)
-    monkeypatch.setattr(api_mod, "_staleness_last_check", 0.0)
+    monkeypatch.setattr(api_mod, "_STALENESS_IS_STALE", False)
+    monkeypatch.setattr(api_mod, "_STALENESS_LAST_CHECK", 0.0)
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
@@ -1024,8 +1024,8 @@ def test_load_and_validate_detects_stale_process(tmp_path, monkeypatch):
 
     monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
     monkeypatch.setattr(api_mod, "_PROCESS_START_PKG_MTIME", 1000)
-    monkeypatch.setattr(api_mod, "_staleness_last_check", 0.0)
-    monkeypatch.setattr(api_mod, "_staleness_is_stale", False)
+    monkeypatch.setattr(api_mod, "_STALENESS_LAST_CHECK", 0.0)
+    monkeypatch.setattr(api_mod, "_STALENESS_IS_STALE", False)
 
     real_mtime = api_mod._path_mtime_ns
 
@@ -1065,8 +1065,8 @@ def test_lru_cache_helpers_cleared_on_process_staleness(tmp_path, monkeypatch):
     assert load_ml_sub_area_folding.cache_info().currsize > 0
 
     monkeypatch.setattr(api_mod, "_PROCESS_START_PKG_MTIME", 1000)
-    monkeypatch.setattr(api_mod, "_staleness_last_check", 0.0)
-    monkeypatch.setattr(api_mod, "_staleness_is_stale", False)
+    monkeypatch.setattr(api_mod, "_STALENESS_LAST_CHECK", 0.0)
+    monkeypatch.setattr(api_mod, "_STALENESS_IS_STALE", False)
 
     real_mtime = api_mod._path_mtime_ns
 

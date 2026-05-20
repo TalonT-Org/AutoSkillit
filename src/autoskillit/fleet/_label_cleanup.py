@@ -94,6 +94,7 @@ async def sweep_stale_dispatch_labels(
     state files are logged and skipped so one corrupt file cannot block recovery.
     """
     for state_path in campaign_state_paths:
+        stale_sidecar_paths: list[str | None] = []
         try:
             with CampaignStateMutator(state_path) as m:
                 if m.state is None:
@@ -103,7 +104,7 @@ async def sweep_stale_dispatch_labels(
                         continue
                     if is_dispatch_session_alive(d):
                         continue
-                    await cleanup_orphaned_labels(d.sidecar_path, github_client)
+                    stale_sidecar_paths.append(d.sidecar_path)
                     d.status = DispatchStatus.INTERRUPTED
                     m.mark_dirty()
         except Exception:
@@ -112,6 +113,9 @@ async def sweep_stale_dispatch_labels(
                 state_path=str(state_path),
                 exc_info=True,
             )
+            continue
+        for sidecar_path in stale_sidecar_paths:
+            await cleanup_orphaned_labels(sidecar_path, github_client)
 
 
 def discover_campaign_state_files(project_dir: Path) -> list[Path]:

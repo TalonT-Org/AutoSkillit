@@ -87,6 +87,33 @@ class QuotaHookSettings:
     disabled: bool = False
 
 
+def merge_hook_configs(base: dict, overlay: dict) -> dict:
+    """Merge base and overlay hook config dicts (overlay wins, shallow dict merge)."""
+    merged = dict(base)
+    for k, v in overlay.items():
+        if k in merged and isinstance(merged[k], dict) and isinstance(v, dict):
+            merged[k] = {**merged[k], **v}
+        else:
+            merged[k] = v
+    return merged
+
+
+def read_merged_hook_config(root: Path | None = None) -> dict:
+    """Read and merge base + overlay hook config files (stdlib-only).
+
+    Returns ``{}`` if both files are absent or unreadable.
+    """
+    cwd = root if root is not None else Path.cwd()
+    try:
+        base_path = cwd.joinpath(*HOOK_DIR_COMPONENTS, HOOK_CONFIG_FILENAME)
+        overlay_path = cwd.joinpath(*HOOK_DIR_COMPONENTS, HOOK_CONFIG_OVERLAY_FILENAME)
+        base = json.loads(base_path.read_text()) if base_path.exists() else {}
+        overlay = json.loads(overlay_path.read_text()) if overlay_path.exists() else {}
+        return merge_hook_configs(base, overlay)
+    except (OSError, json.JSONDecodeError, AttributeError, TypeError):
+        return {}
+
+
 def _read_hook_config() -> dict:
     """Read the merged ``quota_guard`` section from base + overlay hook config.
 
@@ -94,19 +121,7 @@ def _read_hook_config() -> dict:
     written by ``open_kitchen`` and the overlay by ``disable_quota_guard``.
     Overlay values take precedence over base values.
     """
-    try:
-        base_path = Path.cwd().joinpath(*HOOK_DIR_COMPONENTS, HOOK_CONFIG_FILENAME)
-        overlay_path = Path.cwd().joinpath(*HOOK_DIR_COMPONENTS, HOOK_CONFIG_OVERLAY_FILENAME)
-        base = json.loads(base_path.read_text()) if base_path.exists() else {}
-        overlay = json.loads(overlay_path.read_text()) if overlay_path.exists() else {}
-        for k, v in overlay.items():
-            if k in base and isinstance(base[k], dict) and isinstance(v, dict):
-                base[k] = {**base[k], **v}
-            else:
-                base[k] = v
-        return base.get("quota_guard", {})
-    except (OSError, json.JSONDecodeError, AttributeError, TypeError):
-        return {}
+    return read_merged_hook_config().get("quota_guard", {})
 
 
 def _resolve_int(env_var: str, hook_value: object, default: int) -> int:

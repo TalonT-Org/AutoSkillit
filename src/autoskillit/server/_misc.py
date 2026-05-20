@@ -72,14 +72,21 @@ def _merge_hook_configs(base: dict, overlay: dict) -> dict:
 
 
 def _read_merged_hook_config(project_root: Path) -> dict:
-    """Read and merge base + overlay hook config files."""
+    """Read and merge base + overlay hook config files.
+
+    Returns ``{}`` if files are absent or unreadable.
+    """
     import json
 
-    base_path = _hook_config_path(project_root)
-    overlay_path = _hook_config_overlay_path(project_root)
-    base = json.loads(base_path.read_text()) if base_path.exists() else {}
-    overlay = json.loads(overlay_path.read_text()) if overlay_path.exists() else {}
-    return _merge_hook_configs(base, overlay)
+    try:
+        base_path = _hook_config_path(project_root)
+        overlay_path = _hook_config_overlay_path(project_root)
+        base = json.loads(base_path.read_text()) if base_path.exists() else {}
+        overlay = json.loads(overlay_path.read_text()) if overlay_path.exists() else {}
+        return _merge_hook_configs(base, overlay)
+    except (OSError, json.JSONDecodeError, AttributeError, TypeError):
+        logger.warning("Failed to read merged hook config", exc_info=True)
+        return {}
 
 
 def _extract_block(text: str, start_delim: str, end_delim: str) -> list[str]:

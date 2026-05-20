@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -21,6 +21,8 @@ from autoskillit.server.tools.tools_pr_ops import bulk_close_issues, get_pr_revi
 from tests.conftest import _make_result
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+
+_CLAIM_HELPERS = "autoskillit.fleet"
 
 # ---------------------------------------------------------------------------
 # claim_issue / release_issue / prepare_issue / enrich_issues — gated tools
@@ -60,7 +62,8 @@ class TestClaimIssueTool:
             "labels": [{"name": "in-progress"}],
         }
         tool_ctx_kitchen_open.github_client = mock_client
-        result = json.loads(await claim_issue("https://github.com/owner/repo/issues/42"))
+        with patch(f"{_CLAIM_HELPERS}.find_dispatch_for_issue", return_value=None):
+            result = json.loads(await claim_issue("https://github.com/owner/repo/issues/42"))
         assert result["success"] is True
         assert result["claimed"] is False
 
@@ -109,14 +112,15 @@ class TestClaimIssueTool:
     async def test_claim_issue_allow_reentry_false_returns_claimed_false_when_already_labeled(
         self, tool_ctx_kitchen_open
     ):
-        """Default allow_reentry=False: claimed=False when label already present."""
+        """Default allow_reentry=False: claimed=False when label present and no dispatch found."""
         mock_client = AsyncMock()
         mock_client.fetch_issue.return_value = {
             "success": True,
             "labels": [{"name": "in-progress"}],
         }
         tool_ctx_kitchen_open.github_client = mock_client
-        result = json.loads(await claim_issue("https://github.com/owner/repo/issues/42"))
+        with patch(f"{_CLAIM_HELPERS}.find_dispatch_for_issue", return_value=None):
+            result = json.loads(await claim_issue("https://github.com/owner/repo/issues/42"))
         assert result["success"] is True
         assert result["claimed"] is False
         assert "reentry" not in result

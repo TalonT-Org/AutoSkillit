@@ -88,6 +88,8 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_sessions",  # cli/_sessions.py: sessions_app = App(name="sessions", ...)
         "_validate",  # cli/_validate.py: validate_app = App(name="validate", ...)
         "_type_backend",  # core/types/_type_backend.py: CLAUDE_CODE_CAPABILITIES constant
+        # _REMOVE_LABELS = sorted(...) — stable label list derived from LABEL_LIFECYCLE_REGISTRY
+        "_label_cleanup",  # fleet/_label_cleanup.py: _REMOVE_LABELS constant (see comment above)
     }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
@@ -827,9 +829,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "cli": 20,
         "hooks": 10,
         "pipeline": 12,
-        "fleet": 15,
+        "fleet": 16,
         "recipe/rules": 33,
-        "server/tools": 19,
+        "server/tools": 20,
         "hooks/guards": 22,
     }
     violations: list[str] = []

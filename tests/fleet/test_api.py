@@ -133,6 +133,60 @@ class TestExecuteDispatchCancelledErrorLockRelease:
         assert captured_kwargs, "_run_dispatch was never called"
         assert captured_kwargs[0].get("resume_session_id") == "abc-123"
 
+    @pytest.mark.anyio
+    async def test_cancelled_dispatch_triggers_label_cleanup(self, tool_ctx, monkeypatch) -> None:
+        """swap_labels is called for the claimed issue when dispatch is cancelled.
+
+        Patches dispatch_food_truck (not _run_dispatch) so the real finally block
+        runs — this directly covers the gap in the existing CancelledError test.
+        """
+        from unittest.mock import AsyncMock
+
+        from autoskillit.fleet import execute_dispatch
+        from autoskillit.fleet.sidecar import sidecar_path as make_sidecar_path
+        from tests.fleet._helpers import _no_sleep_quota_checker, _noop_quota_refresher
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+
+        swap_labels_mock = AsyncMock(return_value={"success": True})
+        github_client = AsyncMock()
+        github_client.swap_labels = swap_labels_mock
+        tool_ctx.github_client = github_client
+
+        async def _write_sidecar_then_cancel(**kwargs):
+            sidecar = make_sidecar_path(kwargs["dispatch_id"], tool_ctx.project_dir)
+            sidecar.write_text(
+                json.dumps(
+                    {
+                        "issue_url": "https://github.com/owner/repo/issues/42",
+                        "status": "completed",
+                        "ts": "2026-01-01T00:00:00Z",
+                    }
+                )
+                + "\n"
+            )
+            raise asyncio.CancelledError
+
+        tool_ctx.executor.dispatch_food_truck = _write_sidecar_then_cancel
+
+        with pytest.raises(asyncio.CancelledError):
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="t",
+                ingredients=None,
+                dispatch_name=None,
+                timeout_sec=None,
+                prompt_builder=lambda **kw: "prompt",
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
+            )
+
+        swap_labels_mock.assert_called_once()
+        call = swap_labels_mock.call_args
+        assert "in-progress" in call.kwargs["remove_labels"]
+        assert "fail" in call.kwargs["add_labels"]
+
 
 # ---------------------------------------------------------------------------
 # requires_packs forwarding helpers

@@ -200,6 +200,21 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
     except Exception:
         logger.warning("fleet_auto_gate_boot_registry_failed", exc_info=True)
 
+    try:
+        from autoskillit.fleet import (  # noqa: PLC0415
+            discover_campaign_state_files,
+            sweep_stale_dispatch_labels,
+        )
+
+        _campaign_state_paths = discover_campaign_state_files(ctx.project_dir)
+        if _campaign_state_paths and ctx.github_client is not None:
+            create_background_task(
+                sweep_stale_dispatch_labels(_campaign_state_paths, ctx.github_client),
+                label="startup_label_recovery_sweep",
+            )
+    except Exception:
+        logger.warning("fleet_auto_gate_boot_label_recovery_failed", exc_info=True)
+
 
 async def _food_truck_auto_gate_boot(ctx: Any) -> None:
     """Auto-open gate for headless food truck (ORCHESTRATOR) sessions.

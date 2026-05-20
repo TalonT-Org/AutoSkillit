@@ -820,6 +820,7 @@ async def _run_dispatch(
             marker_dir = None
             marker_path = None
 
+    _dispatch_completed_normally = False
     _hb_trigger = anyio.Event()
     try:
         async with anyio.create_task_group() as tg:
@@ -869,6 +870,7 @@ async def _run_dispatch(
                 tg.cancel_scope.cancel()
 
         ended_at = time.time()
+        _dispatch_completed_normally = True
     finally:
         if marker_path is not None:
             try:
@@ -877,6 +879,10 @@ async def _run_dispatch(
                 logger.warning(
                     "dispatch_marker_unlink_failed", marker=str(marker_path), exc_info=True
                 )
+        if not _dispatch_completed_normally:
+            from autoskillit.fleet._label_cleanup import cleanup_orphaned_labels  # noqa: PLC0415
+
+            await cleanup_orphaned_labels(dispatch_sidecar_path, tool_ctx.github_client)
 
     sidecar_file = Path(dispatch_sidecar_path)
     dispatch_checkpoint: SessionCheckpoint | None = None

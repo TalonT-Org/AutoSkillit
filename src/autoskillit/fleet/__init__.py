@@ -12,6 +12,11 @@ from ._api import (
 )
 from ._api import _write_pid as _write_pid
 from ._checkpoint_bridge import checkpoint_from_sidecar
+from ._label_cleanup import (
+    cleanup_orphaned_labels,
+    discover_campaign_state_files,
+    sweep_stale_dispatch_labels,
+)
 from ._liveness import is_dispatch_session_alive
 from ._prompts import _build_admiral_dispatch_block as _build_admiral_dispatch_block
 from ._prompts import _build_food_truck_prompt as _build_food_truck_prompt
@@ -58,6 +63,7 @@ from .state import (
 from .state_recovery import (
     classify_stale_dispatch,
     derive_orchestrator_resume_spec,
+    find_dispatch_for_issue,
     has_blocking_dispatch,
 )
 from .state_types import (
@@ -81,7 +87,10 @@ from .summary import (
 
 __all__ = [
     "_write_pid",
+    "cleanup_orphaned_labels",
+    "discover_campaign_state_files",
     "evaluate_skip_when",
+    "sweep_stale_dispatch_labels",
     "CaptureCompletenessError",
     "classify_dispatch_outcome",
     "execute_dispatch",
@@ -133,6 +142,7 @@ __all__ = [
     "classify_stale_dispatch",
     "FLEET_STATE_SCHEMA_VERSION",
     "derive_orchestrator_resume_spec",
+    "find_dispatch_for_issue",
     "checkpoint_from_sidecar",
     "is_dispatch_session_alive",
     "FleetSemaphore",

@@ -469,9 +469,13 @@ class ProvidersConfig:
             result[name] = ProviderProfileDef(
                 name=name,
                 base_url=base_url,
-                timeout_seconds=int(timeout_str) if timeout_str else None,
+                timeout_seconds=int(timeout_str)
+                if timeout_str is not None and timeout_str != ""
+                else None,
                 api_key_env=api_key_env,
-                context_window=int(context_str) if context_str else None,
+                context_window=int(context_str)
+                if context_str is not None and context_str != ""
+                else None,
                 raw_env=copy,
             )
         return result

@@ -165,6 +165,11 @@ async def resolve_repo_from_remote(cwd: str, hint: str | None = None) -> str:
     return await resolve_remote_repo(cwd, hint=hint) or ""
 
 
+def resolve_provider(default_provider: str | None) -> str:
+    """Return the effective provider name, falling back to ``"anthropic"``."""
+    return default_provider if default_provider else "anthropic"
+
+
 async def _prime_quota_cache() -> None:
     """Fetch quota from the Anthropic API and write the local cache.
 
@@ -175,12 +180,10 @@ async def _prime_quota_cache() -> None:
 
     try:
         _ctx = _ctx_fn()
-        _provider = (
-            _ctx.config.providers.default_provider
-            if _ctx.config.providers.default_provider
-            else "anthropic"
+        await check_and_sleep_if_needed(
+            _ctx.config.quota_guard,
+            provider=resolve_provider(_ctx.config.providers.default_provider),
         )
-        await check_and_sleep_if_needed(_ctx.config.quota_guard, provider=_provider)
     except Exception:
         logger.warning("quota_prime_failed", exc_info=True)
 

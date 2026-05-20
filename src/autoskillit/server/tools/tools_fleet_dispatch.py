@@ -224,6 +224,7 @@ async def dispatch_food_truck(
             _refresh_quota_cache,
             check_and_sleep_if_needed,
             invalidate_cache,
+            resolve_provider,
         )
 
         parsed_checkpoint = (
@@ -269,7 +270,7 @@ async def dispatch_food_truck(
             prompt_builder=_get_food_truck_prompt_builder(),
             quota_checker=lambda cfg: check_and_sleep_if_needed(
                 cfg,
-                provider=tool_ctx.config.providers.default_provider or "anthropic",
+                provider=resolve_provider(tool_ctx.config.providers.default_provider),
             ),
             quota_refresher=_refresh_quota_cache,
             cache_invalidator=invalidate_cache,

@@ -167,7 +167,11 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
         from autoskillit.core import _collect_disabled_feature_tags, register_active_kitchen
         from autoskillit.pipeline import create_background_task
         from autoskillit.server import mcp as _mcp
-        from autoskillit.server._misc import _prime_quota_cache, _quota_refresh_loop
+        from autoskillit.server._misc import (
+            _prime_quota_cache,
+            _quota_refresh_loop,
+            resolve_provider,
+        )
         from autoskillit.server.tools.tools_kitchen import _write_hook_config
 
         _features = ctx.config.features if ctx.config is not None else {}
@@ -188,13 +192,11 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
         logger.warning("fleet_auto_gate_boot_prime_quota_cache_failed", exc_info=True)
 
     try:
-        _provider = (
-            ctx.config.providers.default_provider
-            if ctx.config.providers.default_provider
-            else "anthropic"
-        )
         ctx.quota_refresh_task = create_background_task(
-            _quota_refresh_loop(ctx.config.quota_guard, provider=_provider),
+            _quota_refresh_loop(
+                ctx.config.quota_guard,
+                provider=resolve_provider(ctx.config.providers.default_provider),
+            ),
             label="quota_refresh_loop",
         )
     except Exception:
@@ -237,6 +239,7 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
     from autoskillit.server._misc import (
         _prime_quota_cache,
         _quota_refresh_loop,
+        resolve_provider,
     )
     from autoskillit.server.tools.tools_kitchen import _write_hook_config
 
@@ -286,13 +289,11 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
 
     try:
         if ctx.config is not None:
-            _provider = (
-                ctx.config.providers.default_provider
-                if ctx.config.providers.default_provider
-                else "anthropic"
-            )
             ctx.quota_refresh_task = create_background_task(
-                _quota_refresh_loop(ctx.config.quota_guard, provider=_provider),
+                _quota_refresh_loop(
+                    ctx.config.quota_guard,
+                    provider=resolve_provider(ctx.config.providers.default_provider),
+                ),
                 label="quota_refresh_loop",
             )
     except Exception:

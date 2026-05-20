@@ -97,28 +97,8 @@ worktree, discarding all partial progress. Instead, route to the next step
 ### Step 1 — Create Git Worktree
 
 ```bash
-CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 WORKTREE_NAME="research-$(date +%Y%m%d-%H%M%S)"
-MAIN_GIT_DIR="$(git rev-parse --path-format=absolute --git-common-dir)"
-MAIN_ROOT="$(dirname "$MAIN_GIT_DIR")"
-WORKTREE_DIR="${MAIN_ROOT}/../worktrees"
-mkdir -p "${WORKTREE_DIR}"
-WORKTREE_PATH="${WORKTREE_DIR}/${WORKTREE_NAME}"
-git worktree add -b "${WORKTREE_NAME}" "${WORKTREE_PATH}"
-WORKTREE_PATH="$(cd "${WORKTREE_PATH}" && pwd)"
-
-# Record the base branch for reliable discovery:
-mkdir -p "{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_NAME}"
-echo "${CURRENT_BRANCH}" > "{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_NAME}/base-branch"
-
-# Set upstream tracking if possible:
-REMOTE=$(git remote get-url upstream >/dev/null 2>&1 && echo upstream || echo origin)
-if ! git fetch "$REMOTE" "${CURRENT_BRANCH}" 2>/dev/null; then
-    echo "NOTE: Branch '${CURRENT_BRANCH}' has no remote tracking ref on $REMOTE."
-fi
-if ! git -C "${WORKTREE_PATH}" branch --set-upstream-to="${REMOTE}/${CURRENT_BRANCH}" "${WORKTREE_NAME}" 2>/dev/null; then
-    echo "NOTE: Could not set upstream tracking for '${WORKTREE_NAME}' → '$REMOTE/${CURRENT_BRANCH}'."
-fi
+eval "$(bash "{{AUTOSKILLIT_SCRIPTS}}/create_impl_worktree.sh" "${WORKTREE_NAME}" "{{AUTOSKILLIT_TEMP}}")"
 ```
 
 ### Step 1 (cont.) — Emit Structured Tokens Early
@@ -133,7 +113,7 @@ execution layer can capture them even if context is exhausted later:
 
 ```
 worktree_path = ${WORKTREE_PATH}
-branch_name = ${WORKTREE_NAME}
+branch_name = ${BRANCH_NAME}
 ```
 
 ### Step 2 — Deep Context Understanding (Subagents)
@@ -331,7 +311,7 @@ Then emit these structured output tokens:
 
 ```
 worktree_path = ${WORKTREE_PATH}
-branch_name = ${WORKTREE_NAME}
+branch_name = ${BRANCH_NAME}
 ```
 
 ## Error Handling

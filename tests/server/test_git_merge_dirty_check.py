@@ -150,3 +150,86 @@ async def test_dirty_check_error_format(tmp_path):
     assert "3 dirty file(s)" in result["error"]
     assert "Clean the working tree" in result["error"]
     assert len(result["dirty_files"]) == 3
+
+
+@pytest.mark.anyio
+async def test_embedded_worktree_returns_error(tmp_path):
+    """Step 2b rejects a worktree nested inside its own main repository."""
+    from autoskillit.server.git import perform_merge
+
+    fake_wt = str(tmp_path / "worktrees" / "impl-foo")
+    gitdir_path = tmp_path / ".git" / "worktrees" / "impl-foo"
+    Path(gitdir_path).mkdir(parents=True)
+    Path(fake_wt).mkdir(parents=True)
+    (Path(fake_wt) / ".git").write_text(f"gitdir: {gitdir_path}")
+
+    runner = MockSubprocessRunner()
+    # step 2: rev-parse --git-dir must contain /worktrees/ to pass step 2
+    runner.push(_make_result(0, f"{gitdir_path}"))
+
+    # Mock resolve_main_worktree to return tmp_path (the parent), so the
+    # worktree at tmp_path/worktrees/impl-foo is correctly detected as embedded.
+    with patch("autoskillit.server.git.resolve_main_worktree", return_value=tmp_path):
+        result = await perform_merge(
+            fake_wt,
+            "dev",
+            config=AutomationConfig(),
+            runner=runner,
+            tester=_make_tester(),
+        )
+
+    assert result["failed_step"] == MergeFailedStep.EMBEDDED_WORKTREE
+    assert result["state"] == MergeState.WORKTREE_INTACT
+    assert "nested inside" in result["error"]
+
+
+@pytest.mark.anyio
+async def test_non_embedded_worktree_proceeds_past_spatial_check(tmp_path):
+    """Step 2b passes when the worktree is outside the main repository."""
+    from autoskillit.server.git import perform_merge
+
+    fake_wt = str(tmp_path / "worktrees" / "impl-foo")
+    Path(fake_wt).mkdir(parents=True)
+    (Path(fake_wt) / ".git").write_text("gitdir: /repo/.git/worktrees/impl-foo")
+
+    runner = MockSubprocessRunner()
+    # step 2: rev-parse --git-dir
+    runner.push(_make_result(0, "/repo/.git/worktrees/impl-foo"))
+    # step 3: branch --show-current (worktree)
+    runner.push(_make_result(0, "feature-branch\n"))
+    # step 4: ls-files (generated)
+    runner.push(_make_result(0, ""))
+    # step 5: git status --porcelain (worktree clean)
+    runner.push(_make_result(0, ""))
+    # step 6: fetch
+    runner.push(_make_result(0, ""))
+    # step 7: rev-parse --verify
+    runner.push(_make_result(0, "abc123\n"))
+    # step 7.1: git log --merges
+    runner.push(_make_result(0, ""))
+    # step 7.2: rebase
+    runner.push(_make_result(0, ""))
+    # step 7.5: branch --show-current (main_repo)
+    runner.push(_make_result(0, "dev\n"))
+    # step 7.6: dirty check (clean)
+    runner.push(_make_result(0, ""))
+    # merge
+    runner.push(_make_result(0, ""))
+    # wt remove
+    runner.push(_make_result(0, ""))
+    # branch -D
+    runner.push(_make_result(0, ""))
+
+    with (
+        patch("autoskillit.server.git.scan_editable_installs_for_worktree", return_value=[]),
+        patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")),
+    ):
+        result = await perform_merge(
+            fake_wt,
+            "dev",
+            config=AutomationConfig(),
+            runner=runner,
+            tester=_make_tester(),
+        )
+
+    assert result.get("merge_succeeded") is True

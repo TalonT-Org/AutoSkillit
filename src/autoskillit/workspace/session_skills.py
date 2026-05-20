@@ -27,6 +27,7 @@ from autoskillit.core import (
     atomic_write,
     get_logger,
     is_feature_enabled,
+    pkg_root,
 )
 from autoskillit.workspace.skills import (
     DefaultSkillResolver,
@@ -375,6 +376,10 @@ class SkillsDirectoryProvider:
         if gated:
             content = _inject_disable_model_invocation(content)
         content = content.replace("{{AUTOSKILLIT_TEMP}}", self._temp_dir_relpath)
+        content = content.replace(
+            "{{AUTOSKILLIT_SCRIPTS}}",
+            str(pkg_root() / "recipes" / "scripts"),
+        )
         return content.replace("{{DEFAULT_BASE_BRANCH}}", self._default_base_branch)
 
 

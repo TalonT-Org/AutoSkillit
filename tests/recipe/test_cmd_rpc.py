@@ -3,9 +3,19 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 from unittest.mock import patch
+
+# Git environment for deterministic identity in tests.
+_GIT_ENV = {
+    **os.environ,
+    "GIT_AUTHOR_NAME": "test",
+    "GIT_AUTHOR_EMAIL": "test@test.local",
+    "GIT_COMMITTER_NAME": "test",
+    "GIT_COMMITTER_EMAIL": "test@test.local",
+}
 
 import pytest
 
@@ -210,6 +220,158 @@ def test_emit_fallback_map(tmp_path):
 def test_emit_fallback_map_no_urls(tmp_path):
     with pytest.raises(RuntimeError, match="no issue numbers"):
         emit_fallback_map(issue_urls="", temp_dir=str(tmp_path))
+
+
+# T3
+@pytest.mark.medium
+def test_main_repo_guard_removes_embedded_worktree(tmp_path):
+    """main_repo_guard detects and removes a linked worktree embedded inside the clone."""
+    _init_git_repo(tmp_path)
+
+    # Create a linked worktree inside the repo using _GIT_ENV.
+    wt_path = tmp_path / "embedded-wt"
+    subprocess.run(
+        ["git", "worktree", "add", "--no-checkout", str(wt_path)],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+        env=_GIT_ENV,
+    )
+
+    # Write a dirty file in the main repo.
+    (tmp_path / "dirty.txt").write_text("uncommitted content")
+
+    result = main_repo_guard(clone_path=str(tmp_path))
+
+    assert result["cleaned"] in ("true", "force"), (
+        f"expected cleaned='true' or 'force', got: {result!r}"
+    )
+    # Embedded worktree directory must no longer exist.
+    assert not wt_path.exists(), f"embedded worktree {wt_path} should have been removed"
+    # Repo must be clean after guard.
+    status_result = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        env=_GIT_ENV,
+    )
+    assert status_result.stdout.strip() == "", (
+        f"repo should be clean, but status was: {status_result.stdout!r}"
+    )
+
+
+# T4
+@pytest.mark.medium
+def test_main_repo_guard_removes_multiple_embedded_worktrees(tmp_path):
+    """main_repo_guard removes all embedded linked worktrees before merging."""
+    _init_git_repo(tmp_path)
+
+    wt_a = tmp_path / "wt-a"
+    wt_b = tmp_path / "wt-b"
+    for wt_path in (wt_a, wt_b):
+        subprocess.run(
+            ["git", "worktree", "add", "--no-checkout", str(wt_path)],
+            cwd=tmp_path,
+            check=True,
+            capture_output=True,
+            text=True,
+            env=_GIT_ENV,
+        )
+
+    # Dirty file in main repo.
+    (tmp_path / "dirty.txt").write_text("content")
+
+    result = main_repo_guard(clone_path=str(tmp_path))
+
+    assert result["cleaned"] in ("true", "force"), (
+        f"expected cleaned='true' or 'force', got: {result!r}"
+    )
+    assert not wt_a.exists(), f"embedded worktree {wt_a} should have been removed"
+    assert not wt_b.exists(), f"embedded worktree {wt_b} should have been removed"
+
+    status_result = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        env=_GIT_ENV,
+    )
+    assert status_result.stdout.strip() == "", (
+        f"repo should be clean, but status was: {status_result.stdout!r}"
+    )
+
+
+# T5
+@pytest.mark.medium
+def test_main_repo_guard_post_clean_verify_catches_persistent_dirt(tmp_path):
+    """When neither stash nor force-clean can succeed, main_repo_guard returns failed."""
+    _init_git_repo(tmp_path)
+
+    # Add a tracked file and an embedded worktree at a read-only path.
+    (tmp_path / "tracked.txt").write_text("original")
+    subprocess.run(["git", "add", "tracked.txt"], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "add tracked"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+        env=_GIT_ENV,
+    )
+    # Modify the tracked file to make the repo dirty.
+    (tmp_path / "tracked.txt").write_text("modified")
+
+    # Create an embedded worktree.
+    wt_path = tmp_path / "wt"
+    subprocess.run(
+        ["git", "worktree", "add", "--no-checkout", str(wt_path)],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+        env=_GIT_ENV,
+    )
+
+    # Lock .git to make stash and checkout fail while clean still runs.
+    git_dir = tmp_path / ".git"
+    git_dir.chmod(0o555)
+
+    try:
+        result = main_repo_guard(clone_path=str(tmp_path))
+
+        assert result.get("cleaned") == "failed", f"expected cleaned='failed', got: {result!r}"
+        assert "remaining" in result, f"result should contain 'remaining' key: {result!r}"
+    finally:
+        # Restore permissions so tmp_path cleanup can proceed.
+        git_dir.chmod(0o755)
+
+
+# T6
+@pytest.mark.medium
+def test_main_repo_guard_post_clean_verify_on_stash_success(tmp_path):
+    """When stash succeeds and post-clean verify confirms clean, cleaned=true is returned."""
+    _init_git_repo(tmp_path)
+
+    # Normal dirty file.
+    (tmp_path / "dirty.txt").write_text("content")
+
+    result = main_repo_guard(clone_path=str(tmp_path))
+
+    assert result["cleaned"] == "true", f"expected cleaned='true', got: {result!r}"
+
+    # Explicitly verify repo is clean.
+    status_result = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        env=_GIT_ENV,
+    )
+    assert status_result.stdout.strip() == "", (
+        f"repo should be clean, but status was: {status_result.stdout!r}"
+    )
 
 
 def test_export_local_bundle(tmp_path):

@@ -86,6 +86,7 @@ class MergeFailedStep(StrEnum):
     POST_REBASE_TEST_GATE = "post_rebase_test_gate"
     MERGE = "merge"
     EDITABLE_INSTALL_GUARD = "editable_install_guard"
+    EMBEDDED_WORKTREE = "embedded_worktree"
 
 
 class MergeState(StrEnum):

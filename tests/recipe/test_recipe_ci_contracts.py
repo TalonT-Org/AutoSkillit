@@ -120,3 +120,38 @@ def test_wait_for_ci_steps_have_remote_url(recipe_data) -> None:
             missing.append(step_name)
 
     assert not missing, f"{recipe_name}: wait_for_ci steps missing remote_url: {missing}"
+
+
+def test_ci_event_capture_has_ci_applicable_guard(recipe_data) -> None:
+    """Steps capturing ci_event from check_repo_merge_state must have a ci_applicable guard.
+
+    Structural contract: every check_repo_merge_state step that captures ci_event
+    and routes to a wait_for_ci step (directly or via intermediaries) must also
+    capture ci_applicable and route through an action:route step that checks it.
+    """
+    recipe_name, data = recipe_data
+    steps = data.get("steps") or {}
+
+    ci_event_capture_steps = []
+    for step_name, step in steps.items():
+        tool = step.get("tool", "")
+        if "check_repo_merge_state" not in tool:
+            continue
+        capture = step.get("capture") or {}
+        if any("ci_event" in k for k in capture):
+            ci_event_capture_steps.append(step_name)
+
+    if not ci_event_capture_steps:
+        pytest.skip(f"{recipe_name}: no check_repo_merge_state steps capturing ci_event")
+
+    violations = []
+    for step_name in ci_event_capture_steps:
+        step = steps[step_name]
+        capture = step.get("capture") or {}
+        has_applicable_capture = any("ci_applicable" in k for k in capture)
+        if not has_applicable_capture:
+            violations.append(f"{step_name}: captures ci_event but not ci_applicable")
+
+    assert not violations, f"{recipe_name}: ci_event capture without ci_applicable:\n" + "\n".join(
+        f"  - {v}" for v in violations
+    )

@@ -172,6 +172,21 @@ def test_pr_create_guard_exempt_session_types_matches_hookdef() -> None:
     )
 
 
+def test_pr_create_guard_has_interactive_kitchen_pass_case() -> None:
+    """test_pr_create_guard.py must have at least one test where kitchen_open=True,
+    no session type env var is set, and the guard allows via recipe authorization."""
+    test_file = _find_test_file("guards/pr_create_guard.py")
+    assert test_file is not None
+    source = test_file.read_text(encoding="utf-8")
+    assert "recipe_allows_pr_create" in source, (
+        "test_pr_create_guard.py must have at least one test exercising the "
+        "recipe_allows_pr_create authorization path (interactive kitchen session)."
+    )
+    assert "TestInteractiveKitchenExemption" in source, (
+        "test_pr_create_guard.py must have a TestInteractiveKitchenExemption test class."
+    )
+
+
 def test_canonical_registry_payload_includes_exempt_session_types() -> None:
     """exempt_session_types must be part of the canonical registry payload used for hashing.
 

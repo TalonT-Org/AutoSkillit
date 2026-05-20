@@ -331,3 +331,89 @@ class TestOrchestratorSessionExemption:
             session_type=None,
         )
         assert _is_denied(out), "Missing session type must be denied"
+
+
+# ---------------------------------------------------------------------------
+# Interactive kitchen exemption via recipe authorization
+# ---------------------------------------------------------------------------
+
+
+class TestInteractiveKitchenExemption:
+    """Interactive kitchen sessions with recipe_allows_pr_create must be allowed."""
+
+    def test_interactive_kitchen_with_recipe_allows_pr_create(self, tmp_path) -> None:
+        """Kitchen open + recipe_allows_pr_create=true → allow."""
+        hook_cfg = tmp_path / _HOOK_CONFIG_RELPATH
+        hook_cfg.parent.mkdir(parents=True, exist_ok=True)
+        hook_cfg.write_text(
+            json.dumps(
+                {
+                    "recipe_allows_pr_create": True,
+                    "quota_guard": {"cache_max_age": 300},
+                    "kitchen_id": "test-kitchen-id",
+                }
+            )
+        )
+        from autoskillit.hooks.guards.pr_create_guard import main
+
+        stdin_content = json.dumps(
+            {
+                "tool_name": _TOOL_NAME,
+                "tool_input": {"cmd": "gh pr create --title foo --body bar"},
+            }
+        )
+        clean_env = _make_clean_env(skill_name=None, session_type=None)
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            with unittest.mock.patch.dict(os.environ, clean_env, clear=True):
+                with unittest.mock.patch("sys.stdin", io.StringIO(stdin_content)):
+                    with unittest.mock.patch("pathlib.Path.cwd", return_value=tmp_path):
+                        try:
+                            main()
+                        except SystemExit as exc:
+                            assert exc.code == 0
+
+        assert buf.getvalue().strip() == "", (
+            "Interactive kitchen with recipe_allows_pr_create must be allowed"
+        )
+
+    def test_interactive_kitchen_without_recipe_flag_still_denied(self, tmp_path) -> None:
+        """Kitchen open + no recipe_allows_pr_create → deny."""
+        out = _run_guard(
+            "gh pr create --title foo --body bar",
+            kitchen_open=True,
+            tmpdir=tmp_path,
+            skill_name=None,
+            session_type=None,
+        )
+        assert _is_denied(out), "Kitchen open without recipe flag must be denied"
+
+    def test_interactive_kitchen_recipe_flag_false_still_denied(self, tmp_path) -> None:
+        """Kitchen open + recipe_allows_pr_create=false → deny."""
+        hook_cfg = tmp_path / _HOOK_CONFIG_RELPATH
+        hook_cfg.parent.mkdir(parents=True, exist_ok=True)
+        hook_cfg.write_text(json.dumps({"recipe_allows_pr_create": False, "kitchen_id": "test"}))
+        from autoskillit.hooks.guards.pr_create_guard import main
+
+        stdin_content = json.dumps(
+            {
+                "tool_name": _TOOL_NAME,
+                "tool_input": {"cmd": "gh pr create --title foo"},
+            }
+        )
+        clean_env = _make_clean_env(skill_name=None, session_type=None)
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            with unittest.mock.patch.dict(os.environ, clean_env, clear=True):
+                with unittest.mock.patch("sys.stdin", io.StringIO(stdin_content)):
+                    with unittest.mock.patch("pathlib.Path.cwd", return_value=tmp_path):
+                        try:
+                            main()
+                        except SystemExit as exc:
+                            assert exc.code == 0
+
+        assert _is_denied(buf.getvalue()), (
+            "Kitchen open with recipe_allows_pr_create=false must be denied"
+        )

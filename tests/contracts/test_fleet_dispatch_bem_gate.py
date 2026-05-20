@@ -60,3 +60,34 @@ def test_fleet_prompt_references_max_total_issues_cap(fleet_prompt: str) -> None
     assert "max_total_issues" in fleet_prompt, (
         "Fleet dispatcher prompt must mention the total issues session cap"
     )
+
+
+def test_fleet_prompt_bem_gate_uses_mandatory_heading(fleet_prompt: str) -> None:
+    """BEM gate heading must include MANDATORY to match sous-chef standard."""
+    bem_to_discipline = fleet_prompt.split("## DISPATCHER DISCIPLINE")[0]
+    assert "MANDATORY" in bem_to_discipline, (
+        "BEM pre-step gate heading must include 'MANDATORY' — weak headings "
+        "allow the LLM to treat the gate as advisory documentation"
+    )
+
+
+def test_fleet_prompt_bem_gate_uses_must_directive(fleet_prompt: str) -> None:
+    """BEM gate must contain MUST directives for enforcement."""
+    parts = fleet_prompt.split("## MULTI-ISSUE")
+    assert len(parts) >= 2, "Fleet prompt must contain ## MULTI-ISSUE heading"
+    bem_section = parts[1].split("## DISPATCHER DISCIPLINE")[0]
+    assert "MUST" in bem_section.upper(), (
+        "BEM gate section must contain at least one MUST directive — "
+        "soft imperative language is insufficient for LLM compliance"
+    )
+
+
+def test_fleet_prompt_bem_gate_has_never_block(fleet_prompt: str) -> None:
+    """BEM gate must contain NEVER prohibitions to prevent bypass."""
+    parts = fleet_prompt.split("## MULTI-ISSUE")
+    assert len(parts) >= 2, "Fleet prompt must contain ## MULTI-ISSUE heading"
+    bem_section = parts[1].split("## DISPATCHER DISCIPLINE")[0]
+    assert "NEVER" in bem_section, (
+        "BEM gate section must contain NEVER directives prohibiting "
+        "multi-issue dispatch without prior BEM execution"
+    )

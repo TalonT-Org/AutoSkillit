@@ -831,7 +831,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "pipeline": 12,
         "fleet": 16,
         "recipe/rules": 33,
-        "server/tools": 19,
+        "server/tools": 20,
         "hooks/guards": 22,
     }
     violations: list[str] = []

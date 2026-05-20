@@ -16,7 +16,7 @@ from autoskillit.fleet import (
     write_initial_state,
 )
 
-pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small]
+pytestmark = [pytest.mark.feature("fleet"), pytest.mark.layer("fleet"), pytest.mark.small]
 
 _ISSUE_URL = "https://github.com/owner/repo/issues/42"
 _OTHER_URL = "https://github.com/owner/repo/issues/99"

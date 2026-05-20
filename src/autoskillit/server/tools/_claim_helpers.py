@@ -14,7 +14,7 @@ from autoskillit.fleet import (
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ClaimDecision:
     claimed: bool
     reentry: bool = False

@@ -155,7 +155,7 @@ class TestClaimAndResolveIssueLiveness:
 class TestClaimHelperParity:
     @pytest.mark.anyio
     async def test_claim_helper_dead_dispatch_matches_tool_behavior(self):
-        """_try_claim_with_liveness directly: dead dispatch → claimed=True, stale_label_cleaned=True."""
+        """_try_claim_with_liveness directly: dead dispatch → claimed=True, stale_label_cleaned."""
         from autoskillit.server.tools._claim_helpers import _try_claim_with_liveness
 
         dead_dispatch = _make_dead_dispatch()

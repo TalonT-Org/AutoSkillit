@@ -290,6 +290,7 @@ def find_dispatch_for_issue(
         try:
             state = read_state(state_path)
         except Exception:
+            logger.warning("Failed to read campaign state from %s", state_path, exc_info=True)
             continue
         if state is None:
             continue

@@ -10,7 +10,7 @@ from autoskillit.core import SessionType, extract_path_arg, get_logger, session_
 from autoskillit.pipeline import gate_error_result, headless_error_result
 
 if TYPE_CHECKING:
-    from autoskillit.config._config_dataclasses import ProvidersConfig
+    from autoskillit.config._config_dataclasses import ProviderProfileDef, ProvidersConfig
 
 logger = get_logger(__name__)
 
@@ -164,6 +164,22 @@ def _provider_result(
     return (provider, {k: v for k, v in raw.items() if v is not None})
 
 
+def _profile_to_env(profile: ProviderProfileDef) -> dict[str, str]:
+    env: dict[str, str] = {}
+    if profile.base_url:
+        env["ANTHROPIC_BASE_URL"] = profile.base_url
+    if profile.timeout_seconds is not None and profile.timeout_seconds > 0:
+        env["API_TIMEOUT_MS"] = str(profile.timeout_seconds * 1000)
+    if profile.api_key_env:
+        val = os.environ.get(profile.api_key_env)
+        if val:
+            env["ANTHROPIC_API_KEY"] = val
+        else:
+            logger.warning("provider_api_key_env_missing", api_key_env=profile.api_key_env)
+    env.update(profile.raw_env)
+    return env
+
+
 def _resolve_provider_profile(
     step_name: str,
     recipe_name: str,
@@ -206,8 +222,11 @@ def _resolve_provider_profile(
             )
             if step_override == "anthropic":
                 return ("anthropic", {})
-            raw = config_providers.profiles.get(step_override, {})
-            return (step_override, {k: v for k, v in raw.items() if v is not None})
+            profile = config_providers.resolved_profiles.get(step_override)
+            if profile is None:
+                logger.debug("provider_profile_not_found", provider=step_override)
+                return (step_override, {})
+            return (step_override, _profile_to_env(profile))
 
     # Tier 2: wildcard override (requires recipe context)
     if recipe_name:
@@ -220,24 +239,33 @@ def _resolve_provider_profile(
             )
             if wildcard == "anthropic":
                 return ("anthropic", {})
-            raw = config_providers.profiles.get(wildcard, {})
-            return (wildcard, {k: v for k, v in raw.items() if v is not None})
+            profile = config_providers.resolved_profiles.get(wildcard)
+            if profile is None:
+                logger.debug("provider_profile_not_found", provider=wildcard)
+                return (wildcard, {})
+            return (wildcard, _profile_to_env(profile))
 
     # Tier 3: step YAML provider field
     if step_name:
         logger.debug("provider_profile_resolved", tier="step_provider_field", profile=step_name)
         if step_name == "anthropic":
             return ("anthropic", {})
-        raw = config_providers.profiles.get(step_name, {})
-        return (step_name, {k: v for k, v in raw.items() if v is not None})
+        profile = config_providers.resolved_profiles.get(step_name)
+        if profile is None:
+            logger.debug("provider_profile_not_found", provider=step_name)
+            return (step_name, {})
+        return (step_name, _profile_to_env(profile))
 
     # Tier 4: default
     name = config_providers.default_provider or "anthropic"
     logger.debug("provider_profile_resolved", tier="default", profile=name)
     if name == "anthropic":
         return ("anthropic", {})
-    raw = config_providers.profiles.get(name, {})
-    return (name, {k: v for k, v in raw.items() if v is not None})
+    profile = config_providers.resolved_profiles.get(name)
+    if profile is None:
+        logger.debug("provider_profile_not_found", provider=name)
+        return (name, {})
+    return (name, _profile_to_env(profile))
 
 
 def _resolve_model_as_profile(

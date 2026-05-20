@@ -212,9 +212,10 @@ def test_provider_result_filters_none_values():
     assert extras == {"api_key_env": "MY_KEY"}
 
 
-def test_resolve_provider_profile_filters_none_from_step_override():
+def test_resolve_provider_profile_filters_none_from_step_override(monkeypatch):
     from autoskillit.server._guards import _resolve_provider_profile
 
+    monkeypatch.setenv("MY_KEY", "secret-value")
     cfg = _make_config(
         profiles={"custom": {"base_url": None, "api_key_env": "MY_KEY"}},
         step_overrides={"fetch": "custom"},
@@ -222,4 +223,4 @@ def test_resolve_provider_profile_filters_none_from_step_override():
     name, extras = _resolve_provider_profile("fetch", "my_recipe", cfg)
     assert name == "custom"
     assert None not in extras.values()
-    assert extras == {"api_key_env": "MY_KEY"}
+    assert extras == {"ANTHROPIC_API_KEY": "secret-value"}

@@ -26,12 +26,13 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_misc_module.py` | Contract tests: server._misc module |
 | `test_no_raw_signal_handler.py` | AST guard: no raw signal.signal(SIGTERM, ...) in cli/app.py |
 | `test_perform_merge_editable_guard.py` | Integration tests verifying perform_merge() aborts before cleanup on poisoned installs |
+| `test_profile_to_env.py` | Tests for _profile_to_env — ProviderProfileDef to env dict conversion in _guards.py |
 | `test_quota_refresh_loop.py` | Tests for _quota_refresh_loop in server/_misc.py |
 | `test_release_issue_fail_label.py` | Tests for release_issue fail_label path and fail label cleanup |
 | `test_reload_session.py` | Tests for the reload_session MCP tool and supporting helpers |
 | `test_research_smoke_pipeline.py` | Research recipe smoke pipeline: gated E2E tests (RESEARCH_SMOKE_TEST=1) |
 | `test_resolve_model_as_profile.py` | Tests for _resolve_model_as_profile — model-value-as-provider-profile resolution in _guards.py |
-| `test_resolve_provider_profile.py` | Tests for _resolve_provider_profile four-tier provider resolution in _guards.py |
+| `test_resolve_provider_profile.py` | Tests for _resolve_provider_profile six-tier provider resolution in _guards.py |
 | `test_run_skill_add_dirs.py` | Contract tests: run_skill passes correct add_dirs to executor (T-OVR-014) |
 | `test_run_skill_resume.py` | Tests for resume_session_id threading from run_skill through executor |
 | `test_server_init_gate.py` | Tests for server init: gate access, visibility, subset management, wire format compliance |

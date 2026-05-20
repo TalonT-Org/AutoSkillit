@@ -295,7 +295,12 @@ fleet:
 
 providers:
   default_provider: null
-  profiles: {}
+  profiles:
+    anthropic:
+      base_url: null
+      timeout_seconds: null
+      api_key_env: null
+      context_window: null
   step_overrides: {}
   recipe_overrides: {}
   provider_retry_limit: 2

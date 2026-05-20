@@ -200,3 +200,26 @@ def test_recipe_override_requires_step_name_with_step_name():
     )
     result = _resolve_provider_profile("implement", "remediation", cfg)
     assert result == ("vertex", {"K": "V"})
+
+
+def test_provider_result_filters_none_values():
+    from autoskillit.server._guards import _provider_result
+
+    profiles = {"custom": {"base_url": None, "api_key_env": "MY_KEY", "timeout_seconds": None}}
+    name, extras = _provider_result("custom", profiles)
+    assert name == "custom"
+    assert None not in extras.values()
+    assert extras == {"api_key_env": "MY_KEY"}
+
+
+def test_resolve_provider_profile_filters_none_from_step_override():
+    from autoskillit.server._guards import _resolve_provider_profile
+
+    cfg = _make_config(
+        profiles={"custom": {"base_url": None, "api_key_env": "MY_KEY"}},
+        step_overrides={"fetch": "custom"},
+    )
+    name, extras = _resolve_provider_profile("fetch", "my_recipe", cfg)
+    assert name == "custom"
+    assert None not in extras.values()
+    assert extras == {"api_key_env": "MY_KEY"}

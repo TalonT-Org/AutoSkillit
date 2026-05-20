@@ -99,3 +99,23 @@ def test_anthropic_as_model_value_no_profile():
     cfg = _make_config(profiles={"minimax": {"ANTHROPIC_MODEL": "M2.7"}})
     result = _resolve_model_as_profile("anthropic", cfg)
     assert result == ("anthropic", "", None)
+
+
+def test_resolve_model_as_profile_filters_none_values():
+    from autoskillit.server._guards import _resolve_model_as_profile
+
+    cfg = _make_config(
+        profiles={
+            "myprofile": {
+                "ANTHROPIC_MODEL": "claude-sonnet-4-6",
+                "base_url": None,
+                "api_key_env": None,
+            }
+        }
+    )
+    model, name, extras = _resolve_model_as_profile("myprofile", cfg)
+    assert model == "claude-sonnet-4-6"
+    assert name == "myprofile"
+    assert extras is not None
+    assert None not in extras.values()
+    assert "base_url" not in extras

@@ -156,11 +156,12 @@ def _check_dry_walkthrough(skill_command: str, cwd: str) -> str | None:
 
 def _provider_result(
     provider: str,
-    profiles: dict[str, dict[str, str]],
+    profiles: dict[str, dict[str, str | None]],
 ) -> tuple[str, dict[str, str]]:
     if provider == "anthropic":
         return ("anthropic", {})
-    return (provider, profiles.get(provider, {}))
+    raw = profiles.get(provider, {})
+    return (provider, {k: v for k, v in raw.items() if v is not None})
 
 
 def _resolve_provider_profile(
@@ -205,7 +206,8 @@ def _resolve_provider_profile(
             )
             if step_override == "anthropic":
                 return ("anthropic", {})
-            return (step_override, config_providers.profiles.get(step_override, {}))
+            raw = config_providers.profiles.get(step_override, {})
+            return (step_override, {k: v for k, v in raw.items() if v is not None})
 
     # Tier 2: wildcard override (requires recipe context)
     if recipe_name:
@@ -218,21 +220,24 @@ def _resolve_provider_profile(
             )
             if wildcard == "anthropic":
                 return ("anthropic", {})
-            return (wildcard, config_providers.profiles.get(wildcard, {}))
+            raw = config_providers.profiles.get(wildcard, {})
+            return (wildcard, {k: v for k, v in raw.items() if v is not None})
 
     # Tier 3: step YAML provider field
     if step_name:
         logger.debug("provider_profile_resolved", tier="step_provider_field", profile=step_name)
         if step_name == "anthropic":
             return ("anthropic", {})
-        return (step_name, config_providers.profiles.get(step_name, {}))
+        raw = config_providers.profiles.get(step_name, {})
+        return (step_name, {k: v for k, v in raw.items() if v is not None})
 
     # Tier 4: default
     name = config_providers.default_provider or "anthropic"
     logger.debug("provider_profile_resolved", tier="default", profile=name)
     if name == "anthropic":
         return ("anthropic", {})
-    return (name, config_providers.profiles.get(name, {}))
+    raw = config_providers.profiles.get(name, {})
+    return (name, {k: v for k, v in raw.items() if v is not None})
 
 
 def _resolve_model_as_profile(
@@ -276,5 +281,5 @@ def _resolve_model_as_profile(
         resolved_model=actual_model,
         profile=model_value,
     )
-    env_dict = {k: v for k, v in profile.items() if k != "ANTHROPIC_MODEL"}
+    env_dict = {k: v for k, v in profile.items() if k != "ANTHROPIC_MODEL" and v is not None}
     return (actual_model, model_value, env_dict)

@@ -27,18 +27,52 @@ def recipe_data(request):
         return request.param.stem, yaml.safe_load(f)
 
 
+_PRIMARY_CI_EVENT_KEYS = {"ci_event", "conflict_ci_event"}
+
+
 def _find_ci_event_capture_steps(steps: dict) -> list[tuple[str, dict]]:
-    """Find steps that capture ci_event from check_repo_merge_state."""
+    """Find steps that capture a primary ci_event from check_repo_merge_state.
+
+    Only matches ci_event and conflict_ci_event — not secondary variants like
+    pre_enqueue_ci_event, batch_ci_event, etc. which have independent derivation
+    chains.
+    """
     result = []
     for step_name, step in steps.items():
         tool = step.get("tool", "")
         if "check_repo_merge_state" not in tool:
             continue
         capture = step.get("capture") or {}
-        ci_event_vars = [k for k in capture if "ci_event" in k]
-        if ci_event_vars:
+        if capture.keys() & _PRIMARY_CI_EVENT_KEYS:
             result.append((step_name, step))
     return result
+
+
+def _reaches_wait_for_ci(steps: dict, start: str, depth: int = 5) -> bool:
+    """BFS from start to check if wait_for_ci is reachable within depth hops."""
+    visited: set[str] = set()
+    queue = [start]
+    for _ in range(depth):
+        next_queue: list[str] = []
+        for node in queue:
+            if node in visited:
+                continue
+            visited.add(node)
+            node_step = steps.get(node, {})
+            if node_step.get("tool") == "wait_for_ci":
+                return True
+            for key in ("on_success", "on_failure"):
+                target = node_step.get(key)
+                if target and target in steps and target not in visited:
+                    next_queue.append(target)
+            for cond in node_step.get("on_result", []):
+                target = cond.get("route")
+                if target and target in steps and target not in visited:
+                    next_queue.append(target)
+        queue = next_queue
+        if not queue:
+            break
+    return False
 
 
 def _has_ci_applicable_route(steps: dict, from_step: str) -> bool:
@@ -68,6 +102,8 @@ def test_ci_event_capture_steps_have_ci_applicable_routing(recipe_data) -> None:
 
     violations = []
     for step_name, _step in capture_steps:
+        if not _reaches_wait_for_ci(steps, step_name):
+            continue
         if not _has_ci_applicable_route(steps, step_name):
             violations.append(step_name)
 

@@ -85,11 +85,12 @@
       },
       "capture": {
         "ci_event": "${{ result.ci_event }}",
+        "ci_applicable": "${{ result.ci_applicable }}",
         "auto_merge_available": "${{ result.auto_merge_available }}"
       },
       "on_success": "check_integration_exists",
       "on_failure": "check_integration_exists",
-      "note": "Detects whether the repository's CI triggers on push or merge_group events for the base branch. Each downstream wait_for_ci step re-derives ci_event for its own watched branch via a dedicated derive_*_ci_event step. The global ci_event captured here is used only by diagnose-ci skill invocations. Routes to check_integration_exists regardless of outcome — non-blocking gate: ci_event defaults to null (match-any) on failure.\n"
+      "note": "Detects whether the repository's CI triggers on push or merge_group events for the base branch. Each downstream wait_for_ci step re-derives ci_event for its own watched branch via a dedicated derive_*_ci_event step. The global ci_event and ci_applicable captured here are used by diagnostic skill invocations. Routes to check_integration_exists regardless of outcome — non-blocking gate: ci_event defaults to null (match-any) on failure.\n"
     },
     "check_integration_exists": {
       "tool": "run_cmd",

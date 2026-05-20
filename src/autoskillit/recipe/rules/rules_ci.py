@@ -485,6 +485,7 @@ def _check_ci_event_literal_merge_group(ctx: ValidationContext) -> list[RuleFind
 
 
 _CI_APPLICABLE_RE = re.compile(r"ci_applicable")
+_PRIMARY_CI_EVENT_RE = re.compile(r"context\.(conflict_)?ci_event\s*\}\}")
 
 
 @semantic_rule(
@@ -502,7 +503,7 @@ def _check_ci_wait_requires_applicability_guard(ctx: ValidationContext) -> list[
         if step.tool != "wait_for_ci":
             continue
         event_val = (step.with_args or {}).get("event", "")
-        if not isinstance(event_val, str) or "ci_event" not in event_val:
+        if not isinstance(event_val, str) or not _PRIMARY_CI_EVENT_RE.search(event_val):
             continue
         has_guard = False
         for pred_name in ctx.predecessors.get(step_name, set()):

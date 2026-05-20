@@ -429,6 +429,74 @@ class TestCheckAndSleepResetAtNoneBlocks:
         assert result["sleep_seconds"] > 0
 
 
+class TestProviderBypassUnit:
+    @pytest.mark.anyio
+    async def test_non_anthropic_provider_returns_immediately_no_io(self, monkeypatch):
+        from autoskillit.execution.quota import check_and_sleep_if_needed
+
+        config = make_quota_guard_config(enabled=True)
+        fetch_called = []
+
+        async def mock_fetch(*a, **kw):
+            fetch_called.append(1)
+            raise AssertionError("should not fetch")
+
+        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
+        result = await check_and_sleep_if_needed(config, provider="openai")
+        assert result["should_sleep"] is False
+        assert result["provider_bypass"] is True
+        assert fetch_called == []
+
+    @pytest.mark.anyio
+    async def test_anthropic_provider_does_not_bypass(self, monkeypatch, tmp_path):
+        from autoskillit.execution.quota import (
+            QuotaFetchResult,
+            QuotaStatus,
+            QuotaWindowEntry,
+            check_and_sleep_if_needed,
+        )
+
+        resets_at = datetime.now(UTC) + timedelta(hours=2)
+        config = make_quota_guard_config(
+            enabled=True,
+            credentials_path=str(tmp_path / ".credentials.json"),
+            cache_path=str(tmp_path / "cache.json"),
+        )
+        fetch_called = []
+
+        async def mock_fetch(path, **kwargs):
+            fetch_called.append(1)
+            return QuotaFetchResult(
+                windows={"five_hour": QuotaWindowEntry(utilization=50.0, resets_at=resets_at)},
+                binding=QuotaStatus(
+                    utilization=50.0, resets_at=resets_at, window_name="five_hour"
+                ),
+            )
+
+        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
+        result = await check_and_sleep_if_needed(config, provider="anthropic")
+        assert result["should_sleep"] is False
+        assert fetch_called == [1]
+        assert "provider_bypass" not in result
+
+    @pytest.mark.anyio
+    async def test_provider_bypass_trumps_enabled(self, monkeypatch):
+        from autoskillit.execution.quota import check_and_sleep_if_needed
+
+        config = make_quota_guard_config(enabled=True)
+        fetch_called = []
+
+        async def mock_fetch(*a, **kw):
+            fetch_called.append(1)
+            raise AssertionError("should not fetch")
+
+        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
+        result = await check_and_sleep_if_needed(config, provider="openai")
+        assert result["should_sleep"] is False
+        assert result["provider_bypass"] is True
+        assert fetch_called == []
+
+
 class TestIntegration:
     """Integration tests: write/read contract between execution.quota and hooks.quota_guard."""
 

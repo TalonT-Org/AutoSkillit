@@ -10,13 +10,6 @@ if TYPE_CHECKING:
     from autoskillit.core import GitHubFetcher
     from autoskillit.pipeline.context import ToolContext
 
-from autoskillit.fleet import (
-    cleanup_orphaned_labels,
-    discover_campaign_state_files,
-    find_dispatch_for_issue,
-    is_dispatch_session_alive,
-)
-
 
 @dataclass(frozen=True, slots=True)
 class ClaimDecision:
@@ -27,6 +20,8 @@ class ClaimDecision:
 
 
 def _get_campaign_state_paths(tool_ctx: ToolContext) -> list[Path]:
+    from autoskillit.fleet import discover_campaign_state_files  # noqa: PLC0415
+
     return discover_campaign_state_files(tool_ctx.project_dir)
 
 
@@ -45,6 +40,12 @@ async def _try_claim_with_liveness(
     indicating whether to proceed with the claim. When the owning dispatch session is
     dead, cleans up the stale label inline and returns claimed=True.
     """
+    from autoskillit.fleet import (  # noqa: PLC0415
+        cleanup_orphaned_labels,
+        find_dispatch_for_issue,
+        is_dispatch_session_alive,
+    )
+
     if effective_label not in current_labels:
         return ClaimDecision(claimed=True)
     if allow_reentry:

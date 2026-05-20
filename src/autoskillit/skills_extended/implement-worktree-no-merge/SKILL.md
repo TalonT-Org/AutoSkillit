@@ -96,40 +96,8 @@ Correct orchestration on `needs_retry=true`:
 ### Step 1: Create Git Worktree
 
 ```bash
-CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 WORKTREE_NAME="impl-{plan_name}-$(date +%Y%m%d-%H%M%S)"
-MAIN_GIT_DIR="$(git rev-parse --path-format=absolute --git-common-dir)"
-MAIN_ROOT="$(dirname "$MAIN_GIT_DIR")"
-WORKTREE_DIR="${MAIN_ROOT}/../worktrees"
-mkdir -p "${WORKTREE_DIR}"
-WORKTREE_PATH="${WORKTREE_DIR}/${WORKTREE_NAME}"
-git worktree add -b "${WORKTREE_NAME}" "${WORKTREE_PATH}"
-WORKTREE_PATH="$(cd "${WORKTREE_PATH}" && pwd)"
-
-# Record the base branch in two ways for reliable discovery by retry-worktree:
-# 1) Write an explicit file store (stdlib-only, works with any Git version, works offline)
-python3 -c "
-from pathlib import Path
-import tempfile, os
-project_root = Path('$(git rev-parse --show-toplevel)')
-sidecar_dir = project_root / '.autoskillit' / 'temp' / 'worktrees' / '${WORKTREE_NAME}'
-sidecar_dir.mkdir(parents=True, exist_ok=True)
-sidecar_file = sidecar_dir / 'base-branch'
-fd, tmp = tempfile.mkstemp(dir=str(sidecar_dir))
-os.write(fd, ('${CURRENT_BRANCH}' + '\n').encode())
-os.close(fd)
-os.replace(tmp, str(sidecar_file))
-"
-# 2) Set git upstream tracking (requires remote tracking ref in local fetch cache)
-REMOTE=$(git remote get-url upstream 2>/dev/null | grep -qv "^file://" && echo upstream || echo origin)
-if ! git fetch "$REMOTE" "${CURRENT_BRANCH}" 2>/dev/null; then
-    echo "NOTE: Branch '${CURRENT_BRANCH}' has no remote tracking ref on $REMOTE."
-    echo "      merge_worktree will fail unless you push first: git push -u $REMOTE ${CURRENT_BRANCH}"
-    echo "      Continuing — implementation will proceed, but the merge step will be blocked."
-fi
-if ! git -C "${WORKTREE_PATH}" branch --set-upstream-to="${REMOTE}/${CURRENT_BRANCH}" "${WORKTREE_NAME}" 2>/dev/null; then
-    echo "NOTE: Could not set upstream tracking for '${WORKTREE_NAME}' → '$REMOTE/${CURRENT_BRANCH}'."
-fi
+eval "$(bash "{{AUTOSKILLIT_SCRIPTS}}/create_impl_worktree.sh" "${WORKTREE_NAME}" "{{AUTOSKILLIT_TEMP}}")"
 ```
 
 ### Step 1 (cont.): Emit Structured Tokens Early
@@ -145,7 +113,7 @@ if context is exhausted before Step 6:
 
 ```
 worktree_path = ${WORKTREE_PATH}
-branch_name = ${WORKTREE_NAME}
+branch_name = ${BRANCH_NAME}
 ```
 
 **Why emit early?** If context exhaustion occurs during Steps 2–5, the
@@ -229,7 +197,7 @@ Then emit these structured output tokens on their own lines so recipe capture bl
 
 ```
 worktree_path = ${WORKTREE_PATH}
-branch_name = ${WORKTREE_NAME}
+branch_name = ${BRANCH_NAME}
 ```
 
 **If this is a `_part_` plan file:** The orchestrator MUST merge this worktree

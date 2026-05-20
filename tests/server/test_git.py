@@ -172,7 +172,9 @@ async def test_perform_merge_returns_success_on_green_tests(
     conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
     conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
 
-    with patch("autoskillit.server.git.resolve_main_worktree", return_value=Path(fake_wt)):
+    with patch(
+        "autoskillit.server.git.resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
+    ):
         result = await perform_merge(
             fake_wt,
             "dev",
@@ -189,7 +191,7 @@ async def test_perform_merge_returns_success_on_green_tests(
         for args in conftest_mock_runner.call_args_list
         if len(args[0]) > 1 and args[0][1] == "merge"
     )
-    assert merge_call[1] == Path(fake_wt)
+    assert merge_call[1] == Path("/nonexistent-main-repo")
 
 
 @pytest.mark.anyio
@@ -250,7 +252,9 @@ async def test_perform_merge_uses_no_edit_flag(default_config, conftest_mock_run
     conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
     conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
 
-    with patch("autoskillit.server.git.resolve_main_worktree", return_value=Path(fake_wt)):
+    with patch(
+        "autoskillit.server.git.resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
+    ):
         result = await perform_merge(
             fake_wt,
             "dev",
@@ -338,7 +342,9 @@ async def test_perform_merge_strips_tracked_generated_files(
     conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
     conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
 
-    with patch("autoskillit.server.git.resolve_main_worktree", return_value=Path(fake_wt)):
+    with patch(
+        "autoskillit.server.git.resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
+    ):
         result = await perform_merge(
             fake_wt, "dev", config=default_config, runner=conftest_mock_runner, tester=tester
         )
@@ -389,7 +395,9 @@ async def test_perform_merge_noop_when_no_generated_files_tracked(
     conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
     conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
 
-    with patch("autoskillit.server.git.resolve_main_worktree", return_value=Path(fake_wt)):
+    with patch(
+        "autoskillit.server.git.resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
+    ):
         result = await perform_merge(
             fake_wt, "dev", config=default_config, runner=conftest_mock_runner, tester=tester
         )
@@ -458,7 +466,9 @@ async def test_perform_merge_dirty_check_ignores_generated_files(
     conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
     conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
 
-    with patch("autoskillit.server.git.resolve_main_worktree", return_value=Path(fake_wt)):
+    with patch(
+        "autoskillit.server.git.resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
+    ):
         result = await perform_merge(
             fake_wt, "dev", config=default_config, runner=conftest_mock_runner, tester=tester
         )
@@ -497,7 +507,9 @@ async def test_perform_merge_strips_generated_files_before_dirty_check(
     conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
     conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
 
-    with patch("autoskillit.server.git.resolve_main_worktree", return_value=Path(fake_wt)):
+    with patch(
+        "autoskillit.server.git.resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
+    ):
         result = await perform_merge(
             fake_wt, "dev", config=default_config, runner=conftest_mock_runner, tester=tester
         )

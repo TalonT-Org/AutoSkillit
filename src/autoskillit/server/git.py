@@ -159,6 +159,23 @@ async def perform_merge(
             "worktree_path": worktree_path,
         }
 
+    # 2b. Verify worktree is not nested inside the main repository.
+    _main_for_spatial = await asyncio.to_thread(resolve_main_worktree, Path(worktree_path))
+    if _main_for_spatial is not None and Path(worktree_path).resolve().is_relative_to(
+        _main_for_spatial.resolve()
+    ):
+        return {
+            "error": (
+                f"Worktree {worktree_path} is nested inside its main repository "
+                f"{_main_for_spatial}. This placement prevents main_repo_guard from "
+                f"cleaning the clone. The worktree must be created outside "
+                f"the clone directory (e.g., ../worktrees/)."
+            ),
+            "failed_step": MergeFailedStep.EMBEDDED_WORKTREE,
+            "state": MergeState.WORKTREE_INTACT,
+            "worktree_path": worktree_path,
+        }
+
     # 3. Get branch name
     rc, branch_out, stderr = await _run_git(
         ["git", "branch", "--show-current"], worktree_path, 10, runner

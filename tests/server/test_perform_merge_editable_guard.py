@@ -66,7 +66,9 @@ async def test_perform_merge_aborts_before_cleanup_on_poisoned_install(
     runner.push(_make_result(0, ""))  # git merge (step 8)
     # Step 8.5: editable guard fires (mocked above) — cleanup steps never reached
 
-    with patch("autoskillit.server.git.resolve_main_worktree", return_value=Path(fake_wt)):
+    with patch(
+        "autoskillit.server.git.resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
+    ):
         result = await perform_merge(
             fake_wt, "dev", config=AutomationConfig(), runner=runner, tester=tester
         )
@@ -125,7 +127,9 @@ async def test_perform_merge_proceeds_normally_when_guard_returns_empty(
     # Step 8.5: guard returns [] — cleanup proceeds
     # Steps 9-10 (wt remove, branch -D) use MockSubprocessRunner default (rc=0, stdout="")
 
-    with patch("autoskillit.server.git.resolve_main_worktree", return_value=Path(fake_wt)):
+    with patch(
+        "autoskillit.server.git.resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
+    ):
         result = await perform_merge(
             fake_wt, "dev", config=AutomationConfig(), runner=runner, tester=tester
         )

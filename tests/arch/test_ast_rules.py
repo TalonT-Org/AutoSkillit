@@ -909,7 +909,8 @@ def test_no_build_cmd_accepts_output_format_value_string() -> None:
             ):
                 param_names = [a.arg for a in node.args.args + node.args.kwonlyargs]
                 assert "output_format_value" not in param_names, (
-                    f"{node.name} in {src_path.name} still accepts 'output_format_value' (raw string). "
+                    f"{node.name} in {src_path.name} still accepts"
+                    " 'output_format_value' (raw string). "
                     f"Use 'output_format: OutputFormat' instead."
                 )
 

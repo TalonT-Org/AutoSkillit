@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import secrets
+import shutil
 import subprocess
 import time
 from datetime import UTC, date, datetime
@@ -80,6 +81,35 @@ def main_repo_guard(clone_path: str) -> dict[str, str]:
     if not result.stdout.strip():
         return {"cleaned": "false"}
 
+    # Detect and remove linked worktrees nested inside the clone.
+    clone_resolved = Path(clone_path).resolve()
+    wt_list = subprocess.run(
+        ["git", "worktree", "list", "--porcelain"],
+        cwd=clone_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if wt_list.returncode == 0:
+        first = True
+        for line in wt_list.stdout.splitlines():
+            if not line.startswith("worktree "):
+                continue
+            if first:
+                first = False
+                continue  # main worktree is always first in porcelain output
+            wt_path = Path(line.split(" ", 1)[1].strip())
+            if wt_path.resolve().is_relative_to(clone_resolved):
+                rm_result = subprocess.run(
+                    ["git", "worktree", "remove", "--force", str(wt_path)],
+                    cwd=clone_path,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                if rm_result.returncode != 0 and wt_path.exists():
+                    shutil.rmtree(wt_path, ignore_errors=True)
+
     stash_result = subprocess.run(
         [
             "git",
@@ -126,8 +156,30 @@ def main_repo_guard(clone_path: str) -> dict[str, str]:
             )
         if co.returncode != 0 and cl.returncode != 0:
             return {"cleaned": "failed"}
+        verify = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=clone_path,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if verify.returncode == 0 and verify.stdout.strip():
+            remaining = ", ".join(ln.strip() for ln in verify.stdout.splitlines() if ln.strip())[
+                :200
+            ]
+            return {"cleaned": "failed", "remaining": remaining}
         return {"cleaned": "force"}
 
+    verify = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=clone_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if verify.returncode == 0 and verify.stdout.strip():
+        remaining = ", ".join(ln.strip() for ln in verify.stdout.splitlines() if ln.strip())[:200]
+        return {"cleaned": "failed", "remaining": remaining}
     return {"cleaned": "true"}
 
 
@@ -558,7 +610,6 @@ def export_local_bundle(
     research_dir: str,
 ) -> dict[str, str]:
     """Copy research dir to source_dir/research-bundles/{slug}/."""
-    import shutil  # noqa: PLC0415
 
     local_root = Path(source_dir) / "research-bundles"
     local_root.mkdir(parents=True, exist_ok=True)

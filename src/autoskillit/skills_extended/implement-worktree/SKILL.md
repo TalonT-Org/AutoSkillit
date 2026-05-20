@@ -86,17 +86,8 @@ Correct orchestration on `needs_retry=true`:
 ### Step 1: Create Git Worktree
 
 ```bash
-CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 WORKTREE_NAME="impl-{plan_name}-$(date +%Y%m%d-%H%M%S)"
-MAIN_GIT_DIR="$(git rev-parse --path-format=absolute --git-common-dir)"
-MAIN_ROOT="$(dirname "$MAIN_GIT_DIR")"
-WORKTREE_DIR="${MAIN_ROOT}/../worktrees"
-mkdir -p "${WORKTREE_DIR}"
-WORKTREE_PATH="${WORKTREE_DIR}/${WORKTREE_NAME}"
-git worktree add -b "${WORKTREE_NAME}" "${WORKTREE_PATH}"
-WORKTREE_PATH="$(cd "${WORKTREE_PATH}" && pwd)"
-mkdir -p "{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_NAME}"
-echo "${CURRENT_BRANCH}" > "{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_NAME}/base-branch"
+eval "$(bash "{{AUTOSKILLIT_SCRIPTS}}/create_impl_worktree.sh" "${WORKTREE_NAME}" "{{AUTOSKILLIT_TEMP}}")"
 ```
 
 ### Step 2: Deep System Understanding (Subagents)
@@ -203,8 +194,8 @@ CURRENT_BRANCH=$(cat "{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_NAME}/base-branc
 
 ```
 worktree_path = ${WORKTREE_PATH}
-branch_name = ${WORKTREE_NAME}
-base_branch = ${CURRENT_BRANCH}
+branch_name = ${BRANCH_NAME}
+base_branch = ${BASE_BRANCH}
 ```
 
 ## Error Handling

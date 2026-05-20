@@ -182,3 +182,15 @@ def test_init_session_writes_substituted_skill_md_for_real_skill(
         "ephemeral SKILL.md must have the placeholder substituted"
     )
     assert ".autoskillit/temp" in text
+
+
+def test_get_skill_content_substitutes_scripts_placeholder(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """{{AUTOSKILLIT_SCRIPTS}} is replaced with the path to bundled scripts."""
+    provider, _ = _provider_with_synth(
+        monkeypatch, tmp_path, "synth_scripts", "Run {{AUTOSKILLIT_SCRIPTS}}/foo.sh"
+    )
+    content = provider.get_skill_content("synth_scripts", gated=False)
+    assert "{{AUTOSKILLIT_SCRIPTS}}" not in content
+    assert "recipes/scripts" in content

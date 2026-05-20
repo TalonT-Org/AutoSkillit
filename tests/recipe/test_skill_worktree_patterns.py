@@ -38,64 +38,140 @@ _SKILL_MD_PATHS = _skill_md_paths()
 
 
 class TestImplementWorktreeSkillAbsoluteResolution:
+    """Step 1 bash blocks delegate to create_impl_worktree.sh; the script owns the
+    --path-format=absolute --git-common-dir resolution internally."""
+
+    def _step1_bash_block(self, skill_md_path: Path) -> str:
+        """Extract the Step 1 bash block from a SKILL.md."""
+        text = skill_md_path.read_text()
+        # Match the Step 1 bash block (first ```bash block after "Step 1")
+        matches = re.findall(r"### Step 1.*?```bash(.*?)```", text, re.DOTALL)
+        if not matches:
+            pytest.fail(f"Could not find Step 1 bash block in {skill_md_path}")
+        return matches[0]
+
     def test_implement_worktree_skill_uses_absolute_resolution(self) -> None:
-        """implement-worktree SKILL.md uses absolute resolution, not '../worktrees/'."""
+        """implement-worktree Step 1 bash block delegates to create_impl_worktree.sh."""
         skill_md = pkg_root() / "skills_extended" / "implement-worktree" / "SKILL.md"
-        text = skill_md.read_text()
+        block = self._step1_bash_block(skill_md)
 
-        # Must not contain the fragile relative path pattern in bash code blocks
-        bash_blocks = re.findall(r"```bash(.*?)```", text, re.DOTALL)
-        for block in bash_blocks:
-            if "../worktrees/" in block:
-                pytest.fail(
-                    "implement-worktree/SKILL.md contains fragile '../worktrees/' pattern "
-                    "in a bash code block. Use absolute resolution via "
-                    "'git rev-parse --path-format=absolute --git-common-dir' instead."
-                )
+        # Must not contain the fragile relative path pattern
+        if "../worktrees/" in block:
+            pytest.fail(
+                "implement-worktree/SKILL.md Step 1 contains fragile '../worktrees/' pattern. "
+                "Worktree creation must use create_impl_worktree.sh."
+            )
 
-        # Must contain the absolute resolution approach
-        assert "--path-format=absolute --git-common-dir" in text, (
-            "implement-worktree/SKILL.md must use "
-            "'git rev-parse --path-format=absolute --git-common-dir' for worktree creation"
+        # Must invoke the shared script; the script owns --path-format=absolute internally
+        assert "create_impl_worktree.sh" in block, (
+            "implement-worktree/SKILL.md Step 1 must invoke create_impl_worktree.sh"
+        )
+        # Must NOT contain the old 4-variable chain directly in the SKILL.md bash block
+        assert "MAIN_GIT_DIR=" not in block, (
+            "implement-worktree/SKILL.md Step 1 must not contain MAIN_GIT_DIR= assignment; "
+            "that is handled inside create_impl_worktree.sh"
+        )
+        # The --path-format=absolute flag is in the script, not the SKILL.md step 1 block
+        assert "--path-format=absolute --git-common-dir" not in block, (
+            "implement-worktree/SKILL.md Step 1 must not contain "
+            "--path-format=absolute --git-common-dir directly; "
+            "that flag is used inside create_impl_worktree.sh"
         )
 
     def test_implement_worktree_no_merge_skill_uses_absolute_resolution(self) -> None:
-        """implement-worktree-no-merge SKILL.md uses absolute resolution."""
+        """implement-worktree-no-merge Step 1 bash block delegates to create_impl_worktree.sh."""
         skill_md = pkg_root() / "skills_extended" / "implement-worktree-no-merge" / "SKILL.md"
-        text = skill_md.read_text()
+        block = self._step1_bash_block(skill_md)
 
-        bash_blocks = re.findall(r"```bash(.*?)```", text, re.DOTALL)
-        for block in bash_blocks:
-            if "../worktrees/" in block:
-                pytest.fail(
-                    "implement-worktree-no-merge/SKILL.md contains fragile '../worktrees/' "
-                    "pattern in a bash code block. Use absolute resolution via "
-                    "'git rev-parse --path-format=absolute --git-common-dir' instead."
-                )
+        if "../worktrees/" in block:
+            pytest.fail(
+                "implement-worktree-no-merge/SKILL.md Step 1 contains "
+                "fragile '../worktrees/' pattern. "
+                "Worktree creation must use create_impl_worktree.sh."
+            )
 
-        assert "--path-format=absolute --git-common-dir" in text, (
-            "implement-worktree-no-merge/SKILL.md must use "
-            "'git rev-parse --path-format=absolute --git-common-dir' for worktree creation"
+        assert "create_impl_worktree.sh" in block, (
+            "implement-worktree-no-merge/SKILL.md Step 1 must invoke create_impl_worktree.sh"
+        )
+        assert "MAIN_GIT_DIR=" not in block, (
+            "implement-worktree-no-merge/SKILL.md Step 1 must not contain "
+            "MAIN_GIT_DIR= assignment; "
+            "that is handled inside create_impl_worktree.sh"
+        )
+        assert "--path-format=absolute --git-common-dir" not in block, (
+            "implement-worktree-no-merge/SKILL.md Step 1 must not contain "
+            "--path-format=absolute --git-common-dir directly; "
+            "that flag is used inside create_impl_worktree.sh"
         )
 
     def test_implement_experiment_skill_uses_absolute_resolution(self) -> None:
-        """implement-experiment SKILL.md uses absolute resolution."""
+        """implement-experiment Step 1 bash block delegates to create_impl_worktree.sh."""
         skill_md = pkg_root() / "skills_extended" / "implement-experiment" / "SKILL.md"
-        text = skill_md.read_text()
+        block = self._step1_bash_block(skill_md)
 
-        bash_blocks = re.findall(r"```bash(.*?)```", text, re.DOTALL)
-        for block in bash_blocks:
-            if "../worktrees/" in block:
-                pytest.fail(
-                    "implement-experiment/SKILL.md contains fragile '../worktrees/' pattern "
-                    "in a bash code block. Use absolute resolution via "
-                    "'git rev-parse --path-format=absolute --git-common-dir' instead."
-                )
+        if "../worktrees/" in block:
+            pytest.fail(
+                "implement-experiment/SKILL.md Step 1 contains fragile '../worktrees/' pattern. "
+                "Worktree creation must use create_impl_worktree.sh."
+            )
 
-        assert "--path-format=absolute --git-common-dir" in text, (
-            "implement-experiment/SKILL.md must use "
-            "'git rev-parse --path-format=absolute --git-common-dir' for worktree creation"
+        assert "create_impl_worktree.sh" in block, (
+            "implement-experiment/SKILL.md Step 1 must invoke create_impl_worktree.sh"
         )
+        assert "MAIN_GIT_DIR=" not in block, (
+            "implement-experiment/SKILL.md Step 1 must not contain MAIN_GIT_DIR= assignment; "
+            "that is handled inside create_impl_worktree.sh"
+        )
+        assert "--path-format=absolute --git-common-dir" not in block, (
+            "implement-experiment/SKILL.md Step 1 must not contain "
+            "--path-format=absolute --git-common-dir directly; "
+            "that flag is used inside create_impl_worktree.sh"
+        )
+
+
+class TestImplementSkillsInvokeSharedScript:
+    """T12: Each implement-* skill's Step 1 bash block invokes create_impl_worktree.sh
+    and does not contain the old 4-variable chain pattern (MAIN_GIT_DIR= assignment
+    within the bash block)."""
+
+    _SKILLS = (
+        "implement-worktree",
+        "implement-worktree-no-merge",
+        "implement-experiment",
+    )
+
+    @pytest.mark.parametrize("skill_name", _SKILLS, ids=_SKILLS)
+    def test_step1_invokes_create_impl_worktree_sh(self, skill_name: str) -> None:
+        """Step 1 bash block must invoke create_impl_worktree.sh."""
+        skill_md = pkg_root() / "skills_extended" / skill_name / "SKILL.md"
+        text = skill_md.read_text()
+        bash_blocks = re.findall(r"```bash(.*?)```", text, re.DOTALL)
+        step1_blocks = [b for b in bash_blocks if "create_impl_worktree" in b]
+        assert step1_blocks, (
+            f"{skill_name}/SKILL.md Step 1 bash block not found or does not reference "
+            "create_impl_worktree"
+        )
+        assert any("create_impl_worktree.sh" in b for b in step1_blocks), (
+            f"{skill_name}/SKILL.md Step 1 bash block must invoke create_impl_worktree.sh"
+        )
+
+    @pytest.mark.parametrize("skill_name", _SKILLS, ids=_SKILLS)
+    def test_step1_does_not_contain_old_4variable_chain(self, skill_name: str) -> None:
+        """Step 1 bash block must NOT contain the old MAIN_GIT_DIR= assignment pattern."""
+        skill_md = pkg_root() / "skills_extended" / skill_name / "SKILL.md"
+        text = skill_md.read_text()
+        bash_blocks = re.findall(r"```bash(.*?)```", text, re.DOTALL)
+        matched = [b for b in bash_blocks if "WORKTREE_NAME=" in b or "create_impl_worktree" in b]
+        assert matched, (
+            f"{skill_name}/SKILL.md has no bash block matching WORKTREE_NAME= or "
+            "create_impl_worktree — test cannot verify absence of old pattern"
+        )
+        for block in matched:
+            assert "MAIN_GIT_DIR=" not in block, (
+                f"{skill_name}/SKILL.md Step 1 bash block must NOT contain "
+                "the old MAIN_GIT_DIR= variable assignment; "
+                "that chain is now encapsulated inside create_impl_worktree.sh"
+            )
 
 
 class TestNoSkillMdUsesRelativeWorktreePath:

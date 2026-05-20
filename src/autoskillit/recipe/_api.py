@@ -144,6 +144,7 @@ _LOAD_CACHE_LOCK = threading.Lock()
 _PROCESS_START_PKG_MTIME: int | None = None
 _STALENESS_LAST_CHECK: float = 0.0
 _STALENESS_IS_STALE: bool = False
+_STALENESS_CACHES_CLEARED: bool = False
 _STALENESS_TTL: float = 30.0
 
 
@@ -171,6 +172,7 @@ def _check_process_staleness() -> bool:
 
 def _clear_stale_caches() -> None:
     """Clear all lru_cache helpers and the load cache when staleness is detected."""
+    global _STALENESS_CACHES_CLEARED  # noqa: PLW0603
     from autoskillit.recipe.contracts import load_bundled_manifest  # noqa: PLC0415
     from autoskillit.recipe.methodology_venue_appendix import (  # noqa: PLC0415
         load_ml_sub_area_folding,
@@ -182,6 +184,7 @@ def _clear_stale_caches() -> None:
     load_ml_sub_area_folding.cache_clear()
     with _LOAD_CACHE_LOCK:
         _LOAD_CACHE.clear()
+    _STALENESS_CACHES_CLEARED = True
 
 
 def format_recipe_list_response(result: LoadResult[RecipeInfo]) -> dict[str, object]:
@@ -401,7 +404,8 @@ def load_and_validate(
         On not-found: {"error": str}
     """
     if _check_process_staleness():
-        _clear_stale_caches()
+        if not _STALENESS_CACHES_CLEARED:
+            _clear_stale_caches()
         return {
             "error": (
                 "Process is running stale code — package directory was modified on disk "

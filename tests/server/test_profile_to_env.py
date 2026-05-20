@@ -19,13 +19,18 @@ def test_all_fields_populated(monkeypatch):
 
     monkeypatch.setenv("MY_KEY", "secret")
     profile = _make_profile(
-        name="x", base_url="https://a.com", timeout_seconds=30, api_key_env="MY_KEY"
+        name="x",
+        base_url="https://a.com",
+        timeout_seconds=30,
+        api_key_env="MY_KEY",
+        raw_env={"CUSTOM_FLAG": "on"},
     )
     result = _profile_to_env(profile)
     assert result == {
         "ANTHROPIC_BASE_URL": "https://a.com",
         "API_TIMEOUT_MS": "30000",
         "ANTHROPIC_API_KEY": "secret",
+        "CUSTOM_FLAG": "on",
     }
 
 
@@ -98,3 +103,15 @@ def test_raw_env_merged_with_mapped_fields():
     profile = _make_profile(name="x", base_url="https://a.com", raw_env={"EXTRA": "e"})
     result = _profile_to_env(profile)
     assert result == {"ANTHROPIC_BASE_URL": "https://a.com", "EXTRA": "e"}
+
+
+def test_raw_env_overrides_mapped_field():
+    from autoskillit.server._guards import _profile_to_env
+
+    profile = _make_profile(
+        name="x",
+        base_url="https://a.com",
+        raw_env={"ANTHROPIC_BASE_URL": "https://override.com"},
+    )
+    result = _profile_to_env(profile)
+    assert result["ANTHROPIC_BASE_URL"] == "https://override.com"

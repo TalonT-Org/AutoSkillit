@@ -161,7 +161,11 @@ def _check_process_staleness() -> bool:
     if now - _staleness_last_check < _STALENESS_TTL:
         return _staleness_is_stale
     _staleness_last_check = now
-    _staleness_is_stale = _path_mtime_ns(pkg_root()) != _get_process_start_mtime()
+    try:
+        _staleness_is_stale = _path_mtime_ns(pkg_root()) != _get_process_start_mtime()
+    except (OSError, RuntimeError):
+        logger.warning("pkg_root() unavailable during staleness check; assuming non-stale")
+        _staleness_is_stale = False
     return _staleness_is_stale
 
 

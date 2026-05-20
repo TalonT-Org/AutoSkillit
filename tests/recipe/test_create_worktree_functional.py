@@ -35,7 +35,7 @@ def _git(*args: str) -> None:
 def _init_repo(path: Path) -> None:
     """Create a real git repo with an initial commit."""
     path.mkdir(parents=True, exist_ok=True)
-    _git("init", str(path))
+    _git("init", "-b", "main", str(path))
     _git("-C", str(path), "commit", "--allow-empty", "-m", "init")
 
 

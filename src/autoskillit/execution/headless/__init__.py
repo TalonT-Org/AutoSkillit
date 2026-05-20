@@ -132,9 +132,7 @@ def _session_log_dir(cwd: str) -> Path:
 
 
 def _resolve_pty_mode(ctx: ToolContext) -> bool:
-    if ctx.backend is None:
-        return True
-    return ctx.backend.capabilities.pty_required
+    return True if ctx.backend is None else ctx.backend.capabilities.pty_required
 
 
 def _resolve_session_log_dir(cwd: str, ctx: ToolContext) -> Path | None:

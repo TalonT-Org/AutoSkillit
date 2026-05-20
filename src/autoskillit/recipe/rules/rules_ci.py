@@ -528,7 +528,9 @@ def _check_ci_wait_requires_applicability_guard(ctx: ValidationContext) -> list[
                             has_guard = True
                             break
             if not has_guard:
-                queue.extend(ctx.predecessors.get(node, set()) - visited)
+                new_preds = ctx.predecessors.get(node, set()) - visited
+                visited.update(new_preds)
+                queue.extend(new_preds)
         if not has_guard:
             findings.append(
                 RuleFinding(

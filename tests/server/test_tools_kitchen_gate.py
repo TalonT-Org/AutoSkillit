@@ -928,3 +928,104 @@ async def test_update_hook_config_with_recipe_excludes_pr_create_for_non_pr_reci
     hook_cfg = tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS)
     data = json.loads(hook_cfg.read_text())
     assert "recipe_allows_pr_create" not in data
+
+
+# ---------------------------------------------------------------------------
+# Group H — layered hook config: overlay isolation
+# ---------------------------------------------------------------------------
+
+_HOOK_CONFIG_OVERLAY_RELPATH = (".autoskillit", "temp", ".hook_config_overlay.json")
+
+
+@pytest.mark.anyio
+async def test_disable_quota_guard_survives_write_hook_config(tmp_path, monkeypatch):
+    """disable_quota_guard writes to overlay; subsequent _write_hook_config cannot erase it."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.project_dir = tmp_path
+    mock_ctx.config.quota_guard.cache_max_age = 300
+    mock_ctx.config.quota_guard.cache_path = "/some/path.json"
+    mock_ctx.config.quota_guard.buffer_seconds = 60
+
+    from autoskillit.server import _state
+
+    monkeypatch.setattr(_state, "_ctx", mock_ctx)
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                from autoskillit.server.tools.tools_kitchen import (
+                    _open_kitchen_handler,
+                    _write_hook_config,
+                    disable_quota_guard,
+                )
+
+                await _open_kitchen_handler()
+                result_str = await disable_quota_guard()
+                parsed = json.loads(result_str)
+                assert parsed["success"] is True
+
+                _write_hook_config()
+
+    from autoskillit.server._misc import _read_merged_hook_config
+
+    merged = _read_merged_hook_config(tmp_path)
+    assert merged["quota_guard"]["disabled"] is True
+
+
+def test_write_hook_config_does_not_touch_overlay(tmp_path, monkeypatch):
+    """_write_hook_config() only writes the base file and never modifies the overlay."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.project_dir = tmp_path
+    mock_ctx.config.quota_guard.cache_max_age = 300
+    mock_ctx.config.quota_guard.cache_path = "/p/q.json"
+    mock_ctx.config.quota_guard.buffer_seconds = 60
+
+    overlay_path = tmp_path.joinpath(*_HOOK_CONFIG_OVERLAY_RELPATH)
+    overlay_path.parent.mkdir(parents=True, exist_ok=True)
+    overlay_path.write_text(json.dumps({"quota_guard": {"disabled": True}}))
+    mtime_before = overlay_path.stat().st_mtime
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            from autoskillit.server.tools.tools_kitchen import _write_hook_config
+
+            _write_hook_config()
+
+    assert overlay_path.stat().st_mtime == mtime_before
+    assert json.loads(overlay_path.read_text())["quota_guard"]["disabled"] is True
+
+
+def test_merged_hook_config_overlay_wins():
+    """_merge_hook_configs gives overlay precedence over base."""
+    from autoskillit.server._misc import _merge_hook_configs
+
+    base = {"quota_guard": {"disabled": False, "cache_max_age": 60}, "kitchen_id": "k1"}
+    overlay = {"quota_guard": {"disabled": True}}
+    merged = _merge_hook_configs(base, overlay)
+    assert merged["quota_guard"]["disabled"] is True
+    assert merged["quota_guard"]["cache_max_age"] == 60
+    assert merged["kitchen_id"] == "k1"
+
+
+@pytest.mark.anyio
+async def test_close_kitchen_cleans_overlay(tmp_path, monkeypatch):
+    """close_kitchen removes the overlay file, resetting runtime mutations."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.project_dir = tmp_path
+
+    overlay_path = tmp_path.joinpath(*_HOOK_CONFIG_OVERLAY_RELPATH)
+    overlay_path.parent.mkdir(parents=True, exist_ok=True)
+    overlay_path.write_text(json.dumps({"quota_guard": {"disabled": True}}))
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            from autoskillit.server.tools.tools_kitchen import _close_kitchen_handler
+
+            _close_kitchen_handler()
+
+    assert not overlay_path.exists()

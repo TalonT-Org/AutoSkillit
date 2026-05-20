@@ -18,6 +18,9 @@ from pathlib import Path
 
 
 def main() -> None:
+    if os.environ.get("AUTOSKILLIT_HEADLESS") == "1":
+        sys.exit(0)
+
     try:
         data = json.loads(sys.stdin.read())
     except (json.JSONDecodeError, ValueError, OSError):

@@ -46,12 +46,40 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 _HOOK_CONFIG_FILENAME: str = _HOOK_CONFIG_PATH_COMPONENTS[-1]
+_HOOK_CONFIG_OVERLAY_FILENAME: str = ".hook_config_overlay.json"
 _HOOK_DIR_COMPONENTS: tuple[str, ...] = _HOOK_CONFIG_PATH_COMPONENTS[:-1]
 
 
 def _hook_config_path(project_root: Path) -> Path:
     """Return the canonical path to the hook configuration JSON file."""
     return project_root.joinpath(*_HOOK_DIR_COMPONENTS, _HOOK_CONFIG_FILENAME)
+
+
+def _hook_config_overlay_path(project_root: Path) -> Path:
+    """Return the path to the runtime overlay file for hook config mutations."""
+    return project_root.joinpath(*_HOOK_DIR_COMPONENTS, _HOOK_CONFIG_OVERLAY_FILENAME)
+
+
+def _merge_hook_configs(base: dict, overlay: dict) -> dict:
+    """Merge base and overlay hook configs with overlay taking precedence."""
+    merged = dict(base)
+    for key, value in overlay.items():
+        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+            merged[key] = {**merged[key], **value}
+        else:
+            merged[key] = value
+    return merged
+
+
+def _read_merged_hook_config(project_root: Path) -> dict:
+    """Read and merge base + overlay hook config files."""
+    import json
+
+    base_path = _hook_config_path(project_root)
+    overlay_path = _hook_config_overlay_path(project_root)
+    base = json.loads(base_path.read_text()) if base_path.exists() else {}
+    overlay = json.loads(overlay_path.read_text()) if overlay_path.exists() else {}
+    return _merge_hook_configs(base, overlay)
 
 
 def _extract_block(text: str, start_delim: str, end_delim: str) -> list[str]:

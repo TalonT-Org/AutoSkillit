@@ -96,8 +96,17 @@ def main() -> None:
 
     # Recipe-level authorization: recipes that legitimately create PRs set
     # recipe_allows_pr_create=true in .hook_config.json after loading.
+    # Read merged base + overlay config for data access.
     try:
-        hook_data = json.loads(cfg_path.read_text())
+        base_data = json.loads(cfg_path.read_text())
+        overlay_path = Path.cwd() / ".autoskillit" / "temp" / ".hook_config_overlay.json"
+        overlay_data = json.loads(overlay_path.read_text()) if overlay_path.exists() else {}
+        hook_data = dict(base_data)
+        for k, v in overlay_data.items():
+            if k in hook_data and isinstance(hook_data[k], dict) and isinstance(v, dict):
+                hook_data[k] = {**hook_data[k], **v}
+            else:
+                hook_data[k] = v
         if hook_data.get("recipe_allows_pr_create"):
             sys.exit(0)
     except (OSError, json.JSONDecodeError, AttributeError, TypeError) as exc:

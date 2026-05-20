@@ -139,15 +139,32 @@ def _fmt_duration(seconds: float) -> str:
     return f"{h}h {m}m"
 
 
+_HOOK_CONFIG_OVERLAY_FILENAME = ".hook_config_overlay.json"
+
+
+def _read_merged_hook_config_stdlib(root: pathlib.Path) -> dict:
+    """Merge base + overlay hook configs (stdlib-only)."""
+    base_path = root.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS)
+    overlay_components = _HOOK_CONFIG_PATH_COMPONENTS[:-1] + (_HOOK_CONFIG_OVERLAY_FILENAME,)
+    overlay_path = root.joinpath(*overlay_components)
+    base = json.loads(base_path.read_text(encoding="utf-8")) if base_path.exists() else {}
+    overlay = json.loads(overlay_path.read_text(encoding="utf-8")) if overlay_path.exists() else {}
+    for k, v in overlay.items():
+        if k in base and isinstance(base[k], dict) and isinstance(v, dict):
+            base[k] = {**base[k], **v}
+        else:
+            base[k] = v
+    return base
+
+
 def _read_kitchen_id(base: pathlib.Path | None = None) -> str:
-    """Read kitchen_id from hook_config.json. Returns '' if absent or unset.
+    """Read kitchen_id from merged hook config. Returns '' if absent or unset.
 
     Falls back to 'pipeline_id' key for configs written before the rename.
     """
     root = base if base is not None else pathlib.Path.cwd()
-    path = root.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS)
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = _read_merged_hook_config_stdlib(root)
         if not isinstance(data, dict):
             return ""
         return str(data.get("kitchen_id") or data.get("pipeline_id", ""))

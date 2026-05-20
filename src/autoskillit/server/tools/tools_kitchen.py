@@ -31,6 +31,7 @@ from autoskillit.server._guards import _require_orchestrator_exact
 from autoskillit.server._misc import (
     _apply_triage_gate,
     _build_hook_diagnostic_warning,
+    _hook_config_overlay_path,
     _hook_config_path,
     _prime_quota_cache,
     _quota_refresh_loop,
@@ -249,6 +250,11 @@ def _close_kitchen_handler() -> None:
         hook_cfg_path.unlink(missing_ok=True)
     except OSError:
         logger.warning("hook_config_remove_failed", path=str(hook_cfg_path))
+    overlay_path = _hook_config_overlay_path(ctx.project_dir)
+    try:
+        overlay_path.unlink(missing_ok=True)
+    except OSError:
+        logger.warning("hook_config_overlay_remove_failed", path=str(overlay_path))
     review_gate_path = ctx.project_dir / ".autoskillit" / "temp" / "review_gate_state.json"
     try:
         try:
@@ -574,19 +580,9 @@ async def disable_quota_guard() -> str:
                     "error": "Kitchen is not open — hook config file absent.",
                 }
             )
-        try:
-            payload = json.loads(hook_cfg_path.read_text())
-        except (OSError, json.JSONDecodeError) as exc:
-            return json.dumps(
-                {
-                    "success": False,
-                    "error": f"Failed to read hook config: {type(exc).__name__}: {exc}",
-                }
-            )
-        quota_section = payload.get("quota_guard", {})
-        quota_section["disabled"] = True
-        payload["quota_guard"] = quota_section
-        atomic_write(hook_cfg_path, json.dumps(payload))
+        overlay_path = _hook_config_overlay_path(ctx.project_dir)
+        overlay_path.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write(overlay_path, json.dumps({"quota_guard": {"disabled": True}}))
         return json.dumps(
             {
                 "success": True,

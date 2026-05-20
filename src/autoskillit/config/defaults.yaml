@@ -52,6 +52,7 @@ run_skill:
 model:
   default: sonnet
   override: null
+  provider: anthropic
 
 worktree_setup:
   command: null

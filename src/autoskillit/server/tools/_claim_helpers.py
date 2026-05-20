@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from autoskillit.core import GitHubFetcher
 
 from autoskillit.fleet import (
     cleanup_orphaned_labels,
@@ -32,7 +35,7 @@ async def _try_claim_with_liveness(
     effective_label: str,
     current_labels: list[str],
     allow_reentry: bool,
-    github_client: Any,
+    github_client: GitHubFetcher | None,
     campaign_state_paths: list[Path],
 ) -> ClaimDecision:
     """Core label-presence check with liveness fallback.

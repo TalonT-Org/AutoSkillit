@@ -146,12 +146,10 @@ class TestImplementSkillsInvokeSharedScript:
         skill_md = pkg_root() / "skills_extended" / skill_name / "SKILL.md"
         text = skill_md.read_text()
         bash_blocks = re.findall(r"```bash(.*?)```", text, re.DOTALL)
-        step1_blocks = [
-            b for b in bash_blocks if "create_impl_worktree" in b or "WORKTREE_NAME=" in b
-        ]
+        step1_blocks = [b for b in bash_blocks if "create_impl_worktree" in b]
         assert step1_blocks, (
             f"{skill_name}/SKILL.md Step 1 bash block not found or does not reference "
-            "worktree creation"
+            "create_impl_worktree"
         )
         assert any("create_impl_worktree.sh" in b for b in step1_blocks), (
             f"{skill_name}/SKILL.md Step 1 bash block must invoke create_impl_worktree.sh"
@@ -163,13 +161,17 @@ class TestImplementSkillsInvokeSharedScript:
         skill_md = pkg_root() / "skills_extended" / skill_name / "SKILL.md"
         text = skill_md.read_text()
         bash_blocks = re.findall(r"```bash(.*?)```", text, re.DOTALL)
-        for block in bash_blocks:
-            if "WORKTREE_NAME=" in block or "create_impl_worktree" in block:
-                assert "MAIN_GIT_DIR=" not in block, (
-                    f"{skill_name}/SKILL.md Step 1 bash block must NOT contain "
-                    "the old MAIN_GIT_DIR= variable assignment; "
-                    "that chain is now encapsulated inside create_impl_worktree.sh"
-                )
+        matched = [b for b in bash_blocks if "WORKTREE_NAME=" in b or "create_impl_worktree" in b]
+        assert matched, (
+            f"{skill_name}/SKILL.md has no bash block matching WORKTREE_NAME= or "
+            "create_impl_worktree — test cannot verify absence of old pattern"
+        )
+        for block in matched:
+            assert "MAIN_GIT_DIR=" not in block, (
+                f"{skill_name}/SKILL.md Step 1 bash block must NOT contain "
+                "the old MAIN_GIT_DIR= variable assignment; "
+                "that chain is now encapsulated inside create_impl_worktree.sh"
+            )
 
 
 class TestNoSkillMdUsesRelativeWorktreePath:

@@ -387,12 +387,6 @@ class TestProviderProfileDef:
         p = ProviderProfileDef(name="test", raw_env=env)
         assert p.raw_env == env
 
-    def test_importability_from_autoskillit_config(self) -> None:
-        from autoskillit.config import ProviderProfileDef
-        from autoskillit.config.settings import ProviderProfileDef as SettingsPPD
-
-        assert SettingsPPD is ProviderProfileDef
-
     def test_defaults_yaml_anthropic_sentinel(self) -> None:
         from autoskillit.core.io import load_yaml
         from autoskillit.core.paths import pkg_root

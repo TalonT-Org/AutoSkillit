@@ -63,6 +63,7 @@ from .state import (
 from .state_recovery import (
     classify_stale_dispatch,
     derive_orchestrator_resume_spec,
+    find_dispatch_for_issue,
     has_blocking_dispatch,
 )
 from .state_types import (
@@ -141,6 +142,7 @@ __all__ = [
     "classify_stale_dispatch",
     "FLEET_STATE_SCHEMA_VERSION",
     "derive_orchestrator_resume_spec",
+    "find_dispatch_for_issue",
     "checkpoint_from_sidecar",
     "is_dispatch_session_alive",
     "FleetSemaphore",

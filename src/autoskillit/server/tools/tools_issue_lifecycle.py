@@ -18,6 +18,10 @@ from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import _extract_block
 from autoskillit.server._notify import _notify, track_response_size
+from autoskillit.server.tools._claim_helpers import (
+    _get_campaign_state_paths,
+    _try_claim_with_liveness,
+)
 
 if TYPE_CHECKING:
     from autoskillit.core import SkillResult, WriteBehaviorSpec
@@ -427,25 +431,31 @@ async def claim_issue(
             return json.dumps({"success": False, "error": result.get("error", "fetch failed")})
 
         current_labels = _extract_label_names(result.get("labels", []))
-        if effective_label in current_labels:
-            if allow_reentry:
-                return json.dumps(
-                    {
-                        "success": True,
-                        "claimed": True,
-                        "reentry": True,
-                        "issue_number": issue_number,
-                        "label": effective_label,
-                    }
-                )
+        decision = await _try_claim_with_liveness(
+            issue_url=issue_url,
+            issue_number=issue_number,
+            effective_label=effective_label,
+            current_labels=current_labels,
+            allow_reentry=allow_reentry,
+            github_client=tool_ctx.github_client,
+            campaign_state_paths=_get_campaign_state_paths(tool_ctx),
+        )
+        if not decision.claimed:
             return json.dumps(
                 {
                     "success": True,
                     "claimed": False,
-                    "reason": (
-                        f"Issue #{issue_number} already has '{effective_label}' label"
-                        " — another session may be processing it"
-                    ),
+                    "reason": decision.reason,
+                }
+            )
+        if decision.reentry:
+            return json.dumps(
+                {
+                    "success": True,
+                    "claimed": True,
+                    "reentry": True,
+                    "issue_number": issue_number,
+                    "label": effective_label,
                 }
             )
 

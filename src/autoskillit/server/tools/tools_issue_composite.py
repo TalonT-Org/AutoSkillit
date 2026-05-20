@@ -15,6 +15,10 @@ from autoskillit.core import (
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
 from autoskillit.server._notify import track_response_size
+from autoskillit.server.tools._claim_helpers import (
+    _get_campaign_state_paths,
+    _try_claim_with_liveness,
+)
 
 logger = get_logger(__name__)
 
@@ -100,32 +104,39 @@ async def claim_and_resolve_issue(
             )
 
         current_labels = _extract_label_names(fetch_result.get("labels", []))
-        if effective_label in current_labels:
+        decision = await _try_claim_with_liveness(
+            issue_url=issue_url,
+            issue_number=issue_number,
+            effective_label=effective_label,
+            current_labels=current_labels,
+            allow_reentry=allow_reentry,
+            github_client=tool_ctx.github_client,
+            campaign_state_paths=_get_campaign_state_paths(tool_ctx),
+        )
+        if not decision.claimed:
             claim_ms = int((time.monotonic() - _claim_start) * 1000)
-            if allow_reentry:
-                return json.dumps(
-                    {
-                        "success": True,
-                        "claimed": True,
-                        "reentry": True,
-                        "issue_number": issue_number,
-                        "issue_title": issue_title,
-                        "issue_slug": issue_slug,
-                        "label": effective_label,
-                        "timings": {"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms},
-                    }
-                )
             return json.dumps(
                 {
                     "success": True,
                     "claimed": False,
-                    "reason": (
-                        f"Issue #{issue_number} already has '{effective_label}' label"
-                        " — another session may be processing it"
-                    ),
+                    "reason": decision.reason,
                     "issue_number": issue_number,
                     "issue_title": issue_title,
                     "issue_slug": issue_slug,
+                    "timings": {"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms},
+                }
+            )
+        if decision.reentry:
+            claim_ms = int((time.monotonic() - _claim_start) * 1000)
+            return json.dumps(
+                {
+                    "success": True,
+                    "claimed": True,
+                    "reentry": True,
+                    "issue_number": issue_number,
+                    "issue_title": issue_title,
+                    "issue_slug": issue_slug,
+                    "label": effective_label,
                     "timings": {"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms},
                 }
             )

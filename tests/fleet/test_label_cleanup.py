@@ -240,9 +240,8 @@ class TestCleanupOrphanedLabelsUnit:
     @pytest.mark.anyio
     async def test_cleanup_orphaned_labels_uses_registry_transitions(self, tmp_path: Path) -> None:
         """remove_labels must be derived from LABEL_LIFECYCLE_REGISTRY, not hardcoded."""
-        from autoskillit.fleet._label_cleanup import cleanup_orphaned_labels
-
         from autoskillit.core import LABEL_LIFECYCLE_REGISTRY, IssueLabelState
+        from autoskillit.fleet._label_cleanup import cleanup_orphaned_labels
 
         sidecar = tmp_path / "test_issues.jsonl"
         sidecar.write_text(

@@ -52,9 +52,8 @@ class TestStartupLabelRecoverySweep:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Sweep calls swap_labels and marks dispatch INTERRUPTED for dead RUNNING dispatch."""
-        from autoskillit.fleet._label_cleanup import sweep_stale_dispatch_labels
-
         from autoskillit.fleet import read_state
+        from autoskillit.fleet._label_cleanup import sweep_stale_dispatch_labels
 
         monkeypatch.setattr(
             "autoskillit.fleet._label_cleanup.is_dispatch_session_alive",
@@ -81,9 +80,8 @@ class TestStartupLabelRecoverySweep:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Sweep does NOT call swap_labels for an alive RUNNING dispatch."""
-        from autoskillit.fleet._label_cleanup import sweep_stale_dispatch_labels
-
         from autoskillit.fleet import read_state
+        from autoskillit.fleet._label_cleanup import sweep_stale_dispatch_labels
 
         monkeypatch.setattr(
             "autoskillit.fleet._label_cleanup.is_dispatch_session_alive",
@@ -110,9 +108,8 @@ class TestStartupLabelRecoverySweep:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Sweep handles RUNNING dispatch with sidecar_path=None without error."""
-        from autoskillit.fleet._label_cleanup import sweep_stale_dispatch_labels
-
         from autoskillit.fleet import DispatchRecord, write_initial_state
+        from autoskillit.fleet._label_cleanup import sweep_stale_dispatch_labels
         from autoskillit.fleet.state import mark_dispatch_running
 
         monkeypatch.setattr(

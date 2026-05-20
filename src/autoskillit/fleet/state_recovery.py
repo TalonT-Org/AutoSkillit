@@ -29,6 +29,7 @@ MAX_CONSECUTIVE_RESUME_ATTEMPTS = 3
 __all__ = [
     "classify_stale_dispatch",
     "derive_orchestrator_resume_spec",
+    "find_dispatch_for_issue",
     "has_blocking_dispatch",
     "has_failed_dispatch",
     "resume_campaign_from_state",
@@ -271,6 +272,36 @@ def resume_campaign_from_state(
             kill_reason=resumable_kill_reason,
             resume_checkpoint=resumable_checkpoint,
         )
+
+
+def find_dispatch_for_issue(
+    issue_url: str,
+    campaign_state_paths: list[Path],
+) -> DispatchRecord | None:
+    """Search all known campaign states for a RUNNING dispatch whose sidecar contains issue_url.
+
+    Returns the first matching DispatchRecord, else None. Reads are filesystem-only.
+    Never raises.
+    """
+    from autoskillit.fleet.sidecar import read_sidecar_from_path  # noqa: PLC0415
+    from autoskillit.fleet.state import read_state  # noqa: PLC0415
+
+    for state_path in campaign_state_paths:
+        try:
+            state = read_state(state_path)
+        except Exception:
+            continue
+        if state is None:
+            continue
+        for d in state.dispatches:
+            if d.status != DispatchStatus.RUNNING:
+                continue
+            if d.sidecar_path is None:
+                continue
+            entries = read_sidecar_from_path(Path(d.sidecar_path))
+            if any(e.issue_url == issue_url for e in entries):
+                return d
+    return None
 
 
 def derive_orchestrator_resume_spec(state: CampaignState) -> NamedResume | NoResume:

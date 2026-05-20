@@ -67,6 +67,8 @@ def _has_ci_applicable_route(steps: dict, from_step: str) -> bool:
             if route_step.get("action") == "route":
                 on_result = route_step.get("on_result", [])
                 for condition in on_result:
+                    if isinstance(condition, str):
+                        continue
                     when = condition.get("when", "")
                     if _CI_APPLICABLE_RE.search(when):
                         return True

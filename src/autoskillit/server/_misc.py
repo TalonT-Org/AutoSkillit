@@ -60,35 +60,6 @@ def _hook_config_overlay_path(project_root: Path) -> Path:
     return project_root.joinpath(*_HOOK_DIR_COMPONENTS, _HOOK_CONFIG_OVERLAY_FILENAME)
 
 
-def _merge_hook_configs(base: dict, overlay: dict) -> dict:
-    """Merge base and overlay hook configs with overlay taking precedence."""
-    merged = dict(base)
-    for key, value in overlay.items():
-        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
-            merged[key] = {**merged[key], **value}
-        else:
-            merged[key] = value
-    return merged
-
-
-def _read_merged_hook_config(project_root: Path) -> dict:
-    """Read and merge base + overlay hook config files.
-
-    Returns ``{}`` if files are absent or unreadable.
-    """
-    import json
-
-    try:
-        base_path = _hook_config_path(project_root)
-        overlay_path = _hook_config_overlay_path(project_root)
-        base = json.loads(base_path.read_text()) if base_path.exists() else {}
-        overlay = json.loads(overlay_path.read_text()) if overlay_path.exists() else {}
-        return _merge_hook_configs(base, overlay)
-    except (OSError, json.JSONDecodeError, AttributeError, TypeError):
-        logger.warning("Failed to read merged hook config", exc_info=True)
-        return {}
-
-
 def _extract_block(text: str, start_delim: str, end_delim: str) -> list[str]:
     """Return all lines between start_delim and end_delim (exclusive).
 

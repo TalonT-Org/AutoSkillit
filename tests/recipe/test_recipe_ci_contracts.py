@@ -15,6 +15,13 @@ import yaml
 
 from autoskillit.recipe.io import builtin_recipes_dir
 
+from .conftest import (
+    PRIMARY_CI_EVENT_KEYS,
+    build_reverse_graph,
+    has_wait_for_ci_predecessor,
+    reaches_wait_for_ci,
+)
+
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 _TEMPLATE_RE = re.compile(r"\$\{\{\s*(.+?)\s*\}\}")
@@ -122,81 +129,6 @@ def test_wait_for_ci_steps_have_remote_url(recipe_data) -> None:
     assert not missing, f"{recipe_name}: wait_for_ci steps missing remote_url: {missing}"
 
 
-_PRIMARY_CI_EVENT_KEYS = {"ci_event", "conflict_ci_event"}
-
-
-def _build_reverse_graph(steps: dict) -> dict[str, set[str]]:
-    """Build a reverse routing graph: step -> set of steps that route to it."""
-    reverse: dict[str, set[str]] = {}
-    for name, step in steps.items():
-        for key in ("on_success", "on_failure"):
-            target = step.get(key)
-            if target:
-                reverse.setdefault(target, set()).add(name)
-        on_result = step.get("on_result", [])
-        if isinstance(on_result, list):
-            for cond in on_result:
-                if isinstance(cond, dict):
-                    target = cond.get("route")
-                    if target:
-                        reverse.setdefault(target, set()).add(name)
-        elif isinstance(on_result, dict):
-            for target in on_result.get("routes", {}).values():
-                if target:
-                    reverse.setdefault(target, set()).add(name)
-    return reverse
-
-
-def _has_wait_for_ci_predecessor(steps: dict, step_name: str, reverse_graph: dict) -> bool:
-    """Return True if a wait_for_ci step exists upstream of step_name."""
-    visited: set[str] = set()
-    queue = list(reverse_graph.get(step_name, set()))
-    while queue:
-        node = queue.pop()
-        if node in visited:
-            continue
-        visited.add(node)
-        node_step = steps.get(node, {})
-        if node_step.get("tool") == "wait_for_ci":
-            return True
-        queue.extend(reverse_graph.get(node, set()) - visited)
-    return False
-
-
-def _reaches_wait_for_ci(steps: dict, start: str, depth: int = 5) -> bool:
-    """BFS from start to check if wait_for_ci is reachable within depth hops."""
-    visited: set[str] = set()
-    queue = [start]
-    for _ in range(depth):
-        next_queue: list[str] = []
-        for node in queue:
-            if node in visited:
-                continue
-            visited.add(node)
-            node_step = steps.get(node, {})
-            if node_step.get("tool") == "wait_for_ci":
-                return True
-            for key in ("on_success", "on_failure"):
-                target = node_step.get(key)
-                if target and target in steps and target not in visited:
-                    next_queue.append(target)
-            on_result = node_step.get("on_result", [])
-            if isinstance(on_result, list):
-                for cond in on_result:
-                    if isinstance(cond, dict):
-                        target = cond.get("route")
-                        if target and target in steps and target not in visited:
-                            next_queue.append(target)
-            elif isinstance(on_result, dict):
-                for target in on_result.get("routes", {}).values():
-                    if target and target in steps and target not in visited:
-                        next_queue.append(target)
-        queue = next_queue
-        if not queue:
-            break
-    return False
-
-
 def test_ci_event_capture_has_ci_applicable_guard(recipe_data) -> None:
     """Steps capturing a primary ci_event from check_repo_merge_state must also
     capture the corresponding ci_applicable field when they route to wait_for_ci.
@@ -208,7 +140,7 @@ def test_ci_event_capture_has_ci_applicable_guard(recipe_data) -> None:
     """
     recipe_name, data = recipe_data
     steps = data.get("steps") or {}
-    reverse_graph = _build_reverse_graph(steps)
+    reverse_graph = build_reverse_graph(steps)
 
     ci_event_capture_steps = []
     for step_name, step in steps.items():
@@ -216,11 +148,11 @@ def test_ci_event_capture_has_ci_applicable_guard(recipe_data) -> None:
         if "check_repo_merge_state" not in tool:
             continue
         capture = step.get("capture") or {}
-        if not (capture.keys() & _PRIMARY_CI_EVENT_KEYS):
+        if not (capture.keys() & PRIMARY_CI_EVENT_KEYS):
             continue
-        if _has_wait_for_ci_predecessor(steps, step_name, reverse_graph):
+        if has_wait_for_ci_predecessor(steps, step_name, reverse_graph):
             continue
-        if not _reaches_wait_for_ci(steps, step_name):
+        if not reaches_wait_for_ci(steps, step_name):
             continue
         ci_event_capture_steps.append(step_name)
 

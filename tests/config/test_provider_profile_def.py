@@ -94,7 +94,7 @@ class TestProviderProfileDefFrozen:
     def test_has_slots(self) -> None:
         from autoskillit.config._config_dataclasses import ProviderProfileDef
 
-        assert ProviderProfileDef.__dataclass_params__.slots is True
+        assert hasattr(ProviderProfileDef, "__slots__")
 
 
 class TestProviderProfileDefValidation:

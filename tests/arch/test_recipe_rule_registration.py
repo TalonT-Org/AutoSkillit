@@ -74,3 +74,4 @@ def test_rule_registry_hash_nonempty_after_recipe_import() -> None:
         "RULE_REGISTRY_HASH is empty — _finalize_registry() may have been removed or "
         "called before rules registered"
     )
+    assert len(RULE_REGISTRY_HASH) == 64, "RULE_REGISTRY_HASH must be a sha256 hex digest"

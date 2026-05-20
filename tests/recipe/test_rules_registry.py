@@ -70,14 +70,6 @@ def test_rule_registry_hash_stable_across_calls() -> None:
     assert compute_rule_registry_hash() == compute_rule_registry_hash()
 
 
-def test_rule_registry_hash_nonempty_after_import() -> None:
-    """RULE_REGISTRY_HASH is non-empty after import autoskillit.recipe."""
-    from autoskillit.recipe.registry import RULE_REGISTRY_HASH
-
-    assert RULE_REGISTRY_HASH, "RULE_REGISTRY_HASH must be non-empty after finalization"
-    assert len(RULE_REGISTRY_HASH) == 64  # sha256 hex digest length
-
-
 def test_semantic_rule_after_finalization_raises() -> None:
     """Registering a rule after finalization raises RuntimeError."""
     from autoskillit.recipe.registry import _REGISTRY_FINALIZED, semantic_rule

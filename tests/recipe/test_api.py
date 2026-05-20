@@ -989,35 +989,6 @@ def test_load_and_validate_cache_invalidated_on_rule_registry_change(tmp_path, m
     assert len(calls) == 2
 
 
-def test_load_cache_entry_includes_rule_registry_hash():
-    """_LoadCacheEntry dataclass has a rule_registry_hash field."""
-    import dataclasses
-
-    from autoskillit.recipe._api import _LoadCacheEntry
-
-    field_names = {f.name for f in dataclasses.fields(_LoadCacheEntry)}
-    assert "rule_registry_hash" in field_names
-
-
-def test_load_cache_entry_rule_registry_hash_checked_in_hit_path():
-    """The cache hit validation block references rule_registry_hash."""
-    import ast
-    from pathlib import Path
-
-    api_src = Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "recipe" / "_api.py"
-    tree = ast.parse(api_src.read_text())
-
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef) and node.name == "load_and_validate":
-            src_lines = ast.get_source_segment(api_src.read_text(), node) or ""
-            assert "rule_registry_hash" in src_lines, (
-                "load_and_validate must reference rule_registry_hash in cache validation"
-            )
-            break
-    else:
-        raise AssertionError("load_and_validate function not found")
-
-
 def test_load_and_validate_detects_stale_process(tmp_path, monkeypatch):
     """Stale process returns error result instead of evaluating recipes."""
     import autoskillit.recipe._api as api_mod

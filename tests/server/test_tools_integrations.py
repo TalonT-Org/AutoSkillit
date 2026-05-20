@@ -22,7 +22,7 @@ from tests.conftest import _make_result
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
-_CLAIM_HELPERS = "autoskillit.server.tools._claim_helpers"
+_CLAIM_HELPERS = "autoskillit.fleet"
 
 # ---------------------------------------------------------------------------
 # claim_issue / release_issue / prepare_issue / enrich_issues — gated tools

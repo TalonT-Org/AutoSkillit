@@ -212,7 +212,7 @@ def test_provider_result_filters_none_values():
     assert extras == {"api_key_env": "MY_KEY"}
 
 
-def test_resolve_provider_profile_filters_none_from_step_override(monkeypatch):
+def test_resolve_provider_profile_step_override_resolves_api_key(monkeypatch):
     from autoskillit.server._guards import _resolve_provider_profile
 
     monkeypatch.setenv("MY_KEY", "secret-value")

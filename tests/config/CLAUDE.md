@@ -16,7 +16,7 @@ Configuration loading, defaults, and schema tests.
 | `test_helpers.py` | Tests for autoskillit.config resolve_ingredient_defaults |
 | `test_linux_tracing_config.py` | Tests for LinuxTracingConfig loading and validation |
 | `test_packs_config.py` | Tests for PacksConfig loading and validation |
-| `test_providers_config.py` | Tests for ProvidersConfig loading and validation |
+| `test_providers_config.py` | Tests for ProvidersConfig loading/validation, ProviderProfileDef, resolved_profiles coercion, and CoreRunConfig.provider |
 | `test_provider_profile_def.py` | Tests for ProviderProfileDef frozen dataclass and export chain |
 | `test_quota_guard_config.py` | Tests for QuotaGuardConfig loading and validation |
 | `test_review_config.py` | Tests for ReviewConfig and local_review_rounds wiring |

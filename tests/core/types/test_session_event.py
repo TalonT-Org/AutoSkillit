@@ -26,6 +26,9 @@ def test_required_fields_present() -> None:
         "exit_code",
         "backend_data",
     }
+
+
+def test_construction_stores_all_fields() -> None:
     claude_data = ClaudeEventData(record_type="assistant", subtype="text", session_id="s1")
     ev = SessionEvent(
         kind=BackendEventKind.COMPLETION,

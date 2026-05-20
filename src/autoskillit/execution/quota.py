@@ -336,6 +336,7 @@ async def _refresh_quota_cache(
 async def check_and_sleep_if_needed(
     config: Any,
     *,
+    provider: str = "anthropic",
     base_url: str = _DEFAULT_BASE_URL,
     _httpx_timeout: float = 10,
 ) -> dict:
@@ -351,11 +352,13 @@ async def check_and_sleep_if_needed(
 
     Args:
         config: QuotaGuardConfig instance.
+        provider: Provider name. Non-anthropic providers bypass all quota I/O.
 
     Returns:
         {"should_sleep": bool, "sleep_seconds": int, "utilization": float | None,
          "resets_at": str | None, "window_name": str | None}
         On error: adds "error" key, sets should_sleep=False.
+        On provider bypass: adds "provider_bypass": True key.
     """
     if not config.enabled:
         return {
@@ -364,6 +367,16 @@ async def check_and_sleep_if_needed(
             "utilization": None,
             "resets_at": None,
             "window_name": None,
+        }
+
+    if provider.casefold() != "anthropic":
+        return {
+            "should_sleep": False,
+            "sleep_seconds": 0,
+            "utilization": None,
+            "resets_at": None,
+            "window_name": None,
+            "provider_bypass": True,
         }
 
     fetch_kwargs = {

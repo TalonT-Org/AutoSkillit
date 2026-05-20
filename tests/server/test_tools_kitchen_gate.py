@@ -333,7 +333,7 @@ def test_tool_context_has_quota_refresh_task_field():
 
 @pytest.mark.anyio
 async def test_disable_quota_guard_writes_disabled_flag(tmp_path, monkeypatch):
-    """disable_quota_guard() sets quota_guard.disabled=True in the hook config file."""
+    """disable_quota_guard() sets quota_guard.disabled=True in the overlay file."""
     monkeypatch.chdir(tmp_path)
     hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS)
     hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
@@ -353,8 +353,11 @@ async def test_disable_quota_guard_writes_disabled_flag(tmp_path, monkeypatch):
     parsed = json.loads(result_str)
     assert parsed["success"] is True
 
-    payload = json.loads(hook_cfg_path.read_text())
-    assert payload["quota_guard"]["disabled"] is True
+    overlay_path = tmp_path.joinpath(*_HOOK_CONFIG_OVERLAY_RELPATH)
+    overlay_payload = json.loads(overlay_path.read_text())
+    assert overlay_payload["quota_guard"]["disabled"] is True
+    base_payload = json.loads(hook_cfg_path.read_text())
+    assert "disabled" not in base_payload.get("quota_guard", {})
 
 
 @pytest.mark.anyio
@@ -980,6 +983,7 @@ def test_write_hook_config_does_not_touch_overlay(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     mock_ctx.project_dir = tmp_path
+    mock_ctx.kitchen_id = "test-kitchen-id"
     mock_ctx.config.quota_guard.cache_max_age = 300
     mock_ctx.config.quota_guard.cache_path = "/p/q.json"
     mock_ctx.config.quota_guard.buffer_seconds = 60

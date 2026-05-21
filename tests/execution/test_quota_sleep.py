@@ -515,6 +515,7 @@ class TestIntegration:
             ),
         )
 
+        monkeypatch.delenv("AUTOSKILLIT_PROVIDER_PROFILE", raising=False)
         stdin_text = json.dumps({"tool_name": "run_skill"})
         buf = io.StringIO()
         with patch("sys.stdin", io.StringIO(stdin_text)):

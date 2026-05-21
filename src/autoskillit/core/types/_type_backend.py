@@ -85,6 +85,9 @@ class CodexEventData:
     thread_id: str
     item_type: str
     raw: Mapping[str, Any] = field(default_factory=dict)
+    usage: Mapping[str, Any] | None = None
+    file_changes: tuple[Mapping[str, Any], ...] | None = None
+    command: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

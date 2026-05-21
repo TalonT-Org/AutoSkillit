@@ -132,8 +132,8 @@ many individual dispatch_food_truck calls you plan to make — you MUST follow t
 There are no exceptions.
 
 **NEVER:**
-- NEVER dispatch 2 or more issue-bearing food trucks without first completing \
-the bem-wrapper pre-step.
+- NEVER dispatch 2 or more issue-bearing food trucks without first completing the
+  bem-wrapper pre-step.
 - NEVER assume issues are independent without running BEM — BEM is what determines independence.
 - NEVER call dispatch_food_truck for individual issues in parallel before the execution map \
 has been produced and read.

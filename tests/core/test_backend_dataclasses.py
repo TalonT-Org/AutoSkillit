@@ -71,6 +71,61 @@ def test_codex_event_data_raw_default():
     assert ev.raw == {}
 
 
+def test_codex_event_data_fields_exhaustive():
+    import dataclasses
+
+    from autoskillit.core import CodexEventData
+
+    fields = {f.name for f in dataclasses.fields(CodexEventData)}
+    assert fields == {
+        "record_type",
+        "thread_id",
+        "item_type",
+        "raw",
+        "usage",
+        "file_changes",
+        "command",
+    }
+
+
+def test_codex_event_data_new_fields_default_none():
+    from autoskillit.core import CodexEventData
+
+    ev = CodexEventData(record_type="item", thread_id="t1", item_type="msg")
+    assert ev.usage is None
+    assert ev.file_changes is None
+    assert ev.command is None
+
+
+def test_codex_event_data_new_fields_accept_values():
+    from autoskillit.core import CodexEventData
+
+    ev = CodexEventData(
+        record_type="item",
+        thread_id="t1",
+        item_type="msg",
+        raw={},
+        usage={"input_tokens": 100, "output_tokens": 50},
+        file_changes=({"path": "foo.py", "action": "edit"},),
+        command="python foo.py",
+    )
+    assert ev.usage == {"input_tokens": 100, "output_tokens": 50}
+    assert ev.file_changes == ({"path": "foo.py", "action": "edit"},)
+    assert ev.command == "python foo.py"
+
+
+def test_codex_event_data_field_types():
+    import typing
+    from collections.abc import Mapping
+
+    from autoskillit.core import CodexEventData
+
+    hints = typing.get_type_hints(CodexEventData)
+    assert hints["usage"] == Mapping[str, typing.Any] | None
+    assert hints["file_changes"] == tuple[Mapping[str, typing.Any], ...] | None
+    assert hints["command"] == str | None
+
+
 def test_session_event_frozen():
     from autoskillit.core import BackendEventKind, SessionEvent
 

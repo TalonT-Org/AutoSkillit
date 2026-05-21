@@ -495,6 +495,7 @@ async def _execute_claude_headless(
                 cwd,
                 runner,
                 backend=ctx.backend,
+                result_parser=ctx.backend.result_parser() if ctx.backend else None,
                 provider_extras=provider_extras,
                 retry_reason=skill_result.retry_reason,
             )

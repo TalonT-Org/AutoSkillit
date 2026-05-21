@@ -47,6 +47,7 @@ class TestBackendRegistry:
             "ClaudeStreamParser",
             "CodexBackend",
             "CodexEnvPolicy",
+            "CodexFlags",
             "CodexResultParser",
             "CodexSessionLocator",
             "CodexStreamParser",

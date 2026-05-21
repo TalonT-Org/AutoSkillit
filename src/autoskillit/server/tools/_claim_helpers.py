@@ -41,10 +41,13 @@ async def _try_claim_with_liveness(
     dead, cleans up the stale label inline and returns claimed=True.
     """
     from autoskillit.fleet import (  # noqa: PLC0415
+        DispatchStatus,
         cleanup_orphaned_labels,
         find_dispatch_for_issue,
         is_dispatch_session_alive,
     )
+
+    _TERMINAL_STATUSES = frozenset({DispatchStatus.FAILURE, DispatchStatus.INTERRUPTED})
 
     if effective_label not in current_labels:
         return ClaimDecision(claimed=True)
@@ -59,6 +62,9 @@ async def _try_claim_with_liveness(
                 " — another session may be processing it"
             ),
         )
+    if dispatch.status in _TERMINAL_STATUSES:
+        await cleanup_orphaned_labels(dispatch.sidecar_path, github_client)
+        return ClaimDecision(claimed=True, stale_label_cleaned=True)
     if is_dispatch_session_alive(dispatch):
         return ClaimDecision(
             claimed=False,

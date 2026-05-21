@@ -234,6 +234,80 @@ class TestDispatchSidecarCleanupOnCrash:
         assert swap_labels_mock.call_count == 3
 
 
+class TestDispatchSidecarCleanupOnNormalFailure:
+    """Tests for label cleanup triggered by outcome classification (not exception)."""
+
+    @pytest.mark.anyio
+    async def test_normal_exit_failure_triggers_label_cleanup(
+        self, tool_ctx, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """swap_labels called when dispatch_food_truck returns success=False without raising."""
+        import dataclasses
+
+        from autoskillit.fleet import execute_dispatch
+        from autoskillit.fleet.sidecar import sidecar_path as make_sidecar_path
+        from tests.fakes import _DEFAULT_SKILL_RESULT
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+        swap_labels_mock = AsyncMock(return_value={"success": True})
+        github_client = AsyncMock()
+        github_client.swap_labels = swap_labels_mock
+        tool_ctx.github_client = github_client
+
+        failure_result = dataclasses.replace(
+            _DEFAULT_SKILL_RESULT,
+            success=False,
+            result='{"success": false, "reason": "context_exhaustion"}',
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+        )
+
+        async def _return_failure(**kwargs):
+            sidecar = make_sidecar_path(kwargs["dispatch_id"], tool_ctx.project_dir)
+            sidecar.write_text(
+                json.dumps(
+                    {
+                        "issue_url": "https://github.com/owner/repo/issues/1",
+                        "status": "completed",
+                        "ts": "2026-01-01T00:00:00Z",
+                    }
+                )
+                + "\n"
+            )
+            if kwargs.get("on_spawn"):
+                kwargs["on_spawn"](12345, 1000)
+            return failure_result
+
+        tool_ctx.executor.dispatch_food_truck = _return_failure
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.parse_l3_result_block",
+            lambda **_: None,
+        )
+
+        result = await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="t",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=lambda **kw: "prompt",
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+        )
+
+        swap_labels_mock.assert_called_once()
+        call = swap_labels_mock.call_args
+        assert call.args[0] == "owner"
+        assert call.args[1] == "repo"
+        assert call.args[2] == 1
+        assert "in-progress" in call.kwargs["remove_labels"]
+        assert "fail" in call.kwargs["add_labels"]
+        envelope = json.loads(result.outcome.to_envelope())
+        assert envelope.get("success") is False
+
+
 class TestCleanupOrphanedLabelsUnit:
     """Direct unit tests for cleanup_orphaned_labels helper."""
 

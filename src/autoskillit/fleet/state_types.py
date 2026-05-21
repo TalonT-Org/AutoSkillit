@@ -115,6 +115,7 @@ class DispatchRecord:
     started_at: float = 0.0
     ended_at: float = 0.0
     sidecar_path: str | None = None
+    labels_cleaned: bool = False
     attempt_history: list[dict[str, Any]] = field(default_factory=list)
     resume_checkpoint: dict[str, Any] = field(default_factory=dict)
 
@@ -140,6 +141,7 @@ class DispatchRecord:
             "started_at": self.started_at,
             "ended_at": self.ended_at,
             "sidecar_path": self.sidecar_path,
+            "labels_cleaned": self.labels_cleaned,
             "attempt_history": list(self.attempt_history),
             "resume_checkpoint": dict(self.resume_checkpoint),
         }
@@ -191,6 +193,7 @@ class DispatchRecord:
             started_at=d.get("started_at", 0.0),
             ended_at=d.get("ended_at", 0.0),
             sidecar_path=d.get("sidecar_path"),
+            labels_cleaned=d.get("labels_cleaned", False),
             attempt_history=d.get("attempt_history", []),
             resume_checkpoint=d.get("resume_checkpoint", {}),
         )

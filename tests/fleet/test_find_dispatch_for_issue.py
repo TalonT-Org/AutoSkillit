@@ -124,3 +124,69 @@ def test_skips_corrupt_state_file_and_continues(tmp_path):
 
     assert result is not None
     assert result.name == "task-6"
+
+
+def test_finds_failure_dispatch_with_uncleaned_labels(tmp_path):
+    sidecar = tmp_path / "s7.jsonl"
+    _write_sidecar(sidecar, [IssueSidecarEntry(issue_url=_ISSUE_URL, status="completed", ts=_TS)])
+    dispatch = DispatchRecord(
+        name="task-7",
+        status=DispatchStatus.FAILURE,
+        sidecar_path=str(sidecar),
+        labels_cleaned=False,
+    )
+    state_path = tmp_path / "state.json"
+    _write_state(state_path, [dispatch])
+
+    result = find_dispatch_for_issue(_ISSUE_URL, [state_path])
+
+    assert result is not None
+    assert result.name == "task-7"
+
+
+def test_returns_none_for_failure_dispatch_with_cleaned_labels(tmp_path):
+    sidecar = tmp_path / "s8.jsonl"
+    _write_sidecar(sidecar, [IssueSidecarEntry(issue_url=_ISSUE_URL, status="completed", ts=_TS)])
+    dispatch = DispatchRecord(
+        name="task-8",
+        status=DispatchStatus.FAILURE,
+        sidecar_path=str(sidecar),
+        labels_cleaned=True,
+    )
+    state_path = tmp_path / "state.json"
+    _write_state(state_path, [dispatch])
+
+    result = find_dispatch_for_issue(_ISSUE_URL, [state_path])
+
+    assert result is None
+
+
+def test_running_dispatch_takes_priority_over_failure(tmp_path):
+    sidecar_running = tmp_path / "s9_run.jsonl"
+    _write_sidecar(
+        sidecar_running, [IssueSidecarEntry(issue_url=_ISSUE_URL, status="completed", ts=_TS)]
+    )
+    sidecar_failure = tmp_path / "s9_fail.jsonl"
+    _write_sidecar(
+        sidecar_failure, [IssueSidecarEntry(issue_url=_ISSUE_URL, status="completed", ts=_TS)]
+    )
+    dispatches = [
+        DispatchRecord(
+            name="task-fail",
+            status=DispatchStatus.FAILURE,
+            sidecar_path=str(sidecar_failure),
+            labels_cleaned=False,
+        ),
+        DispatchRecord(
+            name="task-run",
+            status=DispatchStatus.RUNNING,
+            sidecar_path=str(sidecar_running),
+        ),
+    ]
+    state_path = tmp_path / "state.json"
+    _write_state(state_path, dispatches)
+
+    result = find_dispatch_for_issue(_ISSUE_URL, [state_path])
+
+    assert result is not None
+    assert result.name == "task-run"

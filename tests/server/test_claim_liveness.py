@@ -203,3 +203,69 @@ class TestClaimHelperParity:
 
         assert decision.claimed is False
         assert decision.reason != ""
+
+
+class TestClaimHelperTerminalDispatchRecovery:
+    @pytest.mark.anyio
+    async def test_claim_helper_failure_dispatch_triggers_cleanup(self):
+        """_try_claim_with_liveness: FAILURE dispatch with uncleaned labels → cleanup + claimed."""
+        from autoskillit.server.tools._claim_helpers import _try_claim_with_liveness
+
+        failure_dispatch = DispatchRecord(
+            name="task-fail",
+            status=DispatchStatus.FAILURE,
+            sidecar_path="/tmp/fail_sidecar.jsonl",
+            labels_cleaned=False,
+        )
+        cleanup_mock = AsyncMock()
+
+        with (
+            patch(f"{_FLEET_MODULE}.find_dispatch_for_issue", return_value=failure_dispatch),
+            patch(f"{_FLEET_MODULE}.cleanup_orphaned_labels", cleanup_mock),
+        ):
+            decision = await _try_claim_with_liveness(
+                issue_url=_ISSUE_URL,
+                issue_number=42,
+                effective_label="in-progress",
+                current_labels=["in-progress"],
+                allow_reentry=False,
+                github_client=AsyncMock(),
+                campaign_state_paths=[],
+            )
+
+        assert decision.claimed is True
+        assert decision.stale_label_cleaned is True
+        cleanup_mock.assert_called_once()
+        assert cleanup_mock.call_args[0][0] == failure_dispatch.sidecar_path
+
+    @pytest.mark.anyio
+    async def test_claim_helper_failure_dispatch_skips_liveness_check(self):
+        """_try_claim_with_liveness: FAILURE dispatch does NOT call is_dispatch_session_alive."""
+        from autoskillit.server.tools._claim_helpers import _try_claim_with_liveness
+
+        failure_dispatch = DispatchRecord(
+            name="task-fail",
+            status=DispatchStatus.FAILURE,
+            sidecar_path="/tmp/fail_sidecar.jsonl",
+            labels_cleaned=False,
+        )
+        liveness_mock = AsyncMock(return_value=True)
+
+        with (
+            patch(f"{_FLEET_MODULE}.find_dispatch_for_issue", return_value=failure_dispatch),
+            patch(f"{_FLEET_MODULE}.is_dispatch_session_alive", liveness_mock),
+            patch(f"{_FLEET_MODULE}.cleanup_orphaned_labels", AsyncMock()),
+        ):
+            decision = await _try_claim_with_liveness(
+                issue_url=_ISSUE_URL,
+                issue_number=42,
+                effective_label="in-progress",
+                current_labels=["in-progress"],
+                allow_reentry=False,
+                github_client=AsyncMock(),
+                campaign_state_paths=[],
+            )
+
+        assert decision.claimed is True
+        assert decision.stale_label_cleaned is True
+        liveness_mock.assert_not_called()

@@ -278,14 +278,22 @@ def find_dispatch_for_issue(
     issue_url: str,
     campaign_state_paths: list[Path],
 ) -> DispatchRecord | None:
-    """Search all known campaign states for a RUNNING dispatch whose sidecar contains issue_url.
+    """Search all known campaign states for a dispatch whose sidecar contains issue_url
+    and whose labels have not been cleaned up.
 
+    Pass 1: RUNNING dispatches (live session may own the label).
+    Pass 2: terminal dispatches (FAILURE, INTERRUPTED) with labels_cleaned=False.
+
+    RUNNING takes priority — a live session should not be preempted by an old dead dispatch.
     Returns the first matching DispatchRecord, else None. Reads are filesystem-only.
     Never raises.
     """
     from autoskillit.fleet.sidecar import read_sidecar_from_path  # noqa: PLC0415
     from autoskillit.fleet.state import read_state  # noqa: PLC0415
 
+    _TERMINAL_UNCLEANED = frozenset({DispatchStatus.FAILURE, DispatchStatus.INTERRUPTED})
+
+    terminal_match: DispatchRecord | None = None
     for state_path in campaign_state_paths:
         try:
             state = read_state(state_path)
@@ -295,14 +303,19 @@ def find_dispatch_for_issue(
         if state is None:
             continue
         for d in state.dispatches:
-            if d.status != DispatchStatus.RUNNING:
-                continue
             if d.sidecar_path is None:
                 continue
-            entries = read_sidecar_from_path(Path(d.sidecar_path))
-            if any(e.issue_url == issue_url for e in entries):
-                return d
-    return None
+            if d.status == DispatchStatus.RUNNING:
+                entries = read_sidecar_from_path(Path(d.sidecar_path))
+                if any(e.issue_url == issue_url for e in entries):
+                    return d
+            elif (
+                terminal_match is None and d.status in _TERMINAL_UNCLEANED and not d.labels_cleaned
+            ):
+                entries = read_sidecar_from_path(Path(d.sidecar_path))
+                if any(e.issue_url == issue_url for e in entries):
+                    terminal_match = d
+    return terminal_match
 
 
 def derive_orchestrator_resume_spec(state: CampaignState) -> NamedResume | NoResume:

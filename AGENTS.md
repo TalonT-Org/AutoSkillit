@@ -27,7 +27,7 @@ A Claude Code plugin that orchestrates automated skill-driven workflows using he
 ### **3.2. File System**
 
   * **Temporary Files:** All temp files must go in the project's `.autoskillit/temp/` directory.
-  * **Do Not Add Root Files**: Never create new root files unless explicitly required.
+  * **Do Not Add Root Files**: Never create new root files unless explicitly required (except agent instruction files like AGENTS.md and CLAUDE.md).
   * **Never commit unless told to do so**
 
 ### **3.3. GitHub API Call Discipline**

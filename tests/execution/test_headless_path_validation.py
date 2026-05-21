@@ -11,6 +11,7 @@ from autoskillit.core.types import (
     SubprocessResult,
     TerminationReason,
 )
+from autoskillit.execution.backends.claude import ClaudeResultParser
 from autoskillit.execution.headless import (
     _build_skill_result,
     _extract_missing_token_hints,
@@ -1114,7 +1115,6 @@ def _ndjson_with_write(result_text: str, file_paths: list[str], session_id: str 
 
 class TestExtractMissingTokenHints:
     def test_extracts_token_and_path(self):
-        from autoskillit.execution.backends.claude import ClaudeResultParser
 
         stdout = _ndjson_with_write("plan summary\n%%ORDER_UP%%", ["/tmp/out.md"])
         hints = _extract_missing_token_hints(
@@ -1123,7 +1123,6 @@ class TestExtractMissingTokenHints:
         assert hints == [("plan_path", "/tmp/out.md")]
 
     def test_returns_empty_when_pattern_satisfied(self):
-        from autoskillit.execution.backends.claude import ClaudeResultParser
 
         stdout = _ndjson_with_write("plan_path = /tmp/out.md\n%%ORDER_UP%%", ["/tmp/out.md"])
         hints = _extract_missing_token_hints(
@@ -1132,14 +1131,12 @@ class TestExtractMissingTokenHints:
         assert hints == []
 
     def test_returns_empty_for_non_path_patterns(self):
-        from autoskillit.execution.backends.claude import ClaudeResultParser
 
         stdout = _ndjson_with_write("%%ORDER_UP%%", ["/tmp/out.md"])
         hints = _extract_missing_token_hints(stdout, [r"verdict\s*=\s*\w+"], ClaudeResultParser())
         assert hints == []
 
     def test_uses_last_write_path(self):
-        from autoskillit.execution.backends.claude import ClaudeResultParser
 
         stdout = _ndjson_with_write("%%ORDER_UP%%", ["/tmp/first.md", "/tmp/final.md"])
         hints = _extract_missing_token_hints(
@@ -1149,7 +1146,6 @@ class TestExtractMissingTokenHints:
 
     def test_extracts_hints_for_backslash_s_plus_pattern(self):
         """_extract_missing_token_hints must work for \\S+-terminated patterns."""
-        from autoskillit.execution.backends.claude import ClaudeResultParser
 
         stdout = _ndjson_with_write("%%ORDER_UP%%", ["/tmp/out.md"])
         hints = _extract_missing_token_hints(
@@ -1771,12 +1767,39 @@ class TestNudgeBackendGuard:
         assert len(tool_ctx.runner.call_args_list) == 1
 
     @pytest.mark.anyio
+    async def test_nudge_skips_when_result_parser_is_none(self, tool_ctx):
+        from dataclasses import replace
+        from unittest.mock import Mock
+
+        from autoskillit.core import CLAUDE_CODE_CAPABILITIES
+        from autoskillit.core.types import RetryReason
+        from autoskillit.execution.headless import run_headless_core
+
+        marker = tool_ctx.config.run_skill.completion_marker
+        caps = replace(CLAUDE_CODE_CAPABILITIES, skill_injection_capable=True)
+        mock_backend = Mock()
+        mock_backend.capabilities = caps
+        mock_backend.write_tool_names.return_value = frozenset({"Write", "Edit"})
+        mock_backend.result_parser.return_value = None
+        tool_ctx.backend = mock_backend
+        tool_ctx.runner.push(self._main_subprocess_result(marker))
+        tool_ctx.runner.push(self._nudge_response(marker))
+        result = await run_headless_core(
+            "/autoskillit:make-plan foo",
+            cwd="/tmp",
+            ctx=tool_ctx,
+            expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+        )
+        # result_parser=None prevents nudge even when skill_injection_capable=True
+        assert result.retry_reason == RetryReason.CONTRACT_RECOVERY
+        assert len(tool_ctx.runner.call_args_list) == 1
+
+    @pytest.mark.anyio
     async def test_nudge_uses_backend_build_resume_cmd(self, tool_ctx):
         from dataclasses import replace
         from unittest.mock import Mock
 
         from autoskillit.core import CLAUDE_CODE_CAPABILITIES, CmdSpec
-        from autoskillit.execution.backends.claude import ClaudeResultParser
         from autoskillit.execution.headless import run_headless_core
 
         marker = tool_ctx.config.run_skill.completion_marker
@@ -1809,7 +1832,6 @@ class TestNudgeBackendGuard:
         from unittest.mock import Mock
 
         from autoskillit.core import CLAUDE_CODE_CAPABILITIES, CmdSpec
-        from autoskillit.execution.backends.claude import ClaudeResultParser
         from autoskillit.execution.headless import run_headless_core
 
         marker = tool_ctx.config.run_skill.completion_marker
@@ -1836,6 +1858,7 @@ class TestNudgeBackendGuard:
         mock_backend.build_resume_cmd.assert_called_once()
         call_kwargs = mock_backend.build_resume_cmd.call_args
         assert call_kwargs.kwargs["resume_session_id"] == "sess-main"
+        mock_backend.result_parser.assert_called_once()
 
 
 class TestEarlyStopDetection:

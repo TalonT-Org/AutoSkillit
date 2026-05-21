@@ -15,6 +15,12 @@ import shlex
 import sys
 from pathlib import Path
 
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+
+from _hook_settings import read_merged_hook_config  # type: ignore[import-not-found]  # noqa: E402
+
 PR_CREATE_DENY_TRIGGER: str = "PR creation via run_cmd is prohibited"
 
 # Shell-separator tokens that introduce a new subcommand.
@@ -97,7 +103,7 @@ def main() -> None:
     # Recipe-level authorization: recipes that legitimately create PRs set
     # recipe_allows_pr_create=true in .hook_config.json after loading.
     try:
-        hook_data = json.loads(cfg_path.read_text())
+        hook_data = read_merged_hook_config()
         if hook_data.get("recipe_allows_pr_create"):
             sys.exit(0)
     except (OSError, json.JSONDecodeError, AttributeError, TypeError) as exc:

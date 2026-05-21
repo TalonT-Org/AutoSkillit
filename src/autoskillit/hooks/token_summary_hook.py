@@ -20,15 +20,13 @@ import subprocess
 import sys
 from typing import Any
 
-# stdlib-only subprocess hook: import _fmt_primitives by bare name via sys.path
+# stdlib-only subprocess hook: import sibling modules by bare name via sys.path
 # (test_hooks_are_stdlib_only). Venv tests use the autoskillit.hooks package path.
-_FORMATTERS_DIR = str(pathlib.Path(__file__).resolve().parent / "formatters")
-if _FORMATTERS_DIR not in sys.path:
-    sys.path.insert(0, _FORMATTERS_DIR)
+_HOOKS_DIR = str(pathlib.Path(__file__).resolve().parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
 
-from _fmt_primitives import (  # type: ignore[import-not-found]  # noqa: E402
-    _HOOK_CONFIG_PATH_COMPONENTS,
-)
+from _hook_settings import read_merged_hook_config  # type: ignore[import-not-found]  # noqa: E402
 
 _SUFFIX_RE = re.compile(r"-\d+$")
 _PR_PARTS_RE = re.compile(r"https://github\.com/([^/\s]+)/([^/\s]+)/pull/(\d+)")
@@ -140,14 +138,13 @@ def _fmt_duration(seconds: float) -> str:
 
 
 def _read_kitchen_id(base: pathlib.Path | None = None) -> str:
-    """Read kitchen_id from hook_config.json. Returns '' if absent or unset.
+    """Read kitchen_id from merged hook config. Returns '' if absent or unset.
 
     Falls back to 'pipeline_id' key for configs written before the rename.
     """
     root = base if base is not None else pathlib.Path.cwd()
-    path = root.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS)
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = read_merged_hook_config(root)
         if not isinstance(data, dict):
             return ""
         return str(data.get("kitchen_id") or data.get("pipeline_id", ""))

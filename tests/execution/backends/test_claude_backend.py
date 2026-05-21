@@ -202,6 +202,110 @@ class TestBuildSkillSessionCmdEquivalence:
         assert spec.env == shim.env
 
 
+class TestResumePromptPreservation:
+    """Contract: resume paths must never discard the caller's primary prompt."""
+
+    @staticmethod
+    def _extract_prompt(cmd: tuple[str, ...] | list[str]) -> str:
+        cmd_list = list(cmd)
+        if "-p" in cmd_list:
+            return cmd_list[cmd_list.index("-p") + 1]
+        return ""
+
+    def test_food_truck_resume_preserves_orchestrator_prompt(self) -> None:
+        backend = ClaudeCodeBackend()
+        spec = backend.build_food_truck_cmd(
+            orchestrator_prompt="Deploy service X with config Y",
+            plugin_source=DirectInstall(plugin_dir=Path("/fake")),
+            cwd="/tmp",
+            completion_marker="%%DONE%%",
+            resume_session_id="sess-123",
+            sentinel_contract="EMIT %%RESULT%%",
+        )
+        prompt = self._extract_prompt(spec.cmd)
+        assert "Deploy service X with config Y" in prompt
+
+    def test_food_truck_resume_includes_anti_replay_directive(self) -> None:
+        backend = ClaudeCodeBackend()
+        spec = backend.build_food_truck_cmd(
+            orchestrator_prompt="task context",
+            plugin_source=DirectInstall(plugin_dir=Path("/fake")),
+            cwd="/tmp",
+            completion_marker="%%DONE%%",
+            resume_session_id="sess-123",
+        )
+        prompt = self._extract_prompt(spec.cmd)
+        assert "Do NOT re-emit" in prompt
+
+    def test_food_truck_resume_includes_caller_resume_message(self) -> None:
+        backend = ClaudeCodeBackend()
+        spec = backend.build_food_truck_cmd(
+            orchestrator_prompt="task context",
+            plugin_source=DirectInstall(plugin_dir=Path("/fake")),
+            cwd="/tmp",
+            completion_marker="%%DONE%%",
+            resume_session_id="sess-123",
+            resume_message="Quota guard is now disabled. Retry the blocked operation.",
+        )
+        prompt = self._extract_prompt(spec.cmd)
+        assert "Quota guard is now disabled" in prompt
+
+    def test_skill_session_resume_preserves_skill_command(self) -> None:
+        backend = ClaudeCodeBackend()
+        spec = backend.build_skill_session_cmd(
+            "/autoskillit:rectify /path/to/investigation.md",
+            cwd="/tmp",
+            completion_marker="%%DONE%%",
+            model=None,
+            plugin_source=DirectInstall(plugin_dir=Path("/fake")),
+            output_format=OutputFormat.STREAM_JSON,
+            resume_session_id="sess-456",
+        )
+        prompt = self._extract_prompt(spec.cmd)
+        assert "rectify" in prompt
+
+    @pytest.mark.parametrize(
+        "builder,kwargs,marker_text",
+        [
+            (
+                "build_food_truck_cmd",
+                dict(
+                    orchestrator_prompt="UNIQUE_TASK_MARKER_12345",
+                    plugin_source=DirectInstall(plugin_dir=Path("/fake")),
+                    cwd="/tmp",
+                    completion_marker="%%DONE%%",
+                    resume_session_id="sess-inv",
+                ),
+                "UNIQUE_TASK_MARKER_12345",
+            ),
+            (
+                "build_skill_session_cmd",
+                dict(
+                    cwd="/tmp",
+                    completion_marker="%%DONE%%",
+                    model=None,
+                    plugin_source=DirectInstall(plugin_dir=Path("/fake")),
+                    output_format=OutputFormat.STREAM_JSON,
+                    resume_session_id="sess-inv",
+                ),
+                "UNIQUE_ARG_67890",
+            ),
+        ],
+    )
+    def test_resume_prompt_never_discards_base_prompt(
+        self, builder: str, kwargs: dict[str, Any], marker_text: str
+    ) -> None:
+        backend = ClaudeCodeBackend()
+        if builder == "build_skill_session_cmd":
+            spec = backend.build_skill_session_cmd(
+                f"/autoskillit:test-skill {marker_text}", **kwargs
+            )
+        else:
+            spec = getattr(backend, builder)(**kwargs)
+        prompt = self._extract_prompt(spec.cmd)
+        assert marker_text in prompt
+
+
 class TestBuildFoodTruckCmdEquivalence:
     def test_minimal(self) -> None:
         backend = ClaudeCodeBackend()

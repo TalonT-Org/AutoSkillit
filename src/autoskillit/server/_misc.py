@@ -46,12 +46,18 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 _HOOK_CONFIG_FILENAME: str = _HOOK_CONFIG_PATH_COMPONENTS[-1]
+_HOOK_CONFIG_OVERLAY_FILENAME: str = ".hook_config_overlay.json"
 _HOOK_DIR_COMPONENTS: tuple[str, ...] = _HOOK_CONFIG_PATH_COMPONENTS[:-1]
 
 
 def _hook_config_path(project_root: Path) -> Path:
     """Return the canonical path to the hook configuration JSON file."""
     return project_root.joinpath(*_HOOK_DIR_COMPONENTS, _HOOK_CONFIG_FILENAME)
+
+
+def _hook_config_overlay_path(project_root: Path) -> Path:
+    """Return the path to the runtime overlay file for hook config mutations."""
+    return project_root.joinpath(*_HOOK_DIR_COMPONENTS, _HOOK_CONFIG_OVERLAY_FILENAME)
 
 
 def _extract_block(text: str, start_delim: str, end_delim: str) -> list[str]:

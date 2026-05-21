@@ -170,6 +170,7 @@ HOOK_REGISTRY: list[HookDef] = [
     HookDef(
         event_type="SessionStart",
         scripts=["session_start_hook.py"],
+        session_scope="interactive_only",
     ),
 ]
 

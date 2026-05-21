@@ -22,6 +22,7 @@ from pathlib import Path
 # Keep in sync with _HOOK_CONFIG_PATH_COMPONENTS in hooks/_fmt_primitives.py
 # (stdlib-only boundary prevents a shared import).
 HOOK_CONFIG_FILENAME = ".hook_config.json"
+HOOK_CONFIG_OVERLAY_FILENAME = ".hook_config_overlay.json"
 HOOK_DIR_COMPONENTS = (".autoskillit", "temp")
 
 DEFAULT_CACHE_PATH = "~/.claude/autoskillit_quota_cache.json"
@@ -86,17 +87,41 @@ class QuotaHookSettings:
     disabled: bool = False
 
 
-def _read_hook_config() -> dict:
-    """Read the ``quota_guard`` section of ``<cwd>/.autoskillit/temp/.hook_config.json``.
+def merge_hook_configs(base: dict, overlay: dict) -> dict:
+    """Merge base and overlay hook config dicts (overlay wins, shallow dict merge)."""
+    merged = dict(base)
+    for k, v in overlay.items():
+        if k in merged and isinstance(merged[k], dict) and isinstance(v, dict):
+            merged[k] = {**merged[k], **v}
+        else:
+            merged[k] = v
+    return merged
 
-    Returns ``{}`` if the file is absent or unreadable. This file is written by
-    ``open_kitchen`` and removed by ``close_kitchen``.
+
+def read_merged_hook_config(root: Path | None = None) -> dict:
+    """Read and merge base + overlay hook config files (stdlib-only).
+
+    Returns ``{}`` if both files are absent or unreadable.
     """
+    cwd = root if root is not None else Path.cwd()
     try:
-        config_path = Path.cwd().joinpath(*HOOK_DIR_COMPONENTS, HOOK_CONFIG_FILENAME)
-        return json.loads(config_path.read_text()).get("quota_guard", {})
+        base_path = cwd.joinpath(*HOOK_DIR_COMPONENTS, HOOK_CONFIG_FILENAME)
+        overlay_path = cwd.joinpath(*HOOK_DIR_COMPONENTS, HOOK_CONFIG_OVERLAY_FILENAME)
+        base = json.loads(base_path.read_text()) if base_path.exists() else {}
+        overlay = json.loads(overlay_path.read_text()) if overlay_path.exists() else {}
+        return merge_hook_configs(base, overlay)
     except (OSError, json.JSONDecodeError, AttributeError, TypeError):
         return {}
+
+
+def _read_hook_config() -> dict:
+    """Read the merged ``quota_guard`` section from base + overlay hook config.
+
+    Returns ``{}`` if both files are absent or unreadable. The base file is
+    written by ``open_kitchen`` and the overlay by ``disable_quota_guard``.
+    Overlay values take precedence over base values.
+    """
+    return read_merged_hook_config().get("quota_guard", {})
 
 
 def _resolve_int(env_var: str, hook_value: object, default: int) -> int:

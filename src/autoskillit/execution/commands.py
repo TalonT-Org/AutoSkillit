@@ -21,6 +21,7 @@ from autoskillit.execution.backends.claude import (
     ClaudeCodeBackend,
     _apply_output_format,  # noqa: F401 — re-export for downstream consumers
     _build_resume_context,  # noqa: F401 — re-export for downstream consumers
+    _compose_resume_prompt,  # noqa: F401 — re-export for downstream consumers
     _ensure_skill_prefix,  # noqa: F401 — re-export for downstream consumers
     _inject_completion_directive,  # noqa: F401 — re-export for downstream consumers
     _inject_completion_reminder,  # noqa: F401 — re-export for downstream consumers
@@ -133,6 +134,7 @@ def build_skill_session_cmd(
     profile_name: str = "",
     resume_session_id: str = "",
     resume_checkpoint: SessionCheckpoint | None = None,
+    resume_message: str | None = None,
 ) -> ClaudeHeadlessCmd:
     """Build the complete headless command spec for a skill session."""
     spec = ClaudeCodeBackend().build_skill_session_cmd(
@@ -152,6 +154,7 @@ def build_skill_session_cmd(
         profile_name=profile_name,
         resume_session_id=resume_session_id,
         resume_checkpoint=resume_checkpoint,
+        resume_message=resume_message,
     )
     return ClaudeHeadlessCmd(cmd=list(spec.cmd), env=spec.env)
 
@@ -173,6 +176,7 @@ def build_food_truck_cmd(
     temp_dir_relpath: str | None = None,
     allowed_write_prefix: str = "",
     sentinel_contract: str = "",
+    resume_message: str | None = None,
 ) -> ClaudeHeadlessCmd:
     """Build the complete headless command spec for an L2 food truck session."""
     spec = ClaudeCodeBackend().build_food_truck_cmd(
@@ -191,5 +195,6 @@ def build_food_truck_cmd(
         temp_dir_relpath=temp_dir_relpath,
         allowed_write_prefix=allowed_write_prefix,
         sentinel_contract=sentinel_contract,
+        resume_message=resume_message,
     )
     return ClaudeHeadlessCmd(cmd=list(spec.cmd), env=spec.env)

@@ -122,6 +122,7 @@ async def dispatch_food_truck(
     idle_output_timeout: int | None = None,
     prior_dispatch_id: str | None = None,
     skip_when: str | None = None,
+    resume_message: str | None = None,
     ctx: Context = CurrentContext(),
 ) -> str:
     """Dispatch a single food truck L2 session for one recipe.
@@ -145,6 +146,16 @@ async def dispatch_food_truck(
         skip_when: Optional condition expression. If evaluation against accumulated
             campaign captures returns true, the dispatch is recorded as SKIPPED without
             executing the recipe.
+        resume_message: Optional caller-supplied context for the resumed session.
+            Injected as a CALLER CONTEXT section in the resume prompt, allowing the
+            caller to communicate changed conditions (e.g. "quota guard is now
+            disabled") that the LLM should act on.
+
+    Resume vs. Fresh Dispatch:
+        - ``resume_session_id``: Session ID to resume (``--resume <id>``).
+        - ``resume_checkpoint``: Completed-items context from the prior session.
+        - ``resume_message``: Free-text caller context injected into the resume prompt.
+        All three are optional and only meaningful when resuming a prior dispatch.
 
     Never raises.
     """
@@ -280,6 +291,7 @@ async def dispatch_food_truck(
             idle_output_timeout=idle_output_timeout,
             caller_session_id=caller_session_id,
             prior_dispatch_id=prior_dispatch_id,
+            resume_message=resume_message,
         )
 
         if campaign_state_path_str and isinstance(result, DispatchResult):

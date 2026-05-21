@@ -63,6 +63,7 @@ class HeadlessExecutor(Protocol):
         provider_fallback_name: str = "",
         resume_session_id: str = "",
         resume_checkpoint: SessionCheckpoint | None = None,
+        resume_message: str | None = None,
     ) -> SkillResult: ...
 
     async def dispatch_food_truck(
@@ -95,6 +96,7 @@ class HeadlessExecutor(Protocol):
         sentinel_contract: str = "",
         marker_dir: Path | None = None,
         session_id: str | None = None,
+        resume_message: str | None = None,
     ) -> SkillResult: ...
 
 

@@ -36,6 +36,9 @@ class TestCodexFlags:
     def test_str_json_equals_double_dash_json(self) -> None:
         assert str(CodexFlags.JSON) == "--json"
 
+    def test_sandbox_flag_value_string_literal(self) -> None:
+        assert CodexFlags.SANDBOX == "--sandbox"
+
     def test_all_members_present(self) -> None:
         expected = {
             "JSON",
@@ -399,17 +402,17 @@ class TestCodexBackendProtocol:
     def test_capabilities_is_backend_capabilities(self) -> None:
         assert isinstance(CodexBackend().capabilities, BackendCapabilities)
 
-    def test_channel_b_capable_false(self) -> None:
-        assert CodexBackend().capabilities.channel_b_capable is False
-
-    def test_pty_required_false(self) -> None:
-        assert CodexBackend().capabilities.pty_required is False
-
-    def test_session_resume_capable_true(self) -> None:
-        assert CodexBackend().capabilities.session_resume_capable is True
-
-    def test_skill_injection_capable_false(self) -> None:
-        assert CodexBackend().capabilities.skill_injection_capable is False
+    @pytest.mark.parametrize(
+        ("attr", "expected"),
+        [
+            ("channel_b_capable", False),
+            ("pty_required", False),
+            ("session_resume_capable", True),
+            ("skill_injection_capable", False),
+        ],
+    )
+    def test_capability_flag(self, attr: str, expected: bool) -> None:
+        assert getattr(CodexBackend().capabilities, attr) is expected
 
     def test_completion_record_types_content(self) -> None:
         assert CodexBackend().capabilities.completion_record_types == frozenset(
@@ -421,13 +424,18 @@ class TestCodexBackendProtocol:
 
 
 class TestCodexHeadlessCmd:
-    def test_cmd_0_is_codex(self) -> None:
+    def test_default_cmd_structure(self) -> None:
         spec = CodexBackend().build_headless_cmd("do stuff")
-        assert spec.cmd[0] == "codex"
-
-    def test_cmd_1_is_exec(self) -> None:
-        spec = CodexBackend().build_headless_cmd("do stuff")
-        assert spec.cmd[1] == "exec"
+        assert spec.cmd == (
+            "codex",
+            "exec",
+            "--json",
+            "--sandbox",
+            "workspace-write",
+            "-a",
+            "never",
+            "do stuff",
+        )
 
     def test_json_flag_present(self) -> None:
         spec = CodexBackend().build_headless_cmd("do stuff")
@@ -445,10 +453,6 @@ class TestCodexHeadlessCmd:
         idx = spec.cmd.index("-a")
         assert spec.cmd[idx + 1] == "never"
 
-    def test_prompt_is_last_positional(self) -> None:
-        spec = CodexBackend().build_headless_cmd("do stuff")
-        assert spec.cmd[-1] == "do stuff"
-
     def test_model_flag(self) -> None:
         spec = CodexBackend().build_headless_cmd("x", model="o3")
         assert "--model" in spec.cmd
@@ -460,6 +464,13 @@ class TestCodexHeadlessCmd:
         assert "--add-dir" in spec.cmd
         idx = spec.cmd.index("--add-dir")
         assert spec.cmd[idx + 1] == "/extra"
+
+    def test_multiple_add_dir_flags(self) -> None:
+        spec = CodexBackend().build_headless_cmd("x", add_dirs=["/a", "/b"])
+        add_dir_indices = [i for i, v in enumerate(spec.cmd) if v == "--add-dir"]
+        assert len(add_dir_indices) == 2
+        assert spec.cmd[add_dir_indices[0] + 1] == "/a"
+        assert spec.cmd[add_dir_indices[1] + 1] == "/b"
 
     def test_no_dangerously_skip_permissions(self) -> None:
         spec = CodexBackend().build_headless_cmd("do stuff")
@@ -477,12 +488,6 @@ class TestCodexHeadlessCmd:
         spec = CodexBackend().build_headless_cmd("do stuff")
         assert "--output-format" not in spec.cmd
 
-    def test_json_flag_value_string_literal(self) -> None:
-        assert CodexFlags.JSON == "--json"
-
-    def test_sandbox_flag_value_string_literal(self) -> None:
-        assert CodexFlags.SANDBOX == "--sandbox"
-
 
 class TestCodexResumeCmd:
     def test_positional_structure(self) -> None:
@@ -492,6 +497,10 @@ class TestCodexResumeCmd:
     def test_empty_session_id_raises_value_error(self) -> None:
         with pytest.raises(ValueError, match="non-empty"):
             CodexBackend().build_resume_cmd(resume_session_id="", prompt="continue")
+
+    def test_whitespace_session_id_raises_value_error(self) -> None:
+        with pytest.raises(ValueError, match="non-empty"):
+            CodexBackend().build_resume_cmd(resume_session_id="   ", prompt="continue")
 
     def test_no_sandbox_flag_in_resume(self) -> None:
         spec = CodexBackend().build_resume_cmd(resume_session_id="abc123", prompt="continue")

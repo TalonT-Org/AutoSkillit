@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum, unique
@@ -346,7 +347,7 @@ class CodexBackend:
         for d in add_dirs:
             cmd += [CodexFlags.ADD_DIR, d]
         cmd.append(prompt)
-        env = self.env_policy().build_env({})
+        env = self.env_policy().build_env(dict(os.environ))
         return CmdSpec(cmd=tuple(cmd), env=env)
 
     def build_interactive_cmd(self, **kwargs: object) -> CmdSpec:

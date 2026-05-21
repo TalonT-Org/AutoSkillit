@@ -326,7 +326,7 @@ def make_context(
     if is_feature_enabled(
         "codex_backend", config.features, experimental_enabled=config.experimental_enabled
     ):
-        from autoskillit.execution.backends import CodexBackend
+        from autoskillit.execution import CodexBackend
 
         backend = CodexBackend()
 

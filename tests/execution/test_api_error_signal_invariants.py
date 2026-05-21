@@ -28,7 +28,7 @@ from tests.execution.conftest import (
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
-# All patterns that _ALL_API_ERROR_PATTERNS covers
+# All patterns that _KNOWN_API_ERROR_PATTERNS covers
 API_ERROR_SIGNALS: list[str] = [
     "overloaded",
     "529",

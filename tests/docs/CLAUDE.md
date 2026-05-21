@@ -8,7 +8,7 @@ Documentation integrity, link validity, and naming convention tests.
 |------|---------|
 | `__init__.py` | empty |
 | `test_banned_phrases.py` | Reject AI-tone banned phrases in every doc (derived from REQ-DOC-070) |
-| `test_claude_md_structure.py` | Validate CLAUDE.md post-reorganization content accuracy |
+| `test_claude_md_structure.py` | Validate CLAUDE.md post-reorganization: @-import structure, Claude-specific content accuracy |
 | `test_doc_counts.py` | Verify every numerical claim in every doc file matches source of truth |
 | `test_doc_index.py` | Verify every doc is reachable from docs/README.md and every subdir has a README |
 | `test_doc_links.py` | Verify every local markdown link resolves and no old flat-layout link survives |

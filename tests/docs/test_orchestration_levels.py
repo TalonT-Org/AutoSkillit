@@ -62,13 +62,13 @@ def test_orchestration_doc_cross_references_levels():
 
 
 def test_claude_md_has_il_disambiguation():
-    claude_md = REPO_ROOT / "CLAUDE.md"
-    text = claude_md.read_text()
-    assert "| IL-N" in text, "CLAUDE.md must contain the '| IL-N' row in the disambiguation table"
+    agents_md = REPO_ROOT / "AGENTS.md"
+    text = agents_md.read_text()
+    assert "| IL-N" in text, "AGENTS.md must contain the '| IL-N' row in the disambiguation table"
     assert "| IL-NNN" in text, (
-        "CLAUDE.md must contain the '| IL-NNN' row in the disambiguation table"
+        "AGENTS.md must contain the '| IL-NNN' row in the disambiguation table"
     )
-    assert "| L-N" in text, "CLAUDE.md must contain the '| L-N' row in the disambiguation table"
+    assert "| L-N" in text, "AGENTS.md must contain the '| L-N' row in the disambiguation table"
     assert "Import layer level" in text, (
         "Disambiguation table must explain IL-N as 'Import layer level'"
     )

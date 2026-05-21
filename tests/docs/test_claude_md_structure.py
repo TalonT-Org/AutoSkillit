@@ -1,4 +1,4 @@
-"""Validate CLAUDE.md post-reorganization content accuracy."""
+"""Validate CLAUDE.md post-reorganization: @-import structure, Claude-specific content accuracy."""
 
 from __future__ import annotations
 
@@ -6,11 +6,45 @@ import re
 from pathlib import Path
 
 CLAUDE_MD = Path(__file__).resolve().parents[2] / "CLAUDE.md"
+AGENTS_MD = Path(__file__).resolve().parents[2] / "AGENTS.md"
 _SERVER_DIR = CLAUDE_MD.parent / "src" / "autoskillit" / "server"
 
 
+class TestClaudeMdImportStructure:
+    """Tests for CLAUDE.md @-import structure."""
+
+    def test_claude_md_starts_with_agents_import(self) -> None:
+        content = CLAUDE_MD.read_text()
+        lines = [line for line in content.splitlines() if line.strip()]
+        assert lines[0] == "@AGENTS.md", (
+            f"First non-blank line of CLAUDE.md must be '@AGENTS.md', got {lines[0]!r}"
+        )
+
+    def test_claude_md_under_100_lines(self) -> None:
+        content = CLAUDE_MD.read_text()
+        line_count = len(content.splitlines())
+        assert line_count < 100, f"CLAUDE.md must have under 100 lines, got {line_count}"
+
+    def test_claude_md_no_shared_content_duplicated(self) -> None:
+        content = CLAUDE_MD.read_text()
+        shared_markers = [
+            "Core Project Goal",
+            "General Principles",
+            "GitHub API Call Discipline",
+            "GitHub Issue Body",
+            "| Package | IL | Purpose |",
+            "| IL-N (single digit)",
+            "Session Diagnostics",
+        ]
+        for marker in shared_markers:
+            assert marker not in content, (
+                f"CLAUDE.md must not contain shared content marker {marker!r} — "
+                f"it lives in AGENTS.md and is imported via @AGENTS.md"
+            )
+
+
 def test_claude_md_architecture_tree_has_subpackages() -> None:
-    content = CLAUDE_MD.read_text()
+    content = AGENTS_MD.read_text()
     for subpkg in [
         "types/",
         "runtime/",
@@ -27,11 +61,11 @@ def test_claude_md_architecture_tree_has_subpackages() -> None:
         "guards/",
         "formatters/",
     ]:
-        assert subpkg in content, f"CLAUDE.md tree missing {subpkg}"
+        assert subpkg in content, f"AGENTS.md tree missing {subpkg}"
 
 
 def test_claude_md_dataclass_count_is_27() -> None:
-    content = CLAUDE_MD.read_text()
+    content = AGENTS_MD.read_text()
     assert "27 leaf dataclasses" in content
     assert "24 leaf dataclasses" not in content
 
@@ -61,7 +95,6 @@ def test_claude_md_def_spec_location_qualified() -> None:
 
 
 def test_claude_md_mentions_write_guard() -> None:
-    # write_guard is documented in hooks/guards/CLAUDE.md — accept either location
     main_content = CLAUDE_MD.read_text()
     guards_claude = CLAUDE_MD.parent / "src" / "autoskillit" / "hooks" / "guards" / "CLAUDE.md"
     assert "write_guard" in main_content or (
@@ -70,7 +103,6 @@ def test_claude_md_mentions_write_guard() -> None:
 
 
 def test_claude_md_mentions_dispatch_food_truck() -> None:
-    # dispatch_food_truck is documented in server/tools/CLAUDE.md — accept either location
     main_content = CLAUDE_MD.read_text()
     tools_claude = CLAUDE_MD.parent / "src" / "autoskillit" / "server" / "tools" / "CLAUDE.md"
     assert "dispatch_food_truck" in main_content or (
@@ -79,10 +111,10 @@ def test_claude_md_mentions_dispatch_food_truck() -> None:
 
 
 def test_claude_md_defines_channel_b() -> None:
-    content = CLAUDE_MD.read_text()
+    content = AGENTS_MD.read_text()
     assert "Channel B" in content
     assert re.search(r"Channel B[^.]*JSONL", content), (
-        "CLAUDE.md references 'Channel B' without an inline definition mentioning JSONL"
+        "AGENTS.md references 'Channel B' without an inline definition mentioning JSONL"
     )
 
 

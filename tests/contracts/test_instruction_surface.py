@@ -761,14 +761,15 @@ class TestContextLimitBehaviorContract:
 
 
 def test_claude_md_documents_all_source_modules() -> None:
-    """Every .py file in src/autoskillit/ must appear by name in CLAUDE.md.
+    """Every .py file in src/autoskillit/ must appear by name in CLAUDE.md or AGENTS.md.
 
     For __init__.py files, the containing package directory name must appear.
-    For all other files, the filename must appear in CLAUDE.md or the package's
-    own sub-CLAUDE.md (for collapsed subdirectory listings).
+    For all other files, the filename must appear in CLAUDE.md, AGENTS.md, or the
+    package's own sub-CLAUDE.md (for collapsed subdirectory listings).
     """
     claude_path = Path(__file__).parent.parent.parent / "CLAUDE.md"
-    content = claude_path.read_text()
+    agents_path = claude_path.parent / "AGENTS.md"
+    content = claude_path.read_text() + "\n" + agents_path.read_text()
     src_root = Path(__file__).parent.parent.parent / "src" / "autoskillit"
 
     missing = []
@@ -777,20 +778,18 @@ def test_claude_md_documents_all_source_modules() -> None:
             continue
         rel = py_file.relative_to(src_root)
         if py_file.name == "__init__.py":
-            # For sub-package inits, verify the package directory is documented
             parent = rel.parent
             if parent != Path(".") and (parent.name + "/") not in content:
                 missing.append(str(rel))
         else:
             if py_file.name not in content:
-                # Accept documentation in a sub-CLAUDE.md alongside the file
                 pkg_claude = py_file.parent / "CLAUDE.md"
                 if not (pkg_claude.exists() and py_file.name in pkg_claude.read_text()):
                     missing.append(str(rel))
 
     assert not missing, (
-        f"Modules not documented in CLAUDE.md: {', '.join(missing)}. "
-        "Update the Architecture section in CLAUDE.md."
+        f"Modules not documented in CLAUDE.md or AGENTS.md: {', '.join(missing)}. "
+        "Update the Architecture section in AGENTS.md or the package's sub-CLAUDE.md."
     )
 
 

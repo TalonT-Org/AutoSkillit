@@ -18,6 +18,7 @@ from autoskillit.execution.anomaly_detection import (
 )
 from autoskillit.execution.backends import (
     ClaudeCodeBackend,
+    CodexBackend,
     get_backend,
 )
 from autoskillit.execution.ci import DefaultCIWatcher
@@ -209,6 +210,7 @@ __all__ = [
     "start_linux_tracing",
     # backends
     "ClaudeCodeBackend",
+    "CodexBackend",
     # anomaly_detection
     "detect_anomalies",
     "AnomalyKind",

@@ -1,20 +1,53 @@
-"""Codex/OpenAI backend result parser."""
+"""Codex/OpenAI backend implementation."""
 
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from enum import StrEnum, unique
+from pathlib import Path
 from typing import Any
 
 from autoskillit.core import (
     AGENT_BACKEND_CODEX,
     AgentSessionResult,
+    BackendCapabilities,
     BackendEventKind,
     CanonicalTokenUsage,
     CliSubtype,
+    CmdSpec,
+    CodexEventData,
+    OutputFormat,
+    PluginSource,
     SessionEvent,
+    fast_loads,
 )
+from autoskillit.execution.process import _marker_is_standalone
+
+__all__ = [
+    "CodexBackend",
+    "CodexEnvPolicy",
+    "CodexFlags",
+    "CodexResultParser",
+    "CodexSessionLocator",
+    "CodexStreamParser",
+]
+
+
+@unique
+class CodexFlags(StrEnum):
+    JSON = "--json"
+    SANDBOX = "--sandbox"
+    ASK_FOR_APPROVAL = "--ask-for-approval"
+    ASK_FOR_APPROVAL_SHORT = "-a"
+    MODEL = "--model"
+    MODEL_SHORT = "-m"
+    ADD_DIR = "--add-dir"
+    IGNORE_USER_CONFIG = "--ignore-user-config"
+    EPHEMERAL = "--ephemeral"
+    RESUME_SUBCOMMAND = "resume"
+    LAST = "--last"
 
 
 @dataclass
@@ -143,3 +176,193 @@ class CodexResultParser:
                 "file_changes": acc.file_changes,
             },
         )
+
+
+@dataclass(slots=True)
+class CodexStreamParser:
+    completion_marker: str = ""
+    _saw_marker: bool = field(default=False, init=False, repr=False)
+
+    def parse_line(self, line: str) -> SessionEvent | None:
+        line = line.strip()
+        if not line:
+            return None
+        try:
+            obj = fast_loads(line)
+        except (ValueError, TypeError):
+            return None
+        if not isinstance(obj, dict):
+            return None
+
+        event_type = obj.get("type", "")
+
+        if event_type == "thread.started":
+            return SessionEvent(
+                kind=BackendEventKind.SESSION_META,
+                is_terminal=False,
+                has_marker=False,
+                session_id=obj.get("thread_id", "") or None,
+            )
+
+        if event_type == "item.completed":
+            item = obj.get("item", {})
+            if isinstance(item, dict) and item.get("type") == "message":
+                for block in item.get("content", []):
+                    if (
+                        isinstance(block, dict)
+                        and block.get("type") == "text"
+                        and self.completion_marker
+                        and _marker_is_standalone(block.get("text", ""), self.completion_marker)
+                    ):
+                        self._saw_marker = True
+            return SessionEvent(
+                kind=BackendEventKind.IGNORED,
+                is_terminal=False,
+                has_marker=False,
+            )
+
+        if event_type == "turn.completed":
+            return SessionEvent(
+                kind=BackendEventKind.COMPLETION,
+                is_terminal=True,
+                has_marker=self._saw_marker,
+                backend_data=CodexEventData(
+                    record_type="turn.completed",
+                    thread_id="",
+                    item_type="",
+                    raw=obj,
+                    usage=obj.get("usage"),
+                ),
+            )
+
+        if event_type == "turn.failed":
+            return SessionEvent(
+                kind=BackendEventKind.COMPLETION,
+                is_terminal=True,
+                has_marker=False,
+                backend_data=CodexEventData(
+                    record_type="turn.failed",
+                    thread_id="",
+                    item_type="",
+                    raw=obj,
+                ),
+            )
+
+        if event_type == "error":
+            return SessionEvent(
+                kind=BackendEventKind.ERROR,
+                is_terminal=True,
+                has_marker=False,
+            )
+
+        return SessionEvent(
+            kind=BackendEventKind.IGNORED,
+            is_terminal=False,
+            has_marker=False,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class CodexEnvPolicy:
+    def build_env(self, base_env: Mapping[str, str]) -> dict[str, str]:
+        return dict(base_env)
+
+
+@dataclass(frozen=True, slots=True)
+class CodexSessionLocator:
+    def locate_session(self, session_id: str) -> Path | None:
+        return None
+
+
+@dataclass(frozen=True, slots=True)
+class CodexBackend:
+    @property
+    def name(self) -> str:
+        return AGENT_BACKEND_CODEX
+
+    @property
+    def capabilities(self) -> BackendCapabilities:
+        return BackendCapabilities(
+            channel_b_capable=False,
+            pty_required=False,
+            session_resume_capable=True,
+            skill_injection_capable=False,
+            supports_thinking_blocks=False,
+            supports_claude_format_stdout=False,
+            exit_code_is_terminal=True,
+            completion_record_types=frozenset({"turn.completed", "turn.failed", "error"}),
+            session_record_types=frozenset(),
+        )
+
+    def build_cmd(self, skill_command: str, cwd: str) -> CmdSpec:
+        spec = self.build_headless_cmd(skill_command)
+        return CmdSpec(cmd=spec.cmd, env=spec.env, cwd=cwd)
+
+    def stream_parser(self) -> CodexStreamParser:
+        return CodexStreamParser()
+
+    def result_parser(self) -> CodexResultParser:
+        return CodexResultParser()
+
+    def env_policy(self) -> CodexEnvPolicy:
+        return CodexEnvPolicy()
+
+    def session_locator(self) -> CodexSessionLocator:
+        return CodexSessionLocator()
+
+    def write_tool_names(self) -> frozenset[str]:
+        return frozenset()
+
+    def binary_name(self) -> str:
+        return "codex"
+
+    def version_cmd(self) -> tuple[str, ...]:
+        return ("codex", "--version")
+
+    def build_headless_cmd(
+        self,
+        prompt: str,
+        *,
+        model: str | None = None,
+        add_dirs: Sequence[str] = (),
+    ) -> CmdSpec:
+        cmd: list[str] = [
+            "codex",
+            "exec",
+            CodexFlags.JSON,
+            CodexFlags.SANDBOX,
+            "workspace-write",
+            CodexFlags.ASK_FOR_APPROVAL_SHORT,
+            "never",
+        ]
+        if model:
+            cmd += [CodexFlags.MODEL, model]
+        for d in add_dirs:
+            cmd += [CodexFlags.ADD_DIR, d]
+        cmd.append(prompt)
+        env = self.env_policy().build_env({})
+        return CmdSpec(cmd=tuple(cmd), env=env)
+
+    def build_interactive_cmd(self, **kwargs: object) -> CmdSpec:
+        raise NotImplementedError("Codex CLI does not support interactive mode")
+
+    def build_resume_cmd(
+        self,
+        *,
+        resume_session_id: str,
+        prompt: str,
+        output_format: OutputFormat = OutputFormat.JSON,
+        plugin_source: PluginSource | None = None,
+        env_extras: Mapping[str, str] | None = None,
+    ) -> CmdSpec:
+        cmd: list[str] = ["codex", "exec", CodexFlags.RESUME_SUBCOMMAND]
+        if resume_session_id:
+            cmd.append(resume_session_id)
+        else:
+            cmd.append(CodexFlags.LAST)
+        cmd.append(prompt)
+        base: dict[str, str] = {}
+        if env_extras:
+            base.update(env_extras)
+        env = self.env_policy().build_env(base)
+        return CmdSpec(cmd=tuple(cmd), env=env)

@@ -315,3 +315,48 @@ def test_session_type_cook_order_not_in_core_types() -> None:
 
     assert not hasattr(_type_constants, "SESSION_TYPE_COOK")
     assert not hasattr(_type_constants, "SESSION_TYPE_ORDER")
+
+
+# ---------------------------------------------------------------------------
+# T1: CODEX_SCHEMA_VERSION constant exists with correct value
+# ---------------------------------------------------------------------------
+
+
+def test_codex_schema_version_value() -> None:
+    from autoskillit.core.types._type_constants import CODEX_SCHEMA_VERSION
+
+    assert CODEX_SCHEMA_VERSION == 1
+    assert isinstance(CODEX_SCHEMA_VERSION, int)
+
+
+# ---------------------------------------------------------------------------
+# T2: CODEX_SCHEMA_VERSION is in __all__
+# ---------------------------------------------------------------------------
+
+
+def test_codex_schema_version_in_all() -> None:
+    from autoskillit.core.types import _type_constants
+
+    assert "CODEX_SCHEMA_VERSION" in _type_constants.__all__
+
+
+# ---------------------------------------------------------------------------
+# T3: CODEX_SCHEMA_VERSION re-exported via types hub
+# ---------------------------------------------------------------------------
+
+
+def test_codex_schema_version_importable_from_types() -> None:
+    from autoskillit.core.types import CODEX_SCHEMA_VERSION
+
+    assert CODEX_SCHEMA_VERSION == 1
+
+
+# ---------------------------------------------------------------------------
+# T4: CODEX_SCHEMA_VERSION re-exported via core gateway
+# ---------------------------------------------------------------------------
+
+
+def test_codex_schema_version_importable_from_core() -> None:
+    from autoskillit.core import CODEX_SCHEMA_VERSION
+
+    assert CODEX_SCHEMA_VERSION == 1

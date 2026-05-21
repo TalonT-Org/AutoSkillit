@@ -35,6 +35,7 @@ __all__ = [
     "AGENT_PACK_REGISTRY",
     "CORE_PACKS",
     "CATEGORY_TAGS",
+    "CODEX_SCHEMA_VERSION",
     "TOOL_SUBSET_TAGS",
     "ALL_VISIBILITY_TAGS",
     "SKILL_COMMAND_PREFIX",
@@ -77,6 +78,7 @@ __all__ = [
 ]
 
 AUTOSKILLIT_INSTALLED_VERSION: str = version("autoskillit")
+CODEX_SCHEMA_VERSION: int = 1
 
 # Session type environment variable and valid values.
 # String aliases for consumers that cannot import SessionType StrEnum

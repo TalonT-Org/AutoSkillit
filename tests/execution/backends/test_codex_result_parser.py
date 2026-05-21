@@ -8,6 +8,7 @@ import pytest
 from autoskillit.core import BackendEventKind, CodexEventData, ResultParser, SessionEvent
 from autoskillit.execution.backends.codex import (
     CodexResultParser,
+    CodexStreamParser,
     _scan_codex_ndjson,
 )
 
@@ -57,6 +58,24 @@ def _item_completed_file_change_line(path: str) -> str:
     return json.dumps(
         {
             "type": "item.completed",
+            "item": {"type": "file_change", "path": path},
+        }
+    )
+
+
+def _item_started_function_call_line(name: str, args: str) -> str:
+    return json.dumps(
+        {
+            "type": "item.started",
+            "item": {"type": "function_call", "name": name, "args": args},
+        }
+    )
+
+
+def _item_started_file_change_line(path: str) -> str:
+    return json.dumps(
+        {
+            "type": "item.started",
             "item": {"type": "file_change", "path": path},
         }
     )
@@ -308,3 +327,309 @@ class TestCodexResultParserEvents:
 class TestCodexResultParserConformance:
     def test_structural_conformance_result_parser(self) -> None:
         assert isinstance(CodexResultParser(), ResultParser)
+
+
+class TestCodexResultParserHappyPath:
+    def test_single_turn_success(self) -> None:
+        """Composite happy-path: session_id, success, is_error=False, output, token_usage."""
+        ndjson = "\n".join(
+            [
+                _thread_started_line("sess-42"),
+                _item_completed_message_line("Task completed."),
+                _turn_completed_line({"input_tokens": 200, "output_tokens": 80}),
+            ]
+        )
+        parser = CodexResultParser()
+        result = parser.parse_stdout(ndjson)
+        assert result.success is True
+        assert result.session_id == "sess-42"
+        assert result.raw["is_error"] is False
+        assert result.raw["subtype"] == "success"
+        assert result.output == "Task completed."
+        assert result.raw["token_usage"] == {"input_tokens": 200, "output_tokens": 80}
+        assert result.raw["canonical_token_usage"] is not None
+
+
+class TestCodexResultParserCumulativeTokens:
+    def test_single_turn_canonical_matches_usage(self) -> None:
+        """Scenario 1: single turn — canonical matches raw usage."""
+        ndjson = _turn_completed_line({"input_tokens": 150, "output_tokens": 60})
+        result = CodexResultParser().parse_stdout(ndjson)
+        canonical = result.raw["canonical_token_usage"]
+        assert canonical["input_tokens"] == 150
+        assert canonical["output_tokens"] == 60
+
+    def test_three_turns_last_wins_not_cumulative_sum(self) -> None:
+        """Scenario 2: three turns (100/40, 220/90, 350/140) — last turn wins,
+        NOT cumulative sum (670/270)."""
+        ndjson = "\n".join(
+            [
+                _turn_completed_line({"input_tokens": 100, "output_tokens": 40}),
+                _turn_completed_line({"input_tokens": 220, "output_tokens": 90}),
+                _turn_completed_line({"input_tokens": 350, "output_tokens": 140}),
+            ]
+        )
+        result = CodexResultParser().parse_stdout(ndjson)
+        canonical = result.raw["canonical_token_usage"]
+        assert canonical["input_tokens"] == 350
+        assert canonical["output_tokens"] == 140
+
+    def test_cache_read_mapped_and_cache_write_none(self) -> None:
+        """Scenario 3: cached_input_tokens → cache_read_tokens; cache_write_tokens is None."""
+        ndjson = _turn_completed_line(
+            {
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cached_input_tokens": 30,
+            }
+        )
+        result = CodexResultParser().parse_stdout(ndjson)
+        canonical = result.raw["canonical_token_usage"]
+        assert canonical["cache_read_tokens"] == 30
+        assert canonical["cache_write_tokens"] is None
+
+    def test_no_turn_completed_yields_none_canonical(self) -> None:
+        """Scenario 4: no turn.completed event — canonical_token_usage is None."""
+        ndjson = _item_completed_message_line("some output")
+        result = CodexResultParser().parse_stdout(ndjson)
+        assert result.raw["canonical_token_usage"] is None
+        assert result.raw["token_usage"] is None
+
+
+class TestCodexResultParserErrorSession:
+    def test_turn_failed_is_error_with_message(self) -> None:
+        """turn.failed produces is_error=True with the error message extracted."""
+        ndjson = _turn_failed_line("rate limit exceeded")
+        result = CodexResultParser().parse_stdout(ndjson)
+        assert result.raw["is_error"] is True
+        assert result.success is False
+        assert result.error == "rate limit exceeded"
+        assert result.raw["subtype"] == "error_during_execution"
+
+    def test_turn_failed_exit_code_forwarded(self) -> None:
+        """exit_code parameter is forwarded on error path (not clamped to 1)."""
+        ndjson = _turn_failed_line("process crashed")
+        result = CodexResultParser().parse_stdout(ndjson, exit_code=137)
+        assert result.exit_code == 137
+
+
+class TestCodexStreamParserMarker:
+    def test_standalone_marker_has_marker_true(self) -> None:
+        """Standalone ORDER_UP marker in message → has_marker=True on turn.completed event."""
+        marker = "%%ORDER_UP::abc123%%"
+        parser = CodexStreamParser(completion_marker=marker)
+        msg_line = json.dumps(
+            {
+                "type": "item.completed",
+                "item": {"type": "message", "content": [{"type": "text", "text": marker}]},
+            }
+        )
+        turn_line = json.dumps(
+            {"type": "turn.completed", "usage": {"input_tokens": 1, "output_tokens": 1}}
+        )
+        parser.parse_line(msg_line)
+        event = parser.parse_line(turn_line)
+        assert event is not None
+        assert event.has_marker is True
+
+    def test_prose_containing_marker_has_marker_false(self) -> None:
+        """Marker embedded in prose (not standalone line) → has_marker=False."""
+        marker = "%%ORDER_UP::abc123%%"
+        parser = CodexStreamParser(completion_marker=marker)
+        msg_line = json.dumps(
+            {
+                "type": "item.completed",
+                "item": {
+                    "type": "message",
+                    "content": [
+                        {"type": "text", "text": f"I found the text {marker} in the output"}
+                    ],
+                },
+            }
+        )
+        turn_line = json.dumps(
+            {"type": "turn.completed", "usage": {"input_tokens": 1, "output_tokens": 1}}
+        )
+        parser.parse_line(msg_line)
+        event = parser.parse_line(turn_line)
+        assert event is not None
+        assert event.has_marker is False
+
+
+class TestCodexResultParserSessionId:
+    def test_thread_started_extracts_session_id(self) -> None:
+        """thread.started thread_id is surfaced as session_id."""
+        ndjson = "\n".join(
+            [
+                _thread_started_line("codex-thread-99"),
+                _turn_completed_line({"input_tokens": 1, "output_tokens": 1}),
+            ]
+        )
+        result = CodexResultParser().parse_stdout(ndjson)
+        assert result.session_id == "codex-thread-99"
+
+    def test_missing_thread_started_yields_none_session_id(self) -> None:
+        """No thread.started event → session_id is None (empty string coerced to None)."""
+        ndjson = _turn_completed_line({"input_tokens": 1, "output_tokens": 1})
+        result = CodexResultParser().parse_stdout(ndjson)
+        assert result.session_id is None
+
+
+class TestCodexResultParserEdgeCases:
+    def test_empty_stdout_is_error_no_crash(self) -> None:
+        """Empty string → is_error=True, no exception raised."""
+        result = CodexResultParser().parse_stdout("")
+        assert result.raw["is_error"] is True
+        assert result.success is False
+
+    def test_non_json_lines_is_error_no_crash(self) -> None:
+        """Non-JSON garbage → is_error=True (unparseable), no exception raised."""
+        result = CodexResultParser().parse_stdout("not json\nalso not json\n{bad")
+        assert result.raw["is_error"] is True
+        assert result.raw["subtype"] == "unparseable"
+
+    def test_only_messages_no_turn_events_is_error(self) -> None:
+        """Messages without any turn.completed/turn.failed → is_error=True."""
+        ndjson = "\n".join(
+            [
+                _item_completed_message_line("hello"),
+                _item_completed_message_line("world"),
+            ]
+        )
+        result = CodexResultParser().parse_stdout(ndjson)
+        assert result.raw["is_error"] is True
+        assert result.success is False
+
+
+class TestCodexResultParserWriteArtifacts:
+    def test_file_change_populates_file_changes(self) -> None:
+        """Single file_change item → path appears in raw['file_changes']."""
+        ndjson = "\n".join(
+            [
+                _item_completed_file_change_line("/src/main.py"),
+                _turn_completed_line({"input_tokens": 1, "output_tokens": 1}),
+            ]
+        )
+        result = CodexResultParser().parse_stdout(ndjson)
+        assert result.raw["file_changes"] == ["/src/main.py"]
+
+    def test_multiple_file_changes_accumulate(self) -> None:
+        """Multiple file_change items → all paths accumulate in order."""
+        ndjson = "\n".join(
+            [
+                _item_completed_file_change_line("/src/a.py"),
+                _item_completed_file_change_line("/src/b.py"),
+                _item_completed_file_change_line("/src/c.py"),
+                _turn_completed_line({"input_tokens": 1, "output_tokens": 1}),
+            ]
+        )
+        result = CodexResultParser().parse_stdout(ndjson)
+        assert result.raw["file_changes"] == ["/src/a.py", "/src/b.py", "/src/c.py"]
+
+    def test_file_change_delete_kind_path_stored(self) -> None:
+        """file_change with kind=delete — path is still stored (only path is extracted)."""
+        line = json.dumps(
+            {
+                "type": "item.completed",
+                "item": {"type": "file_change", "path": "/src/old.py", "kind": "delete"},
+            }
+        )
+        ndjson = line + "\n" + _turn_completed_line({"input_tokens": 1, "output_tokens": 1})
+        result = CodexResultParser().parse_stdout(ndjson)
+        assert "/src/old.py" in result.raw["file_changes"]
+
+    def test_item_started_file_change_excluded(self) -> None:
+        """item.started with file_change type is NOT counted in file_changes."""
+        ndjson = "\n".join(
+            [
+                _item_started_file_change_line("/src/started.py"),
+                _item_completed_file_change_line("/src/completed.py"),
+                _turn_completed_line({"input_tokens": 1, "output_tokens": 1}),
+            ]
+        )
+        result = CodexResultParser().parse_stdout(ndjson)
+        assert result.raw["file_changes"] == ["/src/completed.py"]
+        assert "/src/started.py" not in result.raw["file_changes"]
+
+    def test_file_change_empty_path_skipped(self) -> None:
+        """file_change item with empty/missing path is silently skipped."""
+        empty_path_line = json.dumps(
+            {
+                "type": "item.completed",
+                "item": {"type": "file_change", "path": ""},
+            }
+        )
+        no_path_line = json.dumps(
+            {
+                "type": "item.completed",
+                "item": {"type": "file_change"},
+            }
+        )
+        ndjson = "\n".join(
+            [
+                empty_path_line,
+                no_path_line,
+                _item_completed_file_change_line("/real.py"),
+                _turn_completed_line({"input_tokens": 1, "output_tokens": 1}),
+            ]
+        )
+        result = CodexResultParser().parse_stdout(ndjson)
+        assert result.raw["file_changes"] == ["/real.py"]
+
+
+class TestCodexResultParserToolUses:
+    def test_function_call_populates_command_executions(self) -> None:
+        """Single function_call item → stored in raw['command_executions']."""
+        ndjson = "\n".join(
+            [
+                _item_completed_function_call_line("Bash", '{"command": "ls"}'),
+                _turn_completed_line({"input_tokens": 1, "output_tokens": 1}),
+            ]
+        )
+        result = CodexResultParser().parse_stdout(ndjson)
+        assert len(result.raw["command_executions"]) == 1
+        assert result.raw["command_executions"][0]["name"] == "Bash"
+
+    def test_multiple_function_calls_accumulate(self) -> None:
+        """Multiple function_call items → all accumulate."""
+        ndjson = "\n".join(
+            [
+                _item_completed_function_call_line("Bash", '{"command": "ls"}'),
+                _item_completed_function_call_line("Read", '{"path": "/a.py"}'),
+                _turn_completed_line({"input_tokens": 1, "output_tokens": 1}),
+            ]
+        )
+        result = CodexResultParser().parse_stdout(ndjson)
+        assert len(result.raw["command_executions"]) == 2
+        names = [e["name"] for e in result.raw["command_executions"]]
+        assert names == ["Bash", "Read"]
+
+    def test_function_call_nonzero_exit_preserved(self) -> None:
+        """function_call item with exit_code field — stored as-is in the dict."""
+        line = json.dumps(
+            {
+                "type": "item.completed",
+                "item": {
+                    "type": "function_call",
+                    "name": "Bash",
+                    "args": '{"command": "false"}',
+                    "exit_code": 1,
+                },
+            }
+        )
+        ndjson = line + "\n" + _turn_completed_line({"input_tokens": 1, "output_tokens": 1})
+        result = CodexResultParser().parse_stdout(ndjson)
+        assert result.raw["command_executions"][0]["exit_code"] == 1
+
+    def test_item_started_function_call_excluded(self) -> None:
+        """item.started with function_call type is NOT counted in command_executions."""
+        ndjson = "\n".join(
+            [
+                _item_started_function_call_line("Bash", '{"command": "echo start"}'),
+                _item_completed_function_call_line("Bash", '{"command": "echo done"}'),
+                _turn_completed_line({"input_tokens": 1, "output_tokens": 1}),
+            ]
+        )
+        result = CodexResultParser().parse_stdout(ndjson)
+        assert len(result.raw["command_executions"]) == 1
+        assert result.raw["command_executions"][0]["args"] == '{"command": "echo done"}'

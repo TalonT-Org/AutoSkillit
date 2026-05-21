@@ -800,7 +800,7 @@ class TestContractDrivenAlwaysWriteSkills:
         skills = manifest.get("skills", {})
         if not isinstance(skills, dict):
             return []
-        return [
+        result = [
             name
             for name, contract in skills.items()
             if (
@@ -810,6 +810,8 @@ class TestContractDrivenAlwaysWriteSkills:
             )
             == "always"
         ]
+        assert result, "load_bundled_manifest() returned no write_behavior=always skills"
+        return result
 
     @pytest.mark.parametrize("skill_name", _always_write_skills.__func__())  # type: ignore[attr-defined]
     def test_always_write_skill_with_edits_passes(self, skill_name: str) -> None:

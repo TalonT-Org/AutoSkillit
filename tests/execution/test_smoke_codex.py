@@ -48,7 +48,7 @@ class TestCodexSmokeExecution:
             ],
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=int(os.environ.get("CODEX_SMOKE_TIMEOUT", "30")),
         )
         assert result.returncode == 0, (
             f"codex exec failed with rc={result.returncode}: {result.stderr}"

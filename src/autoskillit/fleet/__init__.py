@@ -33,6 +33,7 @@ from .sidecar import (
 from .state import (
     FLEET_HALTED_SENTINEL,
     TERMINAL_DISPATCH_STATUSES,
+    TERMINAL_UNCLEANED_STATUSES,
     CampaignState,
     CampaignStateMutator,
     DispatchCompleted,
@@ -110,6 +111,7 @@ __all__ = [
     "serialize_campaign_summary",
     "validate_campaign_summary",
     "TERMINAL_DISPATCH_STATUSES",
+    "TERMINAL_UNCLEANED_STATUSES",
     "FLEET_HALTED_SENTINEL",
     "CampaignState",
     "CampaignStateMutator",

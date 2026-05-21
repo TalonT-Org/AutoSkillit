@@ -39,6 +39,7 @@ from autoskillit.fleet.state_types import (
     FLEET_HALTED_SENTINEL,
     FLEET_STATE_SCHEMA_VERSION,
     TERMINAL_DISPATCH_STATUSES,
+    TERMINAL_UNCLEANED_STATUSES,
     CampaignState,
     DispatchCompleted,
     DispatchRecord,
@@ -61,6 +62,7 @@ __all__ = [
     # re-exported from state_types
     "FLEET_HALTED_SENTINEL",
     "TERMINAL_DISPATCH_STATUSES",
+    "TERMINAL_UNCLEANED_STATUSES",
     "CampaignState",
     "DispatchCompleted",
     "DispatchRecord",

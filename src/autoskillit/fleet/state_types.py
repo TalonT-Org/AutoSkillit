@@ -430,6 +430,9 @@ TERMINAL_DISPATCH_STATUSES: frozenset[str] = frozenset(
     status for status, transitions in _ALLOWED_TRANSITIONS.items() if not transitions
 )
 
+TERMINAL_UNCLEANED_STATUSES: frozenset[DispatchStatus] = frozenset(
+    {DispatchStatus.FAILURE, DispatchStatus.INTERRUPTED}
+)
 
 _ABANDON_REASONS: frozenset[str] = frozenset(
     {

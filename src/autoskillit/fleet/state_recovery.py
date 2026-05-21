@@ -18,6 +18,7 @@ from autoskillit.fleet.state_types import (
     _INFRASTRUCTURE_FAILURE_REASONS,
     _VISIBLE_IN_BLOCK_STATUSES,
     FLEET_HALTED_SENTINEL,
+    TERMINAL_UNCLEANED_STATUSES,
     CampaignState,
     DispatchRecord,
     DispatchStatus,
@@ -291,8 +292,6 @@ def find_dispatch_for_issue(
     from autoskillit.fleet.sidecar import read_sidecar_from_path  # noqa: PLC0415
     from autoskillit.fleet.state import read_state  # noqa: PLC0415
 
-    _TERMINAL_UNCLEANED = frozenset({DispatchStatus.FAILURE, DispatchStatus.INTERRUPTED})
-
     terminal_match: DispatchRecord | None = None
     for state_path in campaign_state_paths:
         try:
@@ -310,7 +309,9 @@ def find_dispatch_for_issue(
                 if any(e.issue_url == issue_url for e in entries):
                     return d
             elif (
-                terminal_match is None and d.status in _TERMINAL_UNCLEANED and not d.labels_cleaned
+                terminal_match is None
+                and d.status in TERMINAL_UNCLEANED_STATUSES
+                and not d.labels_cleaned
             ):
                 entries = read_sidecar_from_path(Path(d.sidecar_path))
                 if any(e.issue_url == issue_url for e in entries):

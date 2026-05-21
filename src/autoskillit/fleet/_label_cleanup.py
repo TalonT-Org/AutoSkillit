@@ -17,7 +17,11 @@ from autoskillit.core import (
 )
 from autoskillit.fleet._liveness import is_dispatch_session_alive
 from autoskillit.fleet.sidecar import read_sidecar_from_path
-from autoskillit.fleet.state import CampaignStateMutator, DispatchStatus
+from autoskillit.fleet.state import (
+    TERMINAL_UNCLEANED_STATUSES,
+    CampaignStateMutator,
+    DispatchStatus,
+)
 
 if TYPE_CHECKING:
     from autoskillit.core import GitHubFetcher
@@ -96,7 +100,6 @@ async def sweep_stale_dispatch_labels(
     Called as a background task from _fleet_auto_gate_boot. Errors on individual
     state files are logged and skipped so one corrupt file cannot block recovery.
     """
-    _TERMINAL_UNCLEANED = frozenset({DispatchStatus.FAILURE, DispatchStatus.INTERRUPTED})
     for state_path in campaign_state_paths:
         stale_sidecar_paths: list[str | None] = []
         terminal_uncleaned: list[tuple[str, str | None]] = []
@@ -112,7 +115,7 @@ async def sweep_stale_dispatch_labels(
                         d.status = DispatchStatus.INTERRUPTED
                         m.mark_dirty()
                     elif (
-                        d.status in _TERMINAL_UNCLEANED
+                        d.status in TERMINAL_UNCLEANED_STATUSES
                         and not d.labels_cleaned
                         and d.sidecar_path is not None
                     ):

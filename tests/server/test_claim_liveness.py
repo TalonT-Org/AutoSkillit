@@ -207,14 +207,14 @@ class TestClaimHelperParity:
 
 class TestClaimHelperTerminalDispatchRecovery:
     @pytest.mark.anyio
-    async def test_claim_helper_failure_dispatch_triggers_cleanup(self):
+    async def test_claim_helper_failure_dispatch_triggers_cleanup(self, tmp_path):
         """_try_claim_with_liveness: FAILURE dispatch with uncleaned labels → cleanup + claimed."""
         from autoskillit.server.tools._claim_helpers import _try_claim_with_liveness
 
         failure_dispatch = DispatchRecord(
             name="task-fail",
             status=DispatchStatus.FAILURE,
-            sidecar_path="/tmp/fail_sidecar.jsonl",
+            sidecar_path=str(tmp_path / "fail_sidecar.jsonl"),
             labels_cleaned=False,
         )
         cleanup_mock = AsyncMock()
@@ -239,14 +239,14 @@ class TestClaimHelperTerminalDispatchRecovery:
         assert cleanup_mock.call_args[0][0] == failure_dispatch.sidecar_path
 
     @pytest.mark.anyio
-    async def test_claim_helper_failure_dispatch_skips_liveness_check(self):
+    async def test_claim_helper_failure_dispatch_skips_liveness_check(self, tmp_path):
         """_try_claim_with_liveness: FAILURE dispatch does NOT call is_dispatch_session_alive."""
         from autoskillit.server.tools._claim_helpers import _try_claim_with_liveness
 
         failure_dispatch = DispatchRecord(
             name="task-fail",
             status=DispatchStatus.FAILURE,
-            sidecar_path="/tmp/fail_sidecar.jsonl",
+            sidecar_path=str(tmp_path / "fail_sidecar.jsonl"),
             labels_cleaned=False,
         )
         liveness_mock = AsyncMock(return_value=True)

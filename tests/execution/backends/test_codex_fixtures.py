@@ -56,21 +56,21 @@ class TestCodexFixturePackage:
 
 class TestCodexFixtureValidity:
     def test_every_line_is_valid_json(self) -> None:
-        name = "happy_path_single_turn.ndjson"
+        name = HAPPY_PATH_SINGLE_TURN
         text = fixture_path(name).read_text()
         for line in text.strip().splitlines():
             if line.strip():
                 json.loads(line)
 
     def test_first_line_is_thread_started(self) -> None:
-        name = "happy_path_single_turn.ndjson"
+        name = HAPPY_PATH_SINGLE_TURN
         events = _load_events(name)
         assert events[0]["type"] == "thread.started"
         assert isinstance(events[0]["thread_id"], str)
         assert events[0]["thread_id"]
 
     def test_all_lines_are_dicts(self) -> None:
-        name = "happy_path_single_turn.ndjson"
+        name = HAPPY_PATH_SINGLE_TURN
         events = _load_events(name)
         for event in events:
             assert isinstance(event, dict)
@@ -107,7 +107,7 @@ class TestHappyPathFixture:
         for event in events:
             if event.get("type") == "turn.completed":
                 usage = event.get("usage", {})
-                assert usage.get("reasoning_output_tokens", -1) == 0
+                assert usage.get("reasoning_output_tokens", 0) == 0
                 return
         pytest.fail("No turn.completed event found in fixture")
 

@@ -201,6 +201,16 @@ class TestCodexBackendFactories:
     def test_write_tool_names_returns_frozenset(self) -> None:
         assert isinstance(CodexBackend().write_tool_names(), frozenset)
 
+    def test_stream_parser_factory_passes_completion_marker(self) -> None:
+        parser = CodexBackend().stream_parser(completion_marker="%%DONE%%")
+        assert isinstance(parser, CodexStreamParser)
+        assert parser.completion_marker == "%%DONE%%"
+
+    def test_stream_parser_factory_default_empty_marker(self) -> None:
+        parser = CodexBackend().stream_parser()
+        assert isinstance(parser, CodexStreamParser)
+        assert parser.completion_marker == ""
+
 
 class TestCodexStreamParser:
     def test_parse_line_empty_returns_none(self) -> None:
@@ -246,9 +256,7 @@ class TestCodexStreamParser:
 
     def test_parse_line_item_completed_yields_ignored(self) -> None:
         parser = CodexStreamParser()
-        line = json.dumps(
-            {"type": "item.completed", "item": {"type": "function_call", "name": "Bash"}}
-        )
+        line = json.dumps({"type": "item.completed", "item": {"type": "reasoning"}})
         event = parser.parse_line(line)
         assert event is not None
         assert event.kind == BackendEventKind.IGNORED
@@ -293,6 +301,94 @@ class TestCodexStreamParser:
         event = parser.parse_line(line)
         assert event is not None
         assert isinstance(event.backend_data, CodexEventData)
+
+    def test_parse_line_item_completed_message_yields_tool_output(self) -> None:
+        parser = CodexStreamParser()
+        line = json.dumps(
+            {
+                "type": "item.completed",
+                "item": {"type": "message", "content": [{"type": "text", "text": "hello"}]},
+            }
+        )
+        event = parser.parse_line(line)
+        assert event is not None
+        assert event.kind == BackendEventKind.TOOL_OUTPUT
+
+    def test_parse_line_item_completed_file_change_yields_tool_output(self) -> None:
+        parser = CodexStreamParser()
+        line = json.dumps(
+            {"type": "item.completed", "item": {"type": "file_change", "path": "src/foo.py"}}
+        )
+        event = parser.parse_line(line)
+        assert event is not None
+        assert event.kind == BackendEventKind.TOOL_OUTPUT
+
+    def test_parse_line_item_completed_function_call_yields_tool_output(self) -> None:
+        parser = CodexStreamParser()
+        line = json.dumps(
+            {"type": "item.completed", "item": {"type": "function_call", "name": "Bash"}}
+        )
+        event = parser.parse_line(line)
+        assert event is not None
+        assert event.kind == BackendEventKind.TOOL_OUTPUT
+
+    def test_parse_line_item_completed_message_has_backend_data(self) -> None:
+        parser = CodexStreamParser()
+        line = json.dumps(
+            {
+                "type": "item.completed",
+                "item": {"type": "message", "content": [{"type": "text", "text": "hello"}]},
+            }
+        )
+        event = parser.parse_line(line)
+        assert event is not None
+        assert isinstance(event.backend_data, CodexEventData)
+        assert event.backend_data.record_type == "item.completed"
+        assert event.backend_data.item_type == "message"
+
+    def test_parse_line_item_completed_file_change_backend_data_item_type(self) -> None:
+        parser = CodexStreamParser()
+        line = json.dumps(
+            {"type": "item.completed", "item": {"type": "file_change", "path": "src/foo.py"}}
+        )
+        event = parser.parse_line(line)
+        assert event is not None
+        assert event.backend_data is not None
+        assert event.backend_data.item_type == "file_change"
+
+    def test_parse_line_item_completed_function_call_backend_data_item_type(self) -> None:
+        parser = CodexStreamParser()
+        line = json.dumps(
+            {"type": "item.completed", "item": {"type": "function_call", "name": "Bash"}}
+        )
+        event = parser.parse_line(line)
+        assert event is not None
+        assert event.backend_data is not None
+        assert event.backend_data.item_type == "function_call"
+
+    def test_parse_line_item_completed_message_not_terminal(self) -> None:
+        parser = CodexStreamParser()
+        line = json.dumps(
+            {
+                "type": "item.completed",
+                "item": {"type": "message", "content": [{"type": "text", "text": "hello"}]},
+            }
+        )
+        event = parser.parse_line(line)
+        assert event is not None
+        assert event.is_terminal is False
+
+    def test_parse_line_item_completed_unknown_subtype_yields_ignored(self) -> None:
+        parser = CodexStreamParser()
+        line = json.dumps({"type": "item.completed", "item": {"type": "reasoning"}})
+        event = parser.parse_line(line)
+        assert event is not None
+        assert event.kind == BackendEventKind.IGNORED
+
+
+class TestCodexStreamParserConformance:
+    def test_isinstance_stream_parser_protocol(self) -> None:
+        assert isinstance(CodexStreamParser(""), StreamParser)
 
 
 class TestCodexEnvPolicy:

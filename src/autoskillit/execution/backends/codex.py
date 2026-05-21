@@ -181,6 +181,12 @@ class CodexResultParser:
 
 @dataclass(slots=True)
 class CodexStreamParser:
+    """Stateful NDJSON stream parser for Codex CLI output.
+
+    One instance per session — accumulates marker detection state across
+    parse_line() calls. Not reusable across sessions.
+    """
+
     completion_marker: str = ""
     _saw_marker: bool = field(default=False, init=False, repr=False)
 
@@ -207,7 +213,15 @@ class CodexStreamParser:
 
         if event_type == "item.completed":
             item = obj.get("item", {})
-            if isinstance(item, dict) and item.get("type") == "message":
+            if not isinstance(item, dict):
+                return SessionEvent(
+                    kind=BackendEventKind.IGNORED,
+                    is_terminal=False,
+                    has_marker=False,
+                )
+            item_type = item.get("type", "")
+
+            if item_type == "message":
                 for block in item.get("content", []):
                     if (
                         isinstance(block, dict)
@@ -216,6 +230,31 @@ class CodexStreamParser:
                         and _marker_is_standalone(block.get("text", ""), self.completion_marker)
                     ):
                         self._saw_marker = True
+                return SessionEvent(
+                    kind=BackendEventKind.TOOL_OUTPUT,
+                    is_terminal=False,
+                    has_marker=False,
+                    backend_data=CodexEventData(
+                        record_type="item.completed",
+                        thread_id="",
+                        item_type="message",
+                        raw=obj,
+                    ),
+                )
+
+            if item_type in ("file_change", "function_call"):
+                return SessionEvent(
+                    kind=BackendEventKind.TOOL_OUTPUT,
+                    is_terminal=False,
+                    has_marker=False,
+                    backend_data=CodexEventData(
+                        record_type="item.completed",
+                        thread_id="",
+                        item_type=item_type,
+                        raw=obj,
+                    ),
+                )
+
             return SessionEvent(
                 kind=BackendEventKind.IGNORED,
                 is_terminal=False,
@@ -305,8 +344,8 @@ class CodexBackend:
         spec = self.build_headless_cmd(skill_command)
         return CmdSpec(cmd=spec.cmd, env=spec.env, cwd=cwd)
 
-    def stream_parser(self) -> CodexStreamParser:
-        return CodexStreamParser()
+    def stream_parser(self, completion_marker: str = "") -> CodexStreamParser:
+        return CodexStreamParser(completion_marker=completion_marker)
 
     def result_parser(self) -> CodexResultParser:
         return CodexResultParser()

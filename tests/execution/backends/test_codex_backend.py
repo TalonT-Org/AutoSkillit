@@ -136,6 +136,10 @@ class TestCodexBackendCommands:
         assert isinstance(spec, CmdSpec)
         assert isinstance(spec.cmd, tuple)
 
+    def test_build_headless_cmd_with_env_extras(self) -> None:
+        spec = CodexBackend().build_headless_cmd("do stuff", env_extras={"FOO": "bar"})
+        assert spec.env.get("FOO") == "bar"
+
     def test_build_cmd_delegates_to_headless(self) -> None:
         backend = CodexBackend()
         spec = backend.build_cmd("do stuff", "/work")

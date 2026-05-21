@@ -332,6 +332,7 @@ class CodexBackend:
         *,
         model: str | None = None,
         add_dirs: Sequence[str] = (),
+        env_extras: Mapping[str, str] | None = None,
     ) -> CmdSpec:
         cmd: list[str] = [
             "codex",
@@ -347,7 +348,10 @@ class CodexBackend:
         for d in add_dirs:
             cmd += [CodexFlags.ADD_DIR, d]
         cmd.append(prompt)
-        env = self.env_policy().build_env(dict(os.environ))
+        base: dict[str, str] = dict(os.environ)
+        if env_extras:
+            base.update(env_extras)
+        env = self.env_policy().build_env(base)
         return CmdSpec(cmd=tuple(cmd), env=env)
 
     def build_interactive_cmd(self, **kwargs: object) -> CmdSpec:

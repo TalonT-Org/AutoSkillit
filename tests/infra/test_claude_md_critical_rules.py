@@ -27,11 +27,10 @@ def agents_md() -> str:
 
 
 def test_claude_md_critical_rules_require_precommit(claude_md: str) -> None:
-    """§3.1 (Code and Implementation) must include a pre-commit critical rule.
+    """Code and Implementation section must include a pre-commit critical rule.
 
     Pre-commit hook failures caused ~15 friction events across 15 sessions.
-    Elevating it to a Critical Rule (not just §5 info) prevents repeat loops
-    (FRICT-3A-1).
+    Elevating it to a Critical Rule prevents repeat loops (FRICT-3A-1).
     """
     lines = claude_md.splitlines()
     section_start = None
@@ -55,7 +54,7 @@ def test_claude_md_critical_rules_require_precommit(claude_md: str) -> None:
     )
 
 
-def test_claude_md_session_diagnostics_has_dedicated_heading(agents_md: str) -> None:
+def test_agents_md_session_diagnostics_has_dedicated_heading(agents_md: str) -> None:
     """Session diagnostics must have a dedicated ## section heading, not a trailing paragraph.
 
     A trailing paragraph after the architecture tree is easy to miss. A named
@@ -76,7 +75,7 @@ def test_claude_md_session_diagnostics_has_dedicated_heading(agents_md: str) -> 
     )
 
 
-def test_claude_md_session_diagnostics_mentions_hyphen_convention(agents_md: str) -> None:
+def test_agents_md_session_diagnostics_mentions_hyphen_convention(agents_md: str) -> None:
     """Session diagnostics section must clarify that path components use hyphens not underscores.
 
     Session 'f9170655' failed due to underscore vs hyphen mismatch when constructing
@@ -103,7 +102,7 @@ def test_claude_md_no_stale_fidelity_reference(claude_md: str) -> None:
     )
 
 
-def test_claude_md_has_github_api_discipline(agents_md: str) -> None:
+def test_agents_md_has_github_api_discipline(agents_md: str) -> None:
     """AGENTS.md must include GitHub API Call Discipline rule."""
     assert "GitHub API Call Discipline" in agents_md
     assert "sleep 1" in agents_md or "asyncio.sleep(1)" in agents_md

@@ -6,9 +6,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from autoskillit.core import get_logger
+
 if TYPE_CHECKING:
     from autoskillit.core import GitHubFetcher
     from autoskillit.pipeline.context import ToolContext
+
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,6 +44,12 @@ def _mark_dispatch_labels_cleaned(dispatch_name: str, campaign_state_paths: list
                         m.mark_dirty()
                         return
         except Exception:
+            logger.warning(
+                "claim_mark_labels_cleaned_failed",
+                state_path=str(state_path),
+                dispatch_name=dispatch_name,
+                exc_info=True,
+            )
             continue
 
 

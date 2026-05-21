@@ -12,6 +12,7 @@ from autoskillit.core.types import (
 )
 from autoskillit.execution.session._exit_classification import classify_infra_exit
 from autoskillit.execution.session._session_model import ClaudeSessionResult
+from tests.execution.conftest import CODEX_API_ERROR_SIGNAL_STRINGS
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -142,6 +143,33 @@ class TestClassifyInfraExit:
         )
         result = _sr(returncode=1, stderr="")
         assert classify_infra_exit(session, result) == InfraExitCategory.CONTEXT_EXHAUSTED
+
+    @pytest.mark.parametrize("signal", CODEX_API_ERROR_SIGNAL_STRINGS)
+    def test_api_error_openai_patterns_in_stderr(self, signal: str) -> None:
+        """OpenAI/Codex error pattern in stderr → API_ERROR."""
+        session = ClaudeSessionResult(
+            subtype="empty_output",
+            is_error=True,
+            result="",
+            session_id="",
+        )
+        result = _sr(returncode=1, stderr=f"Error: {signal}")
+        assert classify_infra_exit(session, result) == InfraExitCategory.API_ERROR
+
+    @pytest.mark.parametrize("signal", CODEX_API_ERROR_SIGNAL_STRINGS)
+    def test_api_error_openai_patterns_in_assistant_messages(self, signal: str) -> None:
+        """OpenAI/Codex error pattern in assistant_messages → API_ERROR."""
+        session = ClaudeSessionResult(
+            subtype="empty_output",
+            is_error=True,
+            result="",
+            session_id="",
+            assistant_messages=[
+                f'OpenAI API Error: {{"type":"{signal}","message":"{signal}"}}',
+            ],
+        )
+        result = _sr(returncode=0, stderr="")
+        assert classify_infra_exit(session, result) == InfraExitCategory.API_ERROR
 
 
 @pytest.mark.parametrize("category", list(InfraExitCategory))

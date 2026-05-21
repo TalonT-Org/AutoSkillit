@@ -16,7 +16,13 @@ import pytest
 from autoskillit.core import CLAUDE_CODE_CAPABILITIES, CmdSpec
 from autoskillit.core.types import SubprocessResult, TerminationReason
 from autoskillit.execution.session import ClaudeSessionResult
+from autoskillit.execution.session._exit_classification import _CODEX_API_ERROR_PATTERNS
 from tests._helpers import make_tracing_config
+
+# Strip regex metacharacters (e.g. \b word boundaries) to yield plain test signal strings.
+CODEX_API_ERROR_SIGNAL_STRINGS: tuple[str, ...] = tuple(
+    p.pattern.replace(r"\b", "") for p in _CODEX_API_ERROR_PATTERNS
+)
 
 
 def _mock_backend(

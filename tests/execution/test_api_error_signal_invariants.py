@@ -21,11 +21,14 @@ from autoskillit.core.types import (
 from autoskillit.execution.headless._headless_result import _build_skill_result
 from autoskillit.execution.session._exit_classification import classify_infra_exit
 from autoskillit.execution.session._session_model import ClaudeSessionResult, parse_session_result
-from tests.execution.conftest import _make_synthetic_api_error_ndjson
+from tests.execution.conftest import (
+    CODEX_API_ERROR_SIGNAL_STRINGS,
+    _make_synthetic_api_error_ndjson,
+)
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
-# All patterns that _API_ERROR_PATTERNS covers
+# All patterns that _KNOWN_API_ERROR_PATTERNS covers
 API_ERROR_SIGNALS: list[str] = [
     "overloaded",
     "529",
@@ -35,6 +38,8 @@ API_ERROR_SIGNALS: list[str] = [
     "socket hang up",
     "network error",
     "connection reset",
+    # OpenAI/Codex API error types
+    *CODEX_API_ERROR_SIGNAL_STRINGS,
 ]
 
 

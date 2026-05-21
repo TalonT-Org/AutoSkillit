@@ -174,7 +174,11 @@ def _extract_missing_token_hints(
     then matches them against path-capture patterns that are NOT satisfied in
     the result text. Returns the hints needed to build the nudge prompt.
     """
-    session = result_parser.parse_stdout(stdout)
+    try:
+        session = result_parser.parse_stdout(stdout)
+    except Exception:
+        logger.warning("nudge_parse_stdout_failed", exc_info=True)
+        return []
     hints: list[tuple[str, str]] = []
 
     for pattern in expected_output_patterns:
@@ -272,7 +276,11 @@ async def _attempt_contract_nudge(
         return None
 
     # Parse the nudge response and check for the missing patterns
-    nudge_session = result_parser.parse_stdout(nudge_result.stdout)
+    try:
+        nudge_session = result_parser.parse_stdout(nudge_result.stdout)
+    except Exception:
+        logger.warning("nudge_parse_stdout_failed", exc_info=True)
+        return None
     combined_result = skill_result.result + "\n" + nudge_session.output
 
     if retry_reason == RetryReason.EARLY_STOP:

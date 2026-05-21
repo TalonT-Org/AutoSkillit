@@ -220,8 +220,8 @@ tasks:
         msg: "OPENAI_API_KEY must be set"
     cmds:
       - |
-        mkdir -p temp
-        TEST_OUTPUT="temp/smoke-codex-$(date +%Y-%m-%d_%H%M%S).txt"
+        mkdir -p .autoskillit/temp
+        TEST_OUTPUT=".autoskillit/temp/smoke-codex-$(date +%Y-%m-%d_%H%M%S).txt"
         echo "Running Codex smoke tests"
         echo "Output: $TEST_OUTPUT"
 

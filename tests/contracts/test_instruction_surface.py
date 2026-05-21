@@ -769,6 +769,7 @@ def test_claude_md_documents_all_source_modules() -> None:
     """
     claude_path = Path(__file__).parent.parent.parent / "CLAUDE.md"
     agents_path = claude_path.parent / "AGENTS.md"
+    assert agents_path.exists(), f"AGENTS.md not found at {agents_path}"
     content = claude_path.read_text() + "\n" + agents_path.read_text()
     src_root = Path(__file__).parent.parent.parent / "src" / "autoskillit"
 

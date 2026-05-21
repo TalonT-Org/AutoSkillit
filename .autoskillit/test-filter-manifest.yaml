@@ -127,6 +127,9 @@ src/autoskillit/assets/**/*:
 tests/recipe/fixtures/*:
   - recipe/
 
+tests/fixtures/codex/*.ndjson:
+  - execution/
+
 # Local .autoskillit/ config and state files
 .autoskillit/test-source-map.json:
   - infra/

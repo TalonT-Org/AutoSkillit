@@ -1,0 +1,14 @@
+{"type":"thread.started","thread_id":"thread_mt_001"}
+{"type":"turn.started"}
+{"type":"item.started","item":{"type":"message","id":"msg_001","content":[]}}
+{"type":"item.completed","item":{"type":"message","id":"msg_001","content":[{"type":"text","text":"Starting work on the task."}]}}
+{"type":"item.started","item":{"type":"function_call","id":"fc_001","name":"shell","args":"{\"command\":\"echo hello\"}"}}
+{"type":"item.completed","item":{"type":"function_call","id":"fc_001","name":"shell","args":"{\"command\":\"echo hello\"}","output":"hello"}}
+{"type":"turn.completed","usage":{"input_tokens":200,"output_tokens":80,"cached_input_tokens":50,"reasoning_output_tokens":0}}
+{"type":"turn.started"}
+{"type":"item.started","item":{"type":"todo_list","id":"todo_001"}}
+{"type":"item.updated","item":{"type":"todo_list","id":"todo_001","items":[{"text":"Step 1","completed":true}]}}
+{"type":"item.completed","item":{"type":"todo_list","id":"todo_001","items":[{"text":"Step 1","completed":true},{"text":"Step 2","completed":true}]}}
+{"type":"item.started","item":{"type":"message","id":"msg_002","content":[]}}
+{"type":"item.completed","item":{"type":"message","id":"msg_002","content":[{"type":"text","text":"All tasks completed.\n\n%%ORDER_UP%%"}]}}
+{"type":"turn.completed","usage":{"input_tokens":450,"output_tokens":120,"cached_input_tokens":100,"reasoning_output_tokens":0}}

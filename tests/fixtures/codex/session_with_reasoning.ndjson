@@ -1,0 +1,7 @@
+{"type":"thread.started","thread_id":"thread_reason_001"}
+{"type":"turn.started"}
+{"type":"item.started","item":{"type":"reasoning","id":"reason_001"}}
+{"type":"item.completed","item":{"type":"reasoning","id":"reason_001","text":"Let me analyze the codebase structure to determine the best approach for this refactoring task."}}
+{"type":"item.started","item":{"type":"message","id":"msg_001","content":[]}}
+{"type":"item.completed","item":{"type":"message","id":"msg_001","content":[{"type":"text","text":"I have analyzed the code and completed the refactoring.\n\n%%ORDER_UP%%"}]}}
+{"type":"turn.completed","usage":{"input_tokens":300,"output_tokens":150,"cached_input_tokens":60,"reasoning_output_tokens":45}}

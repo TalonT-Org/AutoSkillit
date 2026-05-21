@@ -1,0 +1,8 @@
+{"type":"thread.started","thread_id":"thread_mcp_001"}
+{"type":"turn.started"}
+{"type":"item.started","item":{"type":"mcp_tool_call","id":"mcp_001","tool_name":"read_file","args":"{\"path\":\"/src/main.py\"}"}}
+{"type":"item.updated","item":{"type":"mcp_tool_call","id":"mcp_001","tool_name":"read_file","status":"in_progress"}}
+{"type":"item.completed","item":{"type":"mcp_tool_call","id":"mcp_001","tool_name":"read_file","result":{"content":"def main():\n    print('hello')"}}}
+{"type":"item.started","item":{"type":"message","id":"msg_001","content":[]}}
+{"type":"item.completed","item":{"type":"message","id":"msg_001","content":[{"type":"text","text":"File contents retrieved successfully.\n\n%%ORDER_UP%%"}]}}
+{"type":"turn.completed","usage":{"input_tokens":250,"output_tokens":100,"cached_input_tokens":40,"reasoning_output_tokens":0}}

@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"thread_fail_001"}
+{"type":"turn.started"}
+{"type":"item.started","item":{"type":"message","id":"msg_001","content":[]}}
+{"type":"turn.failed","error":{"message":"Rate limit exceeded. Please retry after 30 seconds.","code":"rate_limit_exceeded"}}

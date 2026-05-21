@@ -12,6 +12,7 @@ from .claude import (
 from .codex import (
     CodexBackend,
     CodexEnvPolicy,
+    CodexFlags,
     CodexResultParser,
     CodexSessionLocator,
     CodexStreamParser,
@@ -42,6 +43,7 @@ __all__ = [
     "ClaudeStreamParser",
     "CodexBackend",
     "CodexEnvPolicy",
+    "CodexFlags",
     "CodexResultParser",
     "CodexSessionLocator",
     "CodexStreamParser",

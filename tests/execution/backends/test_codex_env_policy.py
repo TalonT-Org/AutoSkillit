@@ -82,6 +82,9 @@ class TestCodexEnvPolicy:
         assert isinstance(CodexEnvPolicy(), EnvPolicy)
 
     def test_frozen(self) -> None:
+        # CodexEnvPolicy has no dataclass fields; any attribute assignment on a
+        # frozen+slots dataclass raises TypeError (CPython) or FrozenInstanceError
+        # depending on the Python version and slots interaction.
         policy = CodexEnvPolicy()
-        with pytest.raises((FrozenInstanceError, TypeError)):
+        with pytest.raises((FrozenInstanceError, TypeError, AttributeError)):
             policy.some_attr = "value"  # type: ignore[misc]

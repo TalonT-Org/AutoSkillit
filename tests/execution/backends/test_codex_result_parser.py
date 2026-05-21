@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 
 import pytest
 
@@ -17,7 +18,7 @@ def _thread_started_line(thread_id: str) -> str:
     return json.dumps({"type": "thread.started", "thread_id": thread_id})
 
 
-def _turn_completed_line(usage: dict[str, object]) -> str:  # type: ignore[type-arg]
+def _turn_completed_line(usage: Mapping[str, object]) -> str:
     return json.dumps({"type": "turn.completed", "usage": usage})
 
 

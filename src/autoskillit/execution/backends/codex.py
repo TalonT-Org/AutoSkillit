@@ -85,6 +85,14 @@ class CodexResultParser:
     """Codex/OpenAI backend result parser conforming to ResultParser protocol."""
 
     def parse_result(self, events: Sequence[SessionEvent]) -> AgentSessionResult:
+        if not events:
+            return AgentSessionResult(
+                success=False,
+                exit_code=1,
+                backend_name=AGENT_BACKEND_CODEX,
+                elapsed_seconds=0.0,
+                error="empty events sequence",
+            )
         session_id: str | None = None
         has_completion = False
         for event in events:

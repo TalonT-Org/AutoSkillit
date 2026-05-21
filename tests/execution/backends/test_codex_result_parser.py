@@ -229,14 +229,16 @@ class TestCodexResultParserStdout:
         parser = CodexResultParser()
         result = parser.parse_stdout(ndjson)
         raw = result.raw
-        assert "subtype" in raw
-        assert "is_error" in raw
-        assert "token_usage" in raw
-        assert "canonical_token_usage" in raw
-        assert "agent_messages" in raw
-        assert "command_executions" in raw
-        assert "mcp_tool_calls" in raw
-        assert "file_changes" in raw
+        assert raw["subtype"] == "success"
+        assert raw["is_error"] is False
+        assert raw["token_usage"] == {"input_tokens": 1, "output_tokens": 1}
+        assert raw["canonical_token_usage"] is not None
+        assert raw["agent_messages"] == ["hello"]
+        assert len(raw["command_executions"]) == 1
+        assert raw["command_executions"][0]["name"] == "Bash"
+        assert len(raw["mcp_tool_calls"]) == 1
+        assert raw["mcp_tool_calls"][0]["tool_name"] == "mcp_tool"
+        assert raw["file_changes"] == ["/path/file.py"]
 
 
 class TestCodexResultParserEvents:
@@ -257,6 +259,13 @@ class TestCodexResultParserEvents:
         ]
         result = parser.parse_result(events)
         assert result.success is True
+
+    def test_parse_result_empty_events_returns_error(self) -> None:
+        parser = CodexResultParser()
+        result = parser.parse_result([])
+        assert result.success is False
+        assert result.exit_code == 1
+        assert result.error == "empty events sequence"
 
     def test_parse_result_no_completion_yields_failure(self) -> None:
         parser = CodexResultParser()

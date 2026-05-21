@@ -25,8 +25,10 @@ class TestAgentsMdStructure:
         assert agents_md.startswith("# **AutoSkillit: Development Guidelines**")
 
     def test_agents_md_has_proper_heading_hierarchy(self, agents_md: str) -> None:
-        headings = [ln for ln in agents_md.splitlines() if ln.startswith("## ")]
-        assert len(headings) >= 6, f"Expected >= 6 section headings, got {len(headings)}"
+        headings = [
+            ln for ln in agents_md.splitlines() if ln.startswith("## ") or ln.startswith("### ")
+        ]
+        assert len(headings) >= 9, f"Expected >= 9 section headings, got {len(headings)}"
 
     def test_agents_md_no_import_directives(self, agents_md: str) -> None:
         for i, line in enumerate(agents_md.splitlines(), 1):

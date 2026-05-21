@@ -413,7 +413,7 @@ class TestCodexResultParserErrorSession:
         assert result.exit_code == 137
 
 
-class TestCodexResultParserMarker:
+class TestCodexStreamParserMarker:
     def test_standalone_marker_has_marker_true(self) -> None:
         """Standalone ORDER_UP marker in message → has_marker=True on turn.completed event."""
         marker = "%%ORDER_UP::abc123%%"

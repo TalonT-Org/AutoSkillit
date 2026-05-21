@@ -17,6 +17,7 @@ KNOWN_GENERAL_SHARD_DIRS = {
     "cli",
     "config",
     "docs",
+    "fixtures",
     "fleet",
     "hooks",
     "infra",

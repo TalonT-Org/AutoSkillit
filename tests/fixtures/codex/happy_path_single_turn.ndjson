@@ -1,0 +1,12 @@
+{"type":"thread.started","thread_id":"thread_hp_abc123"}
+{"type":"turn.started"}
+{"type":"item.started","item":{"type":"function_call","id":"fc_001","name":"shell","args":"{\"command\":\"ls -la\"}"}}
+{"type":"item.updated","item":{"type":"function_call","id":"fc_001","name":"shell","status":"in_progress"}}
+{"type":"item.completed","item":{"type":"function_call","id":"fc_001","name":"shell","args":"{\"command\":\"ls -la\"}","output":"file1.py\nfile2.py"}}
+{"type":"item.started","item":{"type":"file_change","id":"fch_001","path":"/src/main.py"}}
+{"type":"item.updated","item":{"type":"file_change","id":"fch_001","path":"/src/main.py","status":"in_progress"}}
+{"type":"item.completed","item":{"type":"file_change","id":"fch_001","path":"/src/main.py"}}
+{"type":"item.started","item":{"type":"message","id":"msg_001","content":[]}}
+{"type":"item.updated","item":{"type":"message","id":"msg_001","content":[{"type":"text","text":"Working on it..."}]}}
+{"type":"item.completed","item":{"type":"message","id":"msg_001","content":[{"type":"text","text":"Task completed successfully.\n\n%%ORDER_UP%%"}]}}
+{"type":"turn.completed","usage":{"input_tokens":150,"output_tokens":75,"cached_input_tokens":30,"reasoning_output_tokens":0}}

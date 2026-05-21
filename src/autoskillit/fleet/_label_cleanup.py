@@ -141,6 +141,7 @@ async def sweep_stale_dispatch_labels(
                 logger.warning(
                     "startup_label_sweep_mark_cleaned_failed",
                     state_path=str(state_path),
+                    cleaned_names=sorted(n for n, _ in terminal_uncleaned),
                     exc_info=True,
                 )
 

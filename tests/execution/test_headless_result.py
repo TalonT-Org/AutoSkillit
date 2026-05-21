@@ -420,29 +420,31 @@ class TestIdleStallRecoveryWriteEvidence:
 
 
 class TestWriteEvidenceCrossCheck:
-    def test_cross_check_logs_mismatch(self, caplog: pytest.LogCaptureFixture) -> None:
-        import logging
+    def test_cross_check_logs_mismatch(self) -> None:
+        import unittest.mock
+
+        import structlog.testing
 
         stdout = _tool_use_ndjson("Edit", file_path="/a/b.py", old_string="a", new_string="b")
         result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
 
         from autoskillit.execution.headless import _headless_result
 
-        original_compute = _headless_result._compute_write_evidence
-
         def zero_evidence(*args, **kwargs):
             from autoskillit.core.types import WriteEvidence
 
             return WriteEvidence.none_observed()
 
-        import unittest.mock
-
-        with unittest.mock.patch.object(
-            _headless_result, "_compute_write_evidence", zero_evidence
+        cap = structlog.testing.CapturingLogger()
+        with (
+            unittest.mock.patch.object(_headless_result, "_compute_write_evidence", zero_evidence),
+            unittest.mock.patch.object(_headless_result, "logger", cap),
         ):
-            with caplog.at_level(logging.WARNING):
-                _build_skill_result(result)
+            _build_skill_result(result)
 
         assert any(
-            "write_call_count_cross_check_mismatch" in record.message for record in caplog.records
+            call.method_name == "warning"
+            and call.args
+            and "write_call_count_cross_check_mismatch" in call.args[0]
+            for call in cap.calls
         ), "Cross-check must warn when count=0 but stdout contains write tool names"

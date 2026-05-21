@@ -797,10 +797,18 @@ class TestContractDrivenAlwaysWriteSkills:
         from autoskillit.recipe.contracts import load_bundled_manifest
 
         manifest = load_bundled_manifest()
+        skills = manifest.get("skills", {})
+        if not isinstance(skills, dict):
+            return []
         return [
             name
-            for name, contract in manifest.items()
-            if getattr(contract, "write_behavior", None) == "always"
+            for name, contract in skills.items()
+            if (
+                contract.get("write_behavior")
+                if isinstance(contract, dict)
+                else getattr(contract, "write_behavior", None)
+            )
+            == "always"
         ]
 
     @pytest.mark.parametrize("skill_name", _always_write_skills.__func__())  # type: ignore[attr-defined]

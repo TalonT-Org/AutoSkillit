@@ -14,6 +14,7 @@ from ._type_enums import FeatureLifecycle, FleetErrorCode, IssueLabelState
 
 __all__ = [
     "AUTOSKILLIT_INSTALLED_VERSION",
+    "CODEX_SCHEMA_VERSION",
     "AUTOSKILLIT_PRIVATE_ENV_VARS",
     "CONTEXT_EXHAUSTION_MARKER",
     "RESERVED_LOG_RECORD_KEYS",
@@ -77,6 +78,7 @@ __all__ = [
 ]
 
 AUTOSKILLIT_INSTALLED_VERSION: str = version("autoskillit")
+CODEX_SCHEMA_VERSION: int = 1
 
 # Session type environment variable and valid values.
 # String aliases for consumers that cannot import SessionType StrEnum

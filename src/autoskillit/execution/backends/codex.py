@@ -368,7 +368,7 @@ class CodexBackend:
         cmd: list[str] = ["codex", "exec", CodexFlags.RESUME_SUBCOMMAND]
         cmd.append(resume_session_id)
         cmd.append(prompt)
-        base: dict[str, str] = {}
+        base: dict[str, str] = dict(os.environ)
         if env_extras:
             base.update(env_extras)
         env = self.env_policy().build_env(base)

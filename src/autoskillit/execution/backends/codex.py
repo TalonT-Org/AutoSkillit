@@ -25,6 +25,7 @@ class _CodexParseAccumulator:
     mcp_tool_calls: list[dict[str, Any]] = field(default_factory=list)
     file_changes: list[str] = field(default_factory=list)
     last_usage: dict[str, Any] | None = None
+    saw_failure: bool = False
     success: bool = False
     error_message: str = ""
 
@@ -69,21 +70,21 @@ def _scan_codex_ndjson(stdout: str) -> _CodexParseAccumulator:
             usage = obj.get("usage")
             if isinstance(usage, dict):
                 acc.last_usage = usage
-            acc.success = True
+            if not acc.saw_failure:
+                acc.success = True
         elif event_type == "turn.failed":
             error = obj.get("error", {})
             if isinstance(error, dict):
                 acc.error_message = error.get("message", "")
             else:
                 acc.error_message = str(error) if error else ""
+            acc.saw_failure = True
             acc.success = False
     return acc
 
 
 @dataclass(frozen=True, slots=True)
 class CodexResultParser:
-    """Codex/OpenAI backend result parser conforming to ResultParser protocol."""
-
     def parse_result(self, events: Sequence[SessionEvent]) -> AgentSessionResult:
         if not events:
             return AgentSessionResult(
@@ -125,7 +126,7 @@ class CodexResultParser:
             canonical_dict = canonical.to_dict()
         return AgentSessionResult(
             success=not is_error,
-            exit_code=exit_code if not is_error else (exit_code or 1),
+            exit_code=0 if not is_error else (exit_code or 1),
             backend_name=AGENT_BACKEND_CODEX,
             elapsed_seconds=0.0,
             session_id=acc.session_id or None,

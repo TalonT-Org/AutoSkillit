@@ -129,6 +129,17 @@ class TestScanCodexNdjson:
         acc = _scan_codex_ndjson(ndjson)
         assert acc.last_usage == {"input_tokens": 100, "output_tokens": 50}
 
+    def test_scan_turn_completed_after_failed_does_not_override(self) -> None:
+        ndjson = (
+            _turn_failed_line("first turn failed")
+            + "\n"
+            + _turn_completed_line({"input_tokens": 1, "output_tokens": 1})
+        )
+        acc = _scan_codex_ndjson(ndjson)
+        assert acc.success is False
+        assert acc.saw_failure is True
+        assert acc.error_message == "first turn failed"
+
     def test_scan_turn_failed_after_completed_overrides_success(self) -> None:
         ndjson = (
             _turn_completed_line({"input_tokens": 1, "output_tokens": 1})
@@ -169,11 +180,11 @@ class TestCodexResultParserStdout:
         assert result.raw["subtype"] == "unparseable"
         assert result.success is False
 
-    def test_parse_stdout_exit_code_forwarded(self) -> None:
+    def test_parse_stdout_exit_code_clamped_to_zero_on_success(self) -> None:
         ndjson = _turn_completed_line({"input_tokens": 1, "output_tokens": 1})
         parser = CodexResultParser()
         result = parser.parse_stdout(ndjson, exit_code=42)
-        assert result.exit_code == 42
+        assert result.exit_code == 0
 
     def test_parse_stdout_exit_code_defaulted_on_error(self) -> None:
         parser = CodexResultParser()

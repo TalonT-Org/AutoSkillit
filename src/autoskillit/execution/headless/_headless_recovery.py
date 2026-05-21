@@ -108,8 +108,7 @@ def _recover_block_from_assistant_messages(
         "pattern_recovered_from_assistant_messages",
         patterns=list(expected_output_patterns),
     )
-    # Preserve any content already drained into session.result before appending
-    # the recovered assistant_messages block.
+    # Preserve any content already drained into session.result.
     recovered = (session.result + "\n\n" + combined) if session.result else combined
     return dataclasses.replace(session, result=recovered)
 
@@ -135,9 +134,7 @@ def _synthesize_from_write_artifacts(
     if write_call_count == 0:
         return None
 
-    # Only synthesize for path-capture patterns (token_name\s*=\s*/.+).
-    # Non-path patterns (verdict=, merged=) must remain text-compliance-only.
-
+    # Only synthesize path-capture patterns; non-path patterns must remain text-compliance-only.
     synthesized_lines: list[str] = []
     for pattern in expected_output_patterns:
         token_name = _is_path_capture_pattern(pattern)
@@ -275,7 +272,6 @@ async def _attempt_contract_nudge(
         logger.warning("nudge_runner_failed_unexpected", exc_info=True)
         return None
 
-    # Parse the nudge response and check for the missing patterns
     try:
         nudge_session = result_parser.parse_stdout(nudge_result.stdout)
     except Exception:
@@ -284,7 +280,6 @@ async def _attempt_contract_nudge(
     combined_result = skill_result.result + "\n" + nudge_session.output
 
     if retry_reason == RetryReason.EARLY_STOP:
-        # For EARLY_STOP, success is determined by the marker being present
         if completion_marker in nudge_session.output:
             _nudge_usage = nudge_session.raw.get("token_usage")
             logger.info(

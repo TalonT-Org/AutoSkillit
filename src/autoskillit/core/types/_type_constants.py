@@ -449,6 +449,15 @@ class FeatureDef:
 
 
 FEATURE_REGISTRY: dict[str, FeatureDef] = {
+    "codex_backend": FeatureDef(
+        lifecycle=FeatureLifecycle.EXPERIMENTAL,
+        description="Codex CLI backend for headless sessions",
+        tool_tags=frozenset(),
+        skill_categories=frozenset(),
+        import_package=None,
+        tier=2,
+        default_enabled=False,
+    ),
     "fleet": FeatureDef(
         lifecycle=FeatureLifecycle.EXPERIMENTAL,
         description="L3 Fleet Orchestrator — multi-session campaign dispatch",

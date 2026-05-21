@@ -358,6 +358,22 @@ def test_providers_feature_default_disabled():
     assert FEATURE_REGISTRY["providers"].default_enabled is False
 
 
+# ── Codex backend feature registry tests ───────────────────────────────────────
+
+
+def test_codex_backend_in_feature_registry():
+    """codex_backend is registered with correct FeatureDef field values."""
+    from autoskillit.core.types._type_constants import FEATURE_REGISTRY
+    from autoskillit.core.types._type_enums import FeatureLifecycle
+
+    entry = FEATURE_REGISTRY["codex_backend"]
+    assert entry.lifecycle == FeatureLifecycle.EXPERIMENTAL
+    assert entry.tier == 2
+    assert entry.default_enabled is False
+    assert entry.tool_tags == frozenset()
+    assert entry.skill_categories == frozenset()
+
+
 # ── T1: DISABLED lifecycle ──────────────────────────────────────────────────
 
 

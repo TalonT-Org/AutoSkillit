@@ -27,6 +27,7 @@ from autoskillit.core import (
     WriteBehaviorSpec,
     detect_autoskillit_mcp_prefix,
     get_logger,
+    is_feature_enabled,
     pkg_root,
     resolve_temp_dir,
     temp_dir_display_str,
@@ -321,6 +322,13 @@ def make_context(
     )
 
     backend = get_backend(config.agent_backend.backend)
+
+    if is_feature_enabled(
+        "codex_backend", config.features, experimental_enabled=config.experimental_enabled
+    ):
+        from autoskillit.execution.backends.codex import CodexBackend
+
+        backend = CodexBackend()
 
     audit = DefaultAuditLog()
     github_api_log = DefaultGitHubApiLog()

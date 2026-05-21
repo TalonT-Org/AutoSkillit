@@ -43,7 +43,8 @@ class TestClaudeMdImportStructure:
             )
 
 
-def test_claude_md_architecture_tree_has_subpackages() -> None:
+def test_agents_md_architecture_tree_has_subpackages() -> None:
+    assert AGENTS_MD.exists(), f"AGENTS.md not found at {AGENTS_MD}"
     content = AGENTS_MD.read_text()
     for subpkg in [
         "types/",
@@ -64,7 +65,8 @@ def test_claude_md_architecture_tree_has_subpackages() -> None:
         assert subpkg in content, f"AGENTS.md tree missing {subpkg}"
 
 
-def test_claude_md_dataclass_count_is_27() -> None:
+def test_agents_md_dataclass_count_is_27() -> None:
+    assert AGENTS_MD.exists(), f"AGENTS.md not found at {AGENTS_MD}"
     content = AGENTS_MD.read_text()
     assert "27 leaf dataclasses" in content
     assert "24 leaf dataclasses" not in content
@@ -110,7 +112,8 @@ def test_claude_md_mentions_dispatch_food_truck() -> None:
     )
 
 
-def test_claude_md_defines_channel_b() -> None:
+def test_agents_md_defines_channel_b() -> None:
+    assert AGENTS_MD.exists(), f"AGENTS.md not found at {AGENTS_MD}"
     content = AGENTS_MD.read_text()
     assert "Channel B" in content
     assert re.search(r"Channel B[^.]*JSONL", content), (

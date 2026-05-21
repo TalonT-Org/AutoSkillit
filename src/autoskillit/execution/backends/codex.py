@@ -365,7 +365,10 @@ class CodexBackend:
         if not resume_session_id:
             msg = "resume_session_id must be a non-empty string"
             raise ValueError(msg)
-        cmd: list[str] = ["codex", "exec", CodexFlags.RESUME_SUBCOMMAND]
+        cmd: list[str] = ["codex", "exec"]
+        if output_format == OutputFormat.JSON:
+            cmd.append(CodexFlags.JSON)
+        cmd.append(CodexFlags.RESUME_SUBCOMMAND)
         cmd.append(resume_session_id)
         cmd.append(prompt)
         base: dict[str, str] = dict(os.environ)

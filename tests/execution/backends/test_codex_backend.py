@@ -164,6 +164,10 @@ class TestCodexBackendCommands:
         spec = CodexBackend().build_resume_cmd(resume_session_id="s1", prompt="go")
         assert "PATH" in spec.env
 
+    def test_build_resume_cmd_has_json_flag(self) -> None:
+        spec = CodexBackend().build_resume_cmd(resume_session_id="s1", prompt="go")
+        assert "--json" in spec.cmd
+
     def test_build_interactive_cmd_raises(self) -> None:
         with pytest.raises(NotImplementedError):
             CodexBackend().build_interactive_cmd()

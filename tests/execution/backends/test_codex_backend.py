@@ -7,6 +7,7 @@ import pytest
 
 from autoskillit.core import (
     AGENT_BACKEND_CODEX,
+    BackendCapabilities,
     BackendEventKind,
     CmdSpec,
     CodexEventData,
@@ -383,3 +384,125 @@ class TestCodexImportContract:
         from autoskillit.core.types import __all__ as core_all
 
         assert "CodexBackend" not in core_all
+
+
+class TestCodexBackendProtocol:
+    def test_isinstance_coding_agent_backend(self) -> None:
+        assert isinstance(CodexBackend(), CodingAgentBackend)
+
+    def test_coding_agent_backend_is_runtime_protocol(self) -> None:
+        assert getattr(CodingAgentBackend, "_is_runtime_protocol", False) is True
+
+    def test_binary_name_is_codex(self) -> None:
+        assert CodexBackend().binary_name() == "codex"
+
+    def test_capabilities_is_backend_capabilities(self) -> None:
+        assert isinstance(CodexBackend().capabilities, BackendCapabilities)
+
+    def test_channel_b_capable_false(self) -> None:
+        assert CodexBackend().capabilities.channel_b_capable is False
+
+    def test_pty_required_false(self) -> None:
+        assert CodexBackend().capabilities.pty_required is False
+
+    def test_session_resume_capable_true(self) -> None:
+        assert CodexBackend().capabilities.session_resume_capable is True
+
+    def test_skill_injection_capable_false(self) -> None:
+        assert CodexBackend().capabilities.skill_injection_capable is False
+
+    def test_completion_record_types_content(self) -> None:
+        assert CodexBackend().capabilities.completion_record_types == frozenset(
+            {"turn.completed", "turn.failed", "error"}
+        )
+
+    def test_session_record_types_empty(self) -> None:
+        assert CodexBackend().capabilities.session_record_types == frozenset()
+
+
+class TestCodexHeadlessCmd:
+    def test_cmd_0_is_codex(self) -> None:
+        spec = CodexBackend().build_headless_cmd("do stuff")
+        assert spec.cmd[0] == "codex"
+
+    def test_cmd_1_is_exec(self) -> None:
+        spec = CodexBackend().build_headless_cmd("do stuff")
+        assert spec.cmd[1] == "exec"
+
+    def test_json_flag_present(self) -> None:
+        spec = CodexBackend().build_headless_cmd("do stuff")
+        assert "--json" in spec.cmd
+
+    def test_sandbox_with_workspace_write(self) -> None:
+        spec = CodexBackend().build_headless_cmd("do stuff")
+        assert "--sandbox" in spec.cmd
+        idx = spec.cmd.index("--sandbox")
+        assert spec.cmd[idx + 1] == "workspace-write"
+
+    def test_approval_never(self) -> None:
+        spec = CodexBackend().build_headless_cmd("do stuff")
+        assert "-a" in spec.cmd
+        idx = spec.cmd.index("-a")
+        assert spec.cmd[idx + 1] == "never"
+
+    def test_prompt_is_last_positional(self) -> None:
+        spec = CodexBackend().build_headless_cmd("do stuff")
+        assert spec.cmd[-1] == "do stuff"
+
+    def test_model_flag(self) -> None:
+        spec = CodexBackend().build_headless_cmd("x", model="o3")
+        assert "--model" in spec.cmd
+        idx = spec.cmd.index("--model")
+        assert spec.cmd[idx + 1] == "o3"
+
+    def test_add_dir_flag(self) -> None:
+        spec = CodexBackend().build_headless_cmd("x", add_dirs=["/extra"])
+        assert "--add-dir" in spec.cmd
+        idx = spec.cmd.index("--add-dir")
+        assert spec.cmd[idx + 1] == "/extra"
+
+    def test_no_dangerously_skip_permissions(self) -> None:
+        spec = CodexBackend().build_headless_cmd("do stuff")
+        assert "--dangerously-skip-permissions" not in spec.cmd
+
+    def test_no_print_flag(self) -> None:
+        spec = CodexBackend().build_headless_cmd("do stuff")
+        assert "-p" not in spec.cmd
+
+    def test_no_plugin_dir(self) -> None:
+        spec = CodexBackend().build_headless_cmd("do stuff")
+        assert "--plugin-dir" not in spec.cmd
+
+    def test_no_output_format(self) -> None:
+        spec = CodexBackend().build_headless_cmd("do stuff")
+        assert "--output-format" not in spec.cmd
+
+    def test_json_flag_value_string_literal(self) -> None:
+        assert CodexFlags.JSON == "--json"
+
+    def test_sandbox_flag_value_string_literal(self) -> None:
+        assert CodexFlags.SANDBOX == "--sandbox"
+
+
+class TestCodexResumeCmd:
+    def test_positional_structure(self) -> None:
+        spec = CodexBackend().build_resume_cmd(resume_session_id="abc123", prompt="continue")
+        assert spec.cmd == ("codex", "exec", "--json", "resume", "abc123", "continue")
+
+    def test_empty_session_id_raises_value_error(self) -> None:
+        with pytest.raises(ValueError, match="non-empty"):
+            CodexBackend().build_resume_cmd(resume_session_id="", prompt="continue")
+
+    def test_no_sandbox_flag_in_resume(self) -> None:
+        spec = CodexBackend().build_resume_cmd(resume_session_id="abc123", prompt="continue")
+        assert "--sandbox" not in spec.cmd
+        assert "workspace-write" not in spec.cmd
+
+    def test_no_approval_flag_in_resume(self) -> None:
+        spec = CodexBackend().build_resume_cmd(resume_session_id="abc123", prompt="continue")
+        assert "-a" not in spec.cmd
+        assert "never" not in spec.cmd
+
+    def test_json_flag_present_in_resume(self) -> None:
+        spec = CodexBackend().build_resume_cmd(resume_session_id="abc123", prompt="continue")
+        assert "--json" in spec.cmd

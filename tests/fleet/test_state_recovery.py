@@ -155,6 +155,124 @@ class TestResumeDecisionDispatchId:
         assert decision.dispatch_id == ""
 
 
+class TestResumableToFailureEscalation:
+    def test_resumable_escalation_to_failure_leaves_labels_uncleaned(self, tmp_path: Path) -> None:
+        """When RESUMABLE exhausts attempts, dispatch becomes FAILURE with labels_cleaned=False."""
+        from autoskillit.core import FleetErrorCode
+        from autoskillit.fleet.state import upsert_dispatch_record_by_name, write_initial_state
+        from autoskillit.fleet.state_recovery import (
+            MAX_CONSECUTIVE_RESUME_ATTEMPTS,
+            resume_campaign_from_state,
+        )
+
+        state_path = tmp_path / "escalation.json"
+        write_initial_state(
+            state_path,
+            campaign_id="test-esc",
+            campaign_name="test-escalation",
+            manifest_path="",
+            dispatches=[DispatchRecord(name="d1")],
+        )
+        timeout_history = [
+            {"status": str(DispatchStatus.RESUMABLE), "reason": FleetErrorCode.FLEET_L3_TIMEOUT}
+            for _ in range(MAX_CONSECUTIVE_RESUME_ATTEMPTS)
+        ]
+        upsert_dispatch_record_by_name(
+            state_path,
+            DispatchRecord(
+                name="d1",
+                status=DispatchStatus.RESUMABLE,
+                dispatch_id="esc-uuid",
+                dispatched_session_id="esc-sess",
+                attempt_history=timeout_history,
+                sidecar_path=str(tmp_path / "esc_sidecar.jsonl"),
+            ),
+        )
+
+        decision = resume_campaign_from_state(state_path, continue_on_failure=False)
+        assert decision is not None
+        assert decision.next_dispatch_name == ""
+
+        from autoskillit.fleet.state import read_state
+
+        state = read_state(state_path)
+        assert state is not None
+        d = state.dispatches[0]
+        assert d.status == DispatchStatus.FAILURE
+        assert d.labels_cleaned is False
+
+    @pytest.mark.anyio
+    async def test_sweep_recovers_labels_from_escalated_failure(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Startup sweep cleans labels for a FAILURE dispatch produced by RESUMABLE escalation."""
+        import json
+        from unittest.mock import AsyncMock
+
+        from autoskillit.core import FleetErrorCode
+        from autoskillit.fleet.state import upsert_dispatch_record_by_name, write_initial_state
+        from autoskillit.fleet.state_recovery import (
+            MAX_CONSECUTIVE_RESUME_ATTEMPTS,
+            resume_campaign_from_state,
+        )
+
+        monkeypatch.setattr(
+            "autoskillit.fleet._label_cleanup.is_dispatch_session_alive",
+            lambda record: False,
+        )
+
+        state_path = tmp_path / "esc_sweep.json"
+        sidecar = tmp_path / "esc_sweep_sidecar.jsonl"
+        sidecar.write_text(
+            json.dumps(
+                {
+                    "issue_url": "https://github.com/owner/repo/issues/99",
+                    "status": "completed",
+                    "ts": "2026-01-01T00:00:00Z",
+                }
+            )
+            + "\n"
+        )
+        write_initial_state(
+            state_path,
+            campaign_id="test-esc-sweep",
+            campaign_name="test-escalation-sweep",
+            manifest_path="",
+            dispatches=[DispatchRecord(name="d1")],
+        )
+        timeout_history = [
+            {"status": str(DispatchStatus.RESUMABLE), "reason": FleetErrorCode.FLEET_L3_TIMEOUT}
+            for _ in range(MAX_CONSECUTIVE_RESUME_ATTEMPTS)
+        ]
+        upsert_dispatch_record_by_name(
+            state_path,
+            DispatchRecord(
+                name="d1",
+                status=DispatchStatus.RESUMABLE,
+                dispatch_id="esc-uuid",
+                dispatched_session_id="esc-sess",
+                attempt_history=timeout_history,
+                sidecar_path=str(sidecar),
+            ),
+        )
+
+        resume_campaign_from_state(state_path, continue_on_failure=False)
+
+        from autoskillit.fleet._label_cleanup import sweep_stale_dispatch_labels
+        from autoskillit.fleet.state import read_state
+
+        swap_labels_mock = AsyncMock(return_value={"success": True})
+        github_client = AsyncMock()
+        github_client.swap_labels = swap_labels_mock
+
+        await sweep_stale_dispatch_labels([state_path], github_client)
+
+        swap_labels_mock.assert_called_once()
+        state = read_state(state_path)
+        assert state is not None
+        assert state.dispatches[0].labels_cleaned is True
+
+
 class TestResumeCampaignFromStateDispatchId:
     async def test_resume_campaign_populates_dispatch_id(self, tmp_path: Path) -> None:
         """When a RESUMABLE dispatch is found, its dispatch_id must appear in ResumeDecision."""

@@ -1085,3 +1085,55 @@ class TestCrashPathDiagnosticPersistence:
         refused_campaign = [d for d in campaign_state.dispatches if d.status.value == "refused"]
         assert len(refused_campaign) == 1
         assert "Unknown ingredient keys" in refused_campaign[0].diagnostic_message
+
+
+class TestLabelsCleanedFieldPersistence:
+    @pytest.mark.anyio
+    async def test_labels_cleaned_true_on_failure_outcome(
+        self, tool_ctx, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """DispatchRecord persists labels_cleaned=True when outcome is FAILURE."""
+        import dataclasses
+
+        from tests.fakes import _DEFAULT_SKILL_RESULT
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+        tool_ctx.github_client = None
+
+        failure_result = dataclasses.replace(
+            _DEFAULT_SKILL_RESULT,
+            success=False,
+            result='{"success": false, "reason": "context_exhaustion"}',
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+        )
+        tool_ctx.executor = InMemoryHeadlessExecutor(default_result=failure_result)
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.parse_l3_result_block",
+            lambda **_: _make_no_sentinel(),
+        )
+
+        await _run(tool_ctx)
+
+        record = _read_dispatch_record(tool_ctx)
+        assert record["status"] == "failure"
+        assert record["labels_cleaned"] is True
+
+    @pytest.mark.anyio
+    async def test_labels_cleaned_false_on_success_outcome(
+        self, tool_ctx, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """DispatchRecord persists labels_cleaned=False when outcome is SUCCESS."""
+        _setup_dispatch(tool_ctx, monkeypatch)
+        tool_ctx.github_client = None
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.parse_l3_result_block",
+            lambda **_: _make_completed_clean(True),
+        )
+
+        await _run(tool_ctx)
+
+        record = _read_dispatch_record(tool_ctx)
+        assert record["status"] == "success"
+        assert record["labels_cleaned"] is False

@@ -179,8 +179,11 @@ class TestRunPython:
 
     @pytest.mark.anyio
     async def test_sync_timeout_logs_warning(self):
-        """run_python emits a warning log when TimeoutError is raised."""
+        """_import_and_call emits a warning log when TimeoutError is raised."""
         import asyncio as _aio
+
+        from autoskillit.server.tools import _execution_helpers
+        from autoskillit.server.tools._execution_helpers import _import_and_call
 
         async def _hang(**_kw: object) -> None:
             await _aio.sleep(300)
@@ -188,19 +191,17 @@ class TestRunPython:
         mock_module = MagicMock()
         mock_module.hang_fn = _hang
 
+        mock_logger = MagicMock()
         with (
             patch("importlib.import_module", return_value=mock_module),
-            structlog.testing.capture_logs() as logs,
+            patch.object(_execution_helpers, "logger", mock_logger),
         ):
-            result = json.loads(await run_python(callable="fake_mod.hang_fn", timeout=1))
+            result = await _import_and_call("fake_mod.hang_fn", timeout=1.0)
         assert result["success"] is False
         assert "timeout" in result["error"].lower()
-        assert any(log.get("log_level") == "warning" for log in logs), (
-            f"Expected a warning log entry for timeout, got: {logs}"
-        )
-        assert any("timed out" in log.get("event", "").lower() for log in logs), (
-            f"Expected 'timed out' in warning event, got: {logs}"
-        )
+        mock_logger.warning.assert_called_once()
+        call_args = mock_logger.warning.call_args
+        assert "timed out" in call_args[0][0].lower()
 
 
 class TestRunCmdSleepInterception:

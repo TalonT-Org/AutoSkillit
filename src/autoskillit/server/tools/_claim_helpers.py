@@ -6,9 +6,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from autoskillit.core import get_logger
+
 if TYPE_CHECKING:
     from autoskillit.core import GitHubFetcher
     from autoskillit.pipeline.context import ToolContext
+
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,6 +27,30 @@ def _get_campaign_state_paths(tool_ctx: ToolContext) -> list[Path]:
     from autoskillit.fleet import discover_campaign_state_files  # noqa: PLC0415
 
     return discover_campaign_state_files(tool_ctx.project_dir)
+
+
+def _mark_dispatch_labels_cleaned(dispatch_name: str, campaign_state_paths: list[Path]) -> None:
+    """Persist labels_cleaned=True for a dispatch after claim-time label cleanup."""
+    from autoskillit.fleet import CampaignStateMutator  # noqa: PLC0415
+
+    for state_path in campaign_state_paths:
+        try:
+            with CampaignStateMutator(state_path) as m:
+                if m.state is None:
+                    continue
+                for d in m.state.dispatches:
+                    if d.name == dispatch_name:
+                        d.labels_cleaned = True
+                        m.mark_dirty()
+                        return
+        except Exception:
+            logger.warning(
+                "claim_mark_labels_cleaned_failed",
+                state_path=str(state_path),
+                dispatch_name=dispatch_name,
+                exc_info=True,
+            )
+            continue
 
 
 async def _try_claim_with_liveness(
@@ -41,6 +69,7 @@ async def _try_claim_with_liveness(
     dead, cleans up the stale label inline and returns claimed=True.
     """
     from autoskillit.fleet import (  # noqa: PLC0415
+        TERMINAL_UNCLEANED_STATUSES,
         cleanup_orphaned_labels,
         find_dispatch_for_issue,
         is_dispatch_session_alive,
@@ -59,6 +88,10 @@ async def _try_claim_with_liveness(
                 " — another session may be processing it"
             ),
         )
+    if dispatch.status in TERMINAL_UNCLEANED_STATUSES:
+        await cleanup_orphaned_labels(dispatch.sidecar_path, github_client)
+        _mark_dispatch_labels_cleaned(dispatch.name, campaign_state_paths)
+        return ClaimDecision(claimed=True, stale_label_cleaned=True)
     if is_dispatch_session_alive(dispatch):
         return ClaimDecision(
             claimed=False,

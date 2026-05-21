@@ -17,7 +17,11 @@ from autoskillit.core import (
 )
 from autoskillit.fleet._liveness import is_dispatch_session_alive
 from autoskillit.fleet.sidecar import read_sidecar_from_path
-from autoskillit.fleet.state import CampaignStateMutator, DispatchStatus
+from autoskillit.fleet.state import (
+    TERMINAL_UNCLEANED_STATUSES,
+    CampaignStateMutator,
+    DispatchStatus,
+)
 
 if TYPE_CHECKING:
     from autoskillit.core import GitHubFetcher
@@ -88,25 +92,34 @@ async def sweep_stale_dispatch_labels(
     campaign_state_paths: list[Path],
     github_client: GitHubFetcher | None,
 ) -> None:
-    """Startup sweep: clean up labels for dead RUNNING dispatches across all campaigns.
+    """Startup sweep: clean up labels for dead dispatches across all campaigns.
+
+    Pass 1: dead RUNNING dispatches (process died mid-run).
+    Pass 2: terminal dispatches with labels_cleaned=False (cleanup was missed).
 
     Called as a background task from _fleet_auto_gate_boot. Errors on individual
     state files are logged and skipped so one corrupt file cannot block recovery.
     """
     for state_path in campaign_state_paths:
         stale_sidecar_paths: list[str | None] = []
+        terminal_uncleaned: list[tuple[str, str | None]] = []
         try:
             with CampaignStateMutator(state_path) as m:
                 if m.state is None:
                     continue
                 for d in m.state.dispatches:
-                    if d.status != DispatchStatus.RUNNING:
-                        continue
-                    if is_dispatch_session_alive(d):
-                        continue
-                    stale_sidecar_paths.append(d.sidecar_path)
-                    d.status = DispatchStatus.INTERRUPTED
-                    m.mark_dirty()
+                    if d.status == DispatchStatus.RUNNING:
+                        if is_dispatch_session_alive(d):
+                            continue
+                        stale_sidecar_paths.append(d.sidecar_path)
+                        d.status = DispatchStatus.INTERRUPTED
+                        m.mark_dirty()
+                    elif (
+                        d.status in TERMINAL_UNCLEANED_STATUSES
+                        and not d.labels_cleaned
+                        and d.sidecar_path is not None
+                    ):
+                        terminal_uncleaned.append((d.name, d.sidecar_path))
         except Exception:
             logger.warning(
                 "startup_label_sweep_failed",
@@ -114,8 +127,26 @@ async def sweep_stale_dispatch_labels(
                 exc_info=True,
             )
             continue
-        for sidecar_path in stale_sidecar_paths:
-            await cleanup_orphaned_labels(sidecar_path, github_client)
+        for sp in stale_sidecar_paths:
+            await cleanup_orphaned_labels(sp, github_client)
+        for _name, sp in terminal_uncleaned:
+            await cleanup_orphaned_labels(sp, github_client)
+        if terminal_uncleaned:
+            try:
+                with CampaignStateMutator(state_path) as m:
+                    if m.state is not None:
+                        cleaned_names = {name for name, _ in terminal_uncleaned}
+                        for d in m.state.dispatches:
+                            if d.name in cleaned_names:
+                                d.labels_cleaned = True
+                                m.mark_dirty()
+            except Exception:
+                logger.warning(
+                    "startup_label_sweep_mark_cleaned_failed",
+                    state_path=str(state_path),
+                    cleaned_names=sorted(n for n, _ in terminal_uncleaned),
+                    exc_info=True,
+                )
 
 
 def discover_campaign_state_files(project_dir: Path) -> list[Path]:

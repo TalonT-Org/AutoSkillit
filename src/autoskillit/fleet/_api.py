@@ -928,6 +928,13 @@ async def _run_dispatch(
         subtype=skill_result.subtype,
     )
 
+    _labels_cleaned = False
+    if final_status not in (DispatchStatus.SUCCESS, DispatchStatus.RESUMABLE):
+        from autoskillit.fleet._label_cleanup import cleanup_orphaned_labels  # noqa: PLC0415
+
+        await cleanup_orphaned_labels(dispatch_sidecar_path, tool_ctx.github_client)
+        _labels_cleaned = True
+
     try:
         project_log_dir = str(claude_code_project_dir(str(tool_ctx.project_dir)))
     except OSError:
@@ -950,6 +957,8 @@ async def _run_dispatch(
         token_usage=normalize_dispatch_token_usage(skill_result.token_usage or {}),
         started_at=started_at,
         ended_at=ended_at,
+        sidecar_path=dispatch_sidecar_path,
+        labels_cleaned=_labels_cleaned,
         resume_checkpoint=_checkpoint_to_dict(dispatch_checkpoint),
     )
 

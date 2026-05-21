@@ -58,40 +58,6 @@ class TestCodexStreamParserHappyPath:
         assert usage.cache_write_tokens is None
         assert usage.provider == "codex"
 
-    def test_last_turn_completed_carries_accumulated_marker_state(self) -> None:
-        parser = CodexStreamParser(completion_marker="%%ORDER_UP%%")
-        msg_with_marker = json.dumps(
-            {
-                "type": "item.completed",
-                "item": {
-                    "type": "message",
-                    "content": [{"type": "text", "text": "Done.\n\n%%ORDER_UP%%"}],
-                },
-            }
-        )
-        msg_without_marker = json.dumps(
-            {
-                "type": "item.completed",
-                "item": {
-                    "type": "message",
-                    "content": [{"type": "text", "text": "More work done."}],
-                },
-            }
-        )
-        turn_completed_line = json.dumps({"type": "turn.completed", "usage": {}})
-
-        parser.parse_line(msg_with_marker)
-        event1 = parser.parse_line(turn_completed_line)
-        assert event1 is not None
-        assert event1.kind == BackendEventKind.COMPLETION
-        assert event1.has_marker is True
-
-        parser.parse_line(msg_without_marker)
-        event2 = parser.parse_line(turn_completed_line)
-        assert event2 is not None
-        assert event2.kind == BackendEventKind.COMPLETION
-        assert event2.has_marker is True
-
     def test_turn_failed_yields_terminal_completion(self) -> None:
         parser = CodexStreamParser()
         line = json.dumps(
@@ -195,6 +161,44 @@ class TestCodexStreamParserItemCompleted:
         event = parser.parse_line(turn_completed_line)
         assert event is not None
         assert event.has_marker is False
+
+    def test_last_turn_completed_carries_accumulated_marker_state(self) -> None:
+        # _saw_marker is a permanent latch: once set True by any item.completed
+        # message in the session, it stays True for all subsequent turn.completed
+        # events. The second turn here feeds a message without the marker, but
+        # event2.has_marker is still True because the latch never resets.
+        parser = CodexStreamParser(completion_marker="%%ORDER_UP%%")
+        msg_with_marker = json.dumps(
+            {
+                "type": "item.completed",
+                "item": {
+                    "type": "message",
+                    "content": [{"type": "text", "text": "Done.\n\n%%ORDER_UP%%"}],
+                },
+            }
+        )
+        msg_without_marker = json.dumps(
+            {
+                "type": "item.completed",
+                "item": {
+                    "type": "message",
+                    "content": [{"type": "text", "text": "More work done."}],
+                },
+            }
+        )
+        turn_completed_line = json.dumps({"type": "turn.completed", "usage": {}})
+
+        parser.parse_line(msg_with_marker)
+        event1 = parser.parse_line(turn_completed_line)
+        assert event1 is not None
+        assert event1.kind == BackendEventKind.COMPLETION
+        assert event1.has_marker is True
+
+        parser.parse_line(msg_without_marker)
+        event2 = parser.parse_line(turn_completed_line)
+        assert event2 is not None
+        assert event2.kind == BackendEventKind.COMPLETION
+        assert event2.has_marker is True
 
     def test_item_completed_message_yields_tool_output(self) -> None:
         parser = CodexStreamParser()
@@ -329,6 +333,7 @@ class TestCodexStreamParserFixtures:
         terminal_events = [e for e in events if e.is_terminal]
         assert len(terminal_events) == 1
         assert terminal_events[0].kind == BackendEventKind.COMPLETION
+        assert terminal_events[0].has_marker is True
 
     def test_multi_turn_last_turn_completed_has_final_usage(self) -> None:
         text = fixture_path(MULTI_TURN_WITH_COMPACTION).read_text()
@@ -369,20 +374,6 @@ class TestCodexStreamParserFixtures:
         assert terminal.is_terminal is True
         assert isinstance(terminal.backend_data, CodexEventData)
         assert terminal.backend_data.record_type == "turn.failed"
-
-    def test_happy_path_fixture_marker_detected(self) -> None:
-        text = fixture_path(HAPPY_PATH_SINGLE_TURN).read_text()
-        parser = CodexStreamParser(completion_marker="%%ORDER_UP%%")
-        events = [
-            ev
-            for line in text.strip().splitlines()
-            if line.strip()
-            for ev in [parser.parse_line(line)]
-            if ev is not None
-        ]
-        terminal_events = [e for e in events if e.is_terminal]
-        assert len(terminal_events) == 1
-        assert terminal_events[0].has_marker is True
 
 
 class TestCodexStreamParserConformance:

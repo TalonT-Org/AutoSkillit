@@ -20,5 +20,6 @@ Documentation integrity, link validity, and naming convention tests.
 | `test_rationale_document_completeness.py` | Validate experiment-type rationale document completeness |
 | `test_sub_claude_md_completeness.py` | Structural tests for per-subfolder CLAUDE.md files under src/autoskillit/ |
 | `test_tests_sub_claude_md_completeness.py` | Structural tests for per-subfolder CLAUDE.md files under tests/ |
+| `test_agents_md_content.py` | Validate AGENTS.md content completeness and boundary correctness |
 | `test_guard_fail_mode_docs.py` | Verify guard fail-mode matrix documentation accuracy |
 | `test_check_sub_claude_md_script.py` | Unit and integration tests for the check_sub_claude_md.py pre-commit hook script |

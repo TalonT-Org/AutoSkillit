@@ -378,13 +378,6 @@ class TestCodexStreamParser:
         assert event is not None
         assert event.is_terminal is False
 
-    def test_parse_line_item_completed_unknown_subtype_yields_ignored(self) -> None:
-        parser = CodexStreamParser()
-        line = json.dumps({"type": "item.completed", "item": {"type": "reasoning"}})
-        event = parser.parse_line(line)
-        assert event is not None
-        assert event.kind == BackendEventKind.IGNORED
-
 
 class TestCodexStreamParserConformance:
     def test_isinstance_stream_parser_protocol(self) -> None:

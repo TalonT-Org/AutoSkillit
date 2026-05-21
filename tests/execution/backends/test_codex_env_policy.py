@@ -4,7 +4,7 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from autoskillit.core import EnvPolicy
+from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS, EnvPolicy
 from autoskillit.execution.backends.codex import CodexEnvPolicy
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -41,14 +41,11 @@ class TestCodexEnvPolicy:
 
     def test_autoskillit_private_vars_stripped(self) -> None:
         policy = CodexEnvPolicy()
-        base = {
-            "AUTOSKILLIT_HEADLESS": "1",
-            "AUTOSKILLIT_SESSION_TYPE": "skill",
-            "PATH": "/usr/bin",
-        }
+        base: dict[str, str] = {var: "sentinel" for var in AUTOSKILLIT_PRIVATE_ENV_VARS}
+        base["PATH"] = "/usr/bin"
         result = policy.build_env(base)
-        assert "AUTOSKILLIT_HEADLESS" not in result
-        assert "AUTOSKILLIT_SESSION_TYPE" not in result
+        for var in AUTOSKILLIT_PRIVATE_ENV_VARS:
+            assert var not in result
         assert result["PATH"] == "/usr/bin"
 
     def test_claude_code_auto_connect_ide_not_injected(self) -> None:

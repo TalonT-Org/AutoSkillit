@@ -15,11 +15,15 @@ from autoskillit.execution.process import _marker_is_standalone
 from autoskillit.execution.session import (
     ClaudeSessionResult,
     _check_expected_patterns,
-    parse_session_result,
 )
 
 if TYPE_CHECKING:
-    from autoskillit.core import CodingAgentBackend, SubprocessResult, SubprocessRunner
+    from autoskillit.core import (
+        CodingAgentBackend,
+        ResultParser,
+        SubprocessResult,
+        SubprocessRunner,
+    )
 
 logger = get_logger(__name__)
 
@@ -104,8 +108,7 @@ def _recover_block_from_assistant_messages(
         "pattern_recovered_from_assistant_messages",
         patterns=list(expected_output_patterns),
     )
-    # Preserve any content already drained into session.result before appending
-    # the recovered assistant_messages block.
+    # Preserve any content already drained into session.result.
     recovered = (session.result + "\n\n" + combined) if session.result else combined
     return dataclasses.replace(session, result=recovered)
 
@@ -131,9 +134,7 @@ def _synthesize_from_write_artifacts(
     if write_call_count == 0:
         return None
 
-    # Only synthesize for path-capture patterns (token_name\s*=\s*/.+).
-    # Non-path patterns (verdict=, merged=) must remain text-compliance-only.
-
+    # Only synthesize path-capture patterns; non-path patterns must remain text-compliance-only.
     synthesized_lines: list[str] = []
     for pattern in expected_output_patterns:
         token_name = _is_path_capture_pattern(pattern)
@@ -162,6 +163,7 @@ def _synthesize_from_write_artifacts(
 def _extract_missing_token_hints(
     stdout: str,
     expected_output_patterns: Sequence[str],
+    result_parser: ResultParser,
 ) -> list[tuple[str, str]]:
     """Extract (token_name, write_path) pairs for patterns missing from the result.
 
@@ -169,7 +171,11 @@ def _extract_missing_token_hints(
     then matches them against path-capture patterns that are NOT satisfied in
     the result text. Returns the hints needed to build the nudge prompt.
     """
-    session = parse_session_result(stdout)
+    try:
+        session = result_parser.parse_stdout(stdout)
+    except Exception:
+        logger.warning("nudge_parse_stdout_failed", exc_info=True)
+        return []
     hints: list[tuple[str, str]] = []
 
     for pattern in expected_output_patterns:
@@ -177,12 +183,14 @@ def _extract_missing_token_hints(
         if not token_name:
             continue
         # Skip if already satisfied
-        if re.search(pattern, session.result):
+        if re.search(pattern, session.output):
             continue
-        # Collect absolute Write/Edit paths; use the LAST one (final deliverable)
+        # Collect absolute Write/Edit paths; use the LAST one (final deliverable).
+        # tool_uses and token_usage live in .raw (not promoted to typed attrs) because
+        # they vary by backend and are absent from non-Claude AgentSessionResult payloads.
         candidate_paths = [
             t.get("file_path", "")
-            for t in session.tool_uses
+            for t in session.raw.get("tool_uses", [])
             if t.get("name") in {"Write", "Edit"} and t.get("file_path", "").startswith("/")
         ]
         if candidate_paths:
@@ -200,6 +208,7 @@ async def _attempt_contract_nudge(
     runner: SubprocessRunner,
     *,
     backend: CodingAgentBackend | None = None,
+    result_parser: ResultParser | None = None,
     provider_extras: Mapping[str, str] | None = None,
     retry_reason: RetryReason = RetryReason.CONTRACT_RECOVERY,
 ) -> SkillResult | None:
@@ -215,7 +224,9 @@ async def _attempt_contract_nudge(
     Returns a patched SkillResult(success=True) on success, or None to indicate the
     nudge failed and the caller should fall through to the original path.
     """
-    if backend is None or not backend.capabilities.session_resume_capable:
+    if backend is None or not backend.capabilities.skill_injection_capable:
+        return None
+    if result_parser is None:
         return None
 
     if retry_reason == RetryReason.EARLY_STOP:
@@ -226,7 +237,9 @@ async def _attempt_contract_nudge(
         )
         patterns_to_check: Sequence[str] = []
     else:
-        hints = _extract_missing_token_hints(subprocess_result.stdout, expected_output_patterns)
+        hints = _extract_missing_token_hints(
+            subprocess_result.stdout, expected_output_patterns, result_parser
+        )
         if not hints:
             logger.debug("nudge_skip_no_hints")
             return None
@@ -261,19 +274,20 @@ async def _attempt_contract_nudge(
         logger.warning("nudge_runner_failed_unexpected", exc_info=True)
         return None
 
-    # Parse the nudge response and check for the missing patterns
-    nudge_session = parse_session_result(nudge_result.stdout)
-    combined_result = skill_result.result + "\n" + nudge_session.result
+    try:
+        nudge_session = result_parser.parse_stdout(nudge_result.stdout)
+    except Exception:
+        logger.warning("nudge_parse_stdout_failed", exc_info=True)
+        return None
+    combined_result = skill_result.result + "\n" + nudge_session.output
+    _nudge_usage = nudge_session.raw.get("token_usage")
 
     if retry_reason == RetryReason.EARLY_STOP:
-        # For EARLY_STOP, success is determined by the marker being present
-        if completion_marker in nudge_session.result:
+        if completion_marker in nudge_session.output:
             logger.info(
                 "nudge_recovery_success",
                 session_id=skill_result.session_id,
-                nudge_output_count=nudge_session.token_usage.get("output_tokens", 0)
-                if nudge_session.token_usage
-                else 0,
+                nudge_output_count=_nudge_usage.get("output_tokens", 0) if _nudge_usage else 0,
             )
             return dataclasses.replace(
                 skill_result,
@@ -282,28 +296,24 @@ async def _attempt_contract_nudge(
                 subtype="success",
                 needs_retry=False,
                 retry_reason=RetryReason.NONE,
-                token_usage=_merge_token_usage(
-                    skill_result.token_usage, nudge_session.token_usage
-                ),
+                token_usage=_merge_token_usage(skill_result.token_usage, _nudge_usage),
             )
         logger.debug(
-            "nudge_early_stop_marker_not_found", nudge_result_len=len(nudge_session.result)
+            "nudge_early_stop_marker_not_found", nudge_result_len=len(nudge_session.output)
         )
         return None
 
     if not _check_expected_patterns(combined_result, patterns_to_check):
         logger.debug(
             "nudge_patterns_not_found",
-            nudge_result_len=len(nudge_session.result),
+            nudge_result_len=len(nudge_session.output),
         )
         return None
 
     logger.info(
         "nudge_recovery_success",
         session_id=skill_result.session_id,
-        nudge_output_count=nudge_session.token_usage.get("output_tokens", 0)
-        if nudge_session.token_usage
-        else 0,
+        nudge_output_count=_nudge_usage.get("output_tokens", 0) if _nudge_usage else 0,
     )
     return dataclasses.replace(
         skill_result,
@@ -312,7 +322,7 @@ async def _attempt_contract_nudge(
         subtype="success",
         needs_retry=False,
         retry_reason=RetryReason.NONE,
-        token_usage=_merge_token_usage(skill_result.token_usage, nudge_session.token_usage),
+        token_usage=_merge_token_usage(skill_result.token_usage, _nudge_usage),
     )
 
 

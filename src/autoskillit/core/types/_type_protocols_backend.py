@@ -40,6 +40,8 @@ class ResultParser(Protocol):
         events: Sequence[SessionEvent],
     ) -> AgentSessionResult: ...
 
+    def parse_stdout(self, stdout: str) -> AgentSessionResult: ...
+
 
 @runtime_checkable
 class EnvPolicy(Protocol):

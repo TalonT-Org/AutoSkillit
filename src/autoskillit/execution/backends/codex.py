@@ -12,6 +12,7 @@ from typing import Any
 
 from autoskillit.core import (
     AGENT_BACKEND_CODEX,
+    AUTOSKILLIT_PRIVATE_ENV_VARS,
     AgentSessionResult,
     BackendCapabilities,
     BackendEventKind,
@@ -34,6 +35,16 @@ __all__ = [
     "CodexSessionLocator",
     "CodexStreamParser",
 ]
+
+CODEX_ENV_DENYLIST: frozenset[str] = frozenset(
+    {
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_AUTH_TOKEN",
+        "ANTHROPIC_BASE_URL",
+    }
+)
+
+CODEX_ENV_PREFIX_DENYLIST: tuple[str, ...] = ("CLAUDE_CODE_",)
 
 
 @unique
@@ -310,8 +321,27 @@ class CodexStreamParser:
 
 @dataclass(frozen=True, slots=True)
 class CodexEnvPolicy:
-    def build_env(self, base_env: Mapping[str, str]) -> dict[str, str]:
-        return dict(base_env)
+    def build_env(
+        self,
+        base_env: Mapping[str, str],
+        *,
+        extras: Mapping[str, str] | None = None,
+        required: frozenset[str] | None = None,
+    ) -> dict[str, str]:
+        out: dict[str, str] = {
+            k: v
+            for k, v in base_env.items()
+            if k not in CODEX_ENV_DENYLIST
+            and k not in AUTOSKILLIT_PRIVATE_ENV_VARS
+            and not any(k.startswith(p) for p in CODEX_ENV_PREFIX_DENYLIST)
+        }
+        if extras is not None:
+            out.update(extras)
+        if required is not None:
+            missing = required - frozenset(out)
+            if missing:
+                raise ValueError(f"Required env vars missing from session env: {sorted(missing)}")
+        return out
 
 
 @dataclass(frozen=True, slots=True)

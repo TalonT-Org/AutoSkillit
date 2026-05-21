@@ -25,7 +25,7 @@ from tests.execution.conftest import _make_synthetic_api_error_ndjson
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
-# All patterns that _API_ERROR_PATTERNS covers
+# All patterns that _ALL_API_ERROR_PATTERNS covers
 API_ERROR_SIGNALS: list[str] = [
     "overloaded",
     "529",
@@ -35,6 +35,12 @@ API_ERROR_SIGNALS: list[str] = [
     "socket hang up",
     "network error",
     "connection reset",
+    # OpenAI/Codex API error types
+    "rate_limit_exceeded",
+    "server_error",
+    "insufficient_quota",
+    "context_length_exceeded",
+    "model_not_found",
 ]
 
 

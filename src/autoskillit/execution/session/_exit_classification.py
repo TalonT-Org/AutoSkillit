@@ -25,6 +25,18 @@ _API_ERROR_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"connection reset", re.IGNORECASE),
 )
 
+_CODEX_API_ERROR_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"rate_limit_exceeded", re.IGNORECASE),
+    re.compile(r"server_error", re.IGNORECASE),
+    re.compile(r"insufficient_quota", re.IGNORECASE),
+    re.compile(r"context_length_exceeded", re.IGNORECASE),
+    re.compile(r"model_not_found", re.IGNORECASE),
+)
+
+_ALL_API_ERROR_PATTERNS: tuple[re.Pattern[str], ...] = (
+    _API_ERROR_PATTERNS + _CODEX_API_ERROR_PATTERNS
+)
+
 
 def classify_infra_exit(
     session: ClaudeSessionResult,
@@ -38,7 +50,7 @@ def classify_infra_exit(
     """
     if session._is_context_exhausted():
         return InfraExitCategory.CONTEXT_EXHAUSTED
-    if session._has_api_error() or any(p.search(result.stderr) for p in _API_ERROR_PATTERNS):
+    if session._has_api_error() or any(p.search(result.stderr) for p in _ALL_API_ERROR_PATTERNS):
         return InfraExitCategory.API_ERROR
     if result.returncode is not None and result.returncode < 0:
         return InfraExitCategory.PROCESS_KILLED

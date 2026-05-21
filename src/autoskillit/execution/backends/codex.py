@@ -335,7 +335,7 @@ class CodexEnvPolicy:
             and k not in AUTOSKILLIT_PRIVATE_ENV_VARS
             and not any(k.startswith(p) for p in CODEX_ENV_PREFIX_DENYLIST)
         }
-        if extras:
+        if extras is not None:
             out.update(extras)
         if required is not None:
             missing = required - frozenset(out)

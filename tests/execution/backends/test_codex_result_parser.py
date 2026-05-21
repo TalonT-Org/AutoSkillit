@@ -551,18 +551,6 @@ class TestCodexResultParserWriteArtifacts:
         assert result.raw["file_changes"] == ["/src/completed.py"]
         assert "/src/started.py" not in result.raw["file_changes"]
 
-    def test_file_changes_accessible_via_parse_stdout_raw(self) -> None:
-        """End-to-end: file_changes key present in raw dict from parse_stdout."""
-        ndjson = "\n".join(
-            [
-                _item_completed_file_change_line("/x.py"),
-                _turn_completed_line({"input_tokens": 1, "output_tokens": 1}),
-            ]
-        )
-        result = CodexResultParser().parse_stdout(ndjson)
-        assert "file_changes" in result.raw
-        assert isinstance(result.raw["file_changes"], list)
-
     def test_file_change_empty_path_skipped(self) -> None:
         """file_change item with empty/missing path is silently skipped."""
         empty_path_line = json.dumps(

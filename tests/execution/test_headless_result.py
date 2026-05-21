@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+import unittest.mock
 from unittest.mock import Mock
 
 import pytest
+import structlog.testing
 
-from autoskillit.core.types import KillReason, SubprocessResult, TerminationReason
+from autoskillit.core.types import KillReason, SubprocessResult, TerminationReason, WriteEvidence
 from autoskillit.execution.headless import _build_skill_result
 from tests.execution.conftest import _make_tool_use_line, _sr, _success_session_json
 
@@ -421,18 +423,12 @@ class TestIdleStallRecoveryWriteEvidence:
 
 class TestWriteEvidenceCrossCheck:
     def test_cross_check_logs_mismatch(self) -> None:
-        import unittest.mock
-
-        import structlog.testing
-
         stdout = _tool_use_ndjson("Edit", file_path="/a/b.py", old_string="a", new_string="b")
         result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
 
         from autoskillit.execution.headless import _headless_result
 
         def zero_evidence(*args, **kwargs):
-            from autoskillit.core.types import WriteEvidence
-
             return WriteEvidence.none_observed()
 
         cap = structlog.testing.CapturingLogger()

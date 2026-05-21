@@ -23,7 +23,9 @@ def claude_md() -> str:
 
 @pytest.fixture()
 def agents_md() -> str:
-    return (REPO_ROOT / "AGENTS.md").read_text()
+    path = REPO_ROOT / "AGENTS.md"
+    assert path.exists(), f"AGENTS.md not found at {path}"
+    return path.read_text()
 
 
 def test_claude_md_critical_rules_require_precommit(claude_md: str) -> None:

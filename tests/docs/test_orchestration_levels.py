@@ -63,6 +63,7 @@ def test_orchestration_doc_cross_references_levels():
 
 def test_agents_md_has_il_disambiguation():
     agents_md = REPO_ROOT / "AGENTS.md"
+    assert agents_md.exists(), f"AGENTS.md not found at {agents_md}"
     text = agents_md.read_text()
     assert "| IL-N" in text, "AGENTS.md must contain the '| IL-N' row in the disambiguation table"
     assert "| IL-NNN" in text, (

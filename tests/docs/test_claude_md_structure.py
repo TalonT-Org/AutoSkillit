@@ -10,37 +10,36 @@ AGENTS_MD = Path(__file__).resolve().parents[2] / "AGENTS.md"
 _SERVER_DIR = CLAUDE_MD.parent / "src" / "autoskillit" / "server"
 
 
-class TestClaudeMdImportStructure:
-    """Tests for CLAUDE.md @-import structure."""
+def test_claude_md_starts_with_agents_import() -> None:
+    content = CLAUDE_MD.read_text()
+    lines = [line for line in content.splitlines() if line.strip()]
+    assert lines[0] == "@AGENTS.md", (
+        f"First non-blank line of CLAUDE.md must be '@AGENTS.md', got {lines[0]!r}"
+    )
 
-    def test_claude_md_starts_with_agents_import(self) -> None:
-        content = CLAUDE_MD.read_text()
-        lines = [line for line in content.splitlines() if line.strip()]
-        assert lines[0] == "@AGENTS.md", (
-            f"First non-blank line of CLAUDE.md must be '@AGENTS.md', got {lines[0]!r}"
+
+def test_claude_md_under_100_lines() -> None:
+    content = CLAUDE_MD.read_text()
+    line_count = len(content.splitlines())
+    assert line_count < 100, f"CLAUDE.md must have under 100 lines, got {line_count}"
+
+
+def test_claude_md_no_shared_content_duplicated() -> None:
+    content = CLAUDE_MD.read_text()
+    shared_markers = [
+        "Core Project Goal",
+        "General Principles",
+        "GitHub API Call Discipline",
+        "GitHub Issue Body",
+        "| Package | IL | Purpose |",
+        "| IL-N (single digit)",
+        "Session Diagnostics",
+    ]
+    for marker in shared_markers:
+        assert marker not in content, (
+            f"CLAUDE.md must not contain shared content marker {marker!r} — "
+            f"it lives in AGENTS.md and is imported via @AGENTS.md"
         )
-
-    def test_claude_md_under_100_lines(self) -> None:
-        content = CLAUDE_MD.read_text()
-        line_count = len(content.splitlines())
-        assert line_count < 100, f"CLAUDE.md must have under 100 lines, got {line_count}"
-
-    def test_claude_md_no_shared_content_duplicated(self) -> None:
-        content = CLAUDE_MD.read_text()
-        shared_markers = [
-            "Core Project Goal",
-            "General Principles",
-            "GitHub API Call Discipline",
-            "GitHub Issue Body",
-            "| Package | IL | Purpose |",
-            "| IL-N (single digit)",
-            "Session Diagnostics",
-        ]
-        for marker in shared_markers:
-            assert marker not in content, (
-                f"CLAUDE.md must not contain shared content marker {marker!r} — "
-                f"it lives in AGENTS.md and is imported via @AGENTS.md"
-            )
 
 
 def test_agents_md_architecture_tree_has_subpackages() -> None:

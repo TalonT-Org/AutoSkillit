@@ -12,14 +12,7 @@ from autoskillit.core.types import (
 )
 from autoskillit.execution.session._exit_classification import classify_infra_exit
 from autoskillit.execution.session._session_model import ClaudeSessionResult
-
-OPENAI_ERROR_SIGNALS: list[str] = [
-    "rate_limit_exceeded",
-    "server_error",
-    "insufficient_quota",
-    "context_length_exceeded",
-    "model_not_found",
-]
+from tests.execution.conftest import CODEX_API_ERROR_SIGNAL_STRINGS
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -151,7 +144,7 @@ class TestClassifyInfraExit:
         result = _sr(returncode=1, stderr="")
         assert classify_infra_exit(session, result) == InfraExitCategory.CONTEXT_EXHAUSTED
 
-    @pytest.mark.parametrize("signal", OPENAI_ERROR_SIGNALS)
+    @pytest.mark.parametrize("signal", CODEX_API_ERROR_SIGNAL_STRINGS)
     def test_api_error_openai_patterns_in_stderr(self, signal: str) -> None:
         """OpenAI/Codex error pattern in stderr → API_ERROR."""
         session = ClaudeSessionResult(
@@ -163,7 +156,7 @@ class TestClassifyInfraExit:
         result = _sr(returncode=1, stderr=f"Error: {signal}")
         assert classify_infra_exit(session, result) == InfraExitCategory.API_ERROR
 
-    @pytest.mark.parametrize("signal", OPENAI_ERROR_SIGNALS)
+    @pytest.mark.parametrize("signal", CODEX_API_ERROR_SIGNAL_STRINGS)
     def test_api_error_openai_patterns_in_assistant_messages(self, signal: str) -> None:
         """OpenAI/Codex error pattern in assistant_messages → API_ERROR."""
         session = ClaudeSessionResult(

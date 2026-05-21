@@ -18,6 +18,14 @@ from autoskillit.core.types import SubprocessResult, TerminationReason
 from autoskillit.execution.session import ClaudeSessionResult
 from tests._helpers import make_tracing_config
 
+CODEX_API_ERROR_SIGNAL_STRINGS: tuple[str, ...] = (
+    "rate_limit_exceeded",
+    "server_error",
+    "insufficient_quota",
+    "context_length_exceeded",
+    "model_not_found",
+)
+
 
 def _mock_backend(
     *,

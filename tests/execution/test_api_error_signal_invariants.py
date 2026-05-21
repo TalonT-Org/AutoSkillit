@@ -21,7 +21,10 @@ from autoskillit.core.types import (
 from autoskillit.execution.headless._headless_result import _build_skill_result
 from autoskillit.execution.session._exit_classification import classify_infra_exit
 from autoskillit.execution.session._session_model import ClaudeSessionResult, parse_session_result
-from tests.execution.conftest import _make_synthetic_api_error_ndjson
+from tests.execution.conftest import (
+    CODEX_API_ERROR_SIGNAL_STRINGS,
+    _make_synthetic_api_error_ndjson,
+)
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -36,11 +39,7 @@ API_ERROR_SIGNALS: list[str] = [
     "network error",
     "connection reset",
     # OpenAI/Codex API error types
-    "rate_limit_exceeded",
-    "server_error",
-    "insufficient_quota",
-    "context_length_exceeded",
-    "model_not_found",
+    *CODEX_API_ERROR_SIGNAL_STRINGS,
 ]
 
 

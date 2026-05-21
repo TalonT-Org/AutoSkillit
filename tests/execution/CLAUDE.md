@@ -117,5 +117,6 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_claude_session_locator.py` | Tests for ClaudeSessionLocator |
 | `test_claude_stream_parser.py` | Tests for ClaudeStreamParser |
 | `test_backend_registry.py` | Tests for backend registry |
-| `test_codex_backend.py` | Tests for CodexFlags, CodexBackend, CodexStreamParser, CodexEnvPolicy, CodexSessionLocator |
+| `test_codex_backend.py` | Tests for CodexFlags, CodexBackend, CodexStreamParser, CodexSessionLocator |
+| `test_codex_env_policy.py` | Tests for CodexEnvPolicy three-layer scrub |
 | `test_codex_result_parser.py` | Tests for CodexResultParser |

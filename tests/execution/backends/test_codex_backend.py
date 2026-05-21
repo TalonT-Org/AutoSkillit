@@ -347,7 +347,7 @@ class TestCodexStreamParserConformance:
 
 
 class TestCodexEnvPolicy:
-    def test_build_env_passes_through_base(self) -> None:
+    def test_build_env_preserves_non_denied_vars(self) -> None:
         policy = CodexEnvPolicy()
         result = policy.build_env({"PATH": "/usr/bin", "HOME": "/root"})
         assert result["PATH"] == "/usr/bin"

@@ -68,6 +68,14 @@ class TestCodexEnvPolicy:
         result = policy.build_env(base, extras={"CUSTOM_VAR": "custom_value"})
         assert result["CUSTOM_VAR"] == "custom_value"
 
+    def test_extras_trusted_channel_bypasses_denylist(self) -> None:
+        # extras is a trusted-injection channel: callers can explicitly re-introduce
+        # denied vars (e.g. to forward credentials to a trusted subprocess).
+        policy = CodexEnvPolicy()
+        base = {"ANTHROPIC_API_KEY": "sk-from-base", "PATH": "/usr/bin"}
+        result = policy.build_env(base, extras={"ANTHROPIC_API_KEY": "sk-trusted-override"})
+        assert result["ANTHROPIC_API_KEY"] == "sk-trusted-override"
+
     def test_required_sentinel_raises_value_error(self) -> None:
         policy = CodexEnvPolicy()
         with pytest.raises(ValueError, match="MISSING_VAR"):

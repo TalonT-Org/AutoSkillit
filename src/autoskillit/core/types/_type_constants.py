@@ -14,7 +14,6 @@ from ._type_enums import FeatureLifecycle, FleetErrorCode, IssueLabelState
 
 __all__ = [
     "AUTOSKILLIT_INSTALLED_VERSION",
-    "CODEX_SCHEMA_VERSION",
     "AUTOSKILLIT_PRIVATE_ENV_VARS",
     "CONTEXT_EXHAUSTION_MARKER",
     "RESERVED_LOG_RECORD_KEYS",
@@ -36,6 +35,7 @@ __all__ = [
     "AGENT_PACK_REGISTRY",
     "CORE_PACKS",
     "CATEGORY_TAGS",
+    "CODEX_SCHEMA_VERSION",
     "TOOL_SUBSET_TAGS",
     "ALL_VISIBILITY_TAGS",
     "SKILL_COMMAND_PREFIX",

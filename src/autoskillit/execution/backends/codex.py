@@ -253,6 +253,12 @@ class CodexStreamParser:
                 kind=BackendEventKind.ERROR,
                 is_terminal=True,
                 has_marker=False,
+                backend_data=CodexEventData(
+                    record_type="error",
+                    thread_id="",
+                    item_type="",
+                    raw=obj,
+                ),
             )
 
         return SessionEvent(

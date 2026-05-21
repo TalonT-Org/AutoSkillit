@@ -13,6 +13,7 @@ from autoskillit.core import (
     CodexEventData,
     CodingAgentBackend,
     EnvPolicy,
+    OutputFormat,
     ResultParser,
     SessionLocator,
     StreamParser,
@@ -35,9 +36,6 @@ class TestCodexFlags:
 
     def test_str_json_equals_double_dash_json(self) -> None:
         assert str(CodexFlags.JSON) == "--json"
-
-    def test_sandbox_flag_value_string_literal(self) -> None:
-        assert CodexFlags.SANDBOX == "--sandbox"
 
     def test_all_members_present(self) -> None:
         expected = {
@@ -393,9 +391,6 @@ class TestCodexBackendProtocol:
     def test_isinstance_coding_agent_backend(self) -> None:
         assert isinstance(CodexBackend(), CodingAgentBackend)
 
-    def test_coding_agent_backend_is_runtime_protocol(self) -> None:
-        assert getattr(CodingAgentBackend, "_is_runtime_protocol", False) is True
-
     def test_binary_name_is_codex(self) -> None:
         assert CodexBackend().binary_name() == "codex"
 
@@ -436,10 +431,6 @@ class TestCodexHeadlessCmd:
             "never",
             "do stuff",
         )
-
-    def test_json_flag_present(self) -> None:
-        spec = CodexBackend().build_headless_cmd("do stuff")
-        assert "--json" in spec.cmd
 
     def test_sandbox_with_workspace_write(self) -> None:
         spec = CodexBackend().build_headless_cmd("do stuff")
@@ -515,3 +506,11 @@ class TestCodexResumeCmd:
     def test_json_flag_present_in_resume(self) -> None:
         spec = CodexBackend().build_resume_cmd(resume_session_id="abc123", prompt="continue")
         assert "--json" in spec.cmd
+
+    def test_non_json_output_format_omits_json_flag(self) -> None:
+        spec = CodexBackend().build_resume_cmd(
+            resume_session_id="abc123",
+            prompt="continue",
+            output_format=OutputFormat.STREAM_JSON,
+        )
+        assert "--json" not in spec.cmd

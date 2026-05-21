@@ -254,7 +254,7 @@ class TestCodexStreamParser:
         assert event.kind == BackendEventKind.ERROR
         assert event.is_terminal is True
 
-    def test_parse_line_item_completed_yields_ignored(self) -> None:
+    def test_parse_line_item_completed_unknown_type_yields_ignored(self) -> None:
         parser = CodexStreamParser()
         line = json.dumps({"type": "item.completed", "item": {"type": "reasoning"}})
         event = parser.parse_line(line)

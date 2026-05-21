@@ -27,7 +27,7 @@ _API_ERROR_PATTERNS: tuple[re.Pattern[str], ...] = (
 
 _CODEX_API_ERROR_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"rate_limit_exceeded", re.IGNORECASE),
-    re.compile(r"server_error", re.IGNORECASE),
+    re.compile(r"\bserver_error\b", re.IGNORECASE),
     re.compile(r"insufficient_quota", re.IGNORECASE),
     re.compile(r"context_length_exceeded", re.IGNORECASE),
     re.compile(r"model_not_found", re.IGNORECASE),

@@ -43,9 +43,8 @@ class TestCodexFixturePackage:
         assert CODEX_SCHEMA_VERSION == 1
 
     def test_all_filename_constants_end_in_ndjson(self) -> None:
-        for name in CODEX_ALL:
-            if name.endswith(".ndjson"):
-                assert name.endswith(".ndjson")
+        for name in ALL_FIXTURE_NAMES:
+            assert name.endswith(".ndjson")
 
     def test_fixture_path_returns_existing_file(self) -> None:
         for name in ALL_FIXTURE_NAMES:
@@ -56,21 +55,21 @@ class TestCodexFixturePackage:
 
 
 class TestCodexFixtureValidity:
-    def test_every_line_is_valid_json(self, name: str = "") -> None:
+    def test_every_line_is_valid_json(self) -> None:
         name = "happy_path_single_turn.ndjson"
         text = fixture_path(name).read_text()
         for line in text.strip().splitlines():
             if line.strip():
                 json.loads(line)
 
-    def test_first_line_is_thread_started(self, name: str = "") -> None:
+    def test_first_line_is_thread_started(self) -> None:
         name = "happy_path_single_turn.ndjson"
         events = _load_events(name)
         assert events[0]["type"] == "thread.started"
         assert isinstance(events[0]["thread_id"], str)
         assert events[0]["thread_id"]
 
-    def test_all_lines_are_dicts(self, name: str = "") -> None:
+    def test_all_lines_are_dicts(self) -> None:
         name = "happy_path_single_turn.ndjson"
         events = _load_events(name)
         for event in events:
@@ -91,6 +90,7 @@ class TestHappyPathFixture:
                         if "%%ORDER_UP%%" in text:
                             assert _marker_is_standalone(text, "%%ORDER_UP%%")
                             return
+        pytest.fail("%%ORDER_UP%% marker not found in any item.completed message event")
 
     def test_turn_completed_has_nonzero_usage(self) -> None:
         events = _load_events(HAPPY_PATH_SINGLE_TURN)
@@ -100,6 +100,7 @@ class TestHappyPathFixture:
                 assert usage.get("input_tokens", 0) > 0
                 assert usage.get("output_tokens", 0) > 0
                 return
+        pytest.fail("No turn.completed event found in fixture")
 
     def test_reasoning_output_tokens_zero(self) -> None:
         events = _load_events(HAPPY_PATH_SINGLE_TURN)
@@ -108,6 +109,7 @@ class TestHappyPathFixture:
                 usage = event.get("usage", {})
                 assert usage.get("reasoning_output_tokens", -1) == 0
                 return
+        pytest.fail("No turn.completed event found in fixture")
 
     def test_has_three_item_types(self) -> None:
         events = _load_events(HAPPY_PATH_SINGLE_TURN)
@@ -124,7 +126,7 @@ class TestMultiTurnFixture:
     def test_turn2_input_tokens_greater_than_turn1(self) -> None:
         events = _load_events(MULTI_TURN_WITH_COMPACTION)
         turn_completed_tokens = [
-            e.get("usage", {}).get("input_tokens")
+            e.get("usage", {}).get("input_tokens", 0)
             for e in events
             if e.get("type") == "turn.completed"
         ]
@@ -152,6 +154,7 @@ class TestTurnFailedFixture:
             if event.get("type") == "turn.failed":
                 assert event.get("error", {}).get("message")
                 return
+        pytest.fail("No turn.failed event found in fixture")
 
     def test_has_partial_item_started(self) -> None:
         events = _load_events(TURN_FAILED_ERROR)
@@ -171,6 +174,7 @@ class TestReasoningFixture:
             if event.get("type") == "turn.completed":
                 assert event.get("usage", {}).get("reasoning_output_tokens", 0) > 0
                 return
+        pytest.fail("No turn.completed event found in fixture")
 
     def test_has_reasoning_item(self) -> None:
         events = _load_events(SESSION_WITH_REASONING)
@@ -195,6 +199,7 @@ class TestReasoningFixture:
                         if "%%ORDER_UP%%" in text:
                             assert _marker_is_standalone(text, "%%ORDER_UP%%")
                             return
+        pytest.fail("%%ORDER_UP%% marker not found in any item.completed message event")
 
 
 class TestMcpToolCallFixture:
@@ -217,6 +222,7 @@ class TestMcpToolCallFixture:
                 result = event.get("item", {}).get("result", {})
                 assert result.get("content")
                 return
+        pytest.fail("No item.completed mcp_tool_call event found in fixture")
 
 
 class TestCodexFixturesParseWithBackend:

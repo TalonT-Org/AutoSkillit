@@ -562,7 +562,7 @@ class TestWriteCallCountPropagation:
             _make_result(returncode=0, stdout=stdout),
             skill_command="/investigate something",
         )
-        assert sr.write_call_count == 4
+        assert sr.evidence.write_call_count == 4
 
     def test_write_count_zero_when_no_writes(self) -> None:
         stdout = _ndjson_with_tool_uses(["Read", "Grep", "Glob"])
@@ -570,7 +570,7 @@ class TestWriteCallCountPropagation:
             _make_result(returncode=0, stdout=stdout),
             skill_command="/investigate something",
         )
-        assert sr.write_call_count == 0
+        assert sr.evidence.write_call_count == 0
 
     def test_write_count_in_json_output(self) -> None:
         stdout = _ndjson_with_tool_uses(["Edit", "Write"])
@@ -609,7 +609,7 @@ class TestFilesystemWriteDetection:
             skill_command="/autoskillit:prepare-pr args",
             write_behavior=WriteBehaviorSpec(mode="always"),
         )
-        assert sr.write_call_count == 0
+        assert sr.evidence.write_call_count == 0
 
     def test_fs_writes_detected_suppresses_zero_writes_gate(self) -> None:
         """When fs_writes_detected=True, zero_writes gate must NOT fire
@@ -623,7 +623,7 @@ class TestFilesystemWriteDetection:
         )
         assert sr.success is True
         assert sr.subtype != "zero_writes"
-        assert sr.fs_writes_detected is True
+        assert sr.evidence.fs_writes_detected is True
 
     def test_fs_writes_detected_enables_contract_recovery(self) -> None:
         """When fs_writes_detected=True, CONTRACT_RECOVERY gate must fire
@@ -723,7 +723,7 @@ class TestGitWritesDetection:
         )
         assert sr.success is True
         assert sr.subtype != "zero_writes"
-        assert sr.git_writes_detected is True
+        assert sr.evidence.git_writes_detected is True
 
     def test_git_writes_detected_false_still_allows_gate(self) -> None:
         """When git_writes_detected=False and write_call_count == 0,
@@ -786,6 +786,36 @@ class TestWriteExpectedWhenPatternSync:
             f"{skill_name}: production pattern is {contract.write_expected_when[0]!r} "
             f"but FIXTURE_CONDITIONAL_PATTERN is {FIXTURE_CONDITIONAL_PATTERN!r}. "
             f"Update the constant and all WriteBehaviorSpec(expected_when=...) calls."
+        )
+
+
+class TestContractDrivenAlwaysWriteSkills:
+    """Parametrized coverage: every write_behavior=always skill must not trigger zero_writes."""
+
+    @staticmethod
+    def _always_write_skills() -> list[str]:
+        from autoskillit.recipe.contracts import load_bundled_manifest
+
+        manifest = load_bundled_manifest()
+        return [
+            name
+            for name, contract in manifest.items()
+            if getattr(contract, "write_behavior", None) == "always"
+        ]
+
+    @pytest.mark.parametrize("skill_name", _always_write_skills.__func__())  # type: ignore[attr-defined]
+    def test_always_write_skill_with_edits_passes(self, skill_name: str) -> None:
+        stdout = _ndjson_with_tool_uses(["Edit", "Write"])
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command=f"/autoskillit:{skill_name} arg",
+            write_behavior=WriteBehaviorSpec(mode="always"),
+        )
+        assert sr.evidence.has_evidence is True, (
+            f"Skill {skill_name!r} (write_behavior=always) must detect write evidence"
+        )
+        assert sr.subtype != "zero_writes", (
+            f"Skill {skill_name!r} must not trigger zero_writes gate when writes are present"
         )
 
 

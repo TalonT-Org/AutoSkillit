@@ -18,6 +18,7 @@ from autoskillit.core.types import (
     RetryReason,
     SessionOutcome,
     SkillResult,
+    WriteEvidence,
 )
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
@@ -683,9 +684,9 @@ def test_git_writes_detected_in_has_progress_evidence() -> None:
         retry_reason=RetryReason.NONE,
         stderr="",
         worktree_path=None,
-        fs_writes_detected=False,
-        write_call_count=0,
-        git_writes_detected=True,
+        evidence=WriteEvidence(
+            fs_writes_detected=False, write_call_count=0, git_writes_detected=True
+        ),
     )
     assert sr.has_progress_evidence is True
 
@@ -703,7 +704,9 @@ def test_skill_result_git_writes_detected_in_json() -> None:
         needs_retry=False,
         retry_reason=RetryReason.NONE,
         stderr="",
-        git_writes_detected=True,
+        evidence=WriteEvidence(
+            write_call_count=0, fs_writes_detected=False, git_writes_detected=True
+        ),
     )
     data = json.loads(sr.to_json())
     assert data["git_writes_detected"] is True
@@ -721,7 +724,9 @@ def test_skill_result_git_writes_detected_false_included() -> None:
         needs_retry=False,
         retry_reason=RetryReason.NONE,
         stderr="",
-        git_writes_detected=False,
+        evidence=WriteEvidence(
+            write_call_count=0, fs_writes_detected=False, git_writes_detected=False
+        ),
     )
     data = json.loads(sr.to_json())
     assert "git_writes_detected" in data

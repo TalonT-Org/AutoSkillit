@@ -212,7 +212,7 @@ class TestBackendDelegatedWriteToolNames:
         )
         result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
         sr = _build_skill_result(result, backend=None)
-        assert sr.write_call_count == 2
+        assert sr.evidence.write_call_count == 2
 
     def test_backend_provides_custom_tool_names(self):
         """Custom backend.write_tool_names() overrides the tool name set."""
@@ -228,7 +228,7 @@ class TestBackendDelegatedWriteToolNames:
         )
         result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
         sr = _build_skill_result(result, backend=mock_backend)
-        assert sr.write_call_count == 1
+        assert sr.evidence.write_call_count == 1
 
     def test_backend_none_default_preserves_behavior(self):
         """backend=None with no Write/Edit tools yields write_call_count=0."""
@@ -239,7 +239,7 @@ class TestBackendDelegatedWriteToolNames:
         )
         result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
         sr = _build_skill_result(result, backend=None)
-        assert sr.write_call_count == 0
+        assert sr.evidence.write_call_count == 0
 
     def test_build_skill_result_threads_backend_to_parse_stdout(self, monkeypatch):
         """_build_skill_result passes backend to _parse_stdout on normal exit."""
@@ -373,3 +373,76 @@ class TestParseStdout:
         assert with_backend.result == without_backend.result
         assert with_backend.session_id == without_backend.session_id
         assert with_backend.session_complete == without_backend.session_complete
+
+
+class TestStaleRecoveryWriteEvidence:
+    def test_stale_recovery_carries_write_evidence(self):
+        stdout = (
+            _tool_use_ndjson("Edit", file_path="/a/b.py", old_string="a", new_string="b")
+            + "\n"
+            + _success_result_json("done")
+        )
+        result = _stale_result(kill_reason=KillReason.NATURAL_EXIT, stdout=stdout)
+        sr = _build_skill_result(result, completion_marker="done")
+        assert sr.evidence.write_call_count > 0, (
+            "STALE recovery must propagate write evidence from parsed stdout"
+        )
+
+    def test_stale_failure_carries_write_evidence(self):
+        stdout = _tool_use_ndjson("Edit", file_path="/a/b.py", old_string="a", new_string="b")
+        result = _stale_result(kill_reason=KillReason.NATURAL_EXIT, stdout=stdout)
+        sr = _build_skill_result(result)
+        assert sr.evidence.write_call_count > 0, (
+            "STALE failure must propagate write evidence from parsed stdout"
+        )
+
+
+class TestIdleStallRecoveryWriteEvidence:
+    def test_idle_stall_recovery_carries_write_evidence(self):
+        stdout = (
+            _tool_use_ndjson("Edit", file_path="/a/b.py", old_string="a", new_string="b")
+            + "\n"
+            + _success_result_json("done")
+        )
+        result = _idle_stall_result_with_kill(kill_reason=KillReason.NATURAL_EXIT, stdout=stdout)
+        sr = _build_skill_result(result, completion_marker="done")
+        assert sr.evidence.write_call_count > 0, (
+            "IDLE_STALL recovery must propagate write evidence from parsed stdout"
+        )
+
+    def test_idle_stall_failure_carries_write_evidence(self):
+        stdout = _tool_use_ndjson("Edit", file_path="/a/b.py", old_string="a", new_string="b")
+        result = _idle_stall_result_with_kill(kill_reason=KillReason.NATURAL_EXIT, stdout=stdout)
+        sr = _build_skill_result(result)
+        assert sr.evidence.write_call_count > 0, (
+            "IDLE_STALL failure must propagate write evidence from parsed stdout"
+        )
+
+
+class TestWriteEvidenceCrossCheck:
+    def test_cross_check_logs_mismatch(self, caplog: pytest.LogCaptureFixture) -> None:
+        import logging
+
+        stdout = _tool_use_ndjson("Edit", file_path="/a/b.py", old_string="a", new_string="b")
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+
+        from autoskillit.execution.headless import _headless_result
+
+        original_compute = _headless_result._compute_write_evidence
+
+        def zero_evidence(*args, **kwargs):
+            from autoskillit.core.types import WriteEvidence
+
+            return WriteEvidence.none_observed()
+
+        import unittest.mock
+
+        with unittest.mock.patch.object(
+            _headless_result, "_compute_write_evidence", zero_evidence
+        ):
+            with caplog.at_level(logging.WARNING):
+                _build_skill_result(result)
+
+        assert any(
+            "write_call_count_cross_check_mismatch" in record.message for record in caplog.records
+        ), "Cross-check must warn when count=0 but stdout contains write tool names"

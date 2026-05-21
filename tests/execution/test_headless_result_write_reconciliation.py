@@ -39,7 +39,7 @@ class TestEmptyOutputWriteReconciliation:
         assert sr.needs_retry is True
         assert sr.retry_reason == RetryReason.COMPLETED_NO_FLUSH
         assert sr.retry_reason != RetryReason.EMPTY_OUTPUT
-        assert sr.write_call_count > 0
+        assert sr.evidence.write_call_count > 0
 
     def test_empty_output_with_fs_writes_only_becomes_completed_no_flush(self) -> None:
         """fs_writes_detected alone (no tool_uses) triggers reclassification."""

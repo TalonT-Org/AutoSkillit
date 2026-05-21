@@ -264,6 +264,7 @@ from .types import TokenLog as TokenLog
 from .types import ValidatedAddDir as ValidatedAddDir
 from .types import WorkspaceManager as WorkspaceManager
 from .types import WriteBehaviorSpec as WriteBehaviorSpec
+from .types import WriteEvidence as WriteEvidence
 from .types import WriteExpectedResolver as WriteExpectedResolver
 from .types import assert_prompt_sentinel as assert_prompt_sentinel
 from .types import extract_path_arg as extract_path_arg

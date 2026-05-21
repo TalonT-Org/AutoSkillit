@@ -21,6 +21,7 @@ from autoskillit.core import (
     SkillResult,
     TerminationReason,
     WriteBehaviorSpec,
+    WriteEvidence,
     get_logger,
     truncate_text,
 )
@@ -128,6 +129,27 @@ def _parse_stdout(stdout: str, backend: CodingAgentBackend | None = None) -> Cla
     return parse_session_result(stdout)
 
 
+def _compute_write_evidence(
+    session: ClaudeSessionResult,
+    fs_writes_detected: bool,
+    git_writes_detected: bool,
+    backend: CodingAgentBackend | None = None,
+) -> WriteEvidence:
+    write_names = (
+        backend.write_tool_names() if backend is not None else frozenset({"Write", "Edit"})
+    )
+    write_call_count = sum(1 for t in session.tool_uses if t.get("name") in write_names)
+    return WriteEvidence(
+        write_call_count=write_call_count,
+        fs_writes_detected=fs_writes_detected,
+        git_writes_detected=git_writes_detected,
+    )
+
+
+def _stdout_mentions_write_tools(stdout: str) -> bool:
+    return '"Edit"' in stdout or '"Write"' in stdout
+
+
 def _make_terminated_result(
     *,
     result: SubprocessResult,
@@ -137,6 +159,7 @@ def _make_terminated_result(
     subtype: str,
     needs_retry: bool,
     retry_reason: RetryReason,
+    evidence: WriteEvidence,
     provider_used: str = "",
 ) -> SkillResult:
     """Construct SkillResult for infrastructure-terminated sessions (stale/idle_stall)."""
@@ -151,6 +174,7 @@ def _make_terminated_result(
         retry_reason=retry_reason,
         stderr=result.stderr if result.stderr else "",
         token_usage=session.token_usage,
+        evidence=evidence,
         kill_reason=result.kill_reason,
         last_stop_reason=session.last_stop_reason,
         lifespan_started=session.lifespan_started,
@@ -198,6 +222,9 @@ def _build_skill_result(
     if result.termination == TerminationReason.STALE:
         # Attempt to recover from stdout before declaring stale failure.
         stale_session = _parse_stdout(result.stdout, backend=backend)
+        stale_evidence = _compute_write_evidence(
+            stale_session, fs_writes_detected, git_writes_detected, backend
+        )
         stale_returncode = result.returncode if result.returncode is not None else -1
         can_attempt_stale_recovery = (
             stale_session.subtype == CliSubtype.SUCCESS
@@ -224,6 +251,7 @@ def _build_skill_result(
                     subtype="recovered_from_stale",
                     needs_retry=False,
                     retry_reason=RetryReason.NONE,
+                    evidence=stale_evidence,
                     provider_used=provider_used,
                 )
         # No valid result in stdout — fall through to original stale response
@@ -247,12 +275,16 @@ def _build_skill_result(
             subtype="stale",
             needs_retry=True,
             retry_reason=RetryReason.STALE,
+            evidence=stale_evidence,
             provider_used=provider_used,
         )
         return _apply_budget_guard(stale_sr, skill_command, audit, max_consecutive_retries)
 
     if result.termination == TerminationReason.IDLE_STALL:
         idle_session = _parse_stdout(result.stdout, backend=backend)
+        idle_evidence = _compute_write_evidence(
+            idle_session, fs_writes_detected, git_writes_detected, backend
+        )
         idle_returncode = result.returncode if result.returncode is not None else -1
         can_attempt_idle_stall_recovery = (
             idle_session.subtype == CliSubtype.SUCCESS
@@ -279,6 +311,7 @@ def _build_skill_result(
                     subtype="recovered_from_idle_stall",
                     needs_retry=False,
                     retry_reason=RetryReason.NONE,
+                    evidence=idle_evidence,
                     provider_used=provider_used,
                 )
         _capture_failure(
@@ -304,6 +337,7 @@ def _build_skill_result(
             subtype="idle_stall",
             needs_retry=True,
             retry_reason=RetryReason.IDLE_STALL,
+            evidence=idle_evidence,
             provider_used=provider_used,
         )
         return _apply_budget_guard(idle_sr, skill_command, audit, max_consecutive_retries)
@@ -326,11 +360,15 @@ def _build_skill_result(
         returncode = result.returncode if result.returncode is not None else -1
         session = _parse_stdout(result.stdout, backend=backend)
 
-    write_names = (
-        backend.write_tool_names() if backend is not None else frozenset({"Write", "Edit"})
-    )
-    write_call_count = sum(1 for t in session.tool_uses if t.get("name") in write_names)
-    _has_write_evidence = write_call_count >= 1 or fs_writes_detected or git_writes_detected
+    evidence = _compute_write_evidence(session, fs_writes_detected, git_writes_detected, backend)
+    _has_write_evidence = evidence.has_evidence
+
+    if evidence.write_call_count == 0 and _stdout_mentions_write_tools(result.stdout):
+        logger.warning(
+            "write_call_count_cross_check_mismatch",
+            stdout_length=len(result.stdout),
+            tool_use_count=len(session.tool_uses),
+        )
 
     # Channel B drain-race: recover from assistant_messages if type=result was not flushed.
     match result.channel_confirmation:
@@ -423,7 +461,10 @@ def _build_skill_result(
             and not _check_expected_patterns(session.result.strip(), expected_output_patterns)
         ):
             artifact_recovered = _synthesize_from_write_artifacts(
-                session, list(expected_output_patterns), write_call_count, fs_writes_detected
+                session,
+                list(expected_output_patterns),
+                evidence.write_call_count,
+                evidence.fs_writes_detected,
             )
             if artifact_recovered is not None:
                 session = artifact_recovered
@@ -550,9 +591,7 @@ def _build_skill_result(
             worktree_path=extracted_worktree_path,
             cli_subtype=session.subtype,
             write_path_warnings=write_path_warnings,
-            write_call_count=write_call_count,
-            fs_writes_detected=fs_writes_detected,
-            git_writes_detected=git_writes_detected,
+            evidence=evidence,
             kill_reason=result.kill_reason,
             last_stop_reason=session.last_stop_reason,
             lifespan_started=session.lifespan_started,
@@ -574,9 +613,7 @@ def _build_skill_result(
             worktree_path=extracted_worktree_path,
             cli_subtype=session.subtype,
             write_path_warnings=write_path_warnings,
-            write_call_count=write_call_count,
-            fs_writes_detected=fs_writes_detected,
-            git_writes_detected=git_writes_detected,
+            evidence=evidence,
             kill_reason=result.kill_reason,
             last_stop_reason=session.last_stop_reason,
             lifespan_started=session.lifespan_started,
@@ -640,7 +677,7 @@ def _build_skill_result(
         retry_reason=str(sr.retry_reason),
         is_error=sr.is_error,
         result_len=len(sr.result),
-        write_call_count=sr.write_call_count,
+        write_call_count=sr.evidence.write_call_count,
     )
     return sr
 

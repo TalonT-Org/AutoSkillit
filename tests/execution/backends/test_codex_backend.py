@@ -312,17 +312,17 @@ class TestCodexImportContract:
     def test_import_codex_flags_from_module(self) -> None:
         from autoskillit.execution.backends.codex import CodexFlags
 
-        assert CodexFlags is not None
+        assert issubclass(CodexFlags, StrEnum)
 
     def test_import_codex_backend_from_package(self) -> None:
         from autoskillit.execution.backends import CodexBackend
 
-        assert CodexBackend is not None
+        assert issubclass(CodexBackend, CodingAgentBackend)
 
     def test_import_codex_backend_from_execution(self) -> None:
         from autoskillit.execution import CodexBackend
 
-        assert CodexBackend is not None
+        assert issubclass(CodexBackend, CodingAgentBackend)
 
     def test_codex_backend_not_in_core_types(self) -> None:
         from autoskillit.core.types import __all__ as core_all

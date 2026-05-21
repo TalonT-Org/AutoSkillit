@@ -9,6 +9,7 @@ from .claude import (
     ClaudeSessionLocator,
     ClaudeStreamParser,
 )
+from .codex import CodexResultParser
 
 BACKEND_REGISTRY: dict[str, type[CodingAgentBackend]] = {
     "claude-code": ClaudeCodeBackend,
@@ -32,5 +33,6 @@ __all__ = [
     "ClaudeResultParser",
     "ClaudeSessionLocator",
     "ClaudeStreamParser",
+    "CodexResultParser",
     "get_backend",
 ]

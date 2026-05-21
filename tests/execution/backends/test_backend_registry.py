@@ -37,6 +37,7 @@ class TestBackendRegistry:
             "ClaudeResultParser",
             "ClaudeSessionLocator",
             "ClaudeStreamParser",
+            "CodexResultParser",
             "get_backend",
         }
         assert set(all_exports) == expected

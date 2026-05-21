@@ -101,6 +101,11 @@ CLAUDE.md:
   - contracts/
   - docs/
 
+AGENTS.md:
+  - infra/
+  - contracts/
+  - docs/
+
 Taskfile.yml:
   - infra/
 

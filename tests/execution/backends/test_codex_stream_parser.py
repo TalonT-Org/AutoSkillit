@@ -348,6 +348,8 @@ class TestCodexStreamParserFixtures:
         second_usage = completions[1].backend_data.usage
         assert first_usage is not None
         assert second_usage is not None
+        # Compaction causes cumulative input growth: turn 2 includes the compacted
+        # summary of turn 1, so input_tokens is monotonically increasing across turns.
         assert second_usage["input_tokens"] > first_usage["input_tokens"]
 
     def test_turn_failed_fixture_yields_terminal_event(self) -> None:
@@ -385,4 +387,4 @@ class TestCodexStreamParserFixtures:
 
 class TestCodexStreamParserConformance:
     def test_isinstance_stream_parser_protocol(self) -> None:
-        assert isinstance(CodexStreamParser(""), StreamParser)
+        assert isinstance(CodexStreamParser(), StreamParser)

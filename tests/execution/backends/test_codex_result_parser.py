@@ -373,8 +373,6 @@ class TestCodexResultParserCumulativeTokens:
         canonical = result.raw["canonical_token_usage"]
         assert canonical["input_tokens"] == 350
         assert canonical["output_tokens"] == 140
-        assert canonical["input_tokens"] != 670
-        assert canonical["output_tokens"] != 270
 
     def test_cache_read_mapped_and_cache_write_none(self) -> None:
         """Scenario 3: cached_input_tokens → cache_read_tokens; cache_write_tokens is None."""

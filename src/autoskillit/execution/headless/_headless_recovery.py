@@ -185,7 +185,9 @@ def _extract_missing_token_hints(
         # Skip if already satisfied
         if re.search(pattern, session.output):
             continue
-        # Collect absolute Write/Edit paths; use the LAST one (final deliverable)
+        # Collect absolute Write/Edit paths; use the LAST one (final deliverable).
+        # tool_uses and token_usage live in .raw (not promoted to typed attrs) because
+        # they vary by backend and are absent from non-Claude AgentSessionResult payloads.
         candidate_paths = [
             t.get("file_path", "")
             for t in session.raw.get("tool_uses", [])
@@ -278,10 +280,10 @@ async def _attempt_contract_nudge(
         logger.warning("nudge_parse_stdout_failed", exc_info=True)
         return None
     combined_result = skill_result.result + "\n" + nudge_session.output
+    _nudge_usage = nudge_session.raw.get("token_usage")
 
     if retry_reason == RetryReason.EARLY_STOP:
         if completion_marker in nudge_session.output:
-            _nudge_usage = nudge_session.raw.get("token_usage")
             logger.info(
                 "nudge_recovery_success",
                 session_id=skill_result.session_id,
@@ -294,9 +296,7 @@ async def _attempt_contract_nudge(
                 subtype="success",
                 needs_retry=False,
                 retry_reason=RetryReason.NONE,
-                token_usage=_merge_token_usage(
-                    skill_result.token_usage, nudge_session.raw.get("token_usage")
-                ),
+                token_usage=_merge_token_usage(skill_result.token_usage, _nudge_usage),
             )
         logger.debug(
             "nudge_early_stop_marker_not_found", nudge_result_len=len(nudge_session.output)
@@ -310,7 +310,6 @@ async def _attempt_contract_nudge(
         )
         return None
 
-    _nudge_usage = nudge_session.raw.get("token_usage")
     logger.info(
         "nudge_recovery_success",
         session_id=skill_result.session_id,
@@ -323,9 +322,7 @@ async def _attempt_contract_nudge(
         subtype="success",
         needs_retry=False,
         retry_reason=RetryReason.NONE,
-        token_usage=_merge_token_usage(
-            skill_result.token_usage, nudge_session.raw.get("token_usage")
-        ),
+        token_usage=_merge_token_usage(skill_result.token_usage, _nudge_usage),
     )
 
 

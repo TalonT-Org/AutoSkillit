@@ -227,7 +227,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_figure_spec": frozenset({"core", "report"}),
     "_type_session_env": frozenset({"core", "cli"}),
     "_type_capture": frozenset({"core", "fleet", "recipe", "cli"}),
-    "_type_token": frozenset({"core"}),
+    "_type_token": frozenset({"core", "execution"}),
 }
 
 # Narrow per-module cascade for execution/. Modules not listed here fall through

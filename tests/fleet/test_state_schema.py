@@ -382,6 +382,7 @@ class TestDispatchRecordToDict:
             "sidecar_path",
             "attempt_history",
             "resume_checkpoint",
+            "labels_cleaned",
         }
 
     def test_dispatch_record_to_dict_token_usage_is_shallow_copy(self) -> None:

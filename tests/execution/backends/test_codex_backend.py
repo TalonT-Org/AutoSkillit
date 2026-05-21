@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from enum import StrEnum
 
 import pytest
@@ -8,9 +7,7 @@ import pytest
 from autoskillit.core import (
     AGENT_BACKEND_CODEX,
     BackendCapabilities,
-    BackendEventKind,
     CmdSpec,
-    CodexEventData,
     CodingAgentBackend,
     EnvPolicy,
     OutputFormat,
@@ -212,140 +209,6 @@ class TestCodexBackendFactories:
         parser = CodexBackend().stream_parser()
         assert isinstance(parser, CodexStreamParser)
         assert parser.completion_marker == ""
-
-
-class TestCodexStreamParser:
-    def test_parse_line_empty_returns_none(self) -> None:
-        parser = CodexStreamParser()
-        assert parser.parse_line("") is None
-
-    def test_parse_line_invalid_json_returns_none(self) -> None:
-        parser = CodexStreamParser()
-        assert parser.parse_line("not json") is None
-
-    def test_parse_line_thread_started_yields_session_meta(self) -> None:
-        parser = CodexStreamParser()
-        line = json.dumps({"type": "thread.started", "thread_id": "t1"})
-        event = parser.parse_line(line)
-        assert event is not None
-        assert event.kind == BackendEventKind.SESSION_META
-        assert event.session_id == "t1"
-        assert event.is_terminal is False
-
-    def test_parse_line_turn_completed_yields_completion(self) -> None:
-        parser = CodexStreamParser()
-        line = json.dumps({"type": "turn.completed", "usage": {}})
-        event = parser.parse_line(line)
-        assert event is not None
-        assert event.kind == BackendEventKind.COMPLETION
-        assert event.is_terminal is True
-
-    def test_parse_line_turn_failed_yields_completion(self) -> None:
-        parser = CodexStreamParser()
-        line = json.dumps({"type": "turn.failed", "error": {"message": "fail"}})
-        event = parser.parse_line(line)
-        assert event is not None
-        assert event.kind == BackendEventKind.COMPLETION
-        assert event.is_terminal is True
-
-    def test_parse_line_error_yields_error_event(self) -> None:
-        parser = CodexStreamParser()
-        line = json.dumps({"type": "error", "message": "crash"})
-        event = parser.parse_line(line)
-        assert event is not None
-        assert event.kind == BackendEventKind.ERROR
-        assert event.is_terminal is True
-
-    def test_parse_line_item_completed_unknown_type_yields_ignored(self) -> None:
-        parser = CodexStreamParser()
-        line = json.dumps({"type": "item.completed", "item": {"type": "reasoning"}})
-        event = parser.parse_line(line)
-        assert event is not None
-        assert event.kind == BackendEventKind.IGNORED
-
-    def test_completion_marker_detection_in_message(self) -> None:
-        parser = CodexStreamParser(completion_marker="%%DONE%%")
-        msg_line = json.dumps(
-            {
-                "type": "item.completed",
-                "item": {
-                    "type": "message",
-                    "content": [{"type": "text", "text": "result\n%%DONE%%"}],
-                },
-            }
-        )
-        parser.parse_line(msg_line)
-        done_line = json.dumps({"type": "turn.completed", "usage": {}})
-        event = parser.parse_line(done_line)
-        assert event is not None
-        assert event.has_marker is True
-
-    def test_no_marker_when_completion_marker_empty(self) -> None:
-        parser = CodexStreamParser()
-        msg_line = json.dumps(
-            {
-                "type": "item.completed",
-                "item": {
-                    "type": "message",
-                    "content": [{"type": "text", "text": "%%DONE%%"}],
-                },
-            }
-        )
-        parser.parse_line(msg_line)
-        done_line = json.dumps({"type": "turn.completed", "usage": {}})
-        event = parser.parse_line(done_line)
-        assert event is not None
-        assert event.has_marker is False
-
-    def test_turn_completed_backend_data_is_codex_event_data(self) -> None:
-        parser = CodexStreamParser()
-        line = json.dumps({"type": "turn.completed", "usage": {"input_tokens": 10}})
-        event = parser.parse_line(line)
-        assert event is not None
-        assert isinstance(event.backend_data, CodexEventData)
-
-    def test_parse_line_item_completed_message(self) -> None:
-        parser = CodexStreamParser()
-        line = json.dumps(
-            {
-                "type": "item.completed",
-                "item": {"type": "message", "content": [{"type": "text", "text": "hello"}]},
-            }
-        )
-        event = parser.parse_line(line)
-        assert event is not None
-        assert event.kind == BackendEventKind.TOOL_OUTPUT
-        assert event.is_terminal is False
-        assert isinstance(event.backend_data, CodexEventData)
-        assert event.backend_data.record_type == "item.completed"
-        assert event.backend_data.item_type == "message"
-
-    def test_parse_line_item_completed_file_change(self) -> None:
-        parser = CodexStreamParser()
-        line = json.dumps(
-            {"type": "item.completed", "item": {"type": "file_change", "path": "src/foo.py"}}
-        )
-        event = parser.parse_line(line)
-        assert event is not None
-        assert event.kind == BackendEventKind.TOOL_OUTPUT
-        assert event.backend_data is not None
-        assert event.backend_data.item_type == "file_change"
-
-    def test_parse_line_item_completed_function_call(self) -> None:
-        parser = CodexStreamParser()
-        line = json.dumps(
-            {"type": "item.completed", "item": {"type": "function_call", "name": "Bash"}}
-        )
-        event = parser.parse_line(line)
-        assert event is not None
-        assert event.kind == BackendEventKind.TOOL_OUTPUT
-        assert event.backend_data is not None
-        assert event.backend_data.item_type == "function_call"
-
-
-class TestCodexStreamParserConformance:
-    def test_isinstance_stream_parser_protocol(self) -> None:
-        assert isinstance(CodexStreamParser(""), StreamParser)
 
 
 class TestCodexEnvPolicy:

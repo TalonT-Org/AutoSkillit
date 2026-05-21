@@ -32,13 +32,10 @@ class TestCodexFlags:
     def test_is_str_enum(self) -> None:
         assert issubclass(CodexFlags, StrEnum)
 
-    def test_unique_decorator_enforced(self) -> None:
-        assert len(set(CodexFlags)) == 11
-
     def test_str_json_equals_double_dash_json(self) -> None:
         assert str(CodexFlags.JSON) == "--json"
 
-    def test_all_eleven_members_present(self) -> None:
+    def test_all_members_present(self) -> None:
         expected = {
             "JSON",
             "SANDBOX",
@@ -52,7 +49,9 @@ class TestCodexFlags:
             "RESUME_SUBCOMMAND",
             "LAST",
         }
-        assert {m.name for m in CodexFlags} == expected
+        actual = {m.name for m in CodexFlags}
+        assert actual == expected
+        assert len(set(CodexFlags)) == len(expected)
 
 
 class TestCodexBackend:
@@ -285,11 +284,6 @@ class TestCodexStreamParser:
 
 
 class TestCodexEnvPolicy:
-    def test_build_env_returns_dict(self) -> None:
-        policy = CodexEnvPolicy()
-        result = policy.build_env({"PATH": "/usr/bin"})
-        assert isinstance(result, dict)
-
     def test_build_env_passes_through_base(self) -> None:
         policy = CodexEnvPolicy()
         result = policy.build_env({"PATH": "/usr/bin", "HOME": "/root"})

@@ -362,11 +362,11 @@ class CodexBackend:
         plugin_source: PluginSource | None = None,
         env_extras: Mapping[str, str] | None = None,
     ) -> CmdSpec:
+        if not resume_session_id:
+            msg = "resume_session_id must be a non-empty string"
+            raise ValueError(msg)
         cmd: list[str] = ["codex", "exec", CodexFlags.RESUME_SUBCOMMAND]
-        if resume_session_id:
-            cmd.append(resume_session_id)
-        else:
-            cmd.append(CodexFlags.LAST)
+        cmd.append(resume_session_id)
         cmd.append(prompt)
         base: dict[str, str] = {}
         if env_extras:

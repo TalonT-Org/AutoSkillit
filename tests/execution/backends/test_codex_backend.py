@@ -9,8 +9,8 @@ from autoskillit.core import (
     AGENT_BACKEND_CODEX,
     BackendEventKind,
     CmdSpec,
-    CodingAgentBackend,
     CodexEventData,
+    CodingAgentBackend,
     EnvPolicy,
     ResultParser,
     SessionLocator,
@@ -144,20 +144,16 @@ class TestCodexBackendCommands:
         assert spec.cwd == "/work"
 
     def test_build_resume_cmd_with_session_id(self) -> None:
-        spec = CodexBackend().build_resume_cmd(
-            resume_session_id="sess-123", prompt="continue"
-        )
+        spec = CodexBackend().build_resume_cmd(resume_session_id="sess-123", prompt="continue")
         assert spec.cmd[0] == "codex"
         assert spec.cmd[1] == "exec"
         assert "resume" in spec.cmd
         assert "sess-123" in spec.cmd
         assert spec.cmd[-1] == "continue"
 
-    def test_build_resume_cmd_empty_id_uses_last(self) -> None:
-        spec = CodexBackend().build_resume_cmd(
-            resume_session_id="", prompt="continue"
-        )
-        assert "--last" in spec.cmd
+    def test_build_resume_cmd_empty_id_raises(self) -> None:
+        with pytest.raises(ValueError, match="non-empty"):
+            CodexBackend().build_resume_cmd(resume_session_id="", prompt="continue")
 
     def test_build_resume_cmd_with_env_extras(self) -> None:
         spec = CodexBackend().build_resume_cmd(

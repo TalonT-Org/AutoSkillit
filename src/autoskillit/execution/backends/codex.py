@@ -435,7 +435,7 @@ class CodexBackend:
         plugin_source: PluginSource | None = None,
         env_extras: Mapping[str, str] | None = None,
     ) -> CmdSpec:
-        if not resume_session_id:
+        if not resume_session_id.strip():
             msg = "resume_session_id must be a non-empty string"
             raise ValueError(msg)
         cmd: list[str] = ["codex", "exec"]

@@ -32,9 +32,13 @@ class TestCommandsShimContract:
         ]
         assert len(body_stmts) <= 3, f"{name} has {len(body_stmts)} body statements, expected <= 3"
 
+    # Names that indicate backend-dispatch: the builder resolves its backend
+    # via ctx.backend or get_backend() instead of instantiating ClaudeCodeBackend directly.
+    _BACKEND_DISPATCH_NAMES: frozenset[str] = frozenset({"backend", "ctx", "get_backend"})
+
     @pytest.mark.parametrize("name", BUILDERS)
     def test_builder_delegates_to_backend(self, name: str):
-        """Each builder body must reference ClaudeCodeBackend."""
+        """Each builder body must reference ClaudeCodeBackend or use backend dispatch."""
         source = inspect.getsource(getattr(commands, name))
         tree = ast.parse(source)
         func = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == name)
@@ -43,4 +47,8 @@ class TestCommandsShimContract:
             for node in ast.walk(func)
             if isinstance(node, (ast.Name, ast.Attribute))
         }
-        assert "ClaudeCodeBackend" in ast_names, f"{name} does not delegate to ClaudeCodeBackend"
+        # Direct ClaudeCodeBackend() instantiation OR backend-dispatch (ctx.backend,
+        # get_backend()) are both valid delegation patterns.
+        assert "ClaudeCodeBackend" in ast_names or ast_names & self._BACKEND_DISPATCH_NAMES, (
+            f"{name} does not delegate to ClaudeCodeBackend or use backend dispatch"
+        )

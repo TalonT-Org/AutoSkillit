@@ -516,6 +516,8 @@ class TestIntegration:
         )
 
         monkeypatch.delenv("AUTOSKILLIT_PROVIDER_PROFILE", raising=False)
+        monkeypatch.delenv("AUTOSKILLIT_QUOTA_GUARD__DISABLED", raising=False)
+        monkeypatch.chdir(tmp_path)
         stdin_text = json.dumps({"tool_name": "run_skill"})
         buf = io.StringIO()
         with patch("sys.stdin", io.StringIO(stdin_text)):

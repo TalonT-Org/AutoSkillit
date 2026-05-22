@@ -182,15 +182,22 @@ Capture the PR URL from the output.
 
 ## Output
 
-Emit these tokens as **literal plain text** (no markdown formatting on the token names)
-as your final output:
+Emit these tokens as your final output:
 
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. Do not wrap the output block in a code fence.
+> The adjudicator performs a regex match on the exact token name — decorators and
+> code fences cause match failure.
+
+On success:
 ```
 pr_url = https://github.com/owner/repo/pull/N
+%%ORDER_UP::<hex>%%
 ```
 
-Where `pr_url` is the absolute GitHub PR URL, or an empty string when GitHub is not accessible:
-
+When `gh` is not available or not authenticated:
 ```
 pr_url = 
+%%ORDER_UP::<hex>%%
 ```

@@ -746,7 +746,9 @@ Then determine and emit the structured output tokens (required for the
 - If all ACCEPT findings were skipped (no code changes): `verdict = already_green`
 
 > **IMPORTANT:** Emit the tokens as **literal plain text with no markdown
-> formatting**. Do not wrap in bold or italic.
+> formatting**. Do not wrap in bold or italic. Do not wrap the output block
+> in a code fence. The adjudicator performs a regex match — decorators and
+> code fences cause match failure.
 
 ```
 verdict = {verdict}

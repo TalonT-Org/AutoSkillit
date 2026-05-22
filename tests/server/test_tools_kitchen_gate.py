@@ -377,6 +377,9 @@ async def test_disable_quota_guard_denies_headless(tmp_path, monkeypatch):
 async def test_disable_quota_guard_returns_error_when_kitchen_not_open(tmp_path, monkeypatch):
     """disable_quota_guard() returns an error when the kitchen is not open."""
     monkeypatch.chdir(tmp_path)
+    from autoskillit.server import _state
+
+    monkeypatch.setattr(_state, "_ctx", None)
 
     from autoskillit.server.tools.tools_kitchen import disable_quota_guard
 

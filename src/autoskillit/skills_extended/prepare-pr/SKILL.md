@@ -236,8 +236,15 @@ Emit these structured output tokens (literal plain text, no markdown decoration)
 All output paths are absolute (resolve `{{AUTOSKILLIT_TEMP}}/prepare-pr/` relative to
 the current working directory using `$(pwd)`):
 
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. Do not wrap the output block in a code fence.
+> The adjudicator performs a regex match on the exact token name — decorators and
+> code fences cause match failure.
+
 ```
 prep_path = /absolute/path/{{AUTOSKILLIT_TEMP}}/prepare-pr/pr_prep_{ts}.md
 selected_lenses = module-dependency,process-flow
 lens_context_paths = /abs/ctx_module-dependency_{ts}.md,/abs/ctx_process-flow_{ts}.md
+%%ORDER_UP::<hex>%%
 ```

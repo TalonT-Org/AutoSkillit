@@ -172,6 +172,7 @@ def _compute_outcome(
         channel_confirmation,
         completion_marker,
         prior_completion_markers,
+        expected_output_patterns,
     )
 
     logger.debug(
@@ -200,9 +201,10 @@ def _compute_outcome(
     # content checks failed and no retry was scheduled by _compute_retry.
     # Only promote to RETRIABLE when the failure is a drain-race artifact (ABSENT state):
     #   - empty result → stdout not fully flushed
-    #   - marker missing → partial flush
-    # Do NOT promote CONTRACT_VIOLATION or SESSION_ERROR — these are terminal failures
-    # that retrying will never resolve.
+    #   - marker missing without pattern match → partial flush
+    # MARKER_ABSENT_CONTRACT_MET implies success (_compute_success returns True upstream),
+    # so it never reaches this guard. Do NOT promote CONTRACT_VIOLATION or SESSION_ERROR —
+    # these are terminal failures that retrying will never resolve.
     if not success and not needs_retry:
         match channel_confirmation:
             case ChannelConfirmation.CHANNEL_A | ChannelConfirmation.CHANNEL_B:

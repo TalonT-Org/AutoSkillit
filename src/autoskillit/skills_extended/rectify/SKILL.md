@@ -193,8 +193,9 @@ For a single-part plan:
 
 > **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
 > markdown formatting on the token names**. Do not wrap token names in `**bold**`,
-> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
-> exact token name — decorators cause match failure.
+> `*italic*`, or any other markdown. Do not wrap the output block in a code fence.
+> The adjudicator performs a regex match on the exact token name — decorators and
+> code fences cause match failure.
 
 ```
 plan_path = {absolute_path}

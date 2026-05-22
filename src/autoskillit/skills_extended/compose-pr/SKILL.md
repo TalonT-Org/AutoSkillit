@@ -231,12 +231,20 @@ Capture PR URL from stdout.
 
 Emit these structured output tokens (literal plain text, no markdown decoration):
 
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. Do not wrap the output block in a code fence.
+> The adjudicator performs a regex match on the exact token name — decorators and
+> code fences cause match failure.
+
 On success:
 ```
 pr_url = https://github.com/owner/repo/pull/N
+%%ORDER_UP::<hex>%%
 ```
 
 When `gh` is not available or not authenticated:
 ```
 pr_url = 
+%%ORDER_UP::<hex>%%
 ```

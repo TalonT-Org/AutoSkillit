@@ -121,12 +121,21 @@ def _check_session_content(
                             found_prior = True
                             break
             if not found_prior:
-                logger.debug(
-                    "content_check_failed",
-                    reason="completion_marker_absent",
-                    result_tail=result_text[-200:] if len(result_text) > 200 else result_text,
-                )
-                return False
+                if expected_output_patterns and _check_expected_patterns(
+                    result_text, expected_output_patterns
+                ):
+                    logger.info(
+                        "pattern_gated_success",
+                        reason="marker_absent_contract_met",
+                        pattern_count=len(expected_output_patterns),
+                    )
+                else:
+                    logger.debug(
+                        "content_check_failed",
+                        reason="completion_marker_absent",
+                        result_tail=result_text[-200:] if len(result_text) > 200 else result_text,
+                    )
+                    return False
     if not _check_expected_patterns(session.result.strip(), expected_output_patterns):
         logger.warning(
             "content_check_failed",
@@ -150,8 +159,10 @@ def _evaluate_content_state(
         ContentState.COMPLETE: Result is non-empty, marker present (if configured),
             and all expected_output_patterns match. Session is fully successful.
         ContentState.ABSENT: Result is empty OR completion marker is absent from a
-            non-empty result. Indicates a drain-race artifact — the session may have
-            completed but stdout was not fully flushed. Retriable.
+            non-empty result without pattern match. Drain-race artifact — retriable.
+        ContentState.MARKER_ABSENT_CONTRACT_MET: Completion marker is absent but all
+            expected_output_patterns match. Content contract satisfied despite missing
+            marker — treated as successful by upstream callers.
         ContentState.CONTRACT_VIOLATION: Result is non-empty and contains the marker,
             but one or more expected_output_patterns are absent. The session ran to
             completion but the model did not produce the required output tokens.
@@ -175,6 +186,10 @@ def _evaluate_content_state(
             prior_completion_markers
             and any(pm and pm in result for pm in prior_completion_markers)
         ):
+            if expected_output_patterns and _check_expected_patterns(
+                result, expected_output_patterns
+            ):
+                return ContentState.MARKER_ABSENT_CONTRACT_MET
             return ContentState.ABSENT
 
     if expected_output_patterns and not _check_expected_patterns(result, expected_output_patterns):

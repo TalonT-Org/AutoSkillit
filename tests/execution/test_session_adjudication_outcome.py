@@ -879,3 +879,31 @@ def test_parse_session_result_non_write_tools_no_file_path(make_ndjson):
     session = parse_session_result(ndjson)
     assert session.tool_uses == [{"name": "Bash", "id": "tu3"}]
     assert "file_path" not in session.tool_uses[0]
+
+
+class TestPatternGatedSuccess:
+    """_compute_outcome returns SUCCEEDED when patterns match and marker is absent."""
+
+    def test_compute_outcome_pattern_gated_success(self) -> None:
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result=(
+                "prep_path = /tmp/plan.md\nselected_lenses = dev\nlens_context_paths = /tmp/ctx.md"
+            ),
+            session_id="s1",
+        )
+        outcome, retry_reason = _compute_outcome(
+            session,
+            returncode=0,
+            termination=TerminationReason.NATURAL_EXIT,
+            completion_marker="%%ORDER_UP%%",
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+            expected_output_patterns=[
+                r"prep_path\s*=\s*/.+",
+                r"selected_lenses\s*=\s*\S+",
+                r"lens_context_paths\s*=\s*/.+",
+            ],
+        )
+        assert outcome == SessionOutcome.SUCCEEDED
+        assert retry_reason == RetryReason.NONE

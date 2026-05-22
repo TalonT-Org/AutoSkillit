@@ -43,6 +43,7 @@ CODEX_ENV_DENYLIST: frozenset[str] = frozenset(
         "ANTHROPIC_API_KEY",
         "ANTHROPIC_AUTH_TOKEN",
         "ANTHROPIC_BASE_URL",
+        "CLAUDE_STREAM_IDLE_TIMEOUT_MS",
     }
 )
 

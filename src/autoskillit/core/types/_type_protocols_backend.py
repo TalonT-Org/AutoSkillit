@@ -11,6 +11,7 @@ from ._type_backend import (
     BackendCapabilities,
     CmdSpec,
     SessionEvent,
+    SkillSessionConfig,  # noqa: F401
 )
 from ._type_checkpoint import SessionCheckpoint
 from ._type_enums import OutputFormat

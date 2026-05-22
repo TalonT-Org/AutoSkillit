@@ -121,3 +121,10 @@ def test_stub_class_satisfies_coding_agent_backend():
         ) -> CmdSpec: ...
 
     assert isinstance(_Backend(), CodingAgentBackend)
+
+
+def test_skill_session_config_importable_from_protocols_backend() -> None:
+    from autoskillit.core import SkillSessionConfig as SkillSessionConfigDirect
+    from autoskillit.core.types._type_protocols_backend import SkillSessionConfig
+
+    assert SkillSessionConfig is SkillSessionConfigDirect

@@ -756,7 +756,7 @@ def test_consolidate_then_validate_sees_merged_wps(tmp_path: Path) -> None:
     assert result["issue_count"] == "0"
 
 
-def test_consolidate_wps_writes_absorption_registry(tmp_path: Path) -> None:
+def test_consolidate_wps_writes_lifecycle_registry(tmp_path: Path) -> None:
     """consolidate_wps writes lifecycle_registry.json with absorbed WP mappings."""
     wp1 = make_wp_result("P1-A1-WP1", deliverables=["src/a.py"])
     wp2 = make_wp_result("P1-A2-WP1", deliverables=["src/b.py"])

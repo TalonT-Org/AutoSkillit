@@ -459,6 +459,10 @@ class CodexBackend:
             cmd += [CodexFlags.ADD_DIR, validated_dir.path]
         cmd.append(skill_command)
         env_extras: dict[str, str] = {}
+        if scenario_step_name:
+            env_extras["SCENARIO_STEP_NAME"] = scenario_step_name
+        if allowed_write_prefix:
+            env_extras["AUTOSKILLIT_ALLOWED_WRITE_PREFIX"] = allowed_write_prefix
         if provider_extras:
             env_extras.update(provider_extras)
         base: dict[str, str] = dict(os.environ)

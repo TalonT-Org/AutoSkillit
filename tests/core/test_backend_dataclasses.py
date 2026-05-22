@@ -178,6 +178,7 @@ def test_backend_module_all_exhaustive():
         "BackendCapabilities",
         "CLAUDE_CODE_CAPABILITIES",
         "CmdSpec",
+        "SkillSessionConfig",
         "ClaudeEventData",
         "CodexEventData",
         "SessionEvent",
@@ -194,3 +195,105 @@ def test_no_autoskillit_imports_in_backend():
         stripped = line.strip()
         if stripped.startswith("from autoskillit") or stripped.startswith("import autoskillit"):
             pytest.fail(f"IL-0 violation: {stripped}")
+
+
+def test_skill_session_config_importable_from_core():
+    import dataclasses
+
+    from autoskillit.core import SkillSessionConfig
+
+    assert dataclasses.is_dataclass(SkillSessionConfig)
+
+
+def test_skill_session_config_frozen():
+    from dataclasses import FrozenInstanceError
+
+    from autoskillit.core import SkillSessionConfig
+
+    cfg = SkillSessionConfig()
+    with pytest.raises(FrozenInstanceError):
+        cfg.completion_marker = "x"  # type: ignore[misc]
+
+
+def test_skill_session_config_slots():
+    from autoskillit.core import SkillSessionConfig
+
+    assert hasattr(SkillSessionConfig, "__slots__")
+    cfg = SkillSessionConfig()
+    assert not hasattr(cfg, "__dict__")
+
+
+def test_skill_session_config_fields_exhaustive():
+    import dataclasses
+
+    from autoskillit.core import SkillSessionConfig
+
+    fields = {f.name for f in dataclasses.fields(SkillSessionConfig)}
+    assert fields == {
+        "completion_marker",
+        "model",
+        "plugin_source",
+        "output_format",
+        "add_dirs",
+        "exit_after_stop_delay_ms",
+        "stream_idle_timeout_ms",
+        "scenario_step_name",
+        "temp_dir_relpath",
+        "allowed_write_prefix",
+        "provider_extras",
+        "profile_name",
+        "resume_session_id",
+        "resume_checkpoint",
+        "resume_message",
+    }
+
+
+def test_skill_session_config_defaults():
+    from autoskillit.core import OutputFormat, SkillSessionConfig
+
+    cfg = SkillSessionConfig()
+    assert cfg.completion_marker == ""
+    assert cfg.model is None
+    assert cfg.plugin_source is None
+    assert cfg.output_format == OutputFormat.JSON
+    assert cfg.add_dirs == ()
+    assert cfg.exit_after_stop_delay_ms == 0
+    assert cfg.stream_idle_timeout_ms == 0
+    assert cfg.scenario_step_name == ""
+    assert cfg.temp_dir_relpath is None
+    assert cfg.allowed_write_prefix == ""
+    assert cfg.provider_extras is None
+    assert cfg.profile_name == ""
+    assert cfg.resume_session_id == ""
+    assert cfg.resume_checkpoint is None
+    assert cfg.resume_message is None
+
+
+def test_skill_session_config_field_types():
+    import typing
+    from collections.abc import Mapping
+
+    from autoskillit.core import (
+        OutputFormat,
+        PluginSource,
+        SessionCheckpoint,
+        SkillSessionConfig,
+        ValidatedAddDir,
+    )
+
+    hints = typing.get_type_hints(SkillSessionConfig)
+    assert hints["completion_marker"] is str
+    assert hints["model"] == str | None
+    assert hints["plugin_source"] == PluginSource | None
+    assert hints["output_format"] is OutputFormat
+    assert hints["add_dirs"] == tuple[ValidatedAddDir, ...]
+    assert hints["exit_after_stop_delay_ms"] is int
+    assert hints["stream_idle_timeout_ms"] is int
+    assert hints["scenario_step_name"] is str
+    assert hints["temp_dir_relpath"] == str | None
+    assert hints["allowed_write_prefix"] is str
+    assert hints["provider_extras"] == Mapping[str, str] | None
+    assert hints["profile_name"] is str
+    assert hints["resume_session_id"] is str
+    assert hints["resume_checkpoint"] == SessionCheckpoint | None
+    assert hints["resume_message"] == str | None

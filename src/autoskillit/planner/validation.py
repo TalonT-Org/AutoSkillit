@@ -15,8 +15,9 @@ from typing import Any, NamedTuple
 
 import regex as re
 
-from autoskillit.core import get_logger, read_versioned_json, write_versioned_json
+from autoskillit.core import get_logger, write_versioned_json
 from autoskillit.planner._dag_ops import find_sccs, topological_sort
+from autoskillit.planner.lifecycle import load_lifecycle_registry
 from autoskillit.planner.schema import (
     ASSIGN_RESULT_FILE_RE,
     DELIVERABLE_BOUNDS,
@@ -126,13 +127,6 @@ def _load_wp_manifest(root: Path) -> dict | None:
         raise RuntimeError(f"Malformed WP manifest file {manifest_path}: {exc}") from exc
 
 
-def _load_absorption_registry(root: Path) -> dict[str, Any] | None:
-    registry_path = root / "work_packages" / "absorption_registry.json"
-    if not registry_path.exists():
-        return None
-    return read_versioned_json(registry_path, 1)
-
-
 def _inject_backward_deps(wp_results: dict[str, dict], dep_graph: dict) -> None:
     for wp_id, extra_deps in dep_graph.get("added_backward_deps", {}).items():
         if wp_id not in wp_results:
@@ -146,10 +140,14 @@ def _inject_backward_deps(wp_results: dict[str, dict], dep_graph: dict) -> None:
 def _check_phase_completeness(
     phase_results: dict[str, dict],
     assignment_results: dict[str, dict],
+    lifecycle_registry: dict[str, Any] | None = None,
 ) -> list[ValidationFinding]:
     findings: list[ValidationFinding] = []
+    voided_phase_ids = set((lifecycle_registry or {}).get("voided_phases", []))
     assigned_phase_nums = {v["phase_number"] for v in assignment_results.values()}
     for phase_id, phase in phase_results.items():
+        if phase_id in voided_phase_ids:
+            continue
         if phase["phase_number"] not in assigned_phase_nums:
             findings.append(
                 {
@@ -164,9 +162,10 @@ def _check_phase_completeness(
 def _check_assignment_completeness(
     assignment_results: dict[str, dict],
     wp_results: dict[str, dict],
-    absorption_registry: dict[str, Any] | None = None,
+    lifecycle_registry: dict[str, Any] | None = None,
 ) -> list[ValidationFinding]:
     findings: list[ValidationFinding] = []
+    voided_assign_ids = set((lifecycle_registry or {}).get("voided_assignments", []))
     wp_pairs: set[tuple[int, int]] = set()
     for wp_id in wp_results:
         parts = wp_id.split("-")
@@ -183,8 +182,8 @@ def _check_assignment_completeness(
         assign_num = int(parts[1][1:])
         wp_pairs.add((phase_num, assign_num))
     absorbed_pairs: set[tuple[int, int]] = set()
-    if absorption_registry and isinstance(absorption_registry.get("absorbed"), dict):
-        for absorbed_id in absorption_registry["absorbed"]:
+    if lifecycle_registry and isinstance(lifecycle_registry.get("absorbed"), dict):
+        for absorbed_id in lifecycle_registry["absorbed"]:
             parts = absorbed_id.split("-")
             if len(parts) >= 2:
                 try:
@@ -192,6 +191,8 @@ def _check_assignment_completeness(
                 except ValueError:
                     logger.warning("malformed_absorbed_id", absorbed_id=absorbed_id)
     for assign_id, assign in assignment_results.items():
+        if assign_id in voided_assign_ids:
+            continue
         pair = (assign["phase_number"], assign["assignment_number"])
         if pair in absorbed_pairs:
             continue
@@ -408,7 +409,7 @@ def validate_plan(output_dir: str) -> dict[str, str]:
     assignment_results, assign_rejected = _load_assignment_results(root)
     wp_results, wp_rejected = _load_wp_results(root)
     wp_manifest = _load_wp_manifest(root)
-    absorption_registry = _load_absorption_registry(root)
+    lifecycle_registry = load_lifecycle_registry(root)
 
     dep_graph_path = root / "dep_graph.json"
     if dep_graph_path.exists():
@@ -419,9 +420,11 @@ def validate_plan(output_dir: str) -> dict[str, str]:
         _inject_backward_deps(wp_results, dep_graph)
 
     all_findings: list[ValidationFinding] = []
-    all_findings.extend(_check_phase_completeness(phase_results, assignment_results))
     all_findings.extend(
-        _check_assignment_completeness(assignment_results, wp_results, absorption_registry)
+        _check_phase_completeness(phase_results, assignment_results, lifecycle_registry)
+    )
+    all_findings.extend(
+        _check_assignment_completeness(assignment_results, wp_results, lifecycle_registry)
     )
     all_findings.extend(_check_dep_references(wp_results))
     all_findings.extend(_check_dep_id_format(wp_results))

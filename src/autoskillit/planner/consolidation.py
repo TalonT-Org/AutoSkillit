@@ -12,6 +12,7 @@ import regex as re
 from autoskillit.core import atomic_write, write_versioned_json
 from autoskillit.planner._dag_ops import break_cycles_greedy_fas, filter_self_references
 from autoskillit.planner._sort_utils import _natural_sort_key
+from autoskillit.planner.lifecycle import record_lifecycle_event
 from autoskillit.planner.schema import validate_wp_result
 
 _ASSIGNMENT_RE = re.compile(r"^(P\d+-A\d+)-")
@@ -317,18 +318,15 @@ def consolidate_wps(
             if result_file.exists():
                 result_file.unlink()
         if non_primary_sources:
-            registry: dict[str, Any] = {
-                "absorbed": {
-                    absorbed_id: {
-                        "merged_into": source_to_merged[absorbed_id],
-                        "group_id": source_to_merged[absorbed_id],
-                    }
-                    for absorbed_id in non_primary_sources
-                    if absorbed_id in source_to_merged
-                },
+            absorbed_data = {
+                absorbed_id: {
+                    "merged_into": source_to_merged[absorbed_id],
+                    "group_id": source_to_merged[absorbed_id],
+                }
+                for absorbed_id in non_primary_sources
+                if absorbed_id in source_to_merged
             }
-            registry_path = wp_dir / "absorption_registry.json"
-            write_versioned_json(registry_path, registry, schema_version=1)
+            record_lifecycle_event(planner_path, "absorbed", absorbed_data)
 
     if broken_edges:
         edges_path = planner_path / "broken_cycle_edges.json"

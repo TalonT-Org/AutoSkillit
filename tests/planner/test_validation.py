@@ -9,8 +9,10 @@ import pytest
 
 from autoskillit.planner.schema import DELIVERABLE_BOUNDS
 from autoskillit.planner.validation import (
+    _check_assignment_completeness,
     _check_dag_acyclic,
     _check_duplicate_deliverables,
+    _check_phase_completeness,
     _check_sizing_bounds,
     _load_assignment_results,
     _load_phase_results,
@@ -884,3 +886,155 @@ def test_check_dag_acyclic_3_node_cycle_no_edges() -> None:
     assert findings[0]["cycle_size"] == 3
     assert set(findings[0]["cycle_nodes"]) == {"P1-A1-WP1", "P1-A1-WP2", "P1-A1-WP3"}
     assert "cycle_edges" not in findings[0]
+
+
+# ---------------------------------------------------------------------------
+# Lifecycle registry tests (Tests 1B, 1C, 1E, 1G)
+# ---------------------------------------------------------------------------
+
+
+def test_check_assignment_completeness_skips_voided_assignments() -> None:
+    """1B: _check_assignment_completeness skips voided assignments from lifecycle registry."""
+    assignment_results = {
+        "P4-A2": {"phase_number": 4, "assignment_number": 2},
+        "P4-A1": {"phase_number": 4, "assignment_number": 1},
+    }
+    wp_results = {
+        "P4-A1-WP1": {"id": "P4-A1-WP1", "depends_on": []},
+    }
+    lifecycle_registry = {
+        "voided_assignments": ["P4-A2"],
+        "voided_phases": [],
+        "absorbed": {},
+    }
+    findings = _check_assignment_completeness(assignment_results, wp_results, lifecycle_registry)
+    assert not any("P4-A2" in f["message"] for f in findings)
+
+
+def test_check_phase_completeness_skips_voided_phases() -> None:
+    """1C: _check_phase_completeness skips voided phases from lifecycle registry."""
+    phase_results = {
+        "P3": {"phase_number": 3},
+        "P1": {"phase_number": 1},
+    }
+    assignment_results = {
+        "P1-A1": {"phase_number": 1, "assignment_number": 1},
+    }
+    lifecycle_registry = {
+        "voided_phases": ["P3"],
+        "voided_assignments": [],
+        "absorbed": {},
+    }
+    findings = _check_phase_completeness(phase_results, assignment_results, lifecycle_registry)
+    assert not any("P3" in f["message"] for f in findings)
+
+
+def test_validate_plan_voided_assignment_no_false_positive(tmp_path: Path) -> None:
+    """1E: End-to-end — voided assignment does NOT produce validation error."""
+    from autoskillit.planner.merge import merge_refined_assignments
+
+    phases_dir = tmp_path / "phases"
+    assigns_dir = tmp_path / "assignments"
+    wps_dir = tmp_path / "work_packages"
+
+    write_json(phases_dir / "P1_result.json", make_phase_result(1))
+    write_json(
+        assigns_dir / "P1-A1_result.json",
+        make_assignment_result(1, 1, proposed_work_packages=["P1-A1-WP1"]),
+    )
+    write_json(
+        assigns_dir / "P1-A2_result.json",
+        make_assignment_result(1, 2, proposed_work_packages=["P1-A2-WP1"]),
+    )
+    write_json(
+        wps_dir / "P1-A1-WP1_result.json",
+        make_wp_result("P1-A1-WP1", deliverables=["src/a.py"]),
+    )
+    write_json(
+        wps_dir / "wp_manifest.json",
+        {"pass_name": "work_packages", "items": [{"id": "P1-A1-WP1", "status": "done"}]},
+    )
+
+    ctx_dir = tmp_path / "refine_contexts"
+    ctx_dir.mkdir()
+    voided_assignment = {
+        "id": "P1-A2",
+        "phase_id": "P1",
+        "name": "Voided",
+        "goal": "g",
+        "technical_approach": "",
+        "proposed_work_packages": [],
+    }
+    normal_assignment = {
+        "id": "P1-A1",
+        "phase_id": "P1",
+        "name": "Normal",
+        "goal": "g",
+        "technical_approach": "",
+        "proposed_work_packages": [
+            {
+                "id": "P1-A1-WP1",
+                "name": "WP1",
+                "summary": "s",
+                "goal": "g",
+                "technical_steps": [],
+                "files_touched": ["src/a.py"],
+                "apis_defined": [],
+                "apis_consumed": [],
+                "depends_on": [],
+                "deliverables": ["src/a.py"],
+                "acceptance_criteria": [],
+            }
+        ],
+    }
+    write_json(
+        ctx_dir / "P1_result.json",
+        {"schema_version": 1, "assignments": [normal_assignment, voided_assignment]},
+    )
+
+    merge_refined_assignments(planner_dir=str(tmp_path))
+    result = validate_plan(str(tmp_path))
+
+    assert result["verdict"] == "pass"
+    validation = json.loads((tmp_path / "validation.json").read_text())
+    assert not any(
+        f["check"] == "assignment_completeness" and "P1-A2" in f["message"]
+        for f in validation["findings"]
+    )
+
+
+def test_validate_plan_backward_compat_absorption_registry(tmp_path: Path) -> None:
+    """1G: validate_plan reads absorption_registry.json when lifecycle_registry.json is absent."""
+    phases_dir = tmp_path / "phases"
+    assigns_dir = tmp_path / "assignments"
+    wps_dir = tmp_path / "work_packages"
+
+    write_json(phases_dir / "P1_result.json", make_phase_result(1))
+    write_json(
+        assigns_dir / "P1-A1_result.json",
+        make_assignment_result(1, 1, proposed_work_packages=["P1-A1-WP1"]),
+    )
+    write_json(
+        assigns_dir / "P1-A2_result.json",
+        make_assignment_result(1, 2, proposed_work_packages=["P1-A2-WP1"]),
+    )
+    write_json(
+        wps_dir / "P1-A1-WP1_result.json",
+        make_wp_result("P1-A1-WP1", deliverables=["src/a.py"]),
+    )
+    write_json(
+        wps_dir / "wp_manifest.json",
+        {"pass_name": "work_packages", "items": [{"id": "P1-A1-WP1", "status": "done"}]},
+    )
+    registry = {
+        "schema_version": 1,
+        "absorbed": {"P1-A2-WP1": {"merged_into": "P1-A1-WP1", "group_id": "P1-A1-WP1"}},
+    }
+    write_json(wps_dir / "absorption_registry.json", registry)
+
+    result = validate_plan(str(tmp_path))
+    assert result["verdict"] == "pass"
+    assert not any(
+        "P1-A2" in f.get("message", "")
+        for f in json.loads((tmp_path / "validation.json").read_text())["findings"]
+    )

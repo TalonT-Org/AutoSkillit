@@ -8,6 +8,7 @@ from typing import TypedDict
 
 from autoskillit.core import atomic_write, get_logger, write_versioned_json
 from autoskillit.planner._sort_utils import _natural_sort_key
+from autoskillit.planner.lifecycle import record_lifecycle_event
 from autoskillit.planner.schema import (
     ASSIGN_ID_RE,
     ASSIGN_RESULT_FILE_RE,
@@ -327,6 +328,10 @@ def expand_assignments(
         write_versioned_json(ctx_path, context, schema_version=1)
         context_paths.append(str(ctx_path))
         item_ids.append(phase_id)
+
+    voided_phase_ids = [phase["id"] for phase in phases if not phase.get("assignments_preview")]
+    if voided_phase_ids:
+        record_lifecycle_event(Path(output_dir), "voided_phases", voided_phase_ids)
 
     sentinel_dir = _ensure_sentinel_dir(assign_dir, "assign_sentinels")
     manifest = {

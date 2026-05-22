@@ -1036,3 +1036,29 @@ def test_merge_assignments_succeeds_with_sentinels_present(tmp_path):
     assert len(data["assignments"]) == 2
     ids = {a["id"] for a in data["assignments"]}
     assert ids == {"P1-A1", "P1-A2"}
+
+
+def test_merge_refined_assignments_voided_writes_lifecycle_registry(tmp_path):
+    """merge_refined_assignments records voided assignments in lifecycle_registry.json."""
+    ctx_dir = tmp_path / "refine_contexts"
+    ctx_dir.mkdir()
+    voided_assignment = {
+        "id": "P1-A2",
+        "phase_id": "P1",
+        "name": "Voided",
+        "goal": "g",
+        "technical_approach": "",
+        "proposed_work_packages": [],
+    }
+    _write_phase_result(
+        ctx_dir,
+        "P1",
+        [_make_assignment("P1-A1", "P1", ["src/a.py"]), voided_assignment],
+    )
+
+    merge_refined_assignments(planner_dir=str(tmp_path))
+
+    registry_path = tmp_path / "work_packages" / "lifecycle_registry.json"
+    assert registry_path.exists()
+    registry = json.loads(registry_path.read_text())
+    assert "P1-A2" in registry["voided_assignments"]

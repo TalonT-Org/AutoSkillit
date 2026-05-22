@@ -57,6 +57,8 @@ def test_planner_all_exports() -> None:
         "resolve_task_input",
         "DiscoveryResult",
         "discover_tier_files",
+        "load_lifecycle_registry",
+        "record_lifecycle_event",
     }
 
 

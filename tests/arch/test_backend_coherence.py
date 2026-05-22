@@ -37,20 +37,22 @@ def test_all_experimental_features_with_infrastructure_swap_have_alignment_guard
     source = inspect.getsource(_factory.make_context)
     tree = ast.parse(source)
 
-    swapped_features: set[str] = set()
+    backend_assignments: list[ast.Assign] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Assign):
             for target in node.targets:
                 if isinstance(target, ast.Name) and target.id == "backend":
-                    for parent in ast.walk(tree):
-                        if (
-                            isinstance(parent, ast.If)
-                            and hasattr(parent, "body")
-                            and any(_node_contains(child, node) for child in parent.body)
-                        ):
-                            feat = _extract_feature_name(parent.test)
-                            if feat:
-                                swapped_features.add(feat)
+                    backend_assignments.append(node)
+
+    swapped_features: set[str] = set()
+    for if_node in ast.walk(tree):
+        if not isinstance(if_node, ast.If):
+            continue
+        for assign in backend_assignments:
+            if any(_node_contains(child, assign) for child in if_node.body):
+                feat = _extract_feature_name(if_node.test)
+                if feat:
+                    swapped_features.add(feat)
 
     for feat_name in swapped_features:
         if feat_name in FEATURE_REGISTRY:

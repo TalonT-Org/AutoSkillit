@@ -95,7 +95,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_session_model_peak_context.py` | Tests for peak_context and turn_count extraction from extract_token_usage |
 | `test_session_parsing.py` | L1 unit tests for execution/session.py — token extraction, parsing, and SkillResult |
 | `test_session_result.py` | L1 unit tests for ClaudeSessionResult and parse_session_result — result types and policies |
-| `test_smoke_codex.py` | Codex CLI smoke test: gated E2E validation of codex exec NDJSON output (CODEX_SMOKE_TEST=1) |
+| `test_smoke_codex.py` | Codex CLI smoke test: gated E2E validation of codex exec NDJSON output (CODEX_SMOKE_TEST=1 + CODEX_API_KEY/OPENAI_API_KEY/auth.json) |
 | `test_termination_action.py` | Unit tests for decide_termination_action — pure decision function |
 | `test_termination_executor.py` | Integration tests for execute_termination_action |
 | `test_testing.py` | L1 unit tests for execution/testing.py — pytest output parsing |

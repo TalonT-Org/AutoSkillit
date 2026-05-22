@@ -6,6 +6,8 @@ import ast
 
 import pytest
 
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+
 
 def test_capability_queries_match_command_backend(minimal_ctx):
     """_resolve_pty_mode and _resolve_session_log_dir respect the backend on ctx."""
@@ -73,6 +75,13 @@ def _extract_feature_name(node: ast.AST) -> str | None:
         for arg in node.args:
             if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
                 return arg.value
+        for kw in node.keywords:
+            if (
+                kw.arg == "name"
+                and isinstance(kw.value, ast.Constant)
+                and isinstance(kw.value.value, str)
+            ):
+                return kw.value.value
     return None
 
 

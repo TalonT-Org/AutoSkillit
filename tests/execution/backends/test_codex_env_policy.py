@@ -59,6 +59,12 @@ class TestCodexEnvPolicy:
         result = policy.build_env(base)
         assert result["OPENAI_API_KEY"] == "sk-openai-secret"
 
+    def test_codex_api_key_preserved(self) -> None:
+        policy = CodexEnvPolicy()
+        base = {"CODEX_API_KEY": "sk-codex-secret", "PATH": "/usr/bin"}
+        result = policy.build_env(base)
+        assert result["CODEX_API_KEY"] == "sk-codex-secret"
+
     def test_extras_overlay_applied_after_scrub(self) -> None:
         policy = CodexEnvPolicy()
         base = {"PATH": "/usr/bin"}

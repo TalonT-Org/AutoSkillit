@@ -1,4 +1,4 @@
-"""Tests for execution/commands.py — ClaudeInteractiveCmd / ClaudeHeadlessCmd builders."""
+"""Tests for execution/commands.py — CmdSpec / ClaudeHeadlessCmd alias builders."""
 
 from __future__ import annotations
 

@@ -74,7 +74,7 @@ class TestProviderFieldsReachFlush:
         minimal_ctx.runner = fake_runner  # type: ignore[assignment]
 
         await _execute_claude_headless(
-            ClaudeHeadlessCmd(cmd=["echo", "test"], env={}),
+            ClaudeHeadlessCmd(cmd=("echo", "test"), env={}),
             str(tmp_path),
             minimal_ctx,
             timeout=30.0,
@@ -149,7 +149,7 @@ class TestProviderFieldsReachFlush:
         minimal_ctx.runner = fake_runner  # type: ignore[assignment]
 
         result = await _execute_claude_headless(
-            ClaudeHeadlessCmd(cmd=["echo", "test"], env={}),
+            ClaudeHeadlessCmd(cmd=("echo", "test"), env={}),
             str(tmp_path),
             minimal_ctx,
             timeout=30.0,
@@ -192,7 +192,7 @@ class TestProviderFieldsReachFlush:
         minimal_ctx.runner = raising_runner  # type: ignore[assignment]
 
         result = await _execute_claude_headless(
-            ClaudeHeadlessCmd(cmd=["echo", "test"], env={}),
+            ClaudeHeadlessCmd(cmd=("echo", "test"), env={}),
             str(tmp_path),
             minimal_ctx,
             timeout=30.0,
@@ -234,7 +234,7 @@ class TestProviderFieldsReachFlush:
 
         with pytest.raises(anyio.get_cancelled_exc_class()):
             await _execute_claude_headless(
-                ClaudeHeadlessCmd(cmd=["echo", "test"], env={}),
+                ClaudeHeadlessCmd(cmd=("echo", "test"), env={}),
                 str(tmp_path),
                 minimal_ctx,
                 timeout=30.0,

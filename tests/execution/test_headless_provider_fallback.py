@@ -118,7 +118,7 @@ class TestProviderFallbackLoop:
         minimal_ctx.runner = fake_runner
 
         result = await _execute_claude_headless(
-            ClaudeHeadlessCmd(cmd=["echo", "test"], env={}),
+            ClaudeHeadlessCmd(cmd=("echo", "test"), env={}),
             str(tmp_path),
             minimal_ctx,
             timeout=30.0,
@@ -146,7 +146,7 @@ class TestProviderFallbackLoop:
         minimal_ctx.runner = fake_runner
 
         result = await _execute_claude_headless(
-            ClaudeHeadlessCmd(cmd=["echo", "test"], env={}),
+            ClaudeHeadlessCmd(cmd=("echo", "test"), env={}),
             str(tmp_path),
             minimal_ctx,
             timeout=30.0,
@@ -173,7 +173,7 @@ class TestProviderFallbackLoop:
         minimal_ctx.runner = fake_runner
 
         result = await _execute_claude_headless(
-            ClaudeHeadlessCmd(cmd=["echo", "test"], env={}),
+            ClaudeHeadlessCmd(cmd=("echo", "test"), env={}),
             str(tmp_path),
             minimal_ctx,
             timeout=30.0,
@@ -198,7 +198,7 @@ class TestProviderFallbackLoop:
         minimal_ctx.runner = fake_runner
 
         result = await _execute_claude_headless(
-            ClaudeHeadlessCmd(cmd=["echo", "test"], env={}),
+            ClaudeHeadlessCmd(cmd=("echo", "test"), env={}),
             str(tmp_path),
             minimal_ctx,
             timeout=30.0,

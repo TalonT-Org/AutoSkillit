@@ -129,10 +129,10 @@ def _resolve_skill_session_id(
 
 
 def _parse_stdout(stdout: str, backend: CodingAgentBackend | None = None) -> ClaudeSessionResult:
-    if backend is not None and backend.name != AGENT_BACKEND_CLAUDE_CODE:
-        agent_result = backend.result_parser().parse_stdout(stdout)
-        return _adapt_agent_result(agent_result)
-    return parse_session_result(stdout)
+    if backend is None or backend.name == AGENT_BACKEND_CLAUDE_CODE:
+        return parse_session_result(stdout)
+    agent_result = backend.result_parser().parse_stdout(stdout)
+    return _adapt_agent_result(agent_result)
 
 
 def _adapt_agent_result(agent_result: AgentSessionResult) -> ClaudeSessionResult:

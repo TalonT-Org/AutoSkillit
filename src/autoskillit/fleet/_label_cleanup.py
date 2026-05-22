@@ -119,7 +119,7 @@ async def sweep_stale_dispatch_labels(
     state files are logged and skipped so one corrupt file cannot block recovery.
     """
     for state_path in campaign_state_paths:
-        stale_sidecar_paths: list[str | None] = []
+        stale_dispatches: list[tuple[str, str | None]] = []
         terminal_uncleaned: list[tuple[str, str | None]] = []
         try:
             with CampaignStateMutator(state_path) as m:
@@ -129,7 +129,7 @@ async def sweep_stale_dispatch_labels(
                     if d.status == DispatchStatus.RUNNING:
                         if is_dispatch_session_alive(d):
                             continue
-                        stale_sidecar_paths.append(d.sidecar_path)
+                        stale_dispatches.append((d.name, d.sidecar_path))
                         d.status = DispatchStatus.INTERRUPTED
                         m.mark_dirty()
                     elif (
@@ -145,26 +145,26 @@ async def sweep_stale_dispatch_labels(
                 exc_info=True,
             )
             continue
-        for sp in stale_sidecar_paths:
-            await cleanup_orphaned_labels(sp, github_client)
 
-        terminal_results: dict[str, bool] = {}
+        cleanup_results: dict[str, bool] = {}
+        for name, sp in stale_dispatches:
+            cleanup_results[name] = await cleanup_orphaned_labels(sp, github_client)
         for name, sp in terminal_uncleaned:
-            terminal_results[name] = await cleanup_orphaned_labels(sp, github_client)
+            cleanup_results[name] = await cleanup_orphaned_labels(sp, github_client)
 
-        if terminal_uncleaned:
+        if cleanup_results:
             try:
                 with CampaignStateMutator(state_path) as m:
                     if m.state is not None:
                         for d in m.state.dispatches:
-                            if d.name in terminal_results and terminal_results[d.name]:
+                            if d.name in cleanup_results and cleanup_results[d.name]:
                                 d.labels_cleaned = True
                                 m.mark_dirty()
             except Exception:
                 logger.warning(
                     "startup_label_sweep_mark_cleaned_failed",
                     state_path=str(state_path),
-                    cleaned_names=sorted(n for n, s in terminal_results.items() if s),
+                    cleaned_names=sorted(n for n, s in cleanup_results.items() if s),
                     exc_info=True,
                 )
 

@@ -57,6 +57,9 @@ dev = [
     "packaging>=25.0",
     "pytest-testmon>=2.2.0",
     "api-simulator; sys_platform == 'linux'",
+    "tree-sitter>=0.24",
+    "tree-sitter-python>=0.23",
+    "tree-sitter-language-pack>=0.10",
 ]
 
 [project.urls]

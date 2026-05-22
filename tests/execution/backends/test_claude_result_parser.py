@@ -265,6 +265,28 @@ class TestClaudeResultParser:
     def test_structural_conformance_result_parser(self) -> None:
         assert isinstance(ClaudeResultParser(), ResultParser)
 
+    def test_parse_stdout_accepts_exit_code_kwarg(self) -> None:
+        """ClaudeResultParser.parse_stdout accepts exit_code keyword argument."""
+        from unittest.mock import patch
+
+        from autoskillit.execution.backends.claude import ClaudeResultParser
+        from autoskillit.execution.session import ClaudeSessionResult, CliSubtype
+
+        mock_result = ClaudeSessionResult(
+            subtype=CliSubtype.SUCCESS,
+            is_error=False,
+            result="done",
+            session_id="test-session",
+            errors=[],
+        )
+        with patch(
+            "autoskillit.execution.backends.claude.parse_session_result",
+            return_value=mock_result,
+        ):
+            parser = ClaudeResultParser()
+            result = parser.parse_stdout('{"type": "result"}', exit_code=1)
+            assert result.exit_code == 0
+
 
 class TestClaudeResultParserTokenExtraction:
     def test_token_usage_dict_preserved(self) -> None:

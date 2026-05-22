@@ -387,7 +387,7 @@ class ClaudeResultParser:
             output=output if isinstance(output, str) else "",
         )
 
-    def parse_stdout(self, stdout: str) -> AgentSessionResult:
+    def parse_stdout(self, stdout: str, *, exit_code: int = 0) -> AgentSessionResult:
         result = parse_session_result(stdout)
         write_artifacts = _extract_write_artifacts(result.tool_uses)
         return AgentSessionResult(
@@ -427,8 +427,8 @@ class ClaudeCodeBackend:
         spec = self.build_headless_cmd(skill_command)
         return CmdSpec(cmd=spec.cmd, env=spec.env, cwd=cwd)
 
-    def stream_parser(self) -> ClaudeStreamParser:
-        return ClaudeStreamParser()
+    def stream_parser(self, completion_marker: str = "") -> ClaudeStreamParser:
+        return ClaudeStreamParser(completion_marker=completion_marker)
 
     def result_parser(self) -> ClaudeResultParser:
         return ClaudeResultParser()

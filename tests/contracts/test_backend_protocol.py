@@ -72,3 +72,18 @@ def test_claude_code_backend_result_parser_satisfies_protocol():
     from autoskillit.execution.backends import ClaudeCodeBackend
 
     assert isinstance(ClaudeCodeBackend().result_parser(), ResultParser)
+
+
+def test_claude_code_backend_stream_parser_accepts_completion_marker():
+    from autoskillit.core import StreamParser
+    from autoskillit.execution.backends import ClaudeCodeBackend
+
+    parser = ClaudeCodeBackend().stream_parser(completion_marker="%%TEST%%")
+    assert isinstance(parser, StreamParser)
+
+
+def test_claude_code_backend_stream_parser_forwards_completion_marker():
+    from autoskillit.execution.backends import ClaudeCodeBackend
+
+    parser = ClaudeCodeBackend().stream_parser(completion_marker="%%ORDER_UP%%")
+    assert parser.completion_marker == "%%ORDER_UP%%"

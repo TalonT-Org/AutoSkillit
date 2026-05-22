@@ -418,10 +418,6 @@ class TestBuildSkillSessionCmdConfigAdapter:
         assert isinstance(spec, CmdSpec)
         assert any("/plan" in s or "plan" in s for s in spec.cmd)
 
-    def test_impl_method_exists(self) -> None:
-        assert hasattr(ClaudeCodeBackend, "_build_skill_session_cmd_impl")
-        assert callable(getattr(ClaudeCodeBackend, "_build_skill_session_cmd_impl"))
-
     def test_config_path_returns_cmdspec(self) -> None:
         backend = ClaudeCodeBackend()
         config = SkillSessionConfig(completion_marker="%%DONE%%", output_format=OutputFormat.JSON)

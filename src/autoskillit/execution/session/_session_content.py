@@ -159,8 +159,10 @@ def _evaluate_content_state(
         ContentState.COMPLETE: Result is non-empty, marker present (if configured),
             and all expected_output_patterns match. Session is fully successful.
         ContentState.ABSENT: Result is empty OR completion marker is absent from a
-            non-empty result. Indicates a drain-race artifact — the session may have
-            completed but stdout was not fully flushed. Retriable.
+            non-empty result without pattern match. Drain-race artifact — retriable.
+        ContentState.MARKER_ABSENT_CONTRACT_MET: Completion marker is absent but all
+            expected_output_patterns match. Content contract satisfied despite missing
+            marker — treated as successful by upstream callers.
         ContentState.CONTRACT_VIOLATION: Result is non-empty and contains the marker,
             but one or more expected_output_patterns are absent. The session ran to
             completion but the model did not produce the required output tokens.

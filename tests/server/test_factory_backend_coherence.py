@@ -75,6 +75,6 @@ def test_codex_flag_ignored_warning_when_config_mismatch():
         ctx = make_context(cfg, runner=_runner())
 
     assert isinstance(ctx.backend, ClaudeCodeBackend)
-    warning_logs = [l for l in logs if l.get("event") == "codex_backend_flag_ignored"]
+    warning_logs = [rec for rec in logs if rec.get("event") == "codex_backend_flag_ignored"]
     assert len(warning_logs) == 1
     assert warning_logs[0]["configured_backend"] == "claude-code"

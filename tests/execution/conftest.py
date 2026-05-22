@@ -41,6 +41,7 @@ def _mock_backend(
         **kw,
     )
     backend = Mock()
+    backend.name = "claude-code"
     backend.capabilities = caps
     backend.build_resume_cmd.return_value = CmdSpec(
         cmd=("claude", "--print", "emit marker", "--resume", "test-session"),

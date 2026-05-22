@@ -1751,6 +1751,7 @@ class TestNudgeBackendGuard:
         marker = tool_ctx.config.run_skill.completion_marker
         caps = replace(CLAUDE_CODE_CAPABILITIES, skill_injection_capable=False)
         mock_backend = Mock()
+        mock_backend.name = "claude-code"
         mock_backend.capabilities = caps
         mock_backend.write_tool_names.return_value = frozenset({"Write", "Edit"})
         tool_ctx.backend = mock_backend
@@ -1778,6 +1779,7 @@ class TestNudgeBackendGuard:
         marker = tool_ctx.config.run_skill.completion_marker
         caps = replace(CLAUDE_CODE_CAPABILITIES, skill_injection_capable=True)
         mock_backend = Mock()
+        mock_backend.name = "claude-code"
         mock_backend.capabilities = caps
         mock_backend.write_tool_names.return_value = frozenset({"Write", "Edit"})
         mock_backend.result_parser.return_value = None
@@ -1809,6 +1811,7 @@ class TestNudgeBackendGuard:
         )
         caps = replace(CLAUDE_CODE_CAPABILITIES, session_resume_capable=True)
         mock_backend = Mock()
+        mock_backend.name = "claude-code"
         mock_backend.capabilities = caps
         mock_backend.write_tool_names.return_value = frozenset({"Write", "Edit"})
         mock_backend.build_resume_cmd.return_value = expected_cmd
@@ -1841,6 +1844,7 @@ class TestNudgeBackendGuard:
             env={"TEST": "val"},
         )
         mock_backend = Mock()
+        mock_backend.name = "claude-code"
         mock_backend.capabilities = caps
         mock_backend.write_tool_names.return_value = frozenset({"Write", "Edit"})
         mock_backend.build_resume_cmd.return_value = expected_cmd

@@ -42,14 +42,17 @@ def test_codex_backend_not_instantiated_when_disabled(monkeypatch):
 
 
 def test_codex_backend_instantiated_when_enabled(monkeypatch):
-    """When codex_backend feature is enabled, ctx.backend is a CodexBackend instance."""
+    """When codex_backend is enabled and config backend is codex, ctx.backend is CodexBackend."""
     monkeypatch.setattr(
         "autoskillit.server._factory.is_feature_enabled",
         lambda name, *a, **kw: (
             True if name == "codex_backend" else is_feature_enabled(name, *a, **kw)
         ),
     )
+    from autoskillit.config._config_dataclasses import AgentBackendConfig
     from autoskillit.execution.backends.codex import CodexBackend
 
-    ctx = make_context(AutomationConfig(), runner=_runner())
+    config = AutomationConfig()
+    config.agent_backend = AgentBackendConfig(backend="codex")
+    ctx = make_context(config, runner=_runner())
     assert isinstance(ctx.backend, CodexBackend)

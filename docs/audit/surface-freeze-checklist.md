@@ -111,7 +111,7 @@ autoskillit.core
   │
   ├── execution/headless/__init__.py
   │     Line 50: build_food_truck_cmd, build_skill_session_cmd
-  │     Line 99: ClaudeHeadlessCmd (TYPE_CHECKING)
+  │     Line 96: CmdSpec (TYPE_CHECKING)
   │
   └── execution/backends/claude.py
         Deferred imports:

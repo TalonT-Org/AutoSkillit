@@ -48,7 +48,6 @@ from autoskillit.execution.clone_guard import (
     is_worktree_skill,
     snapshot_clone_state,
 )
-from autoskillit.execution.commands import ClaudeHeadlessCmd
 from autoskillit.execution.headless._headless_git import (
     _capture_git_head_sha,
     _compute_loc_changed,
@@ -94,7 +93,7 @@ if TYPE_CHECKING:
     from autoskillit.config import (
         AutomationConfig,
     )
-    from autoskillit.core import SubprocessResult
+    from autoskillit.core import CmdSpec, SubprocessResult
     from autoskillit.pipeline.context import (
         ToolContext,
     )
@@ -208,7 +207,7 @@ def _compute_post_session_metrics(
 
 
 async def _execute_claude_headless(
-    spec: ClaudeHeadlessCmd,
+    spec: CmdSpec,
     cwd: str,
     ctx: ToolContext,
     *,
@@ -246,7 +245,7 @@ async def _execute_claude_headless(
 ) -> SkillResult:
     """Shared subprocess execution for headless Claude sessions.
 
-    Accepts an already-built ClaudeHeadlessCmd and handles runner invocation,
+    Accepts an already-built CmdSpec and handles runner invocation,
     exception handling, _build_skill_result, and session log flushing.
     Used by both run_headless_core (leaf path) and
     DefaultHeadlessExecutor.dispatch_food_truck (food truck path).

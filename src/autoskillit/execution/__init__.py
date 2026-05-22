@@ -5,7 +5,7 @@ All sub-modules depend only on autoskillit.core.* at runtime;
 execution/headless.py has TYPE_CHECKING-only references to pipeline/.
 """
 
-from autoskillit.core import SkillResult
+from autoskillit.core import CmdSpec, SkillResult
 from autoskillit.execution._recording_skills import (
     restore_skill_snapshot,
     scan_skill_snapshots,
@@ -130,6 +130,7 @@ __all__ = [
     "kill_process_tree",
     "async_kill_process_tree",
     # commands
+    "CmdSpec",
     "ClaudeInteractiveCmd",
     "ClaudeHeadlessCmd",
     "build_interactive_cmd",

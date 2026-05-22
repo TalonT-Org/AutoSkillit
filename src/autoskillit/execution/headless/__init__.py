@@ -26,7 +26,6 @@ from autoskillit.core import (
     CAMPAIGN_ID_ENV_VAR,
     DISPATCH_ID_ENV_VAR,
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
-    CmdSpec,
     KillReason,
     ProviderOutcome,
     RecipeIdentity,
@@ -107,10 +106,6 @@ __all__ = [
 ]
 
 logger = get_logger(__name__)
-
-
-def _cmd_spec_to_headless(cmd_spec: CmdSpec) -> ClaudeHeadlessCmd:
-    return ClaudeHeadlessCmd(cmd=list(cmd_spec.cmd), env=cmd_spec.env)
 
 
 def _session_log_dir(cwd: str) -> Path:
@@ -332,7 +327,7 @@ async def _execute_claude_headless(
     while True:
         try:
             _result = await runner(
-                spec.cmd,
+                list(spec.cmd),
                 cwd=Path(cwd),
                 timeout=timeout,
                 env=spec.env,
@@ -727,7 +722,7 @@ async def run_headless_core(
             resume_checkpoint=resume_checkpoint,
             resume_message=resume_message,
         )
-        spec = _cmd_spec_to_headless(cmd_spec)
+        spec = cmd_spec
 
         effective_timeout = timeout if timeout is not None else cfg.timeout
         effective_stale = stale_threshold if stale_threshold is not None else cfg.stale_threshold
@@ -919,7 +914,7 @@ class DefaultHeadlessExecutor:
             sentinel_contract=sentinel_contract,
             resume_message=resume_message,
         )
-        spec = _cmd_spec_to_headless(cmd_spec)
+        spec = cmd_spec
 
         effective_timeout = timeout if timeout is not None else fleet_cfg.default_timeout_sec
         effective_stale = (

@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from autoskillit.core import (
+    CmdSpec,
     NoResume,
     OutputFormat,
     PluginSource,
@@ -44,17 +45,7 @@ class ClaudeInteractiveCmd:
     env: Mapping[str, str] = field(default_factory=dict)
 
 
-@dataclass(frozen=True, slots=True)
-class ClaudeHeadlessCmd:
-    """Resolved argv + env for a claude headless subprocess.
-
-    ``env`` is the fully resolved environment returned by
-    :func:`build_agent_env`, including any headless-only extras such as
-    ``AUTOSKILLIT_HEADLESS=1``. Pass directly to the subprocess runner.
-    """
-
-    cmd: list[str]
-    env: Mapping[str, str] = field(default_factory=dict)
+ClaudeHeadlessCmd = CmdSpec
 
 
 def build_interactive_cmd(
@@ -86,7 +77,7 @@ def build_headless_cmd(
     model: str | None = None,
     env_extras: Mapping[str, str] | None = None,
     base: Mapping[str, str] | None = None,
-) -> ClaudeHeadlessCmd:
+) -> CmdSpec:
     """Build a Claude headless session command for skill execution."""
     spec = ClaudeCodeBackend().build_headless_cmd(
         prompt,
@@ -94,7 +85,7 @@ def build_headless_cmd(
         env_extras=env_extras,
         base=base,
     )
-    return ClaudeHeadlessCmd(cmd=list(spec.cmd), env=spec.env)
+    return spec
 
 
 def build_headless_resume_cmd(
@@ -104,7 +95,7 @@ def build_headless_resume_cmd(
     output_format: OutputFormat = OutputFormat.JSON,
     plugin_source: PluginSource | None = None,
     env_extras: Mapping[str, str] | None = None,
-) -> ClaudeHeadlessCmd:
+) -> CmdSpec:
     """Build a headless resume command for contract recovery nudge."""
     spec = ClaudeCodeBackend().build_resume_cmd(
         resume_session_id=resume_session_id,
@@ -113,7 +104,7 @@ def build_headless_resume_cmd(
         plugin_source=plugin_source,
         env_extras=env_extras,
     )
-    return ClaudeHeadlessCmd(cmd=list(spec.cmd), env=spec.env)
+    return spec
 
 
 def build_skill_session_cmd(
@@ -135,7 +126,7 @@ def build_skill_session_cmd(
     resume_session_id: str = "",
     resume_checkpoint: SessionCheckpoint | None = None,
     resume_message: str | None = None,
-) -> ClaudeHeadlessCmd:
+) -> CmdSpec:
     """Build the complete headless command spec for a skill session."""
     spec = ClaudeCodeBackend().build_skill_session_cmd(
         skill_command,
@@ -156,7 +147,7 @@ def build_skill_session_cmd(
         resume_checkpoint=resume_checkpoint,
         resume_message=resume_message,
     )
-    return ClaudeHeadlessCmd(cmd=list(spec.cmd), env=spec.env)
+    return spec
 
 
 def build_food_truck_cmd(
@@ -177,7 +168,7 @@ def build_food_truck_cmd(
     allowed_write_prefix: str = "",
     sentinel_contract: str = "",
     resume_message: str | None = None,
-) -> ClaudeHeadlessCmd:
+) -> CmdSpec:
     """Build the complete headless command spec for an L2 food truck session."""
     spec = ClaudeCodeBackend().build_food_truck_cmd(
         orchestrator_prompt=orchestrator_prompt,
@@ -197,4 +188,4 @@ def build_food_truck_cmd(
         sentinel_contract=sentinel_contract,
         resume_message=resume_message,
     )
-    return ClaudeHeadlessCmd(cmd=list(spec.cmd), env=spec.env)
+    return spec

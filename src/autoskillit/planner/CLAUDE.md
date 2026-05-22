@@ -15,6 +15,7 @@ IL-1 progressive resolution planner — phases, work packages, manifest generati
 | `schema.py` | Planner data contracts: `PhaseResult`, `AssignmentResult`, `WPResult`, `PlanDocument` TypedDicts |
 | `compiler.py` | `compile_plan` — topological sort, issue body generation, milestone definitions, plan artifacts |
 | `consolidation.py` | `consolidate_wps` — post-elaboration WP consolidation: reads manifests, merges trivial WPs, rewrites dep IDs |
+| `lifecycle.py` | `record_lifecycle_event`, `load_lifecycle_registry` — unified lifecycle provenance for voided/absorbed entities |
 
 ## Architecture Notes
 import from `server/` or `recipe/`. `validation.py` performs a DAG cycle check before any

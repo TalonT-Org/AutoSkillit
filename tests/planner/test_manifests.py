@@ -945,3 +945,36 @@ def test_build_phase_assignment_manifest_result_dir_isolated(tmp_path):
     manifest = json.loads(Path(result["manifest_path"]).read_text())
     assert Path(manifest["result_dir"]).name == "assign_sentinels"
     assert (output_dir / "assign_sentinels").is_dir()
+
+
+def test_expand_assignments_records_voided_phases(tmp_path):
+    """1D: expand_assignments writes voided_phases to lifecycle_registry.json."""
+    from autoskillit.planner import expand_assignments
+
+    refined = {
+        "phases": [
+            {
+                "id": "P1",
+                "name": "Phase 1",
+                "assignments_preview": [
+                    {"id": "P1-A1", "name": "Assignment 1"},
+                ],
+            },
+            {
+                "id": "P2",
+                "name": "Phase 2",
+                "assignments_preview": [],
+            },
+        ],
+        "task": "test task",
+    }
+    refined_path = tmp_path / "refined_plan.json"
+    refined_path.write_text(json.dumps(refined))
+
+    expand_assignments(str(refined_path), str(tmp_path))
+
+    registry_path = tmp_path / "work_packages" / "lifecycle_registry.json"
+    assert registry_path.exists()
+    registry = json.loads(registry_path.read_text())
+    assert "P2" in registry["voided_phases"]
+    assert "P1" not in registry["voided_phases"]

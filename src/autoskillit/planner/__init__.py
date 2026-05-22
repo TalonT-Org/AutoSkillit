@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from autoskillit.planner.compiler import compile_plan
 from autoskillit.planner.consolidation import consolidate_wps
+from autoskillit.planner.lifecycle import load_lifecycle_registry, record_lifecycle_event
 from autoskillit.planner.manifests import (
     build_phase_assignment_manifest,
     build_phase_wp_manifest,
@@ -86,4 +87,6 @@ __all__ = [
     "ValidationFinding",
     "discover_tier_files",
     "DiscoveryResult",
+    "load_lifecycle_registry",
+    "record_lifecycle_event",
 ]

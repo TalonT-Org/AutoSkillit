@@ -756,8 +756,8 @@ def test_consolidate_then_validate_sees_merged_wps(tmp_path: Path) -> None:
     assert result["issue_count"] == "0"
 
 
-def test_consolidate_wps_writes_absorption_registry(tmp_path: Path) -> None:
-    """consolidate_wps writes absorption_registry.json listing absorbed WP mappings."""
+def test_consolidate_wps_writes_lifecycle_registry(tmp_path: Path) -> None:
+    """consolidate_wps writes lifecycle_registry.json with absorbed WP mappings."""
     wp1 = make_wp_result("P1-A1-WP1", deliverables=["src/a.py"])
     wp2 = make_wp_result("P1-A2-WP1", deliverables=["src/b.py"])
     refined_path = _make_refined_wps(tmp_path, [wp1, wp2])
@@ -794,8 +794,8 @@ def test_consolidate_wps_writes_absorption_registry(tmp_path: Path) -> None:
 
     consolidate_wps(refined_wps_path=str(refined_path), planner_dir=str(tmp_path))
 
-    registry_path = wp_dir / "absorption_registry.json"
-    assert registry_path.exists(), "absorption_registry.json must be written"
+    registry_path = wp_dir / "lifecycle_registry.json"
+    assert registry_path.exists(), "lifecycle_registry.json must be written"
     registry = json.loads(registry_path.read_text())
     assert "absorbed" in registry
     assert "P1-A2-WP1" in registry["absorbed"]
@@ -858,6 +858,40 @@ def test_consolidate_then_validate_cross_assignment_absorption(tmp_path: Path) -
         f["check"] == "assignment_completeness" and "P1-A2" in f["message"]
         for f in validation.get("warnings", [])
     ), "Assignment P1-A2 should not appear as a warning either"
+
+
+def test_consolidate_wps_writes_lifecycle_registry_not_absorption(tmp_path: Path) -> None:
+    """1F: consolidate_wps writes to lifecycle_registry.json, not absorption_registry.json."""
+    wp1 = make_wp_result("P1-A1-WP1", deliverables=["src/a.py"])
+    wp2 = make_wp_result("P1-A1-WP2", deliverables=["src/b.py"])
+    refined_path = _make_refined_wps(tmp_path, [wp1, wp2])
+
+    consolidation_dir = tmp_path / "work_packages" / "consolidation"
+    _make_manifest(
+        consolidation_dir,
+        "P1",
+        [
+            {
+                "merged_id": "P1-A1-WP1",
+                "source_wp_ids": ["P1-A1-WP1", "P1-A1-WP2"],
+                "merge_order": ["P1-A1-WP1", "P1-A1-WP2"],
+                "name": None,
+                "goal": None,
+            }
+        ],
+    )
+
+    consolidate_wps(refined_wps_path=str(refined_path), planner_dir=str(tmp_path))
+
+    lifecycle_path = tmp_path / "work_packages" / "lifecycle_registry.json"
+    absorption_path = tmp_path / "work_packages" / "absorption_registry.json"
+
+    assert lifecycle_path.exists()
+    assert not absorption_path.exists()
+
+    registry = json.loads(lifecycle_path.read_text())
+    assert "P1-A1-WP2" in registry["absorbed"]
+    assert registry["absorbed"]["P1-A1-WP2"]["merged_into"] == "P1-A1-WP1"
 
 
 def test_consolidate_then_compile_emits_correct_issue_count(tmp_path: Path) -> None:

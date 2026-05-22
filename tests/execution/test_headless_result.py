@@ -9,7 +9,14 @@ from unittest.mock import Mock
 import pytest
 import structlog.testing
 
-from autoskillit.core.types import KillReason, SubprocessResult, TerminationReason, WriteEvidence
+from autoskillit.core import AGENT_BACKEND_CLAUDE_CODE
+from autoskillit.core.types import (
+    AgentSessionResult,
+    KillReason,
+    SubprocessResult,
+    TerminationReason,
+    WriteEvidence,
+)
 from autoskillit.execution.headless import _build_skill_result
 from tests.execution.conftest import _make_tool_use_line, _sr, _success_session_json
 
@@ -220,6 +227,7 @@ class TestBackendDelegatedWriteToolNames:
         """Custom backend.write_tool_names() overrides the tool name set."""
 
         mock_backend = Mock()
+        mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
         mock_backend.write_tool_names.return_value = frozenset({"CustomWrite"})
         stdout = (
             _make_tool_use_line("CustomWrite", {"file_path": "/a/b.py", "content": "x"})
@@ -292,6 +300,7 @@ class TestBackendDelegatedWriteToolNames:
         monkeypatch.setattr(_headless_result, "_parse_stdout", spy)
 
         mock_backend = Mock()
+        mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
         stdout = _success_session_json("Done")
         result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
         _build_skill_result(result, backend=mock_backend)
@@ -313,6 +322,7 @@ class TestBackendDelegatedWriteToolNames:
         monkeypatch.setattr(_headless_result, "_parse_stdout", spy)
 
         mock_backend = Mock()
+        mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
         stdout = _success_session_json("Done")
         result = _sr(0, stdout, "", TerminationReason.STALE)
         _build_skill_result(result, backend=mock_backend)
@@ -334,6 +344,7 @@ class TestBackendDelegatedWriteToolNames:
         monkeypatch.setattr(_headless_result, "_parse_stdout", spy)
 
         mock_backend = Mock()
+        mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
         stdout = _success_session_json("Done")
         result = _sr(0, stdout, "", TerminationReason.IDLE_STALL)
         _build_skill_result(result, backend=mock_backend)
@@ -355,6 +366,7 @@ class TestBackendDelegatedWriteToolNames:
         monkeypatch.setattr(_headless_result, "_parse_stdout", spy)
 
         mock_backend = Mock()
+        mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
         stdout = _success_session_json("Done")
         result = _sr(0, stdout, "", TerminationReason.TIMED_OUT)
         _build_skill_result(result, backend=mock_backend)
@@ -392,6 +404,7 @@ class TestParseStdout:
         from autoskillit.execution.session import ClaudeSessionResult
 
         mock_backend = Mock()
+        mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
         stdout = _success_session_json("test result")
         result = _parse_stdout(stdout, backend=mock_backend)
         assert isinstance(result, ClaudeSessionResult)
@@ -403,12 +416,77 @@ class TestParseStdout:
         from autoskillit.execution.headless import _parse_stdout
 
         mock_backend = Mock()
+        mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
         stdout = _success_session_json("test result")
         with_backend = _parse_stdout(stdout, backend=mock_backend)
         without_backend = _parse_stdout(stdout)
         assert with_backend.result == without_backend.result
         assert with_backend.session_id == without_backend.session_id
         assert with_backend.session_complete == without_backend.session_complete
+
+    def test_parse_stdout_claude_code_backend_falls_through(self):
+        """ClaudeCodeBackend backend falls through to parse_session_result."""
+        from autoskillit.execution.backends.claude import ClaudeCodeBackend
+        from autoskillit.execution.headless import _parse_stdout
+        from autoskillit.execution.session import parse_session_result
+
+        stdout = _success_session_json("test result")
+        result = _parse_stdout(stdout, backend=ClaudeCodeBackend())
+        expected = parse_session_result(stdout)
+        assert result.result == expected.result
+        assert result.session_id == expected.session_id
+        assert result.session_complete == expected.session_complete
+
+    def test_parse_stdout_non_claude_backend_dispatches_through_result_parser(self):
+        """Non-Claude backend dispatches through result_parser().parse_stdout()."""
+        from autoskillit.execution.headless import _parse_stdout
+        from autoskillit.execution.session import ClaudeSessionResult
+
+        mock_backend = Mock()
+        mock_backend.name = "not-claude-code"
+        mock_backend.result_parser().parse_stdout.return_value = AgentSessionResult(
+            success=True,
+            exit_code=0,
+            backend_name="not-claude-code",
+            elapsed_seconds=0.0,
+            session_id="s1",
+            output="adapter output",
+            error="",
+            raw={"subtype": "success", "is_error": False, "stop_reasons": []},
+        )
+
+        stdout = _success_session_json("test result")
+        result = _parse_stdout(stdout, backend=mock_backend)
+        mock_backend.result_parser().parse_stdout.assert_called_once_with(stdout)
+        assert isinstance(result, ClaudeSessionResult)
+        assert result.result == "adapter output"
+
+    def test_parse_stdout_backend_none_unchanged(self):
+        """_parse_stdout with backend=None matches parse_session_result (regression guard)."""
+        from autoskillit.execution.headless import _parse_stdout
+        from autoskillit.execution.session import parse_session_result
+
+        stdout = _success_session_json("test result")
+        result = _parse_stdout(stdout, backend=None)
+        expected = parse_session_result(stdout)
+        assert result.result == expected.result
+        assert result.session_id == expected.session_id
+        assert result.session_complete == expected.session_complete
+
+    def test_parse_stdout_codex_backend_dispatches_through_adapter(self, monkeypatch):
+        """CodexBackend dispatches through _adapt_agent_result (non-Claude path)."""
+        from autoskillit.execution.backends.codex import CodexBackend
+        from autoskillit.execution.headless import _headless_result
+        from autoskillit.execution.headless._headless_result import _parse_stdout
+        from autoskillit.execution.session import ClaudeSessionResult
+
+        spy = Mock(wraps=_headless_result._adapt_agent_result)
+        monkeypatch.setattr(_headless_result, "_adapt_agent_result", spy)
+
+        stdout = _success_session_json("test result")
+        result = _parse_stdout(stdout, backend=CodexBackend())
+        spy.assert_called_once()
+        assert isinstance(result, ClaudeSessionResult)
 
 
 class TestStaleRecoveryWriteEvidence:

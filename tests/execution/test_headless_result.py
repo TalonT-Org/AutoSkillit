@@ -457,7 +457,7 @@ class TestParseStdout:
 
         stdout = _success_session_json("test result")
         result = _parse_stdout(stdout, backend=mock_backend)
-        mock_backend.result_parser().parse_stdout.assert_called_once_with(stdout)
+        mock_backend.result_parser.return_value.parse_stdout.assert_called_once_with(stdout)
         assert isinstance(result, ClaudeSessionResult)
         assert result.result == "adapter output"
 
@@ -487,6 +487,7 @@ class TestParseStdout:
         result = _parse_stdout(stdout, backend=CodexBackend())
         spy.assert_called_once()
         assert isinstance(result, ClaudeSessionResult)
+        assert result.result is not None
 
 
 class TestStaleRecoveryWriteEvidence:

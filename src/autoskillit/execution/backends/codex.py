@@ -411,8 +411,6 @@ class CodexBackend:
             CodexFlags.JSON,
             CodexFlags.SANDBOX,
             "workspace-write",
-            CodexFlags.ASK_FOR_APPROVAL_SHORT,
-            "never",
         ]
         if model:
             cmd += [CodexFlags.MODEL, model]

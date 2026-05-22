@@ -114,11 +114,9 @@ class TestCodexBackendCommands:
         idx = spec.cmd.index("--sandbox")
         assert spec.cmd[idx + 1] == "workspace-write"
 
-    def test_build_headless_cmd_has_approval_never(self) -> None:
+    def test_no_approval_flag_in_headless_cmd(self) -> None:
         spec = CodexBackend().build_headless_cmd("do stuff")
-        assert "-a" in spec.cmd
-        idx = spec.cmd.index("-a")
-        assert spec.cmd[idx + 1] == "never"
+        assert "-a" not in spec.cmd
 
     def test_build_headless_cmd_prompt_is_last(self) -> None:
         spec = CodexBackend().build_headless_cmd("do stuff")
@@ -290,8 +288,6 @@ class TestCodexHeadlessCmd:
             "--json",
             "--sandbox",
             "workspace-write",
-            "-a",
-            "never",
             "do stuff",
         )
 
@@ -301,11 +297,9 @@ class TestCodexHeadlessCmd:
         idx = spec.cmd.index("--sandbox")
         assert spec.cmd[idx + 1] == "workspace-write"
 
-    def test_approval_never(self) -> None:
+    def test_no_approval_never_in_headless_cmd(self) -> None:
         spec = CodexBackend().build_headless_cmd("do stuff")
-        assert "-a" in spec.cmd
-        idx = spec.cmd.index("-a")
-        assert spec.cmd[idx + 1] == "never"
+        assert "-a" not in spec.cmd
 
     def test_model_flag(self) -> None:
         spec = CodexBackend().build_headless_cmd("x", model="o3")

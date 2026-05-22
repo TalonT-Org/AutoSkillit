@@ -444,7 +444,8 @@ class TestParseStdout:
 
         mock_backend = Mock()
         mock_backend.name = "not-claude-code"
-        mock_backend.result_parser().parse_stdout.return_value = AgentSessionResult(
+        parser = mock_backend.result_parser.return_value
+        parser.parse_stdout.return_value = AgentSessionResult(
             success=True,
             exit_code=0,
             backend_name="not-claude-code",
@@ -486,6 +487,8 @@ class TestParseStdout:
         stdout = _success_session_json("test result")
         result = _parse_stdout(stdout, backend=CodexBackend())
         spy.assert_called_once()
+        (agent_result,), _ = spy.call_args
+        assert isinstance(agent_result, AgentSessionResult)
         assert isinstance(result, ClaudeSessionResult)
         assert result.result is not None
 

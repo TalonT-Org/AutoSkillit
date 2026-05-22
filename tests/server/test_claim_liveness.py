@@ -49,7 +49,7 @@ class TestClaimIssueLiveness:
     async def test_claim_issue_proceeds_when_owning_session_is_dead(self, tool_ctx_kitchen_open):
         """When dispatch is dead, label is cleaned up and claimed=True is returned."""
         dead_dispatch = _make_dead_dispatch()
-        cleanup_mock = AsyncMock()
+        cleanup_mock = AsyncMock(return_value=True)
         tool_ctx_kitchen_open.github_client = _mock_client_with_in_progress_label()
 
         with (
@@ -117,7 +117,7 @@ class TestClaimAndResolveIssueLiveness:
     ):
         """claim_and_resolve_issue: dead dispatch → cleanup → claimed=True."""
         dead_dispatch = _make_dead_dispatch()
-        cleanup_mock = AsyncMock()
+        cleanup_mock = AsyncMock(return_value=True)
         tool_ctx_kitchen_open.github_client = _mock_client_with_in_progress_label()
 
         with (
@@ -159,7 +159,7 @@ class TestClaimHelperParity:
         from autoskillit.server.tools._claim_helpers import _try_claim_with_liveness
 
         dead_dispatch = _make_dead_dispatch()
-        cleanup_mock = AsyncMock()
+        cleanup_mock = AsyncMock(return_value=True)
 
         with (
             patch(f"{_FLEET_MODULE}.find_dispatch_for_issue", return_value=dead_dispatch),
@@ -217,7 +217,7 @@ class TestClaimHelperTerminalDispatchRecovery:
             sidecar_path=str(tmp_path / "fail_sidecar.jsonl"),
             labels_cleaned=False,
         )
-        cleanup_mock = AsyncMock()
+        cleanup_mock = AsyncMock(return_value=True)
 
         with (
             patch(f"{_FLEET_MODULE}.find_dispatch_for_issue", return_value=failure_dispatch),
@@ -239,6 +239,42 @@ class TestClaimHelperTerminalDispatchRecovery:
         assert cleanup_mock.call_args[0][0] == failure_dispatch.sidecar_path
 
     @pytest.mark.anyio
+    async def test_claim_helper_failure_dispatch_cleanup_fails_leaves_flag_false(self, tmp_path):
+        """_try_claim_with_liveness: cleanup fails → claimed=True, stale_label_cleaned=False."""
+        from autoskillit.server.tools._claim_helpers import _try_claim_with_liveness
+
+        failure_dispatch = DispatchRecord(
+            name="task-fail",
+            status=DispatchStatus.FAILURE,
+            sidecar_path=str(tmp_path / "fail_sidecar.jsonl"),
+            labels_cleaned=False,
+        )
+        cleanup_mock = AsyncMock(return_value=False)
+        mark_cleaned_mock = AsyncMock()
+
+        with (
+            patch(f"{_FLEET_MODULE}.find_dispatch_for_issue", return_value=failure_dispatch),
+            patch(f"{_FLEET_MODULE}.cleanup_orphaned_labels", cleanup_mock),
+            patch(
+                "autoskillit.server.tools._claim_helpers._mark_dispatch_labels_cleaned",
+                mark_cleaned_mock,
+            ),
+        ):
+            decision = await _try_claim_with_liveness(
+                issue_url=_ISSUE_URL,
+                issue_number=42,
+                effective_label="in-progress",
+                current_labels=["in-progress"],
+                allow_reentry=False,
+                github_client=AsyncMock(),
+                campaign_state_paths=[],
+            )
+
+        assert decision.claimed is True
+        assert decision.stale_label_cleaned is False
+        mark_cleaned_mock.assert_not_called()
+
+    @pytest.mark.anyio
     async def test_claim_helper_failure_dispatch_skips_liveness_check(self, tmp_path):
         """_try_claim_with_liveness: FAILURE dispatch does NOT call is_dispatch_session_alive."""
         from autoskillit.server.tools._claim_helpers import _try_claim_with_liveness
@@ -254,7 +290,7 @@ class TestClaimHelperTerminalDispatchRecovery:
         with (
             patch(f"{_FLEET_MODULE}.find_dispatch_for_issue", return_value=failure_dispatch),
             patch(f"{_FLEET_MODULE}.is_dispatch_session_alive", liveness_mock),
-            patch(f"{_FLEET_MODULE}.cleanup_orphaned_labels", AsyncMock()),
+            patch(f"{_FLEET_MODULE}.cleanup_orphaned_labels", AsyncMock(return_value=True)),
         ):
             decision = await _try_claim_with_liveness(
                 issue_url=_ISSUE_URL,

@@ -932,8 +932,9 @@ async def _run_dispatch(
     if final_status not in (DispatchStatus.SUCCESS, DispatchStatus.RESUMABLE):
         from autoskillit.fleet._label_cleanup import cleanup_orphaned_labels  # noqa: PLC0415
 
-        await cleanup_orphaned_labels(dispatch_sidecar_path, tool_ctx.github_client)
-        _labels_cleaned = True
+        _labels_cleaned = await cleanup_orphaned_labels(
+            dispatch_sidecar_path, tool_ctx.github_client
+        )
 
     try:
         project_log_dir = str(claude_code_project_dir(str(tool_ctx.project_dir)))

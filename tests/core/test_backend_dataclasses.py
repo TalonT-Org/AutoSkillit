@@ -273,11 +273,11 @@ def test_skill_session_config_field_types():
     import typing
     from collections.abc import Mapping
 
-    from autoskillit.core import SkillSessionConfig
-    from autoskillit.core.types._type_backend import (
+    from autoskillit.core import (
         OutputFormat,
         PluginSource,
         SessionCheckpoint,
+        SkillSessionConfig,
         ValidatedAddDir,
     )
 
@@ -297,17 +297,3 @@ def test_skill_session_config_field_types():
     assert hints["resume_session_id"] is str
     assert hints["resume_checkpoint"] == SessionCheckpoint | None
     assert hints["resume_message"] == str | None
-
-
-def test_skill_session_config_new_imports_accessible():
-    from autoskillit.core.types._type_backend import (
-        OutputFormat,
-        PluginSource,
-        SessionCheckpoint,
-        ValidatedAddDir,
-    )
-
-    assert OutputFormat is not None
-    assert SessionCheckpoint is not None
-    assert PluginSource is not None
-    assert ValidatedAddDir is not None

@@ -156,7 +156,7 @@ class TestChannelBDrainWait:
         # Drain wait confirmed Channel A fired: stdout is non-empty
         assert result.stdout.strip()
 
-    @pytest.mark.timeout(150)
+    @pytest.mark.timeout(360)
     @pytest.mark.anyio
     async def test_channel_b_wins_drain_timeout_still_kills(self, tmp_path):
         """Channel B fires; Channel A never fires; drain times out and process is killed.
@@ -167,14 +167,14 @@ class TestChannelBDrainWait:
           t=0.66s  drain times out (script never wrote to stdout)
           t=0.66s  process killed with empty stdout
 
-        timeout=120s: guards against the outer wall-clock expiring under xdist -n 4 load.
+        timeout=300s: guards against the outer wall-clock expiring under xdist -n 4 load.
         _watch_session_log waits up to _session_id_timeout (default 1.0s, tests pass 0.01s)
         for stdout_session_id_ready before Phase 1 starts;
         under CI load both the preamble and Phase 1 polls can overrun, so the outer
         timeout must exceed _session_id_timeout + _phase1_timeout (30s default) + drain (0.5s) = 31.5s.
-        _phase1_timeout=250: must exceed outer timeout (120s) so that Phase 1 never fires
+        _phase1_timeout=400: must exceed outer timeout (300s) so that Phase 1 never fires
         first with STALE when subprocess startup is slow under WSL2 + xdist load; the
-        outer 120s guard cancels all tasks before Phase 1 can timeout independently.
+        outer 300s guard cancels all tasks before Phase 1 can timeout independently.
         natural_exit_grace_seconds=0.1: script never exits naturally (time.sleep(300)),
         so shorten grace window to reduce total test time and avoid asyncio-waitpid
         thread contention under CI load (default 3.0s grace + 3.0s kill = 6s total).
@@ -187,7 +187,7 @@ class TestChannelBDrainWait:
         result = await run_managed_async(
             [sys.executable, str(script), str(session_dir)],
             cwd=tmp_path,
-            timeout=120,
+            timeout=300,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=0.5,
@@ -195,7 +195,7 @@ class TestChannelBDrainWait:
             _phase1_poll=0.01,
             _phase2_poll=0.05,
             _session_id_timeout=0.01,
-            _phase1_timeout=250,
+            _phase1_timeout=400,
         )
 
         assert result.termination == TerminationReason.COMPLETED

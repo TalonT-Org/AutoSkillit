@@ -46,9 +46,7 @@ class ContentState(StrEnum):
     """Content evaluation state for dead-end / drain-race guard dispatch."""
 
     COMPLETE = "complete"
-    ABSENT = (
-        "absent"  # Empty result or missing marker without pattern match — drain-race candidate
-    )
+    ABSENT = "absent"  # Empty result or marker absent (no pattern match) — drain-race
     MARKER_ABSENT_CONTRACT_MET = "marker_absent_contract_met"
     CONTRACT_VIOLATION = "contract_violation"  # Result + marker present, but patterns fail
     SESSION_ERROR = "session_error"  # is_error=True or process-level failure

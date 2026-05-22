@@ -33,21 +33,15 @@ def _collect_imports(tree: ast.Module) -> set[str]:
     return names
 
 
-def test_run_headless_core_does_not_import_commands_module():
-    source = _HEADLESS_INIT.read_text()
-    tree = ast.parse(source)
-    imports = _collect_imports(tree)
-    assert "build_skill_session_cmd" not in imports, (
-        "headless/__init__.py must not import build_skill_session_cmd from commands — "
-        "use ctx.backend.build_skill_session_cmd() instead"
-    )
+_HEADLESS_IMPORTS = _collect_imports(ast.parse(_HEADLESS_INIT.read_text()))
 
 
-def test_dispatch_food_truck_does_not_import_commands_module():
-    source = _HEADLESS_INIT.read_text()
-    tree = ast.parse(source)
-    imports = _collect_imports(tree)
-    assert "build_food_truck_cmd" not in imports, (
-        "headless/__init__.py must not import build_food_truck_cmd from commands — "
-        "use ctx.backend.build_food_truck_cmd() instead"
+@pytest.mark.parametrize(
+    "symbol",
+    ["build_skill_session_cmd", "build_food_truck_cmd"],
+)
+def test_headless_does_not_import_commands_module(symbol: str):
+    assert symbol not in _HEADLESS_IMPORTS, (
+        f"headless/__init__.py must not import {symbol} from commands — "
+        f"use ctx.backend.{symbol}() instead"
     )

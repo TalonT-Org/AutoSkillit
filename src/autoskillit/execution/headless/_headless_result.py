@@ -563,10 +563,12 @@ def _build_skill_result(
     if (
         normalized_subtype == "missing_completion_marker"
         and expected_output_patterns
+        and infra_category == InfraExitCategory.COMPLETED
         and _check_expected_patterns(session.result.strip(), expected_output_patterns)
     ):
         normalized_subtype = CliSubtype.SUCCESS.value
         outcome = SessionOutcome.SUCCEEDED
+        success = True
         needs_retry = False
         retry_reason = RetryReason.NONE
 

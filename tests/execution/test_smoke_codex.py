@@ -1,6 +1,7 @@
 """Codex CLI smoke test: gated E2E validation of codex exec NDJSON output.
 
-Gated E2E tests run only when CODEX_SMOKE_TEST=1 and OPENAI_API_KEY are set
+Gated E2E tests run only when CODEX_SMOKE_TEST=1 and one of: CODEX_API_KEY env var,
+OPENAI_API_KEY env var, or ~/.codex/auth.json (CLI-managed auth) are set
 (via ``task test-smoke-codex``).
 """
 
@@ -8,6 +9,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -16,10 +18,18 @@ from autoskillit.execution.backends.codex import CodexResultParser, CodexStreamP
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.large]
 
-_SKIP_REASON = "Set CODEX_SMOKE_TEST=1 and OPENAI_API_KEY to run Codex smoke tests"
+_SKIP_REASON = (
+    "Set CODEX_SMOKE_TEST=1 and one of: CODEX_API_KEY, OPENAI_API_KEY,"
+    " or ~/.codex/auth.json to run Codex smoke tests"
+)
 
 _skip_unless_codex_smoke = pytest.mark.skipif(
-    not os.environ.get("CODEX_SMOKE_TEST") or not os.environ.get("OPENAI_API_KEY"),
+    not os.environ.get("CODEX_SMOKE_TEST")
+    or (
+        not os.environ.get("CODEX_API_KEY")
+        and not os.environ.get("OPENAI_API_KEY")
+        and not Path("~/.codex/auth.json").expanduser().exists()
+    ),
     reason=_SKIP_REASON,
 )
 
@@ -30,8 +40,9 @@ class TestCodexSmokeExecution:
     """Full end-to-end Codex CLI smoke execution.
 
     Run via ``task test-smoke-codex`` which sets CODEX_SMOKE_TEST=1 and
-    requires OPENAI_API_KEY. Executes ``codex exec --json`` with a trivial
-    prompt and validates NDJSON output parsing.
+    requires one of: CODEX_API_KEY, OPENAI_API_KEY, or ~/.codex/auth.json.
+    Executes ``codex exec --json`` with a trivial prompt and validates
+    NDJSON output parsing.
     """
 
     def test_codex_exec_ndjson_parseable(self) -> None:
@@ -42,8 +53,6 @@ class TestCodexSmokeExecution:
                 "--json",
                 "--sandbox",
                 "workspace-write",
-                "-a",
-                "never",
                 "Respond with exactly: hello",
             ],
             capture_output=True,

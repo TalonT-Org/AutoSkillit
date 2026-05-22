@@ -58,10 +58,17 @@ def _get_skill_md_content(skill_name: str) -> str | None:
 
 def _find_important_callouts(content: str) -> list[str]:
     regions: list[str] = []
+    lines = content.splitlines(keepends=True)
     for m in _IMPORTANT_RE.finditer(content):
-        start = max(0, m.start() - 50)
-        end = min(len(content), m.end() + 400)
-        regions.append(content[start:end])
+        line_start = content.rfind("\n", 0, m.start()) + 1
+        line_idx = content[:line_start].count("\n")
+        region_lines = []
+        for i in range(line_idx, len(lines)):
+            line = lines[i]
+            if region_lines and not line.startswith(">") and line.strip():
+                break
+            region_lines.append(line)
+        regions.append("".join(region_lines))
     return regions
 
 

@@ -5,6 +5,10 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
+
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+
 _HEADLESS_INIT = (
     Path(__file__).parent.parent.parent
     / "src"

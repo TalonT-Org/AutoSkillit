@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import pytest
+
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+
 
 def test_coding_agent_backend_protocol_includes_skill_session_cmd():
     from autoskillit.core.types._type_protocols_backend import CodingAgentBackend

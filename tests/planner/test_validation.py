@@ -898,6 +898,7 @@ def test_check_assignment_completeness_skips_voided_assignments() -> None:
     assignment_results = {
         "P4-A2": {"phase_number": 4, "assignment_number": 2},
         "P4-A1": {"phase_number": 4, "assignment_number": 1},
+        "P4-A3": {"phase_number": 4, "assignment_number": 3},
     }
     wp_results = {
         "P4-A1-WP1": {"id": "P4-A1-WP1", "depends_on": []},
@@ -909,6 +910,7 @@ def test_check_assignment_completeness_skips_voided_assignments() -> None:
     }
     findings = _check_assignment_completeness(assignment_results, wp_results, lifecycle_registry)
     assert not any("P4-A2" in f["message"] for f in findings)
+    assert any("P4-A3" in f["message"] for f in findings)
 
 
 def test_check_phase_completeness_skips_voided_phases() -> None:
@@ -916,6 +918,7 @@ def test_check_phase_completeness_skips_voided_phases() -> None:
     phase_results = {
         "P3": {"phase_number": 3},
         "P1": {"phase_number": 1},
+        "P2": {"phase_number": 2},
     }
     assignment_results = {
         "P1-A1": {"phase_number": 1, "assignment_number": 1},
@@ -927,6 +930,7 @@ def test_check_phase_completeness_skips_voided_phases() -> None:
     }
     findings = _check_phase_completeness(phase_results, assignment_results, lifecycle_registry)
     assert not any("P3" in f["message"] for f in findings)
+    assert any("P2" in f["message"] for f in findings)
 
 
 def test_validate_plan_voided_assignment_no_false_positive(tmp_path: Path) -> None:

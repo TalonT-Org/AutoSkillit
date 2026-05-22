@@ -981,21 +981,21 @@ async def test_end_to_end_resumable_dispatch_uses_resume_flag(
     fleet_runtime: FleetRuntime, monkeypatch: Any
 ) -> None:
     """resume_session_id reaches build_food_truck_cmd and produces --resume <id> in the cmd."""
-    import autoskillit.execution.headless as _headless_mod
     from autoskillit.fleet._api import execute_dispatch
 
     rt = fleet_runtime
     rt.add_recipe("recipe-a")
 
     captured_cmds: list[list[str]] = []
-    original_build = _headless_mod.build_food_truck_cmd
+    backend = rt.tool_ctx.backend
+    original_build = backend.build_food_truck_cmd
 
-    def _spy_build(**kwargs):
+    def _spy_build(**kwargs: Any) -> Any:
         spec = original_build(**kwargs)
         captured_cmds.append(list(spec.cmd))
         return spec
 
-    monkeypatch.setattr(_headless_mod, "build_food_truck_cmd", _spy_build)
+    monkeypatch.setattr(backend, "build_food_truck_cmd", _spy_build)
     rt.configure_shim("success")
 
     await execute_dispatch(

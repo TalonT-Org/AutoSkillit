@@ -162,22 +162,27 @@ class TestDispatchFoodTruckIdleEnvInjection:
     ) -> None:
         """dispatch_food_truck adds AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT to env_extras
         based on fleet config idle_output_timeout (priority: caller > fleet > run_skill)."""
+        from dataclasses import replace
+        from unittest.mock import Mock
+
+        from autoskillit.core import CLAUDE_CODE_CAPABILITIES, CmdSpec
+        from autoskillit.core.types import KillReason, RetryReason
         from autoskillit.core.types import SkillResult as _SkillResult
+        from autoskillit.core.types._type_plugin_source import DirectInstall
         from autoskillit.execution.headless import DefaultHeadlessExecutor
 
         minimal_ctx.config.fleet.idle_output_timeout = 120
 
-        captured_env_extras: list[dict[str, str] | None] = []
-
-        def _capture_build(**kwargs: Any):
-            captured_env_extras.append(kwargs.get("env_extras"))
-            from autoskillit.execution.commands import ClaudeHeadlessCmd
-
-            return ClaudeHeadlessCmd(cmd=["echo", "done"], env={})
+        backend = Mock()
+        backend.name = "claude-code"
+        backend.capabilities = replace(CLAUDE_CODE_CAPABILITIES)
+        backend.build_food_truck_cmd.return_value = CmdSpec(
+            cmd=("claude", "--print", "test"), env={}
+        )
+        backend.write_tool_names.return_value = frozenset({"Write", "Edit"})
+        minimal_ctx.backend = backend
 
         async def _fake_execute(*_args: Any, **_kwargs: Any) -> _SkillResult:
-            from autoskillit.core.types import KillReason, RetryReason
-
             return _SkillResult(
                 success=True,
                 result="done",
@@ -192,15 +197,9 @@ class TestDispatchFoodTruckIdleEnvInjection:
             )
 
         monkeypatch.setattr(
-            "autoskillit.execution.headless.build_food_truck_cmd",
-            _capture_build,
-        )
-        monkeypatch.setattr(
             "autoskillit.execution.headless._execute_claude_headless",
             _fake_execute,
         )
-
-        from autoskillit.core.types._type_plugin_source import DirectInstall
 
         minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path / "plugin")
         executor = DefaultHeadlessExecutor(minimal_ctx)
@@ -211,8 +210,9 @@ class TestDispatchFoodTruckIdleEnvInjection:
             env_extras=None,
         )
 
-        assert captured_env_extras, "build_food_truck_cmd was not called"
-        env = captured_env_extras[0] or {}
+        backend.build_food_truck_cmd.assert_called_once()
+        call_kwargs = backend.build_food_truck_cmd.call_args[1]
+        env = call_kwargs.get("env_extras") or {}
         assert "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT" in env, (
             f"Expected AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT in env_extras, got {env!r}"
         )

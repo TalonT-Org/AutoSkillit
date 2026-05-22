@@ -47,6 +47,14 @@ def _mock_backend(
         cmd=("claude", "--print", "emit marker", "--resume", "test-session"),
         env={},
     )
+    backend.build_skill_session_cmd.return_value = CmdSpec(
+        cmd=("claude", "--print", "test-skill"),
+        env={},
+    )
+    backend.build_food_truck_cmd.return_value = CmdSpec(
+        cmd=("claude", "--print", "test-food-truck"),
+        env={},
+    )
     backend.write_tool_names.return_value = frozenset({"Write", "Edit"})
     return backend
 

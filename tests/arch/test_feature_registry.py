@@ -641,3 +641,51 @@ def test_user_config_override_beats_auto_detect(monkeypatch: pytest.MonkeyPatch,
     monkeypatch.setattr("pathlib.Path.home", lambda: fake_home)
     cfg = load_config(tmp_path)
     assert cfg.experimental_enabled is True
+
+
+# ── T5: requires_backend_alignment guard ─────────────────────────────────
+
+
+def test_experimental_blanket_does_not_promote_alignment_guarded_features(monkeypatch):
+    """experimental_enabled must not promote features with requires_backend_alignment=True."""
+    import autoskillit.core.types._type_constants as tc
+    from autoskillit.core.feature_flags import is_feature_enabled
+    from autoskillit.core.types._type_constants import FeatureDef
+    from autoskillit.core.types._type_enums import FeatureLifecycle
+
+    guarded_def = FeatureDef(
+        lifecycle=FeatureLifecycle.EXPERIMENTAL,
+        description="alignment-guarded",
+        tool_tags=frozenset(),
+        skill_categories=frozenset(),
+        import_package=None,
+        default_enabled=False,
+        requires_backend_alignment=True,
+    )
+    monkeypatch.setitem(tc.FEATURE_REGISTRY, "test_guarded_feat", guarded_def)
+    assert is_feature_enabled("test_guarded_feat", {}, experimental_enabled=True) is False
+    assert (
+        is_feature_enabled(
+            "test_guarded_feat", {"test_guarded_feat": True}, experimental_enabled=True
+        )
+        is True
+    )
+
+
+def test_codex_backend_not_promoted_by_experimental_blanket():
+    """Real codex_backend entry must not be promoted by experimental_enabled alone."""
+    from autoskillit.core.feature_flags import is_feature_enabled
+
+    assert is_feature_enabled("codex_backend", {}, experimental_enabled=True) is False
+    assert is_feature_enabled("codex_backend", {}, experimental_enabled=False) is False
+    assert (
+        is_feature_enabled("codex_backend", {"codex_backend": True}, experimental_enabled=True)
+        is True
+    )
+
+
+def test_fleet_still_promoted_by_experimental_blanket():
+    """fleet (no alignment guard) must still be promoted by experimental_enabled."""
+    from autoskillit.core.feature_flags import is_feature_enabled
+
+    assert is_feature_enabled("fleet", {}, experimental_enabled=True) is True

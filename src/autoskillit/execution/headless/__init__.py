@@ -283,6 +283,15 @@ async def _execute_claude_headless(
     if runner is None:
         raise RuntimeError("No subprocess runner configured")
 
+    if ctx.backend is not None and spec.cmd:
+        _binary = Path(spec.cmd[0]).stem
+        _expected = "claude" if ctx.backend.name == "claude-code" else "codex"
+        if _binary != _expected:
+            raise RuntimeError(
+                f"Backend coherence violation: ctx.backend.name={ctx.backend.name!r} "
+                f"but subprocess binary is {_binary!r}"
+            )
+
     linux_tracing_cfg = ctx.config.linux_tracing
     _start_ts = datetime.now(UTC).isoformat()
     _start_mono = time.monotonic()

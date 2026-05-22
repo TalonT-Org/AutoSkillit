@@ -243,6 +243,40 @@ class TestBackendDelegatedWriteToolNames:
         sr = _build_skill_result(result, backend=None)
         assert sr.evidence.write_call_count == 0
 
+    def test_codex_backend_produces_zero_write_count(self):
+        """CodexBackend.write_tool_names() is empty — write_call_count must be 0."""
+        from autoskillit.execution.backends.codex import CodexBackend
+
+        stdout = (
+            _make_tool_use_line("Write", {"file_path": "/a/b.py", "content": "x"})
+            + "\n"
+            + _make_tool_use_line(
+                "Edit", {"file_path": "/a/c.py", "old_string": "a", "new_string": "b"}
+            )
+            + "\n"
+            + _success_session_json("Done")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(result, backend=CodexBackend())
+        assert sr.evidence.write_call_count == 0
+
+    def test_claude_backend_counts_write_and_edit(self):
+        """ClaudeCodeBackend.write_tool_names() includes Write and Edit."""
+        from autoskillit.execution.backends.claude import ClaudeCodeBackend
+
+        stdout = (
+            _make_tool_use_line("Write", {"file_path": "/a/b.py", "content": "x"})
+            + "\n"
+            + _make_tool_use_line(
+                "Edit", {"file_path": "/a/c.py", "old_string": "a", "new_string": "b"}
+            )
+            + "\n"
+            + _success_session_json("Done")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(result, backend=ClaudeCodeBackend())
+        assert sr.evidence.write_call_count == 2
+
     def test_build_skill_result_threads_backend_to_parse_stdout(self, monkeypatch):
         """_build_skill_result passes backend to _parse_stdout on normal exit."""
 

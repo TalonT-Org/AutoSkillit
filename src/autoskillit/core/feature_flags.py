@@ -49,6 +49,8 @@ def is_feature_enabled(
     if name in features:
         return features[name]
     if experimental_enabled and defn.lifecycle == FeatureLifecycle.EXPERIMENTAL:
+        if defn.requires_backend_alignment:
+            return defn.default_enabled
         return True
     return defn.default_enabled
 

@@ -13,6 +13,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_editable_guard.py` | Unit tests for server/_editable_guard.py — scan_editable_installs_for_worktree |
 | `test_factory.py` | Tests for server/_factory.py make_context() composition root |
 | `test_factory_recording.py` | Tests for make_context recording/replay runner wiring |
+| `test_factory_backend_coherence.py` | Tests for backend coherence enforcement in make_context() |
 | `test_factory_codex_backend_gate.py` | Tests for codex_backend feature flag gating in make_context() |
 | `test_git.py` | Tests for server/git.py perform_merge() |
 | `test_git_merge_dirty_check.py` | Tests for the pre-merge dirty check in perform_merge (Layer 3) |

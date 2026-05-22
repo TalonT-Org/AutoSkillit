@@ -12,6 +12,7 @@ from autoskillit.core import (
     MarketplaceInstall,
     NamedResume,
     OutputFormat,
+    SessionCheckpoint,
     SkillSessionConfig,
 )
 from autoskillit.execution import commands
@@ -372,6 +373,7 @@ class TestBuildSkillSessionCmdConfigAdapter:
 
     def test_config_adapter_forwards_all_fields(self) -> None:
         backend = ClaudeCodeBackend()
+        chk = SessionCheckpoint(step_name="chk")
         config = SkillSessionConfig(
             completion_marker="%%MARKER%%",
             model="sonnet",
@@ -385,6 +387,8 @@ class TestBuildSkillSessionCmdConfigAdapter:
             provider_extras={"KEY": "val"},
             profile_name="my-profile",
             resume_session_id="s1",
+            resume_checkpoint=chk,
+            resume_message="resume-msg",
         )
         via_config = backend.build_skill_session_cmd("/plan", cwd="/tmp", config=config)
         via_impl = backend._build_skill_session_cmd_impl(
@@ -402,6 +406,8 @@ class TestBuildSkillSessionCmdConfigAdapter:
             provider_extras={"KEY": "val"},
             profile_name="my-profile",
             resume_session_id="s1",
+            resume_checkpoint=chk,
+            resume_message="resume-msg",
         )
         assert via_config.cmd == via_impl.cmd
         assert via_config.env == via_impl.env

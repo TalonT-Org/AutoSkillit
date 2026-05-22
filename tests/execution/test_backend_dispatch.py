@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from autoskillit.core import CLAUDE_CODE_CAPABILITIES, CmdSpec
-from autoskillit.core.types import SubprocessResult, TerminationReason
+from autoskillit.core.types import RetryReason, SkillResult, SubprocessResult, TerminationReason
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -56,26 +56,17 @@ async def test_run_headless_core_uses_ctx_backend_for_command_construction(minim
     minimal_ctx.runner = mock_runner
 
     with patch("autoskillit.execution.headless._build_skill_result") as mock_build_result:
-        mock_skill_result = Mock()
-        mock_skill_result.success = True
-        mock_skill_result.needs_retry = False
-        mock_skill_result.session_id = "test-session"
-        mock_skill_result.worktree_path = None
-        mock_skill_result.subtype = "success"
-        mock_skill_result.cli_subtype = None
-        mock_skill_result.exit_code = 0
-        mock_skill_result.kill_reason = Mock()
-        mock_skill_result.kill_reason.value = "NATURAL_EXIT"
-        mock_skill_result.token_usage = None
-        mock_skill_result.evidence = Mock()
-        mock_skill_result.evidence.write_call_count = 0
-        mock_skill_result.evidence.fs_writes_detected = False
-        mock_skill_result.evidence.git_writes_detected = False
-        mock_skill_result.write_path_warnings = []
-        mock_skill_result.retry_reason = None
-        mock_skill_result.last_stop_reason = None
-        mock_skill_result.provider = None
-        mock_build_result.return_value = mock_skill_result
+        mock_build_result.return_value = SkillResult(
+            success=True,
+            result="",
+            session_id="test-session",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        )
 
         from autoskillit.execution.headless import run_headless_core
 

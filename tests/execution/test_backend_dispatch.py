@@ -2,41 +2,15 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from autoskillit.core import CLAUDE_CODE_CAPABILITIES, CmdSpec
 from autoskillit.core.types import RetryReason, SkillResult, SubprocessResult, TerminationReason
 
+from .conftest import _mock_backend
+
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
-
-
-def _mock_backend(
-    *,
-    pty_required: bool = True,
-    channel_b_capable: bool = True,
-) -> Mock:
-    caps = replace(
-        CLAUDE_CODE_CAPABILITIES,
-        pty_required=pty_required,
-        channel_b_capable=channel_b_capable,
-    )
-    backend = Mock()
-    backend.name = "claude-code"
-    backend.capabilities = caps
-    backend.build_skill_session_cmd.return_value = CmdSpec(
-        cmd=("claude", "--print", "test-prompt"),
-        env={"AUTOSKILLIT_HEADLESS": "1"},
-    )
-    backend.build_resume_cmd.return_value = CmdSpec(
-        cmd=("claude", "--print", "emit marker", "--resume", "test-session"),
-        env={},
-    )
-    backend.write_tool_names.return_value = frozenset({"Write", "Edit"})
-    backend.result_parser.return_value = Mock()
-    return backend
 
 
 @pytest.mark.anyio

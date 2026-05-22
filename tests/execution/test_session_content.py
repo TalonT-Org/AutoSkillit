@@ -72,6 +72,15 @@ class TestStripMarkdownFromTokens:
         assert result == "worktree_path = /tmp/wt"
 
 
+_PREP_RESULT = "prep_path = /tmp/plan.md\nselected_lenses = dev\nlens_context_paths = /tmp/ctx.md"
+
+_PREP_PATTERNS = [
+    r"prep_path\s*=\s*/.+",
+    r"selected_lenses\s*=\s*\S+",
+    r"lens_context_paths\s*=\s*/.+",
+]
+
+
 class TestCheckSessionContent:
     """Tests for _check_session_content."""
 
@@ -79,17 +88,13 @@ class TestCheckSessionContent:
         session = ClaudeSessionResult(
             subtype="success",
             is_error=False,
-            result="prep_path = /tmp/plan.md\nselected_lenses = dev\nlens_context_paths = /tmp/ctx.md",
+            result=_PREP_RESULT,
             session_id="s1",
         )
         result = _check_session_content(
             session,
             completion_marker="%%ORDER_UP%%",
-            expected_output_patterns=[
-                r"prep_path\s*=\s*/.+",
-                r"selected_lenses\s*=\s*\S+",
-                r"lens_context_paths\s*=\s*/.+",
-            ],
+            expected_output_patterns=_PREP_PATTERNS,
         )
         assert result is True
 
@@ -103,11 +108,7 @@ class TestCheckSessionContent:
         result = _check_session_content(
             session,
             completion_marker="%%ORDER_UP%%",
-            expected_output_patterns=[
-                r"prep_path\s*=\s*/.+",
-                r"selected_lenses\s*=\s*\S+",
-                r"lens_context_paths\s*=\s*/.+",
-            ],
+            expected_output_patterns=_PREP_PATTERNS,
         )
         assert result is False
 
@@ -115,7 +116,7 @@ class TestCheckSessionContent:
         session = ClaudeSessionResult(
             subtype="success",
             is_error=False,
-            result="prep_path = /tmp/plan.md\nselected_lenses = dev\nlens_context_paths = /tmp/ctx.md",
+            result=_PREP_RESULT,
             session_id="s1",
         )
         result = _check_session_content(
@@ -135,11 +136,7 @@ class TestCheckSessionContent:
         result = _check_session_content(
             session,
             completion_marker="%%ORDER_UP%%",
-            expected_output_patterns=[
-                r"prep_path\s*=\s*/.+",
-                r"selected_lenses\s*=\s*\S+",
-                r"lens_context_paths\s*=\s*/.+",
-            ],
+            expected_output_patterns=_PREP_PATTERNS,
         )
         assert result is False
 
@@ -147,17 +144,13 @@ class TestCheckSessionContent:
         session = ClaudeSessionResult(
             subtype="success",
             is_error=False,
-            result="prep_path = /tmp/plan.md\nselected_lenses = dev\nlens_context_paths = /tmp/ctx.md\n%%ORDER_UP%%",
+            result=_PREP_RESULT + "\n%%ORDER_UP%%",
             session_id="s1",
         )
         result = _check_session_content(
             session,
             completion_marker="%%ORDER_UP%%",
-            expected_output_patterns=[
-                r"prep_path\s*=\s*/.+",
-                r"selected_lenses\s*=\s*\S+",
-                r"lens_context_paths\s*=\s*/.+",
-            ],
+            expected_output_patterns=_PREP_PATTERNS,
         )
         assert result is True
 
@@ -169,17 +162,13 @@ class TestEvaluateContentState:
         session = ClaudeSessionResult(
             subtype="success",
             is_error=False,
-            result="prep_path = /tmp/plan.md\nselected_lenses = dev\nlens_context_paths = /tmp/ctx.md",
+            result=_PREP_RESULT,
             session_id="s1",
         )
         state = _evaluate_content_state(
             session,
             "%%ORDER_UP%%",
-            [
-                r"prep_path\s*=\s*/.+",
-                r"selected_lenses\s*=\s*\S+",
-                r"lens_context_paths\s*=\s*/.+",
-            ],
+            _PREP_PATTERNS,
         )
         assert state == ContentState.MARKER_ABSENT_CONTRACT_MET
 
@@ -187,7 +176,7 @@ class TestEvaluateContentState:
         session = ClaudeSessionResult(
             subtype="success",
             is_error=False,
-            result="prep_path = /tmp/plan.md\nselected_lenses = dev\nlens_context_paths = /tmp/ctx.md",
+            result=_PREP_RESULT,
             session_id="s1",
         )
         state = _evaluate_content_state(session, "%%ORDER_UP%%", [])
@@ -203,11 +192,7 @@ class TestEvaluateContentState:
         state = _evaluate_content_state(
             session,
             "%%ORDER_UP%%",
-            [
-                r"prep_path\s*=\s*/.+",
-                r"selected_lenses\s*=\s*\S+",
-                r"lens_context_paths\s*=\s*/.+",
-            ],
+            _PREP_PATTERNS,
         )
         assert state == ContentState.ABSENT
 
@@ -221,10 +206,6 @@ class TestEvaluateContentState:
         state = _evaluate_content_state(
             session,
             "%%ORDER_UP%%",
-            [
-                r"prep_path\s*=\s*/.+",
-                r"selected_lenses\s*=\s*\S+",
-                r"lens_context_paths\s*=\s*/.+",
-            ],
+            _PREP_PATTERNS,
         )
         assert state == ContentState.CONTRACT_VIOLATION

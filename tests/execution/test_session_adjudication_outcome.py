@@ -888,7 +888,9 @@ class TestPatternGatedSuccess:
         session = ClaudeSessionResult(
             subtype="success",
             is_error=False,
-            result="prep_path = /tmp/plan.md\nselected_lenses = dev\nlens_context_paths = /tmp/ctx.md",
+            result=(
+                "prep_path = /tmp/plan.md\nselected_lenses = dev\nlens_context_paths = /tmp/ctx.md"
+            ),
             session_id="s1",
         )
         outcome, retry_reason = _compute_outcome(

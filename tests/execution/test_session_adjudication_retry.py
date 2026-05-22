@@ -661,7 +661,9 @@ class TestEarlyStopPatternSuppression:
         session = ClaudeSessionResult(
             subtype="success",
             is_error=False,
-            result="prep_path = /tmp/plan.md\nselected_lenses = dev\nlens_context_paths = /tmp/ctx.md",
+            result=(
+                "prep_path = /tmp/plan.md\nselected_lenses = dev\nlens_context_paths = /tmp/ctx.md"
+            ),
             session_id="s1",
         )
         needs, reason = _compute_retry(
@@ -703,7 +705,9 @@ class TestEarlyStopPatternSuppression:
         session = ClaudeSessionResult(
             subtype="success",
             is_error=False,
-            result="prep_path = /tmp/plan.md\nselected_lenses = dev\nlens_context_paths = /tmp/ctx.md",
+            result=(
+                "prep_path = /tmp/plan.md\nselected_lenses = dev\nlens_context_paths = /tmp/ctx.md"
+            ),
             session_id="s1",
         )
         needs, reason = _compute_retry(

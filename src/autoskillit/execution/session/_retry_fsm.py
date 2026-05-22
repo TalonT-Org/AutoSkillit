@@ -12,6 +12,7 @@ from autoskillit.core import (
     TerminationReason,
     get_logger,
 )
+from autoskillit.execution.session._session_content import _check_expected_patterns
 from autoskillit.execution.session._session_model import ClaudeSessionResult
 
 logger = get_logger(__name__)
@@ -57,6 +58,7 @@ def _compute_retry(
     channel_confirmation: ChannelConfirmation = ChannelConfirmation.UNMONITORED,
     completion_marker: str = "",
     prior_completion_markers: Sequence[str] | None = None,
+    expected_output_patterns: Sequence[str] = (),
 ) -> tuple[bool, RetryReason]:
     """Compute whether the session result warrants a retry.
 
@@ -120,6 +122,14 @@ def _compute_retry(
                         for pm in prior_completion_markers
                     )
                 ):
+                    if expected_output_patterns and _check_expected_patterns(
+                        session.result.strip(), expected_output_patterns
+                    ):
+                        logger.debug(
+                            "early_stop_suppressed_by_patterns",
+                            pattern_count=len(expected_output_patterns),
+                        )
+                        return False, RetryReason.NONE
                     skill_tool_calls = [t for t in session.tool_uses if t.get("name") == "Skill"]
                     logger.debug(
                         "compute_retry_early_stop",

@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.execution.session._session_content import _strip_markdown_from_tokens
+from autoskillit.execution.session._session_content import (
+    _check_session_content,
+    _evaluate_content_state,
+    _strip_markdown_from_tokens,
+)
+from autoskillit.execution.session._session_model import ClaudeSessionResult, ContentState
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -65,3 +70,161 @@ class TestStripMarkdownFromTokens:
         """The colon-decorated variant that caused #1716 contract failures."""
         result = _strip_markdown_from_tokens("**worktree_path:** /tmp/wt")
         assert result == "worktree_path = /tmp/wt"
+
+
+class TestCheckSessionContent:
+    """Tests for _check_session_content."""
+
+    def test_patterns_present_marker_absent_returns_true(self) -> None:
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="prep_path = /tmp/plan.md\nselected_lenses = dev\nlens_context_paths = /tmp/ctx.md",
+            session_id="s1",
+        )
+        result = _check_session_content(
+            session,
+            completion_marker="%%ORDER_UP%%",
+            expected_output_patterns=[
+                r"prep_path\s*=\s*/.+",
+                r"selected_lenses\s*=\s*\S+",
+                r"lens_context_paths\s*=\s*/.+",
+            ],
+        )
+        assert result is True
+
+    def test_patterns_absent_marker_absent_returns_false(self) -> None:
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="Some work but no tokens",
+            session_id="s1",
+        )
+        result = _check_session_content(
+            session,
+            completion_marker="%%ORDER_UP%%",
+            expected_output_patterns=[
+                r"prep_path\s*=\s*/.+",
+                r"selected_lenses\s*=\s*\S+",
+                r"lens_context_paths\s*=\s*/.+",
+            ],
+        )
+        assert result is False
+
+    def test_no_patterns_configured_marker_absent_returns_false(self) -> None:
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="prep_path = /tmp/plan.md\nselected_lenses = dev\nlens_context_paths = /tmp/ctx.md",
+            session_id="s1",
+        )
+        result = _check_session_content(
+            session,
+            completion_marker="%%ORDER_UP%%",
+            expected_output_patterns=(),
+        )
+        assert result is False
+
+    def test_partial_patterns_marker_absent_returns_false(self) -> None:
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="prep_path = /tmp/plan.md",
+            session_id="s1",
+        )
+        result = _check_session_content(
+            session,
+            completion_marker="%%ORDER_UP%%",
+            expected_output_patterns=[
+                r"prep_path\s*=\s*/.+",
+                r"selected_lenses\s*=\s*\S+",
+                r"lens_context_paths\s*=\s*/.+",
+            ],
+        )
+        assert result is False
+
+    def test_patterns_present_marker_present_returns_true(self) -> None:
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="prep_path = /tmp/plan.md\nselected_lenses = dev\nlens_context_paths = /tmp/ctx.md\n%%ORDER_UP%%",
+            session_id="s1",
+        )
+        result = _check_session_content(
+            session,
+            completion_marker="%%ORDER_UP%%",
+            expected_output_patterns=[
+                r"prep_path\s*=\s*/.+",
+                r"selected_lenses\s*=\s*\S+",
+                r"lens_context_paths\s*=\s*/.+",
+            ],
+        )
+        assert result is True
+
+
+class TestEvaluateContentState:
+    """Tests for _evaluate_content_state."""
+
+    def test_marker_absent_all_patterns_match_returns_marker_absent_contract_met(self) -> None:
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="prep_path = /tmp/plan.md\nselected_lenses = dev\nlens_context_paths = /tmp/ctx.md",
+            session_id="s1",
+        )
+        state = _evaluate_content_state(
+            session,
+            "%%ORDER_UP%%",
+            [
+                r"prep_path\s*=\s*/.+",
+                r"selected_lenses\s*=\s*\S+",
+                r"lens_context_paths\s*=\s*/.+",
+            ],
+        )
+        assert state == ContentState.MARKER_ABSENT_CONTRACT_MET
+
+    def test_marker_absent_no_patterns_returns_absent(self) -> None:
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="prep_path = /tmp/plan.md\nselected_lenses = dev\nlens_context_paths = /tmp/ctx.md",
+            session_id="s1",
+        )
+        state = _evaluate_content_state(session, "%%ORDER_UP%%", [])
+        assert state == ContentState.ABSENT
+
+    def test_marker_absent_patterns_fail_returns_absent(self) -> None:
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="Some work without matching tokens",
+            session_id="s1",
+        )
+        state = _evaluate_content_state(
+            session,
+            "%%ORDER_UP%%",
+            [
+                r"prep_path\s*=\s*/.+",
+                r"selected_lenses\s*=\s*\S+",
+                r"lens_context_paths\s*=\s*/.+",
+            ],
+        )
+        assert state == ContentState.ABSENT
+
+    def test_marker_present_patterns_fail_returns_contract_violation(self) -> None:
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="Some work done. %%ORDER_UP%%",
+            session_id="s1",
+        )
+        state = _evaluate_content_state(
+            session,
+            "%%ORDER_UP%%",
+            [
+                r"prep_path\s*=\s*/.+",
+                r"selected_lenses\s*=\s*\S+",
+                r"lens_context_paths\s*=\s*/.+",
+            ],
+        )
+        assert state == ContentState.CONTRACT_VIOLATION

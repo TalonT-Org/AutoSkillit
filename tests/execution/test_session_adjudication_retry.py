@@ -470,12 +470,12 @@ class TestSessionCompleteProperty:
 
 
 class TestContentStateEnum:
-    """ContentState enum exposes the four expected variants."""
+    """ContentState enum exposes the expected variants."""
 
     def test_content_state_enum_variants(self) -> None:
-        """ContentState exposes the four expected variants."""
         assert ContentState.COMPLETE == "complete"
         assert ContentState.ABSENT == "absent"
+        assert ContentState.MARKER_ABSENT_CONTRACT_MET == "marker_absent_contract_met"
         assert ContentState.CONTRACT_VIOLATION == "contract_violation"
         assert ContentState.SESSION_ERROR == "session_error"
 
@@ -652,3 +652,66 @@ class TestApiErrorRetryRouting:
         assert sr.infra.exit_category == "api_error"
         assert sr.needs_retry is True
         assert sr.retry_reason == RetryReason.RESUME
+
+
+class TestEarlyStopPatternSuppression:
+    """_compute_retry suppresses EARLY_STOP when expected_output_patterns all match."""
+
+    def test_early_stop_suppressed_when_patterns_match(self) -> None:
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="prep_path = /tmp/plan.md\nselected_lenses = dev\nlens_context_paths = /tmp/ctx.md",
+            session_id="s1",
+        )
+        needs, reason = _compute_retry(
+            session,
+            returncode=0,
+            termination=TerminationReason.NATURAL_EXIT,
+            completion_marker="%%ORDER_UP%%",
+            expected_output_patterns=[
+                r"prep_path\s*=\s*/.+",
+                r"selected_lenses\s*=\s*\S+",
+                r"lens_context_paths\s*=\s*/.+",
+            ],
+        )
+        assert needs is False
+        assert reason == RetryReason.NONE
+
+    def test_early_stop_fires_when_patterns_fail(self) -> None:
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="Some work but no tokens",
+            session_id="s1",
+        )
+        needs, reason = _compute_retry(
+            session,
+            returncode=0,
+            termination=TerminationReason.NATURAL_EXIT,
+            completion_marker="%%ORDER_UP%%",
+            expected_output_patterns=[
+                r"prep_path\s*=\s*/.+",
+                r"selected_lenses\s*=\s*\S+",
+                r"lens_context_paths\s*=\s*/.+",
+            ],
+        )
+        assert needs is True
+        assert reason == RetryReason.EARLY_STOP
+
+    def test_early_stop_fires_when_no_patterns_configured(self) -> None:
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="prep_path = /tmp/plan.md\nselected_lenses = dev\nlens_context_paths = /tmp/ctx.md",
+            session_id="s1",
+        )
+        needs, reason = _compute_retry(
+            session,
+            returncode=0,
+            termination=TerminationReason.NATURAL_EXIT,
+            completion_marker="%%ORDER_UP%%",
+            expected_output_patterns=(),
+        )
+        assert needs is True
+        assert reason == RetryReason.EARLY_STOP

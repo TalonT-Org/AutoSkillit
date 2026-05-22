@@ -235,7 +235,7 @@ async def _attempt_contract_nudge(
             f"Please emit ONLY the following text (nothing else):\n"
             f"{completion_marker}"
         )
-        patterns_to_check: Sequence[str] = []
+        patterns_to_check: Sequence[str] = list(expected_output_patterns)
     else:
         hints = _extract_missing_token_hints(
             subprocess_result.stdout, expected_output_patterns, result_parser
@@ -284,6 +284,11 @@ async def _attempt_contract_nudge(
 
     if retry_reason == RetryReason.EARLY_STOP:
         if completion_marker in nudge_session.output:
+            if patterns_to_check and not _check_expected_patterns(
+                combined_result, patterns_to_check
+            ):
+                logger.debug("nudge_early_stop_patterns_not_in_combined")
+                return None
             logger.info(
                 "nudge_recovery_success",
                 session_id=skill_result.session_id,

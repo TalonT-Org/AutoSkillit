@@ -172,6 +172,7 @@ def _compute_outcome(
         channel_confirmation,
         completion_marker,
         prior_completion_markers,
+        expected_output_patterns,
     )
 
     logger.debug(

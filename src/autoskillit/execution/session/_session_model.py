@@ -47,6 +47,7 @@ class ContentState(StrEnum):
 
     COMPLETE = "complete"
     ABSENT = "absent"  # Empty result or missing marker — drain-race candidate
+    MARKER_ABSENT_CONTRACT_MET = "marker_absent_contract_met"
     CONTRACT_VIOLATION = "contract_violation"  # Result + marker present, but patterns fail
     SESSION_ERROR = "session_error"  # is_error=True or process-level failure
 

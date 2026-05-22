@@ -101,6 +101,6 @@ def test_headless_cmd_with_mappingproxy_env() -> None:
     from autoskillit.execution.commands import ClaudeHeadlessCmd
 
     env = MappingProxyType({"PATH": "/usr/bin"})
-    cmd = ClaudeHeadlessCmd(cmd=["echo", "test"], env=env)
+    cmd = ClaudeHeadlessCmd(cmd=("echo", "test"), env=env)
     assert cmd.env["PATH"] == "/usr/bin"
     assert isinstance(cmd.env, MappingProxyType)

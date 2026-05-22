@@ -232,7 +232,7 @@ async def test_no_fallback_env_returns_empty_provider_used(
     from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
     from tests.execution.conftest import _sr
 
-    _spec = ClaudeHeadlessCmd(cmd=["echo", "test"], env={})
+    _spec = ClaudeHeadlessCmd(cmd=("echo", "test"), env={})
     _sub_result = _sr()
 
     async def fake_runner(cmd, **kwargs):  # noqa: ARG001
@@ -273,7 +273,7 @@ async def test_provider_name_stamps_provider_used_on_result(
     from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
     from tests.execution.conftest import _sr
 
-    _spec = ClaudeHeadlessCmd(cmd=["echo", "test"], env={})
+    _spec = ClaudeHeadlessCmd(cmd=("echo", "test"), env={})
     _sub_result = _sr()
 
     async def fake_runner(cmd, **kwargs):  # noqa: ARG001
@@ -527,7 +527,7 @@ async def test_execute_claude_headless_forwards_marker_dir_to_runner(
     from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
     from tests.execution.conftest import _sr
 
-    spec = ClaudeHeadlessCmd(cmd=["echo", "test"], env={})
+    spec = ClaudeHeadlessCmd(cmd=("echo", "test"), env={})
     runner_kwargs: dict = {}
 
     async def fake_runner(cmd, **kwargs):
@@ -581,7 +581,7 @@ async def test_execute_claude_headless_pty_mode_from_backend(
     from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
     from tests.execution.conftest import _sr
 
-    spec = ClaudeHeadlessCmd(cmd=["echo", "test"], env={})
+    spec = ClaudeHeadlessCmd(cmd=("echo", "test"), env={})
     runner_kwargs: dict = {}
 
     async def fake_runner(cmd, **kwargs):
@@ -630,7 +630,7 @@ async def test_execute_claude_headless_session_log_dir_none_when_no_channel_b(
     from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
     from tests.execution.conftest import _sr
 
-    spec = ClaudeHeadlessCmd(cmd=["echo", "test"], env={})
+    spec = ClaudeHeadlessCmd(cmd=("echo", "test"), env={})
     runner_kwargs: dict = {}
 
     async def fake_runner(cmd, **kwargs):

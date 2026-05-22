@@ -67,6 +67,7 @@ def test_stub_class_satisfies_coding_agent_backend():
         PluginSource,
         ResultParser,
         SessionLocator,
+        SkillSessionConfig,
         StreamParser,
     )
 
@@ -103,12 +104,8 @@ def test_stub_class_satisfies_coding_agent_backend():
         def build_skill_session_cmd(
             self,
             skill_command: str,
-            *,
             cwd: str,
-            completion_marker: str,
-            model: str | None,
-            plugin_source: PluginSource | None,
-            output_format: OutputFormat,
+            config: SkillSessionConfig,
         ) -> CmdSpec: ...
 
         def build_food_truck_cmd(

@@ -186,24 +186,25 @@ class TestDispatchFoodTruck:
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_passes_resume_session_id_to_cmd_builder(
-        self, minimal_ctx, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, minimal_ctx, tmp_path: Path
     ):
         """resume_session_id is forwarded from dispatch_food_truck to build_food_truck_cmd."""
+        from dataclasses import replace
+        from unittest.mock import Mock
+
+        from autoskillit.core import CLAUDE_CODE_CAPABILITIES, CmdSpec
         from autoskillit.core.types import SubprocessResult, TerminationReason
         from autoskillit.execution.headless import DefaultHeadlessExecutor
         from tests.fakes import MockSubprocessRunner
 
-        captured_kwargs: list[dict] = []
-
-        import autoskillit.execution.headless as _headless_mod
-
-        original_build = _headless_mod.build_food_truck_cmd
-
-        def _spy(**kwargs):
-            captured_kwargs.append(kwargs)
-            return original_build(**kwargs)
-
-        monkeypatch.setattr(_headless_mod, "build_food_truck_cmd", _spy)
+        backend = Mock()
+        backend.name = "claude-code"
+        backend.capabilities = replace(CLAUDE_CODE_CAPABILITIES)
+        backend.build_food_truck_cmd.return_value = CmdSpec(
+            cmd=("claude", "--print", "test-prompt"), env={}
+        )
+        backend.write_tool_names.return_value = frozenset({"Write", "Edit"})
+        minimal_ctx.backend = backend
 
         runner = MockSubprocessRunner()
         runner.set_default(
@@ -226,8 +227,9 @@ class TestDispatchFoodTruck:
             resume_session_id="abc-123",
         )
 
-        assert captured_kwargs, "build_food_truck_cmd was never called"
-        assert captured_kwargs[0]["resume_session_id"] == "abc-123"
+        backend.build_food_truck_cmd.assert_called_once()
+        call_kwargs = backend.build_food_truck_cmd.call_args[1]
+        assert call_kwargs["resume_session_id"] == "abc-123"
 
 
 class TestDispatchFoodTruckPackInjection:

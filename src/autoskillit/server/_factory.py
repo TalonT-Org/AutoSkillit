@@ -326,9 +326,16 @@ def make_context(
     if is_feature_enabled(
         "codex_backend", config.features, experimental_enabled=config.experimental_enabled
     ):
-        from autoskillit.execution import CodexBackend
+        if config.agent_backend.backend == "codex":
+            from autoskillit.execution import CodexBackend
 
-        backend = CodexBackend()
+            backend = CodexBackend()
+        else:
+            logger.warning(
+                "codex_backend_flag_ignored",
+                reason="config.agent_backend.backend is not 'codex'",
+                configured_backend=config.agent_backend.backend,
+            )
 
     audit = DefaultAuditLog()
     github_api_log = DefaultGitHubApiLog()

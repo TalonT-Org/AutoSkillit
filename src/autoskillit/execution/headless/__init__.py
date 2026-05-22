@@ -26,6 +26,7 @@ from autoskillit.core import (
     CAMPAIGN_ID_ENV_VAR,
     DISPATCH_ID_ENV_VAR,
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
+    CmdSpec,
     KillReason,
     ProviderOutcome,
     RecipeIdentity,
@@ -42,15 +43,13 @@ from autoskillit.core import (
     is_git_worktree,
     temp_dir_display_str,
 )
+from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.clone_guard import (
     check_and_revert_clone_contamination,
     is_worktree_skill,
     snapshot_clone_state,
 )
-from autoskillit.execution.commands import (
-    build_food_truck_cmd,
-    build_skill_session_cmd,
-)
+from autoskillit.execution.commands import ClaudeHeadlessCmd
 from autoskillit.execution.headless._headless_git import (
     _capture_git_head_sha,
     _compute_loc_changed,
@@ -96,7 +95,6 @@ if TYPE_CHECKING:
         AutomationConfig,
     )
     from autoskillit.core import SubprocessResult
-    from autoskillit.execution.commands import ClaudeHeadlessCmd
     from autoskillit.pipeline.context import (
         ToolContext,
     )
@@ -108,6 +106,10 @@ __all__ = [
 ]
 
 logger = get_logger(__name__)
+
+
+def _cmd_spec_to_headless(cmd_spec: CmdSpec) -> ClaudeHeadlessCmd:
+    return ClaudeHeadlessCmd(cmd=list(cmd_spec.cmd), env=cmd_spec.env)
 
 
 def _session_log_dir(cwd: str) -> Path:
@@ -282,6 +284,16 @@ async def _execute_claude_headless(
     runner = ctx.runner
     if runner is None:
         raise RuntimeError("No subprocess runner configured")
+
+    if ctx.backend is not None and spec.cmd:
+        _binary = Path(spec.cmd[0]).stem
+        if _binary in {"claude", "codex"}:
+            _expected = "claude" if ctx.backend.name == "claude-code" else "codex"
+            if _binary != _expected:
+                raise RuntimeError(
+                    f"Backend coherence violation: ctx.backend.name={ctx.backend.name!r} "
+                    f"but subprocess binary is {_binary!r}"
+                )
 
     linux_tracing_cfg = ctx.config.linux_tracing
     _start_ts = datetime.now(UTC).isoformat()
@@ -694,7 +706,8 @@ async def run_headless_core(
         step_name=step_name or None,
     ):
         resolved_model = _resolve_model(model, ctx.config)
-        spec = build_skill_session_cmd(
+        backend = ctx.backend or ClaudeCodeBackend()
+        cmd_spec = backend.build_skill_session_cmd(
             skill_command,
             cwd=cwd,
             completion_marker=effective_marker,
@@ -713,6 +726,7 @@ async def run_headless_core(
             resume_checkpoint=resume_checkpoint,
             resume_message=resume_message,
         )
+        spec = _cmd_spec_to_headless(cmd_spec)
 
         effective_timeout = timeout if timeout is not None else cfg.timeout
         effective_stale = stale_threshold if stale_threshold is not None else cfg.stale_threshold
@@ -885,7 +899,8 @@ class DefaultHeadlessExecutor:
             if idle_cfg_val > 0:
                 merged_extras.setdefault("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(idle_cfg_val))
 
-        spec = build_food_truck_cmd(
+        backend = self._ctx.backend or ClaudeCodeBackend()
+        cmd_spec = backend.build_food_truck_cmd(
             orchestrator_prompt=orchestrator_prompt,
             plugin_source=self._ctx.plugin_source,
             cwd=cwd,
@@ -903,6 +918,7 @@ class DefaultHeadlessExecutor:
             sentinel_contract=sentinel_contract,
             resume_message=resume_message,
         )
+        spec = _cmd_spec_to_headless(cmd_spec)
 
         effective_timeout = timeout if timeout is not None else fleet_cfg.default_timeout_sec
         effective_stale = (

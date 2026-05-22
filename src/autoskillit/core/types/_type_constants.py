@@ -445,6 +445,7 @@ class FeatureDef:
     import_package: str | None
     tier: int = 1
     default_enabled: bool = False
+    requires_backend_alignment: bool = False
     depends_on: frozenset[str] = field(default_factory=frozenset)
     since_version: str | None = None
     sunset_date: date | None = None
@@ -459,6 +460,7 @@ FEATURE_REGISTRY: dict[str, FeatureDef] = {
         import_package=None,
         tier=2,
         default_enabled=False,
+        requires_backend_alignment=True,
     ),
     "fleet": FeatureDef(
         lifecycle=FeatureLifecycle.EXPERIMENTAL,

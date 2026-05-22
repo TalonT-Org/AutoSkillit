@@ -34,7 +34,8 @@ def is_feature_enabled(
     -------
     bool
         Resolution order:
-        DISABLED hard-off → explicit override → experimental blanket → default_enabled.
+        DISABLED hard-off → explicit override → experimental blanket
+        (with requires_backend_alignment bypass → default_enabled) → default_enabled.
 
     Raises
     ------
@@ -49,6 +50,8 @@ def is_feature_enabled(
     if name in features:
         return features[name]
     if experimental_enabled and defn.lifecycle == FeatureLifecycle.EXPERIMENTAL:
+        if defn.requires_backend_alignment:
+            return defn.default_enabled
         return True
     return defn.default_enabled
 

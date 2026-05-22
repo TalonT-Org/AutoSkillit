@@ -22,7 +22,9 @@ from autoskillit.core import (
     CodexEventData,
     OutputFormat,
     PluginSource,
+    SessionCheckpoint,
     SessionEvent,
+    ValidatedAddDir,
     fast_loads,
 )
 from autoskillit.execution.process import _marker_is_standalone
@@ -422,6 +424,74 @@ class CodexBackend:
             base.update(env_extras)
         env = self.env_policy().build_env(base)
         return CmdSpec(cmd=tuple(cmd), env=env)
+
+    def build_skill_session_cmd(
+        self,
+        skill_command: str,
+        *,
+        cwd: str,
+        completion_marker: str,
+        model: str | None,
+        plugin_source: PluginSource | None,
+        output_format: OutputFormat,
+        add_dirs: Sequence[ValidatedAddDir] = (),
+        exit_after_stop_delay_ms: int = 0,
+        stream_idle_timeout_ms: int = 0,
+        scenario_step_name: str = "",
+        temp_dir_relpath: str | None = None,
+        allowed_write_prefix: str = "",
+        provider_extras: Mapping[str, str] | None = None,
+        profile_name: str = "",
+        resume_session_id: str = "",
+        resume_checkpoint: SessionCheckpoint | None = None,
+        resume_message: str | None = None,
+    ) -> CmdSpec:
+        cmd: list[str] = [
+            "codex",
+            "exec",
+            CodexFlags.JSON,
+            CodexFlags.SANDBOX,
+            "workspace-write",
+            CodexFlags.ASK_FOR_APPROVAL_SHORT,
+            "never",
+        ]
+        if model:
+            cmd += [CodexFlags.MODEL, model]
+        for validated_dir in add_dirs:
+            cmd += [CodexFlags.ADD_DIR, validated_dir.path]
+        cmd.append(skill_command)
+        env_extras: dict[str, str] = {}
+        if provider_extras:
+            env_extras.update(provider_extras)
+        base: dict[str, str] = dict(os.environ)
+        if env_extras:
+            base.update(env_extras)
+        env = self.env_policy().build_env(base)
+        return CmdSpec(cmd=tuple(cmd), env=env, cwd=cwd)
+
+    def build_food_truck_cmd(
+        self,
+        *,
+        orchestrator_prompt: str,
+        plugin_source: PluginSource,
+        cwd: str,
+        completion_marker: str,
+        resume_session_id: str | None = None,
+        resume_checkpoint: SessionCheckpoint | None = None,
+        model: str | None = None,
+        env_extras: Mapping[str, str] | None = None,
+        output_format: OutputFormat = OutputFormat.STREAM_JSON,
+        exit_after_stop_delay_ms: int = 0,
+        stream_idle_timeout_ms: int = 0,
+        scenario_step_name: str = "",
+        temp_dir_relpath: str | None = None,
+        allowed_write_prefix: str = "",
+        sentinel_contract: str = "",
+        resume_message: str | None = None,
+    ) -> CmdSpec:
+        raise NotImplementedError(
+            "Codex CLI does not support L2 orchestrator (food truck) sessions"
+        )
 
     def build_interactive_cmd(self, **kwargs: object) -> CmdSpec:
         raise NotImplementedError("Codex CLI does not support interactive mode")

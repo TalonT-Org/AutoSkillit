@@ -100,4 +100,24 @@ def test_stub_class_satisfies_coding_agent_backend():
             env_extras: Mapping[str, str] | None = None,
         ) -> CmdSpec: ...
 
+        def build_skill_session_cmd(
+            self,
+            skill_command: str,
+            *,
+            cwd: str,
+            completion_marker: str,
+            model: str | None,
+            plugin_source: PluginSource | None,
+            output_format: OutputFormat,
+        ) -> CmdSpec: ...
+
+        def build_food_truck_cmd(
+            self,
+            *,
+            orchestrator_prompt: str,
+            plugin_source: PluginSource,
+            cwd: str,
+            completion_marker: str,
+        ) -> CmdSpec: ...
+
     assert isinstance(_Backend(), CodingAgentBackend)

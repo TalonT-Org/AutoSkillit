@@ -27,20 +27,22 @@ _STUB_RESULT = SkillResult(
 async def test_run_headless_core_forwards_provider_extras_to_build_cmd(
     minimal_ctx, tmp_path, monkeypatch
 ) -> None:
+
+    from autoskillit.core import CmdSpec
     from autoskillit.execution.headless import run_headless_core
 
-    captured: dict = {}
     execute_kwargs: dict = {}
 
-    def fake_build(skill_command, **kwargs):
-        captured.update(kwargs)
-        return object()
+    backend = _mock_backend()
+    backend.build_skill_session_cmd.return_value = CmdSpec(
+        cmd=("claude", "--print", "test"), env={}
+    )
+    minimal_ctx.backend = backend
 
     async def fake_execute(spec, cwd, ctx, **kwargs):
         execute_kwargs.update(kwargs)
         return _STUB_RESULT
 
-    monkeypatch.setattr("autoskillit.execution.headless.build_skill_session_cmd", fake_build)
     monkeypatch.setattr("autoskillit.execution.headless._execute_claude_headless", fake_execute)
 
     await run_headless_core(
@@ -51,8 +53,9 @@ async def test_run_headless_core_forwards_provider_extras_to_build_cmd(
         profile_name="bedrock",
     )
 
-    assert captured["provider_extras"] == {"AWS_REGION": "us-east-1"}
-    assert captured["profile_name"] == "bedrock"
+    call_kwargs = backend.build_skill_session_cmd.call_args[1]
+    assert call_kwargs["provider_extras"] == {"AWS_REGION": "us-east-1"}
+    assert call_kwargs["profile_name"] == "bedrock"
     assert execute_kwargs.get("provider_extras") == {"AWS_REGION": "us-east-1"}
     assert "profile_name" not in execute_kwargs
 
@@ -61,24 +64,25 @@ async def test_run_headless_core_forwards_provider_extras_to_build_cmd(
 async def test_run_headless_core_defaults_provider_extras_none(
     minimal_ctx, tmp_path, monkeypatch
 ) -> None:
+    from autoskillit.core import CmdSpec
     from autoskillit.execution.headless import run_headless_core
 
-    captured: dict = {}
-
-    def fake_build(skill_command, **kwargs):
-        captured.update(kwargs)
-        return object()
+    backend = _mock_backend()
+    backend.build_skill_session_cmd.return_value = CmdSpec(
+        cmd=("claude", "--print", "test"), env={}
+    )
+    minimal_ctx.backend = backend
 
     async def fake_execute(spec, cwd, ctx, **kwargs):
         return _STUB_RESULT
 
-    monkeypatch.setattr("autoskillit.execution.headless.build_skill_session_cmd", fake_build)
     monkeypatch.setattr("autoskillit.execution.headless._execute_claude_headless", fake_execute)
 
     await run_headless_core("/autoskillit:probe", str(tmp_path), minimal_ctx)
 
-    assert captured["provider_extras"] is None
-    assert captured["profile_name"] == ""
+    call_kwargs = backend.build_skill_session_cmd.call_args[1]
+    assert call_kwargs["provider_extras"] is None
+    assert call_kwargs["profile_name"] == ""
 
 
 @pytest.mark.anyio
@@ -164,18 +168,21 @@ def test_default_executor_run_accepts_provider_name_and_fallback_env() -> None:
 async def test_run_headless_core_forwards_provider_name_and_fallback_env(
     minimal_ctx, tmp_path, monkeypatch
 ) -> None:
+    from autoskillit.core import CmdSpec
     from autoskillit.execution.headless import run_headless_core
 
     execute_kwargs: dict = {}
 
-    def fake_build(skill_command, **kwargs):  # noqa: ARG001
-        return object()
+    backend = _mock_backend()
+    backend.build_skill_session_cmd.return_value = CmdSpec(
+        cmd=("claude", "--print", "test"), env={}
+    )
+    minimal_ctx.backend = backend
 
     async def fake_execute(spec, cwd, ctx, **kwargs):  # noqa: ARG001
         execute_kwargs.update(kwargs)
         return _STUB_RESULT
 
-    monkeypatch.setattr("autoskillit.execution.headless.build_skill_session_cmd", fake_build)
     monkeypatch.setattr("autoskillit.execution.headless._execute_claude_headless", fake_execute)
 
     await run_headless_core(

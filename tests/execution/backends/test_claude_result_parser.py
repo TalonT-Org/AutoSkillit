@@ -265,6 +265,22 @@ class TestClaudeResultParser:
     def test_structural_conformance_result_parser(self) -> None:
         assert isinstance(ClaudeResultParser(), ResultParser)
 
+    def test_parse_stdout_exit_code_kwarg_accepted_and_ignored(self) -> None:
+        mock_result = ClaudeSessionResult(
+            subtype=CliSubtype.SUCCESS,
+            is_error=False,
+            result="done",
+            session_id="test-session",
+            errors=[],
+        )
+        with patch(
+            "autoskillit.execution.backends.claude.parse_session_result",
+            return_value=mock_result,
+        ):
+            parser = ClaudeResultParser()
+            result = parser.parse_stdout('{"type": "result"}', exit_code=1)
+            assert result.exit_code == 0
+
 
 class TestClaudeResultParserTokenExtraction:
     def test_token_usage_dict_preserved(self) -> None:

@@ -248,6 +248,7 @@ from .types import Severity as Severity
 from .types import SkillLister as SkillLister
 from .types import SkillResolver as SkillResolver
 from .types import SkillResult as SkillResult
+from .types import SkillSessionConfig as SkillSessionConfig
 from .types import SkillSource as SkillSource
 from .types import StreamParser as StreamParser
 from .types import SubprocessResult as SubprocessResult

@@ -9,6 +9,7 @@ import pytest
 from autoskillit.core import (
     BareResume,
     ClaudeFlags,
+    CmdSpec,
     DirectInstall,
     MarketplaceInstall,
     NamedResume,
@@ -1157,3 +1158,37 @@ class TestCompletionReminderPositionInvariant:
             f"[{builder}] Completion marker must appear in the last two prompt blocks. "
             f"Last block: {blocks[-1][:100]!r}"
         )
+
+
+def test_headless_cmd_is_cmdspec_alias() -> None:
+    """ClaudeHeadlessCmd must be a type alias for CmdSpec, not a separate class."""
+    from autoskillit.execution.commands import ClaudeHeadlessCmd
+
+    assert ClaudeHeadlessCmd is CmdSpec
+
+
+@pytest.mark.parametrize(
+    "builder,kwargs",
+    [
+        (build_headless_cmd, {"prompt": "go"}),
+        (build_headless_resume_cmd, {"resume_session_id": "abc", "prompt": "go"}),
+    ],
+)
+def test_headless_builders_return_tuple_cmd(builder, kwargs) -> None:
+    """Builder return values must have cmd as tuple, not list."""
+    result = builder(**kwargs)
+    assert isinstance(result.cmd, tuple)
+
+
+def test_cmdspec_importable_from_execution() -> None:
+    """CmdSpec must be importable from the execution package gateway."""
+    from autoskillit.execution import CmdSpec
+
+    assert CmdSpec is not None
+
+
+def test_cmdspec_in_execution_all() -> None:
+    """CmdSpec must appear in execution.__all__."""
+    import autoskillit.execution as m
+
+    assert "CmdSpec" in m.__all__

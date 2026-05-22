@@ -110,7 +110,7 @@ logger = get_logger(__name__)
 
 
 def _cmd_spec_to_headless(cmd_spec: CmdSpec) -> ClaudeHeadlessCmd:
-    return ClaudeHeadlessCmd(cmd=list(cmd_spec.cmd), env=cmd_spec.env)
+    return cmd_spec
 
 
 def _session_log_dir(cwd: str) -> Path:
@@ -332,7 +332,7 @@ async def _execute_claude_headless(
     while True:
         try:
             _result = await runner(
-                spec.cmd,
+                list(spec.cmd),
                 cwd=Path(cwd),
                 timeout=timeout,
                 env=spec.env,

@@ -33,7 +33,7 @@
 | # | Name | Fields | In `__init__.__all__`? | Production Importers | Test Importers |
 |---|------|--------|------------------------|---------------------|----------------|
 | 1 | `ClaudeInteractiveCmd` | `cmd: list[str]`, `env: Mapping[str, str]` | YES | `execution/__init__.py` | `test_commands.py` |
-| 2 | `ClaudeHeadlessCmd` | `cmd: list[str]`, `env: Mapping[str, str]` | YES | `execution/__init__.py`, `headless/__init__.py` (TYPE_CHECKING) | `test_commands.py`, `test_headless_provider_fallback.py` (4 deferred), `test_headless_provider_forwarding.py` (5 deferred), `test_idle_output_env.py`, `test_flush_provider_integration.py` (4 deferred), `test_process_env_boundary.py` |
+| 2 | `ClaudeHeadlessCmd` | Type alias for `CmdSpec` (`cmd: tuple[str, ...]`, `env: Mapping[str, str]`, `cwd: str`) | YES | `execution/__init__.py`, `headless/__init__.py` (TYPE_CHECKING) | `test_commands.py`, `test_headless_provider_fallback.py` (4 deferred), `test_headless_provider_forwarding.py` (5 deferred), `test_idle_output_env.py`, `test_flush_provider_integration.py` (4 deferred), `test_process_env_boundary.py` |
 
 ### 1c. Constants (3) — MUST PRESERVE
 
@@ -48,10 +48,11 @@
 - `AUTOSKILLIT_PRIVATE_ENV_VARS` in `core/types/_type_constants.py`
 - See block comment at `commands.py:163-171`: "All lists must be kept in sync when adding new exclusive variables."
 
-### 1d. Re-exported Type (via `# noqa: F401, TC001`)
+### 1d. Re-exported Types (via `# noqa: F401, TC001`)
 
 | Name | Source | Purpose |
 |------|--------|---------|
+| `CmdSpec` | `autoskillit.core` | Canonical command spec; `ClaudeHeadlessCmd` is a type alias for this |
 | `SessionCheckpoint` | `autoskillit.core` | Dual purpose: (1) re-export for downstream, (2) runtime dependency — `_build_resume_context` accesses `checkpoint.completed_items` and `checkpoint.step_name`. TC001 suppresses ruff's `TYPE_CHECKING` suggestion which would break runtime usage. |
 
 ---

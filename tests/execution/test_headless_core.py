@@ -216,7 +216,7 @@ class TestRunHeadlessCoreFilesystemWrites:
             minimal_ctx,
         )
 
-        assert result.fs_writes_detected is True
+        assert result.evidence.fs_writes_detected is True
 
     @pytest.mark.anyio
     async def test_fs_writes_detected_false_when_no_file_created(
@@ -238,7 +238,7 @@ class TestRunHeadlessCoreFilesystemWrites:
             minimal_ctx,
         )
 
-        assert result.fs_writes_detected is False
+        assert result.evidence.fs_writes_detected is False
 
 
 class TestResolveSessionId:

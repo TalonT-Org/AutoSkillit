@@ -15,6 +15,8 @@ _REQUIRED_INDEX_FIELDS = {
     "recipe_version",
     "schema_version",
     "caller_session_id",
+    "fs_writes_detected",
+    "git_writes_detected",
 }
 
 

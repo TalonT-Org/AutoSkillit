@@ -461,7 +461,7 @@ class TestTimedOutSessionPreservesState:
             pid=12345,
         )
         sr = _build_skill_result(sub_result)
-        assert sr.write_call_count == 2
+        assert sr.evidence.write_call_count == 2
         assert sr.success is False
         assert sr.needs_retry is False
         assert sr.subtype == "timeout"
@@ -480,7 +480,7 @@ class TestTimedOutSessionPreservesState:
         )
         sr = _build_skill_result(sub_result)
         assert sr.success is False
-        assert sr.write_call_count == 0
+        assert sr.evidence.write_call_count == 0
         assert sr.subtype == "timeout"
         assert sr.cli_subtype == CliSubtype.TIMEOUT
 
@@ -512,7 +512,7 @@ class TestTimedOutSessionPreservesState:
         sr = _build_skill_result(sub_result)
         assert sr.cli_subtype == CliSubtype.TIMEOUT
         assert sr.subtype == "timeout"
-        assert sr.write_call_count == 1
+        assert sr.evidence.write_call_count == 1
 
 
 class TestOutputPathTokensDerivedFromContracts:

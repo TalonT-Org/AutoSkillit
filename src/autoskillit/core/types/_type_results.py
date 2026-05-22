@@ -24,6 +24,7 @@ __all__ = [
     "TestResult",
     "ValidatedAddDir",
     "WriteBehaviorSpec",
+    "WriteEvidence",
     "FailureRecord",
     "ProviderOutcome",
     "InfraOutcome",
@@ -173,6 +174,23 @@ class InfraOutcome:
     exit_category: str = ""
 
 
+@dataclass(frozen=True, slots=True)
+class WriteEvidence:
+    """Bundled write evidence signals — either explicitly constructed or absent."""
+
+    write_call_count: int
+    fs_writes_detected: bool
+    git_writes_detected: bool
+
+    @classmethod
+    def none_observed(cls) -> WriteEvidence:
+        return cls(write_call_count=0, fs_writes_detected=False, git_writes_detected=False)
+
+    @property
+    def has_evidence(self) -> bool:
+        return self.write_call_count >= 1 or self.fs_writes_detected or self.git_writes_detected
+
+
 @dataclass
 class SkillResult:
     """Typed result returned by _build_skill_result and run_headless_core."""
@@ -190,9 +208,7 @@ class SkillResult:
     worktree_path: str | None = None
     cli_subtype: str = field(default="")
     write_path_warnings: list[str] = field(default_factory=list)
-    write_call_count: int = 0
-    fs_writes_detected: bool = False
-    git_writes_detected: bool = False
+    evidence: WriteEvidence = field(default_factory=WriteEvidence.none_observed)
     order_id: str = ""
     kill_reason: KillReason = KillReason.NATURAL_EXIT
     """Why the subprocess was (or was not) killed after the race loop.
@@ -223,9 +239,9 @@ class SkillResult:
             "stderr": self.stderr,
             "token_usage": self.token_usage,
             "write_path_warnings": self.write_path_warnings,
-            "write_call_count": self.write_call_count,
-            "fs_writes_detected": self.fs_writes_detected,
-            "git_writes_detected": self.git_writes_detected,
+            "write_call_count": self.evidence.write_call_count,
+            "fs_writes_detected": self.evidence.fs_writes_detected,
+            "git_writes_detected": self.evidence.git_writes_detected,
             "has_progress_evidence": self.has_progress_evidence,
             "last_stop_reason": self.last_stop_reason,
             "lifespan_started": self.lifespan_started,
@@ -266,6 +282,7 @@ class SkillResult:
             stderr="",
             kill_reason=KillReason.EXCEPTION,
             order_id=order_id,
+            evidence=WriteEvidence.none_observed(),
         )
 
     @property
@@ -283,18 +300,8 @@ class SkillResult:
 
     @property
     def has_progress_evidence(self) -> bool:
-        """Whether any evidence of meaningful progress exists.
-
-        Synthesizes worktree_path, fs_writes_detected, and write_call_count
-        into a single routing-ready signal. Used by routing rules instead of
-        checking individual artifact fields.
-        """
-        return (
-            self.worktree_path is not None
-            or self.fs_writes_detected
-            or self.write_call_count > 0
-            or self.git_writes_detected
-        )
+        """Whether any evidence of meaningful progress exists."""
+        return self.worktree_path is not None or self.evidence.has_evidence
 
 
 @dataclass
@@ -416,6 +423,8 @@ class SessionIndexEntry(TypedDict):
     cache_write_tokens: int
     cache_read_tokens: int
     write_call_count: int
+    fs_writes_detected: bool
+    git_writes_detected: bool
     tracked_comm: str | None
     tracked_comm_drift: bool
     autoskillit_version: str

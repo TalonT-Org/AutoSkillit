@@ -247,7 +247,7 @@ class TestRecursiveSnapshot:
             minimal_ctx,
             write_watch_dirs=[watch_dir],
         )
-        assert result.fs_writes_detected is True
+        assert result.evidence.fs_writes_detected is True
 
     @pytest.mark.anyio
     async def test_run_headless_core_empty_subdir_no_false_positive(
@@ -274,7 +274,7 @@ class TestRecursiveSnapshot:
             minimal_ctx,
             write_watch_dirs=[watch_dir],
         )
-        assert result.fs_writes_detected is False
+        assert result.evidence.fs_writes_detected is False
 
 
 class TestPlannerSkillEndToEnd:
@@ -308,4 +308,4 @@ class TestPlannerSkillEndToEnd:
             write_watch_dirs=[run_dir],
             write_behavior=WriteBehaviorSpec(mode="always"),
         )
-        assert sr.fs_writes_detected is True
+        assert sr.evidence.fs_writes_detected is True

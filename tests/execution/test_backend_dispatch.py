@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from autoskillit.core import CLAUDE_CODE_CAPABILITIES, CmdSpec
+from autoskillit.core.types import SubprocessResult, TerminationReason
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -44,19 +45,13 @@ async def test_run_headless_core_uses_ctx_backend_for_command_construction(minim
     minimal_ctx.backend = backend
 
     mock_runner = AsyncMock()
-    mock_result = Mock()
-    mock_result.stdout = ""
-    mock_result.stderr = ""
-    mock_result.exit_code = 0
-    mock_result.pid = 12345
-    mock_result.termination = Mock()
-    mock_result.termination.value = "NATURAL_EXIT"
-    mock_result.proc_snapshots = None
-    mock_result.start_ts = "2026-01-01T00:00:00+00:00"
-    mock_result.end_ts = "2026-01-01T00:01:00+00:00"
-    mock_result.elapsed_seconds = 60.0
-    mock_result.tracked_comm = None
-    mock_result.orphaned_tool_result = False
+    mock_result = SubprocessResult(
+        returncode=0,
+        stdout="",
+        stderr="",
+        termination=TerminationReason.NATURAL_EXIT,
+        pid=12345,
+    )
     mock_runner.return_value = mock_result
     minimal_ctx.runner = mock_runner
 

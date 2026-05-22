@@ -1744,7 +1744,7 @@ class TestNudgeBackendGuard:
         from dataclasses import replace
         from unittest.mock import Mock
 
-        from autoskillit.core import CLAUDE_CODE_CAPABILITIES
+        from autoskillit.core import CLAUDE_CODE_CAPABILITIES, CmdSpec
         from autoskillit.core.types import RetryReason
         from autoskillit.execution.headless import run_headless_core
 
@@ -1754,6 +1754,10 @@ class TestNudgeBackendGuard:
         mock_backend.name = "claude-code"
         mock_backend.capabilities = caps
         mock_backend.write_tool_names.return_value = frozenset({"Write", "Edit"})
+        mock_backend.build_skill_session_cmd.return_value = CmdSpec(
+            cmd=("claude", "--print", "test"),
+            env={},
+        )
         tool_ctx.backend = mock_backend
         tool_ctx.runner.push(self._main_subprocess_result(marker))
         tool_ctx.runner.push(self._nudge_response(marker))
@@ -1772,7 +1776,7 @@ class TestNudgeBackendGuard:
         from dataclasses import replace
         from unittest.mock import Mock
 
-        from autoskillit.core import CLAUDE_CODE_CAPABILITIES
+        from autoskillit.core import CLAUDE_CODE_CAPABILITIES, CmdSpec
         from autoskillit.core.types import RetryReason
         from autoskillit.execution.headless import run_headless_core
 
@@ -1782,6 +1786,10 @@ class TestNudgeBackendGuard:
         mock_backend.name = "claude-code"
         mock_backend.capabilities = caps
         mock_backend.write_tool_names.return_value = frozenset({"Write", "Edit"})
+        mock_backend.build_skill_session_cmd.return_value = CmdSpec(
+            cmd=("claude", "--print", "test"),
+            env={},
+        )
         mock_backend.result_parser.return_value = None
         tool_ctx.backend = mock_backend
         tool_ctx.runner.push(self._main_subprocess_result(marker))
@@ -1814,6 +1822,10 @@ class TestNudgeBackendGuard:
         mock_backend.name = "claude-code"
         mock_backend.capabilities = caps
         mock_backend.write_tool_names.return_value = frozenset({"Write", "Edit"})
+        mock_backend.build_skill_session_cmd.return_value = CmdSpec(
+            cmd=("claude", "--print", "test"),
+            env={},
+        )
         mock_backend.build_resume_cmd.return_value = expected_cmd
         mock_backend.result_parser.return_value = ClaudeResultParser()
         tool_ctx.backend = mock_backend
@@ -1847,6 +1859,10 @@ class TestNudgeBackendGuard:
         mock_backend.name = "claude-code"
         mock_backend.capabilities = caps
         mock_backend.write_tool_names.return_value = frozenset({"Write", "Edit"})
+        mock_backend.build_skill_session_cmd.return_value = CmdSpec(
+            cmd=("claude", "--print", "test"),
+            env={},
+        )
         mock_backend.build_resume_cmd.return_value = expected_cmd
         mock_backend.result_parser.return_value = ClaudeResultParser()
         tool_ctx.backend = mock_backend

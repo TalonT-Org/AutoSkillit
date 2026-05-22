@@ -987,15 +987,20 @@ async def test_end_to_end_resumable_dispatch_uses_resume_flag(
     rt.add_recipe("recipe-a")
 
     captured_cmds: list[list[str]] = []
-    backend = rt.tool_ctx.backend
-    original_build = backend.build_food_truck_cmd
+    real_backend = rt.tool_ctx.backend
+    original_build = real_backend.build_food_truck_cmd
+
+    from unittest.mock import Mock
+
+    spy_backend = Mock(wraps=real_backend)
 
     def _spy_build(**kwargs: Any) -> Any:
         spec = original_build(**kwargs)
         captured_cmds.append(list(spec.cmd))
         return spec
 
-    monkeypatch.setattr(backend, "build_food_truck_cmd", _spy_build)
+    spy_backend.build_food_truck_cmd = _spy_build
+    rt.tool_ctx.backend = spy_backend
     rt.configure_shim("success")
 
     await execute_dispatch(

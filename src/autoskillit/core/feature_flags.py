@@ -34,7 +34,8 @@ def is_feature_enabled(
     -------
     bool
         Resolution order:
-        DISABLED hard-off → explicit override → experimental blanket → default_enabled.
+        DISABLED hard-off → explicit override → experimental blanket
+        (with requires_backend_alignment bypass → default_enabled) → default_enabled.
 
     Raises
     ------

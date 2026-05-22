@@ -15,6 +15,8 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_arch_deselection.py` | Tests for diff-aware parametrized deselection — REQ-ARCH-004 |
 | `test_ast_rules.py` | Architectural enforcement: AST-based visitor rules (ARCH-001 through ARCH-009) |
 | `test_backend_coherence.py` | Architectural tests for backend coherence enforcement |
+| `test_backend_command_path.py` | AST tests enforcing ctx.backend usage for command construction in headless path |
+| `test_backend_protocol_completeness.py` | Protocol completeness tests for CodingAgentBackend command builders |
 | `test_audit_feature_gates_skill.py` | Structural integrity tests for the audit-feature-gates skill |
 | `test_bundled_recipes_split.py` | Enforcement: test_bundled_recipes.py split structure guard |
 | `test_cascade_map_guard.py` | REQ-GUARD-001..003, 005: CI guard validating cascade maps against AST-derived reverse import graph |

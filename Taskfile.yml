@@ -208,7 +208,7 @@ tasks:
         exit $PYTEST_EXIT
 
   test-smoke-codex:
-    desc: Run Codex CLI smoke tests (requires OPENAI_API_KEY)
+    desc: Run Codex CLI smoke tests (requires Codex authentication)
     deps: [_tmpdir-setup]
     env:
       PYTHONDONTWRITEBYTECODE: "1"
@@ -216,8 +216,8 @@ tasks:
       CODEX_SMOKE_TEST: "1"
       TMPDIR: "{{.PYTEST_TMPDIR}}"
     preconditions:
-      - sh: test -n "$OPENAI_API_KEY"
-        msg: "OPENAI_API_KEY must be set"
+      - sh: test -n "$OPENAI_API_KEY" || test -n "$CODEX_API_KEY" || test -f "$HOME/.codex/auth.json"
+        msg: "Codex authentication required: set OPENAI_API_KEY or CODEX_API_KEY, or run 'codex login'"
     cmds:
       - |
         mkdir -p .autoskillit/temp

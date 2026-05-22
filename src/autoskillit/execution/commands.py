@@ -137,7 +137,7 @@ def build_skill_session_cmd(
     resume_message: str | None = None,
 ) -> ClaudeHeadlessCmd:
     """Build the complete headless command spec for a skill session."""
-    spec = ClaudeCodeBackend().build_skill_session_cmd(
+    spec = ClaudeCodeBackend()._build_skill_session_cmd_impl(
         skill_command,
         cwd=cwd,
         completion_marker=completion_marker,

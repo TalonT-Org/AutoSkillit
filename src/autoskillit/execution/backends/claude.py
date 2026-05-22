@@ -31,6 +31,7 @@ from autoskillit.core import (
     ResumeSpec,
     SessionCheckpoint,
     SessionEvent,
+    SkillSessionConfig,
     ValidatedAddDir,
     build_agent_env,
     extract_skill_name,
@@ -80,7 +81,7 @@ _SESSION_BASELINE_ENV: Mapping[str, str] = MappingProxyType(
     }
 )
 
-# Variables that build_skill_session_cmd controls exclusively. They must not
+# Variables that _build_skill_session_cmd_impl controls exclusively. They must not
 # leak from the host process environment — the caller opts in via explicit
 # parameters (exit_after_stop_delay_ms, scenario_step_name, allowed_write_prefix, etc.).
 # Note: CLAUDE_CODE_EXIT_AFTER_STOP_DELAY, SCENARIO_STEP_NAME, and
@@ -570,6 +571,68 @@ class ClaudeCodeBackend:
         )
 
     def build_skill_session_cmd(
+        self,
+        skill_command: str,
+        cwd: str = "",
+        config: SkillSessionConfig | None = None,
+        *,
+        completion_marker: str = "",
+        model: str | None = None,
+        plugin_source: PluginSource | None = None,
+        output_format: OutputFormat = OutputFormat.JSON,
+        add_dirs: Sequence[ValidatedAddDir] = (),
+        exit_after_stop_delay_ms: int = 0,
+        stream_idle_timeout_ms: int = 0,
+        scenario_step_name: str = "",
+        temp_dir_relpath: str | None = None,
+        allowed_write_prefix: str = "",
+        provider_extras: Mapping[str, str] | None = None,
+        profile_name: str = "",
+        resume_session_id: str = "",
+        resume_checkpoint: SessionCheckpoint | None = None,
+        resume_message: str | None = None,
+    ) -> CmdSpec:
+        if config is not None:
+            return self._build_skill_session_cmd_impl(
+                skill_command,
+                cwd=cwd,
+                completion_marker=config.completion_marker,
+                model=config.model,
+                plugin_source=config.plugin_source,
+                output_format=config.output_format,
+                add_dirs=config.add_dirs,
+                exit_after_stop_delay_ms=config.exit_after_stop_delay_ms,
+                stream_idle_timeout_ms=config.stream_idle_timeout_ms,
+                scenario_step_name=config.scenario_step_name,
+                temp_dir_relpath=config.temp_dir_relpath,
+                allowed_write_prefix=config.allowed_write_prefix,
+                provider_extras=config.provider_extras,
+                profile_name=config.profile_name,
+                resume_session_id=config.resume_session_id,
+                resume_checkpoint=config.resume_checkpoint,
+                resume_message=config.resume_message,
+            )
+        return self._build_skill_session_cmd_impl(
+            skill_command,
+            cwd=cwd,
+            completion_marker=completion_marker,
+            model=model,
+            plugin_source=plugin_source,
+            output_format=output_format,
+            add_dirs=add_dirs,
+            exit_after_stop_delay_ms=exit_after_stop_delay_ms,
+            stream_idle_timeout_ms=stream_idle_timeout_ms,
+            scenario_step_name=scenario_step_name,
+            temp_dir_relpath=temp_dir_relpath,
+            allowed_write_prefix=allowed_write_prefix,
+            provider_extras=provider_extras,
+            profile_name=profile_name,
+            resume_session_id=resume_session_id,
+            resume_checkpoint=resume_checkpoint,
+            resume_message=resume_message,
+        )
+
+    def _build_skill_session_cmd_impl(
         self,
         skill_command: str,
         *,

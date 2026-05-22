@@ -7,10 +7,12 @@ import pytest
 
 from autoskillit.core import (
     BareResume,
+    CmdSpec,
     DirectInstall,
     MarketplaceInstall,
     NamedResume,
     OutputFormat,
+    SkillSessionConfig,
 )
 from autoskillit.execution import commands
 from autoskillit.execution.backends import ClaudeCodeBackend
@@ -345,3 +347,77 @@ class TestBuildFoodTruckCmdEquivalence:
         shim = commands.build_food_truck_cmd(**kwargs)
         assert spec.cmd == tuple(shim.cmd)
         assert spec.env == shim.env
+
+
+class TestBuildSkillSessionCmdConfigAdapter:
+    def test_config_adapter_matches_impl(self) -> None:
+        backend = ClaudeCodeBackend()
+        config = SkillSessionConfig(
+            completion_marker="%%DONE%%",
+            model=None,
+            plugin_source=None,
+            output_format=OutputFormat.JSON,
+        )
+        via_config = backend.build_skill_session_cmd("/plan", cwd="/tmp", config=config)
+        via_impl = backend._build_skill_session_cmd_impl(
+            "/plan",
+            cwd="/tmp",
+            completion_marker="%%DONE%%",
+            model=None,
+            plugin_source=None,
+            output_format=OutputFormat.JSON,
+        )
+        assert via_config.cmd == via_impl.cmd
+        assert via_config.env == via_impl.env
+
+    def test_config_adapter_forwards_all_fields(self) -> None:
+        backend = ClaudeCodeBackend()
+        config = SkillSessionConfig(
+            completion_marker="%%MARKER%%",
+            model="sonnet",
+            plugin_source=DirectInstall(plugin_dir=Path("/p")),
+            output_format=OutputFormat.STREAM_JSON,
+            exit_after_stop_delay_ms=120000,
+            stream_idle_timeout_ms=30000,
+            scenario_step_name="step1",
+            temp_dir_relpath=".autoskillit/temp",
+            allowed_write_prefix="/tmp/test",
+            provider_extras={"KEY": "val"},
+            profile_name="my-profile",
+            resume_session_id="s1",
+        )
+        via_config = backend.build_skill_session_cmd("/plan", cwd="/tmp", config=config)
+        via_impl = backend._build_skill_session_cmd_impl(
+            "/plan",
+            cwd="/tmp",
+            completion_marker="%%MARKER%%",
+            model="sonnet",
+            plugin_source=DirectInstall(plugin_dir=Path("/p")),
+            output_format=OutputFormat.STREAM_JSON,
+            exit_after_stop_delay_ms=120000,
+            stream_idle_timeout_ms=30000,
+            scenario_step_name="step1",
+            temp_dir_relpath=".autoskillit/temp",
+            allowed_write_prefix="/tmp/test",
+            provider_extras={"KEY": "val"},
+            profile_name="my-profile",
+            resume_session_id="s1",
+        )
+        assert via_config.cmd == via_impl.cmd
+        assert via_config.env == via_impl.env
+
+    def test_legacy_flat_params_still_work(self) -> None:
+        backend = ClaudeCodeBackend()
+        spec = backend.build_skill_session_cmd("/plan", **SKILL_BASE)
+        assert isinstance(spec, CmdSpec)
+        assert any("/plan" in s or "plan" in s for s in spec.cmd)
+
+    def test_impl_method_exists(self) -> None:
+        assert hasattr(ClaudeCodeBackend, "_build_skill_session_cmd_impl")
+        assert callable(getattr(ClaudeCodeBackend, "_build_skill_session_cmd_impl"))
+
+    def test_config_path_returns_cmdspec(self) -> None:
+        backend = ClaudeCodeBackend()
+        config = SkillSessionConfig(completion_marker="%%DONE%%", output_format=OutputFormat.JSON)
+        result = backend.build_skill_session_cmd("/plan", cwd="/tmp", config=config)
+        assert isinstance(result, CmdSpec)

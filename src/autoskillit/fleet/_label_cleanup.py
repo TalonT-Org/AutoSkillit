@@ -39,12 +39,15 @@ _ADD_LABELS: list[str] = [IssueLabelState.FAIL.value]
 async def cleanup_orphaned_labels(
     sidecar_path: str | None,
     github_client: GitHubFetcher | None,
-) -> None:
+) -> bool:
     """Remove in-progress labels for all issues in a dispatch sidecar.
 
     Safe to call unconditionally from a finally block — returns immediately when
-    sidecar_path or github_client is None, and swallows GitHub API errors so the
+    sidecar_path or github_client is None, and swallows all errors so the
     original exception is never suppressed.
+
+    Returns True when all swap_labels calls succeeded (or there was nothing to
+    clean). Returns False when any call failed or raised.
     """
     if sidecar_path is None or github_client is None:
         logger.debug(
@@ -52,12 +55,22 @@ async def cleanup_orphaned_labels(
             reason="no_sidecar_or_no_client",
             has_sidecar=sidecar_path is not None,
         )
-        return
+        return True
 
-    entries = read_sidecar_from_path(Path(sidecar_path))
+    try:
+        entries = read_sidecar_from_path(Path(sidecar_path))
+    except Exception:
+        logger.warning(
+            "infra_label_cleanup_sidecar_read_failed",
+            sidecar_path=sidecar_path,
+            exc_info=True,
+        )
+        return False
+
     if not entries:
-        return
+        return True
 
+    all_succeeded = True
     for entry in entries:
         try:
             owner, repo, number = _parse_issue_ref(entry.issue_url)
@@ -66,6 +79,7 @@ async def cleanup_orphaned_labels(
                 "infra_label_cleanup_skip_bad_url",
                 issue_url=entry.issue_url,
             )
+            all_succeeded = False
             continue
         try:
             result = await github_client.swap_labels(
@@ -75,17 +89,21 @@ async def cleanup_orphaned_labels(
                 remove_labels=_REMOVE_LABELS,
                 add_labels=_ADD_LABELS,
             )
+            if not result.get("success"):
+                all_succeeded = False
             logger.info(
                 "infra_label_cleanup",
                 issue_url=entry.issue_url,
                 success=result.get("success"),
             )
         except Exception:
+            all_succeeded = False
             logger.warning(
                 "infra_label_cleanup_swap_failed",
                 issue_url=entry.issue_url,
                 exc_info=True,
             )
+    return all_succeeded
 
 
 async def sweep_stale_dispatch_labels(
@@ -129,22 +147,24 @@ async def sweep_stale_dispatch_labels(
             continue
         for sp in stale_sidecar_paths:
             await cleanup_orphaned_labels(sp, github_client)
-        for _name, sp in terminal_uncleaned:
-            await cleanup_orphaned_labels(sp, github_client)
+
+        terminal_results: dict[str, bool] = {}
+        for name, sp in terminal_uncleaned:
+            terminal_results[name] = await cleanup_orphaned_labels(sp, github_client)
+
         if terminal_uncleaned:
             try:
                 with CampaignStateMutator(state_path) as m:
                     if m.state is not None:
-                        cleaned_names = {name for name, _ in terminal_uncleaned}
                         for d in m.state.dispatches:
-                            if d.name in cleaned_names:
+                            if d.name in terminal_results and terminal_results[d.name]:
                                 d.labels_cleaned = True
                                 m.mark_dirty()
             except Exception:
                 logger.warning(
                     "startup_label_sweep_mark_cleaned_failed",
                     state_path=str(state_path),
-                    cleaned_names=sorted(n for n, _ in terminal_uncleaned),
+                    cleaned_names=sorted(n for n, s in terminal_results.items() if s),
                     exc_info=True,
                 )
 

@@ -344,3 +344,111 @@ class TestCleanupOrphanedLabelsUnit:
         )
         assert sorted(call.kwargs["remove_labels"]) == expected_remove
         assert call.kwargs["add_labels"] == [IssueLabelState.FAIL.value]
+
+    @pytest.mark.anyio
+    async def test_cleanup_returns_false_when_swap_labels_raises(self, tmp_path: Path) -> None:
+        """cleanup_orphaned_labels returns False when swap_labels raises."""
+        from autoskillit.fleet._label_cleanup import cleanup_orphaned_labels
+
+        sidecar = tmp_path / "test_issues.jsonl"
+        sidecar.write_text(
+            json.dumps(
+                {
+                    "issue_url": "https://github.com/owner/repo/issues/1",
+                    "status": "completed",
+                    "ts": "2026-01-01T00:00:00Z",
+                }
+            )
+            + "\n"
+        )
+
+        github_client = AsyncMock()
+        github_client.swap_labels = AsyncMock(side_effect=Exception("rate limited"))
+
+        result = await cleanup_orphaned_labels(str(sidecar), github_client)
+
+        assert result is False
+
+    @pytest.mark.anyio
+    async def test_cleanup_returns_true_when_all_succeed(self, tmp_path: Path) -> None:
+        """cleanup_orphaned_labels returns True when all swap_labels succeed."""
+        from autoskillit.fleet._label_cleanup import cleanup_orphaned_labels
+
+        sidecar = tmp_path / "test_issues.jsonl"
+        sidecar.write_text(
+            json.dumps(
+                {
+                    "issue_url": "https://github.com/owner/repo/issues/1",
+                    "status": "completed",
+                    "ts": "2026-01-01T00:00:00Z",
+                }
+            )
+            + "\n"
+        )
+
+        github_client = AsyncMock()
+        github_client.swap_labels = AsyncMock(return_value={"success": True})
+
+        result = await cleanup_orphaned_labels(str(sidecar), github_client)
+
+        assert result is True
+
+    @pytest.mark.anyio
+    async def test_cleanup_returns_false_on_partial_failure(self, tmp_path: Path) -> None:
+        """cleanup_orphaned_labels returns False when any swap_labels call fails."""
+        from autoskillit.fleet._label_cleanup import cleanup_orphaned_labels
+
+        sidecar = tmp_path / "test_issues.jsonl"
+        lines = [
+            json.dumps(
+                {
+                    "issue_url": f"https://github.com/owner/repo/issues/{i}",
+                    "status": "completed",
+                    "ts": "2026-01-01T00:00:00Z",
+                }
+            )
+            for i in [1, 2]
+        ]
+        sidecar.write_text("\n".join(lines) + "\n")
+
+        call_count = 0
+
+        async def _succeed_then_raise(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return {"success": True}
+            raise Exception("rate limited")
+
+        github_client = AsyncMock()
+        github_client.swap_labels = _succeed_then_raise
+
+        result = await cleanup_orphaned_labels(str(sidecar), github_client)
+
+        assert result is False
+
+    @pytest.mark.anyio
+    async def test_cleanup_returns_false_when_swap_returns_failure(self, tmp_path: Path) -> None:
+        """cleanup_orphaned_labels returns False when swap_labels returns success=False."""
+        from autoskillit.fleet._label_cleanup import cleanup_orphaned_labels
+
+        sidecar = tmp_path / "test_issues.jsonl"
+        sidecar.write_text(
+            json.dumps(
+                {
+                    "issue_url": "https://github.com/owner/repo/issues/1",
+                    "status": "completed",
+                    "ts": "2026-01-01T00:00:00Z",
+                }
+            )
+            + "\n"
+        )
+
+        github_client = AsyncMock()
+        github_client.swap_labels = AsyncMock(
+            return_value={"success": False, "error": "rate limited"}
+        )
+
+        result = await cleanup_orphaned_labels(str(sidecar), github_client)
+
+        assert result is False

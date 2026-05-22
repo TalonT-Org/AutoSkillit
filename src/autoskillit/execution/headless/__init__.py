@@ -79,6 +79,7 @@ from autoskillit.execution.headless._headless_recovery import (
     _synthesize_from_write_artifacts,  # noqa: F401
 )
 from autoskillit.execution.headless._headless_result import (
+    _adapt_agent_result,  # noqa: F401
     _apply_budget_guard,  # noqa: F401
     _build_error_path_telemetry,
     _build_session_telemetry,

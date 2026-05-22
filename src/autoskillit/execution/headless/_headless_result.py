@@ -5,9 +5,10 @@ from __future__ import annotations
 import dataclasses
 from collections.abc import Sequence
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, assert_never
+from typing import TYPE_CHECKING, Any, assert_never
 
 from autoskillit.core import (
+    AgentSessionResult,
     ChannelConfirmation,
     CliSubtype,
     FailureRecord,
@@ -55,6 +56,7 @@ logger = get_logger(__name__)
 _truncate = truncate_text
 
 __all__ = [
+    "_adapt_agent_result",
     "_build_error_path_telemetry",
     "_build_session_telemetry",
     "_capture_failure",
@@ -127,6 +129,51 @@ def _resolve_skill_session_id(
 
 def _parse_stdout(stdout: str, backend: CodingAgentBackend | None = None) -> ClaudeSessionResult:
     return parse_session_result(stdout)
+
+
+def _adapt_agent_result(agent_result: AgentSessionResult) -> ClaudeSessionResult:
+    raw = agent_result.raw
+
+    session_id = agent_result.session_id or ""
+    is_error = raw.get("is_error", not agent_result.success)
+    result_text = agent_result.output
+    subtype = CliSubtype.from_cli(raw.get("subtype", "unknown"))
+    stop_reasons: list[str] = raw.get("stop_reasons", [])
+
+    error_subtypes = {
+        CliSubtype.ERROR_DURING_EXECUTION,
+        CliSubtype.ERROR_MAX_TURNS,
+        CliSubtype.UNKNOWN,
+    }
+    jsonl_context_exhausted = subtype in error_subtypes and "context_length_exceeded" in (
+        agent_result.error or ""
+    )
+
+    token_usage = raw.get("canonical_token_usage") or raw.get("token_usage")
+
+    command_executions: list[dict[str, Any]] = raw.get("command_executions", [])
+    mcp_tool_calls: list[dict[str, Any]] = raw.get("mcp_tool_calls", [])
+    file_change_paths: list[str] = raw.get("file_changes", [])
+    file_change_entries = [
+        {"name": "file_change", "type": "file_change", "path": p} for p in file_change_paths
+    ]
+    tool_uses = command_executions + mcp_tool_calls + file_change_entries
+
+    assistant_messages: list[str] = raw.get("agent_messages", [])
+
+    return ClaudeSessionResult(
+        subtype=subtype,
+        is_error=is_error,
+        result=result_text,
+        session_id=session_id,
+        token_usage=token_usage,
+        assistant_messages=assistant_messages,
+        tool_uses=tool_uses,
+        jsonl_context_exhausted=jsonl_context_exhausted,
+        stop_reasons=stop_reasons,
+        has_thinking_only_turn=False,
+        seen_block_types=frozenset(),
+    )
 
 
 def _compute_write_evidence(

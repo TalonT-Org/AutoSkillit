@@ -1182,9 +1182,9 @@ def test_headless_builders_return_tuple_cmd(builder, kwargs) -> None:
 
 def test_cmdspec_importable_from_execution() -> None:
     """CmdSpec must be importable from the execution package gateway."""
-    from autoskillit.execution import CmdSpec
+    from autoskillit.execution import CmdSpec as execution_CmdSpec
 
-    assert CmdSpec is not None
+    assert execution_CmdSpec is CmdSpec
 
 
 def test_cmdspec_in_execution_all() -> None:

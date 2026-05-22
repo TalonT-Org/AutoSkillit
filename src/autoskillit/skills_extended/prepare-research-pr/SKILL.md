@@ -242,13 +242,19 @@ Store the absolute path as `prep_file_path`.
 
 ## Output
 
-Emit these tokens as **literal plain text** (no markdown formatting on the token names)
-as your final output:
+Emit these tokens as your final output:
+
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. Do not wrap the output block in a code fence.
+> The adjudicator performs a regex match on the exact token name — decorators and
+> code fences cause match failure.
 
 ```
 prep_path = /absolute/path/{{AUTOSKILLIT_TEMP}}/prepare-research-pr/pr_prep_{ts}.md
 selected_lenses = fair-comparison,estimand-clarity
 lens_context_paths = /abs/ctx_fair-comparison_{ts}.md,/abs/ctx_estimand-clarity_{ts}.md
+%%ORDER_UP::<hex>%%
 ```
 
 Where:

@@ -161,7 +161,14 @@ download_report = /absolute/path/to/download_report_{YYYY-MM-DD_HHMMSS}.md
 Include the completion marker from the ORCHESTRATION DIRECTIVE at the end of the
 structured output block.
 
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. Do not wrap the output block in a code fence.
+> The adjudicator performs a regex match on the exact token name — decorators and
+> code fences cause match failure.
+
 ```
 verdict = PASS|WARN|FAIL
 download_report = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/download-data/download_report_{YYYY-MM-DD_HHMMSS}.md
+%%ORDER_UP::<hex>%%
 ```

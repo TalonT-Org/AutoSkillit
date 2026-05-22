@@ -129,11 +129,19 @@ Proceed to Phase 4 only after all dispatches have their ingredients populated (e
 
 Emit the structured output token on its own line:
 
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. Do not wrap the output block in a code fence.
+> The adjudicator performs a regex match on the exact token name — decorators and
+> code fences cause match failure.
+
 ```
 campaign_path = {absolute_path_to_campaign_yaml}
+%%ORDER_UP::<hex>%%
 ```
 
 Example:
 ```
 campaign_path = /home/user/project/.autoskillit/recipes/campaigns/my-campaign.yaml
+%%ORDER_UP::<hex>%%
 ```

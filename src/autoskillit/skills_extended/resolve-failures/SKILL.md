@@ -268,7 +268,8 @@ Then emit the structured output tokens on their own lines so the pipeline's
 `on_result:` verdict routing and `write_behavior: conditional` contract can evaluate them:
 
 > **IMPORTANT:** Emit the tokens as **literal plain text with no markdown
-> formatting**. The gate performs a regex match — decorators cause match failure.
+> formatting**. Do not wrap the output block in a code fence. The gate performs
+> a regex match — decorators and code fences cause match failure.
 
 ```
 verdict = {verdict}

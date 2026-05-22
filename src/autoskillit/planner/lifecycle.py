@@ -27,6 +27,12 @@ def record_lifecycle_event(planner_dir: Path, key: str, data: list[str] | dict[s
                 "voided_assignments": loaded.get("voided_assignments", []),
                 "absorbed": loaded.get("absorbed", {}),
             }
+        else:
+            logger.warning(
+                "lifecycle_registry_unreadable",
+                path=str(registry_path),
+                hint="file exists but could not be parsed; merging with blank default",
+            )
 
     if isinstance(data, list):
         current = existing.get(key, [])

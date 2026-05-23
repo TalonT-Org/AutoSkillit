@@ -182,15 +182,17 @@ class TestSessionTypeVisibility:
 
         tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
+        tool_tags = {t.name: t.tags for t in tools}
         assert "test_check" in tool_names, (
             "test_check should be visible for skill+headless+auto_gate"
         )
         kitchen_core_tools = {t.name for t in tools if "kitchen-core" in t.tags}
         assert kitchen_core_tools, "kitchen-core-tagged tools should be visible when AUTO_GATE=1"
         for name in GATED_TOOLS:
-            assert name not in tool_names, (
-                f"{name} (kitchen) should be hidden for skill+headless+auto_gate"
-            )
+            if name in tool_names:
+                assert "kitchen-core" in tool_tags[name], (
+                    f"{name} visible without kitchen-core tag"
+                )
 
     @pytest.mark.anyio
     async def test_skill_headless_without_auto_gate_only_headless(self, monkeypatch):

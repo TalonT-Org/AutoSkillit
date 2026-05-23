@@ -171,15 +171,16 @@ def _compute_deep_mtime() -> int:
 
 
 def _get_process_start_mtime() -> int:
-    global _PROCESS_START_PKG_MTIME  # noqa: PLW0603
+    global _PROCESS_START_PKG_MTIME, _DEEP_MTIME_BASELINE  # noqa: PLW0603
     if _PROCESS_START_PKG_MTIME is None:
         _PROCESS_START_PKG_MTIME = _path_mtime_ns(pkg_root())
+        _DEEP_MTIME_BASELINE = _compute_deep_mtime()
     return _PROCESS_START_PKG_MTIME
 
 
 def _check_process_staleness() -> bool:
     """Return True if the package directory or rule files were modified after process start."""
-    global _STALENESS_LAST_CHECK, _STALENESS_IS_STALE, _DEEP_MTIME_BASELINE  # noqa: PLW0603
+    global _STALENESS_LAST_CHECK, _STALENESS_IS_STALE  # noqa: PLW0603
     now = time.monotonic()
     if now - _STALENESS_LAST_CHECK < _STALENESS_TTL:
         return _STALENESS_IS_STALE
@@ -188,8 +189,6 @@ def _check_process_staleness() -> bool:
         pkg_stale = _path_mtime_ns(pkg_root()) != _get_process_start_mtime()
         if not pkg_stale:
             current_deep = _compute_deep_mtime()
-            if _DEEP_MTIME_BASELINE is None:
-                _DEEP_MTIME_BASELINE = current_deep
             pkg_stale = current_deep != _DEEP_MTIME_BASELINE
         _STALENESS_IS_STALE = pkg_stale
     except (OSError, RuntimeError):

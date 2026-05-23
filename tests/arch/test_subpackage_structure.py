@@ -18,6 +18,7 @@ class TestCoreSubpackages:
             "_type_dispatch_identity",
             "_type_enums",
             "_type_constants",
+            "_type_exceptions",
             "_type_results",
             "_type_subprocess",
             "_type_helpers",

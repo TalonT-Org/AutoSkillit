@@ -1036,6 +1036,7 @@ def test_load_and_validate_raises_on_not_found(tmp_path, monkeypatch):
 def test_lru_cache_helpers_cleared_on_process_staleness(tmp_path, monkeypatch):
     """Staleness detection clears lru_cache helpers."""
     import autoskillit.recipe._api as api_mod
+    from autoskillit.core import ProcessStaleError
     from autoskillit.recipe.contracts import load_bundled_manifest
     from autoskillit.recipe.methodology_venue_appendix import load_ml_sub_area_folding
     from autoskillit.recipe.rules.rules_blocks import _block_budgets
@@ -1069,7 +1070,8 @@ def test_lru_cache_helpers_cleared_on_process_staleness(tmp_path, monkeypatch):
     recipes_dir.mkdir(parents=True)
     (recipes_dir / "myrecipe.yaml").write_text(MINIMAL_RECIPE_YAML)
 
-    api_mod.load_and_validate("myrecipe", tmp_path)
+    with pytest.raises(ProcessStaleError):
+        api_mod.load_and_validate("myrecipe", tmp_path)
 
     assert _block_budgets.cache_info().currsize == 0
     assert load_bundled_manifest.cache_info().currsize == 0

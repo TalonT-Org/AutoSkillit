@@ -49,6 +49,7 @@ class TestFleetErrorCodeEnum:
             "fleet_acquire_timeout",
             "fleet_recipe_invalid",
             "fleet_dispatch_skipped",
+            "fleet_process_stale",
         }
         assert {c.value for c in FleetErrorCode} == expected_values
 

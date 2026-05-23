@@ -100,10 +100,11 @@ def test_recipe_facades_in_all():
 
 
 def test_recipe_load_and_validate_not_found(tmp_path):
+    from autoskillit.core import RecipeNotFoundError
     from autoskillit.recipe import load_and_validate
 
-    result = load_and_validate("__nonexistent__", project_dir=tmp_path)
-    assert "error" in result
+    with pytest.raises(RecipeNotFoundError):
+        load_and_validate("__nonexistent__", project_dir=tmp_path)
 
 
 def test_recipe_load_and_validate_found_returns_required_keys(tmp_path):

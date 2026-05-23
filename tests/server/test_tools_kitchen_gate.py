@@ -743,22 +743,25 @@ async def test_open_kitchen_uses_project_dir_for_recipe_lookup(tmp_path, monkeyp
     Regression test: when project_dir differs from cwd, recipes must be found
     in project_dir's .autoskillit/recipes/ directory.
     """
-    import yaml
-
     monkeypatch.chdir(tmp_path)  # Ensure cwd != project_dir
     different_dir = tmp_path / "project_root"
     different_dir.mkdir()
 
     # Create a recipe only in project_dir, not in cwd
-    recipe_yaml = {
-        "name": "test-project-dir-recipe",
-        "description": "Test recipe for project_dir propagation",
-        "ingredients": [],
-        "steps": [{"tool": "run_skill", "name": "s1", "with": {"skill": "test"}}],
-    }
+    recipe_yaml_text = (
+        "name: test-project-dir-recipe\n"
+        "description: Test recipe for project_dir propagation\n"
+        "autoskillit_version: '0.2.0'\n"
+        "kitchen_rules:\n"
+        "  - Never use native tools\n"
+        "steps:\n"
+        "  stop:\n"
+        "    action: stop\n"
+        "    message: done\n"
+    )
     recipes_dir = different_dir / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
-    (recipes_dir / "test-project-dir-recipe.yaml").write_text(yaml.dump(recipe_yaml))
+    (recipes_dir / "test-project-dir-recipe.yaml").write_text(recipe_yaml_text)
 
     # Build context with project_dir = different_dir, recipes = RealRecipeRepository
     from autoskillit.config.settings import AutomationConfig

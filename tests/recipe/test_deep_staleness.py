@@ -8,7 +8,7 @@ pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
 def test_deep_staleness_detects_rule_file_changes(tmp_path, monkeypatch):
-    """Changes to .py files in recipe/rules/ trigger staleness even when pkg_root() mtime is unchanged."""
+    """Rule file changes trigger staleness even when pkg_root() mtime is unchanged."""
     import autoskillit.recipe._api as api_mod
 
     monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})

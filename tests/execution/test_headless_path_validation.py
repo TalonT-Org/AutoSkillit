@@ -777,6 +777,65 @@ class TestSynthesizeFromWriteArtifacts:
         assert result is not None
         assert "triage_report = /abs/triage.md" in result.result
 
+    def test_returns_none_when_no_write_calls_and_no_file_changes(self, make_headless_session):
+        """write_call_count == 0 AND empty file_changes → None."""
+        from autoskillit.execution.headless import _synthesize_from_write_artifacts
+
+        session = make_headless_session(result="", tool_uses=[])
+        result = _synthesize_from_write_artifacts(
+            session, [r"plan_path\s*=\s*/.+"], write_call_count=0, file_changes=[]
+        )
+        assert result is None
+
+    def test_file_changes_bypass_early_exit_when_no_write_calls(self, make_headless_session):
+        """write_call_count == 0 but file_changes present → synthesis proceeds."""
+        from autoskillit.execution.headless import _synthesize_from_write_artifacts
+
+        session = make_headless_session(result="", tool_uses=[])
+        result = _synthesize_from_write_artifacts(
+            session,
+            [r"plan_path\s*=\s*/.+"],
+            write_call_count=0,
+            file_changes=["/abs/plan.md"],
+        )
+        assert result is not None
+        assert "plan_path = /abs/plan.md" in result.result
+
+    def test_file_changes_fallback_when_no_candidate_paths(self, make_headless_session):
+        """file_changes used as candidate paths when tool_uses has no Write/Edit paths."""
+        from autoskillit.execution.headless import _synthesize_from_write_artifacts
+
+        session = make_headless_session(
+            result="",
+            tool_uses=[{"name": "file_change", "type": "file_change", "path": "/codex/output.md"}],
+        )
+        result = _synthesize_from_write_artifacts(
+            session,
+            [r"plan_path\s*=\s*/.+"],
+            write_call_count=0,
+            file_changes=["/codex/output.md"],
+        )
+        assert result is not None
+        assert "plan_path = /codex/output.md" in result.result
+
+    def test_file_changes_ignored_when_candidate_paths_exist(self, make_headless_session):
+        """When tool_uses has Write paths, file_changes fallback is not used."""
+        from autoskillit.execution.headless import _synthesize_from_write_artifacts
+
+        session = make_headless_session(
+            result="",
+            tool_uses=[{"name": "Write", "id": "t1", "file_path": "/abs/write.md"}],
+        )
+        result = _synthesize_from_write_artifacts(
+            session,
+            [r"plan_path\s*=\s*/.+"],
+            write_call_count=1,
+            file_changes=["/codex/output.md"],
+        )
+        assert result is not None
+        assert "plan_path = /abs/write.md" in result.result
+        assert "/codex/output.md" not in result.result
+
 
 @pytest.fixture
 def make_build_skill_result_kwargs():

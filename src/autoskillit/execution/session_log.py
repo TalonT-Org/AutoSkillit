@@ -145,6 +145,7 @@ def flush_session_log(
     write_call_count: int = 0,
     fs_writes_detected: bool = False,
     git_writes_detected: bool = False,
+    file_changes_count: int = 0,
     clone_contamination_reverted: bool = False,
     tracked_comm: str | None = None,
     exception_text: str = "",
@@ -367,6 +368,7 @@ def flush_session_log(
         "write_call_count": write_call_count,
         "fs_writes_detected": fs_writes_detected,
         "git_writes_detected": git_writes_detected,
+        "file_changes_count": file_changes_count,
         "clone_contamination_reverted": clone_contamination_reverted,
         # Tracer target resolution fields (issue #806)
         "tracked_comm": _effective_tracked_comm,
@@ -491,6 +493,7 @@ def flush_session_log(
         "write_call_count": write_call_count,
         "fs_writes_detected": fs_writes_detected,
         "git_writes_detected": git_writes_detected,
+        "file_changes_count": file_changes_count,
         "tracked_comm": _effective_tracked_comm,
         "tracked_comm_drift": _tracked_comm_drift,
         "autoskillit_version": versions.get("autoskillit_version", "") if versions else "",

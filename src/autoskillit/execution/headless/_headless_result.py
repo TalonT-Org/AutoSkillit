@@ -187,16 +187,29 @@ def _compute_write_evidence(
     fs_writes_detected: bool,
     git_writes_detected: bool,
     backend: CodingAgentBackend | None = None,
+    file_changes: Sequence[str] = (),
 ) -> WriteEvidence:
     write_names = (
         backend.write_tool_names() if backend is not None else frozenset({"Write", "Edit"})
     )
     write_call_count = sum(1 for t in session.tool_uses if t.get("name") in write_names)
+    # file_changes_count is only meaningful when write_call_count == 0
+    # (Codex file-change fallback); when write tools were used, the
+    # standard write_call_count signal already provides evidence.
+    file_changes_count = len(file_changes) if write_call_count == 0 else 0
     return WriteEvidence(
         write_call_count=write_call_count,
         fs_writes_detected=fs_writes_detected,
         git_writes_detected=git_writes_detected,
+        file_changes_count=file_changes_count,
     )
+
+
+def _extract_file_changes(stdout: str, backend: CodingAgentBackend | None) -> list[str]:
+    if backend is None or backend.name == AGENT_BACKEND_CLAUDE_CODE:
+        return []
+    agent_result = backend.result_parser().parse_stdout(stdout)
+    return list(agent_result.raw.get("file_changes", []))
 
 
 def _stdout_mentions_write_tools(stdout: str) -> bool:
@@ -266,6 +279,7 @@ def _build_skill_result(
     backend: CodingAgentBackend | None = None,
 ) -> SkillResult:
     """Route SubprocessResult fields into the standard run_skill response."""
+    file_changes = _extract_file_changes(result.stdout, backend)
     branch = (
         "idle_stall"
         if result.termination == TerminationReason.IDLE_STALL
@@ -289,7 +303,11 @@ def _build_skill_result(
         # Attempt to recover from stdout before declaring stale failure.
         stale_session = _parse_stdout(result.stdout, backend=backend)
         stale_evidence = _compute_write_evidence(
-            stale_session, fs_writes_detected, git_writes_detected, backend
+            stale_session,
+            fs_writes_detected,
+            git_writes_detected,
+            backend,
+            file_changes=file_changes,
         )
         stale_api_retry = _build_api_retry_outcome(stale_session)
         stale_returncode = result.returncode if result.returncode is not None else -1
@@ -358,7 +376,11 @@ def _build_skill_result(
     if result.termination == TerminationReason.IDLE_STALL:
         idle_session = _parse_stdout(result.stdout, backend=backend)
         idle_evidence = _compute_write_evidence(
-            idle_session, fs_writes_detected, git_writes_detected, backend
+            idle_session,
+            fs_writes_detected,
+            git_writes_detected,
+            backend,
+            file_changes=file_changes,
         )
         idle_api_retry = _build_api_retry_outcome(idle_session)
         idle_returncode = result.returncode if result.returncode is not None else -1
@@ -444,7 +466,9 @@ def _build_skill_result(
         returncode = result.returncode if result.returncode is not None else -1
         session = _parse_stdout(result.stdout, backend=backend)
 
-    evidence = _compute_write_evidence(session, fs_writes_detected, git_writes_detected, backend)
+    evidence = _compute_write_evidence(
+        session, fs_writes_detected, git_writes_detected, backend, file_changes=file_changes
+    )
     _has_write_evidence = evidence.has_evidence
 
     if evidence.write_call_count == 0 and _stdout_mentions_write_tools(result.stdout):
@@ -553,6 +577,7 @@ def _build_skill_result(
                 evidence.write_call_count,
                 evidence.fs_writes_detected,
                 write_tool_names=write_names,
+                file_changes=file_changes,
             )
             if artifact_recovered is not None:
                 session = artifact_recovered

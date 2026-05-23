@@ -215,14 +215,25 @@ class WriteEvidence:
     write_call_count: int
     fs_writes_detected: bool
     git_writes_detected: bool
+    file_changes_count: int = 0
 
     @classmethod
     def none_observed(cls) -> WriteEvidence:
-        return cls(write_call_count=0, fs_writes_detected=False, git_writes_detected=False)
+        return cls(
+            write_call_count=0,
+            fs_writes_detected=False,
+            git_writes_detected=False,
+            file_changes_count=0,
+        )
 
     @property
     def has_evidence(self) -> bool:
-        return self.write_call_count >= 1 or self.fs_writes_detected or self.git_writes_detected
+        return (
+            self.write_call_count >= 1
+            or self.fs_writes_detected
+            or self.git_writes_detected
+            or self.file_changes_count >= 1
+        )
 
 
 @dataclass
@@ -278,6 +289,7 @@ class SkillResult:
             "write_call_count": self.evidence.write_call_count,
             "fs_writes_detected": self.evidence.fs_writes_detected,
             "git_writes_detected": self.evidence.git_writes_detected,
+            "file_changes_count": self.evidence.file_changes_count,
             "has_progress_evidence": self.has_progress_evidence,
             "last_stop_reason": self.last_stop_reason,
             "lifespan_started": self.lifespan_started,
@@ -465,6 +477,7 @@ class SessionIndexEntry(TypedDict):
     write_call_count: int
     fs_writes_detected: bool
     git_writes_detected: bool
+    file_changes_count: int
     tracked_comm: str | None
     tracked_comm_drift: bool
     autoskillit_version: str

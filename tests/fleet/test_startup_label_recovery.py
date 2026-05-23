@@ -338,7 +338,7 @@ class TestStartupLabelRecoverySweep:
     async def test_sweep_does_not_mark_cleaned_when_sidecar_file_missing_on_disk(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Dispatch with sidecar_path pointing to a deleted file must NOT get labels_cleaned=True."""
+        """Dispatch with deleted sidecar file must NOT get labels_cleaned=True."""
         from autoskillit.fleet import DispatchRecord, read_state, write_initial_state
         from autoskillit.fleet._label_cleanup import sweep_stale_dispatch_labels
         from autoskillit.fleet.state import upsert_dispatch_record_by_name

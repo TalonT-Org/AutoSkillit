@@ -903,7 +903,7 @@ async def _run_dispatch(
         from autoskillit.fleet._checkpoint_bridge import checkpoint_from_sidecar  # noqa: PLC0415
         from autoskillit.fleet.sidecar import read_sidecar_from_path  # noqa: PLC0415
 
-        sidecar_entries = read_sidecar_from_path(sidecar_file)
+        sidecar_entries = read_sidecar_from_path(sidecar_file).entries
         if sidecar_entries:
             dispatch_checkpoint = checkpoint_from_sidecar(sidecar_entries)
 

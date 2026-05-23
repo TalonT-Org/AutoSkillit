@@ -18,6 +18,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_backend_command_path.py` | AST tests enforcing ctx.backend usage for command construction in headless path |
 | `test_backend_protocol_completeness.py` | Protocol completeness tests for CodingAgentBackend command builders |
 | `test_audit_feature_gates_skill.py` | Structural integrity tests for the audit-feature-gates skill |
+| `test_boot_step_symmetry.py` | AST guard: both boot functions (_fleet_auto_gate_boot, _food_truck_auto_gate_boot) must call sweep_stale_dispatch_labels |
 | `test_bundled_recipes_split.py` | Enforcement: test_bundled_recipes.py split structure guard |
 | `test_cascade_map_guard.py` | REQ-GUARD-001..003, 005: CI guard validating cascade maps against AST-derived reverse import graph |
 | `test_channel_b_timeout_guard.py` | AST guard: Channel B tests must use timeout >= TimeoutTier.CHANNEL_B |

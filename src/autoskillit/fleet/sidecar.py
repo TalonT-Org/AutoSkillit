@@ -3,12 +3,19 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass
+from enum import StrEnum
 from pathlib import Path
-from typing import Literal
+from typing import Literal, NamedTuple
 
 from autoskillit.core import ensure_project_temp, get_logger
 
 logger = get_logger()
+
+
+class SidecarReadStatus(StrEnum):
+    FOUND = "found"
+    MISSING = "missing"
+    ERROR = "error"
 
 
 @dataclass(frozen=True, slots=True)
@@ -18,6 +25,11 @@ class IssueSidecarEntry:
     ts: str
     pr_url: str | None = None
     reason: str | None = None
+
+
+class SidecarReadResult(NamedTuple):
+    entries: list[IssueSidecarEntry]
+    source: SidecarReadStatus
 
 
 def sidecar_path(dispatch_id: str, project_dir: Path) -> Path:
@@ -58,13 +70,18 @@ def read_sidecar(dispatch_id: str, project_dir: Path) -> list[IssueSidecarEntry]
     return entries
 
 
-def read_sidecar_from_path(path: Path) -> list[IssueSidecarEntry]:
-    """Read and parse a sidecar JSONL at path; skips corrupt lines; returns [] on OSError."""
+def read_sidecar_from_path(path: Path) -> SidecarReadResult:
+    """Read and parse a sidecar JSONL at path.
+
+    Returns a SidecarReadResult with source indicating whether the file was
+    found, missing, or unreadable. Callers must inspect source to distinguish
+    'file missing' from 'file empty'.
+    """
     entries: list[IssueSidecarEntry] = []
     try:
         lines = path.read_text().splitlines()
     except OSError:
-        return []
+        return SidecarReadResult(entries=[], source=SidecarReadStatus.MISSING)
     for line in lines:
         line = line.strip()
         if not line:
@@ -83,7 +100,7 @@ def read_sidecar_from_path(path: Path) -> list[IssueSidecarEntry]:
         except (json.JSONDecodeError, KeyError) as exc:
             logger.debug("sidecar: skipping corrupt JSONL line", path=str(path), error=str(exc))
             continue
-    return entries
+    return SidecarReadResult(entries=entries, source=SidecarReadStatus.FOUND)
 
 
 def compute_remaining_issues(

@@ -779,7 +779,7 @@ class TestFoodTruckAutoGateBoot:
     async def test_food_truck_auto_gate_boot_runs_label_sweep(
         self, tool_ctx, monkeypatch, tmp_path
     ) -> None:
-        """ORCHESTRATOR boot must call sweep_stale_dispatch_labels when campaign state files exist."""
+        """ORCHESTRATOR boot must schedule label sweep when campaign state files exist."""
         import json as _json
         from unittest.mock import AsyncMock, MagicMock, patch
 

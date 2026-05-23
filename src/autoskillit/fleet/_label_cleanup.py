@@ -16,7 +16,7 @@ from autoskillit.core import (
     get_logger,
 )
 from autoskillit.fleet._liveness import is_dispatch_session_alive
-from autoskillit.fleet.sidecar import read_sidecar_from_path
+from autoskillit.fleet.sidecar import SidecarReadStatus, read_sidecar_from_path
 from autoskillit.fleet.state import (
     TERMINAL_UNCLEANED_STATUSES,
     CampaignStateMutator,
@@ -58,7 +58,7 @@ async def cleanup_orphaned_labels(
         return True
 
     try:
-        entries = read_sidecar_from_path(Path(sidecar_path))
+        sidecar_result = read_sidecar_from_path(Path(sidecar_path))
     except Exception:
         logger.warning(
             "infra_label_cleanup_sidecar_read_failed",
@@ -67,11 +67,19 @@ async def cleanup_orphaned_labels(
         )
         return False
 
-    if not entries:
+    if sidecar_result.source != SidecarReadStatus.FOUND:
+        logger.warning(
+            "infra_label_cleanup_sidecar_unavailable",
+            sidecar_path=sidecar_path,
+            source=sidecar_result.source,
+        )
+        return False
+
+    if not sidecar_result.entries:
         return True
 
     all_succeeded = True
-    for entry in entries:
+    for entry in sidecar_result.entries:
         try:
             owner, repo, number = _parse_issue_ref(entry.issue_url)
         except ValueError:

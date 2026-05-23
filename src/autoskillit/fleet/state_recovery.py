@@ -142,7 +142,7 @@ def classify_stale_dispatch(
         else:
             sidecar_path_str = str(sidecar)
             try:
-                has_entries = bool(read_sidecar_from_path(sidecar))
+                has_entries = bool(read_sidecar_from_path(sidecar).entries)
             except Exception:
                 logger.warning(
                     "classify_stale_dispatch: read_sidecar_from_path failed for %s",
@@ -305,7 +305,7 @@ def find_dispatch_for_issue(
             if d.sidecar_path is None:
                 continue
             if d.status == DispatchStatus.RUNNING:
-                entries = read_sidecar_from_path(Path(d.sidecar_path))
+                entries = read_sidecar_from_path(Path(d.sidecar_path)).entries
                 if any(e.issue_url == issue_url for e in entries):
                     return d
             elif (
@@ -313,7 +313,7 @@ def find_dispatch_for_issue(
                 and d.status in TERMINAL_UNCLEANED_STATUSES
                 and not d.labels_cleaned
             ):
-                entries = read_sidecar_from_path(Path(d.sidecar_path))
+                entries = read_sidecar_from_path(Path(d.sidecar_path)).entries
                 if any(e.issue_url == issue_url for e in entries):
                     terminal_match = d
     return terminal_match

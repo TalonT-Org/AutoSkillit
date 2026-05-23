@@ -218,6 +218,12 @@ CONTEXT LIMIT ROUTING — run_skill only (check BEFORE on_failure):
   without consuming the retries budget. This is a one-shot retry — if the retry also
   goes stale, fall through to on_failure. Before re-executing, if worktree_path was
   captured from the stale result, remove it (git worktree remove --force <path>).
+- PARALLEL-AWARE RETRY: When running multiple pipelines in parallel and a batched round
+  returns a mix of successful and needs_retry results, issue the retry for the failing
+  pipeline(s) AND the next steps for the successful pipelines in the same response. A
+  retrying pipeline does not block sibling pipelines from advancing. Route the retry per
+  the rules above. The retrying pipeline rejoins the wavefront at whatever step boundary
+  the others have reached when its retry completes.
 
 HOOK DENIAL COMPLIANCE — ALL HOOKS:
 - When a PreToolUse hook DENIES a tool call (permissionDecision: "deny"), the denial

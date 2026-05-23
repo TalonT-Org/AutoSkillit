@@ -141,8 +141,8 @@ def test_sous_chef_wavefront_has_positive_advancement_mandate() -> None:
     )
 
 
-def test_sous_chef_wavefront_has_four_rules() -> None:
-    """REQ-PROMPT-010: Wavefront Scheduling Rule must contain exactly 4 numbered rules."""
+def test_sous_chef_wavefront_has_five_rules() -> None:
+    """REQ-PROMPT-011: Wavefront Scheduling Rule must contain exactly 5 numbered rules."""
     import re
 
     text = _sous_chef_text()
@@ -153,8 +153,51 @@ def test_sous_chef_wavefront_has_four_rules() -> None:
         text[section_start:next_subsection] if next_subsection != -1 else text[section_start:]
     )
     rules = re.findall(r"^\d+\.\s", subsection, re.MULTILINE)
-    assert len(rules) == 4, (
-        f"Wavefront Scheduling Rule must have exactly 4 numbered rules, found {len(rules)}"
+    assert len(rules) == 5, (
+        f"Wavefront Scheduling Rule must have exactly 5 numbered rules, found {len(rules)}"
+    )
+
+
+def test_sous_chef_wavefront_retry_does_not_block_siblings() -> None:
+    """REQ-PROMPT-012: Wavefront must address retry+parallel collision."""
+    text = _sous_chef_text()
+    section_start = text.find("PARALLEL STEP SCHEDULING")
+    assert section_start != -1
+    next_section = text.find("\n## ", section_start + 1)
+    section_text = text[section_start:next_section] if next_section != -1 else text[section_start:]
+    lower = section_text.lower()
+    has_retry_collision = "retry" in lower and (
+        "sibling" in lower or "successful pipelines" in lower or "does not block" in lower
+    )
+    assert has_retry_collision, (
+        "PARALLEL STEP SCHEDULING section must address retry+parallel collision: "
+        "a retrying pipeline must not block sibling pipelines from advancing"
+    )
+
+
+def test_orchestrator_prompt_has_parallel_retry_note() -> None:
+    """REQ-PROMPT-013: Orchestrator prompt must mirror parallel-aware retry note."""
+    import re
+
+    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("test-recipe", mcp_prefix=DIRECT_PREFIX)
+    section_start = prompt.find("CONTEXT LIMIT ROUTING")
+    assert section_start != -1, "Orchestrator prompt must contain CONTEXT LIMIT ROUTING"
+    next_section = re.search(r"\n[A-Z][A-Z _]+—", prompt[section_start + 1 :])
+    section_text = (
+        prompt[section_start : section_start + 1 + next_section.start()]
+        if next_section
+        else prompt[section_start:]
+    )
+    lower = section_text.lower()
+    has_parallel_note = "retry" in lower and (
+        "sibling" in lower or "parallel" in lower or "does not block" in lower
+    )
+    assert has_parallel_note, (
+        "CONTEXT LIMIT ROUTING section in orchestrator prompt must contain a "
+        "parallel-aware retry note about not blocking sibling pipelines"
     )
 
 

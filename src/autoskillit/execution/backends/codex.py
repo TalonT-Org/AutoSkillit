@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import tomllib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum, unique
@@ -14,6 +15,8 @@ from autoskillit.core import (
     AGENT_BACKEND_CODEX,
     AUTOSKILLIT_PRIVATE_ENV_VARS,
     CAMPAIGN_ID_ENV_VAR,
+    HEADLESS_AUTO_GATE_ENV_VAR,
+    HEADLESS_ENV_VAR,
     KITCHEN_SESSION_ID_ENV_VAR,
     SESSION_TYPE_SKILL,
     AgentSessionResult,
@@ -29,6 +32,7 @@ from autoskillit.core import (
     SessionEvent,
     SkillSessionConfig,
     ValidatedAddDir,
+    atomic_write,
     extract_skill_name,
     fast_loads,
 )
@@ -69,6 +73,116 @@ CODEX_ENV_DENYLIST: frozenset[str] = frozenset(
 )
 
 CODEX_ENV_PREFIX_DENYLIST: tuple[str, ...] = ("CLAUDE_CODE_",)
+
+
+def _format_toml_value(v: Any) -> str:
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, str):
+        escaped = v.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
+    if isinstance(v, int):
+        return str(v)
+    if isinstance(v, float):
+        return str(v)
+    if isinstance(v, list):
+        items = ", ".join(_format_toml_value(item) for item in v)
+        return f"[{items}]"
+    msg = f"Unsupported TOML value type: {type(v).__name__}"
+    raise TypeError(msg)
+
+
+def _format_inline_table(d: dict[str, Any]) -> str:
+    pairs = [f"{k} = {_format_toml_value(v)}" for k, v in d.items()]
+    return "{" + ", ".join(pairs) + "}"
+
+
+def _emit_toml_table(d: dict[str, Any], path: list[str], lines: list[str]) -> None:
+    has_nested_tables = any(
+        isinstance(v, dict) and any(isinstance(sv, dict) for sv in v.values()) for v in d.values()
+    )
+    header = f"[{'.'.join(path)}]"
+    if has_nested_tables:
+        header_emitted = False
+        for k, v in d.items():
+            if not isinstance(v, dict):
+                if not header_emitted:
+                    lines.append(f"\n{header}")
+                    header_emitted = True
+                lines.append(f"{k} = {_format_toml_value(v)}")
+        for k, v in d.items():
+            if isinstance(v, dict):
+                _emit_toml_table(v, [*path, k], lines)
+    else:
+        lines.append(f"\n{header}")
+        for k, v in d.items():
+            if isinstance(v, dict):
+                lines.append(f"{k} = {_format_inline_table(v)}")
+            else:
+                lines.append(f"{k} = {_format_toml_value(v)}")
+
+
+def _serialize_toml(data: dict[str, Any]) -> str:
+    lines: list[str] = []
+    for k, v in data.items():
+        if not isinstance(v, dict):
+            lines.append(f"{k} = {_format_toml_value(v)}")
+    for k, v in data.items():
+        if isinstance(v, dict):
+            _emit_toml_table(v, [k], lines)
+    text = "\n".join(lines).lstrip("\n")
+    return text + "\n" if text else ""
+
+
+def _read_codex_config(path: Path) -> dict[str, Any]:
+    try:
+        with open(path, "rb") as f:
+            data = tomllib.load(f)
+    except (FileNotFoundError, tomllib.TOMLDecodeError):
+        return {}
+    return data
+
+
+def _write_codex_config(path: Path, data: dict[str, Any]) -> None:
+    atomic_write(path, _serialize_toml(data))
+
+
+def _is_autoskillit_registered(config: dict[str, Any], *, headless_auto_gate: bool) -> bool:
+    entry = config.get("mcp_servers", {}).get("autoskillit")
+    if not isinstance(entry, dict):
+        return False
+    if entry.get("command") != "autoskillit":
+        return False
+    env = entry.get("env", {})
+    if env.get(HEADLESS_ENV_VAR) != "1":
+        return False
+    if headless_auto_gate and env.get(HEADLESS_AUTO_GATE_ENV_VAR) != "1":
+        return False
+    return True
+
+
+def ensure_codex_mcp_registered(
+    *,
+    config_path: Path | None = None,
+    headless_auto_gate: bool = True,
+) -> bool:
+    if config_path is None:
+        config_path = Path.home() / ".codex" / "config.toml"
+    config = _read_codex_config(config_path)
+    if _is_autoskillit_registered(config, headless_auto_gate=headless_auto_gate):
+        return False
+    env: dict[str, str] = {HEADLESS_ENV_VAR: "1"}
+    if headless_auto_gate:
+        env[HEADLESS_AUTO_GATE_ENV_VAR] = "1"
+    entry: dict[str, Any] = {
+        "command": "autoskillit",
+        "env": env,
+        "startup_timeout_sec": 30.0,
+        "tool_timeout_sec": 120.0,
+    }
+    config.setdefault("mcp_servers", {})["autoskillit"] = entry
+    _write_codex_config(config_path, config)
+    return True
 
 
 @unique

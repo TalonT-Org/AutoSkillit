@@ -480,4 +480,6 @@ class SessionIndexEntry(TypedDict):
     caller_session_id: str
     api_retry_count: int
     api_retry_exhausted: bool
+    api_retry_last_error: str
+    api_retry_last_status: int | None
     schema_version: int

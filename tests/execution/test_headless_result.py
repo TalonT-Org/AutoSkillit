@@ -19,8 +19,14 @@ from autoskillit.core.types import (
     TerminationReason,
     WriteEvidence,
 )
+from autoskillit.execution.backends.claude import ClaudeResultParser
 from autoskillit.execution.backends.codex import CodexBackend
-from autoskillit.execution.headless import _build_skill_result, _parse_stdout
+from autoskillit.execution.headless import (
+    _build_skill_result,
+    _extract_missing_token_hints,
+    _parse_stdout,
+    _synthesize_from_write_artifacts,
+)
 from autoskillit.execution.headless._headless_result import _adapt_agent_result
 from autoskillit.execution.session import ClaudeSessionResult
 from autoskillit.execution.session._session_outcome import _compute_outcome
@@ -187,6 +193,16 @@ def _codex_subprocess_result(
         pid=12345,
         session_id="",
         channel_b_session_id="",
+    )
+
+
+def _make_session(tool_name: str, file_path: str) -> ClaudeSessionResult:
+    return ClaudeSessionResult(
+        subtype=CliSubtype.SUCCESS,
+        is_error=False,
+        result="",
+        session_id="s-wiring",
+        tool_uses=[{"name": tool_name, "id": "t1", "file_path": file_path}],
     )
 
 
@@ -434,6 +450,157 @@ class TestBackendDelegatedWriteToolNames:
         _build_skill_result(result, backend=mock_backend)
         assert "backend" in captured, "_parse_stdout was not called"
         assert captured["backend"] is mock_backend
+
+
+class TestRecoveryWriteNameWiring:
+    """Write-tool-name wiring: _synthesize and _extract respect write_tool_names."""
+
+    def test_synthesize_recognizes_non_default_write_tool_name(self):
+        session = _make_session("CustomWrite", "/tmp/plan.md")
+        result = _synthesize_from_write_artifacts(
+            session,
+            expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+            write_call_count=1,
+            write_tool_names=frozenset({"CustomWrite"}),
+        )
+        assert result is not None
+
+    def test_synthesize_ignores_claude_names_when_write_tool_names_empty(self):
+        session = _make_session("Write", "/tmp/plan.md")
+        result = _synthesize_from_write_artifacts(
+            session,
+            expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+            write_call_count=1,
+            write_tool_names=frozenset(),
+        )
+        assert result is None
+
+    def test_synthesize_explicit_frozenset_overrides_default(self):
+        session = ClaudeSessionResult(
+            subtype=CliSubtype.SUCCESS,
+            is_error=False,
+            result="",
+            session_id="s-wiring",
+            tool_uses=[
+                {"name": "Write", "id": "t1", "file_path": "/tmp/wrong.md"},
+                {"name": "CustomEdit", "id": "t2", "file_path": "/tmp/right.md"},
+            ],
+        )
+        result = _synthesize_from_write_artifacts(
+            session,
+            expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+            write_call_count=2,
+            write_tool_names=frozenset({"CustomEdit"}),
+        )
+        assert result is not None
+        assert "/tmp/right.md" in result.result
+        assert "/tmp/wrong.md" not in result.result
+
+    def test_extract_hints_recognizes_non_default_write_tool_name(self):
+        mock_parser = Mock()
+        mock_parser.parse_stdout.return_value = AgentSessionResult(
+            success=True,
+            exit_code=0,
+            backend_name="test",
+            elapsed_seconds=0.0,
+            session_id="s1",
+            output="done",
+            error="",
+            raw={
+                "tool_uses": [{"name": "CustomWrite", "id": "t1", "file_path": "/tmp/plan.md"}],
+            },
+        )
+        hints = _extract_missing_token_hints(
+            "",
+            expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+            result_parser=mock_parser,
+            write_tool_names=frozenset({"CustomWrite"}),
+        )
+        assert len(hints) > 0
+
+    def test_extract_hints_ignores_claude_names_when_write_tool_names_empty(self):
+        stdout = (
+            _tool_use_ndjson("Write", file_path="/tmp/plan.md")
+            + "\n"
+            + _success_result_json("done")
+        )
+        hints = _extract_missing_token_hints(
+            stdout,
+            expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+            result_parser=ClaudeResultParser(),
+            write_tool_names=frozenset(),
+        )
+        assert len(hints) == 0
+
+
+class TestComputeWriteEvidenceCodex:
+    """Codex file_changes path: _compute_write_evidence with file_changes parameter."""
+
+    def test_single_file_change_has_evidence(self):
+        from autoskillit.execution.headless._headless_result import _compute_write_evidence
+
+        session = ClaudeSessionResult(
+            subtype=CliSubtype.SUCCESS,
+            is_error=False,
+            result="done",
+            session_id="s1",
+            tool_uses=[],
+        )
+        backend = Mock()
+        backend.write_tool_names.return_value = frozenset()
+        evidence = _compute_write_evidence(
+            session,
+            False,
+            False,
+            backend=backend,
+            file_changes=["src/foo.py"],
+        )
+        assert evidence.has_evidence is True
+        assert evidence.file_changes_count == 1
+
+    def test_multiple_file_changes_has_evidence(self):
+        from autoskillit.execution.headless._headless_result import _compute_write_evidence
+
+        session = ClaudeSessionResult(
+            subtype=CliSubtype.SUCCESS,
+            is_error=False,
+            result="done",
+            session_id="s1",
+            tool_uses=[],
+        )
+        backend = Mock()
+        backend.write_tool_names.return_value = frozenset()
+        evidence = _compute_write_evidence(
+            session,
+            False,
+            False,
+            backend=backend,
+            file_changes=["a.py", "b.py", "c.py"],
+        )
+        assert evidence.has_evidence is True
+        assert evidence.file_changes_count == 3
+
+    def test_empty_file_changes_no_write_tools_no_evidence(self):
+        from autoskillit.execution.headless._headless_result import _compute_write_evidence
+
+        session = ClaudeSessionResult(
+            subtype=CliSubtype.SUCCESS,
+            is_error=False,
+            result="done",
+            session_id="s1",
+            tool_uses=[],
+        )
+        backend = Mock()
+        backend.write_tool_names.return_value = frozenset()
+        evidence = _compute_write_evidence(
+            session,
+            False,
+            False,
+            backend=backend,
+            file_changes=[],
+        )
+        assert evidence.has_evidence is False
+        assert evidence.file_changes_count == 0
 
 
 class TestParseStdout:

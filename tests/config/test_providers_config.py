@@ -55,6 +55,7 @@ class TestProvidersConfig:
         }
         assert cfg.providers.step_overrides == {}
         assert cfg.providers.recipe_overrides == {}
+        assert cfg.providers.model_overrides == {}
         assert cfg.providers.provider_retry_limit == 2
 
     def test_providers_config_defaults(self) -> None:
@@ -65,6 +66,7 @@ class TestProvidersConfig:
         assert cfg.profiles == {}
         assert cfg.step_overrides == {}
         assert cfg.recipe_overrides == {}
+        assert cfg.model_overrides == {}
         assert cfg.provider_retry_limit == 2
 
     def test_providers_config_is_mutable(self) -> None:
@@ -85,6 +87,7 @@ class TestProvidersConfig:
             "profiles",
             "step_overrides",
             "recipe_overrides",
+            "model_overrides",
             "provider_retry_limit",
         }
 
@@ -124,6 +127,33 @@ class TestProvidersConfig:
         cfg = ProvidersConfig(profiles={"sentinel": {"base_url": None, "api_key_env": None}})  # type: ignore[arg-type]
         assert cfg.profiles["sentinel"]["base_url"] is None
         assert cfg.profiles["sentinel"]["api_key_env"] is None
+
+    def test_model_overrides_field_default(self) -> None:
+        from autoskillit.config.settings import ProvidersConfig
+
+        cfg = ProvidersConfig()
+        assert cfg.model_overrides == {}
+
+    def test_model_overrides_valid(self) -> None:
+        from autoskillit.config.settings import ProvidersConfig
+
+        cfg = ProvidersConfig(
+            model_overrides={"implementation": {"implement": "opus", "plan": "opus"}}
+        )
+        assert cfg.model_overrides["implementation"]["implement"] == "opus"
+        assert cfg.model_overrides["implementation"]["plan"] == "opus"
+
+    def test_model_overrides_non_dict_recipe_raises(self) -> None:
+        from autoskillit.config.settings import ProvidersConfig
+
+        with pytest.raises(ValueError, match="model_overrides.*must be a dict"):
+            ProvidersConfig(model_overrides={"implementation": "opus"})  # type: ignore[arg-type]
+
+    def test_model_overrides_non_string_model_raises(self) -> None:
+        from autoskillit.config.settings import ProvidersConfig
+
+        with pytest.raises(ValueError, match="model_overrides.*must be a string"):
+            ProvidersConfig(model_overrides={"implementation": {"implement": 42}})  # type: ignore[arg-type]
 
 
 class TestProvidersConfigYaml:
@@ -226,6 +256,27 @@ class TestProvidersConfigYaml:
             "remediation": {"implement": "anthropic"},
             "implementation": {"implement": "minimax"},
         }
+
+    def test_defaults_yaml_has_model_overrides(self) -> None:
+        from autoskillit.core.io import load_yaml
+        from autoskillit.core.paths import pkg_root
+
+        defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
+        assert "model_overrides" in defaults["providers"]
+        assert defaults["providers"]["model_overrides"] == {}
+
+    def test_model_overrides_round_trip(self, tmp_path) -> None:
+        from autoskillit.config import load_config
+
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text(
+            yaml.dump(
+                {"providers": {"model_overrides": {"implementation": {"implement": "opus"}}}}
+            )
+        )
+        cfg = load_config(tmp_path)
+        assert cfg.providers.model_overrides == {"implementation": {"implement": "opus"}}
 
 
 class TestResolvedProfiles:

@@ -306,6 +306,7 @@ providers:
       context_window: null
   step_overrides: {}
   recipe_overrides: {}
+  model_overrides: {}
   provider_retry_limit: 2
 
 agent_backend:

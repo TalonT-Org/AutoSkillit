@@ -542,6 +542,7 @@ class AutomationConfig:
                 profiles=val(pvd, "profiles", _pvd["profiles"]),
                 step_overrides=val(pvd, "step_overrides", _pvd["step_overrides"]),
                 recipe_overrides=val(pvd, "recipe_overrides", _pvd["recipe_overrides"]),
+                model_overrides=val(pvd, "model_overrides", _pvd["model_overrides"]),
                 provider_retry_limit=_parse_int_field(
                     val(pvd, "provider_retry_limit", _pvd["provider_retry_limit"]),
                     "providers.provider_retry_limit",

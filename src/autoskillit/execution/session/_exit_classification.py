@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import regex as re
 
-from autoskillit.core import InfraExitCategory, get_logger
+from autoskillit.core import CODEX_CONTEXT_EXHAUSTION_MARKER, InfraExitCategory, get_logger
 
 if TYPE_CHECKING:
     from autoskillit.core import SubprocessResult
@@ -37,7 +37,7 @@ _KNOWN_API_ERROR_PATTERNS: tuple[re.Pattern[str], ...] = (
 )
 
 _CODEX_CONTEXT_EXHAUSTION_PATTERN: re.Pattern[str] = re.compile(
-    r"context_length_exceeded", re.IGNORECASE
+    CODEX_CONTEXT_EXHAUSTION_MARKER, re.IGNORECASE
 )
 
 

@@ -19,8 +19,8 @@
 | 1 | `build_interactive_cmd` | YES | `execution/__init__.py`, `backends/claude.py:274` (deferred) | `test_commands.py`, `test_flag_contracts.py` |
 | 2 | `build_headless_cmd` | YES | `execution/__init__.py`, `backends/claude.py:224` (deferred), `backends/claude.py:258` (deferred) | `test_commands.py`, `test_flag_contracts.py`, `test_claude_code_backend.py` |
 | 3 | `build_headless_resume_cmd` | YES | `execution/__init__.py`, `backends/claude.py:296` (deferred) | `test_commands.py`, `test_output_format_contract.py` |
-| 4 | `build_skill_session_cmd` | **NO** | `headless/__init__.py:50` | `test_commands.py`, `test_output_format_contract.py`, `test_resume_prompt.py:52,60,70`, `test_recording.py` |
-| 5 | `build_food_truck_cmd` | **NO** | `headless/__init__.py:50` | `test_commands.py`, `test_output_format_contract.py` |
+| 4 | `build_skill_session_cmd` | **NO** | `headless/__init__.py:50` | `test_commands_skill_session.py`, `test_output_format_contract.py`, `test_resume_prompt.py:52,60,70`, `test_recording.py` |
+| 5 | `build_food_truck_cmd` | **NO** | `headless/__init__.py:50` | `test_commands_food_truck.py`, `test_output_format_contract.py` |
 
 **Monkeypatch consumers for `build_food_truck_cmd`:**
 - `tests/execution/test_headless_dispatch.py`
@@ -39,9 +39,9 @@
 
 | # | Name | Type | Value | In `__init__.__all__`? | Importers |
 |---|------|------|-------|------------------------|-----------|
-| 1 | `_MAX_MCP_OUTPUT_TOKENS_VALUE` | `str` | `"50000"` | NO (imported with `# noqa: F401`) | `execution/__init__.py`, `test_commands.py`, `test_cook_env_scrub.py` |
-| 2 | `_SESSION_BASELINE_ENV` | `Mapping[str, str]` | `MappingProxyType(...)` | NO | `test_commands.py:905` (deferred) |
-| 3 | `_HEADLESS_EXCLUSIVE_VARS` | `frozenset[str]` | env var names | NO | `test_commands.py` (module-level + deferred:867) |
+| 1 | `_MAX_MCP_OUTPUT_TOKENS_VALUE` | `str` | `"50000"` | NO (imported with `# noqa: F401`) | `execution/__init__.py`, `test_commands.py`, `test_commands_skill_session.py`, `test_commands_food_truck.py`, `test_commands_invariants.py`, `test_cook_env_scrub.py` |
+| 2 | `_SESSION_BASELINE_ENV` | `Mapping[str, str]` | `MappingProxyType(...)` | NO | `test_commands.py` (deferred) |
+| 3 | `_HEADLESS_EXCLUSIVE_VARS` | `frozenset[str]` | env var names | NO | `test_commands_skill_session.py` (module-level), `test_commands_invariants.py` (module-level) |
 
 **Dual-copy sync obligation for `_HEADLESS_EXCLUSIVE_VARS`:**
 - `IDE_ENV_DENYLIST` in `core/_claude_env.py`
@@ -150,23 +150,28 @@ autoskillit.core
 
 ---
 
-## 6. Complete Test File Inventory (13 files)
+## 6. Complete Test File Inventory (18 files)
 
 | # | Test File | Names Imported | Import Style |
 |---|-----------|---------------|--------------|
-| 1 | `tests/execution/test_commands.py` | All 5 builders, 2 DCs, 2 private constants (module-level); `_HEADLESS_EXCLUSIVE_VARS` (deferred:867), `_SESSION_BASELINE_ENV` (deferred:905) | Module-level (9 names) + 2 deferred |
-| 2 | `tests/execution/test_flag_contracts.py` | `build_headless_cmd`, `build_interactive_cmd` | Module-level |
-| 3 | `tests/execution/test_output_format_contract.py` | `build_food_truck_cmd`, `build_headless_resume_cmd`, `build_skill_session_cmd` | Module-level |
-| 4 | `tests/execution/test_resume_prompt.py` | `_build_resume_context` (module-level:9), `build_skill_session_cmd` (deferred:52,60,70) | 1 module-level + 3 deferred |
-| 5 | `tests/execution/test_recording.py` | `build_skill_session_cmd` | Module-level |
-| 6 | `tests/execution/test_headless_core.py` | `_ensure_skill_prefix` (module-level:17); `_inject_completion_directive` (deferred:29); `_inject_cwd_anchor` (deferred x5:2517-2544); `_inject_narration_suppression` (deferred x8:2557-2602) | 1 module-level + 14 deferred |
-| 7 | `tests/server/test_tools_execution_command.py` | `_inject_completion_directive` | Module-level |
-| 8 | `tests/execution/test_headless_provider_fallback.py` | `ClaudeHeadlessCmd` | 4 deferred (109,137,165,189) |
-| 9 | `tests/execution/test_headless_provider_forwarding.py` | `ClaudeHeadlessCmd` | 5 deferred (224,265,519,573,622) |
-| 10 | `tests/execution/test_idle_output_env.py` | `ClaudeHeadlessCmd` | Deferred (174) |
-| 11 | `tests/execution/test_flush_provider_integration.py` | `ClaudeHeadlessCmd` | 4 deferred (68,96,174,215) |
-| 12 | `tests/execution/test_process_env_boundary.py` | `ClaudeHeadlessCmd` | Deferred (101) |
-| 13 | `tests/execution/backends/test_claude_code_backend.py` | `build_headless_cmd` | Deferred (47) |
+| 1 | `tests/execution/test_commands.py` | 3 builders (interactive, headless, headless_resume), 2 DCs, `_MAX_MCP_OUTPUT_TOKENS_VALUE`, `_SESSION_BASELINE_ENV` | Module-level |
+| 2 | `tests/execution/test_commands_skill_session.py` | `build_skill_session_cmd`, `_MAX_MCP_OUTPUT_TOKENS_VALUE`, `_HEADLESS_EXCLUSIVE_VARS`, `ClaudeHeadlessCmd` | Module-level |
+| 3 | `tests/execution/test_commands_food_truck.py` | `build_food_truck_cmd`, `_MAX_MCP_OUTPUT_TOKENS_VALUE`, `DispatchIdentity` | Module-level |
+| 4 | `tests/execution/test_commands_invariants.py` | `_HEADLESS_EXCLUSIVE_VARS`, `_MAX_MCP_OUTPUT_TOKENS_VALUE`, all 4 builders | Module-level |
+| 5 | `tests/execution/test_flag_contracts.py` | `build_headless_cmd`, `build_interactive_cmd` | Module-level |
+| 6 | `tests/execution/test_output_format_contract.py` | `build_food_truck_cmd`, `build_headless_resume_cmd`, `build_skill_session_cmd` | Module-level |
+| 7 | `tests/execution/test_resume_prompt.py` | `_build_resume_context` (module-level:9), `build_skill_session_cmd` (deferred:52,60,70) | 1 module-level + 3 deferred |
+| 8 | `tests/execution/test_recording.py` | `build_skill_session_cmd` | Module-level |
+| 9 | `tests/execution/test_headless_core.py` | `_ensure_skill_prefix` (module-level:17); `_inject_completion_directive` (deferred:29); `_inject_cwd_anchor` (deferred x5:2517-2544); `_inject_narration_suppression` (deferred x8:2557-2602) | 1 module-level + 14 deferred |
+| 10 | `tests/server/test_tools_execution_command.py` | `_inject_completion_directive` | Module-level |
+| 11 | `tests/execution/test_headless_provider_fallback.py` | `ClaudeHeadlessCmd` | 4 deferred (109,137,165,189) |
+| 12 | `tests/execution/test_headless_provider_forwarding.py` | `ClaudeHeadlessCmd` | 5 deferred (224,265,519,573,622) |
+| 13 | `tests/execution/test_idle_output_env.py` | `ClaudeHeadlessCmd` | Deferred (174) |
+| 14 | `tests/execution/test_flush_provider_integration.py` | `ClaudeHeadlessCmd` | 4 deferred (68,96,174,215) |
+| 15 | `tests/execution/test_process_env_boundary.py` | `ClaudeHeadlessCmd` | Deferred (101) |
+| 16 | `tests/execution/backends/test_claude_code_backend.py` | `build_headless_cmd` | Deferred (47) |
+| 17 | `tests/execution/test_process_session_log_monitor_stale_suppression.py` | `_session_log_monitor`, `ChannelBStatus` | Module-level |
+| 18 | `tests/execution/test_process_session_log_monitor_dispatch_marker.py` | `_session_log_monitor`, `ChannelBStatus` | Module-level |
 
 **Additional indirect consumer:**
 - `tests/cli/test_cook_env_scrub.py` — imports `_MAX_MCP_OUTPUT_TOKENS_VALUE` from `autoskillit.execution` (package re-export path)

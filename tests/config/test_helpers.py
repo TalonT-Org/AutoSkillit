@@ -61,7 +61,7 @@ def test_resolve_ingredient_defaults_includes_local_review_rounds(tmp_path):
 
 
 def test_resolve_ingredient_defaults_includes_adversarial_review_level(tmp_path):
-    """T2.1: resolve_ingredient_defaults includes adversarial_review_level with default value 'auto'."""
+    """T2.1: resolve_ingredient_defaults includes adversarial_review_level."""
     from autoskillit.config import resolve_ingredient_defaults
 
     repo = tmp_path / "repo"

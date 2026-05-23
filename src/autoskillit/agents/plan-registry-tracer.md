@@ -85,9 +85,21 @@ for f in Path(root, "tests").rglob("*.py"):
 PYEOF
 ```
 
-For EACH symbol from Step 1:
-- Run tree-sitter across `src/` and `tests/` to find the symbol as: a string literal inside dicts/frozensets/sets (registry entries), a keyword argument name in constructor or function calls, a dict key in lookup tables
-- If the plan **renames** a symbol, search for BOTH old and new names
+Write a **single consolidated script** that analyzes ALL symbols from Step 1 in one pass:
+- Build shared data structures (parser instance, reexport maps, AST trees) once
+  and reuse them across all symbol checks.
+- Parse each source file at most once — cache the parsed tree for reuse across
+  symbol lookups.
+- Never write multiple incremental scripts that build on each other's output.
+  Each subsequent script would re-parse the same files and duplicate shared setup
+  code, multiplying API turns with zero information gain.
+
+**Turn budget:** AST analysis across all symbols should complete in 1-2 Bash tool
+calls, not 5-10. If you need a second script, it must analyze a genuinely different
+file set — not re-parse files from the first script.
+
+For all symbols from Step 1, the consolidated script should find each symbol as: a string literal inside dicts/frozensets/sets (registry entries), a keyword argument name in constructor or function calls, a dict key in lookup tables.
+If the plan **renames** a symbol, search for BOTH old and new names.
 
 **Additional tree-sitter targets** — for a renamed field, also explicitly scan for:
 - **Factory functions** that build dicts containing the field (`return {"field_name": ...}` or `dict(field_name=...)` patterns) in conftest/fixture helpers

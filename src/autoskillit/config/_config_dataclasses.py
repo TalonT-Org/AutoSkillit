@@ -323,6 +323,22 @@ class ReviewConfig:
             )
 
 
+_VALID_ADVERSARIAL_REVIEW_LEVELS: frozenset[str] = frozenset({"auto", "full", "none"})
+
+
+@dataclass
+class PlanConfig:
+    adversarial_review_level: str = "auto"
+
+    def __post_init__(self) -> None:
+        if self.adversarial_review_level not in _VALID_ADVERSARIAL_REVIEW_LEVELS:
+            raise ValueError(
+                f"PlanConfig.adversarial_review_level must be one of "
+                f"{sorted(_VALID_ADVERSARIAL_REVIEW_LEVELS)}, "
+                f"got {self.adversarial_review_level!r}"
+            )
+
+
 @dataclass
 class SkillsConfig:
     tier1: list[str] = field(default_factory=list)

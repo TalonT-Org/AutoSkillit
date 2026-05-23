@@ -82,6 +82,71 @@ def test_make_plan_steps_6_through_9_ordered(make_plan_text: str) -> None:
     )
 
 
+def test_make_plan_contains_complexity_gate(make_plan_text: str) -> None:
+    """T4.1: make-plan SKILL.md contains adversarial_review_level complexity gate."""
+    assert "adversarial_review_level" in make_plan_text, (
+        "make-plan SKILL.md must contain 'adversarial_review_level'"
+    )
+
+
+def test_make_plan_contains_complexity_gate_text(make_plan_text: str) -> None:
+    """T4.2: make-plan SKILL.md contains complexity classification text."""
+    lower_text = make_plan_text.lower()
+    assert "complexity gate" in lower_text or "complexity estimation" in lower_text, (
+        "make-plan SKILL.md must contain 'Complexity Gate' or 'complexity estimation' string"
+    )
+
+
+def test_plan_registry_tracer_consolidated_script_instruction() -> None:
+    """T4.3: plan-registry-tracer.md contains 'single consolidated script' instruction."""
+    from autoskillit.core.paths import pkg_root
+
+    content = (pkg_root() / "agents" / "plan-registry-tracer.md").read_text()
+    assert "single consolidated script" in content, (
+        "plan-registry-tracer.md must contain 'single consolidated script' instruction"
+    )
+
+
+def test_plan_registry_tracer_no_old_per_symbol_pattern() -> None:
+    """T5.1: plan-registry-tracer.md does not contain old 'For EACH symbol' pattern."""
+    from autoskillit.core.paths import pkg_root
+
+    content = (pkg_root() / "agents" / "plan-registry-tracer.md").read_text()
+    assert "For EACH symbol from Step 1" not in content, (
+        "plan-registry-tracer.md must not contain 'For EACH symbol from Step 1' pattern"
+    )
+
+
+def test_plan_registry_tracer_turn_budget_instruction() -> None:
+    """T5.2: plan-registry-tracer.md contains 1-2 Bash tool calls turn budget."""
+    from autoskillit.core.paths import pkg_root
+
+    content = (pkg_root() / "agents" / "plan-registry-tracer.md").read_text()
+    assert "1-2 Bash tool" in content or ("1-2" in content and "Bash" in content), (
+        "plan-registry-tracer.md must contain '1-2 Bash tool calls' turn budget instruction"
+    )
+
+
+def test_make_plan_steps_5e_through_9_ordered(make_plan_text: str) -> None:
+    """Verify Steps 5e and 6-9 appear in order in the document."""
+    planning_idx = make_plan_text.find("## Planning Steps")
+    assert planning_idx != -1
+    step5e_idx = make_plan_text.find(
+        "**5e. Complexity-Gated Adversarial Review Decision", planning_idx
+    )
+    step6_idx = make_plan_text.find("**Foundation Audit", planning_idx)
+    step7_idx = make_plan_text.find("**Interface Mapping", planning_idx)
+    step8_idx = make_plan_text.find("**Registry Trace", planning_idx)
+    step9_idx = make_plan_text.find("**Plan Revision", planning_idx)
+    assert step5e_idx != -1, (
+        "Step 5e must exist with 'Complexity-Gated Adversarial Review Decision' heading"
+    )
+    assert all(i != -1 for i in (step6_idx, step7_idx, step8_idx, step9_idx))
+    assert step5e_idx < step6_idx < step7_idx < step8_idx < step9_idx, (
+        "Steps 5e-9 must appear in order in the document"
+    )
+
+
 def test_make_plan_interface_mapping_and_registry_trace_responsibilities(
     make_plan_text: str,
 ) -> None:

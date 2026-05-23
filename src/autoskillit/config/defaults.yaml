@@ -133,6 +133,9 @@ ci:
 review:
   local_review_rounds: 2
 
+plan:
+  adversarial_review_level: auto
+
 subsets:
   disabled: []
   custom_tags: {}

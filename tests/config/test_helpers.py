@@ -58,3 +58,19 @@ def test_resolve_ingredient_defaults_includes_local_review_rounds(tmp_path):
 
     defaults = resolve_ingredient_defaults(repo)
     assert defaults.get("local_review_rounds") == "2"
+
+
+def test_resolve_ingredient_defaults_includes_adversarial_review_level(tmp_path):
+    """T2.1: resolve_ingredient_defaults includes adversarial_review_level with default value 'auto'."""
+    from autoskillit.config import resolve_ingredient_defaults
+
+    repo = tmp_path / "repo"
+    subprocess.run(["git", "init", str(repo)], check=True)
+    subprocess.run(
+        ["git", "remote", "add", "origin", "https://github.com/owner/repo.git"],
+        cwd=str(repo),
+        check=True,
+    )
+
+    defaults = resolve_ingredient_defaults(repo)
+    assert defaults.get("adversarial_review_level") == "auto"

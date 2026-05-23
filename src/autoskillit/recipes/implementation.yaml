@@ -44,6 +44,13 @@ ingredients:
       GitHub-backed review. 0 disables local mode entirely.
     type: integer
     default: "2"
+  adversarial_review_level:
+    description: >-
+      Controls adversarial review depth in make-plan. "auto" estimates complexity
+      and gates agents accordingly. "full" always runs all 3 agents. "none" skips
+      adversarial review entirely.
+    default: "auto"
+    hidden: true
   issue_url:
     description: GitHub issue to close on merge
     required: false
@@ -173,6 +180,7 @@ steps:
       step_name: "plan"
       issue_url: "${{ inputs.issue_url }}"
       issue_title: "${{ context.issue_title }}"
+      adversarial_review_level: "${{ inputs.adversarial_review_level }}"
     capture:
       plan_path: "${{ result.plan_path }}"
       all_plan_paths: "${{ result.plan_path }}"
@@ -195,6 +203,9 @@ steps:
       skill_command so the make-plan skill can detect and fetch the issue itself:
       "/autoskillit:make-plan {task}\n\nGitHub Issue: {inputs.issue_url}"
       The skill detects the URL pattern and calls fetch_github_issue internally.
+      ADVERSARIAL REVIEW LEVEL: If inputs.adversarial_review_level is a non-empty
+      string, append it to the skill_command:
+      "/autoskillit:make-plan {task}\n\nadversarial_review_level={inputs.adversarial_review_level}"
 
   review:
     tool: run_skill

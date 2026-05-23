@@ -33,6 +33,7 @@ from autoskillit.config._config_dataclasses import (
     McpResponseConfig,
     MigrationConfig,
     PacksConfig,
+    PlanConfig,
     ProviderProfileDef,
     ProvidersConfig,
     QuotaGuardConfig,
@@ -142,6 +143,14 @@ __all__ = [
     "TokenUsageConfig",
     "WorkspaceConfig",
     "WorktreeSetupConfig",
+    "PlanConfig",
+    "SafetyConfig",
+    "SkillsConfig",
+    "SubsetsConfig",
+    "TestCheckConfig",
+    "TokenUsageConfig",
+    "WorkspaceConfig",
+    "WorktreeSetupConfig",
     "load_config",
     "validate_layer_keys",
     "write_config_layer",
@@ -189,6 +198,7 @@ class AutomationConfig:
     branching: BranchingConfig = field(default_factory=BranchingConfig)
     ci: CIConfig = field(default_factory=CIConfig)
     review: ReviewConfig = field(default_factory=ReviewConfig)
+    plan: PlanConfig = field(default_factory=PlanConfig)
     skills: SkillsConfig = field(default_factory=SkillsConfig)
     subsets: SubsetsConfig = field(default_factory=SubsetsConfig)
     packs: PacksConfig = field(default_factory=PacksConfig)
@@ -307,6 +317,7 @@ class AutomationConfig:
         br = sec("branching")
         ci = sec("ci")
         rv = sec("review")
+        pn = sec("plan")
         sk = sec("skills")
         _sub = sec("subsets")
         pk = sec("packs")
@@ -336,6 +347,7 @@ class AutomationConfig:
         _br = _field_defaults(BranchingConfig)
         _ci = _field_defaults(CIConfig)
         _rv = _field_defaults(ReviewConfig)
+        _pn = _field_defaults(PlanConfig)
         _sk = _field_defaults(SkillsConfig)
         _wsc = _field_defaults(WorkspaceConfig)
         _fr = _field_defaults(FleetConfig)
@@ -492,6 +504,11 @@ class AutomationConfig:
                 local_review_rounds=_parse_int_config(
                     val(rv, "local_review_rounds", _rv["local_review_rounds"]),
                     "review.local_review_rounds",
+                ),
+            ),
+            plan=PlanConfig(
+                adversarial_review_level=val(
+                    pn, "adversarial_review_level", _pn["adversarial_review_level"]
                 ),
             ),
             skills=SkillsConfig(

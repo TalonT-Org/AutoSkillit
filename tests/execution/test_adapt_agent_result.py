@@ -199,3 +199,116 @@ def test_assistant_messages_from_raw() -> None:
 def test_assistant_messages_default_empty() -> None:
     result = _adapt_agent_result(_make_agent_result())
     assert result.assistant_messages == []
+
+
+def test_success_false_maps_is_error_true_when_raw_absent() -> None:
+    result = _adapt_agent_result(_make_agent_result(success=False))
+    assert result.is_error is True
+
+
+def test_errors_field_defaults_to_empty_list() -> None:
+    result = _adapt_agent_result(_make_agent_result())
+    assert result.errors == []
+
+
+def test_context_exhaustion_error_max_turns() -> None:
+    result = _adapt_agent_result(
+        _make_agent_result(
+            raw={"subtype": "error_max_turns"},
+            error="API error: context_length_exceeded",
+        )
+    )
+    assert result.jsonl_context_exhausted is True
+
+
+def test_context_exhaustion_unknown_subtype() -> None:
+    result = _adapt_agent_result(
+        _make_agent_result(
+            error="context_length_exceeded",
+        )
+    )
+    assert result.jsonl_context_exhausted is True
+
+
+def test_context_exhaustion_error_is_none() -> None:
+    result = _adapt_agent_result(
+        _make_agent_result(
+            raw={"subtype": "error_during_execution"},
+            error=None,
+        )
+    )
+    assert result.jsonl_context_exhausted is False
+
+
+def test_unused_agent_fields_do_not_affect_output() -> None:
+    base = _adapt_agent_result(
+        _make_agent_result(exit_code=0, backend_name="a", elapsed_seconds=1.0)
+    )
+    varied = _adapt_agent_result(
+        _make_agent_result(exit_code=99, backend_name="b", elapsed_seconds=999.0)
+    )
+    assert base.subtype == varied.subtype
+    assert base.is_error == varied.is_error
+    assert base.result == varied.result
+    assert base.session_id == varied.session_id
+    assert base.errors == varied.errors
+    assert base.token_usage == varied.token_usage
+    assert base.assistant_messages == varied.assistant_messages
+    assert base.tool_uses == varied.tool_uses
+    assert base.jsonl_context_exhausted == varied.jsonl_context_exhausted
+    assert base.stop_reasons == varied.stop_reasons
+    assert base.has_thinking_only_turn == varied.has_thinking_only_turn
+    assert base.seen_block_types == varied.seen_block_types
+
+
+def test_canonical_token_usage_none_falls_through_to_token_usage() -> None:
+    result = _adapt_agent_result(
+        _make_agent_result(raw={"canonical_token_usage": None, "token_usage": {"input": 42}})
+    )
+    assert result.token_usage == {"input": 42}
+
+
+def test_empty_output_maps_to_empty_result() -> None:
+    result = _adapt_agent_result(_make_agent_result(output=""))
+    assert result.result == ""
+
+
+def test_full_round_trip_all_fields() -> None:
+    agent = _make_agent_result(
+        success=True,
+        exit_code=42,
+        backend_name="codex",
+        elapsed_seconds=5.5,
+        session_id="sess-abc",
+        output="final output",
+        error="some warning",
+        raw={
+            "is_error": False,
+            "subtype": "success",
+            "stop_reasons": ["end_turn"],
+            "canonical_token_usage": {"input": 200, "output": 50},
+            "token_usage": {"input": 100},
+            "command_executions": [{"name": "bash", "cmd": "ls"}],
+            "mcp_tool_calls": [{"name": "read", "path": "/tmp"}],
+            "file_changes": ["main.py"],
+            "agent_messages": ["I updated the file."],
+        },
+    )
+    result = _adapt_agent_result(agent)
+
+    assert result.subtype == CliSubtype.SUCCESS
+    assert result.is_error is False
+    assert result.result == "final output"
+    assert result.session_id == "sess-abc"
+    assert result.errors == []
+    assert result.token_usage == {"input": 200, "output": 50}
+    assert result.assistant_messages == ["I updated the file."]
+    assert result.tool_uses == [
+        {"name": "bash", "cmd": "ls"},
+        {"name": "read", "path": "/tmp"},
+        {"name": "file_change", "type": "file_change", "path": "main.py"},
+    ]
+    assert result.jsonl_context_exhausted is False
+    assert result.stop_reasons == ["end_turn"]
+    assert result.has_thinking_only_turn is False
+    assert result.seen_block_types == frozenset()

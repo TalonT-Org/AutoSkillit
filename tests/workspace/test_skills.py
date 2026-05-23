@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import re
 from pathlib import Path
 
@@ -17,138 +18,6 @@ from autoskillit.workspace.skills import (
 )
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
-
-BUNDLED_SKILLS = [
-    "analyze-prs",
-    "arch-lens-c4-container",
-    "arch-lens-concurrency",
-    "arch-lens-data-lineage",
-    "arch-lens-deployment",
-    "arch-lens-development",
-    "arch-lens-error-resilience",
-    "arch-lens-module-dependency",
-    "arch-lens-operational",
-    "arch-lens-process-flow",
-    "arch-lens-repository-access",
-    "arch-lens-scenarios",
-    "arch-lens-security",
-    "arch-lens-state-lifecycle",
-    "audit-arch",
-    "audit-bugs",
-    "audit-claims",
-    "audit-cohesion",
-    "audit-defense-standards",
-    "audit-docs",
-    "audit-friction",
-    "audit-impl",
-    "audit-review-decisions",
-    "audit-tests",
-    "build-execution-map",
-    "bundle-local-report",
-    "close-kitchen",
-    "collapse-issues",
-    "compose-pr",
-    "compose-research-pr",
-    "design-guards",
-    "diagnose-ci",
-    "dry-walkthrough",
-    "elaborate-phase",
-    "enrich-issues",
-    "exp-lens-benchmark-representativeness",
-    "exp-lens-causal-assumptions",
-    "exp-lens-comparator-construction",
-    "exp-lens-error-budget",
-    "exp-lens-estimand-clarity",
-    "exp-lens-exploratory-confirmatory",
-    "exp-lens-fair-comparison",
-    "exp-lens-governance-risk",
-    "exp-lens-iterative-learning",
-    "exp-lens-measurement-validity",
-    "exp-lens-pipeline-integrity",
-    "exp-lens-randomization-blocking",
-    "exp-lens-reproducibility-artifacts",
-    "exp-lens-sensitivity-robustness",
-    "exp-lens-severity-testing",
-    "exp-lens-unit-interference",
-    "exp-lens-validity-threats",
-    "exp-lens-variance-stability",
-    "generate-report",
-    "implement-experiment",
-    "implement-worktree",
-    "implement-worktree-no-merge",
-    "investigate",
-    "issue-splitter",
-    "make-arch-diag",
-    "make-campaign",
-    "make-experiment-diag",
-    "make-groups",
-    "make-plan",
-    "make-req",
-    "merge-pr",
-    "mermaid",
-    "migrate-recipes",
-    "open-integration-pr",
-    "open-kitchen",
-    "pipeline-summary",
-    "plan-experiment",
-    "plan-visualization",
-    "planner-analyze",
-    "planner-assess-review-approach",
-    "planner-consolidate-wps",
-    "planner-elaborate-assignments",
-    "planner-elaborate-phase",
-    "planner-elaborate-wps",
-    "planner-extract-domain",
-    "planner-generate-phases",
-    "planner-reconcile-deps",
-    "planner-refine",
-    "planner-refine-assignments",
-    "planner-refine-phases",
-    "planner-refine-wps",
-    "prepare-issue",
-    "prepare-pr",
-    "prepare-research-pr",
-    "process-issues",
-    "promote-to-main",
-    "rectify",
-    "reload-session",
-    "report-bug",
-    "resolve-claims-review",
-    "resolve-design-review",
-    "resolve-failures",
-    "resolve-merge-conflicts",
-    "resolve-research-review",
-    "resolve-review",
-    "retry-worktree",
-    "review-pr",
-    "review-approach",
-    "review-design",
-    "review-research-pr",
-    "run-experiment",
-    "scope",
-    "setup-project",
-    "smoke-task",
-    "sous-chef",
-    "stage-data",
-    "triage-issues",
-    "troubleshoot-experiment",
-    "validate-audit",
-    "validate-review-decisions",
-    "verify-diag",
-    "vis-lens-always-on",
-    "vis-lens-antipattern",
-    "vis-lens-caption-annot",
-    "vis-lens-chart-select",
-    "vis-lens-color-access",
-    "vis-lens-methodology-norms",
-    "vis-lens-figure-table",
-    "vis-lens-multi-compare",
-    "vis-lens-reproducibility",
-    "vis-lens-story-arc",
-    "vis-lens-temporal",
-    "vis-lens-uncertainty",
-    "write-recipe",
-]
 
 # Internal-only skill documents: injected programmatically, never invocable as slash commands.
 # They have no YAML frontmatter and do not follow the user-facing SKILL.md structural contract.
@@ -203,7 +72,16 @@ AUDIT_SKILL_NAMES = [
     "audit-review-decisions",
 ]
 
-BUNDLED_SKILL_NAMES = set(BUNDLED_SKILLS)
+
+@functools.lru_cache(maxsize=1)
+def _get_bundled_skill_names() -> frozenset[str]:
+    """Return the set of all bundled skill names (public + internal).
+
+    Lazy and cached to defer and isolate initialization failures — a broken
+    DefaultSkillResolver will only affect tests that call this function, not
+    the entire module at import time.
+    """
+    return frozenset({s.name for s in DefaultSkillResolver().list_all()} | INTERNAL_SKILLS)
 
 
 def _all_skill_roots() -> list[Path]:
@@ -280,7 +158,7 @@ class TestSkillResolver:
                     # Skip placeholder filesystem paths like {{AUTOSKILLIT_TEMP}}/skill-name/
                     if start >= 1 and content[start - 1] == "}":
                         continue
-                    if name in BUNDLED_SKILL_NAMES:
+                    if name in _get_bundled_skill_names():
                         skill_file = f"{skill_md.parent.name}/SKILL.md"
                         assert False, f"{skill_file}: /{name} should be /autoskillit:{name}"
 
@@ -497,6 +375,21 @@ class TestSkillResolver:
         names = {s.name for s in DefaultSkillResolver().list_all()}
         surfaced = RETIRED_SKILL_NAMES & names
         assert not surfaced, f"list_all() returned retired skill name(s): {sorted(surfaced)}"
+
+    def test_bundled_skill_names_covers_filesystem(self) -> None:
+        """BUNDLED_SKILL_NAMES must cover every skill directory with a SKILL.md."""
+        from autoskillit.core import RETIRED_SKILL_NAMES
+
+        filesystem_names = {
+            entry.name
+            for root in _all_skill_roots()
+            for entry in root.iterdir()
+            if entry.is_dir()
+            and (entry / "SKILL.md").is_file()
+            and entry.name not in RETIRED_SKILL_NAMES
+            and entry.name not in INTERNAL_SKILLS
+        }
+        assert filesystem_names == _get_bundled_skill_names() - INTERNAL_SKILLS
 
 
 class TestSkillCategories:

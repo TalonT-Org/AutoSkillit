@@ -75,7 +75,7 @@ CODEX_ENV_DENYLIST: frozenset[str] = frozenset(
 
 CODEX_ENV_PREFIX_DENYLIST: tuple[str, ...] = ("CLAUDE_CODE_",)
 
-_log = get_logger()
+logger = get_logger()
 
 
 def _format_toml_value(v: Any) -> str:
@@ -151,7 +151,7 @@ def _read_codex_config(path: Path) -> dict[str, Any]:
     except FileNotFoundError:
         return {}
     except tomllib.TOMLDecodeError:
-        _log.warning("corrupt_codex_config", path=str(path))
+        logger.warning("corrupt_codex_config", path=str(path))
         return {}
     return data
 

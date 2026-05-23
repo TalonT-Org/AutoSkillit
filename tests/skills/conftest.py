@@ -1,6 +1,27 @@
+import re
+
 import pytest
 
 from autoskillit.core.paths import pkg_root
+
+
+def assert_ticket_grouper_has_minimum_group_floor(text: str) -> None:
+    grouper_section = (
+        text[text.find("Ticket Grouper") : text.find("### Step 7")]
+        if "Ticket Grouper" in text
+        else ""
+    )
+    has_floor = bool(
+        re.search(
+            r"(?:minimum|at least|floor|must produce)",
+            grouper_section,
+            re.IGNORECASE,
+        )
+    )
+    assert has_floor, (
+        "Ticket Grouper instructions must enforce a minimum group count "
+        "floor to prevent single-group mega-issues"
+    )
 
 
 @pytest.fixture(scope="module")

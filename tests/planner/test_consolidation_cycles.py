@@ -17,7 +17,6 @@ from tests.planner.conftest import (
     make_refined_wps,
     make_wp_result,
     write_json,
-    write_task_file,
 )
 
 pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.feature("planner")]

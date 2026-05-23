@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from autoskillit.core.types._type_constants import PACK_REGISTRY, TOOL_SUBSET_TAGS
 
 # ---------------------------------------------------------------------------
@@ -90,3 +92,69 @@ def _setup_dispatch(
     )
     tool_ctx.recipes = repo
     tool_ctx.executor = InMemoryHeadlessExecutor()
+
+
+async def _run(
+    tool_ctx, recipe: str = "test-recipe", ingredients: dict[str, str] | None = None
+) -> dict:
+    from autoskillit.fleet._api import execute_dispatch
+
+    result = await execute_dispatch(
+        tool_ctx=tool_ctx,
+        recipe=recipe,
+        task="t",
+        ingredients=ingredients,
+        dispatch_name=None,
+        timeout_sec=None,
+        prompt_builder=_simple_prompt_builder,
+        quota_checker=_no_sleep_quota_checker,
+        quota_refresher=_noop_quota_refresher,
+    )
+    return json.loads(result.outcome.to_envelope())
+
+
+def _read_dispatch_record(tool_ctx) -> dict:
+    """Read the single dispatch record written to the state file."""
+    state_files = list((tool_ctx.temp_dir / "dispatches").glob("*.json"))
+    assert len(state_files) == 1, f"Expected 1 state file, found {len(state_files)}"
+    state = json.loads(state_files[0].read_text())
+    return state["dispatches"][0]
+
+
+def _make_no_sentinel():
+    from autoskillit.fleet.result_parser import L3ParseResult
+
+    return L3ParseResult(
+        outcome="no_sentinel",
+        payload=None,
+        raw_body=None,
+        parse_error=None,
+        source="stdout",
+    )
+
+
+def _make_completed_dirty():
+    from autoskillit.fleet.result_parser import L3ParseResult
+
+    return L3ParseResult(
+        outcome="completed_dirty",
+        payload=None,
+        raw_body="garbled",
+        parse_error="json decode error",
+        source="stdout",
+    )
+
+
+def _make_completed_clean(success: bool, reason: str = ""):
+    from autoskillit.fleet.result_parser import L3ParseResult
+
+    payload: dict = {"success": success}
+    if reason:
+        payload["reason"] = reason
+    return L3ParseResult(
+        outcome="completed_clean",
+        payload=payload,
+        raw_body=None,
+        parse_error=None,
+        source="stdout",
+    )

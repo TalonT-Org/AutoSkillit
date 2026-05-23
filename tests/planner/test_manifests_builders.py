@@ -4,15 +4,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
 
 import pytest
 
 from tests.planner.conftest import (
     make_assignment_result,
     make_phase_result,
-    make_wp_result,
-    write_json,
 )
 
 pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.feature("planner")]
@@ -48,6 +45,7 @@ def test_build_phase_assignment_manifest_creates_one_item_per_phase(tmp_path):
     assert p2_item["metadata"]["assignment_count"] == 2
     assert len(p2_item["metadata"]["assignment_names"]) == 2
 
+
 def test_build_phase_assignment_manifest_item_ids_match_phase_ids(tmp_path):
     """Item IDs in the manifest match phase IDs (P1, P2) not assignment IDs."""
     from autoskillit.planner import build_phase_assignment_manifest
@@ -69,6 +67,7 @@ def test_build_phase_assignment_manifest_item_ids_match_phase_ids(tmp_path):
     manifest = json.loads(Path(result["manifest_path"]).read_text())
     item_ids = {i["id"] for i in manifest["items"]}
     assert item_ids == {"P1", "P2"}
+
 
 def test_build_phase_assignment_manifest_items_start_pending(tmp_path):
     """All items in the manifest start with status 'pending'."""
@@ -93,6 +92,7 @@ def test_build_phase_assignment_manifest_items_start_pending(tmp_path):
 # ---------------------------------------------------------------------------
 # build_phase_wp_manifest tests (T1–T7)
 # ---------------------------------------------------------------------------
+
 
 def test_build_phase_wp_manifest_groups_by_phase(tmp_path):
     """T1: Two phases produce a manifest with exactly 2 items."""
@@ -149,6 +149,7 @@ def test_build_phase_wp_manifest_groups_by_phase(tmp_path):
     item_ids = [i["id"] for i in manifest["items"]]
     assert item_ids == ["P1", "P2"]
 
+
 def test_build_phase_wp_manifest_metadata_carries_wp_details(tmp_path):
     """T2: Phase metadata contains wp_count, wp_ids, wp_names, wp_scopes, wp_estimated_files."""
     from autoskillit.planner import build_phase_wp_manifest
@@ -193,6 +194,7 @@ def test_build_phase_wp_manifest_metadata_carries_wp_details(tmp_path):
     assert meta["wp_scopes"] == ["scope-a", "scope-b", "scope-c"]
     assert meta["wp_estimated_files"] == [["a.py"], ["b.py", "c.py"], ["d.py"]]
 
+
 def test_build_phase_wp_manifest_pass_name_and_result_dir(tmp_path):
     """T3: Manifest has pass_name 'phase_work_packages' and result_dir pointing to wp_sentinels."""
     from autoskillit.planner import build_phase_wp_manifest
@@ -219,6 +221,7 @@ def test_build_phase_wp_manifest_pass_name_and_result_dir(tmp_path):
     assert "wp_sentinels" in manifest["result_dir"]
     assert Path(manifest["result_dir"]).exists()
 
+
 def test_build_phase_wp_manifest_initializes_wp_index(tmp_path):
     """T4: wp_index.json exists and contains [] after calling build_phase_wp_manifest."""
     from autoskillit.planner import build_phase_wp_manifest
@@ -243,6 +246,7 @@ def test_build_phase_wp_manifest_initializes_wp_index(tmp_path):
     wp_index = output_dir / "work_packages" / "wp_index.json"
     assert wp_index.exists()
     assert json.loads(wp_index.read_text()) == []
+
 
 def test_build_phase_wp_manifest_sorts_by_phase_number(tmp_path):
     """T5: Items are sorted by phase number regardless of input order."""
@@ -272,6 +276,7 @@ def test_build_phase_wp_manifest_sorts_by_phase_number(tmp_path):
     ids = [i["id"] for i in manifest["items"]]
     assert ids == ["P1", "P2", "P3"]
 
+
 def test_build_phase_wp_manifest_empty_assignments_dir(tmp_path):
     """T6: Empty assignments directory produces manifest with items: []."""
     from autoskillit.planner import build_phase_wp_manifest
@@ -286,6 +291,7 @@ def test_build_phase_wp_manifest_empty_assignments_dir(tmp_path):
     assert result["total_count"] == "0"
     manifest = json.loads(Path(result["manifest_path"]).read_text())
     assert manifest["items"] == []
+
 
 def test_build_phase_wp_manifest_creates_sentinel_dir(tmp_path):
     """T7: The callable creates wp_sentinels/ directory."""
@@ -306,6 +312,7 @@ def test_build_phase_wp_manifest_creates_sentinel_dir(tmp_path):
 # finalize_wp_manifest tests (T8–T11)
 # ---------------------------------------------------------------------------
 
+
 def test_build_phase_assignment_manifest_warns_on_non_canonical_phase_filename(tmp_path):
     """Non-canonical phase file in phases/ emits a warning instead of raising."""
     from autoskillit.planner import build_phase_assignment_manifest
@@ -324,6 +331,7 @@ def test_build_phase_assignment_manifest_warns_on_non_canonical_phase_filename(t
 
     result = build_phase_assignment_manifest(str(phases_dir), str(output_dir))
     assert result["total_count"] == "1"
+
 
 def test_build_phase_wp_manifest_warns_on_non_canonical_assignment_filename(tmp_path):
     """Non-canonical assignment file in assignments/ emits a warning instead of raising."""
@@ -346,6 +354,7 @@ def test_build_phase_wp_manifest_warns_on_non_canonical_assignment_filename(tmp_
     result = build_phase_wp_manifest(str(assign_dir), str(out_dir))
     assert result["total_count"] == "1"
 
+
 def test_build_phase_assignment_manifest_corrupt_json_raises(tmp_path):
     from autoskillit.planner import build_phase_assignment_manifest
 
@@ -358,6 +367,7 @@ def test_build_phase_assignment_manifest_corrupt_json_raises(tmp_path):
     with pytest.raises(json.JSONDecodeError, match="Failed to parse"):
         build_phase_assignment_manifest(str(phases_dir), str(output_dir))
 
+
 def test_build_phase_assignment_manifest_missing_required_keys_raises(tmp_path):
     from autoskillit.planner import build_phase_assignment_manifest
 
@@ -369,6 +379,7 @@ def test_build_phase_assignment_manifest_missing_required_keys_raises(tmp_path):
 
     with pytest.raises(ValueError, match="Invalid phase result in"):
         build_phase_assignment_manifest(str(phases_dir), str(output_dir))
+
 
 def test_build_phase_assignment_manifest_empty_string_dir_raises(tmp_path):
     from autoskillit.planner import build_phase_assignment_manifest
@@ -384,6 +395,7 @@ def test_build_phase_assignment_manifest_empty_string_dir_raises(tmp_path):
 # build_phase_wp_manifest error branches
 # ---------------------------------------------------------------------------
 
+
 def test_build_phase_wp_manifest_corrupt_json_raises(tmp_path):
     from autoskillit.planner import build_phase_wp_manifest
 
@@ -396,6 +408,7 @@ def test_build_phase_wp_manifest_corrupt_json_raises(tmp_path):
     with pytest.raises(json.JSONDecodeError, match="Failed to parse"):
         build_phase_wp_manifest(str(assignments_dir), str(output_dir))
 
+
 def test_build_phase_wp_manifest_empty_string_raises(tmp_path):
     from autoskillit.planner import build_phase_wp_manifest
 
@@ -404,6 +417,7 @@ def test_build_phase_wp_manifest_empty_string_raises(tmp_path):
 
     with pytest.raises(ValueError, match="assignments_dir and output_dir must not be empty"):
         build_phase_wp_manifest("", str(output_dir))
+
 
 def test_build_phase_wp_manifest_nonexistent_dir_raises(tmp_path):
     from autoskillit.planner import build_phase_wp_manifest
@@ -418,6 +432,7 @@ def test_build_phase_wp_manifest_nonexistent_dir_raises(tmp_path):
 # ---------------------------------------------------------------------------
 # finalize_wp_manifest error branches
 # ---------------------------------------------------------------------------
+
 
 def test_build_phase_wp_manifest_ignores_non_canonical_in_assignments(tmp_path):
     """Non-canonical files (e.g. phase sentinels) in assignments/ are silently skipped."""
@@ -438,6 +453,7 @@ def test_build_phase_wp_manifest_ignores_non_canonical_in_assignments(tmp_path):
 
     result = build_phase_wp_manifest(str(assign_dir), str(out_dir))
     assert "manifest_path" in result
+
 
 def test_build_phase_assignment_manifest_result_dir_isolated(tmp_path):
     """build_phase_assignment_manifest must also use assign_sentinels/ subdir."""

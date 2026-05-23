@@ -7,14 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from tests.planner.conftest import (
-    make_assignment_result,
-    make_phase_result,
-    make_wp_result,
-    write_json,
-    write_task_file,
-)
-
 pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.feature("planner")]
 
 

@@ -246,11 +246,11 @@ class TestRunDoctorBackendWiring:
 class TestCheckCodexVersion:
     """Tests for _check_codex_version doctor check (Check 30)."""
 
-    def _codex_result(self, stdout: str, returncode: int = 0):
+    def _codex_result(self, stdout: str, returncode: int = 0, stderr: str = ""):
         return type(
             "CompletedProcess",
             (),
-            {"returncode": returncode, "stdout": stdout},
+            {"returncode": returncode, "stdout": stdout, "stderr": stderr},
         )()
 
     def test_skip_for_non_codex_backend(self) -> None:
@@ -302,6 +302,8 @@ class TestCheckCodexVersion:
         )
         result = _check_codex_version()
         assert result.severity == Severity.WARNING
+        assert "0.129.0" in result.message
+        assert "below minimum" in result.message
 
     def test_version_at_minimum_returns_ok(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import subprocess
@@ -316,6 +318,7 @@ class TestCheckCodexVersion:
         )
         result = _check_codex_version()
         assert result.severity == Severity.OK
+        assert "0.130.0" in result.message
 
     def test_version_above_minimum_returns_ok(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import subprocess
@@ -330,3 +333,4 @@ class TestCheckCodexVersion:
         )
         result = _check_codex_version()
         assert result.severity == Severity.OK
+        assert "0.131.0" in result.message

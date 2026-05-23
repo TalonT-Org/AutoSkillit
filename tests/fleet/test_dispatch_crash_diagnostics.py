@@ -20,6 +20,7 @@ pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature
 class TestCrashPathDiagnosticPersistence:
     """When _run_dispatch raises, the exception message must be persisted to campaign state."""
 
+    @pytest.mark.anyio
     async def test_crash_persists_exception_message_to_campaign_state(
         self, tool_ctx, monkeypatch, tmp_path: Path
     ) -> None:
@@ -82,6 +83,7 @@ class TestCrashPathDiagnosticPersistence:
         assert "kaboom: database connection lost" in refused[0].diagnostic_message
         assert refused[0].reason == "fleet_l3_startup_or_crash"
 
+    @pytest.mark.anyio
     async def test_crash_logs_structured_fields(self, tool_ctx, monkeypatch) -> None:
         """WARNING log must include exc_type and dispatch_name."""
         import structlog
@@ -125,6 +127,7 @@ class TestCrashPathDiagnosticPersistence:
         assert log_record.get("exc_type") == "TypeError"
         assert log_record.get("dispatch_name") == "my-test-dispatch"
 
+    @pytest.mark.anyio
     async def test_reject_with_state_persists_message_to_both_states(
         self, tool_ctx, monkeypatch, tmp_path: Path
     ) -> None:

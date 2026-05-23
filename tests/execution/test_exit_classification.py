@@ -10,7 +10,10 @@ from autoskillit.core.types import (
     SubprocessResult,
     TerminationReason,
 )
-from autoskillit.execution.session._exit_classification import classify_infra_exit
+from autoskillit.execution.session._exit_classification import (
+    _CODEX_API_ERROR_PATTERNS,
+    classify_infra_exit,
+)
 from autoskillit.execution.session._session_model import ClaudeSessionResult
 from tests.execution.conftest import CODEX_API_ERROR_SIGNAL_STRINGS
 
@@ -169,6 +172,18 @@ class TestClassifyInfraExit:
         result = _sr(returncode=1, stderr="")
         assert classify_infra_exit(session, result) == InfraExitCategory.CONTEXT_EXHAUSTED
 
+    def test_context_exhausted_from_codex_context_length_exceeded(self):
+        """context_length_exceeded in errors → CONTEXT_EXHAUSTED (not API_ERROR)."""
+        session = ClaudeSessionResult(
+            subtype="empty_output",
+            is_error=True,
+            result="",
+            session_id="s1",
+            errors=["context_length_exceeded"],
+        )
+        result = _sr(returncode=1, stderr="")
+        assert classify_infra_exit(session, result) == InfraExitCategory.CONTEXT_EXHAUSTED
+
     @pytest.mark.parametrize("signal", CODEX_API_ERROR_SIGNAL_STRINGS)
     def test_api_error_openai_patterns_in_stderr(self, signal: str) -> None:
         """OpenAI/Codex error pattern in stderr → API_ERROR."""
@@ -201,3 +216,8 @@ class TestClassifyInfraExit:
 def test_all_infra_categories_handled(category: InfraExitCategory) -> None:
     """Every InfraExitCategory value has a distinct test above."""
     assert category.value in {"completed", "context_exhausted", "api_error", "process_killed"}
+
+
+def test_codex_api_error_patterns_count() -> None:
+    """Structural test: _CODEX_API_ERROR_PATTERNS has exactly 4 entries."""
+    assert len(_CODEX_API_ERROR_PATTERNS) == 4

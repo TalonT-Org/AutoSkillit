@@ -29,12 +29,15 @@ _CODEX_API_ERROR_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"rate_limit_exceeded", re.IGNORECASE),
     re.compile(r"\bserver_error\b", re.IGNORECASE),
     re.compile(r"insufficient_quota", re.IGNORECASE),
-    re.compile(r"context_length_exceeded", re.IGNORECASE),
     re.compile(r"model_not_found", re.IGNORECASE),
 )
 
 _KNOWN_API_ERROR_PATTERNS: tuple[re.Pattern[str], ...] = (
     _API_ERROR_PATTERNS + _CODEX_API_ERROR_PATTERNS
+)
+
+_CODEX_CONTEXT_EXHAUSTION_PATTERN: re.Pattern[str] = re.compile(
+    r"context_length_exceeded", re.IGNORECASE
 )
 
 
@@ -49,6 +52,8 @@ def classify_infra_exit(
     overloaded API response may co-occur with the final truncation error.
     """
     if session._is_context_exhausted():
+        return InfraExitCategory.CONTEXT_EXHAUSTED
+    if _CODEX_CONTEXT_EXHAUSTION_PATTERN.search(result.stderr):
         return InfraExitCategory.CONTEXT_EXHAUSTED
     if session._has_api_error() or any(p.search(result.stderr) for p in _KNOWN_API_ERROR_PATTERNS):
         return InfraExitCategory.API_ERROR

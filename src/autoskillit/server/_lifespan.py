@@ -325,7 +325,7 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
 
 
 async def _skill_auto_gate_boot(ctx: Any) -> None:
-    """Auto-open gate for headless skill (L1) sessions.
+    """Auto-open gate for headless SKILL sessions.
 
     Runs at lifespan startup when AUTOSKILLIT_HEADLESS=1 and
     AUTOSKILLIT_HEADLESS_AUTO_GATE=1. No-ops for non-headless sessions.

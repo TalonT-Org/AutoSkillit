@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import dataclasses
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -90,15 +89,6 @@ def test_close_kitchen_cancels_quota_refresh_task(tmp_path, monkeypatch):
 
     mock_task.cancel.assert_called_once()
     assert mock_ctx.quota_refresh_task is None
-
-
-def test_tool_context_has_quota_refresh_task_field():
-    """ToolContext must have a quota_refresh_task field defaulting to None."""
-    from autoskillit.pipeline.context import ToolContext
-
-    fields = {f.name: f for f in dataclasses.fields(ToolContext)}
-    assert "quota_refresh_task" in fields
-    assert fields["quota_refresh_task"].default is None
 
 
 @pytest.mark.anyio

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 from typing import get_args, get_type_hints
 
@@ -295,7 +296,6 @@ async def test_toolcontext_default_background_wired_with_audit(tmp_path):
 
 def test_tool_context_has_token_factory_field():
     """ToolContext dataclass exposes token_factory as an optional callable Protocol field."""
-    import dataclasses
     import typing
 
     from autoskillit.core import TokenFactory
@@ -335,7 +335,6 @@ def test_tool_context_recipe_identity_defaults(tmp_path):
 
 def test_toolcontext_has_project_dir_field():
     """ToolContext dataclass has a project_dir field of type Path."""
-    import dataclasses
 
     from autoskillit.pipeline.context import ToolContext
 
@@ -388,3 +387,10 @@ def test_toolcontext_accepts_explicit_path_fields(tmp_path):
     )
     assert ctx.temp_dir == tmp_path / ".autoskillit" / "temp"
     assert ctx.project_dir == tmp_path
+
+
+def test_tool_context_has_quota_refresh_task_field():
+    """ToolContext must have a quota_refresh_task field defaulting to None."""
+    fields = {f.name: f for f in dataclasses.fields(ToolContext)}
+    assert "quota_refresh_task" in fields
+    assert fields["quota_refresh_task"].default is None

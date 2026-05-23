@@ -171,7 +171,7 @@ class TestBuildFoodTruckCmd:
             cwd="/repo",
             completion_marker="DONE",
         )
-        prompt = spec.cmd[spec.cmd.index("-p") + 1]
+        prompt = spec.cmd[spec.cmd.index(ClaudeFlags.PRINT) + 1]
         assert "FIRST ACTION" not in prompt
         assert "After loading" not in prompt
 

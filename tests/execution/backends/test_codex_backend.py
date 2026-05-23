@@ -6,6 +6,7 @@ import pytest
 
 from autoskillit.core import (
     AGENT_BACKEND_CODEX,
+    SESSION_TYPE_SKILL,
     BackendCapabilities,
     CmdSpec,
     CodingAgentBackend,
@@ -376,89 +377,107 @@ class TestCodexResumeCmd:
 
 
 class TestCodexBuildSkillSessionCmd:
-    def test_minimal_config(self) -> None:
+    BASE: dict[str, object] = {
+        "skill_command": "/test-skill",
+        "cwd": "/work",
+        "completion_marker": "%%DONE%%",
+        "model": None,
+        "plugin_source": None,
+        "output_format": OutputFormat.JSON,
+    }
+
+    def test_completion_directive_injected(self) -> None:
+        spec = CodexBackend().build_skill_session_cmd(**self.BASE)
+        assert "ORCHESTRATION DIRECTIVE" in spec.cmd[-1]
+
+    def test_cwd_anchor_injected(self) -> None:
+        spec = CodexBackend().build_skill_session_cmd(**self.BASE)
+        assert "/work" in spec.cmd[-1]
+
+    def test_narration_suppression_injected(self) -> None:
+        spec = CodexBackend().build_skill_session_cmd(**self.BASE)
+        assert "EFFICIENCY DIRECTIVE" in spec.cmd[-1]
+
+    def test_completion_reminder_injected(self) -> None:
+        spec = CodexBackend().build_skill_session_cmd(**self.BASE)
+        assert "Remember: end your final response with" in spec.cmd[-1]
+
+    def test_headless_env_set(self) -> None:
+        spec = CodexBackend().build_skill_session_cmd(**self.BASE)
+        assert spec.env["AUTOSKILLIT_HEADLESS"] == "1"
+
+    def test_session_type_env_set(self) -> None:
+        spec = CodexBackend().build_skill_session_cmd(**self.BASE)
+        assert spec.env["AUTOSKILLIT_SESSION_TYPE"] == SESSION_TYPE_SKILL
+
+    def test_skill_name_extracted(self) -> None:
         spec = CodexBackend().build_skill_session_cmd(
-            "do stuff",
-            cwd="/work",
-            completion_marker="",
-            model=None,
-            plugin_source=None,
-            output_format=OutputFormat.JSON,
+            **{**self.BASE, "skill_command": "/planner-analyze foo"},
         )
-        assert spec.cmd == (
-            "codex",
-            "exec",
-            "--json",
-            "--sandbox",
-            "workspace-write",
-            "-a",
-            "never",
-            "do stuff",
+        assert spec.env["AUTOSKILLIT_SKILL_NAME"] == "planner-analyze"
+
+    def test_scenario_step_name_presence_and_absence(self) -> None:
+        spec = CodexBackend().build_skill_session_cmd(
+            **{**self.BASE, "scenario_step_name": "step-foo"},
         )
+        assert spec.env["SCENARIO_STEP_NAME"] == "step-foo"
+        spec2 = CodexBackend().build_skill_session_cmd(**self.BASE)
+        assert "SCENARIO_STEP_NAME" not in spec2.env
+
+    def test_allowed_write_prefix_presence_and_absence(self) -> None:
+        spec = CodexBackend().build_skill_session_cmd(
+            **{**self.BASE, "allowed_write_prefix": "/work/src"},
+        )
+        assert spec.env["AUTOSKILLIT_ALLOWED_WRITE_PREFIX"] == "/work/src"
+        spec2 = CodexBackend().build_skill_session_cmd(**self.BASE)
+        assert "AUTOSKILLIT_ALLOWED_WRITE_PREFIX" not in spec2.env
+
+    def test_add_dirs_forwarded(self) -> None:
+        dirs = [
+            ValidatedAddDir(path="/extra"),
+            ValidatedAddDir(path="/more"),
+        ]
+        spec = CodexBackend().build_skill_session_cmd(
+            **{**self.BASE, "add_dirs": dirs},
+        )
+        cmd_str = " ".join(spec.cmd)
+        assert "--add-dir /extra" in cmd_str
+        assert "--add-dir /more" in cmd_str
 
     def test_model_forwarded(self) -> None:
         spec = CodexBackend().build_skill_session_cmd(
-            "run",
-            cwd="/w",
-            completion_marker="",
-            model="o3",
-            plugin_source=None,
-            output_format=OutputFormat.JSON,
+            **{**self.BASE, "model": "o3"},
         )
         assert "--model" in spec.cmd
         idx = spec.cmd.index("--model")
         assert spec.cmd[idx + 1] == "o3"
+        spec2 = CodexBackend().build_skill_session_cmd(**self.BASE)
+        assert "--model" not in spec2.cmd
 
-    def test_add_dirs_forwarded(self) -> None:
-        dirs = [ValidatedAddDir(path="/extra/a"), ValidatedAddDir(path="/extra/b")]
+    def test_resume_path(self) -> None:
         spec = CodexBackend().build_skill_session_cmd(
-            "run",
-            cwd="/w",
-            completion_marker="",
-            model=None,
-            plugin_source=None,
-            output_format=OutputFormat.JSON,
-            add_dirs=dirs,
+            **{**self.BASE, "resume_session_id": "sess-abc123"},
         )
-        add_dir_indices = [i for i, v in enumerate(spec.cmd) if v == "--add-dir"]
-        assert len(add_dir_indices) == 2
-        assert spec.cmd[add_dir_indices[0] + 1] == "/extra/a"
-        assert spec.cmd[add_dir_indices[1] + 1] == "/extra/b"
+        assert "resume" in spec.cmd
+        assert "sess-abc123" in spec.cmd
+        assert "--sandbox" in spec.cmd
+        assert "-a" in spec.cmd
 
-    def test_scenario_step_name_in_env(self) -> None:
+    def test_completion_marker_with_profile(self) -> None:
         spec = CodexBackend().build_skill_session_cmd(
-            "run",
-            cwd="/w",
-            completion_marker="",
-            model=None,
-            plugin_source=None,
-            output_format=OutputFormat.JSON,
-            scenario_step_name="step-1",
+            **{**self.BASE, "profile_name": "minimax"},
         )
-        assert spec.env["SCENARIO_STEP_NAME"] == "step-1"
+        assert spec.env["AUTOSKILLIT_COMPLETION_MARKER"] == self.BASE["completion_marker"]
+        spec2 = CodexBackend().build_skill_session_cmd(**self.BASE)
+        assert "AUTOSKILLIT_COMPLETION_MARKER" not in spec2.env
 
-    def test_allowed_write_prefix_in_env(self) -> None:
+    def test_claude_only_params_accepted_but_ignored(self) -> None:
         spec = CodexBackend().build_skill_session_cmd(
-            "run",
-            cwd="/w",
-            completion_marker="",
-            model=None,
-            plugin_source=None,
-            output_format=OutputFormat.JSON,
-            allowed_write_prefix="/tmp/safe",
-        )
-        assert spec.env["AUTOSKILLIT_ALLOWED_WRITE_PREFIX"] == "/tmp/safe"
-
-    def test_claude_only_params_absent(self) -> None:
-        spec = CodexBackend().build_skill_session_cmd(
-            "run",
-            cwd="/w",
-            completion_marker="%%DONE%%",
-            model=None,
-            plugin_source=None,
-            output_format=OutputFormat.STREAM_JSON,
-            exit_after_stop_delay_ms=5000,
-            stream_idle_timeout_ms=3000,
+            **{
+                **self.BASE,
+                "exit_after_stop_delay_ms": 5000,
+                "stream_idle_timeout_ms": 3000,
+            }
         )
         cmd_str = " ".join(spec.cmd)
         assert "--output-format" not in cmd_str
@@ -468,11 +487,10 @@ class TestCodexBuildSkillSessionCmd:
 
     def test_cwd_set(self) -> None:
         spec = CodexBackend().build_skill_session_cmd(
-            "run",
-            cwd="/my/project",
-            completion_marker="",
-            model=None,
-            plugin_source=None,
-            output_format=OutputFormat.JSON,
+            **{**self.BASE, "cwd": "/my/project"},
         )
         assert spec.cwd == "/my/project"
+
+    def test_json_flag_always_present(self) -> None:
+        spec = CodexBackend().build_skill_session_cmd(**self.BASE)
+        assert "--json" in spec.cmd

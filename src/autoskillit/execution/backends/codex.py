@@ -13,6 +13,9 @@ from typing import Any
 from autoskillit.core import (
     AGENT_BACKEND_CODEX,
     AUTOSKILLIT_PRIVATE_ENV_VARS,
+    CAMPAIGN_ID_ENV_VAR,
+    KITCHEN_SESSION_ID_ENV_VAR,
+    SESSION_TYPE_SKILL,
     AgentSessionResult,
     BackendCapabilities,
     BackendEventKind,
@@ -25,7 +28,18 @@ from autoskillit.core import (
     SessionCheckpoint,
     SessionEvent,
     ValidatedAddDir,
+    extract_skill_name,
     fast_loads,
+)
+from autoskillit.execution.backends.claude import (
+    _HEADLESS_EXCLUSIVE_VARS,
+    _MAX_MCP_OUTPUT_TOKENS_VALUE,
+    _compose_resume_prompt,
+    _ensure_skill_prefix,
+    _inject_completion_directive,
+    _inject_completion_reminder,
+    _inject_cwd_anchor,
+    _inject_narration_suppression,
 )
 from autoskillit.execution.process import _marker_is_standalone
 
@@ -445,6 +459,60 @@ class CodexBackend:
         resume_checkpoint: SessionCheckpoint | None = None,
         resume_message: str | None = None,
     ) -> CmdSpec:
+        _has_prefix = bool(profile_name) and skill_command.strip().startswith("/")
+
+        if resume_session_id:
+            effective_prompt = _compose_resume_prompt(
+                base_prompt=_ensure_skill_prefix(
+                    skill_command, provider_profile=profile_name or ""
+                ),
+                resume_checkpoint=resume_checkpoint,
+                resume_message=resume_message,
+            )
+        else:
+            effective_prompt = _ensure_skill_prefix(
+                skill_command, provider_profile=profile_name or ""
+            )
+
+        prompt = _inject_completion_reminder(
+            _inject_narration_suppression(
+                _inject_cwd_anchor(
+                    _inject_completion_directive(effective_prompt, completion_marker),
+                    cwd,
+                    temp_dir_relpath=temp_dir_relpath,
+                ),
+                has_skill_prefix=_has_prefix,
+            ),
+            completion_marker,
+        )
+
+        extras: dict[str, str] = {
+            "AUTOSKILLIT_HEADLESS": "1",
+            "AUTOSKILLIT_SESSION_TYPE": SESSION_TYPE_SKILL,
+            "MAX_MCP_OUTPUT_TOKENS": _MAX_MCP_OUTPUT_TOKENS_VALUE,
+        }
+        if scenario_step_name:
+            extras["SCENARIO_STEP_NAME"] = scenario_step_name
+        campaign_id = os.environ.get(CAMPAIGN_ID_ENV_VAR)
+        if campaign_id:
+            extras[CAMPAIGN_ID_ENV_VAR] = campaign_id
+        kitchen_session_id = os.environ.get(KITCHEN_SESSION_ID_ENV_VAR)
+        if kitchen_session_id:
+            extras[KITCHEN_SESSION_ID_ENV_VAR] = kitchen_session_id
+        if allowed_write_prefix:
+            extras["AUTOSKILLIT_ALLOWED_WRITE_PREFIX"] = allowed_write_prefix
+        extras["AUTOSKILLIT_SKILL_NAME"] = extract_skill_name(skill_command) or ""
+        if provider_extras:
+            for k, v in provider_extras.items():
+                if k not in ("AUTOSKILLIT_SESSION_TYPE", "AUTOSKILLIT_HEADLESS"):
+                    extras[k] = v
+        if profile_name:
+            extras["AUTOSKILLIT_PROVIDER_PROFILE"] = profile_name
+            extras["AUTOSKILLIT_COMPLETION_MARKER"] = completion_marker
+
+        filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
+        env = CodexEnvPolicy().build_env(filtered_base, extras=extras)
+
         cmd: list[str] = [
             "codex",
             "exec",
@@ -458,18 +526,11 @@ class CodexBackend:
             cmd += [CodexFlags.MODEL, model]
         for validated_dir in add_dirs:
             cmd += [CodexFlags.ADD_DIR, validated_dir.path]
-        cmd.append(skill_command)
-        env_extras: dict[str, str] = {}
-        if scenario_step_name:
-            env_extras["SCENARIO_STEP_NAME"] = scenario_step_name
-        if allowed_write_prefix:
-            env_extras["AUTOSKILLIT_ALLOWED_WRITE_PREFIX"] = allowed_write_prefix
-        if provider_extras:
-            env_extras.update(provider_extras)
-        base: dict[str, str] = dict(os.environ)
-        if env_extras:
-            base.update(env_extras)
-        env = self.env_policy().build_env(base)
+        if resume_session_id:
+            cmd.append(CodexFlags.RESUME_SUBCOMMAND)
+            cmd.append(resume_session_id)
+        cmd.append(prompt)
+
         return CmdSpec(cmd=tuple(cmd), env=env, cwd=cwd)
 
     def build_food_truck_cmd(

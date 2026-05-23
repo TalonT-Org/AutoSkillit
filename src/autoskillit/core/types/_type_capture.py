@@ -35,8 +35,6 @@ def resolve_payload_field(entry: CaptureEntrySpec) -> str | None:
 
 CAPTURE_VALID_VALUE_TYPES = frozenset({"path", "url", "string", "optional_string"})
 
-_VALID_VALUE_TYPES = CAPTURE_VALID_VALUE_TYPES
-
 
 @dataclass(frozen=True, slots=True)
 class CaptureEntrySpec:
@@ -55,9 +53,9 @@ class CaptureEntrySpec:
     def __post_init__(self) -> None:
         if not self.from_ or not self.from_.strip():
             raise ValueError("CaptureEntrySpec.from_ must be a non-empty string")
-        if self.value_type not in _VALID_VALUE_TYPES:
+        if self.value_type not in CAPTURE_VALID_VALUE_TYPES:
             raise ValueError(
-                f"CaptureEntrySpec.value_type must be one of {sorted(_VALID_VALUE_TYPES)}, "
+                f"CaptureEntrySpec.value_type must be one of {sorted(CAPTURE_VALID_VALUE_TYPES)}, "
                 f"got {self.value_type!r}"
             )
 

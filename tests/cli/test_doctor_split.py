@@ -7,21 +7,12 @@ from pathlib import Path
 
 import pytest
 
+from ._split_helpers import _has_pytestmark_cli
+
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 _CLI_TESTS = Path(__file__).parent
 _CLI_SRC = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "cli"
-
-
-def _has_pytestmark_cli(path: Path) -> bool:
-    tree = ast.parse(path.read_text())
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name) and target.id == "pytestmark":
-                    src = ast.unparse(node.value)
-                    return 'layer("cli")' in src or "layer('cli')" in src
-    return False
 
 
 def test_doctor_scripts_file_exists():

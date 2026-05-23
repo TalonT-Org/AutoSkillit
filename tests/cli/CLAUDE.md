@@ -8,6 +8,7 @@ CLI command, subcommand, and interactive workflow tests.
 |------|---------|
 | `__init__.py` | empty |
 | `_fleet_helpers.py` | Shared helpers for fleet CLI tests |
+| `_split_helpers.py` | Shared helpers for structural guard tests (split-guard test files) |
 | `_update_checks_helpers.py` | Shared factory helpers for update-checks test files |
 | `conftest.py` | CLI test fixtures — auto-patches the worktree guard for sync_hooks_to_settings() |
 | `test_ansi.py` | Tests for cli/_ansi.py terminal color utilities |
@@ -81,4 +82,4 @@ CLI command, subcommand, and interactive workflow tests.
 
 ## Architecture Notes
 
-`conftest.py` auto-patches `sync_hooks_to_settings()` worktree guard so CLI init tests don't fail in worktree environments. `_fleet_helpers.py` and `_update_checks_helpers.py` are shared factory modules used across split test files for fleet and update-checks functionality respectively.
+`conftest.py` auto-patches `sync_hooks_to_settings()` worktree guard so CLI init tests don't fail in worktree environments. `_fleet_helpers.py` and `_update_checks_helpers.py` are shared factory modules used across split test files for fleet and update-checks functionality respectively. `_split_helpers.py` is a shared module for structural guard helpers (e.g., `_has_pytestmark_cli`) used by multiple split-guard test files.

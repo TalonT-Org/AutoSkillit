@@ -348,6 +348,8 @@ class TestFleetAutoGateBoot:
         expected_id = f"test-campaign-{boot_fn_name}"
         monkeypatch.setenv(CAMPAIGN_ID_ENV_VAR, expected_id)
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        # FOOD_TRUCK_TOOL_TAGS: only read by _food_truck_auto_gate_boot;
+        # harmless for fleet/skill paths.
         monkeypatch.setenv("AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS", "kitchen-core")
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS_AUTO_GATE", "1")
         tool_ctx.gate = DefaultGateState(enabled=False)
@@ -1027,7 +1029,7 @@ class TestSkillAutoGateBoot:
         assert len(quota_loop_calls) == 0, (
             "quota_refresh_loop must not be created for SKILL sessions"
         )
-        assert tool_ctx.quota_refresh_task is None
+        mock_create_bg_task.assert_not_called()
 
     @pytest.mark.anyio
     async def test_skill_auto_gate_boot_uses_project_dir_for_registration(

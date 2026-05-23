@@ -7,6 +7,7 @@ import re
 
 from autoskillit.core.types import SkillSource
 from autoskillit.workspace.skills import DefaultSkillResolver
+from tests.skills.conftest import assert_ticket_grouper_has_minimum_group_floor
 
 
 @functools.cache
@@ -206,6 +207,5 @@ class TestValidateReviewDecisionsInputHandling:
 class TestValidateReviewDecisionsTicketGrouper:
     def test_ticket_grouper_has_minimum_group_floor(self) -> None:
         """Ticket Grouper instructions must enforce a minimum group count."""
-        from tests.skills.conftest import assert_ticket_grouper_has_minimum_group_floor
 
         assert_ticket_grouper_has_minimum_group_floor(_skill_text())

@@ -59,15 +59,20 @@ class TestClaudeCodeBackend:
         result = backend.stream_parser()
         assert isinstance(result, StreamParser)
 
-    def test_stream_parser_factory_passes_completion_marker(self) -> None:
-        parser = ClaudeCodeBackend().stream_parser(completion_marker="%%DONE%%")
+    @pytest.mark.parametrize(
+        ("marker_kwarg", "expected"),
+        [
+            ({"completion_marker": "%%DONE%%"}, "%%DONE%%"),
+            ({}, ""),
+        ],
+        ids=["explicit-marker", "default-empty"],
+    )
+    def test_stream_parser_factory_completion_marker(
+        self, marker_kwarg: dict[str, str], expected: str
+    ) -> None:
+        parser = ClaudeCodeBackend().stream_parser(**marker_kwarg)
         assert isinstance(parser, ClaudeStreamParser)
-        assert parser.completion_marker == "%%DONE%%"
-
-    def test_stream_parser_factory_default_empty_marker(self) -> None:
-        parser = ClaudeCodeBackend().stream_parser()
-        assert isinstance(parser, ClaudeStreamParser)
-        assert parser.completion_marker == ""
+        assert parser.completion_marker == expected
 
     def test_result_parser_returns_result_parser(self) -> None:
         backend = ClaudeCodeBackend()

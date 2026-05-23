@@ -1027,6 +1027,10 @@ class TestBuildSkillResultCrossValidation:
         "git_writes_detected",
         "has_progress_evidence",
         "infra_exit_category",
+        "api_retry_count",
+        "api_retry_last_error",
+        "api_retry_last_status",
+        "api_retry_exhausted",
     }
 
     def test_expected_skill_keys_includes_provider(self):

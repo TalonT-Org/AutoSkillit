@@ -38,6 +38,38 @@ def _context_exhaustion_line() -> str:
 
 
 class TestClaudeStreamParser:
+    def test_parse_line_system_api_retry_returns_api_retry_kind(self) -> None:
+        parser = ClaudeStreamParser()
+        line = json.dumps(
+            {
+                "type": "system",
+                "subtype": "api_retry",
+                "error": "unknown",
+                "error_status": None,
+                "attempt": 5,
+                "max_retries": 10,
+            }
+        )
+        result = parser.parse_line(line)
+        assert result is not None
+        assert result.kind == BackendEventKind.API_RETRY
+        assert result.is_terminal is False
+        assert result.backend_data is not None
+        assert result.backend_data.record_type == "system"
+        assert result.backend_data.subtype == "api_retry"
+        assert result.backend_data.raw["error"] == "unknown"
+        assert result.backend_data.raw["attempt"] == 5
+
+    def test_parse_line_system_unknown_subtype_still_session_meta(self) -> None:
+        # Regression guard: non-api_retry subtypes must not be misrouted to API_RETRY.
+        parser = ClaudeStreamParser()
+        line = json.dumps({"type": "system", "subtype": "other_subtype", "session_id": "s1"})
+        result = parser.parse_line(line)
+        assert result is not None
+        assert result.kind == BackendEventKind.SESSION_META
+        assert result.session_id == "s1"
+        assert result.is_terminal is False
+
     def test_parse_line_system_record_session_meta(self) -> None:
         parser = ClaudeStreamParser()
         line = '{"type": "system", "session_id": "test-session-123"}'

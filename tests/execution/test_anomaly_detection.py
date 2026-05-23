@@ -19,6 +19,11 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 _snap = partial(_snap_full, captured_at=None)
 
 
+def test_anomaly_kind_api_retry_exhaustion_value():
+    """API_RETRY_EXHAUSTION enum member exists with correct value."""
+    assert AnomalyKind.API_RETRY_EXHAUSTION == "api_retry_exhaustion"
+
+
 def test_detect_oom_spike():
     """OOM score delta > 200 between consecutive snapshots."""
     snaps = [_snap(oom_score=100), _snap(oom_score=350)]

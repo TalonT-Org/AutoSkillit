@@ -152,6 +152,10 @@ def flush_session_log(
     raw_stdout: str = "",
     last_stop_reason: str = "",
     has_thinking_only_turn: bool = False,
+    api_retry_count: int = 0,
+    api_retry_last_error: str = "",
+    api_retry_last_status: int | None = None,
+    api_retry_exhausted: bool = False,
     versions: dict[str, Any] | None = None,
     model_identifier: str = "",
     max_sessions: int | None = None,
@@ -280,6 +284,28 @@ def flush_session_log(
         )
         anomalies.extend(outcome_anomalies)
 
+    # API retry exhaustion anomaly — fires regardless of token_usage presence
+    if api_retry_exhausted:
+        from autoskillit.execution.anomaly_detection import (
+            OUTCOME_ANOMALY_PID_SENTINEL,
+            OUTCOME_ANOMALY_SEQ_SENTINEL,
+            AnomalyKind,
+            AnomalySeverity,
+        )
+
+        anomalies.append(
+            {
+                "ts": datetime.now(UTC).isoformat(),
+                "seq": OUTCOME_ANOMALY_SEQ_SENTINEL,
+                "event": "anomaly",
+                "kind": str(AnomalyKind.API_RETRY_EXHAUSTION),
+                "severity": str(AnomalySeverity.WARNING),
+                "pid": OUTCOME_ANOMALY_PID_SENTINEL,
+                "detail": {"subtype": subtype, "api_retry_count": api_retry_count},
+                "snapshot": {},
+            }
+        )
+
     # Write anomalies.jsonl (only if anomalies exist)
     if anomalies:
         anomalies_path = session_dir / "anomalies.jsonl"
@@ -355,6 +381,10 @@ def flush_session_log(
         "dispatch_id": dispatch_id,
         "github_api_requests": github_api_requests,
         "caller_session_id": caller_session_id,
+        "api_retry_count": api_retry_count,
+        "api_retry_last_error": api_retry_last_error,
+        "api_retry_last_status": api_retry_last_status,
+        "api_retry_exhausted": api_retry_exhausted,
     }
     if versions is not None:
         effective_model_id = model_identifier or _primary_model_identifier(token_usage)
@@ -474,6 +504,8 @@ def flush_session_log(
         "provider_used": provider_outcome.provider_used,
         "provider_fallback": provider_outcome.fallback_activated,
         "caller_session_id": caller_session_id,
+        "api_retry_count": api_retry_count,
+        "api_retry_exhausted": api_retry_exhausted,
         "schema_version": 2,
     }
     index_path = log_root / "sessions.jsonl"

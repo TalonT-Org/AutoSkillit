@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, assert_never
 from autoskillit.core import (
     AGENT_BACKEND_CLAUDE_CODE,
     AgentSessionResult,
+    ApiRetryOutcome,
     ChannelConfirmation,
     CliSubtype,
     FailureRecord,
@@ -202,6 +203,15 @@ def _stdout_mentions_write_tools(stdout: str) -> bool:
     return '"Edit"' in stdout or '"Write"' in stdout
 
 
+def _build_api_retry_outcome(session: ClaudeSessionResult) -> ApiRetryOutcome:
+    return ApiRetryOutcome(
+        count=session.api_retry_count,
+        last_error=session.api_retry_last_error,
+        last_status=session.api_retry_last_status,
+        exhausted=session.api_retry_exhausted,
+    )
+
+
 def _make_terminated_result(
     *,
     result: SubprocessResult,
@@ -213,6 +223,8 @@ def _make_terminated_result(
     retry_reason: RetryReason,
     evidence: WriteEvidence,
     provider_used: str = "",
+    infra: InfraOutcome = InfraOutcome(),
+    api_retry: ApiRetryOutcome = ApiRetryOutcome(),
 ) -> SkillResult:
     """Construct SkillResult for infrastructure-terminated sessions (stale/idle_stall)."""
     return SkillResult(
@@ -231,6 +243,8 @@ def _make_terminated_result(
         last_stop_reason=session.last_stop_reason,
         lifespan_started=session.lifespan_started,
         provider=ProviderOutcome(provider_used=provider_used, fallback_activated=False),
+        infra=infra,
+        api_retry=api_retry,
     )
 
 
@@ -277,6 +291,7 @@ def _build_skill_result(
         stale_evidence = _compute_write_evidence(
             stale_session, fs_writes_detected, git_writes_detected, backend
         )
+        stale_api_retry = _build_api_retry_outcome(stale_session)
         stale_returncode = result.returncode if result.returncode is not None else -1
         can_attempt_stale_recovery = (
             stale_session.subtype == CliSubtype.SUCCESS
@@ -305,6 +320,7 @@ def _build_skill_result(
                     retry_reason=RetryReason.NONE,
                     evidence=stale_evidence,
                     provider_used=provider_used,
+                    api_retry=stale_api_retry,
                 )
         # No valid result in stdout — fall through to original stale response
         _capture_failure(
@@ -315,6 +331,11 @@ def _build_skill_result(
             retry_reason=RetryReason.STALE,
             stderr=result.stderr if result.stderr else "",
             audit=audit,
+        )
+        stale_infra = (
+            InfraOutcome(exit_category=InfraExitCategory.API_ERROR.value)
+            if stale_session.api_retry_exhausted
+            else InfraOutcome()
         )
         stale_sr = _make_terminated_result(
             result=result,
@@ -329,6 +350,8 @@ def _build_skill_result(
             retry_reason=RetryReason.STALE,
             evidence=stale_evidence,
             provider_used=provider_used,
+            infra=stale_infra,
+            api_retry=stale_api_retry,
         )
         return _apply_budget_guard(stale_sr, skill_command, audit, max_consecutive_retries)
 
@@ -337,6 +360,7 @@ def _build_skill_result(
         idle_evidence = _compute_write_evidence(
             idle_session, fs_writes_detected, git_writes_detected, backend
         )
+        idle_api_retry = _build_api_retry_outcome(idle_session)
         idle_returncode = result.returncode if result.returncode is not None else -1
         can_attempt_idle_stall_recovery = (
             idle_session.subtype == CliSubtype.SUCCESS
@@ -365,6 +389,7 @@ def _build_skill_result(
                     retry_reason=RetryReason.NONE,
                     evidence=idle_evidence,
                     provider_used=provider_used,
+                    api_retry=idle_api_retry,
                 )
         _capture_failure(
             skill_command,
@@ -377,6 +402,11 @@ def _build_skill_result(
         )
         logger.warning(
             "Headless session killed: stdout idle for configured threshold (IDLE_STALL)"
+        )
+        idle_infra = (
+            InfraOutcome(exit_category=InfraExitCategory.API_ERROR.value)
+            if idle_session.api_retry_exhausted
+            else InfraOutcome()
         )
         idle_sr = _make_terminated_result(
             result=result,
@@ -391,6 +421,8 @@ def _build_skill_result(
             retry_reason=RetryReason.IDLE_STALL,
             evidence=idle_evidence,
             provider_used=provider_used,
+            infra=idle_infra,
+            api_retry=idle_api_retry,
         )
         return _apply_budget_guard(idle_sr, skill_command, audit, max_consecutive_retries)
 
@@ -534,6 +566,7 @@ def _build_skill_result(
     needs_retry = outcome == SessionOutcome.RETRIABLE
 
     infra_category = classify_infra_exit(session, result)
+    api_retry = _build_api_retry_outcome(session)
 
     # API error override: when the session failed due to an API infrastructure error
     # (overload, 529, ECONNRESET), promote to RESUME so the orchestrator routes to
@@ -671,6 +704,7 @@ def _build_skill_result(
             lifespan_started=session.lifespan_started,
             provider=ProviderOutcome(provider_used=provider_used, fallback_activated=False),
             infra=InfraOutcome(exit_category=infra_category.value),
+            api_retry=api_retry,
         )
     else:
         sr = SkillResult(
@@ -693,6 +727,7 @@ def _build_skill_result(
             lifespan_started=session.lifespan_started,
             provider=ProviderOutcome(provider_used=provider_used, fallback_activated=False),
             infra=InfraOutcome(exit_category=infra_category.value),
+            api_retry=api_retry,
         )
     sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
 

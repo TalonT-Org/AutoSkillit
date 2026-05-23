@@ -19,6 +19,7 @@ def test_backend_event_kind_members():
     assert set(BackendEventKind) == {
         BackendEventKind.COMPLETION,
         BackendEventKind.SESSION_META,
+        BackendEventKind.API_RETRY,
         BackendEventKind.TOOL_OUTPUT,
         BackendEventKind.ERROR,
         BackendEventKind.IGNORED,
@@ -30,6 +31,7 @@ def test_backend_event_kind_values():
 
     assert BackendEventKind.COMPLETION == "completion"
     assert BackendEventKind.SESSION_META == "session_meta"
+    assert BackendEventKind.API_RETRY == "api_retry"
     assert BackendEventKind.TOOL_OUTPUT == "tool_output"
     assert BackendEventKind.ERROR == "error"
     assert BackendEventKind.IGNORED == "ignored"

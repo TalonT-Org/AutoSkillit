@@ -487,6 +487,7 @@ class BackendEventKind(StrEnum):
 
     COMPLETION = "completion"
     SESSION_META = "session_meta"
+    API_RETRY = "api_retry"
     TOOL_OUTPUT = "tool_output"
     ERROR = "error"
     IGNORED = "ignored"

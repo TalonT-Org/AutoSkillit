@@ -68,6 +68,10 @@ class ClaudeSessionResult:
     stop_reasons: list[str] = field(default_factory=list)
     has_thinking_only_turn: bool = False
     seen_block_types: frozenset[str] = field(default_factory=frozenset)
+    api_retry_count: int = 0
+    api_retry_last_error: str = ""
+    api_retry_last_status: int | None = None
+    api_retry_exhausted: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.result, str):
@@ -307,6 +311,10 @@ class _ParseAccumulator:
     stop_reasons: list[str] = field(default_factory=list)
     seen_block_types: set[str] = field(default_factory=set)
     has_thinking_only_turn: bool = False
+    api_retry_count: int = 0
+    api_retry_last_error: str = ""
+    api_retry_last_status: int | None = None
+    api_retry_exhausted: bool = False
 
 
 def parse_session_result(stdout: str) -> ClaudeSessionResult:
@@ -337,6 +345,23 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
             if not isinstance(obj, dict):
                 continue
             record_type = obj.get("type")
+
+            if record_type == "system" and obj.get("subtype") == "api_retry":
+                acc.api_retry_count += 1
+                acc.api_retry_last_error = str(obj.get("error", ""))
+                raw_status = obj.get("error_status")
+                acc.api_retry_last_status = raw_status if isinstance(raw_status, int) else None
+                attempt = obj.get("attempt", 0)
+                max_retries = obj.get("max_retries", 0)
+                if (
+                    isinstance(attempt, int)
+                    and isinstance(max_retries, int)
+                    and attempt >= max_retries
+                    and max_retries > 0
+                ):
+                    acc.api_retry_exhausted = True
+                continue
+
             if record_type == "result":
                 acc.result_obj = obj
             elif record_type == "assistant":
@@ -462,4 +487,8 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
         seen_block_types=frozenset(
             acc.seen_block_types
         ),  # accumulator uses set; result is immutable
+        api_retry_count=acc.api_retry_count,
+        api_retry_last_error=acc.api_retry_last_error,
+        api_retry_last_status=acc.api_retry_last_status,
+        api_retry_exhausted=acc.api_retry_exhausted,
     )

@@ -532,6 +532,10 @@ class TestSkillResult:
             "git_writes_detected",
             "has_progress_evidence",
             "infra_exit_category",
+            "api_retry_count",
+            "api_retry_last_error",
+            "api_retry_last_status",
+            "api_retry_exhausted",
         }
         assert set(parsed.keys()) == expected
 
@@ -555,6 +559,31 @@ class TestSkillResult:
         sr = self._make(token_usage=None)
         parsed = json.loads(sr.to_json())
         assert parsed["token_usage"] is None
+
+    def test_api_retry_outcome_in_to_json(self):
+        from autoskillit.core.types import ApiRetryOutcome
+
+        sr = self._make(
+            api_retry=ApiRetryOutcome(
+                count=5,
+                last_error="overloaded",
+                last_status=529,
+                exhausted=True,
+            )
+        )
+        parsed = json.loads(sr.to_json())
+        assert parsed["api_retry_count"] == 5
+        assert parsed["api_retry_last_error"] == "overloaded"
+        assert parsed["api_retry_last_status"] == 529
+        assert parsed["api_retry_exhausted"] is True
+
+    def test_api_retry_default_in_to_json(self):
+        sr = self._make()
+        parsed = json.loads(sr.to_json())
+        assert parsed["api_retry_count"] == 0
+        assert parsed["api_retry_last_error"] == ""
+        assert parsed["api_retry_last_status"] is None
+        assert parsed["api_retry_exhausted"] is False
 
 
 # ---------------------------------------------------------------------------

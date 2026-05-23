@@ -224,7 +224,7 @@ async def _attempt_contract_nudge(
     Returns a patched SkillResult(success=True) on success, or None to indicate the
     nudge failed and the caller should fall through to the original path.
     """
-    if backend is None or not backend.capabilities.skill_injection_capable:
+    if backend is None or not backend.capabilities.session_resume_capable:
         return None
     if result_parser is None:
         return None

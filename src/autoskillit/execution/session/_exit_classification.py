@@ -52,6 +52,9 @@ def classify_infra_exit(
         return InfraExitCategory.CONTEXT_EXHAUSTED
     if session._has_api_error() or any(p.search(result.stderr) for p in _KNOWN_API_ERROR_PATTERNS):
         return InfraExitCategory.API_ERROR
+    # Separate guard: _has_api_error() scans message text for known patterns, but
+    # api_retry_last_error can be "unknown" or another value not in _KNOWN_API_ERROR_PATTERNS.
+    # In that case _has_api_error() returns False while api_retry_exhausted is still True.
     if session.api_retry_exhausted:
         return InfraExitCategory.API_ERROR
     if result.returncode is not None and result.returncode < 0:

@@ -51,7 +51,13 @@ __all__ = [
     "CodexResultParser",
     "CodexSessionLocator",
     "CodexStreamParser",
+    "ensure_codex_mcp_registered",
 ]
+
+
+def ensure_codex_mcp_registered() -> bool:
+    raise NotImplementedError("ensure_codex_mcp_registered: awaiting P5-A7-WP1 implementation")
+
 
 CODEX_ENV_DENYLIST: frozenset[str] = frozenset(
     {

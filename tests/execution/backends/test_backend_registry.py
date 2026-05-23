@@ -51,6 +51,7 @@ class TestBackendRegistry:
             "CodexResultParser",
             "CodexSessionLocator",
             "CodexStreamParser",
+            "ensure_codex_mcp_registered",
             "get_backend",
         }
         assert set(all_exports) == expected

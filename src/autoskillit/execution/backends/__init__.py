@@ -16,6 +16,7 @@ from .codex import (
     CodexResultParser,
     CodexSessionLocator,
     CodexStreamParser,
+    ensure_codex_mcp_registered,
 )
 
 BACKEND_REGISTRY: dict[str, type[CodingAgentBackend]] = {
@@ -47,5 +48,6 @@ __all__ = [
     "CodexResultParser",
     "CodexSessionLocator",
     "CodexStreamParser",
+    "ensure_codex_mcp_registered",
     "get_backend",
 ]

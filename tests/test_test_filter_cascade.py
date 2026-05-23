@@ -117,8 +117,6 @@ class TestCascadeNewEntries:
 
 _SERVER_FILE_LEVEL_ENTRIES = [
     "test_factory.py",
-    "test_tools_dispatch.py",
-    "test_tools_dispatch_params.py",
     "test_tools_load_recipe.py",
     "test_server_tool_registration.py",
     "test_mcp_overrides.py",

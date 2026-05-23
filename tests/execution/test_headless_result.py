@@ -616,7 +616,10 @@ class TestCodexPipelineHappyPath:
         content = fixture_path(HAPPY_PATH_SINGLE_TURN).read_text()
         session = _parse_stdout(content, backend=CodexBackend())
         assert session.session_id == "thread_hp_abc123"
+        assert session.is_error is False
         assert session.token_usage is not None
+        assert "input_tokens" in session.token_usage
+        assert "output_tokens" in session.token_usage
         assert session.token_usage["input_tokens"] == 150
         assert session.token_usage["output_tokens"] == 75
         assert session.token_usage["cache_read_tokens"] == 30
@@ -646,14 +649,6 @@ class TestCodexPipelineHappyPath:
         outcome, _ = _compute_outcome(session, 0, TerminationReason.NATURAL_EXIT)
         expected_subtype = session.normalize_subtype(outcome, "")
         assert sr.subtype == expected_subtype
-
-    def test_parse_stdout_directly_with_codex_backend(self):
-        content = fixture_path(HAPPY_PATH_SINGLE_TURN).read_text()
-        session = _parse_stdout(content, backend=CodexBackend())
-        assert session.session_id == "thread_hp_abc123"
-        assert session.is_error is False
-        assert "input_tokens" in (session.token_usage or {})
-        assert "output_tokens" in (session.token_usage or {})
 
 
 class TestCodexPipelineTurnFailed:

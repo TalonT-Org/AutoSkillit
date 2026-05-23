@@ -391,7 +391,7 @@ def test_headless_auto_gate_env_var_importable_from_core() -> None:
     assert HEADLESS_AUTO_GATE_ENV_VAR == "AUTOSKILLIT_HEADLESS_AUTO_GATE"
 
 
-def test_headless_auto_gate_in_private_env_vars() -> None:
+def test_headless_auto_gate_env_var_in_private_env_vars() -> None:
     from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS
 
     assert "AUTOSKILLIT_HEADLESS_AUTO_GATE" in AUTOSKILLIT_PRIVATE_ENV_VARS

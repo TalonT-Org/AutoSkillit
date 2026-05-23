@@ -655,8 +655,12 @@
     "tests/migration/test_loader.py",
     "tests/migration/test_store.py",
     "tests/planner/test_compiler.py",
-    "tests/planner/test_manifests.py",
-    "tests/planner/test_validation.py",
+    "tests/planner/test_manifests_builders.py",
+    "tests/planner/test_manifests_finalize.py",
+    "tests/planner/test_manifests_expansion.py",
+    "tests/planner/test_validation_core.py",
+    "tests/planner/test_validation_checks.py",
+    "tests/planner/test_validation_discovery.py",
     "tests/recipe/test_anti_pattern_guards.py",
     "tests/recipe/test_api.py",
     "tests/recipe/test_bundled_recipe_hidden_policy.py",
@@ -1744,11 +1748,15 @@
     "tests/planner/test_compiler.py"
   ],
   "src/autoskillit/planner/manifests.py": [
-    "tests/planner/test_manifests.py"
+    "tests/planner/test_manifests_builders.py",
+    "tests/planner/test_manifests_finalize.py",
+    "tests/planner/test_manifests_expansion.py"
   ],
   "src/autoskillit/planner/validation.py": [
     "tests/planner/test_compiler.py",
-    "tests/planner/test_validation.py"
+    "tests/planner/test_validation_core.py",
+    "tests/planner/test_validation_checks.py",
+    "tests/planner/test_validation_discovery.py"
   ],
   "src/autoskillit/recipe/_analysis.py": [
     "tests/cli/test_cli_prompts.py",

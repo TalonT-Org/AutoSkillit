@@ -67,3 +67,94 @@ def write_task_file(tmp_path: Path, content: str = "test task") -> str:
     f = tmp_path / "task_input.md"
     f.write_text(content)
     return str(f)
+
+
+def make_refined_wps(tmp_path: Path, wps: list[dict[str, Any]]) -> Path:
+    doc = {"task": "Test task", "source_dir": "/src", "work_packages": wps, "schema_version": 1}
+    p = tmp_path / "refined_wps.json"
+    write_json(p, doc)
+    return p
+
+
+def make_manifest(consolidation_dir: Path, phase_id: str, groups: list[dict[str, Any]]) -> None:
+    consolidation_dir.mkdir(parents=True, exist_ok=True)
+    write_json(
+        consolidation_dir / f"{phase_id}_consolidation.json",
+        {"phase_id": phase_id, "groups": groups},
+    )
+
+
+def make_minimal_output_dir(
+    tmp_path: Path,
+    *,
+    num_phases: int = 1,
+    wps_per_assignment: int = 1,
+    deliverables_override: list[str] | None = None,
+    depends_on_override: dict[str, list[str]] | None = None,
+    extra_phases: list[int] | None = None,
+    extra_assignments: list[tuple[int, int]] | None = None,
+) -> Path:
+    phases_dir = tmp_path / "phases"
+    assigns_dir = tmp_path / "assignments"
+    wps_dir = tmp_path / "work_packages"
+
+    for p in range(1, num_phases + 1):
+        write_json(
+            phases_dir / f"P{p}_result.json",
+            make_phase_result(p, name=f"Phase {p}"),
+        )
+
+    for p in range(1, num_phases + 1):
+        for a in range(1, 2):
+            write_json(
+                assigns_dir / f"P{p}-A{a}_result.json",
+                make_assignment_result(
+                    p,
+                    a,
+                    name=f"Assignment P{p}-A{a}",
+                    proposed_work_packages=[
+                        f"P{p}-A{a}-WP{w}" for w in range(1, wps_per_assignment + 1)
+                    ],
+                ),
+            )
+
+    for p in range(1, num_phases + 1):
+        for a in range(1, 2):
+            for w in range(1, wps_per_assignment + 1):
+                wp_id = f"P{p}-A{a}-WP{w}"
+                deliverables = (
+                    deliverables_override
+                    if deliverables_override is not None
+                    else [f"src/mod_{wp_id}.py"]
+                )
+                deps = (depends_on_override or {}).get(wp_id, [])
+                write_json(
+                    wps_dir / f"{wp_id}_result.json",
+                    make_wp_result(wp_id, deliverables=deliverables, depends_on=deps),
+                )
+
+    manifest_items = []
+    for p in range(1, num_phases + 1):
+        for a in range(1, 2):
+            for w in range(1, wps_per_assignment + 1):
+                manifest_items.append({"id": f"P{p}-A{a}-WP{w}", "status": "done"})
+    write_json(
+        wps_dir / "wp_manifest.json",
+        {"pass_name": "work_packages", "items": manifest_items},
+    )
+
+    if extra_phases:
+        for p in extra_phases:
+            write_json(
+                phases_dir / f"P{p}_result.json",
+                make_phase_result(p, name=f"Phase {p}"),
+            )
+
+    if extra_assignments:
+        for p, a in extra_assignments:
+            write_json(
+                assigns_dir / f"P{p}-A{a}_result.json",
+                make_assignment_result(p, a, name=f"Orphan assignment P{p}-A{a}"),
+            )
+
+    return tmp_path

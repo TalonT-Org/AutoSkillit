@@ -381,18 +381,6 @@ def test_write_hook_config_does_not_touch_overlay(tmp_path, monkeypatch):
     assert json.loads(overlay_path.read_text())["quota_guard"]["disabled"] is True
 
 
-def test_merged_hook_config_overlay_wins():
-    """merge_hook_configs gives overlay precedence over base."""
-    from autoskillit.hooks._hook_settings import merge_hook_configs
-
-    base = {"quota_guard": {"disabled": False, "cache_max_age": 60}, "kitchen_id": "k1"}
-    overlay = {"quota_guard": {"disabled": True}}
-    merged = merge_hook_configs(base, overlay)
-    assert merged["quota_guard"]["disabled"] is True
-    assert merged["quota_guard"]["cache_max_age"] == 60
-    assert merged["kitchen_id"] == "k1"
-
-
 @pytest.mark.anyio
 async def test_close_kitchen_cleans_overlay(tmp_path, monkeypatch):
     """close_kitchen removes the overlay file, resetting runtime mutations."""

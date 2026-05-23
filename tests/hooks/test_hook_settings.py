@@ -200,3 +200,15 @@ def test_defaults_match_defaults_yaml():
     assert DEFAULT_CACHE_PATH == quota_guard["cache_path"]
     assert DEFAULT_CACHE_MAX_AGE == quota_guard["cache_max_age"]
     assert DEFAULT_BUFFER_SECONDS == quota_guard["buffer_seconds"]
+
+
+def test_merged_hook_config_overlay_wins():
+    """merge_hook_configs gives overlay precedence over base."""
+    from autoskillit.hooks._hook_settings import merge_hook_configs
+
+    base = {"quota_guard": {"disabled": False, "cache_max_age": 60}, "kitchen_id": "k1"}
+    overlay = {"quota_guard": {"disabled": True}}
+    merged = merge_hook_configs(base, overlay)
+    assert merged["quota_guard"]["disabled"] is True
+    assert merged["quota_guard"]["cache_max_age"] == 60
+    assert merged["kitchen_id"] == "k1"

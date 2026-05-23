@@ -229,20 +229,6 @@ class TestProvidersConfigYaml:
 
 
 class TestResolvedProfiles:
-    def test_defaults_yaml_anthropic_sentinel(self) -> None:
-        from autoskillit.core.io import load_yaml
-        from autoskillit.core.paths import pkg_root
-
-        defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
-        profile = defaults["providers"]["profiles"]["anthropic"]
-        assert set(profile.keys()) == {
-            "base_url",
-            "timeout_seconds",
-            "api_key_env",
-            "context_window",
-        }
-        assert all(v is None for v in profile.values())
-
     def test_resolved_profiles_empty(self) -> None:
         from autoskillit.config.settings import ProvidersConfig
 

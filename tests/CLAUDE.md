@@ -172,6 +172,7 @@ tests/
 ├── _test_filter.py                      # Test filter manifest: glob-to-test-directory mapping
 ├── conftest.py                          # Shared fixtures: minimal_ctx, tool_ctx, _make_result, _make_timeout_result
 ├── fakes.py                             # Protocol-based test fakes: InMemory*, MockSubprocessRunner
+├── test_backend_gating_root.py
 ├── test_conftest.py                     # Tests for conftest fixtures
 ├── test_fakes_conformance.py
 ├── test_llm_triage.py
@@ -181,6 +182,7 @@ tests/
 ├── test_test_filter_cascade.py
 ├── test_test_filter_content_aware.py
 ├── test_test_filter_core_cascade.py
+├── test_test_filter_coverage_map.py
 ├── test_test_filter_execution_cascade.py
 ├── test_test_filter_plugin.py
 ├── test_test_filter_scope_extras.py
@@ -198,6 +200,7 @@ tests/
 ├── fleet/                               # Fleet campaign + dispatch tests (see fleet/CLAUDE.md)
 ├── hooks/                               # Hook script tests (see hooks/CLAUDE.md)
 ├── infra/                               # CI/CD and security configuration tests (see infra/CLAUDE.md)
+├── integration/                         # Cross-layer integration tests
 ├── migration/                           # Migration engine and store tests (see migration/CLAUDE.md)
 ├── pipeline/                            # Audit log, gate, fidelity, and PR-gate tests (see pipeline/CLAUDE.md)
 ├── planner/                             # Planner manifest, validation, and compilation tests (see planner/CLAUDE.md)

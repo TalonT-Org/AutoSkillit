@@ -1,4 +1,4 @@
-"""Contract tests verifying adversarial review pass (Steps 6-9) exists in make-plan SKILL.md."""
+"""Contract tests verifying adversarial review agents exist in make-plan and rectify."""
 
 import pytest
 
@@ -8,6 +8,12 @@ from autoskillit.core.paths import pkg_root
 @pytest.fixture(scope="module")
 def make_plan_text() -> str:
     p = pkg_root() / "skills_extended" / "make-plan" / "SKILL.md"
+    return p.read_text()
+
+
+@pytest.fixture(scope="module")
+def rectify_text() -> str:
+    p = pkg_root() / "skills_extended" / "rectify" / "SKILL.md"
     return p.read_text()
 
 
@@ -172,3 +178,123 @@ def test_make_plan_interface_mapping_and_registry_trace_responsibilities(
         "Step 8 (Registry Trace) must mention registry/symbol tracing"
     )
     assert "junior reviewer" in step8_section, "Step 8 must include contrastive prompt frame"
+
+
+# ---------------------------------------------------------------------------
+# Rectify adversarial review contract tests (T1–T8)
+# ---------------------------------------------------------------------------
+
+
+def test_rectify_foundation_audit_exists(rectify_text: str) -> None:
+    """Rectify SKILL.md must include Foundation Audit step with contrastive prompt."""
+    workflow_idx = rectify_text.find("## Rectify Workflow")
+    assert workflow_idx != -1
+    fa_idx = rectify_text.find("Foundation Audit", workflow_idx)
+    assert fa_idx != -1, "Rectify must include Foundation Audit step"
+    im_idx = rectify_text.find("Interface Mapping", fa_idx)
+    assert im_idx != -1
+    section = rectify_text[fa_idx:im_idx].lower()
+    assert "foundation auditor" in section or "plan-foundation-auditor" in section
+    assert "scope expansion" in section
+    assert "junior engineer" in section
+
+
+def test_rectify_interface_mapping_exists(rectify_text: str) -> None:
+    """Rectify SKILL.md must include Interface Mapping step with contrastive prompt."""
+    workflow_idx = rectify_text.find("## Rectify Workflow")
+    assert workflow_idx != -1
+    im_idx = rectify_text.find("Interface Mapping", workflow_idx)
+    assert im_idx != -1, "Rectify must include Interface Mapping step"
+    rt_idx = rectify_text.find("Registry Trace", im_idx)
+    assert rt_idx != -1
+    section = rectify_text[im_idx:rt_idx].lower()
+    assert "variable" in section or "set/read" in section
+    assert "junior engineer" in section
+
+
+def test_rectify_registry_trace_exists(rectify_text: str) -> None:
+    """Rectify SKILL.md must include Registry Trace step with sync pattern names."""
+    workflow_idx = rectify_text.find("## Rectify Workflow")
+    assert workflow_idx != -1
+    rt_idx = rectify_text.find("Registry Trace", workflow_idx)
+    assert rt_idx != -1, "Rectify must include Registry Trace step"
+    next_heading = rectify_text.find("\n## ", rt_idx)
+    end = next_heading if next_heading != -1 else len(rectify_text)
+    section = rectify_text[rt_idx:end].upper()
+    sync_patterns = [
+        "RETIRED",
+        "RE-EXPORT",
+        "RULE REGISTRATION",
+        "IMPORT LAYER",
+        "TYPED ALIASES",
+        "DERIVED ARTIFACTS",
+    ]
+    found = sum(1 for p in sync_patterns if p in section)
+    gated_tools = "GATED_TOOLS" in section or "TOOL REGISTRIES" in section
+    dual_copy = "DUAL-COPY" in section or "SKILL_FILE_ADVISORY_MAP" in section
+    found += int(gated_tools) + int(dual_copy)
+    assert found >= 7, (
+        f"Registry Trace must contain at least 7 of 8 sync pattern names, found {found}"
+    )
+
+
+def test_rectify_adversarial_steps_ordered(rectify_text: str) -> None:
+    """Foundation Audit, Interface Mapping, Registry Trace must appear in order."""
+    workflow_idx = rectify_text.find("## Rectify Workflow")
+    assert workflow_idx != -1
+    fa_idx = rectify_text.find("Foundation Audit", workflow_idx)
+    im_idx = rectify_text.find("Interface Mapping", workflow_idx)
+    rt_idx = rectify_text.find("Registry Trace", workflow_idx)
+    assert all(i != -1 for i in (fa_idx, im_idx, rt_idx)), (
+        "All three adversarial steps must exist in Rectify Workflow"
+    )
+    assert fa_idx < im_idx < rt_idx, (
+        "Adversarial steps must appear in order: "
+        "Foundation Audit < Interface Mapping < Registry Trace"
+    )
+
+
+def test_rectify_checklist_includes_adversarial_review(rectify_text: str) -> None:
+    """Rectify Skill Loading Checklist must include adversarial review item."""
+    checklist_idx = rectify_text.find("## Skill Loading Checklist")
+    assert checklist_idx != -1
+    next_heading = rectify_text.find("\n## ", checklist_idx + 1)
+    end = next_heading if next_heading != -1 else len(rectify_text)
+    section = rectify_text[checklist_idx:end].lower()
+    assert "adversarial" in section, (
+        "Skill Loading Checklist must include an adversarial review checklist item"
+    )
+
+
+def test_rectify_interface_mapping_rules(rectify_text: str) -> None:
+    """Interface Mapping step must contain RULES FOR APPLYING INTERFACE MAPPING FINDINGS."""
+    im_idx = rectify_text.find("Interface Mapping")
+    assert im_idx != -1
+    rt_idx = rectify_text.find("Registry Trace", im_idx)
+    assert rt_idx != -1
+    section = rectify_text[im_idx:rt_idx]
+    assert "RULES FOR APPLYING INTERFACE MAPPING FINDINGS" in section
+
+
+def test_rectify_registry_trace_rules(rectify_text: str) -> None:
+    """Registry Trace step must contain RULES FOR APPLYING REGISTRY TRACE FINDINGS."""
+    rt_idx = rectify_text.find("Registry Trace")
+    assert rt_idx != -1
+    next_heading = rectify_text.find("\n## ", rt_idx)
+    end = next_heading if next_heading != -1 else len(rectify_text)
+    section = rectify_text[rt_idx:end]
+    assert "RULES FOR APPLYING REGISTRY TRACE FINDINGS" in section
+
+
+def test_rectify_sequential_revision_pattern(rectify_text: str) -> None:
+    """Each adversarial step must instruct revision before the next step."""
+    workflow_idx = rectify_text.find("## Rectify Workflow")
+    assert workflow_idx != -1
+    fa_idx = rectify_text.find("Foundation Audit", workflow_idx)
+    im_idx = rectify_text.find("Interface Mapping", workflow_idx)
+    rt_idx = rectify_text.find("Registry Trace", workflow_idx)
+    assert all(i != -1 for i in (fa_idx, im_idx, rt_idx))
+    fa_section = rectify_text[fa_idx:im_idx].lower()
+    im_section = rectify_text[im_idx:rt_idx].lower()
+    assert "revis" in fa_section, "Foundation Audit step must include revision instruction"
+    assert "revis" in im_section, "Interface Mapping step must include revision instruction"

@@ -333,3 +333,48 @@ class TestStartupLabelRecoverySweep:
         await sweep_stale_dispatch_labels([state_path], github_client)
 
         swap_labels_mock.assert_not_called()
+
+    @pytest.mark.anyio
+    async def test_sweep_does_not_mark_cleaned_when_sidecar_file_missing_on_disk(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Dispatch with sidecar_path pointing to a deleted file must NOT get labels_cleaned=True."""
+        from autoskillit.fleet import DispatchRecord, read_state, write_initial_state
+        from autoskillit.fleet._label_cleanup import sweep_stale_dispatch_labels
+        from autoskillit.fleet.state import upsert_dispatch_record_by_name
+
+        monkeypatch.setattr(
+            "autoskillit.fleet._label_cleanup.is_dispatch_session_alive",
+            lambda record: False,
+        )
+
+        state_path = tmp_path / "campaign_missing_sidecar.json"
+        deleted_sidecar = str(tmp_path / "deleted_issues.jsonl")
+
+        write_initial_state(
+            state_path,
+            campaign_id="test",
+            campaign_name="test",
+            manifest_path="/m.yaml",
+            dispatches=[DispatchRecord(name="d1")],
+        )
+        upsert_dispatch_record_by_name(
+            state_path,
+            DispatchRecord(
+                name="d1",
+                status=DispatchStatus.FAILURE,
+                sidecar_path=deleted_sidecar,
+                labels_cleaned=False,
+            ),
+        )
+
+        swap_labels_mock = AsyncMock(return_value={"success": True})
+        github_client = AsyncMock()
+        github_client.swap_labels = swap_labels_mock
+
+        await sweep_stale_dispatch_labels([state_path], github_client)
+
+        swap_labels_mock.assert_not_called()
+        state = read_state(state_path)
+        assert state is not None
+        assert state.dispatches[0].labels_cleaned is False

@@ -470,6 +470,53 @@ class TestClaudeSessionResultContextExhausted:
         session = parse_session_result(flat_record + "\n" + result_record)
         assert session.jsonl_context_exhausted is False
 
+    def test_codex_context_length_exceeded_via_errors_list(self):
+        s = ClaudeSessionResult(
+            subtype="error",
+            is_error=True,
+            result="",
+            session_id="s1",
+            errors=["context_length_exceeded"],
+        )
+        assert s._is_context_exhausted() is True
+
+    def test_codex_context_length_exceeded_via_result_text(self):
+        s = ClaudeSessionResult(
+            subtype="success",
+            is_error=True,
+            result="context_length_exceeded",
+            session_id="s1",
+        )
+        assert s._is_context_exhausted() is True
+
+    def test_codex_context_length_exceeded_false_when_no_error(self):
+        s = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="context_length_exceeded",
+            session_id="s1",
+        )
+        assert s._is_context_exhausted() is False
+
+    def test_codex_context_length_exceeded_via_result_text_empty_output_subtype(self):
+        s = ClaudeSessionResult(
+            subtype="empty_output",
+            is_error=True,
+            result="Error: context_length_exceeded",
+            session_id="s1",
+        )
+        assert s._is_context_exhausted() is True
+
+    def test_codex_context_length_exceeded_via_assistant_messages(self):
+        s = ClaudeSessionResult(
+            subtype="empty_output",
+            is_error=True,
+            result="",
+            session_id="s1",
+            assistant_messages=["API Error: context_length_exceeded"],
+        )
+        assert s._is_context_exhausted() is True
+
 
 class TestClaudeSessionResultNeedsRetry:
     def test_needs_retry_true_for_max_turns(self):

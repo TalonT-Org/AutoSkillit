@@ -201,6 +201,36 @@ class TestApiErrorPtyModeEndToEnd:
         assert sr.needs_retry is True
         assert sr.retry_reason == RetryReason.RESUME
 
+    def test_context_length_exceeded_pty_mode_routes_to_context_exhausted(self) -> None:
+        """PTY mode: context_length_exceeded → CONTEXT_EXHAUSTED, needs_retry=True, RESUME."""
+        from autoskillit.core.types import RetryReason
+
+        ndjson = _make_synthetic_api_error_ndjson(
+            error_type="context_length_exceeded",
+            message="context_length_exceeded",
+        )
+        result_line = json.dumps(
+            {
+                "type": "result",
+                "subtype": "empty_output",
+                "is_error": True,
+                "result": "",
+                "session_id": "",
+            }
+        )
+        result = SubprocessResult(
+            returncode=0,
+            stdout=ndjson + "\n" + result_line,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
+        sr = _build_skill_result(result)
+        assert sr.infra.exit_category == "context_exhausted"
+        assert sr.needs_retry is True
+        assert sr.retry_reason == RetryReason.RESUME
+
 
 # ---------------------------------------------------------------------------
 # Invariant 3: Structural guard — both detection methods on session model
@@ -213,3 +243,48 @@ def test_detection_methods_are_session_model_methods() -> None:
     assert hasattr(ClaudeSessionResult, "_has_api_error")
     assert callable(getattr(ClaudeSessionResult, "_is_context_exhausted"))
     assert callable(getattr(ClaudeSessionResult, "_has_api_error"))
+
+
+# ---------------------------------------------------------------------------
+# Invariant 4: Codex context_length_exceeded routes to CONTEXT_EXHAUSTED
+# ---------------------------------------------------------------------------
+
+
+class TestContextExhaustedCodexInvariant:
+    """context_length_exceeded must route to CONTEXT_EXHAUSTED, not API_ERROR."""
+
+    def test_context_exhausted_in_assistant_messages(self) -> None:
+        session = _make_api_error_session("context_length_exceeded")
+        result = _make_result(returncode=0, stderr="", stdout="")
+        assert classify_infra_exit(session, result) == InfraExitCategory.CONTEXT_EXHAUSTED
+
+    def test_context_exhausted_in_result_field(self) -> None:
+        session = ClaudeSessionResult(
+            subtype="empty_output",
+            is_error=True,
+            result="Error: context_length_exceeded",
+            session_id="s1",
+        )
+        result = _make_result(returncode=0, stderr="")
+        assert classify_infra_exit(session, result) == InfraExitCategory.CONTEXT_EXHAUSTED
+
+    def test_context_exhausted_in_errors_field(self) -> None:
+        session = ClaudeSessionResult(
+            subtype="empty_output",
+            is_error=True,
+            result="",
+            session_id="s1",
+            errors=["APIError: context_length_exceeded"],
+        )
+        result = _make_result(returncode=0, stderr="")
+        assert classify_infra_exit(session, result) == InfraExitCategory.CONTEXT_EXHAUSTED
+
+    def test_context_exhausted_in_stderr(self) -> None:
+        session = ClaudeSessionResult(
+            subtype="empty_output",
+            is_error=True,
+            result="",
+            session_id="s1",
+        )
+        result = _make_result(returncode=1, stderr="Error: context_length_exceeded", stdout="")
+        assert classify_infra_exit(session, result) == InfraExitCategory.CONTEXT_EXHAUSTED

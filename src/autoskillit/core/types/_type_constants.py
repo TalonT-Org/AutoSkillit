@@ -15,6 +15,7 @@ from ._type_enums import FeatureLifecycle, FleetErrorCode, IssueLabelState
 __all__ = [
     "AUTOSKILLIT_INSTALLED_VERSION",
     "AUTOSKILLIT_PRIVATE_ENV_VARS",
+    "CODEX_CONTEXT_EXHAUSTION_MARKER",
     "CONTEXT_EXHAUSTION_MARKER",
     "RESERVED_LOG_RECORD_KEYS",
     "ROUTING_AUTHORITY_CLAUSE",
@@ -149,6 +150,7 @@ FLEET_SESSION_REQUIRED_ENV: frozenset[str] = frozenset(
 # Used by ClaudeSessionResult._is_context_exhausted() for detection.
 # Centralized here so tests can reference the canonical value.
 CONTEXT_EXHAUSTION_MARKER = "prompt is too long"
+CODEX_CONTEXT_EXHAUSTION_MARKER = "context_length_exceeded"
 
 # Attribute names set unconditionally by logging.LogRecord.__init__ and makeRecord().
 # Passing any of these as keys in the extra={} dict to ctx.info/ctx.error causes

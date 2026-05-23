@@ -11,6 +11,7 @@ from typing import Any, assert_never
 import regex as re
 
 from autoskillit.core import (
+    CODEX_CONTEXT_EXHAUSTION_MARKER,
     CONTEXT_EXHAUSTION_MARKER,
     ClaudeContentBlockType,
     CliSubtype,
@@ -108,12 +109,17 @@ class ClaudeSessionResult:
         if not self.is_error:
             return False
         marker = CONTEXT_EXHAUSTION_MARKER
-        if any(marker in e.lower() for e in self.errors):
+        codex = CODEX_CONTEXT_EXHAUSTION_MARKER
+        if any(marker in e.lower() or codex in e.lower() for e in self.errors):
+            return True
+        if codex in self.result.lower():
             return True
         if (
             self.subtype in (CliSubtype.SUCCESS, CliSubtype.ERROR_MAX_TURNS)
             and marker in self.result.lower()
         ):
+            return True
+        if any(codex in m.lower() for m in self.assistant_messages):
             return True
         return False
 

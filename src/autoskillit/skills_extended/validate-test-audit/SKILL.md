@@ -306,7 +306,8 @@ Structure:
 ### Step 5b — Write Validation Summary
 
 Write the full audit trail to a separate file. This file is NOT part of the issue body —
-it is posted as a comment after issue creation.
+it is a pipeline audit artifact stored in the run directory for traceability. The
+file-audit-issues skill must not append this content to issue bodies.
 
 Path: `{{AUTOSKILLIT_TEMP}}/validate-audit-{YYYY-MM-DD_HHMMSS}/validation_summary_tests.md`
 
@@ -401,6 +402,7 @@ Instructions:
 > - **Grouped ticket**: finding is small, low-risk, non-conflicting. Group same-category small findings together.
 > - **Conflict awareness**: findings touching the same file(s) must be in the same ticket or explicitly sequenced
 > - No rigid severity-to-grouping rule: a HIGH can be grouped if small; a LOW can be standalone if complex
+> - **Minimum group floor**: when the number of VALID findings exceeds 4, you must produce at least 2 ticket groups. When findings exceed 8, produce at least 3 groups. Never collapse all findings into a single group when grouping by scope, file overlap, or category would produce a natural partition.
 >
 > Return a grouping manifest listing each proposed ticket with:
 > - Ticket title (descriptive, scoped)

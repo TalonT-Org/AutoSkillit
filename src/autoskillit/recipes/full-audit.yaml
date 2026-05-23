@@ -169,7 +169,7 @@ steps:
       skill_command: "/autoskillit:file-audit-issues ${{ context.audit_run_dir }}"
       cwd: "${{ inputs.workspace }}"
       step_name: "create_issues"
-    note: "Runs /autoskillit:file-audit-issues — discovers ticket_body_*.md in audit_run_dir, deduplicates, batch-creates GitHub issues via GraphQL, applies labels, appends validation summaries."
+    note: "Runs /autoskillit:file-audit-issues — discovers ticket_body_*.md in audit_run_dir, deduplicates, batch-creates GitHub issues via GraphQL, applies labels."
     capture:
       issue_urls: "${{ result.issue_urls }}"
       issue_count: "${{ result.issue_count }}"

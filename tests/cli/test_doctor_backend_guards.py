@@ -241,3 +241,96 @@ class TestRunDoctorBackendWiring:
             run_doctor()
 
         assert captured_backends == ["aider"]
+
+
+class TestCheckCodexVersion:
+    """Tests for _check_codex_version doctor check (Check 30)."""
+
+    def _codex_result(self, stdout: str, returncode: int = 0, stderr: str = ""):
+        return type(
+            "CompletedProcess",
+            (),
+            {"returncode": returncode, "stdout": stdout, "stderr": stderr},
+        )()
+
+    def test_skip_for_non_codex_backend(self) -> None:
+        from autoskillit.cli.doctor._doctor_runtime import _check_codex_version
+        from autoskillit.core import Severity
+
+        result = _check_codex_version(backend="claude-code")
+        assert result.severity == Severity.OK
+        assert "skipped" in result.message.lower()
+
+    def test_file_not_found_returns_ok_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import subprocess
+
+        from autoskillit.cli.doctor._doctor_runtime import _check_codex_version
+        from autoskillit.core import Severity
+
+        def _raise(*a, **kw):
+            raise FileNotFoundError("codex")
+
+        monkeypatch.setattr(subprocess, "run", _raise)
+        result = _check_codex_version()
+        assert result.severity == Severity.OK
+        assert "unavailable" in result.message.lower()
+
+    def test_timeout_returns_ok_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import subprocess
+
+        from autoskillit.cli.doctor._doctor_runtime import _check_codex_version
+        from autoskillit.core import Severity
+
+        def _raise(*a, **kw):
+            raise subprocess.TimeoutExpired(cmd="codex", timeout=5)
+
+        monkeypatch.setattr(subprocess, "run", _raise)
+        result = _check_codex_version()
+        assert result.severity == Severity.OK
+        assert "unavailable" in result.message.lower()
+
+    def test_version_below_minimum_returns_warning(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import subprocess
+
+        from autoskillit.cli.doctor._doctor_runtime import _check_codex_version
+        from autoskillit.core import Severity
+
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            lambda *a, **kw: self._codex_result("Codex 0.129.0\n"),
+        )
+        result = _check_codex_version()
+        assert result.severity == Severity.WARNING
+        assert "0.129.0" in result.message
+        assert "below minimum" in result.message
+
+    def test_version_at_minimum_returns_ok(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import subprocess
+
+        from autoskillit.cli.doctor._doctor_runtime import _check_codex_version
+        from autoskillit.core import Severity
+
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            lambda *a, **kw: self._codex_result("Codex 0.130.0\n"),
+        )
+        result = _check_codex_version()
+        assert result.severity == Severity.OK
+        assert "0.130.0" in result.message
+
+    def test_version_above_minimum_returns_ok(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import subprocess
+
+        from autoskillit.cli.doctor._doctor_runtime import _check_codex_version
+        from autoskillit.core import Severity
+
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            lambda *a, **kw: self._codex_result("Codex 0.131.0\n"),
+        )
+        result = _check_codex_version()
+        assert result.severity == Severity.OK
+        assert "0.131.0" in result.message

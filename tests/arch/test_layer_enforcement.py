@@ -1369,6 +1369,7 @@ def test_tools_with_path_params_validate_existence():
                 missing_guards.append(f"{py_file.name}:{node.name}")
 
     assert not missing_guards, (
-        "MCP tools with worktree_path/cwd params missing os.path.isdir guard:\n"
+        "MCP tools with worktree_path/cwd params missing path-existence guard"
+        " (os.path.isdir or accepted delegation pattern):\n"
         + "\n".join(f"  - {g}" for g in missing_guards)
     )

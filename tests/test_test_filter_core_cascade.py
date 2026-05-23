@@ -68,6 +68,7 @@ class TestModuleCascadeCore:
 
     def test_all_entries_present(self) -> None:
         expected_stems = {
+            "_json",
             "feature_flags",
             "branch_guard",
             "_plugin_ids",
@@ -81,6 +82,7 @@ class TestModuleCascadeCore:
             "_type_resume",
             "_type_helpers",
             "_type_protocols_workspace",
+            "_type_protocols_backend",
             "_install_detect",
             "_linux_proc",
             "_type_plugin_source",
@@ -162,6 +164,16 @@ class TestModuleCascadeCore:
 
     def test_type_token_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["_type_token"] == frozenset({"core", "execution"})
+
+    def test_type_protocols_backend_cascade(self) -> None:
+        assert MODULE_CASCADE_CORE["_type_protocols_backend"] == frozenset(
+            {"core", "execution", "pipeline"}
+        )
+
+    def test_json_cascade(self) -> None:
+        assert MODULE_CASCADE_CORE["_json"] == frozenset(
+            {"core", "execution", "pipeline", "recipe"}
+        )
 
 
 class TestBuildTestScopeCoreCascade:
@@ -503,6 +515,36 @@ class TestBuildTestScopeCoreCascade:
         for pkg in ["core", "execution"]:
             assert pkg in dir_names, f"narrow cascade should include {pkg}"
         for excluded in ["config", "pipeline", "fleet", "migration", "workspace"]:
+            assert excluded not in dir_names, f"narrow cascade should not include {excluded}"
+
+    def test_type_protocols_backend_narrow_cascade(self, tmp_path: Path) -> None:
+        """_type_protocols_backend -> cascade of {"core", "execution", "pipeline"} only."""
+        tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
+        result = build_test_scope(
+            changed_files={"src/autoskillit/core/types/_type_protocols_backend.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        dir_names = {p.name for p in result}
+        for pkg in ["core", "execution", "pipeline"]:
+            assert pkg in dir_names, f"narrow cascade should include {pkg}"
+        for excluded in ["config", "fleet", "migration", "workspace", "recipe", "cli", "planner"]:
+            assert excluded not in dir_names, f"narrow cascade should not include {excluded}"
+
+    def test_json_narrow_cascade(self, tmp_path: Path) -> None:
+        """_json -> cascade of {"core", "execution", "pipeline", "recipe"} only."""
+        tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
+        result = build_test_scope(
+            changed_files={"src/autoskillit/core/_json.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        dir_names = {p.name for p in result}
+        for pkg in ["core", "execution", "pipeline", "recipe"]:
+            assert pkg in dir_names, f"narrow cascade should include {pkg}"
+        for excluded in ["config", "fleet", "migration", "workspace", "cli", "planner"]:
             assert excluded not in dir_names, f"narrow cascade should not include {excluded}"
 
 

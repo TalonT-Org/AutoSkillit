@@ -23,6 +23,7 @@ class AnomalyKind(StrEnum):
     IDENTITY_DRIFT = "identity_drift"
     EMPTY_RESULT_WITH_TOKENS = "empty_result_with_tokens"
     THINKING_ONLY_FINAL_TURN = "thinking_only_final_turn"
+    API_RETRY_EXHAUSTION = "api_retry_exhaustion"
 
 
 class AnomalySeverity(StrEnum):

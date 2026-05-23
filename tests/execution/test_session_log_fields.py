@@ -867,3 +867,68 @@ def test_token_usage_json_model_identifier_empty_when_no_breakdown(tmp_path):
     tu_path = tmp_path / "sessions" / "model-id-002" / "token_usage.json"
     data = json.loads(tu_path.read_text())
     assert data.get("model_identifier", "") == ""
+
+
+class TestApiRetryFields:
+    """T8: api_retry fields written to summary.json, sessions.jsonl, and anomalies.jsonl."""
+
+    def test_api_retry_fields_in_summary(self, tmp_path):
+        """summary.json includes api_retry_count, api_retry_last_error, api_retry_last_status, api_retry_exhausted."""
+        _flush(
+            tmp_path,
+            session_id="retry-summary",
+            api_retry_count=5,
+            api_retry_last_error="overloaded",
+            api_retry_last_status=529,
+            api_retry_exhausted=True,
+            proc_snapshots=None,
+        )
+        summary = json.loads(
+            (tmp_path / "sessions" / "retry-summary" / "summary.json").read_text()
+        )
+        assert summary["api_retry_count"] == 5
+        assert summary["api_retry_last_error"] == "overloaded"
+        assert summary["api_retry_last_status"] == 529
+        assert summary["api_retry_exhausted"] is True
+
+    def test_api_retry_fields_in_index(self, tmp_path):
+        """sessions.jsonl includes api_retry_count and api_retry_exhausted."""
+        _flush(
+            tmp_path,
+            session_id="retry-index",
+            api_retry_count=3,
+            api_retry_last_error="unknown",
+            api_retry_last_status=None,
+            api_retry_exhausted=True,
+            proc_snapshots=None,
+        )
+        entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip().split("\n")[-1])
+        assert entry["api_retry_count"] == 3
+        assert entry["api_retry_exhausted"] is True
+
+    def test_api_retry_fields_default_zero_in_summary(self, tmp_path):
+        """flush_session_log without api_retry params produces zero/false defaults."""
+        _flush(tmp_path, session_id="retry-defaults", proc_snapshots=None)
+        summary = json.loads(
+            (tmp_path / "sessions" / "retry-defaults" / "summary.json").read_text()
+        )
+        assert summary["api_retry_count"] == 0
+        assert summary["api_retry_exhausted"] is False
+
+    def test_api_retry_exhaustion_anomaly_fires_without_token_usage(self, tmp_path):
+        """API_RETRY_EXHAUSTION anomaly fires even when token_usage=None."""
+        _flush(
+            tmp_path,
+            session_id="retry-anomaly",
+            api_retry_count=10,
+            api_retry_last_error="overloaded",
+            api_retry_last_status=529,
+            api_retry_exhausted=True,
+            token_usage=None,
+            proc_snapshots=None,
+        )
+        anomaly_path = tmp_path / "sessions" / "retry-anomaly" / "anomalies.jsonl"
+        anomalies = [json.loads(line) for line in anomaly_path.read_text().strip().split("\n")]
+        api_retry_anomalies = [a for a in anomalies if a["kind"] == "api_retry_exhaustion"]
+        assert len(api_retry_anomalies) == 1
+        assert api_retry_anomalies[0]["detail"]["api_retry_count"] == 10

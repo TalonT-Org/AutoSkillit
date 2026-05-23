@@ -52,6 +52,8 @@ def classify_infra_exit(
         return InfraExitCategory.CONTEXT_EXHAUSTED
     if session._has_api_error() or any(p.search(result.stderr) for p in _KNOWN_API_ERROR_PATTERNS):
         return InfraExitCategory.API_ERROR
+    if session.api_retry_exhausted:
+        return InfraExitCategory.API_ERROR
     if result.returncode is not None and result.returncode < 0:
         return InfraExitCategory.PROCESS_KILLED
     return InfraExitCategory.COMPLETED

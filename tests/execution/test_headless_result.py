@@ -778,3 +778,155 @@ class TestCodexPipelineTerminationBranches:
         )
         sr = _build_skill_result(result, supports_claude_format_stdout=False)
         assert sr.success is False
+
+
+class TestStaleApiRetryExhaustion:
+    """T5: stale/idle_stall sessions with api_retry exhaustion get infra_exit_category=api_error."""
+
+    def test_stale_with_api_retry_exhaustion_sets_infra_exit_category(self):
+        """Stale + exhausted api_retry → infra_exit_category='api_error', exhausted=True."""
+        ndjson = "\n".join(
+            [
+                json.dumps(
+                    {
+                        "type": "system",
+                        "subtype": "api_retry",
+                        "error": "overloaded",
+                        "error_status": 529,
+                        "attempt": 10,
+                        "max_retries": 10,
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "result",
+                        "subtype": "empty_output",
+                        "is_error": True,
+                        "result": "",
+                        "session_id": "s1",
+                    }
+                ),
+            ]
+        )
+        result = _sr(0, ndjson, "", TerminationReason.STALE)
+        sr = _build_skill_result(result)
+        assert sr.success is False
+        assert sr.infra.exit_category == "api_error"
+        assert sr.api_retry.exhausted is True
+        assert sr.api_retry.count > 0
+
+    def test_stale_without_api_retry_has_empty_infra(self):
+        """Stale with no api_retry → infra_exit_category='', count=0."""
+        ndjson = json.dumps(
+            {
+                "type": "result",
+                "subtype": "empty_output",
+                "is_error": True,
+                "result": "",
+                "session_id": "s1",
+            }
+        )
+        result = _sr(0, ndjson, "", TerminationReason.STALE)
+        sr = _build_skill_result(result)
+        assert sr.success is False
+        assert sr.infra.exit_category == ""
+        assert sr.api_retry.count == 0
+
+    def test_stale_recovery_with_api_retry_does_not_set_infra_error(self):
+        """Stale + exhausted api_retry BUT valid result → recovered, infra='' (not api_error)."""
+        ndjson = "\n".join(
+            [
+                json.dumps(
+                    {
+                        "type": "system",
+                        "subtype": "api_retry",
+                        "error": "overloaded",
+                        "error_status": 529,
+                        "attempt": 10,
+                        "max_retries": 10,
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "result",
+                        "subtype": "success",
+                        "is_error": False,
+                        "result": "Done.",
+                        "session_id": "s1",
+                    }
+                ),
+            ]
+        )
+        result = _sr(0, ndjson, "", TerminationReason.STALE)
+        sr = _build_skill_result(result)
+        assert sr.success is True
+        assert sr.subtype == "recovered_from_stale"
+        assert sr.infra.exit_category == ""
+        assert sr.api_retry.exhausted is True
+
+    def test_idle_stall_with_api_retry_exhaustion_sets_infra(self):
+        """Idle_stall + exhausted api_retry → infra_exit_category='api_error'."""
+        ndjson = "\n".join(
+            [
+                json.dumps(
+                    {
+                        "type": "system",
+                        "subtype": "api_retry",
+                        "error": "overloaded",
+                        "error_status": 529,
+                        "attempt": 10,
+                        "max_retries": 10,
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "result",
+                        "subtype": "empty_output",
+                        "is_error": True,
+                        "result": "",
+                        "session_id": "s1",
+                    }
+                ),
+            ]
+        )
+        result = _sr(0, ndjson, "", TerminationReason.IDLE_STALL)
+        sr = _build_skill_result(result)
+        assert sr.success is False
+        assert sr.infra.exit_category == "api_error"
+        assert sr.api_retry.exhausted is True
+
+
+class TestNormalApiRetry:
+    """T10: normal-path SkillResult carries api_retry data."""
+
+    def test_normal_completion_with_api_retry_carries_data(self):
+        """Normal exit with non-exhausted api_retry → api_retry data preserved."""
+        ndjson = "\n".join(
+            [
+                json.dumps(
+                    {
+                        "type": "system",
+                        "subtype": "api_retry",
+                        "error": "unknown",
+                        "error_status": None,
+                        "attempt": 3,
+                        "max_retries": 10,
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "result",
+                        "subtype": "success",
+                        "is_error": False,
+                        "result": "Done.",
+                        "session_id": "s1",
+                    }
+                ),
+            ]
+        )
+        result = _sr(0, ndjson, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(result)
+        assert sr.success is True
+        assert sr.api_retry.count > 0
+        assert sr.api_retry.exhausted is False
+        assert sr.api_retry.last_error == "unknown"

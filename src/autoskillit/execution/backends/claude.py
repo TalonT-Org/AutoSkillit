@@ -295,7 +295,20 @@ class ClaudeStreamParser:
         record_type = obj.get("type", "")
 
         if record_type == "system":
+            subtype = obj.get("subtype", "")
             session_id = obj.get("session_id", "")
+            if subtype == "api_retry":
+                return SessionEvent(
+                    kind=BackendEventKind.API_RETRY,
+                    is_terminal=False,
+                    has_marker=False,
+                    backend_data=ClaudeEventData(
+                        record_type="system",
+                        subtype="api_retry",
+                        session_id=session_id,
+                        raw=obj,
+                    ),
+                )
             return SessionEvent(
                 kind=BackendEventKind.SESSION_META,
                 is_terminal=False,

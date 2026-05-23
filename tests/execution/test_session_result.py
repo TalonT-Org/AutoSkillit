@@ -726,3 +726,106 @@ def test_parse_session_result_missing_stop_reason_skipped():
     parsed = parse_session_result(ndjson)
     assert parsed.stop_reasons == []
     assert parsed.last_stop_reason == ""
+
+
+# ---------------------------------------------------------------------------
+# api_retry accumulation tests
+# ---------------------------------------------------------------------------
+
+
+class TestApiRetryAccumulation:
+    def test_api_retry_fields_accumulated_from_ndjson(self):
+        ndjson = "\n".join(
+            [
+                json.dumps(
+                    {
+                        "type": "system",
+                        "subtype": "api_retry",
+                        "error": "overloaded",
+                        "error_status": 529,
+                        "attempt": 1,
+                        "max_retries": 10,
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "system",
+                        "subtype": "api_retry",
+                        "error": "unknown",
+                        "error_status": None,
+                        "attempt": 2,
+                        "max_retries": 10,
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "system",
+                        "subtype": "api_retry",
+                        "error": "unknown",
+                        "error_status": None,
+                        "attempt": 3,
+                        "max_retries": 10,
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "result",
+                        "subtype": "success",
+                        "is_error": False,
+                        "result": "Done.",
+                        "session_id": "s1",
+                    }
+                ),
+            ]
+        )
+        session = parse_session_result(ndjson)
+        assert session.api_retry_count == 3
+        assert session.api_retry_last_error == "unknown"
+        assert session.api_retry_last_status is None
+        assert session.api_retry_exhausted is False
+
+    def test_api_retry_exhausted_when_attempt_equals_max(self):
+        ndjson = "\n".join(
+            [
+                json.dumps(
+                    {
+                        "type": "system",
+                        "subtype": "api_retry",
+                        "error": "overloaded",
+                        "error_status": 529,
+                        "attempt": 10,
+                        "max_retries": 10,
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "result",
+                        "subtype": "success",
+                        "is_error": False,
+                        "result": "Done.",
+                        "session_id": "s1",
+                    }
+                ),
+            ]
+        )
+        session = parse_session_result(ndjson)
+        assert session.api_retry_count == 1
+        assert session.api_retry_exhausted is True
+        assert session.api_retry_last_error == "overloaded"
+        assert session.api_retry_last_status == 529
+
+    def test_no_api_retry_fields_when_no_retry_events(self):
+        ndjson = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Done.",
+                "session_id": "s1",
+            }
+        )
+        session = parse_session_result(ndjson)
+        assert session.api_retry_count == 0
+        assert session.api_retry_exhausted is False
+        assert session.api_retry_last_error == ""
+        assert session.api_retry_last_status is None

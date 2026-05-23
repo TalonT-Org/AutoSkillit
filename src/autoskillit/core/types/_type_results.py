@@ -29,6 +29,7 @@ __all__ = [
     "FailureRecord",
     "ProviderOutcome",
     "InfraOutcome",
+    "ApiRetryOutcome",
     "SkillResult",
     "CleanupResult",
     "CloneSuccessResult",
@@ -198,6 +199,16 @@ class InfraOutcome:
 
 
 @dataclass(frozen=True, slots=True)
+class ApiRetryOutcome:
+    """API retry event accumulation bundle."""
+
+    count: int = 0
+    last_error: str = ""
+    last_status: int | None = None
+    exhausted: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class WriteEvidence:
     """Bundled write evidence signals — either explicitly constructed or absent."""
 
@@ -246,6 +257,8 @@ class SkillResult:
     """Provider execution outcome bundle."""
     infra: InfraOutcome = field(default_factory=InfraOutcome)
     """Infrastructure exit classification bundle."""
+    api_retry: ApiRetryOutcome = field(default_factory=ApiRetryOutcome)
+    """API retry event accumulation bundle."""
 
     def to_json(self) -> str:
         data: dict[str, Any] = {
@@ -271,6 +284,10 @@ class SkillResult:
             "provider_fallback": self.provider.fallback_activated,
             "provider_used": self.provider.provider_used,
             "infra_exit_category": self.infra.exit_category,
+            "api_retry_count": self.api_retry.count,
+            "api_retry_last_error": self.api_retry.last_error,
+            "api_retry_last_status": self.api_retry.last_status,
+            "api_retry_exhausted": self.api_retry.exhausted,
         }
         if self.worktree_path is not None:
             data["worktree_path"] = self.worktree_path
@@ -461,4 +478,6 @@ class SessionIndexEntry(TypedDict):
     provider_used: str
     provider_fallback: bool
     caller_session_id: str
+    api_retry_count: int
+    api_retry_exhausted: bool
     schema_version: int

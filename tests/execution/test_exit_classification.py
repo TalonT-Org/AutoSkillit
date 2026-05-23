@@ -117,6 +117,31 @@ class TestClassifyInfraExit:
         result = _sr(returncode=0, stderr="")
         assert classify_infra_exit(session, result) == InfraExitCategory.COMPLETED
 
+    def test_api_retry_exhausted_returns_api_error(self):
+        """api_retry_exhausted=True → API_ERROR."""
+        session = ClaudeSessionResult(
+            subtype="empty_output",
+            is_error=True,
+            result="",
+            session_id="",
+            api_retry_exhausted=True,
+        )
+        result = _sr(returncode=0, stderr="")
+        assert classify_infra_exit(session, result) == InfraExitCategory.API_ERROR
+
+    def test_api_retry_not_exhausted_does_not_promote(self):
+        """api_retry_exhausted=False with retries present → no promotion."""
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="Done.",
+            session_id="s1",
+            api_retry_count=3,
+            api_retry_exhausted=False,
+        )
+        result = _sr(returncode=0, stderr="")
+        assert classify_infra_exit(session, result) == InfraExitCategory.COMPLETED
+
     def test_completed_logical_failure(self):
         """Agent failure (success=false, explicit error) → COMPLETED (not infra)."""
         session = ClaudeSessionResult(

@@ -1107,7 +1107,7 @@ def test_efficiency_table_zero_loc_step_shows_dash(tmp_path: Path) -> None:
     assert "## Token Efficiency" in body_content
     eff_section = body_content[body_content.index("## Token Efficiency") :]
     plan_row = next(
-        (line for line in eff_section.split("\n") if line.startswith("| plan ")),
+        (line for line in eff_section.split("\n") if line.startswith("| plan |")),
         None,
     )
     assert plan_row is not None, "No '| plan |' row found in efficiency section"

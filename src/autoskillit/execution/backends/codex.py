@@ -504,7 +504,12 @@ class CodexBackend:
         extras["AUTOSKILLIT_SKILL_NAME"] = extract_skill_name(skill_command) or ""
         if provider_extras:
             for k, v in provider_extras.items():
-                if k not in ("AUTOSKILLIT_SESSION_TYPE", "AUTOSKILLIT_HEADLESS"):
+                if k not in (
+                    "AUTOSKILLIT_SESSION_TYPE",
+                    "AUTOSKILLIT_HEADLESS",
+                    "MAX_MCP_OUTPUT_TOKENS",
+                    "AUTOSKILLIT_SKILL_NAME",
+                ):
                     extras[k] = v
         if profile_name:
             extras["AUTOSKILLIT_PROVIDER_PROFILE"] = profile_name

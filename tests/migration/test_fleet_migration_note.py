@@ -38,7 +38,10 @@ def test_fleet_rename_migration_note_is_valid():
         for change in data.get("changes", []):
             if change.get("detect", {}).get("key") == "features.franchise":
                 assert "instruction" in change, "Migration note missing 'instruction'"
+                assert change["instruction"].strip(), "Migration note 'instruction' is empty"
                 assert "example_before" in change, "Migration note missing 'example_before'"
+                assert change["example_before"].strip(), "Migration note 'example_before' is empty"
                 assert "example_after" in change, "Migration note missing 'example_after'"
+                assert change["example_after"].strip(), "Migration note 'example_after' is empty"
                 return
-    pytest.fail("No matching migration change found")
+    pytest.fail("No matching migration change found with detect.key == 'features.franchise'")

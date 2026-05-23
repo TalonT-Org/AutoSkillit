@@ -9,6 +9,7 @@ import pytest
 import yaml
 
 from autoskillit.migration.loader import (
+    MigrationNote,
     _parse_migration,
     applicable_migrations,
     list_migrations,
@@ -387,10 +388,22 @@ class TestListMigrationsCaching:
             {"from_version": "0.1.0", "to_version": "0.2.0", "changes": []},
         )
         monkeypatch.setattr("autoskillit.migration.loader._migrations_dir", lambda: mig_dir)
+        monkeypatch.setattr("autoskillit.migration.loader._migrations_cache", {})
+
+        parse_count = 0
+        real_parse = _parse_migration
+
+        def counting_parse(path: Path) -> MigrationNote:
+            nonlocal parse_count
+            parse_count += 1
+            return real_parse(path)
+
+        monkeypatch.setattr("autoskillit.migration.loader._parse_migration", counting_parse)
+
         r1 = list_migrations()
         r2 = list_migrations()
         assert r1 == r2
-        assert r1 is not r2
+        assert parse_count == 1
 
     def test_mtime_change_invalidates_cache(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

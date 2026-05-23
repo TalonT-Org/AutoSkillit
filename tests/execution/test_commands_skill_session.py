@@ -142,14 +142,14 @@ class TestBuildSkillSessionCmd:
         """Slash commands must be prefixed with 'Use the ... skill'."""
         spec = build_skill_session_cmd("/investigate foo", **self.BASE)
         cmd = spec.cmd
-        prompt_idx = cmd.index("-p") + 1 if "-p" in cmd else cmd.index("--print") + 1
+        prompt_idx = cmd.index(ClaudeFlags.PRINT) + 1
         assert cmd[prompt_idx].startswith("Use the /investigate skill")
 
     def test_completion_marker_appended(self):
         """Completion directive must appear in the prompt."""
         spec = build_skill_session_cmd("/investigate foo", **self.BASE)
         cmd = spec.cmd
-        prompt_idx = cmd.index("-p") + 1 if "-p" in cmd else cmd.index("--print") + 1
+        prompt_idx = cmd.index(ClaudeFlags.PRINT) + 1
         assert "DONE" in cmd[prompt_idx]
 
     def test_completion_marker_is_last_instruction_in_prompt(self):
@@ -183,7 +183,7 @@ class TestBuildSkillSessionCmd:
         """Working-directory anchor must appear in the prompt."""
         spec = build_skill_session_cmd("/investigate foo", **self.BASE)
         cmd = spec.cmd
-        prompt_idx = cmd.index("-p") + 1 if "-p" in cmd else cmd.index("--print") + 1
+        prompt_idx = cmd.index(ClaudeFlags.PRINT) + 1
         assert "/repo" in cmd[prompt_idx]
 
     def test_model_injected_when_provided(self):
@@ -201,7 +201,7 @@ class TestBuildSkillSessionCmd:
         """EFFICIENCY DIRECTIVE must appear in the assembled prompt."""
         spec = build_skill_session_cmd("/investigate foo", **self.BASE)
         cmd = spec.cmd
-        prompt_idx = cmd.index("-p") + 1 if "-p" in cmd else cmd.index("--print") + 1
+        prompt_idx = cmd.index(ClaudeFlags.PRINT) + 1
         assert "EFFICIENCY DIRECTIVE" in cmd[prompt_idx]
 
     def test_env_has_max_mcp_output_tokens(self):
@@ -297,8 +297,6 @@ class TestBuildSkillSessionCmd:
     def test_host_anthropic_base_url_stripped_when_in_exclusive_vars(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # Depends on P2-A1 (#1751) having added ANTHROPIC_BASE_URL to
-        # _HEADLESS_EXCLUSIVE_VARS.
         monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://host.example.com")
         spec = build_skill_session_cmd("/investigate foo", **self.BASE)
         assert "ANTHROPIC_BASE_URL" not in spec.env

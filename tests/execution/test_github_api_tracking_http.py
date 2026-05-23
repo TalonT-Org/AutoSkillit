@@ -107,7 +107,8 @@ async def test_no_tracker_still_works(mock_http_server, _reset_mock):
     )
     fetcher = DefaultGitHubFetcher(token="test-token", tracker=None, base_url=mock_http_server.url)
     result = await fetcher.fetch_issue("owner", "repo", 1)
-    assert result is not None
+    assert result["success"] is True
+    assert result["issue_number"] == 1
 
 
 async def test_make_tracked_httpx_client_without_tracker_is_normal_client():

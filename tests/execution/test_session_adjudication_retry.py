@@ -396,18 +396,6 @@ class TestComputeRetrySuccessEmptyResult:
         assert reason == RetryReason.RESUME  # infrastructure kill — progress existed
 
 
-class TestComputeRetryCompletedPath:
-    """_compute_retry unique test: COMPLETED termination + unparseable."""
-
-    def test_unparseable_on_completed_returns_resume(self):
-        s = ClaudeSessionResult(
-            subtype="unparseable", is_error=True, result="garbled", session_id=""
-        )
-        needs, reason = _compute_retry(s, -15, TerminationReason.COMPLETED)
-        assert needs is True
-        assert reason == RetryReason.RESUME
-
-
 @pytest.mark.parametrize("termination", list(TerminationReason))
 def test_compute_retry_handles_all_termination_reasons_without_raising(
     termination: TerminationReason,

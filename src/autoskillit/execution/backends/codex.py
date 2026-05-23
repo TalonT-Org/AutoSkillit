@@ -27,6 +27,7 @@ from autoskillit.core import (
     PluginSource,
     SessionCheckpoint,
     SessionEvent,
+    SkillSessionConfig,
     ValidatedAddDir,
     extract_skill_name,
     fast_loads,
@@ -441,12 +442,13 @@ class CodexBackend:
     def build_skill_session_cmd(
         self,
         skill_command: str,
+        cwd: str = "",
+        config: SkillSessionConfig | None = None,
         *,
-        cwd: str,
-        completion_marker: str,
-        model: str | None,
-        plugin_source: PluginSource | None,
-        output_format: OutputFormat,
+        completion_marker: str = "",
+        model: str | None = None,
+        plugin_source: PluginSource | None = None,
+        output_format: OutputFormat = OutputFormat.JSON,
         add_dirs: Sequence[ValidatedAddDir] = (),
         exit_after_stop_delay_ms: int = 0,
         stream_idle_timeout_ms: int = 0,
@@ -459,6 +461,22 @@ class CodexBackend:
         resume_checkpoint: SessionCheckpoint | None = None,
         resume_message: str | None = None,
     ) -> CmdSpec:
+        if config is not None:
+            completion_marker = config.completion_marker
+            model = config.model
+            plugin_source = config.plugin_source  # noqa: F841  # no-op: Codex has no --plugin-dir equivalent
+            output_format = config.output_format  # noqa: F841  # no-op: --json is unconditional for Codex
+            add_dirs = config.add_dirs
+            exit_after_stop_delay_ms = config.exit_after_stop_delay_ms  # noqa: F841  # no-op: Claude-only
+            stream_idle_timeout_ms = config.stream_idle_timeout_ms  # noqa: F841  # no-op: Claude-only
+            scenario_step_name = config.scenario_step_name
+            temp_dir_relpath = config.temp_dir_relpath
+            allowed_write_prefix = config.allowed_write_prefix
+            provider_extras = config.provider_extras
+            profile_name = config.profile_name
+            resume_session_id = config.resume_session_id
+            resume_checkpoint = config.resume_checkpoint
+            resume_message = config.resume_message
         _has_prefix = bool(profile_name) and skill_command.strip().startswith("/")
 
         if resume_session_id:

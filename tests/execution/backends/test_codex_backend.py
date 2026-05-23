@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from pathlib import Path
 
 import pytest
 
@@ -10,10 +11,13 @@ from autoskillit.core import (
     BackendCapabilities,
     CmdSpec,
     CodingAgentBackend,
+    DirectInstall,
     EnvPolicy,
     OutputFormat,
     ResultParser,
+    SessionCheckpoint,
     SessionLocator,
+    SkillSessionConfig,
     StreamParser,
     ValidatedAddDir,
 )
@@ -495,3 +499,97 @@ class TestCodexBuildSkillSessionCmd:
     def test_json_flag_always_present(self) -> None:
         spec = CodexBackend().build_skill_session_cmd(**self.BASE)
         assert "--json" in spec.cmd
+
+
+class TestCodexBuildSkillSessionCmdConfigAdapter:
+    def test_config_adapter_matches_flat_params(self) -> None:
+        config = SkillSessionConfig(
+            completion_marker="%%DONE%%",
+            model=None,
+            plugin_source=None,
+            output_format=OutputFormat.JSON,
+        )
+        via_config = CodexBackend().build_skill_session_cmd(
+            "/test-skill", cwd="/work", config=config
+        )
+        via_flat = CodexBackend().build_skill_session_cmd(
+            skill_command="/test-skill",
+            cwd="/work",
+            completion_marker="%%DONE%%",
+            model=None,
+            plugin_source=None,
+            output_format=OutputFormat.JSON,
+        )
+        assert via_config.cmd == via_flat.cmd
+        assert via_config.env == via_flat.env
+        assert via_config.cwd == via_flat.cwd
+
+    def test_config_adapter_forwards_all_fields(self) -> None:
+        chk = SessionCheckpoint(step_name="chk")
+        config = SkillSessionConfig(
+            completion_marker="%%MARKER%%",
+            model="o3",
+            plugin_source=None,
+            output_format=OutputFormat.STREAM_JSON,
+            exit_after_stop_delay_ms=120000,
+            stream_idle_timeout_ms=30000,
+            scenario_step_name="step1",
+            temp_dir_relpath=".autoskillit/temp",
+            allowed_write_prefix="/tmp/test",
+            provider_extras={"KEY": "val"},
+            profile_name="my-profile",
+            resume_session_id="s1",
+            resume_checkpoint=chk,
+            resume_message="resume-msg",
+        )
+        via_config = CodexBackend().build_skill_session_cmd("/test", cwd="/tmp", config=config)
+        via_flat = CodexBackend().build_skill_session_cmd(
+            skill_command="/test",
+            cwd="/tmp",
+            completion_marker="%%MARKER%%",
+            model="o3",
+            plugin_source=None,
+            output_format=OutputFormat.STREAM_JSON,
+            exit_after_stop_delay_ms=120000,
+            stream_idle_timeout_ms=30000,
+            scenario_step_name="step1",
+            temp_dir_relpath=".autoskillit/temp",
+            allowed_write_prefix="/tmp/test",
+            provider_extras={"KEY": "val"},
+            profile_name="my-profile",
+            resume_session_id="s1",
+            resume_checkpoint=chk,
+            resume_message="resume-msg",
+        )
+        assert via_config.cmd == via_flat.cmd
+        assert via_config.env == via_flat.env
+
+    def test_config_path_returns_cmdspec(self) -> None:
+        config = SkillSessionConfig(completion_marker="%%DONE%%", output_format=OutputFormat.JSON)
+        result = CodexBackend().build_skill_session_cmd("/test", cwd="/tmp", config=config)
+        assert isinstance(result, CmdSpec)
+        assert isinstance(result.cmd, tuple)
+
+    def test_config_noop_fields(self) -> None:
+        config = SkillSessionConfig(
+            completion_marker="%%DONE%%",
+            output_format=OutputFormat.STREAM_JSON,
+            plugin_source=DirectInstall(plugin_dir=Path("/p")),
+        )
+        spec = CodexBackend().build_skill_session_cmd("/test", cwd="/work", config=config)
+        cmd_str = " ".join(spec.cmd)
+        assert "--output-format" not in cmd_str
+        assert "--plugin-dir" not in cmd_str
+        assert "--json" in spec.cmd
+
+    def test_legacy_flat_params_still_work(self) -> None:
+        spec = CodexBackend().build_skill_session_cmd(
+            skill_command="/test-skill",
+            cwd="/work",
+            completion_marker="%%DONE%%",
+            model=None,
+            plugin_source=None,
+            output_format=OutputFormat.JSON,
+        )
+        assert isinstance(spec, CmdSpec)
+        assert any("/test-skill" in s for s in spec.cmd)

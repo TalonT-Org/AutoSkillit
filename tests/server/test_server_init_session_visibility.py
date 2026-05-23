@@ -188,11 +188,10 @@ class TestSessionTypeVisibility:
         )
         kitchen_core_tools = {t.name for t in tools if "kitchen-core" in t.tags}
         assert kitchen_core_tools, "kitchen-core-tagged tools should be visible when AUTO_GATE=1"
-        for name in GATED_TOOLS:
-            if name in tool_names:
-                assert "kitchen-core" in tool_tags[name], (
-                    f"{name} visible without kitchen-core tag"
-                )
+        visible_gated = {name for name in GATED_TOOLS if name in tool_names}
+        assert visible_gated, "At least one GATED_TOOL should be visible via kitchen-core tag"
+        for name in visible_gated:
+            assert "kitchen-core" in tool_tags[name], f"{name} visible without kitchen-core tag"
 
     @pytest.mark.anyio
     async def test_skill_headless_without_auto_gate_only_headless(self, monkeypatch):

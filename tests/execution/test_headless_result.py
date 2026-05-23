@@ -781,7 +781,7 @@ class TestCodexPipelineTerminationBranches:
 
 
 class TestStaleApiRetryExhaustion:
-    """T5: stale/idle_stall sessions with api_retry exhaustion get infra_exit_category=api_error."""
+    """T5: stale/idle_stall + api_retry exhaustion → infra_exit_category=api_error."""
 
     def test_stale_with_api_retry_exhaustion_sets_infra_exit_category(self):
         """Stale + exhausted api_retry → infra_exit_category='api_error', exhausted=True."""
@@ -813,7 +813,7 @@ class TestStaleApiRetryExhaustion:
         assert sr.success is False
         assert sr.infra.exit_category == "api_error"
         assert sr.api_retry.exhausted is True
-        assert sr.api_retry.count > 0
+        assert sr.api_retry.count == 1
 
     def test_stale_without_api_retry_has_empty_infra(self):
         """Stale with no api_retry → infra_exit_category='', count=0."""
@@ -927,6 +927,6 @@ class TestNormalApiRetry:
         result = _sr(0, ndjson, "", TerminationReason.NATURAL_EXIT)
         sr = _build_skill_result(result)
         assert sr.success is True
-        assert sr.api_retry.count > 0
+        assert sr.api_retry.count == 1
         assert sr.api_retry.exhausted is False
         assert sr.api_retry.last_error == "unknown"

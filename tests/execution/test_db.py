@@ -36,41 +36,26 @@ class TestValidateSelectOnly:
     def test_accepts_leading_whitespace(self):
         _validate_select_only("  \n  SELECT 1")
 
-    def test_rejects_insert(self):
+    @pytest.mark.parametrize(
+        "sql",
+        [
+            "INSERT INTO users VALUES (1, 'a')",
+            "DROP TABLE foo",
+            "UPDATE users SET name = 'x'",
+            "DELETE FROM users",
+            "ALTER TABLE users ADD COLUMN x",
+            "ATTACH DATABASE 'other.db' AS other",
+            "CREATE TABLE evil (id INT)",
+            "PRAGMA table_info(users)",
+        ],
+    )
+    def test_rejects_forbidden_sql(self, sql):
         with pytest.raises(ValueError, match="forbidden"):
-            _validate_select_only("INSERT INTO users VALUES (1, 'a')")
+            _validate_select_only(sql)
 
     def test_whitespace_only_raises(self):
         with pytest.raises(ValueError, match="empty"):
             _validate_select_only("   ")
-
-    def test_drop_raises(self):
-        with pytest.raises(ValueError, match="forbidden"):
-            _validate_select_only("DROP TABLE foo")
-
-    def test_update_raises(self):
-        with pytest.raises(ValueError, match="forbidden"):
-            _validate_select_only("UPDATE users SET name = 'x'")
-
-    def test_rejects_delete(self):
-        with pytest.raises(ValueError, match="forbidden"):
-            _validate_select_only("DELETE FROM users")
-
-    def test_rejects_alter(self):
-        with pytest.raises(ValueError, match="forbidden"):
-            _validate_select_only("ALTER TABLE users ADD COLUMN x")
-
-    def test_rejects_attach(self):
-        with pytest.raises(ValueError, match="forbidden"):
-            _validate_select_only("ATTACH DATABASE 'other.db' AS other")
-
-    def test_rejects_create(self):
-        with pytest.raises(ValueError, match="forbidden"):
-            _validate_select_only("CREATE TABLE evil (id INT)")
-
-    def test_rejects_pragma(self):
-        with pytest.raises(ValueError, match="forbidden"):
-            _validate_select_only("PRAGMA table_info(users)")
 
     def test_rejects_non_select_start(self):
         with pytest.raises(ValueError, match="must begin with SELECT"):

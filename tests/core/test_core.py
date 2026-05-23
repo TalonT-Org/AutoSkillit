@@ -41,7 +41,7 @@ def test_core_init_uses_lazy_getattr():
     assert callable(core.__getattr__)
 
 
-def test_core_init_has_no_eager_submodule_imports():
+def test_core_init_has_no_eager_relative_imports():
     import ast
 
     from autoskillit.core.paths import pkg_root

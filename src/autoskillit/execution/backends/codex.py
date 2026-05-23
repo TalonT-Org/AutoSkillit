@@ -60,10 +60,6 @@ __all__ = [
 ]
 
 
-def ensure_codex_mcp_registered() -> bool:
-    raise NotImplementedError("ensure_codex_mcp_registered: awaiting P5-A7-WP1 implementation")
-
-
 CODEX_ENV_DENYLIST: frozenset[str] = frozenset(
     {
         "ANTHROPIC_API_KEY",

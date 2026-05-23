@@ -23,6 +23,7 @@ import anyio
 import structlog
 
 from autoskillit.core import (
+    AGENT_BACKEND_CLAUDE_CODE,
     CAMPAIGN_ID_ENV_VAR,
     DISPATCH_ID_ENV_VAR,
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
@@ -871,6 +872,11 @@ class DefaultHeadlessExecutor:
         session_id: str | None = None,
         resume_message: str | None = None,
     ) -> SkillResult:
+        if self._ctx.backend is not None and self._ctx.backend.name != AGENT_BACKEND_CLAUDE_CODE:
+            raise RuntimeError(
+                f"dispatch_food_truck requires the claude-code backend; "
+                f"got {self._ctx.backend.name!r}"
+            )
         cfg = self._ctx.config
         resolved_model = _resolve_model(model, cfg)
         fleet_cfg = cfg.fleet

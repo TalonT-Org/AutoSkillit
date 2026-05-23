@@ -365,6 +365,94 @@ class TestDispatchFoodTruckGuards:
 
         assert mock_snapshot.call_count == 0
 
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_raises_for_non_claude_code_backend(
+        self, minimal_ctx, tmp_path: Path
+    ) -> None:
+        from unittest.mock import Mock
+
+        from autoskillit.core.types._type_plugin_source import DirectInstall
+        from autoskillit.execution.headless import DefaultHeadlessExecutor
+
+        backend = Mock()
+        backend.name = "codex"
+        minimal_ctx.backend = backend
+        minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
+        executor = DefaultHeadlessExecutor(minimal_ctx)
+
+        with pytest.raises(
+            RuntimeError, match="dispatch_food_truck requires the claude-code backend"
+        ):
+            await executor.dispatch_food_truck(
+                "some prompt",
+                str(tmp_path),
+                completion_marker="DONE",
+            )
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_allows_none_backend(
+        self, minimal_ctx, tmp_path: Path
+    ) -> None:
+        from autoskillit.core.types import SubprocessResult, TerminationReason
+        from autoskillit.core.types._type_plugin_source import DirectInstall
+        from autoskillit.execution.headless import DefaultHeadlessExecutor
+        from tests.fakes import MockSubprocessRunner
+
+        runner = MockSubprocessRunner()
+        runner.set_default(
+            SubprocessResult(
+                returncode=0,
+                stdout=_make_success_stdout(),
+                stderr="",
+                termination=TerminationReason.NATURAL_EXIT,
+                pid=55555,
+            )
+        )
+        minimal_ctx.runner = runner
+        minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
+
+        executor = DefaultHeadlessExecutor(minimal_ctx)
+        result = await executor.dispatch_food_truck(
+            "some prompt",
+            str(tmp_path),
+            completion_marker="%%FT_DONE%%",
+        )
+        assert result is not None
+        assert len(runner.call_args_list) >= 1
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_allows_claude_code_backend(
+        self, minimal_ctx, tmp_path: Path
+    ) -> None:
+        from autoskillit.core.types import SubprocessResult, TerminationReason
+        from autoskillit.core.types._type_plugin_source import DirectInstall
+        from autoskillit.execution.headless import DefaultHeadlessExecutor
+        from tests.execution.conftest import _mock_backend
+        from tests.fakes import MockSubprocessRunner
+
+        runner = MockSubprocessRunner()
+        runner.set_default(
+            SubprocessResult(
+                returncode=0,
+                stdout=_make_success_stdout(),
+                stderr="",
+                termination=TerminationReason.NATURAL_EXIT,
+                pid=55555,
+            )
+        )
+        minimal_ctx.runner = runner
+        minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
+        minimal_ctx.backend = _mock_backend()
+
+        executor = DefaultHeadlessExecutor(minimal_ctx)
+        result = await executor.dispatch_food_truck(
+            "some prompt",
+            str(tmp_path),
+            completion_marker="%%FT_DONE%%",
+        )
+        assert result is not None
+        assert len(runner.call_args_list) >= 1
+
 
 def test_default_executor_satisfies_protocol_with_dispatch(minimal_ctx) -> None:
     """DefaultHeadlessExecutor satisfies HeadlessExecutor protocol with dispatch_food_truck."""

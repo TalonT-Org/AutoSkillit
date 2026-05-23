@@ -993,6 +993,7 @@ async def test_end_to_end_resumable_dispatch_uses_resume_flag(
     from unittest.mock import Mock
 
     spy_backend = Mock(wraps=real_backend)
+    spy_backend.name = real_backend.name
 
     def _spy_build(**kwargs: Any) -> Any:
         spec = original_build(**kwargs)

@@ -95,6 +95,18 @@ def test_private_env_vars_includes_franchise_tier_vars() -> None:
     assert "AUTOSKILLIT_L3_TOOL_TAGS" not in AUTOSKILLIT_PRIVATE_ENV_VARS
 
 
+def test_private_env_vars_includes_execution_control_vars() -> None:
+    """Execution-control vars must not leak into Codex subprocess environments."""
+    from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS
+
+    expected = {
+        "SCENARIO_STEP_NAME",
+        "AUTOSKILLIT_ALLOWED_WRITE_PREFIX",
+        "MAX_MCP_OUTPUT_TOKENS",
+    }
+    assert expected <= AUTOSKILLIT_PRIVATE_ENV_VARS
+
+
 def test_campaign_id_env_var_and_kitchen_session_id_env_var_exported_from_core() -> None:
     """CAMPAIGN_ID_ENV_VAR and KITCHEN_SESSION_ID_ENV_VAR are re-exported from autoskillit.core."""
     from autoskillit.core import CAMPAIGN_ID_ENV_VAR, KITCHEN_SESSION_ID_ENV_VAR

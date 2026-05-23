@@ -30,6 +30,7 @@ from .branch_guard import is_protected_branch as is_protected_branch
 from .claude_conventions import ClaudeDirectoryConventions as ClaudeDirectoryConventions
 from .claude_conventions import LayoutError as LayoutError
 from .claude_conventions import validate_add_dir as validate_add_dir
+from .claude_conventions import validate_worktree_path as validate_worktree_path
 from .feature_flags import _collect_disabled_feature_tags as _collect_disabled_feature_tags
 from .feature_flags import is_feature_enabled as is_feature_enabled
 from .github_url import _parse_issue_ref as _parse_issue_ref
@@ -267,6 +268,7 @@ from .types import TimingLog as TimingLog
 from .types import TokenFactory as TokenFactory
 from .types import TokenLog as TokenLog
 from .types import ValidatedAddDir as ValidatedAddDir
+from .types import ValidatedWorktreePath as ValidatedWorktreePath
 from .types import WorkspaceManager as WorkspaceManager
 from .types import WriteBehaviorSpec as WriteBehaviorSpec
 from .types import WriteEvidence as WriteEvidence

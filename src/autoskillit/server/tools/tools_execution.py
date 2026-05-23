@@ -277,6 +277,13 @@ async def run_skill(
                 ),
             }
         )
+    if cwd and not os.path.isdir(cwd):
+        return json.dumps(
+            {
+                "success": False,
+                "error": f"run_skill: cwd does not exist: {cwd}",
+            }
+        )
     try:
         structlog.contextvars.clear_contextvars()
         structlog.contextvars.bind_contextvars(tool="run_skill", cwd=cwd)

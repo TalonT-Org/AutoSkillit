@@ -13,7 +13,7 @@ from autoskillit.core.types import (
     ChannelConfirmation,
     RetryReason,
 )
-from autoskillit.server.tools.tools_execution import run_skill
+from autoskillit.server.tools.tools_execution import run_cmd, run_skill
 from tests.conftest import _make_result
 from tests.server.conftest import _SUCCESS_JSON, assert_no_timing, assert_step_timed
 
@@ -702,3 +702,19 @@ async def test_run_skill_returns_structured_error_when_executor_raises(
     assert data["subtype"] == "crashed"
     assert data["needs_retry"] is False
     assert "unexpected executor failure" in data["result"]
+
+
+class TestCwdExistenceValidation:
+    """run_skill and run_cmd reject non-existent cwd before reaching executor/subprocess."""
+
+    @pytest.mark.anyio
+    async def test_run_skill_rejects_nonexistent_cwd(self, tool_ctx_kitchen_open):
+        result = json.loads(await run_skill("/investigate foo", "/tmp/nonexistent_dir_xyz"))
+        assert result["success"] is False
+        assert "does not exist" in result["error"]
+
+    @pytest.mark.anyio
+    async def test_run_cmd_rejects_nonexistent_cwd(self, tool_ctx_kitchen_open):
+        result = json.loads(await run_cmd("echo hi", "/tmp/nonexistent_dir_xyz"))
+        assert result["success"] is False
+        assert "does not exist" in result.get("error", result.get("stderr", ""))

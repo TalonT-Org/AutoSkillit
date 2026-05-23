@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .types import ValidatedAddDir
+from .types import ValidatedAddDir, ValidatedWorktreePath
 
 
 class LayoutError(ValueError):
@@ -60,3 +60,11 @@ def validate_add_dir(path: Path) -> ValidatedAddDir:
     if not skill_files:
         raise LayoutError(f"{path}/.claude/skills/ contains no SKILL.md files")
     return ValidatedAddDir(path=str(path))
+
+
+def validate_worktree_path(path: Path | str) -> ValidatedWorktreePath | None:
+    """Validate a worktree path is absolute and exists. Returns None on failure."""
+    p = Path(path) if isinstance(path, str) else path
+    if not p.is_absolute() or not p.is_dir():
+        return None
+    return ValidatedWorktreePath(path=str(p))

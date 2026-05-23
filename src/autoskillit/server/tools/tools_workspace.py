@@ -68,6 +68,15 @@ async def test_check(
             return json.dumps({"passed": False, "error": "Test runner not configured"})
 
         resolved = os.path.realpath(worktree_path)
+        if not os.path.isdir(resolved):
+            logger.warning("test_check path does not exist", path=resolved)
+            return json.dumps(
+                {
+                    "passed": False,
+                    "error": f"Worktree path does not exist: {resolved}",
+                    "infrastructure_missing": True,
+                }
+            )
         infra_issue = tool_ctx.tester.check_infrastructure(Path(resolved))
         if infra_issue is not None:
             logger.warning("test_check infrastructure missing", detail=infra_issue)

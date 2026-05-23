@@ -1324,3 +1324,38 @@ def test_test_files_respect_layer_boundaries(
                 )
 
     assert not violations, f"{rel_path}: cross-layer import violations:\n" + "\n".join(violations)
+
+
+# ── Path param existence validation guard ────────────────────────────────────
+
+
+_PATH_PARAM_NAMES = {"worktree_path", "cwd"}
+
+_TOOLS_DIR = SRC_ROOT / "server" / "tools"
+
+
+def test_tools_with_path_params_validate_existence():
+    """Every tool accepting worktree_path or cwd must validate directory existence."""
+    missing_guards: list[str] = []
+
+    for py_file in sorted(_TOOLS_DIR.glob("tools_*.py")):
+        source = py_file.read_text()
+        tree = ast.parse(source, filename=str(py_file))
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.AsyncFunctionDef):
+                continue
+            if not any(_is_mcp_tool_decorator(d) for d in node.decorator_list):
+                continue
+            param_names = {a.arg for a in node.args.args}
+            if not param_names & _PATH_PARAM_NAMES:
+                continue
+
+            body_source = ast.get_source_segment(source, node) or ""
+            if "os.path.isdir" not in body_source:
+                missing_guards.append(f"{py_file.name}:{node.name}")
+
+    assert not missing_guards, (
+        "MCP tools with worktree_path/cwd params missing os.path.isdir guard:\n"
+        + "\n".join(f"  - {g}" for g in missing_guards)
+    )

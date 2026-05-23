@@ -23,6 +23,7 @@ __all__ = [
     "LoadResult",
     "TestResult",
     "ValidatedAddDir",
+    "ValidatedWorktreePath",
     "WriteBehaviorSpec",
     "WriteEvidence",
     "FailureRecord",
@@ -102,6 +103,28 @@ class ValidatedAddDir:
 
     def glob(self, pattern: str) -> list[Path]:
         return list(Path(self.path).glob(pattern))
+
+
+@dataclass(frozen=True, slots=True)
+class ValidatedWorktreePath:
+    """A worktree path validated as absolute and existing on disk.
+
+    Cannot be constructed directly — use ``validate_worktree_path()``.
+    """
+
+    path: str
+
+    def __str__(self) -> str:
+        return self.path
+
+    def __fspath__(self) -> str:
+        return self.path
+
+    def __truediv__(self, other: str | Path) -> Path:
+        return Path(self.path) / other
+
+    def is_dir(self) -> bool:
+        return Path(self.path).is_dir()
 
 
 @dataclass(frozen=True, slots=True)

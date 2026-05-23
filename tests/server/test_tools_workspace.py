@@ -351,6 +351,14 @@ class TestTestCheck:
         assert "filter_mode" not in data
         assert "tests_selected" not in data
 
+    @pytest.mark.anyio
+    async def test_test_check_rejects_nonexistent_directory(self, tool_ctx):
+        """test_check must return clear error for non-existent worktree path."""
+        result = json.loads(await test_check(worktree_path="/tmp/nonexistent_dir_xyz"))
+        assert result["passed"] is False
+        assert "does not exist" in result["error"]
+        assert result["infrastructure_missing"] is True
+
 
 class TestTestCheckInfrastructure:
     """T1-T5: Infrastructure pre-flight checks in test_check."""

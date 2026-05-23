@@ -16,6 +16,10 @@ from autoskillit.execution.headless import (
     _build_skill_result,
     _extract_missing_token_hints,
 )
+from autoskillit.execution.headless._headless_path_tokens import (
+    _extract_output_paths,
+    _extract_worktree_path,
+)
 from autoskillit.execution.session import ClaudeSessionResult
 from autoskillit.pipeline.audit import DefaultAuditLog, FailureRecord
 from tests.conftest import _make_result
@@ -1991,3 +1995,49 @@ class TestTerminationSubtypeConsistencyInvariant:
         # IDLE_STALL early-returns with hardcoded subtype='idle_stall'
         # No invariant guard applies to this path
         assert sr.subtype == "idle_stall"
+
+
+class TestWorktreePathPropagationWithEmptyMessages:
+    """Integration: parse pipeline -> extraction -> SkillResult -> tool consumption."""
+
+    def test_build_skill_result_rejects_hallucinated_worktree_path(self):
+        """_build_skill_result must reject worktree paths that don't exist on disk."""
+        assistant_line = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [
+                        {"type": "text", "text": "worktree_path = /nonexistent/hallucinated/path"}
+                    ],
+                },
+            }
+        )
+        result_line = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Done",
+                "session_id": "s1",
+                "errors": [],
+            }
+        )
+        stdout = assistant_line + "\n" + result_line
+        sub_result = SubprocessResult(
+            returncode=0,
+            stdout=stdout,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+        )
+        sr = _build_skill_result(sub_result)
+        assert sr.worktree_path is None
+
+    def test_extract_worktree_path_rejects_nonexistent_directory(self):
+        """_extract_worktree_path must reject paths that don't exist on disk."""
+        result = _extract_worktree_path(["worktree_path = /nonexistent/path/xyz"])
+        assert result is None
+
+    def test_extract_output_paths_with_empty_messages_returns_empty(self):
+        """_extract_output_paths([]) returns {} (documents the contract)."""
+        assert _extract_output_paths([]) == {}

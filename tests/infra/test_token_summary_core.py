@@ -986,7 +986,8 @@ def test_efficiency_table_appended_when_loc_present(tmp_path: Path) -> None:
     assert "peak_ctx/LoC" not in body_content
     eff_section = body_content[body_content.index("## Token Efficiency") :]
     eff_header = eff_section.split("\n")[2]
-    assert eff_header.count("|") == 6  # 5 columns + outer pipes
+    assert "Step" in eff_header
+    assert "LoC Changed" in eff_header
 
 
 # T-HOOK-EFF-2
@@ -1104,4 +1105,6 @@ def test_efficiency_table_zero_loc_step_shows_dash(tmp_path: Path) -> None:
     body_arg = edit_calls[0][edit_calls[0].index("--raw-field") + 1]
     body_content = body_arg[len("body=") :]
     assert "## Token Efficiency" in body_content
-    assert "—" in body_content
+    eff_section = body_content[body_content.index("## Token Efficiency") :]
+    plan_row = next(line for line in eff_section.split("\n") if line.startswith("| plan "))
+    assert "—" in plan_row

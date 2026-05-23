@@ -537,6 +537,7 @@ def test_fetch_with_cache_epoch_check_contract(
         assert result == {"tag_name": "v0.8.0"}
     else:
         assert network_hit[0], "Expected cache miss but network was not called"
+        assert result == {"tag_name": "v0.9.0"}
 
 
 # ---------------------------------------------------------------------------

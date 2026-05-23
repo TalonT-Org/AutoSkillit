@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import re
 from pathlib import Path
 
@@ -71,7 +72,16 @@ AUDIT_SKILL_NAMES = [
     "audit-review-decisions",
 ]
 
-BUNDLED_SKILL_NAMES = {s.name for s in DefaultSkillResolver().list_all()} | INTERNAL_SKILLS
+
+@functools.lru_cache(maxsize=1)
+def _get_bundled_skill_names() -> frozenset[str]:
+    """Return the set of all bundled skill names (public + internal).
+
+    Lazy and cached to defer and isolate initialization failures — a broken
+    DefaultSkillResolver will only affect tests that call this function, not
+    the entire module at import time.
+    """
+    return frozenset({s.name for s in DefaultSkillResolver().list_all()} | INTERNAL_SKILLS)
 
 
 def _all_skill_roots() -> list[Path]:
@@ -148,7 +158,7 @@ class TestSkillResolver:
                     # Skip placeholder filesystem paths like {{AUTOSKILLIT_TEMP}}/skill-name/
                     if start >= 1 and content[start - 1] == "}":
                         continue
-                    if name in BUNDLED_SKILL_NAMES:
+                    if name in _get_bundled_skill_names():
                         skill_file = f"{skill_md.parent.name}/SKILL.md"
                         assert False, f"{skill_file}: /{name} should be /autoskillit:{name}"
 
@@ -377,8 +387,9 @@ class TestSkillResolver:
             if entry.is_dir()
             and (entry / "SKILL.md").is_file()
             and entry.name not in RETIRED_SKILL_NAMES
+            and entry.name not in INTERNAL_SKILLS
         }
-        assert filesystem_names == BUNDLED_SKILL_NAMES
+        assert filesystem_names == _get_bundled_skill_names() - INTERNAL_SKILLS
 
 
 class TestSkillCategories:

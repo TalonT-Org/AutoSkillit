@@ -25,19 +25,6 @@ def test_make_plan_step6_adversarial_review_exists(make_plan_text: str) -> None:
     assert "junior reviewer" in step6_section, "Step 6 must include contrastive prompt frame"
 
 
-def test_make_plan_step6_contrastive_frame_exists(make_plan_text: str) -> None:
-    """The new design is sequential (one agent per step), not parallel."""
-    planning_idx = make_plan_text.find("## Planning Steps")
-    assert planning_idx != -1
-    step6_idx = make_plan_text.find("**Foundation Audit", planning_idx)
-    step7_idx = make_plan_text.find("**Interface Mapping", planning_idx)
-    assert step6_idx != -1 and step7_idx != -1
-    step6_section = make_plan_text[step6_idx:step7_idx].lower()
-    assert "junior reviewer" in step6_section, (
-        "Step 6 must include the contrastive prompt frame 'junior reviewer'"
-    )
-
-
 def test_make_plan_step6_no_scope_expansion(make_plan_text: str) -> None:
     planning_idx = make_plan_text.find("## Planning Steps")
     assert planning_idx != -1

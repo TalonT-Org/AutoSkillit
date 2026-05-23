@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from autoskillit.core import SkillResult
 from autoskillit.core.types import RetryReason
 from tests.fleet._helpers import _make_recipe_info as _fleet_make_recipe_info
@@ -14,7 +16,7 @@ def _simple_prompt_builder(**kwargs) -> str:
     return f"prompt-for-{kwargs.get('recipe', 'unknown')}"
 
 
-async def _no_sleep_quota_checker(config, **kwargs) -> dict:
+async def _no_sleep_quota_checker(config: Any, **kwargs) -> dict:
     """Quota checker stub: always returns no-sleep result."""
     return {
         "should_sleep": False,

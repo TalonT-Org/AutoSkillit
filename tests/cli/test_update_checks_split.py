@@ -66,3 +66,17 @@ def test_update_checks_lifecycle_contains_expected_functions():
         in func_names
     )
     assert "test_run_update_sequence_invalidates_fetch_cache" in func_names
+
+
+def test_update_checks_fetch_does_not_contain_lifecycle_tests():
+    p = _CLI_TESTS / "test_update_checks_fetch.py"
+    tree = ast.parse(p.read_text())
+    func_names = {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
+    for fn in (
+        "test_stale_fetch_cache_after_install_detected_by_epoch",
+        "test_run_update_sequence_invalidates_fetch_cache",
+        "test_full_lifecycle_install_clears_stale_cache_then_check_detects_new_version",
+    ):
+        assert fn not in func_names, (
+            f"{fn} must be in test_update_checks_lifecycle.py, not test_update_checks_fetch.py"
+        )

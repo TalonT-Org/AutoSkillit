@@ -140,20 +140,34 @@ If the Skill tool cannot be used (disable-model-invocation) or refuses this invo
 Include the diagram in the plan document under a "## Proposed Architecture" section.
 More than one lens diagram is okay if it is complex plan (don't do more than 3, and make sure to load each appropriate skill).
 
-6. **Adversarial Agent Review** - After drafting the plan (Steps 1-5), spawn 3 parallel adversarial agents. Each receives the full draft plan text and the codebase root. Each attempts to find concrete ways the plan, if implemented literally, would introduce a bug or regression. They must NOT suggest scope expansion — only identify gaps in what the plan already claims to do.
+6. **Foundation Audit** - Spawn 1 Foundation Auditor via `Agent(subagent_type="autoskillit:plan-foundation-auditor")`. Pass the full draft plan text and the codebase root. Prepend the contrastive frame to the prompt:
 
-   Spawn using `Agent(subagent_type=...)`:
-   - `autoskillit:plan-contract-verifier` — Contract Verifier: traces downstream consumers of every function, field, or format the plan introduces or modifies
-   - `autoskillit:plan-completeness-auditor` — Completeness Auditor: finds entities missed by plan search operations
-   - `autoskillit:plan-assumption-challenger` — Assumption Challenger: verifies implicit assumptions against actual code
+   > "A junior reviewer found this plan's control flow acceptable — what did they miss?"
 
-7. **Registry Wire Trace** - Spawn 1 Registry Wire Tracer via `Agent(subagent_type="autoskillit:plan-registry-wire-tracer")`. For every file the plan modifies, check if it participates in registry-sync patterns (RETIRED NAME SETS, RE-EXPORT CHAINS, TOOL REGISTRIES, RULE REGISTRATION, DUAL-COPY CONSTANTS, IMPORT LAYER CONSTRAINTS, TYPED ALIASES, DERIVED ARTIFACTS).
+   The Foundation Auditor performs step-by-step control-flow analysis: enumerates functions, draws control flow with scope levels, builds reachability tables, audits guard coverage, and applies exploit-first verification. It must NOT suggest scope expansion — only identify gaps in what the plan already claims to do.
 
-8. **Plan Revision** - Read all 4 adversarial reports. For each valid finding (where the agent identified a real gap, not a hypothetical):
+7. **Interface Mapping** - Spawn 1 Interface Mapper via `Agent(subagent_type="autoskillit:plan-interface-mapper")`. Pass the full draft plan text and the codebase root. Prepend the contrastive frame to the prompt:
+
+   > "A junior reviewer found this plan's variable usage correct — what did they miss?"
+
+   The Interface Mapper traces variable SET/READ points with full hop-by-hop provenance, builds a Similar-Variable Confusion Matrix, and audits caller/callee contracts. It must NOT suggest scope expansion — only identify gaps in what the plan already claims to do.
+
+   **RULES FOR APPLYING INTERFACE MAPPING FINDINGS:** When the interface mapper identifies the correct variable for a step, apply the correction to ALL fields that consume that variable — cwd, skill_command arguments, branch references, SHA captures, output paths. Do not split the correct variable across some fields while leaving other fields on the wrong variable.
+
+8. **Registry Trace** - Spawn 1 Registry Tracer via `Agent(subagent_type="autoskillit:plan-registry-tracer")`. Pass the full draft plan text and the codebase root. Prepend the contrastive frame to the prompt:
+
+   > "A junior reviewer found this plan's registry coverage complete — what did they miss?"
+
+   The Registry Tracer uses three-layer tracing (LSP primary, tree-sitter structural, grep fallback) to find every file referencing symbols the plan touches. It checks participation in registry-sync patterns (RETIRED NAME SETS, RE-EXPORT CHAINS, TOOL REGISTRIES, RULE REGISTRATION, DUAL-COPY CONSTANTS, IMPORT LAYER CONSTRAINTS, TYPED ALIASES, DERIVED ARTIFACTS), then performs a two-layer completeness check (source-code layer vs. test/fixture layer). It must NOT suggest scope expansion — only identify gaps in what the plan already claims to do.
+
+   **RULES FOR APPLYING REGISTRY TRACE FINDINGS:** Verify BOTH fixture/test completeness AND registry completeness before finalizing. A plan that addresses only one interpretation of a rename (manifest-focused OR workspace-focused) and misses the cross-cutting update is incomplete. Apply the two-family check: if references appear in only one layer (source-code or test/fixture), perform targeted follow-up searches in the other layer before concluding.
+
+9. **Plan Revision** - Read all 3 adversarial reports. For each valid finding (where the agent identified a real gap, not a hypothetical):
    - Add missing consumers to implementation steps
    - Add missing entity categories to search/update operations
    - Replace invalid assumptions with verified facts
    - Add missing registry updates and derived artifact regeneration steps
+   - When a variable correction applies, propagate to ALL consuming fields (cwd, arguments, branch refs, SHA captures, output paths)
 
 Then finalize the plan and emit `plan_path` as normal.
 
@@ -201,7 +215,7 @@ Before writing the final plan, verify:
 - [ ] Diagram uses ONLY the classDef styles from the mermaid skill (no invented colors)
 - [ ] Diagram includes a color legend table
 - [ ] Every new component, class, or function is wired into the call chain — nothing is created but left unconnected
-- [ ] Adversarial review pass completed (Steps 6-8) and valid findings incorporated into the plan
+- [ ] Adversarial review pass completed (Steps 6-9) and valid findings incorporated into the plan
 
 ## Critical Constraints
 

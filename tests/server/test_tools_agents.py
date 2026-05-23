@@ -34,10 +34,15 @@ def test_bundled_agent_files_exist():
         ]
         assert files, f"No agent files for pack {pack}"
 
-    # plan-review pack specifically should have 4 files
-    plan_review_files = [p for p in agents_dir.glob("plan-*.md") if p.name != "CLAUDE.md"]
-    assert len(plan_review_files) == 4, (
-        f"Expected 4 plan-review agents, found {len(plan_review_files)}"
+    # plan-review pack specifically should have the 3 expected agents
+    plan_review_files = {p.stem for p in agents_dir.glob("plan-*.md") if p.name != "CLAUDE.md"}
+    expected_agents = {
+        "plan-foundation-auditor",
+        "plan-interface-mapper",
+        "plan-registry-tracer",
+    }
+    assert expected_agents <= plan_review_files, (
+        f"Missing plan-review agents: {expected_agents - plan_review_files}"
     )
 
 
@@ -85,7 +90,7 @@ async def test_agent_index_resource_registered():
 # T6: Agent index returns JSON list of agent names
 @pytest.mark.anyio
 async def test_agent_index_returns_json_list():
-    """Enable plan-review tag and read _index. Result should be JSON list of 4 agents."""
+    """Enable plan-review tag and read _index. Result should be JSON list of 3 agents."""
     from autoskillit.server import mcp
 
     mcp.enable(tags={"plan-review"})
@@ -94,10 +99,9 @@ async def test_agent_index_returns_json_list():
         content = result.contents[0].content
         names = json.loads(content)
         assert set(names) == {
-            "plan-contract-verifier",
-            "plan-completeness-auditor",
-            "plan-assumption-challenger",
-            "plan-registry-wire-tracer",
+            "plan-foundation-auditor",
+            "plan-interface-mapper",
+            "plan-registry-tracer",
         }
     finally:
         mcp.disable(tags={"plan-review"})
@@ -169,7 +173,10 @@ def test_make_plan_subagent_type_refs_resolve():
 
     content = (pkg_root() / "skills_extended" / "make-plan" / "SKILL.md").read_text()
     refs = re.findall(r"autoskillit:(plan-[a-z-]+)", content)
-    assert len(refs) >= 4, f"Expected >=4 autoskillit:plan-* refs in SKILL.md, found {len(refs)}"
+    unique_refs = set(refs)
+    assert len(unique_refs) >= 3, (
+        f"Expected >=3 unique autoskillit:plan-* refs in SKILL.md, found {len(unique_refs)}"
+    )
 
     agents_dir = pkg_root() / "agents"
     for agent_name in set(refs):
@@ -210,3 +217,41 @@ def test_agent_definition_frontmatter_valid():
             frontmatter = yaml.safe_load(parts[1])
             for field in ("name", "description", "tools", "model", "maxTurns"):
                 assert field in frontmatter, f"{md_file.name}: missing frontmatter field '{field}'"
+
+
+# T13: RETIRED_AGENT_NAMES contains all 4 replaced agent names
+def test_retired_agent_names_contains_old_agents():
+    """RETIRED_AGENT_NAMES must contain all 4 replaced agent names."""
+    from autoskillit.core.types._type_constants import RETIRED_AGENT_NAMES
+
+    expected = {
+        "plan-assumption-challenger",
+        "plan-completeness-auditor",
+        "plan-contract-verifier",
+        "plan-registry-wire-tracer",
+    }
+    assert expected <= RETIRED_AGENT_NAMES
+
+
+# T14: No retired agent name has a live file
+def test_no_retired_agent_name_has_a_live_file():
+    """No .md file in agents/ should have a stem matching a retired agent name."""
+    from autoskillit.core import pkg_root
+    from autoskillit.core.types._type_constants import RETIRED_AGENT_NAMES
+
+    agents_dir = pkg_root() / "agents"
+    for md_file in agents_dir.glob("*.md"):
+        if md_file.name == "CLAUDE.md":
+            continue
+        assert md_file.stem not in RETIRED_AGENT_NAMES, (
+            f"Retired agent name '{md_file.stem}' still has a live file: {md_file}"
+        )
+
+
+# T15: RETIRED_AGENT_NAMES entries are lowercase
+def test_retired_agent_names_lowercase():
+    """All entries in RETIRED_AGENT_NAMES must be lowercase."""
+    from autoskillit.core.types._type_constants import RETIRED_AGENT_NAMES
+
+    for name in RETIRED_AGENT_NAMES:
+        assert name == name.lower(), f"RETIRED_AGENT_NAMES entry '{name}' is not lowercase"

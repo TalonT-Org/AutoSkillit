@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -63,7 +64,6 @@ class TestSerializeToml:
         assert 'args = ["--stdio", "--verbose"]' in result
 
     def test_round_trip_fidelity(self):
-        import tomllib
 
         original = {
             "mcp_servers": {
@@ -80,7 +80,6 @@ class TestSerializeToml:
         assert parsed == original
 
     def test_round_trip_with_list_values(self):
-        import tomllib
 
         original = {
             "mcp_servers": {
@@ -99,7 +98,6 @@ class TestSerializeToml:
         assert parsed == original
 
     def test_no_duplicate_section_headers(self):
-        import tomllib
 
         data = {
             "mcp_servers": {

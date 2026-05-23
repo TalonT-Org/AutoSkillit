@@ -20,6 +20,7 @@ from autoskillit.core import (
     CaptureValueTypeError,
     FleetErrorCode,
     InfraExitCategory,
+    ProcessStaleError,
     RetryReason,
     SessionCheckpoint,  # noqa: F401, TC001
     SkillResult,
@@ -583,6 +584,14 @@ async def _run_dispatch(
             tool_ctx.project_dir,
             suppressed=tool_ctx.config.migration.suppressed if tool_ctx.config else None,
             temp_dir=tool_ctx.temp_dir,
+        )
+    except ProcessStaleError as exc:
+        return DispatchResult(
+            DispatchRejected(
+                error_code=FleetErrorCode.FLEET_PROCESS_STALE,
+                message=str(exc),
+            ),
+            per_dispatch_state_path=None,
         )
     except Exception as exc:
         logger.warning("load_and_validate failed for '%s'", recipe, exc_info=True)

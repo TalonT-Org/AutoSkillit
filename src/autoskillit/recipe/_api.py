@@ -13,6 +13,8 @@ from typing import Any
 
 from autoskillit.core import (
     LoadResult,
+    ProcessStaleError,
+    RecipeNotFoundError,
     RecipeSource,
     SkillLister,
     YAMLError,
@@ -146,6 +148,26 @@ _STALENESS_LAST_CHECK: float = 0.0
 _STALENESS_IS_STALE: bool = False
 _STALENESS_CACHES_CLEARED: bool = False
 _STALENESS_TTL: float = 30.0
+_STALENESS_SCAN_DIRS: tuple[str, ...] = ("recipe/rules",)
+_DEEP_MTIME_BASELINE: int | None = None
+
+
+def _compute_deep_mtime() -> int:
+    """Return max mtime_ns across all .py files in staleness-scanned subdirectories."""
+    root = pkg_root()
+    max_mt = 0
+    for subdir in _STALENESS_SCAN_DIRS:
+        d = root / subdir
+        if d.is_dir():
+            for f in d.iterdir():
+                if f.suffix == ".py" and f.is_file():
+                    try:
+                        mt = f.stat().st_mtime_ns
+                        if mt > max_mt:
+                            max_mt = mt
+                    except OSError:
+                        continue
+    return max_mt
 
 
 def _get_process_start_mtime() -> int:
@@ -156,14 +178,20 @@ def _get_process_start_mtime() -> int:
 
 
 def _check_process_staleness() -> bool:
-    """Return True if the package directory was modified after process start."""
-    global _STALENESS_LAST_CHECK, _STALENESS_IS_STALE  # noqa: PLW0603
+    """Return True if the package directory or rule files were modified after process start."""
+    global _STALENESS_LAST_CHECK, _STALENESS_IS_STALE, _DEEP_MTIME_BASELINE  # noqa: PLW0603
     now = time.monotonic()
     if now - _STALENESS_LAST_CHECK < _STALENESS_TTL:
         return _STALENESS_IS_STALE
     _STALENESS_LAST_CHECK = now
     try:
-        _STALENESS_IS_STALE = _path_mtime_ns(pkg_root()) != _get_process_start_mtime()
+        pkg_stale = _path_mtime_ns(pkg_root()) != _get_process_start_mtime()
+        if not pkg_stale:
+            current_deep = _compute_deep_mtime()
+            if _DEEP_MTIME_BASELINE is None:
+                _DEEP_MTIME_BASELINE = current_deep
+            pkg_stale = current_deep != _DEEP_MTIME_BASELINE
+        _STALENESS_IS_STALE = pkg_stale
     except (OSError, RuntimeError):
         logger.warning("pkg_root() unavailable during staleness check; assuming non-stale")
         _STALENESS_IS_STALE = False
@@ -400,19 +428,19 @@ def load_and_validate(
             recipe defaults. Used to activate hidden features (e.g., sprint_mode).
 
     Returns:
-        {"content": str, "suggestions": list, "valid": bool}
-        On not-found: {"error": str}
+        ``LoadRecipeResult`` dict on success (always has ``valid``, ``suggestions``).
+
+    Raises:
+        ProcessStaleError: Package directory was modified since server startup.
+        RecipeNotFoundError: Named recipe could not be found.
     """
     if _check_process_staleness():
         if not _STALENESS_CACHES_CLEARED:
             _clear_stale_caches()
-        return {
-            "error": (
-                "Process is running stale code — package directory was modified on disk "
-                "since server startup. Restart the MCP server via reload_session."
-            ),
-            "valid": False,
-        }
+        raise ProcessStaleError(
+            "Process is running stale code — package directory was modified on disk "
+            "since server startup. Restart the MCP server via reload_session."
+        )
 
     _pdir = project_dir if project_dir is not None else Path.cwd()
     pkg_version = _get_pkg_version()
@@ -482,7 +510,7 @@ def load_and_validate(
     t0 = _t("find_recipe", t0, name)
 
     if match is None:
-        return {"error": f"No recipe named '{name}' found"}
+        raise RecipeNotFoundError(f"No recipe named '{name}' found")
 
     raw = match.content if match.content is not None else match.path.read_text()
     raw = substitute_temp_placeholder(raw, _temp_relpath)

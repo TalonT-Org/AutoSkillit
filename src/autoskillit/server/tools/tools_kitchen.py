@@ -18,6 +18,7 @@ from autoskillit import __version__
 from autoskillit.config import iter_display_categories, resolve_ingredient_defaults
 from autoskillit.core import (
     PIPELINE_FORBIDDEN_TOOLS,
+    ProcessStaleError,
     _collect_disabled_feature_tags,
     atomic_write,
     find_latest_session_id,
@@ -416,6 +417,9 @@ async def open_kitchen(
                     resolved_defaults=_defaults,
                     ingredient_overrides=overrides,
                 )
+            except ProcessStaleError as exc:
+                logger.warning("open_kitchen_failure", stage="process_stale", exc_info=True)
+                return _kitchen_failure_envelope(exc, stage="process_stale")
             except Exception as exc:
                 logger.warning("open_kitchen_failure", stage="load_and_validate", exc_info=True)
                 return _kitchen_failure_envelope(exc, stage="load_and_validate")

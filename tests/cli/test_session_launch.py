@@ -200,6 +200,7 @@ def test_skill_injection_disabled_omits_flags(monkeypatch: pytest.MonkeyPatch) -
         supports_thinking_blocks=True,
         supports_claude_format_stdout=True,
         exit_code_is_terminal=False,
+        mcp_config_capable=False,
         completion_record_types=frozenset({"result"}),
         session_record_types=frozenset({"assistant"}),
     )
@@ -264,6 +265,7 @@ def test_binary_name_from_backend_used_in_which(monkeypatch: pytest.MonkeyPatch)
                 supports_thinking_blocks=True,
                 supports_claude_format_stdout=True,
                 exit_code_is_terminal=False,
+                mcp_config_capable=False,
                 completion_record_types=frozenset({"result"}),
                 session_record_types=frozenset({"assistant"}),
             )

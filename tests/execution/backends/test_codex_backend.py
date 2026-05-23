@@ -87,6 +87,9 @@ class TestCodexBackend:
     def test_capabilities_exit_code_is_terminal_true(self) -> None:
         assert CodexBackend().capabilities.exit_code_is_terminal is True
 
+    def test_capabilities_mcp_config_capable_false(self) -> None:
+        assert CodexBackend().capabilities.mcp_config_capable is False
+
     def test_capabilities_completion_record_types(self) -> None:
         expected = frozenset({"turn.completed", "turn.failed", "error"})
         assert CodexBackend().capabilities.completion_record_types == expected
@@ -271,6 +274,7 @@ class TestCodexBackendProtocol:
             ("pty_required", False),
             ("session_resume_capable", True),
             ("skill_injection_capable", False),
+            ("mcp_config_capable", False),
         ],
     )
     def test_capability_flag(self, attr: str, expected: bool) -> None:

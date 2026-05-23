@@ -32,6 +32,7 @@ class BackendCapabilities:
     supports_thinking_blocks: bool
     supports_claude_format_stdout: bool
     exit_code_is_terminal: bool
+    mcp_config_capable: bool
     completion_record_types: frozenset[str]
     session_record_types: frozenset[str]
 
@@ -44,6 +45,7 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     supports_thinking_blocks=True,
     supports_claude_format_stdout=True,
     exit_code_is_terminal=False,
+    mcp_config_capable=False,
     completion_record_types=frozenset({"result"}),
     session_record_types=frozenset({"assistant"}),
 )

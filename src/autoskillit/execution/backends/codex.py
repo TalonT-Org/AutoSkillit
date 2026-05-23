@@ -384,6 +384,7 @@ class CodexBackend:
             supports_thinking_blocks=False,
             supports_claude_format_stdout=False,
             exit_code_is_terminal=True,
+            mcp_config_capable=False,
             completion_record_types=frozenset({"turn.completed", "turn.failed", "error"}),
             session_record_types=frozenset(),
         )

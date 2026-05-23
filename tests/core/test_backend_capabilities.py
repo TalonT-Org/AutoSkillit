@@ -50,7 +50,7 @@ def test_backend_capabilities_slots():
 
 
 def test_backend_capabilities_field_count():
-    """9 fields: 7 bool + 2 frozenset[str]."""
+    """10 fields: 8 bool + 2 frozenset[str]."""
     from autoskillit.core import BackendCapabilities
 
     fields = dataclasses.fields(BackendCapabilities)
@@ -65,6 +65,7 @@ def test_backend_capabilities_field_count():
         "supports_thinking_blocks",
         "supports_claude_format_stdout",
         "exit_code_is_terminal",
+        "mcp_config_capable",
     }
     assert frozenset_fields == {"completion_record_types", "session_record_types"}
 
@@ -81,6 +82,7 @@ def test_backend_capabilities_field_names_locked():
         "supports_thinking_blocks",
         "supports_claude_format_stdout",
         "exit_code_is_terminal",
+        "mcp_config_capable",
         "completion_record_types",
         "session_record_types",
     }
@@ -99,6 +101,7 @@ def test_claude_code_capabilities_field_values():
     assert CLAUDE_CODE_CAPABILITIES.supports_thinking_blocks is True
     assert CLAUDE_CODE_CAPABILITIES.supports_claude_format_stdout is True
     assert CLAUDE_CODE_CAPABILITIES.exit_code_is_terminal is False
+    assert CLAUDE_CODE_CAPABILITIES.mcp_config_capable is False
     assert CLAUDE_CODE_CAPABILITIES.completion_record_types == frozenset({"result"})
     assert CLAUDE_CODE_CAPABILITIES.session_record_types == frozenset({"assistant"})
 

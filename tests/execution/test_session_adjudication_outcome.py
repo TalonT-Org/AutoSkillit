@@ -388,9 +388,8 @@ class TestEarlyStop:
             channel_confirmation=ChannelConfirmation.UNMONITORED,
             completion_marker="%%ORDER_UP%%",
         )
-        # is_error sessions may trigger API-level retry via needs_retry property,
-        # but EARLY_STOP specifically should not fire for non-success subtypes
-        assert reason != RetryReason.EARLY_STOP
+        assert needs_retry is False
+        assert reason == RetryReason.NONE
 
     def test_early_stop_not_triggered_for_empty_result(self) -> None:
         """Empty result should be classified as kill anomaly, not EARLY_STOP."""

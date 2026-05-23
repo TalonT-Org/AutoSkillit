@@ -201,3 +201,25 @@ class TestValidateReviewDecisionsInputHandling:
         text = _skill_text()
         finding_ids = re.findall(r"F\d{2}", text)
         assert len(finding_ids) == 0, f"Found specific finding IDs: {finding_ids}"
+
+
+class TestValidateReviewDecisionsTicketGrouper:
+    def test_ticket_grouper_has_minimum_group_floor(self) -> None:
+        """Ticket Grouper instructions must enforce a minimum group count."""
+        text = _skill_text()
+        grouper_section = (
+            text[text.find("Ticket Grouper") : text.find("### Step 7")]
+            if "Ticket Grouper" in text
+            else ""
+        )
+        has_floor = bool(
+            re.search(
+                r"(?:minimum|at least|floor|must produce)",
+                grouper_section,
+                re.IGNORECASE,
+            )
+        )
+        assert has_floor, (
+            "Ticket Grouper instructions must enforce a minimum group count "
+            "floor to prevent single-group mega-issues"
+        )

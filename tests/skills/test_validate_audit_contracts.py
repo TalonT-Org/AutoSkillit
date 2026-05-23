@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import functools
+import re
 
 from autoskillit.core.types import SkillSource
 from autoskillit.workspace.skills import DefaultSkillResolver
@@ -174,3 +175,25 @@ class TestValidateAuditReviewDecisions:
         assert "Cohesion Audit" in text
         assert "Feature Gate Audit" in text
         assert "Documentation Audit" in text
+
+
+class TestValidateAuditTicketGrouper:
+    def test_ticket_grouper_has_minimum_group_floor(self) -> None:
+        """Ticket Grouper instructions must enforce a minimum group count."""
+        text = _skill_text()
+        grouper_section = (
+            text[text.find("Ticket Grouper") : text.find("### Step 7")]
+            if "Ticket Grouper" in text
+            else ""
+        )
+        has_floor = bool(
+            re.search(
+                r"(?:minimum|at least|floor|must produce)",
+                grouper_section,
+                re.IGNORECASE,
+            )
+        )
+        assert has_floor, (
+            "Ticket Grouper instructions must enforce a minimum group count "
+            "floor to prevent single-group mega-issues"
+        )

@@ -205,7 +205,7 @@ def test_rectify_subagent_type_refs_resolve():
     )
 
     agents_dir = pkg_root() / "agents"
-    for agent_name in set(refs):
+    for agent_name in unique_refs:
         agent_file = agents_dir / f"{agent_name}.md"
         assert agent_file.exists(), (
             f"rectify SKILL.md references autoskillit:{agent_name} but {agent_file} does not exist"

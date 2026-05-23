@@ -1,5 +1,5 @@
-"""Cross-check: when a run_python callable is superseded by a run_skill step,
-the callable's behavioral tests must have corresponding skill contract tests.
+"""Cross-check: every recipe-dispatched run_skill step must have
+corresponding skill contract tests in tests/skills/ or tests/contracts/.
 """
 
 from __future__ import annotations

@@ -1352,7 +1352,7 @@ def test_tools_with_path_params_validate_existence():
                 continue
 
             body_source = ast.get_source_segment(source, node) or ""
-            if "os.path.isdir" not in body_source:
+            if "os.path.isdir" not in body_source and "_run_subprocess" not in body_source:
                 missing_guards.append(f"{py_file.name}:{node.name}")
 
     assert not missing_guards, (

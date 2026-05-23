@@ -104,7 +104,7 @@ async def test_wait_for_ci_failure_response(tool_ctx_kitchen_open):
 
 
 @pytest.mark.anyio
-async def test_wait_for_ci_infers_head_sha(tool_ctx_kitchen_open):
+async def test_wait_for_ci_infers_head_sha(tool_ctx_kitchen_open, tmp_path):
     """When head_sha is not provided, it's inferred via git rev-parse HEAD."""
     watcher = InMemoryCIWatcher(
         wait_result={"run_id": 1, "conclusion": "success", "failed_jobs": []}
@@ -120,14 +120,14 @@ async def test_wait_for_ci_infers_head_sha(tool_ctx_kitchen_open):
         )
     )
 
-    await wait_for_ci("main", cwd="/some/repo")
+    await wait_for_ci("main", cwd=str(tmp_path))
 
     # Verify that wait was called with the inferred head_sha inside scope
     assert watcher.wait_calls[-1]["scope"].head_sha == "abc123"
 
 
 @pytest.mark.anyio
-async def test_wait_for_ci_head_sha_uses_runner(tool_ctx_kitchen_open):
+async def test_wait_for_ci_head_sha_uses_runner(tool_ctx_kitchen_open, tmp_path):
     """git rev-parse HEAD must flow through MockSubprocessRunner, not raw asyncio."""
     watcher = InMemoryCIWatcher(
         wait_result={"run_id": 1, "conclusion": "success", "failed_jobs": []}
@@ -145,7 +145,7 @@ async def test_wait_for_ci_head_sha_uses_runner(tool_ctx_kitchen_open):
         )
     )
 
-    await wait_for_ci("main", cwd="/some/repo")
+    await wait_for_ci("main", cwd=str(tmp_path))
 
     # Runner must have been called with the git command
     assert tool_ctx_kitchen_open.runner.call_args_list, "runner was never called"
@@ -619,7 +619,7 @@ async def test_wait_for_merge_queue_watcher_exception_returns_structured_json(
 
 
 @pytest.mark.anyio
-async def test_wait_for_ci_includes_head_sha_in_result(tool_ctx_kitchen_open):
+async def test_wait_for_ci_includes_head_sha_in_result(tool_ctx_kitchen_open, tmp_path):
     """wait_for_ci result includes head_sha when git rev-parse HEAD succeeds."""
     watcher = InMemoryCIWatcher(
         wait_result={"run_id": 1, "conclusion": "success", "failed_jobs": []}
@@ -635,7 +635,7 @@ async def test_wait_for_ci_includes_head_sha_in_result(tool_ctx_kitchen_open):
         )
     )
 
-    result = json.loads(await wait_for_ci("main", cwd="/some/repo"))
+    result = json.loads(await wait_for_ci("main", cwd=str(tmp_path)))
 
     assert result["head_sha"] == "deadbeef1234"
 

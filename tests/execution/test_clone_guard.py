@@ -340,14 +340,16 @@ async def test_guard_skipped_when_no_snapshot(tmp_path):
 # ---------------------------------------------------------------------------
 # T15: worktree_path always extracted (even when needs_retry=False)
 # ---------------------------------------------------------------------------
-def test_worktree_path_always_extracted():
+def test_worktree_path_always_extracted(tmp_path):
     """worktree_path should be extracted regardless of needs_retry status."""
+    wt = tmp_path / "wt"
+    wt.mkdir()
     assistant = json.dumps(
         {
             "type": "assistant",
             "message": {
                 "role": "assistant",
-                "content": "worktree_path = /tmp/wt\nbranch_name = impl-test",
+                "content": f"worktree_path = {wt}\nbranch_name = impl-test",
             },
         }
     )
@@ -369,7 +371,7 @@ def test_worktree_path_always_extracted():
         pid=12345,
     )
     skill = _build_skill_result(sr)
-    assert skill.worktree_path == "/tmp/wt"
+    assert skill.worktree_path == str(wt)
 
 
 # ---------------------------------------------------------------------------

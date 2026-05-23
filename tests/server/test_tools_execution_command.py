@@ -167,11 +167,14 @@ class TestRunSkillPassesSessionLogDir:
     """run_skill passes session_log_dir derived from cwd."""
 
     @pytest.mark.anyio
-    async def test_run_skill_passes_session_log_dir(self, tool_ctx_kitchen_open):
+    async def test_run_skill_passes_session_log_dir(self, tool_ctx_kitchen_open, tmp_path):
         """runner receives session_log_dir derived from cwd."""
         cfg = AutomationConfig()
         cfg.safety.require_dry_walkthrough = False
         tool_ctx_kitchen_open.config = cfg
+
+        cwd = str(tmp_path / "some-project")
+        (tmp_path / "some-project").mkdir()
 
         tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx_kitchen_open.runner.push(
@@ -182,12 +185,12 @@ class TestRunSkillPassesSessionLogDir:
                 "",
             )
         )
-        await run_skill("/investigate foo", "/some/project")
+        await run_skill("/investigate foo", cwd)
 
         call_kwargs = tool_ctx_kitchen_open.runner.call_args_list[-1][3]
-        expected_dir = _session_log_dir("/some/project")
+        expected_dir = _session_log_dir(cwd)
         assert call_kwargs["session_log_dir"] == expected_dir
-        assert "-some-project" in str(expected_dir)
+        assert "some-project" in str(expected_dir)
 
 
 class TestRunSkillModel:

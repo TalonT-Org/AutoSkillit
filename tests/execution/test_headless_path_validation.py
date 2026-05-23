@@ -2033,10 +2033,14 @@ class TestWorktreePathPropagationWithEmptyMessages:
         sr = _build_skill_result(sub_result)
         assert sr.worktree_path is None
 
-    def test_extract_worktree_path_rejects_nonexistent_directory(self):
-        """_extract_worktree_path must reject paths that don't exist on disk."""
+    def test_extract_worktree_path_extracts_nonexistent_path(self):
+        """_extract_worktree_path extracts absolute paths without isdir validation.
+
+        Directory existence validation is handled by validate_worktree_path in
+        _build_skill_result, not by _extract_worktree_path.
+        """
         result = _extract_worktree_path(["worktree_path = /nonexistent/path/xyz"])
-        assert result is None
+        assert result == "/nonexistent/path/xyz"
 
     def test_extract_output_paths_with_empty_messages_returns_empty(self):
         """_extract_output_paths([]) returns {} (documents the contract)."""

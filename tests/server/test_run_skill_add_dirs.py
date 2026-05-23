@@ -10,7 +10,9 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 @pytest.mark.anyio
-async def test_raw_skills_extended_excluded_from_run_skill_add_dirs(tool_ctx_kitchen_open):
+async def test_raw_skills_extended_excluded_from_run_skill_add_dirs(
+    tool_ctx_kitchen_open, tmp_path
+):
     """T-OVR-014: run_skill passes ephemeral session dir (not raw skills_extended/) as add_dirs."""
     from autoskillit.server.tools.tools_execution import run_skill
     from tests.fakes import InMemoryHeadlessExecutor
@@ -18,7 +20,7 @@ async def test_raw_skills_extended_excluded_from_run_skill_add_dirs(tool_ctx_kit
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
 
-    await run_skill("/autoskillit:investigate foo", "/some/cwd")
+    await run_skill("/autoskillit:investigate foo", str(tmp_path))
 
     add_dirs = executor.calls[0].add_dirs
 

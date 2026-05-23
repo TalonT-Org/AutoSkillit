@@ -30,7 +30,7 @@ pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 
 def test_stale_fetch_cache_after_install_detected_by_epoch(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    tmp_path: Path,
 ) -> None:
     """Cache entry with stale installed_version is treated as a miss even within TTL."""
     import time
@@ -484,7 +484,7 @@ def test_full_lifecycle_install_clears_stale_cache_then_check_detects_new_versio
 )
 def test_fetch_with_cache_epoch_check_contract(
     tmp_path: Path,
-    entry_kwargs: dict,
+    entry_kwargs: dict[str, Any],
     expect_hit: bool,
 ) -> None:
     """Parametrized contract: epoch + TTL together determine cache hit/miss."""

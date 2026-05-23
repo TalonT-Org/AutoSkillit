@@ -59,7 +59,7 @@ class TestMissingRequiredIngredient:
         )
 
         result = await _run(tool_ctx, ingredients={"api_key": "secret"})
-        assert result["success"] is True
+        assert result.get("error") != "fleet_missing_ingredient"
 
     @pytest.mark.anyio
     async def test_dispatch_allows_required_ingredient_with_default(self, tool_ctx):

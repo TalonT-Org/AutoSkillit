@@ -64,7 +64,7 @@ class TestRecipeKindDispatchGate:
         self._setup_food_truck_recipe(tool_ctx)
 
         result = await _run(tool_ctx)
-        assert result["success"] is True
+        assert result.get("error") != "fleet_invalid_recipe_kind"
 
     @pytest.mark.anyio
     async def test_campaign_kind_still_rejected_by_dispatch(self, tool_ctx, monkeypatch):

@@ -27,7 +27,7 @@ async def _no_sleep_quota_checker(config: Any, **kwargs) -> dict:
     }
 
 
-async def _noop_quota_refresher(config, **kwargs) -> None:
+async def _noop_quota_refresher(config: Any, **kwargs) -> None:
     """Quota refresher stub: no-op."""
 
 

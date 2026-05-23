@@ -1165,10 +1165,13 @@ class TestSkillAutoGateBoot:
                     await _skill_auto_gate_boot(tool_ctx)
 
         mock_write_hook_config.assert_called_once_with()
+        assert tool_ctx.gate.enabled is True
 
     @pytest.mark.anyio
     async def test_skill_auto_gate_boot_skips_when_both_absent(self, tool_ctx, monkeypatch):
         """Neither HEADLESS nor AUTO_GATE set: gate remains closed."""
+        from unittest.mock import patch
+
         from autoskillit.core import HEADLESS_AUTO_GATE_ENV_VAR, HEADLESS_ENV_VAR
         from autoskillit.pipeline.gate import DefaultGateState
         from autoskillit.server._lifespan import _skill_auto_gate_boot
@@ -1177,9 +1180,15 @@ class TestSkillAutoGateBoot:
         monkeypatch.delenv(HEADLESS_ENV_VAR, raising=False)
         monkeypatch.delenv(HEADLESS_AUTO_GATE_ENV_VAR, raising=False)
 
-        await _skill_auto_gate_boot(tool_ctx)
+        with patch(
+            "autoskillit.server.tools.tools_kitchen._write_hook_config"
+        ) as mock_write_hook_config:
+            with patch("autoskillit.core.register_active_kitchen") as mock_register_kitchen:
+                await _skill_auto_gate_boot(tool_ctx)
 
         assert tool_ctx.gate.enabled is False
+        mock_write_hook_config.assert_not_called()
+        mock_register_kitchen.assert_not_called()
 
 
 @pytest.mark.feature("skill")

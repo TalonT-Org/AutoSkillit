@@ -98,28 +98,29 @@ def _format_inline_table(d: dict[str, Any]) -> str:
 
 
 def _emit_toml_table(d: dict[str, Any], path: list[str], lines: list[str]) -> None:
-    has_nested_tables = any(
-        isinstance(v, dict) and any(isinstance(sv, dict) for sv in v.values()) for v in d.values()
-    )
     header = f"[{'.'.join(path)}]"
-    if has_nested_tables:
-        header_emitted = False
-        for k, v in d.items():
-            if not isinstance(v, dict):
-                if not header_emitted:
-                    lines.append(f"\n{header}")
-                    header_emitted = True
-                lines.append(f"{k} = {_format_toml_value(v)}")
-        for k, v in d.items():
-            if isinstance(v, dict):
-                _emit_toml_table(v, [*path, k], lines)
-    else:
+    scalars = [(k, v) for k, v in d.items() if not isinstance(v, dict)]
+    tables = [(k, v) for k, v in d.items() if isinstance(v, dict)]
+    has_scalars = bool(scalars)
+
+    inline_tables: list[tuple[str, dict[str, Any]]] = []
+    recurse_tables: list[tuple[str, dict[str, Any]]] = []
+    for k, v in tables:
+        is_leaf = not any(isinstance(sv, dict) for sv in v.values())
+        if is_leaf and has_scalars:
+            inline_tables.append((k, v))
+        else:
+            recurse_tables.append((k, v))
+
+    if scalars or inline_tables:
         lines.append(f"\n{header}")
-        for k, v in d.items():
-            if isinstance(v, dict):
-                lines.append(f"{k} = {_format_inline_table(v)}")
-            else:
-                lines.append(f"{k} = {_format_toml_value(v)}")
+        for k, v in scalars:
+            lines.append(f"{k} = {_format_toml_value(v)}")
+        for k, v in inline_tables:
+            lines.append(f"{k} = {_format_inline_table(v)}")
+
+    for k, v in recurse_tables:
+        _emit_toml_table(v, [*path, k], lines)
 
 
 def _serialize_toml(data: dict[str, Any]) -> str:

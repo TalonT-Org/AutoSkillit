@@ -324,10 +324,73 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
         logger.warning("food_truck_auto_gate_boot_label_sweep_failed", exc_info=True)
 
 
+async def _skill_auto_gate_boot(ctx: Any) -> None:
+    """Auto-open gate for headless SKILL sessions.
+
+    Runs at lifespan startup when AUTOSKILLIT_HEADLESS=1 and
+    AUTOSKILLIT_HEADLESS_AUTO_GATE=1. No-ops for non-headless sessions.
+    Omits quota-refresh loop and campaign state recovery — SKILL sessions
+    are short-lived.
+    """
+    from autoskillit.core import HEADLESS_AUTO_GATE_ENV_VAR, HEADLESS_ENV_VAR
+
+    if os.environ.get(HEADLESS_ENV_VAR) != "1":
+        return
+    if os.environ.get(HEADLESS_AUTO_GATE_ENV_VAR) != "1":
+        return
+
+    ctx.kitchen_id = resolve_kitchen_id()
+    ctx.active_recipe_packs = frozenset()
+    ctx.active_recipe_features = frozenset()
+
+    if ctx.gate is None:
+        logger.warning("skill_auto_gate_boot_no_gate")
+        return
+
+    ctx.gate.enable()
+    logger.info(
+        "skill_auto_gate_boot",
+        gate_state="open",
+        kitchen_id=ctx.kitchen_id,
+    )
+
+    try:
+        from autoskillit.core import _collect_disabled_feature_tags
+        from autoskillit.server import mcp as _mcp
+
+        _features = ctx.config.features if ctx.config is not None else {}
+        _exp_enabled = ctx.config.experimental_enabled if ctx.config is not None else False
+        for _tag in _collect_disabled_feature_tags(_features, experimental_enabled=_exp_enabled):
+            _mcp.disable(tags={_tag})
+    except Exception:
+        logger.warning("skill_auto_gate_boot_feature_suppression_failed", exc_info=True)
+
+    try:
+        from autoskillit.server.tools.tools_kitchen import _write_hook_config
+
+        _write_hook_config()
+    except Exception:
+        logger.warning("skill_auto_gate_boot_hook_config_failed", exc_info=True)
+
+    try:
+        from autoskillit.server._misc import _prime_quota_cache
+
+        await _prime_quota_cache()
+    except Exception:
+        logger.warning("skill_auto_gate_boot_quota_cache_failed", exc_info=True)
+
+    try:
+        from autoskillit.core import register_active_kitchen
+
+        register_active_kitchen(ctx.kitchen_id, os.getpid(), str(ctx.project_dir))
+    except Exception:
+        logger.warning("skill_auto_gate_boot_registry_failed", exc_info=True)
+
+
 _LIFESPAN_BOOT_REGISTRY: dict[SessionType, Callable[[Any], Awaitable[None]] | None] = {
     SessionType.FLEET: _fleet_auto_gate_boot,
     SessionType.ORCHESTRATOR: _food_truck_auto_gate_boot,
-    SessionType.SKILL: None,
+    SessionType.SKILL: _skill_auto_gate_boot,
 }
 
 

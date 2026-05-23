@@ -335,7 +335,7 @@ class TestFleetAutoGateBoot:
     @pytest.mark.anyio
     @pytest.mark.parametrize(
         "boot_fn_name",
-        ["_fleet_auto_gate_boot", "_food_truck_auto_gate_boot"],
+        ["_fleet_auto_gate_boot", "_food_truck_auto_gate_boot", "_skill_auto_gate_boot"],
     )
     async def test_boot_paths_inherit_campaign_id(self, boot_fn_name, tool_ctx, monkeypatch):
         """All boot paths must resolve kitchen_id via resolve_kitchen_id()."""
@@ -348,7 +348,10 @@ class TestFleetAutoGateBoot:
         expected_id = f"test-campaign-{boot_fn_name}"
         monkeypatch.setenv(CAMPAIGN_ID_ENV_VAR, expected_id)
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        # FOOD_TRUCK_TOOL_TAGS: only read by _food_truck_auto_gate_boot;
+        # harmless for fleet/skill paths.
         monkeypatch.setenv("AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS", "kitchen-core")
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS_AUTO_GATE", "1")
         tool_ctx.gate = DefaultGateState(enabled=False)
         tool_ctx.quota_refresh_task = None
 
@@ -820,6 +823,294 @@ class TestFoodTruckAutoGateBoot:
             "label sweep background task not scheduled; "
             f"create_background_task labels: {sweep_call_labels}"
         )
+
+
+@pytest.mark.feature("skill")
+class TestSkillAutoGateBoot:
+    """Skill lifespan auto-gate: _skill_auto_gate_boot opens gate."""
+
+    @pytest.mark.anyio
+    async def test_skill_auto_gate_boot_opens_gate(self, tool_ctx, monkeypatch):
+        """SKILL+HEADLESS+AUTO_GATE: gate is open after _skill_auto_gate_boot() runs."""
+        from unittest.mock import AsyncMock, patch
+
+        from autoskillit.core import HEADLESS_AUTO_GATE_ENV_VAR, HEADLESS_ENV_VAR
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server._lifespan import _skill_auto_gate_boot
+
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        monkeypatch.setenv(HEADLESS_ENV_VAR, "1")
+        monkeypatch.setenv(HEADLESS_AUTO_GATE_ENV_VAR, "1")
+
+        with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+            with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.core.register_active_kitchen"):
+                    await _skill_auto_gate_boot(tool_ctx)
+
+        assert tool_ctx.gate.enabled is True
+        assert tool_ctx.kitchen_id is not None
+        assert tool_ctx.active_recipe_packs == frozenset()
+        assert tool_ctx.active_recipe_features == frozenset()
+
+    @pytest.mark.anyio
+    async def test_skill_auto_gate_boot_noop_when_headless_not_1(self, tool_ctx, monkeypatch):
+        """SKILL without HEADLESS=1: gate remains closed."""
+        from autoskillit.core import HEADLESS_AUTO_GATE_ENV_VAR, HEADLESS_ENV_VAR
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server._lifespan import _skill_auto_gate_boot
+
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        monkeypatch.delenv(HEADLESS_ENV_VAR, raising=False)
+        monkeypatch.setenv(HEADLESS_AUTO_GATE_ENV_VAR, "1")
+
+        await _skill_auto_gate_boot(tool_ctx)
+
+        assert tool_ctx.gate.enabled is False
+
+    @pytest.mark.anyio
+    async def test_skill_auto_gate_boot_noop_when_auto_gate_not_1(self, tool_ctx, monkeypatch):
+        """HEADLESS=1 without HEADLESS_AUTO_GATE=1: gate remains closed."""
+        from autoskillit.core import HEADLESS_AUTO_GATE_ENV_VAR, HEADLESS_ENV_VAR
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server._lifespan import _skill_auto_gate_boot
+
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        monkeypatch.setenv(HEADLESS_ENV_VAR, "1")
+        monkeypatch.delenv(HEADLESS_AUTO_GATE_ENV_VAR, raising=False)
+
+        await _skill_auto_gate_boot(tool_ctx)
+
+        assert tool_ctx.gate.enabled is False
+
+    @pytest.mark.anyio
+    async def test_skill_auto_gate_boot_warns_and_returns_when_no_gate(
+        self, tool_ctx, monkeypatch
+    ):
+        """gate is None: warning logged and early return (gate stays closed)."""
+        from autoskillit.core import HEADLESS_AUTO_GATE_ENV_VAR, HEADLESS_ENV_VAR
+        from autoskillit.server._lifespan import _skill_auto_gate_boot
+
+        tool_ctx.gate = None
+        monkeypatch.setenv(HEADLESS_ENV_VAR, "1")
+        monkeypatch.setenv(HEADLESS_AUTO_GATE_ENV_VAR, "1")
+
+        with structlog.testing.capture_logs() as logs:
+            await _skill_auto_gate_boot(tool_ctx)
+
+        assert any(entry.get("event") == "skill_auto_gate_boot_no_gate" for entry in logs)
+        assert tool_ctx.kitchen_id is not None
+
+    @pytest.mark.anyio
+    async def test_skill_auto_gate_boot_fails_open_on_feature_suppression_error(
+        self, tool_ctx, monkeypatch
+    ):
+        """Feature suppression failure: gate stays open."""
+        from unittest.mock import AsyncMock, patch
+
+        from autoskillit.core import HEADLESS_AUTO_GATE_ENV_VAR, HEADLESS_ENV_VAR
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server._lifespan import _skill_auto_gate_boot
+
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        monkeypatch.setenv(HEADLESS_ENV_VAR, "1")
+        monkeypatch.setenv(HEADLESS_AUTO_GATE_ENV_VAR, "1")
+
+        with patch(
+            "autoskillit.core._collect_disabled_feature_tags",
+            side_effect=RuntimeError("feature error"),
+        ):
+            with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
+                    with patch("autoskillit.core.register_active_kitchen"):
+                        await _skill_auto_gate_boot(tool_ctx)
+
+        assert tool_ctx.gate.enabled is True
+
+    @pytest.mark.anyio
+    async def test_skill_auto_gate_boot_fails_open_on_hook_config_error(
+        self, tool_ctx, monkeypatch
+    ):
+        """_write_hook_config failure: gate stays open."""
+        from unittest.mock import AsyncMock, patch
+
+        from autoskillit.core import HEADLESS_AUTO_GATE_ENV_VAR, HEADLESS_ENV_VAR
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server._lifespan import _skill_auto_gate_boot
+
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        monkeypatch.setenv(HEADLESS_ENV_VAR, "1")
+        monkeypatch.setenv(HEADLESS_AUTO_GATE_ENV_VAR, "1")
+
+        with patch(
+            "autoskillit.server.tools.tools_kitchen._write_hook_config",
+            side_effect=OSError("disk full"),
+        ):
+            with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.core.register_active_kitchen"):
+                    await _skill_auto_gate_boot(tool_ctx)
+
+        assert tool_ctx.gate.enabled is True
+
+    @pytest.mark.anyio
+    async def test_skill_auto_gate_boot_fails_open_on_quota_cache_error(
+        self, tool_ctx, monkeypatch
+    ):
+        """_prime_quota_cache failure: gate stays open."""
+        from unittest.mock import AsyncMock, patch
+
+        from autoskillit.core import HEADLESS_AUTO_GATE_ENV_VAR, HEADLESS_ENV_VAR
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server._lifespan import _skill_auto_gate_boot
+
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        monkeypatch.setenv(HEADLESS_ENV_VAR, "1")
+        monkeypatch.setenv(HEADLESS_AUTO_GATE_ENV_VAR, "1")
+
+        with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+            with patch(
+                "autoskillit.server._misc._prime_quota_cache",
+                new=AsyncMock(side_effect=RuntimeError("quota cache error")),
+            ):
+                with patch("autoskillit.core.register_active_kitchen"):
+                    await _skill_auto_gate_boot(tool_ctx)
+
+        assert tool_ctx.gate.enabled is True
+
+    @pytest.mark.anyio
+    async def test_skill_auto_gate_boot_fails_open_on_registry_error(self, tool_ctx, monkeypatch):
+        """register_active_kitchen failure: gate stays open."""
+        from unittest.mock import AsyncMock, patch
+
+        from autoskillit.core import HEADLESS_AUTO_GATE_ENV_VAR, HEADLESS_ENV_VAR
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server._lifespan import _skill_auto_gate_boot
+
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        monkeypatch.setenv(HEADLESS_ENV_VAR, "1")
+        monkeypatch.setenv(HEADLESS_AUTO_GATE_ENV_VAR, "1")
+
+        with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+            with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
+                with patch(
+                    "autoskillit.core.register_active_kitchen",
+                    side_effect=OSError("registry write error"),
+                ):
+                    await _skill_auto_gate_boot(tool_ctx)
+
+        assert tool_ctx.gate.enabled is True
+
+    @pytest.mark.anyio
+    async def test_skill_auto_gate_boot_no_quota_refresh_loop(self, tool_ctx, monkeypatch):
+        """_skill_auto_gate_boot does NOT create a quota_refresh_loop background task."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from autoskillit.core import HEADLESS_AUTO_GATE_ENV_VAR, HEADLESS_ENV_VAR
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server._lifespan import _skill_auto_gate_boot
+
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        monkeypatch.setenv(HEADLESS_ENV_VAR, "1")
+        monkeypatch.setenv(HEADLESS_AUTO_GATE_ENV_VAR, "1")
+
+        with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+            with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
+                with patch(
+                    "autoskillit.pipeline.create_background_task",
+                    return_value=MagicMock(),
+                ) as mock_create_bg_task:
+                    with patch("autoskillit.core.register_active_kitchen"):
+                        await _skill_auto_gate_boot(tool_ctx)
+
+        quota_loop_calls = [
+            call
+            for call in mock_create_bg_task.call_args_list
+            if call.kwargs.get("label") == "quota_refresh_loop"
+        ]
+        assert len(quota_loop_calls) == 0, (
+            "quota_refresh_loop must not be created for SKILL sessions"
+        )
+        mock_create_bg_task.assert_not_called()
+
+    @pytest.mark.anyio
+    async def test_skill_auto_gate_boot_uses_project_dir_for_registration(
+        self, build_ctx, tmp_path, monkeypatch
+    ):
+        """register_active_kitchen must be called with ctx.project_dir, not Path.cwd()."""
+        import os
+        from unittest.mock import AsyncMock, patch
+
+        from autoskillit.core import HEADLESS_AUTO_GATE_ENV_VAR, HEADLESS_ENV_VAR
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server._lifespan import _skill_auto_gate_boot
+
+        monkeypatch.chdir(tmp_path)
+        different_dir = tmp_path / "project_root"
+        different_dir.mkdir()
+
+        ctx = build_ctx(project_dir=different_dir)
+        ctx.gate = DefaultGateState(enabled=False)
+        monkeypatch.setenv(HEADLESS_ENV_VAR, "1")
+        monkeypatch.setenv(HEADLESS_AUTO_GATE_ENV_VAR, "1")
+
+        with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+            with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.core.register_active_kitchen") as mock_register_kitchen:
+                    await _skill_auto_gate_boot(ctx)
+
+        mock_register_kitchen.assert_called_once_with(
+            ctx.kitchen_id, os.getpid(), str(different_dir)
+        )
+
+    @pytest.mark.anyio
+    async def test_skill_auto_gate_boot_emits_structured_log(self, tool_ctx, monkeypatch):
+        """_skill_auto_gate_boot emits info log with event name, gate_state, and kitchen_id."""
+        from unittest.mock import AsyncMock, patch
+
+        from autoskillit.core import HEADLESS_AUTO_GATE_ENV_VAR, HEADLESS_ENV_VAR
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server._lifespan import _skill_auto_gate_boot
+
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        monkeypatch.setenv(HEADLESS_ENV_VAR, "1")
+        monkeypatch.setenv(HEADLESS_AUTO_GATE_ENV_VAR, "1")
+
+        with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+            with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.core.register_active_kitchen"):
+                    with structlog.testing.capture_logs() as logs:
+                        await _skill_auto_gate_boot(tool_ctx)
+
+        assert any(
+            entry.get("event") == "skill_auto_gate_boot"
+            and entry.get("gate_state") == "open"
+            and entry.get("kitchen_id") is not None
+            for entry in logs
+        )
+
+
+@pytest.mark.feature("skill")
+class TestSkillAutoGateBootRegistry:
+    """SKILL session type registry wiring."""
+
+    def test_lifespan_boot_registry_maps_skill_to_handler(self):
+        """SessionType.SKILL maps to _skill_auto_gate_boot in _LIFESPAN_BOOT_REGISTRY."""
+        from autoskillit.core import SessionType
+        from autoskillit.server._lifespan import (
+            _LIFESPAN_BOOT_REGISTRY,
+            _skill_auto_gate_boot,
+        )
+
+        assert _LIFESPAN_BOOT_REGISTRY[SessionType.SKILL] is _skill_auto_gate_boot
+
+    def test_lifespan_boot_registry_covers_all_session_types(self):
+        """_LIFESPAN_BOOT_REGISTRY has no None values (all session types wired)."""
+        from autoskillit.core import SessionType
+        from autoskillit.server._lifespan import _LIFESPAN_BOOT_REGISTRY
+
+        for session_type in SessionType:
+            assert _LIFESPAN_BOOT_REGISTRY.get(session_type) is not None, (
+                f"{session_type} has no boot handler in _LIFESPAN_BOOT_REGISTRY"
+            )
 
 
 @pytest.mark.feature("fleet")

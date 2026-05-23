@@ -82,6 +82,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_tools_kitchen_gate.py` | Tests for tools_kitchen.py: gate toggle, review gate cleanup, kitchen_id, misc |
 | `test_tools_kitchen_gate_features.py` | Tests for tools_kitchen.py: recipe packs, quota refresh, ingredients_only, project_dir |
 | `test_tools_kitchen_gate_hook_config.py` | Tests for tools_kitchen.py: hook config lifecycle, overlay, and quota guard tool |
+| `test_tools_kitchen_gate_split.py` | Kitchen gate split structural guard |
 | `test_tools_kitchen_visibility.py` | Tests for tools_kitchen.py: visibility, component management, sous-chef, redisable_subsets |
 | `test_no_path_cwd_in_tools.py` | Regression guard: Path.cwd() must not appear in server tool handlers |
 | `test_open_kitchen_staleness.py` | Tests for ProcessStaleError propagation through open_kitchen — failure envelope with staleness context |

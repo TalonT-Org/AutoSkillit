@@ -104,7 +104,9 @@ AGENT_BACKEND_CODEX: str = "codex"
 
 # Env vars that control MCP server-level behavior and must not leak into
 # user-code subprocesses (pytest runs, shell commands, etc.).
-# Add new internal vars here as they are introduced.
+# Three-list sync: vars here may also appear in _HEADLESS_EXCLUSIVE_VARS
+# (execution/backends/claude.py) and IDE_ENV_DENYLIST (core/_claude_env.py).
+# Keep all three lists in sync when adding new exclusive variables.
 AUTOSKILLIT_PRIVATE_ENV_VARS: frozenset[str] = frozenset(
     {
         "AUTOSKILLIT_HEADLESS",
@@ -127,6 +129,10 @@ AUTOSKILLIT_PRIVATE_ENV_VARS: frozenset[str] = frozenset(
         "AUTOSKILLIT_SKILL_NAME",
         # Provider-routing vars — must not leak into user-code subprocesses
         "AUTOSKILLIT_PROVIDER_PROFILE",
+        # Execution-control vars — must not leak into Codex subprocess environments
+        "SCENARIO_STEP_NAME",
+        "AUTOSKILLIT_ALLOWED_WRITE_PREFIX",
+        "MAX_MCP_OUTPUT_TOKENS",
     }
 )
 

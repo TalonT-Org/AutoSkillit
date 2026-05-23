@@ -32,7 +32,6 @@ class TestBuildSkillSessionCmd:
         assert isinstance(spec, ClaudeHeadlessCmd)
 
     def test_cmd_starts_with_claude_not_env(self):
-        """Argv no longer carries a leading ['env', ...] prefix."""
         spec = build_skill_session_cmd("/investigate foo", **self.BASE)
         assert spec.cmd[0] == "claude"
         assert "env" != spec.cmd[0]
@@ -41,7 +40,6 @@ class TestBuildSkillSessionCmd:
         assert not any(tok.startswith("SCENARIO_STEP_NAME=") for tok in spec.cmd)
 
     def test_env_has_autoskillit_headless(self):
-        """AUTOSKILLIT_HEADLESS=1 now lives on spec.env, not in argv."""
         spec = build_skill_session_cmd("/investigate foo", **self.BASE)
         assert spec.env["AUTOSKILLIT_HEADLESS"] == "1"
 
@@ -320,7 +318,7 @@ class TestBuildSkillSessionCmd:
 
     def test_no_first_action_without_profile_name(self):
         spec = build_skill_session_cmd("/investigate foo", **self.BASE)
-        prompt = spec.cmd[spec.cmd.index("-p") + 1]
+        prompt = spec.cmd[spec.cmd.index(ClaudeFlags.PRINT) + 1]
         assert "FIRST ACTION" not in prompt
         assert "After loading" not in prompt
 
@@ -328,18 +326,18 @@ class TestBuildSkillSessionCmd:
         spec = build_skill_session_cmd(
             "/autoskillit:investigate foo", **self.BASE, profile_name="minimax"
         )
-        prompt = spec.cmd[spec.cmd.index("-p") + 1]
+        prompt = spec.cmd[spec.cmd.index(ClaudeFlags.PRINT) + 1]
         assert "FIRST ACTION" in prompt
         assert "After loading the skill instructions" in prompt
 
     def test_after_loading_only_with_profile_name(self):
         spec = build_skill_session_cmd("/investigate foo", **self.BASE, profile_name="")
-        prompt = spec.cmd[spec.cmd.index("-p") + 1]
+        prompt = spec.cmd[spec.cmd.index(ClaudeFlags.PRINT) + 1]
         assert "After loading" not in prompt
 
     def test_no_after_loading_for_plain_prompt_with_profile(self):
         spec = build_skill_session_cmd("Fix the bug", **self.BASE, profile_name="minimax")
-        prompt = spec.cmd[spec.cmd.index("-p") + 1]
+        prompt = spec.cmd[spec.cmd.index(ClaudeFlags.PRINT) + 1]
         assert "FIRST ACTION" not in prompt
         assert "After loading" not in prompt
 
@@ -442,7 +440,7 @@ class TestBuildSkillSessionCmdResume:
         spec = build_skill_session_cmd(
             "/implement fix the bug", **self.BASE, resume_session_id="sess-12345"
         )
-        prompt = spec.cmd[spec.cmd.index("-p") + 1]
+        prompt = spec.cmd[spec.cmd.index(ClaudeFlags.PRINT) + 1]
         assert "resume" in prompt.lower() or "continue" in prompt.lower()
         assert "%%ORDER_UP::abc%%" in prompt
 

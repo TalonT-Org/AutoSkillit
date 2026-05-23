@@ -705,13 +705,14 @@ async def run_headless_core(
         step_name=step_name or None,
     ):
         resolved_model = _resolve_model(model, ctx.config)
+        add_dirs_tuple = tuple(add_dirs)
         if ctx.backend is not None:
             config = SkillSessionConfig(
                 completion_marker=effective_marker,
                 model=resolved_model,
                 plugin_source=ctx.plugin_source,
                 output_format=cfg.output_format,
-                add_dirs=tuple(add_dirs),
+                add_dirs=add_dirs_tuple,
                 exit_after_stop_delay_ms=cfg.exit_after_stop_delay_ms,
                 stream_idle_timeout_ms=cfg.stream_idle_timeout_ms,
                 scenario_step_name=step_name,
@@ -723,8 +724,7 @@ async def run_headless_core(
                 resume_checkpoint=resume_checkpoint,
                 resume_message=resume_message,
             )
-            raw = ctx.backend.build_skill_session_cmd(skill_command, cwd, config)
-            spec = CmdSpec(cmd=raw.cmd, env=raw.env)
+            spec = ctx.backend.build_skill_session_cmd(skill_command, cwd, config)
             logger.debug("run_headless_core_backend_dispatch", backend=ctx.backend.name)
         else:
             spec = build_skill_session_cmd(
@@ -734,7 +734,7 @@ async def run_headless_core(
                 model=resolved_model,
                 plugin_source=ctx.plugin_source,
                 output_format=cfg.output_format,
-                add_dirs=add_dirs,
+                add_dirs=add_dirs_tuple,
                 exit_after_stop_delay_ms=cfg.exit_after_stop_delay_ms,
                 stream_idle_timeout_ms=cfg.stream_idle_timeout_ms,
                 scenario_step_name=step_name,

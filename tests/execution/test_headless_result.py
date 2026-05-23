@@ -13,12 +13,18 @@ from autoskillit.core import AGENT_BACKEND_CLAUDE_CODE
 from autoskillit.core.types import (
     AgentSessionResult,
     KillReason,
+    SkillResult,
     SubprocessResult,
     TerminationReason,
     WriteEvidence,
 )
-from autoskillit.execution.headless import _build_skill_result
+from autoskillit.execution.backends.codex import CodexBackend
+from autoskillit.execution.headless import _build_skill_result, _parse_stdout
+from autoskillit.execution.headless._headless_result import _adapt_agent_result
+from autoskillit.execution.session import ClaudeSessionResult
+from autoskillit.execution.session._session_outcome import _compute_outcome
 from tests.execution.conftest import _make_tool_use_line, _sr, _success_session_json
+from tests.fixtures.codex import HAPPY_PATH_SINGLE_TURN, TURN_FAILED_ERROR, fixture_path
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -123,6 +129,62 @@ def _stale_result_with_token_usage(
         kill_reason=kill_reason,
         pid=12345,
         session_id="sess-stale-token",
+        channel_b_session_id="",
+    )
+
+
+def _adapt_codex_result(agent_result: AgentSessionResult) -> ClaudeSessionResult:
+    return _adapt_agent_result(agent_result)
+
+
+def _make_codex_parse_stdout() -> object:
+    """Return a _parse_stdout replacement that delegates to CodexResultParser.
+
+    Simulates Phase C wiring: parses Codex NDJSON via CodexResultParser,
+    adapts via _adapt_codex_result, and extracts error codes from turn.failed
+    events into session.errors for API error detection.
+
+    The ``backend`` parameter is accepted for signature compatibility with
+    _parse_stdout (called as ``_parse_stdout(stdout, backend=backend)`` inside
+    _build_skill_result) but is intentionally ignored — this monkeypatch
+    unconditionally routes through CodexResultParser.
+    """
+
+    def _patched(stdout: str, backend: object = None) -> ClaudeSessionResult:  # noqa: ARG001
+        agent_result = CodexBackend().result_parser().parse_stdout(stdout)
+        session = _adapt_codex_result(agent_result)
+        for line in stdout.strip().splitlines():
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if obj.get("type") == "turn.failed":
+                error = obj.get("error", {})
+                if isinstance(error, dict):
+                    code = error.get("code", "")
+                    if code:
+                        session.errors.append(code)
+        return session
+
+    return _patched  # type: ignore[return-value]
+
+
+def _codex_subprocess_result(
+    stdout: str,
+    *,
+    returncode: int = 0,
+    stderr: str = "",
+    termination: TerminationReason = TerminationReason.NATURAL_EXIT,
+    kill_reason: KillReason = KillReason.NATURAL_EXIT,
+) -> SubprocessResult:
+    return SubprocessResult(
+        returncode=returncode,
+        stdout=stdout,
+        stderr=stderr,
+        termination=termination,
+        kill_reason=kill_reason,
+        pid=12345,
+        session_id="",
         channel_b_session_id="",
     )
 
@@ -253,7 +315,6 @@ class TestBackendDelegatedWriteToolNames:
 
     def test_codex_backend_produces_zero_write_count(self):
         """CodexBackend.write_tool_names() is empty — write_call_count must be 0."""
-        from autoskillit.execution.backends.codex import CodexBackend
 
         stdout = (
             _make_tool_use_line("Write", {"file_path": "/a/b.py", "content": "x"})
@@ -377,7 +438,6 @@ class TestBackendDelegatedWriteToolNames:
 class TestParseStdout:
     def test_backend_none_calls_parse_session_result(self):
         """_parse_stdout with backend=None returns the same result as parse_session_result."""
-        from autoskillit.execution.headless import _parse_stdout
         from autoskillit.execution.session import parse_session_result
 
         stdout = _success_session_json("test result")
@@ -389,8 +449,6 @@ class TestParseStdout:
 
     def test_default_backend_returns_claude_session_result(self):
         """_parse_stdout with no backend arg returns a ClaudeSessionResult."""
-        from autoskillit.execution.headless import _parse_stdout
-        from autoskillit.execution.session import ClaudeSessionResult
 
         stdout = _success_session_json("test result")
         result = _parse_stdout(stdout)
@@ -399,9 +457,6 @@ class TestParseStdout:
 
     def test_parse_stdout_accepts_backend_kwarg(self):
         """_parse_stdout accepts an optional backend keyword argument."""
-
-        from autoskillit.execution.headless import _parse_stdout
-        from autoskillit.execution.session import ClaudeSessionResult
 
         mock_backend = Mock()
         mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
@@ -412,8 +467,6 @@ class TestParseStdout:
 
     def test_parse_stdout_with_backend_matches_fallback(self):
         """_parse_stdout with backend produces same result as without."""
-
-        from autoskillit.execution.headless import _parse_stdout
 
         mock_backend = Mock()
         mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
@@ -427,7 +480,6 @@ class TestParseStdout:
     def test_parse_stdout_claude_code_backend_falls_through(self):
         """ClaudeCodeBackend backend falls through to parse_session_result."""
         from autoskillit.execution.backends.claude import ClaudeCodeBackend
-        from autoskillit.execution.headless import _parse_stdout
         from autoskillit.execution.session import parse_session_result
 
         stdout = _success_session_json("test result")
@@ -439,8 +491,6 @@ class TestParseStdout:
 
     def test_parse_stdout_non_claude_backend_dispatches_through_result_parser(self):
         """Non-Claude backend dispatches through result_parser().parse_stdout()."""
-        from autoskillit.execution.headless import _parse_stdout
-        from autoskillit.execution.session import ClaudeSessionResult
 
         mock_backend = Mock()
         mock_backend.name = "not-claude-code"
@@ -464,7 +514,6 @@ class TestParseStdout:
 
     def test_parse_stdout_backend_none_unchanged(self):
         """_parse_stdout with backend=None matches parse_session_result (regression guard)."""
-        from autoskillit.execution.headless import _parse_stdout
         from autoskillit.execution.session import parse_session_result
 
         stdout = _success_session_json("test result")
@@ -476,10 +525,8 @@ class TestParseStdout:
 
     def test_parse_stdout_codex_backend_dispatches_through_adapter(self, monkeypatch):
         """CodexBackend dispatches through _adapt_agent_result (non-Claude path)."""
-        from autoskillit.execution.backends.codex import CodexBackend
         from autoskillit.execution.headless import _headless_result
         from autoskillit.execution.headless._headless_result import _parse_stdout
-        from autoskillit.execution.session import ClaudeSessionResult
 
         spy = Mock(wraps=_headless_result._adapt_agent_result)
         monkeypatch.setattr(_headless_result, "_adapt_agent_result", spy)
@@ -560,3 +607,178 @@ class TestWriteEvidenceCrossCheck:
             and "write_call_count_cross_check_mismatch" in call.args[0]
             for call in cap.calls
         ), "Cross-check must warn when count=0 but stdout contains write tool names"
+
+
+class TestCodexPipelineHappyPath:
+    """Codex NDJSON happy-path through _parse_stdout and _build_skill_result."""
+
+    def test_parse_stdout_with_codex_backend(self):
+        content = fixture_path(HAPPY_PATH_SINGLE_TURN).read_text()
+        session = _parse_stdout(content, backend=CodexBackend())
+        assert session.session_id == "thread_hp_abc123"
+        assert session.token_usage is not None
+        assert session.token_usage["input_tokens"] == 150
+        assert session.token_usage["output_tokens"] == 75
+        assert session.token_usage["cache_read_tokens"] == 30
+
+    def test_happy_path_pipeline(self):
+        content = fixture_path(HAPPY_PATH_SINGLE_TURN).read_text()
+        result = _codex_subprocess_result(content)
+        sr = _build_skill_result(
+            result,
+            backend=CodexBackend(),
+            supports_claude_format_stdout=False,
+        )
+        assert sr.success is True
+        assert sr.session_id == "thread_hp_abc123"
+        assert sr.is_error is False
+        assert sr.token_usage is not None
+
+    def test_subtype_via_compute_outcome(self):
+        content = fixture_path(HAPPY_PATH_SINGLE_TURN).read_text()
+        result = _codex_subprocess_result(content)
+        sr = _build_skill_result(
+            result,
+            backend=CodexBackend(),
+            supports_claude_format_stdout=False,
+        )
+        session = _parse_stdout(content, backend=CodexBackend())
+        outcome, _ = _compute_outcome(session, 0, TerminationReason.NATURAL_EXIT)
+        expected_subtype = session.normalize_subtype(outcome, "")
+        assert sr.subtype == expected_subtype
+
+    def test_parse_stdout_directly_with_codex_backend(self):
+        content = fixture_path(HAPPY_PATH_SINGLE_TURN).read_text()
+        session = _parse_stdout(content, backend=CodexBackend())
+        assert session.session_id == "thread_hp_abc123"
+        assert session.is_error is False
+        assert "input_tokens" in (session.token_usage or {})
+        assert "output_tokens" in (session.token_usage or {})
+
+
+class TestCodexPipelineTurnFailed:
+    """Codex NDJSON turn_failed_error through _build_skill_result."""
+
+    @pytest.fixture(autouse=True)
+    def _patch_parse_stdout(self, monkeypatch):
+        from autoskillit.execution.headless import _headless_result
+
+        monkeypatch.setattr(_headless_result, "_parse_stdout", _make_codex_parse_stdout())
+        self._content = fixture_path(TURN_FAILED_ERROR).read_text()
+        self._result = _codex_subprocess_result(
+            self._content,
+            returncode=1,
+            termination=TerminationReason.NATURAL_EXIT,
+            kill_reason=KillReason.NATURAL_EXIT,
+        )
+
+    def _build(self) -> SkillResult:
+        return _build_skill_result(self._result, supports_claude_format_stdout=False)
+
+    def test_failure_success_is_false(self):
+        sr = self._build()
+        assert sr.success is False
+
+    def test_failure_session_id(self):
+        sr = self._build()
+        assert sr.session_id == "thread_fail_001"
+
+    def test_failure_is_error(self):
+        sr = self._build()
+        assert sr.is_error is True
+
+    def test_failure_subtype(self):
+        sr = self._build()
+        assert sr.subtype == "error_during_execution"
+
+    def test_failure_needs_retry(self):
+        sr = self._build()
+        assert sr.needs_retry is True
+
+    def test_failure_token_usage_none(self):
+        sr = self._build()
+        assert sr.token_usage is None
+
+
+class TestCodexPipelineTerminationBranches:
+    """STALE and IDLE_STALL branches with Codex NDJSON fixtures."""
+
+    @pytest.fixture(autouse=True)
+    def _patch_parse_stdout(self, monkeypatch):
+        from autoskillit.execution.headless import _headless_result
+
+        monkeypatch.setattr(_headless_result, "_parse_stdout", _make_codex_parse_stdout())
+
+    def _happy_content(self) -> str:
+        return fixture_path(HAPPY_PATH_SINGLE_TURN).read_text()
+
+    def _error_content(self) -> str:
+        return fixture_path(TURN_FAILED_ERROR).read_text()
+
+    def test_stale_codex_happy_path_with_backend_succeeds(self):
+        result = _codex_subprocess_result(
+            self._happy_content(),
+            returncode=-1,
+            termination=TerminationReason.STALE,
+            kill_reason=KillReason.INFRA_KILL,
+        )
+        sr = _build_skill_result(
+            result,
+            completion_marker="%%ORDER_UP%%",
+            supports_claude_format_stdout=False,
+        )
+        assert sr.success is True
+
+    def test_stale_codex_empty_stdout_fails(self):
+        result = _codex_subprocess_result(
+            "",
+            returncode=-1,
+            termination=TerminationReason.STALE,
+            kill_reason=KillReason.INFRA_KILL,
+        )
+        sr = _build_skill_result(result, supports_claude_format_stdout=False)
+        assert sr.success is False
+
+    def test_stale_codex_error_fixture_fails(self):
+        result = _codex_subprocess_result(
+            self._error_content(),
+            returncode=-1,
+            termination=TerminationReason.STALE,
+            kill_reason=KillReason.INFRA_KILL,
+        )
+        sr = _build_skill_result(result, supports_claude_format_stdout=False)
+        assert sr.success is False
+
+    def test_idle_stall_codex_happy_path_with_backend_succeeds(self):
+        result = _codex_subprocess_result(
+            self._happy_content(),
+            returncode=-1,
+            termination=TerminationReason.IDLE_STALL,
+            kill_reason=KillReason.INFRA_KILL,
+        )
+        sr = _build_skill_result(
+            result,
+            completion_marker="%%ORDER_UP%%",
+            supports_claude_format_stdout=False,
+        )
+        assert sr.success is True
+
+    def test_idle_stall_codex_empty_stdout_fails(self):
+        result = _codex_subprocess_result(
+            "",
+            returncode=-1,
+            termination=TerminationReason.IDLE_STALL,
+            kill_reason=KillReason.INFRA_KILL,
+        )
+        sr = _build_skill_result(result, supports_claude_format_stdout=False)
+        assert sr.success is False
+
+    def test_idle_stall_codex_error_fixture_fails(self):
+        result = _codex_subprocess_result(
+            self._error_content(),
+            returncode=-1,
+            termination=TerminationReason.IDLE_STALL,
+            kill_reason=KillReason.INFRA_KILL,
+        )
+        sr = _build_skill_result(result, supports_claude_format_stdout=False)
+        assert sr.success is False

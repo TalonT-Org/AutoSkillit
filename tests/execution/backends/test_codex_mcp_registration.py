@@ -85,20 +85,22 @@ class TestEnsureCodexMcpRegisteredCreate:
 # ---------------------------------------------------------------------------
 
 
-@_xfail_stub
 class TestEnsureCodexMcpRegisteredIdempotent:
+    @_xfail_stub
     def test_second_call_returns_false(self, fake_home: Path) -> None:
         first = ensure_codex_mcp_registered()
         second = ensure_codex_mcp_registered()
         assert first is True
         assert second is False
 
+    @_xfail_stub
     def test_exactly_one_section(self, fake_home: Path) -> None:
         ensure_codex_mcp_registered()
         ensure_codex_mcp_registered()
         raw = (fake_home / ".codex" / "config.toml").read_text()
         assert raw.count("[mcp_servers.autoskillit]") == 1
 
+    @_xfail_stub
     def test_toml_parseable_after_double_call(self, fake_home: Path) -> None:
         ensure_codex_mcp_registered()
         ensure_codex_mcp_registered()
@@ -111,7 +113,6 @@ class TestEnsureCodexMcpRegisteredIdempotent:
 # ---------------------------------------------------------------------------
 
 
-@_xfail_stub
 class TestEnsureCodexMcpRegisteredPreservation:
     _FOREIGN_TOML = '[mcp_servers.other_tool]\ncommand = "other"\n'
 
@@ -120,6 +121,7 @@ class TestEnsureCodexMcpRegisteredPreservation:
         codex_dir.mkdir(parents=True, exist_ok=True)
         (codex_dir / "config.toml").write_text(self._FOREIGN_TOML)
 
+    @_xfail_stub
     def test_foreign_section_survives(self, fake_home: Path) -> None:
         self._pre_write(fake_home)
         ensure_codex_mcp_registered()
@@ -127,6 +129,7 @@ class TestEnsureCodexMcpRegisteredPreservation:
         assert "other_tool" in data["mcp_servers"]
         assert data["mcp_servers"]["other_tool"]["command"] == "other"
 
+    @_xfail_stub
     def test_autoskillit_section_added(self, fake_home: Path) -> None:
         self._pre_write(fake_home)
         ensure_codex_mcp_registered()

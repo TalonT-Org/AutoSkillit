@@ -709,3 +709,131 @@ async def test_dispatch_food_truck_marker_dir_none_when_no_channel_b(
     )
 
     assert execute_kwargs["marker_dir"] is None
+
+
+# ── stream_parser injection tests ────────────────────────────────────────────
+
+
+@pytest.mark.anyio
+async def test_execute_claude_headless_passes_stream_parser_to_runner(
+    minimal_ctx, tmp_path, monkeypatch
+) -> None:
+    from autoskillit.execution.commands import ClaudeHeadlessCmd
+    from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
+    from tests.execution.conftest import _sr
+
+    spec = ClaudeHeadlessCmd(cmd=("echo", "test"), env={})
+    runner_kwargs: dict = {}
+
+    async def fake_runner(cmd, **kwargs):
+        runner_kwargs.update(kwargs)
+        return _sr()
+
+    minimal_ctx.runner = fake_runner
+
+    sentinel = object()
+    backend = _mock_backend()
+    backend.stream_parser.return_value = sentinel
+    minimal_ctx.backend = backend
+
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._build_skill_result",
+        lambda *a, **kw: _STUB_RESULT,
+    )
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._compute_post_session_metrics",
+        lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),
+    )
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._capture_git_head_sha",
+        lambda *a: "",
+    )
+
+    await _execute_claude_headless(
+        spec, str(tmp_path), minimal_ctx, timeout=60, stale_threshold=30
+    )
+
+    assert runner_kwargs["stream_parser"] is sentinel
+    backend.stream_parser.assert_called()
+
+
+@pytest.mark.anyio
+async def test_execute_claude_headless_stream_parser_none_when_no_backend(
+    minimal_ctx, tmp_path, monkeypatch
+) -> None:
+    from autoskillit.execution.commands import ClaudeHeadlessCmd
+    from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
+    from tests.execution.conftest import _sr
+
+    spec = ClaudeHeadlessCmd(cmd=("echo", "test"), env={})
+    runner_kwargs: dict = {}
+
+    async def fake_runner(cmd, **kwargs):
+        runner_kwargs.update(kwargs)
+        return _sr()
+
+    minimal_ctx.runner = fake_runner
+
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._build_skill_result",
+        lambda *a, **kw: _STUB_RESULT,
+    )
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._compute_post_session_metrics",
+        lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),
+    )
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._capture_git_head_sha",
+        lambda *a: "",
+    )
+
+    await _execute_claude_headless(
+        spec, str(tmp_path), minimal_ctx, timeout=60, stale_threshold=30
+    )
+
+    assert runner_kwargs.get("stream_parser") is None
+
+
+@pytest.mark.anyio
+async def test_execute_claude_headless_stream_parser_receives_completion_marker(
+    minimal_ctx, tmp_path, monkeypatch
+) -> None:
+    from autoskillit.execution.commands import ClaudeHeadlessCmd
+    from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
+    from tests.execution.conftest import _sr
+
+    spec = ClaudeHeadlessCmd(cmd=("echo", "test"), env={})
+    runner_kwargs: dict = {}
+
+    async def fake_runner(cmd, **kwargs):
+        runner_kwargs.update(kwargs)
+        return _sr()
+
+    minimal_ctx.runner = fake_runner
+
+    backend = _mock_backend()
+    minimal_ctx.backend = backend
+
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._build_skill_result",
+        lambda *a, **kw: _STUB_RESULT,
+    )
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._compute_post_session_metrics",
+        lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),
+    )
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._capture_git_head_sha",
+        lambda *a: "",
+    )
+
+    await _execute_claude_headless(
+        spec,
+        str(tmp_path),
+        minimal_ctx,
+        timeout=60,
+        stale_threshold=30,
+        completion_marker="%%TEST_MARKER%%",
+    )
+
+    backend.stream_parser.assert_called_once_with(completion_marker="%%TEST_MARKER%%")

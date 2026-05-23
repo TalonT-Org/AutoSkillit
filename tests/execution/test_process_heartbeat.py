@@ -48,7 +48,7 @@ class TestHeartbeatDetectsCompletion:
         assert result.termination != TerminationReason.TIMED_OUT, (
             "Heartbeat should fire before wall-clock timeout"
         )
-        assert elapsed < 10, f"Heartbeat should detect within ~5s, took {elapsed:.1f}s"
+        assert elapsed < 5.0, f"Heartbeat should detect within ~2s, took {elapsed:.1f}s"
         assert '"type": "result"' in result.stdout or '"type":"result"' in result.stdout
 
     @pytest.mark.anyio

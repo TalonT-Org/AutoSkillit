@@ -25,7 +25,6 @@ _FMT_LOAD_RECIPE_RENDERED: frozenset[str] = frozenset(
     {
         "valid",
         "suggestions",
-        "error",
         "content",
         "ingredients_table",
         "orchestration_rules",
@@ -160,7 +159,6 @@ _FMT_OPEN_KITCHEN_RENDERED: frozenset[str] = frozenset(
     {
         "valid",
         "suggestions",
-        "error",
         "content",
         "ingredients_table",
         "orchestration_rules",

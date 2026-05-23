@@ -36,7 +36,12 @@ class RecipeRepository(Protocol):
         ingredient_overrides: dict[str, str] | None = None,
         temp_dir: Path | None = None,
         temp_dir_relpath: str | None = None,
-    ) -> dict[str, Any]: ...
+    ) -> dict[str, Any]:
+        """Load and validate a recipe.
+
+        Raises ProcessStaleError or RecipeNotFoundError on failure.
+        """
+        ...
 
     def validate_from_path(
         self, script_path: Any, temp_dir_relpath: str = ".autoskillit/temp"

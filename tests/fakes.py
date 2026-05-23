@@ -19,6 +19,8 @@ from autoskillit.core.types import (
     DatabaseReader,
     HeadlessExecutor,
     MergeQueueWatcher,
+    ProcessStaleError,
+    RecipeNotFoundError,
     RecipeRepository,
     SessionCheckpoint,  # noqa: F401, TC001
     SkillResult,
@@ -326,6 +328,7 @@ class InMemoryRecipeRepository(RecipeRepository):
         self._validated: dict[str, dict[str, Any]] = {}
         self._path_validated: dict[str, dict[str, Any]] = {}
         self._all_recipes: dict[str, Any] = {}
+        self._stale: bool = False
         self.calls: list[dict[str, Any]] = []
 
     # -- test setup helpers --
@@ -352,6 +355,9 @@ class InMemoryRecipeRepository(RecipeRepository):
 
     def set_all(self, data: dict[str, Any]) -> None:
         self._all_recipes = data
+
+    def set_stale(self, stale: bool) -> None:
+        self._stale = stale
 
     # -- protocol methods --
 
@@ -395,6 +401,13 @@ class InMemoryRecipeRepository(RecipeRepository):
                 "temp_dir_relpath": temp_dir_relpath,
             }
         )
+        if self._stale:
+            raise ProcessStaleError(
+                "Process is running stale code — package directory was modified on disk "
+                "since server startup. Restart the MCP server via reload_session."
+            )
+        if name not in self._validated and name not in self._recipes:
+            raise RecipeNotFoundError(f"No recipe named '{name}' found")
         return self._validated.get(name, {"valid": True, "suggestions": []})
 
     def validate_from_path(

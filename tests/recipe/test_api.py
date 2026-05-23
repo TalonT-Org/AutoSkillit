@@ -991,8 +991,9 @@ def test_load_and_validate_cache_invalidated_on_rule_registry_change(tmp_path, m
 
 
 def test_load_and_validate_detects_stale_process(tmp_path, monkeypatch):
-    """Stale process returns error result instead of evaluating recipes."""
+    """Stale process raises ProcessStaleError instead of evaluating recipes."""
     import autoskillit.recipe._api as api_mod
+    from autoskillit.core import ProcessStaleError
 
     monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
     monkeypatch.setattr(api_mod, "_PROCESS_START_PKG_MTIME", 1000)
@@ -1015,15 +1016,27 @@ def test_load_and_validate_detects_stale_process(tmp_path, monkeypatch):
     recipes_dir.mkdir(parents=True)
     (recipes_dir / "myrecipe.yaml").write_text(MINIMAL_RECIPE_YAML)
 
-    result = api_mod.load_and_validate("myrecipe", tmp_path)
+    with pytest.raises(ProcessStaleError, match="stale"):
+        api_mod.load_and_validate("myrecipe", tmp_path)
 
-    assert result.get("valid") is False
-    assert "stale" in result.get("error", "").lower()
+
+def test_load_and_validate_raises_on_not_found(tmp_path, monkeypatch):
+    """load_and_validate raises RecipeNotFoundError for nonexistent recipes."""
+    import autoskillit.recipe._api as api_mod
+    from autoskillit.core import RecipeNotFoundError
+
+    monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
+    monkeypatch.setattr(api_mod, "_STALENESS_LAST_CHECK", 0.0)
+    monkeypatch.setattr(api_mod, "_STALENESS_IS_STALE", False)
+
+    with pytest.raises(RecipeNotFoundError, match="nonexistent_recipe"):
+        api_mod.load_and_validate("nonexistent_recipe", tmp_path)
 
 
 def test_lru_cache_helpers_cleared_on_process_staleness(tmp_path, monkeypatch):
     """Staleness detection clears lru_cache helpers."""
     import autoskillit.recipe._api as api_mod
+    from autoskillit.core import ProcessStaleError
     from autoskillit.recipe.contracts import load_bundled_manifest
     from autoskillit.recipe.methodology_venue_appendix import load_ml_sub_area_folding
     from autoskillit.recipe.rules.rules_blocks import _block_budgets
@@ -1057,7 +1070,8 @@ def test_lru_cache_helpers_cleared_on_process_staleness(tmp_path, monkeypatch):
     recipes_dir.mkdir(parents=True)
     (recipes_dir / "myrecipe.yaml").write_text(MINIMAL_RECIPE_YAML)
 
-    api_mod.load_and_validate("myrecipe", tmp_path)
+    with pytest.raises(ProcessStaleError):
+        api_mod.load_and_validate("myrecipe", tmp_path)
 
     assert _block_budgets.cache_info().currsize == 0
     assert load_bundled_manifest.cache_info().currsize == 0

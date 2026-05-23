@@ -226,10 +226,13 @@ from .types import OutputPatternResolver as OutputPatternResolver
 from .types import PackDef as PackDef
 from .types import PluginSource as PluginSource
 from .types import PRState as PRState
+from .types import ProcessStaleError as ProcessStaleError
 from .types import PromptContractError as PromptContractError
 from .types import QuotaRefreshTask as QuotaRefreshTask
 from .types import ReadOnlyResolver as ReadOnlyResolver
 from .types import RecipePackDef as RecipePackDef
+from .types import RecipeLoadError as RecipeLoadError
+from .types import RecipeNotFoundError as RecipeNotFoundError
 from .types import RecipeRepository as RecipeRepository
 from .types import RecipeSource as RecipeSource
 from .types import RestartScope as RestartScope

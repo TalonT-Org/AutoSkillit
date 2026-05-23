@@ -63,6 +63,7 @@ _ERROR_CODE_CATEGORIES: dict[str, ErrorCodeCategory] = {
     FleetErrorCode.FLEET_MANIFEST_CORRUPTED: ErrorCodeCategory.INFRASTRUCTURE,
     FleetErrorCode.FLEET_LOCK_NOT_INITIALIZED: ErrorCodeCategory.INFRASTRUCTURE,
     FleetErrorCode.FLEET_RECIPE_INVALID: ErrorCodeCategory.INFRASTRUCTURE,
+    FleetErrorCode.FLEET_PROCESS_STALE: ErrorCodeCategory.INFRASTRUCTURE,
     FleetErrorCode.FLEET_FEATURE_DISABLED: ErrorCodeCategory.INFRASTRUCTURE,
     FleetErrorCode.FLEET_DISPATCH_SKIPPED: ErrorCodeCategory.INFRASTRUCTURE,
     FleetErrorCode.FLEET_GATE_ALREADY_RECORDED: ErrorCodeCategory.INFRASTRUCTURE,

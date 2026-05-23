@@ -67,6 +67,7 @@ __all__ = [
     "LABEL_TRANSITIONS",
     "validate_label_transition",
     "RETIRED_SKILL_NAMES",
+    "RETIRED_AGENT_NAMES",
     "SKILL_FILE_ADVISORY_MAP",
     "SKILL_ACTIVATE_DEPS_REQUIRED",
     "SOUS_CHEF_MANDATORY_SECTIONS",
@@ -605,6 +606,24 @@ if any(n != n.lower() for n in RETIRED_SKILL_NAMES):
     raise AssertionError(
         "RETIRED_SKILL_NAMES entries must be lowercase. "
         f"Offending: {sorted(n for n in RETIRED_SKILL_NAMES if n != n.lower())}"
+    )
+
+RETIRED_AGENT_NAMES: frozenset[str] = frozenset(
+    {
+        # Agent names that have been replaced with proven alternatives.
+        # Append retired names here atomically with the replacement commit.
+        # DO NOT REMOVE entries — this registry is append-only.
+        "plan-assumption-challenger",
+        "plan-completeness-auditor",
+        "plan-contract-verifier",
+        "plan-registry-wire-tracer",
+    }
+)
+
+if any(n != n.lower() for n in RETIRED_AGENT_NAMES):
+    raise AssertionError(
+        "RETIRED_AGENT_NAMES entries must be lowercase. "
+        f"Offending: {sorted(n for n in RETIRED_AGENT_NAMES if n != n.lower())}"
     )
 
 # Guard: FeatureDef.tool_tags must be in TOOL_SUBSET_TAGS — checked at import time.

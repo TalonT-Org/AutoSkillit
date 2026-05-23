@@ -8,10 +8,9 @@ Bundled agent definition markdown files that serve as both **plugin agents**
 
 | File | Purpose |
 |------|---------|
-| `plan-assumption-challenger.md` | Adversarial agent: verifies implicit assumptions against actual code |
-| `plan-completeness-auditor.md` | Adversarial agent: finds entities missed by plan search operations |
-| `plan-contract-verifier.md` | Adversarial agent: traces downstream consumers of plan-introduced changes |
-| `plan-registry-wire-tracer.md` | Adversarial agent: checks plan-touched files against registry sync patterns |
+| `plan-foundation-auditor.md` | Adversarial agent: control-flow auditor — traces branch scope, return placement, guard coverage |
+| `plan-interface-mapper.md` | Adversarial agent: variable/data-flow tracer — builds SET/READ tables for wrong-variable detection |
+| `plan-registry-tracer.md` | Adversarial agent: registry/artifact auditor — LSP + tree-sitter + grep symbol tracing |
 
 ## Layout
 
@@ -33,7 +32,7 @@ Agent(subagent_type="autoskillit:{agent-name}", prompt="...")
 Claude Code automatically applies tool restrictions, model, maxTurns, and the
 markdown body as the system prompt from the agent definition frontmatter.
 
-**Used by:** make-plan Steps 6-7
+**Used by:** make-plan Steps 6-9
 
 ### MCP Resource path (available for programmatic access)
 
@@ -46,7 +45,7 @@ agent definitions are readable via `ReadMcpResourceTool` at `agent://{pack}/{nam
 
 | Pack | Tag | Agents | Used By |
 |------|-----|--------|---------|
-| `plan-review` | `plan-review` | 4 adversarial reviewers | make-plan Steps 6-8 |
+| `plan-review` | `plan-review` | 3 adversarial reviewers | make-plan Steps 6-9 |
 
 ## Adding Agents
 

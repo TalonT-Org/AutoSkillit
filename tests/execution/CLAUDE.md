@@ -130,3 +130,4 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_codex_mcp_registration.py` | Tests for ensure_codex_mcp_registered: file creation, TOML fields, idempotency, foreign section preservation, dir creation |
 | `test_codex_stream_parser.py` | Full test suite for CodexStreamParser: happy-path, item parsing, degradation, fixture-driven integration, protocol conformance |
 | `test_codex_result_parser.py` | Tests for CodexResultParser |
+| `test_codex_config.py` | Tests for TOML read/write primitives, _is_autoskillit_registered, and ensure_codex_mcp_registered |

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import tomllib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum, unique
@@ -14,6 +15,8 @@ from autoskillit.core import (
     AGENT_BACKEND_CODEX,
     AUTOSKILLIT_PRIVATE_ENV_VARS,
     CAMPAIGN_ID_ENV_VAR,
+    HEADLESS_AUTO_GATE_ENV_VAR,
+    HEADLESS_ENV_VAR,
     KITCHEN_SESSION_ID_ENV_VAR,
     SESSION_TYPE_SKILL,
     AgentSessionResult,
@@ -29,8 +32,10 @@ from autoskillit.core import (
     SessionEvent,
     SkillSessionConfig,
     ValidatedAddDir,
+    atomic_write,
     extract_skill_name,
     fast_loads,
+    get_logger,
 )
 from autoskillit.execution.backends.claude import (
     _HEADLESS_EXCLUSIVE_VARS,
@@ -55,10 +60,6 @@ __all__ = [
 ]
 
 
-def ensure_codex_mcp_registered() -> bool:
-    raise NotImplementedError("ensure_codex_mcp_registered: awaiting P5-A7-WP1 implementation")
-
-
 CODEX_ENV_DENYLIST: frozenset[str] = frozenset(
     {
         "ANTHROPIC_API_KEY",
@@ -69,6 +70,132 @@ CODEX_ENV_DENYLIST: frozenset[str] = frozenset(
 )
 
 CODEX_ENV_PREFIX_DENYLIST: tuple[str, ...] = ("CLAUDE_CODE_",)
+
+logger = get_logger()
+
+
+def _format_toml_value(v: Any) -> str:
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, str):
+        escaped = (
+            v.replace("\\", "\\\\")
+            .replace('"', '\\"')
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t")
+        )
+        return f'"{escaped}"'
+    if isinstance(v, int):
+        return str(v)
+    if isinstance(v, float):
+        return str(v)
+    if isinstance(v, list):
+        items = ", ".join(_format_toml_value(item) for item in v)
+        return f"[{items}]"
+    msg = f"Unsupported TOML value type: {type(v).__name__}"
+    raise TypeError(msg)
+
+
+def _format_inline_table(d: dict[str, Any]) -> str:
+    pairs = [f"{k} = {_format_toml_value(v)}" for k, v in d.items()]
+    return "{" + ", ".join(pairs) + "}"
+
+
+def _emit_toml_table(d: dict[str, Any], path: list[str], lines: list[str]) -> None:
+    header = f"[{'.'.join(path)}]"
+    scalars = [(k, v) for k, v in d.items() if not isinstance(v, dict)]
+    tables = [(k, v) for k, v in d.items() if isinstance(v, dict)]
+    has_scalars = bool(scalars)
+
+    inline_tables: list[tuple[str, dict[str, Any]]] = []
+    recurse_tables: list[tuple[str, dict[str, Any]]] = []
+    for k, v in tables:
+        if not v:
+            inline_tables.append((k, v))
+            continue
+        is_leaf = not any(isinstance(sv, dict) for sv in v.values())
+        if is_leaf and has_scalars:
+            inline_tables.append((k, v))
+        else:
+            recurse_tables.append((k, v))
+
+    if scalars or inline_tables:
+        lines.append(f"\n{header}")
+        for k, v in scalars:
+            lines.append(f"{k} = {_format_toml_value(v)}")
+        for k, v in inline_tables:
+            lines.append(f"{k} = {_format_inline_table(v)}")
+
+    for k, v in recurse_tables:
+        _emit_toml_table(v, [*path, k], lines)
+
+
+def _serialize_toml(data: dict[str, Any]) -> str:
+    lines: list[str] = []
+    for k, v in data.items():
+        if not isinstance(v, dict):
+            lines.append(f"{k} = {_format_toml_value(v)}")
+    for k, v in data.items():
+        if isinstance(v, dict):
+            _emit_toml_table(v, [k], lines)
+    text = "\n".join(lines).lstrip("\n")
+    return text + "\n" if text else ""
+
+
+def _read_codex_config(path: Path) -> dict[str, Any]:
+    try:
+        with open(path, "rb") as f:
+            data = tomllib.load(f)
+    except FileNotFoundError:
+        return {}
+    except tomllib.TOMLDecodeError:
+        logger.warning("corrupt_codex_config", path=str(path))
+        return {}
+    return data
+
+
+def _write_codex_config(path: Path, data: dict[str, Any]) -> None:
+    atomic_write(path, _serialize_toml(data))
+
+
+def _is_autoskillit_registered(config: dict[str, Any], *, headless_auto_gate: bool) -> bool:
+    entry = config.get("mcp_servers", {}).get("autoskillit")
+    if not isinstance(entry, dict):
+        return False
+    if entry.get("command") != "autoskillit":
+        return False
+    env = entry.get("env", {})
+    if env.get(HEADLESS_ENV_VAR) != "1":
+        return False
+    if headless_auto_gate and env.get(HEADLESS_AUTO_GATE_ENV_VAR) != "1":
+        return False
+    return True
+
+
+def ensure_codex_mcp_registered(
+    *,
+    config_path: Path | None = None,
+    headless_auto_gate: bool = True,
+) -> bool:
+    """Return True if the entry was written, False if already registered."""
+    if config_path is None:
+        config_path = Path.home() / ".codex" / "config.toml"
+    config = _read_codex_config(config_path)
+    if _is_autoskillit_registered(config, headless_auto_gate=headless_auto_gate):
+        return False
+    env: dict[str, str] = {HEADLESS_ENV_VAR: "1"}
+    if headless_auto_gate:
+        env[HEADLESS_AUTO_GATE_ENV_VAR] = "1"
+    entry: dict[str, Any] = {
+        "command": "autoskillit",
+        "env": env,
+        "startup_timeout_sec": 30.0,
+        "tool_timeout_sec": 120.0,
+    }
+    config.setdefault("mcp_servers", {})["autoskillit"] = entry
+    _write_codex_config(config_path, config)
+    return True
 
 
 @unique

@@ -639,13 +639,14 @@ class TestCodexPipelineHappyPath:
 
     def test_subtype_via_compute_outcome(self):
         content = fixture_path(HAPPY_PATH_SINGLE_TURN).read_text()
+        backend = CodexBackend()
+        session = _parse_stdout(content, backend=backend)
         result = _codex_subprocess_result(content)
         sr = _build_skill_result(
             result,
-            backend=CodexBackend(),
+            backend=backend,
             supports_claude_format_stdout=False,
         )
-        session = _parse_stdout(content, backend=CodexBackend())
         outcome, _ = _compute_outcome(session, 0, TerminationReason.NATURAL_EXIT)
         expected_subtype = session.normalize_subtype(outcome, "")
         assert sr.subtype == expected_subtype

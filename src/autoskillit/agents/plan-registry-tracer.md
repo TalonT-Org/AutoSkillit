@@ -36,7 +36,7 @@ Use the LSP tool (Pyright) as your primary method for tracing Python symbol refe
 - `findReferences` — finds ALL usages of a symbol: constructor calls, type annotations, keyword arguments, re-exports, test fixtures
 - `goToDefinition` — follows imports and re-exports to the actual definition site
 
-For EACH symbol from Step 1, locate its definition in the source (use grep if needed to find the file:line), then:
+For each symbol from the enumeration above, locate its definition in the source (use grep if needed to find the file:line), then:
 - Call `findReferences` on the symbol's definition site to get every usage across the entire codebase
 - Call `goToDefinition` on any ambiguous import to verify it resolves to the correct source
 

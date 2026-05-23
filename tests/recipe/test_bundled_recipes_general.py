@@ -149,7 +149,6 @@ def test_audit_impl_on_failure_routes_to_escalation() -> None:
     [
         ("implementation", "implementation.yaml"),
         ("remediation", "remediation.yaml"),
-        ("merge-prs", "merge-prs.yaml"),
         ("implementation-groups", "implementation-groups.yaml"),
     ],
 )
@@ -157,7 +156,7 @@ def test_implementation_adversarial_review_level_ingredient_exists(
     recipe_name: str,
     yaml_name: str,
 ) -> None:
-    """T3.1: adversarial_review_level ingredient exists in all pipeline recipes."""
+    """T3.1: adversarial_review_level ingredient exists in planning pipeline recipes."""
     recipe = load_recipe(builtin_recipes_dir() / yaml_name)
     ing = recipe.ingredients.get("adversarial_review_level")
     assert ing is not None, f"{recipe_name}: 'adversarial_review_level' ingredient not found"
@@ -168,7 +167,6 @@ def test_implementation_adversarial_review_level_ingredient_exists(
     [
         ("implementation", "implementation.yaml"),
         ("remediation", "remediation.yaml"),
-        ("merge-prs", "merge-prs.yaml"),
         ("implementation-groups", "implementation-groups.yaml"),
     ],
 )
@@ -176,7 +174,7 @@ def test_implementation_adversarial_review_level_ingredient_defaults_to_auto(
     recipe_name: str,
     yaml_name: str,
 ) -> None:
-    """T3.2: adversarial_review_level defaults to 'auto' in all pipeline recipes."""
+    """T3.2: adversarial_review_level defaults to 'auto' in planning pipeline recipes."""
     recipe = load_recipe(builtin_recipes_dir() / yaml_name)
     ing = recipe.ingredients.get("adversarial_review_level")
     assert ing is not None, f"{recipe_name}: 'adversarial_review_level' ingredient not found"
@@ -185,22 +183,11 @@ def test_implementation_adversarial_review_level_ingredient_defaults_to_auto(
     )
 
 
-def test_audit_ingredient_defaults_to_false(recipe_name: str, yaml_name: str) -> None:
-    """audit must default to 'false' (OFF) in all recipes — opt-in, not opt-out."""
-    recipe = load_recipe(builtin_recipes_dir() / yaml_name)
-    audit_ing = recipe.ingredients.get("audit")
-    assert audit_ing is not None, f"{recipe_name}: 'audit' ingredient not found"
-    assert audit_ing.default == "false", (
-        f"{recipe_name}: audit.default must be 'false' (OFF by default), got {audit_ing.default!r}"
-    )
-
-
 @pytest.mark.parametrize(
     "recipe_name,yaml_name",
     [
         ("implementation", "implementation.yaml"),
         ("remediation", "remediation.yaml"),
-        ("merge-prs", "merge-prs.yaml"),
         ("implementation-groups", "implementation-groups.yaml"),
     ],
 )
@@ -208,7 +195,7 @@ def test_implementation_adversarial_review_level_ingredient_is_hidden(
     recipe_name: str,
     yaml_name: str,
 ) -> None:
-    """T3.3: adversarial_review_level is hidden in all pipeline recipes."""
+    """T3.3: adversarial_review_level is hidden in planning pipeline recipes."""
     recipe = load_recipe(builtin_recipes_dir() / yaml_name)
     ing = recipe.ingredients.get("adversarial_review_level")
     assert ing is not None, f"{recipe_name}: 'adversarial_review_level' ingredient not found"

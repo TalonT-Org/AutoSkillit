@@ -402,6 +402,9 @@ class TestListMigrationsCaching:
 
         r1 = list_migrations()
         r2 = list_migrations()
+        assert (
+            len(r1) > 0
+        )  # Ensure test setup produced actual migrations (guards against vacuous pass)
         assert r1 == r2
         assert parse_count == 1
 

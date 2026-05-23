@@ -57,7 +57,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_tools_clone.py` | Tests for autoskillit server clone tools |
 | `test_tools_dispatch.py` | Tests for dispatch_food_truck execution lifecycle: lock, success envelope, PID, quota, cleanup |
 | `test_tools_dispatch_halt.py` | Tests for dispatch_food_truck campaign halt enforcement gate |
-| `test_tools_dispatch_params.py` | Tests for dispatch_food_truck parameter passthrough: resume, idle_timeout |
+| `test_tools_dispatch_params.py` | Tests for dispatch_food_truck parameter passthrough: resume, idle_timeout, marketplace |
 | `test_tools_dispatch_split.py` | Dispatch split structural guard |
 | `test_tools_dispatch_validation.py` | Tests for dispatch_food_truck validation: gates, input, and semantic validation |
 | `test_tools_execution_command.py` | Tests for run_skill command building, timeouts, env, model, and per-invocation markers |

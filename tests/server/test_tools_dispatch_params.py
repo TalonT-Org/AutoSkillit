@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from autoskillit.fleet import FleetSemaphore
@@ -173,3 +175,43 @@ class TestDispatchFoodTruckIdleTimeout:
         executor = tool_ctx.executor
         assert executor.dispatch_calls, "dispatch_food_truck was never called"
         assert executor.dispatch_calls[0].idle_output_timeout == 0.0
+
+
+@pytest.mark.anyio
+async def test_dispatch_food_truck_marketplace_install_succeeds(tool_ctx_marketplace, monkeypatch):
+    """dispatch_food_truck does not raise when plugin_source is MarketplaceInstall."""
+    from autoskillit.fleet._api import execute_dispatch
+    from autoskillit.fleet.result_parser import L3ParseResult
+
+    monkeypatch.setattr(
+        "autoskillit.fleet._api.parse_l3_result_block",
+        lambda **_kwargs: L3ParseResult(
+            outcome="completed_clean",
+            payload={"success": True},
+            raw_body=None,
+            parse_error=None,
+            source="stdout",
+        ),
+    )
+
+    tool_ctx_marketplace.fleet_lock = FleetSemaphore(max_concurrent=1)
+    repo = InMemoryRecipeRepository()
+    recipe_info = _make_recipe_info("test-recipe")
+    repo.add_recipe("test-recipe", recipe_info)
+    repo.add_full_recipe(recipe_info.path, _make_standard_recipe("test-recipe", ["task"]))
+    tool_ctx_marketplace.recipes = repo
+    tool_ctx_marketplace.executor = InMemoryHeadlessExecutor()
+
+    _dispatch_result = await execute_dispatch(
+        tool_ctx=tool_ctx_marketplace,
+        recipe="test-recipe",
+        task="t",
+        ingredients=None,
+        dispatch_name=None,
+        timeout_sec=None,
+        prompt_builder=_simple_prompt_builder,
+        quota_checker=_no_sleep_quota_checker,
+        quota_refresher=_noop_quota_refresher,
+    )
+    result = json.loads(_dispatch_result.outcome.to_envelope())
+    assert result["success"] is True

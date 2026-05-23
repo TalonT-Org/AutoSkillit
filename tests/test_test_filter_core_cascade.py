@@ -529,7 +529,7 @@ class TestBuildTestScopeCoreCascade:
         dir_names = {p.name for p in result}
         for pkg in ["core", "execution", "pipeline"]:
             assert pkg in dir_names, f"narrow cascade should include {pkg}"
-        for excluded in ["config", "fleet", "migration", "workspace", "recipe", "cli"]:
+        for excluded in ["config", "fleet", "migration", "workspace", "recipe", "cli", "planner"]:
             assert excluded not in dir_names, f"narrow cascade should not include {excluded}"
 
     def test_json_narrow_cascade(self, tmp_path: Path) -> None:

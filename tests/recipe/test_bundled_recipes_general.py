@@ -716,6 +716,12 @@ def test_pre_ci_watch_mergeable_check_exists(recipe_name: str) -> None:
     }
     assert conflicting_routes, "CONFLICTING condition must be handled"
     assert "ci_watch" not in conflicting_routes, "CONFLICTING must not route to ci_watch"
+    for route_name in conflicting_routes:
+        target = recipe.steps[route_name]
+        skill_cmd = (target.with_args or {}).get("skill_command", "")
+        assert "resolve-merge-conflicts" in skill_cmd, (
+            f"CONFLICTING route '{route_name}' must invoke resolve-merge-conflicts"
+        )
     ci_event_step = recipe.steps["check_repo_ci_event"]
     next_step = ci_event_step.on_success
     if next_step == "route_ci_applicable":

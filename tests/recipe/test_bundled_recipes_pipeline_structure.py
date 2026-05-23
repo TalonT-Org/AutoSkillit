@@ -196,6 +196,25 @@ class TestPipelineVariantInvariants:
         default_routes = [r for w, r in routes.items() if w is None]
         assert default_routes == ["re_push"]
 
+    def test_check_pr_state_conflicting_routes_directly_to_resolution(self, recipe) -> None:
+        """CONFLICTING mergeability must route directly to conflict resolution,
+        not through a stale-base exit-code gate."""
+        pr_state = recipe.steps["check_pr_state"]
+        conflicting_targets = {
+            c.route for c in pr_state.on_result.conditions if c.when and "CONFLICTING" in c.when
+        }
+        for target_name in conflicting_targets:
+            target_step = recipe.steps[target_name]
+            assert target_step.tool == "run_skill", (
+                f"CONFLICTING routes to '{target_name}' which is {target_step.tool}, "
+                f"not run_skill. CONFLICTING must route directly to conflict resolution."
+            )
+            skill_cmd = (target_step.with_args or {}).get("skill_command", "")
+            assert "resolve-merge-conflicts" in skill_cmd, (
+                f"CONFLICTING routes to '{target_name}' which does not invoke "
+                f"resolve-merge-conflicts. CONFLICTING must route to conflict resolution."
+            )
+
     def test_detect_ci_conflict_skip_when_false(self, recipe) -> None:
         step = recipe.steps["detect_ci_conflict"]
         assert step.skip_when_false == "inputs.open_pr"

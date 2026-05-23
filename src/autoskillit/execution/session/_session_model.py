@@ -109,17 +109,19 @@ class ClaudeSessionResult:
         if not self.is_error:
             return False
         marker = CONTEXT_EXHAUSTION_MARKER
-        codex_marker = CODEX_CONTEXT_EXHAUSTION_MARKER
-        if any(marker in e.lower() or codex_marker in e.lower() for e in self.errors):
+        if any(
+            marker in e.lower() or CODEX_CONTEXT_EXHAUSTION_MARKER in e.lower()
+            for e in self.errors
+        ):
             return True
-        if codex_marker in self.result.lower():
+        if CODEX_CONTEXT_EXHAUSTION_MARKER in self.result.lower():
             return True
         if (
             self.subtype in (CliSubtype.SUCCESS, CliSubtype.ERROR_MAX_TURNS)
             and marker in self.result.lower()
         ):
             return True
-        if any(codex_marker in m.lower() for m in self.assistant_messages):
+        if any(CODEX_CONTEXT_EXHAUSTION_MARKER in m.lower() for m in self.assistant_messages):
             return True
         return False
 

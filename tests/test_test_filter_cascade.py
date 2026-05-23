@@ -122,6 +122,7 @@ _SERVER_FILE_LEVEL_ENTRIES = [
     "test_mcp_overrides.py",
     "test_smoke_pipeline.py",
     "test_tools_dispatch_validation.py",
+    "test_tools_kitchen_gate_features.py",
     "test_tools_kitchen_envelope.py",
     "test_service_wrappers.py",
     "test_tools_list_recipes.py",

@@ -4,35 +4,20 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import AsyncMock
 
 import pytest
 
 from autoskillit.fleet import FleetSemaphore
 from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
-from tests.server._helpers import _make_recipe_info, _make_standard_recipe
+from tests.server._helpers import (
+    _make_recipe_info,
+    _make_standard_recipe,
+    _no_sleep_quota_checker,
+    _noop_quota_refresher,
+    _simple_prompt_builder,
+)
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium, pytest.mark.feature("fleet")]
-
-
-def _simple_prompt_builder(**kwargs) -> str:
-    """Minimal prompt builder for tests — avoids CLI imports."""
-    return f"prompt-for-{kwargs.get('recipe', 'unknown')}"
-
-
-async def _no_sleep_quota_checker(config, **kwargs) -> dict:
-    """Quota checker stub: always returns no-sleep result."""
-    return {
-        "should_sleep": False,
-        "sleep_seconds": 0,
-        "utilization": None,
-        "resets_at": None,
-        "window_name": None,
-    }
-
-
-async def _noop_quota_refresher(config, **kwargs) -> None:
-    """Quota refresher stub: no-op."""
 
 
 class TestDispatchFoodTruckGates:

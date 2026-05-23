@@ -111,6 +111,33 @@ class TestMergeWorktreeRemoteTrackingGuard:
         assert result["state"] == "worktree_intact_rebase_aborted"
         assert "invalid upstream" in result["stderr"]
 
+    @pytest.mark.anyio
+    async def test_checks_fetch_result(self, tool_ctx_kitchen_open, tmp_path):
+        """git fetch failure returns error before rebase attempt."""
+        wt = tmp_path / "worktree"
+        wt.mkdir()
+        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
+
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "/repo/.git/worktrees/wt\n", "")
+        )  # rev-parse
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "", "")
+        )  # git ls-files (pre-dirty-tree check)
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "", "")
+        )  # git status --porcelain (clean)
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "PASS\n= 100 passed =", "")
+        )  # test-check
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(1, "", "fatal: could not connect to remote")
+        )  # git fetch FAILS
+        result = json.loads(await merge_worktree(str(wt), "dev"))
+        assert "error" in result
+        assert result["failed_step"] == MergeFailedStep.FETCH
+
 
 class TestMergeWorktreeTiming:
     """merge_worktree records wall-clock timing when step_name is provided."""

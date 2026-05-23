@@ -6,6 +6,28 @@ from autoskillit.core import SkillResult
 from autoskillit.core.types import RetryReason
 from tests.fleet._helpers import _make_recipe_info as _fleet_make_recipe_info
 
+_HOOK_CONFIG_OVERLAY_RELPATH = (".autoskillit", "temp", ".hook_config_overlay.json")
+
+
+def _simple_prompt_builder(**kwargs) -> str:
+    """Minimal prompt builder for tests — avoids CLI imports."""
+    return f"prompt-for-{kwargs.get('recipe', 'unknown')}"
+
+
+async def _no_sleep_quota_checker(config, **kwargs) -> dict:
+    """Quota checker stub: always returns no-sleep result."""
+    return {
+        "should_sleep": False,
+        "sleep_seconds": 0,
+        "utilization": None,
+        "resets_at": None,
+        "window_name": None,
+    }
+
+
+async def _noop_quota_refresher(config, **kwargs) -> None:
+    """Quota refresher stub: no-op."""
+
 
 def _make_recipe_info(name: str = "test-recipe"):
     return _fleet_make_recipe_info(name, path_prefix="/fake/recipes/")

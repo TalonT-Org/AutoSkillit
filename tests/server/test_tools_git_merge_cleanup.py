@@ -10,7 +10,6 @@ import pytest
 import structlog.testing
 
 from autoskillit.core import CleanupResult
-from autoskillit.core.types import MergeFailedStep
 from autoskillit.server.tools.tools_git import merge_worktree
 from tests.conftest import _make_result
 
@@ -121,33 +120,6 @@ class TestMergeWorktreeCleanupReporting:
         assert result["cleanup_succeeded"] is False
         assert result["worktree_removed"] is True
         assert result["branch_deleted"] is False
-
-    @pytest.mark.anyio
-    async def test_checks_fetch_result(self, tool_ctx_kitchen_open, tmp_path):
-        """3c: git fetch failure returns error before rebase attempt."""
-        wt = tmp_path / "worktree"
-        wt.mkdir()
-        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
-
-        tool_ctx_kitchen_open.runner.push(
-            _make_result(0, "/repo/.git/worktrees/wt\n", "")
-        )  # rev-parse
-        tool_ctx_kitchen_open.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
-        tool_ctx_kitchen_open.runner.push(
-            _make_result(0, "", "")
-        )  # git ls-files (pre-dirty-tree check)
-        tool_ctx_kitchen_open.runner.push(
-            _make_result(0, "", "")
-        )  # git status --porcelain (clean)
-        tool_ctx_kitchen_open.runner.push(
-            _make_result(0, "PASS\n= 100 passed =", "")
-        )  # test-check
-        tool_ctx_kitchen_open.runner.push(
-            _make_result(1, "", "fatal: could not connect to remote")
-        )  # git fetch FAILS
-        result = json.loads(await merge_worktree(str(wt), "dev"))
-        assert "error" in result
-        assert result["failed_step"] == MergeFailedStep.FETCH
 
 
 class TestMergeWorktreeCleanupWarnings:

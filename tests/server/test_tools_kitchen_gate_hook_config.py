@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from autoskillit.config.settings import QuotaGuardConfig
 from autoskillit.hooks.formatters._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
+from tests.server._helpers import _HOOK_CONFIG_OVERLAY_RELPATH
 from tests.server.conftest import _make_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -184,8 +183,6 @@ def test_open_kitchen_handler_is_async():
 # ---------------------------------------------------------------------------
 # Group G — disable_quota_guard tool
 # ---------------------------------------------------------------------------
-
-_HOOK_CONFIG_OVERLAY_RELPATH = (".autoskillit", "temp", ".hook_config_overlay.json")
 
 
 @pytest.mark.anyio

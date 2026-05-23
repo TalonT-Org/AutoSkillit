@@ -83,7 +83,7 @@ class TestClassifyFix:
     async def test_classify_fix_nonexistent_worktree_path_returns_clear_error(
         self, tool_ctx_kitchen_open
     ):
-        """[FAILS NOW] nonexistent path returns a distinct path-not-found error."""
+        """Nonexistent path returns a distinct path-not-found error."""
         result = json.loads(await classify_fix("/no/such/path", "main"))
         assert result["restart_scope"] == RestartScope.FULL_RESTART
         assert "does not exist" in result["reason"].lower()
@@ -116,7 +116,7 @@ class TestClassifyFix:
     async def test_classify_fix_gate_closed_returns_gate_error(
         self, tool_ctx, monkeypatch, tmp_path
     ):
-        """[NEW COVERAGE] gate closed path returns gate_error."""
+        """gate closed path returns gate_error."""
         from autoskillit.pipeline import DefaultGateState
 
         monkeypatch.setattr(tool_ctx, "gate", DefaultGateState(enabled=False))
@@ -127,7 +127,7 @@ class TestClassifyFix:
     async def test_classify_fix_empty_diff_returns_partial_restart_with_no_files(
         self, tool_ctx_kitchen_open, tmp_path
     ):
-        """[NEW COVERAGE] empty diff is a valid state returning partial_restart with no files."""
+        """empty diff is a valid state returning partial_restart with no files."""
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # fetch
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # diff (empty)
         result = json.loads(await classify_fix(str(tmp_path), "main"))

@@ -14,7 +14,6 @@ from tests.server.conftest import _make_mock_ctx
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
-# REQ-PACK-008: open_kitchen stores active_recipe_packs
 @pytest.mark.anyio
 async def test_open_kitchen_sets_active_recipe_packs(tmp_path, monkeypatch):
     """After _open_kitchen_handler(), ctx.active_recipe_packs is frozenset()."""
@@ -34,7 +33,6 @@ async def test_open_kitchen_sets_active_recipe_packs(tmp_path, monkeypatch):
     assert mock_ctx.active_recipe_packs == frozenset()
 
 
-# REQ-PACK-008: close_kitchen clears active_recipe_packs
 def test_close_kitchen_clears_active_recipe_packs(tmp_path, monkeypatch):
     """After _close_kitchen_handler(), ctx.active_recipe_packs is None."""
     monkeypatch.chdir(tmp_path)
@@ -51,7 +49,6 @@ def test_close_kitchen_clears_active_recipe_packs(tmp_path, monkeypatch):
     assert mock_ctx.active_recipe_packs is None
 
 
-# T-REFRESH-1
 @pytest.mark.anyio
 async def test_open_kitchen_starts_quota_refresh_task(tmp_path, monkeypatch):
     """After _open_kitchen_handler(), ctx.quota_refresh_task is a running asyncio.Task."""
@@ -77,7 +74,6 @@ async def test_open_kitchen_starts_quota_refresh_task(tmp_path, monkeypatch):
     mock_ctx.quota_refresh_task.cancel()
 
 
-# T-REFRESH-2
 def test_close_kitchen_cancels_quota_refresh_task(tmp_path, monkeypatch):
     """_close_kitchen_handler cancels ctx.quota_refresh_task and sets it to None."""
     monkeypatch.chdir(tmp_path)
@@ -96,7 +92,6 @@ def test_close_kitchen_cancels_quota_refresh_task(tmp_path, monkeypatch):
     assert mock_ctx.quota_refresh_task is None
 
 
-# T-REFRESH-3
 def test_tool_context_has_quota_refresh_task_field():
     """ToolContext must have a quota_refresh_task field defaulting to None."""
     from autoskillit.pipeline.context import ToolContext
@@ -104,11 +99,6 @@ def test_tool_context_has_quota_refresh_task_field():
     fields = {f.name: f for f in dataclasses.fields(ToolContext)}
     assert "quota_refresh_task" in fields
     assert fields["quota_refresh_task"].default is None
-
-
-# ---------------------------------------------------------------------------
-# Group K — ingredients_only parameter
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.anyio

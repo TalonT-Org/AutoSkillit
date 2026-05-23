@@ -688,7 +688,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
     ),
     # Standalone modules (not subpackage directories)
     # L1
-    "report": frozenset({"skills_extended"}),
+    "report": frozenset({"report", "skills_extended"}),
     "planner": frozenset({"planner", "recipe"}),
     "_llm_triage": frozenset({"test_llm_triage.py", "server"}),
     "_test_filter": frozenset({"arch", "infra", "contracts"}),
@@ -714,6 +714,7 @@ LAYER_CASCADE_AGGRESSIVE: dict[str, frozenset[str]] = {
     "smoke_utils": frozenset({"test_smoke_utils.py"}),
     "version": frozenset({"test_version.py"}),
     "_test_filter": frozenset({"arch", "contracts"}),
+    "report": frozenset({"report"}),
 }
 
 # ---------------------------------------------------------------------------

@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from tests._test_filter import (
+    LAYER_CASCADE_AGGRESSIVE,
     LAYER_CASCADE_CONSERVATIVE,
     MODULE_CASCADE_CORE,
     MODULE_CASCADE_EXECUTION,
@@ -595,4 +596,19 @@ class TestUnmappedPackageGuard:
             "New packages found in src/autoskillit/ with no LAYER_CASCADE_CONSERVATIVE entry.\n"
             f"  Unmapped: {sorted(missing)}\n"
             "Add an entry for each to LAYER_CASCADE_CONSERVATIVE in tests/_test_filter.py."
+        )
+
+    def test_no_src_package_missing_from_aggressive_cascade(self) -> None:
+        all_files = _all_src_files()
+        src_packages = {
+            pkg
+            for f in all_files
+            if (pkg := _file_to_package(str(f))) is not None
+            and pkg not in _AUTOSKILLIT_DUNDER_STEMS
+        }
+        missing = src_packages - set(LAYER_CASCADE_AGGRESSIVE.keys())
+        assert not missing, (
+            "New packages found in src/autoskillit/ with no LAYER_CASCADE_AGGRESSIVE entry.\n"
+            f"  Unmapped: {sorted(missing)}\n"
+            "Add an entry for each to LAYER_CASCADE_AGGRESSIVE in tests/_test_filter.py."
         )

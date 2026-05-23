@@ -19,6 +19,7 @@ Configuration loading, defaults, and schema tests.
 | `test_providers_config.py` | Tests for ProvidersConfig loading/validation, ProviderProfileDef, resolved_profiles coercion, and CoreRunConfig.provider |
 | `test_provider_profile_def.py` | Tests for ProviderProfileDef frozen dataclass and export chain |
 | `test_quota_guard_config.py` | Tests for QuotaGuardConfig loading and validation |
+| `test_plan_config.py` | Tests for PlanConfig and adversarial_review_level wiring |
 | `test_review_config.py` | Tests for ReviewConfig and local_review_rounds wiring |
 | `test_settings_allowed_labels.py` | Tests for GitHubConfig.allowed_labels field and check_label_allowed validation |
 | `test_settings_staged_label.py` | Tests for GitHubConfig.staged_label field and config layer resolution |

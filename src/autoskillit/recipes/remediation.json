@@ -64,6 +64,11 @@
       "type": "integer",
       "default": "2"
     },
+    "adversarial_review_level": {
+      "description": "Controls adversarial review depth in make-plan. \"auto\" estimates complexity and gates agents accordingly. \"full\" always runs all 3 agents. \"none\" skips adversarial review entirely.",
+      "default": "auto",
+      "hidden": true
+    },
     "issue_url": {
       "description": "GitHub issue to close on merge",
       "required": false
@@ -409,7 +414,8 @@
         "skill_command": "/autoskillit:make-plan ${{ context.remediation_path }}",
         "task": "${{ inputs.task }}",
         "cwd": "${{ context.work_dir }}",
-        "step_name": "make_plan"
+        "step_name": "make_plan",
+        "adversarial_review_level": "${{ inputs.adversarial_review_level }}"
       },
       "capture": {
         "plan_path": "${{ result.plan_path }}"
@@ -419,7 +425,8 @@
       },
       "retries": 0,
       "on_success": "dry_walkthrough",
-      "on_failure": "release_issue_failure"
+      "on_failure": "release_issue_failure",
+      "note": "ADVERSARIAL REVIEW LEVEL: If inputs.adversarial_review_level is a non-empty string, append it to the skill_command: \"/autoskillit:make-plan {task}\\n\\nadversarial_review_level={inputs.adversarial_review_level}\"\n"
     },
     "commit_guard": {
       "tool": "run_python",

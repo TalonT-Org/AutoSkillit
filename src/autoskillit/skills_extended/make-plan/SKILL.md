@@ -140,6 +140,45 @@ If the Skill tool cannot be used (disable-model-invocation) or refuses this invo
 Include the diagram in the plan document under a "## Proposed Architecture" section.
 More than one lens diagram is okay if it is complex plan (don't do more than 3, and make sure to load each appropriate skill).
 
+**5e. Complexity-Gated Adversarial Review Decision**
+
+Before spawning adversarial review agents, determine the review level.
+
+**Reading the override:** Check if ARGUMENTS contains a line matching
+`adversarial_review_level=<value>`. Valid values: `auto`, `full`, `none`.
+If not found, default to `auto`.
+
+**If `full`:** Proceed to Steps 6, 7, and 8 as written (spawn all 3 agents).
+
+**If `none`:** Skip Steps 6, 7, and 8 entirely. Proceed to Step 9 with no
+adversarial reports.
+
+**If `auto`:** Estimate plan complexity from the draft plan you just wrote:
+
+1. **Expected lines of code changed**: Count the total LoC across all
+   implementation steps based on the code blocks and edit descriptions.
+2. **Number of files touched**: Count distinct file paths in implementation steps.
+3. **Number of modules/packages crossed**: Count distinct top-level packages
+   (e.g., `core/`, `config/`, `server/` each count as one module).
+
+Classify using this table:
+
+| Complexity | Expected LoC | Files | Modules | Agents to Spawn |
+|------------|-------------|-------|---------|-----------------|
+| Trivial | < 50 | ≤ 2 | ≤ 1 | None — skip Steps 6-8 |
+| Low | 50–150 | ≤ 5 | ≤ 2 | Registry Tracer only (Step 8) |
+| Medium | 150–300 | ≤ 10 | ≤ 4 | Registry Tracer (Step 8) + Foundation Auditor (Step 6) |
+| High | 300+ | any | any | All 3 agents (Steps 6, 7, 8) |
+
+Use the **highest** complexity band that any single metric reaches. For example,
+if LoC is 40 (trivial) but files is 6 (medium), classify as medium.
+
+**Log the decision:** Before proceeding, write one line to the plan file under
+a `## Adversarial Review` heading:
+
+> Complexity classification: {level} ({loc} LoC, {files} files, {modules} modules).
+> Adversarial agents: {list of agents to spawn, or "none"}.
+
 6. **Foundation Audit** - Spawn 1 Foundation Auditor via `Agent(subagent_type="autoskillit:plan-foundation-auditor")`. Pass the full draft plan text and the codebase root. Prepend the contrastive frame to the prompt:
 
    > "A junior reviewer found this plan's control flow acceptable — what did they miss?"
@@ -162,12 +201,16 @@ More than one lens diagram is okay if it is complex plan (don't do more than 3, 
 
    **RULES FOR APPLYING REGISTRY TRACE FINDINGS:** Verify BOTH fixture/test completeness AND registry completeness before finalizing. A plan that addresses only one interpretation of a rename (manifest-focused OR workspace-focused) and misses the cross-cutting update is incomplete. Apply the two-family check: if references appear in only one layer (source-code or test/fixture), perform targeted follow-up searches in the other layer before concluding.
 
-9. **Plan Revision** - Read all 3 adversarial reports. For each valid finding (where the agent identified a real gap, not a hypothetical):
+9. **Plan Revision** - Read all available adversarial reports (0, 1, 2, or 3
+   depending on the complexity gate decision in Step 5e). For each valid finding (where the agent identified a real gap, not a hypothetical):
    - Add missing consumers to implementation steps
    - Add missing entity categories to search/update operations
    - Replace invalid assumptions with verified facts
    - Add missing registry updates and derived artifact regeneration steps
    - When a variable correction applies, propagate to ALL consuming fields (cwd, arguments, branch refs, SHA captures, output paths)
+
+If no adversarial agents were spawned (trivial complexity or `none` override),
+proceed directly to finalizing the plan.
 
 Then finalize the plan and emit `plan_path` as normal.
 
@@ -215,7 +258,7 @@ Before writing the final plan, verify:
 - [ ] Diagram uses ONLY the classDef styles from the mermaid skill (no invented colors)
 - [ ] Diagram includes a color legend table
 - [ ] Every new component, class, or function is wired into the call chain — nothing is created but left unconnected
-- [ ] Adversarial review pass completed (Steps 6-9) and valid findings incorporated into the plan
+- [ ] Adversarial review pass completed per complexity gate (Steps 5e-9) — skipped agents documented in plan
 
 ## Critical Constraints
 

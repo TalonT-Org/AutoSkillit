@@ -36,7 +36,7 @@ Use the LSP tool (Pyright) as your primary method for tracing Python symbol refe
 - `findReferences` — finds ALL usages of a symbol: constructor calls, type annotations, keyword arguments, re-exports, test fixtures
 - `goToDefinition` — follows imports and re-exports to the actual definition site
 
-For EACH symbol from Step 1, locate its definition in the source (use grep if needed to find the file:line), then:
+For each symbol from the enumeration above, locate its definition in the source (use grep if needed to find the file:line), then:
 - Call `findReferences` on the symbol's definition site to get every usage across the entire codebase
 - Call `goToDefinition` on any ambiguous import to verify it resolves to the correct source
 
@@ -85,9 +85,21 @@ for f in Path(root, "tests").rglob("*.py"):
 PYEOF
 ```
 
-For EACH symbol from Step 1:
-- Run tree-sitter across `src/` and `tests/` to find the symbol as: a string literal inside dicts/frozensets/sets (registry entries), a keyword argument name in constructor or function calls, a dict key in lookup tables
-- If the plan **renames** a symbol, search for BOTH old and new names
+Write a **single consolidated script** that analyzes ALL symbols from Step 1 in one pass:
+- Build shared data structures (parser instance, reexport maps, AST trees) once
+  and reuse them across all symbol checks.
+- Parse each source file at most once — cache the parsed tree for reuse across
+  symbol lookups.
+- Never write multiple incremental scripts that build on each other's output.
+  Each subsequent script would re-parse the same files and duplicate shared setup
+  code, multiplying API turns with zero information gain.
+
+**Turn budget:** AST analysis across all symbols should complete in 1-2 Bash tool
+calls, not 5-10. If you need a second script, it must analyze a genuinely different
+file set — not re-parse files from the first script.
+
+For all symbols from Step 1, the consolidated script should find each symbol as: a string literal inside dicts/frozensets/sets (registry entries), a keyword argument name in constructor or function calls, a dict key in lookup tables.
+If the plan **renames** a symbol, search for BOTH old and new names.
 
 **Additional tree-sitter targets** — for a renamed field, also explicitly scan for:
 - **Factory functions** that build dicts containing the field (`return {"field_name": ...}` or `dict(field_name=...)` patterns) in conftest/fixture helpers
@@ -101,7 +113,7 @@ Merge with LSP results — deduplicate by file:line but keep any references foun
 
 Grep catches what tree-sitter and LSP cannot: YAML keys, JSON fields, TOML config, markdown docs, comments, and dynamic string-based lookups.
 
-For EACH symbol from Step 1:
+For each symbol from the enumeration above:
 - Grep `src/` for the symbol name
 - Grep `tests/` for the symbol name
 - Grep project config/data directories (e.g., `.autoskillit/`, `.github/`, `config/`) for the symbol name if they exist. These directories often contain checked-in YAML, JSON manifests, and configuration files that embed field names as keys — primary locations for stale references when a field is renamed.

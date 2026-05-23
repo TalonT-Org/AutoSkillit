@@ -15,27 +15,6 @@ from tests.infra._token_summary_helpers import _make_run_skill_event, _run_hook,
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
 
-def test_tsa1_token_summary_appender_script_exists() -> None:
-    """token_summary_hook.py must exist in hooks/ on disk."""
-    from autoskillit.core.paths import pkg_root
-
-    assert (pkg_root() / "hooks" / "token_summary_hook.py").exists()
-
-
-def test_tsa_rest_api_no_gh_pr_commands() -> None:
-    """Hook source must not contain 'gh pr edit' or 'gh pr view' subprocess calls."""
-    from autoskillit.core.paths import pkg_root
-
-    source = (pkg_root() / "hooks" / "token_summary_hook.py").read_text(encoding="utf-8")
-    assert "gh pr edit" not in source, (
-        "gh pr edit found in hook — must be replaced with "
-        "gh api repos/.../pulls/{N} --method PATCH --field body=..."
-    )
-    assert "gh pr view" not in source, (
-        "gh pr view found in hook — must be replaced with gh api repos/.../pulls/{N} --jq '.body'"
-    )
-
-
 def test_tsa2_no_pr_url_exits_zero() -> None:
     """No GitHub PR URL in tool result → exits 0, no gh subprocess."""
     from autoskillit.core.paths import pkg_root
@@ -944,3 +923,192 @@ class TestLoadSessionsSchemaVersionCompat:
         entry = result["plan"]
         assert entry["cache_write_tokens"] == 10
         assert entry["cache_read_tokens"] == 5
+
+
+# ---------------------------------------------------------------------------
+# T-HOOK-EFF: Token Efficiency table in hook output
+# ---------------------------------------------------------------------------
+
+
+# T-HOOK-EFF-1
+def test_efficiency_table_appended_when_loc_present(tmp_path: Path) -> None:
+    """Hook appends efficiency table after token table when LoC data exists."""
+    log_root = tmp_path / "logs"
+    log_root.mkdir()
+    kitchen_id = "kitchen-eff-1"
+
+    _write_sessions(
+        log_root,
+        [
+            {
+                "dir_name": "s1",
+                "cwd": "/w",
+                "kitchen_id": kitchen_id,
+                "step_name": "implement",
+                "input_tokens": 1000,
+                "output_tokens": 500,
+                "cache_write_tokens": 100,
+                "cache_read_tokens": 200,
+                "timing_seconds": 10.0,
+                "loc_insertions": 80,
+                "loc_deletions": 20,
+            }
+        ],
+    )
+
+    hook_config = tmp_path / ".autoskillit_hook_config.json"
+    hook_config.write_text(json.dumps({"kitchen_id": kitchen_id}))
+    pr_url = "https://github.com/owner/repo/pull/42"
+    event = _make_run_skill_event(f"pr_url={pr_url}\n%%ORDER_UP%%")
+
+    view_result = MagicMock(returncode=0, stdout="Existing PR body.")
+    edit_calls: list = []
+
+    def run_side(args, **kwargs):
+        if "api" in args and "--method" not in args:
+            return view_result
+        if "api" in args and "--method" in args:
+            edit_calls.append(args)
+            return MagicMock(returncode=0)
+        return MagicMock(returncode=0)
+
+    with patch("subprocess.run", side_effect=run_side):
+        _, exit_code = _run_hook(event, log_root=log_root, hook_config_path=hook_config)
+
+    assert exit_code == 0
+    assert len(edit_calls) == 1
+    body_arg = next(a for a in edit_calls[0] if a.startswith("body="))
+    body_content = body_arg[len("body=") :]
+    assert "## Token Efficiency" in body_content
+    assert "cache_read/LoC" in body_content
+    assert "cache_write/LoC" in body_content
+    assert "output/LoC" in body_content
+    assert "peak_ctx/LoC" not in body_content
+    eff_section = body_content[body_content.index("## Token Efficiency") :]
+    eff_header = eff_section.split("\n")[2]
+    assert "Step" in eff_header
+    assert "LoC Changed" in eff_header
+
+
+# T-HOOK-EFF-2
+def test_efficiency_table_omitted_when_no_loc_data(tmp_path: Path) -> None:
+    """Hook omits efficiency table when all sessions have loc_insertions=loc_deletions=0."""
+    log_root = tmp_path / "logs"
+    log_root.mkdir()
+    kitchen_id = "kitchen-eff-2"
+
+    _write_sessions(
+        log_root,
+        [
+            {
+                "dir_name": "s1",
+                "cwd": "/w",
+                "kitchen_id": kitchen_id,
+                "step_name": "plan",
+                "input_tokens": 1000,
+                "output_tokens": 500,
+                "cache_write_tokens": 100,
+                "cache_read_tokens": 200,
+                "timing_seconds": 10.0,
+                "loc_insertions": 0,
+                "loc_deletions": 0,
+            }
+        ],
+    )
+
+    hook_config = tmp_path / ".autoskillit_hook_config.json"
+    hook_config.write_text(json.dumps({"kitchen_id": kitchen_id}))
+    pr_url = "https://github.com/owner/repo/pull/42"
+    event = _make_run_skill_event(f"pr_url={pr_url}\n%%ORDER_UP%%")
+
+    view_result = MagicMock(returncode=0, stdout="Existing PR body.")
+    edit_calls: list = []
+
+    def run_side(args, **kwargs):
+        if "api" in args and "--method" not in args:
+            return view_result
+        if "api" in args and "--method" in args:
+            edit_calls.append(args)
+            return MagicMock(returncode=0)
+        return MagicMock(returncode=0)
+
+    with patch("subprocess.run", side_effect=run_side):
+        _, exit_code = _run_hook(event, log_root=log_root, hook_config_path=hook_config)
+
+    assert exit_code == 0
+    assert len(edit_calls) == 1
+    body_arg = next(a for a in edit_calls[0] if a.startswith("body="))
+    body_content = body_arg[len("body=") :]
+    assert "## Token Efficiency" not in body_content
+
+
+# T-HOOK-EFF-3
+def test_efficiency_table_zero_loc_step_shows_dash(tmp_path: Path) -> None:
+    """Steps with zero LoC changed show — in the hook-generated efficiency table."""
+    log_root = tmp_path / "logs"
+    log_root.mkdir()
+    kitchen_id = "kitchen-eff-3"
+
+    _write_sessions(
+        log_root,
+        [
+            {
+                "dir_name": "s1",
+                "cwd": "/w",
+                "kitchen_id": kitchen_id,
+                "step_name": "plan",
+                "input_tokens": 500,
+                "output_tokens": 100,
+                "cache_write_tokens": 50,
+                "cache_read_tokens": 100,
+                "timing_seconds": 5.0,
+                "loc_insertions": 0,
+                "loc_deletions": 0,
+            },
+            {
+                "dir_name": "s2",
+                "cwd": "/w",
+                "kitchen_id": kitchen_id,
+                "step_name": "implement",
+                "input_tokens": 1000,
+                "output_tokens": 500,
+                "cache_write_tokens": 100,
+                "cache_read_tokens": 200,
+                "timing_seconds": 10.0,
+                "loc_insertions": 50,
+                "loc_deletions": 10,
+            },
+        ],
+    )
+
+    hook_config = tmp_path / ".autoskillit_hook_config.json"
+    hook_config.write_text(json.dumps({"kitchen_id": kitchen_id}))
+    pr_url = "https://github.com/owner/repo/pull/42"
+    event = _make_run_skill_event(f"pr_url={pr_url}\n%%ORDER_UP%%")
+
+    view_result = MagicMock(returncode=0, stdout="Existing PR body.")
+    edit_calls: list = []
+
+    def run_side(args, **kwargs):
+        if "api" in args and "--method" not in args:
+            return view_result
+        if "api" in args and "--method" in args:
+            edit_calls.append(args)
+            return MagicMock(returncode=0)
+        return MagicMock(returncode=0)
+
+    with patch("subprocess.run", side_effect=run_side):
+        _, exit_code = _run_hook(event, log_root=log_root, hook_config_path=hook_config)
+
+    assert exit_code == 0
+    assert len(edit_calls) == 1
+    body_arg = next(a for a in edit_calls[0] if a.startswith("body="))
+    body_content = body_arg[len("body=") :]
+    assert "## Token Efficiency" in body_content
+    eff_section = body_content[body_content.index("## Token Efficiency") :]
+    plan_row = next(
+        (line for line in eff_section.split("\n") if line.startswith("| plan |")),
+        None,
+    )
+    assert plan_row is not None, "No '| plan |' row found in efficiency section"
+    assert "—" in plan_row

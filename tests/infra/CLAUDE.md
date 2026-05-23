@@ -56,8 +56,8 @@ CI/CD configuration, security, guard coverage, and release sanity tests.
 | `test_skill_command_guard.py` | Tests for the skill_command_guard PreToolUse hook |
 | `test_taskfile.py` | Taskfile structural tests |
 | `test_testmon_eval.py` | Testmon eval tests |
-| `test_token_summary_core.py` | Tests: token_summary_appender core — existence, early-exit, happy path, session filtering |
-| `test_token_summary_filters.py` | Tests: token_summary_appender unit helpers and order_id isolation |
+| `test_token_summary_core.py` | Tests: token_summary_appender core — early-exit, happy path, session filtering, efficiency table |
+| `test_token_summary_filters.py` | Tests: token_summary_appender unit helpers (_canonical, _humanize, _format_table, _unwrap_mcp_response), order_id isolation, and config key migration |
 | `test_token_summary_v1_compat.py` | Tests: token_summary_appender v1 sessions.jsonl and token_usage.json backward compatibility |
 | `test_unsafe_install_guard.py` | Tests for the unsafe_install_guard PreToolUse hook |
 

@@ -25,11 +25,11 @@ Hook script behavior, registration, and bridge tests.
 | `test_session_start_hook.py` | Session-scope enforcement tests for session_start_hook.py |
 | `test_session_start_reminder.py` | Tests for the SessionStart hook — session_start_hook.py |
 | `test_skill_load_post_hook.py` | Tests for skill_load_post_hook.py PostToolUse hook |
-| `test_token_summary_appender.py` | Tests for the token_summary_appender PostToolUse hook |
+| `test_token_summary_appender.py` | Token summary hook script existence and source quality (2 tests); behavioral and unit tests live in tests/infra/ |
 | `test_write_guard.py` | Tests for write_guard.py PreToolUse hook |
 | `test_planner_result_naming_guard.py` | Tests for planner_result_naming_guard.py PreToolUse hook |
 | `test_recipe_contract_freshness.py` | Tests for the recipe-contract-freshness pre-commit hook |
 
 ## Architecture Notes
 
-`test_token_summary_appender.py` covers the hook registration and end-to-end behavior. The related split test files (`test_token_summary_core.py`, `test_token_summary_filters.py`) and shared helpers (`_token_summary_helpers.py`) live in `tests/infra/` — see `tests/infra/CLAUDE.md`.
+`test_token_summary_appender.py` contains only script-existence and source-quality checks (2 tests). All behavioral tests (early exit, PR editing, fail-open, efficiency table), unit tests (`_canonical`, `_humanize`, `_format_table`, `_unwrap_mcp_response`), and order_id isolation tests live in `tests/infra/test_token_summary_core.py`, `tests/infra/test_token_summary_filters.py`, and `tests/infra/test_token_summary_v1_compat.py`. Shared helpers are in `tests/infra/_token_summary_helpers.py`.

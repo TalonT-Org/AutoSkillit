@@ -230,7 +230,6 @@ async def test_run_skill_model_as_profile_no_anthropic_model_falls_through(
 async def test_run_skill_model_overrides_applied(
     tool_ctx_kitchen_open, tmp_path, monkeypatch
 ) -> None:
-    from autoskillit.config import AutomationConfig
     from autoskillit.config.settings import ProvidersConfig
     from tests.fakes import InMemoryHeadlessExecutor
 
@@ -239,11 +238,8 @@ async def test_run_skill_model_overrides_applied(
     tool_ctx_kitchen_open.recipe_name = "implementation"
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
     monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: False)
-    cfg = AutomationConfig()
-    cfg.providers = ProvidersConfig(model_overrides={"implementation": {"implement": "opus"}})
-    monkeypatch.setattr(
-        "autoskillit.server.tools.tools_execution._get_config",
-        lambda: cfg,
+    tool_ctx_kitchen_open.config.providers = ProvidersConfig(
+        model_overrides={"implementation": {"implement": "opus"}}
     )
 
     captured: dict = {}
@@ -264,7 +260,6 @@ async def test_run_skill_model_overrides_applied(
 async def test_run_skill_model_overrides_wildcard_step(
     tool_ctx_kitchen_open, tmp_path, monkeypatch
 ) -> None:
-    from autoskillit.config import AutomationConfig
     from autoskillit.config.settings import ProvidersConfig
     from tests.fakes import InMemoryHeadlessExecutor
 
@@ -273,11 +268,8 @@ async def test_run_skill_model_overrides_wildcard_step(
     tool_ctx_kitchen_open.recipe_name = "implementation"
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
     monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: False)
-    cfg = AutomationConfig()
-    cfg.providers = ProvidersConfig(model_overrides={"implementation": {"*": "opus"}})
-    monkeypatch.setattr(
-        "autoskillit.server.tools.tools_execution._get_config",
-        lambda: cfg,
+    tool_ctx_kitchen_open.config.providers = ProvidersConfig(
+        model_overrides={"implementation": {"*": "opus"}}
     )
 
     captured: dict = {}
@@ -298,7 +290,6 @@ async def test_run_skill_model_overrides_wildcard_step(
 async def test_run_skill_model_overrides_exact_over_wildcard(
     tool_ctx_kitchen_open, tmp_path, monkeypatch
 ) -> None:
-    from autoskillit.config import AutomationConfig
     from autoskillit.config.settings import ProvidersConfig
     from tests.fakes import InMemoryHeadlessExecutor
 
@@ -307,13 +298,8 @@ async def test_run_skill_model_overrides_exact_over_wildcard(
     tool_ctx_kitchen_open.recipe_name = "implementation"
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
     monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: False)
-    cfg = AutomationConfig()
-    cfg.providers = ProvidersConfig(
+    tool_ctx_kitchen_open.config.providers = ProvidersConfig(
         model_overrides={"implementation": {"implement": "opus", "*": "haiku"}}
-    )
-    monkeypatch.setattr(
-        "autoskillit.server.tools.tools_execution._get_config",
-        lambda: cfg,
     )
 
     captured: dict = {}
@@ -334,7 +320,6 @@ async def test_run_skill_model_overrides_exact_over_wildcard(
 async def test_run_skill_model_overrides_without_providers_feature(
     tool_ctx_kitchen_open, tmp_path, monkeypatch
 ) -> None:
-    from autoskillit.config import AutomationConfig
     from autoskillit.config.settings import ProvidersConfig
     from tests.fakes import InMemoryHeadlessExecutor
 
@@ -343,11 +328,8 @@ async def test_run_skill_model_overrides_without_providers_feature(
     tool_ctx_kitchen_open.recipe_name = "implementation"
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
     monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: False)
-    cfg = AutomationConfig()
-    cfg.providers = ProvidersConfig(model_overrides={"implementation": {"implement": "opus"}})
-    monkeypatch.setattr(
-        "autoskillit.server.tools.tools_execution._get_config",
-        lambda: cfg,
+    tool_ctx_kitchen_open.config.providers = ProvidersConfig(
+        model_overrides={"implementation": {"implement": "opus"}}
     )
 
     captured: dict = {}
@@ -368,7 +350,6 @@ async def test_run_skill_model_overrides_without_providers_feature(
 async def test_run_skill_model_overrides_no_match_passthrough(
     tool_ctx_kitchen_open, tmp_path, monkeypatch
 ) -> None:
-    from autoskillit.config import AutomationConfig
     from autoskillit.config.settings import ProvidersConfig
     from tests.fakes import InMemoryHeadlessExecutor
 
@@ -377,11 +358,8 @@ async def test_run_skill_model_overrides_no_match_passthrough(
     tool_ctx_kitchen_open.recipe_name = "implementation"
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
     monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: False)
-    cfg = AutomationConfig()
-    cfg.providers = ProvidersConfig(model_overrides={"remediation": {"implement": "opus"}})
-    monkeypatch.setattr(
-        "autoskillit.server.tools.tools_execution._get_config",
-        lambda: cfg,
+    tool_ctx_kitchen_open.config.providers = ProvidersConfig(
+        model_overrides={"remediation": {"implement": "opus"}}
     )
 
     captured: dict = {}
@@ -402,7 +380,6 @@ async def test_run_skill_model_overrides_no_match_passthrough(
 async def test_run_skill_global_override_beats_model_overrides(
     tool_ctx_kitchen_open, tmp_path, monkeypatch
 ) -> None:
-    from autoskillit.config import AutomationConfig
     from autoskillit.config.settings import ProvidersConfig
     from tests.fakes import InMemoryHeadlessExecutor
 
@@ -411,13 +388,10 @@ async def test_run_skill_global_override_beats_model_overrides(
     tool_ctx_kitchen_open.recipe_name = "implementation"
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
     monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: False)
-    cfg = AutomationConfig()
-    cfg.providers = ProvidersConfig(model_overrides={"implementation": {"implement": "opus"}})
-    cfg.model.model_override = "haiku"
-    monkeypatch.setattr(
-        "autoskillit.server.tools.tools_execution._get_config",
-        lambda: cfg,
+    tool_ctx_kitchen_open.config.providers = ProvidersConfig(
+        model_overrides={"implementation": {"implement": "opus"}}
     )
+    tool_ctx_kitchen_open.config.model.model_override = "haiku"
 
     captured: dict = {}
     original_run = executor.run

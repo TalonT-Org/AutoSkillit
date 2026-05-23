@@ -14,7 +14,13 @@ Fleet campaign dispatch, state persistence, and sidecar tests.
 | `test_campaign_capture.py` | Tests for campaign capture extraction and ingredient interpolation (Group J) |
 | `test_capture_roundtrip.py` | Tests for prompt-extractor field name alignment — verifies sentinel examples use bare names matching `_extract_captures` expectations |
 | `test_checkpoint_bridge.py` | Tests for checkpoint_from_sidecar converting IssueSidecarEntry to SessionCheckpoint |
-| `test_dispatch_failure_semantics.py` | Group F: Timeout + No-Result-Block failure semantics for fleet dispatch |
+| `test_dispatch_failure_semantics.py` | Group F: Core failure path semantics — timeout, no-sentinel, completed-dirty, completed-clean |
+| `test_dispatch_envelope_fields.py` | Dispatch envelope field persistence — elapsed_seconds and dispatch_status |
+| `test_dispatch_stderr_forwarding.py` | Stderr envelope forwarding and truncation tests |
+| `test_dispatch_ingredient_validation.py` | Missing required ingredient validation gate |
+| `test_dispatch_recipe_kind_gate.py` | Recipe kind dispatch gate — FOOD_TRUCK accepted, CAMPAIGN rejected |
+| `test_dispatch_crash_diagnostics.py` | Crash path diagnostic persistence and structured logging |
+| `test_dispatch_labels_cleaned.py` | Labels_cleaned field persistence on failure/success outcomes |
 | `test_dispatch_identity_continuity.py` | Tests for dispatch_id identity continuity on resume — prior_dispatch_id threading through API layer |
 | `test_dispatch_state_handle.py` | Tests for DispatchStateHandle factory and dispatch state invariants — resume path state file creation and capture persistence (Group J) |
 | `test_dispatch_lifespan.py` | Group G (fleet part): lifespan_started surface + envelope propagation |

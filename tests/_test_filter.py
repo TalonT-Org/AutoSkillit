@@ -618,7 +618,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "fleet/test_campaign_capture.py",
             "fleet/test_pack_enforcement.py",
             "fleet/test_pack_enforcement_e2e.py",
-            "fleet/test_dispatch_failure_semantics.py",
+            "fleet/test_dispatch_ingredient_validation.py",
+            "fleet/test_dispatch_recipe_kind_gate.py",
             "fleet/test_dispatch_state_handle.py",
             "fleet/test_research_campaign_dispatch.py",
             "fleet/test_gate_state_persistence.py",
@@ -654,7 +655,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "cli",
             # file-level: fleet tests that import server tool handlers directly
             "fleet/test_api.py",
-            "fleet/test_dispatch_failure_semantics.py",
+            "fleet/test_dispatch_crash_diagnostics.py",
             "fleet/test_pack_enforcement.py",
             "fleet/test_gate_state_persistence.py",
             "fleet/test_dispatch_identity_continuity.py",

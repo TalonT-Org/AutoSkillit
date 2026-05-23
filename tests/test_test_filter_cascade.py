@@ -139,7 +139,12 @@ _FLEET_FILE_LEVEL_ENTRIES = [
     "test_campaign_capture.py",
     "test_pack_enforcement.py",
     "test_pack_enforcement_e2e.py",
-    "test_dispatch_failure_semantics.py",
+    "test_dispatch_ingredient_validation.py",
+    "test_dispatch_recipe_kind_gate.py",
+]
+
+_FLEET_SERVER_FILE_LEVEL_ENTRIES = [
+    "test_dispatch_crash_diagnostics.py",
 ]
 
 
@@ -274,7 +279,7 @@ def test_session_log_cascade_targets_hooks_quota_check() -> None:
 
 
 class TestServerFleetCascadeNarrowing:
-    """REQ-FLEET-002: server cascade targets only fleet/test_pack_enforcement.py."""
+    """REQ-FLEET-002: server cascade targets only fleet files with server imports."""
 
     def test_server_source_change_targets_pack_enforcement_only(self, tmp_path: Path) -> None:
         """A server source change cascades to fleet/test_pack_enforcement.py only,
@@ -302,3 +307,27 @@ class TestServerFleetCascadeNarrowing:
             "fleet/test_fleet.py must NOT appear in server cascade — "
             "only test_pack_enforcement.py has server imports"
         )
+
+    def test_server_source_change_includes_fleet_server_file_level_entries(
+        self, tmp_path: Path
+    ) -> None:
+        """A server source change cascades to all fleet server file-level entries."""
+        tests_root = tmp_path / "tests"
+        fleet_dir = tests_root / "fleet"
+        fleet_dir.mkdir(parents=True, exist_ok=True)
+        for fname in _FLEET_SERVER_FILE_LEVEL_ENTRIES:
+            (fleet_dir / fname).touch()
+        (fleet_dir / "test_fleet.py").touch()
+        server_dir = tests_root / "server"
+        server_dir.mkdir(parents=True, exist_ok=True)
+        (server_dir / "test_factory.py").touch()
+
+        result = build_test_scope(
+            changed_files={"src/autoskillit/server/tools/tools_kitchen.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None, "server source change should not force a full run"
+        result_names = {p.name for p in result}
+        for fname in _FLEET_SERVER_FILE_LEVEL_ENTRIES:
+            assert fname in result_names, f"fleet/{fname} must appear in server cascade"

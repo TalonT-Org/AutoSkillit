@@ -26,3 +26,33 @@ def test_setup_dispatch_exported_from_fleet_helpers():
     from tests.fleet._helpers import _setup_dispatch
 
     assert callable(_setup_dispatch)
+
+
+def test_run_exported_from_fleet_helpers():
+    from tests.fleet._helpers import _run
+
+    assert callable(_run)
+
+
+def test_read_dispatch_record_exported_from_fleet_helpers():
+    from tests.fleet._helpers import _read_dispatch_record
+
+    assert callable(_read_dispatch_record)
+
+
+def test_make_no_sentinel_exported_from_fleet_helpers():
+    from tests.fleet._helpers import _make_no_sentinel
+
+    assert callable(_make_no_sentinel)
+
+
+def test_make_completed_dirty_exported_from_fleet_helpers():
+    from tests.fleet._helpers import _make_completed_dirty
+
+    assert callable(_make_completed_dirty)
+
+
+def test_make_completed_clean_exported_from_fleet_helpers():
+    from tests.fleet._helpers import _make_completed_clean
+
+    assert callable(_make_completed_clean)

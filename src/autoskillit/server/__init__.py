@@ -15,7 +15,8 @@ See GATED_TOOLS and UNGATED_TOOLS in core/types/_type_constants.py.
 Startup tag visibility is determined by AUTOSKILLIT_SESSION_TYPE (3-branch dispatch):
   FLEET — fleet-tagged tools pre-revealed
   ORCHESTRATOR + HEADLESS=1 — all kitchen-tagged tools pre-revealed
-  SKILL + HEADLESS=1 — headless-tagged tools (test_check) pre-revealed
+  SKILL + HEADLESS=1 — headless-tagged tools (test_check) pre-revealed;
+  with AUTO_GATE=1, kitchen-core also revealed
   ORCHESTRATOR/SKILL (interactive) — no pre-reveal; open_kitchen unlocks
 
 Transport: stdio (default for FastMCP).

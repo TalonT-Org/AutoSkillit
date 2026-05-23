@@ -1,4 +1,4 @@
-"""Quota cache schema and claude process state doctor checks."""
+"""Quota cache schema, claude process state, and codex version doctor checks."""
 
 from __future__ import annotations
 
@@ -6,12 +6,56 @@ import json
 import subprocess
 from pathlib import Path
 
+import regex as re
+
 from autoskillit.core import Severity, get_logger
 from autoskillit.execution import QUOTA_CACHE_SCHEMA_VERSION
 
 from ._doctor_types import DoctorResult
 
 logger = get_logger(__name__)
+
+CODEX_MIN_VERSION: tuple[int, ...] = (0, 130, 0)
+
+
+def _check_codex_version(*, backend: str | None = None) -> DoctorResult:
+    check_name = "codex_version"
+    if backend is not None and backend != "codex":
+        return DoctorResult(Severity.OK, check_name, f"Skipped (backend={backend})")
+    try:
+        result = subprocess.run(
+            ["codex", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as exc:
+        return DoctorResult(
+            Severity.OK,
+            check_name,
+            f"codex unavailable ({type(exc).__name__}); skipping version check",
+        )
+
+    for line in result.stdout.splitlines():
+        m = re.search(r"(\d+)\.(\d+)\.(\d+)", line)
+        if m:
+            parsed = (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+            if parsed < CODEX_MIN_VERSION:
+                min_str = ".".join(str(v) for v in CODEX_MIN_VERSION)
+                cur_str = ".".join(str(v) for v in parsed)
+                return DoctorResult(
+                    Severity.WARNING,
+                    check_name,
+                    f"Codex CLI {cur_str} is below minimum {min_str}",
+                )
+            cur_str = ".".join(str(v) for v in parsed)
+            return DoctorResult(Severity.OK, check_name, f"Codex CLI {cur_str}")
+
+    return DoctorResult(
+        Severity.OK,
+        check_name,
+        "codex --version output unparseable; skipping version check",
+    )
 
 
 def _check_quota_cache_schema(cache_path: Path | None = None) -> DoctorResult:

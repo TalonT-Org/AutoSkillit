@@ -59,6 +59,7 @@ from ._doctor_mcp import (
 )
 from ._doctor_runtime import (
     _check_claude_process_state_breakdown,
+    _check_codex_version,
     _check_quota_cache_schema,
 )
 from ._doctor_types import _NON_PROBLEM, DoctorResult
@@ -190,6 +191,9 @@ def run_doctor(*, output_json: bool = False) -> None:
 
         # Check 29: Fleet state schema version drift
         results.append(_check_fleet_state_schema())
+
+    # Check 30: Codex CLI version gate
+    results.append(_check_codex_version(backend=cfg.agent_backend.backend))
 
     # Output
     if output_json:

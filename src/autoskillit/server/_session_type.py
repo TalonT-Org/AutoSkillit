@@ -67,10 +67,8 @@ def _apply_session_type_visibility() -> None:
         else:
             mcp.enable(tags={"kitchen"})
     elif _session is SessionType.SKILL and _headless:
+        mcp.enable(tags={"headless"})
         if os.environ.get(HEADLESS_AUTO_GATE_ENV_VAR) == "1":
             mcp.enable(tags={"kitchen-core"})
-            mcp.enable(tags={"headless"})
-        else:
-            mcp.enable(tags={"headless"})
     # ORCHESTRATOR+interactive and SKILL+interactive: no pre-reveal.
     # Cook unlocks via open_kitchen (orchestrator) or stays minimal (skill session).

@@ -1744,7 +1744,7 @@ class TestNudgeBackendGuard:
         assert len(tool_ctx.runner.call_args_list) == 1
 
     @pytest.mark.anyio
-    async def test_nudge_skips_when_not_skill_injection_capable(self, tool_ctx):
+    async def test_nudge_skips_when_not_session_resume_capable(self, tool_ctx):
         from dataclasses import replace
         from unittest.mock import Mock
 
@@ -1753,7 +1753,7 @@ class TestNudgeBackendGuard:
         from autoskillit.execution.headless import run_headless_core
 
         marker = tool_ctx.config.run_skill.completion_marker
-        caps = replace(CLAUDE_CODE_CAPABILITIES, skill_injection_capable=False)
+        caps = replace(CLAUDE_CODE_CAPABILITIES, session_resume_capable=False)
         mock_backend = Mock()
         mock_backend.name = "claude-code"
         mock_backend.capabilities = caps
@@ -1771,7 +1771,7 @@ class TestNudgeBackendGuard:
             ctx=tool_ctx,
             expected_output_patterns=[r"plan_path\s*=\s*/.+"],
         )
-        # Without skill_injection_capable, nudge is skipped
+        # Without session_resume_capable, nudge is skipped
         assert result.retry_reason == RetryReason.CONTRACT_RECOVERY
         assert len(tool_ctx.runner.call_args_list) == 1
 
@@ -1785,7 +1785,7 @@ class TestNudgeBackendGuard:
         from autoskillit.execution.headless import run_headless_core
 
         marker = tool_ctx.config.run_skill.completion_marker
-        caps = replace(CLAUDE_CODE_CAPABILITIES, skill_injection_capable=True)
+        caps = replace(CLAUDE_CODE_CAPABILITIES, session_resume_capable=True)
         mock_backend = Mock()
         mock_backend.name = "claude-code"
         mock_backend.capabilities = caps
@@ -1804,7 +1804,7 @@ class TestNudgeBackendGuard:
             ctx=tool_ctx,
             expected_output_patterns=[r"plan_path\s*=\s*/.+"],
         )
-        # result_parser=None prevents nudge even when skill_injection_capable=True
+        # result_parser=None prevents nudge even when session_resume_capable=True
         assert result.retry_reason == RetryReason.CONTRACT_RECOVERY
         assert len(tool_ctx.runner.call_args_list) == 1
 
@@ -1846,7 +1846,7 @@ class TestNudgeBackendGuard:
         assert call_kwargs.kwargs["resume_session_id"] == "sess-main"
 
     @pytest.mark.anyio
-    async def test_nudge_calls_build_resume_cmd_when_skill_injection_capable(self, tool_ctx):
+    async def test_nudge_calls_build_resume_cmd_when_session_resume_capable(self, tool_ctx):
         from dataclasses import replace
         from unittest.mock import Mock
 
@@ -1854,7 +1854,7 @@ class TestNudgeBackendGuard:
         from autoskillit.execution.headless import run_headless_core
 
         marker = tool_ctx.config.run_skill.completion_marker
-        caps = replace(CLAUDE_CODE_CAPABILITIES, skill_injection_capable=True)
+        caps = replace(CLAUDE_CODE_CAPABILITIES, session_resume_capable=True)
         expected_cmd = CmdSpec(
             cmd=("claude", "--resume", "sess-main", "--print", "emit marker"),
             env={"TEST": "val"},

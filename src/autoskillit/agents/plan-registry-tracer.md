@@ -113,7 +113,7 @@ Merge with LSP results — deduplicate by file:line but keep any references foun
 
 Grep catches what tree-sitter and LSP cannot: YAML keys, JSON fields, TOML config, markdown docs, comments, and dynamic string-based lookups.
 
-For EACH symbol from Step 1:
+For each symbol from the enumeration above:
 - Grep `src/` for the symbol name
 - Grep `tests/` for the symbol name
 - Grep project config/data directories (e.g., `.autoskillit/`, `.github/`, `config/`) for the symbol name if they exist. These directories often contain checked-in YAML, JSON manifests, and configuration files that embed field names as keys — primary locations for stale references when a field is renamed.

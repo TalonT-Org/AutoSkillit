@@ -182,6 +182,7 @@ def ensure_codex_mcp_registered(
     config_path: Path | None = None,
     headless_auto_gate: bool = True,
 ) -> bool:
+    """Return True if the entry was written, False if already registered."""
     if config_path is None:
         config_path = Path.home() / ".codex" / "config.toml"
     config = _read_codex_config(config_path)

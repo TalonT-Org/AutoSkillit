@@ -19,22 +19,10 @@ def test_make_plan_step6_adversarial_review_exists(make_plan_text: str) -> None:
     assert step6_idx != -1 and step7_idx != -1
     step6_section = make_plan_text[step6_idx:step7_idx].lower()
     assert "foundation auditor" in step6_section, "Step 6 must include Foundation Auditor"
-    assert "scope expansion" in step6_section or (
-        "scope" in step6_section and "not" in step6_section
-    ), "Step 6 must restrict agents from suggesting scope expansion"
+    assert "scope expansion" in step6_section, (
+        "Step 6 must restrict agents from suggesting scope expansion"
+    )
     assert "junior reviewer" in step6_section, "Step 6 must include contrastive prompt frame"
-
-
-def test_make_plan_step6_no_scope_expansion(make_plan_text: str) -> None:
-    planning_idx = make_plan_text.find("## Planning Steps")
-    assert planning_idx != -1
-    step6_idx = make_plan_text.find("**Foundation Audit", planning_idx)
-    step7_idx = make_plan_text.find("**Interface Mapping", planning_idx)
-    assert step6_idx != -1 and step7_idx != -1
-    step6_section = make_plan_text[step6_idx:step7_idx].lower()
-    assert "scope expansion" in step6_section or (
-        "scope" in step6_section and "not" in step6_section
-    ), "Step 6 must restrict agents from suggesting scope expansion"
 
 
 def test_make_plan_step8_registry_trace_exists(make_plan_text: str) -> None:
@@ -109,6 +97,7 @@ def test_make_plan_interface_mapping_and_registry_trace_responsibilities(
     assert "variable" in step7_section or "set/read" in step7_section, (
         "Step 7 (Interface Mapping) must mention variable/SET/READ tracing"
     )
+    assert "junior reviewer" in step7_section, "Step 7 must include contrastive prompt frame"
 
     # Step 8 (Registry Trace) must contain registry/symbol responsibility
     step9_idx = make_plan_text.find("**Plan Revision", step8_idx)
@@ -117,3 +106,4 @@ def test_make_plan_interface_mapping_and_registry_trace_responsibilities(
     assert "registry" in step8_section or "symbol" in step8_section, (
         "Step 8 (Registry Trace) must mention registry/symbol tracing"
     )
+    assert "junior reviewer" in step8_section, "Step 8 must include contrastive prompt frame"

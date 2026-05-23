@@ -34,10 +34,15 @@ def test_bundled_agent_files_exist():
         ]
         assert files, f"No agent files for pack {pack}"
 
-    # plan-review pack specifically should have 3 files
-    plan_review_files = [p for p in agents_dir.glob("plan-*.md") if p.name != "CLAUDE.md"]
-    assert len(plan_review_files) == 3, (
-        f"Expected 3 plan-review agents, found {len(plan_review_files)}"
+    # plan-review pack specifically should have the 3 expected agents
+    plan_review_files = {p.stem for p in agents_dir.glob("plan-*.md") if p.name != "CLAUDE.md"}
+    expected_agents = {
+        "plan-foundation-auditor",
+        "plan-interface-mapper",
+        "plan-registry-tracer",
+    }
+    assert expected_agents <= plan_review_files, (
+        f"Missing plan-review agents: {expected_agents - plan_review_files}"
     )
 
 
@@ -168,7 +173,10 @@ def test_make_plan_subagent_type_refs_resolve():
 
     content = (pkg_root() / "skills_extended" / "make-plan" / "SKILL.md").read_text()
     refs = re.findall(r"autoskillit:(plan-[a-z-]+)", content)
-    assert len(refs) >= 3, f"Expected >=3 autoskillit:plan-* refs in SKILL.md, found {len(refs)}"
+    unique_refs = set(refs)
+    assert len(unique_refs) >= 3, (
+        f"Expected >=3 unique autoskillit:plan-* refs in SKILL.md, found {len(unique_refs)}"
+    )
 
     agents_dir = pkg_root() / "agents"
     for agent_name in set(refs):

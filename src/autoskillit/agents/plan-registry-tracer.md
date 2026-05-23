@@ -105,10 +105,9 @@ For EACH symbol from Step 1:
 - Grep `src/` for the symbol name
 - Grep `tests/` for the symbol name
 - Grep project config/data directories (e.g., `.autoskillit/`, `.github/`, `config/`) for the symbol name if they exist. These directories often contain checked-in YAML, JSON manifests, and configuration files that embed field names as keys — primary locations for stale references when a field is renamed.
-- Grep `config/` and any other project-root config directories for the symbol name
 - If the plan **renames** a symbol, grep for BOTH the old AND new names
 
-Use the Bash tool with `grep -rn` or the Grep tool. Do not skip any source tree.
+Use the Grep tool (never `grep` or `rg` via Bash). Do not skip any source tree.
 
 Merge all results from Steps 2–4 — deduplicate by file:line but keep any references found by only one method.
 

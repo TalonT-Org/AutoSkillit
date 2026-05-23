@@ -12,6 +12,7 @@ import structlog.testing
 from autoskillit.core import AGENT_BACKEND_CLAUDE_CODE
 from autoskillit.core.types import (
     AgentSessionResult,
+    CliSubtype,
     KillReason,
     SkillResult,
     SubprocessResult,
@@ -930,3 +931,68 @@ class TestNormalApiRetry:
         assert sr.api_retry.count == 1
         assert sr.api_retry.exhausted is False
         assert sr.api_retry.last_error == "unknown"
+
+
+class TestExtractFileChanges:
+    def test_extract_file_changes_returns_empty_for_no_backend(self) -> None:
+        from autoskillit.execution.headless._headless_result import _extract_file_changes
+
+        assert _extract_file_changes("", None) == []
+
+    def test_extract_file_changes_returns_empty_for_claude_backend(self) -> None:
+        from autoskillit.execution.backends.claude import ClaudeCodeBackend
+        from autoskillit.execution.headless._headless_result import _extract_file_changes
+
+        assert _extract_file_changes("", ClaudeCodeBackend()) == []
+
+    def test_extract_file_changes_extracts_from_codex_stdout(self) -> None:
+        import json as _json
+
+        from autoskillit.execution.backends.codex import CodexBackend
+        from autoskillit.execution.headless._headless_result import _extract_file_changes
+
+        lines = [
+            _json.dumps(
+                {"type": "item.completed", "item": {"type": "file_change", "path": "/a.py"}}
+            ),
+            _json.dumps(
+                {"type": "item.completed", "item": {"type": "file_change", "path": "/b.py"}}
+            ),
+            _json.dumps(
+                {"type": "turn.completed", "usage": {"input_tokens": 100, "output_tokens": 50}}
+            ),
+        ]
+        stdout = "\n".join(lines)
+        backend = CodexBackend()
+        result = _extract_file_changes(stdout, backend)
+        assert result == ["/a.py", "/b.py"]
+
+
+class TestComputeWriteEvidenceWithFileChanges:
+    def test_compute_write_evidence_sets_file_changes_count_when_no_write_calls(self) -> None:
+        from autoskillit.execution.headless._headless_result import _compute_write_evidence
+
+        session = ClaudeSessionResult(
+            subtype=CliSubtype.SUCCESS,
+            is_error=False,
+            result="done",
+            session_id="s1",
+            tool_uses=[],
+        )
+        evidence = _compute_write_evidence(session, False, False, file_changes=["a.py", "b.py"])
+        assert evidence.file_changes_count == 2
+        assert evidence.has_evidence is True
+
+    def test_compute_write_evidence_ignores_file_changes_when_write_calls_exist(self) -> None:
+        from autoskillit.execution.headless._headless_result import _compute_write_evidence
+
+        session = ClaudeSessionResult(
+            subtype=CliSubtype.SUCCESS,
+            is_error=False,
+            result="done",
+            session_id="s1",
+            tool_uses=[{"name": "Write", "id": "t1"}],
+        )
+        evidence = _compute_write_evidence(session, False, False, file_changes=["a.py"])
+        assert evidence.file_changes_count == 0
+        assert evidence.write_call_count == 1

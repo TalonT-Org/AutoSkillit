@@ -17,6 +17,7 @@ _REQUIRED_INDEX_FIELDS = {
     "caller_session_id",
     "fs_writes_detected",
     "git_writes_detected",
+    "file_changes_count",
     "api_retry_count",
     "api_retry_exhausted",
 }

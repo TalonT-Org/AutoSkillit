@@ -119,6 +119,7 @@ def _synthesize_from_write_artifacts(
     write_call_count: int,
     fs_writes_detected: bool = False,
     write_tool_names: frozenset[str] = frozenset({"Write", "Edit"}),
+    file_changes: Sequence[str] = (),
 ) -> ClaudeSessionResult | None:
     """Synthesize missing structured output tokens from write tool_use file_path data.
 
@@ -131,7 +132,7 @@ def _synthesize_from_write_artifacts(
     Returns a new ClaudeSessionResult with the injected line prepended to result, or None if
     synthesis is not possible (no matching file_path, no path-capture patterns, or pattern
     already satisfied)."""
-    if write_call_count == 0:
+    if write_call_count == 0 and not file_changes:
         return None
 
     # Only synthesize path-capture patterns; non-path patterns must remain text-compliance-only.
@@ -150,6 +151,8 @@ def _synthesize_from_write_artifacts(
             for t in session.tool_uses
             if t.get("name") in write_tool_names and t.get("file_path", "").startswith("/")
         ]
+        if not candidate_paths and file_changes:
+            candidate_paths = list(file_changes)
         if candidate_paths:
             synthesized_lines.append(f"{token_name} = {candidate_paths[-1]}")
 

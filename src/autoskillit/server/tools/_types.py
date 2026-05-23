@@ -46,6 +46,7 @@ class RunSkillResult(_RunSkillResultBase, total=False):
     write_call_count: int
     fs_writes_detected: bool
     git_writes_detected: bool
+    file_changes_count: int
     last_stop_reason: str
     lifespan_started: bool
     worktree_path: str

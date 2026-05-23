@@ -1025,6 +1025,7 @@ class TestBuildSkillResultCrossValidation:
         "write_call_count",
         "fs_writes_detected",
         "git_writes_detected",
+        "file_changes_count",
         "has_progress_evidence",
         "infra_exit_category",
         "api_retry_count",

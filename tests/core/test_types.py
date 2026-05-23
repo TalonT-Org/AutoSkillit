@@ -731,3 +731,26 @@ def test_skill_result_git_writes_detected_false_included() -> None:
     data = json.loads(sr.to_json())
     assert "git_writes_detected" in data
     assert data["git_writes_detected"] is False
+
+
+def test_skill_result_file_changes_count_in_json() -> None:
+    sr = SkillResult(
+        success=True,
+        result="done",
+        session_id="s1",
+        subtype="success",
+        is_error=False,
+        exit_code=0,
+        needs_retry=False,
+        retry_reason=RetryReason.NONE,
+        stderr="",
+        evidence=WriteEvidence(
+            write_call_count=0,
+            fs_writes_detected=False,
+            git_writes_detected=False,
+            file_changes_count=2,
+        ),
+    )
+    data = json.loads(sr.to_json())
+    assert "file_changes_count" in data
+    assert data["file_changes_count"] == 2

@@ -19,11 +19,6 @@ class TestSessionLogMonitorStaleSuppressionGate:
 
     @pytest.mark.anyio
     async def test_suppresses_stale_when_port_443_connection_active(self, tmp_path):
-        """
-        File stops growing. Monitor reaches stale_threshold. But process has
-        an ESTABLISHED port-443 connection -> suppression fires, clock resets,
-        monitor continues. On second check (connection dropped) -> stale fires.
-        """
         session_file = tmp_path / "session.jsonl"
         session_file.write_text("")
         spawn_time = time.time() - 10

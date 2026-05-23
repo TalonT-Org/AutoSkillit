@@ -59,7 +59,7 @@ class TestRecipeKindDispatchGate:
         tool_ctx.executor = InMemoryHeadlessExecutor()
 
     @pytest.mark.anyio
-    async def test_food_truck_dispatchable(self, tool_ctx, monkeypatch):
+    async def test_food_truck_dispatchable(self, tool_ctx):
         """T4: FOOD_TRUCK kind is accepted by the dispatch gate (not rejected)."""
         self._setup_food_truck_recipe(tool_ctx)
 
@@ -67,7 +67,7 @@ class TestRecipeKindDispatchGate:
         assert result.get("error") != "fleet_invalid_recipe_kind"
 
     @pytest.mark.anyio
-    async def test_campaign_kind_still_rejected_by_dispatch(self, tool_ctx, monkeypatch):
+    async def test_campaign_kind_still_rejected_by_dispatch(self, tool_ctx):
         """T5: CAMPAIGN kind is still rejected by the dispatch gate."""
         self._setup_campaign_recipe(tool_ctx)
 

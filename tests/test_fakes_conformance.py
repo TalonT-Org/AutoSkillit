@@ -241,6 +241,7 @@ def test_recipe_repository_list_records_call():
 
 def test_recipe_repository_load_and_validate_records_call():
     repo = InMemoryRecipeRepository()
+    repo.set_validated("my-recipe", {"valid": True, "suggestions": []})
     repo.load_and_validate(
         "my-recipe",
         Path("/proj"),
@@ -280,6 +281,7 @@ def test_recipe_repository_list_all_records_call_with_none_project_dir():
 
 def test_recipe_repository_calls_accumulate():
     repo = InMemoryRecipeRepository()
+    repo.set_validated("r1", {"valid": True, "suggestions": []})
     repo.find("r1", Path("/a"))
     repo.list_all()
     repo.load_and_validate("r1", Path("/a"))

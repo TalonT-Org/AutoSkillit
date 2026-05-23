@@ -7,21 +7,12 @@ from pathlib import Path
 
 import pytest
 
+from ._split_helpers import _has_pytestmark_cli
+
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 _CLI_TESTS = Path(__file__).parent
 _CLI_SRC = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "cli"
-
-
-def _has_pytestmark_cli(path: Path) -> bool:
-    tree = ast.parse(path.read_text())
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name) and target.id == "pytestmark":
-                    src = ast.unparse(node.value)
-                    return 'layer("cli")' in src or "layer('cli')" in src
-    return False
 
 
 def test_doctor_scripts_file_exists():
@@ -74,6 +65,67 @@ def test_doctor_core_does_not_contain_quota_cache_class():
     assert "TestCheckQuotaCacheSchema" not in class_names, (
         "TestCheckQuotaCacheSchema must be moved to test_doctor_migration.py"
     )
+
+
+def test_doctor_backend_guards_file_exists():
+    """test_doctor_backend_guards.py must exist after the split."""
+    assert (_CLI_TESTS / "test_doctor_backend_guards.py").exists()
+
+
+def test_doctor_backend_guards_has_correct_pytestmark():
+    p = _CLI_TESTS / "test_doctor_backend_guards.py"
+    assert _has_pytestmark_cli(p), "test_doctor_backend_guards.py missing layer('cli') pytestmark"
+
+
+def test_doctor_backend_guards_contains_expected_classes():
+    p = _CLI_TESTS / "test_doctor_backend_guards.py"
+    tree = ast.parse(p.read_text())
+    class_names = {n.name for n in ast.walk(tree) if isinstance(n, ast.ClassDef)}
+    assert "TestCheckClaudeProcessStateBreakdown" in class_names
+    assert "TestCheckStaleMcpServersBackendGuard" in class_names
+    assert "TestCheckMcpServerRegisteredBackendGuard" in class_names
+    assert "TestCheckClaudeProcessStateBreakdownBackendGuard" in class_names
+    assert "TestRunDoctorBackendWiring" in class_names
+
+
+def test_doctor_fleet_checks_file_exists():
+    """test_doctor_fleet_checks.py must exist after the split."""
+    assert (_CLI_TESTS / "test_doctor_fleet_checks.py").exists()
+
+
+def test_doctor_fleet_checks_has_correct_pytestmark():
+    p = _CLI_TESTS / "test_doctor_fleet_checks.py"
+    assert _has_pytestmark_cli(p), "test_doctor_fleet_checks.py missing layer('cli') pytestmark"
+
+
+def test_doctor_fleet_checks_contains_expected_classes():
+    p = _CLI_TESTS / "test_doctor_fleet_checks.py"
+    tree = ast.parse(p.read_text())
+    class_names = {n.name for n in ast.walk(tree) if isinstance(n, ast.ClassDef)}
+    assert "TestGroupMFranchiseDoctorChecks" in class_names
+    assert "TestGroupNFeatureGateDoctorChecks" in class_names
+
+
+def test_doctor_migration_does_not_contain_backend_guard_classes():
+    p = _CLI_TESTS / "test_doctor_migration.py"
+    tree = ast.parse(p.read_text())
+    class_names = {n.name for n in ast.walk(tree) if isinstance(n, ast.ClassDef)}
+    for cls in (
+        "TestCheckClaudeProcessStateBreakdown",
+        "TestCheckStaleMcpServersBackendGuard",
+        "TestCheckMcpServerRegisteredBackendGuard",
+        "TestCheckClaudeProcessStateBreakdownBackendGuard",
+        "TestRunDoctorBackendWiring",
+    ):
+        assert cls not in class_names, f"{cls} must be moved to test_doctor_backend_guards.py"
+
+
+def test_doctor_migration_does_not_contain_fleet_classes():
+    p = _CLI_TESTS / "test_doctor_migration.py"
+    tree = ast.parse(p.read_text())
+    class_names = {n.name for n in ast.walk(tree) if isinstance(n, ast.ClassDef)}
+    for cls in ("TestGroupMFranchiseDoctorChecks", "TestGroupNFeatureGateDoctorChecks"):
+        assert cls not in class_names, f"{cls} must be moved to test_doctor_fleet_checks.py"
 
 
 def test_doctor_facade_exports_run_doctor():

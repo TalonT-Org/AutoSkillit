@@ -46,7 +46,7 @@ _FLEET_CLASS_MARKERS: dict[str, set[str]] = {
         "TestFeatureGateVisibility",
     },
     "server/test_tools_execution_results.py": {"TestTierAwareGateEnforcement"},
-    "cli/test_doctor_migration.py": {
+    "cli/test_doctor_fleet_checks.py": {
         "TestGroupMFranchiseDoctorChecks",
         "TestGroupNFeatureGateDoctorChecks",
     },

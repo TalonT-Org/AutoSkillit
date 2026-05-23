@@ -160,15 +160,16 @@ class TestSessionLogMonitorStaleSuppressionGate:
             "autoskillit.execution.process._process_monitor._has_active_child_processes",
             fake_child_cpu,
         )
-        result = await _session_log_monitor(
-            tmp_path,
-            "DONE",
-            stale_threshold=0.05,
-            spawn_time=spawn_time,
-            pid=9999,
-            _phase1_poll=0.01,
-            _phase2_poll=0.05,
-        )
+        with anyio.fail_after(5.0):
+            result = await _session_log_monitor(
+                tmp_path,
+                "DONE",
+                stale_threshold=0.05,
+                spawn_time=spawn_time,
+                pid=9999,
+                _phase1_poll=0.01,
+                _phase2_poll=0.05,
+            )
         assert result.status == ChannelBStatus.STALE
         assert call_count["cpu"] == 2  # suppressed once, then fired
 
@@ -268,7 +269,8 @@ class TestStaleSuppressionBounded:
                     max_suppression_seconds=1.0,
                 )
         assert result.status == ChannelBStatus.STALE
-        captured = capsys.readouterr().out + capsys.readouterr().err
+        _io = capsys.readouterr()
+        captured = _io.out + _io.err
         bounded_in_logs = any("Suppression bounded" in str(log.get("event", "")) for log in logs)
         bounded_in_stdout = "Suppression bounded" in captured
         assert bounded_in_logs or bounded_in_stdout

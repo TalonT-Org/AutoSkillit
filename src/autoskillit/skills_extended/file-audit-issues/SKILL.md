@@ -4,9 +4,8 @@ categories: [audit-pipeline]
 description: >-
   Batch-create GitHub issues from validated audit ticket body files. Discovers
   ticket bodies from the audit run directory, deduplicates against existing open
-  issues, creates via batched GraphQL mutations, applies labels, appends
-  validation summaries, and writes a filed-issues manifest. Pipeline-only skill
-  dispatched by the full-audit recipe.
+  issues, creates via batched GraphQL mutations, applies labels and writes a
+  filed-issues manifest. Pipeline-only skill dispatched by the full-audit recipe.
 hooks:
   PreToolUse:
     - matcher: "*"
@@ -42,7 +41,16 @@ as a duplicate and skip it. Log skipped duplicates to terminal.
 `this`, `it`, `be`, `at`, `by`, `from`). Count the number of shared tokens between the
 two sets. Three or more shared tokens ⇒ duplicate.
 
-## Step 4 — Batch-Create Issues via GraphQL
+## Step 4 — Validate Ticket Body Size
+
+For each non-duplicate ticket body file, check its size:
+- If any ticket body exceeds 10,240 characters (10 KB), log a warning:
+  `"Warning: ticket body '{filename}' is {size} chars — exceeds 10KB ceiling. Consider re-running validation with finer ticket grouping."`
+- If any ticket body exceeds 60,000 characters, abort with error:
+  `"Error: ticket body '{filename}' is {size} chars — exceeds 60KB hard limit. Aborting to prevent oversized GitHub issues."`
+- Continue with non-aborted ticket bodies.
+
+## Step 5 — Batch-Create Issues via GraphQL
 
 Resolve repo identity: use `gh repo view --json owner,name` to get the canonical owner and repo name, then fetch `gh api repos/{owner}/{repo} --jq '.node_id'`.
 If this call fails or returns an empty node_id (missing `GH_TOKEN`, wrong remote, insufficient
@@ -53,22 +61,11 @@ Build batched GraphQL `createIssue` mutations with aliases (`issue0`, `issue1`, 
 Execute via `gh api graphql --input -`. Sleep 1 second between chunks (per GitHub API discipline).
 Collect created issue URLs and numbers.
 
-## Step 5 — Apply Source-Specific Labels
+## Step 6 — Apply Source-Specific Labels
 
 Parse the source from each ticket body filename (`ticket_body_{source}_{N}_{ts}.md`). For each unique
 source, ensure a label exists (e.g., `audit:tests`, `audit:arch`, `audit:cohesion`, etc.).
 Batch-apply source labels via GraphQL `addLabelsToLabelable` mutation with aliases.
-
-## Step 6 — Append Validation Summaries
-
-For each created issue, find the corresponding `validation_summary_{source}*.md` in the run directory.
-If no matching summary file exists for a given source, log a warning
-(`"Warning: no validation summary found for source '{source}' — skipping append for issue #{number}"`)
-and skip the append for that issue; do not abort the step.
-For each matched issue: fetch current issue body via `gh issue view {number} --json body --jq .body`.
-Verify fetched body is non-empty (skip append if empty to avoid overwriting). Append horizontal
-rule + validation summary content. Write combined text to temp file, run `gh issue edit {number} --body-file "$FILE"`.
-Sleep 1 second between edits (per GitHub API discipline).
 
 ## Step 7 — Write Filed Issues Manifest
 

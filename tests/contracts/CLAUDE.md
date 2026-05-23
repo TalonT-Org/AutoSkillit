@@ -17,6 +17,7 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_claim_issue_contracts.py` | Contract tests for claim_issue and release_issue MCP tools |
 | `test_claude_code_interface_contracts.py` | Contract tests for Claude Code external interface conventions |
 | `test_collapse_issues_contracts.py` | Contract tests for the collapse-issues skill SKILL.md |
+| `test_callable_skill_parity.py` | Cross-check: recipe-dispatched skills must have contract tests |
 | `test_campaign_prompt_accuracy.py` | Contract: campaign prompt does not contain inaccurate semaphore language |
 | `test_config_field_coverage.py` | REQ-CONFIG-001: every sub-config dataclass field must be referenced in from_dynaconf |
 | `test_core_public_api_surface.py` | Validates that every symbol in autoskillit.core.__all__ is importable via the public gateway |
@@ -34,6 +35,7 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_hook_bridge_coverage.py` | REQ-BRIDGE-001: quota guard hook config bridge must produce exactly the keys that resolve_quota_settings() reads |
 | `test_implement_experiment_contracts.py` | Contract tests for implement-experiment SKILL.md — test infrastructure requirements |
 | `test_instruction_surface.py` | Contract tests: every instruction surface must carry the pipeline tool restriction |
+| `test_issue_body_discipline.py` | Cross-skill contract: no SKILL.md may append validation summaries to issue bodies |
 | `test_issue_content_fidelity.py` | Cross-skill contract: content fidelity for issue body assembly |
 | `test_issue_splitter_contracts.py` | Contract tests: issue-splitter skill correctness and triage-issues integration |
 | `test_l1_packages.py` | Package export surface tests for the L1 sub-packages |
@@ -66,6 +68,7 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_stage_data_contracts.py` | Contract tests for stage-data SKILL.md — pre-flight resource feasibility gate |
 | `test_download_data_contracts.py` | Contract tests for download-data SKILL.md — external dataset acquisition step |
 | `test_sub_skill_refusal_contracts.py` | Cross-skill contract: every SKILL.md that invokes sub-skills must contain explicit refusal handling language |
+| `test_ticket_body_size_ceiling.py` | Cross-skill contract: issue-filing skills must document body size guard |
 | `test_target_skill_invocability.py` | Contract: the target skill of a run_skill call must be invocable after session setup |
 | `test_token_summary_contracts.py` | Structural contracts for the token summary pipeline |
 | `test_tools_recipe_contracts.py` | Contract tests for tools_recipe.py MCP tool docstrings |

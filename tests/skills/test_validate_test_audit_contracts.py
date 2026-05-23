@@ -7,6 +7,7 @@ import re
 
 from autoskillit.core.types import SkillSource
 from autoskillit.workspace.skills import DefaultSkillResolver
+from tests.skills.conftest import assert_ticket_grouper_has_minimum_group_floor
 
 
 @functools.cache
@@ -179,3 +180,10 @@ class TestValidateTestAuditInputHandling:
         text = _skill_text()
         finding_ids = re.findall(r"C\d+-\d+", text)
         assert len(finding_ids) == 0, f"Found specific finding IDs: {finding_ids}"
+
+
+class TestValidateTestAuditTicketGrouper:
+    def test_ticket_grouper_has_minimum_group_floor(self) -> None:
+        """Ticket Grouper instructions must enforce a minimum group count."""
+
+        assert_ticket_grouper_has_minimum_group_floor(_skill_text())

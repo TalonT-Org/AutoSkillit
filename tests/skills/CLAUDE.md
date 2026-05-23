@@ -17,6 +17,7 @@ Skill SKILL.md content compliance, placeholder contracts, and verdict guard test
 | `test_conflict_resolution_guards.py` | Structural guards for conflict resolution safeguards in SKILL.md files |
 | `test_deletion_regression_guards.py` | Structural guards for deletion regression detection in merge-pr and review-pr skills |
 | `test_dry_walkthrough_contracts.py` | Structural contracts for the dry-walkthrough historical regression check step |
+| `test_file_audit_issues_contracts.py` | Contract tests for file-audit-issues SKILL.md behavioral invariants |
 | `test_investigate_contracts.py` | Structural contracts for the investigate historical recurrence check step |
 | `test_investigate_deep_mode_contracts.py` | Structural contracts for the investigate deep analysis mode |
 | `test_investigate_design_intent_contracts.py` | Contract tests for Design Intent Analysis requirements in the investigate skill |

@@ -56,6 +56,11 @@
       "type": "integer",
       "default": "2"
     },
+    "adversarial_review_level": {
+      "description": "Controls adversarial review depth in make-plan. \"auto\" estimates complexity and gates agents accordingly. \"full\" always runs all 3 agents. \"none\" skips adversarial review entirely.",
+      "default": "auto",
+      "hidden": true
+    },
     "issue_url": {
       "description": "GitHub issue to close on merge",
       "required": false
@@ -157,7 +162,8 @@
         "cwd": "${{ context.work_dir }}",
         "step_name": "plan",
         "issue_url": "${{ inputs.issue_url }}",
-        "issue_title": "${{ context.issue_title }}"
+        "issue_title": "${{ context.issue_title }}",
+        "adversarial_review_level": "${{ inputs.adversarial_review_level }}"
       },
       "capture": {
         "plan_path": "${{ result.plan_path }}",
@@ -169,7 +175,7 @@
       "retries": 0,
       "on_success": "review",
       "on_failure": "release_issue_failure",
-      "note": "Produces plan in {{AUTOSKILLIT_TEMP}}/make-plan/. Glob plan_dir for *_part_*.md or single plan file. plan_parts context key contains the full ordered list of part files (sorted alphabetically). For a single-part plan, plan_parts has one entry equal to plan_path. REMEDIATION MODE: context.remediation_path is available when the orchestrator re-enters plan from the remediate step; pass it inline in the skill_command rather than as a named with: key. ACCUMULATION: all_plan_paths accumulates across any re-entries to the plan step (e.g. remediation). For a single-pass run, all_plan_paths equals plan_path (the capture block handles this automatically). ISSUE CONTEXT: If inputs.issue_url is a non-empty string, append it to the skill_command so the make-plan skill can detect and fetch the issue itself: \"/autoskillit:make-plan {task}\\n\\nGitHub Issue: {inputs.issue_url}\" The skill detects the URL pattern and calls fetch_github_issue internally.\n"
+      "note": "Produces plan in {{AUTOSKILLIT_TEMP}}/make-plan/. Glob plan_dir for *_part_*.md or single plan file. plan_parts context key contains the full ordered list of part files (sorted alphabetically). For a single-part plan, plan_parts has one entry equal to plan_path. REMEDIATION MODE: context.remediation_path is available when the orchestrator re-enters plan from the remediate step; pass it inline in the skill_command rather than as a named with: key. ACCUMULATION: all_plan_paths accumulates across any re-entries to the plan step (e.g. remediation). For a single-pass run, all_plan_paths equals plan_path (the capture block handles this automatically). ISSUE CONTEXT: If inputs.issue_url is a non-empty string, append it to the skill_command so the make-plan skill can detect and fetch the issue itself: \"/autoskillit:make-plan {task}\\n\\nGitHub Issue: {inputs.issue_url}\" The skill detects the URL pattern and calls fetch_github_issue internally. ADVERSARIAL REVIEW LEVEL: If inputs.adversarial_review_level is a non-empty string, append it to the skill_command: \"/autoskillit:make-plan {task}\\n\\nadversarial_review_level={inputs.adversarial_review_level}\"\n"
     },
     "review": {
       "tool": "run_skill",

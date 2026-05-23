@@ -775,6 +775,52 @@ class TestFoodTruckAutoGateBoot:
         result = json.loads(await run_skill("/some-skill", "/tmp"))
         assert result.get("success") is True
 
+    @pytest.mark.anyio
+    async def test_food_truck_auto_gate_boot_runs_label_sweep(
+        self, tool_ctx, monkeypatch, tmp_path
+    ) -> None:
+        """ORCHESTRATOR boot must schedule label sweep when campaign state files exist."""
+        import json as _json
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from autoskillit.core import FOOD_TRUCK_TOOL_TAGS_ENV_VAR
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server._lifespan import _food_truck_auto_gate_boot
+
+        dispatches_dir = tmp_path / ".autoskillit" / "temp" / "dispatches"
+        dispatches_dir.mkdir(parents=True)
+        (dispatches_dir / "campaign1.json").write_text(_json.dumps({}))
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        tool_ctx.quota_refresh_task = None
+        tool_ctx.project_dir = tmp_path
+        tool_ctx.github_client = AsyncMock()
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv(FOOD_TRUCK_TOOL_TAGS_ENV_VAR, "kitchen-core")
+
+        mock_create_bg_task = MagicMock(return_value=MagicMock())
+
+        with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+            with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.pipeline.create_background_task", mock_create_bg_task):
+                    with patch("autoskillit.core.register_active_kitchen"):
+                        with patch(
+                            "autoskillit.fleet.sweep_stale_dispatch_labels",
+                            new_callable=AsyncMock,
+                        ):
+                            with patch(
+                                "autoskillit.fleet.discover_campaign_state_files",
+                                return_value=[dispatches_dir / "campaign1.json"],
+                            ):
+                                await _food_truck_auto_gate_boot(tool_ctx)
+
+        sweep_call_labels = [
+            call_args.kwargs.get("label") for call_args in mock_create_bg_task.call_args_list
+        ]
+        assert "startup_label_recovery_sweep" in sweep_call_labels, (
+            "label sweep background task not scheduled; "
+            f"create_background_task labels: {sweep_call_labels}"
+        )
+
 
 @pytest.mark.feature("fleet")
 class TestFeatureGateVisibility:

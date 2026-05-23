@@ -130,7 +130,10 @@ def classify_stale_dispatch(
 
     Returns (new_status, sidecar_path_or_empty).
     """
-    from autoskillit.fleet.sidecar import read_sidecar_from_path  # noqa: PLC0415
+    from autoskillit.fleet.sidecar import (  # noqa: PLC0415
+        SidecarReadStatus,
+        read_sidecar_from_path,
+    )
 
     sidecar = Path(dispatch.sidecar_path) if dispatch.sidecar_path else None
     sidecar_path_str = ""
@@ -142,7 +145,10 @@ def classify_stale_dispatch(
         else:
             sidecar_path_str = str(sidecar)
             try:
-                has_entries = bool(read_sidecar_from_path(sidecar))
+                sidecar_result = read_sidecar_from_path(sidecar)
+                has_entries = sidecar_result.source == SidecarReadStatus.FOUND and bool(
+                    sidecar_result.entries
+                )
             except Exception:
                 logger.warning(
                     "classify_stale_dispatch: read_sidecar_from_path failed for %s",
@@ -305,7 +311,7 @@ def find_dispatch_for_issue(
             if d.sidecar_path is None:
                 continue
             if d.status == DispatchStatus.RUNNING:
-                entries = read_sidecar_from_path(Path(d.sidecar_path))
+                entries = read_sidecar_from_path(Path(d.sidecar_path)).entries
                 if any(e.issue_url == issue_url for e in entries):
                     return d
             elif (
@@ -313,7 +319,7 @@ def find_dispatch_for_issue(
                 and d.status in TERMINAL_UNCLEANED_STATUSES
                 and not d.labels_cleaned
             ):
-                entries = read_sidecar_from_path(Path(d.sidecar_path))
+                entries = read_sidecar_from_path(Path(d.sidecar_path)).entries
                 if any(e.issue_url == issue_url for e in entries):
                     terminal_match = d
     return terminal_match

@@ -144,16 +144,16 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # eval resolved/manifest/scorecard/eval_context
     ("src/autoskillit/smoke_utils.py", 71),
     ("src/autoskillit/smoke_utils.py", 140),
-    # Lines 157 and 420 are list-payload write sites (dual membership: also in list_sites
+    # Lines 157 and 438 are list-payload write sites (dual membership: also in list_sites
     # in test_allowlist_includes_list_payloads_as_documented). The AST scanner catches
     # them because it cannot distinguish list vs dict return types — intentional.
     ("src/autoskillit/smoke_utils.py", 157),
-    ("src/autoskillit/smoke_utils.py", 420),
-    ("src/autoskillit/smoke_utils.py", 502),
-    ("src/autoskillit/smoke_utils.py", 513),
-    ("src/autoskillit/smoke_utils.py", 606),
-    ("src/autoskillit/smoke_utils.py", 682),
-    ("src/autoskillit/smoke_utils.py", 777),
+    ("src/autoskillit/smoke_utils.py", 438),
+    ("src/autoskillit/smoke_utils.py", 520),
+    ("src/autoskillit/smoke_utils.py", 531),
+    ("src/autoskillit/smoke_utils.py", 624),
+    ("src/autoskillit/smoke_utils.py", 700),
+    ("src/autoskillit/smoke_utils.py", 795),
     # planner/consolidation.py — write-back of merged WP dicts to per-file results
     ("src/autoskillit/planner/consolidation.py", 315),
     # planner/consolidation.py — broken_cycle_edges.json (list payload; AST scanner catches it)
@@ -223,7 +223,7 @@ class TestSchemaVersionConvention:
         # These sites write list payloads through function calls but are caught by the scanner
         list_sites = [
             ("src/autoskillit/smoke_utils.py", 157),
-            ("src/autoskillit/smoke_utils.py", 420),
+            ("src/autoskillit/smoke_utils.py", 438),
         ]
         for site in list_sites:
             assert site in _LEGACY_JSON_WRITES, (

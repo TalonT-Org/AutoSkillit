@@ -708,8 +708,9 @@ steps:
     note: >
       Compound iteration + blocking guard. Routes back to annotate_pr_diff only when
       had_blocking=true AND max_exceeded=false. had_blocking is true when
-      previous_verdict=changes_requested OR (local_review_rounds > 0 AND iteration < local_review_rounds),
-      ensuring local review rounds are fully exhausted before exiting to CI.
+      previous_verdict=changes_requested OR (local_review_rounds > 0 AND iteration < local_review_rounds
+      AND verdict not in LOCAL_ROUND_EXEMPT_VERDICTS). approved_with_comments yields had_blocking=false
+      unconditionally because its resolve pass is one-shot, regardless of local_review_rounds.
 
   check_repo_ci_event:
     tool: check_repo_merge_state

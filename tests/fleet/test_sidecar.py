@@ -5,6 +5,7 @@ import pytest
 
 from autoskillit.fleet.sidecar import (
     IssueSidecarEntry,
+    SidecarReadStatus,
     append_sidecar_entry,
     compute_remaining_issues,
     merge_sidecar_chain,
@@ -160,7 +161,24 @@ class TestComputeRemainingIssues:
 class TestReadSidecarFromPath:
     def test_nonexistent_parent_returns_empty(self) -> None:
         result = read_sidecar_from_path(Path("/nonexistent/dir/issues.jsonl"))
-        assert result == []
+        assert result.source == SidecarReadStatus.MISSING
+        assert result.entries == []
+
+    def test_read_sidecar_from_path_returns_found_when_file_empty(self, tmp_path: Path) -> None:
+        sidecar = tmp_path / "empty.jsonl"
+        sidecar.write_text("")
+        result = read_sidecar_from_path(sidecar)
+        assert result.source == SidecarReadStatus.FOUND
+        assert result.entries == []
+
+    def test_read_sidecar_from_path_returns_found_with_entries(self, tmp_path: Path) -> None:
+        sidecar = tmp_path / "issues.jsonl"
+        sidecar.write_text(
+            '{"issue_url":"https://github.com/o/r/issues/1","status":"completed","ts":"t"}\n'
+        )
+        result = read_sidecar_from_path(sidecar)
+        assert result.source == SidecarReadStatus.FOUND
+        assert len(result.entries) == 1
 
     def test_valid_jsonl_parsed_correctly(self, tmp_path: Path) -> None:
         p = tmp_path / "issues.jsonl"
@@ -172,12 +190,13 @@ class TestReadSidecarFromPath:
         ]
         p.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-        entries = read_sidecar_from_path(p)
+        result = read_sidecar_from_path(p)
 
-        assert len(entries) == 2
-        assert all(isinstance(e, IssueSidecarEntry) for e in entries)
-        assert entries[0].issue_url == URL1
-        assert entries[1].issue_url == URL2
+        assert result.source == SidecarReadStatus.FOUND
+        assert len(result.entries) == 2
+        assert all(isinstance(e, IssueSidecarEntry) for e in result.entries)
+        assert result.entries[0].issue_url == URL1
+        assert result.entries[1].issue_url == URL2
 
 
 class TestMergeSidecarChain:

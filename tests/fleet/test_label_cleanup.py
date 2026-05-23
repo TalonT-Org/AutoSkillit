@@ -452,3 +452,18 @@ class TestCleanupOrphanedLabelsUnit:
         result = await cleanup_orphaned_labels(str(sidecar), github_client)
 
         assert result is False
+
+    @pytest.mark.anyio
+    async def test_cleanup_returns_false_when_sidecar_file_missing_on_disk(
+        self, tmp_path: Path
+    ) -> None:
+        """cleanup_orphaned_labels returns False when sidecar_path points to nonexistent file."""
+        from autoskillit.fleet._label_cleanup import cleanup_orphaned_labels
+
+        missing_path = str(tmp_path / "deleted_issues.jsonl")
+        github_client = AsyncMock()
+
+        result = await cleanup_orphaned_labels(missing_path, github_client)
+
+        assert result is False
+        github_client.swap_labels.assert_not_called()

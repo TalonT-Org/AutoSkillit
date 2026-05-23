@@ -204,6 +204,9 @@ class TestPipelineVariantInvariants:
             c.route for c in pr_state.on_result.conditions if c.when and "CONFLICTING" in c.when
         }
         for target_name in conflicting_targets:
+            assert target_name in recipe.steps, (
+                f"CONFLICTING route '{target_name}' not found in recipe steps"
+            )
             target_step = recipe.steps[target_name]
             assert target_step.tool == "run_skill", (
                 f"CONFLICTING routes to '{target_name}' which is {target_step.tool}, "

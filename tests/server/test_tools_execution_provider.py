@@ -224,3 +224,184 @@ async def test_run_skill_model_as_profile_no_anthropic_model_falls_through(
 
     assert captured.get("model") == ""
     assert captured.get("provider_extras") is None
+
+
+@pytest.mark.anyio
+async def test_run_skill_model_overrides_applied(
+    tool_ctx_kitchen_open, tmp_path, monkeypatch
+) -> None:
+    from autoskillit.config.settings import ProvidersConfig
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    tool_ctx_kitchen_open.recipe_name = "implementation"
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: False)
+    tool_ctx_kitchen_open.config.providers = ProvidersConfig(
+        model_overrides={"implementation": {"implement": "opus"}}
+    )
+
+    captured: dict = {}
+    original_run = executor.run
+
+    async def spy_run(*args, **kwargs):
+        captured.update(kwargs)
+        return await original_run(*args, **kwargs)
+
+    monkeypatch.setattr(executor, "run", spy_run)
+
+    await run_skill("/autoskillit:probe", str(tmp_path), step_name="implement")
+
+    assert captured.get("model") == "opus"
+
+
+@pytest.mark.anyio
+async def test_run_skill_model_overrides_wildcard_step(
+    tool_ctx_kitchen_open, tmp_path, monkeypatch
+) -> None:
+    from autoskillit.config.settings import ProvidersConfig
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    tool_ctx_kitchen_open.recipe_name = "implementation"
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: False)
+    tool_ctx_kitchen_open.config.providers = ProvidersConfig(
+        model_overrides={"implementation": {"*": "opus"}}
+    )
+
+    captured: dict = {}
+    original_run = executor.run
+
+    async def spy_run(*args, **kwargs):
+        captured.update(kwargs)
+        return await original_run(*args, **kwargs)
+
+    monkeypatch.setattr(executor, "run", spy_run)
+
+    await run_skill("/autoskillit:probe", str(tmp_path), step_name="plan")
+
+    assert captured.get("model") == "opus"
+
+
+@pytest.mark.anyio
+async def test_run_skill_model_overrides_exact_over_wildcard(
+    tool_ctx_kitchen_open, tmp_path, monkeypatch
+) -> None:
+    from autoskillit.config.settings import ProvidersConfig
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    tool_ctx_kitchen_open.recipe_name = "implementation"
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: False)
+    tool_ctx_kitchen_open.config.providers = ProvidersConfig(
+        model_overrides={"implementation": {"implement": "opus", "*": "haiku"}}
+    )
+
+    captured: dict = {}
+    original_run = executor.run
+
+    async def spy_run(*args, **kwargs):
+        captured.update(kwargs)
+        return await original_run(*args, **kwargs)
+
+    monkeypatch.setattr(executor, "run", spy_run)
+
+    await run_skill("/autoskillit:probe", str(tmp_path), step_name="implement")
+
+    assert captured.get("model") == "opus"
+
+
+@pytest.mark.anyio
+async def test_run_skill_model_overrides_without_providers_feature(
+    tool_ctx_kitchen_open, tmp_path, monkeypatch
+) -> None:
+    from autoskillit.config.settings import ProvidersConfig
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    tool_ctx_kitchen_open.recipe_name = "implementation"
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: False)
+    tool_ctx_kitchen_open.config.providers = ProvidersConfig(
+        model_overrides={"implementation": {"implement": "opus"}}
+    )
+
+    captured: dict = {}
+    original_run = executor.run
+
+    async def spy_run(*args, **kwargs):
+        captured.update(kwargs)
+        return await original_run(*args, **kwargs)
+
+    monkeypatch.setattr(executor, "run", spy_run)
+
+    await run_skill("/autoskillit:probe", str(tmp_path), step_name="implement")
+
+    assert captured.get("model") == "opus"
+
+
+@pytest.mark.anyio
+async def test_run_skill_model_overrides_no_match_passthrough(
+    tool_ctx_kitchen_open, tmp_path, monkeypatch
+) -> None:
+    from autoskillit.config.settings import ProvidersConfig
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    tool_ctx_kitchen_open.recipe_name = "implementation"
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: False)
+    tool_ctx_kitchen_open.config.providers = ProvidersConfig(
+        model_overrides={"remediation": {"implement": "opus"}}
+    )
+
+    captured: dict = {}
+    original_run = executor.run
+
+    async def spy_run(*args, **kwargs):
+        captured.update(kwargs)
+        return await original_run(*args, **kwargs)
+
+    monkeypatch.setattr(executor, "run", spy_run)
+
+    await run_skill("/autoskillit:probe", str(tmp_path), model="sonnet", step_name="implement")
+
+    assert captured.get("model") == "sonnet"
+
+
+@pytest.mark.anyio
+async def test_run_skill_global_override_beats_model_overrides(
+    tool_ctx_kitchen_open, tmp_path, monkeypatch
+) -> None:
+    from autoskillit.config.settings import ProvidersConfig
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    tool_ctx_kitchen_open.recipe_name = "implementation"
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: False)
+    tool_ctx_kitchen_open.config.providers = ProvidersConfig(
+        model_overrides={"implementation": {"implement": "opus"}}
+    )
+    tool_ctx_kitchen_open.config.model.model_override = "haiku"
+
+    captured: dict = {}
+    original_run = executor.run
+
+    async def spy_run(*args, **kwargs):
+        captured.update(kwargs)
+        return await original_run(*args, **kwargs)
+
+    monkeypatch.setattr(executor, "run", spy_run)
+
+    await run_skill("/autoskillit:probe", str(tmp_path), step_name="implement")
+
+    assert captured.get("model") == "haiku"

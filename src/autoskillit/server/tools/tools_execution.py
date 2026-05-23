@@ -342,6 +342,18 @@ async def run_skill(
                     provider_extras = prof_extras
                     profile_name_out = prof_name
 
+        if _cfg.model.model_override:
+            effective_model = _cfg.model.model_override
+        else:
+            if tool_ctx.recipe_name:
+                _mo_recipe_map = _cfg.providers.model_overrides.get(tool_ctx.recipe_name)
+                if _mo_recipe_map:
+                    _step_mo = _mo_recipe_map.get(step_name) if step_name else None
+                    if _step_mo is None:
+                        _step_mo = _mo_recipe_map.get("*")
+                    if _step_mo:
+                        effective_model = _step_mo
+
         # Look up artifact validation patterns from skill contract
         expected_output_patterns: list[str] = []
         if tool_ctx.output_pattern_resolver:

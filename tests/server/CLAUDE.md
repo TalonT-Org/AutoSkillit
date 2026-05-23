@@ -55,15 +55,23 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_tools_ci_split.py` | CI split structural guard |
 | `test_tools_ci_watch.py` | Tests for wait_for_ci event validation, null coercion, and auto_trigger recovery |
 | `test_tools_clone.py` | Tests for autoskillit server clone tools |
-| `test_tools_dispatch.py` | Tests for dispatch_food_truck tool handler: gates, validation, execution, and execute_dispatch domain function |
+| `test_tools_dispatch.py` | Tests for dispatch_food_truck execution lifecycle: lock, success envelope, PID, quota, cleanup |
 | `test_tools_dispatch_halt.py` | Tests for dispatch_food_truck campaign halt enforcement gate |
+| `test_tools_dispatch_params.py` | Tests for dispatch_food_truck parameter passthrough: resume, idle_timeout, marketplace |
+| `test_tools_dispatch_split.py` | Dispatch split structural guard |
+| `test_tools_dispatch_validation.py` | Tests for dispatch_food_truck validation: gates, input, and semantic validation |
 | `test_tools_execution_command.py` | Tests for run_skill command building, timeouts, env, model, and per-invocation markers |
 | `test_tools_execution_input_gates.py` | Tests for run_skill input validation gates and CWD checking |
 | `test_tools_execution_provider.py` | Tests for provider_extras/profile_name forwarding through run_skill() |
 | `test_tools_execution_response.py` | Contract tests: MCP tool response fields use correct enum types |
 | `test_tools_execution_results.py` | Tests for run_skill result shapes, failure paths, timing, flush telemetry, and gate checks |
 | `test_tools_execution_routing.py` | Tests for run_skill routing, executor delegation, and session skill management |
-| `test_tools_git.py` | Tests for classify_fix and merge_worktree MCP tools |
+| `test_tools_git.py` | Tests for merge_worktree core flow: happy path, test gate, rebase abort, bypass prevention |
+| `test_tools_git_branch.py` | Tests for create_unique_branch and check_pr_mergeable tools |
+| `test_tools_git_classify_fix.py` | Tests for classify_fix tool |
+| `test_tools_git_merge_cleanup.py` | Tests for merge_worktree cleanup reporting and warnings |
+| `test_tools_git_merge_guards.py` | Tests for merge_worktree remote tracking guard, timing, and merge commit detection |
+| `test_tools_git_split.py` | Git split structural guard |
 | `test_tools_github.py` | Tests for server/tools_github.py — fetch_github_issue and get_issue_title |
 | `test_tools_github_api_tracking.py` | GitHub API tracking tests |
 | `test_tools_integrations.py` | Integration tests for issue lifecycle, headless tool diagnostics, and PR ops |
@@ -71,7 +79,9 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_claim_liveness.py` | Tests for liveness-aware claiming — dead dispatch recovery, alive dispatch blocking, shared helper parity |
 | `test_tools_issue_lifecycle.py` | Tests for server/tools_issue_lifecycle.py |
 | `test_tools_kitchen_envelope.py` | Tests for tools_kitchen.py: hook drift warnings and failure envelopes |
-| `test_tools_kitchen_gate.py` | Tests for tools_kitchen.py: gate mechanics, hook config, recipe packs, refresh, misc |
+| `test_tools_kitchen_gate.py` | Tests for tools_kitchen.py: gate toggle, review gate cleanup, kitchen_id, misc |
+| `test_tools_kitchen_gate_features.py` | Tests for tools_kitchen.py: recipe packs, quota refresh, ingredients_only, project_dir |
+| `test_tools_kitchen_gate_hook_config.py` | Tests for tools_kitchen.py: hook config lifecycle, overlay, and quota guard tool |
 | `test_tools_kitchen_visibility.py` | Tests for tools_kitchen.py: visibility, component management, sous-chef, redisable_subsets |
 | `test_no_path_cwd_in_tools.py` | Regression guard: Path.cwd() must not appear in server tool handlers |
 | `test_open_kitchen_staleness.py` | Tests for ProcessStaleError propagation through open_kitchen — failure envelope with staleness context |

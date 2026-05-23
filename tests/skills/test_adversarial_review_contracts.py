@@ -122,7 +122,7 @@ def test_plan_registry_tracer_turn_budget_instruction() -> None:
     from autoskillit.core.paths import pkg_root
 
     content = (pkg_root() / "agents" / "plan-registry-tracer.md").read_text()
-    assert "1-2 Bash tool" in content or ("1-2" in content and "Bash" in content), (
+    assert "1-2 Bash tool" in content, (
         "plan-registry-tracer.md must contain '1-2 Bash tool calls' turn budget instruction"
     )
 

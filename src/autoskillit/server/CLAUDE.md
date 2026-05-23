@@ -46,7 +46,7 @@ Controls whether the tool appears in `tools/list` (whether the agent can see it)
 - `_apply_session_type_visibility()` selectively reveals tags per session type:
   - **FLEET** sessions: `fleet`-tagged tools revealed; `fleet-dispatch` revealed only in dispatch mode
   - **ORCHESTRATOR + HEADLESS**: `kitchen` (or `kitchen-core` + pack tags) revealed
-  - **SKILL + HEADLESS**: `headless`-tagged tools revealed (`test_check`)
+  - **SKILL + HEADLESS**: `headless`-tagged tools revealed (`test_check`); with `HEADLESS_AUTO_GATE=1`, `kitchen-core` also revealed
   - **Interactive** (no HEADLESS): nothing pre-revealed; `open_kitchen` reveals `kitchen` tag
 - Tags not disabled at startup (`kitchen-core`, `fleet-dispatch`, `fleet`, `headless`) remain
   visible unless a session-type or feature-gate transform explicitly disables them

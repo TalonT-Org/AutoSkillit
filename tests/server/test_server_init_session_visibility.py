@@ -171,6 +171,62 @@ class TestSessionTypeVisibility:
             assert name not in tool_names, f"{name} (kitchen) should be hidden for skill+headless"
 
     @pytest.mark.anyio
+    async def test_skill_headless_auto_gate_enables_kitchen_core_and_headless(self, monkeypatch):
+        from autoskillit.core import GATED_TOOLS
+        from autoskillit.server import _apply_session_type_visibility, mcp
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS_AUTO_GATE", "1")
+        _apply_session_type_visibility()
+
+        tools = list(await mcp.list_tools())
+        tool_names = {t.name for t in tools}
+        assert "test_check" in tool_names, (
+            "test_check should be visible for skill+headless+auto_gate"
+        )
+        kitchen_core_tools = {t.name for t in tools if "kitchen-core" in t.tags}
+        assert kitchen_core_tools, "kitchen-core-tagged tools should be visible when AUTO_GATE=1"
+        for name in GATED_TOOLS:
+            assert name not in tool_names, (
+                f"{name} (kitchen) should be hidden for skill+headless+auto_gate"
+            )
+
+    @pytest.mark.anyio
+    async def test_skill_headless_without_auto_gate_only_headless(self, monkeypatch):
+        from autoskillit.core import GATED_TOOLS
+        from autoskillit.server import _apply_session_type_visibility, mcp
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.delenv("AUTOSKILLIT_HEADLESS_AUTO_GATE", raising=False)
+        _apply_session_type_visibility()
+
+        tools = list(await mcp.list_tools())
+        tool_names = {t.name for t in tools}
+        assert "test_check" in tool_names, "test_check should be visible for skill+headless"
+        for name in GATED_TOOLS:
+            assert name not in tool_names, f"{name} (kitchen) should be hidden for skill+headless"
+
+    @pytest.mark.anyio
+    async def test_skill_headless_auto_gate_zero_only_headless(self, monkeypatch):
+        from autoskillit.core import GATED_TOOLS
+        from autoskillit.server import _apply_session_type_visibility, mcp
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS_AUTO_GATE", "0")
+        _apply_session_type_visibility()
+
+        tools = list(await mcp.list_tools())
+        tool_names = {t.name for t in tools}
+        assert "test_check" in tool_names, "test_check should be visible for skill+headless+gate=0"
+        for name in GATED_TOOLS:
+            assert name not in tool_names, (
+                f"{name} (kitchen) should be hidden for skill+headless+gate=0"
+            )
+
+    @pytest.mark.anyio
     async def test_food_truck_with_tool_tags_sees_kitchen_core_plus_declared(self, monkeypatch):
         """ORCHESTRATOR+HEADLESS with FOOD_TRUCK_TOOL_TAGS sees kitchen-core + github only."""
         from autoskillit.server import _apply_session_type_visibility, mcp

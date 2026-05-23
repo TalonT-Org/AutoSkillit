@@ -212,6 +212,33 @@ class TestClassifyInfraExit:
         assert classify_infra_exit(session, result) == InfraExitCategory.API_ERROR
 
 
+class TestCodexContextExhaustion:
+    """Codex context-exhaustion boundary: context_length_exceeded substring →
+    CONTEXT_EXHAUSTED, rate_limit_exceeded → API_ERROR."""
+
+    def test_context_length_exceeded_in_errors_produces_context_exhausted(self):
+        session = ClaudeSessionResult(
+            subtype="empty_output",
+            is_error=True,
+            result="",
+            session_id="s1",
+            errors=["context_length_exceeded error"],
+        )
+        result = _sr(returncode=1, stderr="")
+        assert classify_infra_exit(session, result) == InfraExitCategory.CONTEXT_EXHAUSTED
+
+    def test_rate_limit_exceeded_is_api_error_not_context_exhausted(self):
+        session = ClaudeSessionResult(
+            subtype="empty_output",
+            is_error=True,
+            result="",
+            session_id="s1",
+            errors=["rate_limit_exceeded"],
+        )
+        result = _sr(returncode=1, stderr="")
+        assert classify_infra_exit(session, result) == InfraExitCategory.API_ERROR
+
+
 @pytest.mark.parametrize("category", list(InfraExitCategory))
 def test_all_infra_categories_handled(category: InfraExitCategory) -> None:
     """Every InfraExitCategory value has a distinct test above."""

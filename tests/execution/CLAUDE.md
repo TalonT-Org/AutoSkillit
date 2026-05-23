@@ -16,8 +16,11 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_clone_guard.py` | Tests for clone contamination guard — detect and revert direct changes |
 | `test_conftest_import_guard.py` | Structural guard: conftest.py must not import merge_queue at module level |
 | `test_adapt_agent_result.py` | Tests for _adapt_agent_result: AgentSessionResult to ClaudeSessionResult mapping |
-| `test_commands.py` | Tests for execution/commands.py — ClaudeInteractiveCmd / ClaudeHeadlessCmd builders |
+| `test_commands.py` | Tests for execution/commands.py — interactive + headless builders |
+| `test_commands_food_truck.py` | Tests for build_food_truck_cmd — L3 orchestrator session command builder |
+| `test_commands_invariants.py` | Cross-builder invariants: _HEADLESS_EXCLUSIVE_VARS membership, completion marker position |
 | `test_commands_shim_contract.py` | Structural contract tests verifying commands.py builders are thin forwarding shims |
+| `test_commands_skill_session.py` | Tests for build_skill_session_cmd — skill session command builder |
 | `test_db.py` | L1 unit tests for execution/db.py — SQL validation and authorizer |
 | `test_api_error_signal_invariants.py` | API error signal invariants: API errors detected regardless of channel (PTY vs non-PTY) |
 | `test_backend_dispatch.py` | End-to-end tests verifying run_headless_core routes command construction through ctx.backend |
@@ -67,7 +70,9 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_process_pty.py` | Tests for PTY wrapping and pipeline adjudication boundary tests |
 | `test_process_race.py` | Unit tests for _process_race.py: resolve_termination and ChannelBStatus |
 | `test_process_run.py` | Integration tests for normal subprocess run, stdin, timeout, temp I/O, and logging |
-| `test_process_session_log_monitor.py` | Unit tests for _session_log_monitor and related session log monitoring behavior |
+| `test_process_session_log_monitor.py` | Unit tests for _session_log_monitor — core detection + session ID + wiring |
+| `test_process_session_log_monitor_dispatch_marker.py` | Dispatch marker suppression gate tests for _session_log_monitor |
+| `test_process_session_log_monitor_stale_suppression.py` | TCP/CPU stale suppression gate and bounded suppression tests |
 | `test_process_submodules.py` | Tests verifying process.py decomposition into focused sub-modules (P8-2) |
 | `test_provider_outcome_container.py` | Tests for ProviderOutcome typed container construction — required fields and TypeError on omission |
 | `test_push_trigger_applies.py` | Unit tests for _push_trigger_applies_to_branch and _has_merge_group_trigger |

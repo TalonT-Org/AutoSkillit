@@ -190,8 +190,6 @@ class TestBuildFoodTruckCmdPackTags:
 
 
 class TestBuildFoodTruckCmdFeatureParity:
-    """Tests for features ported from build_skill_session_cmd (issue #1656)."""
-
     BASE = dict(
         orchestrator_prompt="You are an L3 food truck orchestrator...",
         plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
@@ -309,5 +307,5 @@ class TestBuildFoodTruckCmdResume:
         spec = build_food_truck_cmd(
             **self.BASE, resume_session_id="abc-123", sentinel_contract=identity.sentinel_contract
         )
-        prompt = spec.cmd[spec.cmd.index("-p") + 1]
+        prompt = spec.cmd[spec.cmd.index(ClaudeFlags.PRINT) + 1]
         assert getattr(identity, attr) in prompt

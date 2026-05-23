@@ -127,5 +127,6 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_backend_registry.py` | Tests for backend registry |
 | `test_codex_backend.py` | Tests for CodexFlags, CodexBackend protocol conformance, headless/resume command builders, CodexSessionLocator |
 | `test_codex_env_policy.py` | Tests for CodexEnvPolicy three-layer scrub |
+| `test_codex_mcp_registration.py` | Tests for ensure_codex_mcp_registered: file creation, TOML fields, idempotency, foreign section preservation, dir creation |
 | `test_codex_stream_parser.py` | Full test suite for CodexStreamParser: happy-path, item parsing, degradation, fixture-driven integration, protocol conformance |
 | `test_codex_result_parser.py` | Tests for CodexResultParser |

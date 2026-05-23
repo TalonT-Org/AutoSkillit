@@ -2407,6 +2407,7 @@
     "tests/arch/test_backend_coherence.py",
     "tests/execution/backends/test_codex_backend.py",
     "tests/execution/backends/test_codex_env_policy.py",
+    "tests/execution/backends/test_codex_mcp_registration.py",
     "tests/execution/backends/test_codex_fixtures.py",
     "tests/execution/backends/test_codex_result_parser.py",
     "tests/execution/backends/test_codex_stream_parser.py",

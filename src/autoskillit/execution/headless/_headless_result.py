@@ -193,9 +193,7 @@ def _compute_write_evidence(
         backend.write_tool_names() if backend is not None else frozenset({"Write", "Edit"})
     )
     write_call_count = sum(1 for t in session.tool_uses if t.get("name") in write_names)
-    # file_changes_count is only meaningful when write_call_count == 0
-    # (Codex file-change fallback); when write tools were used, the
-    # standard write_call_count signal already provides evidence.
+    # Codex fallback: only count file_changes when no Write/Edit tool calls provide evidence.
     file_changes_count = len(file_changes) if write_call_count == 0 else 0
     return WriteEvidence(
         write_call_count=write_call_count,

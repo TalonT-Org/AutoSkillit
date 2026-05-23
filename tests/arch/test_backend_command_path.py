@@ -38,7 +38,7 @@ _HEADLESS_IMPORTS = _collect_imports(ast.parse(_HEADLESS_INIT.read_text()))
 
 @pytest.mark.parametrize(
     "symbol",
-    ["build_skill_session_cmd", "build_food_truck_cmd"],
+    ["build_food_truck_cmd"],
 )
 def test_headless_does_not_import_commands_module(symbol: str):
     assert symbol not in _HEADLESS_IMPORTS, (

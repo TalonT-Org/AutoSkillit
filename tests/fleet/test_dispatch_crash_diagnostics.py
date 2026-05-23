@@ -179,3 +179,12 @@ class TestCrashPathDiagnosticPersistence:
         refused_campaign = [d for d in campaign_state.dispatches if d.status.value == "refused"]
         assert len(refused_campaign) == 1
         assert "Unknown ingredient keys" in refused_campaign[0].diagnostic_message
+
+        assert result.per_dispatch_state_path is not None
+        per_dispatch_state = read_state(result.per_dispatch_state_path)
+        assert per_dispatch_state is not None
+        refused_per_dispatch = [
+            d for d in per_dispatch_state.dispatches if d.status.value == "refused"
+        ]
+        assert len(refused_per_dispatch) == 1
+        assert "Unknown ingredient keys" in refused_per_dispatch[0].diagnostic_message

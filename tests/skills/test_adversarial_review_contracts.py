@@ -268,7 +268,9 @@ def test_rectify_checklist_includes_adversarial_review(rectify_text: str) -> Non
 
 def test_rectify_interface_mapping_rules(rectify_text: str) -> None:
     """Interface Mapping step must contain RULES FOR APPLYING INTERFACE MAPPING FINDINGS."""
-    im_idx = rectify_text.find("Interface Mapping")
+    workflow_idx = rectify_text.find("## Rectify Workflow")
+    assert workflow_idx != -1
+    im_idx = rectify_text.find("Interface Mapping", workflow_idx)
     assert im_idx != -1
     rt_idx = rectify_text.find("Registry Trace", im_idx)
     assert rt_idx != -1
@@ -278,7 +280,9 @@ def test_rectify_interface_mapping_rules(rectify_text: str) -> None:
 
 def test_rectify_registry_trace_rules(rectify_text: str) -> None:
     """Registry Trace step must contain RULES FOR APPLYING REGISTRY TRACE FINDINGS."""
-    rt_idx = rectify_text.find("Registry Trace")
+    workflow_idx = rectify_text.find("## Rectify Workflow")
+    assert workflow_idx != -1
+    rt_idx = rectify_text.find("Registry Trace", workflow_idx)
     assert rt_idx != -1
     next_heading = rectify_text.find("\n## ", rt_idx)
     end = next_heading if next_heading != -1 else len(rectify_text)

@@ -260,6 +260,10 @@ def test_unused_agent_fields_do_not_affect_output() -> None:
     assert base.has_thinking_only_turn == varied.has_thinking_only_turn
     assert base.seen_block_types == varied.seen_block_types
 
+    assert not hasattr(base, "exit_code")
+    assert not hasattr(base, "backend_name")
+    assert not hasattr(base, "elapsed_seconds")
+
 
 def test_canonical_token_usage_none_falls_through_to_token_usage() -> None:
     result = _adapt_agent_result(

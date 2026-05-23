@@ -1122,7 +1122,7 @@ class TestExtractMissingTokenHints:
 
         stdout = _ndjson_with_write("plan summary\n%%ORDER_UP%%", ["/tmp/out.md"])
         hints = _extract_missing_token_hints(
-            stdout, [r"plan_path\s*=\s*/.+"], ClaudeResultParser()
+            stdout, [r"plan_path\s*=\s*/.+"], ClaudeResultParser(), frozenset({"Write", "Edit"})
         )
         assert hints == [("plan_path", "/tmp/out.md")]
 
@@ -1130,21 +1130,23 @@ class TestExtractMissingTokenHints:
 
         stdout = _ndjson_with_write("plan_path = /tmp/out.md\n%%ORDER_UP%%", ["/tmp/out.md"])
         hints = _extract_missing_token_hints(
-            stdout, [r"plan_path\s*=\s*/.+"], ClaudeResultParser()
+            stdout, [r"plan_path\s*=\s*/.+"], ClaudeResultParser(), frozenset({"Write", "Edit"})
         )
         assert hints == []
 
     def test_returns_empty_for_non_path_patterns(self):
 
         stdout = _ndjson_with_write("%%ORDER_UP%%", ["/tmp/out.md"])
-        hints = _extract_missing_token_hints(stdout, [r"verdict\s*=\s*\w+"], ClaudeResultParser())
+        hints = _extract_missing_token_hints(
+            stdout, [r"verdict\s*=\s*\w+"], ClaudeResultParser(), frozenset({"Write", "Edit"})
+        )
         assert hints == []
 
     def test_uses_last_write_path(self):
 
         stdout = _ndjson_with_write("%%ORDER_UP%%", ["/tmp/first.md", "/tmp/final.md"])
         hints = _extract_missing_token_hints(
-            stdout, [r"plan_path\s*=\s*/.+"], ClaudeResultParser()
+            stdout, [r"plan_path\s*=\s*/.+"], ClaudeResultParser(), frozenset({"Write", "Edit"})
         )
         assert hints == [("plan_path", "/tmp/final.md")]
 
@@ -1153,7 +1155,10 @@ class TestExtractMissingTokenHints:
 
         stdout = _ndjson_with_write("%%ORDER_UP%%", ["/tmp/out.md"])
         hints = _extract_missing_token_hints(
-            stdout, [r"elab_result_path\s*=\s*\S+"], ClaudeResultParser()
+            stdout,
+            [r"elab_result_path\s*=\s*\S+"],
+            ClaudeResultParser(),
+            frozenset({"Write", "Edit"}),
         )
         assert hints == [("elab_result_path", "/tmp/out.md")]
 

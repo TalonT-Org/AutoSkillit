@@ -538,6 +538,9 @@ def _build_skill_result(
         # _recover_block_from_assistant_messages is unavailable. For CHANNEL_A/B
         # sessions, if the pattern was absent from assistant_messages the agent never
         # emitted it — synthesis would fabricate a token the agent did not produce.
+        write_names = (
+            backend.write_tool_names() if backend is not None else frozenset({"Write", "Edit"})
+        )
         if (
             expected_output_patterns
             and _has_write_evidence
@@ -549,6 +552,7 @@ def _build_skill_result(
                 list(expected_output_patterns),
                 evidence.write_call_count,
                 evidence.fs_writes_detected,
+                write_tool_names=write_names,
             )
             if artifact_recovered is not None:
                 session = artifact_recovered

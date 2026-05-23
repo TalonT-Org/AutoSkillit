@@ -118,19 +118,19 @@ def _synthesize_from_write_artifacts(
     expected_output_patterns: list[str],
     write_call_count: int,
     fs_writes_detected: bool = False,
+    write_tool_names: frozenset[str] = frozenset({"Write", "Edit"}),
 ) -> ClaudeSessionResult | None:
-    """Synthesize missing structured output tokens from Write/Edit tool_use file_path data.
+    """Synthesize missing structured output tokens from write tool_use file_path data.
 
     When the session has write evidence (write_call_count >= 1) and expected_output_patterns
     contain path-capture patterns (e.g., ``plan_path\\s*=\\s*/.+``), scan tool_uses for
-    Write/Edit entries with absolute file_path values. For each pattern whose token name can
-    be extracted, inject ``{token_name} = {file_path}`` into session.result so that
-    _compute_outcome sees the token as if the model had emitted it.
+    entries matching write_tool_names with absolute file_path values. For each pattern whose
+    token name can be extracted, inject ``{token_name} = {file_path}`` into session.result so
+    that _compute_outcome sees the token as if the model had emitted it.
 
     Returns a new ClaudeSessionResult with the injected line prepended to result, or None if
     synthesis is not possible (no matching file_path, no path-capture patterns, or pattern
-    already satisfied).
-    """
+    already satisfied)."""
     if write_call_count == 0:
         return None
 
@@ -148,7 +148,7 @@ def _synthesize_from_write_artifacts(
         candidate_paths = [
             t.get("file_path", "")
             for t in session.tool_uses
-            if t.get("name") in {"Write", "Edit"} and t.get("file_path", "").startswith("/")
+            if t.get("name") in write_tool_names and t.get("file_path", "").startswith("/")
         ]
         if candidate_paths:
             synthesized_lines.append(f"{token_name} = {candidate_paths[-1]}")
@@ -164,10 +164,11 @@ def _extract_missing_token_hints(
     stdout: str,
     expected_output_patterns: Sequence[str],
     result_parser: ResultParser,
+    write_tool_names: frozenset[str],
 ) -> list[tuple[str, str]]:
     """Extract (token_name, write_path) pairs for patterns missing from the result.
 
-    Parses raw NDJSON stdout to find Write/Edit tool_use file_path entries,
+    Parses raw NDJSON stdout to find write tool_use file_path entries,
     then matches them against path-capture patterns that are NOT satisfied in
     the result text. Returns the hints needed to build the nudge prompt.
     """
@@ -191,7 +192,7 @@ def _extract_missing_token_hints(
         candidate_paths = [
             t.get("file_path", "")
             for t in session.raw.get("tool_uses", [])
-            if t.get("name") in {"Write", "Edit"} and t.get("file_path", "").startswith("/")
+            if t.get("name") in write_tool_names and t.get("file_path", "").startswith("/")
         ]
         if candidate_paths:
             hints.append((token_name, candidate_paths[-1]))
@@ -237,8 +238,9 @@ async def _attempt_contract_nudge(
         )
         patterns_to_check: Sequence[str] = list(expected_output_patterns)
     else:
+        _write_tool_names = backend.write_tool_names()
         hints = _extract_missing_token_hints(
-            subprocess_result.stdout, expected_output_patterns, result_parser
+            subprocess_result.stdout, expected_output_patterns, result_parser, _write_tool_names
         )
         if not hints:
             logger.debug("nudge_skip_no_hints")

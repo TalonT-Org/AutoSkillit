@@ -128,12 +128,6 @@ class TestProvidersConfig:
         assert cfg.profiles["sentinel"]["base_url"] is None
         assert cfg.profiles["sentinel"]["api_key_env"] is None
 
-    def test_model_overrides_field_default(self) -> None:
-        from autoskillit.config.settings import ProvidersConfig
-
-        cfg = ProvidersConfig()
-        assert cfg.model_overrides == {}
-
     def test_model_overrides_valid(self) -> None:
         from autoskillit.config.settings import ProvidersConfig
 

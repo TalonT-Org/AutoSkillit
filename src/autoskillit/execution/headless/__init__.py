@@ -327,6 +327,11 @@ async def _execute_claude_headless(
     _result: SubprocessResult | None = None
     result: SubprocessResult
     skill_result: SkillResult
+    _stream_parser = (
+        ctx.backend.stream_parser(completion_marker=completion_marker)
+        if ctx.backend is not None
+        else None
+    )
     while True:
         try:
             _result = await runner(
@@ -347,6 +352,7 @@ async def _execute_claude_headless(
                 max_extension_seconds=max_extension_seconds,
                 marker_dir=marker_dir,
                 session_id=session_id,
+                stream_parser=_stream_parser,
             )
         except Exception as exc:
             logger.error("headless_runner_crashed", exc_info=True)

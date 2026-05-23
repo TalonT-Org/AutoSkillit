@@ -14,7 +14,7 @@ from autoskillit.core import (
     SessionLocator,
     StreamParser,
 )
-from autoskillit.execution.backends import ClaudeCodeBackend
+from autoskillit.execution.backends import ClaudeCodeBackend, ClaudeStreamParser
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -58,6 +58,21 @@ class TestClaudeCodeBackend:
         backend = ClaudeCodeBackend()
         result = backend.stream_parser()
         assert isinstance(result, StreamParser)
+
+    @pytest.mark.parametrize(
+        ("marker_kwarg", "expected"),
+        [
+            ({"completion_marker": "%%DONE%%"}, "%%DONE%%"),
+            ({}, ""),
+        ],
+        ids=["explicit-marker", "default-empty"],
+    )
+    def test_stream_parser_factory_completion_marker(
+        self, marker_kwarg: dict[str, str], expected: str
+    ) -> None:
+        parser = ClaudeCodeBackend().stream_parser(**marker_kwarg)
+        assert isinstance(parser, ClaudeStreamParser)
+        assert parser.completion_marker == expected
 
     def test_result_parser_returns_result_parser(self) -> None:
         backend = ClaudeCodeBackend()

@@ -1,4 +1,4 @@
-"""Structural guards: test_doctor.py split into three files (P1-F02)."""
+"""Structural guards for the update_checks test split."""
 
 from __future__ import annotations
 

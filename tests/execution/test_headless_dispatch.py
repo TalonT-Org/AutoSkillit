@@ -412,11 +412,13 @@ class TestDispatchFoodTruckGuards:
         minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
-        await executor.dispatch_food_truck(
+        result = await executor.dispatch_food_truck(
             "some prompt",
             str(tmp_path),
             completion_marker="%%FT_DONE%%",
         )
+        assert result is not None
+        assert len(runner.call_args_list) >= 1
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_allows_claude_code_backend(
@@ -443,11 +445,13 @@ class TestDispatchFoodTruckGuards:
         minimal_ctx.backend = _mock_backend()
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
-        await executor.dispatch_food_truck(
+        result = await executor.dispatch_food_truck(
             "some prompt",
             str(tmp_path),
             completion_marker="%%FT_DONE%%",
         )
+        assert result is not None
+        assert len(runner.call_args_list) >= 1
 
 
 def test_default_executor_satisfies_protocol_with_dispatch(minimal_ctx) -> None:

@@ -550,3 +550,26 @@ class TestWriteDispatchToCampaignStateRefusal:
         assert len(refused) == 1
         assert refused[0].diagnostic_message == ""
         assert refused[0].reason == "fleet_unknown_ingredient"
+
+
+class TestResolveDispatchTimeout:
+    def test_uses_config_when_none(self) -> None:
+        """resolve_dispatch_timeout must use fleet.default_timeout_sec when timeout_sec is None."""
+        from autoskillit.fleet._api import resolve_dispatch_timeout
+
+        result = resolve_dispatch_timeout(None, default_timeout_sec=3600)
+        assert result == 3600.0
+
+    def test_uses_explicit_when_provided(self) -> None:
+        """resolve_dispatch_timeout must use the explicit value when provided."""
+        from autoskillit.fleet._api import resolve_dispatch_timeout
+
+        result = resolve_dispatch_timeout(1200, default_timeout_sec=3600)
+        assert result == 1200.0
+
+    def test_handles_zero(self) -> None:
+        """resolve_dispatch_timeout must treat 0 as an explicit value, not as None."""
+        from autoskillit.fleet._api import resolve_dispatch_timeout
+
+        result = resolve_dispatch_timeout(0, default_timeout_sec=3600)
+        assert result == 0.0

@@ -253,6 +253,49 @@ def test_crl_needs_human_non_blocking_when_local_rounds_exhausted() -> None:
 
 
 # ---------------------------------------------------------------------------
+# T_CRL19–T_CRL21: approved_with_comments exemption from local_review_rounds
+# ---------------------------------------------------------------------------
+
+
+def test_crl_approved_with_comments_non_blocking_when_local_rounds_active() -> None:
+    """approved_with_comments must NOT trigger re-review even when local_rounds are not exhausted.
+
+    The resolve_review pass for approved_with_comments is one-shot. Re-reviewing
+    after resolved warnings adds no value and wastes time budget.
+    """
+    result = check_review_loop(
+        pr_number="42",
+        current_iteration="1",
+        max_iterations="6",
+        previous_verdict="approved_with_comments",
+        local_review_rounds="2",
+    )
+    assert result["had_blocking"] == "false"
+    assert result["next_iteration"] == "2"
+
+
+def test_crl_approved_with_comments_non_blocking_at_first_local_round() -> None:
+    """approved_with_comments at iteration 0 with local_review_rounds > 0 is still non-blocking."""
+    result = check_review_loop(
+        pr_number="42",
+        current_iteration="0",
+        max_iterations="6",
+        previous_verdict="approved_with_comments",
+        local_review_rounds="3",
+    )
+    assert result["had_blocking"] == "false"
+
+
+def test_local_round_exempt_verdicts_constant_exists() -> None:
+    """LOCAL_ROUND_EXEMPT_VERDICTS must exist and contain approved_with_comments."""
+    from autoskillit.smoke_utils import LOCAL_ROUND_EXEMPT_VERDICTS
+
+    assert "approved_with_comments" in LOCAL_ROUND_EXEMPT_VERDICTS
+    assert "changes_requested" not in LOCAL_ROUND_EXEMPT_VERDICTS
+    assert "approved" not in LOCAL_ROUND_EXEMPT_VERDICTS
+
+
+# ---------------------------------------------------------------------------
 # T_SU_LI1–T_SU_LI5: check_loop_iteration tests (generic loop iteration guard)
 # ---------------------------------------------------------------------------
 

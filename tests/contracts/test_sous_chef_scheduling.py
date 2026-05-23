@@ -177,17 +177,19 @@ def test_sous_chef_wavefront_retry_does_not_block_siblings() -> None:
 
 def test_orchestrator_prompt_has_parallel_retry_note() -> None:
     """REQ-PROMPT-013: Orchestrator prompt must mirror parallel-aware retry note."""
+    import re
+
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
     from autoskillit.cli._prompts import _build_orchestrator_prompt
 
     prompt = _build_orchestrator_prompt("test-recipe", mcp_prefix=DIRECT_PREFIX)
     section_start = prompt.find("CONTEXT LIMIT ROUTING")
     assert section_start != -1, "Orchestrator prompt must contain CONTEXT LIMIT ROUTING"
-    next_section_marker = "\n\n"
-    search_start = section_start + len("CONTEXT LIMIT ROUTING") + 200
-    next_section = prompt.find(next_section_marker, search_start)
+    next_section = re.search(r"\n[A-Z][A-Z _]+—", prompt[section_start + 1 :])
     section_text = (
-        prompt[section_start:next_section] if next_section != -1 else prompt[section_start:]
+        prompt[section_start : section_start + 1 + next_section.start()]
+        if next_section
+        else prompt[section_start:]
     )
     lower = section_text.lower()
     has_parallel_note = "retry" in lower and (

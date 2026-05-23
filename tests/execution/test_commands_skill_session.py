@@ -6,9 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import ClaudeFlags, CmdSpec, DirectInstall, MarketplaceInstall, OutputFormat
+from autoskillit.core import ClaudeFlags, DirectInstall, MarketplaceInstall, OutputFormat
 from autoskillit.execution.commands import (
-    _HEADLESS_EXCLUSIVE_VARS,
     _MAX_MCP_OUTPUT_TOKENS_VALUE,
     ClaudeHeadlessCmd,
     build_skill_session_cmd,

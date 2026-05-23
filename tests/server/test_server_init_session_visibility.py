@@ -1144,6 +1144,52 @@ class TestSkillAutoGateBoot:
             for entry in logs
         )
 
+    @pytest.mark.anyio
+    async def test_skill_auto_gate_boot_writes_hook_config(self, tool_ctx, monkeypatch):
+        """SKILL+HEADLESS+AUTO_GATE: _write_hook_config is called once."""
+        from unittest.mock import AsyncMock, patch
+
+        from autoskillit.core import HEADLESS_AUTO_GATE_ENV_VAR, HEADLESS_ENV_VAR
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server._lifespan import _skill_auto_gate_boot
+
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        monkeypatch.setenv(HEADLESS_ENV_VAR, "1")
+        monkeypatch.setenv(HEADLESS_AUTO_GATE_ENV_VAR, "1")
+
+        with patch(
+            "autoskillit.server.tools.tools_kitchen._write_hook_config"
+        ) as mock_write_hook_config:
+            with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.core.register_active_kitchen"):
+                    await _skill_auto_gate_boot(tool_ctx)
+
+        mock_write_hook_config.assert_called_once_with()
+        assert tool_ctx.gate.enabled is True
+
+    @pytest.mark.anyio
+    async def test_skill_auto_gate_boot_skips_when_both_absent(self, tool_ctx, monkeypatch):
+        """Neither HEADLESS nor AUTO_GATE set: gate remains closed."""
+        from unittest.mock import patch
+
+        from autoskillit.core import HEADLESS_AUTO_GATE_ENV_VAR, HEADLESS_ENV_VAR
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server._lifespan import _skill_auto_gate_boot
+
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        monkeypatch.delenv(HEADLESS_ENV_VAR, raising=False)
+        monkeypatch.delenv(HEADLESS_AUTO_GATE_ENV_VAR, raising=False)
+
+        with patch(
+            "autoskillit.server.tools.tools_kitchen._write_hook_config"
+        ) as mock_write_hook_config:
+            with patch("autoskillit.core.register_active_kitchen") as mock_register_kitchen:
+                await _skill_auto_gate_boot(tool_ctx)
+
+        assert tool_ctx.gate.enabled is False
+        mock_write_hook_config.assert_not_called()
+        mock_register_kitchen.assert_not_called()
+
 
 @pytest.mark.feature("skill")
 class TestSkillAutoGateBootRegistry:
@@ -1168,6 +1214,12 @@ class TestSkillAutoGateBootRegistry:
             assert _LIFESPAN_BOOT_REGISTRY.get(session_type) is not None, (
                 f"{session_type} has no boot handler in _LIFESPAN_BOOT_REGISTRY"
             )
+
+    def test_headless_auto_gate_env_var_constant_value(self) -> None:
+        from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS, HEADLESS_AUTO_GATE_ENV_VAR
+
+        assert HEADLESS_AUTO_GATE_ENV_VAR == "AUTOSKILLIT_HEADLESS_AUTO_GATE"
+        assert HEADLESS_AUTO_GATE_ENV_VAR in AUTOSKILLIT_PRIVATE_ENV_VARS
 
 
 @pytest.mark.feature("fleet")

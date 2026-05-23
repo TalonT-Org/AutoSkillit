@@ -178,6 +178,8 @@ def test_build_skill_session_cmd_config_delegates_to_impl():
 
     assert result is sentinel
     mock_impl.assert_called_once()
+    args = mock_impl.call_args.args
+    assert args == ("/test",), f"skill_command not forwarded: {args}"
     kw = mock_impl.call_args.kwargs
     assert kw["cwd"] == "/work"
     assert kw["completion_marker"] == config.completion_marker

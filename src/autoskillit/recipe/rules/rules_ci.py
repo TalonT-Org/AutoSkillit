@@ -78,24 +78,20 @@ _CONFLICT_RESOLUTION_SKILLS: frozenset[str] = frozenset({"resolve-merge-conflict
 _CODE_RESOLUTION_SKILLS: frozenset[str] = frozenset({"resolve-failures"})
 
 
-def _is_conflict_gate_step(step: object) -> bool:
-    """Return True if step is a stale-base conflict-detection gate.
+def _is_exit_code_conflict_gate(step: object) -> bool:
+    """Return True if step is a run_cmd stale-base exit-code gate (merge-base/is-ancestor)."""
+    if getattr(step, "tool", None) != "run_cmd":
+        return False
+    cmd = (getattr(step, "with_args", {}) or {}).get("cmd", "")
+    return isinstance(cmd, str) and any(kw in cmd for kw in _CONFLICT_GATE_KEYWORDS)
 
-    A gate is either:
-    - run_cmd with a 'cmd' containing 'merge-base' or 'is-ancestor'
-    - run_skill with a skill_command referencing 'resolve-merge-conflicts'
-    """
-    tool = getattr(step, "tool", None)
-    with_args = getattr(step, "with_args", {}) or {}
-    if tool == "run_cmd":
-        cmd = with_args.get("cmd", "")
-        return isinstance(cmd, str) and any(kw in cmd for kw in _CONFLICT_GATE_KEYWORDS)
-    if tool == "run_skill":
-        skill_cmd = with_args.get("skill_command", "")
-        return isinstance(skill_cmd, str) and any(
-            s in skill_cmd for s in _CONFLICT_RESOLUTION_SKILLS
-        )
-    return False
+
+def _is_conflict_resolution_step(step: object) -> bool:
+    """Return True if step invokes resolve-merge-conflicts via run_skill."""
+    if getattr(step, "tool", None) != "run_skill":
+        return False
+    skill_cmd = (getattr(step, "with_args", {}) or {}).get("skill_command", "")
+    return isinstance(skill_cmd, str) and any(s in skill_cmd for s in _CONFLICT_RESOLUTION_SKILLS)
 
 
 def _is_code_resolution_step(step: object) -> bool:
@@ -135,7 +131,9 @@ def _bfs_without_barrier(graph: dict[str, set[str]], start: str, barriers: set[s
 def _check_ci_failure_conflict_gate(ctx: ValidationContext) -> list[RuleFinding]:
     # Identify all conflict-gate and code-resolution steps by name
     conflict_gates: set[str] = {
-        name for name, step in ctx.recipe.steps.items() if _is_conflict_gate_step(step)
+        name
+        for name, step in ctx.recipe.steps.items()
+        if _is_exit_code_conflict_gate(step) or _is_conflict_resolution_step(step)
     }
     code_resolution_steps: set[str] = {
         name for name, step in ctx.recipe.steps.items() if _is_code_resolution_step(step)
@@ -173,6 +171,53 @@ def _check_ci_failure_conflict_gate(ctx: ValidationContext) -> list[RuleFinding]
                     ),
                 )
             )
+    return findings
+
+
+@semantic_rule(
+    name="mergeability-conflicting-direct-to-resolution",
+    description=(
+        "check_pr_mergeable CONFLICTING arm reaches a stale-base exit-code gate "
+        "(run_cmd with merge-base) before reaching conflict resolution "
+        "(resolve-merge-conflicts). Route CONFLICTING directly to resolution."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_mergeability_conflicting_direct(ctx: ValidationContext) -> list[RuleFinding]:
+    exit_code_gates: set[str] = {
+        name for name, step in ctx.recipe.steps.items() if _is_exit_code_conflict_gate(step)
+    }
+    resolution_steps: set[str] = {
+        name for name, step in ctx.recipe.steps.items() if _is_conflict_resolution_step(step)
+    }
+    if not exit_code_gates:
+        return []
+    findings: list[RuleFinding] = []
+    for name, step in ctx.recipe.steps.items():
+        if step.tool != "check_pr_mergeable":
+            continue
+        if step.on_result is None:
+            continue
+        for cond in step.on_result.conditions:
+            if not cond.when or "CONFLICTING" not in cond.when:
+                continue
+            reachable = _bfs_without_barrier(ctx.step_graph, cond.route, resolution_steps)
+            unguarded_gates = reachable & exit_code_gates
+            if unguarded_gates:
+                findings.append(
+                    RuleFinding(
+                        rule="mergeability-conflicting-direct-to-resolution",
+                        severity=Severity.ERROR,
+                        step_name=name,
+                        message=(
+                            f"Step '{name}' routes CONFLICTING to '{cond.route}' which "
+                            f"reaches exit-code gate(s) "
+                            f"({', '.join(sorted(unguarded_gates))}) "
+                            f"before conflict resolution. GitHub's CONFLICTING status is "
+                            f"authoritative — route directly to resolve-merge-conflicts."
+                        ),
+                    )
+                )
     return findings
 
 

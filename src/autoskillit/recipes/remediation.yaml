@@ -741,7 +741,7 @@ steps:
       cwd: "${{ context.work_dir }}"
     on_result:
       - when: "${{ result.mergeable_status }} == 'CONFLICTING'"
-        route: detect_ci_conflict
+        route: ci_conflict_fix
       - route: ci_watch
     on_failure: ci_watch
     skip_when_false: "inputs.open_pr"
@@ -749,8 +749,10 @@ steps:
       Pre-CI-watch gate: checks PR mergeable state before entering the CI
       polling loop. CONFLICTING PRs cannot trigger pull_request workflows
       (GitHub cannot create refs/pull/N/merge), so routing to ci_watch would
-      produce a guaranteed no_runs. Routes CONFLICTING to detect_ci_conflict
-      (which handles conflict resolution) and MERGEABLE/UNKNOWN to ci_watch.
+      produce a guaranteed no_runs. Routes CONFLICTING directly to ci_conflict_fix
+      (resolve-merge-conflicts) — GitHub's CONFLICTING status is authoritative,
+      no stale-base exit-code discrimination needed (mirrors merge-prs.yaml
+      check_mergeability pattern). Routes MERGEABLE/UNKNOWN to ci_watch.
 
   ci_watch:
     tool: wait_for_ci
@@ -1637,11 +1639,12 @@ steps:
     optional: true
     skip_when_false: "inputs.open_pr"
     note: >
-      Detects whether the CI failure originates from a stale integration base rather than
-      a code-level test failure. Exit 0 (fetch succeeded AND base is NOT an ancestor of HEAD)
-      signals a stale base — routes to ci_conflict_fix. Exit 1 (fetch failed OR base is already
-      an ancestor) signals a real code failure or an unresolvable state — falls through to
-      diagnose_ci. This step insulates resolve_ci from being invoked for merge-conflict failures.
+      Stale-base triage gate for CI FAILURE paths only. Do NOT route
+      check_pr_mergeable CONFLICTING here — GitHub's CONFLICTING status is
+      authoritative and should route directly to ci_conflict_fix.
+      Valid callers: ci_watch, check_ci_timed_out_loop, check_ci_already_passed,
+      ci_watch_post_queue_fix. Exit 0 (base NOT ancestor) → ci_conflict_fix.
+      Exit 1 (base IS ancestor or fetch failed) → diagnose_ci.
 
   ci_conflict_fix:
     tool: run_skill

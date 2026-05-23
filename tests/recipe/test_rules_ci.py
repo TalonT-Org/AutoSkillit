@@ -1105,6 +1105,80 @@ def test_ci_cwd_branch_context_mismatch_passes_for_batch_branch() -> None:
     assert len(matched) == 0
 
 
+# ---------------------------------------------------------------------------
+# mergeability-conflicting-direct-to-resolution rule tests
+# ---------------------------------------------------------------------------
+
+_CONFLICTING_DIRECT_RULE = "mergeability-conflicting-direct-to-resolution"
+
+
+def test_mergeability_conflicting_through_exit_code_gate_fires() -> None:
+    """Rule fires when check_pr_mergeable CONFLICTING routes through
+    a run_cmd merge-base gate before reaching resolution."""
+    wf = _make_workflow(
+        {
+            "check_state": {
+                "tool": "check_pr_mergeable",
+                "on_result": [
+                    {
+                        "when": "${{ result.mergeable_status }} == 'CONFLICTING'",
+                        "route": "stale_base_gate",
+                    },
+                    {"route": "ci_watch"},
+                ],
+            },
+            "stale_base_gate": {
+                "tool": "run_cmd",
+                "with": {"cmd": "! git merge-base --is-ancestor origin/main HEAD"},
+                "on_success": "fix_conflict",
+                "on_failure": "diagnose",
+            },
+            "fix_conflict": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:resolve-merge-conflicts work plan main"},
+                "on_success": "done",
+            },
+            "diagnose": {"tool": "run_skill", "on_success": "done"},
+            "ci_watch": {"tool": "wait_for_ci", "with": {"event": "push"}, "on_success": "done"},
+            "done": {"action": "stop", "message": "done"},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    matched = [f for f in findings if f.rule == _CONFLICTING_DIRECT_RULE]
+    assert len(matched) >= 1, f"Expected rule to fire, got: {[f.rule for f in findings]}"
+    assert matched[0].severity == Severity.ERROR
+    assert matched[0].step_name == "check_state"
+
+
+def test_mergeability_conflicting_direct_to_resolution_passes() -> None:
+    """Rule passes when check_pr_mergeable CONFLICTING routes directly
+    to resolve-merge-conflicts without an intervening exit-code gate."""
+    wf = _make_workflow(
+        {
+            "check_state": {
+                "tool": "check_pr_mergeable",
+                "on_result": [
+                    {
+                        "when": "${{ result.mergeable_status }} == 'CONFLICTING'",
+                        "route": "fix_conflict",
+                    },
+                    {"route": "ci_watch"},
+                ],
+            },
+            "fix_conflict": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:resolve-merge-conflicts work plan main"},
+                "on_success": "done",
+            },
+            "ci_watch": {"tool": "wait_for_ci", "with": {"event": "push"}, "on_success": "done"},
+            "done": {"action": "stop", "message": "done"},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    matched = [f for f in findings if f.rule == _CONFLICTING_DIRECT_RULE]
+    assert not matched, f"Rule should not fire for direct routing, got: {matched}"
+
+
 def test_bundled_recipes_pass_ci_cwd_branch_context_mismatch() -> None:
     """All bundled recipes must pass the ci-cwd-branch-context-mismatch rule."""
     for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):

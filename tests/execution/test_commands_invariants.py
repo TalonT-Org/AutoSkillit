@@ -120,11 +120,7 @@ def test_stream_idle_timeout_in_headless_exclusive_vars() -> None:
 
 
 class TestCompletionReminderPositionInvariant:
-    """Parametrized invariant: completion marker must appear in final prompt blocks.
-
-    This guards against any future refactoring that buries the reminder in the
-    middle of the prompt, and verifies the invariant across all builder functions.
-    """
+    """Parametrized invariant: completion marker must appear in final prompt blocks."""
 
     @pytest.mark.parametrize(
         "builder",

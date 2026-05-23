@@ -53,9 +53,9 @@ async def test_run_headless_core_forwards_provider_extras_to_build_cmd(
         profile_name="bedrock",
     )
 
-    call_kwargs = backend.build_skill_session_cmd.call_args[1]
-    assert call_kwargs["provider_extras"] == {"AWS_REGION": "us-east-1"}
-    assert call_kwargs["profile_name"] == "bedrock"
+    config = backend.build_skill_session_cmd.call_args.args[2]
+    assert config.provider_extras == {"AWS_REGION": "us-east-1"}
+    assert config.profile_name == "bedrock"
     assert execute_kwargs.get("provider_extras") == {"AWS_REGION": "us-east-1"}
     assert "profile_name" not in execute_kwargs
 
@@ -80,9 +80,9 @@ async def test_run_headless_core_defaults_provider_extras_none(
 
     await run_headless_core("/autoskillit:probe", str(tmp_path), minimal_ctx)
 
-    call_kwargs = backend.build_skill_session_cmd.call_args[1]
-    assert call_kwargs["provider_extras"] is None
-    assert call_kwargs["profile_name"] == ""
+    config = backend.build_skill_session_cmd.call_args.args[2]
+    assert config.provider_extras is None
+    assert config.profile_name == ""
 
 
 @pytest.mark.anyio

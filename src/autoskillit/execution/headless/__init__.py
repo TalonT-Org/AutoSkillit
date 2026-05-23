@@ -27,12 +27,14 @@ from autoskillit.core import (
     CAMPAIGN_ID_ENV_VAR,
     DISPATCH_ID_ENV_VAR,
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
+    CmdSpec,
     KillReason,
     ProviderOutcome,
     RecipeIdentity,
     RetryReason,
     SessionCheckpoint,  # noqa: F401, TC001
     SkillResult,
+    SkillSessionConfig,
     ValidatedAddDir,
     WriteBehaviorSpec,
     claude_code_project_dir,
@@ -49,6 +51,7 @@ from autoskillit.execution.clone_guard import (
     is_worktree_skill,
     snapshot_clone_state,
 )
+from autoskillit.execution.commands import build_skill_session_cmd
 from autoskillit.execution.headless._headless_git import (
     _capture_git_head_sha,
     _compute_loc_changed,
@@ -94,7 +97,7 @@ if TYPE_CHECKING:
     from autoskillit.config import (
         AutomationConfig,
     )
-    from autoskillit.core import CmdSpec, SubprocessResult
+    from autoskillit.core import SubprocessResult
     from autoskillit.pipeline.context import (
         ToolContext,
     )
@@ -702,27 +705,47 @@ async def run_headless_core(
         step_name=step_name or None,
     ):
         resolved_model = _resolve_model(model, ctx.config)
-        backend = ctx.backend or ClaudeCodeBackend()
-        cmd_spec = backend.build_skill_session_cmd(
-            skill_command,
-            cwd=cwd,
-            completion_marker=effective_marker,
-            model=resolved_model,
-            plugin_source=ctx.plugin_source,
-            output_format=cfg.output_format,
-            add_dirs=add_dirs,
-            exit_after_stop_delay_ms=cfg.exit_after_stop_delay_ms,
-            stream_idle_timeout_ms=cfg.stream_idle_timeout_ms,
-            scenario_step_name=step_name,
-            temp_dir_relpath=temp_dir_display_str(ctx.config.workspace.temp_dir),
-            allowed_write_prefix=allowed_write_prefix,
-            provider_extras=provider_extras,
-            profile_name=profile_name,
-            resume_session_id=resume_session_id,
-            resume_checkpoint=resume_checkpoint,
-            resume_message=resume_message,
-        )
-        spec = cmd_spec
+        add_dirs_tuple = tuple(add_dirs)
+        if ctx.backend is not None:
+            config = SkillSessionConfig(
+                completion_marker=effective_marker,
+                model=resolved_model,
+                plugin_source=ctx.plugin_source,
+                output_format=cfg.output_format,
+                add_dirs=add_dirs_tuple,
+                exit_after_stop_delay_ms=cfg.exit_after_stop_delay_ms,
+                stream_idle_timeout_ms=cfg.stream_idle_timeout_ms,
+                scenario_step_name=step_name,
+                temp_dir_relpath=temp_dir_display_str(ctx.config.workspace.temp_dir),
+                allowed_write_prefix=allowed_write_prefix,
+                provider_extras=provider_extras,
+                profile_name=profile_name,
+                resume_session_id=resume_session_id,
+                resume_checkpoint=resume_checkpoint,
+                resume_message=resume_message,
+            )
+            spec = ctx.backend.build_skill_session_cmd(skill_command, cwd, config)
+            logger.debug("run_headless_core_backend_dispatch", backend=ctx.backend.name)
+        else:
+            spec = build_skill_session_cmd(
+                skill_command,
+                cwd=cwd,
+                completion_marker=effective_marker,
+                model=resolved_model,
+                plugin_source=ctx.plugin_source,
+                output_format=cfg.output_format,
+                add_dirs=add_dirs_tuple,
+                exit_after_stop_delay_ms=cfg.exit_after_stop_delay_ms,
+                stream_idle_timeout_ms=cfg.stream_idle_timeout_ms,
+                scenario_step_name=step_name,
+                temp_dir_relpath=temp_dir_display_str(ctx.config.workspace.temp_dir),
+                allowed_write_prefix=allowed_write_prefix,
+                provider_extras=provider_extras,
+                profile_name=profile_name,
+                resume_session_id=resume_session_id,
+                resume_checkpoint=resume_checkpoint,
+                resume_message=resume_message,
+            )
 
         effective_timeout = timeout if timeout is not None else cfg.timeout
         effective_stale = stale_threshold if stale_threshold is not None else cfg.stale_threshold

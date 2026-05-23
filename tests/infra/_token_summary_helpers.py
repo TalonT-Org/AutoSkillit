@@ -59,6 +59,20 @@ def _make_run_skill_event(result_text: str = "Done.\n%%ORDER_UP%%") -> dict:
     }
 
 
+def _make_run_skill_event_with_order_id(
+    result_text: str = "Done.\n%%ORDER_UP%%", order_id: str = ""
+) -> dict:
+    """Create a double-wrapped PostToolUse event for run_skill with optional order_id."""
+    inner: dict = {"result": result_text, "success": True}
+    if order_id:
+        inner["order_id"] = order_id
+    outer = {"result": json.dumps(inner)}
+    return {
+        "tool_name": "mcp__autoskillit_server__run_skill",
+        "tool_response": json.dumps(outer),
+    }
+
+
 def _resolve_session_label(entry: dict) -> str:
     """Resolve session_label from entry, falling back to step_name for old test data."""
     return entry.get("session_label") or entry.get("step_name", "unknown")

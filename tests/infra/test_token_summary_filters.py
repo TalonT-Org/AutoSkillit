@@ -11,7 +11,12 @@ import pytest
 
 from autoskillit.core.paths import pkg_root
 from autoskillit.hooks.formatters._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
-from tests.infra._token_summary_helpers import _run_hook, _write_sessions
+from tests.infra._token_summary_helpers import (
+    _make_run_skill_event,
+    _make_run_skill_event_with_order_id,
+    _run_hook,
+    _write_sessions,
+)
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
@@ -40,18 +45,27 @@ def test_tsa_humanize_preserves_decimal() -> None:
     )
 
 
-def _make_run_skill_event_with_order_id(
-    result_text: str = "Done.\n%%ORDER_UP%%", order_id: str = ""
-) -> dict:
-    """Create a double-wrapped PostToolUse event for run_skill with optional order_id."""
-    inner: dict = {"result": result_text, "success": True}
-    if order_id:
-        inner["order_id"] = order_id
-    outer = {"result": json.dumps(inner)}
-    return {
-        "tool_name": "mcp__autoskillit_server__run_skill",
-        "tool_response": json.dumps(outer),
+def test_non_anthropic_step_marked_in_format_table() -> None:
+    """Hook _format_table marks non-Anthropic step names with * and adds footnote."""
+    from autoskillit.hooks.token_summary_hook import _format_table
+
+    aggregated = {
+        "implement": {
+            "step_name": "implement",
+            "model": "MiniMax-M2.7-highspeed",
+            "input_tokens": 307600,
+            "output_tokens": 3400,
+            "cache_read_tokens": 0,
+            "cache_write_tokens": 0,
+            "invocation_count": 1,
+            "elapsed_seconds": 60.0,
+            "peak_context": 0,
+            "turn_count": 0,
+        },
     }
+    result = _format_table(aggregated)
+    assert "| implement* |" in result
+    assert "non-Anthropic provider" in result
 
 
 def test_e1_order_id_isolation_multi_issue_session(tmp_path: Path) -> None:
@@ -139,7 +153,6 @@ def test_e1_order_id_isolation_multi_issue_session(tmp_path: Path) -> None:
 
 def test_e2_fallback_to_kitchen_id_when_no_order_id(tmp_path: Path) -> None:
     """E-2: When run_skill result lacks 'order_id', hook falls back to kitchen_id filtering."""
-    from tests.infra._token_summary_helpers import _make_run_skill_event
 
     log_root = tmp_path / "logs"
     log_root.mkdir()

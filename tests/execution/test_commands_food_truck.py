@@ -6,8 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import ClaudeFlags, DirectInstall, MarketplaceInstall, OutputFormat
-from autoskillit.core.types._type_dispatch_identity import DispatchIdentity
+from autoskillit.core import (
+    ClaudeFlags,
+    DirectInstall,
+    DispatchIdentity,
+    MarketplaceInstall,
+    OutputFormat,
+)
 from autoskillit.execution.commands import (
     _MAX_MCP_OUTPUT_TOKENS_VALUE,
     ClaudeHeadlessCmd,
@@ -258,7 +263,7 @@ class TestBuildFoodTruckCmdFeatureParity:
 
     def test_temp_dir_relpath_in_prompt(self):
         spec = build_food_truck_cmd(**{**self.BASE, "temp_dir_relpath": ".autoskillit/temp"})
-        prompt_text = spec.cmd[2]
+        prompt_text = spec.cmd[spec.cmd.index(ClaudeFlags.PRINT) + 1]
         assert ".autoskillit/temp" in prompt_text
 
     def test_headless_exclusive_vars_stripped_exit_delay(self, monkeypatch: pytest.MonkeyPatch):

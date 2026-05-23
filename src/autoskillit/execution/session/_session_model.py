@@ -350,8 +350,7 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
                 acc.api_retry_count += 1
                 acc.api_retry_last_error = str(obj.get("error", ""))
                 raw_status = obj.get("error_status")
-                if isinstance(raw_status, int):
-                    acc.api_retry_last_status = raw_status
+                acc.api_retry_last_status = raw_status if isinstance(raw_status, int) else None
                 attempt = obj.get("attempt", 0)
                 max_retries = obj.get("max_retries", 0)
                 if (

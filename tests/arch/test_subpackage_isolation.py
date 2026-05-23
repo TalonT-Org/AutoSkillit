@@ -900,15 +900,16 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "REQ-CNST-010-E1: canonical type registry — wide surface required to prevent "
         "circular imports; all enums/protocols/constants consolidated here",
     ),
-    "headless.py": (
-        1550,
+    "execution/headless/__init__.py": (
+        1005,
         "REQ-CNST-010-E2: headless session orchestration — Channel B drain-race "
         "recovery + IDLE_STALL routing + contract nudge resume tier "
         "+ DIR_MISSING late-bind recovery arm + RecordingSubprocessRunner "
         "step-name auto-derivation gate + recipe identity threading "
         "+ _execute_claude_headless extraction + dispatch_food_truck orchestration-L2 path "
         "+ campaign_id/dispatch_id propagation kwargs "
-        "+ fs-level write detection (pre/post temp-dir snapshot + _resolve_skill_temp_dir); "
+        "+ fs-level write detection (pre/post temp-dir snapshot + _resolve_skill_temp_dir) "
+        "+ api_retry field forwarding to flush_session_log; "
         "splitting would fragment the adjudication pipeline across modules",
     ),
     "session.py": (
@@ -949,7 +950,10 @@ def test_no_src_module_exceeds_line_limit() -> None:
     violations: list[str] = []
     for py_file in sorted(SRC_ROOT.rglob("*.py")):
         line_count = len(py_file.read_text().splitlines())
-        limit, _ = _LINE_LIMIT_EXEMPTIONS.get(py_file.name, (1000, ""))
+        rel = str(py_file.relative_to(SRC_ROOT))
+        limit, _ = _LINE_LIMIT_EXEMPTIONS.get(
+            rel, _LINE_LIMIT_EXEMPTIONS.get(py_file.name, (1000, ""))
+        )
         if line_count > limit:
             violations.append(
                 f"{py_file.relative_to(SRC_ROOT)}: {line_count} lines (limit {limit})"

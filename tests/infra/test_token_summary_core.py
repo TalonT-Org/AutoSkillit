@@ -977,7 +977,7 @@ def test_efficiency_table_appended_when_loc_present(tmp_path: Path) -> None:
 
     assert exit_code == 0
     assert len(edit_calls) == 1
-    body_arg = edit_calls[0][edit_calls[0].index("--raw-field") + 1]
+    body_arg = next(a for a in edit_calls[0] if a.startswith("body="))
     body_content = body_arg[len("body=") :]
     assert "## Token Efficiency" in body_content
     assert "cache_read/LoC" in body_content
@@ -1037,7 +1037,7 @@ def test_efficiency_table_omitted_when_no_loc_data(tmp_path: Path) -> None:
 
     assert exit_code == 0
     assert len(edit_calls) == 1
-    body_arg = edit_calls[0][edit_calls[0].index("--raw-field") + 1]
+    body_arg = next(a for a in edit_calls[0] if a.startswith("body="))
     body_content = body_arg[len("body=") :]
     assert "## Token Efficiency" not in body_content
 
@@ -1102,9 +1102,13 @@ def test_efficiency_table_zero_loc_step_shows_dash(tmp_path: Path) -> None:
 
     assert exit_code == 0
     assert len(edit_calls) == 1
-    body_arg = edit_calls[0][edit_calls[0].index("--raw-field") + 1]
+    body_arg = next(a for a in edit_calls[0] if a.startswith("body="))
     body_content = body_arg[len("body=") :]
     assert "## Token Efficiency" in body_content
     eff_section = body_content[body_content.index("## Token Efficiency") :]
-    plan_row = next(line for line in eff_section.split("\n") if line.startswith("| plan "))
+    plan_row = next(
+        (line for line in eff_section.split("\n") if line.startswith("| plan ")),
+        None,
+    )
+    assert plan_row is not None, "No '| plan |' row found in efficiency section"
     assert "—" in plan_row

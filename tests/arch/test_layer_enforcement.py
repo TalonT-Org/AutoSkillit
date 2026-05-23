@@ -1324,3 +1324,52 @@ def test_test_files_respect_layer_boundaries(
                 )
 
     assert not violations, f"{rel_path}: cross-layer import violations:\n" + "\n".join(violations)
+
+
+# ── Path param existence validation guard ────────────────────────────────────
+
+
+_PATH_PARAM_NAMES = {"worktree_path", "cwd"}
+
+_TOOLS_DIR = SRC_ROOT / "server" / "tools"
+
+
+def test_tools_with_path_params_validate_existence():
+    """Every tool accepting worktree_path or cwd must validate directory existence."""
+    missing_guards: list[str] = []
+
+    for py_file in sorted(_TOOLS_DIR.glob("tools_*.py")):
+        source = py_file.read_text()
+        tree = ast.parse(source, filename=str(py_file))
+
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)):
+                continue
+            if not any(_is_mcp_tool_decorator(d) for d in node.decorator_list):
+                continue
+            param_names = {a.arg for a in node.args.args}
+            if not param_names & _PATH_PARAM_NAMES:
+                continue
+
+            body_source = ast.get_source_segment(source, node) or ""
+            has_guard = any(
+                pat in body_source
+                for pat in (
+                    "os.path.isdir",
+                    "_run_subprocess",
+                    "perform_merge",
+                    "resolve_repo_from_remote",
+                    "fetch_repo_merge_state",
+                    "ci_watcher",
+                    "_close_issues_sequentially",
+                    "tool_ctx.executor",
+                )
+            )
+            if not has_guard:
+                missing_guards.append(f"{py_file.name}:{node.name}")
+
+    assert not missing_guards, (
+        "MCP tools with worktree_path/cwd params missing path-existence guard"
+        " (os.path.isdir or accepted delegation pattern):\n"
+        + "\n".join(f"  - {g}" for g in missing_guards)
+    )

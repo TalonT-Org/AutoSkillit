@@ -55,6 +55,10 @@ def _sub(returncode: int, stdout: str = "", stderr: str = "") -> SubprocessResul
 class TestWaitForCiAutoTrigger:
     """wait_for_ci auto_trigger=True: active webhook recovery."""
 
+    @pytest.fixture(autouse=True)
+    def _real_cwd(self, tmp_path):
+        self._cwd = str(tmp_path)
+
     @pytest.mark.anyio
     async def test_auto_trigger_default_false_does_not_fire(self, tool_ctx_kitchen_open):
         watcher = InMemoryCIWatcher(wait_result=_NO_RUNS)
@@ -62,7 +66,7 @@ class TestWaitForCiAutoTrigger:
         tool_ctx_kitchen_open.runner.push(_sub(0, "abc123\n"))  # git rev-parse HEAD
         tool_ctx_kitchen_open.runner.push(_sub(0, "branch\n"))  # git branch --show-current
 
-        result = json.loads(await wait_for_ci("branch", cwd="/repo"))
+        result = json.loads(await wait_for_ci("branch", cwd=self._cwd))
 
         assert len(watcher.wait_calls) == 1
         assert len(tool_ctx_kitchen_open.runner.call_args_list) == 2
@@ -92,7 +96,7 @@ class TestWaitForCiAutoTrigger:
         )  # git remote get-url upstream
         tool_ctx_kitchen_open.runner.push(_sub(0))  # git push --force-with-lease
 
-        result = json.loads(await wait_for_ci("feature-branch", cwd="/repo", auto_trigger=True))
+        result = json.loads(await wait_for_ci("feature-branch", cwd=self._cwd, auto_trigger=True))
 
         assert len(watcher.wait_calls) == 2
         assert watcher.wait_calls[1]["scope"].head_sha == "def456"
@@ -114,7 +118,7 @@ class TestWaitForCiAutoTrigger:
         )  # git branch --show-current (guard)
 
         result = json.loads(
-            await wait_for_ci("feature/conflict-fix", cwd="/repo", auto_trigger=True)
+            await wait_for_ci("feature/conflict-fix", cwd=self._cwd, auto_trigger=True)
         )
 
         assert result["conclusion"] == "branch_mismatch"
@@ -135,7 +139,7 @@ class TestWaitForCiAutoTrigger:
         tool_ctx_kitchen_open.runner.push(_sub(1, ""))  # git branch --show-current (fails)
 
         result = json.loads(
-            await wait_for_ci("feature/conflict-fix", cwd="/repo", auto_trigger=True)
+            await wait_for_ci("feature/conflict-fix", cwd=self._cwd, auto_trigger=True)
         )
 
         assert result["conclusion"] == "branch_check_failed"
@@ -164,7 +168,7 @@ class TestWaitForCiAutoTrigger:
         )  # git remote get-url upstream
         tool_ctx_kitchen_open.runner.push(_sub(0))  # git push --force-with-lease
 
-        result = json.loads(await wait_for_ci("feature-branch", cwd="/repo", auto_trigger=True))
+        result = json.loads(await wait_for_ci("feature-branch", cwd=self._cwd, auto_trigger=True))
 
         assert result["conclusion"] == "success"
         assert result["triggered"] is True
@@ -178,7 +182,7 @@ class TestWaitForCiAutoTrigger:
         tool_ctx_kitchen_open.runner.push(_sub(0, "branch\n"))  # git branch --show-current
         tool_ctx_kitchen_open.runner.push(_sub(0, '{"mergeable":"CONFLICTING"}\n'))  # gh pr view
 
-        result = json.loads(await wait_for_ci("branch", cwd="/repo", auto_trigger=True))
+        result = json.loads(await wait_for_ci("branch", cwd=self._cwd, auto_trigger=True))
 
         assert len(watcher.wait_calls) == 1
         assert result["conclusion"] == "merge_conflict"
@@ -195,7 +199,7 @@ class TestWaitForCiAutoTrigger:
         tool_ctx_kitchen_open.runner.push(_sub(0, "branch\n"))  # git branch --show-current
         tool_ctx_kitchen_open.runner.push(_sub(1))  # gh pr view — CLI failure (no PR)
 
-        result = json.loads(await wait_for_ci("branch", cwd="/repo", auto_trigger=True))
+        result = json.loads(await wait_for_ci("branch", cwd=self._cwd, auto_trigger=True))
 
         assert len(watcher.wait_calls) == 1
         assert result["conclusion"] == "gh_view_failed"
@@ -213,7 +217,7 @@ class TestWaitForCiAutoTrigger:
             _sub(128, stderr="error: pre-commit hook rejected commit")
         )  # git commit fails
 
-        result = json.loads(await wait_for_ci("branch", cwd="/repo", auto_trigger=True))
+        result = json.loads(await wait_for_ci("branch", cwd=self._cwd, auto_trigger=True))
 
         assert len(watcher.wait_calls) == 1
         assert result["conclusion"] == "no_runs"
@@ -237,7 +241,7 @@ class TestWaitForCiAutoTrigger:
         )  # git push fails
         tool_ctx_kitchen_open.runner.push(_sub(0))  # git reset --soft HEAD~1 (cleanup)
 
-        result = json.loads(await wait_for_ci("branch", cwd="/repo", auto_trigger=True))
+        result = json.loads(await wait_for_ci("branch", cwd=self._cwd, auto_trigger=True))
 
         reset_cmd = tool_ctx_kitchen_open.runner.call_args_list[-1][0]
         assert reset_cmd == ["git", "reset", "--soft", "HEAD~1"], (
@@ -277,7 +281,7 @@ class TestWaitForCiAutoTrigger:
         )  # git remote get-url upstream
         tool_ctx_kitchen_open.runner.push(_sub(0))  # git push --force-with-lease
 
-        result = json.loads(await wait_for_ci("branch", cwd="/repo", auto_trigger=True))
+        result = json.loads(await wait_for_ci("branch", cwd=self._cwd, auto_trigger=True))
 
         assert len(watcher.wait_calls) == 2
         assert result["conclusion"] == "auto_trigger_failed"
@@ -299,7 +303,7 @@ class TestWaitForCiAutoTrigger:
         )  # git remote get-url upstream
         tool_ctx_kitchen_open.runner.push(_sub(0))  # git push --force-with-lease
 
-        await wait_for_ci("branch", cwd="/repo", auto_trigger=True, lookback_seconds=7200)
+        await wait_for_ci("branch", cwd=self._cwd, auto_trigger=True, lookback_seconds=7200)
 
         assert len(watcher.wait_calls) == 2
         assert watcher.wait_calls[0]["lookback_seconds"] == 7200

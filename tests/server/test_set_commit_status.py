@@ -57,7 +57,7 @@ async def test_set_commit_status_gate_check(tool_ctx):
 
 
 @pytest.mark.anyio
-async def test_set_commit_status_posts_pending(tool_ctx_kitchen_open, monkeypatch):
+async def test_set_commit_status_posts_pending(tool_ctx_kitchen_open, monkeypatch, tmp_path):
     """Tool posts gh api with state=pending to the correct endpoint."""
     monkeypatch.setattr(
         "autoskillit.server.tools.tools_ci.resolve_repo_from_remote",
@@ -70,7 +70,7 @@ async def test_set_commit_status_posts_pending(tool_ctx_kitchen_open, monkeypatc
         state="pending",
         context="autoskillit/ai-review",
         description="AI review in progress",
-        cwd="/some/repo",
+        cwd=str(tmp_path),
     )
     result = json.loads(raw)
 
@@ -92,7 +92,7 @@ async def test_set_commit_status_posts_pending(tool_ctx_kitchen_open, monkeypatc
 
 
 @pytest.mark.anyio
-async def test_set_commit_status_posts_success(tool_ctx_kitchen_open, monkeypatch):
+async def test_set_commit_status_posts_success(tool_ctx_kitchen_open, monkeypatch, tmp_path):
     """Tool posts gh api with state=success and context preserved."""
     monkeypatch.setattr(
         "autoskillit.server.tools.tools_ci.resolve_repo_from_remote",
@@ -104,7 +104,7 @@ async def test_set_commit_status_posts_success(tool_ctx_kitchen_open, monkeypatc
         sha="cafebabe",
         state="success",
         context="autoskillit/ai-review",
-        cwd="/some/repo",
+        cwd=str(tmp_path),
     )
     result = json.loads(raw)
 
@@ -122,7 +122,7 @@ async def test_set_commit_status_posts_success(tool_ctx_kitchen_open, monkeypatc
 
 
 @pytest.mark.anyio
-async def test_set_commit_status_posts_failure(tool_ctx_kitchen_open, monkeypatch):
+async def test_set_commit_status_posts_failure(tool_ctx_kitchen_open, monkeypatch, tmp_path):
     """Tool posts gh api with state=failure."""
     monkeypatch.setattr(
         "autoskillit.server.tools.tools_ci.resolve_repo_from_remote",
@@ -134,7 +134,7 @@ async def test_set_commit_status_posts_failure(tool_ctx_kitchen_open, monkeypatc
         sha="feedface",
         state="failure",
         context="autoskillit/ai-review",
-        cwd="/some/repo",
+        cwd=str(tmp_path),
     )
     result = json.loads(raw)
 
@@ -151,7 +151,9 @@ async def test_set_commit_status_posts_failure(tool_ctx_kitchen_open, monkeypatc
 
 
 @pytest.mark.anyio
-async def test_set_commit_status_infers_repo_from_cwd(tool_ctx_kitchen_open, monkeypatch):
+async def test_set_commit_status_infers_repo_from_cwd(
+    tool_ctx_kitchen_open, monkeypatch, tmp_path
+):
     """Tool infers owner/repo via resolve_repo_from_remote when repo param is absent."""
     infer_calls: list[str] = []
 
@@ -162,12 +164,13 @@ async def test_set_commit_status_infers_repo_from_cwd(tool_ctx_kitchen_open, mon
     monkeypatch.setattr("autoskillit.server.tools.tools_ci.resolve_repo_from_remote", fake_infer)
     tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
 
+    cwd = str(tmp_path)
     raw = await set_commit_status(
         sha="abc001",
         state="success",
         context="autoskillit/ai-review",
         # repo not provided — must infer from cwd
-        cwd="/some/repo",
+        cwd=cwd,
     )
     result = json.loads(raw)
 
@@ -210,7 +213,7 @@ async def test_set_commit_status_falls_back_to_plugin_dir_when_no_cwd(
 
 @pytest.mark.anyio
 async def test_set_commit_status_uses_explicit_repo_without_inference(
-    tool_ctx_kitchen_open, monkeypatch
+    tool_ctx_kitchen_open, monkeypatch, tmp_path
 ):
     """When repo is provided explicitly, resolve_repo_from_remote is not called."""
     infer_calls: list[str] = []
@@ -227,7 +230,7 @@ async def test_set_commit_status_uses_explicit_repo_without_inference(
         state="success",
         context="autoskillit/ai-review",
         repo="explicit/repo",
-        cwd="/some/repo",
+        cwd=str(tmp_path),
     )
     result = json.loads(raw)
 
@@ -244,7 +247,7 @@ async def test_set_commit_status_uses_explicit_repo_without_inference(
 
 @pytest.mark.anyio
 async def test_set_commit_status_on_gh_failure_returns_error_dict(
-    tool_ctx_kitchen_open, monkeypatch
+    tool_ctx_kitchen_open, monkeypatch, tmp_path
 ):
     """When gh api returns non-zero, tool returns success=false, never raises."""
     monkeypatch.setattr(
@@ -257,7 +260,7 @@ async def test_set_commit_status_on_gh_failure_returns_error_dict(
         sha="baadf00d",
         state="success",
         context="autoskillit/ai-review",
-        cwd="/some/repo",
+        cwd=str(tmp_path),
     )
     result = json.loads(raw)
 
@@ -267,7 +270,7 @@ async def test_set_commit_status_on_gh_failure_returns_error_dict(
 
 @pytest.mark.anyio
 async def test_set_commit_status_repo_inference_failure_returns_error(
-    tool_ctx_kitchen_open, monkeypatch
+    tool_ctx_kitchen_open, monkeypatch, tmp_path
 ):
     """When repo inference returns empty string, tool returns success=false."""
     monkeypatch.setattr(
@@ -279,7 +282,7 @@ async def test_set_commit_status_repo_inference_failure_returns_error(
         sha="baadf00d",
         state="pending",
         context="autoskillit/ai-review",
-        cwd="/some/repo",
+        cwd=str(tmp_path),
     )
     result = json.loads(raw)
 

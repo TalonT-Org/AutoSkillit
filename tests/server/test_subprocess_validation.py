@@ -28,3 +28,8 @@ class TestRunSubprocessCwdValidation:
         rc, stdout, _ = await _run_subprocess(["echo", "hi"], cwd=str(tmp_path), timeout=10)
         assert rc == 0
         assert stdout == "ok\n"
+
+    @pytest.mark.anyio
+    async def test_rejects_nonexistent_cwd(self, tool_ctx_kitchen_open):
+        with pytest.raises(ValueError, match="does not exist"):
+            await _run_subprocess(["echo", "hi"], cwd="/nonexistent", timeout=10)

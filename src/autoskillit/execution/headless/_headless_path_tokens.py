@@ -136,6 +136,8 @@ _OUTPUT_PATH_PATTERN: re.Pattern[str] = (
 
 def _extract_output_paths(assistant_messages: list[str]) -> dict[str, str]:
     """Extract structured output path tokens from session output."""
+    if not assistant_messages:
+        logger.debug("_extract_output_paths called with empty assistant_messages")
     paths: dict[str, str] = {}
     for msg in assistant_messages:
         for m in _OUTPUT_PATH_PATTERN.finditer(msg):

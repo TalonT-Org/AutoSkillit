@@ -26,6 +26,7 @@ from autoskillit.core import (
     WriteEvidence,
     get_logger,
     truncate_text,
+    validate_worktree_path,
 )
 from autoskillit.execution.headless._headless_path_tokens import (
     _extract_output_paths,
@@ -617,6 +618,16 @@ def _build_skill_result(
         result_text = result_text.replace(completion_marker, "").strip()
 
     extracted_worktree_path = _extract_worktree_path(session.assistant_messages)
+    validated_wt = (
+        validate_worktree_path(extracted_worktree_path) if extracted_worktree_path else None
+    )
+    if extracted_worktree_path and validated_wt is None:
+        logger.warning(
+            "worktree_path_validation_failed",
+            extracted=extracted_worktree_path,
+            reason="path does not exist on disk",
+        )
+    effective_worktree_path = validated_wt.path if validated_wt else None
 
     # Path contamination detection
     path_contamination: str | None = None
@@ -651,7 +662,7 @@ def _build_skill_result(
             retry_reason=RetryReason.PATH_CONTAMINATION,
             stderr=_truncate(result.stderr),
             token_usage=session.token_usage,
-            worktree_path=extracted_worktree_path,
+            worktree_path=effective_worktree_path,
             cli_subtype=session.subtype,
             write_path_warnings=write_path_warnings,
             evidence=evidence,
@@ -673,7 +684,7 @@ def _build_skill_result(
             retry_reason=retry_reason,
             stderr=_truncate(result.stderr),
             token_usage=session.token_usage,
-            worktree_path=extracted_worktree_path,
+            worktree_path=effective_worktree_path,
             cli_subtype=session.subtype,
             write_path_warnings=write_path_warnings,
             evidence=evidence,

@@ -1460,9 +1460,11 @@ class TestExtractWorktreePath:
 class TestBuildSkillResultWorktreePath:
     """_build_skill_result extracts worktree_path on context exhaustion."""
 
-    def test_extracts_worktree_path_on_context_exhaustion(self):
+    def test_extracts_worktree_path_on_context_exhaustion(self, tmp_path):
         """worktree_path from early Step 1 emission flows into SkillResult."""
-        path = "/tmp/worktrees/impl-fix-20260307"
+        wt = tmp_path / "impl-fix-20260307"
+        wt.mkdir()
+        path = str(wt)
         sub_result = SubprocessResult(
             returncode=-1,
             stdout=_context_exhausted_with_worktree_ndjson(path),
@@ -1501,14 +1503,18 @@ class TestBuildSkillResultWorktreePath:
         assert sr.success is True
         assert sr.worktree_path is None
 
-    def test_worktree_path_uses_last_occurrence(self):
+    def test_worktree_path_uses_last_occurrence(self, tmp_path):
         """When worktree_path= appears multiple times, the last value wins."""
+        first = tmp_path / "first"
+        second = tmp_path / "second"
+        first.mkdir()
+        second.mkdir()
         assistant1 = json.dumps(
             {
                 "type": "assistant",
                 "message": {
                     "role": "assistant",
-                    "content": "worktree_path=/first/path\nbranch_name=b1",
+                    "content": f"worktree_path={first}\nbranch_name=b1",
                 },
             }
         )
@@ -1517,7 +1523,7 @@ class TestBuildSkillResultWorktreePath:
                 "type": "assistant",
                 "message": {
                     "role": "assistant",
-                    "content": "worktree_path=/second/path\nbranch_name=b1",
+                    "content": f"worktree_path={second}\nbranch_name=b1",
                 },
             }
         )
@@ -1541,15 +1547,17 @@ class TestBuildSkillResultWorktreePath:
             channel_confirmation=ChannelConfirmation.UNMONITORED,
         )
         sr = _build_skill_result(sub_result, "", "/test", None)
-        assert sr.worktree_path == "/second/path"
+        assert sr.worktree_path == str(second)
 
 
 class TestWorktreePathOnContextExhaustion:
     """Contract: worktree_path appears as top-level JSON field on needs_retry."""
 
-    def test_worktree_path_in_json_response_on_context_limit(self):
+    def test_worktree_path_in_json_response_on_context_limit(self, tmp_path):
         """Full stack: NDJSON with early token → SkillResult → to_json()."""
-        path = "/tmp/worktrees/impl-fix"
+        wt = tmp_path / "impl-fix"
+        wt.mkdir()
+        path = str(wt)
         assistant = json.dumps(
             {
                 "type": "assistant",

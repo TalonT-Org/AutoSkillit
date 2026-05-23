@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 from collections.abc import Mapping
 from datetime import UTC, datetime
@@ -57,6 +58,8 @@ async def _run_subprocess(
     """
     if not cwd:
         raise ValueError("_run_subprocess: cwd must not be empty")
+    if not os.path.isdir(cwd):
+        raise ValueError(f"_run_subprocess: cwd does not exist: {cwd}")
 
     runner = _get_ctx().runner
     assert runner is not None, "No subprocess runner configured"

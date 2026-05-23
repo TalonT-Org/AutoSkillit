@@ -708,13 +708,15 @@ class TestCwdExistenceValidation:
     """run_skill and run_cmd reject non-existent cwd before reaching executor/subprocess."""
 
     @pytest.mark.anyio
-    async def test_run_skill_rejects_nonexistent_cwd(self, tool_ctx_kitchen_open):
-        result = json.loads(await run_skill("/investigate foo", "/tmp/nonexistent_dir_xyz"))
+    async def test_run_skill_rejects_nonexistent_cwd(self, tool_ctx_kitchen_open, tmp_path):
+        nonexistent = str(tmp_path / "nonexistent_subdir")
+        result = json.loads(await run_skill("/investigate foo", nonexistent))
         assert result["success"] is False
         assert "does not exist" in result["error"]
 
     @pytest.mark.anyio
-    async def test_run_cmd_rejects_nonexistent_cwd(self, tool_ctx_kitchen_open):
-        result = json.loads(await run_cmd("echo hi", "/tmp/nonexistent_dir_xyz"))
+    async def test_run_cmd_rejects_nonexistent_cwd(self, tool_ctx_kitchen_open, tmp_path):
+        nonexistent = str(tmp_path / "nonexistent_subdir")
+        result = json.loads(await run_cmd("echo hi", nonexistent))
         assert result["success"] is False
         assert "does not exist" in result.get("error", result.get("stderr", ""))

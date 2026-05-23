@@ -352,9 +352,10 @@ class TestTestCheck:
         assert "tests_selected" not in data
 
     @pytest.mark.anyio
-    async def test_test_check_rejects_nonexistent_directory(self, tool_ctx):
+    async def test_test_check_rejects_nonexistent_directory(self, tool_ctx, tmp_path):
         """test_check must return clear error for non-existent worktree path."""
-        result = json.loads(await test_check(worktree_path="/tmp/nonexistent_dir_xyz"))
+        nonexistent = str(tmp_path / "nonexistent_subdir")
+        result = json.loads(await test_check(worktree_path=nonexistent))
         assert result["passed"] is False
         assert "does not exist" in result["error"]
         assert result["infrastructure_missing"] is True

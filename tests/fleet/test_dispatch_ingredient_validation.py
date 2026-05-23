@@ -14,7 +14,7 @@ from tests.fleet._helpers import (
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
 
-def _setup_dispatch_with_ingredients(tool_ctx, monkeypatch, ingredients: dict):
+def _setup_dispatch_with_ingredients(tool_ctx, ingredients: dict):
     """Wire tool_ctx with a recipe that has specific ingredients."""
     from autoskillit.fleet import FleetSemaphore
     from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
@@ -41,10 +41,10 @@ def _setup_dispatch_with_ingredients(tool_ctx, monkeypatch, ingredients: dict):
 
 class TestMissingRequiredIngredient:
     @pytest.mark.anyio
-    async def test_dispatch_rejects_missing_required_ingredient(self, tool_ctx, monkeypatch):
+    async def test_dispatch_rejects_missing_required_ingredient(self, tool_ctx):
         """Required ingredient with no default → FLEET_MISSING_INGREDIENT."""
         _setup_dispatch_with_ingredients(
-            tool_ctx, monkeypatch, {"api_key": {"required": True, "default": None}}
+            tool_ctx, {"api_key": {"required": True, "default": None}}
         )
 
         result = await _run(tool_ctx, ingredients={})
@@ -52,31 +52,30 @@ class TestMissingRequiredIngredient:
         assert result["error"] == "fleet_missing_ingredient"
 
     @pytest.mark.anyio
-    async def test_dispatch_allows_required_ingredient_when_supplied(self, tool_ctx, monkeypatch):
+    async def test_dispatch_allows_required_ingredient_when_supplied(self, tool_ctx):
         """A required ingredient that IS supplied passes validation."""
         _setup_dispatch_with_ingredients(
-            tool_ctx, monkeypatch, {"api_key": {"required": True, "default": None}}
+            tool_ctx, {"api_key": {"required": True, "default": None}}
         )
 
         result = await _run(tool_ctx, ingredients={"api_key": "secret"})
-        assert result.get("error") != "fleet_missing_ingredient"
+        assert result["success"] is True
 
     @pytest.mark.anyio
-    async def test_dispatch_allows_required_ingredient_with_default(self, tool_ctx, monkeypatch):
+    async def test_dispatch_allows_required_ingredient_with_default(self, tool_ctx):
         """A required ingredient with a non-None default passes even when not supplied."""
         _setup_dispatch_with_ingredients(
-            tool_ctx, monkeypatch, {"api_key": {"required": True, "default": "fallback"}}
+            tool_ctx, {"api_key": {"required": True, "default": "fallback"}}
         )
 
         result = await _run(tool_ctx, ingredients={})
         assert result.get("error") != "fleet_missing_ingredient"
 
     @pytest.mark.anyio
-    async def test_dispatch_lists_all_missing_required_ingredients(self, tool_ctx, monkeypatch):
+    async def test_dispatch_lists_all_missing_required_ingredients(self, tool_ctx):
         """When multiple required ingredients are missing, all are listed."""
         _setup_dispatch_with_ingredients(
             tool_ctx,
-            monkeypatch,
             {
                 "key_a": {"required": True, "default": None},
                 "key_b": {"required": True, "default": None},
@@ -90,31 +89,27 @@ class TestMissingRequiredIngredient:
         assert "key_b" in result["user_visible_message"]
 
     @pytest.mark.anyio
-    async def test_dispatch_ignores_optional_missing_ingredients(self, tool_ctx, monkeypatch):
+    async def test_dispatch_ignores_optional_missing_ingredients(self, tool_ctx):
         """Optional ingredients (required=False) don't trigger missing-ingredient errors."""
         _setup_dispatch_with_ingredients(
-            tool_ctx, monkeypatch, {"optional_key": {"required": False, "default": None}}
+            tool_ctx, {"optional_key": {"required": False, "default": None}}
         )
 
         result = await _run(tool_ctx, ingredients={})
         assert result.get("error") != "fleet_missing_ingredient"
 
     @pytest.mark.anyio
-    async def test_task_auto_injected_from_top_level_param(self, tool_ctx, monkeypatch):
+    async def test_task_auto_injected_from_top_level_param(self, tool_ctx):
         """top-level task param auto-injects into effective_ingredients when recipe declares it."""
-        _setup_dispatch_with_ingredients(
-            tool_ctx, monkeypatch, {"task": {"required": True, "default": None}}
-        )
+        _setup_dispatch_with_ingredients(tool_ctx, {"task": {"required": True, "default": None}})
 
         result = await _run(tool_ctx, ingredients={})
         assert result.get("error") != "fleet_missing_ingredient"
 
     @pytest.mark.anyio
-    async def test_explicit_ingredient_task_overrides_top_level(self, tool_ctx, monkeypatch):
+    async def test_explicit_ingredient_task_overrides_top_level(self, tool_ctx):
         """Explicit ingredients['task'] takes precedence over top-level task param."""
-        _setup_dispatch_with_ingredients(
-            tool_ctx, monkeypatch, {"task": {"required": True, "default": None}}
-        )
+        _setup_dispatch_with_ingredients(tool_ctx, {"task": {"required": True, "default": None}})
 
         captured = {}
 
@@ -139,10 +134,10 @@ class TestMissingRequiredIngredient:
         assert captured["ingredients"]["task"] == "override-value"
 
     @pytest.mark.anyio
-    async def test_task_not_injected_when_not_declared_ingredient(self, tool_ctx, monkeypatch):
+    async def test_task_not_injected_when_not_declared_ingredient(self, tool_ctx):
         """Top-level task is NOT injected when recipe has no 'task' ingredient key."""
         _setup_dispatch_with_ingredients(
-            tool_ctx, monkeypatch, {"other_key": {"required": False, "default": "x"}}
+            tool_ctx, {"other_key": {"required": False, "default": "x"}}
         )
 
         captured = {}

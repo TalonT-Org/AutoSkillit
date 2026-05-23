@@ -301,6 +301,7 @@ class TestCodexHeadlessCmd:
     def test_no_approval_never_in_headless_cmd(self) -> None:
         spec = CodexBackend().build_headless_cmd("do stuff")
         assert "-a" not in spec.cmd
+        assert "never" not in spec.cmd
 
     def test_model_flag(self) -> None:
         spec = CodexBackend().build_headless_cmd("x", model="o3")

@@ -360,3 +360,38 @@ def test_codex_schema_version_importable_from_core() -> None:
     from autoskillit.core import CODEX_SCHEMA_VERSION
 
     assert CODEX_SCHEMA_VERSION == 1
+
+
+# ---------------------------------------------------------------------------
+# HEADLESS_AUTO_GATE_ENV_VAR constant
+# ---------------------------------------------------------------------------
+
+
+def test_headless_auto_gate_env_var_value() -> None:
+    from autoskillit.core.types._type_constants import HEADLESS_AUTO_GATE_ENV_VAR
+
+    assert HEADLESS_AUTO_GATE_ENV_VAR == "AUTOSKILLIT_HEADLESS_AUTO_GATE"
+
+
+def test_headless_auto_gate_env_var_in_all() -> None:
+    from autoskillit.core.types import _type_constants
+
+    assert "HEADLESS_AUTO_GATE_ENV_VAR" in _type_constants.__all__
+
+
+def test_headless_auto_gate_env_var_importable_from_types() -> None:
+    from autoskillit.core.types import HEADLESS_AUTO_GATE_ENV_VAR
+
+    assert HEADLESS_AUTO_GATE_ENV_VAR == "AUTOSKILLIT_HEADLESS_AUTO_GATE"
+
+
+def test_headless_auto_gate_env_var_importable_from_core() -> None:
+    from autoskillit.core import HEADLESS_AUTO_GATE_ENV_VAR
+
+    assert HEADLESS_AUTO_GATE_ENV_VAR == "AUTOSKILLIT_HEADLESS_AUTO_GATE"
+
+
+def test_headless_auto_gate_env_var_in_private_env_vars() -> None:
+    from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS
+
+    assert "AUTOSKILLIT_HEADLESS_AUTO_GATE" in AUTOSKILLIT_PRIVATE_ENV_VARS

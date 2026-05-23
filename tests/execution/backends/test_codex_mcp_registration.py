@@ -9,6 +9,12 @@ from autoskillit.execution.backends.codex import ensure_codex_mcp_registered
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
+_xfail_stub = pytest.mark.xfail(
+    raises=NotImplementedError,
+    reason="stub awaiting P5-A7-WP1 implementation",
+    strict=True,
+)
+
 
 @pytest.fixture()
 def fake_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
@@ -27,39 +33,46 @@ class TestEnsureCodexMcpRegisteredCreate:
     def test_config_toml_does_not_exist_before_call(self, fake_home: Path) -> None:
         assert not (fake_home / ".codex" / "config.toml").exists()
 
+    @_xfail_stub
     def test_config_toml_exists_after_call(self, fake_home: Path) -> None:
         ensure_codex_mcp_registered()
         assert (fake_home / ".codex" / "config.toml").exists()
 
+    @_xfail_stub
     def test_mcp_servers_autoskillit_section_present(self, fake_home: Path) -> None:
         ensure_codex_mcp_registered()
         data = tomllib.loads((fake_home / ".codex" / "config.toml").read_text())
         assert "autoskillit" in data.get("mcp_servers", {})
 
+    @_xfail_stub
     def test_command_is_autoskillit(self, fake_home: Path) -> None:
         ensure_codex_mcp_registered()
         data = tomllib.loads((fake_home / ".codex" / "config.toml").read_text())
         section = data["mcp_servers"]["autoskillit"]
         assert section["command"] == "autoskillit"
 
+    @_xfail_stub
     def test_env_contains_headless_flag(self, fake_home: Path) -> None:
         ensure_codex_mcp_registered()
         data = tomllib.loads((fake_home / ".codex" / "config.toml").read_text())
         env = data["mcp_servers"]["autoskillit"]["env"]
         assert env["AUTOSKILLIT_HEADLESS"] == "1"
 
+    @_xfail_stub
     def test_startup_timeout(self, fake_home: Path) -> None:
         ensure_codex_mcp_registered()
         data = tomllib.loads((fake_home / ".codex" / "config.toml").read_text())
         section = data["mcp_servers"]["autoskillit"]
         assert section["startup_timeout_sec"] == 30.0
 
+    @_xfail_stub
     def test_tool_timeout(self, fake_home: Path) -> None:
         ensure_codex_mcp_registered()
         data = tomllib.loads((fake_home / ".codex" / "config.toml").read_text())
         section = data["mcp_servers"]["autoskillit"]
         assert section["tool_timeout_sec"] == 120.0
 
+    @_xfail_stub
     def test_no_type_key(self, fake_home: Path) -> None:
         ensure_codex_mcp_registered()
         data = tomllib.loads((fake_home / ".codex" / "config.toml").read_text())
@@ -72,6 +85,7 @@ class TestEnsureCodexMcpRegisteredCreate:
 # ---------------------------------------------------------------------------
 
 
+@_xfail_stub
 class TestEnsureCodexMcpRegisteredIdempotent:
     def test_second_call_returns_false(self, fake_home: Path) -> None:
         first = ensure_codex_mcp_registered()
@@ -97,6 +111,7 @@ class TestEnsureCodexMcpRegisteredIdempotent:
 # ---------------------------------------------------------------------------
 
 
+@_xfail_stub
 class TestEnsureCodexMcpRegisteredPreservation:
     _FOREIGN_TOML = '[mcp_servers.other_tool]\ncommand = "other"\n'
 
@@ -124,6 +139,7 @@ class TestEnsureCodexMcpRegisteredPreservation:
 # ---------------------------------------------------------------------------
 
 
+@_xfail_stub
 def test_other_tool_env_block_is_unchanged(fake_home: Path) -> None:
     foreign = (
         '[mcp_servers.other_tool]\ncommand = "other"\n\n'
@@ -146,14 +162,17 @@ class TestEnsureCodexMcpRegisteredDirCreation:
     def test_codex_dir_does_not_exist_before_call(self, fake_home: Path) -> None:
         assert not (fake_home / ".codex").exists()
 
+    @_xfail_stub
     def test_codex_dir_created(self, fake_home: Path) -> None:
         ensure_codex_mcp_registered()
         assert (fake_home / ".codex").is_dir()
 
+    @_xfail_stub
     def test_config_toml_created(self, fake_home: Path) -> None:
         ensure_codex_mcp_registered()
         assert (fake_home / ".codex" / "config.toml").is_file()
 
+    @_xfail_stub
     def test_toml_valid(self, fake_home: Path) -> None:
         ensure_codex_mcp_registered()
         raw = (fake_home / ".codex" / "config.toml").read_text()

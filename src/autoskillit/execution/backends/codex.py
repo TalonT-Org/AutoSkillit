@@ -35,6 +35,7 @@ from autoskillit.core import (
     atomic_write,
     extract_skill_name,
     fast_loads,
+    get_logger,
 )
 from autoskillit.execution.backends.claude import (
     _HEADLESS_EXCLUSIVE_VARS,
@@ -74,12 +75,20 @@ CODEX_ENV_DENYLIST: frozenset[str] = frozenset(
 
 CODEX_ENV_PREFIX_DENYLIST: tuple[str, ...] = ("CLAUDE_CODE_",)
 
+_log = get_logger()
+
 
 def _format_toml_value(v: Any) -> str:
     if isinstance(v, bool):
         return "true" if v else "false"
     if isinstance(v, str):
-        escaped = v.replace("\\", "\\\\").replace('"', '\\"')
+        escaped = (
+            v.replace("\\", "\\\\")
+            .replace('"', '\\"')
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t")
+        )
         return f'"{escaped}"'
     if isinstance(v, int):
         return str(v)
@@ -139,7 +148,10 @@ def _read_codex_config(path: Path) -> dict[str, Any]:
     try:
         with open(path, "rb") as f:
             data = tomllib.load(f)
-    except (FileNotFoundError, tomllib.TOMLDecodeError):
+    except FileNotFoundError:
+        return {}
+    except tomllib.TOMLDecodeError:
+        _log.warning("corrupt_codex_config", path=str(path))
         return {}
     return data
 

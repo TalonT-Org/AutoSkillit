@@ -265,6 +265,14 @@ Any `run_skill` invocation (investigate, implement, audit, review, etc.)
    progressing. If a pipeline has completed all its `plan_parts` and only has finalization
    steps remaining (push, merge, close), it is still active and must be advanced.
 
+5. **A retrying pipeline does not block sibling pipelines.** When a batched round returns
+   with a mix of successful and `needs_retry` results, issue the retry for the failing
+   pipeline(s) AND the next steps for the successful pipelines in the same response.
+   Route the retry per CONTEXT LIMIT ROUTING (same rules apply — check `retry_reason`,
+   `subtype`, `on_context_limit`, etc.). The retrying pipeline rejoins the wavefront at
+   whatever step boundary the other pipelines have reached when its retry completes.
+   Never hold successful pipelines idle while waiting for a retry to finish.
+
 ### Rationale
 
 Batched rounds wait for the **slowest step** in the batch. If a slow `run_skill` is launched

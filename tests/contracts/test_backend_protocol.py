@@ -1,8 +1,8 @@
 """Protocol conformance for CodingAgentBackend and sub-protocols.
 
-Contract tests verifying @runtime_checkable decoration and isinstance
-conformance for CodingAgentBackend, StreamParser, ResultParser, and
-ClaudeCodeBackend.
+Contract tests verifying @runtime_checkable decoration, isinstance
+conformance, and build_skill_session_cmd signature/delegation contracts
+for CodingAgentBackend, StreamParser, ResultParser, and ClaudeCodeBackend.
 """
 
 from __future__ import annotations
@@ -87,3 +87,120 @@ def test_claude_code_backend_stream_parser_forwards_completion_marker():
 
     parser = ClaudeCodeBackend().stream_parser(completion_marker="%%ORDER_UP%%")
     assert parser.completion_marker == "%%ORDER_UP%%"
+
+
+# -- Signature conformance: build_skill_session_cmd ---------------------------
+
+
+def test_build_skill_session_cmd_positional_param_names_match_protocol():
+    import inspect
+
+    from autoskillit.core import CodingAgentBackend
+    from autoskillit.execution.backends import ClaudeCodeBackend
+
+    proto_sig = inspect.signature(CodingAgentBackend.build_skill_session_cmd)
+    impl_sig = inspect.signature(ClaudeCodeBackend.build_skill_session_cmd)
+
+    proto_names = [
+        n
+        for n, p in proto_sig.parameters.items()
+        if n != "self" and p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+    ]
+    impl_names = [
+        n
+        for n, p in impl_sig.parameters.items()
+        if n != "self" and p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+    ][: len(proto_names)]
+
+    assert proto_names == impl_names, (
+        f"Positional param name mismatch: protocol={proto_names}, impl={impl_names}"
+    )
+
+
+def test_build_skill_session_cmd_return_annotation_is_cmdspec():
+    from typing import get_type_hints
+
+    from autoskillit.core import CmdSpec
+    from autoskillit.execution.backends import ClaudeCodeBackend
+
+    hints = get_type_hints(ClaudeCodeBackend.build_skill_session_cmd)
+    assert hints["return"] is CmdSpec, (
+        f"Return annotation should be CmdSpec, got {hints['return']}"
+    )
+
+
+def test_build_skill_session_cmd_protocol_shape_call_succeeds():
+    from autoskillit.core import CmdSpec, SkillSessionConfig
+    from autoskillit.execution.backends import ClaudeCodeBackend
+
+    result = ClaudeCodeBackend().build_skill_session_cmd(
+        "/test-skill", "/tmp", SkillSessionConfig()
+    )
+    assert isinstance(result, CmdSpec)
+
+
+def test_build_skill_session_cmd_config_delegates_to_impl():
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from autoskillit.core import (
+        CmdSpec,
+        DirectInstall,
+        OutputFormat,
+        SessionCheckpoint,
+        SkillSessionConfig,
+    )
+    from autoskillit.execution.backends import ClaudeCodeBackend
+
+    config = SkillSessionConfig(
+        completion_marker="%%VERIFY%%",
+        model="sonnet",
+        plugin_source=DirectInstall(plugin_dir=Path("/p")),
+        output_format=OutputFormat.STREAM_JSON,
+        exit_after_stop_delay_ms=120000,
+        stream_idle_timeout_ms=30000,
+        scenario_step_name="step-verify",
+        temp_dir_relpath=".autoskillit/temp",
+        allowed_write_prefix="/tmp/verify",
+        provider_extras={"EXTRA": "val"},
+        profile_name="verify-profile",
+        resume_session_id="sess-1",
+        resume_checkpoint=SessionCheckpoint(step_name="chk"),
+        resume_message="resume-msg",
+    )
+    sentinel = CmdSpec(cmd=("sentinel",), env={})
+
+    with patch.object(
+        ClaudeCodeBackend, "_build_skill_session_cmd_impl", return_value=sentinel
+    ) as mock_impl:
+        backend = ClaudeCodeBackend()
+        result = backend.build_skill_session_cmd("/test", "/work", config)
+
+    assert result is sentinel
+    mock_impl.assert_called_once()
+    args = mock_impl.call_args.args
+    assert args == ("/test",), f"skill_command not forwarded: {args}"
+    kw = mock_impl.call_args.kwargs
+    assert kw["cwd"] == "/work"
+    assert kw["completion_marker"] == config.completion_marker
+    assert kw["model"] == config.model
+    assert kw["plugin_source"] == config.plugin_source
+    assert kw["output_format"] == config.output_format
+    assert kw["add_dirs"] == config.add_dirs
+    assert kw["exit_after_stop_delay_ms"] == config.exit_after_stop_delay_ms
+    assert kw["stream_idle_timeout_ms"] == config.stream_idle_timeout_ms
+    assert kw["scenario_step_name"] == config.scenario_step_name
+    assert kw["temp_dir_relpath"] == config.temp_dir_relpath
+    assert kw["allowed_write_prefix"] == config.allowed_write_prefix
+    assert kw["provider_extras"] == config.provider_extras
+    assert kw["profile_name"] == config.profile_name
+    assert kw["resume_session_id"] == config.resume_session_id
+    assert kw["resume_checkpoint"] == config.resume_checkpoint
+    assert kw["resume_message"] == config.resume_message
+
+
+def test_build_skill_session_cmd_impl_exists():
+    from autoskillit.execution.backends import ClaudeCodeBackend
+
+    assert hasattr(ClaudeCodeBackend, "_build_skill_session_cmd_impl")
+    assert callable(getattr(ClaudeCodeBackend, "_build_skill_session_cmd_impl"))

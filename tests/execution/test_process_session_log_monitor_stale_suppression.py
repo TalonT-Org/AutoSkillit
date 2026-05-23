@@ -125,7 +125,8 @@ class TestSessionLogMonitorStaleSuppressionGate:
         # capture_logs() intercepts when structlog is in default state.
         # In a parallel worker where configure_logging() ran in a prior test,
         # bound loggers may use a stale processor reference and write to stdout.
-        captured = capsys.readouterr().out
+        _io = capsys.readouterr()
+        captured = _io.out + _io.err
         warning_in_logs = any(
             "port-443" in str(log.get("event", "")) or "ESTABLISHED" in str(log.get("event", ""))
             for log in logs

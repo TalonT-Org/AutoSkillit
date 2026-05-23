@@ -11,12 +11,11 @@ from ._type_backend import (
     BackendCapabilities,
     CmdSpec,
     SessionEvent,
-    SkillSessionConfig,  # noqa: F401
+    SkillSessionConfig,
 )
 from ._type_checkpoint import SessionCheckpoint
 from ._type_enums import OutputFormat
 from ._type_plugin_source import PluginSource
-from ._type_results import ValidatedAddDir
 
 __all__ = [
     "StreamParser",
@@ -100,23 +99,8 @@ class CodingAgentBackend(Protocol):
     def build_skill_session_cmd(
         self,
         skill_command: str,
-        *,
         cwd: str,
-        completion_marker: str,
-        model: str | None,
-        plugin_source: PluginSource | None,
-        output_format: OutputFormat,
-        add_dirs: Sequence[ValidatedAddDir] = (),
-        exit_after_stop_delay_ms: int = 0,
-        stream_idle_timeout_ms: int = 0,
-        scenario_step_name: str = "",
-        temp_dir_relpath: str | None = None,
-        allowed_write_prefix: str = "",
-        provider_extras: Mapping[str, str] | None = None,
-        profile_name: str = "",
-        resume_session_id: str = "",
-        resume_checkpoint: SessionCheckpoint | None = None,
-        resume_message: str | None = None,
+        config: SkillSessionConfig,
     ) -> CmdSpec: ...
 
     def build_food_truck_cmd(

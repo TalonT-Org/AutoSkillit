@@ -36,7 +36,14 @@ def _check_codex_version(*, backend: str | None = None) -> DoctorResult:
             f"codex unavailable ({type(exc).__name__}); skipping version check",
         )
 
-    for line in result.stdout.splitlines():
+    if result.returncode != 0:
+        return DoctorResult(
+            Severity.OK,
+            check_name,
+            f"codex exited {result.returncode}; skipping version check",
+        )
+
+    for line in (result.stdout + result.stderr).splitlines():
         m = re.search(r"(\d+)\.(\d+)\.(\d+)", line)
         if m:
             parsed = (int(m.group(1)), int(m.group(2)), int(m.group(3)))

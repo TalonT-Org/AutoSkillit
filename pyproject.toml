@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "autoskillit"
-version = "0.10.209"
+version = "0.10.210"
 description = "MCP server for orchestrating automated skill-driven workflows with Claude Code"
 readme = "README.md"
 license = {text = "MIT"}

@@ -5,7 +5,6 @@ import pytest
 
 from autoskillit.fleet.sidecar import (
     IssueSidecarEntry,
-    SidecarReadResult,
     SidecarReadStatus,
     append_sidecar_entry,
     compute_remaining_issues,
@@ -165,11 +164,6 @@ class TestReadSidecarFromPath:
         assert result.source == SidecarReadStatus.MISSING
         assert result.entries == []
 
-    def test_read_sidecar_from_path_returns_missing_when_file_absent(self) -> None:
-        result = read_sidecar_from_path(Path("/nonexistent/dir/issues.jsonl"))
-        assert result.source == SidecarReadStatus.MISSING
-        assert result.entries == []
-
     def test_read_sidecar_from_path_returns_found_when_file_empty(self, tmp_path: Path) -> None:
         sidecar = tmp_path / "empty.jsonl"
         sidecar.write_text("")
@@ -185,12 +179,6 @@ class TestReadSidecarFromPath:
         result = read_sidecar_from_path(sidecar)
         assert result.source == SidecarReadStatus.FOUND
         assert len(result.entries) == 1
-
-    def test_result_is_sidecar_read_result_type(self, tmp_path: Path) -> None:
-        p = tmp_path / "issues.jsonl"
-        p.write_text("")
-        result = read_sidecar_from_path(p)
-        assert isinstance(result, SidecarReadResult)
 
     def test_valid_jsonl_parsed_correctly(self, tmp_path: Path) -> None:
         p = tmp_path / "issues.jsonl"

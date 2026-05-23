@@ -462,7 +462,6 @@ class TestCleanupOrphanedLabelsUnit:
 
         missing_path = str(tmp_path / "deleted_issues.jsonl")
         github_client = AsyncMock()
-        github_client.swap_labels = AsyncMock(return_value={"success": True})
 
         result = await cleanup_orphaned_labels(missing_path, github_client)
 

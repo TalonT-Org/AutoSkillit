@@ -80,8 +80,11 @@ def read_sidecar_from_path(path: Path) -> SidecarReadResult:
     entries: list[IssueSidecarEntry] = []
     try:
         lines = path.read_text().splitlines()
-    except OSError:
+    except FileNotFoundError:
         return SidecarReadResult(entries=[], source=SidecarReadStatus.MISSING)
+    except OSError as exc:
+        logger.warning("sidecar: failed to read file", path=str(path), error=str(exc))
+        return SidecarReadResult(entries=[], source=SidecarReadStatus.ERROR)
     for line in lines:
         line = line.strip()
         if not line:

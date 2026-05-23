@@ -163,17 +163,15 @@ def annotate_pr_diff(
     }
 
 
+# Verdicts exempt from local_review_rounds re-review.
+# Verdicts in this set yield ``had_blocking=false`` unconditionally regardless
+# of ``local_review_rounds``. ``approved_with_comments`` is exempt because its
+# resolve pass is one-shot — re-reviewing after resolved warnings adds no value.
 LOCAL_ROUND_EXEMPT_VERDICTS: frozenset[str] = frozenset(
     {
         "approved_with_comments",
     }
 )
-"""Verdicts exempt from local_review_rounds re-review.
-
-Verdicts in this set yield ``had_blocking=false`` unconditionally regardless
-of ``local_review_rounds``. ``approved_with_comments`` is exempt because its
-resolve pass is one-shot — re-reviewing after resolved warnings adds no value.
-"""
 
 
 def check_review_loop(

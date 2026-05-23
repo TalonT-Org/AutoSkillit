@@ -115,6 +115,9 @@ def _emit_toml_table(d: dict[str, Any], path: list[str], lines: list[str]) -> No
     inline_tables: list[tuple[str, dict[str, Any]]] = []
     recurse_tables: list[tuple[str, dict[str, Any]]] = []
     for k, v in tables:
+        if not v:
+            inline_tables.append((k, v))
+            continue
         is_leaf = not any(isinstance(sv, dict) for sv in v.values())
         if is_leaf and has_scalars:
             inline_tables.append((k, v))

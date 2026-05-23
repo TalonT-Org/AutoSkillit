@@ -1343,7 +1343,7 @@ def test_tools_with_path_params_validate_existence():
         tree = ast.parse(source, filename=str(py_file))
 
         for node in ast.walk(tree):
-            if not isinstance(node, ast.AsyncFunctionDef):
+            if not isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)):
                 continue
             if not any(_is_mcp_tool_decorator(d) for d in node.decorator_list):
                 continue

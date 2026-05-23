@@ -6,7 +6,6 @@ import pytest
 
 from autoskillit.core import (
     AGENT_BACKEND_CLAUDE_CODE,
-    CLAUDE_CODE_CAPABILITIES,
     CmdSpec,
     CodingAgentBackend,
     EnvPolicy,
@@ -26,8 +25,8 @@ class TestClaudeCodeBackend:
     def test_name_property(self) -> None:
         assert ClaudeCodeBackend().name == AGENT_BACKEND_CLAUDE_CODE
 
-    def test_capabilities_property(self) -> None:
-        assert ClaudeCodeBackend().capabilities == CLAUDE_CODE_CAPABILITIES
+    def test_capabilities_mcp_config_capable_false(self) -> None:
+        assert ClaudeCodeBackend().capabilities.mcp_config_capable is False
 
     def test_binary_name(self) -> None:
         assert ClaudeCodeBackend().binary_name() == "claude"

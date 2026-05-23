@@ -22,7 +22,7 @@ def _collect_function_source(tree: ast.Module, func_name: str) -> str:
 
 
 def test_run_dispatch_uses_resolve_dispatch_timeout() -> None:
-    """_run_dispatch must call resolve_dispatch_timeout and use its result for all timeout surfaces.
+    """_run_dispatch must use resolve_dispatch_timeout for all timeout surfaces.
 
     Prevents future regressions where a new timeout surface is added with its own
     hardcoded fallback.

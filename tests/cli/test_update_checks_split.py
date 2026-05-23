@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 import pytest
@@ -53,3 +54,15 @@ def test_update_checks_lifecycle_has_correct_pytestmark():
     assert _has_pytestmark_cli(p), (
         "test_update_checks_lifecycle.py missing layer('cli') pytestmark"
     )
+
+
+def test_update_checks_lifecycle_contains_expected_functions():
+    p = _CLI_TESTS / "test_update_checks_lifecycle.py"
+    tree = ast.parse(p.read_text())
+    func_names = {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
+    assert "test_stale_fetch_cache_after_install_detected_by_epoch" in func_names
+    assert (
+        "test_full_lifecycle_install_clears_stale_cache_then_check_detects_new_version"
+        in func_names
+    )
+    assert "test_run_update_sequence_invalidates_fetch_cache" in func_names

@@ -24,6 +24,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_channel_b_timeout_guard.py` | AST guard: Channel B tests must use timeout >= TimeoutTier.CHANNEL_B |
 | `test_dataclass_slots.py` | Architectural invariant: every @dataclass(frozen=True) must also have slots=True |
 | `test_cli_decomposition.py` | AST-level tests enforcing CLI decomposition and hook security hardening |
+| `test_dispatch_timeout_guard.py` | AST guard: _run_dispatch must call resolve_dispatch_timeout with no hardcoded 'or 1800' or falsy timeout patterns |
 | `test_doctor_readonly.py` | AST guard: run_doctor() must not perform filesystem mutations (REQ-DOCTOR-READONLY) |
 | `test_execution_source_split.py` | Arch guards for execution layer source splits (P8-F1, F3, F4 audit fixes) |
 | `test_feature_markers.py` | Marker completeness: fleet test files carry feature('fleet'), infra tests do not |

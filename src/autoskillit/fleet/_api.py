@@ -48,6 +48,20 @@ logger = get_logger(__name__)
 ENVELOPE_STDERR_MAX = 2000
 
 
+def resolve_dispatch_timeout(
+    timeout_sec: int | None,
+    default_timeout_sec: int,
+) -> float:
+    """Resolve dispatch timeout to a concrete float.
+
+    Single source of truth for all three timeout surfaces (prompt, process kill,
+    session deadline). Uses ``is not None`` to correctly handle ``timeout_sec=0``.
+    """
+    if timeout_sec is not None:
+        return float(timeout_sec)
+    return float(default_timeout_sec)
+
+
 class CaptureCompletenessError(RuntimeError):
     """Raised when a capture spec extracts zero fields from the payload."""
 
@@ -757,13 +771,16 @@ async def _run_dispatch(
 
     dispatch_sidecar_path = str(compute_sidecar_path(dispatch_id, tool_ctx.project_dir))
 
+    resolved_timeout = resolve_dispatch_timeout(
+        timeout_sec, tool_ctx.config.fleet.default_timeout_sec
+    )
     prompt = prompt_builder(
         recipe=recipe,
         task=task,
         ingredients=effective_ingredients,
         dispatch_id=dispatch_id,
         campaign_id=campaign_id,
-        l3_timeout_sec=timeout_sec or 1800,
+        l3_timeout_sec=int(resolved_timeout),
         capture=capture,
     )
 
@@ -856,7 +873,7 @@ async def _run_dispatch(
                     project_dir=str(tool_ctx.project_dir),
                     marker_dir=marker_dir,
                     session_id=caller_session_id,
-                    timeout=float(timeout_sec) if timeout_sec else None,
+                    timeout=resolved_timeout,
                     idle_output_timeout=float(idle_output_timeout)
                     if idle_output_timeout is not None
                     else None,
@@ -864,14 +881,7 @@ async def _run_dispatch(
                         "AUTOSKILLIT_PROJECT_DIR": str(tool_ctx.project_dir),
                         "AUTOSKILLIT_CAMPAIGN_ID": campaign_id,
                         "AUTOSKILLIT_DISPATCH_ID": dispatch_id,
-                        "AUTOSKILLIT_SESSION_DEADLINE": str(
-                            started_at
-                            + (
-                                float(timeout_sec)
-                                if timeout_sec is not None
-                                else float(tool_ctx.config.fleet.default_timeout_sec)
-                            )
-                        ),
+                        "AUTOSKILLIT_SESSION_DEADLINE": str(started_at + resolved_timeout),
                     },
                     requires_packs=list(full_recipe.requires_packs) or ["kitchen-core"],
                     on_spawn=_on_spawn,

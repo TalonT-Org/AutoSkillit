@@ -163,6 +163,19 @@ def annotate_pr_diff(
     }
 
 
+LOCAL_ROUND_EXEMPT_VERDICTS: frozenset[str] = frozenset(
+    {
+        "approved_with_comments",
+    }
+)
+"""Verdicts exempt from local_review_rounds re-review.
+
+Verdicts in this set yield ``had_blocking=false`` unconditionally regardless
+of ``local_review_rounds``. ``approved_with_comments`` is exempt because its
+resolve pass is one-shot — re-reviewing after resolved warnings adds no value.
+"""
+
+
 def check_review_loop(
     pr_number: str,
     current_iteration: str = "",
@@ -178,10 +191,12 @@ def check_review_loop(
     ``had_blocking`` is true when:
     - ``previous_verdict == "changes_requested"`` (always blocking), OR
     - ``local_review_rounds > 0`` and ``current_iteration < local_review_rounds``
-      (any verdict, including ``approved``, must re-review until local rounds exhausted)
+      AND verdict is not in ``LOCAL_ROUND_EXEMPT_VERDICTS``
+      (``approved`` must re-review until local rounds exhausted;
+      ``approved_with_comments`` is exempt — its resolve pass is one-shot)
 
-    ``approved_with_comments`` intentionally yields ``had_blocking=false`` when
-    ``local_review_rounds`` is absent or exhausted — the resolve_review pass is
+    ``approved_with_comments`` intentionally yields ``had_blocking=false``
+    regardless of ``local_review_rounds`` — the resolve_review pass is
     one-shot and does not trigger a re-review cycle.
     """
     current_iteration = current_iteration or ""
@@ -200,8 +215,13 @@ def check_review_loop(
         )
         local_rounds = 0
 
-    is_blocking_verdict = previous_verdict.strip() == "changes_requested"
-    local_rounds_not_exhausted = local_rounds > 0 and iteration < local_rounds
+    verdict = previous_verdict.strip()
+    is_blocking_verdict = verdict == "changes_requested"
+    local_rounds_not_exhausted = (
+        local_rounds > 0
+        and iteration < local_rounds
+        and verdict not in LOCAL_ROUND_EXEMPT_VERDICTS
+    )
     had_blocking = "true" if (is_blocking_verdict or local_rounds_not_exhausted) else "false"
 
     return {

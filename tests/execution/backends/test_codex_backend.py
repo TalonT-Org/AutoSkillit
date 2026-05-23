@@ -440,9 +440,10 @@ class TestCodexBuildSkillSessionCmd:
         spec = CodexBackend().build_skill_session_cmd(
             **{**self.BASE, "add_dirs": dirs},
         )
-        cmd_str = " ".join(spec.cmd)
-        assert "--add-dir /extra" in cmd_str
-        assert "--add-dir /more" in cmd_str
+        add_dir_indices = [i for i, v in enumerate(spec.cmd) if v == "--add-dir"]
+        assert len(add_dir_indices) == 2
+        assert spec.cmd[add_dir_indices[0] + 1] == "/extra"
+        assert spec.cmd[add_dir_indices[1] + 1] == "/more"
 
     def test_model_forwarded(self) -> None:
         spec = CodexBackend().build_skill_session_cmd(
@@ -458,7 +459,7 @@ class TestCodexBuildSkillSessionCmd:
         spec = CodexBackend().build_skill_session_cmd(
             **{**self.BASE, "resume_session_id": "sess-abc123"},
         )
-        assert "resume" in spec.cmd
+        assert CodexFlags.RESUME_SUBCOMMAND in spec.cmd
         assert "sess-abc123" in spec.cmd
         assert "--sandbox" in spec.cmd
         assert "-a" in spec.cmd

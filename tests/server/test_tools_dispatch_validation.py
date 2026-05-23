@@ -58,9 +58,7 @@ class TestDispatchFoodTruckGates:
         assert result["subtype"] == "gate_error"
 
     @pytest.mark.anyio
-    async def test_dispatch_food_truck_parallel_refused_when_locked(
-        self, tool_ctx, monkeypatch, tmp_path
-    ):
+    async def test_dispatch_food_truck_parallel_refused_when_locked(self, tool_ctx, monkeypatch):
         """fleet_lock.at_capacity() == True → fleet_parallel_refused error."""
         from autoskillit.fleet._api import execute_dispatch
 

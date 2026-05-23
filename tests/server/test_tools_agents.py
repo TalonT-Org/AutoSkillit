@@ -186,6 +186,32 @@ def test_make_plan_subagent_type_refs_resolve():
         )
 
 
+# T11-rectify: rectify SKILL.md subagent_type references resolve to agent files
+def test_rectify_subagent_type_refs_resolve():
+    """Grep rectify SKILL.md for autoskillit:plan-* subagent_type refs.
+
+    Each must correspond to an agent definition file in agents/.
+    """
+    import re
+
+    from autoskillit.core import pkg_root
+
+    content = (pkg_root() / "skills_extended" / "rectify" / "SKILL.md").read_text()
+    refs = re.findall(r"autoskillit:(plan-[a-z-]+)", content)
+    unique_refs = set(refs)
+    assert len(unique_refs) >= 3, (
+        f"Expected >=3 unique autoskillit:plan-* refs in rectify SKILL.md, "
+        f"found {len(unique_refs)}"
+    )
+
+    agents_dir = pkg_root() / "agents"
+    for agent_name in unique_refs:
+        agent_file = agents_dir / f"{agent_name}.md"
+        assert agent_file.exists(), (
+            f"rectify SKILL.md references autoskillit:{agent_name} but {agent_file} does not exist"
+        )
+
+
 # T11b: make-plan SKILL.md no longer has activate_agents frontmatter
 def test_make_plan_no_activate_agents():
     """SKILL.md frontmatter must not contain activate_agents."""

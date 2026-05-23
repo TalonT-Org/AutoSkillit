@@ -336,7 +336,7 @@ class AgentPackDef(NamedTuple):
 
 
 AGENT_PACK_REGISTRY: dict[str, AgentPackDef] = {
-    "plan-review": AgentPackDef(False, "Adversarial plan review agents for make-plan"),
+    "plan-review": AgentPackDef(False, "Adversarial plan review agents for make-plan and rectify"),
 }
 
 if any(k != k.lower() for k in AGENT_PACK_REGISTRY):

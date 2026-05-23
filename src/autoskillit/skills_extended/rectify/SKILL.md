@@ -162,6 +162,40 @@ If the Skill tool cannot be used (disable-model-invocation) or refuses this invo
 
 Include the diagram in the plan document under a "## Proposed Architecture" section.
 
+### Step 5: Foundation Audit
+
+Spawn 1 Foundation Auditor via `Agent(subagent_type="autoskillit:plan-foundation-auditor")`. Pass the full draft immunity plan text and the codebase root. Prepend the contrastive frame to the prompt:
+
+> "A junior engineer reviewed this immunity plan and found no structural flaws. What did they miss?"
+
+The Foundation Auditor performs step-by-step control-flow analysis: enumerates functions, draws control flow with scope levels, builds reachability tables, audits guard coverage, and applies exploit-first verification. It must NOT suggest scope expansion — only identify gaps in what the plan already claims to do.
+
+After reading the agent's findings, revise the draft plan by incorporating all valid findings (real gaps, not hypotheticals) before proceeding to Step 6.
+
+### Step 6: Interface Mapping
+
+Spawn 1 Interface Mapper via `Agent(subagent_type="autoskillit:plan-interface-mapper")`. Pass the **revised** draft plan text (from Step 5) and the codebase root. Prepend the contrastive frame to the prompt:
+
+> "A junior engineer reviewed this plan's variable usage and found it correct. What did they miss?"
+
+The Interface Mapper traces variable SET/READ points with full hop-by-hop provenance, builds a Similar-Variable Confusion Matrix, and audits caller/callee contracts. It must NOT suggest scope expansion — only identify gaps in what the plan already claims to do.
+
+**RULES FOR APPLYING INTERFACE MAPPING FINDINGS:** When the interface mapper identifies the correct variable for a step, apply the correction to ALL fields that consume that variable — cwd, skill_command arguments, branch references, SHA captures, output paths. Do not split the correct variable across some fields while leaving other fields on the wrong variable.
+
+After reading the agent's findings, revise the draft plan by incorporating all valid findings before proceeding to Step 7.
+
+### Step 7: Registry Trace
+
+Spawn 1 Registry Tracer via `Agent(subagent_type="autoskillit:plan-registry-tracer")`. Pass the **revised** draft plan text (from Step 6) and the codebase root. Prepend the contrastive frame to the prompt:
+
+> "A junior engineer reviewed this plan's registry coverage and found it complete. What did they miss?"
+
+The Registry Tracer uses three-layer tracing (LSP primary, tree-sitter structural, grep fallback) to find every file referencing symbols the plan touches. It checks participation in registry-sync patterns (RETIRED NAME SETS, RE-EXPORT CHAINS, TOOL REGISTRIES, RULE REGISTRATION, DUAL-COPY CONSTANTS, IMPORT LAYER CONSTRAINTS, TYPED ALIASES, DERIVED ARTIFACTS), then performs a two-layer completeness check (source-code layer vs. test/fixture layer). It must NOT suggest scope expansion — only identify gaps in what the plan already claims to do.
+
+**RULES FOR APPLYING REGISTRY TRACE FINDINGS:** Verify BOTH fixture/test completeness AND registry completeness before finalizing. A plan that addresses only one interpretation of a rename (manifest-focused OR workspace-focused) and misses the cross-cutting update is incomplete. Apply the two-family check: if references appear in only one layer (source-code or test/fixture), perform targeted follow-up searches in the other layer before concluding.
+
+After reading the agent's findings, apply all valid findings. The plan is now fully reviewed and ready for file write.
+
 ---
 
 ## Skill Loading Checklist
@@ -174,6 +208,7 @@ Before writing the final plan, verify:
 - [ ] Diagram uses ONLY the classDef styles from the mermaid skill (no invented colors)
 - [ ] Diagram includes a color legend table
 - [ ] Every new component, class, or function is wired into the call chain — nothing is created but left unconnected
+- [ ] Adversarial review pass completed (Steps 5-7) — all 3 agents spawned and findings applied
 
 ## Output
 

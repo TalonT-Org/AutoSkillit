@@ -60,9 +60,10 @@ class TestClaudeStreamParser:
         assert result.backend_data.raw["error"] == "unknown"
         assert result.backend_data.raw["attempt"] == 5
 
-    def test_parse_line_system_non_retry_still_session_meta(self) -> None:
+    def test_parse_line_system_unknown_subtype_still_session_meta(self) -> None:
+        # Regression guard: non-api_retry subtypes must not be misrouted to API_RETRY.
         parser = ClaudeStreamParser()
-        line = '{"type": "system", "session_id": "s1"}'
+        line = json.dumps({"type": "system", "subtype": "other_subtype", "session_id": "s1"})
         result = parser.parse_line(line)
         assert result is not None
         assert result.kind == BackendEventKind.SESSION_META

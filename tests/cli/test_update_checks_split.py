@@ -1,5 +1,8 @@
+"""Structural guards: test_doctor.py split into three files (P1-F02)."""
+
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 import pytest
@@ -34,3 +37,29 @@ def test_order_module_file_exists():
 
 def test_order_importable_from_submodule():
     from autoskillit.cli.session._order import _get_subsets_needed, order  # noqa: F401
+
+
+_CLI_TESTS = Path(__file__).parent
+
+
+def _has_pytestmark_cli(path: Path) -> bool:
+    tree = ast.parse(path.read_text())
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "pytestmark":
+                    src = ast.unparse(node.value)
+                    return 'layer("cli")' in src or "layer('cli')" in src
+    return False
+
+
+def test_update_checks_lifecycle_file_exists():
+    """test_update_checks_lifecycle.py must exist after the split."""
+    assert (_CLI_TESTS / "test_update_checks_lifecycle.py").exists()
+
+
+def test_update_checks_lifecycle_has_correct_pytestmark():
+    p = _CLI_TESTS / "test_update_checks_lifecycle.py"
+    assert _has_pytestmark_cli(p), (
+        "test_update_checks_lifecycle.py missing layer('cli') pytestmark"
+    )

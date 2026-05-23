@@ -27,6 +27,8 @@ CLI command, subcommand, and interactive workflow tests.
 | `test_cook_order_prompt.py` | Tests: cook CLI order command — system prompt content, MCP prefix selection, ownership |
 | `test_cook_workspace.py` | Tests: cook CLI workspace init and clean commands |
 | `test_doctor.py` | Tests for CLI doctor command and related utilities |
+| `test_doctor_backend_guards.py` | Tests for doctor backend guard checks (stale MCP, MCP registered, process state) and run_doctor backend wiring |
+| `test_doctor_fleet_checks.py` | Tests for fleet doctor checks — Group M ambient env/infra/campaign, Group N feature gates and registry |
 | `test_doctor_migration.py` | Tests for doctor quota cache schema, install classification, version consistency, and drift |
 | `test_doctor_scripts.py` | Tests for doctor script/recipe version health checks |
 | `test_doctor_fleet.py` | Tests for fleet state schema version doctor check |
@@ -68,7 +70,8 @@ CLI command, subcommand, and interactive workflow tests.
 | `test_startup_budget.py` | Integration test: serve() must call anyio.run() within the startup timing budget |
 | `test_subprocess_env_contracts.py` | Structural contract: every subprocess.run(["autoskillit",...]) in CLI must inject AUTOSKILLIT_SKIP_STALE_CHECK |
 | `test_terminal.py` | Tests for cli/_terminal.py terminal_guard() context manager |
-| `test_update_checks_fetch.py` | Tests for cli/_update_checks.py — UC-9 fetch-cache regression, UC-11/12 lifecycle/transitions |
+| `test_update_checks_fetch.py` | Tests for cli/_update_checks.py — UC-9 fetch-cache regression coverage |
+| `test_update_checks_lifecycle.py` | Tests for cli/_update_checks.py — UC-11 fetch cache epoch/invalidation, UC-12 state transitions, T1/T2/T6 update sequence |
 | `test_update_checks_guards.py` | Tests for cli/_update_checks.py — UC-1 early-return guards, UC-2 signal gatherers |
 | `test_update_checks_prompt.py` | Tests for cli/_update_checks.py — UC-3 through UC-10: prompt consolidation, yes/no paths, dismissal |
 | `test_update_checks_split.py` | Structural guard for update_checks split |

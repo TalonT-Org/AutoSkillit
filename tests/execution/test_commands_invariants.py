@@ -123,18 +123,9 @@ class TestCompletionReminderPositionInvariant:
     """Parametrized invariant: completion marker must appear in final prompt blocks."""
 
     @pytest.mark.parametrize(
-        "builder",
+        "build_spec",
         [
-            "skill_session_non_resume",
-            "skill_session_resume",
-            "food_truck_non_resume",
-        ],
-    )
-    def test_marker_in_final_two_blocks(self, builder: str) -> None:
-        """Completion marker must appear in the last two \\n\\n-delimited blocks."""
-        marker = "%%ORDER_UP::test123%%"
-        if builder == "skill_session_non_resume":
-            spec = build_skill_session_cmd(
+            lambda marker: build_skill_session_cmd(
                 "/autoskillit:make-plan arg",
                 cwd="/repo",
                 completion_marker=marker,
@@ -142,9 +133,8 @@ class TestCompletionReminderPositionInvariant:
                 plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
                 output_format=OutputFormat.JSON,
                 profile_name="minimax",
-            )
-        elif builder == "skill_session_resume":
-            spec = build_skill_session_cmd(
+            ),
+            lambda marker: build_skill_session_cmd(
                 "/autoskillit:make-plan arg",
                 cwd="/repo",
                 completion_marker=marker,
@@ -153,19 +143,25 @@ class TestCompletionReminderPositionInvariant:
                 output_format=OutputFormat.JSON,
                 profile_name="minimax",
                 resume_session_id="sess-abc",
-            )
-        else:  # food_truck_non_resume
-            spec = build_food_truck_cmd(
+            ),
+            lambda marker: build_food_truck_cmd(
                 orchestrator_prompt="Run the campaign",
                 plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
                 cwd="/repo",
                 completion_marker=marker,
-            )
+            ),
+        ],
+        ids=["skill_session_non_resume", "skill_session_resume", "food_truck_non_resume"],
+    )
+    def test_marker_in_final_two_blocks(self, build_spec) -> None:
+        """Completion marker must appear in the last two \\n\\n-delimited blocks."""
+        marker = "%%ORDER_UP::test123%%"
+        spec = build_spec(marker)
         prompt_idx = spec.cmd.index(ClaudeFlags.PRINT) + 1
         prompt = spec.cmd[prompt_idx]
         blocks = prompt.split("\n\n")
         last_two = "\n\n".join(blocks[-2:])
         assert marker in last_two, (
-            f"[{builder}] Completion marker must appear in the last two prompt blocks. "
+            f"Completion marker must appear in the last two prompt blocks. "
             f"Last block: {blocks[-1][:100]!r}"
         )

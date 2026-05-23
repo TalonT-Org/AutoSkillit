@@ -33,15 +33,6 @@ async def test_resolve_repo_from_remote_returns_empty_for_file_url(tmp_path: Pat
     assert result == ""
 
 
-def test_resolve_repo_from_remote_exists() -> None:
-    """Function renamed from infer_repo_from_remote must exist at new name."""
-    import inspect
-
-    from autoskillit.server._misc import resolve_repo_from_remote
-
-    assert inspect.iscoroutinefunction(resolve_repo_from_remote)
-
-
 def test_notify_module_exports():
     from autoskillit.server._notify import _get_ctx_or_none, _notify, track_response_size
 

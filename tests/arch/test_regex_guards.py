@@ -109,3 +109,32 @@ def test_cmd_keyword_regexes_use_path_safe_guards():
                 )
 
     assert violations == [], "Regex patterns missing path-safe guards:\n" + "\n".join(violations)
+
+
+HOOK_GUARD_RULE_FILES = [
+    SRC_ROOT / "hooks" / "guards" / "write_guard.py",
+]
+
+
+def test_redirect_patterns_exclude_fd_redirects():
+    """Redirect-matching regexes in hook guards must not match fd-number redirects
+    without a downstream pseudo-device filter."""
+    for filepath in HOOK_GUARD_RULE_FILES:
+        source = filepath.read_text()
+        for var_name, pattern, lineno in _extract_re_compile_patterns(filepath):
+            if ">+" in pattern:
+                assert "_PSEUDO_DEVICE_PATHS" in source, (
+                    f"{filepath.relative_to(SRC_ROOT.parent.parent)}:{lineno} "
+                    f"{var_name} matches >-redirects but the file has no "
+                    "_PSEUDO_DEVICE_PATHS filter for defense-in-depth"
+                )
+                break
+
+
+def test_write_guard_has_safe_path_filtering():
+    """write_guard must filter pseudo-device paths from extracted targets."""
+    source = (SRC_ROOT / "hooks" / "guards" / "write_guard.py").read_text()
+    assert "/dev/null" in source, "write_guard.py must contain a safe-path set including /dev/null"
+    assert "_PSEUDO_DEVICE_PATHS" in source, (
+        "write_guard.py must define _PSEUDO_DEVICE_PATHS constant"
+    )

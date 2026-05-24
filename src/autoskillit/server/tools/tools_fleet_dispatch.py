@@ -22,6 +22,8 @@ from autoskillit.server._notify import track_response_size
 
 logger = get_logger(__name__)
 
+_MAX_CALLER_INSTRUCTIONS_LEN = 2000
+
 
 def _write_dispatch_to_campaign_state(
     campaign_state_path_str: str,
@@ -172,7 +174,6 @@ async def dispatch_food_truck(
         return fleet_gate
 
     try:
-        _MAX_CALLER_INSTRUCTIONS_LEN = 2000
         if caller_instructions and len(caller_instructions) > _MAX_CALLER_INSTRUCTIONS_LEN:
             caller_instructions = caller_instructions[:_MAX_CALLER_INSTRUCTIONS_LEN]
 

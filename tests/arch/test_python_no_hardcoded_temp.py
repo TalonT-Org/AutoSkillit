@@ -23,6 +23,9 @@ _TEMP_PATH_WHITELIST: dict[str, str] = {
     "recipe/_api.py": "fallback default for temp_dir_relpath kwargs",
     # Justification: _build_active_recipe default temp_dir_relpath parameter mirrors
     # the canonical default used by _api.py (split into _recipe_composition.py).
+    "recipe/_api_listing.py": "validate_from_path default temp_dir_relpath",
+    # Justification: _build_active_recipe default temp_dir_relpath parameter mirrors
+    # the canonical default used by _api.py (mirrors _api_listing.py pattern).
     "recipe/_recipe_composition.py": "fallback default for temp_dir_relpath kwargs",
     # Justification: validate_from_path signature now includes temp_dir_relpath with
     # the canonical default value, mirroring the _api.py pattern.
@@ -57,7 +60,7 @@ _TEMP_PATH_WHITELIST: dict[str, str] = {
     # Justification: docstring for _write_hook_config() references the canonical
     # hook config path so callers know where the file is written.
     "server/tools/tools_kitchen.py": "docstring example",
-    "recipe/_cmd_rpc.py": "ensure_results default temp_subdir matches canonical default",
+    "recipe/_cmd_rpc_issues.py": "ensure_results default temp_subdir matches canonical default",
     "hooks/skill_load_post_hook.py": "stdlib-only hook; cannot use resolve_temp_dir()",
     "hooks/guards/skill_load_guard.py": "stdlib-only guard; cannot use resolve_temp_dir()",
     "core/runtime/session_provenance.py": "IL-0 stdlib-only module; cannot use resolve_temp_dir()",

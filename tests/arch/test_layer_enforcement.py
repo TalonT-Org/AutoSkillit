@@ -1111,7 +1111,12 @@ def test_default_classes_only_instantiated_inside_factory_or_allowlist() -> None
             "DefaultMcpResponseLog",
         },
         Path("recipe/_api.py"): {"DefaultSkillResolver"},  # deferred default factory fallback
-        Path("recipe/contracts.py"): {"DefaultSkillResolver"},  # deferred default factory fallback
+        Path("recipe/_api_listing.py"): {
+            "DefaultSkillResolver"
+        },  # deferred default factory fallback
+        Path("recipe/_contracts_staleness.py"): {
+            "DefaultSkillResolver"
+        },  # deferred default factory fallback
         Path("recipe/rules/rules_skill_content.py"): {
             "DefaultSkillResolver"
         },  # deferred default factory fallback

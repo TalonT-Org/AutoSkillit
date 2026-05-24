@@ -1,31 +1,45 @@
-"""Recipe orchestration API: load/validate pipelines, format responses."""
+"""Recipe orchestration API: load/validate pipelines, format responses.
+
+Re-export facade. Implementation: _api_cache.py, _api_listing.py.
+"""
 
 from __future__ import annotations
 
 import hashlib
 import json
-import threading
 import time
 from collections.abc import Sequence
-from dataclasses import dataclass as _dc
 from pathlib import Path
 from typing import Any
 
 from autoskillit.core import (
-    LoadResult,
     ProcessStaleError,
     RecipeNotFoundError,
     RecipeSource,
-    SessionType,
     SkillLister,
     YAMLError,
     get_logger,
-    load_yaml,
     pkg_root,
     resolve_temp_dir,
-    session_type,
 )
+from autoskillit.recipe import _api_cache
 from autoskillit.recipe._analysis import make_validation_context
+
+# Re-export for backward compatibility
+from autoskillit.recipe._api_cache import (  # noqa: F401
+    _LOAD_CACHE,
+    _STALENESS_CACHES_CLEARED,
+    _check_process_staleness,
+    _clear_stale_caches,
+    _compute_registry_hash,
+    _LoadCacheEntry,
+    _path_mtime_ns,
+)
+from autoskillit.recipe._api_listing import (  # noqa: F401
+    format_recipe_list_response,
+    list_all,
+    validate_from_path,
+)
 from autoskillit.recipe._recipe_composition import (
     _build_active_recipe,
 )
@@ -33,7 +47,7 @@ from autoskillit.recipe._recipe_ingredients import (
     ListRecipesResult,  # noqa: F401
     LoadRecipeResult,
     OpenKitchenResult,  # noqa: F401
-    RecipeListItem,
+    RecipeListItem,  # noqa: F401
     build_ingredient_rows,  # noqa: F401
     format_ingredients_table,
 )
@@ -66,7 +80,6 @@ from autoskillit.recipe.io import (
 )
 from autoskillit.recipe.schema import Recipe
 from autoskillit.recipe.validator import (
-    build_quality_dict,
     compute_recipe_validity,
     filter_version_rule,
     findings_to_dicts,
@@ -75,10 +88,6 @@ from autoskillit.recipe.validator import (
 )
 
 logger = get_logger(__name__)
-
-# ---------------------------------------------------------------------------
-# Stage timing helper
-# ---------------------------------------------------------------------------
 
 
 def _t(label: str, t0: float, name: str) -> float:
@@ -90,259 +99,6 @@ def _t(label: str, t0: float, name: str) -> float:
     elapsed_ms = (time.perf_counter() - t0) * 1000
     logger.debug("load_recipe_stage", recipe=name, stage=label, elapsed_ms=round(elapsed_ms, 1))
     return time.perf_counter()
-
-
-# ---------------------------------------------------------------------------
-# Top-level result cache
-# ---------------------------------------------------------------------------
-
-
-def _path_mtime_ns(path: Path) -> int:
-    try:
-        return path.stat().st_mtime_ns
-    except OSError:
-        return 0
-
-
-def _file_size(path: Path) -> int:
-    try:
-        return path.stat().st_size
-    except OSError:
-        return 0
-
-
-def _get_pkg_version() -> str:
-    from autoskillit import __version__
-
-    return __version__
-
-
-def _compute_registry_hash(experiment_types_dir: Path) -> str:
-    """Compute md5 hash of sorted (path, mtime_ns) pairs for experiment-type YAMLs."""
-    if not experiment_types_dir.exists():
-        return ""
-    entries: list[tuple[str, int]] = []
-    for p in sorted(experiment_types_dir.glob("*.yaml")):
-        try:
-            entries.append((p.name, p.stat().st_mtime_ns))
-        except OSError:
-            continue
-    return hashlib.md5(str(entries).encode(), usedforsecurity=False).hexdigest()
-
-
-@_dc
-class _LoadCacheEntry:
-    recipe_path: Path
-    recipe_mtime: int
-    recipe_size: int
-    project_dir_mtime: int
-    builtin_dir_mtime: int
-    pkg_version: str
-    rule_registry_hash: str
-    result: LoadRecipeResult
-
-
-_LOAD_CACHE: dict[tuple, _LoadCacheEntry] = {}
-_LOAD_CACHE_LOCK = threading.Lock()
-
-_PROCESS_START_PKG_MTIME: int | None = None
-_STALENESS_LAST_CHECK: float = 0.0
-_STALENESS_IS_STALE: bool = False
-_STALENESS_CACHES_CLEARED: bool = False
-_STALENESS_TTL: float = 30.0
-_STALENESS_SCAN_DIRS: tuple[str, ...] = ("recipe/rules",)
-_DEEP_MTIME_BASELINE: int | None = None
-
-
-def _compute_deep_mtime() -> int:
-    """Return max mtime_ns across all .py files in staleness-scanned subdirectories."""
-    root = pkg_root()
-    max_mt = 0
-    for subdir in _STALENESS_SCAN_DIRS:
-        d = root / subdir
-        if d.is_dir():
-            for f in d.iterdir():
-                if f.suffix == ".py" and f.is_file():
-                    try:
-                        mt = f.stat().st_mtime_ns
-                        if mt > max_mt:
-                            max_mt = mt
-                    except OSError:
-                        continue
-    return max_mt
-
-
-def _get_process_start_mtime() -> int:
-    global _PROCESS_START_PKG_MTIME, _DEEP_MTIME_BASELINE  # noqa: PLW0603
-    if _PROCESS_START_PKG_MTIME is None:
-        _PROCESS_START_PKG_MTIME = _path_mtime_ns(pkg_root())
-        _DEEP_MTIME_BASELINE = _compute_deep_mtime()
-    return _PROCESS_START_PKG_MTIME
-
-
-def _check_process_staleness() -> bool:
-    """Return True if the package directory or rule files were modified after process start.
-
-    Fleet sessions always return False — dispatched subprocesses have fresh
-    baselines and revalidate independently.
-    """
-    if session_type() is SessionType.FLEET:
-        _get_process_start_mtime()
-        return False
-
-    global _STALENESS_LAST_CHECK, _STALENESS_IS_STALE  # noqa: PLW0603
-    now = time.monotonic()
-    if now - _STALENESS_LAST_CHECK < _STALENESS_TTL:
-        return _STALENESS_IS_STALE
-    _STALENESS_LAST_CHECK = now
-    try:
-        pkg_stale = _path_mtime_ns(pkg_root()) != _get_process_start_mtime()
-        if not pkg_stale:
-            current_deep = _compute_deep_mtime()
-            pkg_stale = current_deep != _DEEP_MTIME_BASELINE
-        _STALENESS_IS_STALE = pkg_stale
-    except (OSError, RuntimeError):
-        logger.warning("pkg_root() unavailable during staleness check; assuming non-stale")
-        _STALENESS_IS_STALE = False
-    return _STALENESS_IS_STALE
-
-
-def _clear_stale_caches() -> None:
-    """Clear all lru_cache helpers and the load cache when staleness is detected."""
-    global _STALENESS_CACHES_CLEARED  # noqa: PLW0603
-    from autoskillit.recipe.contracts import load_bundled_manifest  # noqa: PLC0415
-    from autoskillit.recipe.methodology_venue_appendix import (  # noqa: PLC0415
-        load_ml_sub_area_folding,
-    )
-    from autoskillit.recipe.rules.rules_blocks import _block_budgets  # noqa: PLC0415
-
-    _block_budgets.cache_clear()
-    load_bundled_manifest.cache_clear()
-    load_ml_sub_area_folding.cache_clear()
-    with _LOAD_CACHE_LOCK:
-        _LOAD_CACHE.clear()
-    _STALENESS_CACHES_CLEARED = True
-
-
-def format_recipe_list_response(result: LoadResult[RecipeInfo]) -> dict[str, object]:
-    """Build the MCP response dict for the list_recipes tool."""
-    items: list[RecipeListItem] = [
-        {
-            "name": r.name,
-            "description": r.description,
-            "summary": r.summary,
-            "source": r.source.value,
-        }
-        for r in result.items
-    ]
-    response: dict[str, object] = {
-        "recipes": items,
-        "count": len(items),
-    }
-    if result.errors:
-        response["errors"] = [{"file": e.path.name, "error": e.error} for e in result.errors]
-    return response
-
-
-def list_all(
-    project_dir: Path | None = None,
-    *,
-    features: dict[str, bool] | None = None,
-) -> dict[str, Any]:
-    """List all recipes from project and built-in sources.
-
-    Returns:
-        {"recipes": list[{"name", "description", "summary"}]}
-        Includes "errors" key when recipes fail to parse.
-    """
-    from autoskillit.core import is_feature_enabled  # noqa: PLC0415
-    from autoskillit.recipe.schema import NON_INTERACTIVE_KINDS  # noqa: PLC0415
-
-    _pdir = project_dir if project_dir is not None else Path.cwd()
-    _features = features or {}
-    fleet_enabled = is_feature_enabled("fleet", _features)
-    exclude_kinds = frozenset() if fleet_enabled else NON_INTERACTIVE_KINDS
-    result = list_recipes(_pdir, exclude_kinds=exclude_kinds)
-    return format_recipe_list_response(result)
-
-
-def validate_from_path(
-    path: Path,
-    temp_dir_relpath: str = ".autoskillit/temp",
-    *,
-    lister: SkillLister | None = None,
-) -> dict[str, Any]:
-    """Validate a recipe YAML file at the given path.
-
-    Args:
-        path: Path to the recipe YAML file.
-        temp_dir_relpath: Relative path to the temp directory used for
-            ``{{AUTOSKILLIT_TEMP}}`` substitution. Defaults to
-            ``.autoskillit/temp``.
-
-    Returns:
-        {"valid": bool, "errors": list, "quality": dict, "semantic": list, "contracts": list}
-        On file/parse error: {"error": str}
-    """
-    if not path.is_file():
-        return {
-            "valid": False,
-            "findings": [{"error": f"File not found: {path}"}],
-        }
-
-    try:
-        raw_text = path.read_text(encoding="utf-8")
-        substituted = substitute_temp_placeholder(raw_text, temp_dir_relpath)
-        data = load_yaml(substituted)
-    except YAMLError as exc:
-        return {
-            "valid": False,
-            "findings": [{"error": f"YAML parse error: {exc}"}],
-        }
-
-    if not isinstance(data, dict):
-        return {
-            "valid": False,
-            "findings": [{"error": "File must contain a YAML mapping"}],
-        }
-
-    if lister is None:
-        from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
-
-        lister = DefaultSkillResolver()
-
-    from autoskillit.core import SkillResolver as _SkillResolver  # noqa: PLC0415
-
-    _skill_resolver = lister if isinstance(lister, _SkillResolver) else None
-
-    recipe = _parse_recipe(data)
-    errors = validate_recipe_structure(recipe)
-    known_skills = frozenset(s.name for s in lister.list_all())
-    ctx = make_validation_context(
-        recipe, available_skills=known_skills, skill_resolver=_skill_resolver
-    )
-    report = ctx.dataflow
-    semantic_findings = run_semantic_rules(ctx)
-
-    quality = build_quality_dict(report)
-    semantic = findings_to_dicts(semantic_findings)
-
-    contract_findings: list[dict[str, Any]] = []
-    recipes_dir = path.parent
-    recipe_name = path.stem
-    contract = load_recipe_card(recipe_name, recipes_dir)
-    if contract:
-        contract_findings = validate_recipe_cards(recipe, contract)
-
-    valid = compute_recipe_validity(errors, semantic_findings, contract_findings)
-
-    return {
-        "valid": valid,
-        "errors": errors,
-        "quality": quality,
-        "findings": semantic,
-        "contracts": contract_findings,
-    }
 
 
 def _infer_stop_failure(name: str, message: str | None) -> bool:
@@ -443,16 +199,16 @@ def load_and_validate(
         ProcessStaleError: Package directory was modified since server startup.
         RecipeNotFoundError: Named recipe could not be found.
     """
-    if _check_process_staleness():
-        if not _STALENESS_CACHES_CLEARED:
-            _clear_stale_caches()
+    if _api_cache._check_process_staleness():
+        if not _api_cache._STALENESS_CACHES_CLEARED:
+            _api_cache._clear_stale_caches()
         raise ProcessStaleError(
             "Process is running stale code — package directory was modified on disk "
             "since server startup. Restart the MCP server via reload_session."
         )
 
     _pdir = project_dir if project_dir is not None else Path.cwd()
-    pkg_version = _get_pkg_version()
+    pkg_version = _api_cache._get_pkg_version()
     project_recipes_dir = _pdir / ".autoskillit" / "recipes"
     _builtin_dir = builtin_recipes_dir()
     from autoskillit.recipe.experiment_type_registry import (  # noqa: PLC0415
@@ -462,12 +218,12 @@ def load_and_validate(
         BUNDLED_METHODOLOGY_TRADITIONS_DIR,
     )
 
-    _exp_types_hash = _compute_registry_hash(BUNDLED_EXPERIMENT_TYPES_DIR)
+    _exp_types_hash = _api_cache._compute_registry_hash(BUNDLED_EXPERIMENT_TYPES_DIR)
     _user_exp_types_dir = _pdir / ".autoskillit" / "experiment-types"
-    _user_exp_hash = _compute_registry_hash(_user_exp_types_dir)
-    _method_traditions_hash = _compute_registry_hash(BUNDLED_METHODOLOGY_TRADITIONS_DIR)
+    _user_exp_hash = _api_cache._compute_registry_hash(_user_exp_types_dir)
+    _method_traditions_hash = _api_cache._compute_registry_hash(BUNDLED_METHODOLOGY_TRADITIONS_DIR)
     _user_method_traditions_dir = _pdir / ".autoskillit" / "methodology-traditions"
-    _user_method_traditions_hash = _compute_registry_hash(_user_method_traditions_dir)
+    _user_method_traditions_hash = _api_cache._compute_registry_hash(_user_method_traditions_dir)
     _temp_relpath = temp_dir_relpath or ".autoskillit/temp"
     cache_key = (
         name,
@@ -481,8 +237,8 @@ def load_and_validate(
         _user_method_traditions_hash,
     )
 
-    with _LOAD_CACHE_LOCK:
-        cached = _LOAD_CACHE.get(cache_key)
+    with _api_cache._LOAD_CACHE_LOCK:
+        cached = _api_cache._LOAD_CACHE.get(cache_key)
 
     from autoskillit.recipe import registry as _registry  # noqa: PLC0415
 
@@ -494,10 +250,10 @@ def load_and_validate(
         and cached.pkg_version == pkg_version
         and cached.rule_registry_hash == _rule_hash
     ):
-        pm = _path_mtime_ns(project_recipes_dir)
-        bm = _path_mtime_ns(_builtin_dir)
-        rm = _path_mtime_ns(cached.recipe_path)
-        rs = _file_size(cached.recipe_path)
+        pm = _api_cache._path_mtime_ns(project_recipes_dir)
+        bm = _api_cache._path_mtime_ns(_builtin_dir)
+        rm = _api_cache._path_mtime_ns(cached.recipe_path)
+        rs = _api_cache._file_size(cached.recipe_path)
         if (
             pm == cached.project_dir_mtime
             and bm == cached.builtin_dir_mtime
@@ -715,17 +471,17 @@ def load_and_validate(
 
     # Write to cache (only when recipe was found and fully processed)
     if match is not None:
-        entry = _LoadCacheEntry(
+        entry = _api_cache._LoadCacheEntry(
             recipe_path=match.path,
-            recipe_mtime=_path_mtime_ns(match.path),
-            recipe_size=_file_size(match.path),
-            project_dir_mtime=_path_mtime_ns(project_recipes_dir),
-            builtin_dir_mtime=_path_mtime_ns(_builtin_dir),
+            recipe_mtime=_api_cache._path_mtime_ns(match.path),
+            recipe_size=_api_cache._file_size(match.path),
+            project_dir_mtime=_api_cache._path_mtime_ns(project_recipes_dir),
+            builtin_dir_mtime=_api_cache._path_mtime_ns(_builtin_dir),
             pkg_version=pkg_version,
             rule_registry_hash=_rule_hash,
             result=result,
         )
-        with _LOAD_CACHE_LOCK:
-            _LOAD_CACHE[cache_key] = entry
+        with _api_cache._LOAD_CACHE_LOCK:
+            _api_cache._LOAD_CACHE[cache_key] = entry
 
     return result

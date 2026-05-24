@@ -153,7 +153,7 @@ def _build_prompt(capture_spec: dict[str, CaptureEntrySpec]) -> str:
 )
 def test_prompt_to_extraction_round_trip_contract(capture_spec):
     """3-leg contract: build prompt -> parse Section 8 -> extract from synthetic payload."""
-    from autoskillit.fleet._api import _extract_captures
+    from autoskillit.fleet._capture import _extract_captures
 
     # Leg 1: Build prompt
     prompt = _build_prompt(capture_spec)
@@ -207,7 +207,7 @@ def test_prompt_to_extraction_round_trip_contract(capture_spec):
 )
 def test_typed_capture_round_trip_contract(value_type, test_value, tmp_path):
     """Typed captures use the same bare field name in prompt and extractor."""
-    from autoskillit.fleet._api import _extract_captures
+    from autoskillit.fleet._capture import _extract_captures
 
     # Resolve the path test_value now (tmp_path is available at fixture time)
     resolved_value = str(tmp_path / "test_file") if test_value is None else test_value
@@ -239,7 +239,7 @@ def test_typed_capture_round_trip_contract(value_type, test_value, tmp_path):
 
 def test_non_result_template_fallback_asymmetry():
     """When from_ is not a result.* template, prompt uses key, extractor skips."""
-    from autoskillit.fleet._api import _extract_captures
+    from autoskillit.fleet._capture import _extract_captures
 
     # Build a capture spec with a non-result.* template
     # CaptureEntrySpec.__post_init__ only checks from_ is non-empty string,

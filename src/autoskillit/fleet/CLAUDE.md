@@ -7,7 +7,10 @@ IL-2 fleet campaign layer — parallel issue dispatch, semaphore, sidecar, liven
 | File | Purpose |
 |------|---------|
 | `__init__.py` | Re-exports `CampaignSummary`, `parse_campaign_summary`, and dispatch callables |
-| `_api.py` | Fleet campaign execution engine — dispatches L2 sessions, resolves campaign/result variable references; `evaluate_skip_when` for conditional dispatch skipping |
+| `_api.py` | Fleet dispatch execution engine — `execute_dispatch`, `_run_dispatch`, semaphore gating, subprocess lifecycle management |
+| `_expressions.py` | Campaign expression evaluation — `evaluate_skip_when`, `_interpolate_campaign_refs`, `${{ campaign/inputs }}` template resolution |
+| `_capture.py` | Capture spec extraction and validation — `_extract_captures`, `_normalize_capture_spec`, `CaptureCompletenessError` |
+| `_outcome.py` | Dispatch outcome classification — `classify_dispatch_outcome`, pure mapping from subprocess signals to `DispatchStatus` |
 | `_prompts.py` | Prompt builder for L2 fleet dispatch sessions — assembles admiral dispatch instruction block from SKILL.md sections |
 | `result_parser.py` | L2 result block parser with Channel B JSONL fallback |
 | `sidecar.py` | Per-issue JSONL sidecar — `IssueSidecarEntry`, append/read/`compute_remaining` helpers |

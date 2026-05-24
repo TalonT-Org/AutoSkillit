@@ -407,3 +407,24 @@ def test_headless_auto_gate_env_var_in_private_env_vars() -> None:
     from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS
 
     assert "AUTOSKILLIT_HEADLESS_AUTO_GATE" in AUTOSKILLIT_PRIVATE_ENV_VARS
+
+
+def test_scenario_step_name_in_private_env_vars() -> None:
+    """SCENARIO_STEP_NAME must be in AUTOSKILLIT_PRIVATE_ENV_VARS."""
+    from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS
+
+    assert "SCENARIO_STEP_NAME" in AUTOSKILLIT_PRIVATE_ENV_VARS
+
+
+def test_autoskillit_allowed_write_prefix_in_private_env_vars() -> None:
+    """AUTOSKILLIT_ALLOWED_WRITE_PREFIX must be in AUTOSKILLIT_PRIVATE_ENV_VARS."""
+    from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS
+
+    assert "AUTOSKILLIT_ALLOWED_WRITE_PREFIX" in AUTOSKILLIT_PRIVATE_ENV_VARS
+
+
+def test_max_mcp_output_tokens_in_private_env_vars() -> None:
+    """MAX_MCP_OUTPUT_TOKENS must be in AUTOSKILLIT_PRIVATE_ENV_VARS."""
+    from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS
+
+    assert "MAX_MCP_OUTPUT_TOKENS" in AUTOSKILLIT_PRIVATE_ENV_VARS

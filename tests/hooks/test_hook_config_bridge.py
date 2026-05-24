@@ -106,6 +106,7 @@ def test_deny_message_contains_sleep_from_payload_buffer_seconds(tmp_path, monke
     )
     monkeypatch.chdir(tmp_path)
     _clear_env(monkeypatch)
+    monkeypatch.delenv("AUTOSKILLIT_SESSION_DEADLINE", raising=False)
 
     out, _ = _run_hook(event={"tool_name": "run_skill"})
 

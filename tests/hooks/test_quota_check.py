@@ -91,7 +91,8 @@ def test_deny_when_utilization_above_threshold(tmp_path):
     assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
-def test_deny_message_contains_sleep_seconds(tmp_path):
+def test_deny_message_contains_sleep_seconds(tmp_path, monkeypatch):
+    monkeypatch.delenv("AUTOSKILLIT_SESSION_DEADLINE", raising=False)
     cache = tmp_path / "quota_cache.json"
     _write_cache(cache, utilization=95.0)
     out, _ = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
@@ -101,8 +102,9 @@ def test_deny_message_contains_sleep_seconds(tmp_path):
     assert "time.sleep" in reason
 
 
-def test_deny_message_contains_echo_repeat(tmp_path):
+def test_deny_message_contains_echo_repeat(tmp_path, monkeypatch):
     """Updated PreToolUse deny message includes echo/repeat instruction."""
+    monkeypatch.delenv("AUTOSKILLIT_SESSION_DEADLINE", raising=False)
     cache = tmp_path / "quota_cache.json"
     _write_cache(cache, utilization=90.0)
     out, _ = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
@@ -266,6 +268,7 @@ def test_quota_check_buffer_seconds_from_hook_config(tmp_path, monkeypatch):
     (``n = settings.buffer_seconds``), making the assertion deterministic.
     """
     monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("AUTOSKILLIT_SESSION_DEADLINE", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_QUOTA_GUARD__BUFFER_SECONDS", raising=False)
     cache = tmp_path / "quota_cache.json"
     _write_cache(cache, utilization=95.0, resets_at=None)
@@ -286,6 +289,7 @@ def test_quota_check_buffer_seconds_from_hook_config(tmp_path, monkeypatch):
 def test_quota_check_buffer_seconds_env_var_override(tmp_path, monkeypatch):
     """``AUTOSKILLIT_QUOTA_GUARD__BUFFER_SECONDS`` overrides the deny-message sleep duration."""
     monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("AUTOSKILLIT_SESSION_DEADLINE", raising=False)
     monkeypatch.setenv("AUTOSKILLIT_QUOTA_GUARD__BUFFER_SECONDS", "180")
     cache = tmp_path / "quota_cache.json"
     _write_cache(cache, utilization=95.0, resets_at=None)
@@ -349,6 +353,7 @@ def test_quota_event_approved_written_to_log(tmp_path, monkeypatch):
 
 # T2
 def test_quota_event_blocked_written_to_log(tmp_path, monkeypatch):
+    monkeypatch.delenv("AUTOSKILLIT_SESSION_DEADLINE", raising=False)
     cache = tmp_path / "quota_cache.json"
     _write_cache(cache, utilization=95.0)
     log_dir = tmp_path / "logs"
@@ -467,7 +472,8 @@ def test_hook_approves_seven_day_at_86_percent_should_block_false(tmp_path):
 
 
 # T-HOOK-PWT-2: seven_day above 98% must still deny.
-def test_hook_blocks_seven_day_above_long_threshold(tmp_path):
+def test_hook_blocks_seven_day_above_long_threshold(tmp_path, monkeypatch):
+    monkeypatch.delenv("AUTOSKILLIT_SESSION_DEADLINE", raising=False)
     cache = tmp_path / "quota_cache.json"
     _write_cache(
         cache,
@@ -485,7 +491,8 @@ def test_hook_blocks_seven_day_above_long_threshold(tmp_path):
 
 
 # T-HOOK-PWT-3: short window above 85% must deny with short threshold in message.
-def test_hook_blocks_short_window_above_threshold_message(tmp_path):
+def test_hook_blocks_short_window_above_threshold_message(tmp_path, monkeypatch):
+    monkeypatch.delenv("AUTOSKILLIT_SESSION_DEADLINE", raising=False)
     cache = tmp_path / "quota_cache.json"
     _write_cache(
         cache,

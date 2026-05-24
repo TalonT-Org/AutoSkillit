@@ -316,7 +316,8 @@ def test_skill_tools_defined_in_types():
     """SKILL_TOOLS must be a top-level assignment in _type_constants_registries.py."""
     tree = _get_module_ast("core/types/_type_constants_registries.py")
     assert "SKILL_TOOLS" in _top_level_assign_targets(tree), (
-        "SKILL_TOOLS not found in core/types/_type_constants_registries.py; it must be defined there"
+        "SKILL_TOOLS not found in core/types/_type_constants_registries.py;"
+        " it must be defined there"
     )
 
 

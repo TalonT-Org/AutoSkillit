@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from autoskillit.execution.backends.codex import _scan_codex_ndjson
+from autoskillit.execution.backends._codex_parse import _scan_codex_ndjson
 from autoskillit.execution.process import _marker_is_standalone
 from tests.fixtures.codex import (
     CODEX_SCHEMA_VERSION,

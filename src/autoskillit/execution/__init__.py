@@ -11,6 +11,7 @@ from autoskillit.execution._recording_skills import (
     scan_skill_snapshots,
     snapshot_skill_dir,
 )
+from autoskillit.execution._session_log_recovery import recover_crashed_sessions
 from autoskillit.execution.anomaly_detection import (
     AnomalyKind,
     AnomalySeverity,
@@ -115,7 +116,6 @@ from autoskillit.execution.session import (
 from autoskillit.execution.session_log import (
     flush_session_log,
     read_telemetry_clear_marker,
-    recover_crashed_sessions,
     resolve_log_dir,
     write_telemetry_clear_marker,
 )

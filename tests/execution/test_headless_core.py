@@ -2170,7 +2170,7 @@ class TestBuildSkillResultTokenUsage:
 
 
 class TestFailureCaptureInBuildSkillResult:
-    """_build_skill_result(backend=ClaudeCodeBackend()) must capture failures into tool_ctx.audit."""
+    """_build_skill_result(backend=ClaudeCodeBackend()) captures failures into audit."""
 
     def test_captures_non_zero_exit_code(self, tool_ctx):
         result = _make_result(

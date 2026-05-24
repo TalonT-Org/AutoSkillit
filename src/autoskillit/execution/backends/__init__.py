@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from autoskillit.core import CodingAgentBackend
 
+from ._codex_config import ensure_codex_mcp_registered
+from ._codex_parse import CodexResultParser, CodexStreamParser
 from .claude import (
     ClaudeCodeBackend,
     ClaudeEnvPolicy,
@@ -13,10 +15,7 @@ from .codex import (
     CodexBackend,
     CodexEnvPolicy,
     CodexFlags,
-    CodexResultParser,
     CodexSessionLocator,
-    CodexStreamParser,
-    ensure_codex_mcp_registered,
 )
 
 BACKEND_REGISTRY: dict[str, type[CodingAgentBackend]] = {

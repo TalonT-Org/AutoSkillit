@@ -51,6 +51,13 @@ from autoskillit.execution.clone_guard import (
     is_worktree_skill,
     snapshot_clone_state,
 )
+from autoskillit.execution.headless._headless_evidence import (
+    _adapt_agent_result,  # noqa: F401
+    _apply_budget_guard,  # noqa: F401
+    _build_error_path_telemetry,
+    _build_session_telemetry,
+    _capture_failure,  # noqa: F401
+)
 from autoskillit.execution.headless._headless_git import (
     _capture_git_head_sha,
     _compute_loc_changed,
@@ -80,12 +87,7 @@ from autoskillit.execution.headless._headless_recovery import (
     _synthesize_from_write_artifacts,  # noqa: F401
 )
 from autoskillit.execution.headless._headless_result import (
-    _adapt_agent_result,  # noqa: F401
-    _apply_budget_guard,  # noqa: F401
-    _build_error_path_telemetry,
-    _build_session_telemetry,
     _build_skill_result,
-    _capture_failure,  # noqa: F401
     _parse_stdout,  # noqa: F401
     _resolve_skill_session_id,  # noqa: F401
 )

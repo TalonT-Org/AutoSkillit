@@ -82,7 +82,7 @@ class TestProviderFallbackLoop:
             )
 
         monkeypatch.setattr(
-            "autoskillit.execution.headless._build_skill_result",
+            "autoskillit.execution.headless._headless_execute._build_skill_result",
             build_result_fn,
         )
         monkeypatch.setattr(

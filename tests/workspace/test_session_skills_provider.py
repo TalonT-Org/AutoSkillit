@@ -145,7 +145,7 @@ def test_activate_skill_deps_removes_flag(tmp_path: Path) -> None:
 
 
 def test_init_session_gated_tier2_skill_dir_absent(tmp_path: Path) -> None:
-    """Gated tier2 skill has no directory at all; tier1 skills have SKILL.md."""
+    """Gated tier2 skill has no directory at all; non-gated skills have SKILL.md."""
     from tests._helpers import make_skills_config, make_test_config
 
     provider = SkillsDirectoryProvider()
@@ -161,9 +161,8 @@ def test_init_session_gated_tier2_skill_dir_absent(tmp_path: Path) -> None:
     skills_base = session_path / _SKILLS_SUBDIR
     # Tier2 directory absent
     assert not (skills_base / "mermaid").exists()
-    # Tier1 directories present
-    assert (skills_base / "open-kitchen" / "SKILL.md").exists()
-    assert (skills_base / "close-kitchen" / "SKILL.md").exists()
+    # Non-gated BUNDLED_EXTENDED skills are written (BUNDLED skills go via --plugin-dir, not here)
+    assert (skills_base / "implement-worktree" / "SKILL.md").exists()
 
 
 def test_cleanup_stale_removes_old_dirs(tmp_path: Path) -> None:

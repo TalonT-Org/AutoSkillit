@@ -23,7 +23,7 @@ def _has_dynamic_dispatch(campaign_recipe: Recipe) -> bool:
     return any("dispatch_plan" in d.capture for d in campaign_recipe.dispatches)
 
 
-def _build_dynamic_dispatch_section(mcp_prefix: str) -> str:
+def _build_dynamic_dispatch_section(mcp_prefix: str, max_issues_per_food_truck: int = 3) -> str:
     return f"""\
 ## DYNAMIC DISPATCH — IMPLEMENT-FINDINGS
 
@@ -46,7 +46,8 @@ If the array is empty (`[]`) there are no issues to implement — skip to INTERR
 **Step 2 — For each group (in array order):**
 
 1. Parse the group's `issues` string into individual issue URLs.
-2. If the group has more issues than `max_issues_per_food_truck` (default: 5), split into
+2. If the group has more issues than `max_issues_per_food_truck`
+   (default: {max_issues_per_food_truck}), split into
    batches of that size. Name batches: `implement-findings-g{{N}}-a`, `-b`, `-c` …
    If the group fits in one batch, use the name `implement-findings-g{{N}}-a`.
 3. If `parallel` is `true`: issue ALL `{mcp_prefix}dispatch_food_truck` calls for this
@@ -111,6 +112,7 @@ def _build_fleet_campaign_prompt(
     ingredients_table: str | None = None,
     prior_dispatch_id: str = "",
     resume_checkpoint: dict[str, Any] | None = None,
+    max_issues_per_food_truck: int = 3,
 ) -> str:
     """Build the system prompt for an L3 campaign dispatcher headless session.
 
@@ -172,7 +174,9 @@ dispatch name NOT listed above.
 """
 
     dynamic_dispatch_section = (
-        _build_dynamic_dispatch_section(mcp_prefix)
+        _build_dynamic_dispatch_section(
+            mcp_prefix, max_issues_per_food_truck=max_issues_per_food_truck
+        )
         if _has_dynamic_dispatch(campaign_recipe)
         else ""
     )

@@ -56,11 +56,19 @@ def _launch_fleet_session(
 
     project_dir = Path.cwd()
 
+    from autoskillit.config import load_config  # noqa: PLC0415
+
+    cfg = load_config(project_dir)
+
     if campaign_recipe is None:
         # Ad-hoc mode: no campaign, no state, bare kitchen open
         from autoskillit.cli._prompts import _build_fleet_dispatch_prompt
 
-        prompt = _build_fleet_dispatch_prompt(mcp_prefix, recipe_table=recipe_table)
+        prompt = _build_fleet_dispatch_prompt(
+            mcp_prefix,
+            recipe_table=recipe_table,
+            max_issues_per_food_truck=cfg.fleet.max_issues_per_food_truck,
+        )
         env_spec = FleetSessionEnv(
             session_type="fleet",
             fleet_mode=fleet_mode,
@@ -154,6 +162,7 @@ def _launch_fleet_session(
             ingredients_table=ingredients_table,
             prior_dispatch_id=resume_dispatch_id,
             resume_checkpoint=resume_checkpoint,
+            max_issues_per_food_truck=cfg.fleet.max_issues_per_food_truck,
         )
         env_spec = FleetSessionEnv(
             session_type="fleet",
@@ -237,4 +246,5 @@ def _launch_fleet_session(
                 ingredients_table=ingredients_table,
                 prior_dispatch_id=resume_dispatch_id,
                 resume_checkpoint=resume_checkpoint,
+                max_issues_per_food_truck=cfg.fleet.max_issues_per_food_truck,
             )

@@ -71,7 +71,9 @@ def _build_open_kitchen_prompt(mcp_prefix: str) -> str:
     return text
 
 
-def _build_fleet_dispatch_prompt(mcp_prefix: str, recipe_table: str | None = None) -> str:
+def _build_fleet_dispatch_prompt(
+    mcp_prefix: str, recipe_table: str | None = None, max_issues_per_food_truck: int = 3
+) -> str:
     """Build the --append-system-prompt content for an ad-hoc fleet dispatcher session."""
     from autoskillit.fleet import _build_admiral_dispatch_block  # noqa: PLC0415
 
@@ -168,6 +170,38 @@ has been produced and read.
    - Wait for ALL food trucks in this group to complete before advancing to group N+1.
 
 BEM already caps parallel group sizes via max_parallel (default 6 issues per group).
+
+## BATCH DISPATCH MODE — OPTIONAL
+
+When dispatching the `implementation` recipe for multiple issues and the user has set the
+`batch_dispatch` ingredient to `"true"`, use batched dispatch instead of per-issue dispatch:
+
+1. After BEM produces the dispatch_plan, for each parallel group (parallel: true):
+   a. Chunk the group's issues into sub-groups of up to {max_issues_per_food_truck} issues.
+   b. Dispatch each chunk as a SINGLE `implement-findings` food truck:
+      {mcp_prefix}dispatch_food_truck(
+          recipe="implement-findings",
+          task="Implement issues #X, #Y, #Z — parallel-safe per BEM group {{N}}",
+          ingredients={{{{
+              "issue_urls": "<comma-separated issue URLs for this chunk>",
+              "execution_map": "<captured execution_map from bem-wrapper>",
+              "base_branch": "<target branch>",
+          }}}},
+          dispatch_name="implement-g{{N}}-{{letter}}",
+      )
+   c. Name chunks sequentially: `implement-g{{N}}-a`, `-b`, `-c` …
+   d. Issue ALL chunks for a parallel group in a single response (parallel tool calls).
+      The fleet semaphore gates actual concurrency — if FLEET_PARALLEL_REFUSED is returned,
+      wait for a running dispatch to complete and retry.
+
+2. Groups with only 1 issue or sequential groups (parallel: false): dispatch via the
+   `implementation` recipe as normal — one food truck per issue, not batched.
+
+3. When `batch_dispatch` is `"false"` (the default): use the standard per-issue dispatch
+   from Step 4 above — one `implementation` food truck per issue. Do NOT use implement-findings.
+
+4. The execution_map captured from bem-wrapper MUST be passed as an ingredient to each
+   implement-findings food truck so BEM is not re-run inside the food truck.
 
 ## DISPATCHER DISCIPLINE
 

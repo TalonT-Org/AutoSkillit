@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
-from typing import Any
+import json
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import regex as re
 
+from autoskillit.core import get_logger
 from autoskillit.recipe._analysis import ValidationContext
+
+if TYPE_CHECKING:
+    from autoskillit.recipe.schema import CampaignDispatch, Recipe
+
+logger = get_logger(__name__)
 
 # Trigger regex: matches multiple sentinel-indicating phrases
 _SENTINEL_TRIGGER_RE = re.compile(
@@ -53,6 +61,40 @@ def extract_sentinel_json_blocks(text: str) -> list[str]:
 def _is_failure_sentinel_value(val: Any) -> bool:
     """Return True if *val* represents a failure sentinel success field."""
     return val is False or (isinstance(val, str) and val.lower() == "false")
+
+
+def _extract_sentinel_fields(recipe: Recipe) -> frozenset[str]:
+    """Extract declared field names from all sentinel stop step JSON examples."""
+    fields: set[str] = set()
+    for step in recipe.steps.values():
+        if step.action != "stop" or not step.message:
+            continue
+        if "sentinel" not in step.message.lower():
+            continue
+        for block in extract_sentinel_json_blocks(step.message):
+            try:
+                parsed = json.loads(block)
+                if isinstance(parsed, dict):
+                    fields.update(parsed.keys())
+            except (json.JSONDecodeError, ValueError):
+                continue
+    return frozenset(fields)
+
+
+def _load_dispatch_target(dispatch: CampaignDispatch, project_dir: Path | None) -> Recipe | None:
+    """Load the target recipe for a dispatch. Returns None if not loadable."""
+    if project_dir is None:
+        return None
+    try:
+        from autoskillit.recipe.io import find_recipe_by_name, load_recipe  # noqa: PLC0415
+
+        info = find_recipe_by_name(dispatch.recipe, project_dir)
+        if info is None:
+            return None
+        return load_recipe(info.path)
+    except Exception:
+        logger.warning("dispatch_target_load_failed", recipe=dispatch.recipe, exc_info=True)
+        return None
 
 
 _PATH_SAFE_LOOKBEHIND = r"(?<![.a-zA-Z0-9_/])"

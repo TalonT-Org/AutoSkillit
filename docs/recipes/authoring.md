@@ -47,14 +47,18 @@ top-level keys (defined in `recipe/schema.py:Recipe`):
 ## The 24 semantic rule families
 
 `validate_recipe` runs every rule registered with `recipe/registry.py:semantic_rule`.
-The rule families live in `src/autoskillit/recipe/rules_*.py` (24 files):
+The rule families live in `src/autoskillit/recipe/rules_*.py` (28 files):
 
 | File | What it catches |
 |------|-----------------|
 | `rules_actions.py` | Action-type semantic rules: `stop-step-has-no-routing`, `recipe-has-terminal-step`, `route-step-requires-on-result` |
 | `rules_blocks.py` | Block-level budget rules: per-block `run_cmd` and `run_skill` call-count budgets |
 | `rules_bypass.py` | `skip_when_false` routes that have no fallthrough — a step that gets bypassed must also have a downstream consumer that handles the bypass |
-| `rules_campaign.py` | Campaign recipe structural rules (step count, required ingredient presence for campaign mode) |
+| `rules_campaign_capture.py` | Campaign capture validation: identifier keys, result refs, sentinel cross-checks |
+| `rules_campaign_deps.py` | Campaign dependency graph rules: valid refs, acyclic, sequential |
+| `rules_campaign_dispatch.py` | Campaign dispatch structure: kind, names, recipe refs, packs, task |
+| `rules_campaign_flow.py` | Campaign flow control: gates, paths, campaign refs, version, skip-when |
+| `rules_campaign_ingredients.py` | Campaign ingredient validation: keys, dangling, required, string types |
 | `rules_ci.py` | CI polling steps written as inline shell commands instead of `wait_for_ci` |
 | `rules_clone.py` | Clone/push workflow integrity — every `clone_repo` must be paired with a `register_clone_status` and a `remove_clone` route |
 | `rules_cmd.py` | `run_cmd` echo-capture alignment and `find` rediscovery anti-patterns |
@@ -76,7 +80,7 @@ The rule families live in `src/autoskillit/recipe/rules_*.py` (24 files):
 | `rules_verdict.py` | Skill verdict routing completeness — every emitted verdict value must be routed |
 | `rules_worktree.py` | Worktree retry lifecycle — every step that creates a worktree must have a downstream merge or cleanup |
 
-The 24-family count is enforced by `tests/docs/test_doc_counts.py`.
+The 28-family count is enforced by `tests/docs/test_doc_counts.py`.
 
 ## Contract cards
 

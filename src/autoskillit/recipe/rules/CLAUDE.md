@@ -1,6 +1,6 @@
 # rules/
 
-Semantic validation rule modules for recipe analysis (40 rule files).
+Semantic validation rule modules for recipe analysis (44 rule files).
 
 ## Files
 
@@ -11,7 +11,11 @@ Semantic validation rule modules for recipe analysis (40 rule files).
 | `rules_blocks.py` | Block-level budget rules; loads `block_budgets.yaml` at import |
 | `rules_bypass.py` | Rules for `skip_when_false` bypass routing contracts |
 | `rules_callable_scope.py` | Enforces scoped directory args for file-discovering callables (e.g. `batch_create_issues` → `audit_run_dir`) |
-| `rules_campaign.py` | Campaign recipe validation: dispatch names, ingredient refs |
+| `rules_campaign_capture.py` | Campaign capture validation: identifier keys, result refs, sentinel cross-checks |
+| `rules_campaign_deps.py` | Campaign dependency graph rules: valid refs, acyclic, sequential |
+| `rules_campaign_dispatch.py` | Campaign dispatch structure: kind, names, recipe refs, packs, task |
+| `rules_campaign_flow.py` | Campaign flow control: gates, paths, campaign refs, version, skip-when |
+| `rules_campaign_ingredients.py` | Campaign ingredient validation: keys, dangling, required, string types |
 | `rules_ci.py` | CI config hygiene: inline shell, event scope, workflow, timeout |
 | `rules_ci_conflict.py` | CI conflict gate routing, mergeability, auto_trigger checks |
 | `rules_ci_guards.py` | CI applicability guards, self-loop, enqueue gate, cwd/branch mismatch |
@@ -51,4 +55,4 @@ Semantic validation rule modules for recipe analysis (40 rule files).
 
 ## Architecture Notes
 
-Side-effect registration: callers import the package to trigger `@semantic_rule` decorator registration of all 40 rule modules. Each rule receives a `ValidationContext` argument. No cross-imports between rule modules.
+Side-effect registration: callers import the package to trigger `@semantic_rule` decorator registration of all 44 rule modules. Each rule receives a `ValidationContext` argument. No cross-imports between rule modules.

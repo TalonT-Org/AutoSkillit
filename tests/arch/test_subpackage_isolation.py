@@ -698,9 +698,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         rules_reachability.py adds symbolic BFS reachability rules, bringing the count to 33.
         rules_fixing.py adds conditional-write-skill ungated-push detection,
         bringing the count to 34.
-        rules_campaign.py, rules_features.py, rules_graph.py, and rules_merge.py add
-        campaign scheduling, feature-gate, graph, and merge-workflow semantic rules,
-        bringing the count to 38.
+        rules_campaign_dispatch.py, rules_campaign_deps.py, rules_campaign_ingredients.py,
+        rules_campaign_capture.py, and rules_campaign_flow.py split rules_campaign.py,
+        bringing the count to 37.
         rules_temp_path.py adds the non-unique-output-path lint rule for output path
         isolation enforcement, bringing the count to 39.
         identity.py adds recipe identity hashing (content and composite fingerprints),
@@ -842,7 +842,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "hooks": 10,
         "pipeline": 12,
         "fleet": 19,
-        "recipe/rules": 42,
+        "recipe/rules": 46,
         "server/tools": 21,
         "hooks/guards": 22,
     }
@@ -936,11 +936,11 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "splitting into sub-modules would obscure the check sequence and break the test "
         "filter cascade",
     ),
-    "rules_campaign.py": (
+    "_api.py": (
         1100,
-        "REQ-CNST-010-E5: campaign validation rules — dispatch-skip-when-valid-expression "
-        "rule added alongside existing route-gate and dependency rules; single-file "
-        "co-location preserves rule cross-referencing and rule registration order",
+        "REQ-CNST-010-E6: fleet dispatch engine — evaluate_skip_when inlined here to avoid "
+        "a 16th fleet/ module (sub-package file ceiling); keeps dispatch-related helpers "
+        "co-located with the execution engine that calls them",
     ),
 }
 

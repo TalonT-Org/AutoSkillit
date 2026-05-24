@@ -70,6 +70,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_merge_prs_queue_release_timeout.py` | Release timeout and ci-watch-post-queue-fix retry logic tests |
 | `test_merge_sub_recipe_hidden.py` | Tests for hidden sub-recipe merging |
 | `test_plan_visualization_step.py` | Tests for plan visualization step in recipes |
+| `test_planner_contracts.py` | Contract-level tests for write_behavior + output_dir coherence in planner.yaml |
 | `test_planner_recipe.py` | Tests for the planner recipe structure |
 | `test_promote_to_main_wrapper.py` | Tests for the promote-to-main wrapper recipe |
 | `test_recipe_ci_applicable_routing.py` | Structural tests for ci_applicable routing guards across all wait_for_ci chains |

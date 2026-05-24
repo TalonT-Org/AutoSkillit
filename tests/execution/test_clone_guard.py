@@ -506,3 +506,73 @@ async def test_worktree_skill_still_uses_nuclear_revert(tmp_path):
     cmds = [call[0] for call in runner.call_args_list]
     assert ["git", "reset", "--hard", "abc123"] in cmds
     assert ["git", "clean", "-fd"] in cmds
+
+
+# ---------------------------------------------------------------------------
+# Write-scoped session guard (Steps 5-6b)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_contamination_check_fires_on_success_when_write_scoped(tmp_path):
+    """Contamination detection fires on success when readonly_skill=True (write-scoped session)."""
+    runner = MockSubprocessRunner()
+    runner.push(_git_result("abc123"))  # rev-parse HEAD (detect)
+    runner.push(_git_result(" M src/daemon.rs\n"))  # status --porcelain (detect)
+    runner.push(_git_result())  # git checkout -- .
+    runner.push(_git_result())  # git clean -fd
+    snapshot = CloneSnapshot(head_sha="abc123")
+    skill_result = _make_skill_result(success=True, needs_retry=False, exit_code=0)
+
+    _, reverted = await check_and_revert_clone_contamination(
+        snapshot,
+        skill_result,
+        str(tmp_path),
+        runner,
+        audit=None,
+        readonly_skill=True,
+    )
+    assert reverted
+
+
+@pytest.mark.anyio
+async def test_selective_revert_with_custom_exclude_prefix(tmp_path):
+    """revert_contamination uses the supplied exclude_prefix in git clean."""
+    from autoskillit.execution.clone_guard import ContaminationReport
+
+    runner = MockSubprocessRunner()
+    snapshot = CloneSnapshot(head_sha="abc123")
+    report = ContaminationReport(
+        pre_sha="abc123",
+        post_sha="abc123",
+        uncommitted_files=[" M src/main.py"],
+        direct_commits=False,
+        reverted=False,
+    )
+    result = await revert_contamination(
+        snapshot,
+        report,
+        str(tmp_path),
+        runner,
+        selective=True,
+        exclude_prefix="temp/planner/",
+    )
+    assert result.reverted
+    cmds = [call[0] for call in runner.call_args_list]
+    assert ["git", "clean", "-fd", "--exclude=temp/planner/"] in cmds
+    assert ["git", "clean", "-fd", "--exclude=.autoskillit/"] not in cmds
+
+
+@pytest.mark.anyio
+async def test_snapshot_not_taken_without_write_scope_or_readonly(tmp_path):
+    """Without worktree skill, readonly, or write_watch_dirs, no snapshot means no revert."""
+    skill_result = _make_skill_result(success=False, needs_retry=True, exit_code=1)
+    _, reverted = await check_and_revert_clone_contamination(
+        None,
+        skill_result,
+        str(tmp_path),
+        MockSubprocessRunner(),
+        audit=None,
+        readonly_skill=False,
+    )
+    assert not reverted

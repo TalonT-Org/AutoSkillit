@@ -33,6 +33,8 @@ Detect language, framework, test infrastructure, project structure, and existing
 - Write analysis.json outside `$1/`
 - Run subagents in the background (`run_in_background: true` is prohibited)
 
+- Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
+
 **ALWAYS:**
 - Use Explore subagents for all file reads
 - Spawn all 4 subagents in parallel

@@ -75,22 +75,22 @@ ingredients:
     required: true
 
 kitchen_rules:
-  - >
-    NEVER use native Claude Code tools from the orchestrator: Read, Grep, Glob,
-    Edit, Write, Bash, Agent, WebFetch, WebSearch, NotebookEdit are ALL forbidden.
-    All work is delegated through run_skill, run_cmd, run_python.
-  - "Do NOT auto-merge. The research PR is for human review only."
-  - "Route to on_failure when a step fails — do not investigate directly."
-  - >
-    LENS ITERATION: run_experiment_lenses iterates over context.selected_lenses
-    (comma-separated lens slugs, e.g. "fair-comparison,estimand-clarity") and
-    context.lens_context_paths (comma-separated context file paths). For each
-    lens slug, run /autoskillit:exp-lens-{slug} {matching_context_path} with the
-    matching context file path. Run all selected lenses in parallel (multiple
-    run_skill calls in a single assistant message). Accumulate each diagram_path
-    value into context.all_diagram_paths using comma separation via capture_list.
-    If a lens fails, continue with remaining lenses — partial diagrams are
-    acceptable (compose_research_pr handles empty lists).
+- >
+  NEVER use native Claude Code tools from the orchestrator: Read, Grep, Glob,
+  Edit, Write, Bash, Agent, WebFetch, WebSearch, NotebookEdit are ALL forbidden.
+  All work is delegated through run_skill, run_cmd, run_python.
+- "Do NOT auto-merge. The research PR is for human review only."
+- "Route to on_failure when a step fails — do not investigate directly."
+- >
+  LENS ITERATION: run_experiment_lenses iterates over context.selected_lenses
+  (comma-separated lens slugs, e.g. "fair-comparison,estimand-clarity") and
+  context.lens_context_paths (comma-separated context file paths). For each
+  lens slug, run /autoskillit:exp-lens-{slug} {matching_context_path} with the
+  matching context file path. Run all selected lenses in parallel (multiple
+  run_skill calls in a single assistant message). Accumulate each diagram_path
+  value into context.all_diagram_paths using comma separation via capture_list.
+  If a lens fails, continue with remaining lenses — partial diagrams are
+  acceptable (compose_research_pr handles empty lists).
 
 steps:
   # --- LENS + STAGING PHASE ---
@@ -142,9 +142,9 @@ steps:
   route_pr_or_local:
     action: route
     on_result:
-      - when: "${{ inputs.output_mode }} == local"
-        route: finalize_bundle
-      - route: compose_research_pr
+    - when: "${{ inputs.output_mode }} == local"
+      route: finalize_bundle
+    - route: compose_research_pr
     note: >
       Branches on output_mode after bundle staging. local → bypass PR pipeline entirely,
       jump to finalize_bundle. pr (fall-through) → compose_research_pr to open PR and run
@@ -168,9 +168,9 @@ steps:
   guard_pr_url:
     action: route
     on_result:
-      - when: "${{ context.pr_url }}"
-        route: review_research_pr
-      - route: review_pr_complete
+    - when: "${{ context.pr_url }}"
+      route: review_research_pr
+    - route: review_pr_complete
     note: Guard — skip review if pr_url is empty (graceful degradation from open_research_pr).
 
   review_research_pr:
@@ -181,6 +181,7 @@ steps:
       skill_command: "/autoskillit:review-research-pr ${{ context.worktree_path }} ${{ inputs.base_branch }} ${{ context.pr_url }}"
       cwd: "${{ context.worktree_path }}"
       step_name: review_research_pr
+      output_dir: ${{ context.worktree_path }}/{{AUTOSKILLIT_TEMP}}/review-research-pr
     capture:
       review_verdict: "${{ result.verdict }}"
     pass_through: [verdict]
@@ -188,7 +189,7 @@ steps:
     on_context_limit: audit_claims
     on_failure: audit_claims
     on_result:
-      - route: audit_claims
+    - route: audit_claims
     note: >
       Optional research PR review step, gated by the review_pr ingredient.
       Verdict captured as review_verdict for deferred routing. All paths
@@ -207,6 +208,7 @@ steps:
       skill_command: "/autoskillit:audit-claims ${{ context.worktree_path }} ${{ inputs.base_branch }} ${{ context.pr_url }}"
       cwd: "${{ context.worktree_path }}"
       step_name: audit_claims
+      output_dir: ${{ context.worktree_path }}/{{AUTOSKILLIT_TEMP}}/audit-claims
     capture:
       audit_verdict: "${{ result.verdict }}"
     pass_through: [verdict]
@@ -216,7 +218,7 @@ steps:
     on_context_limit: route_review_resolve
     on_failure: route_review_resolve
     on_result:
-      - route: route_review_resolve
+    - route: route_review_resolve
     note: >
       Optional citation-integrity gate, gated by the audit_claims ingredient.
       Runs after review_research_pr regardless of that step's verdict.
@@ -227,9 +229,9 @@ steps:
   route_review_resolve:
     action: route
     on_result:
-      - when: "${{ context.review_verdict }} == changes_requested"
-        route: resolve_research_review
-      - route: route_claims_resolve
+    - when: "${{ context.review_verdict }} == changes_requested"
+      route: resolve_research_review
+    - route: route_claims_resolve
     note: >
       Routes to resolve_research_review only when the PR review found
       changes_requested. All other verdicts (approved, needs_human, empty/skipped)
@@ -254,9 +256,9 @@ steps:
   route_claims_resolve:
     action: route
     on_result:
-      - when: "${{ context.audit_verdict }} == changes_requested"
-        route: resolve_claims_review
-      - route: merge_escalations
+    - when: "${{ context.audit_verdict }} == changes_requested"
+      route: resolve_claims_review
+    - route: merge_escalations
     note: >
       Routes to resolve_claims_review only when the claims audit found
       changes_requested. All other verdicts (approved, needs_human, empty/skipped)
@@ -284,11 +286,11 @@ steps:
   merge_escalations:
     action: route
     on_result:
-      - when: "${{ context.review_needs_rerun }} == true"
-        route: re_run_experiment
-      - when: "${{ context.claims_needs_rerun }} == true"
-        route: re_run_experiment
-      - route: finalize_bundle
+    - when: "${{ context.review_needs_rerun }} == true"
+      route: re_run_experiment
+    - when: "${{ context.claims_needs_rerun }} == true"
+      route: re_run_experiment
+    - route: finalize_bundle
     note: >
       Merged escalation consumer replacing check_escalations. Triggers a single
       re_run_experiment if either review resolution or claims resolution flagged
@@ -317,12 +319,12 @@ steps:
       experiment_verdict: "${{ result.verdict }}"
       blocked_hypotheses: "${{ result.blocked_hypotheses }}"
     on_result:
-      - when: "${{ result.verdict }} == CONCLUSIVE"
-        route: re_generate_report
-      - when: "${{ result.verdict }} == BLOCKED"
-        route: escalate_stop
-      - when: "${{ result.verdict }} == INCONCLUSIVE"
-        route: re_push_research
+    - when: "${{ result.verdict }} == CONCLUSIVE"
+      route: re_generate_report
+    - when: "${{ result.verdict }} == BLOCKED"
+      route: escalate_stop
+    - when: "${{ result.verdict }} == INCONCLUSIVE"
+      route: re_push_research
     on_failure: re_push_research
     on_context_limit: re_push_research
     note: >
@@ -342,6 +344,7 @@ steps:
       skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }}"
       cwd: "${{ context.worktree_path }}"
       step_name: re_generate_report
+      output_dir: ${{ context.worktree_path }}/{{AUTOSKILLIT_TEMP}}/generate-report
     capture:
       report_path: "${{ result.report_path }}"
     on_success: re_stage_bundle
@@ -430,9 +433,9 @@ steps:
   route_archive_or_export:
     action: route
     on_result:
-      - when: "${{ inputs.output_mode }} == local"
-        route: export_local_bundle
-      - route: review_pr_complete
+    - when: "${{ inputs.output_mode }} == local"
+      route: export_local_bundle
+    - route: review_pr_complete
     note: >
       Branches after HTML bundle rendering. local → export_local_bundle (copy to
       {source_dir}/research-bundles/). pr (fall-through) → review_pr_complete

@@ -20,6 +20,7 @@ import yaml
 from yaml import YAMLError as YAMLError  # explicit re-export for callers and type checkers
 
 from ._json import fast_dumps as _fast_dumps
+from .types._type_helpers import extract_skill_name
 
 try:
     from yaml import CSafeLoader as _Loader
@@ -37,6 +38,7 @@ __all__ = [
     "ensure_project_temp",
     "load_yaml",
     "dump_yaml_str",
+    "resolve_skill_temp_dir",
     "resolve_temp_dir",
     "temp_dir_display_str",
     "write_versioned_json",
@@ -84,6 +86,19 @@ def temp_dir_display_str(override: str | None) -> str:
     recipe YAML substitution). ``None`` yields the canonical default literal.
     """
     return override or ".autoskillit/temp"
+
+
+def resolve_skill_temp_dir(cwd: str, skill_command: str) -> Path | None:
+    """Return the default write-watch directory for a skill invoked ad-hoc.
+
+    Used when no ``output_dir`` is provided — falls back to
+    ``<cwd>/.autoskillit/temp/<skill-name>/``. Returns ``None`` when the
+    skill name cannot be extracted from ``skill_command``.
+    """
+    name = extract_skill_name(skill_command)
+    if not name:
+        return None
+    return Path(cwd) / ".autoskillit" / "temp" / name
 
 
 def atomic_write(path: Path, content: str) -> None:

@@ -1,4 +1,4 @@
-"""Group F: Core failure path semantics — timeout, no-sentinel, completed-dirty, completed-clean."""
+"""Group F: Core failure path semantics — timeout, no-sentinel, completed-dirty, clean."""
 
 from __future__ import annotations
 

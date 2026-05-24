@@ -7,9 +7,9 @@ description: >-
 kind: standard
 recipe_version: "1.0.0"
 requires_packs:
-  - github
-  - clone
-  - telemetry
+- github
+- clone
+- telemetry
 
 ingredients:
   issue_urls:
@@ -40,23 +40,12 @@ ingredients:
     hidden: true
 
 kitchen_rules:
-  - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
-    Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the
-    orchestrator. All work is delegated through run_skill."
-  - "Route to on_failure — never investigate or fix directly from the orchestrator."
-  - "Issues within a parallel group MUST complete all fast MCP steps
-    (clone_repo, create_branch) for ALL issues before launching any run_skill
-    calls. Wait for all fast steps to finish, then launch run_skill calls for
-    all issues simultaneously."
-  - "Per-issue failures are non-fatal. Write the sidecar entry with
-    status:failed, call release_issue, and continue to the next issue without
-    stopping the batch."
-  - "After all groups complete, call batch_cleanup_clones once with all clone
-    registry paths from the batch."
-  - "SOURCE ISOLATION: After clone_repo returns, the source_dir is strictly
-    off-limits. Never run any command in source_dir — no git checkout, git
-    status, or any other git operation. All implementation work must happen
-    inside the cloned directory returned by clone_repo."
+- "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the orchestrator. All work is delegated through run_skill."
+- "Route to on_failure — never investigate or fix directly from the orchestrator."
+- "Issues within a parallel group MUST complete all fast MCP steps (clone_repo, create_branch) for ALL issues before launching any run_skill calls. Wait for all fast steps to finish, then launch run_skill calls for all issues simultaneously."
+- "Per-issue failures are non-fatal. Write the sidecar entry with status:failed, call release_issue, and continue to the next issue without stopping the batch."
+- "After all groups complete, call batch_cleanup_clones once with all clone registry paths from the batch."
+- "SOURCE ISOLATION: After clone_repo returns, the source_dir is strictly off-limits. Never run any command in source_dir — no git checkout, git status, or any other git operation. All implementation work must happen inside the cloned directory returned by clone_repo."
 
 steps:
   check_resume:
@@ -80,9 +69,9 @@ steps:
   route_bem_mode:
     action: route
     on_result:
-      - when: "${{ inputs.execution_map }} != ''"
-        route: set_bem_path_from_ingredient
-      - route: run_bem_internally
+    - when: "${{ inputs.execution_map }} != ''"
+      route: set_bem_path_from_ingredient
+    - route: run_bem_internally
     note: >
       Campaign mode: execution_map ingredient is pre-computed by the L3 fleet
       dispatcher — skip BEM computation, read the provided file path directly.
@@ -111,6 +100,7 @@ steps:
       skill_command: "/autoskillit:build-execution-map ${{ context.remaining_urls_json }} ${{ inputs.base_branch }}"
       cwd: "${{ inputs.source_dir }}"
       step_name: "run_bem_internally"
+      output_dir: ${{ inputs.source_dir }}/{{AUTOSKILLIT_TEMP}}/build-execution-map
     capture:
       execution_map_path: "${{ result.execution_map }}"
     on_success: load_bem_from_file
@@ -199,11 +189,11 @@ steps:
   next_or_done:
     action: route
     on_result:
-      - when: "${{ result.next }} == more_groups"
-        route: process_groups
-      - when: "${{ result.next }} == all_done"
-        route: batch_cleanup
-      - route: batch_cleanup
+    - when: "${{ result.next }} == more_groups"
+      route: process_groups
+    - when: "${{ result.next }} == all_done"
+      route: batch_cleanup
+    - route: batch_cleanup
     note: >
       Routing step — no tool call. The agent evaluates whether more groups
       remain in the queue (result.next = more_groups) or all groups have

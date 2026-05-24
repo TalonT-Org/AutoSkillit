@@ -873,7 +873,7 @@ class TestApiRetryFields:
     """T8: api_retry fields written to summary.json, sessions.jsonl, and anomalies.jsonl."""
 
     def test_api_retry_fields_in_summary(self, tmp_path):
-        """summary.json includes api_retry_count, api_retry_last_error, api_retry_last_status, api_retry_exhausted."""
+        """summary.json includes api_retry_count, api_retry_last_error, api_retry_last_status."""
         _flush(
             tmp_path,
             session_id="retry-summary",

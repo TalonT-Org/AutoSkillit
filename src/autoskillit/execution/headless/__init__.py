@@ -39,12 +39,12 @@ from autoskillit.core import (
     WriteBehaviorSpec,
     claude_code_project_dir,
     collect_version_snapshot,
-    extract_skill_name,
     get_logger,
     is_feature_enabled,
     is_git_worktree,
     temp_dir_display_str,
 )
+from autoskillit.core import resolve_skill_temp_dir as _resolve_skill_temp_dir
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.clone_guard import (
     check_and_revert_clone_contamination,
@@ -175,13 +175,6 @@ def _derive_step_name_from_skill_command(skill_command: str) -> str:
     return token
 
 
-def _resolve_skill_temp_dir(cwd: str, skill_command: str) -> Path | None:
-    name = extract_skill_name(skill_command)
-    if not name:
-        return None
-    return Path(cwd) / ".autoskillit" / "temp" / name
-
-
 def _recursive_snapshot(directory: Path) -> set[str]:
     """Recursively enumerate all files under directory as relative paths."""
     return {
@@ -300,11 +293,12 @@ async def _execute_claude_headless(
     _versions = collect_version_snapshot()
 
     _readonly_skill = readonly_skill
+    _has_write_scope = bool(write_watch_dirs)
     _clone_snapshot = None
     if (
         not skip_clone_guard
         and not is_git_worktree(Path(cwd))
-        and (is_worktree_skill(skill_command) or _readonly_skill)
+        and (is_worktree_skill(skill_command) or _readonly_skill or _has_write_scope)
     ):
         _clone_snapshot = await snapshot_clone_state(cwd, runner)
 
@@ -521,6 +515,14 @@ async def _execute_claude_headless(
 
         _clone_reverted = False
         if _clone_snapshot is not None:
+            _effective_readonly = _readonly_skill or _has_write_scope
+            _exclude_prefix = ".autoskillit/"
+            if write_watch_dirs:
+                try:
+                    _rel = write_watch_dirs[0].relative_to(Path(cwd))
+                    _exclude_prefix = str(_rel.parts[0]) + "/"
+                except ValueError:
+                    pass  # output_dir not under cwd — keep default ".autoskillit/" fallback
             skill_result, _clone_reverted = await check_and_revert_clone_contamination(
                 _clone_snapshot,
                 skill_result,
@@ -528,7 +530,8 @@ async def _execute_claude_headless(
                 runner,
                 ctx.audit,
                 skill_command=skill_command,
-                readonly_skill=_readonly_skill,
+                readonly_skill=_effective_readonly,
+                exclude_prefix=_exclude_prefix,
             )
 
         if (

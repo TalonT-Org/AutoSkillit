@@ -179,3 +179,32 @@ class TestSkillMdPresence:
             "planner-elaborate-assignments/SKILL.md must specify "
             "the Assignment ID format pattern P{N}-A{N}."
         )
+
+    def test_l0_prompt_template_contains_write_prohibition(self, skill_md: str) -> None:
+        lower = skill_md.lower()
+        has_prohibition = (
+            "do not use write" in lower
+            or "do not use the write" in lower
+            or "read-only analysis agent" in lower
+            or "never:\n- use the write" in lower
+            or "must never:\n- use the write" in lower
+        )
+        assert has_prohibition, (
+            "planner-elaborate-wps/SKILL.md must include an explicit write prohibition "
+            "in the L0 prompt template (Component 0). Expected text like "
+            "'You are a READ-ONLY analysis agent' or 'Do NOT use Write, Edit, or Bash'."
+        )
+
+    def test_l0_prompt_template_contains_json_only_framing(self, skill_md: str) -> None:
+        lower = skill_md.lower()
+        has_json_only = (
+            "return your analysis as json" in lower
+            or "return findings as json only" in lower
+            or "json between triple-backtick json fences only" in lower
+            or ("json" in lower and "only" in lower and "return" in lower)
+        )
+        assert has_json_only, (
+            "planner-elaborate-wps/SKILL.md must specify in the L0 prompt template "
+            "that the L0 must return JSON only. Expected text like "
+            "'Return your analysis as JSON... ONLY'."
+        )

@@ -54,6 +54,8 @@ file to `$3/refine_contexts/{phase_id}_result.json`.
 - Read source code files, test files, or recipe YAML files directly — codebase exploration is the L0 subagents' responsibility
 - Run Bash, Grep, or Glob commands for codebase exploration between L0 spawns
 
+- Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
+
 **ALWAYS:**
 - Read `phase_id` from the context file to construct the output path
 - Validate each L0 response for `assignment_id`, `changes` (array), `dependency_corrections` (array), `wp_proposal_adjustments` (array)

@@ -48,6 +48,8 @@ merging).
 - Run subagents in the background (`run_in_background: true` is prohibited)
 - Spawn more than 6 L0s in a single parallel batch
 
+- Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
+
 **ALWAYS:**
 - Create `$2/work_packages/consolidation/` before dispatching L0s
 - Validate each L0 response before writing its manifest

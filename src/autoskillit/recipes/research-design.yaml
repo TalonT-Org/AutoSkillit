@@ -43,14 +43,14 @@ ingredients:
     default: "2"
 
 kitchen_rules:
-  - >
-    NEVER use native Claude Code tools from the orchestrator: Read, Grep, Glob,
-    Edit, Write, Bash, Agent, WebFetch, WebSearch, NotebookEdit are ALL forbidden.
-    All work is delegated through run_skill, run_cmd, run_python.
-  - >
-    This recipe is a food truck dispatched by a campaign. Emit the L3 sentinel
-    JSON block exactly as instructed in the design_complete step message — no
-    extra tool calls after reaching design_complete.
+- >
+  NEVER use native Claude Code tools from the orchestrator: Read, Grep, Glob,
+  Edit, Write, Bash, Agent, WebFetch, WebSearch, NotebookEdit are ALL forbidden.
+  All work is delegated through run_skill, run_cmd, run_python.
+- >
+  This recipe is a food truck dispatched by a campaign. Emit the L3 sentinel
+  JSON block exactly as instructed in the design_complete step message — no
+  extra tool calls after reaching design_complete.
 
 steps:
   scope:
@@ -60,6 +60,7 @@ steps:
       skill_command: "/autoskillit:scope ${{ inputs.task }}"
       cwd: "${{ inputs.source_dir }}"
       step_name: scope
+      output_dir: ${{ inputs.source_dir }}/{{AUTOSKILLIT_TEMP}}/scope
     capture:
       scope_report: "${{ result.scope_report }}"
       scope_directions: "${{ result.scope_directions }}"
@@ -85,6 +86,7 @@ steps:
       skill_command: "/autoskillit:plan-experiment ${{ context.scope_report }} ${{ context.selected_directions }} ${{ context.revision_guidance }}"
       cwd: "${{ inputs.source_dir }}"
       step_name: plan_experiment
+      output_dir: ${{ inputs.source_dir }}/{{AUTOSKILLIT_TEMP}}/plan-experiment
     optional_context_refs: [revision_guidance, selected_directions]
     capture:
       experiment_plan: "${{ result.experiment_plan }}"
@@ -98,6 +100,7 @@ steps:
       skill_command: "/autoskillit:review-design ${{ context.experiment_plan }} ${{ context.scope_report }}"
       cwd: "${{ inputs.source_dir }}"
       step_name: review_design
+      output_dir: ${{ inputs.source_dir }}/{{AUTOSKILLIT_TEMP}}/review-design
     capture:
       verdict: "${{ result.verdict }}"
       experiment_type: "${{ result.experiment_type }}"
@@ -110,13 +113,13 @@ steps:
     on_context_limit: plan_visualization
     on_failure: plan_visualization
     on_result:
-      - when: "${{ result.verdict }} == GO"
-        route: plan_visualization
-      - when: "${{ result.verdict }} == REVISE"
-        route: revise_design
-      - when: "${{ result.verdict }} == STOP"
-        route: resolve_design_review
-      - route: plan_visualization
+    - when: "${{ result.verdict }} == GO"
+      route: plan_visualization
+    - when: "${{ result.verdict }} == REVISE"
+      route: revise_design
+    - when: "${{ result.verdict }} == STOP"
+      route: resolve_design_review
+    - route: plan_visualization
 
   plan_visualization:
     tool: run_skill
@@ -125,6 +128,7 @@ steps:
       skill_command: "/autoskillit:plan-visualization ${{ inputs.source_dir }} ${{ context.experiment_plan }} ${{ context.scope_report }}"
       cwd: "${{ inputs.source_dir }}"
       step_name: plan_visualization
+      output_dir: ${{ inputs.source_dir }}/{{AUTOSKILLIT_TEMP}}/plan-visualization
     capture:
       visualization_plan_path: "${{ result.visualization_plan_path }}"
       report_plan_path: "${{ result.report_plan_path }}"
@@ -139,7 +143,7 @@ steps:
   revise_design:
     action: route
     on_result:
-      - route: check_design_review_loop
+    - route: check_design_review_loop
 
   check_design_review_loop:
     tool: run_python
@@ -150,12 +154,12 @@ steps:
     capture:
       design_review_count: "${{ result.next_iteration }}"
     on_result:
-      - when: "${{ result.max_exceeded }} == true"
-        route: plan_visualization
-      - route: plan_experiment
+    - when: "${{ result.max_exceeded }} == true"
+      route: plan_visualization
+    - route: plan_experiment
     on_failure: plan_visualization
     optional_context_refs:
-      - design_review_count
+    - design_review_count
     note: >
       Iteration guard for the review_design → revise_design → plan_experiment cycle.
       Caps design revision loops at 3 iterations. Both REVISE and
@@ -169,6 +173,7 @@ steps:
       skill_command: "/autoskillit:resolve-design-review ${{ context.evaluation_dashboard }} ${{ context.experiment_plan }} ${{ context.revision_guidance }}"
       cwd: "${{ inputs.source_dir }}"
       step_name: resolve_design_review
+      output_dir: ${{ inputs.source_dir }}/{{AUTOSKILLIT_TEMP}}/resolve-design-review
     optional_context_refs: [evaluation_dashboard, experiment_plan, revision_guidance]
     capture:
       revision_guidance: "${{ result.revision_guidance }}"
@@ -176,11 +181,11 @@ steps:
     on_failure: design_rejected
     on_context_limit: design_rejected
     on_result:
-      - when: "${{ result.resolution }} == revised"
-        route: revise_design
-      - when: "${{ result.resolution }} == failed"
-        route: design_rejected
-      - route: design_rejected
+    - when: "${{ result.resolution }} == revised"
+      route: revise_design
+    - when: "${{ result.resolution }} == failed"
+      route: design_rejected
+    - route: design_rejected
     note: >
       Triages STOP-verdict findings from review_design. ADDRESSABLE/DISCUSS findings
       generate revision_guidance and loop back. Only all-STRUCTURAL findings halt at

@@ -1237,6 +1237,8 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/execution/test_session_log_retention.py": frozenset({"autoskillit.fleet"}),
     # provider forwarding test verifies budget guard preserves provider_used — needs DefaultAuditLog
     "tests/execution/test_headless_provider_forwarding.py": frozenset({"autoskillit.pipeline"}),
+    # planner write isolation integration test verifies audit log entries from clone guard
+    "tests/execution/test_planner_write_isolation.py": frozenset({"autoskillit.pipeline"}),
 }
 
 

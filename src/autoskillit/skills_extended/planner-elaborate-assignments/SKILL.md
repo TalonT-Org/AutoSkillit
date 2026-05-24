@@ -37,6 +37,8 @@ is the sole writer for this phase's assignments — no concurrent write races.
 - Read result files from other phases
 - Run subagents in the background (`run_in_background: true` is prohibited)
 
+- Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
+
 **ALWAYS:**
 - Spawn all L0 subagents in parallel using the native Agent/Task tool (NOT run_skill — skill session guard blocks it)
 - Write the phase sentinel file before emitting the output token
@@ -82,6 +84,7 @@ Use the native Agent/Task tool to spawn one L0 per assignment simultaneously.
 All L0s must be launched in a single batch — do NOT wait for one before starting the next.
 
 Each L0 receives a self-contained prompt that:
+0. Role framing (write prohibition): "You are a READ-ONLY analysis agent. Your sole task is to analyze code and produce a JSON elaboration plan. You must NEVER: use the Write or Edit tools; use Bash with file-modifying commands (sed -i, echo >, tee, mv, cp, rm, patch, chmod); create, modify, or delete any files; make any changes to the codebase. Return your analysis as JSON between triple-backtick json fences ONLY."
 1. Identifies the assignment (ID, name, goal)
 2. Provides short-form context for all other phase assignments
 3. Lists prior result file paths for cross-phase overlap analysis

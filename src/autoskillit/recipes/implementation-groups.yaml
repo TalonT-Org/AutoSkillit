@@ -60,29 +60,13 @@ ingredients:
     hidden: true
 
 kitchen_rules:
-  - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
-    Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the
-    orchestrator. All work is delegated through run_skill."
-  - "Route to on_failure — never investigate or fix directly from the orchestrator."
-  - "source_doc is required — it provides the work via group decomposition."
-  - "Process plan parts and groups sequentially. Complete the full cycle (verify → implement → test → merge) for one part before starting the next. Do NOT run verify for all parts upfront."
-  - "By default (open_pr=true), a feature branch is created with a unique name
-    derived from inputs.run_name and context.issue_number (e.g. impl/124) or
-    a date suffix (e.g. impl/20260304) when no issue is available. All worktree
-    merges target the feature branch (context.merge_target), not base_branch
-    directly. The push step publishes the feature branch, then prepare_pr → run_arch_lenses → compose_pr
-    opens a PR to base_branch. When open_pr=false, merges target base_branch
-    directly and prepare_pr is skipped."
-  - "When arch_lenses=true (and open_pr=true), prepare_pr routes through
-    run_arch_lenses before compose_pr, adding architecture lens diagrams
-    to the PR. By default arch_lenses is off and prepare_pr routes
-    directly to compose_pr."
-  - "SOURCE ISOLATION: After bootstrap_clone returns, the source_dir is strictly
-    off-limits. Never run any command in source_dir — no git checkout, git
-    fetch, git reset, git pull, run_cmd, run_skill, or any other operation.
-    All work — skill invocations, git operations, file reads — happens
-    exclusively in the clone (work_dir). source_dir is used ONLY to read
-    the remote URL inside push_to_remote."
+- "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the orchestrator. All work is delegated through run_skill."
+- "Route to on_failure — never investigate or fix directly from the orchestrator."
+- "source_doc is required — it provides the work via group decomposition."
+- "Process plan parts and groups sequentially. Complete the full cycle (verify → implement → test → merge) for one part before starting the next. Do NOT run verify for all parts upfront."
+- "By default (open_pr=true), a feature branch is created with a unique name derived from inputs.run_name and context.issue_number (e.g. impl/124) or a date suffix (e.g. impl/20260304) when no issue is available. All worktree merges target the feature branch (context.merge_target), not base_branch directly. The push step publishes the feature branch, then prepare_pr → run_arch_lenses → compose_pr opens a PR to base_branch. When open_pr=false, merges target base_branch directly and prepare_pr is skipped."
+- "When arch_lenses=true (and open_pr=true), prepare_pr routes through run_arch_lenses before compose_pr, adding architecture lens diagrams to the PR. By default arch_lenses is off and prepare_pr routes directly to compose_pr."
+- "SOURCE ISOLATION: After bootstrap_clone returns, the source_dir is strictly off-limits. Never run any command in source_dir — no git checkout, git fetch, git reset, git pull, run_cmd, run_skill, or any other operation. All work — skill invocations, git operations, file reads — happens exclusively in the clone (work_dir). source_dir is used ONLY to read the remote URL inside push_to_remote."
 
 steps:
   clone:
@@ -118,9 +102,9 @@ steps:
       issue_slug: "${{ result.issue_slug }}"
       claimed: "${{ result.claimed }}"
     on_result:
-      - when: "${{ result.claimed }} == true"
-        route: create_and_publish
-      - route: escalate_stop
+    - when: "${{ result.claimed }} == true"
+      route: create_and_publish
+    - route: escalate_stop
     on_failure: escalate_stop
     note: >
       Fetches issue title/slug and claims the issue in one turn.
@@ -156,6 +140,7 @@ steps:
       skill_command: "/autoskillit:make-groups ${{ inputs.source_doc }}"
       cwd: "${{ context.work_dir }}"
       step_name: "group"
+      output_dir: ${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/make-groups
     capture:
       group_files: "${{ result.group_files }}"
     on_success: plan
@@ -215,6 +200,7 @@ steps:
       skill_command: "/autoskillit:review-approach ${{ context.plan_path }}"
       cwd: "${{ context.work_dir }}"
       step_name: "review"
+      output_dir: ${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/review-approach
     capture:
       review_path: "${{ result.review_path }}"
     retries: 1
@@ -232,6 +218,7 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "verify"
       review_path: "${{ context.review_path }}"
+      output_dir: ${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/dry-walkthrough
     on_success: implement
     on_failure: release_issue_failure
     note: "SEQUENTIAL EXECUTION: For each plan_part, run the FULL cycle — verify → implement → test → merge — for that part before advancing to the next part. Never run verify for all parts first. If review produced a report, context.review_path is available — pass it as an additional arg to dry-walkthrough."
@@ -264,9 +251,9 @@ steps:
       worktree_path: "${{ result.worktree_path }}"
       phases_implemented: "${{ result.phases_implemented }}"
     on_result:
-      - when: "${{ result.phases_implemented }} > 0"
-        route: test
-      - route: test
+    - when: "${{ result.phases_implemented }} > 0"
+      route: test
+    - route: test
     on_context_limit: test
     on_exhausted: release_issue_failure
     on_failure: release_issue_failure
@@ -287,12 +274,12 @@ steps:
     capture:
       merge_fix_count: "${{ result.next_iteration }}"
     on_result:
-      - when: "${{ result.max_exceeded }} == true"
-        route: release_issue_failure
-      - route: commit_guard
+    - when: "${{ result.max_exceeded }} == true"
+      route: release_issue_failure
+    - route: commit_guard
     on_failure: release_issue_failure
     optional_context_refs:
-      - merge_fix_count
+    - merge_fix_count
     note: >
       Iteration guard for the merge→fix→test cycle. Caps the loop at 3
       iterations (enough for legitimate flake recovery but not enough to
@@ -332,19 +319,19 @@ steps:
       cleanup_succeeded: "${{ result.cleanup_succeeded }}"
       worktree_path: "${{ result.worktree_path }}"
     on_result:
-      - when: "result.failed_step == 'dirty_tree'"
-        route: fix
-      - when: "result.failed_step == 'test_gate'"
-        route: fix
-      - when: "result.failed_step == 'post_rebase_test_gate'"
-        route: fix
-      - when: "result.failed_step == 'rebase'"
-        route: rebase_conflict_fix
-      - when: "result.failed_step == 'dirty_main_repo'"
-        route: check_merge_fix_loop
-      - when: "result.error"
-        route: release_issue_failure
-      - route: next_or_done
+    - when: "result.failed_step == 'dirty_tree'"
+      route: fix
+    - when: "result.failed_step == 'test_gate'"
+      route: fix
+    - when: "result.failed_step == 'post_rebase_test_gate'"
+      route: fix
+    - when: "result.failed_step == 'rebase'"
+      route: rebase_conflict_fix
+    - when: "result.failed_step == 'dirty_main_repo'"
+      route: check_merge_fix_loop
+    - when: "result.error"
+      route: release_issue_failure
+    - route: next_or_done
     on_failure: release_issue_failure
     note: >
       After merge, route to next_or_done to process remaining parts/groups before pushing.
@@ -383,17 +370,17 @@ steps:
       verdict: "${{ result.verdict }}"
       fixes_applied: "${{ result.fixes_applied }}"
     on_result:
-      - when: "${{ result.verdict }} == 'real_fix'"
-        route: test
-      - when: "${{ result.verdict }} == 'already_green'"
-        route: test
-      - when: "${{ result.verdict }} == 'flake_suspected'"
-        route: test
-      - when: "${{ result.verdict }} == 'ci_only_failure'"
-        route: release_issue_failure
-      - when: "${{ result.verdict }} == 'no_test_infrastructure'"
-        route: release_issue_failure
-      - route: release_issue_failure
+    - when: "${{ result.verdict }} == 'real_fix'"
+      route: test
+    - when: "${{ result.verdict }} == 'already_green'"
+      route: test
+    - when: "${{ result.verdict }} == 'flake_suspected'"
+      route: test
+    - when: "${{ result.verdict }} == 'ci_only_failure'"
+      route: release_issue_failure
+    - when: "${{ result.verdict }} == 'no_test_infrastructure'"
+      route: release_issue_failure
+    - route: release_issue_failure
     on_failure: release_issue_failure
     on_context_limit: test
     note: "Fixes test failures without merging. Routes back to test for re-validation before merge_worktree. on_context_limit routes needs_retry=True to test (worktree may already be green) instead of re-running fix blindly."
@@ -408,9 +395,9 @@ steps:
     capture:
       conflict_escalation_required: "${{ result.escalation_required }}"
     on_result:
-      - when: "${{ result.escalation_required }} == true"
-        route: release_issue_failure
-      - route: test
+    - when: "${{ result.escalation_required }} == true"
+      route: release_issue_failure
+    - route: test
     on_failure: release_issue_failure
     on_context_limit: release_issue_failure
     retries: 1
@@ -419,11 +406,11 @@ steps:
   next_or_done:
     action: route
     on_result:
-      - when: "${{ result.next }} == more_parts"
-        route: verify
-      - when: "${{ result.next }} == more_groups"
-        route: plan
-      - route: audit_impl
+    - when: "${{ result.next }} == more_parts"
+      route: verify
+    - when: "${{ result.next }} == more_groups"
+      route: plan
+    - route: audit_impl
     note: >
       Routing step — no tool call. The agent evaluates what comes next:
       1. If more plan_parts remain for the current group → go to verify with next part.
@@ -437,14 +424,15 @@ steps:
       skill_command: "/autoskillit:audit-impl ${{ context.plan_path }} ${{ context.base_sha }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
       step_name: "audit_impl"
+      output_dir: ${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/audit-impl
     capture:
       remediation_path: "${{ result.remediation_path }}"
     on_result:
-      - when: "${{ result.verdict }} == GO"
-        route: push
-      - when: "result.error"
-        route: escalate_stop
-      - route: remediate
+    - when: "${{ result.verdict }} == GO"
+      route: push
+    - when: "result.error"
+      route: escalate_stop
+    - route: remediate
     on_failure: escalate_stop
     on_context_limit: escalate_stop
     optional: true
@@ -478,11 +466,11 @@ steps:
       selected_lenses: "${{ result.selected_lenses }}"
       lens_context_paths: "${{ result.lens_context_paths }}"
     on_result:
-      - when: "${{ result.prep_path }} and ${{ inputs.arch_lenses }} == 'true'"
-        route: run_arch_lenses
-      - when: "${{ result.prep_path }}"
-        route: compose_pr
-      - route: release_issue_failure
+    - when: "${{ result.prep_path }} and ${{ inputs.arch_lenses }} == 'true'"
+      route: run_arch_lenses
+    - when: "${{ result.prep_path }}"
+      route: compose_pr
+    - route: release_issue_failure
     on_failure: release_issue_failure
     on_context_limit: release_issue_failure
     optional: true
@@ -532,9 +520,9 @@ steps:
     capture:
       pr_url: "${{ result.pr_url }}"
     on_result:
-      - when: "${{ result.pr_url }}"
-        route: guard_pr_url
-      - route: release_issue_failure
+    - when: "${{ result.pr_url }}"
+      route: guard_pr_url
+    - route: release_issue_failure
     on_failure: release_issue_failure
     on_context_limit: release_issue_failure
     optional: true
@@ -548,9 +536,9 @@ steps:
   guard_pr_url:
     action: route
     on_result:
-      - when: "${{ context.pr_url }}"
-        route: extract_pr_number
-      - route: release_issue_failure
+    - when: "${{ context.pr_url }}"
+      route: extract_pr_number
+    - route: release_issue_failure
     note: Guard — skip PR extraction if pr_url is empty (graceful degradation from compose_pr).
 
   extract_pr_number:
@@ -589,7 +577,7 @@ steps:
     optional: true
     skip_when_false: "inputs.open_pr"
     optional_context_refs:
-      - review_loop_count
+    - review_loop_count
     note: >
       Pre-computes annotated diff with [LNNN] markers and hunk ranges JSON for
       review-pr. On failure, falls through to review_pr which uses empty fallback.
@@ -601,26 +589,27 @@ steps:
       skill_command: "/autoskillit:review-pr ${{ context.merge_target }} ${{ inputs.base_branch }} annotated_diff_path=${{ context.annotated_diff_path }} hunk_ranges_path=${{ context.hunk_ranges_path }} diff_metrics_path=${{ context.diff_metrics_path }} mode=${{ context.review_mode }}"
       cwd: "${{ context.work_dir }}"
       step_name: "review_pr"
+      output_dir: ${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/review-pr
     capture:
       review_verdict: "${{ result.verdict }}"
     on_result:
-      - when: "${{ result.verdict }} == changes_requested"
-        route: resolve_review
-      - when: "${{ result.verdict }} == approved_with_comments"
-        route: resolve_review
-      - when: "${{ result.verdict }} == needs_human"
-        route: check_review_loop
-      - when: "${{ result.verdict }} == approved"
-        route: check_review_loop
-      - when: "true"
-        route: check_review_loop
+    - when: "${{ result.verdict }} == changes_requested"
+      route: resolve_review
+    - when: "${{ result.verdict }} == approved_with_comments"
+      route: resolve_review
+    - when: "${{ result.verdict }} == needs_human"
+      route: check_review_loop
+    - when: "${{ result.verdict }} == approved"
+      route: check_review_loop
+    - when: "true"
+      route: check_review_loop
     on_failure: check_repo_ci_event
     on_context_limit: check_repo_ci_event
     optional: true
     skip_when_false: "inputs.open_pr"
     optional_context_refs:
-      - review_loop_count
-      - review_mode
+    - review_loop_count
+    - review_mode
     note: >
       Runs after compose_pr creates the PR. Invokes the review-pr skill as a
       headless session to leave inline review comments on the PR. The skill finds
@@ -644,17 +633,17 @@ steps:
     on_exhausted: release_issue_failure
     on_context_limit: re_push_review
     on_result:
-      - when: "${{ result.verdict }} == 'real_fix'"
-        route: re_push_review
-      - when: "${{ result.verdict }} == 'already_green'"
-        route: re_push_review
-      - when: "${{ result.verdict }} == 'flake_suspected'"
-        route: re_push_review
-      - when: "${{ result.verdict }} == 'ci_only_failure'"
-        route: release_issue_failure
+    - when: "${{ result.verdict }} == 'real_fix'"
+      route: re_push_review
+    - when: "${{ result.verdict }} == 'already_green'"
+      route: re_push_review
+    - when: "${{ result.verdict }} == 'flake_suspected'"
+      route: re_push_review
+    - when: "${{ result.verdict }} == 'ci_only_failure'"
+      route: release_issue_failure
     on_failure: release_issue_failure
     optional_context_refs:
-      - review_mode
+    - review_mode
     note: >
       Runs when review_pr reports issues (verdict=changes_requested). The clone
       (context.work_dir) has the feature branch (context.merge_target) checked out.
@@ -690,13 +679,13 @@ steps:
     capture:
       review_loop_count: "${{ result.next_iteration }}"
     on_result:
-      - when: "${{ result.had_blocking }} == true and ${{ result.max_exceeded }} == false"
-        route: annotate_pr_diff
-      - route: check_repo_ci_event
+    - when: "${{ result.had_blocking }} == true and ${{ result.max_exceeded }} == false"
+      route: annotate_pr_diff
+    - route: check_repo_ci_event
     on_failure: check_repo_ci_event
     optional_context_refs:
-      - review_loop_count
-      - review_verdict
+    - review_loop_count
+    - review_verdict
     note: >
       Compound iteration + blocking guard. Routes back to annotate_pr_diff only when
       had_blocking=true AND max_exceeded=false. had_blocking is true when
@@ -725,9 +714,9 @@ steps:
   route_ci_applicable:
     action: route
     on_result:
-      - when: "${{ context.ci_applicable }} == false"
-        route: check_repo_merge_state
-      - route: check_pr_state
+    - when: "${{ context.ci_applicable }} == false"
+      route: check_repo_merge_state
+    - route: check_pr_state
     skip_when_false: "inputs.open_pr"
     note: >
       Short-circuits CI wait when no workflow trigger matches the feature branch.
@@ -740,9 +729,9 @@ steps:
       pr_number: "${{ context.pr_number }}"
       cwd: "${{ context.work_dir }}"
     on_result:
-      - when: "${{ result.mergeable_status }} == 'CONFLICTING'"
-        route: ci_conflict_fix
-      - route: ci_watch
+    - when: "${{ result.mergeable_status }} == 'CONFLICTING'"
+      route: ci_conflict_fix
+    - route: ci_watch
     on_failure: ci_watch
     skip_when_false: "inputs.open_pr"
     note: >
@@ -767,13 +756,13 @@ steps:
       ci_conclusion: "${{ result.conclusion }}"
       ci_failed_jobs: "${{ result.failed_jobs }}"
     on_result:
-      - when: "${{ result.conclusion }} == 'success'"
-        route: check_repo_merge_state
-      - when: "${{ result.conclusion }} == 'no_runs'"
-        route: handle_no_ci_runs
-      - when: "${{ result.conclusion }} == 'timed_out'"
-        route: check_ci_timed_out_loop
-      - route: detect_ci_conflict
+    - when: "${{ result.conclusion }} == 'success'"
+      route: check_repo_merge_state
+    - when: "${{ result.conclusion }} == 'no_runs'"
+      route: handle_no_ci_runs
+    - when: "${{ result.conclusion }} == 'timed_out'"
+      route: check_ci_timed_out_loop
+    - route: detect_ci_conflict
     on_failure: detect_ci_conflict
     optional: true
     skip_when_false: "inputs.open_pr"
@@ -796,12 +785,12 @@ steps:
     capture:
       ci_timed_out_loop_count: "${{ result.next_iteration }}"
     on_result:
-      - when: "${{ result.max_exceeded }} == true"
-        route: detect_ci_conflict
-      - route: ci_watch
+    - when: "${{ result.max_exceeded }} == true"
+      route: detect_ci_conflict
+    - route: ci_watch
     on_failure: detect_ci_conflict
     optional_context_refs:
-      - ci_timed_out_loop_count
+    - ci_timed_out_loop_count
     note: >
       Caps the ci_watch re-poll loop at 2 iterations.
       After 2 timed_out results (1200s total), routes to detect_ci_conflict
@@ -837,12 +826,12 @@ steps:
     capture:
       ci_loop_count: "${{ result.next_iteration }}"
     on_result:
-      - when: "${{ result.max_exceeded }} == true"
-        route: check_active_trigger_loop
-      - route: ci_watch
+    - when: "${{ result.max_exceeded }} == true"
+      route: check_active_trigger_loop
+    - route: ci_watch
     on_failure: check_ci_already_passed
     optional_context_refs:
-      - ci_loop_count
+    - ci_loop_count
     note: >
       Iteration guard for the ci_watch / handle_no_ci_runs cycle. Caps the
       loop at 2 iterations (initial + 1 retry after re-deriving ci_event).
@@ -858,12 +847,12 @@ steps:
     capture:
       active_trigger_count: "${{ result.next_iteration }}"
     on_result:
-      - when: "${{ result.max_exceeded }} == true"
-        route: check_ci_already_passed
-      - route: trigger_ci_actively
+    - when: "${{ result.max_exceeded }} == true"
+      route: check_ci_already_passed
+    - route: trigger_ci_actively
     on_failure: check_ci_already_passed
     optional_context_refs:
-      - active_trigger_count
+    - active_trigger_count
     note: >
       Bounds the trigger_ci_actively remediation to a single attempt. If
       ci_watch still returns no_runs after the active trigger, escalates
@@ -897,13 +886,13 @@ steps:
       auto_trigger: true
     skip_when_false: "inputs.open_pr"
     on_result:
-      - when: "${{ result.conclusion }} == success"
-        route: check_repo_merge_state
-      - when: "${{ result.conclusion }} == failure"
-        route: detect_ci_conflict
-      - when: "${{ result.conclusion }} == timed_out"
-        route: ci_watch
-      - route: mark_issue_failed_no_ci
+    - when: "${{ result.conclusion }} == success"
+      route: check_repo_merge_state
+    - when: "${{ result.conclusion }} == failure"
+      route: detect_ci_conflict
+    - when: "${{ result.conclusion }} == timed_out"
+      route: ci_watch
+    - route: mark_issue_failed_no_ci
     on_failure: mark_issue_failed_no_ci
     note: >
       Safety net before terminal escalation: re-polls CI with a short timeout
@@ -952,6 +941,7 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "diagnose_ci"
       ci_failed_jobs: "${{ context.ci_failed_jobs }}"
+      output_dir: ${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/diagnose-ci
     capture:
       diagnosis_path: "${{ result.diagnosis_path }}"
     on_success: resolve_ci
@@ -979,16 +969,16 @@ steps:
     on_exhausted: release_issue_failure
     on_context_limit: re_push
     on_result:
-      - when: "${{ result.verdict }} == 'real_fix'"
-        route: re_push
-      - when: "${{ result.verdict }} == 'already_green'"
-        route: pre_resolve_rebase
-      - when: "${{ result.verdict }} == 'flake_suspected'"
-        route: re_push
-      - when: "${{ result.verdict }} == 'ci_only_failure'"
-        route: release_issue_failure
-      - when: "${{ result.verdict }} == 'no_test_infrastructure'"
-        route: release_issue_failure
+    - when: "${{ result.verdict }} == 'real_fix'"
+      route: re_push
+    - when: "${{ result.verdict }} == 'already_green'"
+      route: pre_resolve_rebase
+    - when: "${{ result.verdict }} == 'flake_suspected'"
+      route: re_push
+    - when: "${{ result.verdict }} == 'ci_only_failure'"
+      route: release_issue_failure
+    - when: "${{ result.verdict }} == 'no_test_infrastructure'"
+      route: release_issue_failure
     on_failure: release_issue_failure
     note: >
       Runs when ci_watch reports a CI failure. Receives ci_failed_jobs from wait_for_ci
@@ -1024,12 +1014,12 @@ steps:
     capture:
       ci_rebase_count: "${{ result.next_iteration }}"
     on_result:
-      - when: "${{ result.max_exceeded }} == true"
-        route: release_issue_failure
-      - route: diagnose_ci
+    - when: "${{ result.max_exceeded }} == true"
+      route: release_issue_failure
+    - route: diagnose_ci
     on_failure: release_issue_failure
     optional_context_refs:
-      - ci_rebase_count
+    - ci_rebase_count
     note: >
       Guards the resolve_ci(already_green) → pre_resolve_rebase → diagnose_ci cycle.
       Caps at 3 rebase-rediagnose iterations. If CI keeps reporting already_green
@@ -1078,13 +1068,13 @@ steps:
     block: pre_queue_gate
     action: route
     on_result:
-      - when: "${{ inputs.auto_merge }} != 'true'"
-        route: patch_token_summary
-      - when: "${{ context.queue_available }} == true and ${{ context.merge_group_trigger }} == true"
-        route: enqueue_to_queue
-      - when: "${{ context.auto_merge_available }} == true"
-        route: direct_merge
-      - route: immediate_merge
+    - when: "${{ inputs.auto_merge }} != 'true'"
+      route: patch_token_summary
+    - when: "${{ context.queue_available }} == true and ${{ context.merge_group_trigger }} == true"
+      route: enqueue_to_queue
+    - when: "${{ context.auto_merge_available }} == true"
+      route: direct_merge
+    - route: immediate_merge
     skip_when_false: "inputs.open_pr"
 
   enqueue_to_queue:
@@ -1115,23 +1105,23 @@ steps:
       timeout_seconds: 60
       poll_interval: 10
     on_result:
-      - when: "${{ result.pr_state }} == merged"
-        route: release_issue_success
-      - when: "${{ result.pr_state }} == ejected_ci_failure"
-        route: diagnose_ci
-      - when: "${{ result.pr_state }} == not_enrolled"
-        route: release_issue_failure
-      - when: "${{ result.pr_state }} == dropped_healthy"
-        route: wait_for_queue
-      - when: "${{ result.pr_state }} == dropped_merge_group_ci"
-        route: diagnose_ci
-      - when: "${{ result.pr_state }} == ejected"
-        route: wait_for_queue
-      - when: "${{ result.pr_state }} == stalled"
-        route: wait_for_queue
-      - when: "${{ result.pr_state }} == timeout"
-        route: register_clone_unconfirmed
-      - route: register_clone_unconfirmed
+    - when: "${{ result.pr_state }} == merged"
+      route: release_issue_success
+    - when: "${{ result.pr_state }} == ejected_ci_failure"
+      route: diagnose_ci
+    - when: "${{ result.pr_state }} == not_enrolled"
+      route: release_issue_failure
+    - when: "${{ result.pr_state }} == dropped_healthy"
+      route: wait_for_queue
+    - when: "${{ result.pr_state }} == dropped_merge_group_ci"
+      route: diagnose_ci
+    - when: "${{ result.pr_state }} == ejected"
+      route: wait_for_queue
+    - when: "${{ result.pr_state }} == stalled"
+      route: wait_for_queue
+    - when: "${{ result.pr_state }} == timeout"
+      route: register_clone_unconfirmed
+    - route: register_clone_unconfirmed
     on_failure: register_clone_unconfirmed
     note: >
       Short probe (60s) after enqueue_to_queue failure. If the PR is already
@@ -1155,23 +1145,23 @@ steps:
     capture:
       queue_pr_state: "${{ result.pr_state }}"
     on_result:
-      - when: "${{ result.pr_state }} == merged"
-        route: release_issue_success
-      - when: "${{ result.pr_state }} == ejected_ci_failure"
-        route: diagnose_ci
-      - when: "${{ result.pr_state }} == dropped_merge_group_ci"
-        route: diagnose_ci
-      - when: "${{ result.pr_state }} == not_enrolled"
-        route: release_issue_failure
-      - when: "${{ result.pr_state }} == dropped_healthy"
-        route: check_dropped_healthy_loop
-      - when: "${{ result.pr_state }} == ejected"
-        route: check_eject_limit
-      - when: "${{ result.pr_state }} == stalled"
-        route: reenroll_stalled_pr
-      - when: "${{ result.pr_state }} == timeout"
-        route: register_clone_unconfirmed
-      - route: register_clone_unconfirmed
+    - when: "${{ result.pr_state }} == merged"
+      route: release_issue_success
+    - when: "${{ result.pr_state }} == ejected_ci_failure"
+      route: diagnose_ci
+    - when: "${{ result.pr_state }} == dropped_merge_group_ci"
+      route: diagnose_ci
+    - when: "${{ result.pr_state }} == not_enrolled"
+      route: release_issue_failure
+    - when: "${{ result.pr_state }} == dropped_healthy"
+      route: check_dropped_healthy_loop
+    - when: "${{ result.pr_state }} == ejected"
+      route: check_eject_limit
+    - when: "${{ result.pr_state }} == stalled"
+      route: reenroll_stalled_pr
+    - when: "${{ result.pr_state }} == timeout"
+      route: register_clone_unconfirmed
+    - route: register_clone_unconfirmed
     on_failure: register_clone_unconfirmed
     skip_when_false: "inputs.open_pr"
     note: >
@@ -1203,12 +1193,12 @@ steps:
     capture:
       stall_loop_count: "${{ result.next_iteration }}"
     on_result:
-      - when: "${{ result.max_exceeded }} == true"
-        route: register_clone_unconfirmed
-      - route: wait_for_queue
+    - when: "${{ result.max_exceeded }} == true"
+      route: register_clone_unconfirmed
+    - route: wait_for_queue
     on_failure: register_clone_unconfirmed
     optional_context_refs:
-      - stall_loop_count
+    - stall_loop_count
     note: >
       Iteration guard for the wait_for_queue / reenroll_stalled_pr cycle.
       Caps stall re-enrollment at 3 attempts. On budget exhaustion, routes
@@ -1221,9 +1211,9 @@ steps:
       counter_file: "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/eject_count"
       max_ejects: "3"
     on_result:
-      - when: "${{ result.status }} == EJECT_LIMIT_EXCEEDED"
-        route: release_issue_failure
-      - route: queue_ejected_fix
+    - when: "${{ result.status }} == EJECT_LIMIT_EXCEEDED"
+      route: release_issue_failure
+    - route: queue_ejected_fix
     on_failure: release_issue_failure
     note: >
       Circuit breaker for the queue ejection loop. Tracks ejection count in a
@@ -1237,9 +1227,9 @@ steps:
       counter_file: "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/dropped_healthy_count"
       max_drops: "2"
     on_result:
-      - when: "${{ result.status }} == DROPPED_LIMIT_EXCEEDED"
-        route: release_issue_failure
-      - route: reenter_merge_queue_cheap
+    - when: "${{ result.status }} == DROPPED_LIMIT_EXCEEDED"
+      route: release_issue_failure
+    - route: reenter_merge_queue_cheap
     on_failure: release_issue_failure
     note: >
       Circuit breaker for the dropped_healthy re-enrollment loop. After 2 consecutive
@@ -1255,9 +1245,9 @@ steps:
       work_dir: "${{ context.work_dir }}"
       base_branch: "${{ inputs.base_branch }}"
     on_result:
-      - when: "${{ result.status }} == clean"
-        route: re_push_queue_fix
-      - route: resolve_queue_merge_conflicts
+    - when: "${{ result.status }} == clean"
+      route: re_push_queue_fix
+    - route: resolve_queue_merge_conflicts
     on_failure: resolve_queue_merge_conflicts
     skip_when_false: "inputs.open_pr"
     note: >
@@ -1276,9 +1266,9 @@ steps:
     capture:
       conflict_escalation_required: "${{ result.escalation_required }}"
     on_result:
-      - when: "${{ result.escalation_required }} == true"
-        route: release_issue_failure
-      - route: re_push_queue_fix
+    - when: "${{ result.escalation_required }} == true"
+      route: release_issue_failure
+    - route: re_push_queue_fix
     on_failure: release_issue_failure
     on_context_limit: release_issue_failure
     retries: 1
@@ -1307,9 +1297,9 @@ steps:
   classify_push_failure:
     action: route
     on_result:
-      - when: "${{ context.push_error_type }} == queued_branch"
-        route: wait_dequeue_retry
-      - route: release_issue_failure
+    - when: "${{ context.push_error_type }} == queued_branch"
+      route: wait_dequeue_retry
+    - route: release_issue_failure
 
   wait_dequeue_retry:
     tool: wait_for_merge_queue
@@ -1319,24 +1309,24 @@ steps:
       cwd: "${{ context.work_dir }}"
       timeout_seconds: "60"
     on_result:
-      - when: "${{ result.pr_state }} == merged"
-        route: release_issue_success
-      - when: "${{ result.pr_state }} == ejected_ci_failure"
-        route: register_clone_unconfirmed
-      - when: "${{ result.pr_state }} == dropped_merge_group_ci"
-        route: register_clone_unconfirmed
-      - when: "${{ result.pr_state }} == dropped_healthy"
-        route: register_clone_unconfirmed
-      - when: "${{ result.pr_state }} == ejected"
-        route: re_push_queue_fix
-      - when: "${{ result.pr_state }} == stalled"
-        route: register_clone_unconfirmed
-      - when: "${{ result.pr_state }} == timeout"
-        route: register_clone_unconfirmed
-      - route: register_clone_unconfirmed
+    - when: "${{ result.pr_state }} == merged"
+      route: release_issue_success
+    - when: "${{ result.pr_state }} == ejected_ci_failure"
+      route: register_clone_unconfirmed
+    - when: "${{ result.pr_state }} == dropped_merge_group_ci"
+      route: register_clone_unconfirmed
+    - when: "${{ result.pr_state }} == dropped_healthy"
+      route: register_clone_unconfirmed
+    - when: "${{ result.pr_state }} == ejected"
+      route: re_push_queue_fix
+    - when: "${{ result.pr_state }} == stalled"
+      route: register_clone_unconfirmed
+    - when: "${{ result.pr_state }} == timeout"
+      route: register_clone_unconfirmed
+    - route: register_clone_unconfirmed
     on_failure: register_clone_unconfirmed
     optional_context_refs:
-      - push_error_type
+    - push_error_type
 
   ci_watch_post_queue_fix:
     tool: wait_for_ci
@@ -1351,13 +1341,13 @@ steps:
       ci_conclusion: "${{ result.conclusion }}"
       ci_failed_jobs: "${{ result.failed_jobs }}"
     on_result:
-      - when: "${{ result.conclusion }} == 'success'"
-        route: reenter_merge_queue
-      - when: "${{ result.conclusion }} == 'no_runs'"
-        route: release_issue_failure
-      - when: "${{ result.conclusion }} == 'timed_out'"
-        route: check_ci_post_queue_loop
-      - route: detect_ci_conflict
+    - when: "${{ result.conclusion }} == 'success'"
+      route: reenter_merge_queue
+    - when: "${{ result.conclusion }} == 'no_runs'"
+      route: release_issue_failure
+    - when: "${{ result.conclusion }} == 'timed_out'"
+      route: check_ci_post_queue_loop
+    - route: detect_ci_conflict
     on_failure: detect_ci_conflict
     skip_when_false: "inputs.open_pr"
     note: >
@@ -1376,12 +1366,12 @@ steps:
     capture:
       ci_post_queue_loop_count: "${{ result.next_iteration }}"
     on_result:
-      - when: "${{ result.max_exceeded }} == true"
-        route: release_issue_failure
-      - route: ci_watch_post_queue_fix
+    - when: "${{ result.max_exceeded }} == true"
+      route: release_issue_failure
+    - route: ci_watch_post_queue_fix
     on_failure: release_issue_failure
     optional_context_refs:
-      - ci_post_queue_loop_count
+    - ci_post_queue_loop_count
     skip_when_false: "inputs.open_pr"
     note: >
       Iteration guard for the ci_watch_post_queue_fix timed_out self-loop.
@@ -1441,11 +1431,11 @@ steps:
       max_polls: "90"
       poll_interval: "10"
     on_result:
-      - when: "${{ result.state }} == merged"
-        route: release_issue_success
-      - when: "${{ result.state }} == closed"
-        route: direct_merge_conflict_fix
-      - route: register_clone_unconfirmed
+    - when: "${{ result.state }} == merged"
+      route: release_issue_success
+    - when: "${{ result.state }} == closed"
+      route: direct_merge_conflict_fix
+    - route: register_clone_unconfirmed
     on_failure: register_clone_unconfirmed
     skip_when_false: "inputs.open_pr"
     note: >
@@ -1461,9 +1451,9 @@ steps:
       work_dir: "${{ context.work_dir }}"
       base_branch: "${{ inputs.base_branch }}"
     on_result:
-      - when: "${{ result.status }} == clean"
-        route: re_push_direct_fix
-      - route: resolve_direct_merge_conflicts
+    - when: "${{ result.status }} == clean"
+      route: re_push_direct_fix
+    - route: resolve_direct_merge_conflicts
     on_failure: resolve_direct_merge_conflicts
     skip_when_false: "inputs.open_pr"
     note: >
@@ -1481,9 +1471,9 @@ steps:
     capture:
       conflict_escalation_required: "${{ result.escalation_required }}"
     on_result:
-      - when: "${{ result.escalation_required }} == true"
-        route: release_issue_failure
-      - route: re_push_direct_fix
+    - when: "${{ result.escalation_required }} == true"
+      route: release_issue_failure
+    - route: re_push_direct_fix
     on_failure: release_issue_failure
     on_context_limit: release_issue_failure
     retries: 1
@@ -1543,11 +1533,11 @@ steps:
       max_polls: "30"
       poll_interval: "10"
     on_result:
-      - when: "${{ result.state }} == merged"
-        route: release_issue_success
-      - when: "${{ result.state }} == closed"
-        route: immediate_merge_conflict_fix
-      - route: register_clone_unconfirmed
+    - when: "${{ result.state }} == merged"
+      route: release_issue_success
+    - when: "${{ result.state }} == closed"
+      route: immediate_merge_conflict_fix
+    - route: register_clone_unconfirmed
     on_failure: register_clone_unconfirmed
     skip_when_false: "inputs.open_pr"
     note: >
@@ -1565,9 +1555,9 @@ steps:
       work_dir: "${{ context.work_dir }}"
       base_branch: "${{ inputs.base_branch }}"
     on_result:
-      - when: "${{ result.status }} == clean"
-        route: re_push_immediate_fix
-      - route: resolve_immediate_merge_conflicts
+    - when: "${{ result.status }} == clean"
+      route: re_push_immediate_fix
+    - route: resolve_immediate_merge_conflicts
     on_failure: resolve_immediate_merge_conflicts
     skip_when_false: "inputs.open_pr"
     note: >
@@ -1585,9 +1575,9 @@ steps:
     capture:
       conflict_escalation_required: "${{ result.escalation_required }}"
     on_result:
-      - when: "${{ result.escalation_required }} == true"
-        route: release_issue_failure
-      - route: re_push_immediate_fix
+    - when: "${{ result.escalation_required }} == true"
+      route: release_issue_failure
+    - route: re_push_immediate_fix
     on_failure: release_issue_failure
     on_context_limit: release_issue_failure
     retries: 1
@@ -1681,9 +1671,9 @@ steps:
     capture:
       conflict_escalation_required: "${{ result.escalation_required }}"
     on_result:
-      - when: "${{ result.escalation_required }} == true"
-        route: release_issue_failure
-      - route: re_push
+    - when: "${{ result.escalation_required }} == true"
+      route: release_issue_failure
+    - route: re_push
     on_failure: release_issue_failure
     on_context_limit: release_issue_failure
     retries: 1

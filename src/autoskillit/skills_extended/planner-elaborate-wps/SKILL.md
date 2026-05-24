@@ -38,6 +38,8 @@ is the sole writer for this phase's WPs — no concurrent write races.
 - Read result files from other phases
 - Run subagents in the background (`run_in_background: true` is prohibited)
 
+- Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
+
 **ALWAYS:**
 - Spawn all L0 subagents in parallel using the native Agent/Task tool (NOT run_skill — skill session guard blocks it)
 - Write the phase sentinel file before emitting the output token
@@ -95,7 +97,7 @@ each batch before starting the next.
 
 Each agent receives its variable-data packet (from Step 3) as the `prompt` parameter.
 The agent definition automatically provides:
-- Role and tool constraints
+- Role and tool constraints (You are a READ-ONLY analysis agent. Do NOT use Write, Edit, or Bash to modify any files.)
 - Output JSON schema with all required fields
 - Deliverable bounds (1–5)
 - WP ID format contract

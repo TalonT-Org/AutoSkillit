@@ -41,6 +41,8 @@ a fully-done `phase_manifest.json` in one shot.
 - Read `{{AUTOSKILLIT_TEMP}}` artifacts from other planner runs or pipeline steps
 - If `$3` is empty or the file does not exist, STOP immediately and report failure. Do not attempt to infer the task from the codebase, GitHub issues, or any other source.
 
+- Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
+
 **ALWAYS:**
 - Write `$(dirname $1)/phases/{phase_id}_result.json` for every phase
 - Write `$(dirname $1)/phases/phase_manifest.json` with every item status=`done`

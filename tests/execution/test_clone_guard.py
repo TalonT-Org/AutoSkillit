@@ -12,6 +12,7 @@ from autoskillit.core.types import (
     SubprocessResult,
     TerminationReason,
 )
+from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.clone_guard import (
     CloneSnapshot,
     check_and_revert_clone_contamination,
@@ -370,7 +371,7 @@ def test_worktree_path_always_extracted(tmp_path):
         termination=TerminationReason.NATURAL_EXIT,
         pid=12345,
     )
-    skill = _build_skill_result(sr)
+    skill = _build_skill_result(sr, backend=ClaudeCodeBackend())
     assert skill.worktree_path == str(wt)
 
 

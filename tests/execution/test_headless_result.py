@@ -20,7 +20,7 @@ from autoskillit.core.types import (
     TerminationReason,
     WriteBehaviorSpec,
 )
-from autoskillit.execution.backends.claude import ClaudeResultParser
+from autoskillit.execution.backends.claude import ClaudeCodeBackend, ClaudeResultParser
 from autoskillit.execution.backends.codex import CodexBackend
 from autoskillit.execution.headless import (
     _build_skill_result,
@@ -161,7 +161,7 @@ def _make_codex_parse_stdout() -> object:
     unconditionally routes through CodexResultParser.
     """
 
-    def _patched(stdout: str, backend: object = None) -> ClaudeSessionResult:  # noqa: ARG001
+    def _patched(stdout: str, backend: object) -> ClaudeSessionResult:  # noqa: ARG001
         agent_result = CodexBackend().result_parser().parse_stdout(stdout)
         session = _adapt_codex_result(agent_result)
         for line in stdout.strip().splitlines():
@@ -291,8 +291,8 @@ class TestStaleTokenUsagePropagation:
 
 
 class TestBackendDelegatedWriteToolNames:
-    def test_backend_none_uses_fallback_write_edit(self):
-        """backend=None falls back to frozenset({'Write', 'Edit'})."""
+    def test_claude_backend_uses_write_edit_tool_names(self):
+        """ClaudeCodeBackend uses frozenset({'Write', 'Edit'})."""
         stdout = (
             _make_tool_use_line("Write", {"file_path": "/a/b.py", "content": "x"})
             + "\n"
@@ -303,7 +303,7 @@ class TestBackendDelegatedWriteToolNames:
             + _success_session_json("Done")
         )
         result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
-        sr = _build_skill_result(result, backend=None)
+        sr = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert sr.evidence.write_call_count == 2
 
     def test_backend_provides_custom_tool_names(self):
@@ -323,7 +323,7 @@ class TestBackendDelegatedWriteToolNames:
         sr = _build_skill_result(result, backend=mock_backend)
         assert sr.evidence.write_call_count == 1
 
-    def test_backend_none_default_preserves_behavior(self):
+    def test_default_backend_behavior_preserved(self):
         """backend=None with no Write/Edit tools yields write_call_count=0."""
         stdout = (
             _make_tool_use_line("Read", {"file_path": "/a/b.py"})
@@ -331,7 +331,7 @@ class TestBackendDelegatedWriteToolNames:
             + _success_session_json("Done")
         )
         result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
-        sr = _build_skill_result(result, backend=None)
+        sr = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert sr.evidence.write_call_count == 0
 
     def test_codex_backend_produces_zero_write_count(self):
@@ -375,7 +375,7 @@ class TestBackendDelegatedWriteToolNames:
         captured: dict = {}
         original_parse = _headless_result._parse_stdout
 
-        def spy(stdout, backend=None):
+        def spy(stdout, backend):
             captured["backend"] = backend
             return original_parse(stdout, backend=backend)
 
@@ -397,7 +397,7 @@ class TestBackendDelegatedWriteToolNames:
         captured: dict = {}
         original_parse = _headless_result._parse_stdout
 
-        def spy(stdout, backend=None):
+        def spy(stdout, backend):
             captured["backend"] = backend
             return original_parse(stdout, backend=backend)
 
@@ -419,7 +419,7 @@ class TestBackendDelegatedWriteToolNames:
         captured: dict = {}
         original_parse = _headless_result._parse_stdout
 
-        def spy(stdout, backend=None):
+        def spy(stdout, backend):
             captured["backend"] = backend
             return original_parse(stdout, backend=backend)
 
@@ -441,7 +441,7 @@ class TestBackendDelegatedWriteToolNames:
         captured: dict = {}
         original_parse = _headless_result._parse_stdout
 
-        def spy(stdout, backend=None):
+        def spy(stdout, backend):
             captured["backend"] = backend
             return original_parse(stdout, backend=backend)
 
@@ -605,12 +605,12 @@ class TestComputeWriteEvidenceCodex:
 
 
 class TestParseStdout:
-    def test_backend_none_calls_parse_session_result(self):
-        """_parse_stdout with backend=None returns the same result as parse_session_result."""
+    def test_claude_backend_calls_parse_session_result(self):
+        """_parse_stdout with ClaudeCodeBackend returns the same result as parse_session_result."""
         from autoskillit.execution.session import parse_session_result
 
         stdout = _success_session_json("test result")
-        result = _parse_stdout(stdout)
+        result = _parse_stdout(stdout, backend=ClaudeCodeBackend())
         expected = parse_session_result(stdout)
         assert result.result == expected.result
         assert result.session_id == expected.session_id
@@ -620,7 +620,7 @@ class TestParseStdout:
         """_parse_stdout with no backend arg returns a ClaudeSessionResult."""
 
         stdout = _success_session_json("test result")
-        result = _parse_stdout(stdout)
+        result = _parse_stdout(stdout, ClaudeCodeBackend())
         assert isinstance(result, ClaudeSessionResult)
         assert result.result == "test result"
 
@@ -641,7 +641,7 @@ class TestParseStdout:
         mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
         stdout = _success_session_json("test result")
         with_backend = _parse_stdout(stdout, backend=mock_backend)
-        without_backend = _parse_stdout(stdout)
+        without_backend = _parse_stdout(stdout, ClaudeCodeBackend())
         assert with_backend.result == without_backend.result
         assert with_backend.session_id == without_backend.session_id
         assert with_backend.session_complete == without_backend.session_complete
@@ -680,17 +680,6 @@ class TestParseStdout:
         mock_backend.result_parser.return_value.parse_stdout.assert_called_once_with(stdout)
         assert isinstance(result, ClaudeSessionResult)
         assert result.result == "adapter output"
-
-    def test_parse_stdout_backend_none_unchanged(self):
-        """_parse_stdout with backend=None matches parse_session_result (regression guard)."""
-        from autoskillit.execution.session import parse_session_result
-
-        stdout = _success_session_json("test result")
-        result = _parse_stdout(stdout, backend=None)
-        expected = parse_session_result(stdout)
-        assert result.result == expected.result
-        assert result.session_id == expected.session_id
-        assert result.session_complete == expected.session_complete
 
     def test_parse_stdout_codex_backend_dispatches_through_adapter(self, monkeypatch):
         """CodexBackend dispatches through _adapt_agent_result (non-Claude path)."""
@@ -1183,11 +1172,6 @@ class TestNormalApiRetry:
 
 
 class TestExtractFileChanges:
-    def test_extract_file_changes_returns_empty_for_no_backend(self) -> None:
-        from autoskillit.execution.headless._headless_result import _extract_file_changes
-
-        assert _extract_file_changes("", None) == []
-
     def test_extract_file_changes_returns_empty_for_claude_backend(self) -> None:
         from autoskillit.execution.backends.claude import ClaudeCodeBackend
         from autoskillit.execution.headless._headless_result import _extract_file_changes
@@ -1227,7 +1211,9 @@ class TestComputeWriteEvidenceWithFileChanges:
             session_id="s1",
             tool_uses=[],
         )
-        evidence = _compute_write_evidence(session, False, False, file_changes=["a.py", "b.py"])
+        evidence = _compute_write_evidence(
+            session, False, False, backend=ClaudeCodeBackend(), file_changes=["a.py", "b.py"]
+        )
         assert evidence.file_changes_count == 2
         assert evidence.has_evidence is True
 
@@ -1240,6 +1226,8 @@ class TestComputeWriteEvidenceWithFileChanges:
             session_id="s1",
             tool_uses=[{"name": "Write", "id": "t1"}],
         )
-        evidence = _compute_write_evidence(session, False, False, file_changes=["a.py"])
+        evidence = _compute_write_evidence(
+            session, False, False, backend=ClaudeCodeBackend(), file_changes=["a.py"]
+        )
         assert evidence.file_changes_count == 0
         assert evidence.write_call_count == 1

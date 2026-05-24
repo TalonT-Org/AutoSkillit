@@ -14,6 +14,7 @@ from autoskillit.core.types import (
     SubprocessResult,
     TerminationReason,
 )
+from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.commands import _ensure_skill_prefix
 from autoskillit.execution.headless import (
     _build_skill_result,
@@ -303,7 +304,7 @@ class TestBuildSkillResult:
                 "session_id": "sess-abc",
             }
         )
-        skill = _build_skill_result(_sr(stdout=payload))
+        skill = _build_skill_result(_sr(stdout=payload), backend=ClaudeCodeBackend())
         assert skill.success is True
         assert skill.needs_retry is False
 
@@ -311,7 +312,10 @@ class TestBuildSkillResult:
         """TIMED_OUT termination → success=False, needs_retry=False (timeout is non-retriable)."""
         from autoskillit.execution.headless import _build_skill_result
 
-        skill = _build_skill_result(_sr(returncode=-1, termination=TerminationReason.TIMED_OUT))
+        skill = _build_skill_result(
+            _sr(returncode=-1, termination=TerminationReason.TIMED_OUT),
+            backend=ClaudeCodeBackend(),
+        )
         assert skill.success is False
         assert skill.needs_retry is False
 
@@ -329,7 +333,8 @@ class TestBuildSkillResult:
             }
         )
         skill = _build_skill_result(
-            _sr(returncode=-15, stdout=payload, termination=TerminationReason.STALE)
+            _sr(returncode=-15, stdout=payload, termination=TerminationReason.STALE),
+            backend=ClaudeCodeBackend(),
         )
         assert skill.success is True
         assert skill.subtype == "recovered_from_stale"
@@ -339,7 +344,8 @@ class TestBuildSkillResult:
         from autoskillit.execution.headless import _build_skill_result
 
         skill = _build_skill_result(
-            _sr(returncode=-15, stdout="", termination=TerminationReason.STALE)
+            _sr(returncode=-15, stdout="", termination=TerminationReason.STALE),
+            backend=ClaudeCodeBackend(),
         )
         assert skill.success is False
         assert skill.needs_retry is True
@@ -363,6 +369,7 @@ class TestBuildSkillResult:
             audit=None,
             expected_output_patterns=[],
             cwd="/tmp",
+            backend=ClaudeCodeBackend(),
         )
         assert skill_result.session_id == "b077addc-926d-4869-b27a-7465a4c0fda4"
 
@@ -371,7 +378,8 @@ class TestBuildSkillResult:
         from autoskillit.execution.headless import _build_skill_result
 
         skill = _build_skill_result(
-            _sr(returncode=-15, stdout="", termination=TerminationReason.IDLE_STALL)
+            _sr(returncode=-15, stdout="", termination=TerminationReason.IDLE_STALL),
+            backend=ClaudeCodeBackend(),
         )
         assert skill.success is False
         assert skill.needs_retry is True
@@ -396,6 +404,7 @@ class TestBuildSkillResult:
             audit=None,
             expected_output_patterns=[],
             cwd="/tmp",
+            backend=ClaudeCodeBackend(),
         )
         assert skill_result.session_id == "c1ee2a00-1234-5678-abcd-deadbeefcafe"
         assert skill_result.success is False
@@ -433,6 +442,7 @@ class TestBuildSkillResult:
             audit=None,
             expected_output_patterns=[],
             cwd="/tmp",
+            backend=ClaudeCodeBackend(),
         )
         assert skill_result.session_id == stdout_session  # NOT channel_b_uuid
 
@@ -465,7 +475,7 @@ class TestRecoverFromSeparateMarker:
             pid=0,
             channel_confirmation=channel,
         )
-        return _build_skill_result(result, completion_marker=marker)
+        return _build_skill_result(result, completion_marker=marker, backend=ClaudeCodeBackend())
 
     def test_recovery_yields_success_when_marker_in_separate_message(self):
         """CHANNEL_B + standalone marker in separate assistant msg → result text populated.
@@ -631,7 +641,9 @@ class TestBuildSkillResultUsesComputeOutcome:
                 "session_id": "s1",
             }
         )
-        skill = _build_skill_result(_sr(stdout=payload), completion_marker=marker)
+        skill = _build_skill_result(
+            _sr(stdout=payload), completion_marker=marker, backend=ClaudeCodeBackend()
+        )
         assert skill.success is True
         assert skill.needs_retry is False
 
@@ -648,7 +660,7 @@ class TestBuildSkillResultUsesComputeOutcome:
                 "session_id": "s1",
             }
         )
-        skill = _build_skill_result(_sr(returncode=1, stdout=payload))
+        skill = _build_skill_result(_sr(returncode=1, stdout=payload), backend=ClaudeCodeBackend())
         assert skill.success is False
         assert skill.needs_retry is True
 
@@ -656,7 +668,10 @@ class TestBuildSkillResultUsesComputeOutcome:
         """Timeout session → success=False, needs_retry=False."""
         from autoskillit.execution.headless import _build_skill_result
 
-        skill = _build_skill_result(_sr(returncode=-1, termination=TerminationReason.TIMED_OUT))
+        skill = _build_skill_result(
+            _sr(returncode=-1, termination=TerminationReason.TIMED_OUT),
+            backend=ClaudeCodeBackend(),
+        )
         assert skill.success is False
         assert skill.needs_retry is False
 
@@ -681,7 +696,8 @@ class TestBuildSkillResultUsesComputeOutcome:
                 termination=TerminationReason.NATURAL_EXIT,
                 pid=0,
                 channel_confirmation=ChannelConfirmation.CHANNEL_B,
-            )
+            ),
+            backend=ClaudeCodeBackend(),
         )
         # Contradiction guard: CHANNEL_B bypass makes success=True, error_max_turns
         # makes needs_retry=True. Retry signal is authoritative → success=False.
@@ -709,7 +725,8 @@ class TestBuildSkillResultUsesComputeOutcome:
                 termination=TerminationReason.NATURAL_EXIT,
                 pid=0,
                 channel_confirmation=ChannelConfirmation.CHANNEL_A,
-            )
+            ),
+            backend=ClaudeCodeBackend(),
         )
         # Dead-end guard: success=False (empty result), needs_retry=False (CHANNEL_A
         # returns False from _compute_retry), but CHANNEL_A confirms completion →
@@ -946,7 +963,9 @@ class TestStalenessReturnsNeedsRetry:
             termination=TerminationReason.STALE,
             pid=12345,
         )
-        response = json.loads(_build_skill_result(stale_result).to_json())
+        response = json.loads(
+            _build_skill_result(stale_result, backend=ClaudeCodeBackend()).to_json()
+        )
         assert response["needs_retry"] is True
         assert response["retry_reason"] == "stale"
         assert response["subtype"] == "stale"
@@ -1000,7 +1019,9 @@ class TestBuildSkillResultCrossValidation:
         result_obj = SubprocessResult(
             returncode=0, stdout="", stderr="", termination=TerminationReason.NATURAL_EXIT, pid=1
         )
-        response = json.loads(_build_skill_result(result_obj).to_json())
+        response = json.loads(
+            _build_skill_result(result_obj, backend=ClaudeCodeBackend()).to_json()
+        )
         assert response["success"] is False
         assert response["is_error"] is True
 
@@ -1009,7 +1030,9 @@ class TestBuildSkillResultCrossValidation:
         result_obj = SubprocessResult(
             returncode=-1, stdout="", stderr="", termination=TerminationReason.TIMED_OUT, pid=1
         )
-        response = json.loads(_build_skill_result(result_obj).to_json())
+        response = json.loads(
+            _build_skill_result(result_obj, backend=ClaudeCodeBackend()).to_json()
+        )
         assert response["success"] is False
         assert response["is_error"] is True
         assert response["subtype"] == "timeout"
@@ -1019,7 +1042,9 @@ class TestBuildSkillResultCrossValidation:
         result_obj = SubprocessResult(
             returncode=-1, stdout="", stderr="", termination=TerminationReason.STALE, pid=1
         )
-        response = json.loads(_build_skill_result(result_obj).to_json())
+        response = json.loads(
+            _build_skill_result(result_obj, backend=ClaudeCodeBackend()).to_json()
+        )
         assert response["success"] is False
         assert response["needs_retry"] is True
 
@@ -1041,7 +1066,9 @@ class TestBuildSkillResultCrossValidation:
             termination=TerminationReason.NATURAL_EXIT,
             pid=1,
         )
-        response = json.loads(_build_skill_result(result_obj).to_json())
+        response = json.loads(
+            _build_skill_result(result_obj, backend=ClaudeCodeBackend()).to_json()
+        )
         assert response["success"] is True
         assert response["is_error"] is False
         assert response["result"] == "Task completed."
@@ -1064,7 +1091,9 @@ class TestBuildSkillResultCrossValidation:
             termination=TerminationReason.NATURAL_EXIT,
             pid=1,
         )
-        response = json.loads(_build_skill_result(result_obj).to_json())
+        response = json.loads(
+            _build_skill_result(result_obj, backend=ClaudeCodeBackend()).to_json()
+        )
         assert response["success"] is False
 
     @pytest.mark.parametrize(
@@ -1103,7 +1132,9 @@ class TestBuildSkillResultCrossValidation:
     )
     def test_schema_keys(self, result_obj: SubprocessResult):
         """Response always exposes the full standard key set."""
-        response = json.loads(_build_skill_result(result_obj).to_json())
+        response = json.loads(
+            _build_skill_result(result_obj, backend=ClaudeCodeBackend()).to_json()
+        )
         assert set(response.keys()) == self.EXPECTED_SKILL_KEYS
 
 
@@ -1144,13 +1175,13 @@ class TestBuildSkillResultLifespanStarted:
     def test_build_skill_result_sets_lifespan_started_true(self):
         """Non-empty tool_uses in stdout → _build_skill_result produces lifespan_started=True."""
         result = _make_subprocess_result_with_tool_uses(tool_use_names=["Write", "Edit"])
-        sr = _build_skill_result(result)
+        sr = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert sr.lifespan_started is True
 
     def test_build_skill_result_sets_lifespan_started_false_no_tool_uses(self):
         """Empty tool_uses in stdout → _build_skill_result produces lifespan_started=False."""
         result = _make_subprocess_result_with_tool_uses(tool_use_names=None)
-        sr = _build_skill_result(result)
+        sr = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert sr.lifespan_started is False
 
 
@@ -1175,7 +1206,9 @@ class TestBuildSkillResultStderr:
             termination=TerminationReason.NATURAL_EXIT,
             pid=1,
         )
-        response = json.loads(_build_skill_result(result_obj).to_json())
+        response = json.loads(
+            _build_skill_result(result_obj, backend=ClaudeCodeBackend()).to_json()
+        )
         assert response["stderr"] == "queue contention"
 
     def test_stderr_truncated(self):
@@ -1197,7 +1230,9 @@ class TestBuildSkillResultStderr:
             termination=TerminationReason.NATURAL_EXIT,
             pid=1,
         )
-        response = json.loads(_build_skill_result(result_obj).to_json())
+        response = json.loads(
+            _build_skill_result(result_obj, backend=ClaudeCodeBackend()).to_json()
+        )
         assert len(response["stderr"]) < len(long_stderr)
         assert "truncated" in response["stderr"]
 
@@ -1219,7 +1254,9 @@ class TestBuildSkillResultStderr:
             termination=TerminationReason.NATURAL_EXIT,
             pid=1,
         )
-        response = json.loads(_build_skill_result(result_obj).to_json())
+        response = json.loads(
+            _build_skill_result(result_obj, backend=ClaudeCodeBackend()).to_json()
+        )
         assert response["stderr"] == ""
 
     def test_stale_branch_has_empty_stderr(self):
@@ -1227,7 +1264,9 @@ class TestBuildSkillResultStderr:
         result_obj = SubprocessResult(
             returncode=-1, stdout="", stderr="", termination=TerminationReason.STALE, pid=1
         )
-        response = json.loads(_build_skill_result(result_obj).to_json())
+        response = json.loads(
+            _build_skill_result(result_obj, backend=ClaudeCodeBackend()).to_json()
+        )
         assert response["stderr"] == ""
 
 
@@ -1431,7 +1470,7 @@ class TestBuildSkillResultWorktreePath:
             pid=1234,
             channel_confirmation=ChannelConfirmation.UNMONITORED,
         )
-        sr = _build_skill_result(sub_result, "", "/test", None)
+        sr = _build_skill_result(sub_result, "", "/test", None, backend=ClaudeCodeBackend())
         assert sr.success is False
         assert sr.needs_retry is True
         assert sr.worktree_path == path
@@ -1446,7 +1485,7 @@ class TestBuildSkillResultWorktreePath:
             pid=1234,
             channel_confirmation=ChannelConfirmation.UNMONITORED,
         )
-        sr = _build_skill_result(sub_result, "", "/test", None)
+        sr = _build_skill_result(sub_result, "", "/test", None, backend=ClaudeCodeBackend())
         assert sr.success is False
         assert sr.needs_retry is True
         assert sr.worktree_path is None
@@ -1457,7 +1496,7 @@ class TestBuildSkillResultWorktreePath:
             returncode=0,
             stdout=_success_session_json("worktree_path=/path\nbranch_name=impl-fix"),
         )
-        sr = _build_skill_result(sub_result, "", "/test", None)
+        sr = _build_skill_result(sub_result, "", "/test", None, backend=ClaudeCodeBackend())
         assert sr.success is True
         assert sr.worktree_path is None
 
@@ -1504,7 +1543,7 @@ class TestBuildSkillResultWorktreePath:
             pid=1234,
             channel_confirmation=ChannelConfirmation.UNMONITORED,
         )
-        sr = _build_skill_result(sub_result, "", "/test", None)
+        sr = _build_skill_result(sub_result, "", "/test", None, backend=ClaudeCodeBackend())
         assert sr.worktree_path == str(second)
 
 
@@ -1544,7 +1583,7 @@ class TestWorktreePathOnContextExhaustion:
             pid=1234,
             channel_confirmation=ChannelConfirmation.UNMONITORED,
         )
-        sr = _build_skill_result(sub, "", "/test", None)
+        sr = _build_skill_result(sub, "", "/test", None, backend=ClaudeCodeBackend())
         data = json.loads(sr.to_json())
 
         assert sr.success is False
@@ -1578,6 +1617,7 @@ def test_relative_worktree_path_causes_adjudicated_failure() -> None:
         expected_output_patterns=["worktree_path\\s*=\\s*/.+"],
         cwd="/some/project",
         skill_command="implement-worktree-no-merge",
+        backend=ClaudeCodeBackend(),
     )
     assert skill_result.subtype == "adjudicated_failure"
     assert skill_result.success is False
@@ -1603,7 +1643,7 @@ class TestBuildSkillResultCompleted:
             stdout=stdout,
             termination_reason=TerminationReason.COMPLETED,
         )
-        parsed = json.loads(_build_skill_result(result).to_json())
+        parsed = json.loads(_build_skill_result(result, backend=ClaudeCodeBackend()).to_json())
         assert parsed["success"] is True
 
     def test_build_skill_result_completed_empty_result_is_failure(self):
@@ -1614,7 +1654,7 @@ class TestBuildSkillResultCompleted:
             termination_reason=TerminationReason.COMPLETED,
             channel_confirmation=ChannelConfirmation.UNMONITORED,
         )
-        parsed = json.loads(_build_skill_result(result).to_json())
+        parsed = json.loads(_build_skill_result(result, backend=ClaudeCodeBackend()).to_json())
         assert parsed["success"] is False
         assert parsed["needs_retry"] is True
 
@@ -1655,7 +1695,9 @@ class TestBuildSkillResultCompleted:
             channel_confirmation=ChannelConfirmation.UNMONITORED,
         )
         parsed = json.loads(
-            _build_skill_result(result, completion_marker="", skill_command="/test").to_json()
+            _build_skill_result(
+                result, completion_marker="", skill_command="/test", backend=ClaudeCodeBackend()
+            ).to_json()
         )
         assert parsed["success"] is False
         assert parsed["needs_retry"] is True
@@ -1681,7 +1723,11 @@ class TestBuildSkillResultCompleted:
             channel_confirmation=ChannelConfirmation.UNMONITORED,
         )
         sr = _build_skill_result(
-            result, completion_marker="", skill_command="/test", audit=tool_ctx.audit
+            result,
+            completion_marker="",
+            skill_command="/test",
+            audit=tool_ctx.audit,
+            backend=ClaudeCodeBackend(),
         )
         report = tool_ctx.audit.get_report()
         assert len(report) == 1
@@ -1707,7 +1753,9 @@ class TestBuildSkillResultCompleted:
             termination_reason=TerminationReason.COMPLETED,
             channel_confirmation=ChannelConfirmation.UNMONITORED,
         )
-        sr1 = _build_skill_result(result1, completion_marker="", skill_command="/test")
+        sr1 = _build_skill_result(
+            result1, completion_marker="", skill_command="/test", backend=ClaudeCodeBackend()
+        )
         assert sr1.success is False
         assert sr1.subtype != "success", (
             f"subtype must not be 'success' when success=False, got {sr1.subtype!r}"
@@ -1730,7 +1778,12 @@ class TestBuildSkillResultCompleted:
             termination_reason=TerminationReason.NATURAL_EXIT,
             channel_confirmation=ChannelConfirmation.UNMONITORED,
         )
-        sr2 = _build_skill_result(result2, completion_marker="%%ORDER_UP%%", skill_command="/test")
+        sr2 = _build_skill_result(
+            result2,
+            completion_marker="%%ORDER_UP%%",
+            skill_command="/test",
+            backend=ClaudeCodeBackend(),
+        )
         assert sr2.success is False
         assert sr2.subtype != "success", (
             f"subtype must not be 'success' when success=False, got {sr2.subtype!r}"
@@ -1745,7 +1798,9 @@ class TestBuildSkillResultCompleted:
             termination_reason=TerminationReason.COMPLETED,
             channel_confirmation=ChannelConfirmation.CHANNEL_B,
         )
-        sr = _build_skill_result(result, completion_marker="", skill_command="/test")
+        sr = _build_skill_result(
+            result, completion_marker="", skill_command="/test", backend=ClaudeCodeBackend()
+        )
         assert sr.success is True
         assert sr.subtype == "success"
         assert sr.cli_subtype == "empty_output"
@@ -1795,7 +1850,9 @@ class TestMarkerCrossValidation:
             pid=1,
         )
         response = json.loads(
-            _build_skill_result(result_obj, completion_marker=self.MARKER).to_json()
+            _build_skill_result(
+                result_obj, completion_marker=self.MARKER, backend=ClaudeCodeBackend()
+            ).to_json()
         )
         assert self.MARKER not in response["result"]
         assert "Task completed." in response["result"]
@@ -1952,6 +2009,7 @@ class TestMarkerCrossValidation:
             completion_marker=self.MARKER,
             skill_command="test-skill",
             audit=None,
+            backend=ClaudeCodeBackend(),
         )
         assert result.success is True, (
             f"Expected success=True for COMPLETED+CHANNEL_A+rc=-9, got success={result.success}, "
@@ -1983,6 +2041,7 @@ class TestMarkerCrossValidation:
             completion_marker=marker,
             skill_command="audit-impl",
             audit=None,
+            backend=ClaudeCodeBackend(),
         )
         assert result.success is True
         assert "Detailed audit report." in result.result
@@ -2011,6 +2070,7 @@ class TestMarkerCrossValidation:
             completion_marker=marker,
             skill_command="",
             audit=None,
+            backend=ClaudeCodeBackend(),
         )
         assert result.success is False
 
@@ -2055,7 +2115,9 @@ class TestBuildSkillResultTokenUsage:
         """JSON response includes token_usage when session has usage data."""
         stdout = self._make_ndjson()
         result_obj = _make_result(0, stdout, "")
-        response = json.loads(_build_skill_result(result_obj).to_json())
+        response = json.loads(
+            _build_skill_result(result_obj, backend=ClaudeCodeBackend()).to_json()
+        )
         assert "token_usage" in response
         usage = response["token_usage"]
         assert usage is not None
@@ -2079,7 +2141,9 @@ class TestBuildSkillResultTokenUsage:
             }
         )
         result_obj = _make_result(0, stdout, "")
-        response = json.loads(_build_skill_result(result_obj).to_json())
+        response = json.loads(
+            _build_skill_result(result_obj, backend=ClaudeCodeBackend()).to_json()
+        )
         assert response["token_usage"] is None
 
     def test_stale_result_has_null_token_usage(self):
@@ -2091,18 +2155,22 @@ class TestBuildSkillResultTokenUsage:
             termination=TerminationReason.STALE,
             pid=1,
         )
-        response = json.loads(_build_skill_result(stale_result).to_json())
+        response = json.loads(
+            _build_skill_result(stale_result, backend=ClaudeCodeBackend()).to_json()
+        )
         assert response["token_usage"] is None
 
     def test_timeout_result_has_null_token_usage(self):
         """Timeout termination produces null token_usage."""
         timeout_result = _make_timeout_result(stdout="", stderr="")
-        response = json.loads(_build_skill_result(timeout_result).to_json())
+        response = json.loads(
+            _build_skill_result(timeout_result, backend=ClaudeCodeBackend()).to_json()
+        )
         assert response["token_usage"] is None
 
 
 class TestFailureCaptureInBuildSkillResult:
-    """_build_skill_result() must capture failures into tool_ctx.audit."""
+    """_build_skill_result(backend=ClaudeCodeBackend()) must capture failures into tool_ctx.audit."""
 
     def test_captures_non_zero_exit_code(self, tool_ctx):
         result = _make_result(
@@ -2110,12 +2178,16 @@ class TestFailureCaptureInBuildSkillResult:
             stdout=_failed_session_json(),
             channel_confirmation=ChannelConfirmation.UNMONITORED,
         )
-        _build_skill_result(result, skill_command="/test:cmd", audit=tool_ctx.audit)
+        _build_skill_result(
+            result, skill_command="/test:cmd", audit=tool_ctx.audit, backend=ClaudeCodeBackend()
+        )
         assert len(tool_ctx.audit.get_report()) == 1
 
     def test_does_not_capture_clean_success(self, tool_ctx):
         result = _make_result(returncode=0, stdout=_success_session_json("done"))
-        _build_skill_result(result, skill_command="/test:cmd", audit=tool_ctx.audit)
+        _build_skill_result(
+            result, skill_command="/test:cmd", audit=tool_ctx.audit, backend=ClaudeCodeBackend()
+        )
         assert tool_ctx.audit.get_report() == []
 
     def test_captured_record_has_correct_skill_command(self, tool_ctx):
@@ -2125,7 +2197,10 @@ class TestFailureCaptureInBuildSkillResult:
             channel_confirmation=ChannelConfirmation.UNMONITORED,
         )
         _build_skill_result(
-            result, skill_command="/autoskillit:implement-worktree", audit=tool_ctx.audit
+            result,
+            skill_command="/autoskillit:implement-worktree",
+            audit=tool_ctx.audit,
+            backend=ClaudeCodeBackend(),
         )
         assert tool_ctx.audit.get_report()[0].skill_command == "/autoskillit:implement-worktree"
 
@@ -2137,20 +2212,26 @@ class TestFailureCaptureInBuildSkillResult:
             stdout=_failed_session_json(),
             channel_confirmation=ChannelConfirmation.UNMONITORED,
         )
-        _build_skill_result(result, skill_command="/test", audit=tool_ctx.audit)
+        _build_skill_result(
+            result, skill_command="/test", audit=tool_ctx.audit, backend=ClaudeCodeBackend()
+        )
         record = tool_ctx.audit.get_report()[0]
         assert datetime.fromisoformat(record.timestamp)  # valid ISO 8601 format
 
     def test_stale_termination_is_captured(self, tool_ctx):
         result = _make_result(returncode=0, termination_reason=TerminationReason.STALE)
-        _build_skill_result(result, skill_command="/test", audit=tool_ctx.audit)
+        _build_skill_result(
+            result, skill_command="/test", audit=tool_ctx.audit, backend=ClaudeCodeBackend()
+        )
         report = tool_ctx.audit.get_report()
         assert len(report) == 1
         assert report[0].subtype == "stale"
 
     def test_needs_retry_is_captured(self, tool_ctx):
         result = _make_result(returncode=1, stdout=_context_exhausted_session_json())
-        _build_skill_result(result, skill_command="/test", audit=tool_ctx.audit)
+        _build_skill_result(
+            result, skill_command="/test", audit=tool_ctx.audit, backend=ClaudeCodeBackend()
+        )
         report = tool_ctx.audit.get_report()
         assert len(report) == 1
         assert report[0].needs_retry is True
@@ -2163,7 +2244,9 @@ class TestFailureCaptureInBuildSkillResult:
             stdout=_failed_session_json(),
             channel_confirmation=ChannelConfirmation.UNMONITORED,
         )
-        _build_skill_result(result, skill_command="/test", audit=tool_ctx.audit)
+        _build_skill_result(
+            result, skill_command="/test", audit=tool_ctx.audit, backend=ClaudeCodeBackend()
+        )
         assert len(tool_ctx.audit.get_report()[0].stderr) <= 500
 
 
@@ -2191,14 +2274,14 @@ class TestStalePathStdoutCheck:
             }
         )
         result_obj = self._make_stale_result(stdout=valid_completed_jsonl)
-        parsed = json.loads(_build_skill_result(result_obj).to_json())
+        parsed = json.loads(_build_skill_result(result_obj, backend=ClaudeCodeBackend()).to_json())
         assert parsed["success"] is True
         assert parsed["subtype"] == "recovered_from_stale"
 
     def test_stale_with_empty_stdout_returns_failure(self):
         """Stale session with no stdout — original failure response preserved."""
         result_obj = self._make_stale_result(stdout="")
-        parsed = json.loads(_build_skill_result(result_obj).to_json())
+        parsed = json.loads(_build_skill_result(result_obj, backend=ClaudeCodeBackend()).to_json())
         assert parsed["success"] is False
         assert parsed["subtype"] == "stale"
 
@@ -2214,7 +2297,7 @@ class TestStalePathStdoutCheck:
             }
         )
         result_obj = self._make_stale_result(stdout=error_jsonl)
-        parsed = json.loads(_build_skill_result(result_obj).to_json())
+        parsed = json.loads(_build_skill_result(result_obj, backend=ClaudeCodeBackend()).to_json())
         assert parsed["success"] is False
         assert parsed["subtype"] == "stale"
 
@@ -2243,6 +2326,7 @@ class TestBuildSkillResultDataConfirmedPropagation:
             completion_marker="%%ORDER_UP%%",
             skill_command="cmd",
             audit=None,
+            backend=ClaudeCodeBackend(),
         )
         assert skill_result.success is True
         assert skill_result.subtype == "recovered_from_stale"
@@ -2259,6 +2343,7 @@ class TestBuildSkillResultDataConfirmedPropagation:
             completion_marker="%%ORDER_UP%%",
             skill_command="cmd",
             audit=None,
+            backend=ClaudeCodeBackend(),
         )
         assert skill_result.success is False
         assert skill_result.subtype == "stale"
@@ -2277,6 +2362,7 @@ class TestBuildSkillResultDataConfirmedPropagation:
             completion_marker="%%ORDER_UP%%",
             skill_command="cmd",
             audit=None,
+            backend=ClaudeCodeBackend(),
         )
         assert skill_result.success is True  # FAILS before fix: False
         assert skill_result.needs_retry is False  # FAILS before fix: True
@@ -2295,6 +2381,7 @@ class TestBuildSkillResultDataConfirmedPropagation:
             completion_marker="%%ORDER_UP%%",
             skill_command="cmd",
             audit=None,
+            backend=ClaudeCodeBackend(),
         )
         assert skill_result.success is False
         assert skill_result.needs_retry is True
@@ -2506,6 +2593,7 @@ class TestRetryBudgetEnforcement:
             skill_command="/autoskillit:open-pr",
             audit=audit,  # type: ignore[arg-type]
             max_consecutive_retries=3,
+            backend=ClaudeCodeBackend(),
         )
         assert sr.needs_retry is True
         assert sr.retry_reason == RetryReason.STALE
@@ -2519,6 +2607,7 @@ class TestRetryBudgetEnforcement:
             skill_command="/autoskillit:open-pr",
             audit=audit,  # type: ignore[arg-type]
             max_consecutive_retries=3,
+            backend=ClaudeCodeBackend(),
         )
         assert sr.needs_retry is False
         assert sr.retry_reason == RetryReason.BUDGET_EXHAUSTED
@@ -2531,6 +2620,7 @@ class TestRetryBudgetEnforcement:
             skill_command="/autoskillit:open-pr",
             audit=None,
             max_consecutive_retries=3,
+            backend=ClaudeCodeBackend(),
         )
         assert sr.needs_retry is True
         assert sr.retry_reason == RetryReason.STALE
@@ -2544,6 +2634,7 @@ class TestRetryBudgetEnforcement:
             skill_command="/autoskillit:open-pr",
             audit=audit,  # type: ignore[arg-type]
             max_consecutive_retries=3,
+            backend=ClaudeCodeBackend(),
         )
         assert sr.needs_retry is True
         assert sr.retry_reason == RetryReason.STALE
@@ -2561,6 +2652,7 @@ class TestRetryBudgetEnforcement:
             skill_command="/autoskillit:open-pr",
             audit=audit,  # type: ignore[arg-type]
             max_consecutive_retries=3,
+            backend=ClaudeCodeBackend(),
         )
         assert sr.needs_retry is False
         assert sr.retry_reason == RetryReason.BUDGET_EXHAUSTED

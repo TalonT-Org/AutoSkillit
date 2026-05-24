@@ -7,6 +7,7 @@ import json
 import pytest
 
 from autoskillit.core.types import ChannelConfirmation, TerminationReason
+from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.headless import _build_skill_result
 from autoskillit.hooks.formatters.pretty_output_hook import _format_response
 from tests.conftest import _make_result
@@ -191,7 +192,9 @@ def test_fmt_run_skill_contradictory_subtype_never_renders_fail_success():
         termination_reason=TerminationReason.COMPLETED,
         channel_confirmation=ChannelConfirmation.UNMONITORED,
     )
-    sr = _build_skill_result(result, completion_marker="", skill_command="/test")
+    sr = _build_skill_result(
+        result, completion_marker="", skill_command="/test", backend=ClaudeCodeBackend()
+    )
     assert sr.success is False, "Precondition: this path must produce a failure"
 
     payload = json.loads(sr.to_json())

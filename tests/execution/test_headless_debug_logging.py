@@ -8,6 +8,7 @@ import pytest
 import structlog.testing
 
 from autoskillit.core.types import SubprocessResult, TerminationReason
+from autoskillit.execution.backends.claude import ClaudeCodeBackend
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -33,7 +34,7 @@ class TestBuildSkillResultLogging:
             }
         )
         with structlog.testing.capture_logs() as logs:
-            _build_skill_result(_sr(stdout=payload))
+            _build_skill_result(_sr(stdout=payload), backend=ClaudeCodeBackend())
         entry_logs = [r for r in logs if r.get("event") == "build_skill_result_entry"]
         assert entry_logs, (
             f"Expected build_skill_result_entry, got: {[r.get('event') for r in logs]}"
@@ -54,7 +55,7 @@ class TestBuildSkillResultLogging:
             }
         )
         with structlog.testing.capture_logs() as logs:
-            _build_skill_result(_sr(stdout=payload))
+            _build_skill_result(_sr(stdout=payload), backend=ClaudeCodeBackend())
         exit_logs = [r for r in logs if r.get("event") == "build_skill_result_exit"]
         assert exit_logs, (
             f"Expected build_skill_result_exit, got: {[r.get('event') for r in logs]}"
@@ -66,7 +67,9 @@ class TestBuildSkillResultLogging:
         from autoskillit.execution.headless import _build_skill_result
 
         with structlog.testing.capture_logs() as logs:
-            _build_skill_result(_sr(stdout="", termination=TerminationReason.STALE))
+            _build_skill_result(
+                _sr(stdout="", termination=TerminationReason.STALE), backend=ClaudeCodeBackend()
+            )
         entry_logs = [r for r in logs if r.get("event") == "build_skill_result_entry"]
         assert entry_logs
         assert entry_logs[0]["branch"] == "stale"
@@ -76,7 +79,8 @@ class TestBuildSkillResultLogging:
 
         with structlog.testing.capture_logs() as logs:
             _build_skill_result(
-                _sr(stdout="", returncode=-1, termination=TerminationReason.TIMED_OUT)
+                _sr(stdout="", returncode=-1, termination=TerminationReason.TIMED_OUT),
+                backend=ClaudeCodeBackend(),
             )
         entry_logs = [r for r in logs if r.get("event") == "build_skill_result_entry"]
         assert entry_logs

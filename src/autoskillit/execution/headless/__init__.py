@@ -492,6 +492,7 @@ async def _execute_claude_headless(
         _supports_fmt = cast(
             "CodingAgentBackend", ctx.backend
         ).capabilities.supports_claude_format_stdout
+        _backend = cast(CodingAgentBackend, ctx.backend)
         skill_result = _build_skill_result(
             result,
             completion_marker=completion_marker,
@@ -505,7 +506,7 @@ async def _execute_claude_headless(
             prior_completion_markers=prior_completion_markers,
             provider_used=current_provider_name,
             supports_claude_format_stdout=_supports_fmt,
-            backend=ctx.backend,
+            backend=_backend,
         )
 
         if (

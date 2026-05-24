@@ -21,6 +21,7 @@ from autoskillit.core.types import (
     SubprocessResult,
     TerminationReason,
 )
+from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.headless import _build_skill_result, _recover_from_separate_marker
 from autoskillit.execution.process import (
     RaceSignals,
@@ -276,6 +277,7 @@ class TestSTOPDelayPipelineAdjudication:
             completion_marker="%%ORDER_UP%%",
             skill_command="resolve-failures",
             audit=None,
+            backend=ClaudeCodeBackend(),
         )
 
         assert skill_result.success is False
@@ -310,6 +312,7 @@ class TestSTOPDelayPipelineAdjudication:
             completion_marker="%%ORDER_UP%%",
             skill_command="resolve-failures",
             audit=None,
+            backend=ClaudeCodeBackend(),
         )
 
         assert skill_result.success is False
@@ -343,6 +346,7 @@ class TestSTOPDelayPipelineAdjudication:
             completion_marker="%%ORDER_UP%%",
             skill_command="resolve-failures",
             audit=None,
+            backend=ClaudeCodeBackend(),
         )
 
         assert skill_result.success is False
@@ -396,6 +400,7 @@ class TestStaleRecoveryPipelineAdjudication:
             completion_marker="",
             skill_command="investigate",
             audit=None,
+            backend=ClaudeCodeBackend(),
         )
 
         assert skill_result.success is True
@@ -439,6 +444,7 @@ class TestTimedOutPipelineAdjudication:
             completion_marker="%%ORDER_UP%%",
             skill_command="investigate",
             audit=None,
+            backend=ClaudeCodeBackend(),
         )
 
         assert skill_result.success is False
@@ -668,6 +674,7 @@ class TestChannelBDrainRaceRecovery:
             skill_command="/make-plan",
             audit=None,
             expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+            backend=ClaudeCodeBackend(),
         )
         assert skill_result.success is True
         assert skill_result.needs_retry is False
@@ -696,6 +703,7 @@ class TestChannelBDrainRaceRecovery:
             skill_command="/test",
             audit=None,
             expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+            backend=ClaudeCodeBackend(),
         )
         assert skill_result.success is False
         assert skill_result.needs_retry is False
@@ -732,6 +740,7 @@ class TestChannelBDrainRaceRecovery:
             completion_marker="%%ORDER_UP%%",
             skill_command="/test",
             audit=None,
+            backend=ClaudeCodeBackend(),
         )
         assert skill_result.success is True
 
@@ -757,6 +766,7 @@ class TestChannelBDrainRaceRecovery:
             completion_marker="%%ORDER_UP%%",
             skill_command="/test",
             audit=None,
+            backend=ClaudeCodeBackend(),
         )
         assert skill_result.success is False
 
@@ -778,6 +788,7 @@ class TestChannelBDrainRaceRecovery:
             completion_marker="%%ORDER_UP%%",
             skill_command="/test",
             audit=None,
+            backend=ClaudeCodeBackend(),
         )
         assert skill_result.success is False
 
@@ -797,6 +808,7 @@ class TestChannelBDrainRaceRecovery:
             skill_command="/test",
             audit=None,
             expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+            backend=ClaudeCodeBackend(),
         )
         assert skill_result.success is False
 
@@ -828,6 +840,7 @@ class TestAdjudicationGuards:
             completion_marker="",
             skill_command="/test",
             audit=None,
+            backend=ClaudeCodeBackend(),
         )
         # Must not be a dead end — guard must escalate to retriable
         assert skill_result.success or skill_result.needs_retry, (
@@ -851,6 +864,7 @@ class TestAdjudicationGuards:
             completion_marker="",
             skill_command="/test",
             audit=None,
+            backend=ClaudeCodeBackend(),
         )
         # Must not be contradictory — contradiction guard must set success=False
         assert not (skill_result.success and skill_result.needs_retry), (
@@ -875,6 +889,7 @@ class TestAdjudicationGuards:
             completion_marker="",
             skill_command="/test",
             audit=None,
+            backend=ClaudeCodeBackend(),
         )
         assert not (skill_result.success and skill_result.needs_retry), (
             f"Contradiction: success={skill_result.success}, "

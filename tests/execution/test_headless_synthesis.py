@@ -10,6 +10,7 @@ from autoskillit.core.types import (
     SubprocessResult,
     TerminationReason,
 )
+from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.headless import _build_skill_result, _scan_jsonl_write_paths
 from tests.execution.conftest import _make_tool_use_line, _sr, _success_session_json
 
@@ -144,7 +145,7 @@ class TestBuildSkillResultPathContamination:
             + _success_session_json("Plan created.")
         )
         result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
-        sr = _build_skill_result(result, cwd="/correct/clone")
+        sr = _build_skill_result(result, cwd="/correct/clone", backend=ClaudeCodeBackend())
         assert sr.success is False
         assert sr.subtype == "path_contamination"
         assert sr.needs_retry is True
@@ -163,7 +164,7 @@ class TestBuildSkillResultPathContamination:
             + _success_session_json("Plan created.")
         )
         result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
-        sr = _build_skill_result(result, cwd="/correct/clone")
+        sr = _build_skill_result(result, cwd="/correct/clone", backend=ClaudeCodeBackend())
         assert sr.retry_reason == RetryReason.PATH_CONTAMINATION
         assert sr.needs_retry is True
 
@@ -176,7 +177,7 @@ class TestBuildSkillResultPathContamination:
             + _success_session_json("Plan created.")
         )
         result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
-        sr = _build_skill_result(result, cwd="/correct/clone")
+        sr = _build_skill_result(result, cwd="/correct/clone", backend=ClaudeCodeBackend())
         assert sr.success is True
         assert sr.subtype != "path_contamination"
 
@@ -187,14 +188,14 @@ class TestBuildSkillResultPathContamination:
             self._assistant_ndjson(f"plan_path = {path}") + "\n" + _success_session_json("Done.")
         )
         result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
-        sr = _build_skill_result(result, cwd="")
+        sr = _build_skill_result(result, cwd="", backend=ClaudeCodeBackend())
         assert sr.success is True
 
     def test_no_contamination_when_no_path_tokens(self):
         """No output path tokens means validation passes."""
         stdout = _success_session_json("Done with no file output.")
         result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
-        sr = _build_skill_result(result, cwd="/clone/path")
+        sr = _build_skill_result(result, cwd="/clone/path", backend=ClaudeCodeBackend())
         assert sr.success is True
 
 
@@ -311,7 +312,7 @@ class TestBuildSkillResultWritePathWarnings:
             + _success_session_json("Done %%DONE%%")
         )
         result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
-        sr = _build_skill_result(result, cwd="/clone/worktree")
+        sr = _build_skill_result(result, cwd="/clone/worktree", backend=ClaudeCodeBackend())
         assert sr.write_path_warnings == []
 
     def test_write_path_warnings_populated_for_contaminated_session(self):
@@ -323,7 +324,7 @@ class TestBuildSkillResultWritePathWarnings:
             + _success_session_json("Done %%DONE%%")
         )
         result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
-        sr = _build_skill_result(result, cwd="/clone/worktree")
+        sr = _build_skill_result(result, cwd="/clone/worktree", backend=ClaudeCodeBackend())
         assert len(sr.write_path_warnings) == 1
         assert "/source/repo/.autoskillit/temp/stolen.md" in sr.write_path_warnings[0]
 
@@ -334,7 +335,7 @@ class TestBuildSkillResultWritePathWarnings:
             + _success_session_json("Done %%DONE%%")
         )
         result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
-        sr = _build_skill_result(result, cwd="/clone/worktree")
+        sr = _build_skill_result(result, cwd="/clone/worktree", backend=ClaudeCodeBackend())
         data = json.loads(sr.to_json())
         assert "write_path_warnings" in data
         assert len(data["write_path_warnings"]) == 1
@@ -365,7 +366,7 @@ class TestBuildSkillResultWritePathWarnings:
             + _success_session_json("Done %%DONE%%")
         )
         result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
-        sr = _build_skill_result(result, cwd="/clone/worktree")
+        sr = _build_skill_result(result, cwd="/clone/worktree", backend=ClaudeCodeBackend())
         # subtype is path_contamination (from _validate_output_paths)
         assert sr.subtype == "path_contamination"
         # write_path_warnings also populated from JSONL scan
@@ -419,6 +420,7 @@ class TestBuildSkillResultChannelBPatternRecovery:
             sub_result,
             completion_marker="%%ORDER_UP%%",
             expected_output_patterns=["---prepare-issue-result---"],
+            backend=ClaudeCodeBackend(),
         )
         assert sr.success is True
         assert "---prepare-issue-result---" in sr.result
@@ -454,6 +456,7 @@ class TestBuildSkillResultChannelBPatternRecovery:
         sr = _build_skill_result(
             sub_result,
             expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+            backend=ClaudeCodeBackend(),
         )
         assert sr.success is False
         assert sr.subtype not in {"success"}
@@ -496,6 +499,7 @@ class TestBuildSkillResultChannelBPatternRecovery:
         sr = _build_skill_result(
             sub_result,
             expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+            backend=ClaudeCodeBackend(),
         )
         assert sr.success is False
         assert "arch_lens_selection" not in sr.result
@@ -537,6 +541,7 @@ class TestBuildSkillResultChannelBPatternRecovery:
         sr = _build_skill_result(
             sub_result,
             expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+            backend=ClaudeCodeBackend(),
         )
         assert sr.success is False
         assert "plan_path" not in sr.result
@@ -553,7 +558,12 @@ class TestCapabilityGatedWritePathScan:
             + _success_session_json("Done %%DONE%%")
         )
         result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
-        sr = _build_skill_result(result, cwd="/some/path", supports_claude_format_stdout=False)
+        sr = _build_skill_result(
+            result,
+            cwd="/some/path",
+            supports_claude_format_stdout=False,
+            backend=ClaudeCodeBackend(),
+        )
         assert sr.write_path_warnings == []
 
     def test_true_default_preserves_existing_behavior(self):
@@ -566,5 +576,10 @@ class TestCapabilityGatedWritePathScan:
             + _success_session_json("Done %%DONE%%")
         )
         result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
-        sr = _build_skill_result(result, cwd="/some/path", supports_claude_format_stdout=True)
+        sr = _build_skill_result(
+            result,
+            cwd="/some/path",
+            supports_claude_format_stdout=True,
+            backend=ClaudeCodeBackend(),
+        )
         assert len(sr.write_path_warnings) == 1

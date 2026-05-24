@@ -11,6 +11,7 @@ from autoskillit.core.types import (
     RetryReason,
     TerminationReason,
 )
+from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.session import (
     ClaudeSessionResult,
     ContentState,
@@ -582,7 +583,7 @@ class TestApiErrorRetryRouting:
             }
         )
         result = self._make_result(stderr="", returncode=0, stdout=ndjson + "\n" + result_line)
-        sr = _build_skill_result(result)
+        sr = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert sr.infra.exit_category == "api_error"
         assert sr.needs_retry is True
         assert sr.retry_reason == RetryReason.RESUME
@@ -609,7 +610,7 @@ class TestApiErrorRetryRouting:
             }
         )
         result = self._make_result(stderr="", returncode=0, stdout=ndjson + "\n" + result_line)
-        sr = _build_skill_result(result)
+        sr = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert sr.infra.exit_category == "api_error"
         assert sr.needs_retry is True
         assert sr.retry_reason == RetryReason.RESUME
@@ -636,7 +637,7 @@ class TestApiErrorRetryRouting:
             }
         )
         result = self._make_result(stderr="", returncode=0, stdout=ndjson + "\n" + result_line)
-        sr = _build_skill_result(result)
+        sr = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert sr.infra.exit_category == "api_error"
         assert sr.needs_retry is True
         assert sr.retry_reason == RetryReason.RESUME

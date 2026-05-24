@@ -14,6 +14,7 @@ import pytest
 from autoskillit.core.types import (
     RetryReason,
 )
+from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.headless import _build_skill_result
 from autoskillit.pipeline.audit import DefaultAuditLog, FailureRecord
 from tests.execution.conftest import EMPTY_OUTPUT_RESULT_LINE, WRITE_TOOL_LINE, _sr
@@ -34,7 +35,7 @@ _SUCCESS_EMPTY_RESULT_LINE = json.dumps(
 class TestEmptyOutputWriteReconciliation:
     def test_empty_output_with_write_tool_use_becomes_completed_no_flush(self) -> None:
         stdout = "\n".join([WRITE_TOOL_LINE, EMPTY_OUTPUT_RESULT_LINE])
-        sr = _build_skill_result(_sr(stdout=stdout))
+        sr = _build_skill_result(_sr(stdout=stdout), backend=ClaudeCodeBackend())
 
         assert sr.needs_retry is True
         assert sr.retry_reason == RetryReason.COMPLETED_NO_FLUSH
@@ -44,7 +45,9 @@ class TestEmptyOutputWriteReconciliation:
     def test_empty_output_with_fs_writes_only_becomes_completed_no_flush(self) -> None:
         """fs_writes_detected alone (no tool_uses) triggers reclassification."""
         stdout = EMPTY_OUTPUT_RESULT_LINE
-        sr = _build_skill_result(_sr(stdout=stdout), fs_writes_detected=True)
+        sr = _build_skill_result(
+            _sr(stdout=stdout), backend=ClaudeCodeBackend(), fs_writes_detected=True
+        )
 
         assert sr.needs_retry is True
         assert sr.retry_reason == RetryReason.COMPLETED_NO_FLUSH
@@ -53,7 +56,7 @@ class TestEmptyOutputWriteReconciliation:
     def test_success_empty_result_with_write_evidence_becomes_completed_no_flush(self) -> None:
         """success subtype with empty result + write evidence → COMPLETED_NO_FLUSH."""
         stdout = "\n".join([WRITE_TOOL_LINE, _SUCCESS_EMPTY_RESULT_LINE])
-        sr = _build_skill_result(_sr(stdout=stdout))
+        sr = _build_skill_result(_sr(stdout=stdout), backend=ClaudeCodeBackend())
 
         assert sr.needs_retry is True
         assert sr.retry_reason == RetryReason.COMPLETED_NO_FLUSH
@@ -62,7 +65,9 @@ class TestEmptyOutputWriteReconciliation:
     def test_empty_output_without_write_evidence_stays_empty_output(self) -> None:
         """EMPTY_OUTPUT with no writes preserves original reason — correct behavior unchanged."""
         stdout = EMPTY_OUTPUT_RESULT_LINE
-        sr = _build_skill_result(_sr(stdout=stdout), fs_writes_detected=False)
+        sr = _build_skill_result(
+            _sr(stdout=stdout), backend=ClaudeCodeBackend(), fs_writes_detected=False
+        )
 
         assert sr.needs_retry is True
         assert sr.retry_reason == RetryReason.EMPTY_OUTPUT
@@ -87,6 +92,7 @@ class TestEmptyOutputWriteReconciliation:
 
         sr = _build_skill_result(
             _sr(stdout=stdout),
+            backend=ClaudeCodeBackend(),
             skill_command=skill_command,
             audit=audit,
         )

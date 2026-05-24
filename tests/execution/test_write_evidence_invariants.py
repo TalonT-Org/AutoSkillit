@@ -14,6 +14,7 @@ from autoskillit.core.types import (
     SubprocessResult,
     TerminationReason,
 )
+from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.headless import _build_skill_result
 from tests.execution.conftest import EMPTY_OUTPUT_RESULT_LINE, WRITE_TOOL_LINE
 
@@ -37,7 +38,7 @@ def test_no_work_reasons_are_overridden_by_write_evidence(reason: RetryReason) -
         termination=TerminationReason.NATURAL_EXIT,
         pid=12345,
     )
-    sr = _build_skill_result(result, fs_writes_detected=True)
+    sr = _build_skill_result(result, fs_writes_detected=True, backend=ClaudeCodeBackend())
 
     assert sr.retry_reason != reason, (
         f"RetryReason.{reason.name} was not overridden despite write evidence. "

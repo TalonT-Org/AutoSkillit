@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import RetryReason, WriteBehaviorSpec, extract_skill_name
+from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.headless import _build_skill_result
 from tests.conftest import _make_result
 
@@ -53,6 +54,7 @@ class TestZeroWriteDetection:
             _make_result(returncode=0, stdout=stdout),
             skill_command="/make-plan task",
             write_behavior=WriteBehaviorSpec(mode="always"),
+            backend=ClaudeCodeBackend(),
         )
         assert not sr.success
         assert sr.subtype == "zero_writes"
@@ -65,6 +67,7 @@ class TestZeroWriteDetection:
             _make_result(returncode=0, stdout=stdout),
             skill_command="/make-plan task",
             write_behavior=WriteBehaviorSpec(mode="always"),
+            backend=ClaudeCodeBackend(),
         )
         assert sr.success is True
         assert sr.subtype != "zero_writes"
@@ -90,6 +93,7 @@ class TestZeroWriteDetection:
                 mode="conditional",
                 expected_when=(r"conflict_report_path\s*=\s*/.+",),
             ),
+            backend=ClaudeCodeBackend(),
         )
         assert sr.success is True
 
@@ -110,6 +114,7 @@ class TestZeroWriteDetection:
                 mode="conditional",
                 expected_when=(r"conflict_report_path\s*=\s*/.+",),
             ),
+            backend=ClaudeCodeBackend(),
         )
         assert not sr.success
         assert sr.subtype == "zero_writes"
@@ -121,6 +126,7 @@ class TestZeroWriteDetection:
             _make_result(returncode=0, stdout=stdout),
             skill_command="/investigate err",
             write_behavior=WriteBehaviorSpec(),
+            backend=ClaudeCodeBackend(),
         )
         assert sr.success is True
 
@@ -131,6 +137,7 @@ class TestZeroWriteDetection:
             _make_result(returncode=0, stdout=stdout),
             skill_command="/investigate err",
             write_behavior=None,
+            backend=ClaudeCodeBackend(),
         )
         assert sr.success is True
 
@@ -140,6 +147,7 @@ class TestZeroWriteDetection:
             _make_result(returncode=0, stdout=stdout),
             skill_command="/make-plan task description",
             write_behavior=WriteBehaviorSpec(mode="always"),
+            backend=ClaudeCodeBackend(),
         )
         assert not sr.success
         assert sr.subtype == "zero_writes"
@@ -173,6 +181,7 @@ class TestZeroWriteDetection:
                 mode="conditional",
                 expected_when=(r"verdict\s*=\s*real_fix",),
             ),
+            backend=ClaudeCodeBackend(),
         )
         assert sr.success is True, (
             "Already-green worktree (verdict = already_green) must NOT be demoted. "
@@ -203,6 +212,7 @@ class TestZeroWriteDetection:
                 mode="conditional",
                 expected_when=(r"verdict\s*=\s*real_fix",),
             ),
+            backend=ClaudeCodeBackend(),
         )
         # Write not expected (no verdict = real_fix) → success, NOT demoted
         assert sr.success is True, (
@@ -232,6 +242,7 @@ class TestZeroWriteDetection:
                 mode="conditional",
                 expected_when=(r"verdict\s*=\s*real_fix",),
             ),
+            backend=ClaudeCodeBackend(),
         )
         assert sr.success is False, (
             "verdict = real_fix with 0 writes must be demoted to zero_writes"
@@ -261,6 +272,7 @@ class TestZeroWriteDetection:
                 mode="conditional",
                 expected_when=(r"fixes_applied\s*=\s*[1-9][0-9]*",),
             ),
+            backend=ClaudeCodeBackend(),
         )
         assert sr.success is False
         assert sr.subtype == "zero_writes"
@@ -290,6 +302,7 @@ class TestZeroWriteDetection:
                 mode="conditional",
                 expected_when=(r"phases_implemented\s*=\s*[1-9][0-9]*",),
             ),
+            backend=ClaudeCodeBackend(),
         )
         assert sr.success is True, (
             "All-phases-done worktree (phases_implemented = 0) must NOT be demoted to zero_writes."
@@ -317,6 +330,7 @@ class TestZeroWriteDetection:
                 mode="conditional",
                 expected_when=(r"fixes_applied\s*=\s*[1-9][0-9]*",),
             ),
+            backend=ClaudeCodeBackend(),
         )
         assert sr.success is True, (
             "No-PR graceful degradation (no fixes_applied token) must NOT be demoted."
@@ -340,6 +354,7 @@ class TestZeroWriteDetection:
                 mode="conditional",
                 expected_when=(FIXTURE_CONDITIONAL_PATTERN,),
             ),
+            backend=ClaudeCodeBackend(),
         )
         assert sr.success is True, (
             "No 'verdict = real_fix' token must NOT trigger zero_writes gate."
@@ -367,6 +382,7 @@ class TestZeroWriteDetection:
                 mode="conditional",
                 expected_when=(FIXTURE_CONDITIONAL_PATTERN,),
             ),
+            backend=ClaudeCodeBackend(),
         )
         assert sr.success is True, (
             "All-escalations path (verdict = already_green) must NOT be demoted."
@@ -394,6 +410,7 @@ class TestZeroWriteDetection:
                 mode="conditional",
                 expected_when=(FIXTURE_CONDITIONAL_PATTERN,),
             ),
+            backend=ClaudeCodeBackend(),
         )
         assert sr.success is True, (
             "Graceful degradation (no 'verdict = real_fix' token) must NOT be demoted."
@@ -421,6 +438,7 @@ class TestZeroWriteDetection:
                 mode="conditional",
                 expected_when=(FIXTURE_CONDITIONAL_PATTERN,),
             ),
+            backend=ClaudeCodeBackend(),
         )
         assert sr.success is False, (
             "'verdict = real_fix' with 0 writes must be demoted — silent degradation detected."
@@ -441,6 +459,7 @@ class TestZeroWriteDetection:
                 mode="conditional",
                 expected_when=(FIXTURE_CONDITIONAL_PATTERN,),
             ),
+            backend=ClaudeCodeBackend(),
         )
         assert sr.success is True, "Real fix with actual writes must NOT be demoted."
         assert sr.subtype != "zero_writes"
@@ -462,6 +481,7 @@ class TestZeroWriteDetection:
                 mode="conditional",
                 expected_when=(FIXTURE_CONDITIONAL_PATTERN,),
             ),
+            backend=ClaudeCodeBackend(),
         )
         assert sr.success is True, (
             "No 'verdict = real_fix' token must NOT trigger zero_writes gate."
@@ -485,6 +505,7 @@ class TestZeroWriteDetection:
                 mode="conditional",
                 expected_when=(FIXTURE_CONDITIONAL_PATTERN,),
             ),
+            backend=ClaudeCodeBackend(),
         )
         assert sr.success is True, (
             "All-escalations path (verdict = already_green) must NOT be demoted."
@@ -508,6 +529,7 @@ class TestZeroWriteDetection:
                 mode="conditional",
                 expected_when=(FIXTURE_CONDITIONAL_PATTERN,),
             ),
+            backend=ClaudeCodeBackend(),
         )
         assert sr.success is True, (
             "Graceful degradation (no 'verdict = real_fix' token) must NOT be demoted."
@@ -531,6 +553,7 @@ class TestZeroWriteDetection:
                 mode="conditional",
                 expected_when=(FIXTURE_CONDITIONAL_PATTERN,),
             ),
+            backend=ClaudeCodeBackend(),
         )
         assert sr.success is False, (
             "'verdict = real_fix' with 0 writes must be demoted — silent degradation detected."
@@ -548,6 +571,7 @@ class TestZeroWriteDetection:
                 mode="conditional",
                 expected_when=(FIXTURE_CONDITIONAL_PATTERN,),
             ),
+            backend=ClaudeCodeBackend(),
         )
         assert sr.success is True, "Real fix with actual writes must NOT be demoted."
         assert sr.subtype != "zero_writes"
@@ -561,6 +585,7 @@ class TestWriteCallCountPropagation:
         sr = _build_skill_result(
             _make_result(returncode=0, stdout=stdout),
             skill_command="/investigate something",
+            backend=ClaudeCodeBackend(),
         )
         assert sr.evidence.write_call_count == 4
 
@@ -569,6 +594,7 @@ class TestWriteCallCountPropagation:
         sr = _build_skill_result(
             _make_result(returncode=0, stdout=stdout),
             skill_command="/investigate something",
+            backend=ClaudeCodeBackend(),
         )
         assert sr.evidence.write_call_count == 0
 
@@ -577,6 +603,7 @@ class TestWriteCallCountPropagation:
         sr = _build_skill_result(
             _make_result(returncode=0, stdout=stdout),
             skill_command="/investigate something",
+            backend=ClaudeCodeBackend(),
         )
         parsed = json.loads(sr.to_json())
         assert parsed["write_call_count"] == 2
@@ -608,6 +635,7 @@ class TestFilesystemWriteDetection:
             _make_result(returncode=0, stdout=stdout),
             skill_command="/autoskillit:prepare-pr args",
             write_behavior=WriteBehaviorSpec(mode="always"),
+            backend=ClaudeCodeBackend(),
         )
         assert sr.evidence.write_call_count == 0
 
@@ -620,6 +648,7 @@ class TestFilesystemWriteDetection:
             skill_command="/autoskillit:prepare-pr args",
             write_behavior=WriteBehaviorSpec(mode="always"),
             fs_writes_detected=True,
+            backend=ClaudeCodeBackend(),
         )
         assert sr.success is True
         assert sr.subtype != "zero_writes"
@@ -642,6 +671,7 @@ class TestFilesystemWriteDetection:
             write_behavior=WriteBehaviorSpec(mode="always"),
             expected_output_patterns=["prep_path\\s*=\\s*/.+"],
             fs_writes_detected=False,
+            backend=ClaudeCodeBackend(),
         )
         assert sr_without_fs.subtype == "adjudicated_failure"
         assert sr_without_fs.needs_retry is False
@@ -652,6 +682,7 @@ class TestFilesystemWriteDetection:
             write_behavior=WriteBehaviorSpec(mode="always"),
             expected_output_patterns=["prep_path\\s*=\\s*/.+"],
             fs_writes_detected=True,
+            backend=ClaudeCodeBackend(),
         )
         assert sr_with_fs.needs_retry is True
         assert sr_with_fs.retry_reason == RetryReason.CONTRACT_RECOVERY
@@ -665,6 +696,7 @@ class TestFilesystemWriteDetection:
             skill_command="/autoskillit:make-plan task",
             write_behavior=WriteBehaviorSpec(mode="always"),
             fs_writes_detected=False,
+            backend=ClaudeCodeBackend(),
         )
         assert sr.success is False
         assert sr.subtype == "zero_writes"
@@ -677,6 +709,7 @@ class TestFilesystemWriteDetection:
             skill_command="/autoskillit:make-plan task",
             write_behavior=WriteBehaviorSpec(mode="always"),
             fs_writes_detected=True,
+            backend=ClaudeCodeBackend(),
         )
         json_data = json.loads(sr.to_json())
         assert json_data["fs_writes_detected"] is True
@@ -720,6 +753,7 @@ class TestGitWritesDetection:
             skill_command="/make-plan task",
             write_behavior=WriteBehaviorSpec(mode="always"),
             git_writes_detected=True,
+            backend=ClaudeCodeBackend(),
         )
         assert sr.success is True
         assert sr.subtype != "zero_writes"
@@ -734,6 +768,7 @@ class TestGitWritesDetection:
             skill_command="/make-plan task",
             write_behavior=WriteBehaviorSpec(mode="always"),
             git_writes_detected=False,
+            backend=ClaudeCodeBackend(),
         )
         assert sr.success is False
         assert sr.subtype == "zero_writes"
@@ -749,6 +784,7 @@ class TestGitWritesDetection:
                 expected_when=(r"verdict\s*=\s*real_fix",),
             ),
             git_writes_detected=True,
+            backend=ClaudeCodeBackend(),
         )
         assert sr.success is True, (
             "git_writes_detected=True must suppress zero_writes gate even when "
@@ -820,6 +856,7 @@ class TestContractDrivenAlwaysWriteSkills:
             _make_result(returncode=0, stdout=stdout),
             skill_command=f"/autoskillit:{skill_name} arg",
             write_behavior=WriteBehaviorSpec(mode="always"),
+            backend=ClaudeCodeBackend(),
         )
         assert sr.evidence.has_evidence is True, (
             f"Skill {skill_name!r} (write_behavior=always) must detect write evidence"

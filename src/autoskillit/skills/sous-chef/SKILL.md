@@ -305,7 +305,7 @@ When dispatching from an execution map:
    Group N PRs have merged, dispatch Group N+1 immediately. NEVER use
    AskUserQuestion to ask whether to proceed to the next group.
 
-6. **Handle deferred issues before dispatching any group.**
+6. Handle deferred issues before dispatching any group.
 
    After reading the execution map, check for `has_deferred: true`.
 

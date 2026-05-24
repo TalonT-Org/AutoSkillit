@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.execution.backends import ensure_codex_mcp_registered
-from autoskillit.execution.backends.codex import (
+from autoskillit.execution.backends._codex_config import (
     _is_autoskillit_registered,
     _read_codex_config,
     _serialize_toml,

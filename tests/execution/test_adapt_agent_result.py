@@ -13,7 +13,7 @@ from autoskillit.core.types import (
     SubprocessResult,
     TerminationReason,
 )
-from autoskillit.execution.headless._headless_result import _adapt_agent_result
+from autoskillit.execution.headless._headless_evidence import _adapt_agent_result
 from autoskillit.execution.session._exit_classification import classify_infra_exit
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]

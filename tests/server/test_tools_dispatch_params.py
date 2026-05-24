@@ -104,7 +104,7 @@ async def test_dispatch_food_truck_tool_passes_caller_instructions_into_prompt(
 async def test_dispatch_food_truck_no_caller_instructions_section_when_not_specified(
     tool_ctx_kitchen_open, monkeypatch
 ):
-    """When caller_instructions is not specified, no CALLER INSTRUCTIONS section appears in prompt."""
+    """When caller_instructions is absent, no CALLER INSTRUCTIONS section appears in prompt."""
     from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")

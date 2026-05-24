@@ -16,11 +16,9 @@ from autoskillit.core.types._type_results_execution import (
     RecipeIdentity,
     SessionTelemetry,
 )
+from autoskillit.execution._session_log_recovery import recover_crashed_sessions
 from autoskillit.execution.linux_tracing import read_boot_id, read_starttime_ticks
-from autoskillit.execution.session_log import (
-    flush_session_log,
-    recover_crashed_sessions,
-)
+from autoskillit.execution.session_log import flush_session_log
 from autoskillit.fleet import build_protected_campaign_ids
 from tests.execution.conftest import _flush, _snap
 
@@ -274,7 +272,7 @@ def test_recover_crashed_sessions_skips_file_without_enrollment(tmp_path):
 def test_recover_crashed_sessions_skips_wrong_boot_id(tmp_path, monkeypatch):
     """An enrollment sidecar with a different boot_id must be rejected."""
     monkeypatch.setattr(
-        "autoskillit.execution.session_log.read_boot_id",
+        "autoskillit.execution._session_log_recovery.read_boot_id",
         lambda: "current-boot-id",
     )
     tmpfs = tmp_path / "shm"

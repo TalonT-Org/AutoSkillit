@@ -28,7 +28,7 @@ from autoskillit.execution.headless import (
     _parse_stdout,
     _synthesize_from_write_artifacts,
 )
-from autoskillit.execution.headless._headless_result import (
+from autoskillit.execution.headless._headless_evidence import (
     _adapt_agent_result,
     _compute_write_evidence,
 )
@@ -1191,7 +1191,7 @@ class TestNormalApiRetry:
 class TestExtractFileChanges:
     def test_extract_file_changes_returns_empty_for_claude_backend(self) -> None:
         from autoskillit.execution.backends.claude import ClaudeCodeBackend
-        from autoskillit.execution.headless._headless_result import _extract_file_changes
+        from autoskillit.execution.headless._headless_evidence import _extract_file_changes
 
         assert _extract_file_changes("", ClaudeCodeBackend()) == []
 
@@ -1199,7 +1199,7 @@ class TestExtractFileChanges:
         import json as _json
 
         from autoskillit.execution.backends.codex import CodexBackend
-        from autoskillit.execution.headless._headless_result import _extract_file_changes
+        from autoskillit.execution.headless._headless_evidence import _extract_file_changes
 
         lines = [
             _json.dumps(

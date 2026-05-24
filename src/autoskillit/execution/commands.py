@@ -14,11 +14,10 @@ from autoskillit.core import (
     ResumeSpec,
     ValidatedAddDir,
 )
-from autoskillit.execution.backends.claude import (
+from autoskillit.execution.backends._claude_prompt import (
     _HEADLESS_EXCLUSIVE_VARS,  # noqa: F401 — re-export for downstream consumers
     _MAX_MCP_OUTPUT_TOKENS_VALUE,  # noqa: F401 — re-export for downstream consumers
     _SESSION_BASELINE_ENV,  # noqa: F401 — re-export for downstream consumers
-    ClaudeCodeBackend,
     _apply_output_format,  # noqa: F401 — re-export for downstream consumers
     _build_resume_context,  # noqa: F401 — re-export for downstream consumers
     _compose_resume_prompt,  # noqa: F401 — re-export for downstream consumers
@@ -28,6 +27,7 @@ from autoskillit.execution.backends.claude import (
     _inject_cwd_anchor,  # noqa: F401 — re-export for downstream consumers
     _inject_narration_suppression,  # noqa: F401 — re-export for downstream consumers
 )
+from autoskillit.execution.backends.claude import ClaudeCodeBackend
 
 
 @dataclass(frozen=True, slots=True)

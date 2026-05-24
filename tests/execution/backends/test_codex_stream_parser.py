@@ -10,7 +10,7 @@ from autoskillit.core import (
     CodexEventData,
     StreamParser,
 )
-from autoskillit.execution.backends.codex import CodexStreamParser
+from autoskillit.execution.backends._codex_parse import CodexStreamParser
 from tests.fixtures.codex import (
     HAPPY_PATH_SINGLE_TURN,
     MULTI_TURN_WITH_COMPACTION,

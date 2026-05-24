@@ -109,6 +109,8 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_write_evidence_invariants.py` | Write-evidence invariants: 'no work done' retry reasons must be overridden by write evidence |
 | `test_zero_write_detection.py` | Contract: sessions expected to write must actually write (behavioral write-count gate) |
 
+| `test_session_log_recovery_split_integrity.py` | Split integrity tests for `_session_log_recovery` module |
+
 ## Architecture Notes
 
 `conftest.py` provides shared fixtures for the execution test suite. The headless tests are split across multiple files by concern (dispatch, synthesis, path validation, env injection, ordering) following the P1-F01 audit fix.

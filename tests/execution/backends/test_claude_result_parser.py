@@ -242,7 +242,7 @@ class TestClaudeResultParser:
             assert set(result.raw["seen_block_types"]) == {"text", "thinking"}
 
     def test_extract_write_artifacts_filters_correctly(self) -> None:
-        from autoskillit.execution.backends.claude import _extract_write_artifacts
+        from autoskillit.execution.backends._claude_prompt import _extract_write_artifacts
 
         tool_uses = [
             {"name": "Write", "id": "1", "file_path": "/a.py"},
@@ -258,7 +258,7 @@ class TestClaudeResultParser:
         assert _extract_write_artifacts(tool_uses) == ["/a.py", "/b.py"]
 
     def test_extract_write_artifacts_empty_list(self) -> None:
-        from autoskillit.execution.backends.claude import _extract_write_artifacts
+        from autoskillit.execution.backends._claude_prompt import _extract_write_artifacts
 
         assert _extract_write_artifacts([]) == []
 

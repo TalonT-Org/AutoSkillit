@@ -15,7 +15,8 @@ backends/ (see backends/CLAUDE.md).
 | `diff_annotator.py` | Diff annotation + findings filter for review-pr |
 | `linux_tracing.py` | `/proc` + psutil process tracing (Linux) |
 | `anomaly_detection.py` | Post-hoc anomaly detection over snapshots |
-| `session_log.py` | XDG-aware session diagnostics log writer |
+| `session_log.py` | XDG-aware session diagnostics log writer (crash recovery moved to `_session_log_recovery.py`) |
+| `_session_log_recovery.py` | `recover_crashed_sessions` — tmpfs orphan scanner for SIGKILL'd sessions |
 | `recording.py` | Record/replay subprocess runners via api-simulator |
 | `_recording_skills.py` | Skill dir snapshot/restore for record/replay sessions |
 | `quota.py` | `QuotaStatus`, cache, `check_and_sleep_if_needed` |

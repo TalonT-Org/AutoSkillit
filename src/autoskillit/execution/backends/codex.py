@@ -2,44 +2,30 @@
 
 from __future__ import annotations
 
-import json
 import os
-import tomllib
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import StrEnum, unique
 from pathlib import Path
-from typing import Any
 
 from autoskillit.core import (
     AGENT_BACKEND_CODEX,
     AUTOSKILLIT_PRIVATE_ENV_VARS,
     CAMPAIGN_ID_ENV_VAR,
-    HEADLESS_AUTO_GATE_ENV_VAR,
-    HEADLESS_ENV_VAR,
     KITCHEN_SESSION_ID_ENV_VAR,
     SESSION_TYPE_SKILL,
-    AgentSessionResult,
     BackendCapabilities,
-    BackendEventKind,
-    CanonicalTokenUsage,
-    CliSubtype,
     CmdSpec,
-    CodexEventData,
     NoResume,
     OutputFormat,
     PluginSource,
     ResumeSpec,
     SessionCheckpoint,
-    SessionEvent,
     SkillSessionConfig,
     ValidatedAddDir,
-    atomic_write,
     extract_skill_name,
-    fast_loads,
-    get_logger,
 )
-from autoskillit.execution.backends.claude import (
+from autoskillit.execution.backends._claude_prompt import (
     _HEADLESS_EXCLUSIVE_VARS,
     _MAX_MCP_OUTPUT_TOKENS_VALUE,
     _compose_resume_prompt,
@@ -49,155 +35,16 @@ from autoskillit.execution.backends.claude import (
     _inject_cwd_anchor,
     _inject_narration_suppression,
 )
-from autoskillit.execution.process import _marker_is_standalone
+from autoskillit.execution.backends._codex_config import ensure_codex_mcp_registered
+from autoskillit.execution.backends._codex_parse import CodexResultParser, CodexStreamParser
 
 __all__ = [
     "CodexBackend",
     "CodexEnvPolicy",
     "CodexFlags",
-    "CodexResultParser",
     "CodexSessionLocator",
-    "CodexStreamParser",
     "ensure_codex_mcp_registered",
 ]
-
-
-CODEX_ENV_DENYLIST: frozenset[str] = frozenset(
-    {
-        "ANTHROPIC_API_KEY",
-        "ANTHROPIC_AUTH_TOKEN",
-        "ANTHROPIC_BASE_URL",
-        "CLAUDE_STREAM_IDLE_TIMEOUT_MS",
-    }
-)
-
-CODEX_ENV_PREFIX_DENYLIST: tuple[str, ...] = ("CLAUDE_CODE_",)
-
-logger = get_logger()
-
-
-def _format_toml_value(v: Any) -> str:
-    if isinstance(v, bool):
-        return "true" if v else "false"
-    if isinstance(v, str):
-        escaped = (
-            v.replace("\\", "\\\\")
-            .replace('"', '\\"')
-            .replace("\n", "\\n")
-            .replace("\r", "\\r")
-            .replace("\t", "\\t")
-        )
-        return f'"{escaped}"'
-    if isinstance(v, int):
-        return str(v)
-    if isinstance(v, float):
-        return str(v)
-    if isinstance(v, list):
-        items = ", ".join(_format_toml_value(item) for item in v)
-        return f"[{items}]"
-    msg = f"Unsupported TOML value type: {type(v).__name__}"
-    raise TypeError(msg)
-
-
-def _format_inline_table(d: dict[str, Any]) -> str:
-    pairs = [f"{k} = {_format_toml_value(v)}" for k, v in d.items()]
-    return "{" + ", ".join(pairs) + "}"
-
-
-def _emit_toml_table(d: dict[str, Any], path: list[str], lines: list[str]) -> None:
-    header = f"[{'.'.join(path)}]"
-    scalars = [(k, v) for k, v in d.items() if not isinstance(v, dict)]
-    tables = [(k, v) for k, v in d.items() if isinstance(v, dict)]
-    has_scalars = bool(scalars)
-
-    inline_tables: list[tuple[str, dict[str, Any]]] = []
-    recurse_tables: list[tuple[str, dict[str, Any]]] = []
-    for k, v in tables:
-        if not v:
-            inline_tables.append((k, v))
-            continue
-        is_leaf = not any(isinstance(sv, dict) for sv in v.values())
-        if is_leaf and has_scalars:
-            inline_tables.append((k, v))
-        else:
-            recurse_tables.append((k, v))
-
-    if scalars or inline_tables:
-        lines.append(f"\n{header}")
-        for k, v in scalars:
-            lines.append(f"{k} = {_format_toml_value(v)}")
-        for k, v in inline_tables:
-            lines.append(f"{k} = {_format_inline_table(v)}")
-
-    for k, v in recurse_tables:
-        _emit_toml_table(v, [*path, k], lines)
-
-
-def _serialize_toml(data: dict[str, Any]) -> str:
-    lines: list[str] = []
-    for k, v in data.items():
-        if not isinstance(v, dict):
-            lines.append(f"{k} = {_format_toml_value(v)}")
-    for k, v in data.items():
-        if isinstance(v, dict):
-            _emit_toml_table(v, [k], lines)
-    text = "\n".join(lines).lstrip("\n")
-    return text + "\n" if text else ""
-
-
-def _read_codex_config(path: Path) -> dict[str, Any]:
-    try:
-        with open(path, "rb") as f:
-            data = tomllib.load(f)
-    except FileNotFoundError:
-        return {}
-    except tomllib.TOMLDecodeError:
-        logger.warning("corrupt_codex_config", path=str(path))
-        return {}
-    return data
-
-
-def _write_codex_config(path: Path, data: dict[str, Any]) -> None:
-    atomic_write(path, _serialize_toml(data))
-
-
-def _is_autoskillit_registered(config: dict[str, Any], *, headless_auto_gate: bool) -> bool:
-    entry = config.get("mcp_servers", {}).get("autoskillit")
-    if not isinstance(entry, dict):
-        return False
-    if entry.get("command") != "autoskillit":
-        return False
-    env = entry.get("env", {})
-    if env.get(HEADLESS_ENV_VAR) != "1":
-        return False
-    if headless_auto_gate and env.get(HEADLESS_AUTO_GATE_ENV_VAR) != "1":
-        return False
-    return True
-
-
-def ensure_codex_mcp_registered(
-    *,
-    config_path: Path | None = None,
-    headless_auto_gate: bool = True,
-) -> bool:
-    """Return True if the entry was written, False if already registered."""
-    if config_path is None:
-        config_path = Path.home() / ".codex" / "config.toml"
-    config = _read_codex_config(config_path)
-    if _is_autoskillit_registered(config, headless_auto_gate=headless_auto_gate):
-        return False
-    env: dict[str, str] = {HEADLESS_ENV_VAR: "1"}
-    if headless_auto_gate:
-        env[HEADLESS_AUTO_GATE_ENV_VAR] = "1"
-    entry: dict[str, Any] = {
-        "command": "autoskillit",
-        "env": env,
-        "startup_timeout_sec": 30.0,
-        "tool_timeout_sec": 120.0,
-    }
-    config.setdefault("mcp_servers", {})["autoskillit"] = entry
-    _write_codex_config(config_path, config)
-    return True
 
 
 @unique
@@ -215,261 +62,16 @@ class CodexFlags(StrEnum):
     LAST = "--last"
 
 
-@dataclass
-class _CodexParseAccumulator:
-    session_id: str = ""
-    agent_messages: list[str] = field(default_factory=list)
-    command_executions: list[dict[str, Any]] = field(default_factory=list)
-    mcp_tool_calls: list[dict[str, Any]] = field(default_factory=list)
-    file_changes: list[str] = field(default_factory=list)
-    last_usage: dict[str, Any] | None = None
-    saw_failure: bool = False
-    success: bool = False
-    error_message: str = ""
+CODEX_ENV_DENYLIST: frozenset[str] = frozenset(
+    {
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_AUTH_TOKEN",
+        "ANTHROPIC_BASE_URL",
+        "CLAUDE_STREAM_IDLE_TIMEOUT_MS",
+    }
+)
 
-
-def _scan_codex_ndjson(stdout: str) -> _CodexParseAccumulator:
-    if not stdout.strip():
-        return _CodexParseAccumulator()
-    acc = _CodexParseAccumulator()
-    for line in stdout.strip().splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            obj = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(obj, dict):
-            continue
-        event_type = obj.get("type", "")
-        if event_type == "thread.started":
-            acc.session_id = obj.get("thread_id", "")
-        elif event_type == "item.completed":
-            item = obj.get("item", {})
-            if not isinstance(item, dict):
-                continue
-            item_type = item.get("type", "")
-            if item_type == "message":
-                for block in item.get("content", []):
-                    if isinstance(block, dict) and block.get("type") == "text":
-                        text = block.get("text", "")
-                        if text:
-                            acc.agent_messages.append(text)
-            elif item_type == "function_call":
-                acc.command_executions.append(item)
-            elif item_type == "mcp_tool_call":
-                acc.mcp_tool_calls.append(item)
-            elif item_type == "file_change":
-                path = item.get("path")
-                if path:
-                    acc.file_changes.append(path)
-        elif event_type == "turn.completed":
-            usage = obj.get("usage")
-            if isinstance(usage, dict):
-                acc.last_usage = usage
-            if not acc.saw_failure:
-                acc.success = True
-        elif event_type == "turn.failed":
-            error = obj.get("error", {})
-            if isinstance(error, dict):
-                acc.error_message = error.get("message", "")
-            else:
-                acc.error_message = str(error) if error else ""
-            acc.saw_failure = True
-            acc.success = False
-    return acc
-
-
-@dataclass(frozen=True, slots=True)
-class CodexResultParser:
-    def parse_result(self, events: Sequence[SessionEvent]) -> AgentSessionResult:
-        if not events:
-            return AgentSessionResult(
-                success=False,
-                exit_code=1,
-                backend_name=AGENT_BACKEND_CODEX,
-                elapsed_seconds=0.0,
-                error="empty events sequence",
-            )
-        session_id: str | None = None
-        has_completion = False
-        for event in events:
-            if event.kind == BackendEventKind.SESSION_META and event.session_id:
-                session_id = event.session_id
-            if event.kind == BackendEventKind.COMPLETION:
-                has_completion = True
-        return AgentSessionResult(
-            success=has_completion,
-            exit_code=0 if has_completion else 1,
-            backend_name=AGENT_BACKEND_CODEX,
-            elapsed_seconds=0.0,
-            session_id=session_id,
-        )
-
-    def parse_stdout(self, stdout: str, *, exit_code: int = 0) -> AgentSessionResult:
-        acc = _scan_codex_ndjson(stdout)
-        if acc.success:
-            subtype = CliSubtype.SUCCESS.value
-        elif acc.error_message:
-            subtype = CliSubtype.ERROR_DURING_EXECUTION.value
-        elif not stdout.strip():
-            subtype = CliSubtype.EMPTY_OUTPUT.value
-        else:
-            subtype = CliSubtype.UNPARSEABLE.value
-        is_error = subtype != CliSubtype.SUCCESS.value
-        canonical_dict = None
-        if acc.last_usage is not None:
-            canonical = CanonicalTokenUsage.from_codex_dict(acc.last_usage)
-            canonical_dict = canonical.to_dict()
-        return AgentSessionResult(
-            success=not is_error,
-            exit_code=0 if not is_error else (exit_code or 1),
-            backend_name=AGENT_BACKEND_CODEX,
-            elapsed_seconds=0.0,
-            session_id=acc.session_id or None,
-            output="\n".join(acc.agent_messages),
-            error=acc.error_message,
-            raw={
-                "subtype": subtype,
-                "is_error": is_error,
-                "token_usage": acc.last_usage,
-                "canonical_token_usage": canonical_dict,
-                "agent_messages": acc.agent_messages,
-                "command_executions": acc.command_executions,
-                "mcp_tool_calls": acc.mcp_tool_calls,
-                "file_changes": acc.file_changes,
-            },
-        )
-
-
-@dataclass(slots=True)
-class CodexStreamParser:
-    """Stateful NDJSON stream parser for Codex CLI output.
-
-    One instance per session — accumulates marker detection state across
-    parse_line() calls. Not reusable across sessions.
-    """
-
-    completion_marker: str = ""
-    _saw_marker: bool = field(default=False, init=False, repr=False)
-
-    def parse_line(self, line: str) -> SessionEvent | None:
-        line = line.strip()
-        if not line:
-            return None
-        try:
-            obj = fast_loads(line)
-        except (ValueError, TypeError):
-            return None
-        if not isinstance(obj, dict):
-            return None
-
-        event_type = obj.get("type", "")
-
-        if event_type == "thread.started":
-            return SessionEvent(
-                kind=BackendEventKind.SESSION_META,
-                is_terminal=False,
-                has_marker=False,
-                session_id=obj.get("thread_id", "") or None,
-            )
-
-        if event_type == "item.completed":
-            item = obj.get("item", {})
-            if not isinstance(item, dict):
-                return SessionEvent(
-                    kind=BackendEventKind.IGNORED,
-                    is_terminal=False,
-                    has_marker=False,
-                )
-            item_type = item.get("type", "")
-
-            if item_type == "message":
-                for block in item.get("content", []):
-                    if (
-                        isinstance(block, dict)
-                        and block.get("type") == "text"
-                        and self.completion_marker
-                        and _marker_is_standalone(block.get("text", ""), self.completion_marker)
-                    ):
-                        self._saw_marker = True
-                return SessionEvent(
-                    kind=BackendEventKind.TOOL_OUTPUT,
-                    is_terminal=False,
-                    has_marker=False,
-                    backend_data=CodexEventData(
-                        record_type="item.completed",
-                        thread_id="",
-                        item_type="message",
-                        raw=obj,
-                    ),
-                )
-
-            if item_type in ("file_change", "function_call"):
-                return SessionEvent(
-                    kind=BackendEventKind.TOOL_OUTPUT,
-                    is_terminal=False,
-                    has_marker=False,
-                    backend_data=CodexEventData(
-                        record_type="item.completed",
-                        thread_id="",
-                        item_type=item_type,
-                        raw=obj,
-                    ),
-                )
-
-            return SessionEvent(
-                kind=BackendEventKind.IGNORED,
-                is_terminal=False,
-                has_marker=False,
-            )
-
-        if event_type == "turn.completed":
-            return SessionEvent(
-                kind=BackendEventKind.COMPLETION,
-                is_terminal=True,
-                has_marker=self._saw_marker,
-                backend_data=CodexEventData(
-                    record_type="turn.completed",
-                    thread_id="",
-                    item_type="",
-                    raw=obj,
-                    usage=obj.get("usage"),
-                ),
-            )
-
-        if event_type == "turn.failed":
-            return SessionEvent(
-                kind=BackendEventKind.COMPLETION,
-                is_terminal=True,
-                has_marker=False,
-                backend_data=CodexEventData(
-                    record_type="turn.failed",
-                    thread_id="",
-                    item_type="",
-                    raw=obj,
-                ),
-            )
-
-        if event_type == "error":
-            return SessionEvent(
-                kind=BackendEventKind.ERROR,
-                is_terminal=True,
-                has_marker=False,
-                backend_data=CodexEventData(
-                    record_type="error",
-                    thread_id="",
-                    item_type="",
-                    raw=obj,
-                ),
-            )
-
-        return SessionEvent(
-            kind=BackendEventKind.IGNORED,
-            is_terminal=False,
-            has_marker=False,
-        )
+CODEX_ENV_PREFIX_DENYLIST: tuple[str, ...] = ("CLAUDE_CODE_",)
 
 
 @dataclass(frozen=True, slots=True)

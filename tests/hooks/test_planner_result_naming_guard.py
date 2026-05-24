@@ -278,9 +278,12 @@ def _run_write_guard(
     from autoskillit.hooks.guards.write_guard import main
 
     stdin_text = json.dumps(event) if isinstance(event, dict) else event
-    env_patch: dict[str, str] = {"AUTOSKILLIT_HEADLESS": "1"}
-    if allowed_prefix:
-        env_patch["AUTOSKILLIT_ALLOWED_WRITE_PREFIX"] = allowed_prefix
+    env_patch: dict[str, str] = {
+        "AUTOSKILLIT_HEADLESS": "1",
+        # Explicitly set (or clear) the write prefix so ambient skill-session
+        # env vars do not interfere with tests that expect an unrestricted env.
+        "AUTOSKILLIT_ALLOWED_WRITE_PREFIX": allowed_prefix,
+    }
     if skill_name:
         env_patch["AUTOSKILLIT_SKILL_NAME"] = skill_name
     buf = io.StringIO()

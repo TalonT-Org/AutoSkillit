@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.execution.backends.codex import ensure_codex_mcp_registered
+from autoskillit.execution.backends._codex_config import ensure_codex_mcp_registered
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 

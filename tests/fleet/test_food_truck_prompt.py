@@ -131,7 +131,7 @@ def test_food_truck_prompt_injects_caller_instructions_section():
 
 
 def test_food_truck_prompt_no_caller_instructions_section_when_none():
-    """L3 food truck prompt must not include caller instructions section when caller_instructions is None."""
+    """Food truck prompt must omit caller instructions section when caller_instructions is None."""
     prompt = _build_food_truck_prompt(
         recipe="test-recipe",
         task="Test task",
@@ -145,7 +145,7 @@ def test_food_truck_prompt_no_caller_instructions_section_when_none():
 
 
 def test_food_truck_prompt_no_caller_instructions_section_when_empty():
-    """L3 food truck prompt must not include caller instructions section when caller_instructions is empty."""
+    """Food truck prompt omits CALLER INSTRUCTIONS when caller_instructions is empty."""
     prompt = _build_food_truck_prompt(
         recipe="test-recipe",
         task="Test task",

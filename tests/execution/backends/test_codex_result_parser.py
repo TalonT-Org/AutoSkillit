@@ -6,7 +6,7 @@ from collections.abc import Mapping
 import pytest
 
 from autoskillit.core import BackendEventKind, CodexEventData, ResultParser, SessionEvent
-from autoskillit.execution.backends.codex import (
+from autoskillit.execution.backends._codex_parse import (
     CodexResultParser,
     CodexStreamParser,
     _scan_codex_ndjson,

@@ -308,6 +308,9 @@ dispatch_food_truck(
 If a dispatch has no `capture:` field, pass `capture={{}}` or omit the parameter.
 The `${{{{ campaign.* }}}}` references in ingredients are resolved before the L2 session
 is started — the L2 food truck agent always receives concrete values.
+
+If the user provided extra guidance at campaign launch, pass it to each dispatch via
+`caller_instructions=<guidance>`. The L2 food truck treats it as authoritative.
 {gate_section}{dynamic_dispatch_section}
 ## RESUME DISCIPLINE
 

@@ -382,6 +382,7 @@ async def execute_dispatch(
     caller_session_id: str = "",
     prior_dispatch_id: str | None = None,
     resume_message: str | None = None,
+    caller_instructions: str | None = None,
 ) -> DispatchResult:
     """Execute a single food truck dispatch.
 
@@ -447,6 +448,7 @@ async def execute_dispatch(
             caller_session_id=caller_session_id,
             prior_dispatch_id=prior_dispatch_id,
             resume_message=resume_message,
+            caller_instructions=caller_instructions,
         )
     except asyncio.CancelledError:
         raise
@@ -560,6 +562,7 @@ async def _run_dispatch(
     caller_session_id: str = "",
     prior_dispatch_id: str | None = None,
     resume_message: str | None = None,
+    caller_instructions: str | None = None,
 ) -> DispatchResult:
     """Inner dispatch body — called after lock acquisition."""
     from autoskillit.fleet.state import (
@@ -782,6 +785,7 @@ async def _run_dispatch(
         campaign_id=campaign_id,
         l3_timeout_sec=int(resolved_timeout),
         capture=capture,
+        caller_instructions=caller_instructions,
     )
 
     if tool_ctx.executor is None:

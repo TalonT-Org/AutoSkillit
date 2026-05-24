@@ -73,6 +73,7 @@ class ClaudeSessionResult:
     api_retry_last_error: str = ""
     api_retry_last_status: int | None = None
     api_retry_exhausted: bool = False
+    api_error_status: int | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.result, str):
@@ -85,7 +86,6 @@ class ClaudeSessionResult:
                     block_type = ClaudeContentBlockType.from_api(b.get("type", ""))
                     if block_type == ClaudeContentBlockType.TEXT:
                         parts.append(b.get("text", ""))
-                    # Non-text blocks (thinking, tool_use, etc.) contribute no text
                 self.result = "\n".join(parts)
             elif not isinstance(self.result, str):
                 self.result = "" if self.result is None else str(self.result)
@@ -110,25 +110,18 @@ class ClaudeSessionResult:
             return False
         marker = CONTEXT_EXHAUSTION_MARKER
         codex = CODEX_CONTEXT_EXHAUSTION_MARKER
-        if any(marker in e.lower() or codex in e.lower() for e in self.errors):
-            return True
-        if codex in self.result.lower():
-            return True
-        if (
-            self.subtype in (CliSubtype.SUCCESS, CliSubtype.ERROR_MAX_TURNS)
-            and marker in self.result.lower()
-        ):
-            return True
-        if any(codex in m.lower() for m in self.assistant_messages):
-            return True
-        return False
+        return (
+            any(marker in e.lower() or codex in e.lower() for e in self.errors)
+            or codex in self.result.lower()
+            or (
+                self.subtype in (CliSubtype.SUCCESS, CliSubtype.ERROR_MAX_TURNS)
+                and marker in self.result.lower()
+            )
+            or any(codex in m.lower() for m in self.assistant_messages)
+        )
 
     def _has_api_error(self) -> bool:
-        """True when the session encountered an API infrastructure error.
-
-        Scans assistant_messages, errors, and result for API error patterns.
-        This is the channel-agnostic counterpart to _is_context_exhausted().
-        """
+        """True when the session encountered an API infrastructure error."""
         from autoskillit.execution.session._exit_classification import _KNOWN_API_ERROR_PATTERNS
 
         searchable = "\n".join(self.assistant_messages)
@@ -158,11 +151,7 @@ class ClaudeSessionResult:
     @property
     def needs_retry(self) -> bool:
         """Whether the session didn't finish and should be retried."""
-        if self.subtype == CliSubtype.ERROR_MAX_TURNS:
-            return True
-        if self._is_context_exhausted():
-            return True
-        return False
+        return self.subtype == CliSubtype.ERROR_MAX_TURNS or self._is_context_exhausted()
 
     @property
     def retry_reason(self) -> RetryReason:
@@ -302,7 +291,7 @@ def extract_token_usage(stdout: str) -> dict[str, Any] | None:
 
 
 _KNOWN_RESULT_KEYS: frozenset[str] = frozenset(
-    {"type", "subtype", "is_error", "result", "session_id", "errors", "usage"}
+    {"type", "subtype", "is_error", "result", "session_id", "errors", "usage", "api_error_status"}
 )
 
 
@@ -321,6 +310,7 @@ class _ParseAccumulator:
     api_retry_last_error: str = ""
     api_retry_last_status: int | None = None
     api_retry_exhausted: bool = False
+    api_error_status: int | None = None
 
 
 def parse_session_result(stdout: str) -> ClaudeSessionResult:
@@ -368,8 +358,17 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
                     acc.api_retry_exhausted = True
                 continue
 
+            if record_type == "rate_limit_event":
+                info = obj.get("rate_limit_info") or obj
+                if isinstance(info, dict) and info.get("status") == "rejected":
+                    acc.api_retry_exhausted = True
+                continue
+
             if record_type == "result":
                 acc.result_obj = obj
+                raw_status = obj.get("api_error_status")
+                if isinstance(raw_status, int):
+                    acc.api_error_status = raw_status
             elif record_type == "assistant":
                 msg = obj.get("message")
                 if isinstance(msg, dict):
@@ -436,7 +435,6 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
                     if _stop:
                         acc.stop_reasons.append(str(_stop))
                 elif "message" not in obj:
-                    # Flat assistant record — detect context exhaustion inline.
                     if obj.get("output_tokens", -1) == 0:
                         flat_content = obj.get("content", [])
                         if isinstance(flat_content, list) and any(
@@ -454,6 +452,9 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
             fallback = json.loads(stdout)
             if isinstance(fallback, dict) and fallback.get("type") == "result":
                 acc.result_obj = fallback
+                raw_status = fallback.get("api_error_status")
+                if isinstance(raw_status, int):
+                    acc.api_error_status = raw_status
         except json.JSONDecodeError:
             pass
 
@@ -490,11 +491,10 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
         jsonl_context_exhausted=acc.jsonl_context_exhausted,
         stop_reasons=acc.stop_reasons,
         has_thinking_only_turn=acc.has_thinking_only_turn,
-        seen_block_types=frozenset(
-            acc.seen_block_types
-        ),  # accumulator uses set; result is immutable
+        seen_block_types=frozenset(acc.seen_block_types),
         api_retry_count=acc.api_retry_count,
         api_retry_last_error=acc.api_retry_last_error,
         api_retry_last_status=acc.api_retry_last_status,
         api_retry_exhausted=acc.api_retry_exhausted,
+        api_error_status=acc.api_error_status,
     )

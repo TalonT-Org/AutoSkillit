@@ -14,10 +14,11 @@ from autoskillit.core.types import (
     AgentSessionResult,
     CliSubtype,
     KillReason,
+    RetryReason,
     SkillResult,
     SubprocessResult,
     TerminationReason,
-    WriteEvidence,
+    WriteBehaviorSpec,
 )
 from autoskillit.execution.backends.claude import ClaudeResultParser
 from autoskillit.execution.backends.codex import CodexBackend
@@ -752,21 +753,25 @@ class TestIdleStallRecoveryWriteEvidence:
         )
 
 
+def _truncated_tool_use_line() -> str:
+    """Truncated NDJSON containing '"Edit"' that fails to parse — simulates a parse failure."""
+    return '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Edit","id":"t1"'
+
+
 class TestWriteEvidenceCrossCheck:
     def test_cross_check_logs_mismatch(self) -> None:
-        stdout = _tool_use_ndjson("Edit", file_path="/a/b.py", old_string="a", new_string="b")
-        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        result_line = _success_result_json()
+        result = _sr(
+            0,
+            _truncated_tool_use_line() + "\n" + result_line,
+            "",
+            TerminationReason.NATURAL_EXIT,
+        )
 
         from autoskillit.execution.headless import _headless_result
 
-        def zero_evidence(*args, **kwargs):
-            return WriteEvidence.none_observed()
-
         cap = structlog.testing.CapturingLogger()
-        with (
-            unittest.mock.patch.object(_headless_result, "_compute_write_evidence", zero_evidence),
-            unittest.mock.patch.object(_headless_result, "logger", cap),
-        ):
+        with unittest.mock.patch.object(_headless_result, "logger", cap):
             _build_skill_result(result)
 
         assert any(
@@ -775,6 +780,83 @@ class TestWriteEvidenceCrossCheck:
             and "write_call_count_cross_check_mismatch" in call.args[0]
             for call in cap.calls
         ), "Cross-check must warn when count=0 but stdout contains write tool names"
+
+    def test_cross_check_corrects_evidence_when_stdout_mentions_write_tools(self) -> None:
+        result_line = _success_result_json()
+        result = _sr(
+            0,
+            _truncated_tool_use_line() + "\n" + result_line,
+            "",
+            TerminationReason.NATURAL_EXIT,
+        )
+        sr = _build_skill_result(result)
+        assert sr.subtype != "zero_writes"
+        assert sr.evidence.write_call_count >= 1
+
+    def test_cross_check_sets_has_write_evidence(self) -> None:
+        result_line = _success_result_json()
+        result = _sr(
+            0,
+            _truncated_tool_use_line() + "\n" + result_line,
+            "",
+            TerminationReason.NATURAL_EXIT,
+        )
+        sr = _build_skill_result(
+            result,
+            write_behavior=WriteBehaviorSpec(mode="always"),
+        )
+        assert sr.success is True
+
+    def test_rate_limit_session_not_classified_as_early_stop(self) -> None:
+        result_line = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "result": "Rate limited",
+                "session_id": "s1",
+                "is_error": False,
+                "api_error_status": 429,
+            }
+        )
+        result = _sr(
+            0,
+            result_line,
+            "",
+            TerminationReason.NATURAL_EXIT,
+        )
+        sr = _build_skill_result(result, completion_marker="DONE")
+        assert sr.retry_reason != RetryReason.EARLY_STOP
+        assert sr.retry_reason == RetryReason.RESUME
+
+    def test_stale_session_api_error_status_classified(self) -> None:
+        result_line = json.dumps(
+            {
+                "type": "result",
+                "subtype": "empty_output",
+                "result": "",
+                "session_id": "s1",
+                "is_error": True,
+                "api_error_status": 429,
+            }
+        )
+        result = _stale_result(stdout=result_line)
+        sr = _build_skill_result(result)
+        assert sr.infra.exit_category == "api_error"
+
+    def test_idle_stall_session_api_error_status_classified(self) -> None:
+        result_line = json.dumps(
+            {
+                "type": "result",
+                "subtype": "empty_output",
+                "result": "",
+                "session_id": "s1",
+                "is_error": True,
+                "api_error_status": 429,
+            }
+        )
+        result = _idle_stall_result(result_line)
+        sr = _build_skill_result(result)
+        assert sr.infra.exit_category == "api_error"
 
 
 class TestCodexPipelineHappyPath:

@@ -15,6 +15,7 @@ import pytest
 from autoskillit.core.types import (
     ChannelConfirmation,
     InfraExitCategory,
+    RetryReason,
     SubprocessResult,
     TerminationReason,
 )
@@ -38,6 +39,7 @@ API_ERROR_SIGNALS: list[str] = [
     "socket hang up",
     "network error",
     "connection reset",
+    "Rate limited",
     # OpenAI/Codex API error types
     *CODEX_API_ERROR_SIGNAL_STRINGS,
 ]
@@ -140,7 +142,6 @@ class TestApiErrorPtyModeEndToEnd:
     @pytest.mark.parametrize("signal", API_ERROR_SIGNALS)
     def test_api_error_pty_mode_routes_to_resume(self, signal: str) -> None:
         """Empty stderr + API error in stdout NDJSON → needs_retry=True, RESUME."""
-        from autoskillit.core.types import RetryReason
 
         ndjson = _make_synthetic_api_error_ndjson(
             error_type=f"{signal}_error" if " " not in signal else signal,
@@ -173,7 +174,6 @@ class TestApiErrorPtyModeEndToEnd:
 
     def test_api_error_pty_mode_realistic_overload(self) -> None:
         """Realistic production scenario: overloaded_error, returncode=0, empty stderr."""
-        from autoskillit.core.types import RetryReason
 
         ndjson = _make_synthetic_api_error_ndjson(
             error_type="overloaded_error",
@@ -203,7 +203,6 @@ class TestApiErrorPtyModeEndToEnd:
 
     def test_context_length_exceeded_pty_mode_routes_to_context_exhausted(self) -> None:
         """PTY mode: context_length_exceeded → CONTEXT_EXHAUSTED, needs_retry=True, RESUME."""
-        from autoskillit.core.types import RetryReason
 
         ndjson = _make_synthetic_api_error_ndjson(
             error_type="context_length_exceeded",
@@ -288,3 +287,31 @@ class TestContextExhaustedCodexInvariant:
         )
         result = _make_result(returncode=1, stderr="Error: context_length_exceeded", stdout="")
         assert classify_infra_exit(session, result) == InfraExitCategory.CONTEXT_EXHAUSTED
+
+
+class TestApiErrorStatusChannelInvariance:
+    """api_error_status structured signal must route to RESUME end-to-end."""
+
+    def test_api_error_status_triggers_api_error_classification(self) -> None:
+        result_line = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "result": "partial work",
+                "session_id": "s1",
+                "is_error": False,
+                "api_error_status": 429,
+            }
+        )
+        result = SubprocessResult(
+            returncode=0,
+            stdout=result_line,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
+        sr = _build_skill_result(result, completion_marker="DONE")
+        assert sr.infra.exit_category == "api_error"
+        assert sr.needs_retry is True
+        assert sr.retry_reason == RetryReason.RESUME

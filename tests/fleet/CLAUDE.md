@@ -50,7 +50,7 @@ Fleet campaign dispatch, state persistence, and sidecar tests.
 | `test_sidecar.py` | Sidecar tests |
 | `test_startup_label_recovery.py` | Tests for sweep_stale_dispatch_labels — dead dispatch label cleanup, alive dispatch skip, missing sidecar, multi-campaign |
 | `test_find_dispatch_for_issue.py` | Tests for find_dispatch_for_issue — running dispatch sidecar lookup, non-running skip, missing sidecar, empty state, corrupt state |
-| `test_staleness_propagation.py` | Tests for ProcessStaleError propagation through fleet dispatch — FLEET_PROCESS_STALE error code |
+| `test_staleness_propagation.py` | Tests that fleet dispatch proceeds despite process staleness — L2 subprocess revalidates independently |
 | `test_state.py` | Tests for fleet state module (Group J) |
 | `test_state_lock_contract.py` | Locking contract tests — AST scan for flock targets, flock acquisition per mutation, cross-caller concurrency |
 | `test_state_protection.py` | Tests for fleet.state.build_protected_campaign_ids (PROT_1–PROT_9) |

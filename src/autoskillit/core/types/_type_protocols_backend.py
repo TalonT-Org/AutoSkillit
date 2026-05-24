@@ -51,7 +51,13 @@ class ResultParser(Protocol):
 class EnvPolicy(Protocol):
     """Protocol for building the subprocess environment for a backend launch."""
 
-    def build_env(self, base_env: Mapping[str, str]) -> dict[str, str]: ...
+    def build_env(
+        self,
+        base_env: Mapping[str, str],
+        *,
+        extras: Mapping[str, str] | None = None,
+        required: frozenset[str] | None = None,
+    ) -> dict[str, str]: ...
 
 
 @runtime_checkable

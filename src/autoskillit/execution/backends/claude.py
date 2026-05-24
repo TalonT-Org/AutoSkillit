@@ -62,7 +62,13 @@ __all__ = [
 
 @dataclass(frozen=True, slots=True)
 class ClaudeEnvPolicy:
-    def build_env(self, base_env: Mapping[str, str]) -> dict[str, str]:
+    def build_env(
+        self,
+        base_env: Mapping[str, str],
+        *,
+        extras: Mapping[str, str] | None = None,
+        required: frozenset[str] | None = None,
+    ) -> dict[str, str]:
         return dict(build_agent_env(base=base_env))
 
 

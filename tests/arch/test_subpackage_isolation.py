@@ -685,153 +685,156 @@ def test_test_suite_oversized_files_split():
 def test_no_subpackage_exceeds_10_files() -> None:
     """REQ-CNST-003: No sub-package directory may contain more than 10 Python files.
 
-    Exemptions (rule ID | rationale):
-      server/ — REQ-CNST-003-E1: server/ splits tool handlers into per-domain files
-        (tools_clone, tools_github, tools_issue_headless, tools_issue_labels, tools_pr_ops,
-        tools_ci, tools_git, tools_recipe, tools_status, tools_workspace, tools_execution,
-        tools_kitchen, helpers, git, _factory, _state, __init__); each file is a thin
-        routing layer. Exempt at 16 files.
-      recipe/ — REQ-CNST-003-E2: recipe/ hosts one file per semantic-rule domain
-        (rules_bypass, rules_ci, rules_clone, rules_packs, etc.) for independent testability.
-        Adding rules_cmd.py for run_cmd echo-capture alignment validation and
-        rules_isolation.py for workspace isolation checks brings the count to 30.
-        rules_blocks.py adds the block-level budget rule family, bringing the count to 32.
-        rules_reachability.py adds symbolic BFS reachability rules, bringing the count to 33.
-        rules_fixing.py adds conditional-write-skill ungated-push detection,
-        bringing the count to 34.
-        rules_campaign_dispatch.py, rules_campaign_deps.py, rules_campaign_ingredients.py,
-        rules_campaign_capture.py, and rules_campaign_flow.py split rules_campaign.py,
-        bringing the count to 37.
-        rules_temp_path.py adds the non-unique-output-path lint rule for output path
-        isolation enforcement, bringing the count to 39.
-        identity.py adds recipe identity hashing (content and composite fingerprints),
-        bringing the count to 40.
-        order.py adds the stable display order registry (BUNDLED_RECIPE_ORDER) for
-        Group 0 bundled recipes, bringing the count to 41.
-        Monolithic file splits (_api.py → _recipe_ingredients + _recipe_composition;
-        _analysis.py → _analysis_graph + _analysis_bfs + _analysis_blocks +
-        _analysis_detectors) add 6 files, bringing the count to 47.
-        _skill_helpers.py extracts the shared _get_skill_category_map helper from
-        rules_skills.py and rules_features.py to eliminate duplication,
-        bringing the count to 48.
-        rules/rules_callable_scope.py adds the callable-requires-scoped-discovery
-        rule enforcing scoped directory arguments for file-discovering callables,
-        bringing the rules/ count to 29. rules/rules_remediation.py adds the
-        audit-impl-remediation-route rule ensuring remediation_path captures have
-        non-terminal non-GO routes, bringing the rules/ count to 30.
-        rules/rules_loop_progress.py adds the loop-body-uncaptured-output rule
-        ensuring run_skill steps inside routing cycles capture declared outputs,
-        bringing the rules/ count to 31. Exempt at 48 files.
-      execution/ — REQ-CNST-003-E3: execution/ decomposes process lifecycle into
-        focused single-concern modules (_process_io, _process_kill, _process_race,
-        etc.) that cannot be merged without re-introducing the coupling they isolate.
-        recording.py adds the RecordingSubprocessRunner decorator as a separate module
-        to keep scenario recording concerns isolated from the core process lifecycle.
-        _headless_scan.py extracts write-path JSONL scanning from headless.py to keep
-        that module within its REQ-CNST-010-E2 line budget.
-        _headless_recovery.py, _headless_path_tokens.py, and _headless_result.py
-        split the remaining headless.py concern groups into private sub-modules
-        following the _process_*.py precedent (P8-F1), bringing the count to 29.
-        _session_model.py and _session_content.py split session.py (P8-F3),
-        _merge_queue_classifier.py and _merge_queue_repo_state.py split merge_queue.py
-        (P8-F4), bringing the count to 33.
-        _retry_fsm.py and _session_outcome.py split session retry and outcome logic,
-        bringing the count to 35.
-        _merge_queue_group_ci.py extracts merge-group CI helpers and GraphQL mutation/query
-        strings from merge_queue.py to satisfy the 500-line size budget (P8-F4 follow-up),
-        bringing the count to 36.
-        _headless_git.py extracts git LOC-capture helpers (_capture_git_head_sha,
-        _parse_numstat, _compute_loc_changed) from headless.py to keep it under the
-        750-line architectural budget, bringing the count to 37.
-        _recording_skills.py adds snapshot/restore helpers for ephemeral skill dirs in
-        the record/replay system, isolated from recording.py to keep snapshot logic
-        independently testable, bringing the count to 38.
-        Exempt at 38 files.
-      core/ — REQ-CNST-003-E4: core/ types split into per-concern type modules
-        (_type_enums, _type_protocols_logging, _type_protocols_execution,
-        _type_protocols_github, _type_protocols_workspace, _type_protocols_recipe,
-        _type_protocols_infra, _type_results, _type_subprocess, etc.) to
-        prevent circular imports while keeping IL-0 types co-located. Also houses
-        _terminal_table.py as the IL-0 shared terminal rendering primitive so that
-        both cli/ (IL-3) and pipeline/ (IL-1) can import it without layer violations.
-        _claude_env.py adds the canonical IDE-scrubbing env builder for all
-        claude subprocess launches. kitchen_state.py adds the stdlib-only
-        kitchen-open session marker reader for hook subprocesses.
-        _version_snapshot.py adds the process-scoped version snapshot for session
-        telemetry (collect_version_snapshot, lru_cache'd).
-        _plugin_cache.py adds the plugin cache lifecycle: retiring cache sweep,
-        install locking, and kitchen registry (accessible from server/ without
-        cli/ import).
-        feature_flags.py adds the IL-0 is_feature_enabled() primitive — must live
-        in core/ to be importable by all layers without cross-layer violations.
-        session_registry.py adds the stdlib-only session registry mapping
-        autoskillit launch IDs to Claude Code session UUIDs for the scoped
-        resume picker.
-        tool_sequence_analysis.py adds the stdlib-only cross-session tool call
-        sequence DFG analysis (IL-0; must live in core/ to be importable by server/).
-        Monolithic protocol module split into 6 domain-grouped shard files (net +5 files).
-        _install_detect.py adds the is_dev_install() predicate for config resolution
-        to auto-detect whether the install is editable when experimental_enabled is absent,
-        bringing the count to 33.
-        _type_session_env.py adds FleetSessionEnv frozen dataclass for typed env spec
-        at the session launch boundary, bringing the count to 20.
-        _type_backend.py adds BackendCapabilities frozen dataclass and CLAUDE_CODE_CAPABILITIES
-        constant for backend capability declarations (IL-0), bringing the count to 21.
-        _type_token.py adds CanonicalTokenUsage frozen dataclass for provider-agnostic
-        token usage normalization (IL-0), bringing the count to 22.
-        _type_exceptions.py adds RecipeLoadError hierarchy (ProcessStaleError,
-        RecipeNotFoundError) for exception-based error propagation from
-        load_and_validate, bringing the count to 23.
-        Exempt at 35 files (core/types: 23).
-      cli/ — REQ-CNST-003-E5: cli/ retains _terminal_table.py as a re-export shim
-        for backward-compatible cli/ imports; canonical implementation lives in
-        core/_terminal_table.py. Also contains _terminal.py — the terminal state
-        management context manager (terminal_guard) for interactive subprocess
-        sessions. _install_info.py adds pure install classification + policy.
-        _update_checks.py adds the unified update check orchestration.
-        _update.py adds the first-class update subcommand implementation.
-        _fleet.py adds fleet error envelope rendering for CLI consumers.
-        _features.py adds feature gate inspection subcommand (list/status).
-        _session_picker.py adds the scoped session resume picker that filters
-        sessions by type (cook/order) using the session registry.
-        _sessions.py adds the sessions analyze CLI subcommand for cross-session
-        tool call sequence diagnostics.
-        _restart.py adds the perform_restart() NoReturn contract for post-upgrade
-        process re-exec, keeping the restart logic isolated from update orchestration.
-        _doctor.py was split (1245 lines → facade + 9 sub-modules) following the
-        _process_*.py pattern: _doctor_types.py (shared DoctorResult type),
-        _doctor_mcp.py, _doctor_hooks.py, _doctor_install.py, _doctor_config.py,
-        _doctor_runtime.py, _doctor_env.py, _doctor_features.py, _doctor_fleet.py.
-        _prompts.py (819 lines) was decomposed into three domain-focused submodules:
-        _prompts_campaign.py (IL-3 campaign dispatcher), _prompts_orchestrator.py
-        (IL-1/IL-2 cook session), and _prompts_kitchen.py (open-kitchen + fleet-dispatch),
-        with _prompts.py reduced to a shared-helpers + re-export hub (~50 lines).
-        Exempt at 20 files.
-      hooks/ — REQ-CNST-003-E6: hooks/ hosts one standalone script per hook event
-        (PreToolUse, PostToolUse, SessionStart). Each script must remain a separate
-        file so Claude Code can invoke it directly as a subprocess. pretty_output_hook.py
-        additionally owns a set of underscore-prefixed private formatter modules
-        (_fmt_primitives.py, _fmt_execution.py, _fmt_status.py, _fmt_recipe.py)
-        that are imported helpers — not standalone hook scripts — split out to
-        keep pretty_output_hook.py under its line budget. ask_user_question_guard.py
-        gates AskUserQuestion on kitchen-open state. grep_pattern_lint_guard.py adds
-        input-validation guard for Grep tool BRE pattern syntax. review_gate_post_hook.py
-        and review_loop_gate.py add the review gate enforcement hooks. recipe_write_advisor.py
-        adds a non-blocking advisory hook for recipe YAML writes. write_guard.py
-        blocks Write/Edit outside the allowed prefix in read-only skill sessions.
-        _hook_utils.py provides shared stdlib-only utilities (e.g., find_project_root)
-        for hook scripts that need common path resolution logic.
-        Exempt at 28 files.
-      pipeline/ — REQ-CNST-003-E7: pipeline/ added github_api_log.py for session-scoped
-        GitHub API request tracking (DefaultGitHubApiLog accumulator + GitHubApiEntry).
-        Exempt at 12 files.
-      fleet/ — REQ-CNST-003-E8: fleet/ added _semaphore.py for FleetSemaphore, the
-        configurable asyncio.BoundedSemaphore implementation of the FleetLock protocol.
-        Placed in fleet/ rather than server/ to preserve conservative test-filter cascade
-        narrowing: changes to fleet/_semaphore.py only cascade to fleet/ tests, not to
-        server/ tests. state.py was decomposed into state_types.py, state_gates.py, and
-        state_recovery.py to reduce the 757-line monolith and centralize deserialization
-        logic on DispatchRecord.from_dict. Exempt at 15 files.
+        Exemptions (rule ID | rationale):
+          server/ — REQ-CNST-003-E1: server/ splits tool handlers into per-domain files
+            (tools_clone, tools_github, tools_issue_headless, tools_issue_labels, tools_pr_ops,
+            tools_ci, tools_git, tools_recipe, tools_status, tools_workspace, tools_execution,
+            tools_kitchen, helpers, git, _factory, _state, __init__); each file is a thin
+            routing layer. Exempt at 16 files.
+          recipe/ — REQ-CNST-003-E2: recipe/ hosts one file per semantic-rule domain
+            (rules_bypass, rules_ci, rules_clone, rules_packs, etc.) for independent testability.
+            Adding rules_cmd.py for run_cmd echo-capture alignment validation and
+            rules_isolation.py for workspace isolation checks brings the count to 30.
+            rules_blocks.py adds the block-level budget rule family, bringing the count to 32.
+            rules_reachability.py adds symbolic BFS reachability rules, bringing the count to 33.
+            rules_fixing.py adds conditional-write-skill ungated-push detection,
+            bringing the count to 34.
+            rules_campaign_dispatch.py, rules_campaign_deps.py, rules_campaign_ingredients.py,
+            rules_campaign_capture.py, and rules_campaign_flow.py split rules_campaign.py,
+            bringing the count to 37.
+            rules_temp_path.py adds the non-unique-output-path lint rule for output path
+            isolation enforcement, bringing the count to 39.
+            identity.py adds recipe identity hashing (content and composite fingerprints),
+            bringing the count to 40.
+            order.py adds the stable display order registry (BUNDLED_RECIPE_ORDER) for
+            Group 0 bundled recipes, bringing the count to 41.
+            Monolithic file splits (_api.py → _recipe_ingredients + _recipe_composition;
+            _analysis.py → _analysis_graph + _analysis_bfs + _analysis_blocks +
+            _analysis_detectors) add 6 files, bringing the count to 47.
+            _skill_helpers.py extracts the shared _get_skill_category_map helper from
+            rules_skills.py and rules_features.py to eliminate duplication,
+            bringing the count to 48.
+            rules/rules_callable_scope.py adds the callable-requires-scoped-discovery
+            rule enforcing scoped directory arguments for file-discovering callables,
+            bringing the rules/ count to 29. rules/rules_remediation.py adds the
+            audit-impl-remediation-route rule ensuring remediation_path captures have
+            non-terminal non-GO routes, bringing the rules/ count to 30.
+            rules/rules_loop_progress.py adds the loop-body-uncaptured-output rule
+            ensuring run_skill steps inside routing cycles capture declared outputs,
+            bringing the rules/ count to 31. Exempt at 48 files.
+          execution/ — REQ-CNST-003-E3: execution/ decomposes process lifecycle into
+            focused single-concern modules (_process_io, _process_kill, _process_race,
+            etc.) that cannot be merged without re-introducing the coupling they isolate.
+            recording.py adds the RecordingSubprocessRunner decorator as a separate module
+            to keep scenario recording concerns isolated from the core process lifecycle.
+            _headless_scan.py extracts write-path JSONL scanning from headless.py to keep
+            that module within its REQ-CNST-010-E2 line budget.
+            _headless_recovery.py, _headless_path_tokens.py, and _headless_result.py
+            split the remaining headless.py concern groups into private sub-modules
+            following the _process_*.py precedent (P8-F1), bringing the count to 29.
+            _session_model.py and _session_content.py split session.py (P8-F3),
+            _merge_queue_classifier.py and _merge_queue_repo_state.py split merge_queue.py
+            (P8-F4), bringing the count to 33.
+            _retry_fsm.py and _session_outcome.py split session retry and outcome logic,
+            bringing the count to 35.
+            _merge_queue_group_ci.py extracts merge-group CI helpers and GraphQL mutation/query
+            strings from merge_queue.py to satisfy the 500-line size budget (P8-F4 follow-up),
+            bringing the count to 36.
+            _headless_git.py extracts git LOC-capture helpers (_capture_git_head_sha,
+            _parse_numstat, _compute_loc_changed) from headless.py to keep it under the
+            750-line architectural budget, bringing the count to 37.
+            _recording_skills.py adds snapshot/restore helpers for ephemeral skill dirs in
+            the record/replay system, isolated from recording.py to keep snapshot logic
+            independently testable, bringing the count to 38.
+            Exempt at 38 files.
+          core/ — REQ-CNST-003-E4: core/ types split into per-concern type modules
+            (_type_enums, _type_protocols_logging, _type_protocols_execution,
+            _type_protocols_github, _type_protocols_workspace, _type_protocols_recipe,
+            _type_protocols_infra, _type_results, _type_subprocess, etc.) to
+            prevent circular imports while keeping IL-0 types co-located. Also houses
+            _terminal_table.py as the IL-0 shared terminal rendering primitive so that
+            both cli/ (IL-3) and pipeline/ (IL-1) can import it without layer violations.
+            _claude_env.py adds the canonical IDE-scrubbing env builder for all
+            claude subprocess launches. kitchen_state.py adds the stdlib-only
+            kitchen-open session marker reader for hook subprocesses.
+            _version_snapshot.py adds the process-scoped version snapshot for session
+            telemetry (collect_version_snapshot, lru_cache'd).
+            _plugin_cache.py adds the plugin cache lifecycle: retiring cache sweep,
+            install locking, and kitchen registry (accessible from server/ without
+            cli/ import).
+            feature_flags.py adds the IL-0 is_feature_enabled() primitive — must live
+            in core/ to be importable by all layers without cross-layer violations.
+            session_registry.py adds the stdlib-only session registry mapping
+            autoskillit launch IDs to Claude Code session UUIDs for the scoped
+            resume picker.
+            tool_sequence_analysis.py adds the stdlib-only cross-session tool call
+            sequence DFG analysis (IL-0; must live in core/ to be importable by server/).
+            Monolithic protocol module split into 6 domain-grouped shard files (net +5 files).
+            _install_detect.py adds the is_dev_install() predicate for config resolution
+            to auto-detect whether the install is editable when experimental_enabled is absent,
+            bringing the count to 33.
+            _type_session_env.py adds FleetSessionEnv frozen dataclass for typed env spec
+            at the session launch boundary, bringing the count to 20.
+            _type_backend.py adds BackendCapabilities frozen dataclass and CLAUDE_CODE_CAPABILITIES
+            constant for backend capability declarations (IL-0), bringing the count to 21.
+            _type_token.py adds CanonicalTokenUsage frozen dataclass for provider-agnostic
+            token usage normalization (IL-0), bringing the count to 22.
+            _type_exceptions.py adds RecipeLoadError hierarchy (ProcessStaleError,
+            RecipeNotFoundError) for exception-based error propagation from
+            load_and_validate, bringing the count to 23.
+            Exempt at 35 files (core/types: 23).
+          cli/ — REQ-CNST-003-E5: cli/ retains _terminal_table.py as a re-export shim
+            for backward-compatible cli/ imports; canonical implementation lives in
+            core/_terminal_table.py. Also contains _terminal.py — the terminal state
+            management context manager (terminal_guard) for interactive subprocess
+            sessions. _install_info.py adds pure install classification + policy.
+            _update_checks.py adds the unified update check orchestration.
+            _update.py adds the first-class update subcommand implementation.
+            _fleet.py adds fleet error envelope rendering for CLI consumers.
+            _features.py adds feature gate inspection subcommand (list/status).
+            _session_picker.py adds the scoped session resume picker that filters
+            sessions by type (cook/order) using the session registry.
+            _sessions.py adds the sessions analyze CLI subcommand for cross-session
+            tool call sequence diagnostics.
+            _restart.py adds the perform_restart() NoReturn contract for post-upgrade
+            process re-exec, keeping the restart logic isolated from update orchestration.
+            _doctor.py was split (1245 lines → facade + 9 sub-modules) following the
+            _process_*.py pattern: _doctor_types.py (shared DoctorResult type),
+            _doctor_mcp.py, _doctor_hooks.py, _doctor_install.py, _doctor_config.py,
+            _doctor_runtime.py, _doctor_env.py, _doctor_features.py, _doctor_fleet.py.
+            _prompts.py (819 lines) was decomposed into three domain-focused submodules:
+            _prompts_campaign.py (IL-3 campaign dispatcher), _prompts_orchestrator.py
+            (IL-1/IL-2 cook session), and _prompts_kitchen.py (open-kitchen + fleet-dispatch),
+            with _prompts.py reduced to a shared-helpers + re-export hub (~50 lines).
+            _hooks_codex.py adds Codex config.toml hook generation and sync
+    (generate_codex_hooks_config, sync_hooks_to_codex_config) paralleling
+    _hooks.py for Claude Code settings.json hooks.
+    Exempt at 21 files.
+          hooks/ — REQ-CNST-003-E6: hooks/ hosts one standalone script per hook event
+            (PreToolUse, PostToolUse, SessionStart). Each script must remain a separate
+            file so Claude Code can invoke it directly as a subprocess. pretty_output_hook.py
+            additionally owns a set of underscore-prefixed private formatter modules
+            (_fmt_primitives.py, _fmt_execution.py, _fmt_status.py, _fmt_recipe.py)
+            that are imported helpers — not standalone hook scripts — split out to
+            keep pretty_output_hook.py under its line budget. ask_user_question_guard.py
+            gates AskUserQuestion on kitchen-open state. grep_pattern_lint_guard.py adds
+            input-validation guard for Grep tool BRE pattern syntax. review_gate_post_hook.py
+            and review_loop_gate.py add the review gate enforcement hooks. recipe_write_advisor.py
+            adds a non-blocking advisory hook for recipe YAML writes. write_guard.py
+            blocks Write/Edit outside the allowed prefix in read-only skill sessions.
+            _hook_utils.py provides shared stdlib-only utilities (e.g., find_project_root)
+            for hook scripts that need common path resolution logic.
+            Exempt at 28 files.
+          pipeline/ — REQ-CNST-003-E7: pipeline/ added github_api_log.py for session-scoped
+            GitHub API request tracking (DefaultGitHubApiLog accumulator + GitHubApiEntry).
+            Exempt at 12 files.
+          fleet/ — REQ-CNST-003-E8: fleet/ added _semaphore.py for FleetSemaphore, the
+            configurable asyncio.BoundedSemaphore implementation of the FleetLock protocol.
+            Placed in fleet/ rather than server/ to preserve conservative test-filter cascade
+            narrowing: changes to fleet/_semaphore.py only cascade to fleet/ tests, not to
+            server/ tests. state.py was decomposed into state_types.py, state_gates.py, and
+            state_recovery.py to reduce the 757-line monolith and centralize deserialization
+            logic on DispatchRecord.from_dict. Exempt at 15 files.
     """
     EXEMPTIONS: dict[str, int] = {
         "server": 14,
@@ -839,7 +842,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "execution": 18,
         "core": 20,
         "core/types": 27,
-        "cli": 20,
+        "cli": 21,
         "hooks": 10,
         "pipeline": 12,
         "fleet": 19,

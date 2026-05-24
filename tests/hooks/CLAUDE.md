@@ -28,6 +28,7 @@ Hook script behavior, registration, and bridge tests.
 | `test_token_summary_appender.py` | Token summary hook script existence and source quality (2 tests); behavioral and unit tests live in tests/infra/ |
 | `test_write_guard.py` | Tests for write_guard.py PreToolUse hook |
 | `test_planner_result_naming_guard.py` | Tests for planner_result_naming_guard.py PreToolUse hook |
+| `test_codex_hooks.py` | Tests for cli/_hooks_codex.py — AST scan, hook generation, sync idempotency |
 | `test_recipe_contract_freshness.py` | Tests for the recipe-contract-freshness pre-commit hook |
 
 ## Architecture Notes

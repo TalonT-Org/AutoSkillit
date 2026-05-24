@@ -43,10 +43,51 @@ def _format_inline_table(d: dict[str, Any]) -> str:
     return "{" + ", ".join(pairs) + "}"
 
 
+def _classify_list(key: str, lst: list) -> bool:
+    """Return True if list is all-dicts (array-of-tables), False if all-scalars.
+
+    Raises TypeError for mixed lists containing both dict and non-dict items.
+    """
+    if not lst:
+        return False
+    has_dicts = any(isinstance(item, dict) for item in lst)
+    has_non_dicts = any(not isinstance(item, dict) for item in lst)
+    if has_dicts and has_non_dicts:
+        msg = f"TOML array {key!r} contains both dict and non-dict items"
+        raise TypeError(msg)
+    return has_dicts
+
+
+def _emit_aot_entry(d: dict[str, Any], path: list[str], lines: list[str]) -> None:
+    """Emit a single [[path]] array-of-tables entry."""
+    lines.append(f"\n[[{'.'.join(path)}]]")
+    nested_aot: list[tuple[str, list[dict]]] = []
+    for k, v in d.items():
+        if isinstance(v, dict):
+            lines.append(f"{k} = {_format_inline_table(v)}")
+        elif isinstance(v, list) and _classify_list(k, v):
+            nested_aot.append((k, v))
+        else:
+            lines.append(f"{k} = {_format_toml_value(v)}")
+    for k, entries in nested_aot:
+        for entry in entries:
+            _emit_aot_entry(entry, [*path, k], lines)
+
+
 def _emit_toml_table(d: dict[str, Any], path: list[str], lines: list[str]) -> None:
     header = f"[{'.'.join(path)}]"
-    scalars = [(k, v) for k, v in d.items() if not isinstance(v, dict)]
-    tables = [(k, v) for k, v in d.items() if isinstance(v, dict)]
+
+    scalars: list[tuple[str, Any]] = []
+    tables: list[tuple[str, dict]] = []
+    aot_keys: list[tuple[str, list[dict]]] = []
+    for k, v in d.items():
+        if isinstance(v, dict):
+            tables.append((k, v))
+        elif isinstance(v, list) and _classify_list(k, v):
+            aot_keys.append((k, v))
+        else:
+            scalars.append((k, v))
+
     has_scalars = bool(scalars)
 
     inline_tables: list[tuple[str, dict[str, Any]]] = []
@@ -71,15 +112,26 @@ def _emit_toml_table(d: dict[str, Any], path: list[str], lines: list[str]) -> No
     for k, v in recurse_tables:
         _emit_toml_table(v, [*path, k], lines)
 
+    for k, entries in aot_keys:
+        for entry in entries:
+            _emit_aot_entry(entry, [*path, k], lines)
+
 
 def _serialize_toml(data: dict[str, Any]) -> str:
     lines: list[str] = []
     for k, v in data.items():
-        if not isinstance(v, dict):
-            lines.append(f"{k} = {_format_toml_value(v)}")
+        if isinstance(v, dict):
+            continue
+        if isinstance(v, list) and _classify_list(k, v):
+            continue
+        lines.append(f"{k} = {_format_toml_value(v)}")
     for k, v in data.items():
         if isinstance(v, dict):
             _emit_toml_table(v, [k], lines)
+    for k, v in data.items():
+        if isinstance(v, list) and _classify_list(k, v):
+            for entry in v:
+                _emit_aot_entry(entry, [k], lines)
     text = "\n".join(lines).lstrip("\n")
     return text + "\n" if text else ""
 

@@ -20,6 +20,8 @@ from autoskillit.execution.anomaly_detection import (
 from autoskillit.execution.backends import (
     ClaudeCodeBackend,
     CodexBackend,
+    _read_codex_config,
+    _write_codex_config,
     ensure_codex_mcp_registered,
     get_backend,
 )
@@ -213,6 +215,8 @@ __all__ = [
     # backends
     "ClaudeCodeBackend",
     "CodexBackend",
+    "_read_codex_config",
+    "_write_codex_config",
     "ensure_codex_mcp_registered",
     # anomaly_detection
     "detect_anomalies",

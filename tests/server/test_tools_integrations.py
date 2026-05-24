@@ -9,12 +9,14 @@ import pytest
 
 from autoskillit.core import SkillResult
 from autoskillit.core.types import RetryReason
-from autoskillit.server.tools.tools_issue_lifecycle import (
+from autoskillit.server.tools.tools_issue_headless import (
     _PREPARE_RESULT_END,
     _PREPARE_RESULT_START,
-    claim_issue,
     enrich_issues,
     prepare_issue,
+)
+from autoskillit.server.tools.tools_issue_labels import (
+    claim_issue,
     release_issue,
 )
 from autoskillit.server.tools.tools_pr_ops import bulk_close_issues, get_pr_reviews

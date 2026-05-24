@@ -78,7 +78,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_tools_integrations.py` | Integration tests for issue lifecycle, headless tool diagnostics, and PR ops |
 | `test_tools_integrations_release.py` | Tests for release_issue staged lifecycle behaviour |
 | `test_claim_liveness.py` | Tests for liveness-aware claiming — dead dispatch recovery, alive dispatch blocking, shared helper parity |
-| `test_tools_issue_lifecycle.py` | Tests for server/tools_issue_lifecycle.py |
+| `test_tools_issue_lifecycle.py` | Tests for server/tools/tools_issue_headless.py and server/tools/tools_issue_labels.py |
 | `test_tools_kitchen_envelope.py` | Tests for tools_kitchen.py: hook drift warnings and failure envelopes |
 | `test_tools_kitchen_gate.py` | Tests for tools_kitchen.py: gate toggle, review gate cleanup, kitchen_id, misc |
 | `test_tools_kitchen_gate_features.py` | Tests for tools_kitchen.py: recipe packs, quota refresh, ingredients_only, project_dir |

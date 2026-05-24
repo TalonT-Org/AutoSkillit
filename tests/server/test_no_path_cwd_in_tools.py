@@ -19,7 +19,8 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 TOOLS_FILES: dict[str, list[int] | None] = {
     "src/autoskillit/server/tools/tools_kitchen.py": None,  # allowed in _reload_session_handler
     "src/autoskillit/server/tools/tools_recipe.py": [],
-    "src/autoskillit/server/tools/tools_issue_lifecycle.py": [],
+    "src/autoskillit/server/tools/tools_issue_headless.py": [],
+    "src/autoskillit/server/tools/tools_issue_labels.py": [],
 }
 
 LIFESPAN_FILES: dict[str, list[int] | None] = {

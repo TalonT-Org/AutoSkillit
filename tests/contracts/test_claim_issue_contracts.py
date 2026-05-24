@@ -16,14 +16,14 @@ def test_release_issue_in_gated_tools() -> None:
 
 
 def test_claim_issue_tool_registered() -> None:
-    """claim_issue must be importable from tools_issue_lifecycle."""
-    from autoskillit.server.tools.tools_issue_lifecycle import claim_issue
+    """claim_issue must be importable from tools_issue_labels."""
+    from autoskillit.server.tools.tools_issue_labels import claim_issue
 
     assert callable(claim_issue)
 
 
 def test_release_issue_tool_registered() -> None:
-    """release_issue must be importable from tools_issue_lifecycle."""
-    from autoskillit.server.tools.tools_issue_lifecycle import release_issue
+    """release_issue must be importable from tools_issue_labels."""
+    from autoskillit.server.tools.tools_issue_labels import release_issue
 
     assert callable(release_issue)

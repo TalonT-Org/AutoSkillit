@@ -218,6 +218,41 @@ def test_all_infra_categories_handled(category: InfraExitCategory) -> None:
     assert category.value in {"completed", "context_exhausted", "api_error", "process_killed"}
 
 
+class TestRateLimitClassification:
+    def test_rate_limited_text_classified_as_api_error(self) -> None:
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="API Error: Server is temporarily limiting requests (not your usage limit) · Rate limited",
+            session_id="s1",
+            assistant_messages=["Rate limited"],
+        )
+        result = _sr(returncode=0, stderr="")
+        assert classify_infra_exit(session, result) == InfraExitCategory.API_ERROR
+
+    def test_api_error_status_triggers_api_error_classification(self) -> None:
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="done",
+            session_id="s1",
+            api_error_status=429,
+        )
+        result = _sr(returncode=0, stderr="")
+        assert classify_infra_exit(session, result) == InfraExitCategory.API_ERROR
+
+    def test_api_error_status_below_400_does_not_trigger(self) -> None:
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="done",
+            session_id="s1",
+            api_error_status=200,
+        )
+        result = _sr(returncode=0, stderr="")
+        assert classify_infra_exit(session, result) == InfraExitCategory.COMPLETED
+
+
 def test_codex_api_error_patterns_count() -> None:
     """Structural test: _CODEX_API_ERROR_PATTERNS has exactly 4 entries."""
     assert len(_CODEX_API_ERROR_PATTERNS) == 4

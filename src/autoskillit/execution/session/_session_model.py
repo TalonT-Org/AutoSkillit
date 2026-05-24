@@ -73,6 +73,7 @@ class ClaudeSessionResult:
     api_retry_last_error: str = ""
     api_retry_last_status: int | None = None
     api_retry_exhausted: bool = False
+    api_error_status: int | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.result, str):
@@ -302,7 +303,7 @@ def extract_token_usage(stdout: str) -> dict[str, Any] | None:
 
 
 _KNOWN_RESULT_KEYS: frozenset[str] = frozenset(
-    {"type", "subtype", "is_error", "result", "session_id", "errors", "usage"}
+    {"type", "subtype", "is_error", "result", "session_id", "errors", "usage", "api_error_status"}
 )
 
 
@@ -321,6 +322,7 @@ class _ParseAccumulator:
     api_retry_last_error: str = ""
     api_retry_last_status: int | None = None
     api_retry_exhausted: bool = False
+    api_error_status: int | None = None
 
 
 def parse_session_result(stdout: str) -> ClaudeSessionResult:
@@ -368,8 +370,17 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
                     acc.api_retry_exhausted = True
                 continue
 
+            if record_type == "rate_limit_event":
+                info = obj.get("rate_limit_info") or obj
+                if isinstance(info, dict) and info.get("status") == "rejected":
+                    acc.api_retry_exhausted = True
+                continue
+
             if record_type == "result":
                 acc.result_obj = obj
+                raw_status = obj.get("api_error_status")
+                if isinstance(raw_status, int):
+                    acc.api_error_status = raw_status
             elif record_type == "assistant":
                 msg = obj.get("message")
                 if isinstance(msg, dict):
@@ -454,6 +465,9 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
             fallback = json.loads(stdout)
             if isinstance(fallback, dict) and fallback.get("type") == "result":
                 acc.result_obj = fallback
+                raw_status = fallback.get("api_error_status")
+                if isinstance(raw_status, int):
+                    acc.api_error_status = raw_status
         except json.JSONDecodeError:
             pass
 
@@ -497,4 +511,5 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
         api_retry_last_error=acc.api_retry_last_error,
         api_retry_last_status=acc.api_retry_last_status,
         api_retry_exhausted=acc.api_retry_exhausted,
+        api_error_status=acc.api_error_status,
     )

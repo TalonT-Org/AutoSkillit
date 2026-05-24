@@ -348,9 +348,12 @@ def _build_skill_result(
             stderr=result.stderr if result.stderr else "",
             audit=audit,
         )
+        _stale_is_api_error = stale_session.api_retry_exhausted or (
+            stale_session.api_error_status is not None and stale_session.api_error_status >= 400
+        )
         stale_infra = (
             InfraOutcome(exit_category=InfraExitCategory.API_ERROR.value)
-            if stale_session.api_retry_exhausted
+            if _stale_is_api_error
             else InfraOutcome()
         )
         stale_sr = _make_terminated_result(
@@ -423,9 +426,12 @@ def _build_skill_result(
         logger.warning(
             "Headless session killed: stdout idle for configured threshold (IDLE_STALL)"
         )
+        _idle_is_api_error = idle_session.api_retry_exhausted or (
+            idle_session.api_error_status is not None and idle_session.api_error_status >= 400
+        )
         idle_infra = (
             InfraOutcome(exit_category=InfraExitCategory.API_ERROR.value)
-            if idle_session.api_retry_exhausted
+            if _idle_is_api_error
             else InfraOutcome()
         )
         idle_sr = _make_terminated_result(
@@ -469,12 +475,24 @@ def _build_skill_result(
     )
     _has_write_evidence = evidence.has_evidence
 
-    if evidence.write_call_count == 0 and _stdout_mentions_write_tools(result.stdout):
+    try:
+        _backend_write_names = set(backend.write_tool_names()) if backend else {"Write", "Edit"}
+    except Exception:
+        _backend_write_names = {"Write", "Edit"}
+    _parsed_has_write_tools = any(tu.get("name") in {"Write", "Edit"} for tu in session.tool_uses)
+    if (
+        evidence.write_call_count == 0
+        and _backend_write_names & {"Write", "Edit"}
+        and _stdout_mentions_write_tools(result.stdout)
+        and not _parsed_has_write_tools
+    ):
         logger.warning(
             "write_call_count_cross_check_mismatch",
             stdout_length=len(result.stdout),
             tool_use_count=len(session.tool_uses),
         )
+        evidence = dataclasses.replace(evidence, write_call_count=1)
+        _has_write_evidence = True
 
     # Channel B drain-race: recover from assistant_messages if type=result was not flushed.
     match result.channel_confirmation:

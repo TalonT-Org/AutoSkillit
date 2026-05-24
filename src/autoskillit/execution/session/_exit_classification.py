@@ -23,6 +23,7 @@ _API_ERROR_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"socket hang up", re.IGNORECASE),
     re.compile(r"network error", re.IGNORECASE),
     re.compile(r"connection reset", re.IGNORECASE),
+    re.compile(r"rate.limited", re.IGNORECASE),
 )
 
 _CODEX_API_ERROR_PATTERNS: tuple[re.Pattern[str], ...] = (
@@ -61,6 +62,8 @@ def classify_infra_exit(
     # api_retry_last_error can be "unknown" or another value not in _KNOWN_API_ERROR_PATTERNS.
     # In that case _has_api_error() returns False while api_retry_exhausted is still True.
     if session.api_retry_exhausted:
+        return InfraExitCategory.API_ERROR
+    if session.api_error_status is not None and session.api_error_status >= 400:
         return InfraExitCategory.API_ERROR
     if result.returncode is not None and result.returncode < 0:
         return InfraExitCategory.PROCESS_KILLED

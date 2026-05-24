@@ -218,7 +218,7 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "verify"
       review_path: "${{ context.review_path }}"
-      output_dir: ${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/dry-walkthrough
+      output_dir: ${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}
     on_success: implement
     on_failure: release_issue_failure
     note: "SEQUENTIAL EXECUTION: For each plan_part, run the FULL cycle — verify → implement → test → merge — for that part before advancing to the next part. Never run verify for all parts first. If review produced a report, context.review_path is available — pass it as an additional arg to dry-walkthrough."

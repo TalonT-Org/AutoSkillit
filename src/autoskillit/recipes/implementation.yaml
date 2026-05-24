@@ -215,7 +215,7 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "verify"
       review_path: "${{ context.review_path }}"
-      output_dir: ${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/dry-walkthrough
+      output_dir: ${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}
     on_success: implement
     on_failure: release_issue_failure
     on_context_limit: implement

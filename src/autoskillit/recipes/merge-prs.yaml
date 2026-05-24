@@ -806,7 +806,7 @@ steps:
       skill_command: "/autoskillit:dry-walkthrough ${{ context.pr_plan_path }}"
       cwd: "${{ context.work_dir }}"
       step_name: "verify"
-      output_dir: ${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/dry-walkthrough
+      output_dir: ${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}
     on_success: implement
     on_failure: register_clone_failure
     retries: 5

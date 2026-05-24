@@ -151,9 +151,9 @@ async def dispatch_food_truck(
             Injected as a CALLER CONTEXT section in the resume prompt, allowing the
             caller to communicate changed conditions (e.g. "quota guard is now
             disabled") that the LLM should act on.
-        caller_instructions: Optional free-text instructions from the caller (L3) to
-            the food truck (L2) session. Injected as a CALLER INSTRUCTIONS section in
-            the L2 system prompt. Use to forward user guidance such as "use model opus
+        caller_instructions: Optional free-text instructions from the dispatching caller to
+            the food truck session. Injected as a CALLER INSTRUCTIONS section in
+            the food truck system prompt. Use to forward user guidance such as "use model opus
             for the implement step" or "skip review if diff is under 20 lines."
             Only meaningful on fresh dispatches (not resumes). When None or empty,
             the L2 prompt is unchanged.

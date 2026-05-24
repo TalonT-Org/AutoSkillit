@@ -88,6 +88,8 @@ class CodingAgentBackend(Protocol):
 
     def write_tool_names(self) -> frozenset[str]: ...
 
+    def binary_name(self) -> str: ...
+
     def build_resume_cmd(
         self,
         *,

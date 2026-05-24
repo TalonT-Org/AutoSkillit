@@ -181,7 +181,15 @@ def init(
         onboarded_marker.unlink(missing_ok=True)
 
     try:
-        _register_all(scope, project_dir)
+        from autoskillit.config import ConfigSchemaError, load_config
+        from autoskillit.execution import get_backend
+
+        try:
+            _backend_name = load_config(project_dir).agent_backend.backend
+        except ConfigSchemaError:
+            _backend_name = "claude-code"
+        _backend = get_backend(_backend_name)
+        _register_all(scope, project_dir, backend=_backend)
     except CliError as exc:
         print(f"\n  ERROR: {exc}")
         raise SystemExit(1) from None

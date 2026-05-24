@@ -91,10 +91,18 @@ def test_fleet_dispatch_exits_when_claude_missing(
     monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
     monkeypatch.setattr("autoskillit.cli.fleet.is_feature_enabled", lambda *a, **kw: True)
     _fleet = type("Fleet", (), {"max_issues_per_food_truck": 3})()
+    _agent_backend = type("AB", (), {"backend": "claude-code"})()
     monkeypatch.setattr(
         "autoskillit.config.load_config",
-        lambda path: type(
-            "C", (), {"features": {}, "experimental_enabled": False, "fleet": _fleet}
+        lambda path=None: type(
+            "C",
+            (),
+            {
+                "features": {},
+                "experimental_enabled": False,
+                "fleet": _fleet,
+                "agent_backend": _agent_backend,
+            },
         )(),
     )
     _stub_list_recipes(monkeypatch, [])
@@ -151,10 +159,18 @@ def test_fleet_dispatch_proceeds_when_enabled(
         lambda name, features, *, experimental_enabled=False: True,
     )
     _fleet = type("Fleet", (), {"max_issues_per_food_truck": 3})()
+    _agent_backend = type("AB", (), {"backend": "claude-code"})()
     monkeypatch.setattr(
         "autoskillit.config.load_config",
-        lambda path: type(
-            "C", (), {"features": {}, "experimental_enabled": False, "fleet": _fleet}
+        lambda path=None: type(
+            "C",
+            (),
+            {
+                "features": {},
+                "experimental_enabled": False,
+                "fleet": _fleet,
+                "agent_backend": _agent_backend,
+            },
         )(),
     )
     _stub_list_recipes(monkeypatch, [])

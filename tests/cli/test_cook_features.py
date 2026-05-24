@@ -35,6 +35,7 @@ class TestOrderSubsetGate:
     def _make_config_mock(self, disabled: list[str]) -> MagicMock:
         mock_cfg = MagicMock()
         mock_cfg.subsets.disabled = disabled
+        mock_cfg.agent_backend.backend = "claude-code"
         return mock_cfg
 
     def test_order_hard_error_non_interactive_on_disabled_subset(

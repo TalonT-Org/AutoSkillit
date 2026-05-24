@@ -189,7 +189,7 @@ def test_run_interactive_session_appends_system_prompt_on_fresh_session(
 
 
 def test_skill_injection_disabled_omits_flags(monkeypatch: pytest.MonkeyPatch) -> None:
-    """When skill_injection_capable=False, no plugin/tools flags injected by _run_interactive_session."""
+    """When skill_injection_capable=False, no plugin/tools flags are injected."""
     from autoskillit.core import BackendCapabilities, CmdSpec
 
     no_inject_caps = BackendCapabilities(
@@ -227,8 +227,7 @@ def test_skill_injection_disabled_omits_flags(monkeypatch: pytest.MonkeyPatch) -
         return type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
 
     monkeypatch.setattr(subprocess, "run", mock_run)
-    monkeypatch.setattr("autoskillit.execution.ClaudeCodeBackend", _NoInjectBackend)
-    _run_interactive_session(system_prompt="test")
+    _run_interactive_session(system_prompt="test", backend=_NoInjectBackend())
     assert ClaudeFlags.PLUGIN_DIR not in captured["cmd"]
     assert ClaudeFlags.TOOLS not in captured["cmd"]
     assert ClaudeFlags.APPEND_SYSTEM_PROMPT not in captured["cmd"]
@@ -280,9 +279,81 @@ def test_binary_name_from_backend_used_in_which(monkeypatch: pytest.MonkeyPatch)
         return None
 
     monkeypatch.setattr(shutil, "which", tracking_which)
-    monkeypatch.setattr("autoskillit.execution.ClaudeCodeBackend", _CustomBinaryBackend)
     monkeypatch.setattr(subprocess, "run", lambda *a, **kw: type("R", (), {"returncode": 0})())
     from autoskillit.cli.session._session_launch import _run_interactive_session
 
-    _run_interactive_session(system_prompt="test")
+    _run_interactive_session(system_prompt="test", backend=_CustomBinaryBackend())
     assert "test-agent-binary" in captured_which_arg
+
+
+def test_run_interactive_session_uses_injected_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When backend= is passed, _run_interactive_session uses it directly."""
+    from autoskillit.core import BackendCapabilities, CmdSpec
+
+    build_called: list[dict] = []
+
+    class _InjectedBackend:
+        def binary_name(self) -> str:
+            return "claude"
+
+        @property
+        def capabilities(self):
+            return BackendCapabilities(
+                channel_b_capable=True,
+                pty_required=True,
+                session_resume_capable=True,
+                skill_injection_capable=True,
+                supports_thinking_blocks=True,
+                supports_claude_format_stdout=True,
+                exit_code_is_terminal=False,
+                mcp_config_capable=False,
+                completion_record_types=frozenset({"result"}),
+                session_record_types=frozenset({"assistant"}),
+            )
+
+        def build_interactive_cmd(self, **kwargs):
+            build_called.append(kwargs)
+            return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
+
+    _stub_plugin_installed(monkeypatch, installed=True)
+    _capture_subprocess(monkeypatch)
+    _run_interactive_session(system_prompt="test", backend=_InjectedBackend())
+    assert build_called, "Injected backend must be used"
+
+
+def test_run_interactive_session_default_backend_calls_get_backend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When backend= is not passed, _run_interactive_session calls get_backend()."""
+    from unittest.mock import MagicMock
+
+    get_backend_called: list = []
+
+    class _FakeBackend:
+        def binary_name(self) -> str:
+            return "claude"
+
+        @property
+        def capabilities(self):
+            return MagicMock(
+                skill_injection_capable=True,
+            )
+
+        def build_interactive_cmd(self, **kwargs):
+            from autoskillit.core import CmdSpec
+
+            return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
+
+    mock_config = MagicMock()
+    mock_config.agent_backend.backend = "claude-code"
+
+    def fake_get_backend(name: str):
+        get_backend_called.append(name)
+        return _FakeBackend()
+
+    _stub_plugin_installed(monkeypatch, installed=True)
+    _capture_subprocess(monkeypatch)
+    monkeypatch.setattr("autoskillit.execution.get_backend", fake_get_backend)
+    _run_interactive_session(system_prompt="test")
+    assert get_backend_called, "get_backend must be called when backend is not injected"
+    assert get_backend_called[0] == "claude-code"

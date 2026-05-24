@@ -483,6 +483,7 @@ async def _execute_claude_headless(
                     version=recipe_version,
                 ),
                 max_sessions=ctx.config.linux_tracing.max_sessions,
+                is_resume="--resume" in spec.cmd,
             )
         except Exception:
             logger.debug("session_log_flush_failed", exc_info=True)

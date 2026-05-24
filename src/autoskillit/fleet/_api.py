@@ -463,6 +463,37 @@ async def _run_dispatch(
     if quota_result.get("should_sleep"):
         await asyncio.sleep(quota_result.get("sleep_seconds", 0))
 
+    if resume_session_id:
+        _primary_jsonl = claude_code_log_path(str(tool_ctx.project_dir), resume_session_id)
+        if _primary_jsonl is None or not _primary_jsonl.exists():
+            logger.warning(
+                "resume_jsonl_missing",
+                resume_session_id=resume_session_id,
+                expected_path=str(_primary_jsonl) if _primary_jsonl else "none",
+            )
+            _fallback_session_id = prior_session_chain[-1] if prior_session_chain else ""
+            if _fallback_session_id:
+                _fallback_jsonl = claude_code_log_path(
+                    str(tool_ctx.project_dir), _fallback_session_id
+                )
+                if _fallback_jsonl is not None and _fallback_jsonl.exists():
+                    logger.info(
+                        "resume_session_fallback",
+                        original_session_id=resume_session_id,
+                        fallback_session_id=_fallback_session_id,
+                    )
+                    resume_session_id = _fallback_session_id
+                else:
+                    return _reject_with_state(
+                        FleetErrorCode.FLEET_RESUME_SESSION_MISSING,
+                        f"JSONL log for session {resume_session_id} not found",
+                    )
+            else:
+                return _reject_with_state(
+                    FleetErrorCode.FLEET_RESUME_SESSION_MISSING,
+                    f"JSONL log for session {resume_session_id} not found",
+                )
+
     completion_marker = identity.completion_marker
     sentinel_contract = identity.sentinel_contract
     from autoskillit.fleet.sidecar import sidecar_path as compute_sidecar_path  # noqa: PLC0415
@@ -659,6 +690,17 @@ async def _run_dispatch(
     except OSError:
         logger.warning("failed to resolve project log dir", exc_info=True)
         project_log_dir = ""
+
+    if (
+        resume_session_id
+        and skill_result.session_id
+        and resume_session_id != skill_result.session_id
+    ):
+        logger.warning(
+            "session_id_continuity_mismatch",
+            resume_session_id=resume_session_id,
+            returned_session_id=skill_result.session_id,
+        )
 
     record = DispatchRecord(
         name=effective_name,

@@ -57,7 +57,9 @@ class TestResumeWithoutPriorDispatchId:
         assert len(state.dispatches) == 1
 
     @pytest.mark.anyio
-    async def test_resume_without_prior_dispatch_id_persists_captures(self, tool_ctx, monkeypatch):
+    async def test_resume_without_prior_dispatch_id_persists_captures(
+        self, tool_ctx, monkeypatch, tmp_path
+    ):
         from autoskillit.core.types import CaptureEntrySpec
         from autoskillit.fleet.result_parser import L3ParseResult
         from tests.fleet._helpers import (
@@ -67,6 +69,9 @@ class TestResumeWithoutPriorDispatchId:
         )
 
         _setup_dispatch(tool_ctx, monkeypatch)
+        jsonl_file = tmp_path / "sess-123.jsonl"
+        jsonl_file.touch()
+        monkeypatch.setattr("autoskillit.fleet._api.claude_code_log_path", lambda *_: jsonl_file)
 
         mock_parsed = L3ParseResult(
             outcome="completed_clean",
@@ -263,7 +268,7 @@ class TestCaptureChainAcrossResumeBoundary:
 
 class TestSessionChainAccumulatesAcrossResume:
     @pytest.mark.anyio
-    async def test_session_chain_accumulates_across_resume(self, tool_ctx, monkeypatch):
+    async def test_session_chain_accumulates_across_resume(self, tool_ctx, monkeypatch, tmp_path):
         """session_chain accumulates prior dispatched_session_id on resume."""
         from autoskillit.core import RetryReason, SkillResult
         from autoskillit.fleet._api import _run_dispatch
@@ -275,6 +280,9 @@ class TestSessionChainAccumulatesAcrossResume:
         )
 
         _setup_dispatch(tool_ctx, monkeypatch)
+        jsonl_file = tmp_path / "sess-resume-1.jsonl"
+        jsonl_file.touch()
+        monkeypatch.setattr("autoskillit.fleet._api.claude_code_log_path", lambda *_: jsonl_file)
 
         dispatches_dir = tool_ctx.temp_dir / "dispatches"
         campaign_id = tool_ctx.kitchen_id

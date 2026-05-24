@@ -307,7 +307,11 @@ async def _extract_stdout_session_id(
                     obj = _fast_loads(line)
                 except ValueError:
                     continue
-                if isinstance(obj, dict) and obj.get("type") == "system":
+                if (
+                    isinstance(obj, dict)
+                    and obj.get("type") == "system"
+                    and obj.get("subtype") == "init"
+                ):
                     raw_sid = obj.get("session_id")
                     if isinstance(raw_sid, str):
                         sid = raw_sid

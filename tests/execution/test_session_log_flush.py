@@ -119,6 +119,38 @@ def test_flush_session_log_uses_resolved_session_id(tmp_path):
     assert summary["session_id"] == "chan-b-uuid-123"
 
 
+def test_resumed_session_uses_distinct_log_directory(tmp_path):
+    """Resumed sessions with is_resume=True write to a directory distinct from the original."""
+    shared_session_id = "conv-uuid-shared"
+    start_ts_original = "2026-05-24T10:00:00+00:00"
+    start_ts_resume = "2026-05-24T11:00:00+00:00"
+
+    common_kwargs = dict(
+        log_dir=str(tmp_path),
+        cwd="/home/test/project",
+        session_id=shared_session_id,
+        pid=12345,
+        skill_command="/autoskillit:investigate foo",
+        success=True,
+        subtype="completed",
+        exit_code=0,
+        proc_snapshots=None,
+        provider_outcome=ProviderOutcome.none_used(),
+        recipe_identity=RecipeIdentity.empty(),
+        telemetry=SessionTelemetry.empty(),
+    )
+
+    flush_session_log(**common_kwargs, start_ts=start_ts_original, is_resume=False)
+    flush_session_log(**common_kwargs, start_ts=start_ts_resume, is_resume=True)
+
+    sessions_dir = tmp_path / "sessions"
+    dirs = sorted(d.name for d in sessions_dir.iterdir())
+    assert len(dirs) == 2
+    assert shared_session_id in dirs
+    resume_dir = [d for d in dirs if d != shared_session_id][0]
+    assert resume_dir.startswith(shared_session_id)
+
+
 def test_flush_summary_includes_claude_code_log_for_real_session(tmp_path):
     """Flush with a real session_id produces claude_code_log in summary.json."""
     _flush(tmp_path, session_id="real-session-abc", cwd="/home/test/project")

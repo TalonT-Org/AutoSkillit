@@ -125,7 +125,7 @@ class ClaudeStreamParser:
                 kind=BackendEventKind.SESSION_META,
                 is_terminal=False,
                 has_marker=False,
-                session_id=session_id or None,
+                session_id=session_id if subtype == "init" else None,
             )
 
         if record_type == "result":

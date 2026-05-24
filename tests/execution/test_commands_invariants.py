@@ -164,3 +164,20 @@ class TestCompletionReminderPositionInvariant:
             f"Completion marker must appear in the last two prompt blocks. "
             f"Last block: {blocks[-1][:100]!r}"
         )
+
+
+def test_session_deadline_in_headless_exclusive_vars() -> None:
+    assert "AUTOSKILLIT_SESSION_DEADLINE" in _HEADLESS_EXCLUSIVE_VARS
+
+
+def test_session_deadline_not_in_l1_subprocess_env(monkeypatch) -> None:
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_DEADLINE", "9999999999.0")
+    spec = ClaudeCodeBackend().build_skill_session_cmd(
+        "/investigate foo",
+        cwd="/tmp",
+        completion_marker="%%DONE%%",
+        model=None,
+        plugin_source=None,
+        output_format=OutputFormat.STREAM_JSON,
+    )
+    assert "AUTOSKILLIT_SESSION_DEADLINE" not in spec.env

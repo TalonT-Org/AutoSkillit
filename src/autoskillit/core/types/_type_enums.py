@@ -416,6 +416,7 @@ class FleetErrorCode(StrEnum):
     FLEET_RECIPE_INVALID = "fleet_recipe_invalid"
     FLEET_PROCESS_STALE = "fleet_process_stale"
     FLEET_DISPATCH_SKIPPED = "fleet_dispatch_skipped"
+    FLEET_RESUME_SESSION_MISSING = "fleet_resume_session_missing"
 
 
 class FeatureLifecycle(StrEnum):

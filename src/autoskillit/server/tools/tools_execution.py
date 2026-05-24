@@ -391,20 +391,19 @@ async def run_skill(
             tool_ctx.read_only_resolver and tool_ctx.read_only_resolver(skill_command)
         )
         allowed_write_prefix = ""
-        if is_read_only:
-            if write_watch_dirs:
-                allowed_write_prefix = str(write_watch_dirs[0]) + "/"
+        if write_watch_dirs:
+            allowed_write_prefix = str(write_watch_dirs[0]) + "/"
+        elif is_read_only:
+            _skill_temp_name = target_name or ""
+            if _skill_temp_name:
+                allowed_write_prefix = os.path.join(
+                    cwd, ".autoskillit", "temp", _skill_temp_name, ""
+                )
             else:
-                _skill_temp_name = target_name or ""
-                if _skill_temp_name:
-                    allowed_write_prefix = os.path.join(
-                        cwd, ".autoskillit", "temp", _skill_temp_name, ""
-                    )
-                else:
-                    logger.warning(
-                        "read_only_skill_no_target_name",
-                        skill_command=skill_command[:100],
-                    )
+                logger.warning(
+                    "read_only_skill_no_target_name",
+                    skill_command=skill_command[:100],
+                )
 
         invocation_marker = f"%%ORDER_UP::{uuid4().hex[:8]}%%"
 

@@ -26,8 +26,10 @@ from autoskillit.core import (
     CliSubtype,
     CmdSpec,
     CodexEventData,
+    NoResume,
     OutputFormat,
     PluginSource,
+    ResumeSpec,
     SessionCheckpoint,
     SessionEvent,
     SkillSessionConfig,
@@ -714,8 +716,19 @@ class CodexBackend:
             "Codex CLI does not support L2 orchestrator (food truck) sessions"
         )
 
-    def build_interactive_cmd(self, **kwargs: object) -> CmdSpec:
-        raise NotImplementedError("Codex CLI does not support interactive mode")
+    def build_interactive_cmd(
+        self,
+        *,
+        initial_prompt: str | None = None,
+        model: str | None = None,
+        plugin_source: PluginSource | None = None,
+        add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
+        resume_spec: ResumeSpec = NoResume(),
+        system_prompt: str | None = None,
+        env_extras: Mapping[str, str] | None = None,
+        required_env: frozenset[str] | None = None,
+    ) -> CmdSpec:
+        raise NotImplementedError("Codex interactive mode is implemented in P6-A3")
 
     def build_resume_cmd(
         self,

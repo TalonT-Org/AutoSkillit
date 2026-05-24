@@ -204,3 +204,33 @@ def test_build_skill_session_cmd_impl_exists():
 
     assert hasattr(ClaudeCodeBackend, "_build_skill_session_cmd_impl")
     assert callable(getattr(ClaudeCodeBackend, "_build_skill_session_cmd_impl"))
+
+
+def test_build_interactive_cmd_satisfies_protocol_claude():
+    from autoskillit.core import CodingAgentBackend
+    from autoskillit.execution.backends import ClaudeCodeBackend
+
+    assert isinstance(ClaudeCodeBackend(), CodingAgentBackend)
+
+
+def test_build_interactive_cmd_codex_raises_not_implemented():
+    from autoskillit.execution.backends import CodexBackend
+
+    with pytest.raises(NotImplementedError, match="P6-A3"):
+        CodexBackend().build_interactive_cmd()
+
+
+def test_build_interactive_cmd_signature_shape():
+    import inspect
+
+    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+
+    sig = inspect.signature(CodingAgentBackend.build_interactive_cmd)
+    params = sig.parameters
+
+    assert "order_mode" not in params, "order_mode must not be in signature"
+    assert params["system_prompt"].default is None
+    for name, param in params.items():
+        if name == "self":
+            continue
+        assert param.kind == inspect.Parameter.KEYWORD_ONLY, f"{name} must be KEYWORD_ONLY"

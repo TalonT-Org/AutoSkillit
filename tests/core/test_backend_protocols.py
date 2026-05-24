@@ -58,17 +58,23 @@ def test_stub_class_satisfies_stream_parser():
 
 
 def test_stub_class_satisfies_coding_agent_backend():
+    from collections.abc import Sequence
+    from pathlib import Path
+
     from autoskillit.core import (
         BackendCapabilities,
         CmdSpec,
         CodingAgentBackend,
         EnvPolicy,
+        NoResume,
         OutputFormat,
         PluginSource,
         ResultParser,
+        ResumeSpec,
         SessionLocator,
         SkillSessionConfig,
         StreamParser,
+        ValidatedAddDir,
     )
 
     class _Backend:
@@ -115,6 +121,19 @@ def test_stub_class_satisfies_coding_agent_backend():
             plugin_source: PluginSource,
             cwd: str,
             completion_marker: str,
+        ) -> CmdSpec: ...
+
+        def build_interactive_cmd(
+            self,
+            *,
+            initial_prompt: str | None = None,
+            model: str | None = None,
+            plugin_source: PluginSource | None = None,
+            add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
+            resume_spec: ResumeSpec = NoResume(),
+            system_prompt: str | None = None,
+            env_extras: Mapping[str, str] | None = None,
+            required_env: frozenset[str] | None = None,
         ) -> CmdSpec: ...
 
     assert isinstance(_Backend(), CodingAgentBackend)

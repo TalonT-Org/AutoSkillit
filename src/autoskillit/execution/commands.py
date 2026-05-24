@@ -55,6 +55,7 @@ def build_interactive_cmd(
     plugin_source: PluginSource | None = None,
     add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
     resume_spec: ResumeSpec = NoResume(),
+    system_prompt: str | None = None,
     env_extras: Mapping[str, str] | None = None,
     required_env: frozenset[str] | None = None,
 ) -> ClaudeInteractiveCmd:
@@ -65,6 +66,7 @@ def build_interactive_cmd(
         plugin_source=plugin_source,
         add_dirs=add_dirs,
         resume_spec=resume_spec,
+        system_prompt=system_prompt,
         env_extras=env_extras,
         required_env=required_env,
     )

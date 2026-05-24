@@ -107,6 +107,12 @@ def test_private_env_vars_includes_execution_control_vars() -> None:
     assert expected <= AUTOSKILLIT_PRIVATE_ENV_VARS
 
 
+def test_session_deadline_in_private_env_vars() -> None:
+    from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS
+
+    assert "AUTOSKILLIT_SESSION_DEADLINE" in AUTOSKILLIT_PRIVATE_ENV_VARS
+
+
 def test_campaign_id_env_var_and_kitchen_session_id_env_var_exported_from_core() -> None:
     """CAMPAIGN_ID_ENV_VAR and KITCHEN_SESSION_ID_ENV_VAR are re-exported from autoskillit.core."""
     from autoskillit.core import CAMPAIGN_ID_ENV_VAR, KITCHEN_SESSION_ID_ENV_VAR

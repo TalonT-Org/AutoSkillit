@@ -18,6 +18,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_adapt_agent_result.py` | Tests for _adapt_agent_result: AgentSessionResult to ClaudeSessionResult mapping |
 | `test_commands.py` | Tests for execution/commands.py — interactive + headless builders |
 | `test_commands_invariants.py` | Cross-builder invariants: _HEADLESS_EXCLUSIVE_VARS membership, completion marker position |
+| `test_env_boundary.py` | Contract: every fleet-injected env var must appear in at least one filter list |
 | `test_commands_shim_contract.py` | Structural contract tests verifying commands.py builders are thin forwarding shims |
 | `test_db.py` | L1 unit tests for execution/db.py — SQL validation and authorizer |
 | `test_api_error_signal_invariants.py` | API error signal invariants: API errors detected regardless of channel (PTY vs non-PTY) |

@@ -60,19 +60,20 @@ class TestClaudeStreamParser:
         assert result.backend_data.raw["error"] == "unknown"
         assert result.backend_data.raw["attempt"] == 5
 
-    def test_parse_line_system_unknown_subtype_still_session_meta(self) -> None:
-        # Regression guard: non-api_retry subtypes must not be misrouted to API_RETRY.
+    def test_parse_line_system_non_init_subtype_no_session_id(self) -> None:
+        # Regression guard: non-api_retry subtypes must not be misrouted to API_RETRY,
+        # but non-init subtypes must not yield a session_id (they carry process UUIDs).
         parser = ClaudeStreamParser()
         line = json.dumps({"type": "system", "subtype": "other_subtype", "session_id": "s1"})
         result = parser.parse_line(line)
         assert result is not None
         assert result.kind == BackendEventKind.SESSION_META
-        assert result.session_id == "s1"
+        assert result.session_id is None
         assert result.is_terminal is False
 
     def test_parse_line_system_record_session_meta(self) -> None:
         parser = ClaudeStreamParser()
-        line = '{"type": "system", "session_id": "test-session-123"}'
+        line = '{"type": "system", "subtype": "init", "session_id": "test-session-123"}'
         result = parser.parse_line(line)
         assert result is not None
         assert result.kind == BackendEventKind.SESSION_META
@@ -152,6 +153,26 @@ class TestClaudeStreamParser:
     def test_structural_conformance_stream_parser(self) -> None:
         assert isinstance(ClaudeStreamParser(), StreamParser)
 
+    def test_parse_line_system_init_subtype_records_session_id(self) -> None:
+        parser = ClaudeStreamParser()
+        line = json.dumps(
+            {"type": "system", "subtype": "init", "session_id": "conversation-uuid-456"}
+        )
+        result = parser.parse_line(line)
+        assert result is not None
+        assert result.kind == BackendEventKind.SESSION_META
+        assert result.session_id == "conversation-uuid-456"
+
+    def test_parse_line_system_hook_started_no_session_id(self) -> None:
+        parser = ClaudeStreamParser()
+        line = json.dumps(
+            {"type": "system", "subtype": "hook_started", "session_id": "process-uuid-123"}
+        )
+        result = parser.parse_line(line)
+        assert result is not None
+        assert result.kind == BackendEventKind.SESSION_META
+        assert result.session_id is None
+
 
 class TestClaudeStreamParserBackendData:
     def test_result_line_populates_claude_event_data(self) -> None:
@@ -191,3 +212,29 @@ class TestClaudeStreamParserBackendData:
         result = parser.parse_line(_assistant_line())
         assert result is not None
         assert result.backend_data is None
+
+
+class TestClaudeResultParserSessionId:
+    def test_parse_result_uses_init_session_id(self) -> None:
+        from autoskillit.execution.backends.claude import ClaudeResultParser
+
+        parser_stream = ClaudeStreamParser()
+        hook_event = parser_stream.parse_line(
+            json.dumps({"type": "system", "subtype": "hook_started", "session_id": "proc-uuid"})
+        )
+        init_event = parser_stream.parse_line(
+            json.dumps({"type": "system", "subtype": "init", "session_id": "conv-uuid"})
+        )
+        result_event = parser_stream.parse_line(
+            json.dumps(
+                {"type": "result", "result": "%%DONE%%", "subtype": "success", "session_id": "s1"}
+            )
+        )
+        assert hook_event is not None
+        assert init_event is not None
+        assert result_event is not None
+
+        result_parser = ClaudeResultParser()
+        # hook_started arrives first, then init — parse_result must pick conv-uuid
+        asr = result_parser.parse_result([hook_event, init_event, result_event])
+        assert asr.session_id == "conv-uuid"

@@ -385,7 +385,7 @@ class TestExtractStdoutSessionIdStreamParser:
         from autoskillit.execution.backends import ClaudeStreamParser
 
         path = tmp_path / "stdout"
-        path.write_text('{"type": "system", "session_id": "sp-test-123"}\n')
+        path.write_text('{"type": "system", "subtype": "init", "session_id": "sp-test-123"}\n')
 
         acc = RaceAccumulator()
         ready = anyio.Event()
@@ -405,7 +405,7 @@ class TestExtractStdoutSessionIdStreamParser:
 
     async def test_none_stream_parser_uses_fallback(self, tmp_path: Path) -> None:
         path = tmp_path / "stdout"
-        path.write_text('{"type": "system", "session_id": "fallback-456"}\n')
+        path.write_text('{"type": "system", "subtype": "init", "session_id": "fallback-456"}\n')
 
         acc = RaceAccumulator()
         ready = anyio.Event()
@@ -486,4 +486,53 @@ class TestExtractStdoutSessionIdStreamParser:
         )
 
         assert acc.stdout_session_id is None
+        assert ready.is_set()
+
+    async def test_resume_sequence_extracts_conversation_uuid(self, tmp_path: Path) -> None:
+        from autoskillit.execution.backends import ClaudeStreamParser
+
+        path = tmp_path / "stdout"
+        path.write_text(
+            '{"type": "system", "subtype": "hook_started", "session_id": "process-uuid-AAA"}\n'
+            '{"type": "system", "subtype": "init", "session_id": "conversation-uuid-BBB"}\n'
+        )
+
+        acc = RaceAccumulator()
+        ready = anyio.Event()
+        parser = ClaudeStreamParser()
+
+        await _extract_stdout_session_id(
+            path,
+            acc,
+            ready,
+            _poll_interval=0.05,
+            _timeout=1.0,
+            stream_parser=parser,
+        )
+
+        assert acc.stdout_session_id == "conversation-uuid-BBB"
+        assert ready.is_set()
+
+    async def test_fallback_resume_sequence_extracts_conversation_uuid(
+        self, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "stdout"
+        path.write_text(
+            '{"type": "system", "subtype": "hook_started", "session_id": "process-uuid-AAA"}\n'
+            '{"type": "system", "subtype": "init", "session_id": "conversation-uuid-BBB"}\n'
+        )
+
+        acc = RaceAccumulator()
+        ready = anyio.Event()
+
+        await _extract_stdout_session_id(
+            path,
+            acc,
+            ready,
+            _poll_interval=0.05,
+            _timeout=1.0,
+            stream_parser=None,
+        )
+
+        assert acc.stdout_session_id == "conversation-uuid-BBB"
         assert ready.is_set()

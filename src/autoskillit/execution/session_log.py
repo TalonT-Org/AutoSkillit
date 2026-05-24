@@ -153,6 +153,7 @@ def flush_session_log(
     versions: dict[str, Any] | None = None,
     model_identifier: str = "",
     max_sessions: int | None = None,
+    is_resume: bool = False,
     telemetry: SessionTelemetry,
 ) -> None:
     """Flush session diagnostics to disk.
@@ -175,7 +176,12 @@ def flush_session_log(
         write_path_warnings if write_path_warnings is not None else []
     )
     log_root = resolve_log_dir(log_dir)
-    dir_name = session_id if session_id else f"no_session_{start_ts.replace(':', '-')}"
+    if session_id and is_resume:
+        dir_name = f"{session_id}_{start_ts.replace(':', '-')}"
+    elif session_id:
+        dir_name = session_id
+    else:
+        dir_name = f"no_session_{start_ts.replace(':', '-')}"
 
     cc_log = claude_code_log_path(cwd, session_id)
     cc_log_str: str | None = str(cc_log) if cc_log else None

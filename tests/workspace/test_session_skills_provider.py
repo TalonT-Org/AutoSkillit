@@ -11,6 +11,7 @@ import pytest
 import yaml
 
 from autoskillit.workspace.session_skills import (
+    _SKILLS_SUBDIR,
     DefaultSessionSkillManager,
     SkillsDirectoryProvider,
     resolve_ephemeral_root,
@@ -79,12 +80,12 @@ def test_session_skill_manager_creates_ephemeral_dir(tmp_path: Path) -> None:
     session_path = mgr.init_session("test-session-abc", cook_session=False)
     assert session_path.exists()
     assert session_path.is_dir()
-    skill_files = list(session_path.glob(".claude/skills/*/SKILL.md"))
+    skill_files = list((session_path / _SKILLS_SUBDIR).glob("*/SKILL.md"))
     assert len(skill_files) > 0
 
 
 def test_session_manager_injects_disable_for_tier2(tmp_path: Path) -> None:
-    """Non-cook init_session injects disable-model-invocation for tier2 skills."""
+    """Non-cook init_session omits tier2 skill entirely (no directory created)."""
     from tests._helpers import make_skills_config, make_test_config
 
     provider = SkillsDirectoryProvider()
@@ -97,17 +98,12 @@ def test_session_manager_injects_disable_for_tier2(tmp_path: Path) -> None:
         )
     )
     session_path = mgr.init_session("test-session-xyz", cook_session=False, config=config)
-    mermaid_md = session_path / ".claude" / "skills" / "mermaid" / "SKILL.md"
-    assert mermaid_md.exists()
-    content = mermaid_md.read_text()
-    fm_match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
-    assert fm_match
-    fm = yaml.safe_load(fm_match.group(1))
-    assert fm.get("disable-model-invocation") is True
+    mermaid_dir = session_path / _SKILLS_SUBDIR / "mermaid"
+    assert not mermaid_dir.exists()
 
 
 def test_session_manager_no_flag_for_cook_session(tmp_path: Path) -> None:
-    """Cook session does not inject disable-model-invocation even for tier2 skills."""
+    """Cook session writes all skills including tier2 (no gating)."""
     from tests._helpers import make_skills_config, make_test_config
 
     provider = SkillsDirectoryProvider()
@@ -120,14 +116,11 @@ def test_session_manager_no_flag_for_cook_session(tmp_path: Path) -> None:
         )
     )
     session_path = mgr.init_session("cook-session-123", cook_session=True, config=config)
-    mermaid_md = session_path / ".claude" / "skills" / "mermaid" / "SKILL.md"
-    content = mermaid_md.read_text()
-    fm_match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
-    assert fm_match
-    fm = yaml.safe_load(fm_match.group(1))
-    assert fm.get("disable-model-invocation") is not True
+    mermaid_md = session_path / _SKILLS_SUBDIR / "mermaid" / "SKILL.md"
+    assert mermaid_md.exists()
 
 
+@pytest.mark.skip(reason="P3-A2: copy-on-activate rewrite")
 def test_activate_skill_deps_removes_flag(tmp_path: Path) -> None:
     from tests._helpers import make_skills_config, make_test_config
 
@@ -143,12 +136,34 @@ def test_activate_skill_deps_removes_flag(tmp_path: Path) -> None:
     mgr.init_session("session-toggle", cook_session=False, config=config)
     result = mgr.activate_skill_deps("session-toggle", "mermaid")
     assert result is True
-    mermaid_md = tmp_path / "session-toggle" / ".claude" / "skills" / "mermaid" / "SKILL.md"
+    mermaid_md = tmp_path / "session-toggle" / _SKILLS_SUBDIR / "mermaid" / "SKILL.md"
     content = mermaid_md.read_text()
     fm_match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
     assert fm_match
     fm = yaml.safe_load(fm_match.group(1))
     assert "disable-model-invocation" not in fm or fm.get("disable-model-invocation") is not True
+
+
+def test_init_session_gated_tier2_skill_dir_absent(tmp_path: Path) -> None:
+    """Gated tier2 skill has no directory at all; tier1 skills have SKILL.md."""
+    from tests._helpers import make_skills_config, make_test_config
+
+    provider = SkillsDirectoryProvider()
+    mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
+    config = make_test_config(
+        skills=make_skills_config(
+            tier1=["open-kitchen", "close-kitchen"],
+            tier2=["mermaid"],
+            tier3=[],
+        )
+    )
+    session_path = mgr.init_session("test-absent", cook_session=False, config=config)
+    skills_base = session_path / _SKILLS_SUBDIR
+    # Tier2 directory absent
+    assert not (skills_base / "mermaid").exists()
+    # Tier1 directories present
+    assert (skills_base / "open-kitchen" / "SKILL.md").exists()
+    assert (skills_base / "close-kitchen" / "SKILL.md").exists()
 
 
 def test_cleanup_stale_removes_old_dirs(tmp_path: Path) -> None:

@@ -270,6 +270,7 @@ def test_ungated_tools_do_not_call_require_enabled() -> None:
     from autoskillit.pipeline.gate import UNGATED_TOOLS
     from autoskillit.server.tools import (
         tools_clone,
+        tools_config,
         tools_execution,
         tools_git,
         tools_github,
@@ -282,6 +283,7 @@ def test_ungated_tools_do_not_call_require_enabled() -> None:
     )
 
     _all_tool_modules = [
+        tools_config,
         tools_execution,
         tools_git,
         tools_workspace,

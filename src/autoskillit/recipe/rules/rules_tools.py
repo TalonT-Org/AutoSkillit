@@ -177,6 +177,28 @@ _TOOL_PARAMS: dict[str, frozenset[str]] = {
     "get_pr_reviews": frozenset({"pr_number", "cwd", "repo"}),
     "bulk_close_issues": frozenset({"issue_numbers", "comment", "cwd"}),
     "unlock_agent_pack": frozenset({"pack_name"}),
+    "configure_fleet": frozenset(
+        {
+            "max_concurrent_dispatches",
+            "max_total_issues",
+            "default_timeout_sec",
+            "max_extension_seconds",
+            "idle_output_timeout",
+            "acquire_timeout_sec",
+            "max_issues_per_food_truck",
+            "enable_deadline_extension",
+            "default_model",
+        }
+    ),
+    "configure_order": frozenset(
+        {
+            "timeout",
+            "stale_threshold",
+            "idle_output_timeout",
+            "max_suppression_seconds",
+            "default_model",
+        }
+    ),
 }
 
 

@@ -9,6 +9,7 @@ MCP `@mcp.tool()` handlers registered on import (16 tool modules).
 | `__init__.py` | Docstring-only — tools register via `@mcp.tool()` on import |
 | `_types.py` | TypedDict definitions for server tool JSON responses (RunSkillResult, RunCmdResult, etc.) |
 | `tools_kitchen.py` | `open_kitchen`, `close_kitchen` (gate lifecycle), `recipe://` MCP resource |
+| `tools_config.py` | `configure_fleet`, `configure_order` (session config overlay) |
 | `tools_agents.py` | `unlock_agent_pack` tool + `agent://` resource templates |
 | `tools_ci.py` | `set_commit_status`, `check_repo_merge_state` |
 | `tools_ci_watch.py` | `wait_for_ci`, `get_ci_status`, `_auto_trigger_ci` |

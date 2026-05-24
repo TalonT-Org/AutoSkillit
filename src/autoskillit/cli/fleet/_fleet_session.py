@@ -68,6 +68,8 @@ def _launch_fleet_session(
             mcp_prefix,
             recipe_table=recipe_table,
             max_issues_per_food_truck=cfg.fleet.max_issues_per_food_truck,
+            max_total_issues=cfg.fleet.max_total_issues,
+            max_concurrent_dispatches=cfg.fleet.max_concurrent_dispatches,
         )
         env_spec = FleetSessionEnv(
             session_type="fleet",

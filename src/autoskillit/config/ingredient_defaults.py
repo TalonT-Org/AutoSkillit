@@ -75,7 +75,17 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     ("Fleet", FLEET_MENU_TOOLS),
-    ("Kitchen", ("open_kitchen", "close_kitchen", "disable_quota_guard", "reload_session")),
+    (
+        "Kitchen",
+        (
+            "open_kitchen",
+            "close_kitchen",
+            "disable_quota_guard",
+            "reload_session",
+            "configure_fleet",
+            "configure_order",
+        ),
+    ),
 )
 
 

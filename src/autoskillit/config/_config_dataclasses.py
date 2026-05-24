@@ -389,13 +389,13 @@ class WorkspaceConfig:
     temp_dir: str | None = None  # null = canonical default (see resolve_temp_dir)
 
 
-_MAX_CONCURRENT_DISPATCHES = 3
+_MAX_CONCURRENT_DISPATCHES = 8
 
 
 @dataclass
 class FleetConfig:
     default_timeout_sec: int = 3600
-    max_concurrent_dispatches: int = _MAX_CONCURRENT_DISPATCHES
+    max_concurrent_dispatches: int = 3  # default; ceiling is _MAX_CONCURRENT_DISPATCHES
     max_total_issues: int = 12
     enable_deadline_extension: bool = True
     max_extension_seconds: float = 7200

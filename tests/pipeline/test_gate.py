@@ -73,7 +73,14 @@ def test_check_quota_not_in_ungated_tools():
 def test_ungated_tools_contains_expected_names():
     from autoskillit.pipeline.gate import UNGATED_TOOLS
 
-    expected = {"open_kitchen", "close_kitchen", "disable_quota_guard", "reload_session"}
+    expected = {
+        "open_kitchen",
+        "close_kitchen",
+        "disable_quota_guard",
+        "reload_session",
+        "configure_fleet",
+        "configure_order",
+    }
     assert UNGATED_TOOLS == expected
 
 

@@ -313,6 +313,8 @@ def test_free_range_tools_contains_expected_names():
         "close_kitchen",
         "disable_quota_guard",
         "reload_session",
+        "configure_fleet",
+        "configure_order",
     }
 
 

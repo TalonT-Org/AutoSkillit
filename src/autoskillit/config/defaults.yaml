@@ -53,6 +53,8 @@ model:
   default: sonnet
   override: null
   provider: anthropic
+  step_overrides: {}
+  recipe_overrides: {}
 
 worktree_setup:
   command: null

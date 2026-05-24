@@ -142,11 +142,30 @@ def _resolve_session_log_dir(cwd: str, ctx: ToolContext) -> Path | None:
     return _session_log_dir(cwd)
 
 
-def _resolve_model(step_model: str, config: AutomationConfig) -> str | None:
-    """Resolve model selection: config override > step > config default."""
+def _resolve_model(
+    step_model: str,
+    config: AutomationConfig,
+    *,
+    step_name: str = "",
+    recipe_name: str = "",
+) -> str | None:
+    """Resolve model selection with 5-tier precedence.
+
+    override > recipe_overrides[recipe][step] > step_overrides[step] > step_model > default
+    """
     if config.model.model_override:
         logger.debug("model_resolved", tier="override", model=config.model.model_override)
         return config.model.model_override
+    if recipe_name and step_name:
+        recipe_model = config.model.recipe_overrides.get(recipe_name, {}).get(step_name)
+        if recipe_model:
+            logger.debug("model_resolved", tier="recipe_override", model=recipe_model)
+            return recipe_model
+    if step_name:
+        step_override = config.model.step_overrides.get(step_name)
+        if step_override:
+            logger.debug("model_resolved", tier="step_override", model=step_override)
+            return step_override
     if step_model:
         logger.debug("model_resolved", tier="step", model=step_model)
         return step_model
@@ -718,7 +737,9 @@ async def run_headless_core(
         skill_command=original_skill_command[:100],
         step_name=step_name or None,
     ):
-        resolved_model = _resolve_model(model, ctx.config)
+        resolved_model = _resolve_model(
+            model, ctx.config, step_name=step_name, recipe_name=recipe_name
+        )
         add_dirs_tuple = tuple(add_dirs)
         if ctx.backend is not None:
             config = SkillSessionConfig(
@@ -915,7 +936,7 @@ class DefaultHeadlessExecutor:
                 f"got {self._ctx.backend.name!r}"
             )
         cfg = self._ctx.config
-        resolved_model = _resolve_model(model, cfg)
+        resolved_model = _resolve_model(model, cfg, step_name=step_name)
         fleet_cfg = cfg.fleet
 
         merged_extras: dict[str, str] = dict(env_extras) if env_extras else {}

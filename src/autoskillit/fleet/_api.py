@@ -4,37 +4,33 @@ from __future__ import annotations
 
 import asyncio
 import functools
-import json
 import os
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import anyio
 import psutil
-import regex as re
 
 from autoskillit.core import (
     CaptureEntrySpec,
-    CaptureValueTypeError,
     FleetErrorCode,
-    InfraExitCategory,
     ProcessStaleError,
-    RetryReason,
     SessionCheckpoint,  # noqa: F401, TC001
     SkillResult,
     claude_code_log_path,
     claude_code_project_dir,
     get_logger,
-    resolve_payload_field,
     truncate_text,
     write_versioned_json,
 )
-from autoskillit.fleet.result_parser import L3ParseResult, parse_l3_result_block
+from autoskillit.fleet._capture import _extract_captures, _normalize_capture_spec
+from autoskillit.fleet._expressions import _CAMPAIGN_REF_RE, _interpolate_campaign_refs
+from autoskillit.fleet._outcome import _checkpoint_to_dict, classify_dispatch_outcome
+from autoskillit.fleet.result_parser import parse_l3_result_block
 from autoskillit.fleet.state import DispatchStatus
 from autoskillit.fleet.state_types import (
-    _ABANDON_REASONS,
     DispatchCompleted,
     DispatchRejected,
     DispatchResult,
@@ -60,217 +56,6 @@ def resolve_dispatch_timeout(
     if timeout_sec is not None:
         return float(timeout_sec)
     return float(default_timeout_sec)
-
-
-class CaptureCompletenessError(RuntimeError):
-    """Raised when a capture spec extracts zero fields from the payload."""
-
-
-_CAMPAIGN_REF_RE = re.compile(r"\$\{\{\s*campaign\.(\w+)\s*\}\}")
-_INPUTS_REF_RE = re.compile(r"\$\{\{\s*inputs\.(\w+)\s*\}\}")
-
-
-def _strip_quotes(s: str) -> str:
-    if (s.startswith("'") and s.endswith("'")) or (s.startswith('"') and s.endswith('"')):
-        return s[1:-1]
-    return s
-
-
-def evaluate_skip_when(
-    skip_when: str,
-    accumulated_captures: dict[str, str],
-    ingredients: dict[str, str] | None = None,
-) -> tuple[FleetErrorCode | None, str | None, bool]:
-    """Evaluate a skip_when expression against campaign captures and ingredients.
-
-    Returns ``(error_code, error_message, should_skip)``.
-    ``error_code`` is ``None`` when evaluation succeeds; ``should_skip`` is only
-    meaningful in that case.
-    """
-    ingredients = ingredients or {}
-
-    missing_campaign_refs = [
-        ref for ref in _CAMPAIGN_REF_RE.findall(skip_when) if ref not in accumulated_captures
-    ]
-    if missing_campaign_refs:
-        return (
-            FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
-            f"skip_when references campaign captures that have not been produced "
-            f"by any prior dispatch: {missing_campaign_refs!r}. "
-            f"Available captures: {sorted(accumulated_captures)}",
-            False,
-        )
-
-    missing_inputs_refs = [
-        ref for ref in _INPUTS_REF_RE.findall(skip_when) if ref not in ingredients
-    ]
-    if missing_inputs_refs:
-        return (
-            FleetErrorCode.FLEET_RECIPE_INVALID,
-            f"skip_when references ingredient keys that were not passed: "
-            f"{missing_inputs_refs!r}. Available ingredients: {sorted(ingredients)}",
-            False,
-        )
-
-    resolved = _CAMPAIGN_REF_RE.sub(lambda m: accumulated_captures[m.group(1)], skip_when)
-    resolved = _INPUTS_REF_RE.sub(lambda m: ingredients[m.group(1)], resolved).strip()
-
-    if not resolved:
-        return (
-            FleetErrorCode.FLEET_RECIPE_INVALID,
-            "skip_when resolved to an empty expression after substitution",
-            False,
-        )
-
-    op_count = resolved.count(" == ") + resolved.count(" != ")
-    if op_count != 1:
-        return (
-            FleetErrorCode.FLEET_RECIPE_INVALID,
-            f"skip_when resolved to a malformed expression: {resolved!r}. "
-            f"Expected exactly one '==' or '!=' comparison operator.",
-            False,
-        )
-
-    should_skip = False
-    if " == " in resolved:
-        lhs, rhs = resolved.split(" == ", 1)
-        should_skip = _strip_quotes(lhs.strip()) == _strip_quotes(rhs.strip())
-    elif " != " in resolved:
-        lhs, rhs = resolved.split(" != ", 1)
-        should_skip = _strip_quotes(lhs.strip()) != _strip_quotes(rhs.strip())
-
-    return (None, None, should_skip)
-
-
-def _validate_capture_value(key: str, value: str, declared_type: str) -> None:
-    """Validate a captured value against its declared type.
-
-    Raises CaptureValueTypeError if validation fails.
-    """
-    if declared_type == "path":
-        if not value:
-            raise CaptureValueTypeError(
-                key=key,
-                value=value,
-                declared_type=declared_type,
-                reason="path value must be non-empty",
-            )
-        if not Path(value).exists():
-            raise CaptureValueTypeError(
-                key=key,
-                value=value,
-                declared_type=declared_type,
-                reason=f"path does not exist: {value}",
-            )
-    elif declared_type == "string":
-        if not value:
-            raise CaptureValueTypeError(
-                key=key,
-                value=value,
-                declared_type=declared_type,
-                reason="string value must be non-empty",
-            )
-    elif declared_type == "url":
-        if not value:
-            raise CaptureValueTypeError(
-                key=key,
-                value=value,
-                declared_type=declared_type,
-                reason="url value must be non-empty",
-            )
-        if not (
-            value.startswith("http://")
-            or value.startswith("https://")
-            or value.startswith("file://")
-        ):
-            raise CaptureValueTypeError(
-                key=key,
-                value=value,
-                declared_type=declared_type,
-                reason=f"url value must start with http://, https://, or file://: {value!r}",
-            )
-    # optional_string: any value including empty string — no validation
-
-
-def _extract_captures(
-    capture_spec: dict[str, CaptureEntrySpec],
-    payload: dict[str, object],
-) -> dict[str, str]:
-    """Extract captured values from an L3 result payload.
-
-    For each entry in `capture_spec`, reads `payload[field_name]` from the
-    ``from_`` template and validates it against the declared `value_type`.
-    Missing payload keys are logged as warnings. If the capture spec has
-    entries but all fields are absent from the payload, raises
-    CaptureCompletenessError. If a value fails type validation,
-    raises CaptureValueTypeError.
-    """
-    result: dict[str, str] = {}
-    expected_fields: list[str] = []
-    for key, entry in capture_spec.items():
-        field_name = resolve_payload_field(entry)
-        if field_name is None:
-            continue
-        expected_fields.append(field_name)
-        if field_name in payload:
-            value: object = payload[field_name]
-            if not isinstance(value, str) and entry.value_type == "path":
-                raise CaptureValueTypeError(
-                    key=key,
-                    value=repr(value),
-                    declared_type=entry.value_type,
-                    reason=f"expected a string path, got {type(value).__name__}",
-                )
-            str_value = value if isinstance(value, str) else json.dumps(value, default=str)
-            _validate_capture_value(key, str_value, entry.value_type)
-            result[key] = str_value
-        else:
-            logger.warning(
-                "capture_field_missing_from_payload",
-                capture_name=key,
-                expected_field=field_name,
-                available_fields=sorted(str(k) for k in payload.keys()),
-            )
-    if expected_fields and not result:
-        raise CaptureCompletenessError(
-            f"Capture spec expected fields {expected_fields} but none were "
-            f"present in payload. Available: {sorted(str(k) for k in payload.keys())}. "
-            f"This indicates a sentinel/capture misalignment."
-        )
-    return result
-
-
-def _interpolate_campaign_refs(
-    ingredients: dict[str, str],
-    captured: dict[str, str],
-) -> dict[str, str]:
-    """Resolve ``${{ campaign.key }}`` references in ingredient values.
-
-    Raises ValueError if a campaign reference cannot be resolved or resolves to
-    an empty string (which may indicate an invalid capture from a prior dispatch).
-    Non-campaign values are returned unchanged.
-    """
-    out: dict[str, str] = {}
-    for k, v in ingredients.items():
-
-        def _replace(m: re.Match, _k: str = k) -> str:
-            ref = m.group(1)
-            if ref not in captured:
-                raise ValueError(
-                    f"Ingredient '{_k}' references ${{{{ campaign.{ref} }}}} "
-                    f"but '{ref}' has not been captured by any prior dispatch. "
-                    f"Available: {sorted(captured)}"
-                )
-            resolved = captured[ref]
-            if resolved == "":
-                raise ValueError(
-                    f"Ingredient '{_k}' campaign ref '{ref}' resolved to empty string — "
-                    f"the capturing dispatch may have emitted an empty value"
-                )
-            return resolved
-
-        out[k] = _CAMPAIGN_REF_RE.sub(_replace, v)
-    return out
 
 
 def _write_pid(
@@ -327,23 +112,6 @@ def _post_dispatch_cleanup(
                 exc_class=type(exc).__name__,
                 exc_info=True,
             )
-
-
-def _normalize_capture_spec(
-    capture: Mapping[str, str | CaptureEntrySpec] | None,
-) -> dict[str, CaptureEntrySpec] | None:
-    """Convert YAML-format ``dict[str, str]`` capture spec to ``dict[str, CaptureEntrySpec]``.
-
-    The recipe YAML uses shorthand capture entries: ``{key: "${{ result.field }}"}``.
-    This converts them to the typed ``CaptureEntrySpec`` format used internally.
-    Already-typed ``CaptureEntrySpec`` values are passed through unchanged.
-    """
-    if capture is None:
-        return None
-    return {
-        key: val if isinstance(val, CaptureEntrySpec) else CaptureEntrySpec(from_=val)
-        for key, val in capture.items()
-    }
 
 
 async def _touch_dispatch_marker(
@@ -472,78 +240,6 @@ async def execute_dispatch(
         lock.release()
 
 
-def _is_abandon_reason(skill_result: SkillResult) -> bool:
-    """Return True when the kill reason indicates resume would be futile."""
-    if skill_result.retry_reason in _ABANDON_REASONS:
-        return True
-    if (
-        skill_result.retry_reason == RetryReason.RESUME
-        and skill_result.infra.exit_category == InfraExitCategory.CONTEXT_EXHAUSTED
-    ):
-        return True
-    return False
-
-
-def _checkpoint_to_dict(cp: SessionCheckpoint | None) -> dict[str, Any]:
-    """Convert SessionCheckpoint to a plain dict for DispatchRecord storage."""
-    if cp is None:
-        return {}
-    return {
-        "completed_items": list(cp.completed_items),
-        "step_name": cp.step_name,
-        "progress_pct": cp.progress_pct,
-        "ts": cp.ts,
-    }
-
-
-def classify_dispatch_outcome(
-    parsed: L3ParseResult | None,
-    skill_result: SkillResult,
-    *,
-    sidecar_exists: bool = False,
-    checkpoint: SessionCheckpoint | None = None,
-    subtype: str = "",
-) -> tuple[DispatchStatus, str]:
-    """Map L2 food truck subprocess signals to a (DispatchStatus, reason) pair.
-
-    Pure function — no filesystem access, no side effects.
-    Rules applied in order:
-      0. timeout + session_id + lifespan_started + (checkpoint or sidecar)
-         + not abandon → RESUMABLE
-      0b. timeout (any other case) → FAILURE
-      1. completed_clean + success flag → SUCCESS
-      2. completed_clean + no success → FAILURE
-      3. completed_dirty → FAILURE (fleet_l3_parse_failed)
-      4. no_sentinel + session_id + lifespan_started + (checkpoint or sidecar)
-         + not abandon → RESUMABLE
-      5. no_sentinel (any other case) → FAILURE (fleet_l3_no_result_block)
-    """
-    if subtype == "timeout":
-        has_progress = checkpoint is not None or sidecar_exists
-        if skill_result.session_id and skill_result.lifespan_started and has_progress:
-            if _is_abandon_reason(skill_result):
-                return DispatchStatus.FAILURE, FleetErrorCode.FLEET_L3_TIMEOUT
-            return DispatchStatus.RESUMABLE, FleetErrorCode.FLEET_L3_TIMEOUT
-        return DispatchStatus.FAILURE, FleetErrorCode.FLEET_L3_TIMEOUT
-
-    if parsed is None:
-        return DispatchStatus.FAILURE, FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
-
-    if parsed.outcome == "completed_clean" and parsed.payload and parsed.payload.get("success"):
-        return DispatchStatus.SUCCESS, ""
-    if parsed.outcome == "completed_clean":
-        reason = parsed.payload.get("reason", "") if parsed.payload else ""
-        return DispatchStatus.FAILURE, reason
-    if parsed.outcome == "completed_dirty":
-        return DispatchStatus.FAILURE, FleetErrorCode.FLEET_L3_PARSE_FAILED
-    has_progress = checkpoint is not None or sidecar_exists
-    if skill_result.session_id and skill_result.lifespan_started and has_progress:
-        if _is_abandon_reason(skill_result):
-            return DispatchStatus.FAILURE, FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
-        return DispatchStatus.RESUMABLE, FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
-    return DispatchStatus.FAILURE, FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
-
-
 async def _run_dispatch(
     tool_ctx: ToolContext,
     recipe: str,
@@ -568,7 +264,6 @@ async def _run_dispatch(
     from autoskillit.fleet.state import (
         DispatchRecord,
         DispatchStateHandle,
-        DispatchStatus,
         append_dispatch_record,
         normalize_dispatch_token_usage,
         read_state,

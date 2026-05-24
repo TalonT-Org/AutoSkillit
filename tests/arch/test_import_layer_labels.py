@@ -80,6 +80,7 @@ _PRECAUTIONARY_SKIP_PATHS: frozenset[str] = frozenset(
         # fleet/ files use orchestration vocabulary ("L3 food truck", "L3 dispatch", etc.)
         # that escapes the current regex but could match after a future regex expansion.
         "fleet/_api.py",
+        "fleet/_outcome.py",
         "fleet/_prompts.py",
         "fleet/result_parser.py",
     }

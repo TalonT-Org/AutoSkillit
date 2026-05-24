@@ -23,7 +23,7 @@ def _ce(from_: str, value_type: str = "string") -> CaptureEntrySpec:
 
 
 def test_extract_captures_from_payload():
-    from autoskillit.fleet._api import _extract_captures
+    from autoskillit.fleet._capture import _extract_captures
 
     result = _extract_captures(
         {"sources_manifest": _ce("${{ result.sources_manifest }}")},
@@ -33,7 +33,7 @@ def test_extract_captures_from_payload():
 
 
 def test_extract_captures_all_fields_missing_raises():
-    from autoskillit.fleet._api import CaptureCompletenessError, _extract_captures
+    from autoskillit.fleet._capture import CaptureCompletenessError, _extract_captures
 
     with pytest.raises(CaptureCompletenessError):
         _extract_captures(
@@ -43,7 +43,7 @@ def test_extract_captures_all_fields_missing_raises():
 
 
 def test_extract_captures_non_result_template_skipped():
-    from autoskillit.fleet._api import _extract_captures
+    from autoskillit.fleet._capture import _extract_captures
 
     result = _extract_captures(
         {"a": _ce("plain_string"), "b": _ce("${{ inputs.x }}")},
@@ -53,7 +53,7 @@ def test_extract_captures_non_result_template_skipped():
 
 
 def test_extract_captures_converts_value_to_str():
-    from autoskillit.fleet._api import _extract_captures
+    from autoskillit.fleet._capture import _extract_captures
 
     result = _extract_captures(
         {"count": _ce("${{ result.count }}")},
@@ -64,7 +64,7 @@ def test_extract_captures_converts_value_to_str():
 
 def test_extract_captures_list_value_uses_json_dumps():
     """list payload value must be JSON-serialized, not Python repr."""
-    from autoskillit.fleet._api import _extract_captures
+    from autoskillit.fleet._capture import _extract_captures
 
     result = _extract_captures(
         {"issue_urls": _ce("${{ result.issue_urls }}")},
@@ -83,7 +83,7 @@ def test_extract_captures_list_value_uses_json_dumps():
 
 def test_extract_captures_dict_value_uses_json_dumps():
     """dict payload value must be JSON-serialized, not Python repr."""
-    from autoskillit.fleet._api import _extract_captures
+    from autoskillit.fleet._capture import _extract_captures
 
     result = _extract_captures(
         {"meta": _ce("${{ result.meta }}")},
@@ -98,21 +98,21 @@ def test_extract_captures_dict_value_uses_json_dumps():
 
 
 def test_interpolate_campaign_refs_basic():
-    from autoskillit.fleet._api import _interpolate_campaign_refs
+    from autoskillit.fleet._expressions import _interpolate_campaign_refs
 
     result = _interpolate_campaign_refs({"k": "${{ campaign.v }}"}, {"v": "resolved"})
     assert result == {"k": "resolved"}
 
 
 def test_interpolate_unresolved_ref_raises_value_error():
-    from autoskillit.fleet._api import _interpolate_campaign_refs
+    from autoskillit.fleet._expressions import _interpolate_campaign_refs
 
     with pytest.raises(ValueError, match="missing"):
         _interpolate_campaign_refs({"k": "${{ campaign.missing }}"}, {})
 
 
 def test_interpolate_passthrough_non_campaign_values():
-    from autoskillit.fleet._api import _interpolate_campaign_refs
+    from autoskillit.fleet._expressions import _interpolate_campaign_refs
 
     result = _interpolate_campaign_refs(
         {"a": "${{ inputs.x }}", "b": "plain"},
@@ -122,7 +122,7 @@ def test_interpolate_passthrough_non_campaign_values():
 
 
 def test_interpolate_multiple_refs_in_one_value():
-    from autoskillit.fleet._api import _interpolate_campaign_refs
+    from autoskillit.fleet._expressions import _interpolate_campaign_refs
 
     result = _interpolate_campaign_refs(
         {"path": "${{ campaign.a }}/${{ campaign.b }}"},
@@ -132,7 +132,7 @@ def test_interpolate_multiple_refs_in_one_value():
 
 
 def test_extract_captures_bool_value_uses_json_dumps():
-    from autoskillit.fleet._api import _extract_captures
+    from autoskillit.fleet._capture import _extract_captures
 
     result = _extract_captures(
         {"flag": _ce("${{ result.flag }}")},
@@ -143,7 +143,7 @@ def test_extract_captures_bool_value_uses_json_dumps():
 
 
 def test_extract_captures_none_value_uses_json_dumps():
-    from autoskillit.fleet._api import _extract_captures
+    from autoskillit.fleet._capture import _extract_captures
 
     result = _extract_captures(
         {"val": _ce("${{ result.val }}")},
@@ -154,7 +154,7 @@ def test_extract_captures_none_value_uses_json_dumps():
 
 
 def test_extract_captures_float_value_uses_json_dumps():
-    from autoskillit.fleet._api import _extract_captures
+    from autoskillit.fleet._capture import _extract_captures
 
     result = _extract_captures(
         {"pi": _ce("${{ result.pi }}")},
@@ -164,14 +164,14 @@ def test_extract_captures_float_value_uses_json_dumps():
 
 
 def test_extract_captures_empty_spec_returns_empty():
-    from autoskillit.fleet._api import _extract_captures
+    from autoskillit.fleet._capture import _extract_captures
 
     result = _extract_captures({}, {"anything": "value"})
     assert result == {}
 
 
 def test_interpolate_campaign_refs_empty_ingredients():
-    from autoskillit.fleet._api import _interpolate_campaign_refs
+    from autoskillit.fleet._expressions import _interpolate_campaign_refs
 
     result = _interpolate_campaign_refs({}, {"k": "v"})
     assert result == {}
@@ -183,7 +183,7 @@ def test_interpolate_campaign_refs_empty_ingredients():
 
 
 def test_extract_research_design_captures():
-    from autoskillit.fleet._api import _extract_captures
+    from autoskillit.fleet._capture import _extract_captures
 
     spec = {
         "worktree_path": _ce("${{ result.worktree_path }}"),
@@ -207,7 +207,7 @@ def test_extract_research_design_captures():
 
 
 def test_extract_research_implement_capture():
-    from autoskillit.fleet._api import _extract_captures
+    from autoskillit.fleet._capture import _extract_captures
 
     result = _extract_captures(
         {"report_path": _ce("${{ result.report_path }}")},
@@ -217,7 +217,7 @@ def test_extract_research_implement_capture():
 
 
 def test_extract_research_review_captures():
-    from autoskillit.fleet._api import _extract_captures
+    from autoskillit.fleet._capture import _extract_captures
 
     spec = {
         "pr_url": _ce("${{ result.pr_url }}"),
@@ -238,7 +238,7 @@ def test_extract_research_review_captures():
 
 
 def test_extract_research_review_all_diagram_paths_list():
-    from autoskillit.fleet._api import _extract_captures
+    from autoskillit.fleet._capture import _extract_captures
 
     result = _extract_captures(
         {"all_diagram_paths": _ce("${{ result.all_diagram_paths }}")},
@@ -249,7 +249,7 @@ def test_extract_research_review_all_diagram_paths_list():
 
 
 def test_extract_research_partial_payload_skips_missing():
-    from autoskillit.fleet._api import _extract_captures
+    from autoskillit.fleet._capture import _extract_captures
 
     spec = {
         "worktree_path": _ce("${{ result.worktree_path }}"),
@@ -271,7 +271,7 @@ def test_extract_research_partial_payload_skips_missing():
 
 
 def test_extract_research_capture_all_fields_combined():
-    from autoskillit.fleet._api import _extract_captures
+    from autoskillit.fleet._capture import _extract_captures
 
     spec = {
         "worktree_path": _ce("${{ result.worktree_path }}"),
@@ -300,7 +300,8 @@ def test_extract_research_capture_all_fields_combined():
 def test_relative_path_capture_and_reconstruction():
     """Repo-relative path values survive capture → interpolation
     and produce correct absolute paths when joined with worktree_path."""
-    from autoskillit.fleet._api import _extract_captures, _interpolate_campaign_refs
+    from autoskillit.fleet._capture import _extract_captures
+    from autoskillit.fleet._expressions import _interpolate_campaign_refs
 
     spec = {
         "worktree_path": _ce("${{ result.worktree_path }}"),
@@ -327,7 +328,7 @@ def test_relative_path_capture_and_reconstruction():
 
 
 def test_interpolate_campaign_worktree_and_report_path():
-    from autoskillit.fleet._api import _interpolate_campaign_refs
+    from autoskillit.fleet._expressions import _interpolate_campaign_refs
 
     result = _interpolate_campaign_refs(
         {
@@ -342,7 +343,7 @@ def test_interpolate_campaign_worktree_and_report_path():
 def test_interpolate_campaign_unresolved_research_ref_raises():
     import pytest
 
-    from autoskillit.fleet._api import _interpolate_campaign_refs
+    from autoskillit.fleet._expressions import _interpolate_campaign_refs
 
     with pytest.raises(ValueError, match="has not been captured"):
         _interpolate_campaign_refs(
@@ -578,7 +579,7 @@ def test_extract_captures_logs_warning_for_missing_spec_keys():
     """
     import structlog
 
-    from autoskillit.fleet._api import _extract_captures
+    from autoskillit.fleet._capture import _extract_captures
 
     capture_spec = {
         "pr_url": _ce("${{ result.pr_url }}"),
@@ -601,7 +602,7 @@ def test_extract_captures_raises_on_complete_capture_miss():
     _extract_captures must raise CaptureCompletenessError rather than
     returning an empty dict that silently poisons the campaign state.
     """
-    from autoskillit.fleet._api import CaptureCompletenessError, _extract_captures
+    from autoskillit.fleet._capture import CaptureCompletenessError, _extract_captures
 
     capture_spec = {
         "pr_url": _ce("${{ result.pr_url }}"),
@@ -655,7 +656,7 @@ class TestCaptureFieldNameRoundTrip:
     def test_synthetic_payload_round_trip(self) -> None:
         """Build synthetic L3 JSON using prompt field names; verify extractor finds all."""
         from autoskillit.core.types import CaptureEntrySpec
-        from autoskillit.fleet._api import _extract_captures
+        from autoskillit.fleet._capture import _extract_captures
 
         capture_spec = {
             "worktree_path": CaptureEntrySpec(from_="${{ result.worktree_path }}"),
@@ -677,7 +678,7 @@ class TestCaptureFieldNameRoundTrip:
     def test_hyphenated_field_name_round_trip(self) -> None:
         """Field names with hyphens are handled correctly end-to-end."""
         from autoskillit.core.types import CaptureEntrySpec
-        from autoskillit.fleet._api import _extract_captures
+        from autoskillit.fleet._capture import _extract_captures
         from autoskillit.fleet._prompts import _build_food_truck_prompt
 
         capture_spec = {
@@ -716,7 +717,8 @@ class TestCaptureFieldNameRoundTrip:
 
 def test_extract_path_type_rejects_empty_string():
     """A path-type capture with an empty-string value must raise CaptureValueTypeError."""
-    from autoskillit.fleet._api import CaptureValueTypeError, _extract_captures
+    from autoskillit.core import CaptureValueTypeError
+    from autoskillit.fleet._capture import _extract_captures
 
     capture_spec = {
         "p": CaptureEntrySpec(from_="${{ result.p }}", value_type="path"),
@@ -731,7 +733,8 @@ def test_extract_path_type_rejects_empty_string():
 
 def test_extract_url_type_rejects_empty_string():
     """A url-type capture with an empty-string value must raise CaptureValueTypeError."""
-    from autoskillit.fleet._api import CaptureValueTypeError, _extract_captures
+    from autoskillit.core import CaptureValueTypeError
+    from autoskillit.fleet._capture import _extract_captures
 
     capture_spec = {
         "u": CaptureEntrySpec(from_="${{ result.u }}", value_type="url"),
@@ -746,7 +749,7 @@ def test_extract_url_type_rejects_empty_string():
 
 def test_extract_optional_string_type_accepts_empty():
     """An optional_string-type capture with an empty-string value must be accepted."""
-    from autoskillit.fleet._api import _extract_captures
+    from autoskillit.fleet._capture import _extract_captures
 
     capture_spec = {
         "pr_url": CaptureEntrySpec(from_="${{ result.pr_url }}", value_type="optional_string"),
@@ -759,7 +762,8 @@ def test_extract_optional_string_type_accepts_empty():
 
 def test_extract_path_type_rejects_nonexistent_path(tmp_path: Path):
     """A path-type capture with a non-existent path must raise CaptureValueTypeError."""
-    from autoskillit.fleet._api import CaptureValueTypeError, _extract_captures
+    from autoskillit.core import CaptureValueTypeError
+    from autoskillit.fleet._capture import _extract_captures
 
     capture_spec = {
         "p": CaptureEntrySpec(from_="${{ result.p }}", value_type="path"),
@@ -774,7 +778,7 @@ def test_extract_path_type_rejects_nonexistent_path(tmp_path: Path):
 
 def test_interpolate_rejects_empty_string_campaign_ref():
     """_interpolate_campaign_refs must reject an empty-string captured value."""
-    from autoskillit.fleet._api import _interpolate_campaign_refs
+    from autoskillit.fleet._expressions import _interpolate_campaign_refs
 
     ingredients = {"report_path": "${{ campaign.report_path }}"}
     captured = {"report_path": ""}

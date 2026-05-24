@@ -832,7 +832,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "cli": 20,
         "hooks": 10,
         "pipeline": 12,
-        "fleet": 16,
+        "fleet": 19,
         "recipe/rules": 33,
         "server/tools": 20,
         "hooks/guards": 22,
@@ -932,12 +932,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "REQ-CNST-010-E5: campaign validation rules — dispatch-skip-when-valid-expression "
         "rule added alongside existing route-gate and dependency rules; single-file "
         "co-location preserves rule cross-referencing and rule registration order",
-    ),
-    "_api.py": (
-        1100,
-        "REQ-CNST-010-E6: fleet dispatch engine — evaluate_skip_when inlined here to avoid "
-        "a 16th fleet/ module (sub-package file ceiling); keeps dispatch-related helpers "
-        "co-located with the execution engine that calls them",
     ),
 }
 

@@ -8,7 +8,7 @@ import pytest
 
 from autoskillit.core import FleetErrorCode, InfraOutcome, SkillResult
 from autoskillit.fleet import DispatchStatus
-from autoskillit.fleet._api import classify_dispatch_outcome
+from autoskillit.fleet._outcome import classify_dispatch_outcome
 from autoskillit.fleet.result_parser import L3ParseResult
 from tests.fakes import _DEFAULT_SKILL_RESULT
 

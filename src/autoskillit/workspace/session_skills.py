@@ -364,6 +364,7 @@ class SkillsDirectoryProvider:
         """Return SKILL.md content with gating frontmatter injected when required.
 
         - gated=True  → ensure disable-model-invocation: true is present
+          (used only by the activate path — init_session omits gated skills entirely)
         - gated=False → return unmodified content (cook session or Tier 1 skills)
 
         Substitutes ``{{AUTOSKILLIT_TEMP}}`` with the configured temp dir relpath.
@@ -529,17 +530,21 @@ class DefaultSessionSkillManager:
                 else:
                     _log.debug("init_session_subset_skip", skill=skill_info.name)
                 continue
+            gated = (not cook_session) and (skill_info.name in tier2_skills)
+            if gated:
+                _log.debug("init_session_tier2_omit", skill=skill_info.name)
+                continue
             skill_dir = skills_base / skill_info.name
             skill_dir.mkdir(exist_ok=True)
-            gated = (not cook_session) and (skill_info.name in tier2_skills)
-            content = self._provider.get_skill_content(skill_info.name, gated=gated)
+            content = self._provider.get_skill_content(skill_info.name, gated=False)
             atomic_write(skill_dir / "SKILL.md", content)
         if allow_only is not None and allow_only:
             written = {p.name for p in skills_base.iterdir() if p.is_dir()}
             bundled_names = {
                 s.name for s in self._provider.list_skills() if s.source == SkillSource.BUNDLED
             }
-            achievable = allow_only - overrides - bundled_names
+            gated_omitted = tier2_skills & allow_only
+            achievable = allow_only - overrides - bundled_names - gated_omitted
             if achievable and not (written & achievable):
                 raise RuntimeError(
                     f"init_session: allow_only={sorted(allow_only)!r} specified but "

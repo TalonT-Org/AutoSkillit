@@ -15,12 +15,11 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import (
     DISPATCH_ID_ENV_VAR,
-    LayoutError,
     SkillResult,
     ValidatedAddDir,
     get_logger,
     truncate_text,
-    validate_add_dir,
+    validate_project_local_skill_dir,
 )
 from autoskillit.core import resolve_skill_temp_dir as _resolve_skill_temp_dir
 from autoskillit.server import mcp
@@ -457,10 +456,9 @@ async def run_skill(
 
             if target_name:
                 tool_ctx.session_skill_manager.activate_skill_deps(session_id, target_name)
-        try:
-            skill_add_dirs.append(validate_add_dir(Path(cwd)))
-        except LayoutError:
-            pass  # cwd has no project-local skills — already accessible as working dir
+        _local_dir = validate_project_local_skill_dir(Path(cwd), tool_ctx.backend)
+        if _local_dir is not None:
+            skill_add_dirs.append(_local_dir)
 
         _start = time.monotonic()
         try:

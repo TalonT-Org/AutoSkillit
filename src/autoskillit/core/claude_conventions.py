@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .types import ValidatedAddDir, ValidatedWorktreePath
+from .types import AGENT_BACKEND_CODEX, CodingAgentBackend, ValidatedAddDir, ValidatedWorktreePath
 
 
 class LayoutError(ValueError):
@@ -60,6 +60,18 @@ def validate_add_dir(path: Path) -> ValidatedAddDir:
     if not skill_files:
         raise LayoutError(f"{path}/.claude/skills/ contains no SKILL.md files")
     return ValidatedAddDir(path=str(path))
+
+
+def validate_project_local_skill_dir(
+    cwd: Path,
+    backend: CodingAgentBackend | None,
+) -> ValidatedAddDir | None:
+    if backend is not None and backend.name == AGENT_BACKEND_CODEX:
+        return None
+    try:
+        return validate_add_dir(cwd)
+    except LayoutError:
+        return None
 
 
 def validate_worktree_path(path: Path | str) -> ValidatedWorktreePath | None:

@@ -743,7 +743,7 @@ class TestCookInteractive:
             patch("subprocess.run", return_value=MagicMock(returncode=0)),
             patch("autoskillit.core.write_registry_entry"),
             patch(
-                "autoskillit.execution.backends.get_backend",
+                "autoskillit.execution.get_backend",
                 side_effect=lambda name: get_backend_called.append(name),
             ),
         ):
@@ -789,7 +789,7 @@ class TestCookInteractive:
             patch("autoskillit.core.write_registry_entry"),
             patch("autoskillit.config.load_config", return_value=mock_config),
             patch(
-                "autoskillit.execution.backends.get_backend",
+                "autoskillit.execution.get_backend",
                 side_effect=lambda name: (get_backend_called.append(name), _FakeBackend())[1],
             ),
         ):

@@ -181,8 +181,7 @@ def init(
         onboarded_marker.unlink(missing_ok=True)
 
     try:
-        from autoskillit.config import load_config
-        from autoskillit.config._config_dataclasses import ConfigSchemaError
+        from autoskillit.config import ConfigSchemaError, load_config
         from autoskillit.execution import get_backend
 
         try:

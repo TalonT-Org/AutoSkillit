@@ -74,58 +74,38 @@ and `estimated_files` — must serve the stated task. Do not read the full task 
 L1 context or embed it in the L0 prompt — pass the path reference only and instruct L0s
 to read the file from disk for scope creep verification.
 
-### Step 3: Build per-L0 context packets
+### Step 3: Build per-WP variable-data packets
 
-For each WP in the phase, build a self-contained context packet:
+For each WP in the phase, build a variable-data packet containing ONLY the per-WP context.
+The agent definition (`autoskillit:wp-elaborator`) supplies all behavioral instructions,
+output format, and constraints — do NOT re-add any static instructions to these packets.
+
+Each packet contains:
 - WP ID, name, scope, estimated_files (from manifest metadata)
 - Assignment context: the parent assignment's goal, technical_approach
 - All sibling WPs for this phase in short-form (id, name, scope only — for dependency detection)
 - Phase goal and scope
-- Instruct L0 to use Grep/Glob/Read for codebase analysis (no sub-subagents)
-- Instruct L0 to return JSON between triple-backtick json fences
+- Task file path (absolute) — the agent reads this for scope-creep verification
 
 ### Step 4: Spawn L0 subagents in PARALLEL
 
-Use the native Agent/Task tool to spawn one L0 per WP simultaneously.
-If WP count > 6, spawn in sequential batches of 6 — await each batch before starting the next.
+Use the native Agent tool with `subagent_type: "autoskillit:wp-elaborator"` to spawn one
+agent per WP simultaneously. If WP count > 6, spawn in sequential batches of 6 — await
+each batch before starting the next.
 
-Each L0 receives a self-contained prompt that:
-1. Identifies the WP (ID, name, scope, estimated_files)
-2. Provides assignment context (goal, technical_approach)
-3. Lists all sibling WPs in short-form for dependency detection
-4. Provides phase goal and scope
-5. Instructs the L0 to use Grep/Glob/Read for codebase analysis (no sub-subagents)
-6. Instructs the L0 to produce exactly 1–5 deliverables (hard constraint — validate_wp_result rejects out-of-range counts)
-7. Instructs the L0 to return results as JSON between triple-backtick json fences
+Each agent receives its variable-data packet (from Step 3) as the `prompt` parameter.
+The agent definition automatically provides:
+- Role and tool constraints
+- Output JSON schema with all required fields
+- Deliverable bounds (1–5)
+- WP ID format contract
+- Task file scope-creep verification instructions
 
-Each L0 MUST:
-- Use Grep/Glob/Read for codebase analysis (no sub-subagent spawning — they are actual leaf nodes)
-- Elaborate the WP with all mandatory fields
-- Produce exactly 1–5 deliverables — if the WP naturally spans more than 5 files, group related files into logical deliverables (e.g., "test suite for module X" rather than individual test files)
-- Return structured JSON between ` ```json ` and ` ``` ` delimiters
+Do NOT embed any of the above in the prompt — the agent definition handles it.
+Duplicating instructions wastes L1 context budget.
 
-Expected L0 return schema:
-```json
-{
-  "id": "P1-A2-WP1",
-  "name": "...",
-  "goal": "...",
-  "summary": "<=120 chars",
-  "technical_steps": ["..."],
-  "files_touched": ["..."],
-  "apis_defined": ["..."],
-  "apis_consumed": ["..."],
-  "depends_on": ["..."],
-  "deliverables": ["(exactly 1–5 items, hard limit) file_or_logical_group", "..."],
-  "acceptance_criteria": ["..."]
-}
-```
-
-**CRITICAL — WP ID Format Contract:**
-- WP IDs MUST match the pattern `P{N}-A{N}-WP{N}` where `{N}` is a positive integer (numeric only — no letters or hyphens in the number)
-- Examples: `P1-A2-WP1`, `P3-A1-WP12`
-- INVALID: `WP2a`, `WP3b`, `WP6-C`, `P1-A1-WP-1`, `wp1`
-- The result filename is `{wp_id}_result.json` — non-matching filenames are rejected
+**WP ID Format Reference:** WP IDs produced by the agents must match `P{N}-A{N}-WP{N}`
+where `{N}` is a positive integer (numeric only). Non-matching IDs are rejected at validation.
 
 ### Step 5: Collect and validate L0 responses
 

@@ -118,8 +118,8 @@ def test_all_campaign_dispatches_have_parseable_sentinels():
 
     Campaign recipes live in the campaigns/ subdirectory, not at the top level.
     """
+    from autoskillit.recipe._rule_helpers import _extract_sentinel_fields
     from autoskillit.recipe.io import load_recipe
-    from autoskillit.recipe.rules.rules_campaign import _extract_sentinel_fields
 
     # Collect campaign recipes with non-empty capture (campaigns are in campaigns/ subdir)
     campaigns_with_captures = []

@@ -1399,7 +1399,7 @@ def test_extract_sentinel_fields_handles_nested_braces(tmp_path: Path):
     invalid JSON that json.loads() fails on. This should be silently caught,
     leaving sentinel_fields empty — which is the bug.
     """
-    from autoskillit.recipe.rules.rules_campaign import _extract_sentinel_fields
+    from autoskillit.recipe._rule_helpers import _extract_sentinel_fields
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
@@ -1441,7 +1441,7 @@ def test_extract_sentinel_fields_handles_alternate_sentinel_phrasing(tmp_path: P
     The regex only matches '[Ee]xample\\s+sentinel:' — it misses the
     'include it directly in the sentinel JSON:' phrasing used by full-audit.yaml.
     """
-    from autoskillit.recipe.rules.rules_campaign import _extract_sentinel_fields
+    from autoskillit.recipe._rule_helpers import _extract_sentinel_fields
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
@@ -1559,7 +1559,7 @@ def test_dispatch_capture_field_in_sentinel_skips_non_campaign(tmp_path: Path):
 
 def test_extract_sentinel_fields_parses_json_example():
     """Helper parses JSON example block and returns field names."""
-    from autoskillit.recipe.rules.rules_campaign import _extract_sentinel_fields
+    from autoskillit.recipe._rule_helpers import _extract_sentinel_fields
     from autoskillit.recipe.schema import Recipe, RecipeStep
 
     recipe = Recipe(
@@ -1582,7 +1582,7 @@ def test_extract_sentinel_fields_parses_json_example():
 
 def test_extract_sentinel_fields_returns_empty_for_no_json():
     """Helper returns empty set when no JSON example block is present."""
-    from autoskillit.recipe.rules.rules_campaign import _extract_sentinel_fields
+    from autoskillit.recipe._rule_helpers import _extract_sentinel_fields
     from autoskillit.recipe.schema import Recipe, RecipeStep
 
     recipe = Recipe(
@@ -1597,7 +1597,7 @@ def test_extract_sentinel_fields_returns_empty_for_no_json():
 
 def test_extract_sentinel_fields_handles_multiline_json():
     """Helper handles JSON spanning multiple lines (folded YAML block)."""
-    from autoskillit.recipe.rules.rules_campaign import _extract_sentinel_fields
+    from autoskillit.recipe._rule_helpers import _extract_sentinel_fields
     from autoskillit.recipe.schema import Recipe, RecipeStep
 
     recipe = Recipe(
@@ -1624,7 +1624,7 @@ def test_extract_sentinel_fields_handles_multiline_json():
 
 def test_extract_sentinel_fields_handles_multiple_sentinels():
     """Helper returns union of fields from all sentinel stop steps."""
-    from autoskillit.recipe.rules.rules_campaign import _extract_sentinel_fields
+    from autoskillit.recipe._rule_helpers import _extract_sentinel_fields
     from autoskillit.recipe.schema import Recipe, RecipeStep
 
     recipe = Recipe(

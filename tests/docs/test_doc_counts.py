@@ -342,7 +342,7 @@ def test_orchestration_states_13_retry_reasons() -> None:
     _assert_doc_states_number(DOCS_DIR / "execution" / "orchestration.md", "retry reasons", 13)
 
 
-def test_authoring_states_24_rule_families() -> None:
+def test_authoring_states_28_rule_families() -> None:
     _assert_doc_states_number(DOCS_DIR / "recipes" / "authoring.md", "rule families", 24)
 
 

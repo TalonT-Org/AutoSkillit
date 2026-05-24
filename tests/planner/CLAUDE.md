@@ -13,6 +13,7 @@ Planner manifest, validation, compilation, and merge tests.
 | `test_consolidation_writeback.py` | Consolidation write-back, pipeline integration, lifecycle registry |
 | `test_consolidation_cycles.py` | Consolidation cycle-breaking via greedy FAS |
 | `test_dag_ops.py` | Tests for _dag_ops: topological_sort, find_sccs, break_cycles_greedy_fas, filter_self_references |
+| `test_elaborate_assignments_contract.py` | Contract conformance tests for planner-elaborate-assignments skill |
 | `test_elaborate_wps_contract.py` | Contract conformance tests for planner-elaborate-wps skill |
 | `test_manifests_builders.py` | build_phase_assignment_manifest and build_phase_wp_manifest |
 | `test_manifests_finalize.py` | finalize_wp_manifest and collect_tier_result_files |

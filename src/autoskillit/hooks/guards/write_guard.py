@@ -1,12 +1,63 @@
-"""PreToolUse hook: blocks Write/Edit outside the allowed prefix in read-only sessions."""
+"""PreToolUse hook: blocks Write/Edit/Bash outside the allowed prefix in write-scoped sessions."""
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 
 WRITE_GUARD_DENY_TRIGGER = "read-only skill session"
+
+# Patterns that detect file-modifying commands in a bash command string.
+# Used to decide whether a Bash tool call warrants path extraction.
+_IS_WRITE_CMD_RE = re.compile(
+    r"\bsed\s+(?:\S+\s+)*(?:-i|--in-place)"
+    r"|>+\s*/"
+    r"|\btee\s+/"
+    r"|\b(?:mv|cp)\s+"
+    r"|\bpatch\s+"
+    r"|\bgit\s+checkout\s+--"
+    r"|\bgit\s+reset\s+--hard"
+    r"|\b(?:rm|unlink)\s+"
+)
+
+# Each pattern extracts the target file path (group 1) from a file-modifying command.
+_BASH_TARGET_PATTERNS: list[re.Pattern[str]] = [
+    # sed -i 's/x/y/' /file  or  sed --in-place 's/x/y/' /file
+    re.compile(
+        r"\bsed\s+(?:\S+\s+)*(?:-i\S*|--in-place\S*)\s+"
+        r"(?:'[^']*'|\"[^\"]*\"|\S+)\s+(/[^\s;|&]+)"
+    ),
+    # anything > /file  or  >> /file  (redirect to absolute path)
+    re.compile(r">+\s*(/[^\s;|&>]+)"),
+    # tee /file
+    re.compile(r"\btee\s+(/[^\s;|&>]+)"),
+    # mv /src /dst  or  cp /src /dst  (captures destination)
+    re.compile(r"\b(?:mv|cp)\s+\S+\s+(/[^\s;|&>]+)"),
+    # patch /file
+    re.compile(r"\bpatch\s+(?:-\S+\s+)*(/[^\s;|&><]+)"),
+    # git checkout -- /file
+    re.compile(r"\bgit\s+checkout\s+--\s+(/[^\s;|&>]+)"),
+    # rm /file  or  unlink /file
+    re.compile(r"\b(?:rm|unlink)\s+(?:-\S+\s+)*(/[^\s;|&>]+)"),
+]
+
+
+def _extract_bash_write_targets(command: str) -> list[str] | None:
+    """Return absolute target paths from a bash command, or None if no write command found.
+
+    Returns an empty list when a write command is detected but no path can be reliably
+    extracted — callers treat this as fail-open (ambiguous = allow).
+    """
+    if not _IS_WRITE_CMD_RE.search(command):
+        return None
+    targets: list[str] = []
+    for pattern in _BASH_TARGET_PATTERNS:
+        m = pattern.search(command)
+        if m:
+            targets.append(m.group(1))
+    return targets
 
 
 def _deny(reason: str) -> None:
@@ -38,20 +89,42 @@ def main() -> None:
         return
 
     tool_name = data.get("tool_name", "")
-    if tool_name not in ("Write", "Edit"):
+    if tool_name not in ("Write", "Edit", "Bash"):
         sys.exit(0)
 
     tool_input = data.get("tool_input", {})
+
+    real_prefix = os.path.realpath(allowed_prefix)
+    norm_prefix = real_prefix.rstrip("/") + "/"
+
+    def _within_prefix(path: str) -> bool:
+        resolved = os.path.realpath(path)
+        return resolved.startswith(norm_prefix) or resolved == norm_prefix.rstrip("/")
+
+    if tool_name == "Bash":
+        command = tool_input.get("command", "")
+        targets = _extract_bash_write_targets(command)
+        if targets is None:
+            sys.exit(0)
+        if not targets:
+            # Write command detected but path not extractable — fail-open.
+            sys.exit(0)
+        for target in targets:
+            if not _within_prefix(target):
+                _deny(
+                    f"Write/Edit blocked: {WRITE_GUARD_DENY_TRIGGER}. "
+                    f"Only writes to {allowed_prefix} are permitted."
+                )
+                return
+        sys.exit(0)
+
+    # Write or Edit
     file_path = tool_input.get("file_path", "")
     if not file_path:
         _deny(f"Write/Edit blocked: {WRITE_GUARD_DENY_TRIGGER} (no file_path).")
         return
 
-    resolved = os.path.realpath(file_path)
-    real_prefix = os.path.realpath(allowed_prefix)
-    norm_prefix = real_prefix.rstrip("/") + "/"
-
-    if resolved.startswith(norm_prefix) or resolved == norm_prefix.rstrip("/"):
+    if _within_prefix(file_path):
         sys.exit(0)
 
     _deny(

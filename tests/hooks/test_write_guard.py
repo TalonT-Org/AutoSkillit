@@ -128,3 +128,61 @@ class TestWriteGuardWithPrefix:
         result = _run_hook(event)
         parsed = json.loads(result)
         assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def _build_bash_event(command: str) -> dict:
+    return {"tool_name": "Bash", "tool_input": {"command": command}}
+
+
+class TestWriteGuardBashBypass:
+    """write_guard intercepts Bash tool calls containing file-modifying commands."""
+
+    PREFIX = "/clone/.autoskillit/temp/planner/"
+
+    @pytest.fixture(autouse=True)
+    def _enable_headless(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+
+    def test_bash_sed_outside_prefix_denied(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)
+        event = _build_bash_event("sed -i 's/foo/bar/' /clone/src/main.rs")
+        result = _run_hook(event)
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert (
+            "read-only skill session" in parsed["hookSpecificOutput"]["permissionDecisionReason"]
+        )
+
+    def test_bash_sed_inside_prefix_allowed(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)
+        event = _build_bash_event(
+            "sed -i 's/foo/bar/' /clone/.autoskillit/temp/planner/context.json"
+        )
+        result = _run_hook(event)
+        assert result == ""
+
+    def test_bash_echo_redirect_outside_prefix_denied(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)
+        event = _build_bash_event('echo "x" > /clone/src/lib.rs')
+        result = _run_hook(event)
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_bash_tee_outside_prefix_denied(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)
+        event = _build_bash_event("cat output.txt | tee /clone/src/config.rs")
+        result = _run_hook(event)
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_bash_non_modifying_allowed(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)
+        event = _build_bash_event("grep foo /clone/src/main.rs")
+        result = _run_hook(event)
+        assert result == ""
+
+    def test_bash_no_prefix_allows_all(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.delenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", raising=False)
+        event = _build_bash_event("sed -i 's/x/y/' /clone/src/main.rs")
+        result = _run_hook(event)
+        assert result == ""

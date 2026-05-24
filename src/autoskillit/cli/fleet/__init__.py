@@ -96,7 +96,7 @@ def fleet_dispatch() -> None:
     if confirm.lower() in ("n", "no"):
         return
 
-    greeting = random.choice(_FLEET_DISPATCH_GREETINGS).format(recipe_table=recipe_table)
+    greeting = random.choice(_FLEET_DISPATCH_GREETINGS)
     _launch_fleet_session(
         None,
         None,

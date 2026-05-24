@@ -293,8 +293,8 @@ Timeout: {l3_timeout_sec} seconds
 
 Execute the recipe pipeline for the task above. Follow all routing
 rules and failure predicates. Emit the sentinel block upon completion.
-{caller_instructions_section}
---- SECTION 7: INGREDIENT VALUES ---
+
+{caller_instructions_section}--- SECTION 7: INGREDIENT VALUES ---
 
 The following ingredient values have been applied via open_kitchen overrides.
 They are provided here for reference only — do NOT re-apply or re-prompt.

@@ -25,7 +25,7 @@ def test_campaign_prompt_does_not_claim_queuing(dynamic_dispatch_text: str) -> N
 def test_dynamic_dispatch_section_uses_configured_max_issues() -> None:
     """Dynamic dispatch section must use the passed max_issues_per_food_truck value."""
     text = _build_dynamic_dispatch_section(mcp_prefix=MCP_PREFIX, max_issues_per_food_truck=7)
-    assert "7" in text
+    assert "(default: 7)" in text
     assert "(default: 5)" not in text
 
 

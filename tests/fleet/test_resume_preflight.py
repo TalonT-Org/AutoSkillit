@@ -123,7 +123,7 @@ class TestResumeJSONLPreflight:
             prev_state_path,
             DispatchRecord(
                 name="test-recipe",
-                status=DispatchStatus.SUCCESS,
+                status=DispatchStatus.RESUMABLE,
                 session_chain=["chain-session-id"],
             ),
         )

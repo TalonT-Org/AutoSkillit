@@ -50,6 +50,7 @@ class TestFleetErrorCodeEnum:
             "fleet_recipe_invalid",
             "fleet_dispatch_skipped",
             "fleet_process_stale",
+            "fleet_resume_session_missing",
         }
         assert {c.value for c in FleetErrorCode} == expected_values
 

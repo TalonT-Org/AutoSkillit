@@ -978,7 +978,7 @@ async def test_fourth_concurrent_dispatch_refused_with_max3(
 
 @pytest.mark.anyio
 async def test_end_to_end_resumable_dispatch_uses_resume_flag(
-    fleet_runtime: FleetRuntime, monkeypatch: Any
+    fleet_runtime: FleetRuntime, monkeypatch: Any, tmp_path: Path
 ) -> None:
     """resume_session_id reaches build_food_truck_cmd and produces --resume <id> in the cmd."""
     from autoskillit.fleet._api import execute_dispatch
@@ -1003,6 +1003,9 @@ async def test_end_to_end_resumable_dispatch_uses_resume_flag(
     spy_backend.build_food_truck_cmd = _spy_build
     rt.tool_ctx.backend = spy_backend
     rt.configure_shim("success")
+    jsonl_file = tmp_path / "test-session-id.jsonl"
+    jsonl_file.touch()
+    monkeypatch.setattr("autoskillit.fleet._api.claude_code_log_path", lambda *_: jsonl_file)
 
     await execute_dispatch(
         tool_ctx=rt.tool_ctx,

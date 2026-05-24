@@ -19,7 +19,7 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.medium, pytest.mark.featu
 
 @pytest.mark.anyio
 async def test_dispatch_food_truck_tool_passes_resume_session_id_to_executor(
-    tool_ctx_kitchen_open, monkeypatch
+    tool_ctx_kitchen_open, monkeypatch, tmp_path
 ):
     """dispatch_food_truck MCP tool forwards resume_session_id all the way to the executor."""
     from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
@@ -33,6 +33,9 @@ async def test_dispatch_food_truck_tool_passes_resume_session_id_to_executor(
     tool_ctx_kitchen_open.recipes = repo
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
+    jsonl_file = tmp_path / "sess-resume-123.jsonl"
+    jsonl_file.touch()
+    monkeypatch.setattr("autoskillit.fleet._api.claude_code_log_path", lambda *_: jsonl_file)
 
     await dispatch_food_truck(
         recipe="test-recipe",
@@ -46,7 +49,7 @@ async def test_dispatch_food_truck_tool_passes_resume_session_id_to_executor(
 
 @pytest.mark.anyio
 async def test_dispatch_food_truck_tool_passes_resume_message_to_executor(
-    tool_ctx_kitchen_open, monkeypatch
+    tool_ctx_kitchen_open, monkeypatch, tmp_path
 ):
     """dispatch_food_truck MCP tool forwards resume_message all the way to the executor."""
     from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
@@ -60,6 +63,9 @@ async def test_dispatch_food_truck_tool_passes_resume_message_to_executor(
     tool_ctx_kitchen_open.recipes = repo
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
+    jsonl_file = tmp_path / "sess-resume-123.jsonl"
+    jsonl_file.touch()
+    monkeypatch.setattr("autoskillit.fleet._api.claude_code_log_path", lambda *_: jsonl_file)
 
     await dispatch_food_truck(
         recipe="test-recipe",

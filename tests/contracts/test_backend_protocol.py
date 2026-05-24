@@ -89,6 +89,54 @@ def test_claude_code_backend_stream_parser_forwards_completion_marker():
     assert parser.completion_marker == "%%ORDER_UP%%"
 
 
+# -- isinstance conformance: CodexBackend ------------------------------------
+
+
+def test_codex_backend_satisfies_coding_agent_backend():
+    from autoskillit.core import CodingAgentBackend
+    from autoskillit.execution.backends import CodexBackend
+
+    assert isinstance(CodexBackend(), CodingAgentBackend)
+
+
+def test_codex_backend_stream_parser_satisfies_protocol():
+    from autoskillit.core import StreamParser
+    from autoskillit.execution.backends import CodexBackend
+
+    assert isinstance(CodexBackend().stream_parser(), StreamParser)
+
+
+def test_codex_backend_result_parser_satisfies_protocol():
+    from autoskillit.core import ResultParser
+    from autoskillit.execution.backends import CodexBackend
+
+    assert isinstance(CodexBackend().result_parser(), ResultParser)
+
+
+def test_codex_backend_env_policy_satisfies_protocol():
+    from autoskillit.core import EnvPolicy
+    from autoskillit.execution.backends import CodexBackend
+
+    assert isinstance(CodexBackend().env_policy(), EnvPolicy)
+
+
+# -- Signature conformance: EnvPolicy.build_env -------------------------------
+
+
+def test_env_policy_build_env_signature_includes_extras_and_required():
+    import inspect
+
+    from autoskillit.core import EnvPolicy
+
+    sig = inspect.signature(EnvPolicy.build_env)
+    params = sig.parameters
+
+    assert "extras" in params, "EnvPolicy.build_env must have 'extras' parameter"
+    assert params["extras"].default is None
+    assert "required" in params, "EnvPolicy.build_env must have 'required' parameter"
+    assert params["required"].default is None
+
+
 # -- Signature conformance: build_skill_session_cmd ---------------------------
 
 

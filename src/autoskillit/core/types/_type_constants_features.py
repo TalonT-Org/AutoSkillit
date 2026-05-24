@@ -8,8 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 
-from ._type_enums import FeatureLifecycle, IssueLabelState
 from ._type_constants_registries import TOOL_SUBSET_TAGS
+from ._type_enums import FeatureLifecycle, IssueLabelState
 
 __all__ = [
     "FeatureDef",
@@ -20,6 +20,7 @@ __all__ = [
     "LABEL_TRANSITIONS",
     "validate_label_transition",
 ]
+
 
 @dataclass(frozen=True, slots=True)
 class FeatureDef:

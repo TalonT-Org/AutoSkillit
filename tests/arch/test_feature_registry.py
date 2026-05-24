@@ -265,7 +265,7 @@ def test_config_dependency_validation(monkeypatch):
         skill_categories=frozenset(),
         import_package=None,
     )
-    import autoskillit.core.types._type_constants as tc
+    import autoskillit.core.types._type_constants_features as tc
 
     monkeypatch.setitem(tc.FEATURE_REGISTRY, "test_dep_a", dep_parent)
     monkeypatch.setitem(tc.FEATURE_REGISTRY, "test_dep_b", dep_feature)
@@ -283,8 +283,8 @@ def test_no_unregistered_feature_tag_on_tools():
     Known registries: FEATURE_REGISTRY names, PACK_REGISTRY names, and known
     non-feature structural tags (e.g. 'kitchen-core').
     """
-    from autoskillit.core.types._type_constants import (
-        FEATURE_REGISTRY,
+    from autoskillit.core.types._type_constants_features import FEATURE_REGISTRY
+    from autoskillit.core.types._type_constants_registries import (
         PACK_REGISTRY,
         TOOL_SUBSET_TAGS,
     )
@@ -379,7 +379,7 @@ def test_codex_backend_in_feature_registry():
 
 def test_is_feature_enabled_disabled_lifecycle_always_false(monkeypatch):
     """DISABLED lifecycle features return False regardless of config or experimental_enabled."""
-    import autoskillit.core.types._type_constants as tc
+    import autoskillit.core.types._type_constants_features as tc
     from autoskillit.core.feature_flags import is_feature_enabled
     from autoskillit.core.types._type_constants_features import FeatureDef
     from autoskillit.core.types._type_enums import FeatureLifecycle
@@ -403,7 +403,7 @@ def test_is_feature_enabled_disabled_lifecycle_always_false(monkeypatch):
 
 def test_build_features_dict_rejects_enabling_disabled_feature(monkeypatch):
     """_build_features_dict raises ConfigSchemaError if a DISABLED feature is set to True."""
-    import autoskillit.core.types._type_constants as tc
+    import autoskillit.core.types._type_constants_features as tc
     from autoskillit.config.settings import AutomationConfig, ConfigSchemaError
     from autoskillit.core.types._type_constants_features import FeatureDef
     from autoskillit.core.types._type_enums import FeatureLifecycle
@@ -427,7 +427,7 @@ def test_build_features_dict_rejects_enabling_disabled_feature(monkeypatch):
 
 def test_is_feature_enabled_experimental_blanket(monkeypatch):
     """EXPERIMENTAL feature is True when experimental_enabled=True and no override."""
-    import autoskillit.core.types._type_constants as tc
+    import autoskillit.core.types._type_constants_features as tc
     from autoskillit.core.feature_flags import is_feature_enabled
     from autoskillit.core.types._type_constants_features import FeatureDef
     from autoskillit.core.types._type_enums import FeatureLifecycle
@@ -451,7 +451,7 @@ def test_is_feature_enabled_experimental_blanket(monkeypatch):
 
 def test_is_feature_enabled_stable_unaffected_by_experimental_enabled(monkeypatch):
     """experimental_enabled has no effect on STABLE features."""
-    import autoskillit.core.types._type_constants as tc
+    import autoskillit.core.types._type_constants_features as tc
     from autoskillit.core.feature_flags import is_feature_enabled
     from autoskillit.core.types._type_constants_features import FeatureDef
     from autoskillit.core.types._type_enums import FeatureLifecycle
@@ -648,7 +648,7 @@ def test_user_config_override_beats_auto_detect(monkeypatch: pytest.MonkeyPatch,
 
 def test_experimental_blanket_does_not_promote_alignment_guarded_features(monkeypatch):
     """experimental_enabled must not promote features with requires_backend_alignment=True."""
-    import autoskillit.core.types._type_constants as tc
+    import autoskillit.core.types._type_constants_features as tc
     from autoskillit.core.feature_flags import is_feature_enabled
     from autoskillit.core.types._type_constants_features import FeatureDef
     from autoskillit.core.types._type_enums import FeatureLifecycle

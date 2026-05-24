@@ -183,7 +183,7 @@ def _get_process_start_mtime() -> int:
 def _check_process_staleness() -> bool:
     """Return True if the package directory or rule files were modified after process start.
 
-    Fleet sessions (L3) always return False — dispatched subprocesses have fresh
+    Fleet sessions always return False — dispatched subprocesses have fresh
     baselines and revalidate independently.
     """
     if session_type() is SessionType.FLEET:

@@ -901,7 +901,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "circular imports; all enums/protocols/constants consolidated here",
     ),
     "execution/headless/__init__.py": (
-        1005,
+        1015,
         "REQ-CNST-010-E2: headless session orchestration — Channel B drain-race "
         "recovery + IDLE_STALL routing + contract nudge resume tier "
         "+ DIR_MISSING late-bind recovery arm + RecordingSubprocessRunner "
@@ -909,6 +909,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "+ _execute_claude_headless extraction + dispatch_food_truck orchestration-L2 path "
         "+ campaign_id/dispatch_id propagation kwargs "
         "+ fs-level write detection (pre/post temp-dir snapshot + _resolve_skill_temp_dir) "
+        "+ clone guard write-scope extension (planner session write isolation) "
         "+ api_retry field forwarding to flush_session_log; "
         "splitting would fragment the adjudication pipeline across modules",
     ),

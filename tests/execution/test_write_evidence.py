@@ -234,6 +234,8 @@ class TestRecursiveSnapshot:
         (sub_dir / "existing.json").write_text("{}")
 
         async def mock_runner(cmd, **kwargs):
+            if cmd[0] == "git":
+                return _make_result(returncode=1, stdout="")
             (sub_dir / "new_output.json").write_text('{"data": true}')
             return _make_result(returncode=0, stdout=_success_session_json("done"))
 
@@ -293,7 +295,8 @@ class TestPlannerSkillEndToEnd:
         # Pre-snapshot: run_dir is empty at session start
 
         async def mock_runner(cmd, **kwargs):
-            # Simulate the skill writing to run_dir during the session
+            if cmd[0] == "git":
+                return _make_result(returncode=1, stdout="")
             (run_dir / "refined_plan.json").write_text("{}")
             return _make_result(returncode=0, stdout=_success_session_json("done"))
 

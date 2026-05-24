@@ -99,7 +99,7 @@ HOOK_REGISTRY: list[HookDef] = [
         scripts=["guards/generated_file_write_guard.py"],
     ),
     HookDef(
-        matcher=r"Write|Edit|Bash",
+        matcher=r"Write|Edit|Bash|mcp__.*autoskillit.*__run_cmd",
         scripts=["guards/write_guard.py"],
         session_scope="headless_only",
     ),

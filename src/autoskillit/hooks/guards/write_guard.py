@@ -89,7 +89,7 @@ def main() -> None:
         return
 
     tool_name = data.get("tool_name", "")
-    if tool_name not in ("Write", "Edit", "Bash"):
+    if tool_name not in ("Write", "Edit", "Bash") and "run_cmd" not in tool_name:
         sys.exit(0)
 
     tool_input = data.get("tool_input", {})
@@ -101,8 +101,8 @@ def main() -> None:
         resolved = os.path.realpath(path)
         return resolved.startswith(norm_prefix) or resolved == norm_prefix.rstrip("/")
 
-    if tool_name == "Bash":
-        command = tool_input.get("command", "")
+    if tool_name == "Bash" or "run_cmd" in tool_name:
+        command = tool_input.get("command", "") or tool_input.get("cmd", "")
         targets = _extract_bash_write_targets(command)
         if targets is None:
             sys.exit(0)

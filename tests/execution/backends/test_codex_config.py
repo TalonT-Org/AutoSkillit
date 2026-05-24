@@ -113,6 +113,46 @@ class TestSerializeToml:
         assert count == 1
         tomllib.loads(serialized)
 
+    def test_array_of_tables_round_trip(self):
+        original = {
+            "hooks": [{"event": "PreToolUse", "matcher": "Bash", "command": "python3 guard.py"}]
+        }
+        serialized = _serialize_toml(original)
+        assert "[[hooks]]" in serialized
+        parsed = tomllib.loads(serialized)
+        assert parsed == original
+
+    def test_nested_array_of_tables_round_trip(self):
+        original = {
+            "hooks": [
+                {
+                    "event": "PreToolUse",
+                    "hooks": [{"type": "command", "command": "python3 guard.py"}],
+                }
+            ]
+        }
+        serialized = _serialize_toml(original)
+        assert "[[hooks]]" in serialized
+        assert "[[hooks.hooks]]" in serialized
+        parsed = tomllib.loads(serialized)
+        assert parsed == original
+
+    def test_mixed_list_raises_type_error(self):
+        data = {"items": [{"a": 1}, "b"]}
+        with pytest.raises(TypeError, match="dict and non-dict"):
+            _serialize_toml(data)
+
+    def test_array_of_tables_with_scalar_siblings(self):
+        original = {
+            "config": {
+                "name": "test",
+                "entries": [{"key": "val"}],
+            }
+        }
+        serialized = _serialize_toml(original)
+        parsed = tomllib.loads(serialized)
+        assert parsed == original
+
 
 class TestWriteCodexConfig:
     def test_writes_readable_toml(self, tmp_path):

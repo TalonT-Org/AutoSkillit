@@ -12,6 +12,7 @@ session/ (see session/CLAUDE.md), ui/ (see ui/CLAUDE.md), update/ (see update/CL
 | `app.py` | CLI entry: `serve`, `init`, `config`, `skills`, `recipes`, `doctor`, `update`, etc. |
 | `_restart.py` | `perform_restart()` → `NoReturn`: sets `SKIP_UPDATE_CHECK`, calls `os.execv` |
 | `_hooks.py` | `PreToolUse` hook registration helpers |
+| `_hooks_codex.py` | Codex config.toml hook generation and sync (`generate_codex_hooks_config`, `sync_hooks_to_codex_config`) |
 | `_init_helpers.py` | `autoskillit init` implementation helpers |
 | `_installed_plugins.py` | `InstalledPluginsFile` — canonical accessor for `installed_plugins.json` |
 | `_install_info.py` | `InstallInfo`, `InstallType`, `detect_install()`, `comparison_branch()`, `dismissal_window()`, `upgrade_command()` |

@@ -69,7 +69,7 @@ def test_execution_map_always_block_requires_file_output() -> None:
     """SKILL.md ALWAYS block must require writing the execution map to temp directory."""
     text = _skill_md_text()
     always_match = re.search(r"\*\*ALWAYS:\*\*(.*?)(?=\n\*\*|\n##)", text, re.DOTALL)
-    assert always_match is not None, "SKILL.md must have an **ALWAYS:** block"
+    assert always_match is not None, "SKILL.md must have a **ALWAYS:** block"
     always_block = always_match.group(1)
     assert "AUTOSKILLIT_TEMP" in always_block, (
         "ALWAYS block must reference AUTOSKILLIT_TEMP output directory"
@@ -97,7 +97,7 @@ def test_execution_map_review_approach_flag_declared() -> None:
     """SKILL.md Arguments section must declare --assess-review-approach flag."""
     text = _skill_md_text()
     args_match = re.search(r"## Arguments(.*?)(?=\n##)", text, re.DOTALL)
-    assert args_match is not None, "SKILL.md must have an ## Arguments section"
+    assert args_match is not None, "SKILL.md must have a ## Arguments section"
     args_section = args_match.group(1)
     assert "--assess-review-approach" in args_section, (
         "Arguments section must declare --assess-review-approach flag"
@@ -215,6 +215,15 @@ def sample_bem_json_with_deferrals() -> str:
                 }
             ],
             "merge_order": [1155, 1156],
+            "deferred_groups": [
+                {
+                    "group": 1,
+                    "parallel": False,
+                    "gated_by": [887],
+                    "issues": [{"number": 1158, "title": "C"}],
+                }
+            ],
+            "deferred_merge_order": [1158],
             "in_progress_context": [{"number": 887, "title": "X"}],
             "cross_assessments": [
                 {
@@ -225,9 +234,6 @@ def sample_bem_json_with_deferrals() -> str:
                     "reasoning": "...",
                     "recommendation": "defer",
                 }
-            ],
-            "deferred_issues": [
-                {"number": 1158, "title": "C", "blocked_by": [887], "reason": "..."}
             ],
         }
     )
@@ -248,6 +254,15 @@ def sample_bem_json_with_critical_deferral() -> str:
             "has_deferred": True,
             "groups": [{"group": 1, "parallel": True, "issues": [{"number": 1155, "title": "A"}]}],
             "merge_order": [1155],
+            "deferred_groups": [
+                {
+                    "group": 1,
+                    "parallel": False,
+                    "gated_by": [887],
+                    "issues": [{"number": 1158, "title": "B"}],
+                }
+            ],
+            "deferred_merge_order": [1158],
             "in_progress_context": [{"number": 887, "title": "X"}],
             "cross_assessments": [
                 {
@@ -259,9 +274,6 @@ def sample_bem_json_with_critical_deferral() -> str:
                     "recommendation": "defer",
                 }
             ],
-            "deferred_issues": [
-                {"number": 1158, "title": "B", "blocked_by": [887], "reason": "..."}
-            ],
         }
     )
 
@@ -270,7 +282,7 @@ def test_critical_cross_assessment_defers_issue(
     sample_bem_json_with_critical_deferral: str,
 ) -> None:
     data = json.loads(sample_bem_json_with_critical_deferral)
-    deferred_numbers = {d["number"] for d in data["deferred_issues"]}
+    deferred_numbers = {i["number"] for g in data["deferred_groups"] for i in g["issues"]}
     grouped_numbers = {i["number"] for g in data["groups"] for i in g["issues"]}
     assert deferred_numbers.isdisjoint(grouped_numbers), (
         "Deferred issues must not appear in any dispatch group"
@@ -293,9 +305,10 @@ def sample_bem_json_no_in_progress() -> str:
                 }
             ],
             "merge_order": [1155, 1156],
+            "deferred_groups": [],
+            "deferred_merge_order": [],
             "in_progress_context": [],
             "cross_assessments": [],
-            "deferred_issues": [],
         }
     )
 
@@ -305,24 +318,50 @@ def test_no_in_progress_produces_no_deferrals(sample_bem_json_no_in_progress: st
     assert data["has_deferred"] is False
     assert data["deferred_count"] == 0
     assert data["dispatched_count"] == data["total_issues"]
-    assert data["deferred_issues"] == []
-    assert data["in_progress_context"] == []
-    assert data["cross_assessments"] == []
+    assert data["deferred_groups"] == []
+    assert data["deferred_merge_order"] == []
 
 
-def test_blocked_by_is_array(sample_bem_json_with_deferrals: str) -> None:
+def test_gated_by_is_array(sample_bem_json_with_deferrals: str) -> None:
     data = json.loads(sample_bem_json_with_deferrals)
-    for deferred in data["deferred_issues"]:
-        assert isinstance(deferred["blocked_by"], list), (
-            f"blocked_by for issue {deferred['number']} must be an array"
+    for dg in data["deferred_groups"]:
+        assert isinstance(dg["gated_by"], list), (
+            f"gated_by for deferred group {dg['group']} must be an array"
         )
+
+
+def test_deferred_groups_schema(sample_bem_json_with_deferrals: str) -> None:
+    data = json.loads(sample_bem_json_with_deferrals)
+    for dg in data["deferred_groups"]:
+        assert "group" in dg, "deferred_groups entry must have 'group' int"
+        assert "parallel" in dg, "deferred_groups entry must have 'parallel' bool"
+        assert "issues" in dg, "deferred_groups entry must have 'issues' array"
+        assert "gated_by" in dg, "deferred_groups entry must have 'gated_by' array"
+        assert isinstance(dg["gated_by"], list)
+        assert all(isinstance(n, int) for n in dg["gated_by"])
+
+
+def test_deferred_merge_order_covers_deferred_issues(
+    sample_bem_json_with_deferrals: str,
+) -> None:
+    data = json.loads(sample_bem_json_with_deferrals)
+    deferred_numbers = {i["number"] for g in data["deferred_groups"] for i in g["issues"]}
+    assert set(data["deferred_merge_order"]) == deferred_numbers
+
+
+def test_deferred_count_matches_deferred_groups(
+    sample_bem_json_with_deferrals: str,
+) -> None:
+    data = json.loads(sample_bem_json_with_deferrals)
+    total_deferred = sum(len(g["issues"]) for g in data["deferred_groups"])
+    assert data["deferred_count"] == total_deferred
 
 
 def test_bem_skillmd_has_cross_assessment_section() -> None:
     content = _skill_md_text()
     assert "cross_assessments" in content
     assert "in_progress_context" in content
-    assert "deferred_issues" in content
+    assert "deferred_groups" in content
     assert "has_deferred" in content
 
 

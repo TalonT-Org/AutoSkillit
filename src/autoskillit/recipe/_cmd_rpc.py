@@ -579,6 +579,8 @@ def emit_fallback_map(
     data = {
         "groups": [{"group": 1, "parallel": False, "issues": issues}],
         "merge_order": nums,
+        "deferred_groups": [],
+        "deferred_merge_order": [],
         "pairwise_assessments": [],
     }
     map_file = Path(temp_dir) / "bem-fallback-map.json"

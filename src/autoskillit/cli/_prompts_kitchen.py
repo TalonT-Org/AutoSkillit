@@ -162,9 +162,16 @@ has been produced and read.
    )
 
 3. Read dispatch_plan from l3_payload in the dispatch_food_truck response. It is a JSON
-   array: [{{"group": N, "parallel": bool, "issues": "url1,url2"}}, ...].
+   array: [{{"group": N, "parallel": bool, "issues": "url1,url2"}},
+   {{"group": M, "parallel": bool, "issues": "urlN", "gated": true, "gated_by": [887]}}, ...].
    If dispatch_plan is empty or bem-wrapper failed, fall back to sequential dispatch
    (one issue at a time, no parallelism).
+
+**Gated groups:** If a dispatch_plan entry has `"gated": true`, do NOT dispatch it.
+Hold gated groups — they are blocked by in-progress issues listed in `gated_by`.
+After all non-gated groups complete, report held gated groups in the session result
+with their blocker issue numbers. Do not poll or wait for blockers to clear — the
+sous-chef path handles deferred issue lifecycle.
 
 4. For each group in array order:
    - parallel: true → issue ALL dispatch_food_truck calls for this group in a single

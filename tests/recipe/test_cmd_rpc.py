@@ -222,6 +222,16 @@ def test_emit_fallback_map_no_urls(tmp_path):
         emit_fallback_map(issue_urls="", temp_dir=str(tmp_path))
 
 
+def test_emit_fallback_map_includes_deferred_groups(tmp_path):
+    result = emit_fallback_map(
+        issue_urls="https://github.com/o/r/issues/1,https://github.com/o/r/issues/2",
+        temp_dir=str(tmp_path),
+    )
+    data = json.loads(Path(result["execution_map"]).read_text())
+    assert data["deferred_groups"] == []
+    assert data["deferred_merge_order"] == []
+
+
 @pytest.mark.medium
 def test_main_repo_guard_removes_embedded_worktree(tmp_path):
     """main_repo_guard detects and removes a linked worktree embedded inside the clone."""

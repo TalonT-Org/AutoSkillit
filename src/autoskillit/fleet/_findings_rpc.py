@@ -44,8 +44,9 @@ def load_execution_map(map_path: str) -> dict[str, str]:
     """Read a BEM JSON file and extract the groups array.
 
     Callable via run_python.
-    Returns {"groups_json": "[{...}]", "total_groups": "N"} on success
-    or {"error": "..."} on failure.
+    Returns {"groups_json": "[{...}]", "total_groups": "N",
+             "deferred_groups_json": "[{...}]", "total_deferred_groups": "N"}
+    on success or {"error": "..."} on failure.
     """
     path = Path(map_path)
     if not path.exists():
@@ -59,7 +60,12 @@ def load_execution_map(map_path: str) -> dict[str, str]:
     groups = data["groups"]
     if not isinstance(groups, list):
         return {"error": f"BEM 'groups' must be a list, got {type(groups).__name__}"}
+    deferred_groups = data.get("deferred_groups", [])
+    if not isinstance(deferred_groups, list):
+        deferred_groups = []
     return {
         "groups_json": json.dumps(groups),
         "total_groups": str(len(groups)),
+        "deferred_groups_json": json.dumps(deferred_groups),
+        "total_deferred_groups": str(len(deferred_groups)),
     }

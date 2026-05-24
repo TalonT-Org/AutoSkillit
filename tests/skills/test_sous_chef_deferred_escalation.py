@@ -18,11 +18,20 @@ def _sous_chef_text() -> str:
 
 def test_sous_chef_skillmd_has_deferred_escalation() -> None:
     content = _sous_chef_text()
-    assert "deferred_issues" in content
+    assert "deferred_groups" in content
+    assert "gated_by" in content
     assert "AskUserQuestion" in content
     assert "Wait" in content and "Proceed" in content and "Drop" in content
     assert "release_issue" in content
     assert "headless" in content.lower()
+    # Old field names must not survive the rename
+    step6_start = content.find("6. Handle deferred")
+    assert step6_start != -1, "sous-chef must have Step 6 deferred handling section"
+    step6_text = content[step6_start:]
+    assert "deferred_issues" not in step6_text, (
+        "Steps 6a-6e must use deferred_groups, not deferred_issues"
+    )
+    assert "blocked_by" not in step6_text, "Steps 6a-6e must use gated_by, not blocked_by"
 
 
 def test_sous_chef_has_headless_wait_rule() -> None:

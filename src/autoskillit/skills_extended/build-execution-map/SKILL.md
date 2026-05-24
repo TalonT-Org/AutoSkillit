@@ -226,22 +226,35 @@ others merges last).
 The `merge_order` list is the flattened sequence of issue numbers across groups in dispatch
 order.
 
-#### Step 3b — Deferred Issue Routing
+#### Step 3b — Deferred Issue Partitioning
 
-After assembling dispatch groups, separate issues flagged as `critical` in Step 2b:
+After assembling dispatch groups, partition them based on deferral status from Step 2b:
 
-1. For each target issue that has at least one `critical` cross-assessment, **remove it from
-   its dispatch group** and add it to the `deferred_issues` array.
-2. If removing a deferred issue leaves a group empty, remove that group and renumber.
-3. Compute:
-   - `deferred_count` = count of issues in `deferred_issues`
+1. Identify deferred issues: any target issue with at least one `critical` cross-assessment.
+2. Partition each assembled group:
+   - If **all** issues in the group are deferred: move the entire group to `deferred_groups[]`.
+     Set `gated_by` to the union of all blocker issue numbers from the group's issues' critical
+     cross-assessments.
+   - If **some** issues are deferred and others are not: split the group. Non-deferred issues
+     remain in `groups[]` (adjusting `parallel` to `false` if the group shrinks to 1 issue).
+     Deferred issues form a new entry in `deferred_groups[]` with the appropriate `gated_by`
+     (and `parallel: false` if the deferred sub-group contains only 1 issue — same rule as `groups[]`).
+   - If **no** issues are deferred: keep the entire group in `groups[]`.
+3. Re-number groups sequentially in both `groups[]` (starting from 1) and `deferred_groups[]`
+   (starting from 1, independent numbering).
+4. Compute `merge_order` from `groups[]` and `deferred_merge_order` from `deferred_groups[]`,
+   both following the same foundational-first ordering principle from Step 3.
+5. Compute:
+   - `deferred_count` = total issues across all `deferred_groups[]` entries
    - `dispatched_count` = `total_issues` − `deferred_count`
    - `has_deferred` = `true` if `deferred_count > 0`, else `false`
-4. Each `deferred_issues` entry includes `blocked_by` as an **array** — a target issue may
-   have critical conflicts with multiple in-progress issues.
 
-When no cross-assessments produce `critical` severity, this step is a no-op: `deferred_issues`
-is `[]`, `has_deferred` is `false`, `dispatched_count` equals `total_issues`.
+Each `deferred_groups[]` entry has the same structure as `groups[]` (`group`, `parallel`,
+`issues[]`) plus a `gated_by` field listing the in-progress blocker issue numbers as an array.
+
+When no cross-assessments produce `critical` severity, this step is a no-op: `deferred_groups`
+is `[]`, `deferred_merge_order` is `[]`, `has_deferred` is `false`, `dispatched_count`
+equals `total_issues`.
 
 ### Step 3.5 — Apply Parallel Cap
 
@@ -371,20 +384,23 @@ structured output tokens. If context is exhausted mid-execution:
       "recommendation": "defer"
     }
   ],
-  "deferred_issues": [
+  "deferred_groups": [
     {
-      "number": 1158,
-      "title": "...",
-      "blocked_by": [887],
-      "reason": "..."
+      "group": 1,
+      "parallel": false,
+      "gated_by": [887],
+      "issues": [
+        {"number": 1158, "title": "..."}
+      ]
     }
-  ]
+  ],
+  "deferred_merge_order": [1158]
 }
 ```
 
 **Schema notes:**
 - `total_issues` counts ALL input issues (backward-compatible — callers expect `total_issues == len(input_issues)`)
-- `in_progress_context`, `cross_assessments`, `deferred_issues` are JSON-body-only — NOT emitted as terminal output tokens
+- `deferred_groups`, `deferred_merge_order`, `in_progress_context`, `cross_assessments` are JSON-body-only — NOT emitted as terminal output tokens
 - `has_deferred`, `deferred_count`, `dispatched_count` ARE emitted as terminal output tokens
 
 When `--assess-review-approach` is active, each issue object gains two additional fields:
@@ -397,5 +413,11 @@ When `--assess-review-approach` is active, each issue object gains two additiona
   "review_approach_reasoning": "Issue proposes a new caching layer with multiple viable strategies. External research would surface current best practices and library maturity."
 }
 ```
+
+Note on `deferred_merge_order`: This field is schema-only in the current plan — no downstream
+code path reads it. It is included for structural completeness and to support future supplementary
+BEM optimization (Step 6e can reuse pre-computed ordering). When deferred issues are re-dispatched
+via Step 6e, the supplementary BEM generates its own `merge_order`, so `deferred_merge_order`
+is advisory.
 
 When the flag is inactive, these fields are omitted entirely (not set to defaults).

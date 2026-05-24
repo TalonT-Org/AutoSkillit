@@ -22,6 +22,7 @@ from autoskillit.core import (
     truncate_text,
     validate_add_dir,
 )
+from autoskillit.core.io import resolve_skill_temp_dir as _resolve_skill_temp_dir
 from autoskillit.server import mcp
 from autoskillit.server._guards import (
     _check_dry_walkthrough,
@@ -386,6 +387,11 @@ async def run_skill(
             if not resolved_dir.is_absolute():
                 resolved_dir = Path(cwd) / output_dir
             write_watch_dirs.append(resolved_dir)
+
+        if not write_watch_dirs:
+            _default_temp = _resolve_skill_temp_dir(cwd, skill_command)
+            if _default_temp:
+                write_watch_dirs.append(_default_temp)
 
         is_read_only = bool(
             tool_ctx.read_only_resolver and tool_ctx.read_only_resolver(skill_command)

@@ -908,7 +908,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "step-name auto-derivation gate + recipe identity threading "
         "+ _execute_claude_headless extraction + dispatch_food_truck orchestration-L2 path "
         "+ campaign_id/dispatch_id propagation kwargs "
-        "+ fs-level write detection (pre/post temp-dir snapshot + _resolve_skill_temp_dir) "
+        "+ fs-level write detection (pre/post temp-dir snapshot) "
         "+ clone guard write-scope extension (planner session write isolation) "
         "+ api_retry field forwarding to flush_session_log; "
         "splitting would fragment the adjudication pipeline across modules",

@@ -39,12 +39,12 @@ from autoskillit.core import (
     WriteBehaviorSpec,
     claude_code_project_dir,
     collect_version_snapshot,
-    extract_skill_name,
     get_logger,
     is_feature_enabled,
     is_git_worktree,
     temp_dir_display_str,
 )
+from autoskillit.core.io import resolve_skill_temp_dir as _resolve_skill_temp_dir
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.clone_guard import (
     check_and_revert_clone_contamination,
@@ -173,13 +173,6 @@ def _derive_step_name_from_skill_command(skill_command: str) -> str:
     if ":" in token:
         token = token.rsplit(":", 1)[-1]
     return token
-
-
-def _resolve_skill_temp_dir(cwd: str, skill_command: str) -> Path | None:
-    name = extract_skill_name(skill_command)
-    if not name:
-        return None
-    return Path(cwd) / ".autoskillit" / "temp" / name
 
 
 def _recursive_snapshot(directory: Path) -> set[str]:

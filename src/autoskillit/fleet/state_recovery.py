@@ -48,13 +48,18 @@ _ALWAYS_BLOCKING_STATUSES = frozenset(
 _RETRIABLE_NON_SUCCESS = _ALWAYS_BLOCKING_STATUSES | frozenset({DispatchStatus.FAILURE})
 
 
+_RESUMABLE_RETRY_REASONS: frozenset[str] = frozenset(
+    {FleetErrorCode.FLEET_L3_TIMEOUT, FleetErrorCode.FLEET_QUOTA_EXHAUSTED}
+)
+
+
 def _count_consecutive_resumable_timeouts(history: list[dict[str, Any]]) -> int:
-    """Count consecutive RESUMABLE + FLEET_L3_TIMEOUT entries from the tail."""
+    """Count consecutive RESUMABLE entries with retriable reasons from the tail."""
     count = 0
     for entry in reversed(history):
         if (
             entry.get("status") == str(DispatchStatus.RESUMABLE)
-            and entry.get("reason") == FleetErrorCode.FLEET_L3_TIMEOUT
+            and entry.get("reason") in _RESUMABLE_RETRY_REASONS
         ):
             count += 1
         else:
@@ -241,7 +246,11 @@ def resume_campaign_from_state(
                 timeout_count = _count_consecutive_resumable_timeouts(d.attempt_history)
                 if timeout_count >= MAX_CONSECUTIVE_RESUME_ATTEMPTS:
                     d.status = DispatchStatus.FAILURE
-                    d.reason = FleetErrorCode.FLEET_L3_TIMEOUT
+                    d.reason = (
+                        d.attempt_history[-1].get("reason", FleetErrorCode.FLEET_L3_TIMEOUT)
+                        if d.attempt_history
+                        else FleetErrorCode.FLEET_L3_TIMEOUT
+                    )
                     m.mark_dirty()
                     return ResumeDecision(
                         next_dispatch_name="",

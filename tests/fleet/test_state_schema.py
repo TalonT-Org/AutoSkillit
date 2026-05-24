@@ -382,6 +382,8 @@ class TestDispatchRecordToDict:
             "sidecar_path",
             "attempt_history",
             "resume_checkpoint",
+            "wait_seconds",
+            "resets_at",
             "labels_cleaned",
         }
 

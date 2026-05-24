@@ -75,6 +75,10 @@ def classify_dispatch_outcome(
 
     if parsed.outcome == "completed_clean" and parsed.payload and parsed.payload.get("success"):
         return DispatchStatus.SUCCESS, ""
+    if parsed.outcome == "completed_clean" and parsed.payload:
+        reason = parsed.payload.get("reason", "")
+        if reason == FleetErrorCode.FLEET_QUOTA_EXHAUSTED:
+            return DispatchStatus.RESUMABLE, FleetErrorCode.FLEET_QUOTA_EXHAUSTED
     if parsed.outcome == "completed_clean":
         reason = parsed.payload.get("reason", "") if parsed.payload else ""
         return DispatchStatus.FAILURE, reason

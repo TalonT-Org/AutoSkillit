@@ -27,7 +27,10 @@ from autoskillit.execution.headless import (
     _parse_stdout,
     _synthesize_from_write_artifacts,
 )
-from autoskillit.execution.headless._headless_result import _adapt_agent_result
+from autoskillit.execution.headless._headless_result import (
+    _adapt_agent_result,
+    _compute_write_evidence,
+)
 from autoskillit.execution.session import ClaudeSessionResult
 from autoskillit.execution.session._session_outcome import _compute_outcome
 from tests.execution.conftest import _make_tool_use_line, _sr, _success_session_json
@@ -537,7 +540,6 @@ class TestComputeWriteEvidenceCodex:
     """Codex file_changes path: _compute_write_evidence with file_changes parameter."""
 
     def test_single_file_change_has_evidence(self):
-        from autoskillit.execution.headless._headless_result import _compute_write_evidence
 
         session = ClaudeSessionResult(
             subtype=CliSubtype.SUCCESS,
@@ -559,7 +561,6 @@ class TestComputeWriteEvidenceCodex:
         assert evidence.file_changes_count == 1
 
     def test_multiple_file_changes_has_evidence(self):
-        from autoskillit.execution.headless._headless_result import _compute_write_evidence
 
         session = ClaudeSessionResult(
             subtype=CliSubtype.SUCCESS,
@@ -581,7 +582,6 @@ class TestComputeWriteEvidenceCodex:
         assert evidence.file_changes_count == 3
 
     def test_empty_file_changes_no_write_tools_no_evidence(self):
-        from autoskillit.execution.headless._headless_result import _compute_write_evidence
 
         session = ClaudeSessionResult(
             subtype=CliSubtype.SUCCESS,
@@ -1137,7 +1137,6 @@ class TestExtractFileChanges:
 
 class TestComputeWriteEvidenceWithFileChanges:
     def test_compute_write_evidence_sets_file_changes_count_when_no_write_calls(self) -> None:
-        from autoskillit.execution.headless._headless_result import _compute_write_evidence
 
         session = ClaudeSessionResult(
             subtype=CliSubtype.SUCCESS,
@@ -1151,7 +1150,6 @@ class TestComputeWriteEvidenceWithFileChanges:
         assert evidence.has_evidence is True
 
     def test_compute_write_evidence_ignores_file_changes_when_write_calls_exist(self) -> None:
-        from autoskillit.execution.headless._headless_result import _compute_write_evidence
 
         session = ClaudeSessionResult(
             subtype=CliSubtype.SUCCESS,

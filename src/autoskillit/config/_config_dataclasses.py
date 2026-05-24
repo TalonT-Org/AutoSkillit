@@ -130,10 +130,29 @@ class CoreRunConfig:
     default_model: str = "sonnet"
     model_override: str | None = None
     provider: str = "anthropic"
+    step_overrides: dict[str, str] = field(default_factory=dict)
+    recipe_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.default_model:
             raise ValueError("CoreRunConfig.default_model must not be empty")
+        for step, model_val in self.step_overrides.items():
+            if not isinstance(model_val, str):
+                raise ValueError(
+                    f"step_overrides[{step!r}] must be a string, got {type(model_val).__name__!r}"
+                )
+        for recipe, overrides in self.recipe_overrides.items():
+            if not isinstance(overrides, dict):
+                raise ValueError(
+                    f"recipe_overrides[{recipe!r}] must be a dict, "
+                    f"got {type(overrides).__name__!r}"
+                )
+            for step, model_val in overrides.items():
+                if not isinstance(model_val, str):
+                    raise ValueError(
+                        f"recipe_overrides[{recipe!r}][{step!r}] must be a string, "
+                        f"got {type(model_val).__name__!r}"
+                    )
 
 
 @dataclass

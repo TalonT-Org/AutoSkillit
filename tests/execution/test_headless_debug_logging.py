@@ -133,3 +133,60 @@ class TestResolveModelLogging:
         model_logs = [r for r in logs if r.get("event") == "model_resolved"]
         assert model_logs
         assert model_logs[0]["tier"] == "none"
+
+    def test_logs_recipe_override_tier(self):
+        from autoskillit.execution.headless import _resolve_model
+
+        cfg = self._make_config()
+        cfg.model.recipe_overrides = {"impl": {"plan": "opus"}}
+        with structlog.testing.capture_logs() as logs:
+            result = _resolve_model("", cfg, step_name="plan", recipe_name="impl")
+        assert result == "opus"
+        model_logs = [r for r in logs if r.get("event") == "model_resolved"]
+        assert model_logs
+        assert model_logs[0]["tier"] == "recipe_override"
+
+    def test_logs_step_override_tier(self):
+        from autoskillit.execution.headless import _resolve_model
+
+        cfg = self._make_config()
+        cfg.model.step_overrides = {"plan": "opus"}
+        with structlog.testing.capture_logs() as logs:
+            result = _resolve_model("", cfg, step_name="plan")
+        assert result == "opus"
+        model_logs = [r for r in logs if r.get("event") == "model_resolved"]
+        assert model_logs
+        assert model_logs[0]["tier"] == "step_override"
+
+    def test_recipe_override_beats_step_override(self):
+        from autoskillit.execution.headless import _resolve_model
+
+        cfg = self._make_config()
+        cfg.model.step_overrides = {"plan": "haiku"}
+        cfg.model.recipe_overrides = {"impl": {"plan": "opus"}}
+        result = _resolve_model("", cfg, step_name="plan", recipe_name="impl")
+        assert result == "opus"
+
+    def test_step_override_beats_step_model(self):
+        from autoskillit.execution.headless import _resolve_model
+
+        cfg = self._make_config()
+        cfg.model.step_overrides = {"plan": "opus"}
+        result = _resolve_model("sonnet", cfg, step_name="plan")
+        assert result == "opus"
+
+    def test_override_beats_recipe_override(self):
+        from autoskillit.execution.headless import _resolve_model
+
+        cfg = self._make_config(override="haiku")
+        cfg.model.recipe_overrides = {"impl": {"plan": "opus"}}
+        result = _resolve_model("", cfg, step_name="plan", recipe_name="impl")
+        assert result == "haiku"
+
+    def test_recipe_override_no_leak(self):
+        from autoskillit.execution.headless import _resolve_model
+
+        cfg = self._make_config(default="sonnet")
+        cfg.model.recipe_overrides = {"impl": {"plan": "opus"}}
+        result = _resolve_model("", cfg, step_name="plan", recipe_name="other")
+        assert result == "sonnet"

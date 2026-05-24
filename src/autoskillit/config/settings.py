@@ -412,6 +412,8 @@ class AutomationConfig:
                 else _mc["default_model"],
                 model_override=val(mc, "override", _mc["model_override"]) or None,
                 provider=str(val(mc, "provider", _mc["provider"])),
+                step_overrides=val(mc, "step_overrides", _mc["step_overrides"]),
+                recipe_overrides=val(mc, "recipe_overrides", _mc["recipe_overrides"]),
             ),
             worktree_setup=WorktreeSetupConfig(
                 command=_to_optional_list(val(ws, "command", _ws["command"])),
@@ -582,7 +584,9 @@ def _build_config_schema() -> dict[str, frozenset[str]]:
         # YAML uses short keys ('default', 'override') to keep user config concise;
         # the Python fields use explicit names to avoid shadowing builtins.
         if f.name == "model":
-            schema["model"] = frozenset({"default", "override", "provider"})
+            schema["model"] = frozenset(
+                {"default", "override", "provider", "step_overrides", "recipe_overrides"}
+            )
             continue
         # Skip the scalar experimental_enabled field — it is handled under the features section
         if f.name == "experimental_enabled":

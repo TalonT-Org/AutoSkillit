@@ -56,6 +56,68 @@ class TestDefaultConfig:
         assert cfg.model_override is None
 
 
+class TestModelStepOverrides:
+    def test_default_model_step_overrides(self):
+        cfg = AutomationConfig()
+        assert cfg.model.step_overrides == {}
+        assert cfg.model.recipe_overrides == {}
+
+    def test_step_overrides_rejects_non_string_value(self):
+        from autoskillit.config import CoreRunConfig
+
+        with pytest.raises(ValueError, match="step_overrides"):
+            CoreRunConfig(step_overrides={"plan": 42})
+
+    def test_recipe_overrides_rejects_non_dict_inner(self):
+        from autoskillit.config import CoreRunConfig
+
+        with pytest.raises(ValueError, match="recipe_overrides"):
+            CoreRunConfig(recipe_overrides={"impl": "opus"})
+
+    def test_recipe_overrides_rejects_non_string_inner_value(self):
+        from autoskillit.config import CoreRunConfig
+
+        with pytest.raises(ValueError, match="recipe_overrides"):
+            CoreRunConfig(recipe_overrides={"impl": {"plan": 42}})
+
+    def test_valid_step_overrides_accepted(self):
+        from autoskillit.config import CoreRunConfig
+
+        cfg = CoreRunConfig(step_overrides={"plan": "opus"})
+        assert cfg.step_overrides == {"plan": "opus"}
+
+    def test_valid_recipe_overrides_accepted(self):
+        from autoskillit.config import CoreRunConfig
+
+        cfg = CoreRunConfig(recipe_overrides={"impl": {"plan": "opus"}})
+        assert cfg.recipe_overrides == {"impl": {"plan": "opus"}}
+
+    def test_yaml_loads_step_overrides(self, tmp_path):
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        config_data = {"model": {"step_overrides": {"make_plan": "opus"}}}
+        (config_dir / "config.yaml").write_text(yaml.dump(config_data))
+        cfg = load_config(tmp_path)
+        assert cfg.model.step_overrides == {"make_plan": "opus"}
+
+    def test_yaml_loads_recipe_overrides(self, tmp_path):
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        config_data = {"model": {"recipe_overrides": {"implementation": {"make_plan": "opus"}}}}
+        (config_dir / "config.yaml").write_text(yaml.dump(config_data))
+        cfg = load_config(tmp_path)
+        assert cfg.model.recipe_overrides == {"implementation": {"make_plan": "opus"}}
+
+    def test_validate_layer_keys_accepts_model_step_overrides(self):
+        from autoskillit.config.settings import validate_layer_keys
+
+        validate_layer_keys(
+            {"model": {"step_overrides": {"plan": "opus"}, "recipe_overrides": {}}},
+            Path("/fake/config.yaml"),
+            is_secrets_layer=False,
+        )
+
+
 class TestLoadConfig:
     def test_load_config_no_files_returns_defaults(self, tmp_path):
         """C2: No YAML files on disk -> defaults returned."""

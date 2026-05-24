@@ -146,6 +146,11 @@ class TestBuildInteractiveCmdSystemPrompt:
         )
         assert ClaudeFlags.APPEND_SYSTEM_PROMPT not in spec.cmd
 
+    def test_no_system_prompt_omits_flag_with_no_resume(self) -> None:
+        backend = ClaudeCodeBackend()
+        spec = backend.build_interactive_cmd(system_prompt=None, resume_spec=NoResume())
+        assert ClaudeFlags.APPEND_SYSTEM_PROMPT not in spec.cmd
+
 
 class TestBuildHeadlessResumeCmdEquivalence:
     def test_minimal(self) -> None:

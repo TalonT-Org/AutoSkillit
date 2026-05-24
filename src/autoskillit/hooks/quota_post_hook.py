@@ -12,6 +12,7 @@ requiring the autoskillit package to be importable.
 import json
 import os
 import sys
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -30,6 +31,7 @@ _AUTOSKILLIT_LOG_DIR_ENV = "AUTOSKILLIT_LOG_DIR"
 
 # Emitted in post-tool output; referenced by orchestrator prompt and sous-chef SKILL.md.
 QUOTA_POST_WARNING_TRIGGER: str = "--- QUOTA WARNING ---"
+QUOTA_POST_BUDGET_EXCEEDED_TRIGGER: str = "QUOTA BUDGET EXCEEDED"
 
 
 def _read_quota_cache(cache_path_str: str, max_age: int) -> dict | None:
@@ -181,31 +183,62 @@ def main(*, cache_path_override: str | None = None) -> None:
 
     result_summary = _extract_run_skill_result(tool_response)
 
-    warning_text = (
-        f"{result_summary}\n\n"
-        f"{QUOTA_POST_WARNING_TRIGGER}\n"
-        f"Post-execution utilization: {utilization:.0f}% on window '{window_name}' "
-        f"(threshold: {effective_threshold:.0f}%)\n"
-        f"MANDATORY ACTION before next run_skill: Call run_cmd with: "
-        f'python3 -c "import time; time.sleep({n})" timeout={n + 30}\n'
-        f"Before executing, state aloud: "
-        f"'Quota at {utilization:.0f}%. Sleeping {n}s before next step.'"
-    )
+    session_deadline_str = os.environ.get("AUTOSKILLIT_SESSION_DEADLINE")
+    budget_exceeded = False
+    remaining_budget = float("inf")
+    if session_deadline_str:
+        try:
+            session_deadline = float(session_deadline_str)
+            remaining_budget = max(0, session_deadline - time.time())
+            if n > remaining_budget:
+                budget_exceeded = True
+        except (ValueError, TypeError):
+            pass
+
+    if budget_exceeded:
+        resets_at_display = resets_at_str or "unknown"
+        warning_text = (
+            f"{result_summary}\n\n"
+            f"{QUOTA_POST_BUDGET_EXCEEDED_TRIGGER}\n"
+            f"Post-execution utilization: {utilization:.0f}% on window '{window_name}' "
+            f"(threshold: {effective_threshold:.0f}%)\n"
+            f"Quota sleep ({n}s) exceeds session budget ({remaining_budget:.0f}s remaining).\n"
+            f"MANDATORY ACTION: Emit your result block with "
+            f'"success": false, '
+            f'"reason": "fleet_quota_exhausted", '
+            f'"wait_seconds": {n}, '
+            f'"resets_at": "{resets_at_display}", '
+            f'"summary": "Quota exceeded; session budget insufficient for sleep. '
+            f'"Resume after window resets." '
+            f"Then STOP — do not call any more tools."
+        )
+    else:
+        warning_text = (
+            f"{result_summary}\n\n"
+            f"{QUOTA_POST_WARNING_TRIGGER}\n"
+            f"Post-execution utilization: {utilization:.0f}% on window '{window_name}' "
+            f"(threshold: {effective_threshold:.0f}%)\n"
+            f"MANDATORY ACTION before next run_skill: Call run_cmd with: "
+            f'python3 -c "import time; time.sleep({n})" timeout={n + 30}\n'
+            f"Before executing, state aloud: "
+            f"'Quota at {utilization:.0f}%. Sleeping {n}s before next step.'"
+        )
 
     _write_quota_log_event(
         {
             "ts": ts,
-            "event": "post_check_warning",
+            "event": "post_check_budget_exceeded" if budget_exceeded else "post_check_warning",
             "effective_threshold": effective_threshold,
             "window_name": window_name,
             "utilization": utilization,
             "sleep_seconds": n,
             "resets_at": resets_at_str,
             "tool_name": tool_name,
+            "budget_exceeded": budget_exceeded,
+            "remaining_budget": remaining_budget if remaining_budget != float("inf") else None,
         },
         log_dir,
     )
-
     print(
         json.dumps(
             {

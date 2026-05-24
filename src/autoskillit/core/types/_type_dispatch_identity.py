@@ -31,7 +31,7 @@ as your final output. No other text after the sentinel.
 
 Fields:
 - success: true if all mandatory steps completed without unresolved failures
-- reason: "completed", "failed", "quota_exhausted", "timeout",
+- reason: "completed", "failed", "fleet_quota_exhausted", "timeout",
   "open_kitchen_failed", "missing_on_failure"
 - summary: One-line description of what happened
 

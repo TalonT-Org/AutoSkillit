@@ -351,7 +351,8 @@ Trigger: a dispatch returns reason=quota_exhausted OR
 
 Action:
 1. Sleep min(wait_seconds, {max_quota_wait_sec}) seconds.
-2. Retry that exact dispatch ONCE.
+2. Retry that exact dispatch ONCE, passing the dispatched_session_id from the
+   failed envelope as resume_session_id to dispatch_food_truck.
 3. If the retry still fails: halt campaign (proceed to INTERRUPT/CLEANUP).
 
 This is the ONLY condition where re-dispatching the same dispatch_name is permitted.

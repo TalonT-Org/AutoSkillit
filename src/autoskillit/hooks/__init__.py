@@ -13,7 +13,10 @@ from autoskillit.hooks.guards.quota_guard import (
 )
 from autoskillit.hooks.guards.review_loop_gate import REVIEW_LOOP_DENY_TRIGGER
 from autoskillit.hooks.guards.skill_orchestration_guard import SKILL_ORCHESTRATION_DENY_TRIGGER
-from autoskillit.hooks.quota_post_hook import QUOTA_POST_WARNING_TRIGGER
+from autoskillit.hooks.quota_post_hook import (
+    QUOTA_POST_BUDGET_EXCEEDED_TRIGGER,
+    QUOTA_POST_WARNING_TRIGGER,
+)
 
 __all__ = [
     "HOOK_REGISTRY",
@@ -23,6 +26,7 @@ __all__ = [
     "QUOTA_GUARD_DENY_TRIGGER",
     "QUOTA_BUDGET_EXCEEDED_TRIGGER",
     "QUOTA_POST_WARNING_TRIGGER",
+    "QUOTA_POST_BUDGET_EXCEEDED_TRIGGER",
     "REVIEW_LOOP_DENY_TRIGGER",
     "_HOOK_CONFIG_PATH_COMPONENTS",
     "generate_hooks_json",

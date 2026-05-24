@@ -22,6 +22,7 @@ from autoskillit.core import (
 from autoskillit.hooks import (
     QUOTA_BUDGET_EXCEEDED_TRIGGER,
     QUOTA_GUARD_DENY_TRIGGER,
+    QUOTA_POST_BUDGET_EXCEEDED_TRIGGER,
     QUOTA_POST_WARNING_TRIGGER,
 )
 
@@ -249,6 +250,12 @@ QUOTA DENIAL ROUTING — run_skill only (check BEFORE on_failure):
   - A post-execution quota check detected high utilization.
   - The warning contains a run_cmd sleep command. Execute it BEFORE the next run_skill call.
   - After sleeping, proceed normally with the next pipeline step.
+- When run_skill output contains "{QUOTA_POST_BUDGET_EXCEEDED_TRIGGER}":
+  - The required quota sleep EXCEEDS the session's remaining wall-clock budget.
+  - Do NOT sleep. Instead, emit the sentinel block with the fields
+    specified in the output (success=false, reason=fleet_quota_exhausted,
+    wait_seconds, resets_at, summary).
+  - Then STOP — do not call any more tools after emitting the sentinel.
 
 SKILL_COMMAND FORMATTING — MANDATORY:
 - The `skill_command` value in each step's `with:` block is a LITERAL template.
@@ -275,13 +282,13 @@ or quota post-warning), and you cannot make further progress:
 
 Emit the sentinel block with:
   "success": false,
-  "reason": "quota_exhausted",
+  "reason": "fleet_quota_exhausted",
   "wait_seconds": <seconds_until_reset>
 
 The fleet dispatcher will schedule a retry after the wait period.
 Do NOT loop indefinitely on quota denials — if 3 consecutive quota
 denials occur with no successful run_skill between them, emit the
-quota_exhausted sentinel and exit.
+fleet_quota_exhausted sentinel and exit.
 
 --- SECTION 6: CAMPAIGN TASK ---
 

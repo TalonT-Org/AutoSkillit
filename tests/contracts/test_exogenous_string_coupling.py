@@ -53,6 +53,27 @@ def test_quota_post_warning_trigger_coupled_to_sous_chef_skill():
     )
 
 
+def test_quota_post_budget_exceeded_trigger_coupled_to_food_truck_prompt():
+    """QUOTA_POST_BUDGET_EXCEEDED_TRIGGER must appear verbatim in the food truck prompt."""
+    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.fleet._prompts import _build_food_truck_prompt
+    from autoskillit.hooks.quota_post_hook import QUOTA_POST_BUDGET_EXCEEDED_TRIGGER
+
+    prompt = _build_food_truck_prompt(
+        recipe="test",
+        task="test",
+        ingredients={},
+        mcp_prefix=DIRECT_PREFIX,
+        dispatch_id="did",
+        campaign_id="cid",
+        l3_timeout_sec=3600,
+    )
+    assert QUOTA_POST_BUDGET_EXCEEDED_TRIGGER in prompt, (
+        f"Food truck prompt must reference quota_post_hook.QUOTA_POST_BUDGET_EXCEEDED_TRIGGER "
+        f"({QUOTA_POST_BUDGET_EXCEEDED_TRIGGER!r}) verbatim"
+    )
+
+
 class TestPromptToolReachability:
     """Tools referenced in FIRST ACTION must be registered in the FastMCP app."""
 

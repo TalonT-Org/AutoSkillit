@@ -119,6 +119,8 @@ class DispatchRecord:
     labels_cleaned: bool = False
     attempt_history: list[dict[str, Any]] = field(default_factory=list)
     resume_checkpoint: dict[str, Any] = field(default_factory=dict)
+    wait_seconds: float | None = None
+    resets_at: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -145,6 +147,8 @@ class DispatchRecord:
             "labels_cleaned": self.labels_cleaned,
             "attempt_history": list(self.attempt_history),
             "resume_checkpoint": dict(self.resume_checkpoint),
+            "wait_seconds": self.wait_seconds,
+            "resets_at": self.resets_at,
         }
 
     @classmethod
@@ -197,6 +201,8 @@ class DispatchRecord:
             labels_cleaned=d.get("labels_cleaned", False),
             attempt_history=d.get("attempt_history", []),
             resume_checkpoint=d.get("resume_checkpoint", {}),
+            wait_seconds=d.get("wait_seconds"),
+            resets_at=d.get("resets_at", ""),
         )
 
     @classmethod

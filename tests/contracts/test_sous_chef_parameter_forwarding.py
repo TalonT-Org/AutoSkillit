@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import pytest
-
 from pathlib import Path
 
+import pytest
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 

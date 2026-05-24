@@ -453,7 +453,7 @@ implement:
     skill_command: "/implement ..."
     cwd: "${{ context.work_dir }}"
     step_name: implement
-    output_dir: "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}"
+    output_dir: "${{ context.work_dir }}/${{ context.autoskillit_temp }}"
 ```
 
 Call: `run_skill(skill_command=..., cwd=..., step_name="implement", output_dir="...", stale_threshold=2400)`

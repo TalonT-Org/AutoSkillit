@@ -15,9 +15,8 @@ async def test_run_skill_resolves_output_dir_from_recipe_step(
 ) -> None:
     """When output_dir is omitted but step_name maps to a recipe step with
     output_dir in with_args, the server resolves it automatically."""
-    from tests.fakes import InMemoryHeadlessExecutor
-
     from autoskillit.recipe.schema import RecipeStep
+    from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
@@ -42,9 +41,8 @@ async def test_run_skill_resolves_stale_threshold_from_recipe_step(
 ) -> None:
     """When stale_threshold is None but step_name maps to a recipe step with
     stale_threshold set, the server uses the recipe value."""
-    from tests.fakes import InMemoryHeadlessExecutor
-
     from autoskillit.recipe.schema import RecipeStep
+    from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
@@ -64,18 +62,17 @@ async def test_run_skill_resolves_idle_output_timeout_from_recipe_step(
 ) -> None:
     """When idle_output_timeout is None but step_name maps to a recipe step
     with idle_output_timeout=0, the server uses the recipe value (disabled)."""
-    from tests.fakes import InMemoryHeadlessExecutor
-
     from autoskillit.recipe.schema import RecipeStep
+    from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
 
-    step = RecipeStep(name="scope", idle_output_timeout=0)
-    tool_ctx_kitchen_open.active_recipe_steps = {"scope": step}
+    step = RecipeStep(name="idle-scope", idle_output_timeout=0)
+    tool_ctx_kitchen_open.active_recipe_steps = {"idle-scope": step}
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
-    await run_skill("/scope ...", str(tmp_path), step_name="scope")
+    await run_skill("/idle-scope ...", str(tmp_path), step_name="idle-scope")
 
     assert executor.calls[0].idle_output_timeout == 0.0
 
@@ -85,9 +82,8 @@ async def test_run_skill_llm_provided_params_override_recipe_step(
     tool_ctx_kitchen_open, monkeypatch, tmp_path
 ) -> None:
     """Explicit caller-provided values must override recipe step defaults."""
-    from tests.fakes import InMemoryHeadlessExecutor
-
     from autoskillit.recipe.schema import RecipeStep
+    from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
@@ -125,9 +121,8 @@ async def test_run_skill_logs_warning_when_output_dir_resolved_from_recipe(
     """
     import structlog.testing
 
-    from tests.fakes import InMemoryHeadlessExecutor
-
     from autoskillit.recipe.schema import RecipeStep
+    from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
@@ -142,6 +137,4 @@ async def test_run_skill_logs_warning_when_output_dir_resolved_from_recipe(
     with structlog.testing.capture_logs() as cap:
         await run_skill("/dry-walkthrough ...", str(tmp_path), step_name="verify")
 
-    assert any(
-        entry.get("event") == "output_dir_resolved_from_recipe" for entry in cap
-    )
+    assert any(entry.get("event") == "output_dir_resolved_from_recipe" for entry in cap)

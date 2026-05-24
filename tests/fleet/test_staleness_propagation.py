@@ -34,10 +34,11 @@ def _simple_prompt_builder(**kwargs) -> str:
 
 class TestStalenessErrorPropagation:
     @pytest.mark.anyio
-    async def test_stale_process_returns_fleet_process_stale(self, tool_ctx):
-        """ProcessStaleError from load_and_validate → FLEET_PROCESS_STALE rejection."""
+    async def test_stale_process_does_not_block_dispatch(self, tool_ctx, monkeypatch):
+        """Fleet dispatch must proceed despite process staleness — L2 revalidates."""
         from autoskillit.fleet._api import execute_dispatch
 
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
         tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
         repo = InMemoryRecipeRepository()
         recipe_info = _make_recipe_info("test-recipe")
@@ -45,7 +46,8 @@ class TestStalenessErrorPropagation:
         repo.add_full_recipe(recipe_info.path, _make_standard_recipe("test-recipe", ["task"]))
         repo.set_stale(True)
         tool_ctx.recipes = repo
-        tool_ctx.executor = InMemoryHeadlessExecutor()
+        executor = InMemoryHeadlessExecutor()
+        tool_ctx.executor = executor
 
         dispatch_result = await execute_dispatch(
             tool_ctx=tool_ctx,
@@ -59,6 +61,7 @@ class TestStalenessErrorPropagation:
             quota_refresher=_noop_quota_refresher,
         )
         result = json.loads(dispatch_result.outcome.to_envelope())
-        assert result["success"] is False
-        assert result["error"] == FleetErrorCode.FLEET_PROCESS_STALE
-        assert "stale" in result["user_visible_message"].lower()
+        # Must NOT be FLEET_PROCESS_STALE — dispatch should proceed
+        assert result.get("error") != FleetErrorCode.FLEET_PROCESS_STALE
+        # Executor must have been called (dispatch proceeded past validation)
+        assert len(executor.dispatch_calls) == 1

@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.core import ValidatedAddDir
+from autoskillit.execution.backends.claude import ClaudeCodeBackend
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -22,6 +23,7 @@ async def test_run_headless_core_no_add_dir_when_empty(minimal_ctx, tmp_path):
         return _make_result()
 
     minimal_ctx.runner = mock_runner
+    minimal_ctx.backend = ClaudeCodeBackend()
     proj = tmp_path / "proj"
     proj.mkdir()
     await run_headless_core("/autoskillit:investigate foo", str(proj), minimal_ctx, add_dirs=())
@@ -50,6 +52,7 @@ async def test_run_headless_core_two_add_dirs(minimal_ctx, tmp_path):
         return _make_result()
 
     minimal_ctx.runner = mock_runner
+    minimal_ctx.backend = ClaudeCodeBackend()
     proj = tmp_path / "proj"
     proj.mkdir()
     await run_headless_core(

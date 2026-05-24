@@ -11,6 +11,7 @@ from collections import deque
 import pytest
 
 from autoskillit.core.types import RetryReason, SkillResult
+from tests.execution.conftest import _mock_backend
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -171,6 +172,7 @@ class TestProviderFallbackLoop:
             _make_queued_build_result(_STALE_RESULT),
         )
         minimal_ctx.runner = fake_runner
+        minimal_ctx.backend = _mock_backend()
 
         result = await _execute_claude_headless(
             ClaudeHeadlessCmd(cmd=("echo", "test"), env={}),
@@ -196,6 +198,7 @@ class TestProviderFallbackLoop:
             ctx=minimal_ctx,
         )
         minimal_ctx.runner = fake_runner
+        minimal_ctx.backend = _mock_backend()
 
         result = await _execute_claude_headless(
             ClaudeHeadlessCmd(cmd=("echo", "test"), env={}),

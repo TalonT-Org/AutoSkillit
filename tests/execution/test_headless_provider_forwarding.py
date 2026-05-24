@@ -239,6 +239,7 @@ async def test_no_fallback_env_returns_empty_provider_used(
         return _sub_result
 
     minimal_ctx.runner = fake_runner
+    minimal_ctx.backend = _mock_backend()
 
     monkeypatch.setattr(
         "autoskillit.execution.headless._build_skill_result",
@@ -280,6 +281,7 @@ async def test_provider_name_stamps_provider_used_on_result(
         return _sub_result
 
     minimal_ctx.runner = fake_runner
+    minimal_ctx.backend = _mock_backend()
 
     monkeypatch.setattr(
         "autoskillit.execution.headless._build_skill_result",
@@ -419,6 +421,7 @@ async def test_dispatch_food_truck_forwards_marker_dir_and_session_id(
         lambda *a, **kw: object(),
     )
 
+    minimal_ctx.backend = _mock_backend()
     executor = DefaultHeadlessExecutor(minimal_ctx)
     marker = tmp_path / "markers"
     await executor.dispatch_food_truck(
@@ -468,6 +471,7 @@ async def test_dispatch_food_truck_derives_marker_dir_from_cwd(
         lambda *a, **kw: object(),
     )
 
+    minimal_ctx.backend = _mock_backend()
     executor = DefaultHeadlessExecutor(minimal_ctx)
     await executor.dispatch_food_truck(
         "prompt",
@@ -507,6 +511,7 @@ async def test_dispatch_food_truck_marker_dir_none_when_cwd_falsy(
 
     from autoskillit.execution.headless import DefaultHeadlessExecutor
 
+    minimal_ctx.backend = _mock_backend()
     executor = DefaultHeadlessExecutor(minimal_ctx)
     await executor.dispatch_food_truck(
         "prompt",
@@ -535,6 +540,7 @@ async def test_execute_claude_headless_forwards_marker_dir_to_runner(
         return _sr()
 
     minimal_ctx.runner = fake_runner
+    minimal_ctx.backend = _mock_backend()
     monkeypatch.setattr(
         "autoskillit.execution.headless._build_skill_result",
         lambda *a, **kw: SkillResult(

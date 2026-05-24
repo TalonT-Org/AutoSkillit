@@ -20,7 +20,7 @@ from autoskillit.execution.headless import (
     _extract_worktree_path,
 )
 from tests.conftest import _make_result, _make_timeout_result
-from tests.execution.conftest import _sr, _success_session_json
+from tests.execution.conftest import _mock_backend, _sr, _success_session_json
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -209,6 +209,7 @@ class TestRunHeadlessCoreFilesystemWrites:
         base_runner = MockSubprocessRunner()
         base_runner.set_default(_sr(0, _success_session_json("done"), ""))
         minimal_ctx.runner = _FileSideEffectRunner(base_runner, skill_temp / "output.txt")
+        minimal_ctx.backend = _mock_backend()
 
         result = await run_headless_core(
             "/autoskillit:probe",
@@ -231,6 +232,7 @@ class TestRunHeadlessCoreFilesystemWrites:
         runner = MockSubprocessRunner()
         runner.set_default(_sr(0, _success_session_json("done"), ""))
         minimal_ctx.runner = runner
+        minimal_ctx.backend = _mock_backend()
 
         result = await run_headless_core(
             "/autoskillit:probe",

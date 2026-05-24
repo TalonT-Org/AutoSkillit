@@ -18,6 +18,7 @@ import pytest
 
 from autoskillit.core import HeadlessExecutor, WriteBehaviorSpec
 from tests.conftest import _make_result
+from tests.execution.conftest import _mock_backend
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -72,6 +73,7 @@ class TestMultiDirFsSnapshot:
             return _make_result()
 
         minimal_ctx.runner = mock_runner
+        minimal_ctx.backend = _mock_backend()
         proj = tmp_path / "proj"
         proj.mkdir()
 
@@ -240,6 +242,7 @@ class TestRecursiveSnapshot:
             return _make_result(returncode=0, stdout=_success_session_json("done"))
 
         minimal_ctx.runner = mock_runner
+        minimal_ctx.backend = _mock_backend()
         proj = tmp_path / "proj"
         proj.mkdir()
 
@@ -267,6 +270,7 @@ class TestRecursiveSnapshot:
             return _make_result(returncode=0, stdout=_success_session_json("done"))
 
         minimal_ctx.runner = mock_runner
+        minimal_ctx.backend = _mock_backend()
         proj = tmp_path / "proj"
         proj.mkdir()
 
@@ -301,6 +305,7 @@ class TestPlannerSkillEndToEnd:
             return _make_result(returncode=0, stdout=_success_session_json("done"))
 
         minimal_ctx.runner = mock_runner
+        minimal_ctx.backend = _mock_backend()
         proj = tmp_path / "proj"
         proj.mkdir()
 

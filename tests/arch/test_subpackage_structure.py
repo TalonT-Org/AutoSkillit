@@ -15,30 +15,46 @@ class TestCoreSubpackages:
         expected = {
             "_type_backend",
             "_type_checkpoint",
+            "_type_constants",
+            "_type_constants_env",
+            "_type_constants_features",
+            "_type_constants_registries",
             "_type_dispatch_identity",
             "_type_enums",
-            "_type_constants",
             "_type_exceptions",
-            "_type_results",
-            "_type_subprocess",
+            "_type_figure_spec",
+            "_type_capture",
             "_type_helpers",
-            "_type_resume",
             "_type_plugin_source",
+            "_type_protocols_backend",
             "_type_protocols_execution",
             "_type_protocols_github",
             "_type_protocols_infra",
             "_type_protocols_logging",
             "_type_protocols_recipe",
             "_type_protocols_workspace",
-            "_type_protocols_backend",
+            "_type_results",
             "_type_results_execution",
-            "_type_figure_spec",
-            "_type_capture",
+            "_type_resume",
             "_type_session_env",
+            "_type_subprocess",
             "_type_token",
         }
         actual = {p.stem for p in (SRC / "core" / "types").glob("_type_*.py")}
         assert actual == expected
+
+    def test_type_constants_split_completeness(self):
+        """Verify __all__ union across all _type_constants*.py modules equals 65 symbols."""
+        from autoskillit.core.types._type_constants import __all__ as remaining
+        from autoskillit.core.types._type_constants_env import __all__ as env
+        from autoskillit.core.types._type_constants_features import __all__ as features
+        from autoskillit.core.types._type_constants_registries import __all__ as registries
+
+        combined = set(remaining) | set(env) | set(features) | set(registries)
+        assert len(combined) == len(remaining) + len(env) + len(features) + len(registries), (
+            "Duplicate symbols across split modules"
+        )
+        assert len(combined) == 65, f"Expected 65 symbols total, got {len(combined)}"
 
     def test_core_runtime_is_package(self):
         assert (SRC / "core" / "runtime" / "__init__.py").exists()

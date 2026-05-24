@@ -31,7 +31,7 @@ def test_all_experimental_features_with_infrastructure_swap_have_alignment_guard
     """Features that swap core infrastructure must declare requires_backend_alignment."""
     import inspect
 
-    from autoskillit.core.types._type_constants import FEATURE_REGISTRY
+    from autoskillit.core.types._type_constants_features import FEATURE_REGISTRY
     from autoskillit.server import _factory
 
     source = inspect.getsource(_factory.make_context)
@@ -89,7 +89,7 @@ def _extract_feature_name(node: ast.AST) -> str | None:
 
 def test_codex_backend_requires_backend_alignment():
     """codex_backend must have requires_backend_alignment=True."""
-    from autoskillit.core.types._type_constants import FEATURE_REGISTRY
+    from autoskillit.core.types._type_constants_features import FEATURE_REGISTRY
 
     defn = FEATURE_REGISTRY["codex_backend"]
     assert defn.requires_backend_alignment is True
@@ -101,7 +101,7 @@ def test_codex_backend_requires_backend_alignment():
 )
 def test_non_infrastructure_features_do_not_require_alignment(feature_name):
     """Features that don't swap infrastructure should not set requires_backend_alignment."""
-    from autoskillit.core.types._type_constants import FEATURE_REGISTRY
+    from autoskillit.core.types._type_constants_features import FEATURE_REGISTRY
 
     defn = FEATURE_REGISTRY[feature_name]
     assert defn.requires_backend_alignment is False

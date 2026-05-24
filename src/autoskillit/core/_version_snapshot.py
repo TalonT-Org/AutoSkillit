@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from ._install_detect import parse_direct_url
-from .types._type_constants import AGENT_BACKEND_CLAUDE_CODE, AGENT_BACKEND_ENV_VAR
+from .types._type_constants_env import AGENT_BACKEND_CLAUDE_CODE, AGENT_BACKEND_ENV_VAR
 
 logger = logging.getLogger(__name__)  # noqa: TID251 — IL-0 module, no autoskillit imports allowed
 

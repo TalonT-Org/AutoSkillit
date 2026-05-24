@@ -10,7 +10,10 @@ Type re-export hub and all typed building blocks for the autoskillit package (IL
 | `_type_enums.py` | All `StrEnum` discriminators (`RetryReason`, `KillReason`, `Severity`, etc.) |
 | `_type_exceptions.py` | Exception hierarchy for recipe loading: `RecipeLoadError`, `ProcessStaleError`, `RecipeNotFoundError` |
 | `_type_figure_spec.py` | `FigureSpec` TypedDict and consumer/producer field sets for `yaml:figure-spec` contracts |
-| `_type_constants.py` | Shared constants: tool lists, env var names, env var sets for session kinds |
+| `_type_constants.py` | Retired name registries, skill contracts, orchestration prompt sections, CI/domain constants |
+| `_type_constants_env.py` | Environment variable names, session type aliases, context markers, logging keys |
+| `_type_constants_registries.py` | Tool registries, pack registries, tool-to-tag mappings, visibility tags |
+| `_type_constants_features.py` | Feature gates (FeatureDef, FEATURE_REGISTRY), label lifecycle state machine |
 | `_type_session_env.py` | Typed env spec dataclasses for session launch boundaries (`FleetSessionEnv`) |
 | `_type_subprocess.py` | `SubprocessResult` dataclass and `SubprocessRunner` protocol |
 | `_type_token.py` | `CanonicalTokenUsage` frozen dataclass with factory methods and merge |
@@ -33,7 +36,7 @@ Type re-export hub and all typed building blocks for the autoskillit package (IL
 
 ## Architecture Notes
 
-Internal dependency DAG: enums -> constants -> subprocess -> results_execution; enums -> results -> protocols -> helpers. All modules have zero `autoskillit` imports outside this sub-package (IL-0 hard constraint). Production code imports from `autoskillit.core`, not from this package directly.
+Internal dependency DAG: enums -> constants_registries -> constants_features; enums -> results -> protocols -> helpers. All modules have zero `autoskillit` imports outside this sub-package (IL-0 hard constraint). Production code imports from `autoskillit.core`, not from this package directly.
 
 ## Extension Bundle Pattern
 

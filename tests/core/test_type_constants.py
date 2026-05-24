@@ -10,7 +10,7 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 # REQ-PACK-001: PACK_REGISTRY defines all packs with default_enabled
 def test_core_packs_constant_defined() -> None:
     """CORE_PACKS must be a frozenset defined in _type_constants and exported via core."""
-    from autoskillit.core.types._type_constants import CORE_PACKS
+    from autoskillit.core.types._type_constants_registries import CORE_PACKS
 
     assert isinstance(CORE_PACKS, frozenset)
     assert CORE_PACKS == frozenset({"github", "ci", "clone", "telemetry"})
@@ -226,7 +226,7 @@ def test_fleet_dispatch_tools_constant_exists() -> None:
 
 def test_fleet_menu_tools_in_type_constants() -> None:
     """FLEET_MENU_TOOLS must live in core._type_constants, not fleet.__init__."""
-    from autoskillit.core.types._type_constants import FLEET_MENU_TOOLS
+    from autoskillit.core.types._type_constants_registries import FLEET_MENU_TOOLS
 
     assert isinstance(FLEET_MENU_TOOLS, tuple)
     assert "dispatch_food_truck" in FLEET_MENU_TOOLS
@@ -261,7 +261,7 @@ def test_feature_def_has_no_name_field() -> None:
     """FeatureDef.name is redundant with the FEATURE_REGISTRY dict key and must not exist."""
     import dataclasses
 
-    from autoskillit.core.types._type_constants import FeatureDef
+    from autoskillit.core.types._type_constants_features import FeatureDef
 
     field_names = {f.name for f in dataclasses.fields(FeatureDef)}
     assert "name" not in field_names, "FeatureDef.name is redundant with FEATURE_REGISTRY dict key"
@@ -335,7 +335,7 @@ def test_session_type_cook_order_not_in_core_types() -> None:
 
 
 def test_codex_schema_version_value() -> None:
-    from autoskillit.core.types._type_constants import CODEX_SCHEMA_VERSION
+    from autoskillit.core.types._type_constants_env import CODEX_SCHEMA_VERSION
 
     assert CODEX_SCHEMA_VERSION == 1
     assert isinstance(CODEX_SCHEMA_VERSION, int)
@@ -347,9 +347,9 @@ def test_codex_schema_version_value() -> None:
 
 
 def test_codex_schema_version_in_all() -> None:
-    from autoskillit.core.types import _type_constants
+    from autoskillit.core.types._type_constants_env import __all__ as env_all
 
-    assert "CODEX_SCHEMA_VERSION" in _type_constants.__all__
+    assert "CODEX_SCHEMA_VERSION" in env_all
 
 
 # ---------------------------------------------------------------------------
@@ -380,15 +380,15 @@ def test_codex_schema_version_importable_from_core() -> None:
 
 
 def test_headless_auto_gate_env_var_value() -> None:
-    from autoskillit.core.types._type_constants import HEADLESS_AUTO_GATE_ENV_VAR
+    from autoskillit.core.types._type_constants_env import HEADLESS_AUTO_GATE_ENV_VAR
 
     assert HEADLESS_AUTO_GATE_ENV_VAR == "AUTOSKILLIT_HEADLESS_AUTO_GATE"
 
 
 def test_headless_auto_gate_env_var_in_all() -> None:
-    from autoskillit.core.types import _type_constants
+    from autoskillit.core.types._type_constants_env import __all__ as env_all
 
-    assert "HEADLESS_AUTO_GATE_ENV_VAR" in _type_constants.__all__
+    assert "HEADLESS_AUTO_GATE_ENV_VAR" in env_all
 
 
 def test_headless_auto_gate_env_var_importable_from_types() -> None:

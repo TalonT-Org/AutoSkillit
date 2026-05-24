@@ -439,7 +439,8 @@ class TestGroupNFeatureGateDoctorChecks:
     ) -> None:
         from autoskillit.cli.doctor import _check_feature_dependencies
         from autoskillit.core import Severity
-        from autoskillit.core.types._type_constants import FeatureDef, FeatureLifecycle
+        from autoskillit.core.types._type_constants_features import FeatureDef
+        from autoskillit.core.types._type_enums import FeatureLifecycle
 
         fake_feature = FeatureDef(
             lifecycle=FeatureLifecycle.EXPERIMENTAL,
@@ -465,7 +466,8 @@ class TestGroupNFeatureGateDoctorChecks:
     ) -> None:
         from autoskillit.cli.doctor import _check_feature_dependencies
         from autoskillit.core import Severity
-        from autoskillit.core.types._type_constants import FeatureDef, FeatureLifecycle
+        from autoskillit.core.types._type_constants_features import FeatureDef
+        from autoskillit.core.types._type_enums import FeatureLifecycle
 
         fake_feature = FeatureDef(
             lifecycle=FeatureLifecycle.EXPERIMENTAL,
@@ -509,7 +511,8 @@ class TestGroupNFeatureGateDoctorChecks:
     ) -> None:
         from autoskillit.cli.doctor import _check_feature_registry_consistency
         from autoskillit.core import Severity
-        from autoskillit.core.types._type_constants import FeatureDef, FeatureLifecycle
+        from autoskillit.core.types._type_constants_features import FeatureDef
+        from autoskillit.core.types._type_enums import FeatureLifecycle
 
         bad_feature = FeatureDef(
             lifecycle=FeatureLifecycle.EXPERIMENTAL,

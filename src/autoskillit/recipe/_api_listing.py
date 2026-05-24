@@ -64,7 +64,7 @@ def list_all(
     _features = features or {}
     fleet_enabled = is_feature_enabled("fleet", _features)
     exclude_kinds = frozenset() if fleet_enabled else NON_INTERACTIVE_KINDS
-    result = list_recipes(_pdir, exclude_kinds=exclude_kinds)
+    result = list_recipes(_pdir, exclude_kinds=exclude_kinds, exclude_dispatch_only=True)
     return format_recipe_list_response(result)
 
 

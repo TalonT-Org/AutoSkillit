@@ -64,7 +64,7 @@ def _print_dispatch_preview() -> str:
         f" {_D}Fleet dispatcher. Ad-hoc food truck coordination.{_R}"
     )
 
-    recipes = list_recipes(Path.cwd(), exclude_kinds=frozenset({RecipeKind.CAMPAIGN})).items
+    recipes = list_recipes(Path.cwd(), exclude_kinds=frozenset({RecipeKind.CAMPAIGN}), exclude_dispatch_only=True).items
     if recipes:
         name_w = max(len(r.name or "") for r in recipes)
         src_w = max(len(r.source or "") for r in recipes)

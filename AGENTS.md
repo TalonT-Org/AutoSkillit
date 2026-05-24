@@ -4,7 +4,7 @@ Mandatory instructions for AI-assisted development in this repository.
 
 ## **1. Core Project Goal**
 
-A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides MCP tools (gated behind `open_kitchen`/`close_kitchen` via FastMCP v3 tag-based visibility) and bundled skills registered as `/autoskillit:*` slash commands.
+A coding-agent plugin that orchestrates automated skill-driven workflows using headless sessions. It provides MCP tools (gated behind `open_kitchen`/`close_kitchen` via FastMCP v3 tag-based visibility) and bundled skills registered as `/autoskillit:*` slash commands.
 
 ## **2. General Principles**
 
@@ -91,13 +91,16 @@ generic_automation_mcp/
 | `fleet/` | IL-2 | Campaign dispatch, semaphore, sidecar, liveness, state persistence |
 | `server/` | IL-3 | FastMCP server — tools/, kitchen gating, session-type dispatch |
 | `cli/` | IL-3 | CLI — doctor/, update/, fleet/ subcommands, ui/, session/ management |
-| `hooks/` | — | Claude Code hook scripts — guards/, formatters/ |
+| `hooks/` | — | coding-agent hook scripts — guards/, formatters/ |
 | `agents/` | — | Bundled agent definition markdown files served as MCP resources |
 | `recipes/` | — | Bundled recipe YAML + contracts, diagrams, sub-recipes |
 | `skills/` | — | Tier 1 skills: open-kitchen, close-kitchen, sous-chef |
 | `skills_extended/` | — | Tier 2 (interactive) + Tier 3 (pipeline) skills, incl. arch-lens-* (13), exp-lens-* (18), vis-lens-* (12) |
 
-**Session diagnostics logs** live at `~/.local/share/autoskillit/logs/` (Linux) or `~/Library/Application Support/autoskillit/logs/` (macOS). Override with `linux_tracing.log_dir`. Session directories are named by Claude Code session UUID when available (parsed from stdout, or discovered from JSONL filename via Channel B (the JSONL stream written by the Claude Code subprocess)). Fallback: `no_session_{timestamp}`. Query the index: `jq 'select(.success == false)' ~/.local/share/autoskillit/logs/sessions.jsonl`.
+**Session diagnostics logs** — per-backend log paths and session identification:
+
+- **Claude Code**: Logs live at `~/.local/share/autoskillit/logs/` (Linux) or `~/Library/Application Support/autoskillit/logs/` (macOS). Override with `linux_tracing.log_dir`. Session directories are named by the agent session ID when available (resolved from stdout or, for Claude Code backends, from the session JSONL filename via Channel B (the JSONL side-channel stream)). Fallback: `no_session_{timestamp}`. Query the index: `jq 'select(.success == false)' ~/.local/share/autoskillit/logs/sessions.jsonl`.
+- **Codex**: Session log discovery is not yet wired (`CodexSessionLocator` returns `None`; `session_record_types` is empty). The `thread_id` (from the `thread.started` NDJSON event) is the canonical session identifier for Codex backends.
 
 **Import layer vs. orchestration level — disambiguation table:**
 

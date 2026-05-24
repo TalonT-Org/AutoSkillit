@@ -9,7 +9,6 @@ from autoskillit.core import (
     BareResume,
     CmdSpec,
     DirectInstall,
-    MarketplaceInstall,
     NamedResume,
     OutputFormat,
     SessionCheckpoint,
@@ -162,49 +161,6 @@ class TestBuildHeadlessResumeCmdEquivalence:
         assert spec.env == shim.env
 
 
-class TestBuildSkillSessionCmdEquivalence:
-    def test_minimal(self) -> None:
-        backend = ClaudeCodeBackend()
-        spec = backend.build_skill_session_cmd("/plan", **SKILL_BASE)
-        shim = commands.build_skill_session_cmd("/plan", **SKILL_BASE)
-        assert spec.cmd == tuple(shim.cmd)
-        assert spec.env == shim.env
-
-    def test_with_model(self) -> None:
-        backend = ClaudeCodeBackend()
-        kwargs = {**SKILL_BASE, "model": "opus"}
-        spec = backend.build_skill_session_cmd("/plan", **kwargs)
-        shim = commands.build_skill_session_cmd("/plan", **kwargs)
-        assert spec.cmd == tuple(shim.cmd)
-        assert spec.env == shim.env
-
-    def test_with_direct_install(self) -> None:
-        backend = ClaudeCodeBackend()
-        kwargs = {**SKILL_BASE, "plugin_source": DirectInstall(plugin_dir=Path("/p"))}
-        spec = backend.build_skill_session_cmd("/plan", **kwargs)
-        shim = commands.build_skill_session_cmd("/plan", **kwargs)
-        assert spec.cmd == tuple(shim.cmd)
-        assert spec.env == shim.env
-
-    def test_with_exit_delay(self) -> None:
-        backend = ClaudeCodeBackend()
-        spec = backend.build_skill_session_cmd(
-            "/plan", exit_after_stop_delay_ms=120000, **SKILL_BASE
-        )
-        shim = commands.build_skill_session_cmd(
-            "/plan", exit_after_stop_delay_ms=120000, **SKILL_BASE
-        )
-        assert spec.cmd == tuple(shim.cmd)
-        assert spec.env == shim.env
-
-    def test_with_resume(self) -> None:
-        backend = ClaudeCodeBackend()
-        spec = backend.build_skill_session_cmd("/plan", resume_session_id="s1", **SKILL_BASE)
-        shim = commands.build_skill_session_cmd("/plan", resume_session_id="s1", **SKILL_BASE)
-        assert spec.cmd == tuple(shim.cmd)
-        assert spec.env == shim.env
-
-
 class TestResumePromptPreservation:
     """Contract: resume paths must never discard the caller's primary prompt."""
 
@@ -307,47 +263,6 @@ class TestResumePromptPreservation:
             spec = getattr(backend, builder)(**kwargs)
         prompt = self._extract_prompt(spec.cmd)
         assert marker_text in prompt
-
-
-class TestBuildFoodTruckCmdEquivalence:
-    def test_minimal(self) -> None:
-        backend = ClaudeCodeBackend()
-        spec = backend.build_food_truck_cmd(**FOOD_TRUCK_BASE)
-        shim = commands.build_food_truck_cmd(**FOOD_TRUCK_BASE)
-        assert spec.cmd == tuple(shim.cmd)
-        assert spec.env == shim.env
-
-    def test_with_model(self) -> None:
-        backend = ClaudeCodeBackend()
-        spec = backend.build_food_truck_cmd(model="opus", **FOOD_TRUCK_BASE)
-        shim = commands.build_food_truck_cmd(model="opus", **FOOD_TRUCK_BASE)
-        assert spec.cmd == tuple(shim.cmd)
-        assert spec.env == shim.env
-
-    def test_with_env_extras(self) -> None:
-        backend = ClaudeCodeBackend()
-        spec = backend.build_food_truck_cmd(env_extras={"X": "1"}, **FOOD_TRUCK_BASE)
-        shim = commands.build_food_truck_cmd(env_extras={"X": "1"}, **FOOD_TRUCK_BASE)
-        assert spec.cmd == tuple(shim.cmd)
-        assert spec.env == shim.env
-
-    def test_with_exit_delay(self) -> None:
-        backend = ClaudeCodeBackend()
-        spec = backend.build_food_truck_cmd(exit_after_stop_delay_ms=120000, **FOOD_TRUCK_BASE)
-        shim = commands.build_food_truck_cmd(exit_after_stop_delay_ms=120000, **FOOD_TRUCK_BASE)
-        assert spec.cmd == tuple(shim.cmd)
-        assert spec.env == shim.env
-
-    def test_with_marketplace_install(self) -> None:
-        backend = ClaudeCodeBackend()
-        kwargs = {
-            **FOOD_TRUCK_BASE,
-            "plugin_source": MarketplaceInstall(cache_path=Path("/cache")),
-        }
-        spec = backend.build_food_truck_cmd(**kwargs)
-        shim = commands.build_food_truck_cmd(**kwargs)
-        assert spec.cmd == tuple(shim.cmd)
-        assert spec.env == shim.env
 
 
 class TestBuildSkillSessionCmdConfigAdapter:

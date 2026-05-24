@@ -23,10 +23,9 @@ from autoskillit.core.types import (
     SubprocessResult,
     TerminationReason,
 )
+from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.commands import (
-    build_food_truck_cmd,
     build_headless_resume_cmd,
-    build_skill_session_cmd,
 )
 from autoskillit.execution.headless import _build_skill_result
 from autoskillit.execution.session import (
@@ -224,7 +223,7 @@ class TestOutputFormatCliRequirements:
     def test_command_assembly_satisfies_format_requirements(self):
         """Actual builders must produce commands containing all required flags."""
         fmt = OutputFormat.STREAM_JSON
-        spec = build_skill_session_cmd(
+        spec = ClaudeCodeBackend().build_skill_session_cmd(
             "/investigate foo",
             cwd="/tmp",
             completion_marker="%%DONE%%",
@@ -241,7 +240,7 @@ class TestAllBuildersEnforceOutputFormatFlags:
 
     @pytest.mark.parametrize("fmt", list(OutputFormat))
     def test_skill_builder_satisfies_format_requirements(self, fmt: OutputFormat):
-        spec = build_skill_session_cmd(
+        spec = ClaudeCodeBackend().build_skill_session_cmd(
             "/investigate foo",
             cwd="/tmp",
             completion_marker="%%DONE%%",
@@ -254,7 +253,7 @@ class TestAllBuildersEnforceOutputFormatFlags:
 
     @pytest.mark.parametrize("fmt", list(OutputFormat))
     def test_food_truck_builder_satisfies_format_requirements(self, fmt: OutputFormat):
-        spec = build_food_truck_cmd(
+        spec = ClaudeCodeBackend().build_food_truck_cmd(
             orchestrator_prompt="Orchestrator",
             plugin_source=DirectInstall(plugin_dir=Path("/p")),
             cwd="/tmp",
@@ -281,20 +280,23 @@ def test_all_headless_builders_handle_output_format():
     import importlib
     import inspect
 
-    mod = importlib.import_module("autoskillit.execution.commands")
-    source = inspect.getsource(mod)
-    tree = ast.parse(source)
-
     builders_with_format = []
-    for node in ast.walk(tree):
-        if (
-            isinstance(node, ast.FunctionDef)
-            and node.name.startswith("build_")
-            and node.name.endswith("_cmd")
-        ):
-            params = [a.arg for a in node.args.args + node.args.kwonlyargs]
-            if "output_format" in params:
-                builders_with_format.append(node.name)
+    for mod_name in (
+        "autoskillit.execution.commands",
+        "autoskillit.execution.backends.claude",
+    ):
+        mod = importlib.import_module(mod_name)
+        source = inspect.getsource(mod)
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.FunctionDef)
+                and node.name.startswith("build_")
+                and node.name.endswith("_cmd")
+            ):
+                params = [a.arg for a in node.args.args + node.args.kwonlyargs]
+                if "output_format" in params:
+                    builders_with_format.append(f"{mod_name}:{node.name}")
 
     assert len(builders_with_format) >= 3, (
         f"Expected at least 3 builders with output_format, found {builders_with_format}"

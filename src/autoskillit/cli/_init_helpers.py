@@ -434,7 +434,9 @@ def _register_all(
         sweep_all_scopes_for_orphans,
         sync_hooks_to_settings,
     )
-    from autoskillit.core import ensure_project_temp
+    from autoskillit.config import load_config
+    from autoskillit.core import AGENT_BACKEND_CODEX, ensure_project_temp
+    from autoskillit.execution import ensure_codex_mcp_registered
 
     # Refuse to register from inside the autoskillit source tree — this would
     # plant source-tree absolute paths in the project scope.
@@ -462,9 +464,28 @@ def _register_all(
     _B, _C, _D, _G, _Y, _R = _colors()
 
     ensure_project_temp(project_dir)
-    settings_path = _claude_settings_path(scope)
-    _evict_stale_autoskillit_hooks(settings_path)
-    sync_hooks_to_settings(settings_path)
+
+    try:
+        _cfg = load_config(project_dir)
+        _backend_name = _cfg.agent_backend.backend
+    except Exception:
+        logger.warning("load_config failed, defaulting to claude-code backend", exc_info=True)
+        _backend_name = "claude-code"
+
+    if _backend_name == AGENT_BACKEND_CODEX:
+        ensure_codex_mcp_registered()
+        # P4: insert Codex hook registration here
+        plugin_ok = None
+    else:
+        settings_path = _claude_settings_path(scope)
+        _evict_stale_autoskillit_hooks(settings_path)
+        sync_hooks_to_settings(settings_path)
+
+        plugin_ok = _is_plugin_installed()
+        if not plugin_ok:
+            _register_mcp_server(_user_claude_json_path())
+        else:
+            evict_direct_mcp_entry(_user_claude_json_path())
 
     # Prompt for github.default_repo if running interactively
     github_repo = None
@@ -490,12 +511,6 @@ def _register_all(
 
     _create_secrets_template(project_dir)
 
-    plugin_ok = _is_plugin_installed()
-    if not plugin_ok:
-        _register_mcp_server(_user_claude_json_path())
-    else:
-        evict_direct_mcp_entry(_user_claude_json_path())  # remove stale direct entry
-
     # --- Summary block ---
     print()
     from autoskillit import __version__
@@ -510,10 +525,14 @@ def _register_all(
         print(f"  {_Y}{'gh auth':>12}{_R}  {_G}authenticated{_R}")
     else:
         print(f"  {_Y}{'gh auth':>12}{_R}  {_D}not found — run{_R} {_G}gh auth login{_R}")
-    if plugin_ok:
-        print(f"  {_Y}{'plugin':>12}{_R}  {_G}registered{_R}")
+    if _backend_name == AGENT_BACKEND_CODEX:
+        print(f"  {_Y}{'mcp':>12}{_R}  {_G}~/.codex/config.toml{_R}")
     else:
-        print(f"  {_Y}{'plugin':>12}{_R}  {_G}registered via ~/.claude.json{_R}")
-    print(f"  {_Y}{'hooks':>12}{_R}  {_G}synced{_R} {_D}({scope} scope){_R}")
+        if plugin_ok:
+            print(f"  {_Y}{'plugin':>12}{_R}  {_G}registered{_R}")
+        else:
+            print(f"  {_Y}{'plugin':>12}{_R}  {_G}registered via ~/.claude.json{_R}")
+        print(f"  {_Y}{'hooks':>12}{_R}  {_G}synced{_R} {_D}({scope} scope){_R}")
+
     print()
     _print_next_steps(context="init")

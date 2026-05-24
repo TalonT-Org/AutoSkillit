@@ -20,6 +20,7 @@ from autoskillit.execution.anomaly_detection import (
 from autoskillit.execution.backends import (
     ClaudeCodeBackend,
     CodexBackend,
+    ensure_codex_mcp_registered,
     get_backend,
 )
 from autoskillit.execution.ci import DefaultCIWatcher
@@ -212,6 +213,7 @@ __all__ = [
     # backends
     "ClaudeCodeBackend",
     "CodexBackend",
+    "ensure_codex_mcp_registered",
     # anomaly_detection
     "detect_anomalies",
     "AnomalyKind",

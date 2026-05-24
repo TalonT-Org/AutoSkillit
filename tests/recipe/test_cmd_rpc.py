@@ -393,7 +393,7 @@ def test_export_local_bundle(tmp_path):
 
 
 def test_refetch_issues_builds_query():
-    with patch("autoskillit.recipe._cmd_rpc.subprocess.run") as mock_run:
+    with patch("autoskillit.recipe._cmd_rpc_issues.subprocess.run") as mock_run:
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="1 2", stderr=""
         )
@@ -464,8 +464,8 @@ def test_batch_create_issues_discovers_ticket_bodies(tmp_path):
             f"validated: true\n\n# Title {n}\n\n| col1 | col2 |\n"
         )
     with (
-        patch("autoskillit.recipe._cmd_rpc.subprocess.run") as mock_run,
-        patch("autoskillit.recipe._cmd_rpc.time.sleep"),
+        patch("autoskillit.recipe._cmd_rpc_issues.subprocess.run") as mock_run,
+        patch("autoskillit.recipe._cmd_rpc_issues.time.sleep"),
     ):
         mock_run.side_effect = _make_side_effect(
             issue_data=[
@@ -492,8 +492,8 @@ def test_batch_create_issues_strips_body_content(tmp_path):
         "**Exception note:** this is an exception.\n"
     )
     with (
-        patch("autoskillit.recipe._cmd_rpc.subprocess.run") as mock_run,
-        patch("autoskillit.recipe._cmd_rpc.time.sleep"),
+        patch("autoskillit.recipe._cmd_rpc_issues.subprocess.run") as mock_run,
+        patch("autoskillit.recipe._cmd_rpc_issues.time.sleep"),
     ):
         mock_run.side_effect = _make_side_effect()
         batch_create_issues(workspace=str(tmp_path))
@@ -521,8 +521,8 @@ def test_batch_create_issues_extracts_h1_title(tmp_path):
         "validated: true\n\n# Audit: Missing test coverage\n\nBody content."
     )
     with (
-        patch("autoskillit.recipe._cmd_rpc.subprocess.run") as mock_run,
-        patch("autoskillit.recipe._cmd_rpc.time.sleep"),
+        patch("autoskillit.recipe._cmd_rpc_issues.subprocess.run") as mock_run,
+        patch("autoskillit.recipe._cmd_rpc_issues.time.sleep"),
     ):
         mock_run.side_effect = _make_side_effect()
         batch_create_issues(workspace=str(tmp_path))
@@ -543,8 +543,8 @@ def test_batch_create_issues_constructs_graphql_mutation(tmp_path):
     (va_dir / "ticket_body_tests_1_2026-01-01_120000.md").write_text("# Issue One\n\nBody one.")
     (va_dir / "ticket_body_tests_2_2026-01-01_120000.md").write_text("# Issue Two\n\nBody two.")
     with (
-        patch("autoskillit.recipe._cmd_rpc.subprocess.run") as mock_run,
-        patch("autoskillit.recipe._cmd_rpc.time.sleep"),
+        patch("autoskillit.recipe._cmd_rpc_issues.subprocess.run") as mock_run,
+        patch("autoskillit.recipe._cmd_rpc_issues.time.sleep"),
     ):
         mock_run.side_effect = _make_side_effect(
             issue_data=[
@@ -579,8 +579,8 @@ def test_batch_create_issues_chunks_large_batches(tmp_path):
             f"# Issue {n + 1}\n\nBody {n + 1}."
         )
     with (
-        patch("autoskillit.recipe._cmd_rpc.subprocess.run") as mock_run,
-        patch("autoskillit.recipe._cmd_rpc.time.sleep"),
+        patch("autoskillit.recipe._cmd_rpc_issues.subprocess.run") as mock_run,
+        patch("autoskillit.recipe._cmd_rpc_issues.time.sleep"),
     ):
 
         def side_effect_factory():
@@ -680,8 +680,8 @@ def test_batch_create_issues_ignores_validation_summary_file(tmp_path):
         "## Validation Summary\nAll clear."
     )
     with (
-        patch("autoskillit.recipe._cmd_rpc.subprocess.run") as mock_run,
-        patch("autoskillit.recipe._cmd_rpc.time.sleep"),
+        patch("autoskillit.recipe._cmd_rpc_issues.subprocess.run") as mock_run,
+        patch("autoskillit.recipe._cmd_rpc_issues.time.sleep"),
     ):
         mock_run.side_effect = _make_side_effect()
         batch_create_issues(workspace=str(tmp_path))
@@ -733,8 +733,8 @@ def test_batch_create_issues_handles_graphql_error(tmp_path):
         subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="rate limited"),
     ]
     with (
-        patch("autoskillit.recipe._cmd_rpc.subprocess.run") as mock_run,
-        patch("autoskillit.recipe._cmd_rpc.time.sleep"),
+        patch("autoskillit.recipe._cmd_rpc_issues.subprocess.run") as mock_run,
+        patch("autoskillit.recipe._cmd_rpc_issues.time.sleep"),
     ):
         mock_run.side_effect = error_side_effect
         with pytest.raises(RuntimeError, match="rate limited"):
@@ -744,8 +744,8 @@ def test_batch_create_issues_handles_graphql_error(tmp_path):
 # ─── Type coercion: int pr_number for _cmd_rpc callables (Step 1c) ───────────
 
 
-@patch("autoskillit.recipe._cmd_rpc.subprocess.run")
-@patch("autoskillit.recipe._cmd_rpc.time.sleep")
+@patch("autoskillit.recipe._cmd_rpc_merge.subprocess.run")
+@patch("autoskillit.recipe._cmd_rpc_merge.time.sleep")
 def test_wait_for_direct_merge_int_pr_number(mock_sleep, mock_run):
     """wait_for_direct_merge handles int pr_number from LLM JSON boundary."""
     mock_run.return_value = subprocess.CompletedProcess(
@@ -779,8 +779,8 @@ def test_batch_create_issues_ignores_prior_run_files(tmp_path):
 
     # Call batch_create_issues — should return 3 issues
     with (
-        patch("autoskillit.recipe._cmd_rpc.subprocess.run") as mock_run,
-        patch("autoskillit.recipe._cmd_rpc.time.sleep"),
+        patch("autoskillit.recipe._cmd_rpc_issues.subprocess.run") as mock_run,
+        patch("autoskillit.recipe._cmd_rpc_issues.time.sleep"),
     ):
         mock_run.side_effect = _make_side_effect(
             issue_data=[
@@ -801,8 +801,8 @@ def test_batch_create_issues_ignores_prior_run_files(tmp_path):
 
     # Call batch_create_issues WITHOUT audit_run_dir — globs all 5 files
     with (
-        patch("autoskillit.recipe._cmd_rpc.subprocess.run") as mock_run,
-        patch("autoskillit.recipe._cmd_rpc.time.sleep"),
+        patch("autoskillit.recipe._cmd_rpc_issues.subprocess.run") as mock_run,
+        patch("autoskillit.recipe._cmd_rpc_issues.time.sleep"),
     ):
         mock_run.side_effect = _make_side_effect(
             issue_data=[
@@ -847,8 +847,8 @@ def test_batch_create_issues_scoped_to_audit_run_dir(tmp_path):
 
     # Call batch_create_issues scoped to run2_dir only
     with (
-        patch("autoskillit.recipe._cmd_rpc.subprocess.run") as mock_run,
-        patch("autoskillit.recipe._cmd_rpc.time.sleep"),
+        patch("autoskillit.recipe._cmd_rpc_issues.subprocess.run") as mock_run,
+        patch("autoskillit.recipe._cmd_rpc_issues.time.sleep"),
     ):
         mock_run.side_effect = _make_side_effect(
             issue_data=[
@@ -884,8 +884,8 @@ def test_batch_create_issues_audit_run_dir_only(tmp_path):
     (scoped_dir / "ticket_body_tests_1_2026-05-06_130000.md").write_text("# Active Issue\n\nBody.")
 
     with (
-        patch("autoskillit.recipe._cmd_rpc.subprocess.run") as mock_run,
-        patch("autoskillit.recipe._cmd_rpc.time.sleep"),
+        patch("autoskillit.recipe._cmd_rpc_issues.subprocess.run") as mock_run,
+        patch("autoskillit.recipe._cmd_rpc_issues.time.sleep"),
     ):
         mock_run.side_effect = _make_side_effect(
             issue_data=[{"number": 99, "url": "https://github.com/org/repo/issues/99"}]
@@ -915,11 +915,11 @@ def _raise_os_error(*_args, **_kwargs):
     raise OSError("Permission denied")
 
 
-@patch("autoskillit.recipe._cmd_rpc.subprocess.run")
-@patch("autoskillit.recipe._cmd_rpc.time.sleep")
+@patch("autoskillit.recipe._cmd_rpc_merge.subprocess.run")
+@patch("autoskillit.recipe._cmd_rpc_merge.time.sleep")
 def test_force_push_int_review_pr_number(mock_sleep, mock_run, tmp_path):
     """force_push_and_wait_mergeability handles int review_pr_number."""
-    with patch("autoskillit.recipe._cmd_rpc._detect_remote", return_value="origin"):
+    with patch("autoskillit.recipe._cmd_rpc_merge._detect_remote", return_value="origin"):
         mock_run.side_effect = [
             subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
             subprocess.CompletedProcess(args=[], returncode=0, stdout="TRUE\n", stderr=""),

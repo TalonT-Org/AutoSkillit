@@ -149,8 +149,9 @@ steps:
 def test_load_and_validate_returns_cached_result_on_second_call(tmp_path, monkeypatch):
     """Second call for unchanged recipe returns cached result without re-running pipeline."""
     import autoskillit.recipe._api as api_mod
+    import autoskillit.recipe._api_cache as cache_mod
 
-    monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", {})
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
@@ -175,8 +176,9 @@ def test_load_and_validate_returns_cached_result_on_second_call(tmp_path, monkey
 def test_load_and_validate_cache_invalidated_on_recipe_mtime_change(tmp_path, monkeypatch):
     """Changing the recipe file mtime causes a cache miss."""
     import autoskillit.recipe._api as api_mod
+    import autoskillit.recipe._api_cache as cache_mod
 
-    monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", {})
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
@@ -202,8 +204,9 @@ def test_load_and_validate_cache_invalidated_on_recipe_mtime_change(tmp_path, mo
 def test_load_and_validate_cache_invalidated_on_pkg_version_change(tmp_path, monkeypatch):
     """Package version change invalidates the cache."""
     import autoskillit.recipe._api as api_mod
+    import autoskillit.recipe._api_cache as cache_mod
 
-    monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", {})
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
@@ -219,7 +222,7 @@ def test_load_and_validate_cache_invalidated_on_pkg_version_change(tmp_path, mon
     monkeypatch.setattr(api_mod, "validate_recipe_structure", counting_validate)
 
     api_mod.load_and_validate("myrecipe", tmp_path)
-    monkeypatch.setattr(api_mod, "_get_pkg_version", lambda: "99.99.99")
+    monkeypatch.setattr(cache_mod, "_get_pkg_version", lambda: "99.99.99")
     api_mod.load_and_validate("myrecipe", tmp_path)
 
     assert len(calls) == 2
@@ -228,8 +231,9 @@ def test_load_and_validate_cache_invalidated_on_pkg_version_change(tmp_path, mon
 def test_load_and_validate_cache_invalidated_on_dir_mtime_change(tmp_path, monkeypatch):
     """Adding a new recipe file to the project directory invalidates the cache."""
     import autoskillit.recipe._api as api_mod
+    import autoskillit.recipe._api_cache as cache_mod
 
-    monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", {})
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
@@ -257,6 +261,7 @@ def test_load_and_validate_cache_key_includes_all_result_affecting_params(tmp_pa
     import inspect
 
     import autoskillit.recipe._api as api_mod
+    import autoskillit.recipe._api_cache as cache_mod
 
     # resolved_defaults affects result["ingredients_table"] but is intentionally excluded here.
     RESULT_METADATA_ONLY_PARAMS: frozenset[str] = frozenset(
@@ -276,7 +281,7 @@ def test_load_and_validate_cache_key_includes_all_result_affecting_params(tmp_pa
     result_affecting_params = all_params - RESULT_METADATA_ONLY_PARAMS
 
     cache_snap: dict = {}
-    monkeypatch.setattr(api_mod, "_LOAD_CACHE", cache_snap)
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_snap)
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
@@ -338,8 +343,9 @@ def test_load_and_validate_cache_key_includes_all_result_affecting_params(tmp_pa
 def test_load_and_validate_logs_stage_timing_at_debug(tmp_path, monkeypatch):
     """load_and_validate calls the timing helper for each pipeline stage."""
     import autoskillit.recipe._api as api_mod
+    import autoskillit.recipe._api_cache as cache_mod
 
-    monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", {})
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
@@ -873,8 +879,9 @@ def test_compute_registry_hash_changes_on_mtime(tmp_path: Path) -> None:
 def test_load_and_validate_reuses_content_hash_from_recipe_info(tmp_path, monkeypatch):
     """load_and_validate reuses match.content_hash for the result's content_hash field."""
     import autoskillit.recipe._api as api_mod
+    import autoskillit.recipe._api_cache as cache_mod
 
-    monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", {})
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
@@ -902,8 +909,9 @@ def test_load_and_validate_reuses_content_hash_from_recipe_info(tmp_path, monkey
 def test_load_and_validate_calls_list_recipes_once(tmp_path, monkeypatch):
     """list_recipes is called exactly once when recipe_info is not provided."""
     import autoskillit.recipe._api as api_mod
+    import autoskillit.recipe._api_cache as cache_mod
 
-    monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", {})
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
@@ -927,8 +935,9 @@ def test_load_and_validate_calls_list_recipes_once(tmp_path, monkeypatch):
 def test_load_and_validate_skips_list_recipes_when_recipe_list_provided(tmp_path, monkeypatch):
     """list_recipes is not called when recipe_list is provided alongside recipe_info."""
     import autoskillit.recipe._api as api_mod
+    import autoskillit.recipe._api_cache as cache_mod
 
-    monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", {})
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
@@ -961,11 +970,12 @@ def test_load_and_validate_skips_list_recipes_when_recipe_list_provided(tmp_path
 def test_load_and_validate_cache_invalidated_on_rule_registry_change(tmp_path, monkeypatch):
     """Changing the rule registry hash invalidates the cache."""
     import autoskillit.recipe._api as api_mod
+    import autoskillit.recipe._api_cache as cache_mod
 
-    monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
-    monkeypatch.setattr(api_mod, "_STALENESS_IS_STALE", False)
-    monkeypatch.setattr(api_mod, "_STALENESS_CACHES_CLEARED", False)
-    monkeypatch.setattr(api_mod, "_STALENESS_LAST_CHECK", 0.0)
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", {})
+    monkeypatch.setattr(cache_mod, "_STALENESS_IS_STALE", False)
+    monkeypatch.setattr(cache_mod, "_STALENESS_CACHES_CLEARED", False)
+    monkeypatch.setattr(cache_mod, "_STALENESS_LAST_CHECK", 0.0)
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
@@ -993,13 +1003,14 @@ def test_load_and_validate_cache_invalidated_on_rule_registry_change(tmp_path, m
 def test_load_and_validate_detects_stale_process(tmp_path, monkeypatch):
     """Stale process raises ProcessStaleError instead of evaluating recipes."""
     import autoskillit.recipe._api as api_mod
+    import autoskillit.recipe._api_cache as cache_mod
     from autoskillit.core import ProcessStaleError
 
-    monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
-    monkeypatch.setattr(api_mod, "_PROCESS_START_PKG_MTIME", 1000)
-    monkeypatch.setattr(api_mod, "_STALENESS_LAST_CHECK", 0.0)
-    monkeypatch.setattr(api_mod, "_STALENESS_IS_STALE", False)
-    monkeypatch.setattr(api_mod, "_STALENESS_CACHES_CLEARED", False)
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", {})
+    monkeypatch.setattr(cache_mod, "_PROCESS_START_PKG_MTIME", 1000)
+    monkeypatch.setattr(cache_mod, "_STALENESS_LAST_CHECK", 0.0)
+    monkeypatch.setattr(cache_mod, "_STALENESS_IS_STALE", False)
+    monkeypatch.setattr(cache_mod, "_STALENESS_CACHES_CLEARED", False)
 
     real_mtime = api_mod._path_mtime_ns
 
@@ -1010,7 +1021,7 @@ def test_load_and_validate_detects_stale_process(tmp_path, monkeypatch):
             return 2000
         return real_mtime(path)
 
-    monkeypatch.setattr(api_mod, "_path_mtime_ns", fake_mtime)
+    monkeypatch.setattr(cache_mod, "_path_mtime_ns", fake_mtime)
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
@@ -1023,11 +1034,12 @@ def test_load_and_validate_detects_stale_process(tmp_path, monkeypatch):
 def test_load_and_validate_raises_on_not_found(tmp_path, monkeypatch):
     """load_and_validate raises RecipeNotFoundError for nonexistent recipes."""
     import autoskillit.recipe._api as api_mod
+    import autoskillit.recipe._api_cache as cache_mod
     from autoskillit.core import RecipeNotFoundError
 
-    monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
-    monkeypatch.setattr(api_mod, "_STALENESS_LAST_CHECK", 0.0)
-    monkeypatch.setattr(api_mod, "_STALENESS_IS_STALE", False)
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", {})
+    monkeypatch.setattr(cache_mod, "_STALENESS_LAST_CHECK", 0.0)
+    monkeypatch.setattr(cache_mod, "_STALENESS_IS_STALE", False)
 
     with pytest.raises(RecipeNotFoundError, match="nonexistent_recipe"):
         api_mod.load_and_validate("nonexistent_recipe", tmp_path)
@@ -1036,12 +1048,13 @@ def test_load_and_validate_raises_on_not_found(tmp_path, monkeypatch):
 def test_lru_cache_helpers_cleared_on_process_staleness(tmp_path, monkeypatch):
     """Staleness detection clears lru_cache helpers."""
     import autoskillit.recipe._api as api_mod
+    import autoskillit.recipe._api_cache as cache_mod
     from autoskillit.core import ProcessStaleError
     from autoskillit.recipe.contracts import load_bundled_manifest
     from autoskillit.recipe.methodology_venue_appendix import load_ml_sub_area_folding
     from autoskillit.recipe.rules.rules_blocks import _block_budgets
 
-    monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", {})
 
     _block_budgets()
     load_bundled_manifest()
@@ -1050,10 +1063,10 @@ def test_lru_cache_helpers_cleared_on_process_staleness(tmp_path, monkeypatch):
     assert load_bundled_manifest.cache_info().currsize > 0
     assert load_ml_sub_area_folding.cache_info().currsize > 0
 
-    monkeypatch.setattr(api_mod, "_PROCESS_START_PKG_MTIME", 1000)
-    monkeypatch.setattr(api_mod, "_STALENESS_LAST_CHECK", 0.0)
-    monkeypatch.setattr(api_mod, "_STALENESS_IS_STALE", False)
-    monkeypatch.setattr(api_mod, "_STALENESS_CACHES_CLEARED", False)
+    monkeypatch.setattr(cache_mod, "_PROCESS_START_PKG_MTIME", 1000)
+    monkeypatch.setattr(cache_mod, "_STALENESS_LAST_CHECK", 0.0)
+    monkeypatch.setattr(cache_mod, "_STALENESS_IS_STALE", False)
+    monkeypatch.setattr(cache_mod, "_STALENESS_CACHES_CLEARED", False)
 
     real_mtime = api_mod._path_mtime_ns
 
@@ -1064,7 +1077,7 @@ def test_lru_cache_helpers_cleared_on_process_staleness(tmp_path, monkeypatch):
             return 2000
         return real_mtime(path)
 
-    monkeypatch.setattr(api_mod, "_path_mtime_ns", fake_mtime)
+    monkeypatch.setattr(cache_mod, "_path_mtime_ns", fake_mtime)
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)

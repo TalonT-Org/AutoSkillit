@@ -255,13 +255,13 @@ async def test_open_kitchen_recipe_found_returns_envelope_with_content_and_ingre
 @pytest.mark.anyio
 async def test_open_kitchen_smoke_test_renders_resolved_base_branch(monkeypatch):
     """T7: open_kitchen smoke-test renders the config-resolved base_branch value."""
-    import autoskillit.recipe._api as api_mod
+    import autoskillit.recipe._api_cache as cache_mod
     from autoskillit.core import pkg_root
     from autoskillit.recipe.repository import DefaultRecipeRepository
 
     project_dir = pkg_root().parent.parent
     monkeypatch.chdir(project_dir)
-    monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", {})
     monkeypatch.setattr(
         "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
         lambda _: {"base_branch": "develop"},

@@ -413,10 +413,10 @@ def test_contract_validator_module_deleted() -> None:
 
 def test_recipe_validator_has_regex_patterns() -> None:
     """recipe/contracts.py must define context/input regex patterns."""
-    ast_module = _get_module_ast("recipe/contracts.py")
+    ast_module = _get_module_ast("recipe/_contracts_types.py")
     assigns = _top_level_assign_targets(ast_module)
-    assert "_CONTEXT_REF_RE" in assigns, "recipe/contracts.py must define _CONTEXT_REF_RE"
-    assert "INPUT_REF_RE" in assigns, "recipe/contracts.py must define INPUT_REF_RE"
+    assert "_CONTEXT_REF_RE" in assigns, "recipe/_contracts_types.py must define _CONTEXT_REF_RE"
+    assert "INPUT_REF_RE" in assigns, "recipe/_contracts_types.py must define INPUT_REF_RE"
 
 
 def test_recipe_validator_no_process_lifecycle_import() -> None:
@@ -1257,9 +1257,9 @@ def test_recipe_lister_callsites_use_protocol_typing() -> None:
         f"These files still consume SkillResolver without SkillLister Protocol typing: {missing}"
     )
     # contracts.py uses .resolve() — must reference SkillResolver, not SkillLister
-    contracts_text = (src_root / "src/autoskillit/recipe/contracts.py").read_text()
+    contracts_text = (src_root / "src/autoskillit/recipe/_contracts_staleness.py").read_text()
     assert "SkillResolver" in contracts_text, (
-        "contracts.py must reference SkillResolver for the resolver parameter"
+        "_contracts_staleness.py must reference SkillResolver for the resolver parameter"
     )
 
 

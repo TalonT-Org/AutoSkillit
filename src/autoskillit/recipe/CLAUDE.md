@@ -8,12 +8,21 @@ Sub-package: rules/ (see rules/CLAUDE.md).
 | File | Purpose |
 |------|---------|
 | `__init__.py` | Re-exports `load_recipe`, `validate_recipe_structure`, `analyze_dataflow` |
-| `contracts.py` | Contract card generation + staleness triage |
+| `contracts.py` | Re-export facade — contract types, manifest, card, staleness |
+| `_contracts_types.py` | 10 dataclasses + 4 regex patterns |
+| `_contracts_manifest.py` | Manifest loading + ref extraction utilities |
+| `_contracts_card.py` | Card generation, loading, validation |
+| `_contracts_staleness.py` | Staleness detection + MCP suggestions |
 | `io.py` | `load_recipe`, `list_recipes`, `iter_steps_with_context` |
 | `order.py` | `BUNDLED_RECIPE_ORDER` — stable display order registry for Group 0 recipes |
 | `loader.py` | Path-based recipe metadata utilities |
-| `_api.py` | Orchestration API |
-| `_cmd_rpc.py` | `run_python` callables for externalized recipe cmd scripts |
+| `_api.py` | Re-export facade — `load_and_validate` + orchestration rules |
+| `_api_cache.py` | Cache globals + staleness helpers |
+| `_api_listing.py` | `list_all` + `validate_from_path` |
+| `_cmd_rpc.py` | Re-export facade — `run_python` callables |
+| `_cmd_rpc_guards.py` | Counter guards + git workspace ops |
+| `_cmd_rpc_merge.py` | Rebase, PR polling, branch management |
+| `_cmd_rpc_issues.py` | Issue creation, bundles, audit run dirs |
 | `_recipe_ingredients.py` | `format_ingredients_table` + `LoadRecipeResult` TypedDicts |
 | `_recipe_composition.py` | `_build_active_recipe` + sub-recipe merging |
 | `_rule_helpers.py` | Shared helper utilities for recipe semantic rules |

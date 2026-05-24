@@ -15,6 +15,7 @@ from autoskillit.core import (
     NamedResume,
     NoResume,
 )
+from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.commands import (
     _MAX_MCP_OUTPUT_TOKENS_VALUE,
     ClaudeHeadlessCmd,
@@ -283,3 +284,16 @@ def test_cmdspec_in_execution_all() -> None:
     import autoskillit.execution as m
 
     assert "CmdSpec" in m.__all__
+
+
+def test_system_prompt_forwarded_to_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+    original = ClaudeCodeBackend.build_interactive_cmd
+
+    def spy(self_inner: object, **kwargs: object) -> object:
+        captured.update(kwargs)
+        return original(self_inner, **kwargs)
+
+    monkeypatch.setattr(ClaudeCodeBackend, "build_interactive_cmd", spy)
+    build_interactive_cmd(system_prompt="forwarded-prompt")
+    assert captured["system_prompt"] == "forwarded-prompt"

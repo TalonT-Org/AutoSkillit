@@ -29,7 +29,9 @@ _FORBIDDEN_BY_CONTRACT: dict[str, frozenset[str]] = {
 
 EXPECTED_CROSS_LAYER_GUARDS: dict[str, frozenset[str]] = {
     "core/types/_type_protocols_recipe.py": frozenset({"recipe"}),
-    "execution/headless/__init__.py": frozenset({"config", "pipeline"}),
+    "execution/headless/__init__.py": frozenset({"pipeline"}),
+    "execution/headless/_headless_execute.py": frozenset({"pipeline"}),
+    "execution/headless/_headless_helpers.py": frozenset({"config", "pipeline"}),
     "execution/linux_tracing.py": frozenset({"config"}),
     "execution/process/__init__.py": frozenset({"config"}),
     "execution/testing.py": frozenset({"config"}),

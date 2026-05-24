@@ -141,7 +141,7 @@ class TestExecuteClaudeHeadlessIdleEnv:
             return None
 
         monkeypatch.setattr(
-            "autoskillit.execution.headless._attempt_contract_nudge",
+            "autoskillit.execution.headless._headless_execute._attempt_contract_nudge",
             _no_nudge,
         )
         minimal_ctx.config.run_skill.idle_output_timeout = 45

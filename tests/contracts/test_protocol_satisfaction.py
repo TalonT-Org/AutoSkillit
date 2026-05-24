@@ -524,12 +524,12 @@ class TestGroupDApiContractPreservation:
         )
 
     def test_req_api_004_headless_subprocess_result_under_type_checking(self):
-        """execution/headless.py must import SubprocessResult only under TYPE_CHECKING."""
-        source = (self._pkg_root() / "execution" / "headless" / "__init__.py").read_text()
+        """execution/headless/_headless_execute.py must import SubprocessResult only under TYPE_CHECKING."""
+        source = (self._pkg_root() / "execution" / "headless" / "_headless_execute.py").read_text()
         assert "SubprocessResult" in source, (
-            "SubprocessResult reference vanished from headless.py entirely"
+            "SubprocessResult reference vanished from _headless_execute.py entirely"
         )
-        assert "TYPE_CHECKING" in source, "TYPE_CHECKING guard removed from headless.py"
+        assert "TYPE_CHECKING" in source, "TYPE_CHECKING guard removed from _headless_execute.py"
         # A top-level (non-indented) import of SubprocessResult is the violation.
         runtime_import = re.search(
             r"^from\s+\S+\s+import\s+.*SubprocessResult",
@@ -537,7 +537,7 @@ class TestGroupDApiContractPreservation:
             re.MULTILINE,
         )
         assert runtime_import is None, (
-            f"SubprocessResult has a runtime (non-TYPE_CHECKING) import in headless.py: "
+            f"SubprocessResult has a runtime (non-TYPE_CHECKING) import in _headless_execute.py: "
             f"{runtime_import.group()!r}"
         )
 

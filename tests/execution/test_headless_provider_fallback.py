@@ -82,23 +82,23 @@ class TestProviderFallbackLoop:
             )
 
         monkeypatch.setattr(
-            "autoskillit.execution.headless._build_skill_result",
+            "autoskillit.execution.headless._headless_execute._build_skill_result",
             build_result_fn,
         )
         monkeypatch.setattr(
-            "autoskillit.execution.headless._compute_post_session_metrics",
+            "autoskillit.execution.headless._headless_execute._compute_post_session_metrics",
             lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),  # noqa: ARG005
         )
         monkeypatch.setattr(
-            "autoskillit.execution.headless._capture_git_head_sha",
+            "autoskillit.execution.headless._headless_execute._capture_git_head_sha",
             lambda *a: "",  # noqa: ARG005
         )
         monkeypatch.setattr(
-            "autoskillit.execution.headless.is_feature_enabled",
+            "autoskillit.execution.headless._headless_execute.is_feature_enabled",
             lambda name, *a, **kw: name == "providers",  # noqa: ARG005
         )
         monkeypatch.setattr(
-            "autoskillit.execution.headless.collect_version_snapshot",
+            "autoskillit.execution.headless._headless_execute.collect_version_snapshot",
             lambda: {},
         )
         monkeypatch.setattr(_sl_mod, "flush_session_log", lambda **kw: None)  # noqa: ARG005

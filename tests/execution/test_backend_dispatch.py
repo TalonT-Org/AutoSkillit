@@ -29,7 +29,9 @@ async def test_run_headless_core_uses_ctx_backend_for_command_construction(minim
     mock_runner.return_value = mock_result
     minimal_ctx.runner = mock_runner
 
-    with patch("autoskillit.execution.headless._build_skill_result") as mock_build_result:
+    with patch(
+        "autoskillit.execution.headless._headless_execute._build_skill_result"
+    ) as mock_build_result:
         mock_build_result.return_value = SkillResult(
             success=True,
             result="",

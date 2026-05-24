@@ -31,7 +31,7 @@ class TestResolveSessionLogDir:
 
         minimal_ctx.backend = _mock_backend(channel_b_capable=True)
         monkeypatch.setattr(
-            "autoskillit.execution.headless._session_log_dir",
+            "autoskillit.execution.headless._headless_helpers._session_log_dir",
             lambda cwd: Path("/fake/log/dir"),
         )
         result = _headless_mod._resolve_session_log_dir("/some/cwd", minimal_ctx)

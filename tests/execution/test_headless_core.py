@@ -817,7 +817,9 @@ class TestRunHeadlessCore:
         runner.set_default(_sr(0, _success_session_json("done"), ""))
         minimal_ctx.runner = runner
 
-        with patch("autoskillit.execution.headless._build_skill_result") as mock_build:
+        with patch(
+            "autoskillit.execution.headless._headless_execute._build_skill_result"
+        ) as mock_build:
             mock_build.return_value = SkillResult(
                 success=True,
                 result="",
@@ -2473,7 +2475,7 @@ class TestCrashSessionLog:
 
         tool_ctx.runner = raising_runner  # type: ignore[assignment]
 
-        with patch("autoskillit.execution.headless.logger") as mock_logger:
+        with patch("autoskillit.execution.headless._headless_execute.logger") as mock_logger:
             result = await run_headless_core("/investigate test", cwd=str(tmp_path), ctx=tool_ctx)
             mock_logger.error.assert_called_once()
             call_kwargs = mock_logger.error.call_args

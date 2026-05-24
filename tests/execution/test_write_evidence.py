@@ -54,17 +54,17 @@ class TestMultiDirFsSnapshot:
         self, tmp_path: Path, minimal_ctx, monkeypatch
     ) -> None:
         """When write_watch_dirs is provided, _resolve_skill_temp_dir is NOT called."""
-        import autoskillit.execution.headless as headless_mod
+        import autoskillit.execution.headless._headless_execute as _exec_mod
         from autoskillit.execution.headless import run_headless_core
 
         resolver_calls: list[str] = []
-        original = headless_mod._resolve_skill_temp_dir
+        original = _exec_mod._resolve_skill_temp_dir
 
         def recording_resolver(cwd: str, skill_command: str) -> Path | None:
             resolver_calls.append(skill_command)
             return original(cwd, skill_command)
 
-        monkeypatch.setattr(headless_mod, "_resolve_skill_temp_dir", recording_resolver)
+        monkeypatch.setattr(_exec_mod, "_resolve_skill_temp_dir", recording_resolver)
 
         explicit_dir = tmp_path / "planner" / "run-20260502"
         explicit_dir.mkdir(parents=True)

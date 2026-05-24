@@ -20,7 +20,7 @@ _HEADLESS_PATH = (
     / "autoskillit"
     / "execution"
     / "headless"
-    / "__init__.py"
+    / "_headless_execute.py"
 )
 
 

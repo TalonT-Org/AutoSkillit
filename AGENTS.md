@@ -99,7 +99,7 @@ generic_automation_mcp/
 
 **Session diagnostics logs** — per-backend log paths and session identification:
 
-- **Claude Code**: Logs live at `~/.local/share/autoskillit/logs/` (Linux) or `~/Library/Application Support/autoskillit/logs/` (macOS). Override with `linux_tracing.log_dir`. Session directories are named by the agent session ID when available (resolved from stdout or, for Claude Code backends, from the session JSONL filename via the side-channel stream). Fallback: `no_session_{timestamp}`. Query the index: `jq 'select(.success == false)' ~/.local/share/autoskillit/logs/sessions.jsonl`.
+- **Claude Code**: Logs live at `~/.local/share/autoskillit/logs/` (Linux) or `~/Library/Application Support/autoskillit/logs/` (macOS). Override with `linux_tracing.log_dir`. Session directories are named by the agent session ID when available (resolved from stdout or, for Claude Code backends, from the session JSONL filename via Channel B (the JSONL side-channel stream)). Fallback: `no_session_{timestamp}`. Query the index: `jq 'select(.success == false)' ~/.local/share/autoskillit/logs/sessions.jsonl`.
 - **Codex**: Session log discovery is not yet wired (`CodexSessionLocator` returns `None`; `session_record_types` is empty). The `thread_id` (from the `thread.started` NDJSON event) is the canonical session identifier for Codex backends.
 
 **Import layer vs. orchestration level — disambiguation table:**

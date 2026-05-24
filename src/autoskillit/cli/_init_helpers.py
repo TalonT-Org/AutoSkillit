@@ -7,10 +7,13 @@ import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 
 from autoskillit.config import write_config_layer
 from autoskillit.core import YAMLError, atomic_write, dump_yaml_str, get_logger, load_yaml
+
+if TYPE_CHECKING:
+    from autoskillit.core import CodingAgentBackend
 
 logger = get_logger(__name__)
 
@@ -420,7 +423,9 @@ def _print_next_steps(*, context: str = "install") -> None:
         print(f"  {_D}{i}.{_R} {_G}{cmd}{_R}  {_D}{desc}{_R}")
 
 
-def _register_all(scope: str, project_dir: Path) -> None:
+def _register_all(
+    scope: str, project_dir: Path, *, backend: CodingAgentBackend | None = None
+) -> None:
     """Ensure project temp dir, register hooks and MCP server, print summary."""
     import autoskillit.core.paths as _core_paths
     from autoskillit.cli._hooks import (

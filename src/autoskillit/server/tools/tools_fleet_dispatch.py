@@ -166,16 +166,16 @@ async def dispatch_food_truck(
 
     Never raises.
     """
-    _MAX_CALLER_INSTRUCTIONS_LEN = 2000
-    if caller_instructions and len(caller_instructions) > _MAX_CALLER_INSTRUCTIONS_LEN:
-        caller_instructions = caller_instructions[:_MAX_CALLER_INSTRUCTIONS_LEN]
-
     if (gate := _require_enabled()) is not None:
         return gate
     if (fleet_gate := _require_fleet("dispatch_food_truck")) is not None:
         return fleet_gate
 
     try:
+        _MAX_CALLER_INSTRUCTIONS_LEN = 2000
+        if caller_instructions and len(caller_instructions) > _MAX_CALLER_INSTRUCTIONS_LEN:
+            caller_instructions = caller_instructions[:_MAX_CALLER_INSTRUCTIONS_LEN]
+
         # Feature guard: config authority check independent of MCP visibility state.
         # Fleet sessions open the gate unconditionally at boot; this catch-all ensures
         # dispatch_food_truck never executes when features.fleet is disabled in config.

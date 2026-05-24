@@ -73,7 +73,7 @@ def test_run_interactive_session_restricts_tools(monkeypatch: pytest.MonkeyPatch
 
 
 def test_run_interactive_session_appends_system_prompt(monkeypatch: pytest.MonkeyPatch) -> None:
-    """_run_interactive_session appends --append-system-prompt <prompt>."""
+    """--append-system-prompt <prompt> present in subprocess cmd (via build_interactive_cmd)."""
     _stub_plugin_installed(monkeypatch)
     captured = _capture_subprocess(monkeypatch)
     _run_interactive_session(system_prompt="my-unique-prompt")
@@ -132,7 +132,7 @@ def test_run_interactive_session_no_plugin_dir_when_installed(
 def test_run_interactive_session_suppresses_system_prompt_on_named_resume(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """_run_interactive_session omits --append-system-prompt when resume_spec is NamedResume."""
+    """--append-system-prompt absent on NamedResume (suppressed by build_interactive_cmd)."""
     from autoskillit.core import NamedResume
 
     _stub_plugin_installed(monkeypatch)
@@ -147,7 +147,7 @@ def test_run_interactive_session_suppresses_system_prompt_on_named_resume(
 def test_run_interactive_session_suppresses_system_prompt_on_bare_resume(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """_run_interactive_session omits --append-system-prompt when resume_spec is BareResume."""
+    """--append-system-prompt absent on BareResume (suppressed by build_interactive_cmd)."""
     from autoskillit.core import BareResume
 
     _stub_plugin_installed(monkeypatch)
@@ -169,7 +169,7 @@ def test_session_type_cook_order_in_cli_session() -> None:
 def test_run_interactive_session_appends_system_prompt_on_fresh_session(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """_run_interactive_session appends --append-system-prompt for fresh (NoResume) sessions."""
+    """--append-system-prompt present for fresh NoResume sessions (via build_interactive_cmd)."""
     from autoskillit.core import NoResume
 
     _stub_plugin_installed(monkeypatch)
@@ -189,7 +189,7 @@ def test_run_interactive_session_appends_system_prompt_on_fresh_session(
 
 
 def test_skill_injection_disabled_omits_flags(monkeypatch: pytest.MonkeyPatch) -> None:
-    """When skill_injection_capable=False, no plugin/tools/system-prompt flags are injected."""
+    """When skill_injection_capable=False, no plugin/tools flags injected by _run_interactive_session."""
     from autoskillit.core import BackendCapabilities, CmdSpec
 
     no_inject_caps = BackendCapabilities(

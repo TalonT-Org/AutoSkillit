@@ -7,9 +7,11 @@ import pytest
 
 from autoskillit.core import (
     BareResume,
+    ClaudeFlags,
     CmdSpec,
     DirectInstall,
     NamedResume,
+    NoResume,
     OutputFormat,
     SessionCheckpoint,
     SkillSessionConfig,
@@ -113,6 +115,36 @@ class TestBuildInteractiveCmdEquivalence:
         shim = commands.build_interactive_cmd(model="sonnet")
         assert spec.cmd == tuple(shim.cmd)
         assert spec.env == shim.env
+
+
+class TestBuildInteractiveCmdSystemPrompt:
+    """system_prompt is emitted as --append-system-prompt by build_interactive_cmd."""
+
+    def test_system_prompt_with_no_resume_appends_flag(self) -> None:
+        backend = ClaudeCodeBackend()
+        spec = backend.build_interactive_cmd(system_prompt="my-prompt", resume_spec=NoResume())
+        assert ClaudeFlags.APPEND_SYSTEM_PROMPT in spec.cmd
+        idx = spec.cmd.index(ClaudeFlags.APPEND_SYSTEM_PROMPT)
+        assert spec.cmd[idx + 1] == "my-prompt"
+
+    def test_system_prompt_none_does_not_append_flag(self) -> None:
+        backend = ClaudeCodeBackend()
+        spec = backend.build_interactive_cmd(system_prompt=None)
+        assert ClaudeFlags.APPEND_SYSTEM_PROMPT not in spec.cmd
+
+    def test_system_prompt_with_named_resume_suppresses_flag(self) -> None:
+        backend = ClaudeCodeBackend()
+        spec = backend.build_interactive_cmd(
+            system_prompt="should-suppress", resume_spec=NamedResume(session_id="s1")
+        )
+        assert ClaudeFlags.APPEND_SYSTEM_PROMPT not in spec.cmd
+
+    def test_system_prompt_with_bare_resume_suppresses_flag(self) -> None:
+        backend = ClaudeCodeBackend()
+        spec = backend.build_interactive_cmd(
+            system_prompt="should-suppress", resume_spec=BareResume()
+        )
+        assert ClaudeFlags.APPEND_SYSTEM_PROMPT not in spec.cmd
 
 
 class TestBuildHeadlessResumeCmdEquivalence:

@@ -50,10 +50,8 @@ def _run_interactive_session(
     from autoskillit.cli.ui._terminal import terminal_guard
     from autoskillit.core import (
         MARKETPLACE_PREFIX,
-        BareResume,
         ClaudeFlags,
         InfraExitCategory,
-        NamedResume,
         NoResume,
         detect_autoskillit_mcp_prefix,
         pkg_root,
@@ -63,6 +61,7 @@ def _run_interactive_session(
     spec = backend.build_interactive_cmd(
         initial_prompt=initial_message,
         resume_spec=resume_spec if resume_spec is not None else NoResume(),
+        system_prompt=system_prompt,
         env_extras=extra_env,
         required_env=required_env,
     )
@@ -72,13 +71,11 @@ def _run_interactive_session(
             if detect_autoskillit_mcp_prefix() == MARKETPLACE_PREFIX
             else [ClaudeFlags.PLUGIN_DIR, str(pkg_root())]
         )
-        _is_resume = isinstance(resume_spec, (BareResume, NamedResume))
         cmd = [
             *spec.cmd,
             *plugin_flags,
             ClaudeFlags.TOOLS,
             "AskUserQuestion",
-            *([] if _is_resume else [ClaudeFlags.APPEND_SYSTEM_PROMPT, system_prompt]),
         ]
     else:
         cmd = [*spec.cmd]

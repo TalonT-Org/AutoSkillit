@@ -509,8 +509,10 @@ class ClaudeCodeBackend:
             session. ``BareResume`` passes ``--resume`` without an ID (Claude Code's
             interactive picker). ``NamedResume`` passes ``--resume <id>``.
         system_prompt
-            Optional system prompt text. Unused in A1 — reserved for A2 wiring,
-            which will translate it to ``--append-system-prompt <value>``.
+            Optional system prompt text. When provided and resume_spec is NoResume,
+            appended as ``--append-system-prompt <value>``. Suppressed on resume
+            sessions (BareResume or NamedResume) because ``--append-system-prompt``
+            is incompatible with ``--resume``.
         env_extras
             Optional caller overrides merged into the resolved env after IDE scrubbing.
         required_env
@@ -534,6 +536,8 @@ class ClaudeCodeBackend:
                 cmd.append(ClaudeFlags.RESUME)
             case NoResume():
                 pass
+        if system_prompt is not None and isinstance(resume_spec, NoResume):
+            cmd += [ClaudeFlags.APPEND_SYSTEM_PROMPT, system_prompt]
         if model:
             cmd += [ClaudeFlags.MODEL, model]
         match plugin_source:

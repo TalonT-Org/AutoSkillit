@@ -134,6 +134,73 @@ def _build_bash_event(command: str) -> dict:
     return {"tool_name": "Bash", "tool_input": {"command": command}}
 
 
+def _build_apply_patch_event(patch_text: str) -> dict:
+    return {"tool_name": "apply_patch", "tool_input": {"command": patch_text}}
+
+
+class TestWriteGuardApplyPatch:
+    """write_guard intercepts apply_patch tool calls with unified diff path extraction."""
+
+    @pytest.fixture(autouse=True)
+    def _enable_headless(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+
+    def test_apply_patch_within_prefix_allowed(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
+        allowed = tmp_path / "workspace"
+        allowed.mkdir()
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", str(allowed) + "/")
+        patch_text = f"--- a/old.py\n+++ b/{allowed}/foo.py\n@@ -1 +1 @@\n-old\n+new"
+        result = _run_hook(_build_apply_patch_event(patch_text))
+        assert result == ""
+
+    def test_apply_patch_outside_prefix_denied(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
+        allowed = tmp_path / "workspace"
+        allowed.mkdir()
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", str(allowed) + "/")
+        patch_text = "--- a/old.py\n+++ b/outside/bar.py\n@@ -1 +1 @@\n-old\n+new"
+        result = _run_hook(_build_apply_patch_event(patch_text))
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert (
+            "read-only skill session" in parsed["hookSpecificOutput"]["permissionDecisionReason"]
+        )
+
+    def test_apply_patch_multiple_files_one_outside_denied(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        allowed = tmp_path / "workspace"
+        allowed.mkdir()
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", str(allowed) + "/")
+        patch_text = (
+            f"--- a/a.py\n+++ b/{allowed}/a.py\n@@ -1 +1 @@\n-x\n+y\n"
+            f"--- a/b.py\n+++ b/outside/b.py\n@@ -1 +1 @@\n-x\n+y"
+        )
+        result = _run_hook(_build_apply_patch_event(patch_text))
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_apply_patch_no_target_paths_denies(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
+        allowed = tmp_path / "workspace"
+        allowed.mkdir()
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", str(allowed) + "/")
+        patch_text = "some random text\nwithout any diff headers\n"
+        result = _run_hook(_build_apply_patch_event(patch_text))
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert (
+            "no target paths found in patch"
+            in parsed["hookSpecificOutput"]["permissionDecisionReason"]
+        )
+
+    def test_apply_patch_empty_command_denies(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
+        allowed = tmp_path / "workspace"
+        allowed.mkdir()
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", str(allowed) + "/")
+        result = _run_hook(_build_apply_patch_event(""))
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
 class TestWriteGuardBashBypass:
     """write_guard intercepts Bash tool calls containing file-modifying commands."""
 

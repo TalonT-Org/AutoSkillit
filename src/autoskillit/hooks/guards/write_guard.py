@@ -1,4 +1,5 @@
-"""PreToolUse hook: blocks Write/Edit/Bash outside the allowed prefix in write-scoped sessions."""
+"""PreToolUse hook: blocks Write/Edit/Bash/apply_patch outside
+the allowed prefix in write-scoped sessions."""
 
 from __future__ import annotations
 
@@ -71,6 +72,17 @@ def _extract_bash_write_targets(command: str) -> list[str] | None:
     return targets
 
 
+def _extract_paths_from_patch(command: str) -> list[str]:
+    """Extract target file paths from a unified diff patch ('+++ b/' lines)."""
+    if not command:
+        return []
+    paths: list[str] = []
+    for line in command.split("\n"):
+        if line.startswith("+++ b/"):
+            paths.append(line[6:])
+    return paths
+
+
 def _deny(reason: str) -> None:
     json.dump(
         {
@@ -96,11 +108,13 @@ def main() -> None:
     try:
         data = json.loads(sys.stdin.read())
     except (json.JSONDecodeError, ValueError, OSError):
-        _deny(f"Write/Edit blocked: {WRITE_GUARD_DENY_TRIGGER} (malformed hook input).")
+        _deny(
+            f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER} (malformed hook input)."
+        )
         return
 
     tool_name = data.get("tool_name", "")
-    if tool_name not in ("Write", "Edit", "Bash") and "run_cmd" not in tool_name:
+    if tool_name not in ("Write", "Edit", "Bash", "apply_patch") and "run_cmd" not in tool_name:
         sys.exit(0)
 
     tool_input = data.get("tool_input", {})
@@ -123,7 +137,25 @@ def main() -> None:
         for target in targets:
             if not _within_prefix(target):
                 _deny(
-                    f"Write/Edit blocked: {WRITE_GUARD_DENY_TRIGGER}. "
+                    f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER}. "
+                    f"Only writes to {allowed_prefix} are permitted."
+                )
+                return
+        sys.exit(0)
+
+    if tool_name == "apply_patch":
+        command = tool_input.get("command", "")
+        paths = _extract_paths_from_patch(command)
+        if not paths:
+            _deny(
+                f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER} "
+                f"(no target paths found in patch)."
+            )
+            return
+        for p in paths:
+            if not _within_prefix(p):
+                _deny(
+                    f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER}. "
                     f"Only writes to {allowed_prefix} are permitted."
                 )
                 return
@@ -132,14 +164,14 @@ def main() -> None:
     # Write or Edit
     file_path = tool_input.get("file_path", "")
     if not file_path:
-        _deny(f"Write/Edit blocked: {WRITE_GUARD_DENY_TRIGGER} (no file_path).")
+        _deny(f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER} (no file_path).")
         return
 
     if _within_prefix(file_path):
         sys.exit(0)
 
     _deny(
-        f"Write/Edit blocked: {WRITE_GUARD_DENY_TRIGGER}. "
+        f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER}. "
         f"Only writes to {allowed_prefix} are permitted."
     )
 

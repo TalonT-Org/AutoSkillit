@@ -435,6 +435,33 @@ parallel run of the same step reports under the same canonical step name.
 
 ---
 
+## PARAMETER FORWARDING — output_dir, stale_threshold, idle_output_timeout
+
+When a recipe step's `with:` block contains `output_dir`, you MUST pass it as the
+`output_dir` parameter of `run_skill`. This controls the write guard — omitting it
+causes the session to write to the wrong directory.
+
+When a recipe step has a top-level `stale_threshold` or `idle_output_timeout` field,
+pass it as the corresponding `run_skill` parameter. These control session kill thresholds.
+
+**Example:**
+```yaml
+implement:
+  tool: run_skill
+  stale_threshold: 2400
+  with:
+    skill_command: "/implement ..."
+    cwd: "${{ context.work_dir }}"
+    step_name: implement
+    output_dir: "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}"
+```
+
+Call: `run_skill(skill_command=..., cwd=..., step_name="implement", output_dir="...", stale_threshold=2400)`
+
+This provides defense-in-depth: the server resolves parameters server-side, AND the LLM is instructed to forward them.
+
+---
+
 ## MODEL PROPAGATION — MANDATORY
 
 **MODEL PROPAGATION** — When the user specifies a model (e.g. "use opus"), apply it to the `model` parameter of ALL `run_skill` calls for steps that declare a `model:` field — including follow-on steps (retry_worktree, fix, resolve_review, resolve_ci, conflict resolution). All `run_skill` steps in orchestrated recipes must declare a `model:` field; steps that omit it are ineligible for propagation and silently bypass user model selection.

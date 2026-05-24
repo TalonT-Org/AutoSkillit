@@ -66,6 +66,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_tools_execution_response.py` | Contract tests: MCP tool response fields use correct enum types |
 | `test_tools_execution_results.py` | Tests for run_skill result shapes, failure paths, timing, flush telemetry, and gate checks |
 | `test_tools_execution_routing.py` | Tests for run_skill routing, executor delegation, and session skill management |
+| `test_tools_execution_step_resolution.py` | Tests for server-side recipe step parameter resolution in run_skill (output_dir, stale_threshold, idle_output_timeout auto-filled from cached recipe step definitions) |
 | `test_tools_execution_write_prefix.py` | Tests for allowed_write_prefix computation decoupled from read_only |
 | `test_tools_git.py` | Tests for merge_worktree core flow: happy path, test gate, rebase abort, bypass prevention |
 | `test_tools_git_branch.py` | Tests for create_unique_branch and check_pr_mergeable tools |

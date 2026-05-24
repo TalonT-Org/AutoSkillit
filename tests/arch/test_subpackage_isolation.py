@@ -1108,6 +1108,7 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
         "config",
         "active_recipe_packs",
         "active_recipe_features",
+        "active_recipe_steps",
         "temp_dir",
         "project_dir",
         "ephemeral_root",

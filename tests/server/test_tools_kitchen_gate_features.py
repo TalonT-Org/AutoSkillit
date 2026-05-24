@@ -30,6 +30,7 @@ async def test_open_kitchen_sets_active_recipe_packs(tmp_path, monkeypatch):
                     await _open_kitchen_handler()
 
     assert mock_ctx.active_recipe_packs == frozenset()
+    assert mock_ctx.active_recipe_steps == {}
 
 
 def test_close_kitchen_clears_active_recipe_packs(tmp_path, monkeypatch):
@@ -46,6 +47,7 @@ def test_close_kitchen_clears_active_recipe_packs(tmp_path, monkeypatch):
             _close_kitchen_handler()
 
     assert mock_ctx.active_recipe_packs is None
+    assert mock_ctx.active_recipe_steps is None
 
 
 @pytest.mark.anyio

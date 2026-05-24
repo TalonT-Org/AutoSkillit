@@ -88,8 +88,8 @@ class TestClassifyDispatchOutcomeCompletedClean:
 
 
 class TestQuotaExhaustedOutcome:
-    def test_quota_exhausted_is_failure(self):
-        """completed_clean + success=false + reason=fleet_quota_exhausted → FAILURE."""
+    def test_quota_exhausted_is_resumable(self):
+        """completed_clean + success=false + reason=fleet_quota_exhausted → RESUMABLE."""
         parsed = L3ParseResult(
             outcome="completed_clean",
             payload={"success": False, "reason": FleetErrorCode.FLEET_QUOTA_EXHAUSTED},
@@ -99,7 +99,7 @@ class TestQuotaExhaustedOutcome:
         )
         skill_result = dataclasses.replace(_DEFAULT_SKILL_RESULT)
         status, reason = classify_dispatch_outcome(parsed, skill_result, sidecar_exists=False)
-        assert status == DispatchStatus.FAILURE
+        assert status == DispatchStatus.RESUMABLE
         assert reason == FleetErrorCode.FLEET_QUOTA_EXHAUSTED
 
 

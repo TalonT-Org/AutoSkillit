@@ -22,7 +22,7 @@ from autoskillit.core import (
     truncate_text,
     validate_add_dir,
 )
-from autoskillit.core.io import resolve_skill_temp_dir as _resolve_skill_temp_dir
+from autoskillit.core import resolve_skill_temp_dir as _resolve_skill_temp_dir
 from autoskillit.server import mcp
 from autoskillit.server._guards import (
     _check_dry_walkthrough,

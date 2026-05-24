@@ -44,7 +44,7 @@ from autoskillit.core import (
     is_git_worktree,
     temp_dir_display_str,
 )
-from autoskillit.core.io import resolve_skill_temp_dir as _resolve_skill_temp_dir
+from autoskillit.core import resolve_skill_temp_dir as _resolve_skill_temp_dir
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.clone_guard import (
     check_and_revert_clone_contamination,

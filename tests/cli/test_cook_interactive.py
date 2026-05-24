@@ -701,12 +701,11 @@ class TestCookInteractive:
             patch("builtins.input", return_value=""),
             patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
             patch("subprocess.run", return_value=MagicMock(returncode=0)),
-            patch("autoskillit.execution.ClaudeCodeBackend", _CapturingBackend),
             patch("autoskillit.core.write_registry_entry"),
         ):
             import autoskillit.cli.session._cook as module
 
-            module.cook()
+            module.cook(backend=_CapturingBackend())
 
         assert len(captured_kwargs) == 1, "build_interactive_cmd must have been called"
         call_kwargs = captured_kwargs[0]
@@ -715,3 +714,91 @@ class TestCookInteractive:
         assert "initial_prompt" in call_kwargs
         assert "resume_spec" in call_kwargs
         assert "env_extras" in call_kwargs
+
+    def test_cook_uses_injected_backend(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """When backend= is passed, cook() uses it directly without calling get_backend()."""
+        from unittest.mock import MagicMock, patch
+
+        from autoskillit.core import CmdSpec
+
+        fake_skills_dir = tmp_path / "skills"
+        fake_skills_dir.mkdir()
+        mock_mgr = MagicMock()
+        mock_mgr.init_session.return_value = fake_skills_dir
+        build_called: list[dict] = []
+
+        class _InjectedBackend:
+            def binary_name(self) -> str:
+                return "claude"
+
+            def build_interactive_cmd(self, **kwargs):
+                build_called.append(kwargs)
+                return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
+
+        get_backend_called: list = []
+
+        with (
+            patch("shutil.which", return_value="/usr/bin/claude"),
+            patch("builtins.input", return_value=""),
+            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
+            patch("subprocess.run", return_value=MagicMock(returncode=0)),
+            patch("autoskillit.core.write_registry_entry"),
+            patch(
+                "autoskillit.execution.backends.get_backend",
+                side_effect=lambda name: get_backend_called.append(name),
+            ),
+        ):
+            import autoskillit.cli.session._cook as module
+
+            module.cook(backend=_InjectedBackend())
+
+        assert build_called, "Injected backend's build_interactive_cmd must be called"
+        assert not get_backend_called, "get_backend must NOT be called when backend is injected"
+
+    def test_cook_default_backend_calls_get_backend(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """When backend= is not passed, cook() calls get_backend() with the config backend name."""
+        from unittest.mock import MagicMock, patch
+
+        from autoskillit.core import CmdSpec
+
+        fake_skills_dir = tmp_path / "skills"
+        fake_skills_dir.mkdir()
+        mock_mgr = MagicMock()
+        mock_mgr.init_session.return_value = fake_skills_dir
+        get_backend_called: list = []
+
+        class _FakeBackend:
+            def binary_name(self) -> str:
+                return "claude"
+
+            def build_interactive_cmd(self, **kwargs):
+                return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
+
+        mock_config = MagicMock()
+        mock_config.agent_backend.backend = "claude-code"
+        mock_config.features = {}
+        mock_config.experimental_enabled = False
+        mock_config.providers.profiles = {}
+
+        with (
+            patch("shutil.which", return_value="/usr/bin/claude"),
+            patch("builtins.input", return_value=""),
+            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
+            patch("subprocess.run", return_value=MagicMock(returncode=0)),
+            patch("autoskillit.core.write_registry_entry"),
+            patch("autoskillit.config.load_config", return_value=mock_config),
+            patch(
+                "autoskillit.execution.backends.get_backend",
+                side_effect=lambda name: (get_backend_called.append(name), _FakeBackend())[1],
+            ),
+        ):
+            import autoskillit.cli.session._cook as module
+
+            module.cook()
+
+        assert get_backend_called, "get_backend must be called when backend is not injected"
+        assert get_backend_called[0] == "claude-code"

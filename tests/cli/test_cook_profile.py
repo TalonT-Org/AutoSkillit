@@ -38,7 +38,6 @@ def _run_cook(profile, cfg, mock_mgr):
         patch("builtins.input", return_value=""),
         patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
         patch("subprocess.run", return_value=MagicMock(returncode=0)),
-        patch("autoskillit.execution.ClaudeCodeBackend", mock_backend_cls),
         patch("autoskillit.core.write_registry_entry"),
         patch("autoskillit.config.load_config", return_value=cfg),
         patch(
@@ -47,7 +46,7 @@ def _run_cook(profile, cfg, mock_mgr):
         ),
         patch("autoskillit.cli.ui._timed_input.timed_prompt", return_value=""),
     ):
-        cook_module.cook(profile=profile)
+        cook_module.cook(profile=profile, backend=mock_backend_cls())
     return captured
 
 
@@ -96,12 +95,11 @@ def test_profile_feature_disabled_exits(capsys, _mock_mgr):
     with (
         patch("shutil.which", return_value="/usr/bin/claude"),
         patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=_mock_mgr),
-        patch("autoskillit.execution.ClaudeCodeBackend", mock_backend_cls),
         patch("autoskillit.config.load_config", return_value=cfg),
         patch("autoskillit.cli.session._cook.is_feature_enabled", return_value=False),
     ):
         with pytest.raises(SystemExit) as exc_info:
-            cook_module.cook(profile="minimax")
+            cook_module.cook(profile="minimax", backend=mock_backend_cls())
     assert exc_info.value.code == 1
     assert "providers" in capsys.readouterr().err
 
@@ -115,12 +113,11 @@ def test_profile_unknown_exits(capsys, _mock_mgr):
     with (
         patch("shutil.which", return_value="/usr/bin/claude"),
         patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=_mock_mgr),
-        patch("autoskillit.execution.ClaudeCodeBackend", mock_backend_cls),
         patch("autoskillit.config.load_config", return_value=cfg),
         patch("autoskillit.cli.session._cook.is_feature_enabled", return_value=True),
     ):
         with pytest.raises(SystemExit) as exc_info:
-            cook_module.cook(profile="minimax")
+            cook_module.cook(profile="minimax", backend=mock_backend_cls())
     assert exc_info.value.code == 1
     err = capsys.readouterr().err
     assert "minimax" in err

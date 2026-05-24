@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from autoskillit.execution.backends._codex_config import (
+from autoskillit.execution import (
     _read_codex_config,
     _write_codex_config,
 )
@@ -45,7 +45,7 @@ def _is_autoskillit_hook_entry(entry: dict) -> bool:
     hooks_dir_str = str(HOOKS_DIR)
     for hook in entry.get("hooks", []):
         cmd = hook.get("command", "")
-        if "/autoskillit/" in cmd or hooks_dir_str in cmd:
+        if "/autoskillit/" in cmd or hooks_dir_str in cmd or "_dispatch.py" in cmd:
             return True
     return False
 

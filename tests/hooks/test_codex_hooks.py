@@ -3,8 +3,6 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-import pytest
-
 from autoskillit.cli._hooks_codex import (
     _is_autoskillit_hook_entry,
     generate_codex_hooks_config,
@@ -18,11 +16,7 @@ pytestmark = []
 class TestNoThirdPartyToml:
     def test_no_third_party_toml_in_hooks_codex(self):
         source = (
-            Path(__file__).resolve().parents[2]
-            / "src"
-            / "autoskillit"
-            / "cli"
-            / "_hooks_codex.py"
+            Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "cli" / "_hooks_codex.py"
         )
         tree = ast.parse(source.read_text())
         for node in ast.walk(tree):
@@ -109,7 +103,9 @@ class TestSyncHooksToCodexConfig:
 
     def test_sync_preserves_foreign_hooks(self, tmp_path):
         p = tmp_path / "config.toml"
-        p.write_text('[[hooks]]\nevent = "PreToolUse"\n[[hooks.hooks]]\ncommand = "python3 /usr/local/guard.py"\n')
+        p.write_text(
+            '[[hooks]]\nevent = "PreToolUse"\n[[hooks.hooks]]\ncommand = "python3 /usr/local/guard.py"\n'
+        )
         result = sync_hooks_to_codex_config(config_path=p)
         assert result is True
         config = _read_codex_config(p)
@@ -119,7 +115,9 @@ class TestSyncHooksToCodexConfig:
 
     def test_sync_replaces_stale(self, tmp_path):
         p = tmp_path / "config.toml"
-        p.write_text('[[hooks]]\nevent = "PreToolUse"\n[[hooks.hooks]]\ncommand = "/autoskillit/hooks/_dispatch.py old"\n')
+        p.write_text(
+            '[[hooks]]\nevent = "PreToolUse"\n[[hooks.hooks]]\ncommand = "/autoskillit/hooks/_dispatch.py old"\n'
+        )
         result = sync_hooks_to_codex_config(config_path=p)
         assert result is True
         config = _read_codex_config(p)

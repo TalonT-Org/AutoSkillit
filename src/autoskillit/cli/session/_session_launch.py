@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 from autoskillit.core import NamedResume, NoResume
 
 if TYPE_CHECKING:
-    from autoskillit.core import ResumeSpec
+    from autoskillit.core import CodingAgentBackend, ResumeSpec
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,6 +29,7 @@ def _run_interactive_session(
     resume_spec: ResumeSpec | None = None,
     project_dir: Path | None = None,
     required_env: frozenset[str] | None = None,
+    backend: CodingAgentBackend | None = None,
 ) -> str | _InfraExitSignal | None:
     """Launch an interactive Claude Code session.
 
@@ -37,9 +38,13 @@ def _run_interactive_session(
         _InfraExitSignal — when an infrastructure exit is detected
         None — clean exit
     """
-    from autoskillit.execution import ClaudeCodeBackend, read_session_state
+    from autoskillit.execution import read_session_state
 
-    backend = ClaudeCodeBackend()
+    if backend is None:
+        from autoskillit.config import load_config
+        from autoskillit.execution.backends import get_backend
+
+        backend = get_backend(load_config().agent_backend.backend)
     if shutil.which(backend.binary_name()) is None:
         print(
             f"ERROR: '{backend.binary_name()}' not found. "

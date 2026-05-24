@@ -11,7 +11,7 @@ from autoskillit.recipe.registry import RuleFinding, semantic_rule
 from autoskillit.recipe.schema import RecipeKind
 
 if TYPE_CHECKING:
-    from autoskillit.recipe.schema import Recipe
+    pass
 
 # _run_dispatch() auto-injects these from dispatch-level fields (e.g. task: from the
 # dispatch task: field), so campaigns that rely on this injection pattern should not

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections import Counter
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import regex as re
@@ -15,7 +14,7 @@ from autoskillit.recipe.registry import RuleFinding, semantic_rule
 from autoskillit.recipe.schema import RecipeKind
 
 if TYPE_CHECKING:
-    from autoskillit.recipe.schema import Recipe
+    pass
 
 logger = get_logger(__name__)
 

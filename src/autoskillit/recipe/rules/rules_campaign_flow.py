@@ -13,7 +13,7 @@ from autoskillit.recipe.registry import RuleFinding, semantic_rule
 from autoskillit.recipe.schema import CAMPAIGN_REF_RE, RecipeKind
 
 if TYPE_CHECKING:
-    from autoskillit.recipe.schema import Recipe
+    pass
 
 logger = get_logger(__name__)
 

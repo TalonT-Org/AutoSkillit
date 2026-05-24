@@ -661,3 +661,13 @@ def test_make_context_unknown_backend_raises_value_error() -> None:
     cfg = AutomationConfig(agent_backend=AgentBackendConfig(backend="nonexistent"))
     with pytest.raises(ValueError, match="nonexistent"):
         make_context(cfg, runner=_runner())
+
+
+def test_make_context_codex_backend_not_none_plain_config() -> None:
+    """AgentBackendConfig(backend='codex') with no feature flags produces CodexBackend."""
+    from autoskillit.execution.backends.codex import CodexBackend
+
+    cfg = AutomationConfig(agent_backend=AgentBackendConfig(backend="codex"))
+    ctx = make_context(cfg, runner=_runner())
+    assert ctx.backend is not None
+    assert isinstance(ctx.backend, CodexBackend)

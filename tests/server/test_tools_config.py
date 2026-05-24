@@ -27,6 +27,7 @@ async def test_configure_fleet_writes_overlay(tmp_path, monkeypatch) -> None:
 
     mock_ctx = _make_mock_ctx()
     mock_ctx.project_dir = tmp_path
+    mock_ctx.config = AutomationConfig()
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_state, "_ctx", mock_ctx)
@@ -59,6 +60,7 @@ async def test_configure_fleet_replaces_semaphore(tmp_path, monkeypatch) -> None
     mock_ctx = _make_mock_ctx()
     mock_ctx.project_dir = tmp_path
     mock_ctx.fleet_lock = FleetSemaphore(max_concurrent=3)
+    mock_ctx.config = AutomationConfig()
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_state, "_ctx", mock_ctx)
@@ -88,6 +90,7 @@ async def test_configure_fleet_preserves_existing_overlay(tmp_path, monkeypatch)
 
     mock_ctx = _make_mock_ctx()
     mock_ctx.project_dir = tmp_path
+    mock_ctx.config = AutomationConfig()
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_state, "_ctx", mock_ctx)
@@ -186,6 +189,7 @@ async def test_configure_fleet_accumulates_across_calls(tmp_path, monkeypatch) -
 
     mock_ctx = _make_mock_ctx()
     mock_ctx.project_dir = tmp_path
+    mock_ctx.config = AutomationConfig()
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_state, "_ctx", mock_ctx)

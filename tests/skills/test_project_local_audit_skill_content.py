@@ -449,3 +449,19 @@ def test_validate_audit_project_local_has_validation_summary() -> None:
     assert "validation_summary_" in content, (
         "validate-audit/.claude/SKILL.md missing validation_summary_ output file"
     )
+
+
+# ---------------------------------------------------------------------------
+# Test 23: validate-audit project-local has effort-based splitting
+# ---------------------------------------------------------------------------
+
+
+def test_validate_audit_project_local_has_effort_based_splitting() -> None:
+    path = SKILLS_DIR / "validate-audit" / "SKILL.md"
+    content = path.read_text(encoding="utf-8").lower()
+    assert "effort-based" in content, (
+        "validate-audit/.claude/SKILL.md missing effort-based splitting instructions"
+    )
+    assert "high effort" in content, (
+        "validate-audit/.claude/SKILL.md missing high-effort classification"
+    )

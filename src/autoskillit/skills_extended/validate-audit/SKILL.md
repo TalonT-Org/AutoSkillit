@@ -401,6 +401,11 @@ Instructions:
 > - **Conflict awareness**: findings touching the same file(s) must be in the same ticket or explicitly sequenced
 > - No rigid severity-to-grouping rule: a HIGH can be grouped if small; a LOW can be standalone if complex
 > - **Minimum group floor**: when the number of VALID findings exceeds 4, you must produce at least 2 ticket groups. When findings exceed 8, produce at least 3 groups. Never collapse all findings into a single group when grouping by scope, file overlap, or category would produce a natural partition.
+> - **Effort-based splitting for multi-file findings**: When a single finding enumerates multiple files for modification (splitting, refactoring, restructuring), do not treat the finding as one atomic unit. Estimate implementation effort per file using line count as a proxy:
+>   - **High effort** (above ~900 lines): Assign to a standalone ticket, or pair with at most one other file.
+>   - **Medium effort** (~750–900 lines): Group in small batches, preferring files in the same directory or package area.
+>   - **Cross-package separation**: Files in different top-level packages should generally land in separate tickets.
+>   - These thresholds are guidelines for judgment — assess the specific files rather than applying rigid per-file caps.
 >
 > Return a grouping manifest listing each proposed ticket with:
 > - Ticket title (descriptive, scoped)

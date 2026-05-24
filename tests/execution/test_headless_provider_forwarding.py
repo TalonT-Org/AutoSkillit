@@ -239,6 +239,7 @@ async def test_no_fallback_env_returns_empty_provider_used(
         return _sub_result
 
     minimal_ctx.runner = fake_runner
+    minimal_ctx.backend = _mock_backend()
 
     monkeypatch.setattr(
         "autoskillit.execution.headless._build_skill_result",
@@ -280,6 +281,7 @@ async def test_provider_name_stamps_provider_used_on_result(
         return _sub_result
 
     minimal_ctx.runner = fake_runner
+    minimal_ctx.backend = _mock_backend()
 
     monkeypatch.setattr(
         "autoskillit.execution.headless._build_skill_result",
@@ -419,6 +421,7 @@ async def test_dispatch_food_truck_forwards_marker_dir_and_session_id(
         lambda *a, **kw: object(),
     )
 
+    minimal_ctx.backend = _mock_backend()
     executor = DefaultHeadlessExecutor(minimal_ctx)
     marker = tmp_path / "markers"
     await executor.dispatch_food_truck(
@@ -468,6 +471,7 @@ async def test_dispatch_food_truck_derives_marker_dir_from_cwd(
         lambda *a, **kw: object(),
     )
 
+    minimal_ctx.backend = _mock_backend()
     executor = DefaultHeadlessExecutor(minimal_ctx)
     await executor.dispatch_food_truck(
         "prompt",
@@ -507,6 +511,7 @@ async def test_dispatch_food_truck_marker_dir_none_when_cwd_falsy(
 
     from autoskillit.execution.headless import DefaultHeadlessExecutor
 
+    minimal_ctx.backend = _mock_backend()
     executor = DefaultHeadlessExecutor(minimal_ctx)
     await executor.dispatch_food_truck(
         "prompt",
@@ -535,6 +540,7 @@ async def test_execute_claude_headless_forwards_marker_dir_to_runner(
         return _sr()
 
     minimal_ctx.runner = fake_runner
+    minimal_ctx.backend = _mock_backend()
     monkeypatch.setattr(
         "autoskillit.execution.headless._build_skill_result",
         lambda *a, **kw: SkillResult(
@@ -755,43 +761,6 @@ async def test_execute_claude_headless_passes_stream_parser_to_runner(
 
     assert runner_kwargs["stream_parser"] is sentinel
     backend.stream_parser.assert_called()
-
-
-@pytest.mark.anyio
-async def test_execute_claude_headless_stream_parser_none_when_no_backend(
-    minimal_ctx, tmp_path, monkeypatch
-) -> None:
-    from autoskillit.execution.commands import ClaudeHeadlessCmd
-    from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
-    from tests.execution.conftest import _sr
-
-    spec = ClaudeHeadlessCmd(cmd=("echo", "test"), env={})
-    runner_kwargs: dict = {}
-
-    async def fake_runner(cmd, **kwargs):
-        runner_kwargs.update(kwargs)
-        return _sr()
-
-    minimal_ctx.runner = fake_runner
-
-    monkeypatch.setattr(
-        "autoskillit.execution.headless._build_skill_result",
-        lambda *a, **kw: _STUB_RESULT,
-    )
-    monkeypatch.setattr(
-        "autoskillit.execution.headless._compute_post_session_metrics",
-        lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),
-    )
-    monkeypatch.setattr(
-        "autoskillit.execution.headless._capture_git_head_sha",
-        lambda *a: "",
-    )
-
-    await _execute_claude_headless(
-        spec, str(tmp_path), minimal_ctx, timeout=60, stale_threshold=30
-    )
-
-    assert runner_kwargs.get("stream_parser") is None
 
 
 @pytest.mark.anyio

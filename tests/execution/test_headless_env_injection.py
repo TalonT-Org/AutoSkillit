@@ -7,7 +7,9 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import CmdSpec
 from autoskillit.core.types import SubprocessResult, TerminationReason
+from tests.execution.conftest import _mock_backend
 from tests.fakes import MockSubprocessRunner
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -38,6 +40,12 @@ async def test_headless_command_includes_headless_env_var(minimal_ctx, tmp_path:
         )
     )
 
+    backend = _mock_backend()
+    backend.build_skill_session_cmd.return_value = CmdSpec(
+        cmd=("claude", "--print", "test"),
+        env={"AUTOSKILLIT_HEADLESS": "1"},
+    )
+    minimal_ctx.backend = backend
     await run_headless_core("/investigate foo", str(tmp_path), minimal_ctx)
 
     assert minimal_ctx.runner.call_args_list, "runner was never called"

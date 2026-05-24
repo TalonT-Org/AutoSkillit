@@ -1789,25 +1789,6 @@ class TestNudgeBackendGuard:
         )
 
     @pytest.mark.anyio
-    async def test_nudge_skips_when_backend_none(self, tool_ctx):
-        from autoskillit.core.types import RetryReason
-        from autoskillit.execution.headless import run_headless_core
-
-        marker = tool_ctx.config.run_skill.completion_marker
-        tool_ctx.backend = None
-        tool_ctx.runner.push(self._main_subprocess_result(marker))
-        tool_ctx.runner.push(self._nudge_response(marker))
-        result = await run_headless_core(
-            "/autoskillit:make-plan foo",
-            cwd="/tmp",
-            ctx=tool_ctx,
-            expected_output_patterns=[r"plan_path\s*=\s*/.+"],
-        )
-        # Without backend, nudge is skipped - CONTRACT_RECOVERY persists
-        assert result.retry_reason == RetryReason.CONTRACT_RECOVERY
-        assert len(tool_ctx.runner.call_args_list) == 1
-
-    @pytest.mark.anyio
     async def test_nudge_skips_when_not_session_resume_capable(self, tool_ctx):
         from dataclasses import replace
         from unittest.mock import Mock

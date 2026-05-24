@@ -17,7 +17,7 @@ import traceback
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import anyio
 import structlog
@@ -28,6 +28,7 @@ from autoskillit.core import (
     DISPATCH_ID_ENV_VAR,
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
     CmdSpec,
+    CodingAgentBackend,
     KillReason,
     ProviderOutcome,
     RecipeIdentity,
@@ -45,13 +46,11 @@ from autoskillit.core import (
     temp_dir_display_str,
 )
 from autoskillit.core import resolve_skill_temp_dir as _resolve_skill_temp_dir
-from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.clone_guard import (
     check_and_revert_clone_contamination,
     is_worktree_skill,
     snapshot_clone_state,
 )
-from autoskillit.execution.commands import build_skill_session_cmd
 from autoskillit.execution.headless._headless_git import (
     _capture_git_head_sha,
     _compute_loc_changed,
@@ -133,11 +132,13 @@ def _session_log_dir(cwd: str) -> Path:
 
 
 def _resolve_pty_mode(ctx: ToolContext) -> bool:
-    return True if ctx.backend is None else ctx.backend.capabilities.pty_required
+    backend = cast(CodingAgentBackend, ctx.backend)
+    return backend.capabilities.pty_required
 
 
 def _resolve_session_log_dir(cwd: str, ctx: ToolContext) -> Path | None:
-    if ctx.backend is not None and not ctx.backend.capabilities.channel_b_capable:
+    backend = cast(CodingAgentBackend, ctx.backend)
+    if not backend.capabilities.channel_b_capable:
         return None
     return _session_log_dir(cwd)
 
@@ -340,10 +341,8 @@ async def _execute_claude_headless(
     _result: SubprocessResult | None = None
     result: SubprocessResult
     skill_result: SkillResult
-    _stream_parser = (
-        ctx.backend.stream_parser(completion_marker=completion_marker)
-        if ctx.backend is not None
-        else None
+    _stream_parser = cast(CodingAgentBackend, ctx.backend).stream_parser(
+        completion_marker=completion_marker
     )
     while True:
         try:
@@ -490,11 +489,9 @@ async def _execute_claude_headless(
             _git_writes_detected = _detect_branch_divergence(cwd)
 
         audit_count_before = len(ctx.audit.get_report())
-        _supports_fmt = (
-            ctx.backend.capabilities.supports_claude_format_stdout
-            if ctx.backend is not None
-            else True
-        )
+        _supports_fmt = cast(
+            "CodingAgentBackend", ctx.backend
+        ).capabilities.supports_claude_format_stdout
         skill_result = _build_skill_result(
             result,
             completion_marker=completion_marker,
@@ -741,46 +738,28 @@ async def run_headless_core(
             model, ctx.config, step_name=step_name, recipe_name=recipe_name
         )
         add_dirs_tuple = tuple(add_dirs)
-        if ctx.backend is not None:
-            config = SkillSessionConfig(
-                completion_marker=effective_marker,
-                model=resolved_model,
-                plugin_source=ctx.plugin_source,
-                output_format=cfg.output_format,
-                add_dirs=add_dirs_tuple,
-                exit_after_stop_delay_ms=cfg.exit_after_stop_delay_ms,
-                stream_idle_timeout_ms=cfg.stream_idle_timeout_ms,
-                scenario_step_name=step_name,
-                temp_dir_relpath=temp_dir_display_str(ctx.config.workspace.temp_dir),
-                allowed_write_prefix=allowed_write_prefix,
-                provider_extras=provider_extras,
-                profile_name=profile_name,
-                resume_session_id=resume_session_id,
-                resume_checkpoint=resume_checkpoint,
-                resume_message=resume_message,
-            )
-            spec = ctx.backend.build_skill_session_cmd(skill_command, cwd, config)
-            logger.debug("run_headless_core_backend_dispatch", backend=ctx.backend.name)
-        else:
-            spec = build_skill_session_cmd(
-                skill_command,
-                cwd=cwd,
-                completion_marker=effective_marker,
-                model=resolved_model,
-                plugin_source=ctx.plugin_source,
-                output_format=cfg.output_format,
-                add_dirs=add_dirs_tuple,
-                exit_after_stop_delay_ms=cfg.exit_after_stop_delay_ms,
-                stream_idle_timeout_ms=cfg.stream_idle_timeout_ms,
-                scenario_step_name=step_name,
-                temp_dir_relpath=temp_dir_display_str(ctx.config.workspace.temp_dir),
-                allowed_write_prefix=allowed_write_prefix,
-                provider_extras=provider_extras,
-                profile_name=profile_name,
-                resume_session_id=resume_session_id,
-                resume_checkpoint=resume_checkpoint,
-                resume_message=resume_message,
-            )
+        assert ctx.backend is not None, (
+            "ctx.backend must be set before run_headless_core is called"
+        )
+        config = SkillSessionConfig(
+            completion_marker=effective_marker,
+            model=resolved_model,
+            plugin_source=ctx.plugin_source,
+            output_format=cfg.output_format,
+            add_dirs=add_dirs_tuple,
+            exit_after_stop_delay_ms=cfg.exit_after_stop_delay_ms,
+            stream_idle_timeout_ms=cfg.stream_idle_timeout_ms,
+            scenario_step_name=step_name,
+            temp_dir_relpath=temp_dir_display_str(ctx.config.workspace.temp_dir),
+            allowed_write_prefix=allowed_write_prefix,
+            provider_extras=provider_extras,
+            profile_name=profile_name,
+            resume_session_id=resume_session_id,
+            resume_checkpoint=resume_checkpoint,
+            resume_message=resume_message,
+        )
+        spec = ctx.backend.build_skill_session_cmd(skill_command, cwd, config)
+        logger.debug("run_headless_core_backend_dispatch", backend=ctx.backend.name)
 
         effective_timeout = timeout if timeout is not None else cfg.timeout
         effective_stale = stale_threshold if stale_threshold is not None else cfg.stale_threshold
@@ -958,7 +937,8 @@ class DefaultHeadlessExecutor:
             if idle_cfg_val > 0:
                 merged_extras.setdefault("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(idle_cfg_val))
 
-        backend = self._ctx.backend or ClaudeCodeBackend()
+        assert self._ctx.backend is not None, "ctx.backend must be set before dispatch_food_truck"
+        backend = self._ctx.backend
         cmd_spec = backend.build_food_truck_cmd(
             orchestrator_prompt=orchestrator_prompt,
             plugin_source=self._ctx.plugin_source,

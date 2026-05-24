@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 
 from autoskillit.core.types import SubprocessResult, TerminationReason
+from tests.execution.conftest import _mock_backend
 from tests.fakes import MockSubprocessRunner
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -45,6 +46,7 @@ class TestExecuteClaudeHeadlessIdleEnv:
         monkeypatch.setenv("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", "30")
         minimal_ctx.runner = MockSubprocessRunner()
         minimal_ctx.runner.set_default(_success_result())
+        minimal_ctx.backend = _mock_backend()
 
         await run_headless_core("/investigate foo", str(tmp_path), minimal_ctx)
 
@@ -71,6 +73,7 @@ class TestExecuteClaudeHeadlessIdleEnv:
         minimal_ctx.config.run_skill.idle_output_timeout = 60
         minimal_ctx.runner = MockSubprocessRunner()
         minimal_ctx.runner.set_default(_success_result())
+        minimal_ctx.backend = _mock_backend()
 
         await run_headless_core(
             "/investigate foo", str(tmp_path), minimal_ctx, idle_output_timeout=15.0
@@ -117,6 +120,7 @@ class TestExecuteClaudeHeadlessIdleEnv:
         minimal_ctx.config.run_skill.idle_output_timeout = 0  # cfg also 0
         minimal_ctx.runner = MockSubprocessRunner()
         minimal_ctx.runner.set_default(_success_result())
+        minimal_ctx.backend = _mock_backend()
 
         await run_headless_core("/investigate foo", str(tmp_path), minimal_ctx)
 
@@ -145,6 +149,7 @@ class TestExecuteClaudeHeadlessIdleEnv:
         runner = MockSubprocessRunner()
         runner.set_default(_success_result())
         minimal_ctx.runner = runner
+        minimal_ctx.backend = _mock_backend()
 
         await run_headless_core(
             "/autoskillit:some-skill",

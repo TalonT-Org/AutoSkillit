@@ -12,12 +12,6 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 class TestResolvePtyMode:
-    def test_none_backend_returns_true(self, minimal_ctx) -> None:
-        import autoskillit.execution.headless as _headless_mod
-
-        minimal_ctx.backend = None
-        assert _headless_mod._resolve_pty_mode(minimal_ctx) is True
-
     def test_pty_required_true_returns_true(self, minimal_ctx) -> None:
         import autoskillit.execution.headless as _headless_mod
 
@@ -32,17 +26,6 @@ class TestResolvePtyMode:
 
 
 class TestResolveSessionLogDir:
-    def test_none_backend_returns_path(self, minimal_ctx, monkeypatch) -> None:
-        import autoskillit.execution.headless as _headless_mod
-
-        minimal_ctx.backend = None
-        monkeypatch.setattr(
-            "autoskillit.execution.headless._session_log_dir",
-            lambda cwd: Path("/fake/log/dir"),
-        )
-        result = _headless_mod._resolve_session_log_dir("/some/cwd", minimal_ctx)
-        assert isinstance(result, Path)
-
     def test_channel_b_capable_true_returns_path(self, minimal_ctx, monkeypatch) -> None:
         import autoskillit.execution.headless as _headless_mod
 

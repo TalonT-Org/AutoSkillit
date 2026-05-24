@@ -281,3 +281,80 @@ def test_retired_agent_names_lowercase():
 
     for name in RETIRED_AGENT_NAMES:
         assert name == name.lower(), f"RETIRED_AGENT_NAMES entry '{name}' is not lowercase"
+
+
+# All 11 WPResult fields (used by T-NEW-2)
+_WP_RESULT_ALL_FIELDS = frozenset(
+    {
+        "id",
+        "name",
+        "summary",
+        "goal",
+        "technical_steps",
+        "files_touched",
+        "apis_defined",
+        "apis_consumed",
+        "depends_on",
+        "deliverables",
+        "acceptance_criteria",
+    }
+)
+
+
+# T-NEW-1: planner-elaborate-wps SKILL.md subagent_type refs resolve to agent files
+def test_elaborate_wps_subagent_type_refs_resolve():
+    """planner-elaborate-wps SKILL.md subagent_type refs resolve to agent files."""
+    import re
+
+    from autoskillit.core import pkg_root
+
+    content = (pkg_root() / "skills_extended" / "planner-elaborate-wps" / "SKILL.md").read_text()
+    refs = re.findall(r'subagent_type.*?["\']autoskillit:([a-z][a-z0-9-]+)["\']', content)
+    unique_refs = set(refs)
+    assert len(unique_refs) >= 1, (
+        f"Expected >=1 subagent_type ref in planner-elaborate-wps SKILL.md, "
+        f"found {len(unique_refs)}"
+    )
+    agents_dir = pkg_root() / "agents"
+    for agent_name in unique_refs:
+        agent_file = agents_dir / f"{agent_name}.md"
+        assert agent_file.exists(), (
+            f"SKILL.md references autoskillit:{agent_name} but {agent_file} does not exist"
+        )
+
+
+# T-NEW-2: wp-elaborator.md JSON schema must contain all WPResult fields
+def test_wp_elaborator_schema_covers_all_wp_fields():
+    """wp-elaborator.md JSON schema must contain all WPResult fields, not just WP_REQUIRED_KEYS."""
+    from autoskillit.core import pkg_root
+    from autoskillit.planner.schema import WP_REQUIRED_KEYS
+
+    agent_path = pkg_root() / "agents" / "wp-elaborator.md"
+    content = agent_path.read_text()
+    parts = content.split("---", 2)
+    assert len(parts) >= 3, "wp-elaborator.md must have YAML frontmatter"
+    body = parts[2]
+    # WP_REQUIRED_KEYS is a subset — verify it hasn't drifted from our full set
+    assert WP_REQUIRED_KEYS <= _WP_RESULT_ALL_FIELDS
+    for key in _WP_RESULT_ALL_FIELDS:
+        assert f'"{key}"' in body, f"wp-elaborator.md schema must contain WPResult field: {key}"
+
+
+# T-NEW-3: wp-elaborator is subagent_type-only — must not be registered in any agent pack
+def test_wp_elaborator_is_packless():
+    """wp-elaborator is subagent_type-only — must not be registered in any agent pack."""
+    from autoskillit.core import pkg_root
+    from autoskillit.core.types._type_constants import AGENT_PACK_REGISTRY
+
+    agent_path = pkg_root() / "agents" / "wp-elaborator.md"
+    assert agent_path.exists(), "wp-elaborator.md must exist"
+    # AGENT_PACK_REGISTRY keys are pack names — guard against a new pack created for wp-elaborator
+    for pack_name in AGENT_PACK_REGISTRY:
+        assert "wp-elaborator" not in pack_name, (
+            f"wp-elaborator must NOT appear in any AGENT_PACK_REGISTRY pack name — "
+            f"found in '{pack_name}'. It is subagent_type-only."
+        )
+    # Guard against accidental inclusion in the plan-review pack glob (plan-*.md)
+    assert not agent_path.stem.startswith("plan-"), (
+        "wp-elaborator.md must NOT start with 'plan-' (would collide with plan-review pack glob)"
+    )

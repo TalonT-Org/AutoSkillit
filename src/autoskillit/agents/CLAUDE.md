@@ -11,6 +11,7 @@ Bundled agent definition markdown files that serve as both **plugin agents**
 | `plan-foundation-auditor.md` | Adversarial agent: control-flow auditor — traces branch scope, return placement, guard coverage |
 | `plan-interface-mapper.md` | Adversarial agent: variable/data-flow tracer — builds SET/READ tables for wrong-variable detection |
 | `plan-registry-tracer.md` | Adversarial agent: registry/artifact auditor — LSP + tree-sitter + grep symbol tracing |
+| `wp-elaborator.md` | Pipeline agent: work-package elaboration — codebase analysis and structured JSON output |
 
 ## Layout
 
@@ -46,6 +47,7 @@ agent definitions are readable via `ReadMcpResourceTool` at `agent://{pack}/{nam
 | Pack | Tag | Agents | Used By |
 |------|-----|--------|---------|
 | `plan-review` | `plan-review` | 3 adversarial reviewers | make-plan Steps 6-9, rectify Steps 5-7 |
+| _(none)_ | _(none)_ | `wp-elaborator` | planner-elaborate-wps (subagent_type-only) |
 
 ## Adding Agents
 
@@ -54,3 +56,9 @@ agent definitions are readable via `ReadMcpResourceTool` at `agent://{pack}/{nam
 3. Add the pack tag to `ALL_VISIBILITY_TAGS` in `core/types/_type_constants.py`
 4. Register resource template + index resource in `server/tools/tools_agents.py`
 5. Add `mcp.disable(tags={pack_tag})` in `server/__init__.py`
+
+**Packless agents (subagent_type-only):** If the agent is invoked exclusively via
+`subagent_type: "autoskillit:{name}"` and does NOT need MCP resource access via
+`unlock_agent_pack`, only step 1 is required. Steps 2–5 exist for the
+`agent://{pack}/{name}` resource path and can be skipped for packless agents.
+Current packless agents: `wp-elaborator`.

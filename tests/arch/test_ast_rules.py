@@ -415,7 +415,6 @@ def test_no_raw_claude_list_construction() -> None:
     ALLOWED = {
         ("_marketplace.py", "install"),
         ("_cook.py", "cook"),
-        ("_llm_triage.py", "_triage_batch"),
         ("claude.py", "build_interactive_cmd"),
         ("claude.py", "build_headless_cmd"),
         ("claude.py", "build_resume_cmd"),

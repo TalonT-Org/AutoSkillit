@@ -19,7 +19,7 @@ from autoskillit.core import (
     build_agent_env,
     get_logger,
 )
-from autoskillit.execution import parse_session_result, run_managed_async
+from autoskillit.execution import get_backend, parse_session_result, run_managed_async
 from autoskillit.recipe import StaleItem, load_bundled_manifest
 from autoskillit.workspace import bundled_skills_dir
 
@@ -120,7 +120,7 @@ async def _triage_batch(
         # Build the command manually — triage is a read-only Haiku query with no
         # tool use, so it must NOT receive --dangerously-skip-permissions.
         triage_cmd: list[str] = [
-            "claude",
+            get_backend(agent_backend).binary_name(),
             ClaudeFlags.PRINT,
             prompt,
             ClaudeFlags.MODEL,

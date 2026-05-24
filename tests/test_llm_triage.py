@@ -545,3 +545,62 @@ async def test_triage_env_excludes_ide_vars(tmp_path: Path, monkeypatch: pytest.
     assert "CLAUDE_CODE_SSE_PORT" not in env
     assert "ENABLE_IDE_INTEGRATION" not in env
     assert env["CLAUDE_CODE_AUTO_CONNECT_IDE"] == "0"
+
+
+# ---------------------------------------------------------------------------
+# T-P1-A6-WP1: Binary name must come from backend abstraction
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_triage_command_uses_backend_binary_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """The triage command first element must equal get_backend('claude-code').binary_name()."""
+    from unittest.mock import AsyncMock
+
+    from autoskillit._llm_triage import triage_staleness
+    from autoskillit.execution import get_backend
+    from autoskillit.execution.process import SubprocessResult, TerminationReason
+
+    skill_dir = tmp_path / "test-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text("# test skill")
+    monkeypatch.setattr("autoskillit._llm_triage.bundled_skills_dir", lambda: tmp_path)
+
+    ndjson = (
+        __import__("json").dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": __import__("json").dumps(
+                    [
+                        {
+                            "index": 1,
+                            "skill": "test-skill",
+                            "meaningful_change": False,
+                            "summary": "ok",
+                        }
+                    ]
+                ),
+                "session_id": "s1",
+            }
+        )
+        + "\n"
+    )
+    mock_run = AsyncMock(
+        return_value=SubprocessResult(0, ndjson, "", TerminationReason.NATURAL_EXIT, pid=1)
+    )
+    monkeypatch.setattr("autoskillit._llm_triage.run_managed_async", mock_run)
+
+    item = StaleItem(
+        skill="test-skill", reason="hash_mismatch", stored_value="old", current_value="new"
+    )
+    await triage_staleness([item], agent_backend="claude-code")
+
+    cmd = mock_run.call_args.kwargs["cmd"]
+    expected_binary = get_backend("claude-code").binary_name()
+    assert cmd[0] == expected_binary, (
+        f"triage_cmd[0] must equal get_backend().binary_name(), got {cmd[0]!r}"
+    )

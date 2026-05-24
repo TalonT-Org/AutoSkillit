@@ -8,9 +8,13 @@ import sys
 import uuid
 from collections.abc import Mapping
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from autoskillit.cli.ui._terminal import terminal_guard
 from autoskillit.core import is_feature_enabled
+
+if TYPE_CHECKING:
+    from autoskillit.core import CodingAgentBackend
 
 
 def _print_recipes_list() -> None:
@@ -62,17 +66,24 @@ def _run_cook_session(
 
 
 def cook(
-    *, resume: bool = False, session_id: str | None = None, profile: str | None = None
+    *,
+    resume: bool = False,
+    session_id: str | None = None,
+    profile: str | None = None,
+    backend: CodingAgentBackend | None = None,
 ) -> None:
     """Launch Claude with all bundled AutoSkillit skills as slash commands."""
-    from autoskillit.execution import ClaudeCodeBackend
+    from autoskillit.config import iter_display_categories, load_config
+    from autoskillit.execution.backends import get_backend
     from autoskillit.workspace import (
         DefaultSessionSkillManager,
         SkillsDirectoryProvider,
         resolve_ephemeral_root,
     )
 
-    backend = ClaudeCodeBackend()
+    config = load_config()
+    if backend is None:
+        backend = get_backend(config.agent_backend.backend)
 
     if shutil.which(backend.binary_name()) is None:
         print(
@@ -91,10 +102,6 @@ def cook(
     _G = "\x1b[32m" if color else ""
     _Y = "\x1b[33m" if color else ""
     _R = "\x1b[0m" if color else ""
-
-    from autoskillit.config import iter_display_categories, load_config  # noqa: PLC0415
-
-    config = load_config()
 
     if profile is not None:
         if not is_feature_enabled(

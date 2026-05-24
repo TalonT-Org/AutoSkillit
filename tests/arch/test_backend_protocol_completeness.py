@@ -29,6 +29,29 @@ def test_coding_agent_backend_protocol_includes_food_truck_cmd():
     )
 
 
+def test_coding_agent_backend_protocol_includes_build_interactive_cmd():
+    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+
+    assert hasattr(CodingAgentBackend, "build_interactive_cmd"), (
+        "CodingAgentBackend protocol must define build_interactive_cmd"
+    )
+    assert callable(getattr(CodingAgentBackend, "build_interactive_cmd")), (
+        "build_interactive_cmd must be callable"
+    )
+
+
+def test_all_backends_implement_build_interactive_cmd():
+    from autoskillit.execution.backends import BACKEND_REGISTRY
+
+    for name, cls in BACKEND_REGISTRY.items():
+        assert hasattr(cls, "build_interactive_cmd"), (
+            f"{name} backend must implement build_interactive_cmd"
+        )
+        assert callable(getattr(cls, "build_interactive_cmd")), (
+            f"{name} backend build_interactive_cmd must be callable"
+        )
+
+
 def test_all_backends_implement_skill_session_cmd():
     from autoskillit.execution.backends import BACKEND_REGISTRY
 

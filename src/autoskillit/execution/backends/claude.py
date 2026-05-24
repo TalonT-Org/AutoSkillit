@@ -484,6 +484,7 @@ class ClaudeCodeBackend:
         plugin_source: PluginSource | None = None,
         add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
         resume_spec: ResumeSpec = NoResume(),
+        system_prompt: str | None = None,
         env_extras: Mapping[str, str] | None = None,
         required_env: frozenset[str] | None = None,
     ) -> CmdSpec:
@@ -507,6 +508,9 @@ class ClaudeCodeBackend:
             Resume intent discriminated union. ``NoResume`` (default) starts a fresh
             session. ``BareResume`` passes ``--resume`` without an ID (Claude Code's
             interactive picker). ``NamedResume`` passes ``--resume <id>``.
+        system_prompt
+            Optional system prompt text. Unused in A1 — reserved for A2 wiring,
+            which will translate it to ``--append-system-prompt <value>``.
         env_extras
             Optional caller overrides merged into the resolved env after IDE scrubbing.
         required_env

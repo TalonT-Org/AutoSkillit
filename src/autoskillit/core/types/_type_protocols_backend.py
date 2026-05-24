@@ -16,6 +16,8 @@ from ._type_backend import (
 from ._type_checkpoint import SessionCheckpoint
 from ._type_enums import OutputFormat
 from ._type_plugin_source import PluginSource
+from ._type_results import ValidatedAddDir
+from ._type_resume import NoResume, ResumeSpec
 
 __all__ = [
     "StreamParser",
@@ -122,4 +124,17 @@ class CodingAgentBackend(Protocol):
         allowed_write_prefix: str = "",
         sentinel_contract: str = "",
         resume_message: str | None = None,
+    ) -> CmdSpec: ...
+
+    def build_interactive_cmd(
+        self,
+        *,
+        initial_prompt: str | None = None,
+        model: str | None = None,
+        plugin_source: PluginSource | None = None,
+        add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
+        resume_spec: ResumeSpec = NoResume(),
+        system_prompt: str | None = None,
+        env_extras: Mapping[str, str] | None = None,
+        required_env: frozenset[str] | None = None,
     ) -> CmdSpec: ...

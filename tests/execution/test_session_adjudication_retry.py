@@ -397,6 +397,47 @@ class TestComputeRetrySuccessEmptyResult:
         assert reason == RetryReason.RESUME  # infrastructure kill — progress existed
 
 
+class TestComputeRetryExitCodeIsTerminal:
+    def test_terminal_nonzero_exit_no_retry(self):
+        session = ClaudeSessionResult(
+            subtype="success", is_error=False, result="", session_id="s1"
+        )
+        needs_retry, reason = _compute_retry(
+            session,
+            1,
+            TerminationReason.NATURAL_EXIT,
+            exit_code_is_terminal=True,
+        )
+        assert needs_retry is False
+        assert reason == RetryReason.NONE
+
+    def test_terminal_zero_exit_passes_through(self):
+        session = ClaudeSessionResult(
+            subtype="success", is_error=False, result="Done.", session_id="s1"
+        )
+        needs_retry, reason = _compute_retry(
+            session,
+            0,
+            TerminationReason.NATURAL_EXIT,
+            exit_code_is_terminal=True,
+        )
+        assert needs_retry is False
+        assert reason == RetryReason.NONE
+
+    def test_api_resume_not_suppressed_by_terminal_flag(self):
+        session = ClaudeSessionResult(
+            subtype="error_max_turns", is_error=False, result="", session_id="s1"
+        )
+        needs_retry, reason = _compute_retry(
+            session,
+            1,
+            TerminationReason.NATURAL_EXIT,
+            exit_code_is_terminal=True,
+        )
+        assert needs_retry is True
+        assert reason == RetryReason.RESUME
+
+
 @pytest.mark.parametrize("termination", list(TerminationReason))
 def test_compute_retry_handles_all_termination_reasons_without_raising(
     termination: TerminationReason,

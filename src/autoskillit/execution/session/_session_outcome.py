@@ -150,6 +150,7 @@ def _compute_outcome(
     channel_confirmation: ChannelConfirmation = ChannelConfirmation.UNMONITORED,
     expected_output_patterns: Sequence[str] = (),
     prior_completion_markers: Sequence[str] | None = None,
+    exit_code_is_terminal: bool = False,
 ) -> tuple[SessionOutcome, RetryReason]:
     """Compose _compute_success and _compute_retry into a (SessionOutcome, RetryReason) pair.
 
@@ -173,6 +174,7 @@ def _compute_outcome(
         completion_marker,
         prior_completion_markers,
         expected_output_patterns,
+        exit_code_is_terminal=exit_code_is_terminal,
     )
 
     logger.debug(

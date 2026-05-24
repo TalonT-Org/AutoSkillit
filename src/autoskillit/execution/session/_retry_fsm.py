@@ -59,6 +59,7 @@ def _compute_retry(
     completion_marker: str = "",
     prior_completion_markers: Sequence[str] | None = None,
     expected_output_patterns: Sequence[str] = (),
+    exit_code_is_terminal: bool = False,
 ) -> tuple[bool, RetryReason]:
     """Compute whether the session result warrants a retry.
 
@@ -70,6 +71,10 @@ def _compute_retry(
     the provenance bypass applies: Channel B's session-JSONL signal is
     authoritative, so kill-anomaly appearance is a drain-race artifact.
     No retry is needed.
+
+    When ``exit_code_is_terminal=True`` and ``returncode > 0`` in the
+    NATURAL_EXIT arm, the positive returncode is treated as authoritative
+    terminal failure — kill-anomaly and early-stop checks are bypassed.
     """
     # Phase 1: API-level retry signals (context exhaustion, max_turns)
     if session.needs_retry:
@@ -87,6 +92,15 @@ def _compute_retry(
                     "compute_retry_result",
                     termination="NATURAL_EXIT",
                     channel=str(channel_confirmation),
+                    needs_retry=False,
+                )
+                return False, RetryReason.NONE
+            if exit_code_is_terminal and returncode > 0:
+                logger.debug(
+                    "compute_retry_result",
+                    termination="NATURAL_EXIT",
+                    exit_code_is_terminal=True,
+                    returncode=returncode,
                     needs_retry=False,
                 )
                 return False, RetryReason.NONE

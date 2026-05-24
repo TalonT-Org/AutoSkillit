@@ -473,6 +473,7 @@ def _build_skill_result(
             if artifact_recovered is not None:
                 session = artifact_recovered
 
+    exit_code_is_terminal = backend.capabilities.exit_code_is_terminal
     outcome, retry_reason = _compute_outcome(
         session,
         returncode,
@@ -481,6 +482,7 @@ def _build_skill_result(
         channel_confirmation=result.channel_confirmation,
         expected_output_patterns=expected_output_patterns,
         prior_completion_markers=prior_completion_markers,
+        exit_code_is_terminal=exit_code_is_terminal,
     )
     success = outcome == SessionOutcome.SUCCEEDED
     needs_retry = outcome == SessionOutcome.RETRIABLE

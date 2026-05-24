@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core.types._type_plugin_source import DirectInstall, MarketplaceInstall
+from autoskillit.execution.backends.claude import ClaudeCodeBackend
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -43,6 +44,7 @@ class TestDispatchFoodTruck:
         )
         minimal_ctx.runner = runner
         minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
+        minimal_ctx.backend = ClaudeCodeBackend()
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
         await executor.dispatch_food_truck(
@@ -78,6 +80,7 @@ class TestDispatchFoodTruck:
         )
         minimal_ctx.runner = runner
         minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
+        minimal_ctx.backend = ClaudeCodeBackend()
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
         result = await executor.dispatch_food_truck(
@@ -107,6 +110,7 @@ class TestDispatchFoodTruck:
         )
         minimal_ctx.runner = runner
         minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
+        minimal_ctx.backend = ClaudeCodeBackend()
 
         spawned_pids: list[int] = []
 
@@ -138,6 +142,7 @@ class TestDispatchFoodTruck:
         )
         minimal_ctx.runner = runner
         minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
+        minimal_ctx.backend = ClaudeCodeBackend()
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
         result = await executor.dispatch_food_truck(
@@ -173,6 +178,7 @@ class TestDispatchFoodTruck:
         )
         minimal_ctx.runner = runner
         minimal_ctx.plugin_source = MarketplaceInstall(cache_path=cache)
+        minimal_ctx.backend = ClaudeCodeBackend()
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
         await executor.dispatch_food_truck(
@@ -254,6 +260,7 @@ class TestDispatchFoodTruckPackInjection:
         )
         minimal_ctx.runner = runner
         minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
+        minimal_ctx.backend = ClaudeCodeBackend()
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
         await executor.dispatch_food_truck(
@@ -288,6 +295,7 @@ class TestDispatchFoodTruckPackInjection:
         )
         minimal_ctx.runner = runner
         minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
+        minimal_ctx.backend = ClaudeCodeBackend()
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
         await executor.dispatch_food_truck(
@@ -355,6 +363,7 @@ class TestDispatchFoodTruckGuards:
         )
         minimal_ctx.runner = runner
         minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
+        minimal_ctx.backend = ClaudeCodeBackend()
         executor = DefaultHeadlessExecutor(minimal_ctx)
 
         await executor.dispatch_food_truck(
@@ -390,35 +399,22 @@ class TestDispatchFoodTruckGuards:
             )
 
     @pytest.mark.anyio
-    async def test_dispatch_food_truck_allows_none_backend(
+    async def test_dispatch_food_truck_raises_for_none_backend(
         self, minimal_ctx, tmp_path: Path
     ) -> None:
-        from autoskillit.core.types import SubprocessResult, TerminationReason
         from autoskillit.core.types._type_plugin_source import DirectInstall
         from autoskillit.execution.headless import DefaultHeadlessExecutor
-        from tests.fakes import MockSubprocessRunner
 
-        runner = MockSubprocessRunner()
-        runner.set_default(
-            SubprocessResult(
-                returncode=0,
-                stdout=_make_success_stdout(),
-                stderr="",
-                termination=TerminationReason.NATURAL_EXIT,
-                pid=55555,
-            )
-        )
-        minimal_ctx.runner = runner
+        minimal_ctx.backend = None
         minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
-
         executor = DefaultHeadlessExecutor(minimal_ctx)
-        result = await executor.dispatch_food_truck(
-            "some prompt",
-            str(tmp_path),
-            completion_marker="%%FT_DONE%%",
-        )
-        assert result is not None
-        assert len(runner.call_args_list) >= 1
+
+        with pytest.raises(AssertionError):
+            await executor.dispatch_food_truck(
+                "some prompt",
+                str(tmp_path),
+                completion_marker="%%FT_DONE%%",
+            )
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_allows_claude_code_backend(

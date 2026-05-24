@@ -798,11 +798,6 @@ class TestRunHeadlessCore:
         runner.set_default(_sr(0, _success_session_json("done"), ""))
         minimal_ctx.runner = runner
 
-        monkeypatch.setattr(
-            "autoskillit.execution.headless.build_skill_session_cmd",
-            Mock(side_effect=AssertionError("module-level shim should not be called")),
-        )
-
         with patch("autoskillit.execution.headless._build_skill_result") as mock_build:
             mock_build.return_value = SkillResult(
                 success=True,
@@ -823,50 +818,6 @@ class TestRunHeadlessCore:
             )
 
         assert backend.build_skill_session_cmd.call_count == 1
-
-    @pytest.mark.anyio
-    async def test_run_headless_core_falls_back_to_module_shim_when_backend_is_none(
-        self, minimal_ctx, monkeypatch, tmp_path
-    ):
-        from unittest.mock import Mock
-
-        from autoskillit.core import CmdSpec
-        from autoskillit.execution.headless import run_headless_core
-        from tests.fakes import MockSubprocessRunner
-
-        assert minimal_ctx.backend is None
-
-        shim_mock = Mock(return_value=CmdSpec(cmd=("claude", "--print", "fallback"), env={}))
-        monkeypatch.setattr(
-            "autoskillit.execution.headless.build_skill_session_cmd",
-            shim_mock,
-        )
-
-        runner = MockSubprocessRunner()
-        runner.set_default(_sr(0, _success_session_json("done"), ""))
-        minimal_ctx.runner = runner
-
-        with patch("autoskillit.execution.headless._build_skill_result") as mock_build:
-            mock_build.return_value = SkillResult(
-                success=True,
-                result="",
-                session_id="test-session",
-                subtype="success",
-                is_error=False,
-                exit_code=0,
-                needs_retry=False,
-                retry_reason=RetryReason.NONE,
-                stderr="",
-            )
-            await run_headless_core(
-                "/autoskillit:test-skill",
-                str(tmp_path),
-                minimal_ctx,
-                completion_marker="%%DONE%%",
-            )
-
-        shim_mock.assert_called_once()
-        assert shim_mock.call_args.args[0] == "/autoskillit:test-skill"
 
 
 class TestHeadlessTelemetryContainment:

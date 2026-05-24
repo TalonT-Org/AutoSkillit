@@ -90,9 +90,12 @@ def test_fleet_dispatch_exits_when_claude_missing(
     monkeypatch.delenv("CLAUDECODE", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
     monkeypatch.setattr("autoskillit.cli.fleet.is_feature_enabled", lambda *a, **kw: True)
+    _fleet = type("Fleet", (), {"max_issues_per_food_truck": 3})()
     monkeypatch.setattr(
         "autoskillit.config.load_config",
-        lambda path: type("C", (), {"features": {}, "experimental_enabled": False})(),
+        lambda path: type(
+            "C", (), {"features": {}, "experimental_enabled": False, "fleet": _fleet}
+        )(),
     )
     _stub_list_recipes(monkeypatch, [])
     monkeypatch.setattr("autoskillit.cli.ui._timed_input.timed_prompt", lambda *a, **kw: "")
@@ -119,9 +122,12 @@ def test_fleet_dispatch_exits_when_disabled(
             checked_features.append(name) or False
         ),
     )
+    _fleet = type("Fleet", (), {"max_issues_per_food_truck": 3})()
     monkeypatch.setattr(
         "autoskillit.config.load_config",
-        lambda path: type("C", (), {"features": {}, "experimental_enabled": False})(),
+        lambda path: type(
+            "C", (), {"features": {}, "experimental_enabled": False, "fleet": _fleet}
+        )(),
     )
     with pytest.raises(SystemExit) as exc_info:
         _fleet_dispatch()
@@ -144,9 +150,12 @@ def test_fleet_dispatch_proceeds_when_enabled(
         "autoskillit.cli.fleet.is_feature_enabled",
         lambda name, features, *, experimental_enabled=False: True,
     )
+    _fleet = type("Fleet", (), {"max_issues_per_food_truck": 3})()
     monkeypatch.setattr(
         "autoskillit.config.load_config",
-        lambda path: type("C", (), {"features": {}, "experimental_enabled": False})(),
+        lambda path: type(
+            "C", (), {"features": {}, "experimental_enabled": False, "fleet": _fleet}
+        )(),
     )
     _stub_list_recipes(monkeypatch, [])
     monkeypatch.setattr("autoskillit.cli.ui._timed_input.timed_prompt", lambda *a, **kw: "")

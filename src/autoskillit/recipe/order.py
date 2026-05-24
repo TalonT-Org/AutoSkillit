@@ -15,4 +15,7 @@ BUNDLED_RECIPE_ORDER: list[str] = [
     "remediation",
     "implementation-groups",
     "merge-prs",
+    "full-audit",
+    "planner",
+    "research",
 ]

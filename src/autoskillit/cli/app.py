@@ -181,7 +181,11 @@ def init(
         onboarded_marker.unlink(missing_ok=True)
 
     try:
-        _register_all(scope, project_dir)
+        from autoskillit.config import load_config
+        from autoskillit.execution.backends import get_backend
+
+        _backend = get_backend(load_config(project_dir).agent_backend.backend)
+        _register_all(scope, project_dir, backend=_backend)
     except CliError as exc:
         print(f"\n  ERROR: {exc}")
         raise SystemExit(1) from None

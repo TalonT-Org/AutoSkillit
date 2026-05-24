@@ -23,6 +23,7 @@ def _flush_structlog_proxy_caches() -> None:
             continue
         for lg in vars(mod).values():
             if isinstance(lg, _sc.BoundLoggerLazyProxy):
+                lg.__dict__.pop("_bound_logger", None)
                 lg.__dict__.pop("bind", None)
             elif hasattr(lg, "_processors"):
                 lg._processors = current_procs

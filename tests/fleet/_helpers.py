@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from autoskillit.core.types._type_constants import PACK_REGISTRY, TOOL_SUBSET_TAGS
+from autoskillit.core.types._type_constants_registries import PACK_REGISTRY, TOOL_SUBSET_TAGS
 
 # ---------------------------------------------------------------------------
 # Module-level constants — derived from the authoritative TOOL_SUBSET_TAGS map

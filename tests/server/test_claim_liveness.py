@@ -9,7 +9,7 @@ import pytest
 
 from autoskillit.fleet import DispatchRecord, DispatchStatus
 from autoskillit.server.tools.tools_issue_composite import claim_and_resolve_issue
-from autoskillit.server.tools.tools_issue_lifecycle import claim_issue
+from autoskillit.server.tools.tools_issue_labels import claim_issue
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 

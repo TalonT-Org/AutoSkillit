@@ -12,13 +12,9 @@ import re
 import warnings
 from typing import Any
 
-from ._type_constants import (
-    AUTOSKILLIT_SKILL_PREFIX,
-    FLEET_ERROR_CODES,
-    HEADLESS_ENV_VAR,
-    SESSION_TYPE_ENV_VAR,
-    SKILL_COMMAND_PREFIX,
-)
+from ._type_constants import AUTOSKILLIT_SKILL_PREFIX, SKILL_COMMAND_PREFIX
+from ._type_constants_env import HEADLESS_ENV_VAR, SESSION_TYPE_ENV_VAR
+from ._type_constants_registries import FLEET_ERROR_CODES
 from ._type_enums import SessionType, SkillSource
 from ._type_protocols_workspace import SkillResolver
 

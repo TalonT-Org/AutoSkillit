@@ -24,7 +24,7 @@ def test_feature_lifecycle_enum_exists():
 
 def test_feature_registry_keys_are_sorted():
     """FEATURE_REGISTRY keys must be alphabetically sorted (prevents merge conflicts)."""
-    from autoskillit.core.types._type_constants import FEATURE_REGISTRY
+    from autoskillit.core.types._type_constants_features import FEATURE_REGISTRY
 
     keys = list(FEATURE_REGISTRY.keys())
     assert keys == sorted(keys), f"FEATURE_REGISTRY keys not sorted: {keys}"
@@ -32,7 +32,7 @@ def test_feature_registry_keys_are_sorted():
 
 def test_feature_tool_tags_exist_in_subset_tags():
     """Every FeatureDef.tool_tags entry exists in TOOL_SUBSET_TAGS tag values."""
-    from autoskillit.core.types._type_constants import FEATURE_REGISTRY, TOOL_SUBSET_TAGS
+    from autoskillit.core.types._type_constants_features import FEATURE_REGISTRY, TOOL_SUBSET_TAGS
 
     all_tags = frozenset(tag for tags in TOOL_SUBSET_TAGS.values() for tag in tags)
     violations = [
@@ -46,7 +46,7 @@ def test_feature_tool_tags_exist_in_subset_tags():
 
 def test_feature_import_package_exists():
     """Every FeatureDef.import_package resolves to a real importable package."""
-    from autoskillit.core.types._type_constants import FEATURE_REGISTRY
+    from autoskillit.core.types._type_constants_features import FEATURE_REGISTRY
 
     failures = []
     for k, defn in FEATURE_REGISTRY.items():
@@ -61,7 +61,7 @@ def test_feature_import_package_exists():
 
 def test_no_retired_feature_has_live_registry_entry():
     """RETIRED_FEATURES and FEATURE_REGISTRY must be disjoint."""
-    from autoskillit.core.types._type_constants import FEATURE_REGISTRY, RETIRED_FEATURES
+    from autoskillit.core.types._type_constants_features import FEATURE_REGISTRY, RETIRED_FEATURES
 
     overlap = RETIRED_FEATURES & frozenset(FEATURE_REGISTRY.keys())
     assert not overlap, f"Names appear in both RETIRED_FEATURES and FEATURE_REGISTRY: {overlap}"
@@ -69,7 +69,7 @@ def test_no_retired_feature_has_live_registry_entry():
 
 def test_stable_features_are_default_enabled():
     """lifecycle=STABLE implies default_enabled=True."""
-    from autoskillit.core.types._type_constants import FEATURE_REGISTRY
+    from autoskillit.core.types._type_constants_features import FEATURE_REGISTRY
     from autoskillit.core.types._type_enums import FeatureLifecycle
 
     violations = [
@@ -82,7 +82,7 @@ def test_stable_features_are_default_enabled():
 
 def test_sunset_dates_not_expired():
     """Time-bomb: no FeatureDef may have a sunset_date in the past."""
-    from autoskillit.core.types._type_constants import FEATURE_REGISTRY
+    from autoskillit.core.types._type_constants_features import FEATURE_REGISTRY
 
     today = date.today()
     expired = [
@@ -95,7 +95,7 @@ def test_sunset_dates_not_expired():
 
 def test_feature_depends_on_references_valid_features():
     """All depends_on entries must reference names that exist in FEATURE_REGISTRY."""
-    from autoskillit.core.types._type_constants import FEATURE_REGISTRY
+    from autoskillit.core.types._type_constants_features import FEATURE_REGISTRY
 
     violations = [
         f"{k}.depends_on contains unknown {dep!r}"
@@ -111,7 +111,7 @@ def test_every_feature_with_skill_categories_has_recipe_enablement_path():
     init_session accept recipe_features so it is testable via recipe-level enablement."""
     import inspect
 
-    from autoskillit.core.types._type_constants import FEATURE_REGISTRY
+    from autoskillit.core.types._type_constants_features import FEATURE_REGISTRY
     from autoskillit.workspace.session_skills import DefaultSessionSkillManager
 
     features_with_cats = [name for name, defn in FEATURE_REGISTRY.items() if defn.skill_categories]
@@ -131,7 +131,7 @@ def test_feature_skill_categories_match_real_skills():
     import yaml
 
     from autoskillit.core.paths import pkg_root
-    from autoskillit.core.types._type_constants import FEATURE_REGISTRY
+    from autoskillit.core.types._type_constants_features import FEATURE_REGISTRY
 
     skills_dirs = [pkg_root() / "skills", pkg_root() / "skills_extended"]
     all_category_tags: set[str] = set()
@@ -171,7 +171,7 @@ def test_feature_skill_categories_match_real_skills():
 def test_is_feature_enabled_defaults():
     """is_feature_enabled uses FeatureDef.default_enabled when experimental_enabled=False."""
     from autoskillit.core.feature_flags import is_feature_enabled
-    from autoskillit.core.types._type_constants import FEATURE_REGISTRY
+    from autoskillit.core.types._type_constants_features import FEATURE_REGISTRY
     from autoskillit.core.types._type_enums import FeatureLifecycle
 
     for name, defn in FEATURE_REGISTRY.items():
@@ -186,7 +186,7 @@ def test_is_feature_enabled_defaults():
 def test_is_feature_enabled_override():
     """is_feature_enabled respects explicit overrides in the features dict (except DISABLED)."""
     from autoskillit.core.feature_flags import is_feature_enabled
-    from autoskillit.core.types._type_constants import FEATURE_REGISTRY
+    from autoskillit.core.types._type_constants_features import FEATURE_REGISTRY
     from autoskillit.core.types._type_enums import FeatureLifecycle
 
     assert len(FEATURE_REGISTRY) > 0, "FEATURE_REGISTRY must not be empty"
@@ -213,7 +213,7 @@ def test_is_feature_enabled_unknown():
 def test_config_rejects_unknown_feature():
     """_build_features_dict raises ConfigSchemaError for keys not in FEATURE_REGISTRY."""
     from autoskillit.config.settings import AutomationConfig, ConfigSchemaError
-    from autoskillit.core.types._type_constants import FEATURE_REGISTRY
+    from autoskillit.core.types._type_constants_features import FEATURE_REGISTRY
 
     unknown = "this_feature_does_not_exist_xyz"
     assert unknown not in FEATURE_REGISTRY, "Test setup error: pick a truly unknown name"
@@ -246,7 +246,7 @@ def test_config_dependency_validation(monkeypatch):
     """_build_features_dict raises ConfigSchemaError when B is enabled but dep A is disabled."""
 
     from autoskillit.config.settings import AutomationConfig, ConfigSchemaError
-    from autoskillit.core.types._type_constants import FeatureDef
+    from autoskillit.core.types._type_constants_features import FeatureDef
     from autoskillit.core.types._type_enums import FeatureLifecycle
 
     # Temporarily patch FEATURE_REGISTRY with a dep-requiring entry for this test
@@ -265,7 +265,7 @@ def test_config_dependency_validation(monkeypatch):
         skill_categories=frozenset(),
         import_package=None,
     )
-    import autoskillit.core.types._type_constants as tc
+    import autoskillit.core.types._type_constants_features as tc
 
     monkeypatch.setitem(tc.FEATURE_REGISTRY, "test_dep_a", dep_parent)
     monkeypatch.setitem(tc.FEATURE_REGISTRY, "test_dep_b", dep_feature)
@@ -283,8 +283,8 @@ def test_no_unregistered_feature_tag_on_tools():
     Known registries: FEATURE_REGISTRY names, PACK_REGISTRY names, and known
     non-feature structural tags (e.g. 'kitchen-core').
     """
-    from autoskillit.core.types._type_constants import (
-        FEATURE_REGISTRY,
+    from autoskillit.core.types._type_constants_features import FEATURE_REGISTRY
+    from autoskillit.core.types._type_constants_registries import (
         PACK_REGISTRY,
         TOOL_SUBSET_TAGS,
     )
@@ -306,13 +306,13 @@ def test_no_unregistered_feature_tag_on_tools():
 
 
 def test_fleet_in_feature_registry():
-    from autoskillit.core.types._type_constants import FEATURE_REGISTRY
+    from autoskillit.core.types._type_constants_features import FEATURE_REGISTRY
 
     assert "fleet" in FEATURE_REGISTRY
 
 
 def test_fleet_feature_tool_tags_in_tool_subset_tags():
-    from autoskillit.core.types._type_constants import FEATURE_REGISTRY, TOOL_SUBSET_TAGS
+    from autoskillit.core.types._type_constants_features import FEATURE_REGISTRY, TOOL_SUBSET_TAGS
 
     all_tags = set().union(*TOOL_SUBSET_TAGS.values())
     for tag in FEATURE_REGISTRY["fleet"].tool_tags:
@@ -320,7 +320,7 @@ def test_fleet_feature_tool_tags_in_tool_subset_tags():
 
 
 def test_fleet_feature_default_disabled():
-    from autoskillit.core.types._type_constants import FEATURE_REGISTRY
+    from autoskillit.core.types._type_constants_features import FEATURE_REGISTRY
 
     assert FEATURE_REGISTRY["fleet"].default_enabled is False
 
@@ -346,13 +346,13 @@ def test_build_features_dict_franchise_raises_config_schema_error():
 
 
 def test_providers_in_feature_registry():
-    from autoskillit.core.types._type_constants import FEATURE_REGISTRY
+    from autoskillit.core.types._type_constants_features import FEATURE_REGISTRY
 
     assert "providers" in FEATURE_REGISTRY
 
 
 def test_providers_feature_default_disabled():
-    from autoskillit.core.types._type_constants import FEATURE_REGISTRY
+    from autoskillit.core.types._type_constants_features import FEATURE_REGISTRY
 
     assert "providers" in FEATURE_REGISTRY
     assert FEATURE_REGISTRY["providers"].default_enabled is False
@@ -363,7 +363,7 @@ def test_providers_feature_default_disabled():
 
 def test_codex_backend_in_feature_registry():
     """codex_backend is registered with correct FeatureDef field values."""
-    from autoskillit.core.types._type_constants import FEATURE_REGISTRY
+    from autoskillit.core.types._type_constants_features import FEATURE_REGISTRY
     from autoskillit.core.types._type_enums import FeatureLifecycle
 
     entry = FEATURE_REGISTRY["codex_backend"]
@@ -379,9 +379,9 @@ def test_codex_backend_in_feature_registry():
 
 def test_is_feature_enabled_disabled_lifecycle_always_false(monkeypatch):
     """DISABLED lifecycle features return False regardless of config or experimental_enabled."""
-    import autoskillit.core.types._type_constants as tc
+    import autoskillit.core.types._type_constants_features as tc
     from autoskillit.core.feature_flags import is_feature_enabled
-    from autoskillit.core.types._type_constants import FeatureDef
+    from autoskillit.core.types._type_constants_features import FeatureDef
     from autoskillit.core.types._type_enums import FeatureLifecycle
 
     disabled_def = FeatureDef(
@@ -403,9 +403,9 @@ def test_is_feature_enabled_disabled_lifecycle_always_false(monkeypatch):
 
 def test_build_features_dict_rejects_enabling_disabled_feature(monkeypatch):
     """_build_features_dict raises ConfigSchemaError if a DISABLED feature is set to True."""
-    import autoskillit.core.types._type_constants as tc
+    import autoskillit.core.types._type_constants_features as tc
     from autoskillit.config.settings import AutomationConfig, ConfigSchemaError
-    from autoskillit.core.types._type_constants import FeatureDef
+    from autoskillit.core.types._type_constants_features import FeatureDef
     from autoskillit.core.types._type_enums import FeatureLifecycle
 
     disabled_def = FeatureDef(
@@ -427,9 +427,9 @@ def test_build_features_dict_rejects_enabling_disabled_feature(monkeypatch):
 
 def test_is_feature_enabled_experimental_blanket(monkeypatch):
     """EXPERIMENTAL feature is True when experimental_enabled=True and no override."""
-    import autoskillit.core.types._type_constants as tc
+    import autoskillit.core.types._type_constants_features as tc
     from autoskillit.core.feature_flags import is_feature_enabled
-    from autoskillit.core.types._type_constants import FeatureDef
+    from autoskillit.core.types._type_constants_features import FeatureDef
     from autoskillit.core.types._type_enums import FeatureLifecycle
 
     exp_def = FeatureDef(
@@ -451,9 +451,9 @@ def test_is_feature_enabled_experimental_blanket(monkeypatch):
 
 def test_is_feature_enabled_stable_unaffected_by_experimental_enabled(monkeypatch):
     """experimental_enabled has no effect on STABLE features."""
-    import autoskillit.core.types._type_constants as tc
+    import autoskillit.core.types._type_constants_features as tc
     from autoskillit.core.feature_flags import is_feature_enabled
-    from autoskillit.core.types._type_constants import FeatureDef
+    from autoskillit.core.types._type_constants_features import FeatureDef
     from autoskillit.core.types._type_enums import FeatureLifecycle
 
     stable_def = FeatureDef(
@@ -648,9 +648,9 @@ def test_user_config_override_beats_auto_detect(monkeypatch: pytest.MonkeyPatch,
 
 def test_experimental_blanket_does_not_promote_alignment_guarded_features(monkeypatch):
     """experimental_enabled must not promote features with requires_backend_alignment=True."""
-    import autoskillit.core.types._type_constants as tc
+    import autoskillit.core.types._type_constants_features as tc
     from autoskillit.core.feature_flags import is_feature_enabled
-    from autoskillit.core.types._type_constants import FeatureDef
+    from autoskillit.core.types._type_constants_features import FeatureDef
     from autoskillit.core.types._type_enums import FeatureLifecycle
 
     guarded_def = FeatureDef(

@@ -1,6 +1,6 @@
 """Canonical env builder for agent subprocesses.
 
-Every subprocess that invokes the ``claude`` CLI must route its environment
+Every subprocess that invokes the `claude` CLI must route its environment
 through :func:`build_agent_env` so that host-process IDE state (VS Code,
 Cursor, Zed, JetBrains, Neovim bridges) cannot leak across the trust
 boundary and silently widen the child's tool surface.
@@ -16,7 +16,7 @@ Three layers of immunity are applied:
    ``AUTOSKILLIT_CAMPAIGN_ID``) are stripped so parent session state cannot
    leak into child sessions. Callers opt back in via ``extras``.
 3. **Implicit auto-connect disable** — ``CLAUDE_CODE_AUTO_CONNECT_IDE=0``
-   is always injected. This suppresses the ``~/.claude/ide/*.lock`` scan
+   is always injected. This suppresses the `~/.claude/ide/*.lock` scan
    fallback that the Claude CLI follows at startup even when no IDE env
    vars are set; without it, third-party IDE bridges (e.g.
    ``claudecode.nvim``) can still attach via the lock-file mechanism.
@@ -28,7 +28,7 @@ import os
 from collections.abc import Mapping
 from types import MappingProxyType
 
-from .types._type_constants import AUTOSKILLIT_PRIVATE_ENV_VARS
+from .types._type_constants_env import AUTOSKILLIT_PRIVATE_ENV_VARS
 
 # Exact-match IDE discovery variable names stripped from the child env.
 IDE_ENV_DENYLIST: frozenset[str] = frozenset(

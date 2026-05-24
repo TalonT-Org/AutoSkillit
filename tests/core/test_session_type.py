@@ -145,7 +145,7 @@ def test_session_type_enum_fleet_value():
 
 def test_session_type_fleet_constant_matches_enum():
     from autoskillit.core import SessionType
-    from autoskillit.core.types._type_constants import SESSION_TYPE_FLEET
+    from autoskillit.core.types._type_constants_env import SESSION_TYPE_FLEET
 
     assert SessionType.FLEET.value == SESSION_TYPE_FLEET
 

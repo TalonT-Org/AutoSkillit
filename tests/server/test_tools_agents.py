@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from autoskillit.core.types._type_constants import AGENT_PACK_REGISTRY
+from autoskillit.core.types._type_constants_registries import AGENT_PACK_REGISTRY
 from tests.server.conftest import _make_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -344,7 +344,7 @@ def test_wp_elaborator_schema_covers_all_wp_fields():
 def test_wp_elaborator_is_packless():
     """wp-elaborator is subagent_type-only — must not be registered in any agent pack."""
     from autoskillit.core import pkg_root
-    from autoskillit.core.types._type_constants import AGENT_PACK_REGISTRY
+    from autoskillit.core.types._type_constants_registries import AGENT_PACK_REGISTRY
 
     agent_path = pkg_root() / "agents" / "wp-elaborator.md"
     assert agent_path.exists(), "wp-elaborator.md must exist"

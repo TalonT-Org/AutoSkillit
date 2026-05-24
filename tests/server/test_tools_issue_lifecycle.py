@@ -9,18 +9,20 @@ import pytest
 
 from autoskillit.core import RetryReason, SkillResult
 from autoskillit.pipeline.gate import DefaultGateState
-from autoskillit.server.tools.tools_issue_lifecycle import (
+from autoskillit.server.tools.tools_issue_headless import (
     _build_enrich_skill_command,
     _build_headless_error_response,
     _build_prepare_skill_command,
-    _extract_label_names,
     _parse_enrich_result,
     _parse_prepare_result,
     _retry_reason_to_error,
     _without_success_key,
-    claim_issue,
     enrich_issues,
     prepare_issue,
+)
+from autoskillit.server.tools.tools_issue_labels import (
+    _extract_label_names,
+    claim_issue,
     release_issue,
 )
 

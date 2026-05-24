@@ -19,7 +19,7 @@ from autoskillit.server.tools.tools_github import (
     _parse_fingerprint,
     report_bug,
 )
-from autoskillit.server.tools.tools_issue_lifecycle import (
+from autoskillit.server.tools.tools_issue_headless import (
     _ENRICH_RESULT_END,
     _ENRICH_RESULT_START,
     _PREPARE_RESULT_END,

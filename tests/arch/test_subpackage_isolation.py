@@ -313,10 +313,10 @@ def test_severity_defined_in_types():
 
 
 def test_skill_tools_defined_in_types():
-    """SKILL_TOOLS must be a top-level assignment in core/types/_type_constants.py."""
-    tree = _get_module_ast("core/types/_type_constants.py")
+    """SKILL_TOOLS must be a top-level assignment in _type_constants_registries.py."""
+    tree = _get_module_ast("core/types/_type_constants_registries.py")
     assert "SKILL_TOOLS" in _top_level_assign_targets(tree), (
-        "SKILL_TOOLS not found in core/types/_type_constants.py; it must be defined there"
+        "SKILL_TOOLS not found in core/types/_type_constants_registries.py; it must be defined there"
     )
 
 
@@ -565,18 +565,25 @@ def test_server_file_count_under_limit() -> None:
 
 
 def test_tools_integrations_replaced_by_split_modules() -> None:
-    """tools_integrations.py deleted; three replacement modules exist."""
+    """tools_integrations.py deleted; four replacement modules exist."""
     server = SRC_ROOT / "server"
     assert not (server / "tools_integrations.py").exists()
+    assert not (server / "tools" / "tools_issue_lifecycle.py").exists()
     assert (server / "tools" / "tools_github.py").exists()
-    assert (server / "tools" / "tools_issue_lifecycle.py").exists()
+    assert (server / "tools" / "tools_issue_headless.py").exists()
+    assert (server / "tools" / "tools_issue_labels.py").exists()
     assert (server / "tools" / "tools_pr_ops.py").exists()
 
 
 def test_split_files_under_750_lines() -> None:
     """Each split module must stay under the 750-line threshold."""
     server = SRC_ROOT / "server"
-    for name in ("tools_github.py", "tools_issue_lifecycle.py", "tools_pr_ops.py"):
+    for name in (
+        "tools_github.py",
+        "tools_issue_headless.py",
+        "tools_issue_labels.py",
+        "tools_pr_ops.py",
+    ):
         lines = len((server / "tools" / name).read_text().splitlines())
         assert lines <= 750, f"{name} has {lines} lines, exceeds 750"
 
@@ -595,10 +602,12 @@ def test_all_tools_importable_from_split_modules() -> None:
         get_issue_title,
         report_bug,
     )
-    from autoskillit.server.tools.tools_issue_lifecycle import (
-        claim_issue,
+    from autoskillit.server.tools.tools_issue_headless import (
         enrich_issues,
         prepare_issue,
+    )
+    from autoskillit.server.tools.tools_issue_labels import (
+        claim_issue,
         release_issue,
     )
     from autoskillit.server.tools.tools_pr_ops import bulk_close_issues, get_pr_reviews
@@ -677,10 +686,10 @@ def test_no_subpackage_exceeds_10_files() -> None:
 
     Exemptions (rule ID | rationale):
       server/ — REQ-CNST-003-E1: server/ splits tool handlers into per-domain files
-        (tools_clone, tools_github, tools_issue_lifecycle, tools_pr_ops, tools_ci,
-        tools_git, tools_recipe, tools_status, tools_workspace, tools_execution,
-        tools_kitchen, helpers, git, _factory, _state, __init__); each file is a
-        thin routing layer. Exempt at 16 files.
+        (tools_clone, tools_github, tools_issue_headless, tools_issue_labels, tools_pr_ops,
+        tools_ci, tools_git, tools_recipe, tools_status, tools_workspace, tools_execution,
+        tools_kitchen, helpers, git, _factory, _state, __init__); each file is a thin
+        routing layer. Exempt at 16 files.
       recipe/ — REQ-CNST-003-E2: recipe/ hosts one file per semantic-rule domain
         (rules_bypass, rules_ci, rules_clone, rules_packs, etc.) for independent testability.
         Adding rules_cmd.py for run_cmd echo-capture alignment validation and
@@ -828,13 +837,13 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "recipe": 42,  # was 33; +9 from CI/graph/dataflow splits
         "execution": 18,
         "core": 20,
-        "core/types": 24,
+        "core/types": 27,
         "cli": 20,
         "hooks": 10,
         "pipeline": 12,
         "fleet": 19,
         "recipe/rules": 42,
-        "server/tools": 20,
+        "server/tools": 21,
         "hooks/guards": 22,
     }
     violations: list[str] = []

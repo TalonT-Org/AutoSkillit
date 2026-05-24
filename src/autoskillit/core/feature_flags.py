@@ -7,7 +7,7 @@ full AutomationConfig to keep core/ free of config/ imports.
 
 from __future__ import annotations
 
-from .types._type_constants import FEATURE_REGISTRY
+from .types._type_constants_features import FEATURE_REGISTRY
 from .types._type_enums import FeatureLifecycle
 
 

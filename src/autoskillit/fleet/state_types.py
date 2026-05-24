@@ -70,6 +70,7 @@ _ERROR_CODE_CATEGORIES: dict[str, ErrorCodeCategory] = {
     FleetErrorCode.FLEET_GATE_NO_CAMPAIGN: ErrorCodeCategory.INFRASTRUCTURE,
     FleetErrorCode.FLEET_GATE_UNKNOWN_DISPATCH: ErrorCodeCategory.INFRASTRUCTURE,
     FleetErrorCode.FLEET_BUDGET_EXCEEDED: ErrorCodeCategory.INFRASTRUCTURE,
+    FleetErrorCode.FLEET_RESUME_SESSION_MISSING: ErrorCodeCategory.INFRASTRUCTURE,
     FleetErrorCode.FLEET_UNKNOWN_INGREDIENT: ErrorCodeCategory.LOGIC,
     FleetErrorCode.FLEET_MISSING_INGREDIENT: ErrorCodeCategory.LOGIC,
     FleetErrorCode.FLEET_CAMPAIGN_HALTED: ErrorCodeCategory.LOGIC,

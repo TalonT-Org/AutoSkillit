@@ -218,6 +218,8 @@ _UNFORMATTED_TOOLS: frozenset[str] = frozenset(
         "bootstrap_clone",  # composite clone result dict
         "claim_and_resolve_issue",  # composite claim result dict
         "create_and_publish_branch",  # composite branch result dict
+        "configure_fleet",  # simple config snapshot dict
+        "configure_order",  # simple config snapshot dict
     }
 )
 

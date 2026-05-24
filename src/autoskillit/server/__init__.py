@@ -88,6 +88,9 @@ from autoskillit.server.tools import (  # noqa: E402, F401
     tools_clone as _tools_clone,
 )
 from autoskillit.server.tools import (  # noqa: E402, F401
+    tools_config as _tools_config,
+)
+from autoskillit.server.tools import (  # noqa: E402, F401
     tools_execution as _tools_execution,
 )
 from autoskillit.server.tools import (  # noqa: E402, F401

@@ -91,7 +91,11 @@ def test_fleet_dispatch_exits_when_claude_missing(
     monkeypatch.delenv("CLAUDECODE", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
     monkeypatch.setattr("autoskillit.cli.fleet.is_feature_enabled", lambda *a, **kw: True)
-    _fleet = type("Fleet", (), {"max_issues_per_food_truck": 3})()
+    _fleet = type(
+        "Fleet",
+        (),
+        {"max_issues_per_food_truck": 3, "max_total_issues": 12, "max_concurrent_dispatches": 3},
+    )()
     _agent_backend = type("AB", (), {"backend": "claude-code"})()
     monkeypatch.setattr(
         "autoskillit.config.load_config",
@@ -131,7 +135,11 @@ def test_fleet_dispatch_exits_when_disabled(
             checked_features.append(name) or False
         ),
     )
-    _fleet = type("Fleet", (), {"max_issues_per_food_truck": 3})()
+    _fleet = type(
+        "Fleet",
+        (),
+        {"max_issues_per_food_truck": 3, "max_total_issues": 12, "max_concurrent_dispatches": 3},
+    )()
     monkeypatch.setattr(
         "autoskillit.config.load_config",
         lambda path: type(
@@ -159,7 +167,11 @@ def test_fleet_dispatch_proceeds_when_enabled(
         "autoskillit.cli.fleet.is_feature_enabled",
         lambda name, features, *, experimental_enabled=False: True,
     )
-    _fleet = type("Fleet", (), {"max_issues_per_food_truck": 3})()
+    _fleet = type(
+        "Fleet",
+        (),
+        {"max_issues_per_food_truck": 3, "max_total_issues": 12, "max_concurrent_dispatches": 3},
+    )()
     _agent_backend = type("AB", (), {"backend": "claude-code"})()
     monkeypatch.setattr(
         "autoskillit.config.load_config",

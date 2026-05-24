@@ -131,7 +131,14 @@ FLEET_MENU_TOOLS: tuple[str, ...] = ("dispatch_food_truck", "record_gate_dispatc
 FLEET_ERROR_CODES: frozenset[str] = frozenset(FleetErrorCode)
 
 FREE_RANGE_TOOLS: frozenset[str] = frozenset(
-    {"open_kitchen", "close_kitchen", "disable_quota_guard", "reload_session"}
+    {
+        "open_kitchen",
+        "close_kitchen",
+        "disable_quota_guard",
+        "reload_session",
+        "configure_fleet",
+        "configure_order",
+    }
 )
 
 UNGATED_TOOLS: frozenset[str] = FREE_RANGE_TOOLS

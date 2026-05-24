@@ -100,6 +100,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_clone_result_exhaustiveness.py` | Structural test enforcing exhaustive CloneResult gate handling in _require_clone_success |
 | `test_subprocess_validation.py` | Tests for _run_subprocess cwd validation (empty, relative, nonexistent paths) |
 | `test_tools_bootstrap.py` | Tests for bootstrap composite MCP tools (bootstrap_clone, claim_and_resolve_issue, create_and_publish_branch) |
+| `test_tools_config.py` | Tests for `configure_fleet` and `configure_order` MCP tools |
 | `test_tools_run_skill_retry.py` | Tests verifying run_skill_retry was removed and run_skill handles all sessions |
 | `test_tools_session_diagnostics.py` | Tests for session diagnostics helpers in tools_github |
 | `test_tools_status_kitchen.py` | Tests for server status tools: kitchen status, pipeline report, and telemetry recovery |

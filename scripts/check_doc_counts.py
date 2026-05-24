@@ -18,7 +18,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SKILLS_DIR = PROJECT_ROOT / "src" / "autoskillit" / "skills"
 SKILLS_EXTENDED_DIR = PROJECT_ROOT / "src" / "autoskillit" / "skills_extended"
 RECIPES_DIR = PROJECT_ROOT / "src" / "autoskillit" / "recipes"
-TYPES_FILE = PROJECT_ROOT / "src" / "autoskillit" / "core" / "types" / "_type_constants.py"
+TYPES_FILE = (
+    PROJECT_ROOT / "src" / "autoskillit" / "core" / "types" / "_type_constants_registries.py"
+)
 
 
 def count_skills() -> int:

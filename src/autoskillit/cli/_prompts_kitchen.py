@@ -74,7 +74,11 @@ def _build_open_kitchen_prompt(mcp_prefix: str) -> str:
 
 
 def _build_fleet_dispatch_prompt(
-    mcp_prefix: str, recipe_table: str | None = None, max_issues_per_food_truck: int = 3
+    mcp_prefix: str,
+    recipe_table: str | None = None,
+    max_issues_per_food_truck: int = 3,
+    max_total_issues: int = 12,
+    max_concurrent_dispatches: int = 3,
 ) -> str:
     """Build the --append-system-prompt content for an ad-hoc fleet dispatcher session."""
     from autoskillit.fleet import _build_admiral_dispatch_block  # noqa: PLC0415
@@ -146,8 +150,9 @@ There are no exceptions.
 - NEVER call dispatch_food_truck for individual issues in parallel before the execution map \
 has been produced and read.
 
-1. Count total issues across all targets. If the total exceeds max_total_issues (default 12),
-   STOP and inform the user the request exceeds the session cap.
+1. Count total issues across all targets. If the total exceeds
+   max_total_issues ({max_total_issues}), STOP and inform the user the
+   request exceeds the session cap.
 
 2. You MUST dispatch bem-wrapper first as the conflict analysis pre-step:
    {mcp_prefix}dispatch_food_truck(
@@ -175,8 +180,9 @@ sous-chef path handles deferred issue lifecycle.
 
 4. For each group in array order:
    - parallel: true → issue ALL dispatch_food_truck calls for this group in a single
-     response (parallel tool calls). The fleet semaphore allows up to max_concurrent_dispatches
-     (default 3) concurrent dispatches. If a dispatch returns FLEET_PARALLEL_REFUSED,
+     response (parallel tool calls). The fleet semaphore allows up to
+     max_concurrent_dispatches ({max_concurrent_dispatches}) concurrent
+     dispatches. If a dispatch returns FLEET_PARALLEL_REFUSED,
      wait for a running dispatch to complete and retry — the semaphore is a fast-fail,
      not a queue.
    - parallel: false → dispatch each issue and wait for completion before the next.

@@ -200,6 +200,7 @@ steps:
     with:
       skill_command: "/autoskillit:rectify ${{ context.investigation_path }}"
       cwd: "${{ context.work_dir }}"
+      output_dir: "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/rectify"
       step_name: "rectify"
     capture:
       plan_path: "${{ result.plan_path }}"
@@ -233,6 +234,7 @@ steps:
     with:
       skill_command: "/autoskillit:dry-walkthrough ${{ context.plan_path }}"
       cwd: "${{ context.work_dir }}"
+      output_dir: "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/dry-walkthrough"
       review_path: "${{ context.review_path }}"
       step_name: "dry_walkthrough"
     on_success: implement

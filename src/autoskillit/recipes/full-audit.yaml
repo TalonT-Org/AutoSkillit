@@ -81,12 +81,12 @@ steps:
       scheduling capped at ${{ inputs.max_parallel }} concurrent slots:
 
       1. Queue all six audits:
-         - run_skill(skill_command="/autoskillit:audit-tests", cwd="${{ inputs.workspace }}", step_name="audit_tests")
-         - run_skill(skill_command="/autoskillit:audit-cohesion", cwd="${{ inputs.workspace }}", step_name="audit_cohesion")
-         - run_skill(skill_command="/autoskillit:audit-arch", cwd="${{ inputs.workspace }}", step_name="audit_arch")
-         - run_skill(skill_command="/audit-feature-gates", cwd="${{ inputs.workspace }}", step_name="audit_feature_gates")  # project-local skill (.autoskillit/skills/): bare /name invocation, no /autoskillit: prefix
-         - run_skill(skill_command="/autoskillit:audit-docs", cwd="${{ inputs.workspace }}", step_name="audit_docs")
-         - run_skill(skill_command="/autoskillit:audit-review-decisions", cwd="${{ inputs.workspace }}", step_name="audit_review_decisions")
+         - run_skill(skill_command="/autoskillit:audit-tests", cwd="${{ inputs.workspace }}", step_name="audit_tests", output_dir="${{ inputs.workspace }}/{{AUTOSKILLIT_TEMP}}/audit-tests")
+         - run_skill(skill_command="/autoskillit:audit-cohesion", cwd="${{ inputs.workspace }}", step_name="audit_cohesion", output_dir="${{ inputs.workspace }}/{{AUTOSKILLIT_TEMP}}/audit-cohesion")
+         - run_skill(skill_command="/autoskillit:audit-arch", cwd="${{ inputs.workspace }}", step_name="audit_arch", output_dir="${{ inputs.workspace }}/{{AUTOSKILLIT_TEMP}}/audit-arch")
+         - run_skill(skill_command="/audit-feature-gates", cwd="${{ inputs.workspace }}", step_name="audit_feature_gates", output_dir="${{ inputs.workspace }}/{{AUTOSKILLIT_TEMP}}/audit-feature-gates")  # project-local skill (.autoskillit/skills/): bare /name invocation, no /autoskillit: prefix
+         - run_skill(skill_command="/autoskillit:audit-docs", cwd="${{ inputs.workspace }}", step_name="audit_docs", output_dir="${{ inputs.workspace }}/{{AUTOSKILLIT_TEMP}}/audit-docs")
+         - run_skill(skill_command="/autoskillit:audit-review-decisions", cwd="${{ inputs.workspace }}", step_name="audit_review_decisions", output_dir="${{ inputs.workspace }}/{{AUTOSKILLIT_TEMP}}/audit-review-decisions")
 
       2. Launch the first ${{ inputs.max_parallel }} audits as run_skill calls
          in a single message.
@@ -131,12 +131,12 @@ steps:
       Do not wait for all audits to complete before beginning validation.
 
       For each succeeded audit, queue a validation:
-        1. run_skill(skill_command="/autoskillit:validate-test-audit {tests_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_tests")
-        2. run_skill(skill_command="/autoskillit:validate-audit {cohesion_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_cohesion")
-        3. run_skill(skill_command="/autoskillit:validate-audit {arch_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_arch")
-        4. run_skill(skill_command="/autoskillit:validate-audit {feature_gates_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_feature_gates")
-        5. run_skill(skill_command="/autoskillit:validate-audit {docs_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_docs")
-        6. run_skill(skill_command="/autoskillit:validate-review-decisions {review_decisions_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_review_decisions")
+        1. run_skill(skill_command="/autoskillit:validate-test-audit {tests_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_tests", output_dir="${{ context.audit_run_dir }}")
+        2. run_skill(skill_command="/autoskillit:validate-audit {cohesion_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_cohesion", output_dir="${{ context.audit_run_dir }}")
+        3. run_skill(skill_command="/autoskillit:validate-audit {arch_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_arch", output_dir="${{ context.audit_run_dir }}")
+        4. run_skill(skill_command="/autoskillit:validate-audit {feature_gates_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_feature_gates", output_dir="${{ context.audit_run_dir }}")
+        5. run_skill(skill_command="/autoskillit:validate-audit {docs_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_docs", output_dir="${{ context.audit_run_dir }}")
+        6. run_skill(skill_command="/autoskillit:validate-review-decisions {review_decisions_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_review_decisions", output_dir="${{ context.audit_run_dir }}")
 
       Apply the same prefer-completion scheduling as run_audits — maintain up
       to ${{ inputs.max_parallel }} concurrent slots across validations. As each

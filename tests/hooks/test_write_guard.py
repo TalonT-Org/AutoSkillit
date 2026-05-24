@@ -186,3 +186,126 @@ class TestWriteGuardBashBypass:
         event = _build_bash_event("sed -i 's/x/y/' /clone/src/main.rs")
         result = _run_hook(event)
         assert result == ""
+
+
+class TestExtractBashWriteTargets:
+    """Unit tests for _extract_bash_write_targets -- the two-phase detect+extract logic."""
+
+    def test_stderr_redirect_to_dev_null_not_blocked(self):
+        """2>/dev/null should not produce a blocking target."""
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        result = _extract_bash_write_targets("gh auth status 2>/dev/null")
+        assert result is None or result == []
+
+    def test_stderr_redirect_with_space_not_blocked(self):
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        result = _extract_bash_write_targets("gh auth status 2> /dev/null")
+        assert result is None or result == []
+
+    def test_stdout_to_dev_null_not_blocked(self):
+        """>/dev/null is stdout redirect to a pseudo-device -- not a real file write."""
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        result = _extract_bash_write_targets("echo foo > /dev/null")
+        assert result is None or result == []
+
+    def test_combined_redirect_not_blocked(self):
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        result = _extract_bash_write_targets("cmd > /dev/null 2>&1")
+        assert result is None or result == []
+
+    def test_fd3_redirect_to_dev_null_not_blocked(self):
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        result = _extract_bash_write_targets("cmd 3>/dev/null")
+        assert result is None or result == []
+
+    def test_tee_dev_null_not_blocked(self):
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        result = _extract_bash_write_targets("cmd | tee /dev/null")
+        assert result is None or result == []
+
+    def test_fd_redirect_to_real_path_detected(self):
+        """2>/tmp/steal.log is a real file write -- must be detected and blocked."""
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        result = _extract_bash_write_targets("exec 2>/tmp/steal.log")
+        assert result == ["/tmp/steal.log"]
+
+    def test_fd_redirect_to_real_path_with_space_detected(self):
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        result = _extract_bash_write_targets("cmd 2> /tmp/output.log")
+        assert result == ["/tmp/output.log"]
+
+    def test_real_file_write_detected(self):
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        result = _extract_bash_write_targets("echo secret > /tmp/leak.txt")
+        assert result == ["/tmp/leak.txt"]
+
+    def test_sed_inplace_detected(self):
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        result = _extract_bash_write_targets("sed -i 's/x/y/' /clone/src/main.py")
+        assert result == ["/clone/src/main.py"]
+
+    def test_non_write_command_returns_none(self):
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        result = _extract_bash_write_targets("grep foo /clone/src/main.py")
+        assert result is None
+
+    def test_three_way_return_contract(self):
+        """Verify the None / [] / [paths] contract."""
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        assert _extract_bash_write_targets("ls -la") is None
+        result_filtered = _extract_bash_write_targets("echo x > /dev/null")
+        assert result_filtered == []
+        result_real = _extract_bash_write_targets("echo x > /tmp/out.txt")
+        assert result_real == ["/tmp/out.txt"]
+
+
+class TestWriteGuardRealisticCommands:
+    """Integration tests: common agent-generated commands must not be blocked."""
+
+    PREFIX = "/clone/.autoskillit/temp/compose-pr/"
+
+    @pytest.fixture(autouse=True)
+    def _enable_headless(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)
+
+    def test_gh_auth_status_2_dev_null_allowed(self):
+        """The exact command that caused pipeline 3 (#2864) failure."""
+        result = _run_hook(_build_bash_event("gh auth status 2>/dev/null"))
+        assert result == ""
+
+    def test_curl_stderr_suppression_allowed(self):
+        result = _run_hook(_build_bash_event("curl -s https://api.example.com 2>/dev/null"))
+        assert result == ""
+
+    def test_git_remote_2_dev_null_allowed(self):
+        result = _run_hook(
+            _build_bash_event(
+                "git remote get-url upstream 2>/dev/null && echo upstream || echo origin"
+            )
+        )
+        assert result == ""
+
+    def test_which_2_dev_null_allowed(self):
+        result = _run_hook(_build_bash_event("which gh 2>/dev/null || echo 'not found'"))
+        assert result == ""
+
+    def test_dev_null_combined_allowed(self):
+        result = _run_hook(_build_bash_event("cmd > /dev/null 2>&1"))
+        assert result == ""
+
+    def test_tee_dev_null_allowed(self):
+        result = _run_hook(_build_bash_event("cmd | tee /dev/null"))
+        assert result == ""

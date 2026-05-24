@@ -21,6 +21,15 @@ _IS_WRITE_CMD_RE = re.compile(
     r"|\bgit\s+reset\s+--hard"
     r"|\b(?:rm|unlink)\s+"
 )
+_PSEUDO_DEVICE_PATHS: frozenset[str] = frozenset(
+    {
+        "/dev/null",
+        "/dev/zero",
+        "/dev/stdout",
+        "/dev/stderr",
+        "/dev/stdin",
+    }
+)
 
 # Each pattern extracts the target file path (group 1) from a file-modifying command.
 _BASH_TARGET_PATTERNS: list[re.Pattern[str]] = [
@@ -56,7 +65,9 @@ def _extract_bash_write_targets(command: str) -> list[str] | None:
     for pattern in _BASH_TARGET_PATTERNS:
         m = pattern.search(command)
         if m:
-            targets.append(m.group(1))
+            path = m.group(1)
+            if path not in _PSEUDO_DEVICE_PATHS:
+                targets.append(path)
     return targets
 
 

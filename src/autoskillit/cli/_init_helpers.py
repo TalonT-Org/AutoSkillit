@@ -435,9 +435,8 @@ def _register_all(
         sync_hooks_to_settings,
     )
     from autoskillit.config import load_config
-    from autoskillit.core import ensure_project_temp
-    from autoskillit.core.types import AGENT_BACKEND_CODEX
-    from autoskillit.execution.backends import ensure_codex_mcp_registered
+    from autoskillit.core import AGENT_BACKEND_CODEX, ensure_project_temp
+    from autoskillit.execution import ensure_codex_mcp_registered
 
     # Refuse to register from inside the autoskillit source tree — this would
     # plant source-tree absolute paths in the project scope.
@@ -470,6 +469,7 @@ def _register_all(
         _cfg = load_config(project_dir)
         _backend_name = _cfg.agent_backend.backend
     except Exception:
+        logger.warning("load_config failed, defaulting to claude-code backend", exc_info=True)
         _backend_name = "claude-code"
 
     if _backend_name == AGENT_BACKEND_CODEX:

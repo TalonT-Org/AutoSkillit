@@ -133,7 +133,9 @@ class TestRecoveryIntegrationWithFormat:
             pid=1234,
             channel_confirmation=ChannelConfirmation.UNMONITORED,
         )
-        skill_result = _build_skill_result(sub_result, "%%ORDER_UP%%", "/test", None)
+        skill_result = _build_skill_result(
+            sub_result, "%%ORDER_UP%%", "/test", None, backend=ClaudeCodeBackend()
+        )
         assert skill_result.success is True
         assert "MERGE APPROVED" in skill_result.result
 
@@ -162,7 +164,9 @@ class TestRecoveryIntegrationWithFormat:
             pid=1234,
             channel_confirmation=ChannelConfirmation.UNMONITORED,
         )
-        skill_result = _build_skill_result(sub_result, "%%ORDER_UP%%", "/test", None)
+        skill_result = _build_skill_result(
+            sub_result, "%%ORDER_UP%%", "/test", None, backend=ClaudeCodeBackend()
+        )
         # With JSON format, result is only the marker — stripped to empty — fails content check.
         # With UNMONITORED channel, dead-end guard does not promote to retriable.
         assert skill_result.success is False

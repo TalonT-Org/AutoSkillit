@@ -130,8 +130,8 @@ def _resolve_skill_session_id(
     return result.session_id or result.channel_b_session_id
 
 
-def _parse_stdout(stdout: str, backend: CodingAgentBackend | None = None) -> ClaudeSessionResult:
-    if backend is None or backend.name == AGENT_BACKEND_CLAUDE_CODE:
+def _parse_stdout(stdout: str, backend: CodingAgentBackend) -> ClaudeSessionResult:
+    if backend.name == AGENT_BACKEND_CLAUDE_CODE:
         return parse_session_result(stdout)
     agent_result = backend.result_parser().parse_stdout(stdout)
     return _adapt_agent_result(agent_result)
@@ -186,12 +186,10 @@ def _compute_write_evidence(
     session: ClaudeSessionResult,
     fs_writes_detected: bool,
     git_writes_detected: bool,
-    backend: CodingAgentBackend | None = None,
+    backend: CodingAgentBackend,
     file_changes: Sequence[str] = (),
 ) -> WriteEvidence:
-    write_names = (
-        backend.write_tool_names() if backend is not None else frozenset({"Write", "Edit"})
-    )
+    write_names = backend.write_tool_names()
     write_call_count = sum(1 for t in session.tool_uses if t.get("name") in write_names)
     # Codex fallback: only count file_changes when no Write/Edit tool calls provide evidence.
     file_changes_count = len(file_changes) if write_call_count == 0 else 0
@@ -203,8 +201,8 @@ def _compute_write_evidence(
     )
 
 
-def _extract_file_changes(stdout: str, backend: CodingAgentBackend | None) -> list[str]:
-    if backend is None or backend.name == AGENT_BACKEND_CLAUDE_CODE:
+def _extract_file_changes(stdout: str, backend: CodingAgentBackend) -> list[str]:
+    if backend.name == AGENT_BACKEND_CLAUDE_CODE:
         return []
     agent_result = backend.result_parser().parse_stdout(stdout)
     return list(agent_result.raw.get("file_changes", []))
@@ -274,7 +272,7 @@ def _build_skill_result(
     *,
     provider_used: str = "",
     supports_claude_format_stdout: bool = True,
-    backend: CodingAgentBackend | None = None,
+    backend: CodingAgentBackend,
 ) -> SkillResult:
     """Route SubprocessResult fields into the standard run_skill response."""
     file_changes = _extract_file_changes(result.stdout, backend)
@@ -476,11 +474,13 @@ def _build_skill_result(
     _has_write_evidence = evidence.has_evidence
 
     try:
-        _backend_write_names = set(backend.write_tool_names()) if backend else {"Write", "Edit"}
+        _backend_write_names = set(backend.write_tool_names())
     except Exception:
         logger.warning("backend_write_tool_names_failed", exc_info=True)
         _backend_write_names = {"Write", "Edit"}
-    _parsed_has_write_tools = any(tu.get("name") in {"Write", "Edit"} for tu in session.tool_uses)
+    _parsed_has_write_tools = any(
+        tu.get("name") in _backend_write_names for tu in session.tool_uses
+    )
     if (
         evidence.write_call_count == 0
         and _backend_write_names & {"Write", "Edit"}
@@ -579,9 +579,7 @@ def _build_skill_result(
         # _recover_block_from_assistant_messages is unavailable. For CHANNEL_A/B
         # sessions, if the pattern was absent from assistant_messages the agent never
         # emitted it — synthesis would fabricate a token the agent did not produce.
-        write_names = (
-            backend.write_tool_names() if backend is not None else frozenset({"Write", "Edit"})
-        )
+        write_names = backend.write_tool_names()
         if (
             expected_output_patterns
             and _has_write_evidence

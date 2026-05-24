@@ -8,6 +8,7 @@ import textwrap
 import pytest
 
 from autoskillit.core.types import ChannelConfirmation, SubprocessResult, TerminationReason
+from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.process import run_managed_async
 from tests.execution.conftest import WRITE_RESULT_THEN_HANG_SCRIPT
 
@@ -373,6 +374,7 @@ class TestChannelBFullPipelineAdjudication:
             completion_marker="%%ORDER_UP%%",
             skill_command="test-command",
             audit=None,
+            backend=ClaudeCodeBackend(),
         )
         assert skill_result.success is True  # FAILS before fix: False
         assert skill_result.needs_retry is False  # FAILS before fix: True
@@ -421,6 +423,7 @@ class TestChannelBDrainRacePipelineAdjudication:
             completion_marker="%%ORDER_UP%%",
             skill_command="resolve-failures",
             audit=None,
+            backend=ClaudeCodeBackend(),
         )
 
         assert skill_result.success is True
@@ -452,7 +455,11 @@ class TestNaturalExitWithChannelConfirmation:
             channel_confirmation=ChannelConfirmation.CHANNEL_B,
         )
         skill_result = _build_skill_result(
-            result, completion_marker="", skill_command="test", audit=None
+            result,
+            completion_marker="",
+            skill_command="test",
+            audit=None,
+            backend=ClaudeCodeBackend(),
         )
         assert skill_result.success is True
         assert skill_result.needs_retry is False

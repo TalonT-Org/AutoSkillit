@@ -11,7 +11,7 @@ from autoskillit.core.types import (
     SubprocessResult,
     TerminationReason,
 )
-from autoskillit.execution.backends.claude import ClaudeResultParser
+from autoskillit.execution.backends.claude import ClaudeCodeBackend, ClaudeResultParser
 from autoskillit.execution.headless import (
     _build_skill_result,
     _extract_missing_token_hints,
@@ -65,6 +65,7 @@ class TestBuildSkillResultChannelAPatternRecovery:
             sub_result,
             completion_marker="%%ORDER_UP%%",
             expected_output_patterns=["verdict\\s*=\\s*(GO|NO GO)"],
+            backend=ClaudeCodeBackend(),
         )
         assert sr.success is True, (
             "CHANNEL_A should recover patterns from assistant_messages, same as CHANNEL_B."
@@ -105,6 +106,7 @@ class TestBuildSkillResultChannelAPatternRecovery:
             sub_result,
             completion_marker="%%ORDER_UP%%",
             expected_output_patterns=["verdict\\s*=\\s*(GO|NO GO)"],
+            backend=ClaudeCodeBackend(),
         )
         assert sr.success is False
         assert sr.needs_retry is False
@@ -132,6 +134,7 @@ class TestBuildSkillResultChannelAPatternRecovery:
             sub_result,
             completion_marker="%%ORDER_UP%%",
             expected_output_patterns=["plan_path\\s*=\\s*/.+"],
+            backend=ClaudeCodeBackend(),
         )
         assert sr.success is True
         assert sr.subtype != "adjudicated_failure"
@@ -175,6 +178,7 @@ class TestBuildSkillResultChannelAPatternRecovery:
             sub_result,
             completion_marker="%%ORDER_UP%%",
             expected_output_patterns=["plan_path\\s*=\\s*/.+"],
+            backend=ClaudeCodeBackend(),
         )
         assert sr.success is True
         assert sr.subtype != "adjudicated_failure"
@@ -229,7 +233,9 @@ class TestBuildSkillResultDirMissingRecovery:
             channel_confirmation=ChannelConfirmation.DIR_MISSING,
         )
         with structlog.testing.capture_logs() as logs:
-            skill = _build_skill_result(sub_result, completion_marker=marker)
+            skill = _build_skill_result(
+                sub_result, completion_marker=marker, backend=ClaudeCodeBackend()
+            )
         # Recovery should succeed — marker found as standalone line in assistant_messages
         assert skill.success is True
         # Verify the recovery code path was taken, not just the outcome
@@ -245,7 +251,7 @@ class TestBuildSkillResultDirMissingRecovery:
             pid=12345,
             channel_confirmation=ChannelConfirmation.DIR_MISSING,
         )
-        skill = _build_skill_result(sub_result)
+        skill = _build_skill_result(sub_result, backend=ClaudeCodeBackend())
         assert skill.success is False
 
 
@@ -276,7 +282,7 @@ class TestTimedOutAlwaysProducesTimeoutSubtype:
             termination=TerminationReason.TIMED_OUT,
             pid=12345,
         )
-        sr = _build_skill_result(sub_result)
+        sr = _build_skill_result(sub_result, backend=ClaudeCodeBackend())
         assert sr.subtype == "timeout", (
             f"UNPARSEABLE leak: TIMED_OUT session produced subtype={sr.subtype!r}, "
             f"expected 'timeout'. parse_session_result returned CliSubtype.UNPARSEABLE "
@@ -310,7 +316,7 @@ class TestTimedOutAlwaysProducesTimeoutSubtype:
             termination=TerminationReason.TIMED_OUT,
             pid=12345,
         )
-        sr = _build_skill_result(sub_result)
+        sr = _build_skill_result(sub_result, backend=ClaudeCodeBackend())
         assert sr.subtype == "timeout"
         assert sr.cli_subtype == CliSubtype.TIMEOUT
         assert sr.success is False
@@ -335,7 +341,7 @@ class TestTimedOutAlwaysProducesTimeoutSubtype:
             termination=TerminationReason.TIMED_OUT,
             pid=12345,
         )
-        sr = _build_skill_result(sub_result)
+        sr = _build_skill_result(sub_result, backend=ClaudeCodeBackend())
         assert sr.subtype == "timeout"
         assert sr.cli_subtype == CliSubtype.TIMEOUT
         assert sr.success is False
@@ -360,7 +366,7 @@ class TestTimedOutAlwaysProducesTimeoutSubtype:
             termination=TerminationReason.TIMED_OUT,
             pid=12345,
         )
-        sr = _build_skill_result(sub_result)
+        sr = _build_skill_result(sub_result, backend=ClaudeCodeBackend())
         assert sr.subtype == "timeout"
         assert sr.cli_subtype == CliSubtype.TIMEOUT
         assert sr.success is False
@@ -385,7 +391,7 @@ class TestTimedOutAlwaysProducesTimeoutSubtype:
             termination=TerminationReason.TIMED_OUT,
             pid=12345,
         )
-        sr = _build_skill_result(sub_result)
+        sr = _build_skill_result(sub_result, backend=ClaudeCodeBackend())
         assert sr.subtype == "timeout"
         assert sr.cli_subtype == CliSubtype.TIMEOUT
         assert sr.success is False
@@ -410,7 +416,7 @@ class TestTimedOutAlwaysProducesTimeoutSubtype:
             termination=TerminationReason.TIMED_OUT,
             pid=12345,
         )
-        sr = _build_skill_result(sub_result)
+        sr = _build_skill_result(sub_result, backend=ClaudeCodeBackend())
         assert sr.subtype == "timeout"
         assert sr.cli_subtype == CliSubtype.TIMEOUT
         assert sr.success is False
@@ -435,7 +441,7 @@ class TestTimedOutAlwaysProducesTimeoutSubtype:
             termination=TerminationReason.TIMED_OUT,
             pid=12345,
         )
-        sr = _build_skill_result(sub_result)
+        sr = _build_skill_result(sub_result, backend=ClaudeCodeBackend())
         assert sr.subtype == "timeout"
         assert sr.cli_subtype == CliSubtype.TIMEOUT
         assert sr.success is False
@@ -464,7 +470,7 @@ class TestTimedOutSessionPreservesState:
             termination=TerminationReason.TIMED_OUT,
             pid=12345,
         )
-        sr = _build_skill_result(sub_result)
+        sr = _build_skill_result(sub_result, backend=ClaudeCodeBackend())
         assert sr.evidence.write_call_count == 2
         assert sr.success is False
         assert sr.needs_retry is False
@@ -482,7 +488,7 @@ class TestTimedOutSessionPreservesState:
             termination=TerminationReason.TIMED_OUT,
             pid=12345,
         )
-        sr = _build_skill_result(sub_result)
+        sr = _build_skill_result(sub_result, backend=ClaudeCodeBackend())
         assert sr.success is False
         assert sr.evidence.write_call_count == 0
         assert sr.subtype == "timeout"
@@ -513,7 +519,7 @@ class TestTimedOutSessionPreservesState:
             termination=TerminationReason.TIMED_OUT,
             pid=12345,
         )
-        sr = _build_skill_result(sub_result)
+        sr = _build_skill_result(sub_result, backend=ClaudeCodeBackend())
         assert sr.cli_subtype == CliSubtype.TIMEOUT
         assert sr.subtype == "timeout"
         assert sr.evidence.write_call_count == 1
@@ -909,6 +915,7 @@ def make_build_skill_result_kwargs():
             "expected_output_patterns": expected_output_patterns or [],
             "skill_command": skill_command,
             "audit": audit,
+            "backend": ClaudeCodeBackend(),
         }
 
     return _factory
@@ -1006,7 +1013,7 @@ class TestBuildSkillResultSessionIdFromSubprocess:
             pid=1,
             session_id="real-uuid-from-channel-b",
         )
-        sr = _build_skill_result(result)
+        sr = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert sr.session_id == "real-uuid-from-channel-b"
 
     def test_timeout_empty_stdout_session_id_from_subprocess_result(self) -> None:
@@ -1019,7 +1026,7 @@ class TestBuildSkillResultSessionIdFromSubprocess:
             pid=1,
             session_id="real-uuid-from-channel-b",
         )
-        sr = _build_skill_result(result)
+        sr = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert sr.session_id == "real-uuid-from-channel-b"
 
     def test_channel_a_session_id_takes_precedence(self) -> None:
@@ -1041,7 +1048,7 @@ class TestBuildSkillResultSessionIdFromSubprocess:
             pid=1,
             session_id="ch-b-uuid",
         )
-        sr = _build_skill_result(result)
+        sr = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert sr.session_id == "stdout-uuid"
 
     def test_context_exhaustion_session_id_from_subprocess_result(self) -> None:
@@ -1060,7 +1067,7 @@ class TestBuildSkillResultSessionIdFromSubprocess:
             pid=1,
             session_id="ch-b-uuid-5678",
         )
-        sr = _build_skill_result(result)
+        sr = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert sr.session_id == "ch-b-uuid-5678"
 
 
@@ -1647,7 +1654,7 @@ def test_build_skill_result_surfaces_last_stop_reason():
         ]
     )
     result = _make_result(returncode=0, stdout=ndjson)
-    sr = _build_skill_result(result)
+    sr = _build_skill_result(result, backend=ClaudeCodeBackend())
     assert sr.last_stop_reason == "end_turn"
 
 
@@ -1944,8 +1951,7 @@ class TestEarlyStopDetection:
             pid=12345,
         )
         sr = _build_skill_result(
-            sub_result,
-            completion_marker="%%ORDER_UP::abc%%",
+            sub_result, completion_marker="%%ORDER_UP::abc%%", backend=ClaudeCodeBackend()
         )
         assert sr.needs_retry is True
         assert sr.retry_reason == RetryReason.EARLY_STOP
@@ -1971,7 +1977,7 @@ class TestTerminationSubtypeConsistencyInvariant:
             termination=TerminationReason.TIMED_OUT,
             pid=12345,
         )
-        sr = _build_skill_result(sub_result)
+        sr = _build_skill_result(sub_result, backend=ClaudeCodeBackend())
         assert sr.subtype == "timeout"
 
     def test_timed_out_with_parsed_unparseable_is_promoted(self):
@@ -1986,7 +1992,7 @@ class TestTerminationSubtypeConsistencyInvariant:
             termination=TerminationReason.TIMED_OUT,
             pid=12345,
         )
-        sr = _build_skill_result(sub_result)
+        sr = _build_skill_result(sub_result, backend=ClaudeCodeBackend())
         # The invariant guard is inside _build_skill_result; if subtype != 'timeout',
         # it would raise RuntimeError. So a successful return means it passed.
         assert sr.subtype == "timeout"
@@ -2016,7 +2022,7 @@ class TestTerminationSubtypeConsistencyInvariant:
             termination=TerminationReason.NATURAL_EXIT,  # Not TIMED_OUT → no guard
             pid=12345,
         )
-        sr = _build_skill_result(sub_result)
+        sr = _build_skill_result(sub_result, backend=ClaudeCodeBackend())
         # NATURAL_EXIT with UNPARSEABLE → normalize_subtype returns "unparseable"
         # The guard does not apply (only TIMED_OUT is guarded), so no RuntimeError
         assert sr.subtype == "unparseable"
@@ -2036,7 +2042,7 @@ class TestTerminationSubtypeConsistencyInvariant:
             termination=TerminationReason.IDLE_STALL,
             pid=12345,
         )
-        sr = _build_skill_result(sub_result)
+        sr = _build_skill_result(sub_result, backend=ClaudeCodeBackend())
         # IDLE_STALL early-returns with hardcoded subtype='idle_stall'
         # No invariant guard applies to this path
         assert sr.subtype == "idle_stall"
@@ -2075,7 +2081,7 @@ class TestWorktreePathPropagationWithEmptyMessages:
             termination=TerminationReason.NATURAL_EXIT,
             pid=12345,
         )
-        sr = _build_skill_result(sub_result)
+        sr = _build_skill_result(sub_result, backend=ClaudeCodeBackend())
         assert sr.worktree_path is None
 
     def test_extract_worktree_path_extracts_nonexistent_path(self):

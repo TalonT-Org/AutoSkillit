@@ -20,7 +20,7 @@ from autoskillit.core.types import (
     TerminationReason,
     WriteBehaviorSpec,
 )
-from autoskillit.execution.backends.claude import ClaudeResultParser
+from autoskillit.execution.backends.claude import ClaudeCodeBackend, ClaudeResultParser
 from autoskillit.execution.backends.codex import CodexBackend
 from autoskillit.execution.headless import (
     _build_skill_result,
@@ -161,7 +161,7 @@ def _make_codex_parse_stdout() -> object:
     unconditionally routes through CodexResultParser.
     """
 
-    def _patched(stdout: str, backend: object = None) -> ClaudeSessionResult:  # noqa: ARG001
+    def _patched(stdout: str, backend: object) -> ClaudeSessionResult:  # noqa: ARG001
         agent_result = CodexBackend().result_parser().parse_stdout(stdout)
         session = _adapt_codex_result(agent_result)
         for line in stdout.strip().splitlines():
@@ -214,36 +214,40 @@ class TestIdleStallLifespanStarted:
     def test_idle_stall_failure_preserves_lifespan_started_true(self):
         stdout = _tool_use_ndjson("Write", file_path="/worktree/src/foo.py")
         result = _idle_stall_result(stdout)
-        skill_result = _build_skill_result(result)
+        skill_result = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert skill_result.lifespan_started is True
 
     def test_idle_stall_failure_preserves_lifespan_started_false(self):
         result = _idle_stall_result("")
-        skill_result = _build_skill_result(result)
+        skill_result = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert skill_result.lifespan_started is False
 
 
 class TestKillReasonPropagation:
     def test_stale_failure_propagates_infra_kill(self):
         result = _stale_result(kill_reason=KillReason.INFRA_KILL)
-        skill_result = _build_skill_result(result)
+        skill_result = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert skill_result.kill_reason == KillReason.INFRA_KILL
 
     def test_idle_stall_failure_propagates_infra_kill(self):
         result = _idle_stall_result_with_kill(kill_reason=KillReason.INFRA_KILL)
-        skill_result = _build_skill_result(result)
+        skill_result = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert skill_result.kill_reason == KillReason.INFRA_KILL
 
     def test_recovered_stale_propagates_infra_kill(self):
         stdout = _success_result_json()
         result = _stale_result(kill_reason=KillReason.INFRA_KILL, stdout=stdout)
-        skill_result = _build_skill_result(result, completion_marker="done")
+        skill_result = _build_skill_result(
+            result, completion_marker="done", backend=ClaudeCodeBackend()
+        )
         assert skill_result.kill_reason == KillReason.INFRA_KILL
 
     def test_recovered_idle_stall_propagates_infra_kill(self):
         stdout = _success_result_json()
         result = _idle_stall_result_with_kill(kill_reason=KillReason.INFRA_KILL, stdout=stdout)
-        skill_result = _build_skill_result(result, completion_marker="done")
+        skill_result = _build_skill_result(
+            result, completion_marker="done", backend=ClaudeCodeBackend()
+        )
         assert skill_result.kill_reason == KillReason.INFRA_KILL
 
     def test_path_contamination_propagates_kill_reason(self):
@@ -266,7 +270,7 @@ class TestKillReasonPropagation:
             session_id="sess-contam",
             channel_b_session_id="",
         )
-        skill_result = _build_skill_result(result, cwd="/wrong/path")
+        skill_result = _build_skill_result(result, cwd="/wrong/path", backend=ClaudeCodeBackend())
         assert skill_result.kill_reason == KillReason.INFRA_KILL
 
 
@@ -281,7 +285,7 @@ class TestStaleTokenUsagePropagation:
             "cache_read_tokens": 75,
         }
         result = _stale_result_with_token_usage(usage, kill_reason=KillReason.INFRA_KILL)
-        skill_result = _build_skill_result(result)
+        skill_result = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert skill_result.token_usage is not None
         tu = skill_result.token_usage
         assert tu["input_tokens"] == 100
@@ -291,8 +295,8 @@ class TestStaleTokenUsagePropagation:
 
 
 class TestBackendDelegatedWriteToolNames:
-    def test_backend_none_uses_fallback_write_edit(self):
-        """backend=None falls back to frozenset({'Write', 'Edit'})."""
+    def test_claude_backend_uses_write_edit_tool_names(self):
+        """ClaudeCodeBackend uses frozenset({'Write', 'Edit'})."""
         stdout = (
             _make_tool_use_line("Write", {"file_path": "/a/b.py", "content": "x"})
             + "\n"
@@ -303,7 +307,7 @@ class TestBackendDelegatedWriteToolNames:
             + _success_session_json("Done")
         )
         result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
-        sr = _build_skill_result(result, backend=None)
+        sr = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert sr.evidence.write_call_count == 2
 
     def test_backend_provides_custom_tool_names(self):
@@ -323,7 +327,7 @@ class TestBackendDelegatedWriteToolNames:
         sr = _build_skill_result(result, backend=mock_backend)
         assert sr.evidence.write_call_count == 1
 
-    def test_backend_none_default_preserves_behavior(self):
+    def test_default_backend_behavior_preserved(self):
         """backend=None with no Write/Edit tools yields write_call_count=0."""
         stdout = (
             _make_tool_use_line("Read", {"file_path": "/a/b.py"})
@@ -331,7 +335,7 @@ class TestBackendDelegatedWriteToolNames:
             + _success_session_json("Done")
         )
         result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
-        sr = _build_skill_result(result, backend=None)
+        sr = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert sr.evidence.write_call_count == 0
 
     def test_codex_backend_produces_zero_write_count(self):
@@ -375,7 +379,7 @@ class TestBackendDelegatedWriteToolNames:
         captured: dict = {}
         original_parse = _headless_result._parse_stdout
 
-        def spy(stdout, backend=None):
+        def spy(stdout, backend):
             captured["backend"] = backend
             return original_parse(stdout, backend=backend)
 
@@ -397,7 +401,7 @@ class TestBackendDelegatedWriteToolNames:
         captured: dict = {}
         original_parse = _headless_result._parse_stdout
 
-        def spy(stdout, backend=None):
+        def spy(stdout, backend):
             captured["backend"] = backend
             return original_parse(stdout, backend=backend)
 
@@ -419,7 +423,7 @@ class TestBackendDelegatedWriteToolNames:
         captured: dict = {}
         original_parse = _headless_result._parse_stdout
 
-        def spy(stdout, backend=None):
+        def spy(stdout, backend):
             captured["backend"] = backend
             return original_parse(stdout, backend=backend)
 
@@ -441,7 +445,7 @@ class TestBackendDelegatedWriteToolNames:
         captured: dict = {}
         original_parse = _headless_result._parse_stdout
 
-        def spy(stdout, backend=None):
+        def spy(stdout, backend):
             captured["backend"] = backend
             return original_parse(stdout, backend=backend)
 
@@ -605,12 +609,12 @@ class TestComputeWriteEvidenceCodex:
 
 
 class TestParseStdout:
-    def test_backend_none_calls_parse_session_result(self):
-        """_parse_stdout with backend=None returns the same result as parse_session_result."""
+    def test_claude_backend_calls_parse_session_result(self):
+        """_parse_stdout with ClaudeCodeBackend returns the same result as parse_session_result."""
         from autoskillit.execution.session import parse_session_result
 
         stdout = _success_session_json("test result")
-        result = _parse_stdout(stdout)
+        result = _parse_stdout(stdout, backend=ClaudeCodeBackend())
         expected = parse_session_result(stdout)
         assert result.result == expected.result
         assert result.session_id == expected.session_id
@@ -620,7 +624,7 @@ class TestParseStdout:
         """_parse_stdout with no backend arg returns a ClaudeSessionResult."""
 
         stdout = _success_session_json("test result")
-        result = _parse_stdout(stdout)
+        result = _parse_stdout(stdout, ClaudeCodeBackend())
         assert isinstance(result, ClaudeSessionResult)
         assert result.result == "test result"
 
@@ -641,7 +645,7 @@ class TestParseStdout:
         mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
         stdout = _success_session_json("test result")
         with_backend = _parse_stdout(stdout, backend=mock_backend)
-        without_backend = _parse_stdout(stdout)
+        without_backend = _parse_stdout(stdout, ClaudeCodeBackend())
         assert with_backend.result == without_backend.result
         assert with_backend.session_id == without_backend.session_id
         assert with_backend.session_complete == without_backend.session_complete
@@ -681,17 +685,6 @@ class TestParseStdout:
         assert isinstance(result, ClaudeSessionResult)
         assert result.result == "adapter output"
 
-    def test_parse_stdout_backend_none_unchanged(self):
-        """_parse_stdout with backend=None matches parse_session_result (regression guard)."""
-        from autoskillit.execution.session import parse_session_result
-
-        stdout = _success_session_json("test result")
-        result = _parse_stdout(stdout, backend=None)
-        expected = parse_session_result(stdout)
-        assert result.result == expected.result
-        assert result.session_id == expected.session_id
-        assert result.session_complete == expected.session_complete
-
     def test_parse_stdout_codex_backend_dispatches_through_adapter(self, monkeypatch):
         """CodexBackend dispatches through _adapt_agent_result (non-Claude path)."""
         from autoskillit.execution.headless import _headless_result
@@ -717,7 +710,7 @@ class TestStaleRecoveryWriteEvidence:
             + _success_result_json("done")
         )
         result = _stale_result(kill_reason=KillReason.NATURAL_EXIT, stdout=stdout)
-        sr = _build_skill_result(result, completion_marker="done")
+        sr = _build_skill_result(result, completion_marker="done", backend=ClaudeCodeBackend())
         assert sr.evidence.write_call_count > 0, (
             "STALE recovery must propagate write evidence from parsed stdout"
         )
@@ -725,7 +718,7 @@ class TestStaleRecoveryWriteEvidence:
     def test_stale_failure_carries_write_evidence(self):
         stdout = _tool_use_ndjson("Edit", file_path="/a/b.py", old_string="a", new_string="b")
         result = _stale_result(kill_reason=KillReason.NATURAL_EXIT, stdout=stdout)
-        sr = _build_skill_result(result)
+        sr = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert sr.evidence.write_call_count > 0, (
             "STALE failure must propagate write evidence from parsed stdout"
         )
@@ -739,7 +732,7 @@ class TestIdleStallRecoveryWriteEvidence:
             + _success_result_json("done")
         )
         result = _idle_stall_result_with_kill(kill_reason=KillReason.NATURAL_EXIT, stdout=stdout)
-        sr = _build_skill_result(result, completion_marker="done")
+        sr = _build_skill_result(result, completion_marker="done", backend=ClaudeCodeBackend())
         assert sr.evidence.write_call_count > 0, (
             "IDLE_STALL recovery must propagate write evidence from parsed stdout"
         )
@@ -747,7 +740,7 @@ class TestIdleStallRecoveryWriteEvidence:
     def test_idle_stall_failure_carries_write_evidence(self):
         stdout = _tool_use_ndjson("Edit", file_path="/a/b.py", old_string="a", new_string="b")
         result = _idle_stall_result_with_kill(kill_reason=KillReason.NATURAL_EXIT, stdout=stdout)
-        sr = _build_skill_result(result)
+        sr = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert sr.evidence.write_call_count > 0, (
             "IDLE_STALL failure must propagate write evidence from parsed stdout"
         )
@@ -772,7 +765,7 @@ class TestWriteEvidenceCrossCheck:
 
         cap = structlog.testing.CapturingLogger()
         with unittest.mock.patch.object(_headless_result, "logger", cap):
-            _build_skill_result(result)
+            _build_skill_result(result, backend=ClaudeCodeBackend())
 
         assert any(
             call.method_name == "warning"
@@ -789,7 +782,7 @@ class TestWriteEvidenceCrossCheck:
             "",
             TerminationReason.NATURAL_EXIT,
         )
-        sr = _build_skill_result(result)
+        sr = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert sr.subtype != "zero_writes"
         assert sr.evidence.write_call_count >= 1
 
@@ -804,6 +797,7 @@ class TestWriteEvidenceCrossCheck:
         sr = _build_skill_result(
             result,
             write_behavior=WriteBehaviorSpec(mode="always"),
+            backend=ClaudeCodeBackend(),
         )
         assert sr.success is True
 
@@ -824,7 +818,7 @@ class TestWriteEvidenceCrossCheck:
             "",
             TerminationReason.NATURAL_EXIT,
         )
-        sr = _build_skill_result(result, completion_marker="DONE")
+        sr = _build_skill_result(result, completion_marker="DONE", backend=ClaudeCodeBackend())
         assert sr.retry_reason != RetryReason.EARLY_STOP
         assert sr.retry_reason == RetryReason.RESUME
 
@@ -840,7 +834,7 @@ class TestWriteEvidenceCrossCheck:
             }
         )
         result = _stale_result(stdout=result_line)
-        sr = _build_skill_result(result)
+        sr = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert sr.infra.exit_category == "api_error"
 
     def test_idle_stall_session_api_error_status_classified(self) -> None:
@@ -855,7 +849,7 @@ class TestWriteEvidenceCrossCheck:
             }
         )
         result = _idle_stall_result(result_line)
-        sr = _build_skill_result(result)
+        sr = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert sr.infra.exit_category == "api_error"
 
 
@@ -919,7 +913,9 @@ class TestCodexPipelineTurnFailed:
         )
 
     def _build(self) -> SkillResult:
-        return _build_skill_result(self._result, supports_claude_format_stdout=False)
+        return _build_skill_result(
+            self._result, supports_claude_format_stdout=False, backend=CodexBackend()
+        )
 
     def test_failure_success_is_false(self):
         sr = self._build()
@@ -972,6 +968,7 @@ class TestCodexPipelineTerminationBranches:
             result,
             completion_marker="%%ORDER_UP%%",
             supports_claude_format_stdout=False,
+            backend=CodexBackend(),
         )
         assert sr.success is True
 
@@ -982,7 +979,9 @@ class TestCodexPipelineTerminationBranches:
             termination=TerminationReason.STALE,
             kill_reason=KillReason.INFRA_KILL,
         )
-        sr = _build_skill_result(result, supports_claude_format_stdout=False)
+        sr = _build_skill_result(
+            result, supports_claude_format_stdout=False, backend=CodexBackend()
+        )
         assert sr.success is False
 
     def test_stale_codex_error_fixture_fails(self):
@@ -992,7 +991,9 @@ class TestCodexPipelineTerminationBranches:
             termination=TerminationReason.STALE,
             kill_reason=KillReason.INFRA_KILL,
         )
-        sr = _build_skill_result(result, supports_claude_format_stdout=False)
+        sr = _build_skill_result(
+            result, supports_claude_format_stdout=False, backend=CodexBackend()
+        )
         assert sr.success is False
 
     def test_idle_stall_codex_happy_path_with_backend_succeeds(self):
@@ -1006,6 +1007,7 @@ class TestCodexPipelineTerminationBranches:
             result,
             completion_marker="%%ORDER_UP%%",
             supports_claude_format_stdout=False,
+            backend=CodexBackend(),
         )
         assert sr.success is True
 
@@ -1016,7 +1018,9 @@ class TestCodexPipelineTerminationBranches:
             termination=TerminationReason.IDLE_STALL,
             kill_reason=KillReason.INFRA_KILL,
         )
-        sr = _build_skill_result(result, supports_claude_format_stdout=False)
+        sr = _build_skill_result(
+            result, supports_claude_format_stdout=False, backend=CodexBackend()
+        )
         assert sr.success is False
 
     def test_idle_stall_codex_error_fixture_fails(self):
@@ -1026,7 +1030,9 @@ class TestCodexPipelineTerminationBranches:
             termination=TerminationReason.IDLE_STALL,
             kill_reason=KillReason.INFRA_KILL,
         )
-        sr = _build_skill_result(result, supports_claude_format_stdout=False)
+        sr = _build_skill_result(
+            result, supports_claude_format_stdout=False, backend=CodexBackend()
+        )
         assert sr.success is False
 
 
@@ -1059,7 +1065,7 @@ class TestStaleApiRetryExhaustion:
             ]
         )
         result = _sr(0, ndjson, "", TerminationReason.STALE)
-        sr = _build_skill_result(result)
+        sr = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert sr.success is False
         assert sr.infra.exit_category == "api_error"
         assert sr.api_retry.exhausted is True
@@ -1077,7 +1083,7 @@ class TestStaleApiRetryExhaustion:
             }
         )
         result = _sr(0, ndjson, "", TerminationReason.STALE)
-        sr = _build_skill_result(result)
+        sr = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert sr.success is False
         assert sr.infra.exit_category == ""
         assert sr.api_retry.count == 0
@@ -1108,7 +1114,7 @@ class TestStaleApiRetryExhaustion:
             ]
         )
         result = _sr(0, ndjson, "", TerminationReason.STALE)
-        sr = _build_skill_result(result)
+        sr = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert sr.success is True
         assert sr.subtype == "recovered_from_stale"
         assert sr.infra.exit_category == ""
@@ -1140,7 +1146,7 @@ class TestStaleApiRetryExhaustion:
             ]
         )
         result = _sr(0, ndjson, "", TerminationReason.IDLE_STALL)
-        sr = _build_skill_result(result)
+        sr = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert sr.success is False
         assert sr.infra.exit_category == "api_error"
         assert sr.api_retry.exhausted is True
@@ -1175,7 +1181,7 @@ class TestNormalApiRetry:
             ]
         )
         result = _sr(0, ndjson, "", TerminationReason.NATURAL_EXIT)
-        sr = _build_skill_result(result)
+        sr = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert sr.success is True
         assert sr.api_retry.count == 1
         assert sr.api_retry.exhausted is False
@@ -1183,11 +1189,6 @@ class TestNormalApiRetry:
 
 
 class TestExtractFileChanges:
-    def test_extract_file_changes_returns_empty_for_no_backend(self) -> None:
-        from autoskillit.execution.headless._headless_result import _extract_file_changes
-
-        assert _extract_file_changes("", None) == []
-
     def test_extract_file_changes_returns_empty_for_claude_backend(self) -> None:
         from autoskillit.execution.backends.claude import ClaudeCodeBackend
         from autoskillit.execution.headless._headless_result import _extract_file_changes
@@ -1227,7 +1228,9 @@ class TestComputeWriteEvidenceWithFileChanges:
             session_id="s1",
             tool_uses=[],
         )
-        evidence = _compute_write_evidence(session, False, False, file_changes=["a.py", "b.py"])
+        evidence = _compute_write_evidence(
+            session, False, False, backend=ClaudeCodeBackend(), file_changes=["a.py", "b.py"]
+        )
         assert evidence.file_changes_count == 2
         assert evidence.has_evidence is True
 
@@ -1240,6 +1243,8 @@ class TestComputeWriteEvidenceWithFileChanges:
             session_id="s1",
             tool_uses=[{"name": "Write", "id": "t1"}],
         )
-        evidence = _compute_write_evidence(session, False, False, file_changes=["a.py"])
+        evidence = _compute_write_evidence(
+            session, False, False, backend=ClaudeCodeBackend(), file_changes=["a.py"]
+        )
         assert evidence.file_changes_count == 0
         assert evidence.write_call_count == 1

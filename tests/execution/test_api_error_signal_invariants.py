@@ -19,6 +19,7 @@ from autoskillit.core.types import (
     SubprocessResult,
     TerminationReason,
 )
+from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.headless._headless_result import _build_skill_result
 from autoskillit.execution.session._exit_classification import classify_infra_exit
 from autoskillit.execution.session._session_model import ClaudeSessionResult, parse_session_result
@@ -164,7 +165,7 @@ class TestApiErrorPtyModeEndToEnd:
             pid=12345,
             channel_confirmation=ChannelConfirmation.UNMONITORED,
         )
-        sr = _build_skill_result(result)
+        sr = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert sr.infra.exit_category == "api_error", (
             f"Expected infra.exit_category='api_error' for signal='{signal}', "
             f"got '{sr.infra.exit_category}'"
@@ -196,7 +197,7 @@ class TestApiErrorPtyModeEndToEnd:
             pid=12345,
             channel_confirmation=ChannelConfirmation.UNMONITORED,
         )
-        sr = _build_skill_result(result)
+        sr = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert sr.infra.exit_category == "api_error"
         assert sr.needs_retry is True
         assert sr.retry_reason == RetryReason.RESUME
@@ -225,7 +226,7 @@ class TestApiErrorPtyModeEndToEnd:
             pid=12345,
             channel_confirmation=ChannelConfirmation.UNMONITORED,
         )
-        sr = _build_skill_result(result)
+        sr = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert sr.infra.exit_category == "context_exhausted"
         assert sr.needs_retry is True
         assert sr.retry_reason == RetryReason.RESUME
@@ -311,7 +312,7 @@ class TestApiErrorStatusChannelInvariance:
             pid=12345,
             channel_confirmation=ChannelConfirmation.UNMONITORED,
         )
-        sr = _build_skill_result(result, completion_marker="DONE")
+        sr = _build_skill_result(result, backend=ClaudeCodeBackend(), completion_marker="DONE")
         assert sr.infra.exit_category == "api_error"
         assert sr.needs_retry is True
         assert sr.retry_reason == RetryReason.RESUME

@@ -6,6 +6,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.core.types import RetryReason, SkillResult
+from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from tests.execution.conftest import _mock_backend
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -335,9 +336,9 @@ def test_build_skill_result_stamps_provider_used_on_result() -> None:
     from tests.execution.conftest import _sr
 
     sub_result = _sr(stdout="result: done\n", returncode=0)
-    sr = _build_skill_result(sub_result, provider_used="vertex")
+    sr = _build_skill_result(sub_result, provider_used="vertex", backend=ClaudeCodeBackend())
     assert sr.provider.provider_used == "vertex"
-    sr_default = _build_skill_result(sub_result)
+    sr_default = _build_skill_result(sub_result, backend=ClaudeCodeBackend())
     assert sr_default.provider.provider_used == ""
 
 
@@ -354,6 +355,7 @@ def test_build_skill_result_provider_used_survives_budget_guard() -> None:
         audit=audit,
         max_consecutive_retries=3,
         provider_used="bedrock",
+        backend=ClaudeCodeBackend(),
     )
     assert sr.provider.provider_used == "bedrock"
 

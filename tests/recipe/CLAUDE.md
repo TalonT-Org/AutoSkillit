@@ -76,6 +76,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_recipe_ci_applicable_routing.py` | Structural tests for ci_applicable routing guards across all wait_for_ci chains |
 | `test_recipe_ci_contracts.py` | Cross-recipe ci_event/branch coherence and remote_url structural tests |
 | `test_recipe_ci_watch_event.py` | Tests for CI watch event in recipe steps |
+| `test_recipe_dry_walkthrough_scope.py` | Regression test: dry-walkthrough output_dir must not scope to /dry-walkthrough subdirectory (#2919) |
 | `test_recipe_order.py` | Tests for BUNDLED_RECIPE_ORDER stable display order registry |
 | `test_report_frontmatter_schema.py` | Tests for report.md YAML frontmatter audit-trail schema |
 | `test_recipe_scripts.py` | Tests for recipe script callables |

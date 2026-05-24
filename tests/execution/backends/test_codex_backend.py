@@ -201,9 +201,9 @@ class TestCodexBackendFactories:
         locator = CodexBackend().session_locator()
         assert isinstance(locator, SessionLocator)
 
-    def test_session_locator_locate_returns_none(self) -> None:
+    def test_session_locator_is_codex_session_locator(self) -> None:
         locator = CodexBackend().session_locator()
-        assert locator.locate_session("any-id") is None
+        assert isinstance(locator, CodexSessionLocator)
 
     def test_write_tool_names_returns_frozenset(self) -> None:
         assert isinstance(CodexBackend().write_tool_names(), frozenset)
@@ -225,15 +225,6 @@ class TestCodexEnvPolicy:
         result = policy.build_env({"PATH": "/usr/bin", "HOME": "/root"})
         assert result["PATH"] == "/usr/bin"
         assert result["HOME"] == "/root"
-
-
-class TestCodexSessionLocator:
-    def test_locate_session_returns_none(self) -> None:
-        locator = CodexSessionLocator()
-        assert locator.locate_session("any-session-id") is None
-
-    def test_satisfies_session_locator_protocol(self) -> None:
-        assert isinstance(CodexSessionLocator(), SessionLocator)
 
 
 class TestCodexImportContract:

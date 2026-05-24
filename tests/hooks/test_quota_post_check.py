@@ -99,6 +99,20 @@ def _run_hook(
     return buf.getvalue(), exit_code
 
 
+@pytest.fixture(autouse=True)
+def _clear_session_deadline(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Isolate quota tests from orchestrator env vars that alter hook control flow.
+
+    AUTOSKILLIT_SESSION_DEADLINE: when expired, triggers budget_exceeded path
+    (QUOTA BUDGET EXCEEDED) instead of the normal QUOTA WARNING path.
+    AUTOSKILLIT_PROVIDER_PROFILE: when non-anthropic, triggers provider bypass
+    exit before quota check, producing empty output instead of warning JSON.
+    Tests that need a specific profile set it explicitly via monkeypatch.setenv.
+    """
+    monkeypatch.delenv("AUTOSKILLIT_SESSION_DEADLINE", raising=False)
+    monkeypatch.delenv("AUTOSKILLIT_PROVIDER_PROFILE", raising=False)
+
+
 # T1: PostToolUse quota warning emitted when over threshold
 def test_qpc1_emits_warning_when_over_threshold(tmp_path):
     """PostToolUse hook emits updatedMCPToolOutput with quota warning."""

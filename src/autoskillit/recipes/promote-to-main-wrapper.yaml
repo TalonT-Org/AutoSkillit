@@ -6,13 +6,11 @@ kind: food-truck
 recipe_version: "1.0.0"
 
 requires_packs:
-  - github
+- github
 
 kitchen_rules:
-  - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
-    Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the
-    orchestrator. All work is delegated through run_skill."
-  - "Route to on_failure — never investigate or fix directly from the orchestrator."
+- "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the orchestrator. All work is delegated through run_skill."
+- "Route to on_failure — never investigate or fix directly from the orchestrator."
 
 ingredients:
   batch_branch:
@@ -35,18 +33,19 @@ steps:
       skill_command: "/autoskillit:promote-to-main ${{ inputs.batch_branch }} ${{ inputs.base_branch }}"
       cwd: "${{ inputs.source_dir }}"
       step_name: "promote"
+      output_dir: ${{ inputs.source_dir }}/{{AUTOSKILLIT_TEMP}}/promote-to-main
     capture:
       pr_url: "${{ result.pr_url }}"
       verdict: "${{ result.verdict }}"
       category_summary: "${{ result.category_summary }}"
     on_result:
-      - when: "${{ result.verdict }} == 'preflight_failed'"
-        route: escalate_stop
-      - when: "${{ result.verdict }} == 'created'"
-        route: emit_result
-      - when: "${{ result.verdict }} == 'dry_run'"
-        route: emit_result
-      - route: emit_result
+    - when: "${{ result.verdict }} == 'preflight_failed'"
+      route: escalate_stop
+    - when: "${{ result.verdict }} == 'created'"
+      route: emit_result
+    - when: "${{ result.verdict }} == 'dry_run'"
+      route: emit_result
+    - route: emit_result
     on_context_limit: escalate_stop
     on_failure: escalate_stop
 

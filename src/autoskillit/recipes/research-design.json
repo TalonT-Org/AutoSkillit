@@ -48,7 +48,8 @@
       "with": {
         "skill_command": "/autoskillit:scope ${{ inputs.task }}",
         "cwd": "${{ inputs.source_dir }}",
-        "step_name": "scope"
+        "step_name": "scope",
+        "output_dir": "${{ inputs.source_dir }}/{{AUTOSKILLIT_TEMP}}/scope"
       },
       "capture": {
         "scope_report": "${{ result.scope_report }}",
@@ -77,7 +78,8 @@
       "with": {
         "skill_command": "/autoskillit:plan-experiment ${{ context.scope_report }} ${{ context.selected_directions }} ${{ context.revision_guidance }}",
         "cwd": "${{ inputs.source_dir }}",
-        "step_name": "plan_experiment"
+        "step_name": "plan_experiment",
+        "output_dir": "${{ inputs.source_dir }}/{{AUTOSKILLIT_TEMP}}/plan-experiment"
       },
       "optional_context_refs": [
         "revision_guidance",
@@ -95,7 +97,8 @@
       "with": {
         "skill_command": "/autoskillit:review-design ${{ context.experiment_plan }} ${{ context.scope_report }}",
         "cwd": "${{ inputs.source_dir }}",
-        "step_name": "review_design"
+        "step_name": "review_design",
+        "output_dir": "${{ inputs.source_dir }}/{{AUTOSKILLIT_TEMP}}/review-design"
       },
       "capture": {
         "verdict": "${{ result.verdict }}",
@@ -135,7 +138,8 @@
       "with": {
         "skill_command": "/autoskillit:plan-visualization ${{ inputs.source_dir }} ${{ context.experiment_plan }} ${{ context.scope_report }}",
         "cwd": "${{ inputs.source_dir }}",
-        "step_name": "plan_visualization"
+        "step_name": "plan_visualization",
+        "output_dir": "${{ inputs.source_dir }}/{{AUTOSKILLIT_TEMP}}/plan-visualization"
       },
       "capture": {
         "visualization_plan_path": "${{ result.visualization_plan_path }}",
@@ -185,7 +189,8 @@
       "with": {
         "skill_command": "/autoskillit:resolve-design-review ${{ context.evaluation_dashboard }} ${{ context.experiment_plan }} ${{ context.revision_guidance }}",
         "cwd": "${{ inputs.source_dir }}",
-        "step_name": "resolve_design_review"
+        "step_name": "resolve_design_review",
+        "output_dir": "${{ inputs.source_dir }}/{{AUTOSKILLIT_TEMP}}/resolve-design-review"
       },
       "optional_context_refs": [
         "evaluation_dashboard",

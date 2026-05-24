@@ -96,7 +96,8 @@
       "with": {
         "skill_command": "/autoskillit:build-execution-map ${{ context.remaining_urls_json }} ${{ inputs.base_branch }}",
         "cwd": "${{ inputs.source_dir }}",
-        "step_name": "run_bem_internally"
+        "step_name": "run_bem_internally",
+        "output_dir": "${{ inputs.source_dir }}/{{AUTOSKILLIT_TEMP}}/build-execution-map"
       },
       "capture": {
         "execution_map_path": "${{ result.execution_map }}"

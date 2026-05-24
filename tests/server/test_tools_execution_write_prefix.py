@@ -28,10 +28,10 @@ async def test_allowed_write_prefix_set_from_output_dir_even_when_not_read_only(
 
 
 @pytest.mark.anyio
-async def test_allowed_write_prefix_empty_without_output_dir_and_not_read_only(
+async def test_allowed_write_prefix_uses_fallback_without_output_dir(
     tool_ctx_kitchen_open, monkeypatch, tmp_path
 ) -> None:
-    """When no output_dir and skill is not read-only, allowed_write_prefix is empty."""
+    """When no output_dir is given, fallback computes prefix from skill name."""
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
@@ -41,4 +41,5 @@ async def test_allowed_write_prefix_empty_without_output_dir_and_not_read_only(
     await run_skill("/test skill", str(tmp_path))
 
     assert len(executor.calls) == 1
-    assert executor.calls[0].allowed_write_prefix == ""
+    expected = str(tmp_path / ".autoskillit" / "temp" / "test") + "/"
+    assert executor.calls[0].allowed_write_prefix == expected

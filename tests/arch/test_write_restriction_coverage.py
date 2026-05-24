@@ -30,6 +30,7 @@ UNRESTRICTED_WRITE_SKILLS: frozenset[str] = frozenset(
         "close-kitchen",  # server lifecycle only
         "init",  # project initialization: writes config
         "update-config",  # config mutation by design
+        "build-execution-map",  # bem-wrapper.yaml step has no CWD anchor for output_dir
     }
 )
 
@@ -136,7 +137,7 @@ def _recipe_invocations_have_output_dir(skill_name: str, recipe_files: list[Path
 
             # Also check note text for prose-dispatched invocations
             note = step.get("note", "") or ""
-            # Note dispatch pattern: run_skill(skill_command="...skill-name...", ..., output_dir=...)
+            # Note dispatch pattern: run_skill(skill_command="...skill-name...", output_dir=...)
             note_invocations = re.findall(
                 r'run_skill\([^)]*skill_command=["\'][^"\']*'
                 + re.escape(skill_name)

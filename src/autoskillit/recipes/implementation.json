@@ -187,7 +187,8 @@
       "with": {
         "skill_command": "/autoskillit:review-approach ${{ context.plan_path }}",
         "cwd": "${{ context.work_dir }}",
-        "step_name": "review"
+        "step_name": "review",
+        "output_dir": "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/review-approach"
       },
       "capture": {
         "review_path": "${{ result.review_path }}"
@@ -206,7 +207,8 @@
         "skill_command": "/autoskillit:dry-walkthrough ${{ context.plan_path }}",
         "cwd": "${{ context.work_dir }}",
         "step_name": "verify",
-        "review_path": "${{ context.review_path }}"
+        "review_path": "${{ context.review_path }}",
+        "output_dir": "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/dry-walkthrough"
       },
       "on_success": "implement",
       "on_failure": "release_issue_failure",
@@ -445,7 +447,8 @@
       "with": {
         "skill_command": "/autoskillit:audit-impl ${{ context.plan_path }} ${{ context.base_sha }} ${{ inputs.base_branch }}",
         "cwd": "${{ context.work_dir }}",
-        "step_name": "audit_impl"
+        "step_name": "audit_impl",
+        "output_dir": "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/audit-impl"
       },
       "capture": {
         "remediation_path": "${{ result.remediation_path }}"
@@ -618,7 +621,8 @@
       "with": {
         "skill_command": "/autoskillit:review-pr ${{ context.merge_target }} ${{ inputs.base_branch }} annotated_diff_path=${{ context.annotated_diff_path }} hunk_ranges_path=${{ context.hunk_ranges_path }} diff_metrics_path=${{ context.diff_metrics_path }} mode=${{ context.review_mode }}",
         "cwd": "${{ context.work_dir }}",
-        "step_name": "review_pr"
+        "step_name": "review_pr",
+        "output_dir": "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/review-pr"
       },
       "capture": {
         "review_verdict": "${{ result.verdict }}"
@@ -1663,7 +1667,8 @@
         "skill_command": "/autoskillit:diagnose-ci ${{ context.merge_target }} - - - ${{ context.ci_event }}",
         "cwd": "${{ context.work_dir }}",
         "step_name": "diagnose_ci",
-        "ci_failed_jobs": "${{ context.ci_failed_jobs }}"
+        "ci_failed_jobs": "${{ context.ci_failed_jobs }}",
+        "output_dir": "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/diagnose-ci"
       },
       "capture": {
         "diagnosis_path": "${{ result.diagnosis_path }}"

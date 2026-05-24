@@ -357,3 +357,96 @@ def test_run_interactive_session_default_backend_calls_get_backend(
     _run_interactive_session(system_prompt="test")
     assert get_backend_called, "get_backend must be called when backend is not injected"
     assert get_backend_called[0] == "claude-code"
+
+
+def test_get_backend_di_used_in_session_launch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """get_backend DI path in _run_interactive_session invokes stub's build_interactive_cmd."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.core import BackendCapabilities, CmdSpec
+
+    build_calls: list[dict] = []
+
+    caps = BackendCapabilities(
+        channel_b_capable=True,
+        pty_required=True,
+        session_resume_capable=True,
+        skill_injection_capable=True,
+        supports_thinking_blocks=True,
+        supports_claude_format_stdout=True,
+        exit_code_is_terminal=False,
+        mcp_config_capable=False,
+        completion_record_types=frozenset({"result"}),
+        session_record_types=frozenset({"assistant"}),
+    )
+
+    class _DIBackend:
+        def binary_name(self) -> str:
+            return "claude"
+
+        @property
+        def capabilities(self):
+            return caps
+
+        def build_interactive_cmd(self, **kwargs):
+            build_calls.append(kwargs)
+            return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
+
+    mock_config = MagicMock()
+    mock_config.agent_backend.backend = "claude-code"
+
+    monkeypatch.setattr("autoskillit.config.load_config", lambda: mock_config)
+    monkeypatch.setattr("autoskillit.execution.get_backend", lambda name: _DIBackend())
+    _stub_plugin_installed(monkeypatch)
+    _capture_subprocess(monkeypatch)
+    _run_interactive_session(system_prompt="test")
+    assert build_calls, "Stub backend's build_interactive_cmd must be invoked via get_backend DI"
+
+
+def test_skill_injection_false_via_get_backend_omits_append_system_prompt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """skill_injection_capable=False stub via get_backend DI omits --append-system-prompt."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.core import BackendCapabilities, ClaudeFlags, CmdSpec
+
+    no_inject_caps = BackendCapabilities(
+        channel_b_capable=True,
+        pty_required=True,
+        session_resume_capable=True,
+        skill_injection_capable=False,
+        supports_thinking_blocks=True,
+        supports_claude_format_stdout=True,
+        exit_code_is_terminal=False,
+        mcp_config_capable=False,
+        completion_record_types=frozenset({"result"}),
+        session_record_types=frozenset({"assistant"}),
+    )
+
+    class _NoInjectDIBackend:
+        def binary_name(self) -> str:
+            return "claude"
+
+        @property
+        def capabilities(self):
+            return no_inject_caps
+
+        def build_interactive_cmd(self, **kwargs):
+            return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
+
+    mock_config = MagicMock()
+    mock_config.agent_backend.backend = "claude-code"
+
+    captured: dict = {}
+    monkeypatch.setattr("autoskillit.config.load_config", lambda: mock_config)
+    monkeypatch.setattr("autoskillit.execution.get_backend", lambda name: _NoInjectDIBackend())
+    monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/claude")
+
+    def mock_run(cmd, **kwargs):
+        captured["cmd"] = list(cmd)
+        return type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+    monkeypatch.setattr(subprocess, "run", mock_run)
+    _run_interactive_session(system_prompt="sentinel")
+    assert ClaudeFlags.APPEND_SYSTEM_PROMPT not in captured["cmd"]

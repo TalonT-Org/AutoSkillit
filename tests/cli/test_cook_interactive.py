@@ -799,3 +799,103 @@ class TestCookInteractive:
 
         assert get_backend_called, "get_backend must be called when backend is not injected"
         assert get_backend_called[0] == "claude-code"
+
+    @pytest.mark.parametrize("backend_name", ["claude-code", "codex"])
+    def test_cook_routes_through_get_backend(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, backend_name: str
+    ) -> None:
+        """cook() calls get_backend with config.agent_backend.backend value."""
+        from unittest.mock import MagicMock, patch
+
+        from autoskillit.core import CmdSpec
+
+        fake_skills_dir = tmp_path / "skills"
+        fake_skills_dir.mkdir()
+        mock_mgr = MagicMock()
+        mock_mgr.init_session.return_value = fake_skills_dir
+        get_backend_calls: list = []
+
+        class _StubBackend:
+            def binary_name(self) -> str:
+                return "claude"
+
+            def build_interactive_cmd(self, **kwargs):
+                return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
+
+        mock_config = MagicMock()
+        mock_config.agent_backend.backend = backend_name
+        mock_config.features = {}
+        mock_config.experimental_enabled = False
+        mock_config.providers.profiles = {}
+
+        def fake_get_backend(name: str):
+            get_backend_calls.append(name)
+            return _StubBackend()
+
+        with (
+            patch("shutil.which", return_value="/usr/bin/claude"),
+            patch("builtins.input", return_value=""),
+            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
+            patch("subprocess.run", return_value=MagicMock(returncode=0)),
+            patch("autoskillit.core.write_registry_entry"),
+            patch("autoskillit.config.load_config", return_value=mock_config),
+            patch("autoskillit.execution.get_backend", side_effect=fake_get_backend),
+        ):
+            import autoskillit.cli.session._cook as module
+
+            module.cook()
+
+        assert len(get_backend_calls) == 1, "get_backend must be called exactly once"
+        assert get_backend_calls[0] == backend_name
+
+    def test_cook_get_backend_called_not_hardcoded(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """ClaudeCodeBackend is never instantiated when get_backend is the DI path."""
+        from unittest.mock import MagicMock, patch
+
+        from autoskillit.core import CmdSpec
+
+        fake_skills_dir = tmp_path / "skills"
+        fake_skills_dir.mkdir()
+        mock_mgr = MagicMock()
+        mock_mgr.init_session.return_value = fake_skills_dir
+        hardcoded_calls: list = []
+
+        class _StubBackend:
+            def binary_name(self) -> str:
+                return "claude"
+
+            def build_interactive_cmd(self, **kwargs):
+                return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
+
+        mock_config = MagicMock()
+        mock_config.agent_backend.backend = "claude-code"
+        mock_config.features = {}
+        mock_config.experimental_enabled = False
+        mock_config.providers.profiles = {}
+
+        def tracking_claude_code_backend(*args, **kwargs):
+            hardcoded_calls.append(True)
+            return MagicMock()
+
+        with (
+            patch("shutil.which", return_value="/usr/bin/claude"),
+            patch("builtins.input", return_value=""),
+            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
+            patch("subprocess.run", return_value=MagicMock(returncode=0)),
+            patch("autoskillit.core.write_registry_entry"),
+            patch("autoskillit.config.load_config", return_value=mock_config),
+            patch("autoskillit.execution.get_backend", return_value=_StubBackend()),
+            patch(
+                "autoskillit.execution.backends.claude.ClaudeCodeBackend",
+                side_effect=tracking_claude_code_backend,
+            ),
+        ):
+            import autoskillit.cli.session._cook as module
+
+            module.cook()
+
+        assert not hardcoded_calls, (
+            "ClaudeCodeBackend must never be instantiated when get_backend is patched"
+        )

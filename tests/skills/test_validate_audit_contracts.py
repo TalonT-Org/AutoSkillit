@@ -6,7 +6,10 @@ import functools
 
 from autoskillit.core.types import SkillSource
 from autoskillit.workspace.skills import DefaultSkillResolver
-from tests.skills.conftest import assert_ticket_grouper_has_minimum_group_floor
+from tests.skills.conftest import (
+    assert_ticket_grouper_has_effort_based_splitting,
+    assert_ticket_grouper_has_minimum_group_floor,
+)
 
 
 @functools.cache
@@ -182,3 +185,7 @@ class TestValidateAuditTicketGrouper:
         """Ticket Grouper instructions must enforce a minimum group count."""
 
         assert_ticket_grouper_has_minimum_group_floor(_skill_text())
+
+    def test_ticket_grouper_has_effort_based_splitting(self) -> None:
+        """Ticket Grouper instructions must include effort-based splitting."""
+        assert_ticket_grouper_has_effort_based_splitting(_skill_text())

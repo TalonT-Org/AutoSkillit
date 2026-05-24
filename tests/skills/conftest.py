@@ -25,6 +25,26 @@ def assert_ticket_grouper_has_minimum_group_floor(text: str) -> None:
     )
 
 
+def assert_ticket_grouper_has_effort_based_splitting(text: str) -> None:
+    start = text.find("Ticket Grouper")
+    if start == -1:
+        grouper_section = ""
+    else:
+        end = text.find("### Step 7")
+        grouper_section = text[start : end if end != -1 else None]
+    has_effort = bool(
+        re.search(
+            r"(?:effort-based|line count|high effort|medium effort)",
+            grouper_section,
+            re.IGNORECASE,
+        )
+    )
+    assert has_effort, (
+        "Ticket Grouper instructions must include effort-based splitting rules "
+        "for findings that enumerate multiple files"
+    )
+
+
 @pytest.fixture(scope="module")
 def skill_text() -> str:
     skill_path = pkg_root() / "skills_extended" / "investigate" / "SKILL.md"

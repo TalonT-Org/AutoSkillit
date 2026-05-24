@@ -266,3 +266,58 @@ class TestPlannerResultNamingGuardSessionScope:
         result = _run_hook(event, headless=False)
         assert result.output == ""
         assert result.exit_code == 0
+
+
+def _run_write_guard(
+    event: dict | str,
+    *,
+    allowed_prefix: str = "",
+    skill_name: str = "",
+) -> str:
+    """Run write_guard.py with optional planner session environment."""
+    from autoskillit.hooks.guards.write_guard import main
+
+    stdin_text = json.dumps(event) if isinstance(event, dict) else event
+    env_patch: dict[str, str] = {"AUTOSKILLIT_HEADLESS": "1"}
+    if allowed_prefix:
+        env_patch["AUTOSKILLIT_ALLOWED_WRITE_PREFIX"] = allowed_prefix
+    if skill_name:
+        env_patch["AUTOSKILLIT_SKILL_NAME"] = skill_name
+    buf = io.StringIO()
+    with (
+        unittest.mock.patch("sys.stdin", io.StringIO(stdin_text)),
+        redirect_stdout(buf),
+        unittest.mock.patch.dict(os.environ, env_patch, clear=False),
+    ):
+        try:
+            main()
+        except SystemExit:
+            pass
+    return buf.getvalue()
+
+
+class TestPlannerWriteScopeGuard:
+    """write_guard enforces AUTOSKILLIT_ALLOWED_WRITE_PREFIX in planner sessions."""
+
+    PREFIX = "/clone/.autoskillit/temp/planner/run-xyz/work_packages/"
+    SKILL = "planner-elaborate-wps"
+
+    def test_planner_session_write_to_source_denied(self) -> None:
+        event = _build_event("Write", "/clone/src/daemon.rs")
+        result = _run_write_guard(event, allowed_prefix=self.PREFIX, skill_name=self.SKILL)
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert (
+            "read-only skill session" in parsed["hookSpecificOutput"]["permissionDecisionReason"]
+        )
+
+    def test_planner_session_write_to_output_dir_allowed(self) -> None:
+        path = "/clone/.autoskillit/temp/planner/run-xyz/work_packages/P1-A1-WP1_result.json"
+        event = _build_event("Write", path)
+        result = _run_write_guard(event, allowed_prefix=self.PREFIX, skill_name=self.SKILL)
+        assert result == ""
+
+    def test_non_planner_session_unaffected(self) -> None:
+        event = _build_event("Write", "/clone/src/foo.py")
+        result = _run_write_guard(event, allowed_prefix="", skill_name="")
+        assert result == ""

@@ -497,6 +497,9 @@ class TestApiErrorStatusParsing:
         assert session.api_error_status == 429
 
     def test_api_error_status_captured_from_fallback_json(self) -> None:
+        # Pretty-printed JSON: individual lines aren't valid JSON, so the
+        # line-by-line NDJSON scan misses it and the whole-string fallback
+        # parse at _session_model.py:450 triggers instead.
         stdout = json.dumps(
             {
                 "type": "result",
@@ -505,7 +508,8 @@ class TestApiErrorStatusParsing:
                 "session_id": "s1",
                 "is_error": False,
                 "api_error_status": 429,
-            }
+            },
+            indent=2,
         )
         session = parse_session_result(stdout)
         assert session.api_error_status == 429

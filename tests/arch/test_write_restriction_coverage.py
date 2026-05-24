@@ -96,25 +96,28 @@ def _skill_is_read_only(skill_name: str, contracts: dict) -> bool:
     return bool(entry.get("read_only"))
 
 
-def _recipe_yaml_files() -> list[Path]:
-    return list(_RECIPES_DIR.glob("*.yaml"))
-
-
 def _skill_name_from_command(command: str) -> str | None:
     """Extract bare skill name from /autoskillit:name or /name command strings."""
     m = re.search(r"/(?:autoskillit:)?([a-z][a-z0-9-]+)", command)
     return m.group(1) if m else None
 
 
-def _recipe_invocations_have_output_dir(skill_name: str, recipe_files: list[Path]) -> bool:
+def _load_parsed_recipes() -> list[dict]:
+    """Parse all recipe YAML files once and return their data dicts."""
+    results: list[dict] = []
+    for recipe_path in sorted(_RECIPES_DIR.glob("*.yaml")):
+        data = yaml.safe_load(recipe_path.read_text())
+        if isinstance(data, dict):
+            results.append(data)
+    return results
+
+
+def _recipe_invocations_have_output_dir(skill_name: str, parsed_recipes: list[dict]) -> bool:
     """Return True if the skill appears in recipes and all its invocations have output_dir."""
     invocation_count = 0
     covered_count = 0
 
-    for recipe_path in recipe_files:
-        data = yaml.safe_load(recipe_path.read_text())
-        if not isinstance(data, dict):
-            continue
+    for data in parsed_recipes:
         steps = data.get("steps", {})
         if not isinstance(steps, dict):
             continue
@@ -135,9 +138,7 @@ def _recipe_invocations_have_output_dir(skill_name: str, recipe_files: list[Path
             invocation_count += 1
             has_output_dir_in_with = bool(with_block.get("output_dir"))
 
-            # Also check note text for prose-dispatched invocations
             note = step.get("note", "") or ""
-            # Note dispatch pattern: run_skill(skill_command="...skill-name...", output_dir=...)
             note_invocations = re.findall(
                 r'run_skill\([^)]*skill_command=["\'][^"\']*'
                 + re.escape(skill_name)
@@ -155,8 +156,6 @@ def _recipe_invocations_have_output_dir(skill_name: str, recipe_files: list[Path
                 covered_count += 1
 
     if invocation_count == 0:
-        # Skill not in any recipe — it's invoked ad-hoc; the _resolve_skill_temp_dir
-        # fallback provides default restriction. Count as covered.
         return True
     return covered_count == invocation_count
 
@@ -170,7 +169,7 @@ def test_never_modify_source_skills_have_write_prefix() -> None:
     3. Explicit UNRESTRICTED_WRITE_SKILLS entry (with documented justification)
     """
     contracts = _load_contracts()
-    recipe_files = _recipe_yaml_files()
+    parsed_recipes = _load_parsed_recipes()
 
     violations: list[str] = []
     for skill_dir in sorted(_SKILLS_ROOT.iterdir()):
@@ -187,7 +186,7 @@ def test_never_modify_source_skills_have_write_prefix() -> None:
             continue
         if _skill_is_read_only(skill_name, contracts):
             continue
-        if _recipe_invocations_have_output_dir(skill_name, recipe_files):
+        if _recipe_invocations_have_output_dir(skill_name, parsed_recipes):
             continue
 
         violations.append(skill_name)
@@ -243,7 +242,7 @@ def test_audit_skills_have_output_dir_or_read_only() -> None:
     ]
 
     contracts = _load_contracts()
-    recipe_files = _recipe_yaml_files()
+    parsed_recipes = _load_parsed_recipes()
 
     violations: list[str] = []
     for skill_dir in sorted(_SKILLS_ROOT.iterdir()):
@@ -257,7 +256,7 @@ def test_audit_skills_have_output_dir_or_read_only() -> None:
             continue
         if _skill_is_read_only(skill_name, contracts):
             continue
-        if _recipe_invocations_have_output_dir(skill_name, recipe_files):
+        if _recipe_invocations_have_output_dir(skill_name, parsed_recipes):
             continue
 
         violations.append(skill_name)

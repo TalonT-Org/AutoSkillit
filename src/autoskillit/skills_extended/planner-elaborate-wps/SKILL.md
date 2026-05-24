@@ -97,7 +97,7 @@ each batch before starting the next.
 
 Each agent receives its variable-data packet (from Step 3) as the `prompt` parameter.
 The agent definition automatically provides:
-- Role and tool constraints
+- Role and tool constraints (You are a READ-ONLY analysis agent. Do NOT use Write, Edit, or Bash to modify any files.)
 - Output JSON schema with all required fields
 - Deliverable bounds (1–5)
 - WP ID format contract

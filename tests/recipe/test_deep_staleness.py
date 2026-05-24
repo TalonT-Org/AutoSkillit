@@ -36,7 +36,6 @@ def test_deep_staleness_detects_rule_file_changes(tmp_path, monkeypatch):
 
 def test_deep_staleness_baseline_initialized_eagerly(tmp_path, monkeypatch):
     """_get_process_start_mtime eagerly sets the deep mtime baseline."""
-    import autoskillit.recipe._api as api_mod
     import autoskillit.recipe._api_cache as cache_mod
 
     monkeypatch.setattr(cache_mod, "_PROCESS_START_PKG_MTIME", None)

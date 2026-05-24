@@ -31,7 +31,10 @@ ingredients:
     description: Generate architecture lens diagrams for the PR
     default: "false"
   auto_merge:
-    default: "false"
+    description: >-
+      Automatically merge the PR after required checks pass —
+      via merge queue when available, direct merge otherwise
+    default: "true"
   review_max_retries:
     description: Maximum number of review-resolve retry cycles before proceeding to CI
     default: "3"

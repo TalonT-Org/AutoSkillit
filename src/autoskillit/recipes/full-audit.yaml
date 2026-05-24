@@ -1,6 +1,7 @@
 name: full-audit
 description: >-
-  Run parallel audits, validate findings, create issues
+  Run parallel audits, validate findings, and create issues
+  including audit-review-decisions
 summary: "branch → audit×6 ∥ → validate×6 ∥ → issue×6 ∥ → done"
 recipe_version: "1.2.0"
 requires_packs: [audit, github, audit-pipeline]

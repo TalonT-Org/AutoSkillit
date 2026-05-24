@@ -299,6 +299,9 @@ def test_collect_recipes_populates_dispatch_only(tmp_path: Path) -> None:
 
     import yaml
 
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+
     # Write a recipe with dispatch_only: true
     recipe_data = {
         "name": "sub-recipe",
@@ -308,8 +311,7 @@ def test_collect_recipes_populates_dispatch_only(tmp_path: Path) -> None:
         "recipe_version": "1.0.0",
         "steps": {},
     }
-    yaml_path = tmp_path / "sub-recipe.yaml"
-    yaml_path.write_text(yaml.dump(recipe_data))
+    (recipes_dir / "sub-recipe.yaml").write_text(yaml.dump(recipe_data))
 
     from autoskillit.recipe.io import list_recipes
 
@@ -322,6 +324,9 @@ def test_collect_recipes_populates_dispatch_only(tmp_path: Path) -> None:
 def test_list_recipes_exclude_dispatch_only_filters_out_dispatch_only(tmp_path: Path) -> None:
 
     import yaml
+
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
 
     # Write two recipes: one standard, one dispatch_only
     std_data = {
@@ -338,8 +343,8 @@ def test_list_recipes_exclude_dispatch_only_filters_out_dispatch_only(tmp_path: 
         "recipe_version": "1.0.0",
         "steps": {},
     }
-    (tmp_path / "standard-recipe.yaml").write_text(yaml.dump(std_data))
-    (tmp_path / "dispatch-only-recipe.yaml").write_text(yaml.dump(sub_data))
+    (recipes_dir / "standard-recipe.yaml").write_text(yaml.dump(std_data))
+    (recipes_dir / "dispatch-only-recipe.yaml").write_text(yaml.dump(sub_data))
 
     from autoskillit.recipe.io import list_recipes
 
@@ -352,6 +357,9 @@ def test_list_recipes_exclude_dispatch_only_filters_out_dispatch_only(tmp_path: 
 def test_list_recipes_default_includes_dispatch_only(tmp_path: Path) -> None:
 
     import yaml
+
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
 
     std_data = {
         "name": "standard-recipe",
@@ -367,8 +375,8 @@ def test_list_recipes_default_includes_dispatch_only(tmp_path: Path) -> None:
         "recipe_version": "1.0.0",
         "steps": {},
     }
-    (tmp_path / "standard-recipe.yaml").write_text(yaml.dump(std_data))
-    (tmp_path / "dispatch-only-recipe.yaml").write_text(yaml.dump(sub_data))
+    (recipes_dir / "standard-recipe.yaml").write_text(yaml.dump(std_data))
+    (recipes_dir / "dispatch-only-recipe.yaml").write_text(yaml.dump(sub_data))
 
     from autoskillit.recipe.io import list_recipes
 

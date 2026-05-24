@@ -16,12 +16,14 @@ from autoskillit.core import (
     ProcessStaleError,
     RecipeNotFoundError,
     RecipeSource,
+    SessionType,
     SkillLister,
     YAMLError,
     get_logger,
     load_yaml,
     pkg_root,
     resolve_temp_dir,
+    session_type,
 )
 from autoskillit.recipe._analysis import make_validation_context
 from autoskillit.recipe._recipe_composition import (
@@ -179,7 +181,15 @@ def _get_process_start_mtime() -> int:
 
 
 def _check_process_staleness() -> bool:
-    """Return True if the package directory or rule files were modified after process start."""
+    """Return True if the package directory or rule files were modified after process start.
+
+    Fleet sessions (L3) always return False — dispatched subprocesses have fresh
+    baselines and revalidate independently.
+    """
+    if session_type() is SessionType.FLEET:
+        _get_process_start_mtime()
+        return False
+
     global _STALENESS_LAST_CHECK, _STALENESS_IS_STALE  # noqa: PLW0603
     now = time.monotonic()
     if now - _STALENESS_LAST_CHECK < _STALENESS_TTL:

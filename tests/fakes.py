@@ -402,10 +402,13 @@ class InMemoryRecipeRepository(RecipeRepository):
             }
         )
         if self._stale:
-            raise ProcessStaleError(
-                "Process is running stale code — package directory was modified on disk "
-                "since server startup. Restart the MCP server via reload_session."
-            )
+            from autoskillit.core import SessionType, session_type  # noqa: PLC0415
+
+            if session_type() is not SessionType.FLEET:
+                raise ProcessStaleError(
+                    "Process is running stale code — package directory was modified on disk "
+                    "since server startup. Restart the MCP server via reload_session."
+                )
         if name not in self._validated and name not in self._recipes:
             raise RecipeNotFoundError(f"No recipe named '{name}' found")
         return self._validated.get(name, {"valid": True, "suggestions": []})

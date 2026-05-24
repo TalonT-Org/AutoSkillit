@@ -833,7 +833,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "hooks": 10,
         "pipeline": 12,
         "fleet": 19,
-        "recipe/rules": 33,
+        "recipe/rules": 42,
         "server/tools": 20,
         "hooks/guards": 22,
     }

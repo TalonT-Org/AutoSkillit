@@ -9,6 +9,7 @@ description: >
   the 22-step PR/review pipeline: prepare PR, run experiment lenses, stage bundle,
   compose PR, review, audit claims, resolve feedback, re-run if needed, finalize,
   and export. Terminates with sentinel emission of output paths.
+dispatch_only: true
 summary: prepare > lenses > stage > [pr-compose > review? > audit? > resolve > re-run?] > finalize > export/complete
 
 ingredients:

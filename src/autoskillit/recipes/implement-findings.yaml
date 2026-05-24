@@ -4,6 +4,7 @@ description: >-
   a batch of audit findings through the full implementation or remediation
   lifecycle. Issues within the same BEM group run in parallel via wavefront
   scheduling; groups run sequentially.
+dispatch_only: true
 kind: standard
 recipe_version: "1.0.0"
 requires_packs:

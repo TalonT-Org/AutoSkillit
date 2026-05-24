@@ -10,6 +10,7 @@ description: >
   the original PR with cross-references, and patches the token summary. All
   steps are best-effort — failures route to patch_token_summary for graceful
   degradation.
+dispatch_only: true
 summary: begin_archival > capture > branch > pr > tag > close > patch > complete | escalate
 
 ingredients:

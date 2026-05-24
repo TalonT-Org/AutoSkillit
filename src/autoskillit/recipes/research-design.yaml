@@ -10,6 +10,7 @@ description: >
   terminates with a cross-dispatch handoff sentinel containing the design
   artifacts. Dispatched as a food truck by campaign recipes that separate
   design from execution.
+dispatch_only: true
 summary: scope > plan > [review?] > visualize > design_complete
 
 ingredients:

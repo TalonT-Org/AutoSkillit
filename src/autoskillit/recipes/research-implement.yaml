@@ -9,6 +9,7 @@ description: >
   implementation pipeline: stage data, decompose into phases, iteratively plan and
   implement each phase, troubleshoot failures, run the experiment, generate a report,
   test, and push. Terminates with sentinel emission of output paths.
+dispatch_only: true
 summary: stage > decompose > [plan > implement]* > experiment > report > test > push > complete
 
 ingredients:

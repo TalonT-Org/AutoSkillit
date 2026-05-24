@@ -478,6 +478,7 @@ def _build_skill_result(
     try:
         _backend_write_names = set(backend.write_tool_names()) if backend else {"Write", "Edit"}
     except Exception:
+        logger.warning("backend_write_tool_names_failed", exc_info=True)
         _backend_write_names = {"Write", "Edit"}
     _parsed_has_write_tools = any(tu.get("name") in {"Write", "Edit"} for tu in session.tool_uses)
     if (
@@ -728,51 +729,35 @@ def _build_skill_result(
                 warnings=write_path_warnings[:5],
             )
 
+    sr = SkillResult(
+        success=success,
+        result=result_text,
+        session_id=session.session_id or result.session_id,
+        subtype=normalized_subtype,
+        is_error=session.is_error,
+        exit_code=returncode,
+        needs_retry=needs_retry,
+        retry_reason=retry_reason,
+        stderr=_truncate(result.stderr),
+        token_usage=session.token_usage,
+        worktree_path=effective_worktree_path,
+        cli_subtype=session.subtype,
+        write_path_warnings=write_path_warnings,
+        evidence=evidence,
+        kill_reason=result.kill_reason,
+        last_stop_reason=session.last_stop_reason,
+        lifespan_started=session.lifespan_started,
+        provider=ProviderOutcome(provider_used=provider_used, fallback_activated=False),
+        infra=InfraOutcome(exit_category=infra_category.value),
+        api_retry=api_retry,
+    )
     if path_contamination:
-        sr = SkillResult(
+        sr = dataclasses.replace(
+            sr,
             success=False,
-            result=result_text,
-            session_id=session.session_id or result.session_id,
             subtype="path_contamination",
-            is_error=session.is_error,
-            exit_code=returncode,
             needs_retry=True,
             retry_reason=RetryReason.PATH_CONTAMINATION,
-            stderr=_truncate(result.stderr),
-            token_usage=session.token_usage,
-            worktree_path=effective_worktree_path,
-            cli_subtype=session.subtype,
-            write_path_warnings=write_path_warnings,
-            evidence=evidence,
-            kill_reason=result.kill_reason,
-            last_stop_reason=session.last_stop_reason,
-            lifespan_started=session.lifespan_started,
-            provider=ProviderOutcome(provider_used=provider_used, fallback_activated=False),
-            infra=InfraOutcome(exit_category=infra_category.value),
-            api_retry=api_retry,
-        )
-    else:
-        sr = SkillResult(
-            success=success,
-            result=result_text,
-            session_id=session.session_id or result.session_id,
-            subtype=normalized_subtype,
-            is_error=session.is_error,
-            exit_code=returncode,
-            needs_retry=needs_retry,
-            retry_reason=retry_reason,
-            stderr=_truncate(result.stderr),
-            token_usage=session.token_usage,
-            worktree_path=effective_worktree_path,
-            cli_subtype=session.subtype,
-            write_path_warnings=write_path_warnings,
-            evidence=evidence,
-            kill_reason=result.kill_reason,
-            last_stop_reason=session.last_stop_reason,
-            lifespan_started=session.lifespan_started,
-            provider=ProviderOutcome(provider_used=provider_used, fallback_activated=False),
-            infra=InfraOutcome(exit_category=infra_category.value),
-            api_retry=api_retry,
         )
     sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
 

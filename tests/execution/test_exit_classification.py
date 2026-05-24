@@ -223,7 +223,10 @@ class TestRateLimitClassification:
         session = ClaudeSessionResult(
             subtype="success",
             is_error=False,
-            result="API Error: Server is temporarily limiting requests (not your usage limit) · Rate limited",
+            result=(
+                "API Error: Server is temporarily limiting requests"
+                " (not your usage limit) · Rate limited"
+            ),
             session_id="s1",
             assistant_messages=["Rate limited"],
         )

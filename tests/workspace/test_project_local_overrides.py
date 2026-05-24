@@ -15,7 +15,7 @@ _DEFAULT_DISABLED_TAGS: frozenset[str] = frozenset(
 )
 
 # ---------------------------------------------------------------------------
-# T-OVR-001..006: detect_project_local_overrides() — pure detection function
+# T-OVR-001..006,019..021: detect_project_local_overrides() — pure detection function
 # ---------------------------------------------------------------------------
 
 
@@ -79,6 +79,45 @@ def test_detect_project_local_overrides_missing_dirs_no_crash(tmp_path):
 
     result = detect_project_local_overrides(tmp_path / "nonexistent")
     assert result == frozenset()
+
+
+def test_detect_project_local_overrides_codex_skills(tmp_path):
+    """T-OVR-019: Detects skill in .codex/skills/<name>/SKILL.md."""
+    from autoskillit.workspace.skills import detect_project_local_overrides
+
+    skill_dir = tmp_path / ".codex" / "skills" / "codex-review"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("# codex-review")
+    result = detect_project_local_overrides(tmp_path)
+    assert result == frozenset({"codex-review"})
+
+
+def test_detect_project_local_overrides_agents_skills(tmp_path):
+    """T-OVR-020: Detects skill in .agents/skills/<name>/SKILL.md."""
+    from autoskillit.workspace.skills import detect_project_local_overrides
+
+    skill_dir = tmp_path / ".agents" / "skills" / "agent-deploy"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("# agent-deploy")
+    result = detect_project_local_overrides(tmp_path)
+    assert result == frozenset({"agent-deploy"})
+
+
+def test_detect_project_local_overrides_union_four_paths(tmp_path):
+    """T-OVR-021: Returns union across all four override search dirs."""
+    from autoskillit.workspace.skills import detect_project_local_overrides
+
+    for subdir, name in [
+        (".claude/skills/review-pr", "review-pr"),
+        (".autoskillit/skills/open-pr", "open-pr"),
+        (".codex/skills/codex-review", "codex-review"),
+        (".agents/skills/agent-deploy", "agent-deploy"),
+    ]:
+        d = tmp_path / subdir
+        d.mkdir(parents=True)
+        (d / "SKILL.md").write_text("# skill")
+    result = detect_project_local_overrides(tmp_path)
+    assert result == frozenset({"review-pr", "open-pr", "codex-review", "agent-deploy"})
 
 
 # ---------------------------------------------------------------------------

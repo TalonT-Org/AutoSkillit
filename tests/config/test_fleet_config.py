@@ -216,6 +216,49 @@ class TestFleetConfig:
         with pytest.raises(ValueError, match="idle_output_timeout must be non-negative"):
             FleetConfig(idle_output_timeout=-1).validate(feature_enabled=True)
 
+    def test_fleet_config_max_issues_per_food_truck_defaults_to_3(self) -> None:
+        """FleetConfig.max_issues_per_food_truck defaults to 3."""
+        from autoskillit.config.settings import FleetConfig
+
+        assert FleetConfig().max_issues_per_food_truck == 3
+
+    def test_fleet_config_max_issues_per_food_truck_rejects_zero(self) -> None:
+        """FleetConfig raises ValueError when max_issues_per_food_truck is 0."""
+        from autoskillit.config.settings import FleetConfig
+
+        with pytest.raises(ValueError, match="max_issues_per_food_truck must be >= 1"):
+            FleetConfig(max_issues_per_food_truck=0).validate(feature_enabled=True)
+
+    def test_fleet_config_max_issues_per_food_truck_rejects_above_max_total(self) -> None:
+        """FleetConfig raises ValueError when max_issues > max_total_issues."""
+        from autoskillit.config.settings import FleetConfig
+
+        with pytest.raises(ValueError, match="max_issues_per_food_truck must be <="):
+            FleetConfig(max_issues_per_food_truck=13, max_total_issues=12).validate(
+                feature_enabled=True
+            )
+
+    def test_fleet_config_max_issues_per_food_truck_matches_defaults_yaml(self) -> None:
+        """FleetConfig.max_issues_per_food_truck matches defaults.yaml."""
+        from autoskillit.config.settings import FleetConfig
+        from autoskillit.core.io import load_yaml
+        from autoskillit.core.paths import pkg_root
+
+        defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
+        assert (
+            FleetConfig().max_issues_per_food_truck
+            == defaults["fleet"]["max_issues_per_food_truck"]
+        )
+
+    def test_load_config_fleet_max_issues_per_food_truck_override(self, tmp_path: Path) -> None:
+        """User config can override max_issues_per_food_truck."""
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        config_data = {"fleet": {"max_issues_per_food_truck": 5}}
+        (config_dir / "config.yaml").write_text(yaml.dump(config_data))
+        cfg = load_config(tmp_path)
+        assert cfg.fleet.max_issues_per_food_truck == 5
+
 
 def test_config_resolution_fleet_enabled_via_experimental(tmp_path) -> None:
     """Full config resolution enables fleet when experimental_enabled=True in project config."""

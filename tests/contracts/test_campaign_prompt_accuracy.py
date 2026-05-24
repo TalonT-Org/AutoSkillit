@@ -20,3 +20,16 @@ def test_campaign_prompt_does_not_claim_queuing(dynamic_dispatch_text: str) -> N
         "Campaign prompt must not claim 'calls queue when the semaphore is saturated' — "
         "FLEET_PARALLEL_REFUSED is a fast-fail, not a queue. Dispatcher must wait and retry."
     )
+
+
+def test_dynamic_dispatch_section_uses_configured_max_issues() -> None:
+    """Dynamic dispatch section must use the passed max_issues_per_food_truck value."""
+    text = _build_dynamic_dispatch_section(mcp_prefix=MCP_PREFIX, max_issues_per_food_truck=7)
+    assert "(default: 7)" in text
+    assert "(default: 5)" not in text
+
+
+def test_dynamic_dispatch_section_default_max_issues_is_3() -> None:
+    """Default max_issues_per_food_truck when unspecified should be 3."""
+    text = _build_dynamic_dispatch_section(mcp_prefix=MCP_PREFIX)
+    assert "(default: 3)" in text

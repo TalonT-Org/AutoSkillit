@@ -382,6 +382,7 @@ class FleetConfig:
     max_extension_seconds: float = 7200
     idle_output_timeout: float = 1800
     acquire_timeout_sec: float = 300.0
+    max_issues_per_food_truck: int = 3
 
     def validate(self, feature_enabled: bool) -> None:
         """Validate only when the feature is active."""
@@ -413,6 +414,15 @@ class FleetConfig:
         if self.acquire_timeout_sec <= 0:
             raise ValueError(
                 f"acquire_timeout_sec must be positive, got {self.acquire_timeout_sec}"
+            )
+        if self.max_issues_per_food_truck < 1:
+            raise ValueError(
+                f"max_issues_per_food_truck must be >= 1, got {self.max_issues_per_food_truck}"
+            )
+        if self.max_issues_per_food_truck > self.max_total_issues:
+            raise ValueError(
+                f"max_issues_per_food_truck must be <= max_total_issues"
+                f" ({self.max_total_issues}), got {self.max_issues_per_food_truck}"
             )
 
 

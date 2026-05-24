@@ -35,6 +35,12 @@ ingredients:
       Automatically merge the PR after required checks pass —
       via merge queue when available, direct merge otherwise
     default: "true"
+  batch_dispatch:
+    description: >-
+      Pack multiple parallel-safe issues per food truck. When "true", the fleet
+      dispatcher batches parallel-safe issues (up to max_issues_per_food_truck)
+      into implement-findings food trucks with comma-separated issue_urls.
+    default: "false"
   review_max_retries:
     description: Maximum number of review-resolve retry cycles before proceeding to CI
     default: "3"

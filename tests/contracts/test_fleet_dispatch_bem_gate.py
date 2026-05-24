@@ -94,3 +94,48 @@ def test_fleet_prompt_bem_gate_has_never_block(fleet_prompt: str) -> None:
         "BEM gate section must contain NEVER directives prohibiting "
         "multi-issue dispatch without prior BEM execution"
     )
+
+
+def test_fleet_prompt_contains_batch_dispatch_section(fleet_prompt: str) -> None:
+    """Fleet dispatcher prompt must contain batch dispatch mode section."""
+    assert "BATCH DISPATCH" in fleet_prompt
+
+
+def test_fleet_prompt_batch_section_references_implement_findings(fleet_prompt: str) -> None:
+    """Batch dispatch section must reference implement-findings recipe."""
+    batch_section = fleet_prompt.split("BATCH DISPATCH")[1].split("## DISPATCHER")[0]
+    assert "implement-findings" in batch_section
+
+
+def test_fleet_prompt_batch_section_references_execution_map(fleet_prompt: str) -> None:
+    """Batch dispatch section must instruct passing execution_map to implement-findings."""
+    batch_section = fleet_prompt.split("BATCH DISPATCH")[1].split("## DISPATCHER")[0]
+    assert "execution_map" in batch_section
+
+
+def test_fleet_prompt_batch_section_contains_max_issues_cap(fleet_prompt: str) -> None:
+    """Batch dispatch section must contain the max_issues_per_food_truck cap value."""
+    batch_section = fleet_prompt.split("BATCH DISPATCH")[1].split("## DISPATCHER")[0]
+    assert "3" in batch_section
+
+
+def test_fleet_prompt_batch_section_preserves_single_issue_fallback(fleet_prompt: str) -> None:
+    """Batch section must instruct fallback to implementation recipe for single-issue groups."""
+    batch_section = fleet_prompt.split("BATCH DISPATCH")[1].split("## DISPATCHER")[0]
+    lower = batch_section.lower()
+    assert "single" in lower or "1 issue" in lower or "only 1" in lower
+
+
+def test_implementation_recipe_has_batch_dispatch_ingredient() -> None:
+    """implementation.yaml must expose a visible batch_dispatch ingredient."""
+    from autoskillit.core.io import load_yaml
+    from autoskillit.core.paths import pkg_root
+
+    recipe_yaml = load_yaml(pkg_root() / "recipes" / "implementation.yaml")
+    ingredients = recipe_yaml["ingredients"]
+    assert "batch_dispatch" in ingredients, (
+        "implementation.yaml must have batch_dispatch ingredient"
+    )
+    bd = ingredients["batch_dispatch"]
+    assert bd.get("default") == "false", "batch_dispatch must default to 'false'"
+    assert bd.get("hidden") is not True, "batch_dispatch must be visible (not hidden)"

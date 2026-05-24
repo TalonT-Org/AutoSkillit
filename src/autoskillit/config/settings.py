@@ -536,6 +536,9 @@ class AutomationConfig:
                 acquire_timeout_sec=float(
                     val(fr, "acquire_timeout_sec", _fr["acquire_timeout_sec"])
                 ),
+                max_issues_per_food_truck=int(
+                    val(fr, "max_issues_per_food_truck", _fr["max_issues_per_food_truck"])
+                ),
             ),
             providers=ProvidersConfig(
                 default_provider=val(pvd, "default_provider", _pvd["default_provider"]),

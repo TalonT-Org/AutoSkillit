@@ -1,5 +1,5 @@
 name: implementation
-description: Plan, verify, implement, test, and merge a task end-to-end. Use when user says "run pipeline", "implement task", or "auto implement".
+description: Plan, implement, test, and merge a task end-to-end
 summary: "bootstrap_clone > (claim_and_resolve?) > (create_and_publish?) > make-plan > (review-approach?) > dry-walkthrough > implement > test > merge (per plan part) > (audit-impl?) > (open_pr?) > push > cleanup"
 recipe_version: "1.0.0"
 requires_packs: [github, ci, clone, telemetry]
@@ -31,10 +31,7 @@ ingredients:
     description: Generate architecture lens diagrams for the PR
     default: "false"
   auto_merge:
-    description: >-
-      Automatically merge the PR after required checks pass —
-      via merge queue when available, direct merge otherwise
-    default: "true"
+    default: "false"
   batch_dispatch:
     description: >-
       Pack multiple parallel-safe issues per food truck. When "true", the fleet

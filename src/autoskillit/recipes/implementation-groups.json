@@ -1,6 +1,6 @@
 {
   "name": "implementation-groups",
-  "description": "Decompose a source document into sequenced implementation groups, then plan, verify, implement, test, and merge each group end-to-end. Use when you have a large document or roadmap to implement via make-groups.",
+  "description": "Decompose a document into groups, implement each",
   "summary": "bootstrap_clone > (claim_and_resolve?) > (create_and_publish?) > make-groups > make-plan > (review-approach?) > dry-walkthrough > implement > test > merge (per group, per plan part) > (audit-impl?) > (open_pr?) > push > (review_pr?) > (ci_watch?) > cleanup",
   "recipe_version": "1.0.0",
   "requires_packs": [
@@ -44,8 +44,7 @@
       "default": "false"
     },
     "auto_merge": {
-      "description": "Automatically merge the PR after required checks pass — via merge queue when available, direct merge otherwise",
-      "default": "true"
+      "default": "false"
     },
     "review_max_retries": {
       "description": "Maximum number of review-resolve retry cycles before proceeding to CI",

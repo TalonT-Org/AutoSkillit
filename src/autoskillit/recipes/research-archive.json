@@ -9,7 +9,8 @@
     "github",
     "ci"
   ],
-  "description": "Archival-phase sub-recipe extracted from research.yaml. Separates research artifacts from experimental code, opens an artifact-only PR containing only the research/ directory, tags the experiment branch for preservation, closes the original PR with cross-references, and patches the token summary. All steps are best-effort — failures route to patch_token_summary for graceful degradation.\n",
+  "description": "Separate artifacts, tag branch, close original PR artifacts from experimental code, opens an artifact-only PR containing only the research/ directory, tags the experiment branch for preservation, closes the original PR with cross-references, and patches the token summary. All steps are best-effort — failures route to patch_token_summary for graceful degradation.\n",
+  "dispatch_only": true,
   "summary": "begin_archival > capture > branch > pr > tag > close > patch > complete | escalate",
   "ingredients": {
     "worktree_path": {

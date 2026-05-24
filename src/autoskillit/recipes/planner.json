@@ -1,7 +1,7 @@
 {
   "name": "planner",
   "recipe_version": "2",
-  "description": "Progressive decomposition pipeline with mixed dispatch. Analyzes a codebase,\ngenerates phases, then elaborates each tier (phases, assignments, work packages).\nPhases and assignments elaborate in parallel; work packages elaborate sequentially\n(one phase at a time) to smooth token spend rate. Each tier follows the pattern:\nelaborate → merge → refine. Reconciles dependencies, validates the dependency\ngraph, and compiles a manifest ready for issue creation.\n",
+  "description": "Progressive decomposition: phases, assignments, work packages\n",
   "summary": "init > analyze > [domain?] > gen-phases > parallel-phases > parallel-assignments > sequential-wps > reconcile > validate/refine > compile",
   "requires_packs": [
     "kitchen-core"

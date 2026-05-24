@@ -4,7 +4,7 @@ kind: food-truck
 categories: [research-family]
 requires_packs: [research, vis-lens]
 description: >
-  Design-phase sub-recipe extracted from research.yaml. Scopes a research
+  Scope a research question and plan the experiment
   question, plans an experiment, optionally reviews the design (bounded by
   check_design_review_loop, max 3 iterations), plans visualizations, then
   terminates with a cross-dispatch handoff sentinel containing the design

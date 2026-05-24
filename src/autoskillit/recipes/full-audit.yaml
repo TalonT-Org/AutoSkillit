@@ -1,8 +1,6 @@
 name: full-audit
 description: >-
-  Run audit-tests, audit-cohesion, audit-arch, audit-feature-gates, audit-docs, and
-  audit-review-decisions in parallel, validate each report individually, and create a
-  GitHub issue from each validated report.
+  Run parallel audits, validate findings, create issues
 summary: "branch → audit×6 ∥ → validate×6 ∥ → issue×6 ∥ → done"
 recipe_version: "1.2.0"
 requires_packs: [audit, github, audit-pipeline]

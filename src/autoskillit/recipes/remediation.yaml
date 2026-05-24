@@ -1,5 +1,5 @@
 name: remediation
-description: Investigate deeply, plan architectural fix, implement and open a PR.
+description: Investigate a bug, plan a fix, open a PR
 summary: "bootstrap_clone > (claim_and_resolve?) > (create_and_publish?) > investigate > rectify > dry-walkthrough > implement > test > merge (per plan part) > (audit-impl?) > (open_pr?) > push > cleanup"
 recipe_version: "1.0.0"
 requires_packs: [github, ci, clone, telemetry]
@@ -39,10 +39,7 @@ ingredients:
     description: Generate architecture lens diagrams for the PR
     default: "false"
   auto_merge:
-    description: >-
-      Automatically merge the PR after required checks pass —
-      via merge queue when available, direct merge otherwise
-    default: "true"
+    default: "false"
   review_max_retries:
     description: Maximum number of review-resolve retry cycles before proceeding to CI
     default: "3"

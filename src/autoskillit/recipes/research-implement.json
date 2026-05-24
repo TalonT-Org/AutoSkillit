@@ -8,7 +8,8 @@
   "requires_packs": [
     "research"
   ],
-  "description": "Execution-phase sub-recipe extracted from research.yaml. Receives a pre-created worktree and experiment plan from a campaign dispatch, then runs the full 20-step implementation pipeline: stage data, decompose into phases, iteratively plan and implement each phase, troubleshoot failures, run the experiment, generate a report, test, and push. Terminates with sentinel emission of output paths.\n",
+  "description": "Execute experiment phases and push results worktree and experiment plan from a campaign dispatch, then runs the full 20-step implementation pipeline: stage data, decompose into phases, iteratively plan and implement each phase, troubleshoot failures, run the experiment, generate a report, test, and push. Terminates with sentinel emission of output paths.\n",
+  "dispatch_only": true,
   "summary": "stage > decompose > [plan > implement]* > experiment > report > test > push > complete",
   "ingredients": {
     "task": {

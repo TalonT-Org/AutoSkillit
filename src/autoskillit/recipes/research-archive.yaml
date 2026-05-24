@@ -4,7 +4,7 @@ kind: food-truck
 categories: [research-family]
 requires_packs: [github, ci]
 description: >
-  Archival-phase sub-recipe extracted from research.yaml. Separates research
+  Separate artifacts, tag branch, close original PR
   artifacts from experimental code, opens an artifact-only PR containing only
   the research/ directory, tags the experiment branch for preservation, closes
   the original PR with cross-references, and patches the token summary. All

@@ -358,7 +358,7 @@ def test_load_and_validate_logs_stage_timing_at_debug(tmp_path, monkeypatch):
         stage_calls.append(label)
         return real_t(label, t0, name)
 
-    monkeypatch.setattr(cache_mod, "_t", capturing_t)
+    monkeypatch.setattr(api_mod, "_t", capturing_t)
     api_mod.load_and_validate("myrecipe", tmp_path)
 
     # At minimum: find_recipe, yaml_parse, validate_recipe, semantic_rules

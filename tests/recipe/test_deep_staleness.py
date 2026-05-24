@@ -43,8 +43,8 @@ def test_deep_staleness_baseline_initialized_eagerly(tmp_path, monkeypatch):
     monkeypatch.setattr(cache_mod, "_DEEP_MTIME_BASELINE", None)
     monkeypatch.setattr(cache_mod, "_compute_deep_mtime", lambda: 5000)
 
-    api_mod._get_process_start_mtime()
-    assert api_mod._DEEP_MTIME_BASELINE == 5000
+    cache_mod._get_process_start_mtime()
+    assert cache_mod._DEEP_MTIME_BASELINE == 5000
 
 
 def test_staleness_check_skipped_for_fleet_sessions(monkeypatch):
@@ -74,5 +74,5 @@ def test_fleet_guard_still_initializes_baseline(monkeypatch):
 
     api_mod._check_process_staleness()
 
-    assert api_mod._PROCESS_START_PKG_MTIME is not None
-    assert api_mod._DEEP_MTIME_BASELINE is not None
+    assert cache_mod._PROCESS_START_PKG_MTIME is not None
+    assert cache_mod._DEEP_MTIME_BASELINE is not None

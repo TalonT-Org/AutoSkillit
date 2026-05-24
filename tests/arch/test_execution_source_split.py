@@ -12,9 +12,13 @@ NEW_HEADLESS_MODULES = [
     "_headless_recovery.py",
     "_headless_path_tokens.py",
     "_headless_result.py",
+    "_headless_helpers.py",
+    "_headless_execute.py",
 ]
 HEADLESS_SIZE_BUDGETS = {
-    "headless/__init__.py": 1030,
+    "headless/__init__.py": 460,
+    "headless/_headless_helpers.py": 175,
+    "headless/_headless_execute.py": 550,
     "headless/_headless_recovery.py": 365,
     "headless/_headless_path_tokens.py": 175,
     "headless/_headless_result.py": 865,
@@ -60,6 +64,28 @@ def test_headless_facade_does_not_define_path_token_functions():
         "_extract_worktree_path",
     ):
         assert f"def {fn}" not in src, f"{fn} must live in _headless_path_tokens.py"
+
+
+def test_headless_facade_does_not_define_helpers():
+    src = (SRC_EXECUTION / "headless" / "__init__.py").read_text()
+    for fn in (
+        "def _session_log_dir",
+        "def _resolve_pty_mode",
+        "def _resolve_session_log_dir",
+        "def _resolve_model",
+        "def _derive_step_name_from_skill_command",
+        "def _recursive_snapshot",
+        "class PostSessionMetrics",
+        "def _compute_post_session_metrics",
+    ):
+        assert fn not in src, f"{fn} must live in _headless_helpers.py"
+
+
+def test_headless_facade_does_not_define_execute():
+    src = (SRC_EXECUTION / "headless" / "__init__.py").read_text()
+    assert "async def _execute_claude_headless" not in src, (
+        "_execute_claude_headless must live in _headless_execute.py"
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -243,15 +243,15 @@ async def test_no_fallback_env_returns_empty_provider_used(
     minimal_ctx.backend = _mock_backend()
 
     monkeypatch.setattr(
-        "autoskillit.execution.headless._build_skill_result",
+        "autoskillit.execution.headless._headless_execute._build_skill_result",
         lambda *a, **kw: _STUB_RESULT,  # noqa: ARG005
     )
     monkeypatch.setattr(
-        "autoskillit.execution.headless._compute_post_session_metrics",
+        "autoskillit.execution.headless._headless_execute._compute_post_session_metrics",
         lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),  # noqa: ARG005
     )
     monkeypatch.setattr(
-        "autoskillit.execution.headless._capture_git_head_sha",
+        "autoskillit.execution.headless._headless_execute._capture_git_head_sha",
         lambda *a: "",  # noqa: ARG005
     )
 
@@ -285,15 +285,15 @@ async def test_provider_name_stamps_provider_used_on_result(
     minimal_ctx.backend = _mock_backend()
 
     monkeypatch.setattr(
-        "autoskillit.execution.headless._build_skill_result",
+        "autoskillit.execution.headless._headless_execute._build_skill_result",
         lambda *a, **kw: _STUB_RESULT,  # noqa: ARG005
     )
     monkeypatch.setattr(
-        "autoskillit.execution.headless._compute_post_session_metrics",
+        "autoskillit.execution.headless._headless_execute._compute_post_session_metrics",
         lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),  # noqa: ARG005
     )
     monkeypatch.setattr(
-        "autoskillit.execution.headless._capture_git_head_sha",
+        "autoskillit.execution.headless._headless_execute._capture_git_head_sha",
         lambda *a: "",  # noqa: ARG005
     )
 
@@ -417,9 +417,11 @@ async def test_dispatch_food_truck_forwards_marker_dir_and_session_id(
         )
 
     monkeypatch.setattr("autoskillit.execution.headless._execute_claude_headless", fake_execute)
-    monkeypatch.setattr("autoskillit.execution.headless._capture_git_head_sha", lambda *a: "")
     monkeypatch.setattr(
-        "autoskillit.execution.headless._compute_post_session_metrics",
+        "autoskillit.execution.headless._headless_execute._capture_git_head_sha", lambda *a: ""
+    )
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._headless_execute._compute_post_session_metrics",
         lambda *a, **kw: object(),
     )
 
@@ -467,9 +469,11 @@ async def test_dispatch_food_truck_derives_marker_dir_from_cwd(
         "autoskillit.execution.headless._resolve_session_log_dir",
         lambda cwd, ctx: Path("/derived/project"),
     )
-    monkeypatch.setattr("autoskillit.execution.headless._capture_git_head_sha", lambda *a: "")
     monkeypatch.setattr(
-        "autoskillit.execution.headless._compute_post_session_metrics",
+        "autoskillit.execution.headless._headless_execute._capture_git_head_sha", lambda *a: ""
+    )
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._headless_execute._compute_post_session_metrics",
         lambda *a, **kw: object(),
     )
 
@@ -505,9 +509,11 @@ async def test_dispatch_food_truck_marker_dir_none_when_cwd_falsy(
         )
 
     monkeypatch.setattr("autoskillit.execution.headless._execute_claude_headless", fake_execute)
-    monkeypatch.setattr("autoskillit.execution.headless._capture_git_head_sha", lambda *a: "")
     monkeypatch.setattr(
-        "autoskillit.execution.headless._compute_post_session_metrics",
+        "autoskillit.execution.headless._headless_execute._capture_git_head_sha", lambda *a: ""
+    )
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._headless_execute._compute_post_session_metrics",
         lambda *a, **kw: object(),
     )
 
@@ -544,7 +550,7 @@ async def test_execute_claude_headless_forwards_marker_dir_to_runner(
     minimal_ctx.runner = fake_runner
     minimal_ctx.backend = _mock_backend()
     monkeypatch.setattr(
-        "autoskillit.execution.headless._build_skill_result",
+        "autoskillit.execution.headless._headless_execute._build_skill_result",
         lambda *a, **kw: SkillResult(
             success=True,
             result="ok",
@@ -558,10 +564,12 @@ async def test_execute_claude_headless_forwards_marker_dir_to_runner(
         ),
     )
     monkeypatch.setattr(
-        "autoskillit.execution.headless._compute_post_session_metrics",
+        "autoskillit.execution.headless._headless_execute._compute_post_session_metrics",
         lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),
     )
-    monkeypatch.setattr("autoskillit.execution.headless._capture_git_head_sha", lambda *a: "")
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._headless_execute._capture_git_head_sha", lambda *a: ""
+    )
 
     await _execute_claude_headless(
         spec,
@@ -599,7 +607,7 @@ async def test_execute_claude_headless_pty_mode_from_backend(
     minimal_ctx.runner = fake_runner
     minimal_ctx.backend = _mock_backend(pty_required=False)
     monkeypatch.setattr(
-        "autoskillit.execution.headless._build_skill_result",
+        "autoskillit.execution.headless._headless_execute._build_skill_result",
         lambda *a, **kw: SkillResult(
             success=True,
             result="ok",
@@ -613,10 +621,12 @@ async def test_execute_claude_headless_pty_mode_from_backend(
         ),
     )
     monkeypatch.setattr(
-        "autoskillit.execution.headless._compute_post_session_metrics",
+        "autoskillit.execution.headless._headless_execute._compute_post_session_metrics",
         lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),
     )
-    monkeypatch.setattr("autoskillit.execution.headless._capture_git_head_sha", lambda *a: "")
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._headless_execute._capture_git_head_sha", lambda *a: ""
+    )
 
     await _execute_claude_headless(
         spec,
@@ -648,7 +658,7 @@ async def test_execute_claude_headless_session_log_dir_none_when_no_channel_b(
     minimal_ctx.runner = fake_runner
     minimal_ctx.backend = _mock_backend(channel_b_capable=False)
     monkeypatch.setattr(
-        "autoskillit.execution.headless._build_skill_result",
+        "autoskillit.execution.headless._headless_execute._build_skill_result",
         lambda *a, **kw: SkillResult(
             success=True,
             result="ok",
@@ -662,10 +672,12 @@ async def test_execute_claude_headless_session_log_dir_none_when_no_channel_b(
         ),
     )
     monkeypatch.setattr(
-        "autoskillit.execution.headless._compute_post_session_metrics",
+        "autoskillit.execution.headless._headless_execute._compute_post_session_metrics",
         lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),
     )
-    monkeypatch.setattr("autoskillit.execution.headless._capture_git_head_sha", lambda *a: "")
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._headless_execute._capture_git_head_sha", lambda *a: ""
+    )
 
     await _execute_claude_headless(
         spec,
@@ -699,9 +711,11 @@ async def test_dispatch_food_truck_marker_dir_none_when_no_channel_b(
         )
 
     monkeypatch.setattr("autoskillit.execution.headless._execute_claude_headless", fake_execute)
-    monkeypatch.setattr("autoskillit.execution.headless._capture_git_head_sha", lambda *a: "")
     monkeypatch.setattr(
-        "autoskillit.execution.headless._compute_post_session_metrics",
+        "autoskillit.execution.headless._headless_execute._capture_git_head_sha", lambda *a: ""
+    )
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._headless_execute._compute_post_session_metrics",
         lambda *a, **kw: object(),
     )
 
@@ -745,15 +759,15 @@ async def test_execute_claude_headless_passes_stream_parser_to_runner(
     minimal_ctx.backend = backend
 
     monkeypatch.setattr(
-        "autoskillit.execution.headless._build_skill_result",
+        "autoskillit.execution.headless._headless_execute._build_skill_result",
         lambda *a, **kw: _STUB_RESULT,
     )
     monkeypatch.setattr(
-        "autoskillit.execution.headless._compute_post_session_metrics",
+        "autoskillit.execution.headless._headless_execute._compute_post_session_metrics",
         lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),
     )
     monkeypatch.setattr(
-        "autoskillit.execution.headless._capture_git_head_sha",
+        "autoskillit.execution.headless._headless_execute._capture_git_head_sha",
         lambda *a: "",
     )
 
@@ -786,15 +800,15 @@ async def test_execute_claude_headless_stream_parser_receives_completion_marker(
     minimal_ctx.backend = backend
 
     monkeypatch.setattr(
-        "autoskillit.execution.headless._build_skill_result",
+        "autoskillit.execution.headless._headless_execute._build_skill_result",
         lambda *a, **kw: _STUB_RESULT,
     )
     monkeypatch.setattr(
-        "autoskillit.execution.headless._compute_post_session_metrics",
+        "autoskillit.execution.headless._headless_execute._compute_post_session_metrics",
         lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),
     )
     monkeypatch.setattr(
-        "autoskillit.execution.headless._capture_git_head_sha",
+        "autoskillit.execution.headless._headless_execute._capture_git_head_sha",
         lambda *a: "",
     )
 

@@ -270,7 +270,10 @@ def test_post_session_metrics_effective_cwd_resolution(tmp_path: Path):
     mock_result_with_worktree = MagicMock()
     mock_result_with_worktree.worktree_path = worktree
 
-    with patch("autoskillit.execution.headless._compute_loc_changed", return_value=(0, 0)):
+    with patch(
+        "autoskillit.execution.headless._headless_helpers._compute_loc_changed",
+        return_value=(0, 0),
+    ):
         metrics_no_wt = _compute_post_session_metrics(cwd, "abc123", mock_result_no_worktree)
         metrics_with_wt = _compute_post_session_metrics(cwd, "abc123", mock_result_with_worktree)
 

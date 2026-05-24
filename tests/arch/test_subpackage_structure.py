@@ -95,7 +95,9 @@ class TestExecutionSubpackages:
     def test_headless_has_expected_modules(self):
         expected = {
             "_headless_evidence",
+            "_headless_execute",
             "_headless_git",
+            "_headless_helpers",
             "_headless_path_tokens",
             "_headless_recovery",
             "_headless_result",

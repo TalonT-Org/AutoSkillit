@@ -347,7 +347,7 @@ class TestDispatchFoodTruckGuards:
 
         mock_snapshot = AsyncMock()
         monkeypatch.setattr(
-            "autoskillit.execution.headless.snapshot_clone_state",
+            "autoskillit.execution.headless._headless_execute.snapshot_clone_state",
             mock_snapshot,
         )
 

@@ -124,7 +124,9 @@ def _suppress_nudge(monkeypatch):
     async def _noop(*_args, **_kwargs):
         return None
 
-    monkeypatch.setattr("autoskillit.execution.headless._attempt_contract_nudge", _noop)
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._headless_execute._attempt_contract_nudge", _noop
+    )
 
 
 @pytest.fixture

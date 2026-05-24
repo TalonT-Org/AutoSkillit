@@ -104,6 +104,12 @@ def test_bem_wrapper_done_message_mentions_execution_map():
     assert "execution_map" in msg
 
 
+def test_bem_wrapper_done_message_mentions_deferred_groups():
+    recipe = _load()
+    msg = recipe.steps["done"].message
+    assert "deferred_groups" in msg
+
+
 def test_bem_wrapper_run_skill_capture_keys_in_contract():
     """Captured keys from run_bem must exist in build-execution-map skill contract."""
     recipe = _load()

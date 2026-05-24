@@ -1,4 +1,4 @@
-"""Tests for autoskillit.fleet._findings_rpc (T15–T21)."""
+"""Tests for autoskillit.fleet._findings_rpc (T15–T23)."""
 
 from __future__ import annotations
 
@@ -92,6 +92,33 @@ def test_load_execution_map_invalid_json(tmp_path: Path) -> None:
     bad_file.write_text("not json {{{")
     result = load_execution_map(str(bad_file))
     assert "error" in result
+
+
+# T22
+def test_load_execution_map_with_deferred_groups(tmp_path: Path) -> None:
+    map_data = {
+        "groups": [{"group": 1, "parallel": True, "issues": [{"number": 1}]}],
+        "deferred_groups": [
+            {"group": 1, "parallel": False, "gated_by": [99], "issues": [{"number": 2}]}
+        ],
+    }
+    map_file = tmp_path / "bem_map.json"
+    map_file.write_text(json.dumps(map_data))
+    result = load_execution_map(str(map_file))
+    deferred = json.loads(result["deferred_groups_json"])
+    assert len(deferred) == 1
+    assert deferred[0]["gated_by"] == [99]
+    assert result["total_deferred_groups"] == "1"
+
+
+# T23
+def test_load_execution_map_without_deferred_groups(tmp_path: Path) -> None:
+    map_data = {"groups": [{"group": 1, "parallel": True, "issues": [{"number": 1}]}]}
+    map_file = tmp_path / "bem_map.json"
+    map_file.write_text(json.dumps(map_data))
+    result = load_execution_map(str(map_file))
+    assert json.loads(result["deferred_groups_json"]) == []
+    assert result["total_deferred_groups"] == "0"
 
 
 # T21

@@ -37,11 +37,18 @@ The captured value `${{{{ campaign.dispatch_plan }}}}` is a JSON array of groups
 ```json
 [
   {{"group": 1, "parallel": true, "issues": "1155,1156,1157"}},
-  {{"group": 2, "parallel": false, "issues": "1158,1159"}}
+  {{"group": 2, "parallel": false, "issues": "1158,1159"}},
+  {{"group": 1, "parallel": false, "issues": "1160", "gated": true, "gated_by": [887]}}
 ]
 ```
 
 If the array is empty (`[]`) there are no issues to implement — skip to INTERRUPT/CLEANUP.
+
+**Gated groups:** If a dispatch_plan entry has `"gated": true`, do NOT dispatch it.
+Gated groups represent deferred issues blocked by in-progress work. Skip gated entries
+entirely — they are included in dispatch_plan for informational completeness only.
+Report skipped gated groups in the campaign summary with their `gated_by` blocker
+issue numbers.
 
 **Step 2 — For each group (in array order):**
 

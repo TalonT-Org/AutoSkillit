@@ -88,13 +88,17 @@ steps:
       file path or "none" (if all issues were closed during review gate). Emit
       your L3 sentinel JSON block now. The sentinel must include: success=true,
       execution_map=<the captured value>, and dispatch_plan=<compact array>.
-      To build dispatch_plan: if execution_map is a file path, parse the JSON
-      and for each group emit {"group": <N>, "parallel": <bool>, "issues":
-      "<comma-separated issue numbers as string>"}. If execution_map is "none",
-      set dispatch_plan=[]. Example sentinel:
+      To build dispatch_plan: if execution_map is a file path, parse the JSON.
+      For each entry in groups[], emit {"group": <N>, "parallel": <bool>,
+      "issues": "<comma-separated issue numbers as string>"}.
+      For each entry in deferred_groups[], emit {"group": <N>, "parallel": <bool>,
+      "issues": "<comma-separated issue numbers as string>", "gated": true,
+      "gated_by": <array of blocker issue numbers>}.
+      If execution_map is "none", set dispatch_plan=[].
+      Example sentinel:
       {"success": true, "execution_map": "/path/map.json", "dispatch_plan":
       [{"group": 1, "parallel": true, "issues": "1155,1156"},
-       {"group": 2, "parallel": false, "issues": "1157"}]}
+       {"group": 2, "parallel": false, "issues": "1158", "gated": true, "gated_by": [887]}]}
 
   escalate_stop:
     action: stop

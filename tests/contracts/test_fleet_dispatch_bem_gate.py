@@ -139,3 +139,19 @@ def test_implementation_recipe_has_batch_dispatch_ingredient() -> None:
     bd = ingredients["batch_dispatch"]
     assert bd.get("default") == "false", "batch_dispatch must default to 'false'"
     assert bd.get("hidden") is not True, "batch_dispatch must be visible (not hidden)"
+
+
+def test_fleet_prompt_contains_gated_group_handling(fleet_prompt: str) -> None:
+    assert "gated" in fleet_prompt.lower(), (
+        "Fleet dispatcher prompt must instruct handling of gated groups "
+        "from dispatch_plan to prevent dispatching deferred issues"
+    )
+
+
+def test_campaign_dynamic_dispatch_skips_gated_groups() -> None:
+    from autoskillit.cli._prompts_campaign import _build_dynamic_dispatch_section
+
+    section = _build_dynamic_dispatch_section(mcp_prefix=MCP_PREFIX)
+    assert "gated" in section.lower(), (
+        "Dynamic dispatch section must instruct skipping gated groups"
+    )

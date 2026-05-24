@@ -38,6 +38,8 @@ def _build_open_kitchen_prompt(mcp_prefix: str) -> str:
         "2. Display the ingredients table and collect required values from the user.\n"
         f"3. Call {mcp_prefix}dispatch_food_truck(recipe='<recipe>', task='<task>', "
         "ingredients={...}) with the collected values.\n"
+        'If the user provides extra guidance for the food truck (e.g., "use opus model", '
+        "\"skip review\"), pass it via caller_instructions='<guidance>'.\n"
         "Do NOT call open_kitchen without ingredients_only=True when dispatching "
         "— the full recipe content is unnecessary for dispatch and wastes context.\n"
         "If the user wants to run a recipe interactively (pipeline execution), "
@@ -124,6 +126,10 @@ issue context when the task involves a GitHub issue.
 - `task` parameter: provide a clear, actionable one-line description of the work for each dispatch.
 - `ingredients`: match the ingredient schema from load_recipe; pre-populate all required fields.
 - Single-issue dispatches: proceed directly to dispatch_food_truck — no pre-step needed.
+- `caller_instructions`: when the user provides extra guidance for the food truck session
+  (e.g., 'use model opus for implement', 'skip review if diff is under 20 lines'),
+  pass it as caller_instructions. This free-text is injected into the L2 system prompt
+  as authoritative guidance from the dispatcher.
 
 ## MULTI-ISSUE DISPATCH — BEM PRE-STEP GATE — MANDATORY
 

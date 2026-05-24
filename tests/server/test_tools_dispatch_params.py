@@ -72,6 +72,60 @@ async def test_dispatch_food_truck_tool_passes_resume_message_to_executor(
     assert executor.dispatch_calls[0].resume_message == "retry with new quota"
 
 
+@pytest.mark.anyio
+async def test_dispatch_food_truck_tool_passes_caller_instructions_into_prompt(
+    tool_ctx_kitchen_open, monkeypatch
+):
+    """dispatch_food_truck MCP tool embeds caller_instructions in the orchestrator prompt."""
+    from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+    tool_ctx_kitchen_open.fleet_lock = FleetSemaphore(max_concurrent=1)
+    repo = InMemoryRecipeRepository()
+    recipe_info = _make_recipe_info("test-recipe")
+    repo.add_recipe("test-recipe", recipe_info)
+    repo.add_full_recipe(recipe_info.path, _make_standard_recipe("test-recipe"))
+    tool_ctx_kitchen_open.recipes = repo
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+
+    await dispatch_food_truck(
+        recipe="test-recipe",
+        task="do-work",
+        caller_instructions="use opus for implement",
+    )
+
+    assert executor.dispatch_calls, "dispatch_food_truck executor was never called"
+    assert "CALLER INSTRUCTIONS" in executor.dispatch_calls[0].orchestrator_prompt
+    assert "use opus for implement" in executor.dispatch_calls[0].orchestrator_prompt
+
+
+@pytest.mark.anyio
+async def test_dispatch_food_truck_no_caller_instructions_section_when_not_specified(
+    tool_ctx_kitchen_open, monkeypatch
+):
+    """When caller_instructions is not specified, no CALLER INSTRUCTIONS section appears in prompt."""
+    from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+    tool_ctx_kitchen_open.fleet_lock = FleetSemaphore(max_concurrent=1)
+    repo = InMemoryRecipeRepository()
+    recipe_info = _make_recipe_info("test-recipe")
+    repo.add_recipe("test-recipe", recipe_info)
+    repo.add_full_recipe(recipe_info.path, _make_standard_recipe("test-recipe"))
+    tool_ctx_kitchen_open.recipes = repo
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+
+    await dispatch_food_truck(
+        recipe="test-recipe",
+        task="do-work",
+    )
+
+    assert executor.dispatch_calls, "dispatch_food_truck executor was never called"
+    assert "CALLER INSTRUCTIONS" not in executor.dispatch_calls[0].orchestrator_prompt
+
+
 class TestDispatchFoodTruckIdleTimeout:
     """Tests for idle_output_timeout passthrough through the dispatch chain."""
 

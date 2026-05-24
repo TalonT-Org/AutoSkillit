@@ -22,6 +22,8 @@ from autoskillit.server._notify import track_response_size
 
 logger = get_logger(__name__)
 
+_MAX_CALLER_INSTRUCTIONS_LEN = 2000
+
 
 def _write_dispatch_to_campaign_state(
     campaign_state_path_str: str,
@@ -123,6 +125,7 @@ async def dispatch_food_truck(
     prior_dispatch_id: str | None = None,
     skip_when: str | None = None,
     resume_message: str | None = None,
+    caller_instructions: str | None = None,
     ctx: Context = CurrentContext(),
 ) -> str:
     """Dispatch a single food truck L2 session for one recipe.
@@ -150,6 +153,12 @@ async def dispatch_food_truck(
             Injected as a CALLER CONTEXT section in the resume prompt, allowing the
             caller to communicate changed conditions (e.g. "quota guard is now
             disabled") that the LLM should act on.
+        caller_instructions: Optional free-text instructions from the dispatching caller to
+            the food truck session. Injected as a CALLER INSTRUCTIONS section in
+            the food truck system prompt. Use to forward user guidance such as "use model opus
+            for the implement step" or "skip review if diff is under 20 lines."
+            Only meaningful on fresh dispatches (not resumes). When None or empty,
+            the L2 prompt is unchanged.
 
     Resume vs. Fresh Dispatch:
         - ``resume_session_id``: Session ID to resume (``--resume <id>``).
@@ -165,6 +174,9 @@ async def dispatch_food_truck(
         return fleet_gate
 
     try:
+        if caller_instructions and len(caller_instructions) > _MAX_CALLER_INSTRUCTIONS_LEN:
+            caller_instructions = caller_instructions[:_MAX_CALLER_INSTRUCTIONS_LEN]
+
         # Feature guard: config authority check independent of MCP visibility state.
         # Fleet sessions open the gate unconditionally at boot; this catch-all ensures
         # dispatch_food_truck never executes when features.fleet is disabled in config.
@@ -292,6 +304,7 @@ async def dispatch_food_truck(
             caller_session_id=caller_session_id,
             prior_dispatch_id=prior_dispatch_id,
             resume_message=resume_message,
+            caller_instructions=caller_instructions,
         )
 
         if campaign_state_path_str and isinstance(result, DispatchResult):

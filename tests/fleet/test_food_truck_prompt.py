@@ -111,3 +111,49 @@ def test_food_truck_prompt_has_anti_fabrication_guard():
         "Food truck prompt must include anti-fabrication language"
     )
     assert "ROUTING AUTHORITY" in prompt
+
+
+def test_food_truck_prompt_injects_caller_instructions_section():
+    """L3 food truck prompt must inject caller instructions when provided."""
+    prompt = _build_food_truck_prompt(
+        recipe="test-recipe",
+        task="Test task",
+        ingredients={},
+        mcp_prefix=DIRECT_PREFIX,
+        dispatch_id="test-dispatch",
+        campaign_id="test-campaign",
+        l3_timeout_sec=300,
+        caller_instructions="use opus for implement",
+    )
+    assert "CALLER INSTRUCTIONS" in prompt
+    assert "use opus for implement" in prompt
+    assert "SECTION 6b" in prompt
+
+
+def test_food_truck_prompt_no_caller_instructions_section_when_none():
+    """L3 food truck prompt must not include caller instructions section when caller_instructions is None."""
+    prompt = _build_food_truck_prompt(
+        recipe="test-recipe",
+        task="Test task",
+        ingredients={},
+        mcp_prefix=DIRECT_PREFIX,
+        dispatch_id="test-dispatch",
+        campaign_id="test-campaign",
+        l3_timeout_sec=300,
+    )
+    assert "CALLER INSTRUCTIONS" not in prompt
+
+
+def test_food_truck_prompt_no_caller_instructions_section_when_empty():
+    """L3 food truck prompt must not include caller instructions section when caller_instructions is empty."""
+    prompt = _build_food_truck_prompt(
+        recipe="test-recipe",
+        task="Test task",
+        ingredients={},
+        mcp_prefix=DIRECT_PREFIX,
+        dispatch_id="test-dispatch",
+        campaign_id="test-campaign",
+        l3_timeout_sec=300,
+        caller_instructions="",
+    )
+    assert "CALLER INSTRUCTIONS" not in prompt

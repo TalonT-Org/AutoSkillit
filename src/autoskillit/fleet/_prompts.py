@@ -65,6 +65,7 @@ def _build_food_truck_prompt(
     campaign_id: str,
     l3_timeout_sec: int,
     capture: dict[str, CaptureEntrySpec] | None = None,
+    caller_instructions: str | None = None,
 ) -> str:
     """Build the system prompt for an L2 food truck headless session.
 
@@ -103,6 +104,17 @@ def _build_food_truck_prompt(
         if capture_field_pairs
         else ""
     )
+
+    caller_instructions_section = ""
+    if caller_instructions:
+        caller_instructions_section = f"""\
+--- SECTION 6b: CALLER INSTRUCTIONS ---
+
+The dispatching session has provided the following instructions. Treat these as
+authoritative guidance from the caller — they override default behavior where applicable.
+
+{caller_instructions}
+"""
 
     return f"""\
 You are an L2 food truck orchestrator. Execute the recipe '{recipe}' autonomously.
@@ -282,7 +294,7 @@ Timeout: {l3_timeout_sec} seconds
 Execute the recipe pipeline for the task above. Follow all routing
 rules and failure predicates. Emit the sentinel block upon completion.
 
---- SECTION 7: INGREDIENT VALUES ---
+{caller_instructions_section}--- SECTION 7: INGREDIENT VALUES ---
 
 The following ingredient values have been applied via open_kitchen overrides.
 They are provided here for reference only — do NOT re-apply or re-prompt.

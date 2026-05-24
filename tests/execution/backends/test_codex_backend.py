@@ -53,6 +53,7 @@ class TestCodexFlags:
             "EPHEMERAL",
             "RESUME_SUBCOMMAND",
             "LAST",
+            "CONFIG_OVERRIDE",
         }
         actual = {m.name for m in CodexFlags}
         assert actual == expected

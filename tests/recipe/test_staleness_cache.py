@@ -150,7 +150,9 @@ def test_check_staleness_writes_cache_on_miss(monkeypatch, tmp_path):
         compute_called.append(skill_name)
         return "sha256:" + "b" * 64
 
-    monkeypatch.setattr("autoskillit.recipe._contracts_staleness.compute_skill_hash", tracking_compute)
+    monkeypatch.setattr(
+        "autoskillit.recipe._contracts_staleness.compute_skill_hash", tracking_compute
+    )
 
     contract = {
         "bundled_manifest_version": manifest_version,

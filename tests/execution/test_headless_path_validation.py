@@ -915,6 +915,7 @@ def make_build_skill_result_kwargs():
             "expected_output_patterns": expected_output_patterns or [],
             "skill_command": skill_command,
             "audit": audit,
+            "backend": ClaudeCodeBackend(),
         }
 
     return _factory

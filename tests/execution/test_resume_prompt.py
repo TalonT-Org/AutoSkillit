@@ -49,27 +49,27 @@ class TestBuildSkillSessionCmdResume:
     )
 
     def test_resume_without_checkpoint(self) -> None:
-        from autoskillit.execution.commands import build_skill_session_cmd
+        from autoskillit.execution.backends.claude import ClaudeCodeBackend
 
-        spec = build_skill_session_cmd(**self.BASE)
+        spec = ClaudeCodeBackend().build_skill_session_cmd(**self.BASE)
         prompt = spec.cmd[spec.cmd.index("-p") + 1] if "-p" in spec.cmd else ""
         assert "interrupted before completion" in prompt
         assert "RESUME CONTEXT" not in prompt
 
     def test_resume_with_checkpoint(self) -> None:
-        from autoskillit.execution.commands import build_skill_session_cmd
+        from autoskillit.execution.backends.claude import ClaudeCodeBackend
 
         cp = SessionCheckpoint(completed_items=["done_a", "done_b"], step_name="step_x")
-        spec = build_skill_session_cmd(**self.BASE, resume_checkpoint=cp)
+        spec = ClaudeCodeBackend().build_skill_session_cmd(**self.BASE, resume_checkpoint=cp)
         prompt = spec.cmd[spec.cmd.index("-p") + 1] if "-p" in spec.cmd else ""
         assert "RESUME CONTEXT" in prompt
         assert "COMPLETED: done_a" in prompt
         assert "COMPLETED: done_b" in prompt
 
     def test_resume_with_empty_checkpoint_no_context(self) -> None:
-        from autoskillit.execution.commands import build_skill_session_cmd
+        from autoskillit.execution.backends.claude import ClaudeCodeBackend
 
         cp = SessionCheckpoint(completed_items=[], step_name="")
-        spec = build_skill_session_cmd(**self.BASE, resume_checkpoint=cp)
+        spec = ClaudeCodeBackend().build_skill_session_cmd(**self.BASE, resume_checkpoint=cp)
         prompt = spec.cmd[spec.cmd.index("-p") + 1] if "-p" in spec.cmd else ""
         assert "RESUME CONTEXT" not in prompt

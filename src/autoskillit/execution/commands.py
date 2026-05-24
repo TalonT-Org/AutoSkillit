@@ -12,7 +12,6 @@ from autoskillit.core import (
     OutputFormat,
     PluginSource,
     ResumeSpec,
-    SessionCheckpoint,
     ValidatedAddDir,
 )
 from autoskillit.execution.backends.claude import (
@@ -59,7 +58,7 @@ def build_interactive_cmd(
     env_extras: Mapping[str, str] | None = None,
     required_env: frozenset[str] | None = None,
 ) -> ClaudeInteractiveCmd:
-    """Build a Claude interactive session command."""
+    """Deprecated shim. Use ClaudeCodeBackend().build_interactive_cmd() directly."""
     spec = ClaudeCodeBackend().build_interactive_cmd(
         initial_prompt=initial_prompt,
         model=model,
@@ -80,7 +79,7 @@ def build_headless_cmd(
     env_extras: Mapping[str, str] | None = None,
     base: Mapping[str, str] | None = None,
 ) -> CmdSpec:
-    """Build a Claude headless session command for skill execution."""
+    """Deprecated shim. Use ClaudeCodeBackend().build_headless_cmd() directly."""
     spec = ClaudeCodeBackend().build_headless_cmd(
         prompt,
         model=model,
@@ -98,96 +97,12 @@ def build_headless_resume_cmd(
     plugin_source: PluginSource | None = None,
     env_extras: Mapping[str, str] | None = None,
 ) -> CmdSpec:
-    """Build a headless resume command for contract recovery nudge."""
+    """Deprecated shim. Use ClaudeCodeBackend().build_resume_cmd() directly."""
     spec = ClaudeCodeBackend().build_resume_cmd(
         resume_session_id=resume_session_id,
         prompt=prompt,
         output_format=output_format,
         plugin_source=plugin_source,
         env_extras=env_extras,
-    )
-    return spec
-
-
-def build_skill_session_cmd(
-    skill_command: str,
-    *,
-    cwd: str,
-    completion_marker: str,
-    model: str | None,
-    plugin_source: PluginSource | None,
-    output_format: OutputFormat,
-    add_dirs: Sequence[ValidatedAddDir] = (),
-    exit_after_stop_delay_ms: int = 0,
-    stream_idle_timeout_ms: int = 0,
-    scenario_step_name: str = "",
-    temp_dir_relpath: str | None = None,
-    allowed_write_prefix: str = "",
-    provider_extras: Mapping[str, str] | None = None,
-    profile_name: str = "",
-    resume_session_id: str = "",
-    resume_checkpoint: SessionCheckpoint | None = None,
-    resume_message: str | None = None,
-) -> CmdSpec:
-    """Build the complete headless command spec for a skill session."""
-    spec = ClaudeCodeBackend().build_skill_session_cmd(
-        skill_command,
-        cwd=cwd,
-        completion_marker=completion_marker,
-        model=model,
-        plugin_source=plugin_source,
-        output_format=output_format,
-        add_dirs=add_dirs,
-        exit_after_stop_delay_ms=exit_after_stop_delay_ms,
-        stream_idle_timeout_ms=stream_idle_timeout_ms,
-        scenario_step_name=scenario_step_name,
-        temp_dir_relpath=temp_dir_relpath,
-        allowed_write_prefix=allowed_write_prefix,
-        provider_extras=provider_extras,
-        profile_name=profile_name,
-        resume_session_id=resume_session_id,
-        resume_checkpoint=resume_checkpoint,
-        resume_message=resume_message,
-    )
-    return spec
-
-
-def build_food_truck_cmd(
-    *,
-    orchestrator_prompt: str,
-    plugin_source: PluginSource,
-    cwd: str,
-    completion_marker: str,
-    resume_session_id: str | None = None,
-    resume_checkpoint: SessionCheckpoint | None = None,
-    model: str | None = None,
-    env_extras: Mapping[str, str] | None = None,
-    output_format: OutputFormat = OutputFormat.STREAM_JSON,
-    exit_after_stop_delay_ms: int = 0,
-    stream_idle_timeout_ms: int = 0,
-    scenario_step_name: str = "",
-    temp_dir_relpath: str | None = None,
-    allowed_write_prefix: str = "",
-    sentinel_contract: str = "",
-    resume_message: str | None = None,
-) -> CmdSpec:
-    """Build the complete headless command spec for an L2 food truck session."""
-    spec = ClaudeCodeBackend().build_food_truck_cmd(
-        orchestrator_prompt=orchestrator_prompt,
-        plugin_source=plugin_source,
-        cwd=cwd,
-        completion_marker=completion_marker,
-        resume_session_id=resume_session_id,
-        resume_checkpoint=resume_checkpoint,
-        model=model,
-        env_extras=env_extras,
-        output_format=output_format,
-        exit_after_stop_delay_ms=exit_after_stop_delay_ms,
-        stream_idle_timeout_ms=stream_idle_timeout_ms,
-        scenario_step_name=scenario_step_name,
-        temp_dir_relpath=temp_dir_relpath,
-        allowed_write_prefix=allowed_write_prefix,
-        sentinel_contract=sentinel_contract,
-        resume_message=resume_message,
     )
     return spec

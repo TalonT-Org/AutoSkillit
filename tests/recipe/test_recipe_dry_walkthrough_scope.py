@@ -7,7 +7,6 @@ import pytest
 from autoskillit.core import pkg_root
 from autoskillit.recipe.io import load_recipe
 
-
 _RECIPES_WITH_DRY_WALKTHROUGH = (
     "implementation",
     "implementation-groups",
@@ -34,9 +33,7 @@ def test_dry_walkthrough_output_dir_does_not_scope_to_subdirectory(
         if "dry-walkthrough" not in cmd:
             continue
         output_dir = (step.with_args or {}).get("output_dir", "")
-        assert not output_dir.endswith(
-            "/dry-walkthrough"
-        ), (
+        assert not output_dir.endswith("/dry-walkthrough"), (
             f"{recipe_name}.{step_name}: output_dir must not scope to "
             f"/dry-walkthrough subdirectory — dry-walkthrough edits plan files "
             f"at make-plan/ or rectify/ locations (issue #2919)"

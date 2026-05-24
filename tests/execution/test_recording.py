@@ -10,7 +10,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from autoskillit.core.types import DirectInstall, OutputFormat, SubprocessRunner, TerminationReason
-from autoskillit.execution.commands import build_skill_session_cmd
+from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.recording import (
     RecordingSubprocessRunner,
     ReplayingSubprocessRunner,
@@ -183,7 +183,7 @@ _BASE_CMD_ARGS = dict(
 
 
 def test_build_skill_session_cmd_injects_scenario_step_name():
-    spec = build_skill_session_cmd(
+    spec = ClaudeCodeBackend().build_skill_session_cmd(
         "/investigate foo",
         scenario_step_name="investigate",
         **_BASE_CMD_ARGS,
@@ -196,7 +196,7 @@ def test_build_skill_session_cmd_injects_scenario_step_name():
 
 
 def test_build_skill_session_cmd_no_scenario_step_name():
-    spec = build_skill_session_cmd(
+    spec = ClaudeCodeBackend().build_skill_session_cmd(
         "/investigate foo",
         **_BASE_CMD_ARGS,
     )

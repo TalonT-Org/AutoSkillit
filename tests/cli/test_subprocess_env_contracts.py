@@ -38,6 +38,7 @@ _CLAUDE_BUILDER_NAMES = frozenset(
         "build_interactive_cmd",
         "build_headless_cmd",
         "build_skill_session_cmd",
+        "build_food_truck_cmd",
     }
 )
 
@@ -523,8 +524,6 @@ _CLAUDE_ENV_RULE_ALLOWED: frozenset[tuple[str, str]] = frozenset(
         ("commands.py", "build_interactive_cmd"),
         ("commands.py", "build_headless_cmd"),
         ("commands.py", "build_headless_resume_cmd"),
-        ("commands.py", "build_skill_session_cmd"),
-        ("commands.py", "build_food_truck_cmd"),
     }
 )
 

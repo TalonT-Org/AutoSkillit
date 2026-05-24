@@ -13,8 +13,6 @@ BUILDERS = [
     "build_interactive_cmd",
     "build_headless_cmd",
     "build_headless_resume_cmd",
-    "build_skill_session_cmd",
-    "build_food_truck_cmd",
 ]
 
 

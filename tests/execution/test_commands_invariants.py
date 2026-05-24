@@ -7,13 +7,12 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import ClaudeFlags, DirectInstall, OutputFormat
+from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.commands import (
     _HEADLESS_EXCLUSIVE_VARS,
     _MAX_MCP_OUTPUT_TOKENS_VALUE,
-    build_food_truck_cmd,
     build_headless_resume_cmd,
     build_interactive_cmd,
-    build_skill_session_cmd,
 )
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -28,7 +27,7 @@ def test_headless_exclusive_vars_contains_max_mcp_output_tokens() -> None:
     "builder_call",
     [
         lambda: build_interactive_cmd(),
-        lambda: build_skill_session_cmd(
+        lambda: ClaudeCodeBackend().build_skill_session_cmd(
             "/investigate foo",
             cwd="/tmp",
             completion_marker="%%DONE%%",
@@ -37,7 +36,7 @@ def test_headless_exclusive_vars_contains_max_mcp_output_tokens() -> None:
             output_format=OutputFormat.STREAM_JSON,
         ),
         lambda: build_headless_resume_cmd(resume_session_id="abc", prompt="Emit"),
-        lambda: build_food_truck_cmd(
+        lambda: ClaudeCodeBackend().build_food_truck_cmd(
             orchestrator_prompt="You are an L3 orchestrator",
             plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
             cwd="/tmp",
@@ -57,7 +56,7 @@ def test_all_session_builders_inject_max_mcp_output_tokens(builder_call) -> None
     "builder_call",
     [
         lambda: build_interactive_cmd(),
-        lambda: build_skill_session_cmd(
+        lambda: ClaudeCodeBackend().build_skill_session_cmd(
             "/investigate foo",
             cwd="/tmp",
             completion_marker="%%DONE%%",
@@ -66,7 +65,7 @@ def test_all_session_builders_inject_max_mcp_output_tokens(builder_call) -> None
             output_format=OutputFormat.STREAM_JSON,
         ),
         lambda: build_headless_resume_cmd(resume_session_id="abc", prompt="Emit"),
-        lambda: build_food_truck_cmd(
+        lambda: ClaudeCodeBackend().build_food_truck_cmd(
             orchestrator_prompt="You are an L3 orchestrator",
             plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
             cwd="/tmp",
@@ -125,7 +124,7 @@ class TestCompletionReminderPositionInvariant:
     @pytest.mark.parametrize(
         "build_spec",
         [
-            lambda marker: build_skill_session_cmd(
+            lambda marker: ClaudeCodeBackend().build_skill_session_cmd(
                 "/autoskillit:make-plan arg",
                 cwd="/repo",
                 completion_marker=marker,
@@ -134,7 +133,7 @@ class TestCompletionReminderPositionInvariant:
                 output_format=OutputFormat.JSON,
                 profile_name="minimax",
             ),
-            lambda marker: build_skill_session_cmd(
+            lambda marker: ClaudeCodeBackend().build_skill_session_cmd(
                 "/autoskillit:make-plan arg",
                 cwd="/repo",
                 completion_marker=marker,
@@ -144,7 +143,7 @@ class TestCompletionReminderPositionInvariant:
                 profile_name="minimax",
                 resume_session_id="sess-abc",
             ),
-            lambda marker: build_food_truck_cmd(
+            lambda marker: ClaudeCodeBackend().build_food_truck_cmd(
                 orchestrator_prompt="Run the campaign",
                 plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
                 cwd="/repo",

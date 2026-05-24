@@ -17,10 +17,8 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_conftest_import_guard.py` | Structural guard: conftest.py must not import merge_queue at module level |
 | `test_adapt_agent_result.py` | Tests for _adapt_agent_result: AgentSessionResult to ClaudeSessionResult mapping |
 | `test_commands.py` | Tests for execution/commands.py — interactive + headless builders |
-| `test_commands_food_truck.py` | Tests for build_food_truck_cmd — L3 orchestrator session command builder |
 | `test_commands_invariants.py` | Cross-builder invariants: _HEADLESS_EXCLUSIVE_VARS membership, completion marker position |
 | `test_commands_shim_contract.py` | Structural contract tests verifying commands.py builders are thin forwarding shims |
-| `test_commands_skill_session.py` | Tests for build_skill_session_cmd — skill session command builder |
 | `test_db.py` | L1 unit tests for execution/db.py — SQL validation and authorizer |
 | `test_api_error_signal_invariants.py` | API error signal invariants: API errors detected regardless of channel (PTY vs non-PTY) |
 | `test_backend_dispatch.py` | End-to-end tests verifying run_headless_core routes command construction through ctx.backend |
@@ -84,7 +82,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_readiness_helper_contract.py` | AST lint guard: no inline stderr/stdout readline loops used as subprocess readiness polls |
 | `test_recording.py` | Tests for RecordingSubprocessRunner and related helpers |
 | `test_resume_concurrency.py` | Tests for file lock preventing concurrent resume of same session |
-| `test_resume_prompt.py` | Tests for _build_resume_context and build_skill_session_cmd resume integration |
+| `test_resume_prompt.py` | Tests for _build_resume_context and ClaudeCodeBackend.build_skill_session_cmd resume integration |
 | `test_recording_sigterm.py` | Integration test: autoskillit serve subprocess receives SIGTERM and writes scenario.json |
 | `test_recording_sigterm_early_term.py` | Edge case: SIGTERM sent to subprocess before readiness sentinel appears |
 | `test_recording_skills.py` | Tests for _recording_skills snapshot/restore helpers |
@@ -119,7 +117,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 
 | File | Purpose |
 |------|---------|
-| `test_claude_backend.py` | Equivalence tests: ClaudeCodeBackend cmd builders vs commands.py forwarding shims |
+| `test_claude_backend.py` | Equivalence tests for retained shims; backend method tests, config adapter, resume preservation |
 | `test_claude_code_backend.py` | Structural tests for ClaudeCodeBackend |
 | `test_claude_env_policy.py` | Tests for ClaudeEnvPolicy |
 | `test_claude_result_parser.py` | Tests for ClaudeResultParser |

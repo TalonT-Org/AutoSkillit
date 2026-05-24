@@ -178,16 +178,23 @@ class TestExecuteDispatchCancelledErrorLockRelease:
     async def test_execute_dispatch_passes_caller_instructions_to_prompt_builder(
         self, tool_ctx, monkeypatch
     ) -> None:
-        """Verify caller_instructions is forwarded to prompt_builder."""
+        """Verify caller_instructions is forwarded to prompt_builder.
+
+        Patches _run_dispatch to capture prompt_builder kwargs, then raises
+        CancelledError to short-circuit. The capture must occur inside _run_dispatch
+        since that is where prompt_builder is called.
+        """
         from tests.fleet._helpers import _setup_dispatch
 
         _setup_dispatch(tool_ctx, monkeypatch)
 
         prompt_builder_calls: list[dict] = []
 
-        async def _capturing_prompt_builder(**kwargs):
+        async def _run_dispatch_with_capture(**kwargs):
             prompt_builder_calls.append(kwargs)
-            return "prompt"
+            raise asyncio.CancelledError
+
+        monkeypatch.setattr("autoskillit.fleet._api._run_dispatch", _run_dispatch_with_capture)
 
         with pytest.raises(asyncio.CancelledError):
             from autoskillit.fleet import execute_dispatch
@@ -199,7 +206,7 @@ class TestExecuteDispatchCancelledErrorLockRelease:
                 ingredients=None,
                 dispatch_name="test-dispatch",
                 timeout_sec=None,
-                prompt_builder=_capturing_prompt_builder,
+                prompt_builder=lambda *a, **kw: "prompt",
                 quota_checker=lambda *a, **kw: None,
                 quota_refresher=lambda *a, **kw: None,
                 caller_instructions="test instructions",

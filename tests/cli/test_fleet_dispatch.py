@@ -26,6 +26,7 @@ def _fake_recipe(name: str, source: str, description: str) -> object:
             "source": source,
             "description": description,
             "kind": "standard",
+            "dispatch_only": False,
             "path": Path(f"/fake/{name}.yaml"),
             "summary": "",
             "version": None,
@@ -467,14 +468,16 @@ def test_fleet_dispatch_passes_initial_message(
         mock_run_session,
     )
     _fleet_dispatch()
-    assert captured_kwargs.get("initial_message") is not None
-    assert "smoke-test" in captured_kwargs["initial_message"]
+    greeting = captured_kwargs.get("initial_message")
+    assert greeting is not None
+    assert "smoke-test" not in greeting
+    assert len(greeting) < 200
 
 
 def test_fleet_dispatch_greeting_contains_recipe_descriptions(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """The initial_message greeting includes recipe names and descriptions."""
+    """The initial_message greeting does not include recipe names."""
     _stub_guards(monkeypatch)
     monkeypatch.chdir(tmp_path)
     _stub_list_recipes(
@@ -497,17 +500,17 @@ def test_fleet_dispatch_greeting_contains_recipe_descriptions(
     )
     _fleet_dispatch()
     greeting = captured_kwargs["initial_message"]
-    assert "review-pr" in greeting
-    assert "implement" in greeting
+    assert "review-pr" not in greeting
+    assert "implement" not in greeting
 
 
-def test_fleet_dispatch_greetings_have_recipe_table_placeholder() -> None:
-    """All _FLEET_DISPATCH_GREETINGS entries must contain {recipe_table}."""
+def test_fleet_dispatch_greetings_are_plain_strings() -> None:
+    """No _FLEET_DISPATCH_GREETINGS entry contains {recipe_table} placeholder."""
     from autoskillit.cli.fleet._fleet_preview import _FLEET_DISPATCH_GREETINGS
 
     assert len(_FLEET_DISPATCH_GREETINGS) >= 3
     for greeting in _FLEET_DISPATCH_GREETINGS:
-        assert "{recipe_table}" in greeting
+        assert "{recipe_table}" not in greeting
 
 
 # ---------------------------------------------------------------------------

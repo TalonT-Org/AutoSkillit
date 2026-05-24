@@ -628,3 +628,24 @@ def test_recipe_ingredient_type_can_be_explicitly_none() -> None:
 
     ing = RecipeIngredient(description="d", type=None)
     assert ing.type is None
+
+
+# ---------------------------------------------------------------------------
+# dispatch_only field tests
+# ---------------------------------------------------------------------------
+
+
+def test_recipe_has_dispatch_only_field_defaulting_to_false() -> None:
+    from autoskillit.recipe.schema import Recipe
+
+    r = Recipe(name="x", description="y")
+    assert r.dispatch_only is False
+
+
+def test_recipe_info_has_dispatch_only_field_defaulting_to_false() -> None:
+    from pathlib import Path
+
+    from autoskillit.recipe.schema import RecipeInfo, RecipeSource
+
+    ri = RecipeInfo(name="x", description="y", source=RecipeSource.BUILTIN, path=Path("/x"))
+    assert ri.dispatch_only is False

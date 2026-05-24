@@ -7,6 +7,7 @@ import os
 import sys
 import textwrap
 import time
+from unittest.mock import MagicMock, patch
 
 import anyio
 import pytest
@@ -16,6 +17,145 @@ from autoskillit.execution.process._process_race import (
     RaceAccumulator,
     _watch_stdout_idle,
 )
+
+
+@pytest.mark.anyio
+async def test_watch_stdout_idle_emits_suppression_evaluated_debug_log(
+    tmp_path: anyio.Path,
+) -> None:
+    """Debug log fires when marker_dir is None and IDLE_STALL fires."""
+    stdout_file = tmp_path / "stdout.txt"
+    await anyio.Path(stdout_file).write_bytes(b"initial output\n")
+
+    acc = RaceAccumulator()
+    trigger = anyio.Event()
+
+    with patch(
+        "autoskillit.execution.process._process_race.logger", new=MagicMock()
+    ) as mock_debug:
+        with anyio.fail_after(2.0):
+            async with anyio.create_task_group() as tg:
+                tg.start_soon(
+                    functools.partial(
+                        _watch_stdout_idle,
+                        stdout_file,
+                        0.1,
+                        acc,
+                        trigger,
+                        0.05,
+                    )
+                )
+                await trigger.wait()
+
+    debug_calls = mock_debug.debug.call_args_list
+    evaluated_calls = [
+        c for c in debug_calls if c.args and c.args[0] == "stdout_idle_stall_suppression_evaluated"
+    ]
+    assert len(evaluated_calls) == 1
+    call_kwargs = evaluated_calls[0].kwargs
+    assert call_kwargs.get("marker_dir_present") is False
+    assert call_kwargs.get("session_id") is None
+    assert call_kwargs.get("suppression_skipped_reason") == "marker_dir_none"
+
+
+@pytest.mark.anyio
+async def test_watch_stdout_idle_emits_suppression_evaluated_with_marker_dir(
+    tmp_path: anyio.Path,
+) -> None:
+    """Debug log fires when marker_dir is present but marker inactive."""
+    stdout_file = tmp_path / "stdout.txt"
+    await anyio.Path(stdout_file).write_bytes(b"initial output\n")
+
+    acc = RaceAccumulator()
+    trigger = anyio.Event()
+
+    with patch(
+        "autoskillit.execution.process._process_race.logger", new=MagicMock()
+    ) as mock_debug:
+        with anyio.fail_after(2.0):
+            async with anyio.create_task_group() as tg:
+                tg.start_soon(
+                    functools.partial(
+                        _watch_stdout_idle,
+                        stdout_file,
+                        0.1,
+                        acc,
+                        trigger,
+                        0.05,
+                        marker_dir=tmp_path,
+                    )
+                )
+                await trigger.wait()
+
+    debug_calls = mock_debug.debug.call_args_list
+    evaluated_calls = [
+        c for c in debug_calls if c.args and c.args[0] == "stdout_idle_stall_suppression_evaluated"
+    ]
+    assert len(evaluated_calls) == 1
+    call_kwargs = evaluated_calls[0].kwargs
+    assert call_kwargs.get("marker_dir_present") is True
+    assert "suppression_skipped_reason" not in call_kwargs
+
+
+@pytest.mark.anyio
+async def test_watch_stdout_idle_suppression_evaluated_fires_once_during_suppression(
+    tmp_path: anyio.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Debug log fires exactly once on first suppression entry, not each tick."""
+    stdout_file = tmp_path / "stdout.txt"
+    await anyio.Path(stdout_file).write_bytes(b"initial output\n")
+
+    monkeypatch.setattr(
+        "autoskillit.execution.process._process_race._has_active_dispatch_marker",
+        lambda marker_dir, session_id=None: True,
+    )
+
+    acc = RaceAccumulator()
+    trigger = anyio.Event()
+
+    with patch(
+        "autoskillit.execution.process._process_race.logger", new=MagicMock()
+    ) as mock_debug:
+
+        async def cancel_when_suppressed() -> None:
+            # Wait for at least 2 suppressed warnings before cancelling
+            suppressed_count = 0
+            start = anyio.current_time()
+            while suppressed_count < 2:
+                await anyio.sleep(0.02)
+                suppressed_count = sum(
+                    1
+                    for c in mock_debug.call_args_list
+                    if (c.kwargs.get("event") == "stdout_idle_stall_suppressed")
+                )
+                if anyio.current_time() - start > 1.5:
+                    break
+            trigger.set()
+
+        with anyio.fail_after(2.0):
+            async with anyio.create_task_group() as tg:
+                tg.start_soon(cancel_when_suppressed)
+                tg.start_soon(
+                    functools.partial(
+                        _watch_stdout_idle,
+                        stdout_file,
+                        0.05,
+                        acc,
+                        trigger,
+                        0.02,
+                        marker_dir=tmp_path,
+                        session_id="test-sess",
+                        max_suppression_seconds=10.0,
+                    )
+                )
+                await trigger.wait()
+
+    debug_calls = mock_debug.debug.call_args_list
+    evaluated_calls = [
+        c for c in debug_calls if c.args and c.args[0] == "stdout_idle_stall_suppression_evaluated"
+    ]
+    assert len(evaluated_calls) == 1
+
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -496,3 +636,6 @@ async def test_watch_stdout_idle_marker_suppression_bounded(
     assert acc.idle_stall is True
     assert elapsed >= 1.5
     assert elapsed < 5.0
+
+
+# test write

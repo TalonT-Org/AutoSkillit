@@ -194,6 +194,11 @@ async def _watch_stdout_idle(
                 now = _time.monotonic()
                 if suppression_start_marker is None:
                     suppression_start_marker = now
+                    logger.debug(
+                        "stdout_idle_stall_suppression_evaluated",
+                        marker_dir_present=True,
+                        session_id=session_id,
+                    )
                 elapsed = now - suppression_start_marker
                 if elapsed < max_suppression_seconds:
                     logger.warning(
@@ -204,6 +209,14 @@ async def _watch_stdout_idle(
                         max_suppression_seconds=max_suppression_seconds,
                     )
                     continue
+            logger.debug(
+                "stdout_idle_stall_suppression_evaluated",
+                marker_dir_present=marker_dir is not None,
+                session_id=session_id,
+                **(
+                    {"suppression_skipped_reason": "marker_dir_none"} if marker_dir is None else {}
+                ),
+            )
             logger.warning(
                 "stdout idle for %ss — firing IDLE_STALL",
                 idle_output_timeout,

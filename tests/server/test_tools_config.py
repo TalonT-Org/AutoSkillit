@@ -6,6 +6,7 @@ import json
 
 import pytest
 
+from autoskillit.config import AutomationConfig
 from tests.server.conftest import _make_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -50,7 +51,6 @@ async def test_configure_fleet_replaces_semaphore(tmp_path, monkeypatch) -> None
     """configure_fleet replaces ctx.fleet_lock with resized FleetSemaphore."""
     from autoskillit.fleet._semaphore import FleetSemaphore
     from autoskillit.server import _state
-    from tests.server._helpers import _HOOK_CONFIG_OVERLAY_RELPATH
 
     hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_RELPATH)
     hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
@@ -145,6 +145,7 @@ async def test_configure_order_writes_overlay(tmp_path, monkeypatch) -> None:
 
     mock_ctx = _make_mock_ctx()
     mock_ctx.project_dir = tmp_path
+    mock_ctx.config = AutomationConfig()
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_state, "_ctx", mock_ctx)
@@ -234,6 +235,7 @@ async def test_configure_fleet_no_params_returns_defaults(tmp_path, monkeypatch)
 
     mock_ctx = _make_mock_ctx()
     mock_ctx.project_dir = tmp_path
+    mock_ctx.config = AutomationConfig()
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_state, "_ctx", mock_ctx)
@@ -259,6 +261,7 @@ async def test_configure_order_no_params_returns_defaults(tmp_path, monkeypatch)
 
     mock_ctx = _make_mock_ctx()
     mock_ctx.project_dir = tmp_path
+    mock_ctx.config = AutomationConfig()
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_state, "_ctx", mock_ctx)
@@ -275,7 +278,6 @@ async def test_configure_order_no_params_returns_defaults(tmp_path, monkeypatch)
 @pytest.mark.anyio
 async def test_configure_fleet_semaphore_null_fleet_lock(tmp_path, monkeypatch) -> None:
     """configure_fleet creates new semaphore when fleet_lock is None."""
-    from autoskillit.fleet._semaphore import FleetSemaphore
     from autoskillit.server import _state
 
     hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_RELPATH)
@@ -285,6 +287,7 @@ async def test_configure_fleet_semaphore_null_fleet_lock(tmp_path, monkeypatch) 
     mock_ctx = _make_mock_ctx()
     mock_ctx.project_dir = tmp_path
     mock_ctx.fleet_lock = None
+    mock_ctx.config = AutomationConfig()
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_state, "_ctx", mock_ctx)

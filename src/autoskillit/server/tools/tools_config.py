@@ -66,7 +66,72 @@ def _build_config_snapshot(config, domain: str, overlay: dict) -> dict:
     return {domain: snapshot_domain, "core": {**core_defaults, **core_overrides}}
 
 
-@mcp.tool(tags={"autoskillit"}, annotations={"readOnlyHint": True}, meta={"anthropic/alwaysLoad": True})
+def _collect_fleet_params(
+    max_concurrent_dispatches: int | None,
+    max_total_issues: int | None,
+    default_timeout_sec: int | None,
+    max_extension_seconds: float | None,
+    idle_output_timeout: float | None,
+    acquire_timeout_sec: float | None,
+    max_issues_per_food_truck: int | None,
+    enable_deadline_extension: bool | None,
+) -> dict:
+    params: dict = {}
+    for name, val in [
+        ("max_concurrent_dispatches", max_concurrent_dispatches),
+        ("max_total_issues", max_total_issues),
+        ("default_timeout_sec", default_timeout_sec),
+        ("max_extension_seconds", max_extension_seconds),
+        ("idle_output_timeout", idle_output_timeout),
+        ("acquire_timeout_sec", acquire_timeout_sec),
+        ("max_issues_per_food_truck", max_issues_per_food_truck),
+        ("enable_deadline_extension", enable_deadline_extension),
+    ]:
+        if val is not None:
+            params[name] = val
+    return params
+
+
+def _collect_order_params(
+    timeout: int | None,
+    stale_threshold: int | None,
+    idle_output_timeout: int | None,
+    max_suppression_seconds: int | None,
+) -> dict:
+    params: dict = {}
+    for name, val in [
+        ("timeout", timeout),
+        ("stale_threshold", stale_threshold),
+        ("idle_output_timeout", idle_output_timeout),
+        ("max_suppression_seconds", max_suppression_seconds),
+    ]:
+        if val is not None:
+            params[name] = val
+    return params
+
+
+def _validate_max_concurrent(value: int) -> str | None:
+    from autoskillit.config import _MAX_CONCURRENT_DISPATCHES
+
+    if value < 1 or value > _MAX_CONCURRENT_DISPATCHES:
+        return (
+            f"max_concurrent_dispatches must be between 1 and "
+            f"{_MAX_CONCURRENT_DISPATCHES}, got {value}"
+        )
+    return None
+
+
+def _replace_fleet_semaphore(ctx, max_concurrent: int, acquire_timeout_sec: float | None) -> None:
+    from autoskillit.fleet import FleetSemaphore
+
+    existing_timeout = ctx.fleet_lock.timeout if ctx.fleet_lock is not None else None
+    timeout = acquire_timeout_sec if acquire_timeout_sec is not None else existing_timeout
+    ctx.fleet_lock = FleetSemaphore(max_concurrent=max_concurrent, timeout=timeout)
+
+
+@mcp.tool(
+    tags={"autoskillit"}, annotations={"readOnlyHint": True}, meta={"anthropic/alwaysLoad": True}
+)
 @track_response_size("configure_fleet")
 async def configure_fleet(
     max_concurrent_dispatches: int | None = None,
@@ -102,41 +167,30 @@ async def configure_fleet(
         ctx = _get_ctx()
 
         if max_concurrent_dispatches is not None:
-            from autoskillit.config._config_dataclasses import _MAX_CONCURRENT_DISPATCHES
-            if max_concurrent_dispatches < 1 or max_concurrent_dispatches > _MAX_CONCURRENT_DISPATCHES:
-                return json.dumps({
-                    "success": False,
-                    "error": f"max_concurrent_dispatches must be between 1 and {_MAX_CONCURRENT_DISPATCHES}, got {max_concurrent_dispatches}",
-                })
+            if (err := _validate_max_concurrent(max_concurrent_dispatches)) is not None:
+                return json.dumps({"success": False, "error": err})
 
-        fleet_params = {}
-        for name, val in [
-            ("max_concurrent_dispatches", max_concurrent_dispatches),
-            ("max_total_issues", max_total_issues),
-            ("default_timeout_sec", default_timeout_sec),
-            ("max_extension_seconds", max_extension_seconds),
-            ("idle_output_timeout", idle_output_timeout),
-            ("acquire_timeout_sec", acquire_timeout_sec),
-            ("max_issues_per_food_truck", max_issues_per_food_truck),
-            ("enable_deadline_extension", enable_deadline_extension),
-        ]:
-            if val is not None:
-                fleet_params[name] = val
+        fleet_params = _collect_fleet_params(
+            max_concurrent_dispatches,
+            max_total_issues,
+            default_timeout_sec,
+            max_extension_seconds,
+            idle_output_timeout,
+            acquire_timeout_sec,
+            max_issues_per_food_truck,
+            enable_deadline_extension,
+        )
 
-        core_params = {}
-        if default_model is not None:
-            core_params["default_model"] = default_model
+        core_params = {"default_model": default_model} if default_model is not None else None
 
-        ok, result = _write_session_config(ctx.project_dir, "fleet", fleet_params, core_params or None)
+        ok, result = _write_session_config(ctx.project_dir, "fleet", fleet_params, core_params)
         if not ok:
             return json.dumps({"success": False, "error": result})
 
         if max_concurrent_dispatches is not None:
-            from autoskillit.fleet._semaphore import FleetSemaphore
-            existing_timeout = ctx.fleet_lock.timeout if ctx.fleet_lock is not None else None
-            timeout = acquire_timeout_sec if acquire_timeout_sec is not None else existing_timeout
-            ctx.fleet_lock = FleetSemaphore(max_concurrent=max_concurrent_dispatches, timeout=timeout)
+            _replace_fleet_semaphore(ctx, max_concurrent_dispatches, acquire_timeout_sec)
 
+        assert isinstance(result, dict)
         snapshot = _build_config_snapshot(ctx.config, "fleet", result)
         return json.dumps({"success": True, "config": snapshot})
     except Exception as exc:
@@ -144,7 +198,9 @@ async def configure_fleet(
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
-@mcp.tool(tags={"autoskillit"}, annotations={"readOnlyHint": True}, meta={"anthropic/alwaysLoad": True})
+@mcp.tool(
+    tags={"autoskillit"}, annotations={"readOnlyHint": True}, meta={"anthropic/alwaysLoad": True}
+)
 @track_response_size("configure_order")
 async def configure_order(
     timeout: int | None = None,
@@ -175,24 +231,17 @@ async def configure_order(
 
         ctx = _get_ctx()
 
-        order_params = {}
-        for name, val in [
-            ("timeout", timeout),
-            ("stale_threshold", stale_threshold),
-            ("idle_output_timeout", idle_output_timeout),
-            ("max_suppression_seconds", max_suppression_seconds),
-        ]:
-            if val is not None:
-                order_params[name] = val
+        order_params = _collect_order_params(
+            timeout, stale_threshold, idle_output_timeout, max_suppression_seconds
+        )
 
-        core_params = {}
-        if default_model is not None:
-            core_params["default_model"] = default_model
+        core_params = {"default_model": default_model} if default_model is not None else None
 
-        ok, result = _write_session_config(ctx.project_dir, "order", order_params, core_params or None)
+        ok, result = _write_session_config(ctx.project_dir, "order", order_params, core_params)
         if not ok:
             return json.dumps({"success": False, "error": result})
 
+        assert isinstance(result, dict)
         snapshot = _build_config_snapshot(ctx.config, "order", result)
         return json.dumps({"success": True, "config": snapshot})
     except Exception as exc:

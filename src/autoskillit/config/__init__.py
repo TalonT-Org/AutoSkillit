@@ -5,6 +5,9 @@ either `from autoskillit.config import AutomationConfig` or the explicit
 `from autoskillit.config.settings import AutomationConfig`.
 """
 
+from autoskillit.config._config_dataclasses import (
+    _MAX_CONCURRENT_DISPATCHES as _MAX_CONCURRENT_DISPATCHES,
+)
 from autoskillit.config.ingredient_defaults import (
     iter_display_categories,
     resolve_ingredient_defaults,

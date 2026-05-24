@@ -117,6 +117,7 @@ class TestProviderFallbackLoop:
             ctx=minimal_ctx,
         )
         minimal_ctx.runner = fake_runner
+        minimal_ctx.backend = _mock_backend()
 
         result = await _execute_claude_headless(
             ClaudeHeadlessCmd(cmd=("echo", "test"), env={}),
@@ -145,6 +146,7 @@ class TestProviderFallbackLoop:
             ctx=minimal_ctx,
         )
         minimal_ctx.runner = fake_runner
+        minimal_ctx.backend = _mock_backend()
 
         result = await _execute_claude_headless(
             ClaudeHeadlessCmd(cmd=("echo", "test"), env={}),

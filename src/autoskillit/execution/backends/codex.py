@@ -60,6 +60,7 @@ class CodexFlags(StrEnum):
     EPHEMERAL = "--ephemeral"
     RESUME_SUBCOMMAND = "resume"
     LAST = "--last"
+    CONFIG_OVERRIDE = "-c"
 
 
 CODEX_ENV_DENYLIST: frozenset[str] = frozenset(

@@ -1,6 +1,6 @@
 # rules/
 
-Semantic validation rule modules for recipe analysis (31 rule files).
+Semantic validation rule modules for recipe analysis (40 rule files).
 
 ## Files
 
@@ -12,15 +12,24 @@ Semantic validation rule modules for recipe analysis (31 rule files).
 | `rules_bypass.py` | Rules for `skip_when_false` bypass routing contracts |
 | `rules_callable_scope.py` | Enforces scoped directory args for file-discovering callables (e.g. `batch_create_issues` → `audit_run_dir`) |
 | `rules_campaign.py` | Campaign recipe validation: dispatch names, ingredient refs |
-| `rules_ci.py` | CI polling patterns: PR state handling, CI step ordering |
+| `rules_ci.py` | CI config hygiene: inline shell, event scope, workflow, timeout |
+| `rules_ci_conflict.py` | CI conflict gate routing, mergeability, auto_trigger checks |
+| `rules_ci_guards.py` | CI applicability guards, self-loop, enqueue gate, cwd/branch mismatch |
+| `rules_ci_merge_queue.py` | Merge queue PR state routing completeness and conformance |
 | `rules_clone.py` | Clone/push dataflow rules: missing remote URL, local-strategy capture |
 | `rules_cmd.py` | `run_cmd` echo-capture alignment; git remote command detection |
 | `rules_contracts.py` | Skill contract completeness rules |
-| `rules_dataflow.py` | Dataflow analysis: pipeline-forbidden tool usage, output chaining |
+| `rules_dataflow.py` | Capture key validation, dead output, weak constraint |
+| `rules_dataflow_callable.py` | Callable contract validation, signature mismatch, context gap |
+| `rules_dataflow_handoff.py` | Implicit handoff, uncaptured consumer, merge cleanup, stale ref |
+| `rules_dataflow_multipart.py` | Multi-part recipe iteration notes validation |
 | `rules_features.py` | Feature-gated tool/skill reference validation |
 | `rules_food_truck.py` | Food-truck recipe validation: sentinel stop step requirement |
 | `rules_fixing.py` | Conditional-write skill must gate on declared verdict output |
-| `rules_graph.py` | Graph/routing analysis rules |
+| `rules_graph.py` | Unbounded cycle detection (DFS) |
+| `rules_graph_output.py` | Merge-base unpublished, tool output routing, skill result routing gap |
+| `rules_graph_review.py` | Pass-through validity, review waypoint guards, context limit |
+| `rules_graph_routes.py` | Route completeness, structural ordering, clone root validation |
 | `rules_inline_script.py` | Detects inline shell scripts in `run_cmd` cmd fields |
 | `rules_inputs.py` | Input/ingredient validation; version compatibility checks; condition-value-domain checks |
 | `rules_isolation.py` | Workspace isolation rules (prevents operating on source repo) |
@@ -42,4 +51,4 @@ Semantic validation rule modules for recipe analysis (31 rule files).
 
 ## Architecture Notes
 
-Side-effect registration: callers import the package to trigger `@semantic_rule` decorator registration of all 31 rule modules. Each rule receives a `ValidationContext` argument. No cross-imports between rule modules.
+Side-effect registration: callers import the package to trigger `@semantic_rule` decorator registration of all 40 rule modules. Each rule receives a `ValidationContext` argument. No cross-imports between rule modules.

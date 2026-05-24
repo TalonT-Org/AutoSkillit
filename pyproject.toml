@@ -41,6 +41,7 @@ dependencies = [
     "cyclopts>=4.0",
     "regex>=2026.1",
     "structlog>=25.0,<26.0",
+    "zstandard>=0.23",
     "uvloop>=0.21.0; sys_platform != 'win32'",
 ]
 

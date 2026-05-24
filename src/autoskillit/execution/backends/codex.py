@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum, unique
 from pathlib import Path
+
+import zstandard
 
 from autoskillit.core import (
     AGENT_BACKEND_CODEX,
@@ -24,6 +27,7 @@ from autoskillit.core import (
     SkillSessionConfig,
     ValidatedAddDir,
     extract_skill_name,
+    get_logger,
 )
 from autoskillit.execution.backends._claude_prompt import (
     _HEADLESS_EXCLUSIVE_VARS,
@@ -45,6 +49,8 @@ __all__ = [
     "CodexSessionLocator",
     "ensure_codex_mcp_registered",
 ]
+
+logger = get_logger(__name__)
 
 
 @unique
@@ -102,8 +108,52 @@ class CodexEnvPolicy:
 
 @dataclass(frozen=True, slots=True)
 class CodexSessionLocator:
-    def locate_session(self, session_id: str) -> Path | None:
+    def locate_session(self, session_id: str, codex_home: Path | None = None) -> Path | None:
+        if not session_id or session_id.startswith(("no_session_", "crashed_")):
+            return None
+        if codex_home is not None:
+            sessions_dir = codex_home / "sessions"
+        else:
+            env_home = os.environ.get("CODEX_HOME")
+            if env_home:
+                sessions_dir = Path(env_home) / "sessions"
+            else:
+                sessions_dir = Path.home() / ".codex" / "sessions"
+        if not sessions_dir.exists():
+            return None
+        for year_dir in sessions_dir.iterdir():
+            if not year_dir.is_dir():
+                continue
+            for month_dir in year_dir.iterdir():
+                if not month_dir.is_dir():
+                    continue
+                for day_dir in month_dir.iterdir():
+                    if not day_dir.is_dir():
+                        continue
+                    for entry in day_dir.iterdir():
+                        if entry.is_file() and entry.name == f"{session_id}.jsonl.zst":
+                            return entry
         return None
+
+    def read_session(self, path: Path) -> list[dict]:
+        try:
+            raw = path.read_bytes()
+            decompressed = zstandard.ZstdDecompressor().decompress(raw)
+            text = decompressed.decode("utf-8")
+        except Exception:
+            logger.warning("read_session: failed to decompress", path=str(path), exc_info=True)
+            return []
+        result: list[dict] = []
+        for line in text.splitlines():
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(obj, dict):
+                result.append(obj)
+        return result
 
 
 @dataclass(frozen=True, slots=True)

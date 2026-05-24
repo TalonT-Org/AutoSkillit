@@ -31,6 +31,7 @@ Fleet campaign dispatch, state persistence, and sidecar tests.
 | `test_dispatch_classification_integrity.py` | AST test: `DispatchRecord(status=...)` must route through classifier |
 | `test_resume_checkpoint_field.py` | `DispatchRecord.resume_checkpoint` and `ResumeDecision.checkpoint` field tests |
 | `test_resume_max_attempts.py` | `MAX_CONSECUTIVE_RESUME_ATTEMPTS` guard in `resume_campaign_from_state` |
+| `test_resume_preflight.py` | Pre-flight JSONL validation and session chain continuity for fleet resume |
 | `test_error_envelope.py` | Tests for fleet error envelope registry and constructor (Group R) |
 | `test_findings_rpc.py` | Tests for autoskillit.fleet._findings_rpc (T15–T21) |
 | `test_fleet.py` | Tests for fleet package |

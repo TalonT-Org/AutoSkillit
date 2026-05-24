@@ -189,7 +189,7 @@ def test_run_interactive_session_appends_system_prompt_on_fresh_session(
 
 
 def test_skill_injection_disabled_omits_flags(monkeypatch: pytest.MonkeyPatch) -> None:
-    """When skill_injection_capable=False, no plugin/tools flags are injected."""
+    """When skill_injection_capable=False, _run_interactive_session omits plugin/tools flags"""
     from autoskillit.core import BackendCapabilities, CmdSpec
 
     no_inject_caps = BackendCapabilities(

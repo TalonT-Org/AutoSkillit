@@ -727,3 +727,22 @@ def test_campaign_dispatch_skip_when_default_none() -> None:
     recipe = _parse_recipe(data)
     assert len(recipe.dispatches) == 1
     assert recipe.dispatches[0].skip_when is None
+
+
+# ---------------------------------------------------------------------------
+# dispatch_only field parsing tests
+# ---------------------------------------------------------------------------
+
+
+def test_parse_recipe_reads_dispatch_only_true() -> None:
+    from autoskillit.recipe.io import _parse_recipe
+
+    recipe = _parse_recipe({"name": "sub", "description": "d", "dispatch_only": True})
+    assert recipe.dispatch_only is True
+
+
+def test_parse_recipe_reads_dispatch_only_false_by_default() -> None:
+    from autoskillit.recipe.io import _parse_recipe
+
+    recipe = _parse_recipe({"name": "sub", "description": "d"})
+    assert recipe.dispatch_only is False

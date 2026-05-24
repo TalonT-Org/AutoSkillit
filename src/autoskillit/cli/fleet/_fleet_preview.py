@@ -16,22 +16,9 @@ _DISPATCH_TOOL_CATEGORIES: list[tuple[str, tuple[str, ...]]] = [
 ]
 
 _FLEET_DISPATCH_GREETINGS: list[str] = [
-    (
-        "Fleet dispatcher online. Your available food trucks:\n\n"
-        "{recipe_table}\n\n"
-        "Ready for dispatch orders."
-    ),
-    (
-        "Welcome to fleet dispatch — ad-hoc food truck coordination.\n\n"
-        "Available food trucks:\n\n"
-        "{recipe_table}\n\n"
-        "What targets are we dispatching to?"
-    ),
-    (
-        "Dispatcher standing by. Food truck roster:\n\n"
-        "{recipe_table}\n\n"
-        "Issue your dispatch orders when ready."
-    ),
+    "Fleet dispatcher online. Ready for dispatch orders.",
+    "Welcome to fleet dispatch. What targets are we dispatching to?",
+    "Dispatcher standing by. Issue your dispatch orders when ready.",
 ]
 
 _FLEET_CAMPAIGN_GREETINGS: list[str] = [
@@ -44,9 +31,10 @@ _FLEET_CAMPAIGN_GREETINGS: list[str] = [
 def _print_dispatch_preview() -> str:
     """Print the pre-launch summary for fleet dispatch (mirrors cook's pre-launch display).
 
-    Returns the recipe table string (name + description) for greeting injection.
+    Returns the recipe table string (name + description) for system prompt injection.
     """
     from autoskillit.cli.ui._ansi import permissions_warning, supports_color
+    from autoskillit.core import load_yaml  # noqa: PLC0415
     from autoskillit.recipe import RecipeKind, list_recipes
 
     color = supports_color()
@@ -64,7 +52,9 @@ def _print_dispatch_preview() -> str:
         f" {_D}Fleet dispatcher. Ad-hoc food truck coordination.{_R}"
     )
 
-    recipes = list_recipes(Path.cwd(), exclude_kinds=frozenset({RecipeKind.CAMPAIGN})).items
+    recipes = list_recipes(
+        Path.cwd(), exclude_kinds=frozenset({RecipeKind.CAMPAIGN}), exclude_dispatch_only=True
+    ).items
     if recipes:
         name_w = max(len(r.name or "") for r in recipes)
         src_w = max(len(r.source or "") for r in recipes)
@@ -79,6 +69,26 @@ def _print_dispatch_preview() -> str:
     else:
         print(f"\n{_D}No recipes found.{_R}")
         greeting_table = "(no recipes found)"
+
+    # Show campaign sub-recipes in a separate section
+    all_result = list_recipes(Path.cwd(), exclude_dispatch_only=False)
+    dispatch_only_recipes = [r for r in all_result.items if r.dispatch_only]
+    if dispatch_only_recipes:
+        all_campaigns = [r for r in all_result.items if r.kind == RecipeKind.CAMPAIGN]
+        campaign_children: dict[str, list[str]] = {}
+        for c in all_campaigns:
+            if c.content:
+                data = load_yaml(c.content)
+                children = [
+                    d.get("recipe", "") for d in (data.get("dispatches") or []) if d.get("recipe")
+                ]
+                if children:
+                    campaign_children[c.name] = children
+
+        print(f"\n  {_D}Campaign sub-recipes (dispatched by campaigns, not standalone):{_R}")
+        for cname, children in sorted(campaign_children.items()):
+            child_str = ", ".join(children)
+            print(f"    {_G}{cname:<{name_w}}{_R}  {_D}-> {child_str}{_R}")
 
     print()
     for name, tools in _DISPATCH_TOOL_CATEGORIES:

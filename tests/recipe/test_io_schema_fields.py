@@ -288,3 +288,119 @@ def test_recipe_step_provider_in_handled_fields() -> None:
     from autoskillit.recipe.io import _PARSE_STEP_HANDLED_FIELDS
 
     assert "provider" in _PARSE_STEP_HANDLED_FIELDS
+
+
+# ---------------------------------------------------------------------------
+# dispatch_only field I/O tests (T3, T4, T5, T9)
+# ---------------------------------------------------------------------------
+
+
+def test_collect_recipes_populates_dispatch_only(tmp_path: Path) -> None:
+
+    import yaml
+
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+
+    # Write a recipe with dispatch_only: true
+    recipe_data = {
+        "name": "sub-recipe",
+        "description": "A sub-recipe",
+        "dispatch_only": True,
+        "kind": "food-truck",
+        "recipe_version": "1.0.0",
+        "steps": {},
+    }
+    (recipes_dir / "sub-recipe.yaml").write_text(yaml.dump(recipe_data))
+
+    from autoskillit.recipe.io import list_recipes
+
+    result = list_recipes(tmp_path, exclude_dispatch_only=False)
+    sub = next((r for r in result.items if r.name == "sub-recipe"), None)
+    assert sub is not None
+    assert sub.dispatch_only is True
+
+
+def test_list_recipes_exclude_dispatch_only_filters_out_dispatch_only(tmp_path: Path) -> None:
+
+    import yaml
+
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+
+    # Write two recipes: one standard, one dispatch_only
+    std_data = {
+        "name": "standard-recipe",
+        "description": "Standard",
+        "recipe_version": "1.0.0",
+        "steps": {},
+    }
+    sub_data = {
+        "name": "dispatch-only-recipe",
+        "description": "Sub",
+        "dispatch_only": True,
+        "kind": "food-truck",
+        "recipe_version": "1.0.0",
+        "steps": {},
+    }
+    (recipes_dir / "standard-recipe.yaml").write_text(yaml.dump(std_data))
+    (recipes_dir / "dispatch-only-recipe.yaml").write_text(yaml.dump(sub_data))
+
+    from autoskillit.recipe.io import list_recipes
+
+    result = list_recipes(tmp_path, exclude_dispatch_only=True)
+    names = [r.name for r in result.items]
+    assert "standard-recipe" in names
+    assert "dispatch-only-recipe" not in names
+
+
+def test_list_recipes_default_includes_dispatch_only(tmp_path: Path) -> None:
+
+    import yaml
+
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+
+    std_data = {
+        "name": "standard-recipe",
+        "description": "Standard",
+        "recipe_version": "1.0.0",
+        "steps": {},
+    }
+    sub_data = {
+        "name": "dispatch-only-recipe",
+        "description": "Sub",
+        "dispatch_only": True,
+        "kind": "food-truck",
+        "recipe_version": "1.0.0",
+        "steps": {},
+    }
+    (recipes_dir / "standard-recipe.yaml").write_text(yaml.dump(std_data))
+    (recipes_dir / "dispatch-only-recipe.yaml").write_text(yaml.dump(sub_data))
+
+    from autoskillit.recipe.io import list_recipes
+
+    result = list_recipes(tmp_path)  # no exclude_dispatch_only
+    names = [r.name for r in result.items]
+    assert "standard-recipe" in names
+    assert "dispatch-only-recipe" in names
+
+
+def test_bundled_sub_recipes_have_dispatch_only() -> None:
+    from autoskillit.core import pkg_root
+    from autoskillit.recipe.io import list_recipes
+
+    result = list_recipes(pkg_root() / "recipes", exclude_dispatch_only=False)
+    sub_recipe_names = [
+        "research-design",
+        "research-implement",
+        "research-review",
+        "research-archive",
+        "bem-wrapper",
+        "implement-findings",
+        "promote-to-main-wrapper",
+    ]
+    for name in sub_recipe_names:
+        sub = next((r for r in result.items if r.name == name), None)
+        assert sub is not None, f"Sub-recipe {name} not found"
+        assert sub.dispatch_only is True, f"Sub-recipe {name} should have dispatch_only=True"

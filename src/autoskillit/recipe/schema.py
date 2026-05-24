@@ -194,6 +194,9 @@ class Recipe:
     requires_features: list[str] = field(default_factory=list)
     # Keys from FEATURE_REGISTRY. Recipes declare the features whose skill_categories
     # they need so init_session can merge them into session_features at dispatch time.
+    dispatch_only: bool = False
+    # When True, this sub-recipe is excluded from fleet dispatch listings and MCP
+    # list_recipes. It is only loaded via campaign dispatch by name.
 
     def __post_init__(self) -> None:
         self.name = self.name.strip()
@@ -224,6 +227,7 @@ class RecipeInfo:
     kind: RecipeKind = RecipeKind.STANDARD
     experimental: bool = False
     requires_packs: list[str] = field(default_factory=list)
+    dispatch_only: bool = False
 
 
 @dataclass

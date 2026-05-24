@@ -1,7 +1,8 @@
 name: promote-to-main-wrapper
 description: >-
-  Thin wrapper that invokes the promote-to-main skill via run_skill, enabling
+  Invoke promote-to-main skill as campaign dispatch
   campaign dispatch of integration branch promotions as L2 food trucks.
+dispatch_only: true
 kind: food-truck
 recipe_version: "1.0.0"
 

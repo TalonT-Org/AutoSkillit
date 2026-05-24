@@ -184,6 +184,8 @@ def _registry_position(r: RecipeInfo) -> int:
 def list_recipes(
     project_dir: Path,
     exclude_kinds: frozenset[RecipeKind] = frozenset(),
+    *,
+    exclude_dispatch_only: bool = False,
 ) -> LoadResult[RecipeInfo]:
     """Find available recipes from project and built-in sources."""
     seen: set[str] = set()
@@ -202,6 +204,8 @@ def list_recipes(
         _collect_recipes(RecipeSource.BUILTIN, builtin_dir_scan, seen, items, errors)
 
     filtered = [r for r in items if r.kind not in exclude_kinds] if exclude_kinds else items
+    if exclude_dispatch_only:
+        filtered = [r for r in filtered if not r.dispatch_only]
     return LoadResult(
         items=sorted(filtered, key=lambda r: (group_rank(r), _registry_position(r), r.name)),
         errors=errors,
@@ -373,6 +377,7 @@ _PARSE_RECIPE_HANDLED_FIELDS: frozenset[str] = frozenset(
         "allowed_recipes",
         "continue_on_failure",
         "requires_features",
+        "dispatch_only",
     }
 )
 
@@ -556,6 +561,7 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
         allowed_recipes=allowed_recipes,
         continue_on_failure=continue_on_failure,
         requires_features=requires_features_raw,
+        dispatch_only=bool(data.get("dispatch_only", False)),
     )
 
 
@@ -660,6 +666,7 @@ def _collect_recipes(
                             kind=recipe.kind,
                             experimental=recipe.experimental,
                             requires_packs=recipe.requires_packs,
+                            dispatch_only=recipe.dispatch_only,
                         )
                     )
             except Exception as exc:

@@ -9,7 +9,8 @@
     "research",
     "vis-lens"
   ],
-  "description": "Design-phase sub-recipe extracted from research.yaml. Scopes a research question, plans an experiment, optionally reviews the design (bounded by check_design_review_loop, max 3 iterations), plans visualizations, then terminates with a cross-dispatch handoff sentinel containing the design artifacts. Dispatched as a food truck by campaign recipes that separate design from execution.\n",
+  "description": "Scope a research question and plan the experiment question, plans an experiment, optionally reviews the design (bounded by check_design_review_loop, max 3 iterations), plans visualizations, then terminates with a cross-dispatch handoff sentinel containing the design artifacts. Dispatched as a food truck by campaign recipes that separate design from execution.\n",
+  "dispatch_only": true,
   "summary": "scope > plan > [review?] > visualize > design_complete",
   "ingredients": {
     "task": {

@@ -2,16 +2,7 @@ name: research
 recipe_version: "1.0.0"
 requires_packs: [research, exp-lens, vis-lens]
 description: >
-  Single-phase technical research recipe. Scopes a research question, plans an
-  experiment, optionally reviews the design, then always decomposes into phases,
-  implements, runs the experiment, writes a report to research/, and opens a PR.
-  Supports a skippable design review loop (bounded by check_design_review_loop at 3 iterations), review
-  resolution routing after PR open, and a post-review re-validation loop that
-  re-runs affected benchmarks when resolve-research-review produces rerun_required
-  escalations. After the final push (or when review completes), an archival
-  phase separates research artifacts from experimental code: opens a clean
-  artifact-only PR, tags the experiment branch, and closes the original PR.
-  No auto-merge.
+  End-to-end technical research: scope, implement, report
 summary: scope > plan > [review?] > worktree > env-setup > decompose > phases > experiment > report > open-pr > [review? > resolve > [re-run?] > push] > archive
 
 ingredients:

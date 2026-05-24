@@ -42,7 +42,7 @@ def _run_interactive_session(
 
     if backend is None:
         from autoskillit.config import load_config
-        from autoskillit.execution.backends import get_backend
+        from autoskillit.execution import get_backend
 
         backend = get_backend(load_config().agent_backend.backend)
     if shutil.which(backend.binary_name()) is None:

@@ -74,7 +74,7 @@ def cook(
 ) -> None:
     """Launch Claude with all bundled AutoSkillit skills as slash commands."""
     from autoskillit.config import iter_display_categories, load_config
-    from autoskillit.execution.backends import get_backend
+    from autoskillit.execution import get_backend
     from autoskillit.workspace import (
         DefaultSessionSkillManager,
         SkillsDirectoryProvider,

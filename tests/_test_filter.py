@@ -196,7 +196,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_resume": frozenset({"core", "cli", "execution", "fleet"}),
     "_type_helpers": frozenset({"core", "execution", "fleet", "pipeline", "recipe", "server"}),
     "_type_protocols_workspace": frozenset({"core", "pipeline", "recipe", "workspace"}),
-    "_type_protocols_backend": frozenset({"core", "execution", "pipeline"}),
+    "_type_protocols_backend": frozenset({"cli", "core", "execution", "pipeline"}),
     "_install_detect": frozenset({"core", "cli", "config"}),
     "_linux_proc": frozenset({"core", "execution", "fleet", "cli"}),
     "_type_plugin_source": frozenset({"core", "execution", "pipeline", "server", "cli"}),

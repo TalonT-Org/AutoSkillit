@@ -353,7 +353,7 @@ def test_run_interactive_session_default_backend_calls_get_backend(
 
     _stub_plugin_installed(monkeypatch, installed=True)
     _capture_subprocess(monkeypatch)
-    monkeypatch.setattr("autoskillit.execution.backends.get_backend", fake_get_backend)
+    monkeypatch.setattr("autoskillit.execution.get_backend", fake_get_backend)
     _run_interactive_session(system_prompt="test")
     assert get_backend_called, "get_backend must be called when backend is not injected"
     assert get_backend_called[0] == "claude-code"

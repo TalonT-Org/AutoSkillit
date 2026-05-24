@@ -182,9 +182,14 @@ def init(
 
     try:
         from autoskillit.config import load_config
-        from autoskillit.execution.backends import get_backend
+        from autoskillit.config._config_dataclasses import ConfigSchemaError
+        from autoskillit.execution import get_backend
 
-        _backend = get_backend(load_config(project_dir).agent_backend.backend)
+        try:
+            _backend_name = load_config(project_dir).agent_backend.backend
+        except ConfigSchemaError:
+            _backend_name = "claude-code"
+        _backend = get_backend(_backend_name)
         _register_all(scope, project_dir, backend=_backend)
     except CliError as exc:
         print(f"\n  ERROR: {exc}")

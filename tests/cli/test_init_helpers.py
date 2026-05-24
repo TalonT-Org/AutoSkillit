@@ -93,41 +93,27 @@ class TestInitBackendResolution:
         mock_config = MagicMock()
         mock_config.agent_backend.backend = "claude-code"
 
-        # Create minimal project structure
+        # Create minimal project structure with an existing config so init skips prompting
         project_dir = tmp_path / "project"
         project_dir.mkdir()
         config_dir = project_dir / ".autoskillit"
         config_dir.mkdir()
+        (config_dir / "config.yaml").write_text("test_check:\n  command: [pytest]\n")
 
-        # Patch gate to accept bypass
-        import autoskillit.cli._init_helpers as init_helpers_mod
-
-        monkeypatch.setattr(
-            init_helpers_mod,
-            "_check_secret_scanning",
-            lambda p: MagicMock(passed=True, bypass_accepted=False),
-        )
-
-        # Patch _register_all to avoid actual file operations
-        register_called_with: dict = {}
-
-        def fake_register_all(scope, proj_dir, *, backend=None):
-            register_called_with["scope"] = scope
-            register_called_with["backend"] = backend
+        monkeypatch.chdir(project_dir)
 
         with (
+            patch(
+                "autoskillit.cli.app._check_secret_scanning",
+                lambda p: MagicMock(passed=True, bypass_accepted=False),
+            ),
             patch("autoskillit.config.load_config", return_value=mock_config),
-            patch("autoskillit.execution.backends.get_backend", side_effect=fake_get_backend),
-            patch("autoskillit.cli._init_helpers._register_all", side_effect=fake_register_all),
+            patch("autoskillit.execution.get_backend", side_effect=fake_get_backend),
+            patch("autoskillit.cli.app._register_all", side_effect=lambda *a, **kw: None),
         ):
-            # init() uses click — invoke it directly
-            from click.testing import CliRunner
-
             from autoskillit.cli.app import init
 
-            runner = CliRunner()
-            runner.invoke(init, ["--scope", "user"], input="n\n", catch_exceptions=False, obj={})
-            # Command may exit early; get_backend call is what matters
+            init(scope="user", force=False)
 
         assert get_backend_calls, "get_backend must have been called"
         assert get_backend_calls[0] == "claude-code"

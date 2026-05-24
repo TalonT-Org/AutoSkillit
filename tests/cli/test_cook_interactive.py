@@ -587,12 +587,11 @@ class TestCookInteractive:
             patch("builtins.input", return_value=""),
             patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
             patch("subprocess.run", return_value=MagicMock(returncode=0)),
-            patch("autoskillit.execution.ClaudeCodeBackend", _MockBackend),
             patch("autoskillit.core.write_registry_entry"),
         ):
             import autoskillit.cli.session._cook as module
 
-            module.cook()
+            module.cook(backend=_MockBackend())
 
         assert captured_env_extras, "build_interactive_cmd must have been called"
         env_extras = captured_env_extras[0]
@@ -625,12 +624,11 @@ class TestCookInteractive:
             patch("builtins.input", return_value=""),
             patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
             patch("subprocess.run", return_value=MagicMock(returncode=0)),
-            patch("autoskillit.execution.ClaudeCodeBackend", _MockBackend),
             patch("autoskillit.core.write_registry_entry"),
         ):
             import autoskillit.cli.session._cook as module
 
-            module.cook()
+            module.cook(backend=_MockBackend())
 
         assert captured_env_extras, "build_interactive_cmd must have been called"
         assert "AUTOSKILLIT_LAUNCH_ID" in captured_env_extras[0]
@@ -665,12 +663,11 @@ class TestCookInteractive:
             patch("builtins.input", return_value=""),
             patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
             patch("subprocess.run", return_value=MagicMock(returncode=0)),
-            patch("autoskillit.execution.ClaudeCodeBackend", _CustomBackend),
             patch("autoskillit.core.write_registry_entry"),
         ):
             import autoskillit.cli.session._cook as module
 
-            module.cook()
+            module.cook(backend=_CustomBackend())
 
         assert "my-test-claude" in captured_which
 

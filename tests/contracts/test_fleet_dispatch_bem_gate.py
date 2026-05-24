@@ -116,7 +116,7 @@ def test_fleet_prompt_batch_section_references_execution_map(fleet_prompt: str) 
 def test_fleet_prompt_batch_section_contains_max_issues_cap(fleet_prompt: str) -> None:
     """Batch dispatch section must contain the max_issues_per_food_truck cap value."""
     batch_section = fleet_prompt.split("BATCH DISPATCH")[1].split("## DISPATCHER")[0]
-    assert "3" in batch_section or "max_issues_per_food_truck" in batch_section
+    assert "3" in batch_section
 
 
 def test_fleet_prompt_batch_section_preserves_single_issue_fallback(fleet_prompt: str) -> None:

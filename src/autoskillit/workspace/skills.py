@@ -47,7 +47,12 @@ def read_skill_categories(path: Path) -> frozenset[str]:
 
 _INTERNAL_SKILLS: frozenset[str] = frozenset({"sous-chef"})
 
-_OVERRIDE_SEARCH_DIRS: tuple[str, ...] = (".claude/skills", ".autoskillit/skills")
+_OVERRIDE_SEARCH_DIRS: tuple[str, ...] = (
+    ".claude/skills",
+    ".autoskillit/skills",
+    ".codex/skills",
+    ".agents/skills",
+)
 
 _LIST_ALL_CACHE: list[SkillInfo] | None = None
 _LIST_ALL_CACHE_KEY: tuple[float, float] = (0.0, 0.0)
@@ -64,8 +69,9 @@ def _dir_mtime(path: Path) -> float:
 def detect_project_local_overrides(project_dir: Path) -> frozenset[str]:
     """Return the set of bundled skill names overridden by project-local SKILL.md files.
 
-    Scans .claude/skills/<name>/SKILL.md and .autoskillit/skills/<name>/SKILL.md
-    under project_dir. Returns a frozenset of skill names that have a project-local
+    Scans .claude/skills/<name>/SKILL.md, .autoskillit/skills/<name>/SKILL.md,
+    .codex/skills/<name>/SKILL.md, and .agents/skills/<name>/SKILL.md under
+    project_dir. Returns a frozenset of skill names that have a project-local
     override. Returns an empty frozenset if project_dir does not exist.
     """
     overrides: set[str] = set()

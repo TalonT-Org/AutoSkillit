@@ -41,6 +41,8 @@ spawning parallel sessions.
 - Write output outside `{$1}/`
 - Add transitive deps without a concrete API or file relationship as evidence
 
+- Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
+
 **ALWAYS:**
 - Read `wp_index.json` in full before analyzing
 - Populate `added_backward_deps` only when an `apis_consumed`/`apis_defined` or `files_touched` match justifies the dependency

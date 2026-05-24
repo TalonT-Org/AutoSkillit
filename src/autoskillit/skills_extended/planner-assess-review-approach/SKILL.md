@@ -35,6 +35,8 @@ writes `review_approach_assessment.json` to the planner directory. Does NOT invo
 - Modify input files
 - Run subagents in the background (`run_in_background: true` is prohibited)
 
+- Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
+
 **ALWAYS:**
 - Read the `review-approach` SKILL.md at `src/autoskillit/skills_extended/review-approach/SKILL.md` before assessing
 - Read `$1` to get `task` and `work_packages[]`

@@ -44,6 +44,8 @@ conflicts, applies field-level edits to the plan, and writes `refined_plan.json`
 - Run subagents in the background (`run_in_background: true` is prohibited)
 - Spawn more than 6 L0s in a single parallel batch
 
+- Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
+
 **ALWAYS:**
 - Validate each L0 response for `phase_id`, `changes` (array), `conflicts` (array)
 - Log a `WARNING` to stdout for any L0 response that fails validation (skip that phase)

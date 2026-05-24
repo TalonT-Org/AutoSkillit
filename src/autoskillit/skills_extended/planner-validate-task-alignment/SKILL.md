@@ -35,6 +35,8 @@ zero findings.
 - Modify input files
 - Run subagents in the background (`run_in_background: true` is prohibited)
 
+- Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
+
 **ALWAYS:**
 - Read the `task` field from $1 or $2
 - Compare every phase goal and every WP description against the task

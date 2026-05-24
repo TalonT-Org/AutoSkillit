@@ -40,6 +40,8 @@ retries) before escalation.
 - Remove a deliverable without reassigning it to another WP
 - Introduce new WP IDs — the skill never creates WPs; it repairs or escalates existing ones
 
+- Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
+
 **ALWAYS:**
 - Load `validation.json` before reading any artifact
 - Fix all addressable finding types in a single pass

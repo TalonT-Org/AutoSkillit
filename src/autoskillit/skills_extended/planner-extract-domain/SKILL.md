@@ -35,6 +35,8 @@ Extract domain knowledge, naming conventions, and structural patterns specific t
 - Run subagents in the background (`run_in_background: true` is prohibited)
 - If `$1` is empty or the file does not exist, STOP immediately and report failure
 
+- Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
+
 **ALWAYS:**
 - Read the analysis file from argument $1 before spawning subagents
 - Use Explore subagents for all file reads

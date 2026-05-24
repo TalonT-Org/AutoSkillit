@@ -49,6 +49,8 @@ suggestions, resolves conflicts, and writes `refined_wps.json`.
 - Read `{{AUTOSKILLIT_TEMP}}` artifacts not passed as positional arguments
 - Run subagents in the background (`run_in_background: true` is prohibited)
 
+- Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
+
 **ALWAYS:**
 - Spawn one L0 per phase (NOT per WP) — each L0 reviews ALL WPs in its phase against the full WP set
 - Validate each L0 response for `phase_id`, `wp_changes` (array), `cross_phase_deps` (array), `deliverable_conflicts` (array), `api_mismatches` (array)

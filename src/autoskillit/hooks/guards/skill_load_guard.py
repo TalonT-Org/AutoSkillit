@@ -121,8 +121,8 @@ def main() -> None:
                 f"skill_load_guard: auto-exempted session {session_id} after "
                 f"{DENY_THRESHOLD} denials (possible deadlock)\n"
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            sys.stderr.write(f"skill_load_guard: flag write failed: {exc}\n")
         sys.exit(0)
 
     _record_denial(temp_dir, session_id)

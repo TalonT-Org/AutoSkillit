@@ -43,6 +43,12 @@ REPLAY_SCENARIO_ENV = "REPLAY_SCENARIO"
 REPLAY_SCENARIO_DIR_ENV = "REPLAY_SCENARIO_DIR"
 
 
+def _detect_backend_format(scenario_dir: Path) -> str:
+    if any(scenario_dir.glob("*/codex_stdout.ndjson")):
+        return "codex"
+    return "claude"
+
+
 class ScenarioReplayError(Exception):
     """Raised when scenario replay cannot find a session or result for a step."""
 
@@ -319,23 +325,38 @@ def build_replay_runner(replay_dir: str) -> ReplayingSubprocessRunner:
             ``player.build_session_map()`` is re-raised after logging the
             scenario path for context.
     """
-    try:
-        from api_simulator.claude import make_scenario_player
-    except ImportError as exc:
-        raise RuntimeError(
-            "REPLAY_SCENARIO is set but 'api_simulator' is not installed. "
-            "Install it to enable scenario replay."
-        ) from exc
+    fmt = _detect_backend_format(Path(replay_dir))
 
     _tmp_replay_dir = tempfile.TemporaryDirectory(prefix="autoskillit-replay-")
     tmp_replay = _tmp_replay_dir.name
 
     try:
-        player = make_scenario_player(
-            scenario_dir=replay_dir,
-            output_dir=tmp_replay,
-            binary_path=str(Path(tmp_replay) / "claude"),
-        )
+        if fmt == "codex":
+            try:
+                from api_simulator.codex import CodexScenarioPlayer
+            except ImportError as exc:
+                raise RuntimeError(
+                    "Codex scenario detected but 'api_simulator.codex' is not installed. "
+                    "Install it to enable Codex scenario replay."
+                ) from exc
+            player = CodexScenarioPlayer(
+                scenario_dir=replay_dir,
+                output_dir=tmp_replay,
+                binary_path=str(Path(tmp_replay) / "codex"),
+            )
+        else:
+            try:
+                from api_simulator.claude import make_scenario_player
+            except ImportError as exc:
+                raise RuntimeError(
+                    "REPLAY_SCENARIO is set but 'api_simulator' is not installed. "
+                    "Install it to enable scenario replay."
+                ) from exc
+            player = make_scenario_player(
+                scenario_dir=replay_dir,
+                output_dir=tmp_replay,
+                binary_path=str(Path(tmp_replay) / "claude"),
+            )
     except Exception:
         _tmp_replay_dir.cleanup()
         raise

@@ -15,6 +15,7 @@ from autoskillit.execution.recording import (
     RecordingSubprocessRunner,
     ReplayingSubprocessRunner,
     ScenarioReplayError,
+    _detect_backend_format,
     _extract_model,
 )
 from tests.conftest import _make_result
@@ -650,3 +651,84 @@ async def test_replaying_runner_accepts_marker_params(tmp_path):
 
     assert result.returncode == 0
     assert result.stdout == "ok"
+
+
+# --- T-DETECT-CODEX: _detect_backend_format returns 'codex' when sidecar exists ---
+
+
+def test_detect_backend_format_codex(tmp_path):
+    """_detect_backend_format returns 'codex' when any subdir contains codex_stdout.ndjson."""
+    sidecar = tmp_path / "investigate" / "codex_stdout.ndjson"
+    sidecar.parent.mkdir(parents=True)
+    sidecar.touch()
+    assert _detect_backend_format(tmp_path) == "codex"
+
+
+# --- T-DETECT-CLAUDE: _detect_backend_format returns 'claude' when no sidecar ---
+
+
+def test_detect_backend_format_claude(tmp_path):
+    """_detect_backend_format returns 'claude' when no codex sidecar exists."""
+    assert _detect_backend_format(tmp_path) == "claude"
+
+
+# --- T-REPLAY-CODEX: build_replay_runner dispatches to CodexScenarioPlayer ---
+
+
+def test_build_replay_runner_detects_codex_format(tmp_path, monkeypatch):
+    """build_replay_runner() uses CodexScenarioPlayer when codex sidecar detected."""
+    import sys
+    import types
+    import weakref
+
+    from autoskillit.execution.recording import build_replay_runner
+
+    replay_dir = tmp_path / "replay"
+    sidecar = replay_dir / "investigate" / "codex_stdout.ndjson"
+    sidecar.parent.mkdir(parents=True)
+    sidecar.touch()
+
+    mock_scenario = Mock()
+    mock_scenario.step_sequence = []
+    mock_codex_cls = Mock()
+    mock_codex_instance = mock_codex_cls.return_value
+    mock_codex_instance.scenario.return_value = mock_scenario
+    mock_codex_instance.build_session_map.return_value = {}
+
+    fake_codex_mod = types.ModuleType("api_simulator.codex")
+    fake_codex_mod.CodexScenarioPlayer = mock_codex_cls  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "api_simulator.codex", fake_codex_mod)
+
+    monkeypatch.setattr(weakref.finalize, "_registered_with_atexit", True)
+    monkeypatch.setattr("atexit.register", Mock())
+
+    result = build_replay_runner(str(replay_dir))
+    assert result.player is mock_codex_instance
+
+
+# --- T-REPLAY-CLAUDE: build_replay_runner dispatches to make_scenario_player ---
+
+
+def test_build_replay_runner_detects_claude_format(tmp_path, monkeypatch):
+    """build_replay_runner() uses make_scenario_player when no codex sidecar detected."""
+    import weakref
+
+    from autoskillit.execution.recording import build_replay_runner
+
+    replay_dir = tmp_path / "replay"
+    replay_dir.mkdir()
+
+    mock_scenario = Mock()
+    mock_scenario.step_sequence = []
+    mock_player = Mock()
+    mock_player.scenario.return_value = mock_scenario
+    mock_player.build_session_map.return_value = {}
+
+    monkeypatch.setattr(
+        _api_sim_claude, "make_scenario_player", Mock(return_value=mock_player), raising=False
+    )
+    monkeypatch.setattr(weakref.finalize, "_registered_with_atexit", True)
+    monkeypatch.setattr("atexit.register", Mock())
+
+    result = build_replay_runner(str(replay_dir))
+    assert result.player is mock_player

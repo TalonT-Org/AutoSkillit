@@ -120,7 +120,6 @@ def test_session_manager_no_flag_for_cook_session(tmp_path: Path) -> None:
     assert mermaid_md.exists()
 
 
-@pytest.mark.skip(reason="P3-A2: copy-on-activate rewrite")
 def test_activate_skill_deps_removes_flag(tmp_path: Path) -> None:
     from tests._helpers import make_skills_config, make_test_config
 
@@ -133,7 +132,12 @@ def test_activate_skill_deps_removes_flag(tmp_path: Path) -> None:
             tier3=[],
         )
     )
-    mgr.init_session("session-toggle", cook_session=False, config=config)
+    mgr.init_session(
+        "session-toggle",
+        cook_session=False,
+        config=config,
+        allow_only=frozenset({"mermaid"}),
+    )
     result = mgr.activate_skill_deps("session-toggle", "mermaid")
     assert result is True
     mermaid_md = tmp_path / "session-toggle" / _SKILLS_SUBDIR / "mermaid" / "SKILL.md"
@@ -163,6 +167,30 @@ def test_init_session_gated_tier2_skill_dir_absent(tmp_path: Path) -> None:
     assert not (skills_base / "mermaid").exists()
     # Non-gated BUNDLED_EXTENDED skills are written (BUNDLED skills go via --plugin-dir, not here)
     assert (skills_base / "implement-worktree" / "SKILL.md").exists()
+
+
+def test_init_session_tier2_skill_present_when_in_allow_only(tmp_path: Path) -> None:
+    """Tier2 skill in allow_only is written; tier2 skill NOT in allow_only is absent."""
+    from tests._helpers import make_skills_config, make_test_config
+
+    provider = SkillsDirectoryProvider()
+    mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
+    config = make_test_config(
+        skills=make_skills_config(
+            tier1=["open-kitchen", "close-kitchen"],
+            tier2=["mermaid", "make-plan"],
+            tier3=[],
+        )
+    )
+    session_path = mgr.init_session(
+        "test-allow",
+        cook_session=False,
+        config=config,
+        allow_only=frozenset({"mermaid"}),
+    )
+    skills_base = session_path / _SKILLS_SUBDIR
+    assert (skills_base / "mermaid" / "SKILL.md").exists()
+    assert not (skills_base / "make-plan").exists()
 
 
 def test_cleanup_stale_removes_old_dirs(tmp_path: Path) -> None:

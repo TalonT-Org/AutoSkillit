@@ -35,10 +35,12 @@ def _make_session(
     if config is None:
         config = load_config()
     session_id = "test-session-001"
+    closure = mgr.compute_skill_closure(target_skill)
     mgr.init_session(
         session_id,
         cook_session=False,
         config=config,
+        allow_only=closure if closure else None,
     )
     tier2 = frozenset(config.skills.tier2)
     if target_skill in tier2:
@@ -54,9 +56,6 @@ def _read_skill_md(tmp_path: Path, session_id: str, skill_name: str) -> str:
 class TestTargetSkillNotGatedAfterActivation:
     """Tier 2 target skills must have disable-model-invocation removed after activation."""
 
-    @pytest.mark.skip(
-        reason="P3-A2: tier2 skills omitted from init_session; activate path rewrite pending"
-    )
     def test_tier2_target_skill_not_gated_after_activation(self, tmp_path: Path) -> None:
         config = load_config()
         tier2 = list(config.skills.tier2)
@@ -67,9 +66,6 @@ class TestTargetSkillNotGatedAfterActivation:
         content = _read_skill_md(tmp_path, "test-session-001", target)
         assert "disable-model-invocation: true" not in content
 
-    @pytest.mark.skip(
-        reason="P3-A2: tier2 skills omitted from init_session; activate path rewrite pending"
-    )
     def test_other_tier2_skills_remain_gated(self, tmp_path: Path) -> None:
         config = load_config()
         tier2 = list(config.skills.tier2)
@@ -134,16 +130,19 @@ class TestResolvedNamespaceMatchesSkillLocation:
 class TestDepSkillsNotGatedAfterActivation:
     """After activating a target with activate_deps, dependency skills are also ungated."""
 
-    @pytest.mark.skip(
-        reason="P3-A2: tier2 skills omitted from init_session; activate path rewrite pending"
-    )
     def test_dep_skills_not_gated_after_activation(self, tmp_path: Path) -> None:
         """After activating make-plan, arch-lens-* and mermaid skills are ungated."""
         config = load_config()
         provider = SkillsDirectoryProvider()
         mgr = DefaultSessionSkillManager(provider, tmp_path)
         session_id = "test-dep-activation"
-        mgr.init_session(session_id, cook_session=False, config=config)
+        closure = mgr.compute_skill_closure("make-plan")
+        mgr.init_session(
+            session_id,
+            cook_session=False,
+            config=config,
+            allow_only=closure if closure else None,
+        )
         mgr.activate_skill_deps(session_id, "make-plan")
 
         skills_base = tmp_path / session_id / ".claude" / "skills"
@@ -214,7 +213,13 @@ class TestAllRecipeSkillCommandsInvocable:
                 # Verify activation: after init_session + activate_skill_deps, target is invocable
                 session_id = f"test-{yaml_path.stem}-{step_name}"
                 mgr = DefaultSessionSkillManager(provider, tmp_path)
-                mgr.init_session(session_id, cook_session=False, config=config)
+                closure = mgr.compute_skill_closure(name)
+                mgr.init_session(
+                    session_id,
+                    cook_session=False,
+                    config=config,
+                    allow_only=closure if closure else None,
+                )
                 if name in tier2:
                     mgr.activate_skill_deps(session_id, name)
                 skill_md_path = tmp_path / session_id / ".claude" / "skills" / name / "SKILL.md"

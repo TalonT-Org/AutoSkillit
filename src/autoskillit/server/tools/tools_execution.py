@@ -495,6 +495,31 @@ async def run_skill(
 
             if target_name:
                 tool_ctx.session_skill_manager.activate_skill_deps(session_id, target_name)
+                _is_known_skill = (
+                    tool_ctx.skill_resolver is not None
+                    and tool_ctx.skill_resolver.resolve(target_name) is not None
+                )
+                if _is_known_skill:
+                    _skill_md = (
+                        Path(session_root.path) / ".claude" / "skills" / target_name / "SKILL.md"
+                    )
+                    if not _skill_md.exists():
+                        logger.error(
+                            "target_skill_not_in_session",
+                            target=target_name,
+                            session_id=session_id,
+                            session_root=str(session_root.path),
+                        )
+                        return SkillResult.crashed(
+                            exception=RuntimeError(
+                                f"Target skill {target_name!r} not available in session "
+                                f"{session_id!r}: SKILL.md not found after init_session + "
+                                f"activate_skill_deps. Check tier/feature/pack gating."
+                            ),
+                            skill_command=resolved_command,
+                            session_id=session_id,
+                            order_id=effective_order_id,
+                        ).to_json()
         _local_dir = validate_project_local_skill_dir(Path(cwd), tool_ctx.backend)
         if _local_dir is not None:
             skill_add_dirs.append(_local_dir)

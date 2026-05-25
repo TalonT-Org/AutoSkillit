@@ -12,3 +12,4 @@ IL-1 backend abstraction layer — concrete `CodingAgentBackend` implementations
 | `codex.py` | `CodexFlags`, `CodexBackend`, `CodexEnvPolicy`, `CodexSessionLocator` (parse/config moved to `_codex_parse.py` / `_codex_config.py`) |
 | `_codex_config.py` | TOML serialization with `[[key]]` array-of-tables support, MCP registration (`ensure_codex_mcp_registered`, `_serialize_toml`) |
 | `_codex_parse.py` | `CodexStreamParser`, `CodexResultParser`, `_scan_codex_ndjson`, `_CodexParseAccumulator` |
+| `codex_scenario_player.py` | `CodexScenarioPlayer`, `make_codex_scenario_player`, `CodexStepRecord`, `CodexScenario`, `_load_manifest`, `_FakeCodexCLI`, `_write_shim_script` — scenario replay data layer for Codex backend |

@@ -21,6 +21,10 @@ from .codex import (
     CodexFlags,
     CodexSessionLocator,
 )
+from .codex_scenario_player import (
+    CodexScenarioPlayer,
+    make_codex_scenario_player,
+)
 
 BACKEND_REGISTRY: dict[str, type[CodingAgentBackend]] = {
     "claude-code": ClaudeCodeBackend,
@@ -49,8 +53,10 @@ __all__ = [
     "CodexEnvPolicy",
     "CodexFlags",
     "CodexResultParser",
+    "CodexScenarioPlayer",
     "CodexSessionLocator",
     "CodexStreamParser",
     "ensure_codex_mcp_registered",
     "get_backend",
+    "make_codex_scenario_player",
 ]

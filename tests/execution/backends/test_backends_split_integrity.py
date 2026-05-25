@@ -60,6 +60,22 @@ class TestCodexParseModuleExists:
         assert callable(_scan_codex_ndjson)
 
 
+class TestCodexScenarioPlayerModuleExists:
+    """codex_scenario_player symbols are importable."""
+
+    def test_codex_scenario_player_importable(self):
+        from autoskillit.execution.backends.codex_scenario_player import CodexScenarioPlayer
+
+        assert CodexScenarioPlayer is not None
+
+    def test_make_codex_scenario_player_importable(self):
+        from autoskillit.execution.backends.codex_scenario_player import (
+            make_codex_scenario_player,
+        )
+
+        assert callable(make_codex_scenario_player)
+
+
 class TestBackendsPublicAPISurfacePreserved:
     """All __all__ symbols from backends/__init__ are importable."""
 
@@ -82,3 +98,13 @@ class TestBackendsPublicAPISurfacePreserved:
         from autoskillit.execution.backends import get_backend
 
         assert callable(get_backend)
+
+    def test_codex_scenario_player_importable_from_backends(self):
+        from autoskillit.execution.backends import CodexScenarioPlayer
+
+        assert CodexScenarioPlayer is not None
+
+    def test_make_codex_scenario_player_importable_from_backends(self):
+        from autoskillit.execution.backends import make_codex_scenario_player
+
+        assert callable(make_codex_scenario_player)

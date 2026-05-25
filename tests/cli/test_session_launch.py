@@ -40,6 +40,27 @@ def _stub_plugin_installed(monkeypatch: pytest.MonkeyPatch, *, installed: bool =
     monkeypatch.setattr("autoskillit.core.detect_autoskillit_mcp_prefix", lambda: prefix)
 
 
+def _make_capturing_backend() -> tuple[object, list[dict]]:
+    """Return (backend_instance, captured_kwargs_list)."""
+    from autoskillit.core import CLAUDE_CODE_CAPABILITIES, CmdSpec
+
+    captured_kwargs: list[dict] = []
+
+    class _CapturingBackend:
+        def binary_name(self) -> str:
+            return "claude"
+
+        @property
+        def capabilities(self):
+            return CLAUDE_CODE_CAPABILITIES
+
+        def build_interactive_cmd(self, **kwargs):
+            captured_kwargs.append(kwargs)
+            return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
+
+    return _CapturingBackend(), captured_kwargs
+
+
 # ---------------------------------------------------------------------------
 # T13. _session_launch.py — plugin flags when plugin not installed
 # ---------------------------------------------------------------------------
@@ -68,18 +89,17 @@ def test_run_interactive_session_restricts_tools(monkeypatch: pytest.MonkeyPatch
 
 
 # ---------------------------------------------------------------------------
-# system prompt appended
+# system prompt kwarg forwarded
 # ---------------------------------------------------------------------------
 
 
 def test_run_interactive_session_appends_system_prompt(monkeypatch: pytest.MonkeyPatch) -> None:
-    """--append-system-prompt <prompt> present in subprocess cmd (via build_interactive_cmd)."""
-    _stub_plugin_installed(monkeypatch)
-    captured = _capture_subprocess(monkeypatch)
-    _run_interactive_session(system_prompt="my-unique-prompt")
-    assert ClaudeFlags.APPEND_SYSTEM_PROMPT in captured["cmd"]
-    idx = captured["cmd"].index(ClaudeFlags.APPEND_SYSTEM_PROMPT)
-    assert captured["cmd"][idx + 1] == "my-unique-prompt"
+    """_run_interactive_session forwards system_prompt kwarg to build_interactive_cmd."""
+    backend, captured_kwargs = _make_capturing_backend()
+    _capture_subprocess(monkeypatch)
+    _run_interactive_session(system_prompt="my-unique-prompt", backend=backend)
+    assert len(captured_kwargs) == 1
+    assert captured_kwargs[0]["system_prompt"] == "my-unique-prompt"
 
 
 # ---------------------------------------------------------------------------
@@ -125,38 +145,42 @@ def test_run_interactive_session_no_plugin_dir_when_installed(
 
 
 # ---------------------------------------------------------------------------
-# system prompt suppressed for resume sessions
+# system prompt kwarg forwarded with resume specs
 # ---------------------------------------------------------------------------
 
 
-def test_run_interactive_session_suppresses_system_prompt_on_named_resume(
+def test_run_interactive_session_forwards_system_prompt_with_named_resume(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """--append-system-prompt absent on NamedResume (suppressed by build_interactive_cmd)."""
+    """_run_interactive_session forwards system_prompt and NamedResume to build_interactive_cmd."""
     from autoskillit.core import NamedResume
 
-    _stub_plugin_installed(monkeypatch)
-    captured = _capture_subprocess(monkeypatch)
+    backend, captured_kwargs = _make_capturing_backend()
+    _capture_subprocess(monkeypatch)
     _run_interactive_session(
         system_prompt="should-not-appear",
         resume_spec=NamedResume(session_id="4b581974-1f19-4aec-8405-78c5ede5e233"),
+        backend=backend,
     )
-    assert ClaudeFlags.APPEND_SYSTEM_PROMPT not in captured["cmd"]
+    assert captured_kwargs[0]["system_prompt"] == "should-not-appear"
+    assert isinstance(captured_kwargs[0]["resume_spec"], NamedResume)
 
 
-def test_run_interactive_session_suppresses_system_prompt_on_bare_resume(
+def test_run_interactive_session_forwards_system_prompt_with_bare_resume(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """--append-system-prompt absent on BareResume (suppressed by build_interactive_cmd)."""
+    """_run_interactive_session forwards system_prompt and BareResume to build_interactive_cmd."""
     from autoskillit.core import BareResume
 
-    _stub_plugin_installed(monkeypatch)
-    captured = _capture_subprocess(monkeypatch)
+    backend, captured_kwargs = _make_capturing_backend()
+    _capture_subprocess(monkeypatch)
     _run_interactive_session(
         system_prompt="should-not-appear",
         resume_spec=BareResume(),
+        backend=backend,
     )
-    assert ClaudeFlags.APPEND_SYSTEM_PROMPT not in captured["cmd"]
+    assert captured_kwargs[0]["system_prompt"] == "should-not-appear"
+    assert isinstance(captured_kwargs[0]["resume_spec"], BareResume)
 
 
 def test_session_type_cook_order_in_cli_session() -> None:
@@ -166,21 +190,21 @@ def test_session_type_cook_order_in_cli_session() -> None:
     assert SESSION_TYPE_ORDER == "order"
 
 
-def test_run_interactive_session_appends_system_prompt_on_fresh_session(
+def test_run_interactive_session_forwards_system_prompt_on_fresh_session(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """--append-system-prompt present for fresh NoResume sessions (via build_interactive_cmd)."""
+    """_run_interactive_session forwards system_prompt with NoResume to build_interactive_cmd."""
     from autoskillit.core import NoResume
 
-    _stub_plugin_installed(monkeypatch)
-    captured = _capture_subprocess(monkeypatch)
+    backend, captured_kwargs = _make_capturing_backend()
+    _capture_subprocess(monkeypatch)
     _run_interactive_session(
         system_prompt="my-prompt",
         resume_spec=NoResume(),
+        backend=backend,
     )
-    assert ClaudeFlags.APPEND_SYSTEM_PROMPT in captured["cmd"]
-    idx = captured["cmd"].index(ClaudeFlags.APPEND_SYSTEM_PROMPT)
-    assert captured["cmd"][idx + 1] == "my-prompt"
+    assert captured_kwargs[0]["system_prompt"] == "my-prompt"
+    assert isinstance(captured_kwargs[0]["resume_spec"], NoResume)
 
 
 # ---------------------------------------------------------------------------
@@ -189,9 +213,11 @@ def test_run_interactive_session_appends_system_prompt_on_fresh_session(
 
 
 def test_skill_injection_disabled_omits_flags(monkeypatch: pytest.MonkeyPatch) -> None:
-    """When skill_injection_capable=False, _run_interactive_session omits plugin/tools flags"""
+    """When skill_injection_capable=False, _run_interactive_session omits plugin/tools flags
+    but still forwards system_prompt to build_interactive_cmd."""
     from autoskillit.core import BackendCapabilities, CmdSpec
 
+    build_kwargs: list[dict] = []
     no_inject_caps = BackendCapabilities(
         channel_b_capable=True,
         pty_required=True,
@@ -214,6 +240,7 @@ def test_skill_injection_disabled_omits_flags(monkeypatch: pytest.MonkeyPatch) -
             return no_inject_caps
 
         def build_interactive_cmd(self, **kwargs):
+            build_kwargs.append(kwargs)
             return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
 
     from autoskillit.cli.session._session_launch import _run_interactive_session
@@ -230,18 +257,18 @@ def test_skill_injection_disabled_omits_flags(monkeypatch: pytest.MonkeyPatch) -
     _run_interactive_session(system_prompt="test", backend=_NoInjectBackend())
     assert ClaudeFlags.PLUGIN_DIR not in captured["cmd"]
     assert ClaudeFlags.TOOLS not in captured["cmd"]
-    assert ClaudeFlags.APPEND_SYSTEM_PROMPT not in captured["cmd"]
+    assert build_kwargs[0]["system_prompt"] == "test"
 
 
 def test_skill_injection_enabled_preserves_flags(monkeypatch: pytest.MonkeyPatch) -> None:
-    """When skill_injection_capable=True, plugin/tools/system-prompt flags are present."""
-    _stub_plugin_installed(monkeypatch)
+    """When skill_injection_capable=True, tools flag is present and system_prompt forwarded."""
+    backend, captured_kwargs = _make_capturing_backend()
     captured = _capture_subprocess(monkeypatch)
-    _run_interactive_session(system_prompt="test")
+    _run_interactive_session(system_prompt="test", backend=backend)
     assert ClaudeFlags.TOOLS in captured["cmd"]
     idx = captured["cmd"].index(ClaudeFlags.TOOLS)
     assert captured["cmd"][idx + 1] == "AskUserQuestion"
-    assert ClaudeFlags.APPEND_SYSTEM_PROMPT in captured["cmd"]
+    assert captured_kwargs[0]["system_prompt"] == "test"
 
 
 def test_binary_name_from_backend_used_in_which(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -403,14 +430,15 @@ def test_get_backend_di_used_in_session_launch(monkeypatch: pytest.MonkeyPatch) 
     assert build_calls, "Stub backend's build_interactive_cmd must be invoked via get_backend DI"
 
 
-def test_skill_injection_false_via_get_backend_omits_append_system_prompt(
+def test_skill_injection_false_via_get_backend_forwards_system_prompt_kwarg(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """skill_injection_capable=False stub via get_backend DI omits --append-system-prompt."""
+    """skill_injection_capable=False stub via get_backend DI still receives system_prompt kwarg."""
     from unittest.mock import MagicMock
 
-    from autoskillit.core import BackendCapabilities, ClaudeFlags, CmdSpec
+    from autoskillit.core import BackendCapabilities, CmdSpec
 
+    build_kwargs: list[dict] = []
     no_inject_caps = BackendCapabilities(
         channel_b_capable=True,
         pty_required=True,
@@ -433,20 +461,19 @@ def test_skill_injection_false_via_get_backend_omits_append_system_prompt(
             return no_inject_caps
 
         def build_interactive_cmd(self, **kwargs):
+            build_kwargs.append(kwargs)
             return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
 
     mock_config = MagicMock()
     mock_config.agent_backend.backend = "claude-code"
 
-    captured: dict = {}
     monkeypatch.setattr("autoskillit.config.load_config", lambda: mock_config)
     monkeypatch.setattr("autoskillit.execution.get_backend", lambda name: _NoInjectDIBackend())
     monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/claude")
 
     def mock_run(cmd, **kwargs):
-        captured["cmd"] = list(cmd)
         return type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
 
     monkeypatch.setattr(subprocess, "run", mock_run)
     _run_interactive_session(system_prompt="sentinel")
-    assert ClaudeFlags.APPEND_SYSTEM_PROMPT not in captured["cmd"]
+    assert build_kwargs[0]["system_prompt"] == "sentinel"

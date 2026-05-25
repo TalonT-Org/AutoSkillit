@@ -496,11 +496,7 @@ async def run_skill(
             if target_name:
                 tool_ctx.session_skill_manager.activate_skill_deps(session_id, target_name)
                 _skill_md = (
-                    Path(session_root.path)
-                    / ".claude"
-                    / "skills"
-                    / target_name
-                    / "SKILL.md"
+                    Path(session_root.path) / ".claude" / "skills" / target_name / "SKILL.md"
                 )
                 if not _skill_md.exists():
                     logger.error(

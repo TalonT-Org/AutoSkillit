@@ -75,6 +75,10 @@ When `run_skill` returns `needs_retry=true` for **any step**:
 - **If `retry_reason: path_contamination`** → fall through to `on_failure`. The session wrote
   files outside its working directory. This is a CWD boundary violation, not a context limit.
   Do NOT route to `on_context_limit` even if defined.
+- **If `retry_reason: contract_recovery` AND `has_progress_evidence` is true AND the step
+  defines `on_context_limit`** → follow `on_context_limit`. The session wrote files but omitted
+  the structured output token. Partial progress is confirmed on disk.
+- **If `retry_reason: contract_recovery` AND `has_progress_evidence` is false** → fall through to `on_failure`.
 - **If `retry_reason: thinking_stall` AND `lifespan_started` is true AND the step defines
   `on_context_limit`** → follow `on_context_limit`. The model consumed tokens (thinking
   blocks) but produced no final output. Prior tool calls suggest partial progress on disk.
@@ -128,6 +132,8 @@ Summary: `needs_retry=true` + `retry_reason=resume` + `subtype=stale` → re-exe
          `needs_retry=true` + `retry_reason=completed_no_flush` + no `on_context_limit` → `on_failure`.
          `needs_retry=true` + `retry_reason=empty_output` → `on_failure`.
          `needs_retry=true` + `retry_reason=path_contamination` → `on_failure`.
+         `needs_retry=true` + `retry_reason=contract_recovery` + `has_progress_evidence=true` + step has `on_context_limit` → follow `on_context_limit`.
+         `needs_retry=true` + `retry_reason=contract_recovery` + `has_progress_evidence=false` → `on_failure`.
          `needs_retry=true` + `retry_reason=thinking_stall` + `lifespan_started=true` + step has `on_context_limit` → follow `on_context_limit`.
          `needs_retry=true` + `retry_reason=thinking_stall` + `lifespan_started=false` → `on_failure`.
          `needs_retry=true` + `retry_reason=idle_stall` + `lifespan_started=true` + step has `on_context_limit` → follow `on_context_limit`.

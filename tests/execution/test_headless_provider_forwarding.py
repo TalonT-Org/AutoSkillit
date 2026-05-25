@@ -467,7 +467,7 @@ async def test_dispatch_food_truck_derives_marker_dir_from_cwd(
     monkeypatch.setattr("autoskillit.execution.headless._execute_claude_headless", fake_execute)
     monkeypatch.setattr(
         "autoskillit.execution.headless._resolve_session_log_dir",
-        lambda cwd, ctx: Path("/derived/project"),
+        lambda cwd, backend: Path("/derived/project"),
     )
     monkeypatch.setattr(
         "autoskillit.execution.headless._headless_execute._capture_git_head_sha", lambda *a: ""

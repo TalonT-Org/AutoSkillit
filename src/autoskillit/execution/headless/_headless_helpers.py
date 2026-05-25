@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from autoskillit.core import (
     CodingAgentBackend,
@@ -17,7 +17,6 @@ from autoskillit.execution.headless._headless_git import _compute_loc_changed
 
 if TYPE_CHECKING:
     from autoskillit.config import AutomationConfig
-    from autoskillit.pipeline.context import ToolContext
 
 logger = get_logger(__name__)
 
@@ -35,13 +34,11 @@ def _session_log_dir(cwd: str) -> Path:
     return log_dir
 
 
-def _resolve_pty_mode(ctx: ToolContext) -> bool:
-    backend = cast(CodingAgentBackend, ctx.backend)
+def _resolve_pty_mode(backend: CodingAgentBackend) -> bool:
     return backend.capabilities.pty_required
 
 
-def _resolve_session_log_dir(cwd: str, ctx: ToolContext) -> Path | None:
-    backend = cast(CodingAgentBackend, ctx.backend)
+def _resolve_session_log_dir(cwd: str, backend: CodingAgentBackend) -> Path | None:
     if not backend.capabilities.channel_b_capable:
         return None
     return _session_log_dir(cwd)

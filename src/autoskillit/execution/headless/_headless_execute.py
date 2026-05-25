@@ -95,6 +95,7 @@ async def _execute_claude_headless(
     max_extension_seconds: float = 7200,
     marker_dir: Path | None = None,
     session_id: str | None = None,
+    step_backend: CodingAgentBackend | None = None,
 ) -> SkillResult:
     """Shared subprocess execution for headless Claude sessions.
 
@@ -133,13 +134,17 @@ async def _execute_claude_headless(
     if runner is None:
         raise RuntimeError("No subprocess runner configured")
 
-    if ctx.backend is not None and spec.cmd:
+    _step_backend: CodingAgentBackend = (
+        step_backend if step_backend is not None else cast(CodingAgentBackend, ctx.backend)
+    )
+
+    if spec.cmd:
         _binary = Path(spec.cmd[0]).stem
         if _binary in {"claude", "codex"}:
-            _expected = "claude" if ctx.backend.name == "claude-code" else "codex"
+            _expected = "claude" if _step_backend.name == "claude-code" else "codex"
             if _binary != _expected:
                 raise RuntimeError(
-                    f"Backend coherence violation: ctx.backend.name={ctx.backend.name!r} "
+                    f"Backend coherence violation: backend.name={_step_backend.name!r} "
                     f"but subprocess binary is {_binary!r}"
                 )
 
@@ -177,9 +182,7 @@ async def _execute_claude_headless(
     _result: SubprocessResult | None = None
     result: SubprocessResult
     skill_result: SkillResult
-    _stream_parser = cast(CodingAgentBackend, ctx.backend).stream_parser(
-        completion_marker=completion_marker
-    )
+    _stream_parser = _step_backend.stream_parser(completion_marker=completion_marker)
     while True:
         try:
             _result = await runner(
@@ -187,8 +190,10 @@ async def _execute_claude_headless(
                 cwd=Path(cwd),
                 timeout=timeout,
                 env=spec.env,
-                pty_mode=_resolve_pty_mode(ctx),
-                session_log_dir=_resolve_session_log_dir(cwd, ctx),
+                pty_mode=_resolve_pty_mode(cast(CodingAgentBackend, ctx.backend)),
+                session_log_dir=_resolve_session_log_dir(
+                    cwd, cast(CodingAgentBackend, ctx.backend)
+                ),
                 completion_marker=completion_marker,
                 stale_threshold=stale_threshold,
                 completion_drain_timeout=cfg.completion_drain_timeout,
@@ -325,10 +330,7 @@ async def _execute_claude_headless(
             _git_writes_detected = _detect_branch_divergence(cwd)
 
         audit_count_before = len(ctx.audit.get_report())
-        _supports_fmt = cast(
-            "CodingAgentBackend", ctx.backend
-        ).capabilities.supports_claude_format_stdout
-        _backend = cast(CodingAgentBackend, ctx.backend)
+        _supports_fmt = _step_backend.capabilities.supports_claude_format_stdout
         skill_result = _build_skill_result(
             result,
             completion_marker=completion_marker,
@@ -342,7 +344,7 @@ async def _execute_claude_headless(
             prior_completion_markers=prior_completion_markers,
             provider_used=current_provider_name,
             supports_claude_format_stdout=_supports_fmt,
-            backend=_backend,
+            backend=_step_backend,
         )
 
         if (
@@ -358,8 +360,8 @@ async def _execute_claude_headless(
                 completion_marker,
                 cwd,
                 runner,
-                backend=ctx.backend,
-                result_parser=ctx.backend.result_parser() if ctx.backend else None,
+                backend=_step_backend,
+                result_parser=_step_backend.result_parser(),
                 provider_extras=provider_extras,
                 retry_reason=skill_result.retry_reason,
             )

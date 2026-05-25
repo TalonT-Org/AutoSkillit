@@ -232,13 +232,16 @@ async def _watch_child_activity(
     max_extension_seconds: float,
     trigger: anyio.Event,
     _poll_interval: float = 30.0,
+    *,
+    marker_dir: Path | None = None,
+    session_id: str | None = None,
 ) -> None:
     """Extend the wall-clock CancelScope.deadline when child processes are active.
 
-    Polls _has_active_child_processes and _has_active_api_connection every
-    _poll_interval seconds. When either returns True, pushes
-    timeout_scope.deadline forward (up to max_extension_seconds beyond the
-    original deadline).
+    Polls _has_active_child_processes, _has_active_api_connection, and
+    _has_active_dispatch_marker every _poll_interval seconds. When any
+    returns True, pushes timeout_scope.deadline forward (up to
+    max_extension_seconds beyond the original deadline).
 
     Terminates when trigger fires (session completed normally). Crash is
     fail-closed — anyio propagates exceptions in the task group, cancelling
@@ -258,7 +261,14 @@ async def _watch_child_activity(
         if _first_observed_deadline is None:
             _first_observed_deadline = scope.deadline
 
-        active = _has_active_child_processes(pid) or _has_active_api_connection(pid)
+        active = (
+            _has_active_child_processes(pid)
+            or _has_active_api_connection(pid)
+            or (
+                marker_dir is not None
+                and _has_active_dispatch_marker(marker_dir, session_id=session_id)
+            )
+        )
         if not active:
             continue
 

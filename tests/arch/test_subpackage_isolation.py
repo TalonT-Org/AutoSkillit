@@ -1361,6 +1361,10 @@ class TestGroupCMigration:
         source = Path("src/autoskillit/execution/process/_process_race.py").read_text()
         assert "async def _watch_session_log(" in source  # REQ-SIG-007
 
+    def test_watch_child_activity_present(self):
+        source = Path("src/autoskillit/execution/process/_process_race.py").read_text()
+        assert "async def _watch_child_activity(" in source  # REQ-SIG-007
+
     def test_race_signals_fields_unchanged(self):
         import dataclasses
 

@@ -113,3 +113,8 @@ generic_automation_mcp/
 ## **6. Session Diagnostics**
 
 **Path components use hyphens, not underscores.** Log directory names and session folder names are hyphen-separated. Never assume underscores when constructing or searching for log paths — hyphen mismatch causes ENOENT (session f9170655 pattern).
+
+**Per-backend session identification:**
+
+- **Claude Code**: Session directories are named by the agent session ID (resolved from stdout or from the session JSONL filename via Channel B). Fallback: `no_session_{timestamp}`.
+- **Codex**: The canonical session identifier is the `thread_id` from the `thread.started` NDJSON event. `CodexSessionLocator` returns `None`; `session_record_types` is empty (log discovery not yet wired).

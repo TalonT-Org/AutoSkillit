@@ -2,7 +2,7 @@
 
 import asyncio
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -204,3 +204,49 @@ def test_lifespan_boot_registry_covers_all_session_types() -> None:
         f"SessionType values not in _LIFESPAN_BOOT_REGISTRY: {missing}. "
         "Every SessionType must declare a boot function or None."
     )
+
+
+@pytest.mark.asyncio
+async def test_lifespan_launches_codex_registration_for_codex_backend():
+    from autoskillit.server import _autoskillit_lifespan
+
+    mock_ctx = MagicMock()
+    mock_ctx.backend.name = "codex"
+    mock_ctx.runner = MagicMock()
+
+    reg_mock = AsyncMock()
+
+    with (
+        patch("autoskillit.server._lifespan._get_ctx_or_none", return_value=mock_ctx),
+        patch(
+            "autoskillit.server._lifespan._run_codex_mcp_registration_async",
+            reg_mock,
+        ),
+    ):
+        async with _autoskillit_lifespan(MagicMock()):
+            pass
+
+    reg_mock.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_lifespan_skips_codex_registration_for_non_codex_backend():
+    from autoskillit.server import _autoskillit_lifespan
+
+    mock_ctx = MagicMock()
+    mock_ctx.backend.name = "claude-code"
+    mock_ctx.runner = MagicMock()
+
+    reg_mock = AsyncMock()
+
+    with (
+        patch("autoskillit.server._lifespan._get_ctx_or_none", return_value=mock_ctx),
+        patch(
+            "autoskillit.server._lifespan._run_codex_mcp_registration_async",
+            reg_mock,
+        ),
+    ):
+        async with _autoskillit_lifespan(MagicMock()):
+            pass
+
+    reg_mock.assert_not_called()

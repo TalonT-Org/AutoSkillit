@@ -9,7 +9,14 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from autoskillit.core.types import DirectInstall, OutputFormat, SubprocessRunner, TerminationReason
+from autoskillit.core import AGENT_BACKEND_ENV_VAR
+from autoskillit.core.types import (
+    DirectInstall,
+    OutputFormat,
+    SubprocessResult,
+    SubprocessRunner,
+    TerminationReason,
+)
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.recording import (
     RecordingSubprocessRunner,
@@ -732,3 +739,173 @@ def test_build_replay_runner_detects_claude_format(tmp_path, monkeypatch):
 
     result = build_replay_runner(str(replay_dir))
     assert result.player is mock_player
+
+
+# --- T-NONPTY-DISPATCH: Non-PTY Codex step routes to _record_non_pty_session ---
+
+
+@pytest.mark.anyio
+async def test_nonpty_dispatch_routes_to_record_non_pty_session(tmp_path):
+    """pty_mode=False + step_name + AGENT_BACKEND=codex → _record_non_pty_session path."""
+    mock_recorder = Mock()
+    inner = MockSubprocessRunner()
+    inner.set_default(_make_result(returncode=0, stdout="codex output"))
+    runner = RecordingSubprocessRunner(recorder=mock_recorder, inner=inner, scenario_dir=tmp_path)
+
+    cmd = ["codex", "exec", "--model", "o3", "implement the thing"]
+    env = {
+        "SCENARIO_STEP_NAME": "codex-step",
+        AGENT_BACKEND_ENV_VAR: "codex",
+    }
+
+    result = await runner(cmd, cwd=Path("/tmp"), timeout=300, env=env, pty_mode=False)
+
+    assert len(inner.call_args_list) == 1
+    mock_recorder.record_step.assert_not_called()
+    mock_recorder.record_non_session_step.assert_called_once_with(
+        step_name="codex-step",
+        tool="run_skill",
+        result_summary={"exit_code": 0, "stdout_head": "codex output"[:500]},
+    )
+    assert result.returncode == 0
+
+
+# --- T-NONPTY-CASSETTES: Cassette files written under scenario_dir/step_name ---
+
+
+@pytest.mark.anyio
+async def test_nonpty_cassettes_written(tmp_path):
+    """_record_non_pty_session writes codex_stdout.ndjson and step_meta.json."""
+    import json
+
+    scenario_dir = tmp_path / "scenario"
+    mock_recorder = Mock()
+    expected = SubprocessResult(
+        returncode=0,
+        stdout="line1\nline2\n",
+        stderr="",
+        termination=TerminationReason.NATURAL_EXIT,
+        pid=12345,
+        elapsed_seconds=2.5,
+    )
+    inner = MockSubprocessRunner()
+    inner.set_default(expected)
+    runner = RecordingSubprocessRunner(
+        recorder=mock_recorder, inner=inner, scenario_dir=scenario_dir
+    )
+
+    cmd = ["codex", "exec", "--model", "o3", "go"]
+    env = {"SCENARIO_STEP_NAME": "codex-step", AGENT_BACKEND_ENV_VAR: "codex"}
+
+    await runner(cmd, cwd=Path("/tmp"), timeout=300, env=env, pty_mode=False)
+
+    cassette_dir = scenario_dir / "codex-step"
+    assert (cassette_dir / "codex_stdout.ndjson").exists()
+    assert (cassette_dir / "step_meta.json").exists()
+
+    ndjson_text = (cassette_dir / "codex_stdout.ndjson").read_text().strip()
+    ndjson_lines = ndjson_text.split("\n")
+    assert len(ndjson_lines) == 2
+    assert json.loads(ndjson_lines[0]) == "line1"
+    assert json.loads(ndjson_lines[1]) == "line2"
+
+    meta = json.loads((cassette_dir / "step_meta.json").read_text())
+    assert meta == {
+        "backend": "codex",
+        "model": "o3",
+        "exit_code": 0,
+        "duration_ms": 2500,
+    }
+
+
+# --- T-NONPTY-RESULT-PASSTHROUGH: Result identity preserved ---
+
+
+@pytest.mark.anyio
+async def test_nonpty_result_passthrough(tmp_path):
+    """SubprocessResult from runner is the exact same object from inner."""
+    mock_recorder = Mock()
+    expected = _make_result(returncode=42, stdout="raw codex out")
+    inner = MockSubprocessRunner()
+    inner.set_default(expected)
+    runner = RecordingSubprocessRunner(recorder=mock_recorder, inner=inner, scenario_dir=tmp_path)
+
+    cmd = ["codex", "exec", "--model", "o3", "go"]
+    env = {"SCENARIO_STEP_NAME": "step", AGENT_BACKEND_ENV_VAR: "codex"}
+
+    result = await runner(cmd, cwd=Path("/tmp"), timeout=300, env=env, pty_mode=False)
+
+    assert result is expected
+    assert result.returncode == 42
+    assert result.stdout == "raw codex out"
+
+
+# --- T-PTY-UNAFFECTED: PTY path unchanged by new non-PTY branch ---
+
+
+@pytest.mark.anyio
+async def test_pty_unaffected_by_nonpty_branch(tmp_path):
+    """pty_mode=True + step_name → _record_session, not _record_non_pty_session."""
+    mock_recorder = Mock()
+    mock_recorder.record_step.return_value = FakeStepResult(
+        cassette_exit_code=0,
+        cassette_path=str(tmp_path / "cassette"),
+        cassette_duration_ms=5000,
+    )
+    inner = MockSubprocessRunner()
+    runner = RecordingSubprocessRunner(recorder=mock_recorder, inner=inner)
+
+    cmd = ["claude", "--model", "sonnet", "--print", "do stuff"]
+    env = {"SCENARIO_STEP_NAME": "investigate", "AUTOSKILLIT_HEADLESS": "1"}
+
+    result = await runner(cmd, cwd=Path("/tmp"), timeout=300, env=env, pty_mode=True)
+
+    mock_recorder.record_step.assert_called_once()
+    assert inner.call_args_list == []
+    mock_recorder.record_non_session_step.assert_not_called()
+    assert result.returncode == 0
+
+
+# --- T-NONPTY-NO-STEP-NAME: No step_name → pass-through, no recording ---
+
+
+@pytest.mark.anyio
+async def test_nonpty_no_step_name_skips_recording():
+    """pty_mode=False + no SCENARIO_STEP_NAME → inner runner, no recording."""
+    mock_recorder = Mock()
+    inner = MockSubprocessRunner()
+    inner.set_default(_make_result(returncode=0))
+    runner = RecordingSubprocessRunner(recorder=mock_recorder, inner=inner)
+
+    cmd = ["codex", "exec", "do something"]
+    env = {AGENT_BACKEND_ENV_VAR: "codex"}
+
+    await runner(cmd, cwd=Path("/tmp"), timeout=60, env=env, pty_mode=False)
+
+    assert len(inner.call_args_list) == 1
+    mock_recorder.record_step.assert_not_called()
+    mock_recorder.record_non_session_step.assert_not_called()
+
+
+# --- T-NONPTY-T3-BOUNDARY: Non-Codex non-PTY with step_name → run_cmd ---
+
+
+@pytest.mark.anyio
+async def test_nonpty_t3_boundary_non_codex_routes_to_run_cmd():
+    """pty_mode=False + step_name + no AGENT_BACKEND → record_non_session_step(run_cmd)."""
+    mock_recorder = Mock()
+    inner = MockSubprocessRunner()
+    inner.set_default(_make_result(returncode=0))
+    runner = RecordingSubprocessRunner(recorder=mock_recorder, inner=inner)
+
+    cmd = ["task", "test-check"]
+    env = {"SCENARIO_STEP_NAME": "test-check"}
+
+    await runner(cmd, cwd=Path("/tmp"), timeout=60, env=env, pty_mode=False)
+
+    assert len(inner.call_args_list) == 1
+    mock_recorder.record_non_session_step.assert_called_once_with(
+        step_name="test-check",
+        tool="run_cmd",
+        result_summary={"exit_code": 0, "stdout_head": ""},
+    )

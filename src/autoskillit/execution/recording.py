@@ -10,10 +10,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
+    AGENT_BACKEND_ENV_VAR,
     SubprocessResult,
     SubprocessRunner,
     TerminationReason,
     ValidatedAddDir,
+    atomic_write,
+    fast_dumps,
     get_logger,
 )
 from autoskillit.execution._recording_skills import (
@@ -65,12 +68,19 @@ def _extract_model(args: list[str]) -> str:
 class RecordingSubprocessRunner(SubprocessRunner):
     """Wraps a SubprocessRunner, records each session via ScenarioRecorder.
 
-    - **Session calls** (``pty_mode=True`` + ``SCENARIO_STEP_NAME`` in cmd env prefix):
-      delegates to ``ScenarioRecorder.record_step()`` which spawns the real subprocess
-      under PTY capture, then constructs a ``SubprocessResult`` from the cassette.
-    - **Non-session calls**: delegates to the inner runner, then records a summary via
-      ``recorder.record_non_session_step()`` if ``SCENARIO_STEP_NAME`` is present.
-    - **Calls without SCENARIO_STEP_NAME**: passes through to inner runner unrecorded.
+    Dispatch paths (checked in order):
+
+    1. **PTY session** (``step_name`` + ``pty_mode=True``):
+       delegates to ``ScenarioRecorder.record_step()`` which spawns the real subprocess
+       under PTY capture, then constructs a ``SubprocessResult`` from the cassette.
+    2. **Non-PTY Codex session** (``step_name`` + ``pty_mode=False`` +
+       ``AUTOSKILLIT_AGENT_BACKEND=codex``): delegates to the inner runner, writes
+       ``codex_stdout.ndjson`` and ``step_meta.json`` cassette files, then records via
+       ``recorder.record_non_session_step(tool='run_skill')``.
+    3. **Non-session command** (``step_name`` + ``pty_mode=False`` + non-Codex backend):
+       delegates to the inner runner, then records a summary via
+       ``recorder.record_non_session_step(tool='run_cmd')``.
+    4. **Untracked** (no ``step_name``): passes through to inner runner unrecorded.
 
     Public attribute ``recorder`` holds the :class:`ScenarioRecorder` instance.
     The symmetric counterpart :class:`ReplayingSubprocessRunner` exposes ``player``
@@ -118,15 +128,78 @@ class RecordingSubprocessRunner(SubprocessRunner):
     ) -> SubprocessResult:
         step_name = (env or {}).get(SCENARIO_STEP_NAME_ENV, "")
 
-        if pty_mode and step_name:
-            return await self._record_session(
-                cmd=cmd,
-                step_name=step_name,
-                model=_extract_model(cmd),
-                session_log_dir=session_log_dir,
-            )
+        if step_name:
+            if pty_mode:
+                return await self._record_session(
+                    cmd=cmd,
+                    step_name=step_name,
+                    model=_extract_model(cmd),
+                    session_log_dir=session_log_dir,
+                )
 
-        result = await self._inner(
+            # Non-PTY session step — use AUTOSKILLIT_AGENT_BACKEND as the
+            # discriminator; it is the most explicit signal and avoids cmd[0]
+            # fragility.  Codex backends are definitionally non-PTY
+            # (CodexBackend.capabilities.pty_required=False), so this branch
+            # is only reachable when pty_mode=False.
+            if (env or {}).get(AGENT_BACKEND_ENV_VAR, "") == "codex":
+                return await self._record_non_pty_session(
+                    cmd=cmd,
+                    cwd=cwd,
+                    timeout=timeout,
+                    env=env,
+                    stale_threshold=stale_threshold,
+                    completion_marker=completion_marker,
+                    session_log_dir=session_log_dir,
+                    pty_mode=pty_mode,
+                    input_data=input_data,
+                    completion_drain_timeout=completion_drain_timeout,
+                    linux_tracing_config=linux_tracing_config,
+                    idle_output_timeout=idle_output_timeout,
+                    max_suppression_seconds=max_suppression_seconds,
+                    on_pid_resolved=on_pid_resolved,
+                    enable_deadline_extension=enable_deadline_extension,
+                    max_extension_seconds=max_extension_seconds,
+                    marker_dir=marker_dir,
+                    session_id=session_id,
+                    stream_parser=stream_parser,
+                    step_name=step_name,
+                )
+
+            # Non-Codex, non-PTY with step_name: run inner + record summary.
+            result = await self._inner(
+                cmd,
+                cwd=cwd,
+                timeout=timeout,
+                env=env,
+                stale_threshold=stale_threshold,
+                completion_marker=completion_marker,
+                session_log_dir=session_log_dir,
+                pty_mode=pty_mode,
+                input_data=input_data,
+                completion_drain_timeout=completion_drain_timeout,
+                linux_tracing_config=linux_tracing_config,
+                idle_output_timeout=idle_output_timeout,
+                max_suppression_seconds=max_suppression_seconds,
+                on_pid_resolved=on_pid_resolved,
+                enable_deadline_extension=enable_deadline_extension,
+                max_extension_seconds=max_extension_seconds,
+                marker_dir=marker_dir,
+                session_id=session_id,
+                stream_parser=stream_parser,
+            )
+            self.recorder.record_non_session_step(
+                step_name=step_name,
+                tool="run_cmd",
+                result_summary={
+                    "exit_code": result.returncode,
+                    "stdout_head": (result.stdout or "")[:500],
+                },
+            )
+            return result
+
+        # No step_name: T3 boundary — pass through to inner runner unrecorded.
+        return await self._inner(
             cmd,
             cwd=cwd,
             timeout=timeout,
@@ -147,18 +220,6 @@ class RecordingSubprocessRunner(SubprocessRunner):
             session_id=session_id,
             stream_parser=stream_parser,
         )
-
-        if step_name:
-            self.recorder.record_non_session_step(
-                step_name=step_name,
-                tool="run_cmd",
-                result_summary={
-                    "exit_code": result.returncode,
-                    "stdout_head": (result.stdout or "")[:500],
-                },
-            )
-
-        return result
 
     async def _record_session(
         self,
@@ -207,6 +268,85 @@ class RecordingSubprocessRunner(SubprocessRunner):
             pid=0,
             elapsed_seconds=(step_result.cassette_duration_ms or 0) / 1000.0,
         )
+
+    async def _record_non_pty_session(
+        self,
+        *,
+        cmd: list[str],
+        cwd: Path,
+        timeout: float,
+        env: Mapping[str, str] | None,
+        stale_threshold: float,
+        completion_marker: str,
+        session_log_dir: Path | None,
+        pty_mode: bool,
+        input_data: str | None,
+        completion_drain_timeout: float,
+        linux_tracing_config: Any | None,
+        idle_output_timeout: float | None,
+        max_suppression_seconds: float | None,
+        on_pid_resolved: Callable[[int, int], None] | None,
+        enable_deadline_extension: bool,
+        max_extension_seconds: float,
+        marker_dir: Path | None,
+        session_id: str | None,
+        stream_parser: StreamParser | None,
+        step_name: str,
+    ) -> SubprocessResult:
+        """Record a non-PTY (Codex) session step via cassette files."""
+        result = await self._inner(
+            cmd,
+            cwd=cwd,
+            timeout=timeout,
+            env=env,
+            stale_threshold=stale_threshold,
+            completion_marker=completion_marker,
+            session_log_dir=session_log_dir,
+            pty_mode=pty_mode,
+            input_data=input_data,
+            completion_drain_timeout=completion_drain_timeout,
+            linux_tracing_config=linux_tracing_config,
+            idle_output_timeout=idle_output_timeout,
+            max_suppression_seconds=max_suppression_seconds,
+            on_pid_resolved=on_pid_resolved,
+            enable_deadline_extension=enable_deadline_extension,
+            max_extension_seconds=max_extension_seconds,
+            marker_dir=marker_dir,
+            session_id=session_id,
+            stream_parser=stream_parser,
+        )
+
+        if self._scenario_dir is None:
+            logger.warning(
+                "no scenario_dir set; skipping cassette write for step=%r",
+                step_name,
+            )
+        else:
+            cassette_dir = self._scenario_dir / step_name
+            cassette_dir.mkdir(parents=True, exist_ok=True)
+
+            lines = (result.stdout or "").splitlines()
+            ndjson_content = "".join(fast_dumps(line) + "\n" for line in lines)
+            (cassette_dir / "codex_stdout.ndjson").write_text(ndjson_content, encoding="utf-8")
+
+            meta = {
+                "backend": "codex",
+                "model": _extract_model(cmd),
+                "exit_code": result.returncode,
+                "duration_ms": int(result.elapsed_seconds * 1000),
+            }
+            atomic_write(cassette_dir / "step_meta.json", fast_dumps(meta, indent=True))
+
+        self.recorder.record_non_session_step(
+            step_name=step_name,
+            tool="run_skill",
+            result_summary={
+                "exit_code": result.returncode,
+                "stdout_head": (result.stdout or "")[:500],
+            },
+        )
+
+        return result
 
 
 class ReplayingSubprocessRunner(SubprocessRunner):

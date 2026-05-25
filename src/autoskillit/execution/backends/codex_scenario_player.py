@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core.io import atomic_write
+from autoskillit.core import atomic_write
 
 __all__ = ["CodexScenarioPlayer", "make_codex_scenario_player"]
 

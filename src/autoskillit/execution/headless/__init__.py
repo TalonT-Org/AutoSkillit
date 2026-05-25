@@ -17,7 +17,6 @@ from typing import TYPE_CHECKING
 import structlog
 
 from autoskillit.core import (
-    AGENT_BACKEND_CLAUDE_CODE,
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
     SessionCheckpoint,  # noqa: F401, TC001
     SkillResult,
@@ -321,10 +320,10 @@ class DefaultHeadlessExecutor:
         session_id: str | None = None,
         resume_message: str | None = None,
     ) -> SkillResult:
-        if self._ctx.backend is not None and self._ctx.backend.name != AGENT_BACKEND_CLAUDE_CODE:
+        if self._ctx.backend is not None and not self._ctx.backend.capabilities.food_truck_capable:
             raise RuntimeError(
-                f"dispatch_food_truck requires the claude-code backend; "
-                f"got {self._ctx.backend.name!r}"
+                f"backend does not support food truck dispatch "
+                f"(food_truck_capable=False); got {self._ctx.backend.name!r}"
             )
         cfg = self._ctx.config
         resolved_model = _resolve_model(model, cfg, step_name=step_name)

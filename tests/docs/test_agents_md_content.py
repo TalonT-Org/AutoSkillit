@@ -80,6 +80,7 @@ FORBIDDEN_TERMS: list[tuple[str, str]] = [
     ("grep_pattern_lint_guard", "Grep tool ERE syntax rule"),
     ("CLAUDE_CODE_EXIT_AFTER_STOP_DELAY", "Claude Code env var"),
     ("autoskillit init", "Worktree init prohibition"),
+    ("Claude Code session UUID", "Section 5 session diagnostics sentence"),
 ]
 
 
@@ -115,3 +116,9 @@ class TestAgentsMdContentQuality:
 
     def test_agents_md_testing_mentions_parallel_safety(self, agents_md: str) -> None:
         assert "parallel" in agents_md.lower()
+
+    def test_agents_md_diagnostics_mentions_codex(self, agents_md: str) -> None:
+        parts = agents_md.split("## **6. Session Diagnostics**")
+        assert len(parts) > 1, "Session Diagnostics section not found"
+        section = parts[1].split("## ", 1)[0]
+        assert "Codex" in section

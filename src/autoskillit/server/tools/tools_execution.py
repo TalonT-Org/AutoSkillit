@@ -384,6 +384,41 @@ async def run_skill(
                 skill_command, tool_ctx.skill_resolver
             )
 
+        # Server-side recipe step parameter resolution.
+        # When a step_name is provided and the recipe's step definition is cached,
+        # auto-fill parameters the LLM may have omitted.
+        if step_name and tool_ctx.active_recipe_steps is not None:
+            _recipe_step = tool_ctx.active_recipe_steps.get(step_name)
+            if _recipe_step is not None:
+                if not output_dir and "output_dir" in _recipe_step.with_args:
+                    _recipe_output_dir = _recipe_step.with_args["output_dir"]
+                    # Skip values containing unresolved template references —
+                    # load() returns raw YAML without ingredient resolution,
+                    # so ${{ context.* }} placeholders may survive.
+                    if "${{" not in _recipe_output_dir:
+                        output_dir = _recipe_output_dir
+                        logger.warning(
+                            "output_dir_resolved_from_recipe",
+                            step=step_name,
+                            output_dir=output_dir,
+                        )
+
+                if stale_threshold is None and _recipe_step.stale_threshold is not None:
+                    stale_threshold = _recipe_step.stale_threshold
+                    logger.warning(
+                        "stale_threshold_resolved_from_recipe",
+                        step=step_name,
+                        value=stale_threshold,
+                    )
+
+                if idle_output_timeout is None and _recipe_step.idle_output_timeout is not None:
+                    idle_output_timeout = _recipe_step.idle_output_timeout
+                    logger.warning(
+                        "idle_output_timeout_resolved_from_recipe",
+                        step=step_name,
+                        value=idle_output_timeout,
+                    )
+
         write_watch_dirs: list[Path] = []
         if output_dir:
             resolved_dir = Path(output_dir)

@@ -152,6 +152,7 @@ async def _open_kitchen_handler() -> str | None:
     ctx.kitchen_id = resolve_kitchen_id()
     ctx.active_recipe_packs = frozenset()
     ctx.active_recipe_features = frozenset()
+    ctx.active_recipe_steps = {}
     logger.info("open_kitchen", gate_state="open", kitchen_id=ctx.kitchen_id)
 
     try:
@@ -241,6 +242,7 @@ def _close_kitchen_handler() -> None:
         logger.warning("close_kitchen_registry_failed", exc_info=True)
     ctx.active_recipe_packs = None
     ctx.active_recipe_features = None
+    ctx.active_recipe_steps = None
     ctx.recipe_name = ""
     ctx.recipe_content_hash = ""
     ctx.recipe_composite_hash = ""
@@ -450,6 +452,16 @@ async def open_kitchen(
             except Exception as exc:
                 logger.warning("open_kitchen_failure", stage="recipe_find", exc_info=True)
                 return _kitchen_failure_envelope(exc, stage="recipe_find")
+
+            if recipe_info is not None:
+                try:
+                    recipe_obj = tool_ctx.recipes.load(recipe_info.path)
+                    tool_ctx.active_recipe_steps = dict(recipe_obj.steps)
+                except Exception:
+                    logger.warning("open_kitchen_recipe_steps_cache_failed", exc_info=True)
+                    tool_ctx.active_recipe_steps = None
+            else:
+                tool_ctx.active_recipe_steps = None
 
             try:
                 result = await _apply_triage_gate(result, name, recipe_info=recipe_info)

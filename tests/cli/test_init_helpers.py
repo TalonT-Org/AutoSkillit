@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -199,7 +200,7 @@ class TestRegisterAllBackendDispatch:
         codex_calls, mcp_calls = self._setup_register_all(monkeypatch, tmp_path, "claude-code")
         _register_all("user", tmp_path)
         assert mcp_calls, "_register_mcp_server must be called for claude-code backend"
-        assert not codex_calls, "ensure_codex_mcp_registered must NOT be called for claude-code"
+        assert codex_calls, "ensure_codex_mcp_registered must be called unconditionally"
 
     def test_codex_backend_does_not_write_claude_json(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -459,4 +460,74 @@ class TestRegisterAllBackendBranching:
         ):
             _register_all("user", tmp_path)
             mock_sync.assert_called()
-            mock_codex.assert_not_called()
+            mock_codex.assert_called_once()
+
+
+class TestRegisterAllCodexMcpRegistration:
+    """Unconditional ensure_codex_mcp_registered() call in _register_all()."""
+
+    def _setup(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, backend_name: str
+    ) -> MagicMock:
+        """Stub collaborators; return mock for ensure_codex_mcp_registered."""
+        import autoskillit.cli._hooks as _hooks_mod
+        import autoskillit.core.paths as _core_paths
+
+        monkeypatch.setattr(_hooks_mod, "sweep_all_scopes_for_orphans", lambda p: None)
+        monkeypatch.setattr(_hooks_mod, "sync_hooks_to_settings", lambda p: None)
+        monkeypatch.setattr(_hooks_mod, "_evict_stale_autoskillit_hooks", lambda p: None)
+        monkeypatch.setattr(
+            _hooks_mod, "_claude_settings_path", lambda s: tmp_path / "settings.json"
+        )
+        monkeypatch.setattr(_core_paths, "pkg_root", lambda: tmp_path / "pkg")
+        monkeypatch.setattr("autoskillit.cli._init_helpers._register_mcp_server", lambda p: None)
+        monkeypatch.setattr(
+            "autoskillit.cli._init_helpers._user_claude_json_path",
+            lambda: tmp_path / ".claude.json",
+        )
+        monkeypatch.setattr(
+            "autoskillit.cli._init_helpers._create_secrets_template", lambda p: None
+        )
+        monkeypatch.setattr("autoskillit.cli._init_helpers._prompt_github_repo", lambda: None)
+        monkeypatch.setattr(
+            "autoskillit.cli._init_helpers.evict_direct_mcp_entry", lambda p: False
+        )
+        monkeypatch.setattr("sys.stdin", MagicMock(isatty=lambda: False))
+        monkeypatch.setattr("autoskillit.core.ensure_project_temp", lambda p: tmp_path / "temp")
+        monkeypatch.setattr(
+            "autoskillit.cli._init_helpers._is_plugin_installed", lambda **kwargs: False
+        )
+
+        mock_config = MagicMock()
+        mock_config.agent_backend.backend = backend_name
+        monkeypatch.setattr("autoskillit.config.load_config", lambda p=None: mock_config)
+
+        if backend_name == "codex":
+            monkeypatch.setattr(
+                "autoskillit.cli._hooks_codex.sync_hooks_to_codex_config",
+                lambda **kwargs: True,
+            )
+
+        codex_mock = MagicMock(return_value=True)
+        monkeypatch.setattr("autoskillit.execution.ensure_codex_mcp_registered", codex_mock)
+
+        (tmp_path / "pkg").mkdir(exist_ok=True)
+        return codex_mock
+
+    def test_codex_backend_calls_ensure_codex_mcp_registered(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from autoskillit.cli._init_helpers import _register_all
+
+        codex_mock = self._setup(monkeypatch, tmp_path, "codex")
+        _register_all("user", tmp_path)
+        codex_mock.assert_called_once()
+
+    def test_non_codex_backend_calls_ensure_codex_mcp_registered(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from autoskillit.cli._init_helpers import _register_all
+
+        codex_mock = self._setup(monkeypatch, tmp_path, "claude-code")
+        _register_all("user", tmp_path)
+        codex_mock.assert_called_once()

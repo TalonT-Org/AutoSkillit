@@ -397,6 +397,17 @@ _LIFESPAN_BOOT_REGISTRY: dict[SessionType, Callable[[Any], Awaitable[None]] | No
 }
 
 
+async def _run_codex_mcp_registration_async() -> None:
+    """Offload ensure_codex_mcp_registered() to a thread executor — fail-open."""
+    try:
+        from autoskillit.execution import ensure_codex_mcp_registered  # noqa: PLC0415
+
+        loop = _asyncio.get_running_loop()
+        await loop.run_in_executor(None, ensure_codex_mcp_registered)
+    except Exception:
+        logger.warning("codex_mcp_registration_failed", exc_info=True)
+
+
 @asynccontextmanager
 async def _autoskillit_lifespan(server: Any) -> Any:
     """Server lifecycle: write readiness sentinel, yield, then finalize recording.
@@ -433,13 +444,24 @@ async def _autoskillit_lifespan(server: Any) -> Any:
             create_background_task(_run_hook_health_check_async(), label="hook_health")
         )
         bg_tasks.append(create_background_task(_run_deferred_init(event), label="deferred_init"))
+        _boot_ctx = _get_ctx_or_none()
+
+        if _boot_ctx is not None:
+            from autoskillit.core import AGENT_BACKEND_CODEX  # noqa: PLC0415
+
+            if getattr(_boot_ctx.backend, "name", None) == AGENT_BACKEND_CODEX:
+                bg_tasks.append(
+                    create_background_task(
+                        _run_codex_mcp_registration_async(),
+                        label="codex_mcp_registration",
+                    )
+                )
+
         from autoskillit.core import session_type as _resolve_session_type
 
         _boot_fn = _LIFESPAN_BOOT_REGISTRY.get(_resolve_session_type())
-        if _boot_fn is not None:
-            _boot_ctx = _get_ctx_or_none()
-            if _boot_ctx is not None:
-                await _boot_fn(_boot_ctx)
+        if _boot_fn is not None and _boot_ctx is not None:
+            await _boot_fn(_boot_ctx)
         yield
     finally:
         for task in bg_tasks:

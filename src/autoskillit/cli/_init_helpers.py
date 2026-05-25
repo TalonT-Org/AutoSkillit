@@ -473,10 +473,6 @@ def _register_all(
         _backend_name = "claude-code"
 
     if _backend_name == AGENT_BACKEND_CODEX:
-        from autoskillit.execution import ensure_codex_mcp_registered
-
-        ensure_codex_mcp_registered()
-
         from autoskillit.cli._hooks_codex import sync_hooks_to_codex_config
 
         sync_hooks_to_codex_config()
@@ -491,6 +487,10 @@ def _register_all(
             _register_mcp_server(_user_claude_json_path())
         else:
             evict_direct_mcp_entry(_user_claude_json_path())
+
+    from autoskillit.execution import ensure_codex_mcp_registered  # noqa: PLC0415
+
+    codex_registered = ensure_codex_mcp_registered()
 
     # Prompt for github.default_repo if running interactively
     github_repo = None
@@ -531,7 +531,6 @@ def _register_all(
     else:
         print(f"  {_Y}{'gh auth':>12}{_R}  {_D}not found — run{_R} {_G}gh auth login{_R}")
     if _backend_name == AGENT_BACKEND_CODEX:
-        print(f"  {_Y}{'mcp':>12}{_R}  {_G}~/.codex/config.toml{_R}")
         print(f"  {_Y}{'hooks':>12}{_R}  {_G}synced{_R} {_D}(codex){_R}")
     else:
         if plugin_ok:
@@ -539,6 +538,9 @@ def _register_all(
         else:
             print(f"  {_Y}{'plugin':>12}{_R}  {_G}registered via ~/.claude.json{_R}")
         print(f"  {_Y}{'hooks':>12}{_R}  {_G}synced{_R} {_D}({scope} scope){_R}")
+
+    _codex_tag = "registered" if codex_registered else "ok"
+    print(f"  {_Y}{'codex mcp':>12}{_R}  {_G}{_codex_tag}{_R}")
 
     print()
     _print_next_steps(context="init")

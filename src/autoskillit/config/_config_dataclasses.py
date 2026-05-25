@@ -514,6 +514,25 @@ class ProvidersConfig:
                         f"model_overrides[{recipe!r}][{step!r}] must be a string, "
                         f"got {type(model_val).__name__!r}"
                     )
+        known = set(self.profiles.keys()) | {"anthropic"}
+        for step, profile_name in self.step_overrides.items():
+            if profile_name not in known:
+                logger.warning(
+                    "step_override_references_unknown_profile",
+                    step=step,
+                    profile=profile_name,
+                    known_profiles=sorted(known),
+                )
+        for recipe, step_map in self.recipe_overrides.items():
+            for step, profile_name in step_map.items():
+                if profile_name not in known:
+                    logger.warning(
+                        "recipe_override_references_unknown_profile",
+                        recipe=recipe,
+                        step=step,
+                        profile=profile_name,
+                        known_profiles=sorted(known),
+                    )
 
     @property
     def resolved_profiles(self) -> dict[str, ProviderProfileDef]:

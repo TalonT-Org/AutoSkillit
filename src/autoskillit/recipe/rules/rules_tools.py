@@ -18,6 +18,7 @@ _TOOL_PARAMS: dict[str, frozenset[str]] = {
             "cwd",
             "model",
             "step_name",
+            "step_provider",
             "order_id",
             "stale_threshold",
             "idle_output_timeout",

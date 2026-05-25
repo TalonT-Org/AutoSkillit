@@ -213,6 +213,7 @@ mcp_response:
 implement_gate:
   marker: "Dry-walkthrough verified = TRUE"
   skill_names: ["/autoskillit:implement-worktree", "/autoskillit:implement-worktree-no-merge"]
+  allowed_plan_dirs: ["make-plan", "rectify"]
 
 safety:
   reset_guard_marker: ".autoskillit-workspace"

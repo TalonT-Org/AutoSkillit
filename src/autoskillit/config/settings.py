@@ -370,6 +370,7 @@ class AutomationConfig:
             implement_gate=ImplementGateConfig(
                 marker=str(val(ig, "marker", _ig["marker"])),
                 skill_names=set(val(ig, "skill_names", _ig["skill_names"])),
+                allowed_plan_dirs=set(val(ig, "allowed_plan_dirs", _ig["allowed_plan_dirs"])),
             ),
             safety=SafetyConfig(
                 reset_guard_marker=str(val(sf, "reset_guard_marker", _sf["reset_guard_marker"])),

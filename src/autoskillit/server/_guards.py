@@ -151,6 +151,16 @@ def _check_dry_walkthrough(skill_command: str, cwd: str) -> str | None:
             f"actual: {first_line[:100]!r}"
         )
 
+    allowed = _get_config().implement_gate.allowed_plan_dirs
+    if allowed and plan_path.parent.name not in allowed:
+        return gate_error_result(
+            f"Plan file is not at its original location. "
+            f"Expected parent directory to be one of {sorted(allowed)}, "
+            f"got: {plan_path.parent.name!r}. "
+            f"The implement gate requires the plan at its make-plan/ or rectify/ origin — "
+            f"copies in other directories are not accepted."
+        )
+
     return None
 
 

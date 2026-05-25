@@ -392,7 +392,9 @@ class TestConfigDrivenBehavior:
             implement_gate=ImplementGateConfig(marker="CUSTOM MARKER")
         )
 
-        plan = tmp_path / "plan.md"
+        plan_dir = tmp_path / "make-plan"
+        plan_dir.mkdir()
+        plan = plan_dir / "plan.md"
         plan.write_text("CUSTOM MARKER\n# Plan content")
         result = _check_dry_walkthrough(f"/implement-worktree {plan}", str(tmp_path))
         assert result is None  # passes with custom marker

@@ -85,6 +85,10 @@ Correct orchestration on `needs_retry=true`:
    - Display warning: "WARNING: This plan has NOT been validated with a dry-walkthrough. Implementation may encounter issues that could have been caught beforehand."
    - Use `AskUserQuestion` to prompt: "Do you want to continue without dry-walkthrough validation?"
    - If user declines, abort and suggest running `/autoskillit:dry-walkthrough` first
+
+   **Note:** The server-side gate also verifies that the plan file is at its original
+   `make-plan/` or `rectify/` location. Plans copied to other directories (e.g.,
+   `dry-walkthrough/`) are rejected even if they carry the verification marker.
 3. Check `git status --porcelain` — if dirty, warn user
 4. Parse plan: phases, files per phase, verification commands
 5. **Multi-Part Plan Detection:** Examine the plan filename. If it contains `_part_` (e.g., `_part_a`, `_part_b`, `_part_1`):

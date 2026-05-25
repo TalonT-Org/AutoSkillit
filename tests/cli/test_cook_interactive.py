@@ -28,7 +28,13 @@ class TestCookInteractive:
         fake_skills_dir.mkdir()
 
         def fake_init_session(
-            self, session_id: str, *, cook_session: bool = False, config=None, project_dir=None
+            self,
+            session_id: str,
+            *,
+            cook_session: bool = False,
+            config=None,
+            project_dir=None,
+            backend=None,
         ) -> Path:
             captured["cook_session"] = cook_session
             return fake_skills_dir
@@ -50,7 +56,13 @@ class TestCookInteractive:
         fake_skills_dir.mkdir()
 
         def fake_init_session(
-            self, session_id: str, *, cook_session: bool = False, config=None, project_dir=None
+            self,
+            session_id: str,
+            *,
+            cook_session: bool = False,
+            config=None,
+            project_dir=None,
+            backend=None,
         ) -> Path:
             return fake_skills_dir
 
@@ -76,7 +88,13 @@ class TestCookInteractive:
         fake_skills_dir.mkdir()
 
         def fake_init_session(
-            self, session_id: str, *, cook_session: bool = False, config=None, project_dir=None
+            self,
+            session_id: str,
+            *,
+            cook_session: bool = False,
+            config=None,
+            project_dir=None,
+            backend=None,
         ) -> Path:
             return fake_skills_dir
 
@@ -899,3 +917,39 @@ class TestCookInteractive:
         assert not hardcoded_calls, (
             "ClaudeCodeBackend must never be instantiated when get_backend is patched"
         )
+
+    def test_cook_init_session_passes_backend(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """cook() forwards backend to init_session()."""
+        captured: dict = {}
+        fake_skills_dir = tmp_path / "fake-skills-backend"
+        fake_skills_dir.mkdir()
+
+        def fake_init_session(
+            self,
+            session_id: str,
+            *,
+            cook_session: bool = False,
+            config=None,
+            project_dir=None,
+            backend=None,
+        ) -> Path:
+            captured["backend"] = backend
+            return fake_skills_dir
+
+        class _FakeBackend:
+            def binary_name(self) -> str:
+                return "claude"
+
+            def build_interactive_cmd(self, **kwargs):
+                from autoskillit.core import CmdSpec
+
+                return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
+
+        monkeypatch.setattr(DefaultSessionSkillManager, "init_session", fake_init_session)
+        monkeypatch.setattr(subprocess, "run", lambda *a, **kw: type("R", (), {"returncode": 0})())
+        monkeypatch.setattr(shutil, "which", lambda x: "/usr/bin/claude")
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
+        cli.cook(backend=_FakeBackend())
+        assert captured["backend"] is not None

@@ -448,11 +448,15 @@ class TestCookTerminalGuard:
         # cook() calls init_session to create a skills directory
         fake_skills_dir = tmp_path / "fake-skills"
         fake_skills_dir.mkdir()
+
+        def _fake_init_session(
+            self, session_id, *, cook_session=False, config=None, project_dir=None, backend=None
+        ):
+            return fake_skills_dir
+
         monkeypatch.setattr(
             "autoskillit.workspace.session_skills.DefaultSessionSkillManager.init_session",
-            lambda self, session_id, *, cook_session=False, config=None, project_dir=None: (
-                fake_skills_dir
-            ),
+            _fake_init_session,
         )
 
         with pytest.raises(KeyboardInterrupt):

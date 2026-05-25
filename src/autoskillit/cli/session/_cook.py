@@ -183,7 +183,11 @@ def cook(
     session_mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), ephemeral_root)
     session_mgr.cleanup_stale()
     skills_dir = session_mgr.init_session(
-        session_id_local, cook_session=True, config=config, project_dir=project_dir
+        session_id_local,
+        cook_session=True,
+        config=config,
+        project_dir=project_dir,
+        backend=backend,
     )
 
     plugin_source: MarketplaceInstall | DirectInstall

@@ -152,7 +152,9 @@ def test_cook_reload_loop_uses_named_resume(
     monkeypatch.setattr(
         DefaultSessionSkillManager,
         "init_session",
-        lambda self, sid, *, cook_session=False, config=None, project_dir=None: fake_skills_dir,
+        lambda self, sid, *, cook_session=False, config=None, project_dir=None, backend=None: (
+            fake_skills_dir
+        ),
     )
 
     from autoskillit import cli

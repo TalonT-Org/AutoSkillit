@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from ._type_protocols_backend import CodingAgentBackend
 
 from ._type_results import CleanupResult, CloneResult, ValidatedAddDir
 
@@ -68,6 +71,7 @@ class SessionSkillManager(Protocol):
         recipe_packs: frozenset[str] | None = None,
         recipe_features: frozenset[str] | None = None,
         allow_only: frozenset[str] | None = None,
+        backend: CodingAgentBackend | None = None,
     ) -> ValidatedAddDir: ...
 
     def compute_skill_closure(self, skill_name: str) -> frozenset[str]: ...

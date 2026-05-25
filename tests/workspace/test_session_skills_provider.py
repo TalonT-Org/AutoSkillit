@@ -179,8 +179,61 @@ def test_cleanup_stale_removes_old_dirs(tmp_path: Path) -> None:
     assert fresh_dir.exists()
 
 
-def test_tier2_skills_constant_removed() -> None:
-    """TIER2_SKILLS no longer exported from workspace (superseded by config)."""
-    import autoskillit.workspace as ws
+def test_init_session_backend_none_uses_claude_skills_subdir(tmp_path: Path) -> None:
+    """When backend is None (default), skills_base resolves to .claude/skills/."""
+    provider = SkillsDirectoryProvider()
+    mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
+    session_path = mgr.init_session("test-backend-none", cook_session=True)
+    skills_dir = session_path / _SKILLS_SUBDIR
+    assert skills_dir.is_dir()
+    skill_files = list(skills_dir.glob("*/SKILL.md"))
+    assert len(skill_files) > 0
 
-    assert not hasattr(ws, "TIER2_SKILLS")
+
+def test_init_session_codex_backend_uses_codex_skills_subdir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When backend.name == 'codex', skills_base resolves to skills/ (not .claude/skills/)."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.workspace.session_skills import CODEX_SKILLS_SUBDIR
+
+    codex_backend = MagicMock()
+    codex_backend.name = "codex"
+
+    fake_home = tmp_path / "fakehome"
+    codex_dir = fake_home / ".codex"
+    codex_dir.mkdir(parents=True)
+    (codex_dir / "config.toml").write_text("[codex]\n")
+
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+
+    provider = SkillsDirectoryProvider()
+    mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
+    session_path = mgr.init_session("test-codex-backend", cook_session=True, backend=codex_backend)
+
+    codex_skills = session_path / CODEX_SKILLS_SUBDIR
+    claude_skills = session_path / _SKILLS_SUBDIR
+    assert codex_skills.is_dir()
+    skill_files = list(codex_skills.glob("*/SKILL.md"))
+    assert len(skill_files) > 0
+    assert not claude_skills.exists()
+
+
+def test_init_session_returns_validated_add_dir_for_default_backend(tmp_path: Path) -> None:
+    """init_session() returns a ValidatedAddDir regardless of backend."""
+    from autoskillit.core import ValidatedAddDir
+
+    provider = SkillsDirectoryProvider()
+    mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
+    result = mgr.init_session("test-validated-return", cook_session=True)
+    assert isinstance(result, ValidatedAddDir)
+
+
+def test_default_session_skill_manager_satisfies_protocol() -> None:
+    """DefaultSessionSkillManager satisfies the SessionSkillManager Protocol."""
+    from autoskillit.core.types._type_protocols_workspace import SessionSkillManager
+
+    provider = SkillsDirectoryProvider()
+    mgr = DefaultSessionSkillManager(provider, ephemeral_root=Path("/tmp/dummy"))
+    assert isinstance(mgr, SessionSkillManager)

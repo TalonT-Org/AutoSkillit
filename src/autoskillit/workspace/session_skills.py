@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 import regex as re
 
 from autoskillit.core import (
+    AGENT_BACKEND_CODEX,
     FEATURE_REGISTRY,
     PACK_REGISTRY,
     ClaudeDirectoryConventions,
@@ -37,6 +38,7 @@ from autoskillit.workspace.skills import (
 
 if TYPE_CHECKING:
     from autoskillit.config import AutomationConfig
+    from autoskillit.core import CodingAgentBackend
 
 # Candidate ephemeral roots, tried in order.
 # resolve_ephemeral_root() appends tempfile.gettempdir() as the final fallback.
@@ -48,6 +50,7 @@ _CANDIDATE_ROOTS: list[Path] = [
 _FM_PATTERN = re.compile(r"^---\n(.*?)\n?---\n?(.*)", re.DOTALL)
 
 _SKILLS_SUBDIR = ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
+CODEX_SKILLS_SUBDIR = ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR
 
 logger = get_logger(__name__)
 
@@ -394,6 +397,7 @@ class DefaultSessionSkillManager:
     ) -> None:
         self._provider = provider
         self._root = ephemeral_root
+        self._skills_subdir = _SKILLS_SUBDIR
 
     def compute_skill_closure(self, skill_name: str) -> frozenset[str]:
         """Return the transitive activate_deps closure for ``skill_name``.
@@ -412,6 +416,7 @@ class DefaultSessionSkillManager:
         recipe_packs: frozenset[str] | None = None,
         recipe_features: frozenset[str] | None = None,
         allow_only: frozenset[str] | None = None,
+        backend: CodingAgentBackend | None = None,
     ) -> ValidatedAddDir:
         """Create ephemeral skill dir for session_id.
 
@@ -503,9 +508,33 @@ class DefaultSessionSkillManager:
         )
         _log = logger
 
+        _is_codex = backend is not None and backend.name == AGENT_BACKEND_CODEX
+        skills_subdir = CODEX_SKILLS_SUBDIR if _is_codex else _SKILLS_SUBDIR
+        self._skills_subdir = skills_subdir
+
         session_skills_dir = self._root / session_id
-        skills_base = session_skills_dir / _SKILLS_SUBDIR
+        skills_base = session_skills_dir / skills_subdir
         skills_base.mkdir(parents=True, exist_ok=True)
+
+        if _is_codex:
+            codex_home_source = Path.home() / ".codex"
+            try:
+                shutil.copy2(codex_home_source / "config.toml", session_skills_dir / "config.toml")
+                logger.debug("codex_config_copy", src=str(codex_home_source / "config.toml"))
+            except FileNotFoundError:
+                logger.error(
+                    "codex_config_copy_missing", src=str(codex_home_source / "config.toml")
+                )
+                raise
+            try:
+                shutil.copy2(codex_home_source / "auth.json", session_skills_dir / "auth.json")
+                logger.debug("codex_auth_copy", src=str(codex_home_source / "auth.json"))
+            except FileNotFoundError:
+                logger.warning("codex_auth_copy_missing", src=str(codex_home_source / "auth.json"))
+            env_source = codex_home_source / ".env"
+            if env_source.exists():
+                shutil.copy2(env_source, session_skills_dir / ".env")
+                logger.debug("codex_env_copy", src=str(env_source))
         for skill_info in self._provider.list_skills():
             if allow_only is not None and skill_info.name not in allow_only:
                 _log.debug("init_session_allow_only_skip", skill=skill_info.name)
@@ -552,6 +581,7 @@ class DefaultSessionSkillManager:
                     f"This indicates a gating conflict — check feature gates, "
                     f"disabled categories, or pack visibility."
                 )
+        # P3-A9: Codex branch will add codex-home layout validation here
         return ValidatedAddDir(path=str(session_skills_dir))
 
     def activate_skill_deps(self, session_id: str, skill_name: str) -> bool:

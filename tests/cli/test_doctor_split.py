@@ -86,6 +86,7 @@ def test_doctor_backend_guards_contains_expected_classes():
     assert "TestCheckMcpServerRegisteredBackendGuard" in class_names
     assert "TestCheckClaudeProcessStateBreakdownBackendGuard" in class_names
     assert "TestRunDoctorBackendWiring" in class_names
+    assert "TestCheckClaudeProcessStateBreakdownCodexBackend" in class_names
 
 
 def test_doctor_fleet_checks_file_exists():
@@ -116,6 +117,7 @@ def test_doctor_migration_does_not_contain_backend_guard_classes():
         "TestCheckMcpServerRegisteredBackendGuard",
         "TestCheckClaudeProcessStateBreakdownBackendGuard",
         "TestRunDoctorBackendWiring",
+        "TestCheckClaudeProcessStateBreakdownCodexBackend",
     ):
         assert cls not in class_names, f"{cls} must be moved to test_doctor_backend_guards.py"
 

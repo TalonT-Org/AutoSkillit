@@ -214,6 +214,90 @@ class TestCheckClaudeProcessStateBreakdownBackendGuard:
         assert "skipped" not in result.message.lower()
 
 
+class TestCheckClaudeProcessStateBreakdownCodexBackend:
+    """Tests for codex backend branch in _check_claude_process_state_breakdown."""
+
+    def _ps_result(self, stdout: str, returncode: int = 0):
+        return type(
+            "CompletedProcess",
+            (),
+            {"returncode": returncode, "stdout": stdout},
+        )()
+
+    def test_ok_when_only_sleeping_codex(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Single sleeping codex process → Severity.OK with state breakdown."""
+        import subprocess
+
+        from autoskillit.cli.doctor._doctor_runtime import _check_claude_process_state_breakdown
+        from autoskillit.core import Severity
+
+        header = "PID STAT %CPU COMMAND\n"
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            lambda *a, **kw: self._ps_result(header + "1234 S 0.5 codex"),
+        )
+        result = _check_claude_process_state_breakdown(backend="codex")
+        assert result.severity == Severity.OK
+        assert result.check == "codex_process_state"
+        assert "S=1" in result.message
+
+    def test_warns_on_d_state_codex(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """codex process in D state → Severity.WARNING with pid and pcpu."""
+        import subprocess
+
+        from autoskillit.cli.doctor._doctor_runtime import _check_claude_process_state_breakdown
+        from autoskillit.core import Severity
+
+        header = "PID STAT %CPU COMMAND\n"
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            lambda *a, **kw: self._ps_result(header + "1234 D 99.0 codex"),
+        )
+        result = _check_claude_process_state_breakdown(backend="codex")
+        assert result.severity == Severity.WARNING
+        assert result.check == "codex_process_state"
+        assert "D=1" in result.message
+        assert "99.0" in result.message
+        assert "codex processes in D state" in result.message
+
+    def test_ok_when_no_codex_processes(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """No codex rows in ps output → Severity.OK, 'No codex processes running'."""
+        import subprocess
+
+        from autoskillit.cli.doctor._doctor_runtime import _check_claude_process_state_breakdown
+        from autoskillit.core import Severity
+
+        header = "PID STAT %CPU COMMAND\n"
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            lambda *a, **kw: self._ps_result(header + "5678 S 0.1 python"),
+        )
+        result = _check_claude_process_state_breakdown(backend="codex")
+        assert result.severity == Severity.OK
+        assert result.check == "codex_process_state"
+        assert result.message == "No codex processes running"
+
+    def test_ok_when_ps_missing_codex(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """FileNotFoundError from ps → Severity.OK explaining ps unavailability."""
+        import subprocess
+
+        from autoskillit.cli.doctor._doctor_runtime import _check_claude_process_state_breakdown
+        from autoskillit.core import Severity
+
+        def _raise(*a, **kw):
+            raise FileNotFoundError("ps")
+
+        monkeypatch.setattr(subprocess, "run", _raise)
+        result = _check_claude_process_state_breakdown(backend="codex")
+        assert result.severity == Severity.OK
+        assert result.check == "codex_process_state"
+        assert "ps unavailable" in result.message
+        assert "FileNotFoundError" in result.message
+
+
 class TestRunDoctorBackendWiring:
     def test_run_doctor_passes_backend_to_guarded_checks(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

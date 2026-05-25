@@ -28,8 +28,7 @@ class TestNonUniqueOutputPath:
         )
         findings = run_semantic_rules(wf)
         assert not any(
-            f.rule == "non-unique-output-path" and f.step_name == "init_step"
-            for f in findings
+            f.rule == "non-unique-output-path" and f.step_name == "init_step" for f in findings
         )
 
     def test_bare_temp_path_without_suffix_in_output_dir_errors(self) -> None:
@@ -68,8 +67,7 @@ class TestNonUniqueOutputPath:
         )
         findings = run_semantic_rules(wf)
         assert not any(
-            f.rule == "non-unique-output-path" and f.step_name == "verify"
-            for f in findings
+            f.rule == "non-unique-output-path" and f.step_name == "verify" for f in findings
         )
 
     def test_bare_temp_path_in_cmd_errors(self) -> None:

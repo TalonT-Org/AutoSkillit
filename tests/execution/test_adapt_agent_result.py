@@ -172,8 +172,8 @@ def test_tool_uses_concatenation() -> None:
     assert result.tool_uses == [
         {"name": "cmd"},
         {"name": "mcp"},
-        {"name": "file_change", "type": "file_change", "path": "a.py"},
-        {"name": "file_change", "type": "file_change", "path": "b.py"},
+        {"name": "file_change", "type": "file_change", "file_path": "a.py"},
+        {"name": "file_change", "type": "file_change", "file_path": "b.py"},
     ]
 
 
@@ -185,10 +185,10 @@ def test_tool_uses_missing_sources_default_empty() -> None:
 def test_file_change_entry_shape() -> None:
     result = _adapt_agent_result(_make_agent_result(raw={"file_changes": ["x.py"]}))
     entry = result.tool_uses[0]
-    assert set(entry.keys()) == {"name", "type", "path"}
+    assert set(entry.keys()) == {"name", "type", "file_path"}
     assert entry["name"] == "file_change"
     assert entry["type"] == "file_change"
-    assert entry["path"] == "x.py"
+    assert entry["file_path"] == "x.py"
 
 
 def test_assistant_messages_from_raw() -> None:
@@ -310,9 +310,34 @@ def test_full_round_trip_all_fields() -> None:
     assert result.tool_uses == [
         {"name": "bash", "cmd": "ls"},
         {"name": "read", "path": "/tmp"},
-        {"name": "file_change", "type": "file_change", "path": "main.py"},
+        {"name": "file_change", "type": "file_change", "file_path": "main.py"},
     ]
     assert result.jsonl_context_exhausted is False
     assert result.stop_reasons == ["end_turn"]
     assert result.has_thinking_only_turn is False
     assert result.seen_block_types == frozenset()
+
+
+class TestAdaptAgentResultFilePathKey:
+    """Verify file_change entries use 'file_path' key for synthesis compatibility."""
+
+    def test_file_change_entry_has_file_path_key(self) -> None:
+        result = _adapt_agent_result(_make_agent_result(raw={"file_changes": ["x.py"]}))
+        entry = result.tool_uses[0]
+        assert set(entry.keys()) == {"name", "type", "file_path"}
+        assert entry["file_path"] == "x.py"
+
+    def test_file_path_key_enables_primary_synthesis_branch(self) -> None:
+        from autoskillit.execution.headless import _synthesize_from_write_artifacts
+
+        agent = _make_agent_result(raw={"file_changes": ["/abs/output.md"]})
+        adapted = _adapt_agent_result(agent)
+        recovered = _synthesize_from_write_artifacts(
+            adapted,
+            [r"plan_path\s*=\s*/.+"],
+            write_call_count=0,
+            file_changes=["/abs/output.md"],
+            write_tool_names=frozenset({"file_change"}),
+        )
+        assert recovered is not None
+        assert "plan_path = /abs/output.md" in recovered.result

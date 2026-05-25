@@ -531,7 +531,7 @@ class DefaultSessionSkillManager:
                     _log.debug("init_session_subset_skip", skill=skill_info.name)
                 continue
             gated = (not cook_session) and (skill_info.name in tier2_skills)
-            if gated:
+            if gated and (allow_only is None or skill_info.name not in allow_only):
                 _log.debug("init_session_tier2_omit", skill=skill_info.name)
                 continue
             skill_dir = skills_base / skill_info.name

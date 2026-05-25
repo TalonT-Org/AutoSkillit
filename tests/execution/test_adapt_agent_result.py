@@ -318,6 +318,26 @@ def test_full_round_trip_all_fields() -> None:
     assert result.seen_block_types == frozenset()
 
 
+def test_context_exhaustion_from_code_field() -> None:
+    result = _adapt_agent_result(
+        _make_agent_result(
+            raw={"subtype": "error_during_execution"},
+            error="Token limit reached. [context_length_exceeded]",
+        )
+    )
+    assert result.jsonl_context_exhausted is True
+
+
+def test_rate_limit_code_field_not_context_exhausted() -> None:
+    result = _adapt_agent_result(
+        _make_agent_result(
+            raw={"subtype": "error_during_execution"},
+            error="Rate limit exceeded. [rate_limit_exceeded]",
+        )
+    )
+    assert result.jsonl_context_exhausted is False
+
+
 class TestAdaptAgentResultFilePathKey:
     """Verify file_change entries use 'file_path' key for synthesis compatibility."""
 

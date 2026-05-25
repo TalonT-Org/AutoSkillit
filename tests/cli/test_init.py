@@ -209,7 +209,9 @@ class TestCLIInit:
         """init --scope user writes mcpServers.autoskillit to ~/.claude.json."""
         monkeypatch.chdir(tmp_path)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda: False)
+        monkeypatch.setattr(
+            "autoskillit.cli._init_helpers._is_plugin_installed", lambda **kwargs: False
+        )
         cli.init(scope="user", test_command="task test-all")
         claude_json = tmp_path / ".claude.json"
         data = json.loads(claude_json.read_text())
@@ -250,7 +252,9 @@ class TestCLIInit:
         """Running init twice does not duplicate mcpServers.autoskillit or hook entries."""
         monkeypatch.chdir(tmp_path)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda: False)
+        monkeypatch.setattr(
+            "autoskillit.cli._init_helpers._is_plugin_installed", lambda **kwargs: False
+        )
         cli.init(scope="user", test_command="task test-all")
         cli.init(scope="user", test_command="task test-all")
         claude_json = tmp_path / ".claude.json"
@@ -277,7 +281,9 @@ class TestCLIInit:
         )
         monkeypatch.chdir(project_dir)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda: False)
+        monkeypatch.setattr(
+            "autoskillit.cli._init_helpers._is_plugin_installed", lambda **kwargs: False
+        )
         cli.init(test_command="task test-all")
         # MCP server should be registered to user home, not project dir
         assert (tmp_path / ".claude.json").exists()
@@ -893,7 +899,9 @@ def test_register_all_evicts_direct_entry_when_plugin_installed(
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda: True)
+    monkeypatch.setattr(
+        "autoskillit.cli._init_helpers._is_plugin_installed", lambda **kwargs: True
+    )
     cli.init(scope="user", test_command="task test-all")
     data = json.loads(claude_json.read_text())
     assert "autoskillit" not in data.get("mcpServers", {})

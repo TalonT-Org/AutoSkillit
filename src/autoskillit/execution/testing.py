@@ -169,6 +169,70 @@ def parse_pytest_summary(stdout: str) -> dict[str, int]:
     return {}
 
 
+def extract_summary_line(stdout: str) -> str | None:
+    """Extract the raw test summary line from stdout.
+
+    Uses the same two-pass detection as parse_pytest_summary but returns
+    the raw line text (with = delimiters stripped) instead of parsed counts.
+    Returns None if no summary line is found (non-pytest runner).
+    """
+    lines = stdout.splitlines()
+
+    for line in reversed(lines):
+        stripped = line.strip()
+        if stripped.startswith("=") and stripped.endswith("="):
+            if _OUTCOME_PATTERN.search(stripped):
+                return stripped.strip("= ")
+
+    for line in reversed(lines):
+        stripped = line.strip()
+        if _BARE_TIME_ANCHOR.search(stripped):
+            if _OUTCOME_PATTERN.search(stripped):
+                return stripped
+
+    return None
+
+
+_PROGRESS_PCT_RE = re.compile(r"\[\s*\d+%\]\s*$")
+
+
+def _is_progress_line(line: str) -> bool:
+    """Detect test runner progress indicator lines.
+
+    Runner-agnostic heuristic: matches lines that are predominantly dots
+    or end with a percentage bracket like [ 72%].
+    """
+    stripped = line.strip()
+    if not stripped:
+        return True
+    if _PROGRESS_PCT_RE.search(stripped):
+        return True
+    non_ws = stripped.replace(" ", "")
+    if non_ws and non_ws.count(".") / len(non_ws) > 0.6:
+        return True
+    return False
+
+
+def _strip_progress_noise(stdout: str) -> str:
+    """Remove progress indicator lines from test output."""
+    lines = stdout.splitlines()
+    return "\n".join(line for line in lines if not _is_progress_line(line))
+
+
+def condense_test_output(result: TestResult) -> tuple[str, str]:
+    """Condense test output for MCP response consumption.
+
+    On pass: returns only the summary line and empty stderr.
+    On fail: strips progress noise from stdout, preserves stderr.
+    """
+    if result.passed:
+        summary = extract_summary_line(result.stdout) or ""
+        return summary, ""
+
+    stdout = _strip_progress_noise(result.stdout)
+    return stdout, result.stderr
+
+
 def check_test_passed(returncode: int, stdout: str, stderr: str = "") -> bool:
     """Determine test pass/fail with cross-validation.
 

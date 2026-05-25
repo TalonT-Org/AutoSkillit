@@ -825,3 +825,32 @@ def test_make_run_skill_event_custom_provider_values() -> None:
     payload = json.loads(event["tool_response"])
     assert payload["provider_used"] == "anthropic"
     assert payload["provider_fallback"] is True
+
+
+# T12-T13: _fmt_test_check handles pre-condensed output
+
+
+def test_fmt_test_check_handles_condensed_pass_output():
+    """T12: _fmt_test_check works with pre-condensed passing output."""
+    from autoskillit.hooks.formatters._fmt_execution import _fmt_test_check
+
+    data = {"passed": True, "stdout": "10 passed in 1.0s", "stderr": "", "duration_seconds": 1.0}
+    result = _fmt_test_check(data, False)
+    assert "10 passed in 1.0s" in result
+    assert "PASS" in result
+
+
+def test_fmt_test_check_handles_condensed_fail_output():
+    """T13: _fmt_test_check works with pre-condensed failing output."""
+    from autoskillit.hooks.formatters._fmt_execution import _fmt_test_check
+
+    data = {
+        "passed": False,
+        "stdout": "FAILED test_x.py::test_y\nE  assert False\n= 1 failed =",
+        "stderr": "",
+        "duration_seconds": 2.0,
+    }
+    result = _fmt_test_check(data, False)
+    assert "FAILED test_x.py::test_y" in result
+    assert "assert False" in result
+    assert "FAIL" in result

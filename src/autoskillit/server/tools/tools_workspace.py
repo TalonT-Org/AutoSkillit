@@ -14,6 +14,7 @@ from fastmcp.dependencies import CurrentContext
 from autoskillit.core import get_logger, truncate_text
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
+from autoskillit.server._misc import condense_test_output
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._subprocess import _run_subprocess
 
@@ -101,10 +102,11 @@ async def test_check(
                     extra={"worktree": worktree_path},
                 )
 
+            condensed_stdout, condensed_stderr = condense_test_output(test_result)
             response = {
                 "passed": test_result.passed,
-                "stdout": truncate_text(test_result.stdout),
-                "stderr": truncate_text(test_result.stderr),
+                "stdout": truncate_text(condensed_stdout),
+                "stderr": truncate_text(condensed_stderr),
             }
             if test_result.duration_seconds is not None:
                 response["duration_seconds"] = round(test_result.duration_seconds, 2)

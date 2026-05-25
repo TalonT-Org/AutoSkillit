@@ -17,10 +17,10 @@ def test_capability_queries_match_command_backend(minimal_ctx):
     for name, cls in BACKEND_REGISTRY.items():
         backend = cls()
         minimal_ctx.backend = backend
-        assert _resolve_pty_mode(minimal_ctx) == backend.capabilities.pty_required, (
+        assert _resolve_pty_mode(backend) == backend.capabilities.pty_required, (
             f"PTY mode mismatch for {name}"
         )
-        log_dir = _resolve_session_log_dir("/tmp/fake", minimal_ctx)
+        log_dir = _resolve_session_log_dir("/tmp/fake", backend)
         if not backend.capabilities.channel_b_capable:
             assert log_dir is None, f"Expected None log_dir for {name}"
         else:

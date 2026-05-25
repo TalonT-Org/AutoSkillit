@@ -12,13 +12,14 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import structlog
 
 from autoskillit.core import (
     AGENT_BACKEND_CLAUDE_CODE,
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
+    CodingAgentBackend,
     SessionCheckpoint,  # noqa: F401, TC001
     SkillResult,
     SkillSessionConfig,
@@ -27,6 +28,7 @@ from autoskillit.core import (
     get_logger,
     temp_dir_display_str,
 )
+from autoskillit.execution.backends import get_backend  # noqa: F401
 from autoskillit.execution.headless._headless_evidence import (
     _adapt_agent_result,  # noqa: F401
     _apply_budget_guard,  # noqa: F401
@@ -129,6 +131,7 @@ async def run_headless_core(
     resume_session_id: str = "",
     resume_checkpoint: SessionCheckpoint | None = None,
     resume_message: str | None = None,
+    backend_override: str | None = None,
 ) -> SkillResult:
     """Shared headless runner used by run_skill.
 
@@ -170,8 +173,19 @@ async def run_headless_core(
             resume_checkpoint=resume_checkpoint,
             resume_message=resume_message,
         )
-        spec = ctx.backend.build_skill_session_cmd(skill_command, cwd, config)
-        logger.debug("run_headless_core_backend_dispatch", backend=ctx.backend.name)
+        step_backend: CodingAgentBackend | None = None
+        if backend_override is not None:
+            step_backend = get_backend(backend_override)
+            logger.info(
+                "step_backend_override_resolved",
+                override=backend_override,
+                step_backend=step_backend.name,
+                ctx_backend=ctx.backend.name,
+            )
+
+        _cmd_backend = step_backend if step_backend is not None else ctx.backend
+        spec = _cmd_backend.build_skill_session_cmd(skill_command, cwd, config)
+        logger.debug("run_headless_core_backend_dispatch", backend=_cmd_backend.name)
 
         effective_timeout = timeout if timeout is not None else cfg.timeout
         effective_stale = stale_threshold if stale_threshold is not None else cfg.stale_threshold
@@ -213,6 +227,7 @@ async def run_headless_core(
             provider_fallback_env=provider_fallback_env,
             provider_fallback_name=provider_fallback_name,
             provider_extras=provider_extras,
+            step_backend=step_backend,
         )
 
 
@@ -253,6 +268,7 @@ class DefaultHeadlessExecutor:
         resume_session_id: str = "",
         resume_checkpoint: SessionCheckpoint | None = None,
         resume_message: str | None = None,
+        backend_override: str | None = None,
     ) -> SkillResult:
         cfg = self._ctx.config.run_skill
         effective_timeout = timeout if timeout is not None else cfg.timeout
@@ -287,6 +303,7 @@ class DefaultHeadlessExecutor:
             resume_session_id=resume_session_id,
             resume_checkpoint=resume_checkpoint,
             resume_message=resume_message,
+            backend_override=backend_override,
         )
 
     async def dispatch_food_truck(
@@ -387,7 +404,9 @@ class DefaultHeadlessExecutor:
         )
 
         effective_marker_dir: Path | None = marker_dir or (
-            _resolve_session_log_dir(cwd, self._ctx) if cwd else None
+            _resolve_session_log_dir(cwd, cast(CodingAgentBackend, self._ctx.backend))
+            if cwd
+            else None
         )
 
         return await _execute_claude_headless(

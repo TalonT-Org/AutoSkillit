@@ -88,6 +88,7 @@ class ExecutorCall:
     resume_session_id: str = ""
     resume_checkpoint: SessionCheckpoint | None = None
     resume_message: str | None = None
+    backend_override: str | None = None
 
 
 @dataclasses.dataclass
@@ -180,6 +181,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         resume_session_id: str = "",
         resume_checkpoint: SessionCheckpoint | None = None,
         resume_message: str | None = None,
+        backend_override: str | None = None,
     ) -> SkillResult:
         self.calls.append(
             ExecutorCall(
@@ -208,6 +210,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 resume_session_id=resume_session_id,
                 resume_checkpoint=resume_checkpoint,
                 resume_message=resume_message,
+                backend_override=backend_override,
             )
         )
         if self._queue:

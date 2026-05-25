@@ -49,9 +49,11 @@ class TestBackendRegistry:
             "CodexEnvPolicy",
             "CodexFlags",
             "CodexResultParser",
+            "CodexScenarioPlayer",
             "CodexSessionLocator",
             "CodexStreamParser",
             "ensure_codex_mcp_registered",
             "get_backend",
+            "make_codex_scenario_player",
         }
         assert set(all_exports) == expected

@@ -436,7 +436,6 @@ def _register_all(
     )
     from autoskillit.config import load_config
     from autoskillit.core import AGENT_BACKEND_CODEX, ensure_project_temp
-    from autoskillit.execution import ensure_codex_mcp_registered
 
     # Refuse to register from inside the autoskillit source tree — this would
     # plant source-tree absolute paths in the project scope.
@@ -473,6 +472,8 @@ def _register_all(
         _backend_name = "claude-code"
 
     if _backend_name == AGENT_BACKEND_CODEX:
+        from autoskillit.execution import ensure_codex_mcp_registered
+
         ensure_codex_mcp_registered()
         # P4: insert Codex hook registration here
         plugin_ok = None
@@ -481,7 +482,7 @@ def _register_all(
         _evict_stale_autoskillit_hooks(settings_path)
         sync_hooks_to_settings(settings_path)
 
-        plugin_ok = _is_plugin_installed()
+        plugin_ok = _is_plugin_installed(agent_backend=_backend_name)
         if not plugin_ok:
             _register_mcp_server(_user_claude_json_path())
         else:

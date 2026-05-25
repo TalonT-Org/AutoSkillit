@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from autoskillit.core.types import (
@@ -10,6 +12,8 @@ from autoskillit.core.types import (
     SubprocessResult,
     TerminationReason,
 )
+from autoskillit.execution.backends._codex_parse import CodexResultParser
+from autoskillit.execution.headless._headless_evidence import _adapt_agent_result
 from autoskillit.execution.session._exit_classification import (
     _CODEX_API_ERROR_PATTERNS,
     classify_infra_exit,
@@ -33,6 +37,10 @@ def _sr(
         pid=12345,
         channel_confirmation=ChannelConfirmation.UNMONITORED,
     )
+
+
+def _turn_failed_ndjson(error_message: str) -> str:
+    return json.dumps({"type": "turn.failed", "error": {"message": error_message}})
 
 
 class TestClassifyInfraExit:
@@ -243,6 +251,35 @@ class TestCodexContextExhaustion:
 def test_all_infra_categories_handled(category: InfraExitCategory) -> None:
     """Every InfraExitCategory value has a distinct test above."""
     assert category.value in {"completed", "context_exhausted", "api_error", "process_killed"}
+
+
+class TestCodexContextExhaustionFromTurnFailed:
+    """Full pipeline: raw NDJSON -> CodexResultParser -> _adapt_agent_result -> classification."""
+
+    def test_turn_failed_context_length_exceeded_sets_jsonl_context_exhausted(self) -> None:
+        ndjson = _turn_failed_ndjson("context_length_exceeded")
+        agent_result = CodexResultParser().parse_stdout(ndjson)
+        adapted = _adapt_agent_result(agent_result)
+        assert adapted.jsonl_context_exhausted is True
+
+    def test_turn_failed_context_length_exceeded_is_context_exhausted(self) -> None:
+        ndjson = _turn_failed_ndjson("context_length_exceeded")
+        agent_result = CodexResultParser().parse_stdout(ndjson)
+        adapted = _adapt_agent_result(agent_result)
+        assert adapted._is_context_exhausted() is True
+
+    def test_turn_failed_context_length_exceeded_classify_returns_context_exhausted(self) -> None:
+        ndjson = _turn_failed_ndjson("context_length_exceeded")
+        agent_result = CodexResultParser().parse_stdout(ndjson)
+        adapted = _adapt_agent_result(agent_result)
+        result = _sr(returncode=1)
+        assert classify_infra_exit(adapted, result) == InfraExitCategory.CONTEXT_EXHAUSTED
+
+    def test_turn_failed_rate_limit_exceeded_jsonl_context_exhausted_false(self) -> None:
+        ndjson = _turn_failed_ndjson("rate_limit_exceeded")
+        agent_result = CodexResultParser().parse_stdout(ndjson)
+        adapted = _adapt_agent_result(agent_result)
+        assert adapted.jsonl_context_exhausted is False
 
 
 class TestRateLimitClassification:

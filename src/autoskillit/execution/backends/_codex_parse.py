@@ -78,7 +78,12 @@ def _scan_codex_ndjson(stdout: str) -> _CodexParseAccumulator:
         elif event_type == "turn.failed":
             error = obj.get("error", {})
             if isinstance(error, dict):
-                acc.error_message = error.get("message", "")
+                error_msg = error.get("message", "")
+                error_code = error.get("code", "")
+                if error_code and error_code not in error_msg:
+                    acc.error_message = f"{error_msg} [{error_code}]" if error_msg else error_code
+                else:
+                    acc.error_message = error_msg
             else:
                 acc.error_message = str(error) if error else ""
             acc.saw_failure = True

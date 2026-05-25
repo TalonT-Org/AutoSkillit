@@ -27,6 +27,10 @@ def _turn_failed_line(error_message: str) -> str:
     return json.dumps({"type": "turn.failed", "error": {"message": error_message}})
 
 
+def _turn_failed_code_line(code: str, message: str) -> str:
+    return json.dumps({"type": "turn.failed", "error": {"message": message, "code": code}})
+
+
 def _item_completed_message_line(text: str) -> str:
     return json.dumps(
         {
@@ -633,3 +637,32 @@ class TestCodexResultParserToolUses:
         result = CodexResultParser().parse_stdout(ndjson)
         assert len(result.raw["command_executions"]) == 1
         assert result.raw["command_executions"][0]["args"] == '{"command": "echo done"}'
+
+
+class TestScanCodexNdjsonErrorCode:
+    def test_scan_turn_failed_error_code_appended_to_message(self) -> None:
+        ndjson = _turn_failed_code_line("context_length_exceeded", "Context window exceeded")
+        acc = _scan_codex_ndjson(ndjson)
+        assert "context_length_exceeded" in acc.error_message
+
+    def test_scan_turn_failed_error_code_only_message_variant(self) -> None:
+        ndjson = _turn_failed_line("context_length_exceeded")
+        acc = _scan_codex_ndjson(ndjson)
+        assert acc.error_message == "context_length_exceeded"
+
+
+class TestCodexResultParserContextExhaustion:
+    def test_parse_stdout_message_context_exhausted(self) -> None:
+        ndjson = _turn_failed_line("context_length_exceeded")
+        result = CodexResultParser().parse_stdout(ndjson)
+        assert "context_length_exceeded" in result.error
+
+    def test_parse_stdout_code_context_exhausted(self) -> None:
+        ndjson = _turn_failed_code_line("context_length_exceeded", "Token limit reached.")
+        result = CodexResultParser().parse_stdout(ndjson)
+        assert "context_length_exceeded" in result.error
+
+    def test_parse_stdout_rate_limit_not_context_exhausted(self) -> None:
+        ndjson = _turn_failed_code_line("rate_limit_exceeded", "Rate limit exceeded.")
+        result = CodexResultParser().parse_stdout(ndjson)
+        assert "context_length_exceeded" not in result.error

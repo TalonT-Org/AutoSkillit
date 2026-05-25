@@ -62,6 +62,27 @@ def _check_mcp_server_registered(
     claude_json_path: Path | None = None, *, backend: str | None = None
 ) -> DoctorResult:
     """Check that autoskillit MCP server is registered (via mcpServers or plugin)."""
+    if backend == "codex":
+        from autoskillit.execution.backends._codex_config import (
+            _is_autoskillit_registered,
+            _read_codex_config,
+        )
+
+        config = _read_codex_config(Path.home() / ".codex" / "config.toml")
+        if _is_autoskillit_registered(config, headless_auto_gate=False):
+            return DoctorResult(
+                severity=Severity.OK,
+                check="mcp_server_registered",
+                message="autoskillit registered in codex config.toml",
+            )
+        return DoctorResult(
+            severity=Severity.WARNING,
+            check="mcp_server_registered",
+            message=(
+                "autoskillit not registered in codex config.toml. "
+                "Run 'autoskillit init' to register."
+            ),
+        )
     if backend is not None and backend != "claude-code":
         return DoctorResult(Severity.OK, "mcp_server_registered", f"Skipped (backend={backend})")
     if claude_json_path is None:

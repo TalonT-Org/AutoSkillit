@@ -327,7 +327,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
 
             lines = (result.stdout or "").splitlines()
             ndjson_content = "".join(fast_dumps(line) + "\n" for line in lines)
-            (cassette_dir / "codex_stdout.ndjson").write_text(ndjson_content, encoding="utf-8")
+            atomic_write(cassette_dir / "codex_stdout.ndjson", ndjson_content)
 
             meta = {
                 "backend": "codex",

@@ -3,6 +3,7 @@ from __future__ import annotations
 from autoskillit.core import CodingAgentBackend
 
 from ._codex_config import (
+    _is_autoskillit_registered,
     _read_codex_config,
     _write_codex_config,
     ensure_codex_mcp_registered,
@@ -56,6 +57,9 @@ __all__ = [
     "CodexScenarioPlayer",
     "CodexSessionLocator",
     "CodexStreamParser",
+    "_is_autoskillit_registered",
+    "_read_codex_config",
+    "_write_codex_config",
     "ensure_codex_mcp_registered",
     "get_backend",
     "make_codex_scenario_player",

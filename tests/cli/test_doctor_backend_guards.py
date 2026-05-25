@@ -160,6 +160,77 @@ class TestCheckMcpServerRegisteredBackendGuard:
         assert "skipped" not in result.message.lower()
 
 
+class TestCheckMcpServerRegisteredCodexBackend:
+    """Tests for codex backend branch in _check_mcp_server_registered."""
+
+    def test_codex_backend_ok_when_registered(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """backend='codex' with valid registration returns OK."""
+        from autoskillit.cli.doctor._doctor_mcp import _check_mcp_server_registered
+        from autoskillit.core import Severity
+
+        codex_dir = tmp_path / ".codex"
+        codex_dir.mkdir()
+        (codex_dir / "config.toml").write_text(
+            "[mcp_servers.autoskillit]\n"
+            'command = "autoskillit"\n'
+            "\n"
+            "[mcp_servers.autoskillit.env]\n"
+            'AUTOSKILLIT_HEADLESS = "1"\n'
+        )
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
+        result = _check_mcp_server_registered(backend="codex")
+        assert result.severity == Severity.OK
+        assert result.check == "mcp_server_registered"
+        assert "registered" in result.message.lower()
+        assert "skipped" not in result.message.lower()
+
+    def test_codex_backend_warning_when_not_registered(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """backend='codex' with missing autoskillit entry returns WARNING."""
+        from autoskillit.cli.doctor._doctor_mcp import _check_mcp_server_registered
+        from autoskillit.core import Severity
+
+        codex_dir = tmp_path / ".codex"
+        codex_dir.mkdir()
+        (codex_dir / "config.toml").write_text("")
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
+        result = _check_mcp_server_registered(backend="codex")
+        assert result.severity == Severity.WARNING
+        assert result.check == "mcp_server_registered"
+        assert "autoskillit init" in result.message
+
+    def test_codex_backend_warning_when_config_missing(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """backend='codex' with no config.toml file returns WARNING."""
+        from autoskillit.cli.doctor._doctor_mcp import _check_mcp_server_registered
+        from autoskillit.core import Severity
+
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
+        result = _check_mcp_server_registered(backend="codex")
+        assert result.severity == Severity.WARNING
+        assert result.check == "mcp_server_registered"
+        assert "autoskillit init" in result.message
+
+    def test_codex_backend_warning_when_config_corrupt(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """backend='codex' with corrupt TOML returns WARNING."""
+        from autoskillit.cli.doctor._doctor_mcp import _check_mcp_server_registered
+        from autoskillit.core import Severity
+
+        codex_dir = tmp_path / ".codex"
+        codex_dir.mkdir()
+        (codex_dir / "config.toml").write_text("[[[bad toml")
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
+        result = _check_mcp_server_registered(backend="codex")
+        assert result.severity == Severity.WARNING
+        assert result.check == "mcp_server_registered"
+
+
 class TestCheckClaudeProcessStateBreakdownBackendGuard:
     def test_non_claude_code_backend_returns_ok_skip(self) -> None:
         """Non-claude-code backend returns OK skip without subprocess access."""

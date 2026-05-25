@@ -42,7 +42,7 @@ def _check_deny_count(temp_dir: Path, session_id: str) -> bool:
     if not deny_dir.exists():
         return False
     try:
-        return len(list(deny_dir.iterdir())) >= DENY_THRESHOLD
+        return sum(1 for p in deny_dir.iterdir() if p.is_file()) >= DENY_THRESHOLD
     except OSError:
         return False
 

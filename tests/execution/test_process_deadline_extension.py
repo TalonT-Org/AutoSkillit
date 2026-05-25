@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import functools
+
 import anyio
 import pytest
 
@@ -54,7 +56,11 @@ async def test_no_extension_when_inactive(monkeypatch) -> None:
     original_deadline_ref: list[float] = []
 
     async with anyio.create_task_group() as tg:
-        tg.start_soon(_watch_child_activity, 1, scope_ref, 7200.0, trigger, 0.05, marker_dir=None)
+        tg.start_soon(
+            functools.partial(
+                _watch_child_activity, 1, scope_ref, 7200.0, trigger, 0.05, marker_dir=None
+            )
+        )
         with anyio.move_on_after(2.0) as scope:
             scope_ref[0] = scope
             original_deadline_ref.append(scope.deadline)
@@ -188,14 +194,16 @@ async def test_extends_deadline_when_dispatch_marker_active(monkeypatch, tmp_pat
 
     async with anyio.create_task_group() as tg:
         tg.start_soon(
-            _watch_child_activity,
-            1,
-            scope_ref,
-            7200.0,
-            trigger,
-            0.05,
-            marker_dir=tmp_path,
-            session_id="test-sid",
+            functools.partial(
+                _watch_child_activity,
+                1,
+                scope_ref,
+                7200.0,
+                trigger,
+                0.05,
+                marker_dir=tmp_path,
+                session_id="test-sid",
+            )
         )
         with anyio.move_on_after(0.1) as scope:
             scope_ref[0] = scope
@@ -229,14 +237,16 @@ async def test_no_extension_when_marker_inactive(monkeypatch, tmp_path) -> None:
 
     async with anyio.create_task_group() as tg:
         tg.start_soon(
-            _watch_child_activity,
-            1,
-            scope_ref,
-            7200.0,
-            trigger,
-            0.05,
-            marker_dir=tmp_path,
-            session_id="test-sid",
+            functools.partial(
+                _watch_child_activity,
+                1,
+                scope_ref,
+                7200.0,
+                trigger,
+                0.05,
+                marker_dir=tmp_path,
+                session_id="test-sid",
+            )
         )
         with anyio.move_on_after(2.0) as scope:
             scope_ref[0] = scope

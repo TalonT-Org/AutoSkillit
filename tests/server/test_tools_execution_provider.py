@@ -47,7 +47,7 @@ async def test_run_skill_provider_extras_none_for_anthropic_sentinel(
     monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: True)
     monkeypatch.setattr(
         "autoskillit.server._guards._resolve_provider_profile",
-        lambda *a, **kw: ("anthropic", {"SOME_KEY": "val"}),
+        lambda *a: ("anthropic", {"SOME_KEY": "val"}),
     )
 
     captured: dict = {}
@@ -77,7 +77,7 @@ async def test_run_skill_provider_extras_forwarded_for_non_anthropic(
     monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: True)
     monkeypatch.setattr(
         "autoskillit.server._guards._resolve_provider_profile",
-        lambda *a, **kw: ("bedrock", {"AWS_REGION": "us-east-1"}),
+        lambda *a: ("bedrock", {"AWS_REGION": "us-east-1"}),
     )
 
     captured: dict = {}
@@ -107,7 +107,7 @@ async def test_run_skill_model_as_profile_resolves_provider(
     monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: True)
     monkeypatch.setattr(
         "autoskillit.server._guards._resolve_provider_profile",
-        lambda *a, **kw: ("anthropic", {}),
+        lambda *a: ("anthropic", {}),
     )
     monkeypatch.setattr(
         "autoskillit.server._guards._resolve_model_as_profile",
@@ -142,7 +142,7 @@ async def test_run_skill_step_overrides_win_over_model_as_profile(
     monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: True)
     monkeypatch.setattr(
         "autoskillit.server._guards._resolve_provider_profile",
-        lambda *a, **kw: ("bedrock", {"AWS_REGION": "us-east-1"}),
+        lambda *a: ("bedrock", {"AWS_REGION": "us-east-1"}),
     )
     map_called = []
     monkeypatch.setattr(
@@ -204,7 +204,7 @@ async def test_run_skill_model_as_profile_no_anthropic_model_falls_through(
     monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: True)
     monkeypatch.setattr(
         "autoskillit.server._guards._resolve_provider_profile",
-        lambda *a, **kw: ("anthropic", {}),
+        lambda *a: ("anthropic", {}),
     )
     monkeypatch.setattr(
         "autoskillit.server._guards._resolve_model_as_profile",
@@ -405,31 +405,3 @@ async def test_run_skill_global_override_beats_model_overrides(
     await run_skill("/autoskillit:probe", str(tmp_path), step_name="implement")
 
     assert captured.get("model") == "haiku"
-
-
-@pytest.mark.anyio
-async def test_run_skill_no_provider_profile_injected_for_default_step(
-    tool_ctx_kitchen_open, tmp_path, monkeypatch
-) -> None:
-    """run_skill with step_name='plan' and no provider config must NOT
-    inject AUTOSKILLIT_PROVIDER_PROFILE into the subprocess."""
-    from tests.fakes import InMemoryHeadlessExecutor
-
-    executor = InMemoryHeadlessExecutor()
-    tool_ctx_kitchen_open.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: True)
-
-    captured: dict = {}
-    original_run = executor.run
-
-    async def spy_run(*args, **kwargs):
-        captured.update(kwargs)
-        return await original_run(*args, **kwargs)
-
-    monkeypatch.setattr(executor, "run", spy_run)
-
-    await run_skill("/autoskillit:probe", str(tmp_path), step_name="plan")
-
-    assert captured.get("provider_extras") is None
-    assert captured.get("profile_name") == ""

@@ -160,10 +160,7 @@ def _provider_result(
 ) -> tuple[str, dict[str, str]]:
     if provider == "anthropic":
         return ("anthropic", {})
-    raw = profiles.get(provider)
-    if raw is None:
-        logger.warning("provider_profile_not_found", provider=provider, tier="recipe_override")
-        return (provider, {})
+    raw = profiles.get(provider, {})
     return (provider, {k: v for k, v in raw.items() if v is not None})
 
 
@@ -187,8 +184,6 @@ def _resolve_provider_profile(
     step_name: str,
     recipe_name: str,
     config_providers: ProvidersConfig,
-    *,
-    step_provider: str = "",
 ) -> tuple[str, dict[str, str]]:
 
     # Tiers 0/0W: recipe-scoped overrides — single lookup shared by both tiers
@@ -229,9 +224,7 @@ def _resolve_provider_profile(
                 return ("anthropic", {})
             profile = config_providers.resolved_profiles.get(step_override)
             if profile is None:
-                logger.warning(
-                    "provider_profile_not_found", provider=step_override, tier="step_override"
-                )
+                logger.debug("provider_profile_not_found", provider=step_override)
                 return (step_override, {})
             return (step_override, _profile_to_env(profile))
 
@@ -248,26 +241,20 @@ def _resolve_provider_profile(
                 return ("anthropic", {})
             profile = config_providers.resolved_profiles.get(wildcard)
             if profile is None:
-                logger.warning(
-                    "provider_profile_not_found", provider=wildcard, tier="wildcard_override"
-                )
+                logger.debug("provider_profile_not_found", provider=wildcard)
                 return (wildcard, {})
             return (wildcard, _profile_to_env(profile))
 
-    # Tier 3: explicit step-level provider declaration (YAML provider: field)
-    if step_provider:
-        logger.debug(
-            "provider_profile_resolved", tier="step_provider_field", profile=step_provider
-        )
-        if step_provider == "anthropic":
+    # Tier 3: step YAML provider field
+    if step_name:
+        logger.debug("provider_profile_resolved", tier="step_provider_field", profile=step_name)
+        if step_name == "anthropic":
             return ("anthropic", {})
-        profile = config_providers.resolved_profiles.get(step_provider)
+        profile = config_providers.resolved_profiles.get(step_name)
         if profile is None:
-            logger.warning(
-                "provider_profile_not_found", provider=step_provider, tier="step_provider_field"
-            )
-            return ("anthropic", {})
-        return (step_provider, _profile_to_env(profile))
+            logger.debug("provider_profile_not_found", provider=step_name)
+            return (step_name, {})
+        return (step_name, _profile_to_env(profile))
 
     # Tier 4: default
     name = config_providers.default_provider or "anthropic"
@@ -276,7 +263,7 @@ def _resolve_provider_profile(
         return ("anthropic", {})
     profile = config_providers.resolved_profiles.get(name)
     if profile is None:
-        logger.warning("provider_profile_not_found", provider=name, tier="default")
+        logger.debug("provider_profile_not_found", provider=name)
         return (name, {})
     return (name, _profile_to_env(profile))
 

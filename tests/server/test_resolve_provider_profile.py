@@ -41,7 +41,7 @@ def test_step_yaml_provider_wins_when_no_config_overrides():
     cfg = _make_config(
         profiles={"bedrock": {"AWS_REGION": "eu-west-1"}},
     )
-    result = _resolve_provider_profile("implement", "my_recipe", cfg, step_provider="bedrock")
+    result = _resolve_provider_profile("bedrock", "my_recipe", cfg)
     assert result == ("bedrock", {"AWS_REGION": "eu-west-1"})
 
 
@@ -90,8 +90,8 @@ def test_non_anthropic_profile_returns_correct_env_dict():
 
 
 def test_no_recipe_name_skips_step_override():
-    # Without recipe context, Tiers 1/2 are bypassed. Without step_provider,
-    # Tier 3 is also skipped. Falls through to Tier 4 (default).
+    # Without recipe context, Tier 1 is bypassed; Tier 3 uses step_name as the
+    # provider name. If the override had applied we'd get ("vertex", {"K": "V"}).
     from autoskillit.server._guards import _resolve_provider_profile
 
     cfg = _make_config(
@@ -99,7 +99,7 @@ def test_no_recipe_name_skips_step_override():
         profiles={"vertex": {"K": "V"}, "bedrock": {"X": "Y"}},
     )
     result = _resolve_provider_profile("bedrock", "", cfg)
-    assert result == ("anthropic", {})
+    assert result == ("bedrock", {"X": "Y"})
 
 
 def test_recipe_override_wins_over_global_step_override():
@@ -176,7 +176,7 @@ def test_recipe_override_requires_recipe_context():
         profiles={"vertex": {"K": "V"}},
     )
     result = _resolve_provider_profile("implement", "", cfg)
-    assert result == ("anthropic", {})
+    assert result == ("implement", {})
 
 
 def test_recipe_override_requires_step_name():
@@ -224,61 +224,3 @@ def test_resolve_provider_profile_step_override_resolves_api_key(monkeypatch):
     assert name == "custom"
     assert None not in extras.values()
     assert extras == {"ANTHROPIC_API_KEY": "secret-value"}
-
-
-def test_tier3_step_name_not_used_as_profile_when_no_matching_profile():
-    """step_name='plan' with no 'plan' profile should fall through to Tier 4."""
-    from autoskillit.server._guards import _resolve_provider_profile
-
-    cfg = _make_config()
-    result = _resolve_provider_profile("plan", "", cfg)
-    assert result == ("anthropic", {}), (
-        "step_name='plan' should NOT be returned as a profile name "
-        "when 'plan' is not a configured profile"
-    )
-
-
-def test_tier3_only_fires_for_explicit_provider_declaration():
-    """Tier 3 should only use step_provider (the YAML provider: field), not step_name."""
-    from autoskillit.server._guards import _resolve_provider_profile
-
-    cfg = _make_config(profiles={"bedrock": {"AWS_REGION": "us-east-1"}})
-    result = _resolve_provider_profile("implement", "", cfg, step_provider="")
-    assert result == ("anthropic", {}), (
-        "Without an explicit provider: field, Tier 3 should not fire"
-    )
-
-
-def test_tier3_uses_explicit_provider_field():
-    """When step_provider='bedrock' is explicitly set, Tier 3 resolves it."""
-    from autoskillit.server._guards import _resolve_provider_profile
-
-    cfg = _make_config(profiles={"bedrock": {"AWS_REGION": "us-east-1"}})
-    result = _resolve_provider_profile("implement", "", cfg, step_provider="bedrock")
-    assert result == ("bedrock", {"AWS_REGION": "us-east-1"})
-
-
-def test_tier3_unresolvable_step_provider_falls_to_anthropic():
-    """Unknown step_provider should warn and return anthropic, not propagate."""
-    from autoskillit.server._guards import _resolve_provider_profile
-
-    cfg = _make_config()
-    result = _resolve_provider_profile("implement", "", cfg, step_provider="nonexistent")
-    assert result == ("anthropic", {}), "Unresolvable step_provider should fall back to anthropic"
-
-
-def test_unresolvable_step_override_logs_warning():
-    """A step_overrides value that doesn't match a profile should log a warning."""
-    import structlog.testing
-
-    from autoskillit.server._guards import _resolve_provider_profile
-
-    with structlog.testing.capture_logs() as cap_logs:
-        cfg = _make_config(
-            step_overrides={"plan": "nonexistent_profile"},
-            profiles={},
-        )
-        result = _resolve_provider_profile("plan", "my_recipe", cfg)
-    assert result == ("nonexistent_profile", {})
-    warning_events = [e for e in cap_logs if e.get("log_level") == "warning"]
-    assert any("nonexistent_profile" in str(e.get("provider", "")) for e in warning_events)

@@ -89,7 +89,7 @@ steps:
       skill_command: "/autoskillit:stage-data ${{ inputs.experiment_plan }}"
       cwd: "${{ inputs.worktree_path }}"
       step_name: stage_data
-      output_dir: ${{ inputs.worktree_path }}/{{AUTOSKILLIT_TEMP}}/stage-data
+      output_dir: "{{AUTOSKILLIT_TEMP}}/stage-data"
     capture:
       verdict: "${{ result.verdict }}"
       resource_report: "${{ result.resource_report }}"
@@ -119,7 +119,7 @@ steps:
       skill_command: "/autoskillit:download-data ${{ inputs.experiment_plan }}"
       cwd: "${{ inputs.worktree_path }}"
       step_name: download_data
-      output_dir: ${{ inputs.worktree_path }}/{{AUTOSKILLIT_TEMP}}/download-data
+      output_dir: "{{AUTOSKILLIT_TEMP}}/download-data"
     capture:
       verdict: "${{ result.verdict }}"
       download_report: "${{ result.download_report }}"
@@ -145,7 +145,7 @@ steps:
       skill_command: "/autoskillit:make-groups ${{ inputs.experiment_plan }}"
       cwd: "${{ inputs.worktree_path }}"
       step_name: decompose
-      output_dir: ${{ inputs.worktree_path }}/{{AUTOSKILLIT_TEMP}}/make-groups
+      output_dir: "{{AUTOSKILLIT_TEMP}}/make-groups"
     capture:
       group_files: "${{ result.group_files }}"
     on_success: plan_phase
@@ -213,7 +213,7 @@ steps:
       skill_command: "/autoskillit:troubleshoot-experiment ${{ context.worktree_path }} implement_phase"
       cwd: "${{ inputs.source_dir }}"
       step_name: troubleshoot_implement_failure
-      output_dir: ${{ inputs.source_dir }}/{{AUTOSKILLIT_TEMP}}/troubleshoot-experiment
+      output_dir: "{{AUTOSKILLIT_TEMP}}/troubleshoot-experiment"
     capture:
       is_fixable: "${{ result.is_fixable }}"
       retry_delay: "${{ result.retry_delay }}"
@@ -308,7 +308,7 @@ steps:
       skill_command: "/autoskillit:audit-impl ${{ context.group_files }} ${{ inputs.base_branch }}"
       cwd: "${{ context.worktree_path }}"
       step_name: audit_impl
-      output_dir: ${{ context.worktree_path }}/{{AUTOSKILLIT_TEMP}}/audit-impl
+      output_dir: "{{AUTOSKILLIT_TEMP}}/audit-impl"
     capture:
       remediation_path: "${{ result.remediation_path }}"
     on_result:
@@ -394,7 +394,7 @@ steps:
       skill_command: "/autoskillit:troubleshoot-experiment ${{ context.worktree_path }} run_experiment"
       cwd: "${{ inputs.source_dir }}"
       step_name: troubleshoot_run_failure
-      output_dir: ${{ inputs.source_dir }}/{{AUTOSKILLIT_TEMP}}/troubleshoot-experiment
+      output_dir: "{{AUTOSKILLIT_TEMP}}/troubleshoot-experiment"
     capture:
       run_is_fixable: "${{ result.is_fixable }}"
       run_retry_delay: "${{ result.retry_delay }}"
@@ -497,7 +497,7 @@ steps:
       skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }}"
       cwd: "${{ context.worktree_path }}"
       step_name: generate_report
-      output_dir: ${{ context.worktree_path }}/{{AUTOSKILLIT_TEMP}}/generate-report
+      output_dir: "{{AUTOSKILLIT_TEMP}}/generate-report"
     capture:
       report_path: "${{ result.report_path }}"
     on_success: test
@@ -512,7 +512,7 @@ steps:
       skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --inconclusive --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }}"
       cwd: "${{ context.worktree_path }}"
       step_name: generate_report_inconclusive
-      output_dir: ${{ context.worktree_path }}/{{AUTOSKILLIT_TEMP}}/generate-report
+      output_dir: "{{AUTOSKILLIT_TEMP}}/generate-report"
     capture:
       report_path: "${{ result.report_path }}"
     on_success: test

@@ -138,3 +138,62 @@ async def test_run_skill_logs_warning_when_output_dir_resolved_from_recipe(
         await run_skill("/dry-walkthrough ...", str(tmp_path), step_name="verify")
 
     assert any(entry.get("event") == "output_dir_resolved_from_recipe" for entry in cap)
+
+
+@pytest.mark.anyio
+async def test_run_skill_skips_auto_fill_when_output_dir_has_template(
+    tool_ctx_kitchen_open, monkeypatch, tmp_path
+) -> None:
+    """When recipe step output_dir has ${{ }}, auto-fill MUST skip AND fallback
+    to resolve_skill_temp_dir — producing the correct skill-scoped prefix."""
+    from autoskillit.recipe.schema import RecipeStep
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    tool_ctx_kitchen_open.active_recipe_steps = {
+        "verify": RecipeStep(
+            name="verify",
+            with_args={
+                "output_dir": "${{ context.work_dir }}/.autoskillit/temp",
+                "skill_command": "/autoskillit:dry-walkthrough path/to/plan.md",
+            },
+        )
+    }
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+
+    await run_skill(
+        skill_command="/autoskillit:dry-walkthrough path/to/plan.md",
+        cwd=str(tmp_path),
+        step_name="verify",
+    )
+    expected = str(tmp_path / ".autoskillit" / "temp" / "dry-walkthrough") + "/"
+    assert executor.calls[0].allowed_write_prefix == expected
+
+
+@pytest.mark.anyio
+async def test_run_skill_auto_fills_relative_output_dir_from_recipe(
+    tool_ctx_kitchen_open, monkeypatch, tmp_path
+) -> None:
+    """When recipe step output_dir is a server-resolvable relative path,
+    auto-fill MUST resolve it against cwd and produce the correct prefix."""
+    from autoskillit.recipe.schema import RecipeStep
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    tool_ctx_kitchen_open.active_recipe_steps = {
+        "verify": RecipeStep(
+            name="verify",
+            with_args={"output_dir": ".autoskillit/temp"},
+        )
+    }
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+
+    await run_skill(
+        skill_command="/autoskillit:dry-walkthrough path/to/plan.md",
+        cwd=str(tmp_path),
+        step_name="verify",
+    )
+    expected = str(tmp_path / ".autoskillit" / "temp") + "/"
+    assert executor.calls[0].allowed_write_prefix == expected

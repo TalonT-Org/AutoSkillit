@@ -38,3 +38,21 @@ def test_dry_walkthrough_output_dir_does_not_scope_to_subdirectory(
             f"/dry-walkthrough subdirectory — dry-walkthrough edits plan files "
             f"at make-plan/ or rectify/ locations (issue #2919)"
         )
+
+
+@pytest.mark.parametrize("recipe_name", _RECIPES_WITH_DRY_WALKTHROUGH)
+def test_dry_walkthrough_output_dir_is_server_resolvable(
+    recipe_name: str,
+) -> None:
+    """dry-walkthrough output_dir must be free of ${{ }} templates."""
+    recipe_path = pkg_root() / "recipes" / f"{recipe_name}.yaml"
+    recipe = load_recipe(recipe_path)
+    for step_name, step in recipe.steps.items():
+        cmd = (step.with_args or {}).get("skill_command", "")
+        if "dry-walkthrough" not in cmd:
+            continue
+        output_dir = (step.with_args or {}).get("output_dir", "")
+        assert "${{" not in output_dir, (
+            f"{recipe_name}.{step_name}: output_dir '{output_dir}' contains "
+            f"${{{{ }}}} — server auto-fill cannot resolve this."
+        )

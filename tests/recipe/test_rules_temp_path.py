@@ -12,7 +12,7 @@ pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
 class TestNonUniqueOutputPath:
-    def test_bare_temp_path_in_output_dir_errors(self) -> None:
+    def test_relative_temp_path_with_suffix_in_output_dir_passes(self) -> None:
         wf = _make_workflow(
             {
                 "init_step": {
@@ -27,8 +27,48 @@ class TestNonUniqueOutputPath:
             }
         )
         findings = run_semantic_rules(wf)
+        assert not any(
+            f.rule == "non-unique-output-path" and f.step_name == "init_step" for f in findings
+        )
+
+    def test_bare_temp_path_without_suffix_in_output_dir_errors(self) -> None:
+        wf = _make_workflow(
+            {
+                "init_step": {
+                    "tool": "run_skill",
+                    "with": {
+                        "skill_command": "/autoskillit:make-plan task",
+                        "output_dir": "{{AUTOSKILLIT_TEMP}}",
+                    },
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = run_semantic_rules(wf)
         errors = [f for f in findings if f.rule == "non-unique-output-path"]
         assert any(f.severity == Severity.ERROR and f.step_name == "init_step" for f in errors)
+
+    def test_bare_temp_path_without_suffix_in_output_dir_passes_for_dry_walkthrough(
+        self,
+    ) -> None:
+        wf = _make_workflow(
+            {
+                "verify": {
+                    "tool": "run_skill",
+                    "with": {
+                        "skill_command": "/autoskillit:dry-walkthrough plan.md",
+                        "output_dir": "{{AUTOSKILLIT_TEMP}}",
+                    },
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = run_semantic_rules(wf)
+        assert not any(
+            f.rule == "non-unique-output-path" and f.step_name == "verify" for f in findings
+        )
 
     def test_bare_temp_path_in_cmd_errors(self) -> None:
         wf = _make_workflow(

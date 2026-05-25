@@ -140,7 +140,7 @@ steps:
       skill_command: "/autoskillit:make-groups ${{ inputs.source_doc }}"
       cwd: "${{ context.work_dir }}"
       step_name: "group"
-      output_dir: ${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/make-groups
+      output_dir: "{{AUTOSKILLIT_TEMP}}/make-groups"
     capture:
       group_files: "${{ result.group_files }}"
     on_success: plan
@@ -200,7 +200,7 @@ steps:
       skill_command: "/autoskillit:review-approach ${{ context.plan_path }}"
       cwd: "${{ context.work_dir }}"
       step_name: "review"
-      output_dir: ${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/review-approach
+      output_dir: "{{AUTOSKILLIT_TEMP}}/review-approach"
     capture:
       review_path: "${{ result.review_path }}"
     retries: 1
@@ -218,7 +218,7 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "verify"
       review_path: "${{ context.review_path }}"
-      output_dir: ${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}
+      output_dir: "{{AUTOSKILLIT_TEMP}}"
     on_success: implement
     on_failure: release_issue_failure
     note: "SEQUENTIAL EXECUTION: For each plan_part, run the FULL cycle — verify → implement → test → merge — for that part before advancing to the next part. Never run verify for all parts first. If review produced a report, context.review_path is available — pass it as an additional arg to dry-walkthrough."
@@ -424,7 +424,7 @@ steps:
       skill_command: "/autoskillit:audit-impl ${{ context.plan_path }} ${{ context.base_sha }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
       step_name: "audit_impl"
-      output_dir: ${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/audit-impl
+      output_dir: "{{AUTOSKILLIT_TEMP}}/audit-impl"
     capture:
       remediation_path: "${{ result.remediation_path }}"
     on_result:
@@ -563,7 +563,7 @@ steps:
       callable: "autoskillit.smoke_utils.annotate_pr_diff"
       pr_number: "${{ context.pr_number }}"
       cwd: "${{ context.work_dir }}"
-      output_dir: "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/review-pr"
+      output_dir: "{{AUTOSKILLIT_TEMP}}/review-pr"
       base_branch: "${{ inputs.base_branch }}"
       local_review_rounds: "${{ inputs.local_review_rounds }}"
       current_iteration: "${{ context.review_loop_count }}"
@@ -589,7 +589,7 @@ steps:
       skill_command: "/autoskillit:review-pr ${{ context.merge_target }} ${{ inputs.base_branch }} annotated_diff_path=${{ context.annotated_diff_path }} hunk_ranges_path=${{ context.hunk_ranges_path }} diff_metrics_path=${{ context.diff_metrics_path }} mode=${{ context.review_mode }}"
       cwd: "${{ context.work_dir }}"
       step_name: "review_pr"
-      output_dir: ${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/review-pr
+      output_dir: "{{AUTOSKILLIT_TEMP}}/review-pr"
     capture:
       review_verdict: "${{ result.verdict }}"
     on_result:
@@ -941,7 +941,7 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "diagnose_ci"
       ci_failed_jobs: "${{ context.ci_failed_jobs }}"
-      output_dir: ${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/diagnose-ci
+      output_dir: "{{AUTOSKILLIT_TEMP}}/diagnose-ci"
     capture:
       diagnosis_path: "${{ result.diagnosis_path }}"
     on_success: resolve_ci

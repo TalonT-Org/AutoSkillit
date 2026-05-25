@@ -476,7 +476,10 @@ def _register_all(
         from autoskillit.execution import ensure_codex_mcp_registered
 
         ensure_codex_mcp_registered()
-        # P4: insert Codex hook registration here
+
+        from autoskillit.cli._hooks_codex import sync_hooks_to_codex_config
+
+        sync_hooks_to_codex_config()
         plugin_ok = None
     else:
         settings_path = _claude_settings_path(scope)
@@ -529,6 +532,7 @@ def _register_all(
         print(f"  {_Y}{'gh auth':>12}{_R}  {_D}not found — run{_R} {_G}gh auth login{_R}")
     if _backend_name == AGENT_BACKEND_CODEX:
         print(f"  {_Y}{'mcp':>12}{_R}  {_G}~/.codex/config.toml{_R}")
+        print(f"  {_Y}{'hooks':>12}{_R}  {_G}synced{_R} {_D}(codex){_R}")
     else:
         if plugin_ok:
             print(f"  {_Y}{'plugin':>12}{_R}  {_G}registered{_R}")

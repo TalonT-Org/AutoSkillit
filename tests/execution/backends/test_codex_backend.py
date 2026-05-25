@@ -267,6 +267,7 @@ class TestCodexBackendProtocol:
             ("session_resume_capable", True),
             ("skill_injection_capable", False),
             ("mcp_config_capable", True),
+            ("food_truck_capable", False),
         ],
     )
     def test_capability_flag(self, attr: str, expected: bool) -> None:

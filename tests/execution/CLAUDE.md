@@ -20,6 +20,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_commands_invariants.py` | Cross-builder invariants: _HEADLESS_EXCLUSIVE_VARS membership, completion marker position |
 | `test_env_boundary.py` | Contract: every fleet-injected env var must appear in at least one filter list |
 | `test_commands_shim_contract.py` | Structural contract tests verifying commands.py builders are thin forwarding shims |
+| `test_commands_skill_session.py` | Cross-backend contract tests for build_skill_session_cmd shared invariants |
 | `test_db.py` | L1 unit tests for execution/db.py — SQL validation and authorizer |
 | `test_api_error_signal_invariants.py` | API error signal invariants: API errors detected regardless of channel (PTY vs non-PTY) |
 | `test_backend_dispatch.py` | End-to-end tests verifying run_headless_core routes command construction through ctx.backend |

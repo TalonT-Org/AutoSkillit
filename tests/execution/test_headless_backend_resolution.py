@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.execution.backends import CodexBackend
 from tests.execution.conftest import _mock_backend
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -22,6 +23,12 @@ class TestResolvePtyMode:
         import autoskillit.execution.headless as _headless_mod
 
         minimal_ctx.backend = _mock_backend(pty_required=False)
+        assert _headless_mod._resolve_pty_mode(minimal_ctx) is False
+
+    def test_pty_mode_false_for_codex_backend(self, minimal_ctx) -> None:
+        import autoskillit.execution.headless as _headless_mod
+
+        minimal_ctx.backend = CodexBackend()
         assert _headless_mod._resolve_pty_mode(minimal_ctx) is False
 
 

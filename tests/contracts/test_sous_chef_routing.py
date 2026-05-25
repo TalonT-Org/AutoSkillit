@@ -365,7 +365,6 @@ def test_skill_md_covers_all_prompts_routing_reasons() -> None:
         if reason in {
             RetryReason.NONE,
             RetryReason.BUDGET_EXHAUSTED,
-            RetryReason.CONTRACT_RECOVERY,
             RetryReason.CLONE_CONTAMINATION,
         }:
             continue

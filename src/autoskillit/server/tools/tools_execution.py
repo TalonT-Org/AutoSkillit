@@ -490,6 +490,7 @@ async def run_skill(
                 recipe_packs=tool_ctx.active_recipe_packs,
                 recipe_features=tool_ctx.active_recipe_features,
                 allow_only=allow_only,
+                backend=tool_ctx.backend,
             )
             skill_add_dirs.append(session_root)
 

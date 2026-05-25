@@ -286,6 +286,35 @@ async def test_run_skill_idle_output_timeout_defaults_to_none(
     assert executor.calls[0].idle_output_timeout is None
 
 
+@pytest.mark.anyio
+async def test_run_skill_passes_backend_to_init_session(
+    tool_ctx_kitchen_open, monkeypatch
+) -> None:
+    """run_skill forwards tool_ctx.backend to init_session()."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.core import ValidatedAddDir
+    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    fake_validated = ValidatedAddDir(path="/fake/session/dir")
+    mock_ssm = MagicMock()
+    mock_ssm.init_session.return_value = fake_validated
+    tool_ctx_kitchen_open.session_skill_manager = mock_ssm
+
+    # Set a non-None backend on the context
+    fake_backend = MagicMock(spec=CodingAgentBackend)
+    tool_ctx_kitchen_open.backend = fake_backend
+
+    tool_ctx_kitchen_open.executor = InMemoryHeadlessExecutor()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+
+    await run_skill("/test skill", "/tmp")
+
+    mock_ssm.init_session.assert_called_once()
+    assert mock_ssm.init_session.call_args.kwargs.get("backend") is fake_backend
+
+
 class TestOutputDirParameter:
     """output_dir parameter plumbing from run_skill to executor."""
 

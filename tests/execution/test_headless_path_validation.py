@@ -813,7 +813,9 @@ class TestSynthesizeFromWriteArtifacts:
 
         session = make_headless_session(
             result="",
-            tool_uses=[{"name": "file_change", "type": "file_change", "path": "/codex/output.md"}],
+            tool_uses=[
+                {"name": "file_change", "type": "file_change", "file_path": "/codex/output.md"}
+            ],
         )
         result = _synthesize_from_write_artifacts(
             session,

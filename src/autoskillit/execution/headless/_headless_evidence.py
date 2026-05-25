@@ -101,7 +101,7 @@ def _adapt_agent_result(agent_result: AgentSessionResult) -> ClaudeSessionResult
     mcp_tool_calls: list[dict[str, Any]] = raw.get("mcp_tool_calls", [])
     file_change_paths: list[str] = raw.get("file_changes", [])
     file_change_entries = [
-        {"name": "file_change", "type": "file_change", "path": p} for p in file_change_paths
+        {"name": "file_change", "type": "file_change", "file_path": p} for p in file_change_paths
     ]
     tool_uses = command_executions + mcp_tool_calls + file_change_entries
 

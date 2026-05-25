@@ -590,16 +590,20 @@ CHANNEL_B_SUB_SKILL_COLLISION_SCRIPT = textwrap.dedent("""\
 class TestChannelBSubSkillCollision:
     """Channel B ignores static markers when monitoring for a unique marker."""
 
-    @pytest.mark.timeout(150)
+    @pytest.mark.timeout(400)
     @pytest.mark.anyio
     async def test_channel_b_ignores_sub_skill_marker(self, tmp_path):
         """Channel B must not trigger on a sub-skill's static %%ORDER_UP%% marker.
 
-        timeout=120s / _phase1_timeout=250: _phase1_timeout must exceed the outer timeout so
+        timeout=300s / _phase1_timeout=600: _phase1_timeout must exceed the outer timeout so
         Phase 1 never fires STALE before the outer guard under WSL2 + xdist load.
         _session_id_timeout=5.0 gives the stdout reader enough headroom under
         heavy parallel load so Channel B monitoring always starts before the
         JSONL markers are written.
+
+        Timeouts are set at 3x the isolation baseline (~14s) to absorb event-loop
+        slowdowns under 4-worker xdist load on WSL2, where anyio.sleep() can run
+        10-20x longer than nominal due to scheduler saturation.
         """
         session_dir = tmp_path / "session"
         session_dir.mkdir()
@@ -610,11 +614,11 @@ class TestChannelBSubSkillCollision:
         result = await run_managed_async(
             [sys.executable, str(script), str(session_dir), unique_marker],
             cwd=tmp_path,
-            timeout=120,
+            timeout=300,
             session_log_dir=session_dir,
             completion_marker=unique_marker,
             completion_drain_timeout=5.0,
-            _phase1_timeout=250,
+            _phase1_timeout=600,
             _phase1_poll=0.05,
             _phase2_poll=0.05,
             _heartbeat_poll=0.05,

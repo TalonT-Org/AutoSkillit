@@ -70,8 +70,8 @@ class TestCodexBackend:
     def test_capabilities_channel_b_false(self) -> None:
         assert CodexBackend().capabilities.channel_b_capable is False
 
-    def test_capabilities_skill_injection_false(self) -> None:
-        assert CodexBackend().capabilities.skill_injection_capable is False
+    def test_capabilities_skill_injection_true(self) -> None:
+        assert CodexBackend().capabilities.skill_injection_capable is True
 
     def test_capabilities_pty_required_false(self) -> None:
         assert CodexBackend().capabilities.pty_required is False
@@ -265,7 +265,7 @@ class TestCodexBackendProtocol:
             ("channel_b_capable", False),
             ("pty_required", False),
             ("session_resume_capable", True),
-            ("skill_injection_capable", False),
+            ("skill_injection_capable", True),
             ("mcp_config_capable", True),
             ("food_truck_capable", False),
         ],
@@ -433,18 +433,27 @@ class TestCodexBuildSkillSessionCmd:
         spec2 = CodexBackend().build_skill_session_cmd(**self.BASE)
         assert "AUTOSKILLIT_ALLOWED_WRITE_PREFIX" not in spec2.env
 
-    def test_add_dirs_forwarded(self) -> None:
-        dirs = [
-            ValidatedAddDir(path="/extra"),
-            ValidatedAddDir(path="/more"),
-        ]
+    def test_codex_home_env_set(self) -> None:
+        dirs = [ValidatedAddDir(path="/extra")]
         spec = CodexBackend().build_skill_session_cmd(
             **{**self.BASE, "add_dirs": dirs},
         )
-        add_dir_indices = [i for i, v in enumerate(spec.cmd) if v == "--add-dir"]
-        assert len(add_dir_indices) == 2
-        assert spec.cmd[add_dir_indices[0] + 1] == "/extra"
-        assert spec.cmd[add_dir_indices[1] + 1] == "/more"
+        assert spec.env["CODEX_HOME"] == "/extra"
+
+    def test_codex_home_not_set_by_default(self) -> None:
+        spec = CodexBackend().build_skill_session_cmd(**self.BASE)
+        assert "CODEX_HOME" not in spec.env
+
+    def test_no_add_dir_flag_with_add_dirs(self) -> None:
+        dirs = [ValidatedAddDir(path="/extra")]
+        spec = CodexBackend().build_skill_session_cmd(
+            **{**self.BASE, "add_dirs": dirs},
+        )
+        assert "--add-dir" not in spec.cmd
+
+    def test_no_add_dir_flag_without_add_dirs(self) -> None:
+        spec = CodexBackend().build_skill_session_cmd(**self.BASE)
+        assert "--add-dir" not in spec.cmd
 
     def test_model_forwarded(self) -> None:
         spec = CodexBackend().build_skill_session_cmd(

@@ -168,7 +168,7 @@ class CodexBackend:
             channel_b_capable=False,
             pty_required=False,
             session_resume_capable=True,
-            skill_injection_capable=False,
+            skill_injection_capable=True,
             supports_thinking_blocks=False,
             supports_claude_format_stdout=False,
             exit_code_is_terminal=True,
@@ -322,6 +322,8 @@ class CodexBackend:
         if profile_name:
             extras["AUTOSKILLIT_PROVIDER_PROFILE"] = profile_name
             extras["AUTOSKILLIT_COMPLETION_MARKER"] = completion_marker
+        if add_dirs:
+            extras["CODEX_HOME"] = add_dirs[0].path
 
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
         env = CodexEnvPolicy().build_env(filtered_base, extras=extras)
@@ -337,8 +339,6 @@ class CodexBackend:
         ]
         if model:
             cmd += [CodexFlags.MODEL, model]
-        for validated_dir in add_dirs:
-            cmd += [CodexFlags.ADD_DIR, validated_dir.path]
         if resume_session_id:
             cmd.append(CodexFlags.RESUME_SUBCOMMAND)
             cmd.append(resume_session_id)

@@ -482,6 +482,7 @@ class SessionIndexEntry(TypedDict):
     tracked_comm_drift: bool
     autoskillit_version: str
     claude_code_version: str
+    codex_version: str
     recipe_name: str
     recipe_content_hash: str
     recipe_composite_hash: str

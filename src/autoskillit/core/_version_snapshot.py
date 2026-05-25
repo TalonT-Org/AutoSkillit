@@ -19,7 +19,11 @@ from pathlib import Path
 from typing import Any
 
 from ._install_detect import parse_direct_url
-from .types._type_constants_env import AGENT_BACKEND_CLAUDE_CODE, AGENT_BACKEND_ENV_VAR
+from .types._type_constants_env import (
+    AGENT_BACKEND_CLAUDE_CODE,
+    AGENT_BACKEND_CODEX,
+    AGENT_BACKEND_ENV_VAR,
+)
 
 logger = logging.getLogger(__name__)  # noqa: TID251 — IL-0 module, no autoskillit imports allowed
 
@@ -35,6 +39,8 @@ def collect_version_snapshot() -> dict[str, Any]:
         claude_code_version: output of `claude --version`, or "".
         plugins: list of {"ref": ..., "version"?: ...} dicts
             read from ~/.claude/plugins/installed_plugins.json.
+        codex_version: output of `codex --version`, or "".
+        codex_plugins: list of plugin dicts from `codex plugin list --json`, or [].
     """
     install = _install_info()
     return {
@@ -43,6 +49,8 @@ def collect_version_snapshot() -> dict[str, Any]:
         "commit_id": install.get("commit_id"),
         "claude_code_version": _claude_code_version(),
         "plugins": _plugins(),
+        "codex_version": _codex_version(),
+        "codex_plugins": _codex_plugins(),
     }
 
 
@@ -87,6 +95,51 @@ def _claude_code_version() -> str:
     except Exception:
         logger.warning("Failed to run claude --version", exc_info=True)
         return ""
+
+
+def _codex_version() -> str:
+    """Run ``codex --version`` and return the stripped output, or "" on error."""
+    backend = os.environ.get(AGENT_BACKEND_ENV_VAR, AGENT_BACKEND_CLAUDE_CODE)
+    if backend != AGENT_BACKEND_CODEX:
+        return ""
+    try:
+        result = subprocess.run(
+            ["codex", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return result.stdout.strip() or result.stderr.strip()
+    except subprocess.TimeoutExpired:
+        return ""
+    except Exception:
+        logger.warning("Failed to run codex --version", exc_info=True)
+        return ""
+
+
+def _codex_plugins() -> list[dict[str, Any]]:
+    """Run ``codex plugin list --json`` and return parsed plugin list, or [] on error."""
+    backend = os.environ.get(AGENT_BACKEND_ENV_VAR, AGENT_BACKEND_CLAUDE_CODE)
+    if backend != AGENT_BACKEND_CODEX:
+        return []
+    try:
+        result = subprocess.run(
+            ["codex", "plugin", "list", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if not result.stdout.strip():
+            return []
+        parsed = json.loads(result.stdout)
+        if not isinstance(parsed, list):
+            return []
+        return parsed
+    except subprocess.TimeoutExpired:
+        return []
+    except Exception:
+        logger.warning("Failed to run codex plugin list", exc_info=True)
+        return []
 
 
 def _plugins() -> list[dict[str, Any]]:

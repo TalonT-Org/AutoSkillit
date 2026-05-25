@@ -261,11 +261,12 @@ def test_build_interactive_cmd_satisfies_protocol_claude():
     assert isinstance(ClaudeCodeBackend(), CodingAgentBackend)
 
 
-def test_build_interactive_cmd_codex_raises_not_implemented():
+def test_build_interactive_cmd_codex_returns_cmd_spec():
+    from autoskillit.core import CmdSpec
     from autoskillit.execution.backends import CodexBackend
 
-    with pytest.raises(NotImplementedError, match="P6-A3"):
-        CodexBackend().build_interactive_cmd()
+    spec = CodexBackend().build_interactive_cmd()
+    assert isinstance(spec, CmdSpec)
 
 
 def test_build_interactive_cmd_signature_shape():

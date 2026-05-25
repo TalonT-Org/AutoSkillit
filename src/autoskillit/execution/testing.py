@@ -222,12 +222,19 @@ def _strip_progress_noise(stdout: str) -> str:
 def condense_test_output(result: TestResult) -> tuple[str, str]:
     """Condense test output for MCP response consumption.
 
-    On pass: returns only the summary line and empty stderr.
+    On pass: if a pytest-style summary line is found, returns only the summary
+    and clears stderr (which contains only install noise). For non-pytest runners
+    that emit results to stderr, stderr is preserved.
     On fail: strips progress noise from stdout, preserves stderr.
     """
     if result.passed:
-        summary = extract_summary_line(result.stdout) or ""
-        return summary, ""
+        summary = extract_summary_line(result.stdout)
+        if summary is not None:
+            # Pytest-style output: summary found; stderr is install noise only.
+            return summary, ""
+        # Non-pytest runner: no summary in stdout; preserve stderr as it may
+        # contain the primary result (e.g. cargo nextest: "PASS [0.5s] 5 tests").
+        return "", result.stderr
 
     stdout = _strip_progress_noise(result.stdout)
     return stdout, result.stderr

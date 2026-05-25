@@ -202,6 +202,7 @@ async def run_skill(
     cwd: str,
     model: str = "",
     step_name: str = "",
+    step_provider: str = "",
     order_id: str = "",
     stale_threshold: int | None = None,
     idle_output_timeout: int | None = None,
@@ -329,7 +330,10 @@ async def run_skill(
             )
 
             _profile, _env_dict = _resolve_provider_profile(
-                step_name or "", tool_ctx.recipe_name or "", _cfg.providers
+                step_name or "",
+                tool_ctx.recipe_name or "",
+                _cfg.providers,
+                step_provider=step_provider or "",
             )
             if _profile != "anthropic":
                 provider_extras = _env_dict

@@ -22,6 +22,8 @@ from __future__ import annotations
 import json
 import os
 import sys
+import tempfile
+import time
 from pathlib import Path
 
 _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
@@ -31,6 +33,47 @@ if _HOOKS_DIR not in sys.path:
 from _hook_utils import find_project_root  # type: ignore[import-not-found]  # noqa: E402
 
 SKILL_LOAD_DENY_TRIGGER: str = "SKILL LOADING REQUIRED"
+
+DENY_THRESHOLD: int = 5
+
+
+def _check_deny_count(temp_dir: Path, session_id: str) -> bool:
+    deny_dir = temp_dir / f"skill_guard_{session_id}_denials"
+    if not deny_dir.exists():
+        return False
+    try:
+        return len(list(deny_dir.iterdir())) >= DENY_THRESHOLD
+    except OSError:
+        return False
+
+
+def _record_denial(temp_dir: Path, session_id: str) -> None:
+    deny_dir = temp_dir / f"skill_guard_{session_id}_denials"
+    deny_dir.mkdir(parents=True, exist_ok=True)
+    deny_file = deny_dir / f"{os.getpid()}_{time.monotonic_ns()}"
+    try:
+        fd = os.open(str(deny_file), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+        os.close(fd)
+    except (FileExistsError, OSError):
+        pass
+
+
+def _atomic_write_flag(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(content)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
 
 _DENY_MESSAGE: str = (
     "SKILL LOADING REQUIRED. You MUST call the Skill tool to load the skill "
@@ -65,9 +108,24 @@ def main() -> None:
     if not session_id:
         sys.exit(0)
 
-    flag_path = find_project_root() / ".autoskillit" / "temp" / f"skill_guard_{session_id}.flag"
+    project_root = find_project_root()
+    temp_dir = project_root / ".autoskillit" / "temp"
+    flag_path = temp_dir / f"skill_guard_{session_id}.flag"
     if flag_path.exists():
         sys.exit(0)
+
+    if _check_deny_count(temp_dir, session_id):
+        try:
+            _atomic_write_flag(flag_path, "__auto_exempt__")
+            sys.stderr.write(
+                f"skill_load_guard: auto-exempted session {session_id} after "
+                f"{DENY_THRESHOLD} denials (possible deadlock)\n"
+            )
+        except Exception:
+            pass
+        sys.exit(0)
+
+    _record_denial(temp_dir, session_id)
 
     payload = json.dumps(
         {

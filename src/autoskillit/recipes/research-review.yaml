@@ -182,7 +182,7 @@ steps:
       skill_command: "/autoskillit:review-research-pr ${{ context.worktree_path }} ${{ inputs.base_branch }} ${{ context.pr_url }}"
       cwd: "${{ context.worktree_path }}"
       step_name: review_research_pr
-      output_dir: ${{ context.worktree_path }}/{{AUTOSKILLIT_TEMP}}/review-research-pr
+      output_dir: "{{AUTOSKILLIT_TEMP}}/review-research-pr"
     capture:
       review_verdict: "${{ result.verdict }}"
     pass_through: [verdict]
@@ -209,7 +209,7 @@ steps:
       skill_command: "/autoskillit:audit-claims ${{ context.worktree_path }} ${{ inputs.base_branch }} ${{ context.pr_url }}"
       cwd: "${{ context.worktree_path }}"
       step_name: audit_claims
-      output_dir: ${{ context.worktree_path }}/{{AUTOSKILLIT_TEMP}}/audit-claims
+      output_dir: "{{AUTOSKILLIT_TEMP}}/audit-claims"
     capture:
       audit_verdict: "${{ result.verdict }}"
     pass_through: [verdict]
@@ -345,7 +345,7 @@ steps:
       skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }}"
       cwd: "${{ context.worktree_path }}"
       step_name: re_generate_report
-      output_dir: ${{ context.worktree_path }}/{{AUTOSKILLIT_TEMP}}/generate-report
+      output_dir: "{{AUTOSKILLIT_TEMP}}/generate-report"
     capture:
       report_path: "${{ result.report_path }}"
     on_success: re_stage_bundle

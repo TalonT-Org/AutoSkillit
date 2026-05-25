@@ -61,7 +61,7 @@ steps:
       skill_command: "/autoskillit:scope ${{ inputs.task }}"
       cwd: "${{ inputs.source_dir }}"
       step_name: scope
-      output_dir: ${{ inputs.source_dir }}/{{AUTOSKILLIT_TEMP}}/scope
+      output_dir: "{{AUTOSKILLIT_TEMP}}/scope"
     capture:
       scope_report: "${{ result.scope_report }}"
       scope_directions: "${{ result.scope_directions }}"
@@ -87,7 +87,7 @@ steps:
       skill_command: "/autoskillit:plan-experiment ${{ context.scope_report }} ${{ context.selected_directions }} ${{ context.revision_guidance }}"
       cwd: "${{ inputs.source_dir }}"
       step_name: plan_experiment
-      output_dir: ${{ inputs.source_dir }}/{{AUTOSKILLIT_TEMP}}/plan-experiment
+      output_dir: "{{AUTOSKILLIT_TEMP}}/plan-experiment"
     optional_context_refs: [revision_guidance, selected_directions]
     capture:
       experiment_plan: "${{ result.experiment_plan }}"
@@ -101,7 +101,7 @@ steps:
       skill_command: "/autoskillit:review-design ${{ context.experiment_plan }} ${{ context.scope_report }}"
       cwd: "${{ inputs.source_dir }}"
       step_name: review_design
-      output_dir: ${{ inputs.source_dir }}/{{AUTOSKILLIT_TEMP}}/review-design
+      output_dir: "{{AUTOSKILLIT_TEMP}}/review-design"
     capture:
       verdict: "${{ result.verdict }}"
       experiment_type: "${{ result.experiment_type }}"
@@ -129,7 +129,7 @@ steps:
       skill_command: "/autoskillit:plan-visualization ${{ inputs.source_dir }} ${{ context.experiment_plan }} ${{ context.scope_report }}"
       cwd: "${{ inputs.source_dir }}"
       step_name: plan_visualization
-      output_dir: ${{ inputs.source_dir }}/{{AUTOSKILLIT_TEMP}}/plan-visualization
+      output_dir: "{{AUTOSKILLIT_TEMP}}/plan-visualization"
     capture:
       visualization_plan_path: "${{ result.visualization_plan_path }}"
       report_plan_path: "${{ result.report_plan_path }}"
@@ -174,7 +174,7 @@ steps:
       skill_command: "/autoskillit:resolve-design-review ${{ context.evaluation_dashboard }} ${{ context.experiment_plan }} ${{ context.revision_guidance }}"
       cwd: "${{ inputs.source_dir }}"
       step_name: resolve_design_review
-      output_dir: ${{ inputs.source_dir }}/{{AUTOSKILLIT_TEMP}}/resolve-design-review
+      output_dir: "{{AUTOSKILLIT_TEMP}}/resolve-design-review"
     optional_context_refs: [evaluation_dashboard, experiment_plan, revision_guidance]
     capture:
       revision_guidance: "${{ result.revision_guidance }}"

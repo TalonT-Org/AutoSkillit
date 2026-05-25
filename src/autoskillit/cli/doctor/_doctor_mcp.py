@@ -63,7 +63,7 @@ def _check_mcp_server_registered(
 ) -> DoctorResult:
     """Check that autoskillit MCP server is registered (via mcpServers or plugin)."""
     if backend == "codex":
-        from autoskillit.execution.backends._codex_config import (
+        from autoskillit.execution import (
             _is_autoskillit_registered,
             _read_codex_config,
         )

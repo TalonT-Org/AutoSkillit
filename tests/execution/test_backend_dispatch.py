@@ -59,3 +59,47 @@ async def test_run_headless_core_uses_ctx_backend_for_command_construction(minim
     assert call_args.args[1] == "/tmp/test-cwd"
     config = call_args.args[2]
     assert config.completion_marker == "%%DONE%%"
+
+
+class TestBackendDispatchRouting:
+    @pytest.mark.anyio
+    async def test_codex_backend_pty_mode_false_reaches_runner(self, minimal_ctx):
+        backend = _mock_backend(pty_required=False, channel_b_capable=False)
+        minimal_ctx.backend = backend
+
+        mock_runner = AsyncMock()
+        mock_result = SubprocessResult(
+            returncode=0,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+        )
+        mock_runner.return_value = mock_result
+        minimal_ctx.runner = mock_runner
+
+        with patch(
+            "autoskillit.execution.headless._headless_execute._build_skill_result"
+        ) as mock_build_result:
+            mock_build_result.return_value = SkillResult(
+                success=True,
+                result="",
+                session_id="test-session",
+                subtype="success",
+                is_error=False,
+                exit_code=0,
+                needs_retry=False,
+                retry_reason=RetryReason.NONE,
+                stderr="",
+            )
+
+            from autoskillit.execution.headless import run_headless_core
+
+            await run_headless_core(
+                "/autoskillit:test-skill",
+                "/tmp/test-cwd",
+                minimal_ctx,
+                completion_marker="%%DONE%%",
+            )
+
+        assert mock_runner.call_args.kwargs["pty_mode"] is False

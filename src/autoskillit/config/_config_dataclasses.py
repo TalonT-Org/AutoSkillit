@@ -69,6 +69,7 @@ class ImplementGateConfig:
             "/implement-worktree-no-merge",
         }
     )
+    allowed_plan_dirs: set[str] = field(default_factory=lambda: {"make-plan", "rectify"})
 
 
 @dataclass

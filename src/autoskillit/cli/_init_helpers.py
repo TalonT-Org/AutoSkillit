@@ -327,6 +327,7 @@ safety:
 # implement_gate:
 #   marker: "Dry-walkthrough verified = TRUE"
 #   skill_names: ["/implement-worktree", "/implement-worktree-no-merge"]
+#   allowed_plan_dirs: ["make-plan", "rectify"]
 #
 # run_skill:
 #   timeout: 7200

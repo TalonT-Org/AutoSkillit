@@ -48,6 +48,7 @@ The plan file must remain a **clean, self-contained implementation instruction s
 - Reduce the plan's scope to a "simpler fix" - the plan defines the problem scope, not you
 - Consider effort as a reason for choosing one approach over another
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Write plan content, corrections, or the verification marker to any file other than the original plan file path provided as input. If the Edit tool is denied on the plan file, do NOT create a copy elsewhere — output a failure message instead.
 
 **ALWAYS:**
 - Keep the plan as clean implementation instructions only (information/background helpful to implementation is okay)
@@ -218,6 +219,30 @@ Dry-walkthrough verified = TRUE
 ```
 
 This marker indicates the plan has been validated and is ready for implementation. The implement-worktree skill checks for this marker before proceeding.
+
+### Step 6.1: Verify Stamp Landed
+
+After adding the marker line, immediately read the first line of the plan file back:
+
+1. Read the plan file
+2. Check that the first line is exactly `Dry-walkthrough verified = TRUE`
+3. If the marker is NOT present (edit was blocked by write guard or failed for any reason):
+   - Do NOT attempt to write the marker or plan content to any other file
+   - Do NOT create a copy of the plan at a different path
+   - Output this exact failure message to the terminal:
+
+   ```
+   ## Dry Walkthrough FAILED
+
+   **Plan:** {path}
+   **Status:** FAILED — Could not stamp plan file
+
+   The verification marker could not be written to the plan file.
+   This session must end as a failure. The implement step will not accept
+   an unstamped plan.
+   ```
+
+   - Stop execution immediately — do not proceed to Step 7
 
 ### Step 7: Report to Terminal
 

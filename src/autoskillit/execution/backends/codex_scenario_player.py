@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from autoskillit.core.io import atomic_write
+
 __all__ = ["CodexScenarioPlayer", "make_codex_scenario_player"]
 
 
@@ -52,7 +54,7 @@ sys.exit(0)
 
 def _write_shim_script(output_dir: Path, binary_path: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
-    binary_path.write_text(f"#!/usr/bin/env python3\n{_CODEX_SHIM_SCRIPT}")
+    atomic_write(binary_path, f"#!/usr/bin/env python3\n{_CODEX_SHIM_SCRIPT}")
     binary_path.chmod(binary_path.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
 
 

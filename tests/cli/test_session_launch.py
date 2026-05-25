@@ -227,6 +227,7 @@ def test_skill_injection_disabled_omits_flags(monkeypatch: pytest.MonkeyPatch) -
         supports_claude_format_stdout=True,
         exit_code_is_terminal=False,
         mcp_config_capable=False,
+        food_truck_capable=True,
         completion_record_types=frozenset({"result"}),
         session_record_types=frozenset({"assistant"}),
     )
@@ -292,6 +293,7 @@ def test_binary_name_from_backend_used_in_which(monkeypatch: pytest.MonkeyPatch)
                 supports_claude_format_stdout=True,
                 exit_code_is_terminal=False,
                 mcp_config_capable=False,
+                food_truck_capable=True,
                 completion_record_types=frozenset({"result"}),
                 session_record_types=frozenset({"assistant"}),
             )
@@ -334,6 +336,7 @@ def test_run_interactive_session_uses_injected_backend(monkeypatch: pytest.Monke
                 supports_claude_format_stdout=True,
                 exit_code_is_terminal=False,
                 mcp_config_capable=False,
+                food_truck_capable=True,
                 completion_record_types=frozenset({"result"}),
                 session_record_types=frozenset({"assistant"}),
             )
@@ -403,6 +406,7 @@ def test_get_backend_di_used_in_session_launch(monkeypatch: pytest.MonkeyPatch) 
         supports_claude_format_stdout=True,
         exit_code_is_terminal=False,
         mcp_config_capable=False,
+        food_truck_capable=True,
         completion_record_types=frozenset({"result"}),
         session_record_types=frozenset({"assistant"}),
     )
@@ -448,6 +452,7 @@ def test_skill_injection_false_via_get_backend_forwards_system_prompt_kwarg(
         supports_claude_format_stdout=True,
         exit_code_is_terminal=False,
         mcp_config_capable=False,
+        food_truck_capable=True,
         completion_record_types=frozenset({"result"}),
         session_record_types=frozenset({"assistant"}),
     )

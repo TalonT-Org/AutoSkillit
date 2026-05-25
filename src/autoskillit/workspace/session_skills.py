@@ -611,9 +611,16 @@ class DefaultSessionSkillManager:
             return False
         activated.add(skill_name)
 
-        skill_md = self._root / session_id / _SKILLS_SUBDIR / skill_name / "SKILL.md"
+        skill_dir = self._root / session_id / self._skills_subdir / skill_name
+        skill_md = skill_dir / "SKILL.md"
         if not skill_md.exists():
-            return False
+            try:
+                fetched = self._provider.get_skill_content(skill_name, gated=False)
+            except FileNotFoundError:
+                return False
+            skill_dir.mkdir(parents=True, exist_ok=True)
+            atomic_write(skill_md, fetched)
+            logger.debug("activate_deps_materialise", skill=skill_name)
 
         content = skill_md.read_text()
         new_content = _remove_disable_model_invocation(content)
@@ -633,18 +640,25 @@ class DefaultSessionSkillManager:
 
     def _activate_pack_deps(self, session_id: str, pack_name: str, activated: set[str]) -> None:
         """Activate all session skills whose category matches *pack_name*."""
-        skills_base = self._root / session_id / _SKILLS_SUBDIR
-        if not skills_base.is_dir():
-            return
-        for skill_dir in sorted(skills_base.iterdir()):
-            if not skill_dir.is_dir():
+        skills_base = self._root / session_id / self._skills_subdir
+        on_disk: set[str] = set()
+        if skills_base.is_dir():
+            for skill_dir in sorted(skills_base.iterdir()):
+                if not skill_dir.is_dir():
+                    continue
+                name = skill_dir.name
+                on_disk.add(name)
+                if name in activated:
+                    continue
+                info = self._provider.resolver.resolve(name)
+                if info and pack_name in info.categories:
+                    self._activate_with_deps(session_id, name, activated, _is_root=False)
+        for info in self._provider.list_skills():
+            if pack_name not in info.categories:
                 continue
-            name = skill_dir.name
-            if name in activated:
+            if info.name in on_disk or info.name in activated:
                 continue
-            info = self._provider.resolver.resolve(name)
-            if info and pack_name in info.categories:
-                self._activate_with_deps(session_id, name, activated, _is_root=False)
+            self._activate_with_deps(session_id, info.name, activated, _is_root=False)
 
     def cleanup_session(self, session_id: str) -> bool:
         """Remove the session skill directory for a completed session.

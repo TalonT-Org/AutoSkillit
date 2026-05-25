@@ -111,6 +111,7 @@ class TestActivateDepsResolution:
             )
 
         resolver.resolve.side_effect = resolve_fn
+        provider.list_skills.return_value = []
 
         mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
         result = mgr.activate_skill_deps(session_id, "make-plan")
@@ -140,6 +141,7 @@ class TestActivateDepsResolution:
 
         provider = MagicMock()
         provider.resolver.resolve.return_value = None
+        provider.list_skills.return_value = []
 
         mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
         result = mgr.activate_skill_deps(session_id, "parent-skill")
@@ -191,6 +193,7 @@ class TestActivateDepsResolution:
             )
 
         resolver.resolve.side_effect = resolve_fn
+        provider.list_skills.return_value = []
 
         mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
         mgr.activate_skill_deps(session_id, "make-plan")
@@ -335,3 +338,169 @@ class TestActivateDepsResolution:
         root_md = tmp_path / session_id / ".claude" / "skills" / "root-skill" / "SKILL.md"
         root_content = root_md.read_text()
         assert "%%ORDER_UP%%" in root_content
+
+
+class TestCopyOnActivate:
+    def test_copy_on_activate_single_absent_skill(self, tmp_path: Path) -> None:
+        """Absence of SKILL.md triggers provider fetch; content is ungated after materialisation."""
+        from unittest.mock import MagicMock
+
+        session_id = "test-copy-on-activate"
+        provider = MagicMock()
+
+        def get_skill_content(name: str, gated: bool = False) -> str:
+            if name == "absent-skill" and gated is False:
+                return "---\nname: absent-skill\ndisable-model-invocation: true\n---\n# Body"
+            raise FileNotFoundError(name)
+
+        provider.get_skill_content.side_effect = get_skill_content
+
+        mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
+        result = mgr.activate_skill_deps(session_id, "absent-skill")
+
+        assert result is True
+        skill_md = tmp_path / session_id / ".claude" / "skills" / "absent-skill" / "SKILL.md"
+        assert skill_md.exists()
+        provider.get_skill_content.assert_called_once_with("absent-skill", gated=False)
+        assert "disable-model-invocation" not in skill_md.read_text()
+
+    def test_copy_on_activate_unknown_skill_returns_false(self, tmp_path: Path) -> None:
+        """Unknown skill raises FileNotFoundError and activate returns False."""
+        from unittest.mock import MagicMock
+
+        session_id = "test-unknown-skill"
+        provider = MagicMock()
+        provider.get_skill_content.side_effect = FileNotFoundError("not found")
+
+        mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
+        result = mgr.activate_skill_deps(session_id, "nonexistent-skill")
+
+        assert result is False
+        skills_dir = tmp_path / session_id / ".claude" / "skills"
+        assert not skills_dir.exists() or not any(skills_dir.iterdir())
+
+    def test_copy_on_activate_transitive_absent_dep(self, tmp_path: Path) -> None:
+        """Transitive dep absent from disk is fetched and ungated after materialisation."""
+        from unittest.mock import MagicMock
+
+        session_id = "test-transitive-absent"
+        _write_skill_md(
+            tmp_path,
+            session_id,
+            "root-skill",
+            "---\nname: root-skill\nactivate_deps: [dep-skill]\n"
+            "disable-model-invocation: true\n---\n# Root",
+        )
+
+        def get_skill_content(name: str, gated: bool = False) -> str:
+            if name == "dep-skill" and not gated:
+                return "---\nname: dep-skill\ndisable-model-invocation: true\n---\n# Dep Body"
+            raise FileNotFoundError(name)
+
+        provider = MagicMock()
+        provider.get_skill_content.side_effect = get_skill_content
+        provider.resolver.resolve.return_value = None
+
+        mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
+        result = mgr.activate_skill_deps(session_id, "root-skill")
+
+        assert result is True
+        dep_md = tmp_path / session_id / ".claude" / "skills" / "dep-skill" / "SKILL.md"
+        assert dep_md.exists()
+        assert "disable-model-invocation" not in dep_md.read_text()
+        root_md = tmp_path / session_id / ".claude" / "skills" / "root-skill" / "SKILL.md"
+        assert "disable-model-invocation" not in root_md.read_text()
+
+    def test_copy_on_activate_absent_pack_member(self, tmp_path: Path) -> None:
+        """list_skills() discovers pack members absent from disk and copy-on-activates them."""
+        from unittest.mock import MagicMock
+
+        from autoskillit.core.types import SkillSource
+        from autoskillit.workspace.skills import SkillInfo
+
+        session_id = "test-absent-pack-member"
+        _write_skill_md(
+            tmp_path,
+            session_id,
+            "parent-skill",
+            "---\nname: parent-skill\nactivate_deps: [arch-lens]\n"
+            "disable-model-invocation: true\n---\n# Parent",
+        )
+        _write_skill_md(
+            tmp_path,
+            session_id,
+            "arch-lens-a",
+            "---\nname: arch-lens-a\ncategories: [arch-lens]\n"
+            "disable-model-invocation: true\n---\n# Lens A",
+        )
+
+        def get_skill_content(name: str, gated: bool = False) -> str:
+            if name == "arch-lens-b" and not gated:
+                return (
+                    "---\nname: arch-lens-b\ncategories: [arch-lens]\n"
+                    "disable-model-invocation: true\n---\n# Lens B"
+                )
+            raise FileNotFoundError(name)
+
+        provider = MagicMock()
+        provider.get_skill_content.side_effect = get_skill_content
+        provider.list_skills.return_value = [
+            SkillInfo(
+                name="arch-lens-a",
+                source=SkillSource.BUNDLED_EXTENDED,
+                path=tmp_path / session_id / ".claude" / "skills" / "arch-lens-a" / "SKILL.md",
+                categories=frozenset({"arch-lens"}),
+            ),
+            SkillInfo(
+                name="arch-lens-b",
+                source=SkillSource.BUNDLED_EXTENDED,
+                path=tmp_path / ".claude" / "skills" / "arch-lens-b" / "SKILL.md",
+                categories=frozenset({"arch-lens"}),
+            ),
+        ]
+
+        def resolve_fn(name: str) -> SkillInfo | None:
+            if name == "arch-lens-a":
+                return SkillInfo(
+                    name="arch-lens-a",
+                    source=SkillSource.BUNDLED_EXTENDED,
+                    path=tmp_path / session_id / ".claude" / "skills" / "arch-lens-a" / "SKILL.md",
+                    categories=frozenset({"arch-lens"}),
+                )
+            return None
+
+        provider.resolver.resolve.side_effect = resolve_fn
+
+        mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
+        result = mgr.activate_skill_deps(session_id, "parent-skill")
+
+        assert result is True
+        a_md = tmp_path / session_id / ".claude" / "skills" / "arch-lens-a" / "SKILL.md"
+        assert a_md.exists()
+        assert "disable-model-invocation" not in a_md.read_text()
+        b_md = tmp_path / session_id / ".claude" / "skills" / "arch-lens-b" / "SKILL.md"
+        assert b_md.exists()
+        assert "disable-model-invocation" not in b_md.read_text()
+
+    def test_activate_skill_deps_removes_flag_structural_gating(self, tmp_path: Path) -> None:
+        """Materialised skill content has disable-model-invocation removed after ungating."""
+        from unittest.mock import MagicMock
+
+        session_id = "test-structural-gating"
+        provider = MagicMock()
+
+        def get_skill_content(name: str, gated: bool = False) -> str:
+            if name == "gated-skill" and gated is False:
+                return "---\nname: gated-skill\ndisable-model-invocation: true\n---\n# Gated Body"
+            raise FileNotFoundError(name)
+
+        provider.get_skill_content.side_effect = get_skill_content
+
+        mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
+        result = mgr.activate_skill_deps(session_id, "gated-skill")
+
+        assert result is True
+        skill_md = tmp_path / session_id / ".claude" / "skills" / "gated-skill" / "SKILL.md"
+        content = skill_md.read_text()
+        assert "disable-model-invocation" not in content
+        assert "# Gated Body" in content

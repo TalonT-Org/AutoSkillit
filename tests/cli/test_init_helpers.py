@@ -350,3 +350,113 @@ class TestRegisterAllCodexHookWiring:
         )
         with pytest.raises(RuntimeError, match="hook sync failed"):
             _register_all("user", tmp_path)
+
+
+class TestRegisterAllBackendBranching:
+    """File-based config branching: codex vs claude-code paths in _register_all."""
+
+    def _write_config(self, tmp_path: Path, backend: str) -> None:
+        """Write config.yaml and .pre-commit-config.yaml into tmp_path."""
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir(exist_ok=True)
+        (config_dir / "config.yaml").write_text(f"agent_backend:\n  backend: {backend}\n")
+        (tmp_path / ".pre-commit-config.yaml").write_text(
+            "repos:\n  - repo: https://github.com/gitleaks/gitleaks\n"
+            "    rev: v8.18.0\n    hooks:\n      - id: gitleaks\n"
+        )
+
+    def test_codex_path_calls_ensure_codex_mcp_registered(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from unittest.mock import MagicMock, patch
+
+        import autoskillit.cli._hooks as _hooks_mod
+        import autoskillit.core.paths as _core_paths
+        from autoskillit.cli._init_helpers import _register_all
+
+        self._write_config(tmp_path, "codex")
+
+        monkeypatch.setattr(_hooks_mod, "sweep_all_scopes_for_orphans", lambda p: None)
+        monkeypatch.setattr(_core_paths, "pkg_root", lambda: tmp_path / "pkg")
+        monkeypatch.setattr("sys.stdin", MagicMock(isatty=lambda: False))
+        monkeypatch.setattr(
+            "autoskillit.cli._init_helpers._create_secrets_template", lambda p: None
+        )
+        monkeypatch.setattr("autoskillit.core.ensure_project_temp", lambda p: tmp_path / "temp")
+        (tmp_path / "pkg").mkdir(exist_ok=True)
+
+        with patch("autoskillit.execution.ensure_codex_mcp_registered") as mock_codex:
+            mock_codex.return_value = True
+            _register_all("user", tmp_path)
+            mock_codex.assert_called()
+
+    def test_codex_path_skips_sync_hooks_to_settings(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from unittest.mock import MagicMock, patch
+
+        import autoskillit.cli._hooks as _hooks_mod
+        import autoskillit.core.paths as _core_paths
+        from autoskillit.cli._init_helpers import _register_all
+
+        self._write_config(tmp_path, "codex")
+
+        monkeypatch.setattr(_hooks_mod, "sweep_all_scopes_for_orphans", lambda p: None)
+        monkeypatch.setattr(_core_paths, "pkg_root", lambda: tmp_path / "pkg")
+        monkeypatch.setattr("sys.stdin", MagicMock(isatty=lambda: False))
+        monkeypatch.setattr(
+            "autoskillit.cli._init_helpers._create_secrets_template", lambda p: None
+        )
+        monkeypatch.setattr("autoskillit.core.ensure_project_temp", lambda p: tmp_path / "temp")
+        (tmp_path / "pkg").mkdir(exist_ok=True)
+
+        with (
+            patch("autoskillit.execution.ensure_codex_mcp_registered", return_value=True),
+            patch.object(_hooks_mod, "sync_hooks_to_settings") as mock_sync,
+        ):
+            _register_all("user", tmp_path)
+            mock_sync.assert_not_called()
+
+    def test_claude_code_path_unchanged(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from unittest.mock import MagicMock, patch
+
+        import autoskillit.cli._hooks as _hooks_mod
+        import autoskillit.core.paths as _core_paths
+        from autoskillit.cli._init_helpers import _register_all
+
+        self._write_config(tmp_path, "claude-code")
+
+        monkeypatch.setattr(_hooks_mod, "sweep_all_scopes_for_orphans", lambda p: None)
+        monkeypatch.setattr(_hooks_mod, "_evict_stale_autoskillit_hooks", lambda p: None)
+        monkeypatch.setattr(
+            _hooks_mod, "_claude_settings_path", lambda s: tmp_path / "settings.json"
+        )
+        monkeypatch.setattr(_core_paths, "pkg_root", lambda: tmp_path / "pkg")
+        monkeypatch.setattr(
+            "autoskillit.cli._init_helpers._is_plugin_installed",
+            lambda **kwargs: False,
+        )
+        monkeypatch.setattr("autoskillit.cli._init_helpers._register_mcp_server", lambda p: None)
+        monkeypatch.setattr(
+            "autoskillit.cli._init_helpers._user_claude_json_path",
+            lambda: tmp_path / ".claude.json",
+        )
+        monkeypatch.setattr(
+            "autoskillit.cli._init_helpers.evict_direct_mcp_entry", lambda p: False
+        )
+        monkeypatch.setattr("sys.stdin", MagicMock(isatty=lambda: False))
+        monkeypatch.setattr(
+            "autoskillit.cli._init_helpers._create_secrets_template", lambda p: None
+        )
+        monkeypatch.setattr("autoskillit.core.ensure_project_temp", lambda p: tmp_path / "temp")
+        (tmp_path / "pkg").mkdir(exist_ok=True)
+
+        with (
+            patch("autoskillit.execution.ensure_codex_mcp_registered") as mock_codex,
+            patch.object(_hooks_mod, "sync_hooks_to_settings") as mock_sync,
+        ):
+            _register_all("user", tmp_path)
+            mock_sync.assert_called()
+            mock_codex.assert_not_called()

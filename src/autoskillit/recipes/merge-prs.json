@@ -126,7 +126,7 @@
         "callable": "autoskillit.smoke_utils.fetch_merge_queue_data",
         "base_branch": "${{ inputs.base_branch }}",
         "cwd": "${{ context.work_dir }}",
-        "output_dir": "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/merge-prs"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/merge-prs"
       },
       "capture": {
         "merge_queue_data_path": "${{ result.merge_queue_data_path }}"
@@ -142,7 +142,7 @@
         "skill_command": "/autoskillit:analyze-prs ${{ inputs.base_branch }} merge_queue_data_path=${{ context.merge_queue_data_path }}",
         "cwd": "${{ context.work_dir }}",
         "step_name": "analyze_prs",
-        "output_dir": "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/analyze-prs"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/analyze-prs"
       },
       "capture": {
         "pr_order_file": "${{ result.pr_order_file }}",
@@ -736,7 +736,7 @@
         "skill_command": "/autoskillit:diagnose-ci '${{ context.current_pr_number }}' - - - ${{ context.ci_event }}",
         "cwd": "${{ context.work_dir }}",
         "step_name": "diagnose_queue_ci",
-        "output_dir": "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/diagnose-ci"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/diagnose-ci"
       },
       "capture": {
         "diagnosis_path": "${{ result.diagnosis_path }}"
@@ -812,7 +812,7 @@
         "cwd": "${{ context.work_dir }}",
         "step_name": "merge_pr",
         "pr_order_file": "${{ context.pr_order_file }}",
-        "output_dir": "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/merge-pr"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/merge-pr"
       },
       "capture": {
         "needs_plan": "${{ result.needs_plan }}",
@@ -872,7 +872,7 @@
         "skill_command": "/autoskillit:dry-walkthrough ${{ context.pr_plan_path }}",
         "cwd": "${{ context.work_dir }}",
         "step_name": "verify",
-        "output_dir": "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}"
       },
       "on_success": "implement",
       "on_failure": "register_clone_failure",
@@ -1230,7 +1230,7 @@
         "skill_command": "/autoskillit:audit-impl \"${{ context.all_plan_paths }}\" ${{ context.batch_branch }} ${{ inputs.base_branch }} \"${{ context.all_conflict_report_paths }}\"",
         "cwd": "${{ context.work_dir }}",
         "step_name": "audit_impl",
-        "output_dir": "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/audit-impl"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/audit-impl"
       },
       "capture": {
         "verdict": "${{ result.verdict }}",
@@ -1263,7 +1263,7 @@
         "batch_branch": "${{ context.batch_branch }}",
         "base_branch": "${{ inputs.base_branch }}",
         "cwd": "${{ context.work_dir }}",
-        "output_dir": "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/open-integration-pr"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/open-integration-pr"
       },
       "capture": {
         "domain_partitions_path": "${{ result.domain_partitions_path }}"
@@ -1279,7 +1279,7 @@
         "skill_command": "/autoskillit:open-integration-pr ${{ context.batch_branch }} ${{ inputs.base_branch }} ${{ context.pr_order_file }} ${{ context.verdict }} \"${{ context.all_conflict_report_paths }}\" domain_partitions_path=${{ context.domain_partitions_path }}",
         "cwd": "${{ context.work_dir }}",
         "step_name": "open_integration_pr",
-        "output_dir": "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/open-integration-pr"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/open-integration-pr"
       },
       "capture": {
         "pr_url": "${{ result.pr_url }}"
@@ -1390,7 +1390,7 @@
         "callable": "autoskillit.smoke_utils.annotate_pr_diff",
         "pr_number": "${{ context.review_pr_number }}",
         "cwd": "${{ context.work_dir }}",
-        "output_dir": "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/review-pr",
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/review-pr",
         "local_review_rounds": "0"
       },
       "capture": {
@@ -1409,7 +1409,7 @@
         "skill_command": "/autoskillit:review-pr ${{ context.batch_branch }} ${{ inputs.base_branch }} annotated_diff_path=${{ context.annotated_diff_path }} hunk_ranges_path=${{ context.hunk_ranges_path }} diff_metrics_path=${{ context.diff_metrics_path }}",
         "cwd": "${{ context.work_dir }}",
         "step_name": "review_pr_integration",
-        "output_dir": "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/review-pr"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/review-pr"
       },
       "capture": {
         "review_verdict": "${{ result.verdict }}"
@@ -1559,7 +1559,7 @@
         "skill_command": "/autoskillit:diagnose-ci ${{ context.batch_branch }} - - - ${{ context.ci_event }}",
         "cwd": "${{ context.work_dir }}",
         "step_name": "diagnose_ci",
-        "output_dir": "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/diagnose-ci"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/diagnose-ci"
       },
       "capture": {
         "diagnosis_path": "${{ result.diagnosis_path }}"

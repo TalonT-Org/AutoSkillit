@@ -76,7 +76,7 @@
         "skill_command": "/autoskillit:scope ${{ inputs.task }}",
         "cwd": "${{ inputs.source_dir }}",
         "step_name": "scope",
-        "output_dir": "${{ inputs.source_dir }}/{{AUTOSKILLIT_TEMP}}/scope"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/scope"
       },
       "capture": {
         "scope_report": "${{ result.scope_report }}",
@@ -106,7 +106,7 @@
         "skill_command": "/autoskillit:plan-experiment ${{ context.scope_report }} ${{ context.selected_directions }} ${{ context.revision_guidance }}",
         "cwd": "${{ inputs.source_dir }}",
         "step_name": "plan_experiment",
-        "output_dir": "${{ inputs.source_dir }}/{{AUTOSKILLIT_TEMP}}/plan-experiment"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/plan-experiment"
       },
       "optional_context_refs": [
         "revision_guidance",
@@ -125,7 +125,7 @@
         "skill_command": "/autoskillit:review-design ${{ context.experiment_plan }} ${{ context.scope_report }}",
         "cwd": "${{ inputs.source_dir }}",
         "step_name": "review_design",
-        "output_dir": "${{ inputs.source_dir }}/{{AUTOSKILLIT_TEMP}}/review-design"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/review-design"
       },
       "capture": {
         "verdict": "${{ result.verdict }}",
@@ -167,7 +167,7 @@
         "skill_command": "/autoskillit:plan-visualization ${{ inputs.source_dir }} ${{ context.experiment_plan }} ${{ context.scope_report }}",
         "cwd": "${{ inputs.source_dir }}",
         "step_name": "plan_visualization",
-        "output_dir": "${{ inputs.source_dir }}/{{AUTOSKILLIT_TEMP}}/plan-visualization"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/plan-visualization"
       },
       "capture": {
         "visualization_plan_path": "${{ result.visualization_plan_path }}",
@@ -221,7 +221,7 @@
         "skill_command": "/autoskillit:resolve-design-review ${{ context.evaluation_dashboard }} ${{ context.experiment_plan }} ${{ context.revision_guidance }}",
         "cwd": "${{ inputs.source_dir }}",
         "step_name": "resolve_design_review",
-        "output_dir": "${{ inputs.source_dir }}/{{AUTOSKILLIT_TEMP}}/resolve-design-review"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/resolve-design-review"
       },
       "optional_context_refs": [
         "evaluation_dashboard",
@@ -275,7 +275,7 @@
         "skill_command": "/autoskillit:stage-data ${{ context.experiment_plan }}",
         "cwd": "${{ context.worktree_path }}",
         "step_name": "stage_data",
-        "output_dir": "${{ context.worktree_path }}/{{AUTOSKILLIT_TEMP}}/stage-data"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/stage-data"
       },
       "capture": {
         "verdict": "${{ result.verdict }}",
@@ -303,7 +303,7 @@
         "skill_command": "/autoskillit:download-data ${{ context.experiment_plan }}",
         "cwd": "${{ context.worktree_path }}",
         "step_name": "download_data",
-        "output_dir": "${{ context.worktree_path }}/{{AUTOSKILLIT_TEMP}}/download-data"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/download-data"
       },
       "capture": {
         "verdict": "${{ result.verdict }}",
@@ -327,7 +327,7 @@
         "skill_command": "/autoskillit:setup-environment ${{ context.worktree_path }} ${{ context.experiment_plan }}",
         "cwd": "${{ context.worktree_path }}",
         "step_name": "setup_environment",
-        "output_dir": "${{ context.worktree_path }}/{{AUTOSKILLIT_TEMP}}/setup-environment"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/setup-environment"
       },
       "capture": {
         "verdict": "${{ result.verdict }}"
@@ -353,7 +353,7 @@
         "skill_command": "/autoskillit:make-groups ${{ context.experiment_plan }}",
         "cwd": "${{ context.worktree_path }}",
         "step_name": "decompose",
-        "output_dir": "${{ context.worktree_path }}/{{AUTOSKILLIT_TEMP}}/make-groups"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/make-groups"
       },
       "capture": {
         "group_files": "${{ result.group_files }}"
@@ -425,7 +425,7 @@
         "skill_command": "/autoskillit:troubleshoot-experiment ${{ context.worktree_path }} implement_phase",
         "cwd": "${{ inputs.source_dir }}",
         "step_name": "troubleshoot_implement_failure",
-        "output_dir": "${{ inputs.source_dir }}/{{AUTOSKILLIT_TEMP}}/troubleshoot-experiment"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/troubleshoot-experiment"
       },
       "capture": {
         "is_fixable": "${{ result.is_fixable }}",
@@ -543,7 +543,7 @@
         "skill_command": "/autoskillit:audit-impl ${{ context.group_files }} ${{ context.impl_base_sha }} ${{ inputs.base_branch }}",
         "cwd": "${{ context.worktree_path }}",
         "step_name": "audit_impl",
-        "output_dir": "${{ context.worktree_path }}/{{AUTOSKILLIT_TEMP}}/audit-impl"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/audit-impl"
       },
       "capture": {
         "remediation_path": "${{ result.remediation_path }}"
@@ -605,7 +605,7 @@
         "skill_command": "/autoskillit:troubleshoot-experiment ${{ context.worktree_path }} run_experiment",
         "cwd": "${{ inputs.source_dir }}",
         "step_name": "troubleshoot_run_failure",
-        "output_dir": "${{ inputs.source_dir }}/{{AUTOSKILLIT_TEMP}}/troubleshoot-experiment"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/troubleshoot-experiment"
       },
       "capture": {
         "run_is_fixable": "${{ result.is_fixable }}",
@@ -733,7 +733,7 @@
         "skill_command": "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }} --experiment-type '${{ context.experiment_type }}' --methodology-traditions '${{ context.methodology_tradition }}' --design-review-verdict '${{ context.verdict }}' --disambiguation-rule-applied '${{ context.disambiguation_rule_applied }}' --tier-c-lens '${{ context.tier_c_lens }}' --classification-timestamp '${{ context.classification_timestamp }}' --group-manifest '${{ context.group_manifest }}'",
         "cwd": "${{ context.worktree_path }}",
         "step_name": "generate_report",
-        "output_dir": "${{ context.worktree_path }}/{{AUTOSKILLIT_TEMP}}/generate-report"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/generate-report"
       },
       "capture": {
         "report_path": "${{ result.report_path }}"
@@ -750,7 +750,7 @@
         "skill_command": "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --inconclusive --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }} --experiment-type '${{ context.experiment_type }}' --methodology-traditions '${{ context.methodology_tradition }}' --design-review-verdict '${{ context.verdict }}' --disambiguation-rule-applied '${{ context.disambiguation_rule_applied }}' --tier-c-lens '${{ context.tier_c_lens }}' --classification-timestamp '${{ context.classification_timestamp }}' --group-manifest '${{ context.group_manifest }}'",
         "cwd": "${{ context.worktree_path }}",
         "step_name": "generate_report",
-        "output_dir": "${{ context.worktree_path }}/{{AUTOSKILLIT_TEMP}}/generate-report"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/generate-report"
       },
       "capture": {
         "report_path": "${{ result.report_path }}"
@@ -914,7 +914,7 @@
         "skill_command": "/autoskillit:review-research-pr ${{ context.worktree_path }} ${{ inputs.base_branch }} ${{ context.pr_url }}",
         "cwd": "${{ context.worktree_path }}",
         "step_name": "review_research_pr",
-        "output_dir": "${{ context.worktree_path }}/{{AUTOSKILLIT_TEMP}}/review-research-pr"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/review-research-pr"
       },
       "capture": {
         "review_verdict": "${{ result.verdict }}"
@@ -939,7 +939,7 @@
         "skill_command": "/autoskillit:audit-claims ${{ context.worktree_path }} ${{ inputs.base_branch }} ${{ context.pr_url }}",
         "cwd": "${{ context.worktree_path }}",
         "step_name": "audit_claims",
-        "output_dir": "${{ context.worktree_path }}/{{AUTOSKILLIT_TEMP}}/audit-claims"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/audit-claims"
       },
       "capture": {
         "audit_verdict": "${{ result.verdict }}"
@@ -1076,7 +1076,7 @@
         "skill_command": "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }} --experiment-type '${{ context.experiment_type }}' --methodology-traditions '${{ context.methodology_tradition }}' --design-review-verdict '${{ context.verdict }}' --disambiguation-rule-applied '${{ context.disambiguation_rule_applied }}' --tier-c-lens '${{ context.tier_c_lens }}' --classification-timestamp '${{ context.classification_timestamp }}' --group-manifest '${{ context.group_manifest }}'",
         "cwd": "${{ context.worktree_path }}",
         "step_name": "re_generate_report",
-        "output_dir": "${{ context.worktree_path }}/{{AUTOSKILLIT_TEMP}}/generate-report"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/generate-report"
       },
       "capture": {
         "report_path": "${{ result.report_path }}"

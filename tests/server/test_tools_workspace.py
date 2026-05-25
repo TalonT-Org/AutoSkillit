@@ -360,6 +360,27 @@ class TestTestCheck:
         assert "does not exist" in result["error"]
         assert result["infrastructure_missing"] is True
 
+    @pytest.mark.anyio
+    async def test_test_check_condenses_passing_output(self, tool_ctx):
+        """T10: passing output is condensed to bare summary line."""
+        raw_stdout = "...... [ 50%]\n...... [100%]\n= 10 passed in 1.0s =\n"
+        tool_ctx.runner.push(_make_result(0, raw_stdout, "venv noise\n"))
+        result = json.loads(await test_check(worktree_path=self.wt))
+        assert result["passed"] is True
+        assert result["stdout"] == "10 passed in 1.0s"
+        assert result["stderr"] == ""
+
+    @pytest.mark.anyio
+    async def test_test_check_preserves_failure_diagnostics(self, tool_ctx):
+        """T11: failing output preserves diagnostics, strips progress."""
+        raw_stdout = "...... [ 50%]\nFAILED test_x.py::test_y\nE  assert False\n= 1 failed =\n"
+        tool_ctx.runner.push(_make_result(1, raw_stdout, ""))
+        result = json.loads(await test_check(worktree_path=self.wt))
+        assert result["passed"] is False
+        assert "[ 50%]" not in result["stdout"]
+        assert "FAILED test_x.py::test_y" in result["stdout"]
+        assert "assert False" in result["stdout"]
+
 
 class TestTestCheckInfrastructure:
     """T1-T5: Infrastructure pre-flight checks in test_check."""

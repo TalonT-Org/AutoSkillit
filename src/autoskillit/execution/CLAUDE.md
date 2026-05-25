@@ -23,7 +23,7 @@ backends/ (see backends/CLAUDE.md).
 | `ci.py` | GitHub Actions CI watcher (httpx, never raises) |
 | `github.py` | GitHub issue fetcher |
 | `remote_resolver.py` | Upstream > origin, clone-aware remote resolution |
-| `testing.py` | Pytest output parsing + pass/fail adjudication |
+| `testing.py` | Pytest output parsing, pass/fail adjudication, output condensation |
 | `clone_guard.py` | Clone contamination guard — detect and revert direct changes to clone CWD |
 | `pr_analysis.py` | `extract_linked_issues`, `DOMAIN_PATHS`, `partition_files_by_domain` |
 

@@ -13,9 +13,12 @@ from autoskillit.core.types import (
 )
 from autoskillit.execution.testing import (
     DefaultTestRunner,
+    _is_progress_line,
     _read_sidecar_base_branch,
     _resolve_base_ref,
     build_sanitized_env,
+    condense_test_output,
+    extract_summary_line,
 )
 from autoskillit.execution.testing import (
     parse_pytest_summary as _parse_pytest_summary,
@@ -977,3 +980,101 @@ def test_check_infrastructure_custom_command_in_path(tmp_path):
     runner = MockSubprocessRunner()
     tester = DefaultTestRunner(config=config, runner=runner)
     assert tester.check_infrastructure(tmp_path) is None
+
+
+# ---------------------------------------------------------------------------
+# Output condensation tests (T1-T9)
+# ---------------------------------------------------------------------------
+
+
+class TestExtractSummaryLine:
+    """T1-T3: extract_summary_line returns stripped summary or None."""
+
+    def test_equals_delimited(self):
+        """T1: =-delimited summary returns stripped text."""
+        stdout = "...\n= 14514 passed, 427 skipped in 77.23s =\n"
+        result = extract_summary_line(stdout)
+        assert result == "14514 passed, 427 skipped in 77.23s"
+
+    def test_bare_q_format(self):
+        """T2: bare -q summary returns bare text."""
+        stdout = "...\n3 failed, 97 passed in 2.31s\n"
+        result = extract_summary_line(stdout)
+        assert result == "3 failed, 97 passed in 2.31s"
+
+    def test_no_summary_returns_none(self):
+        """T3: non-pytest output returns None."""
+        stdout = "All tests passed\nDone.\n"
+        assert extract_summary_line(stdout) is None
+
+
+class TestIsProgressLine:
+    """T4-T6: _is_progress_line identifies dot-heavy and percentage lines."""
+
+    def test_dots(self):
+        """T4: dot-heavy lines are progress lines."""
+        assert _is_progress_line(
+            "........................................................................"
+        )
+        assert _is_progress_line("...F...F....")
+        assert not _is_progress_line("FAILED tests/test_foo.py::test_bar - AssertionError")
+
+    def test_percentage_bracket(self):
+        """T5: percentage bracket lines are progress lines."""
+        assert _is_progress_line("............ [ 72%]")
+        assert _is_progress_line("...F...      [100%]")
+        assert not _is_progress_line("assert x == 42  # [expected]")
+
+    def test_rejects_diagnostics(self):
+        """T6: tracebacks and error messages are not progress lines."""
+        assert not _is_progress_line("    assert result == expected")
+        assert not _is_progress_line("E       AssertionError: 1 != 2")
+        assert not _is_progress_line("tests/test_foo.py:42: AssertionError")
+        assert not _is_progress_line("FAILED tests/test_foo.py::test_bar")
+        assert not _is_progress_line("=== FAILURES ===")
+
+
+class TestCondenseTestOutput:
+    """T7-T9: condense_test_output condenses output appropriately."""
+
+    def test_pass_returns_summary_and_empty_stderr(self):
+        """T7: pass returns summary line and empty stderr."""
+        from autoskillit.core import TestResult
+
+        result = TestResult(
+            passed=True,
+            stdout="...\n= 5 passed in 1.23s =\n",
+            stderr="Installing packages...\nvenv created\n",
+        )
+        stdout, stderr = condense_test_output(result)
+        assert stdout == "5 passed in 1.23s"
+        assert stderr == ""
+
+    def test_fail_strips_progress_preserves_tracebacks(self):
+        """T8: fail strips progress lines, preserves diagnostics."""
+        from autoskillit.core import TestResult
+
+        raw = (
+            "....... [ 10%]\n"
+            "....... [ 20%]\n"
+            "FAILED tests/test_foo.py::test_bar\n"
+            "    assert 1 == 2\n"
+            "E   AssertionError\n"
+            "= 1 failed, 99 passed in 5.0s =\n"
+        )
+        result = TestResult(passed=False, stdout=raw, stderr="some error\n")
+        stdout, stderr = condense_test_output(result)
+        assert "[ 10%]" not in stdout
+        assert "[ 20%]" not in stdout
+        assert "FAILED tests/test_foo.py::test_bar" in stdout
+        assert "AssertionError" in stdout
+        assert stderr == "some error\n"
+
+    def test_pass_no_summary_returns_empty(self):
+        """T9: pass with no summary returns empty stdout and stderr."""
+        from autoskillit.core import TestResult
+
+        result = TestResult(passed=True, stdout="ok\n", stderr="")
+        stdout, stderr = condense_test_output(result)
+        assert stdout == ""
+        assert stderr == ""

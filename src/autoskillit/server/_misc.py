@@ -22,6 +22,9 @@ from autoskillit.execution import (
     check_and_sleep_if_needed as check_and_sleep_if_needed,
 )
 from autoskillit.execution import (
+    condense_test_output as condense_test_output,
+)
+from autoskillit.execution import (
     fetch_repo_merge_state as fetch_repo_merge_state,
 )
 from autoskillit.execution import (

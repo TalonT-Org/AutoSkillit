@@ -388,11 +388,15 @@ async def run_managed_async(
                     )
                 if enable_deadline_extension and _observed_pid is not None:
                     tg.start_soon(
-                        _watch_child_activity,
-                        _observed_pid,
-                        timeout_scope_ref,
-                        max_extension_seconds,
-                        trigger,
+                        functools.partial(
+                            _watch_child_activity,
+                            _observed_pid,
+                            timeout_scope_ref,
+                            max_extension_seconds,
+                            trigger,
+                            marker_dir=marker_dir,
+                            session_id=session_id,
+                        ),
                     )
                 timeout_scope: anyio.CancelScope | None
                 with anyio.move_on_after(timeout) as _ts:

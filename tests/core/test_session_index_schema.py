@@ -20,6 +20,7 @@ _REQUIRED_INDEX_FIELDS = {
     "file_changes_count",
     "api_retry_count",
     "api_retry_exhausted",
+    "codex_version",
 }
 
 

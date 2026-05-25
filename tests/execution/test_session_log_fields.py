@@ -504,6 +504,8 @@ _VERSIONS = {
     "commit_id": None,
     "claude_code_version": "1.0.5",
     "plugins": [],
+    "codex_version": "",
+    "codex_plugins": [],
 }
 
 
@@ -547,6 +549,18 @@ def test_sessions_jsonl_includes_claude_code_version(tmp_path):
     ]
     entry = next(e for e in entries if e["session_id"] == "vs-005")
     assert entry["claude_code_version"] == "1.0.5"
+
+
+def test_sessions_jsonl_includes_codex_version(tmp_path):
+    versions_with_codex = {**_VERSIONS, "codex_version": "0.1.0"}
+    _flush(tmp_path, session_id="vs-cdx-001", versions=versions_with_codex)
+    entries = [
+        json.loads(line)
+        for line in (tmp_path / "sessions.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    entry = next(e for e in entries if e["session_id"] == "vs-cdx-001")
+    assert entry["codex_version"] == "0.1.0"
 
 
 def test_sessions_jsonl_autoskillit_version_empty_when_no_versions(tmp_path):

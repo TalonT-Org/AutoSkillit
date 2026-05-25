@@ -6,10 +6,14 @@ for non-claude-code backends without performing any I/O.
 
 from __future__ import annotations
 
+import subprocess
+
 import pytest
 
 from autoskillit.core._version_snapshot import (
     _claude_code_version,
+    _codex_plugins,
+    _codex_version,
     _plugins,
     collect_version_snapshot,
 )
@@ -68,3 +72,78 @@ def test_claude_code_version_still_runs_for_claude_code_backend(monkeypatch):
     monkeypatch.setattr(mod.subprocess, "run", _fake_run)
     _claude_code_version()
     assert len(called) == 1
+
+
+def test_codex_version_returns_empty_for_non_codex_backend(monkeypatch):
+    import autoskillit.core._version_snapshot as mod
+
+    monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "headless")
+
+    def _no_call(*args, **kwargs):
+        raise AssertionError("subprocess.run should not be called")
+
+    monkeypatch.setattr(mod.subprocess, "run", _no_call)
+    assert _codex_version() == ""
+
+
+def test_codex_version_graceful_on_timeout(monkeypatch):
+    import autoskillit.core._version_snapshot as mod
+
+    monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "codex")
+
+    def _raise(*args, **kwargs):
+        raise subprocess.TimeoutExpired("codex", 5)
+
+    monkeypatch.setattr(mod.subprocess, "run", _raise)
+    assert _codex_version() == ""
+
+
+def test_codex_version_graceful_on_file_not_found_for_codex_backend(monkeypatch):
+    import autoskillit.core._version_snapshot as mod
+
+    monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "codex")
+
+    def _raise(*args, **kwargs):
+        raise FileNotFoundError("codex not found")
+
+    monkeypatch.setattr(mod.subprocess, "run", _raise)
+    assert _codex_version() == ""
+
+
+def test_codex_plugins_returns_empty_for_non_codex_backend(monkeypatch):
+    import autoskillit.core._version_snapshot as mod
+
+    monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "headless")
+
+    def _no_call(*args, **kwargs):
+        raise AssertionError("subprocess.run should not be called")
+
+    monkeypatch.setattr(mod.subprocess, "run", _no_call)
+    assert _codex_plugins() == []
+
+
+def test_codex_plugins_graceful_on_subprocess_error(monkeypatch):
+    import autoskillit.core._version_snapshot as mod
+
+    monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "codex")
+
+    def _raise(*args, **kwargs):
+        raise FileNotFoundError("codex not found")
+
+    monkeypatch.setattr(mod.subprocess, "run", _raise)
+    assert _codex_plugins() == []
+
+
+def test_codex_version_not_called_without_backend_env(monkeypatch):
+    import autoskillit.core._version_snapshot as mod
+
+    monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
+    called = []
+
+    def _fake_run(*args, **kwargs):
+        called.append(args)
+        raise FileNotFoundError("codex not found")
+
+    monkeypatch.setattr(mod.subprocess, "run", _fake_run)
+    assert _codex_version() == ""
+    assert len(called) == 0

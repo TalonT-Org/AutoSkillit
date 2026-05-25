@@ -497,6 +497,7 @@ def flush_session_log(
         "tracked_comm_drift": _tracked_comm_drift,
         "autoskillit_version": versions.get("autoskillit_version", "") if versions else "",
         "claude_code_version": versions.get("claude_code_version", "") if versions else "",
+        "codex_version": versions.get("codex_version", "") if versions else "",
         "recipe_name": recipe_identity.name,
         "recipe_content_hash": recipe_identity.content_hash,
         "recipe_composite_hash": recipe_identity.composite_hash,

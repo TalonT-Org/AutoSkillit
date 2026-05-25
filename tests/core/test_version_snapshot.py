@@ -27,6 +27,8 @@ def test_collect_version_snapshot_returns_required_keys():
         "commit_id",
         "claude_code_version",
         "plugins",
+        "codex_version",
+        "codex_plugins",
     }
 
 

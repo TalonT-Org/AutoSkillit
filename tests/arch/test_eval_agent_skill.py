@@ -1,6 +1,5 @@
 """Structural integrity tests for the eval-agent skill."""
 
-import re
 from pathlib import Path
 
 import yaml
@@ -45,8 +44,8 @@ def test_eval_agent_has_critical_constraints():
 def test_eval_agent_uses_agent_tool():
     """SKILL.md instructs use of native Agent tool with autoskillit: subagent_type."""
     source = _SKILL_FILE.read_text()
-    assert 'Agent(subagent_type=' in source
-    assert 'autoskillit:' in source
+    assert "Agent(subagent_type=" in source
+    assert "autoskillit:" in source
 
 
 def test_eval_agent_uses_write_tool():
@@ -64,7 +63,11 @@ def test_eval_agent_emits_output_token():
 def test_eval_agent_no_source_modification():
     """SKILL.md prohibits source code modification."""
     source = _SKILL_FILE.read_text()
-    never_section = source.split("**NEVER:**")[1].split("**ALWAYS:**")[0] if "**NEVER:**" in source and "**ALWAYS:**" in source else ""
+    never_section = (
+        source.split("**NEVER:**")[1].split("**ALWAYS:**")[0]
+        if "**NEVER:**" in source and "**ALWAYS:**" in source
+        else ""
+    )
     assert "source code" in never_section.lower() or "Modify any source" in never_section
 
 

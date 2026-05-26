@@ -2220,6 +2220,13 @@ skills:
     write_behavior: conditional
     write_expected_when:
     - "verdict\\s*=\\s*created"
+  analyze-pipeline-health:
+    inputs:
+    - name: kitchen_id
+      type: string
+      required: true
+    outputs: []
+    read_only: true
 callable_contracts:
   autoskillit.smoke_utils.check_loop_iteration:
     inputs:

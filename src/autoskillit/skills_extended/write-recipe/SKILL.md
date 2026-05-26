@@ -241,7 +241,7 @@ Available tools for use in `tool:` fields:
 
 These skills ship with the autoskillit plugin and are invoked as `/autoskillit:<name>`:
 
-analyze-prs, arch-lens-c4-container, arch-lens-concurrency, arch-lens-data-lineage, arch-lens-deployment,
+analyze-pipeline-health, analyze-prs, arch-lens-c4-container, arch-lens-concurrency, arch-lens-data-lineage, arch-lens-deployment,
 arch-lens-development, arch-lens-error-resilience, arch-lens-module-dependency, arch-lens-operational,
 arch-lens-process-flow, arch-lens-repository-access, arch-lens-scenarios, arch-lens-security, arch-lens-state-lifecycle,
 audit-arch, audit-bugs, audit-claims, audit-cohesion, audit-defense-standards, audit-docs, audit-friction, audit-impl, audit-review-decisions, audit-tests,

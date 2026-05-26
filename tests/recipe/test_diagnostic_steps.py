@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.repository import builtin_recipes_dir
-from autoskillit.recipe.yaml_loader import load_recipe
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 

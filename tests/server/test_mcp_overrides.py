@@ -63,10 +63,15 @@ async def test_load_recipe_tool_accepts_overrides_param(tmp_path: Path) -> None:
         assert "error" not in result
         assert result.get("valid") is True
 
-        # Verify overrides were passed through to load_and_validate
+        # Verify user-supplied overrides were passed through to load_and_validate
+        # (merged with auto-injected kitchen_id and post_run_diagnostics)
         mock_recipes.load_and_validate.assert_called_once()
         call_kwargs = mock_recipes.load_and_validate.call_args
-        assert call_kwargs.kwargs.get("ingredient_overrides") == {"run_mode": "sequential"}
+        actual_overrides = call_kwargs.kwargs.get("ingredient_overrides") or {}
+        assert actual_overrides.get("run_mode") == "sequential", (
+            "user-supplied override 'run_mode' missing from ingredient_overrides: "
+            f"{actual_overrides}"
+        )
 
 
 async def test_open_kitchen_accepts_overrides_param(tmp_path: Path) -> None:
@@ -115,10 +120,15 @@ async def test_open_kitchen_accepts_overrides_param(tmp_path: Path) -> None:
         assert result.get("kitchen") == "open"
         assert result.get("valid") is True
 
-        # Verify overrides were passed through to load_and_validate
+        # Verify user-supplied overrides were passed through to load_and_validate
+        # (merged with auto-injected kitchen_id and post_run_diagnostics)
         mock_recipes.load_and_validate.assert_called_once()
         call_kwargs = mock_recipes.load_and_validate.call_args
-        assert call_kwargs.kwargs.get("ingredient_overrides") == {"run_mode": "sequential"}
+        actual_overrides = call_kwargs.kwargs.get("ingredient_overrides") or {}
+        assert actual_overrides.get("run_mode") == "sequential", (
+            "user-supplied override 'run_mode' missing from ingredient_overrides: "
+            f"{actual_overrides}"
+        )
 
 
 async def test_unknown_override_key_ignored(tmp_path: Path) -> None:

@@ -261,17 +261,11 @@ async def test_open_kitchen_injects_hidden_ingredient_overrides(tmp_path, monkey
     mock_ctx.enable_components = AsyncMock()
     mock_ctx.recipes = MagicMock()
     mock_ctx.recipes.load_and_validate.return_value = {
-        "content": "name: demo
-steps:
-  do:
-    tool: run_cmd
-",
+        "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
         "valid": True,
         "suggestions": [],
         "diagram": None,
-        "ingredients_table": "--- INGREDIENTS TABLE ---
-  task  required
---- END TABLE ---",
+        "ingredients_table": "--- INGREDIENTS TABLE ---\n  task  required\n--- END TABLE ---",
     }
     mock_ctx.recipes.find.return_value = None
     mock_ctx.config.migration.suppressed = []

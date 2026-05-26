@@ -44,6 +44,7 @@ def _has_contract_tests(skill_name: str) -> bool:
 def test_recipe_skills_have_contract_tests() -> None:
     """Every skill dispatched by a recipe run_skill step should have contract tests."""
     KNOWN_EXCEPTIONS = {
+        "analyze-pipeline-health",
         "audit-tests",
         "audit-cohesion",
         "audit-arch",

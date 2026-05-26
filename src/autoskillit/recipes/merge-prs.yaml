@@ -1536,6 +1536,7 @@ steps:
   run_diagnostic:
     description: "Run post-pipeline diagnostic analysis on session logs"
     tool: run_skill
+    model: ""
     optional: true
     skip_when_false: "inputs.post_run_diagnostics"
     with:
@@ -1552,6 +1553,7 @@ steps:
   run_diagnostic_error:
     description: "Run post-pipeline diagnostic analysis on session logs (error path)"
     tool: run_skill
+    model: ""
     optional: true
     skip_when_false: "inputs.post_run_diagnostics"
     with:

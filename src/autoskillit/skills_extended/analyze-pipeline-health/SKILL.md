@@ -24,6 +24,7 @@ Coordinator skill that reads session logs from a pipeline run, groups them by st
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, embellish, or invent findings not supported by evidence in session data
 - Modify any source code files
 - Create issues or PRs (findings are reported to the calling session only)
 - Run subagents in the background (`run_in_background: true` is prohibited)

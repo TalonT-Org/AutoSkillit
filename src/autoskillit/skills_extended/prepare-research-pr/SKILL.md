@@ -257,7 +257,17 @@ lens_context_paths = /abs/ctx_fair-comparison_{ts}.md,/abs/ctx_estimand-clarity_
 %%ORDER_UP::<hex>%%
 ```
 
+When the branch has zero changed files (feature already merged), emit:
+
+```
+prep_path = /absolute/path/{{AUTOSKILLIT_TEMP}}/prepare-research-pr/pr_prep_{ts}.md
+selected_lenses = none
+lens_context_paths = none
+%%ORDER_UP::<hex>%%
+```
+
 Where:
-- `selected_lenses` is a comma-separated list of lens slugs (no spaces)
+- `selected_lenses` is a comma-separated list of lens slugs (no spaces), or `none` when
+  the branch has zero changed files
 - `lens_context_paths` is a comma-separated list of absolute context file paths in the
-  same order as `selected_lenses`
+  same order as `selected_lenses`, or `none` when the branch has zero changed files

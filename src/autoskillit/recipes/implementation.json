@@ -397,6 +397,37 @@
       "on_failure": "release_issue_failure",
       "note": "After merge, route to next_or_done to process remaining parts before pushing. By default (open_pr=true), merge_target is the feature branch named from run_name. When open_pr=false, merge_target equals base_branch — merges go directly to base. dirty_tree and test_gate failures route to fix (resolve-failures) for recovery; all other failures route to release_issue_failure.\n"
     },
+    "check_has_commits": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.smoke_utils.check_commits_ahead",
+        "cwd": "${{ context.work_dir }}",
+        "base_branch": "${{ inputs.base_branch }}"
+      },
+      "on_result": [
+        {
+          "when": "${{ result.has_commits }}",
+          "route": "push"
+        },
+        {
+          "route": "close_issue_already_done"
+        }
+      ],
+      "on_failure": "release_issue_failure"
+    },
+    "close_issue_already_done": {
+      "description": "Close issue as already-implemented when branch has zero commits ahead of base",
+      "tool": "run_python",
+      "optional": true,
+      "skip_when_false": "inputs.issue_url",
+      "with": {
+        "callable": "autoskillit.smoke_utils.close_issue_already_done",
+        "issue_url": "${{ inputs.issue_url }}"
+      },
+      "on_success": "register_clone_success",
+      "on_failure": "register_clone_success",
+      "note": "Zero commits ahead of base means the feature is already merged. Remove in-progress label, close issue with \"already implemented\" comment, and route to clone cleanup.\n"
+    },
     "push": {
       "tool": "push_to_remote",
       "with": {
@@ -406,7 +437,7 @@
       },
       "on_success": "prepare_pr",
       "on_failure": "release_issue_failure",
-      "note": "Runs once at the end, after audit_impl passes. Pushes merge_target branch from the clone to the upstream remote. By default (open_pr=true), this pushes the feature branch; when open_pr=false, pushes base_branch. Uses the pre-resolved remote_url captured at clone time, preserving clone isolation. On success, routes to prepare_pr (which opens the PR by default; skipped when open_pr=false). On failure, release_issue_failure registers the clone and escalates.\n"
+      "note": "Runs once at the end, after check_has_commits confirms commits exist. Pushes merge_target branch from the clone to the upstream remote. By default (open_pr=true), this pushes the feature branch; when open_pr=false, pushes base_branch. Uses the pre-resolved remote_url captured at clone time, preserving clone isolation. On success, routes to prepare_pr (which opens the PR by default; skipped when open_pr=false). On failure, release_issue_failure registers the clone and escalates.\n"
     },
     "fix": {
       "tool": "run_skill",
@@ -499,7 +530,7 @@
       "on_result": [
         {
           "when": "${{ result.verdict }} == GO",
-          "route": "push"
+          "route": "check_has_commits"
         },
         {
           "when": "result.error",
@@ -513,7 +544,7 @@
       "on_context_limit": "escalate_stop",
       "optional": true,
       "skip_when_false": "inputs.audit",
-      "note": "Only execute if inputs.audit is 'true'. If false, skip directly to push. Captures verdict and remediation_path. Routes GO → push, NO GO → remediate which re-enters the plan step with the remediation file. All parts have been merged at this point — no worktree exists. Uses context.base_sha (a stable commit SHA captured before any merge began) as implementation_ref. A SHA names a git object and survives git branch -D unconditionally. The diff git diff base_sha..base_branch (two-dot, SHA on the left) covers the full implementation.\n"
+      "note": "Only execute if inputs.audit is 'true'. If false, skip directly to check_has_commits. Captures verdict and remediation_path. Routes GO → push, NO GO → remediate which re-enters the plan step with the remediation file. All parts have been merged at this point — no worktree exists. Uses context.base_sha (a stable commit SHA captured before any merge began) as implementation_ref. A SHA names a git object and survives git branch -D unconditionally. The diff git diff base_sha..base_branch (two-dot, SHA on the left) covers the full implementation.\n"
     },
     "remediate": {
       "action": "route",

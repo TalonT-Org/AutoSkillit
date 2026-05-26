@@ -212,6 +212,13 @@ CONTEXT LIMIT ROUTING — run_skill only (check BEFORE on_failure):
     via CLI). Partial progress may exist on disk. Follow on_context_limit.
   - If "has_progress_evidence" is false OR the step has no on_context_limit: fall through
     to on_failure — no recoverable progress evidence.
+- When run_skill returns "needs_retry: true" AND "retry_reason: contract_recovery":
+  - The model ran to completion and wrote artifacts but the structured output tokens
+    failed pattern validation. Infrastructure nudge was attempted but could not recover.
+  - If "has_progress_evidence" is true in the result AND the step defines on_context_limit:
+    partial progress exists on disk. Follow on_context_limit.
+  - If "has_progress_evidence" is false OR the step has no on_context_limit: fall through
+    to on_failure — no recoverable progress evidence.
 - WORKTREE-STALE CARVE-OUT: When the step invokes a worktree-creating skill
   (implement-worktree-no-merge, implement-worktree, implement-experiment) and returns
   retry_reason=stale (or retry_reason=resume with subtype=stale), re-execute the step

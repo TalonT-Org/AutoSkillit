@@ -469,13 +469,42 @@ steps:
     on_result:
     - when: "${{ result.next }} == more_parts"
       route: dry_walkthrough
-    - route: push
+    - route: check_has_commits
     note: >
       Routing step — no tool call. The agent evaluates what comes next:
       1. If more plan_parts remain for the current plan → go to dry_walkthrough with next part.
-      2. If all plan_parts are complete → go to push.
+      2. If all plan_parts are complete → go to check_has_commits.
       Unlike implementation.yaml (which routes done → audit_impl → push), remediation runs
-      audit_impl pre-merge (GO → commit_guard), so the fallthrough here goes directly to push.
+      audit_impl pre-merge (GO → commit_guard), so the fallthrough here goes directly to
+      check_has_commits → push (or close_issue_already_done if zero commits ahead of base).
+
+
+  check_has_commits:
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.check_commits_ahead"
+      cwd: "${{ context.work_dir }}"
+      base_branch: "${{ inputs.base_branch }}"
+    on_result:
+    - when: "${{ result.has_commits }}"
+      route: push
+    - route: close_issue_already_done
+    on_failure: release_issue_failure
+
+  close_issue_already_done:
+    description: "Close issue as already-implemented when branch has zero commits ahead of base"
+    tool: run_python
+    optional: true
+    skip_when_false: "inputs.issue_url"
+    with:
+      callable: "autoskillit.smoke_utils.close_issue_already_done"
+      issue_url: "${{ inputs.issue_url }}"
+    on_success: register_clone_success
+    on_failure: register_clone_success
+    note: >
+      Zero commits ahead of base means the feature is already merged.
+      Remove in-progress label, close issue with "already implemented" comment,
+      and route to clone cleanup.
 
   push:
     tool: push_to_remote

@@ -480,10 +480,14 @@ skills:
       type: string
     expected_output_patterns:
     - "prep_path\\s*=\\s*/.+"
-    - "selected_lenses\\s*=\\s*\\S+"
-    - "lens_context_paths\\s*=\\s*/.+"
+    - "selected_lenses[ \\t]*=[ \\t]*(\\S[^\\n]*|none)"
+    - "lens_context_paths[ \\t]*=[ \\t]*(\\S[^\\n]*|none)"
     pattern_examples:
     - "prep_path = /abs/path/pr_prep_2026-04-07_120000.md\nselected_lenses = module-dependency,process-flow\nlens_context_paths = /abs/ctx1.md,/abs/ctx2.md\n%%ORDER_UP%%"
+    - "prep_path = /abs/path/prep.md\nselected_lenses = none\nlens_context_paths = none\n%%ORDER_UP%%"
+    negative_examples:
+    - "prep_path = /abs/path/prep.md\nselected_lenses = \nlens_context_paths = \n%%ORDER_UP%%"
+    - "prep_path = /abs/path/prep.md\nselected_lenses = \nlens_context_paths\n%%ORDER_UP%%"
     write_behavior: conditional
     write_expected_when:
     - "prep_path\\s*=\\s*/.+"
@@ -1489,10 +1493,14 @@ skills:
       type: string
     expected_output_patterns:
     - "prep_path\\s*=\\s*/.+"
-    - "selected_lenses\\s*=\\s*\\S+"
-    - "lens_context_paths\\s*=\\s*/.+"
+    - "selected_lenses[ \\t]*=[ \\t]*(\\S[^\\n]*|none)"
+    - "lens_context_paths[ \\t]*=[ \\t]*(\\S[^\\n]*|none)"
     pattern_examples:
     - "prep_path = /abs/path/pr_prep_2026-04-07_101349.md\nselected_lenses = fair-comparison,estimand-clarity\nlens_context_paths = /abs/ctx1.md,/abs/ctx2.md\n%%ORDER_UP%%"
+    - "prep_path = /abs/path/prep.md\nselected_lenses = none\nlens_context_paths = none\n%%ORDER_UP%%"
+    negative_examples:
+    - "prep_path = /abs/path/prep.md\nselected_lenses = \nlens_context_paths = \n%%ORDER_UP%%"
+    - "prep_path = /abs/path/prep.md\nselected_lenses = \nlens_context_paths\n%%ORDER_UP%%"
     write_behavior: always
 
   compose-research-pr:
@@ -1545,7 +1553,7 @@ skills:
       type: string
     expected_output_patterns:
     - "verdict\\s*=\\s*(GO|REVISE|STOP)"
-    - "(?:experiment_type\\s*=\\s*\\S+|verdict\\s*=\\s*STOP)"
+    - "(?:experiment_type[ \\t]*=[ \\t]*(\\S[^\\n]*|none)|verdict[ \\t]*=[ \\t]*STOP)"
     pattern_examples:
     - "verdict = GO\nexperiment_type = benchmark\nevaluation_dashboard = /tmp/eval.md\nrevision_guidance = /tmp/guidance.md\n%%ORDER_UP%%"
     - "verdict = REVISE\nexperiment_type = benchmark\nrevision_guidance = /tmp/guidance.md\n%%ORDER_UP%%"
@@ -2794,6 +2802,25 @@ callable_contracts:
       type: str
     - name: commit_count
       type: str
+  autoskillit.smoke_utils.check_commits_ahead:
+    inputs:
+    - name: cwd
+      type: directory_path
+      required: true
+    - name: base_branch
+      type: string
+      required: true
+    outputs:
+    - name: has_commits
+      type: string
+  autoskillit.smoke_utils.close_issue_already_done:
+    inputs:
+    - name: issue_url
+      type: string
+      required: true
+    outputs:
+    - name: closed
+      type: string
 
 tool_output_contracts:
   wait_for_ci:

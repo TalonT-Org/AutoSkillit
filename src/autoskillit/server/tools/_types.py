@@ -52,6 +52,13 @@ class RunSkillResult(_RunSkillResultBase, total=False):
     worktree_path: str
     order_id: str
     infra_exit_category: str
+    has_progress_evidence: bool
+    provider_fallback: bool
+    provider_used: str
+    api_retry_count: int
+    api_retry_last_error: str
+    api_retry_last_status: int
+    api_retry_exhausted: bool
 
 
 class _RunCmdResultBase(TypedDict):

@@ -248,3 +248,12 @@ selected_lenses = module-dependency,process-flow
 lens_context_paths = /abs/ctx_module-dependency_{ts}.md,/abs/ctx_process-flow_{ts}.md
 %%ORDER_UP::<hex>%%
 ```
+
+When the branch has zero changed files (feature already merged), emit:
+
+```
+prep_path = /absolute/path/{{AUTOSKILLIT_TEMP}}/prepare-pr/pr_prep_{ts}.md
+selected_lenses = none
+lens_context_paths = none
+%%ORDER_UP::<hex>%%
+```

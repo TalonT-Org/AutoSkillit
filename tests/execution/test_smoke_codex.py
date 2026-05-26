@@ -13,8 +13,12 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import BackendEventKind, SessionEvent
-from autoskillit.execution.backends.codex import CodexResultParser, CodexStreamParser
+from autoskillit.core import BackendEventKind, DirectInstall, SessionEvent
+from autoskillit.execution.backends.codex import (
+    CodexBackend,
+    CodexResultParser,
+    CodexStreamParser,
+)
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.large]
 
@@ -85,3 +89,32 @@ class TestCodexSmokeExecution:
         )
         assert token_usage.get("input_tokens", -1) >= 0
         assert token_usage.get("output_tokens", -1) >= 0
+
+
+@_skip_unless_codex_smoke
+@pytest.mark.smoke
+class TestCodexSmokeInteractiveCmdBuild:
+    """Verify CodexBackend.build_interactive_cmd produces a valid CmdSpec."""
+
+    def test_interactive_cmd_builds_without_error(self) -> None:
+        cmd = CodexBackend().build_interactive_cmd(initial_prompt="Hello")
+        assert cmd.cmd[0] == "codex"
+        assert "--dangerously-bypass-approvals-and-sandbox" in cmd.cmd
+
+
+@_skip_unless_codex_smoke
+@pytest.mark.smoke
+class TestCodexSmokeFoodTruckCmdBuild:
+    """Verify CodexBackend.build_food_truck_cmd produces a valid CmdSpec."""
+
+    def test_food_truck_cmd_has_required_flags(self) -> None:
+        plugin_source = DirectInstall(plugin_dir=Path("/tmp/fake-plugin"))
+        cmd = CodexBackend().build_food_truck_cmd(
+            orchestrator_prompt="test",
+            plugin_source=plugin_source,
+            cwd="/tmp",
+            completion_marker="DONE",
+        )
+        assert "--json" in cmd.cmd
+        assert "--sandbox" in cmd.cmd
+        assert cmd.cmd[cmd.cmd.index("--sandbox") + 1] == "read-only"

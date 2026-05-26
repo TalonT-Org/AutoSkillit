@@ -2390,6 +2390,12 @@ callable_contracts:
     - name: source_dir
       type: directory_path
       required: true
+    - name: plan_id
+      type: str
+      required: false
+    - name: source_commit
+      type: str
+      required: false
     outputs:
     - name: plan_path
       type: file_path
@@ -2480,9 +2486,16 @@ callable_contracts:
     - name: temp_dir
       type: directory_path
       required: true
+    - name: source_dir
+      type: directory_path
+      required: false
     outputs:
     - name: planner_dir
       type: directory_path
+    - name: plan_id
+      type: str
+    - name: source_commit
+      type: str
   autoskillit.planner.finalize_wp_manifest:
     inputs:
     - name: work_packages_dir

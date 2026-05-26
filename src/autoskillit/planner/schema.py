@@ -119,6 +119,8 @@ class PlanDocument(_PlanDocumentBase, total=False):
     phases: list[PhaseShort | PhaseElaborated]
     assignments: list[AssignmentShort | AssignmentElaborated]
     work_packages: list[WPShort | WPElaborated]
+    plan_id: str
+    source_commit: str
 
 
 class PlannerManifestItem(TypedDict):
@@ -138,6 +140,8 @@ class PlannerManifest(TypedDict):
 
 class RunDirResult(TypedDict):
     planner_dir: str
+    plan_id: str
+    source_commit: str
 
 
 class TaskResolutionResult(TypedDict):

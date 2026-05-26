@@ -48,8 +48,11 @@ steps:
       callable: "autoskillit.planner.create_run_dir"
       args:
         temp_dir: "{{AUTOSKILLIT_TEMP}}"
+        source_dir: "${{ inputs.source_dir }}"
     capture:
       planner_dir: "${{ result.planner_dir }}"
+      plan_id: "${{ result.plan_id }}"
+      source_commit: "${{ result.source_commit }}"
     on_success: resolve_task
     on_failure: escalate_stop
 
@@ -461,6 +464,8 @@ steps:
       task_file_path: "${{ context.task_file_path }}"
       task_label: "${{ context.task_label }}"
       source_dir: "${{ inputs.source_dir }}"
+      plan_id: "${{ context.plan_id }}"
+      source_commit: "${{ context.source_commit }}"
     on_success: done
     on_failure: escalate_stop
 

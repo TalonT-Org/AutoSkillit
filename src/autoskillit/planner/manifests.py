@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import secrets
+import subprocess
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TypedDict
@@ -44,14 +46,36 @@ def _ensure_sentinel_dir(tier_dir: Path, sentinel_name: str) -> Path:
     return sentinel_dir
 
 
-def create_run_dir(temp_dir: str) -> RunDirResult:
+def _capture_head_sha(source_dir: str) -> str:
+    if not source_dir:
+        return ""
+    try:
+        proc = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=source_dir,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if proc.returncode == 0:
+            sha = proc.stdout.strip()
+            if len(sha) == 40:
+                return sha
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    return ""
+
+
+def create_run_dir(temp_dir: str, source_dir: str = "") -> RunDirResult:
     if not temp_dir:
         raise ValueError("temp_dir must be a non-empty path")
     stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     run_dir = Path(temp_dir) / "planner" / f"run-{stamp}-{secrets.token_hex(4)}"
     for sub in ("phases", "assignments", "work_packages"):
         (run_dir / sub).mkdir(parents=True, exist_ok=True)
-    return RunDirResult(planner_dir=str(run_dir))
+    plan_id = str(uuid.uuid4())
+    source_commit = _capture_head_sha(source_dir)
+    return RunDirResult(planner_dir=str(run_dir), plan_id=plan_id, source_commit=source_commit)
 
 
 def _build_index_entry(result_data: dict[str, object]) -> dict[str, object]:

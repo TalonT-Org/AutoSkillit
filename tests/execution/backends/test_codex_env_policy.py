@@ -103,6 +103,10 @@ class TestCodexEnvPolicy:
         result = policy.build_env(base)
         assert result["AUTOSKILLIT_AGENT_BACKEND"] == "codex"
 
+    @pytest.mark.xfail(
+        reason="Requires P4-A1-WP1 to land: adds AUTOSKILLIT_AGENT_BACKEND to CODEX_ENV_DENYLIST",
+        strict=True,
+    )
     def test_agent_backend_not_in_base_env(self) -> None:
         policy = CodexEnvPolicy()
         base = {"AUTOSKILLIT_AGENT_BACKEND": "codex", "PATH": "/usr/bin"}

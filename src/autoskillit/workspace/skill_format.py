@@ -25,10 +25,17 @@ def parse_frontmatter_content(content: str) -> dict[str, Any]:
     stripped = content.lstrip()
     if not stripped.startswith("---"):
         return {}
-    parts = stripped.split("---", 2)
-    if len(parts) < 3:
+    lines = stripped.split("\n")
+    if len(lines) < 2:
         return {}
-    yaml_block = parts[1]
+    close_idx = None
+    for i, line in enumerate(lines[1:], start=1):
+        if line.rstrip("\r") == "---":
+            close_idx = i
+            break
+    if close_idx is None:
+        return {}
+    yaml_block = "\n".join(lines[1:close_idx])
     try:
         return load_yaml(yaml_block) or {}
     except Exception:
@@ -47,14 +54,16 @@ def validate_skill_frontmatter(frontmatter: dict[str, Any], skill_name: str) -> 
     name = frontmatter.get("name")
     if not isinstance(name, str) or not name:
         errors.append("frontmatter missing required 'name' field")
-    elif name != skill_name:
-        errors.append(f"frontmatter 'name' is {name!r} but directory is {skill_name!r}")
-    elif len(name) > _NAME_MAX_LEN:
-        errors.append(f"'name' exceeds {_NAME_MAX_LEN} character limit (got {len(name)})")
-    elif not _NAME_PATTERN.match(name):
-        errors.append(
-            f"'name' {name!r} must match ^[a-z0-9-]+$ (lowercase letters, digits, hyphens only)"
-        )
+    else:
+        if name != skill_name:
+            errors.append(f"frontmatter 'name' is {name!r} but directory is {skill_name!r}")
+        if len(name) > _NAME_MAX_LEN:
+            errors.append(f"'name' exceeds {_NAME_MAX_LEN} character limit (got {len(name)})")
+        if not _NAME_PATTERN.match(name):
+            errors.append(
+                f"'name' {name!r} must match ^[a-z0-9-]+$"
+                " (lowercase letters, digits, hyphens only)"
+            )
 
     # --- description ---
     desc = frontmatter.get("description")

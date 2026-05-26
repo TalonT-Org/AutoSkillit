@@ -372,6 +372,7 @@ class TestDispatchRecordToDict:
             "dispatched_starttime_ticks",
             "dispatched_boot_id",
             "dispatched_create_time",
+            "identity_degraded",
             "reason",
             "diagnostic_message",
             "kill_reason",

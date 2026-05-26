@@ -49,6 +49,7 @@ from autoskillit.execution.headless._headless_helpers import (
     _recursive_snapshot,
     _resolve_pty_mode,
     _resolve_session_log_dir,
+    assert_headless_cmd,
 )
 from autoskillit.execution.headless._headless_recovery import _attempt_contract_nudge
 from autoskillit.execution.headless._headless_result import _build_skill_result
@@ -148,6 +149,8 @@ async def _execute_claude_headless(
                     f"Backend coherence violation: backend.name={_step_backend.name!r} "
                     f"but subprocess binary is {_binary!r}"
                 )
+
+    assert_headless_cmd(spec)
 
     linux_tracing_cfg = ctx.config.linux_tracing
     _start_ts = datetime.now(UTC).isoformat()

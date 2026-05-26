@@ -164,3 +164,33 @@ def _check_claude_process_state_breakdown(*, backend: str | None = None) -> Doct
         check_name,
         f"{process_label} process state breakdown: {summary}",
     )
+
+
+def _check_script_binary() -> DoctorResult:
+    """Check that script(1) is available and supports -qefc flags."""
+    check_name = "script_binary"
+    try:
+        result = subprocess.run(
+            ["script", "-qefc", "true", "/dev/null"],
+            capture_output=True,
+            timeout=5,
+        )
+    except FileNotFoundError:
+        return DoctorResult(
+            Severity.WARNING,
+            check_name,
+            "script(1) not found — PTY wrapping unavailable; headless sessions may misbehave",
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        return DoctorResult(
+            Severity.WARNING,
+            check_name,
+            f"script(1) probe failed ({type(exc).__name__}) — PTY wrapping may be unavailable",
+        )
+    if result.returncode != 0:
+        return DoctorResult(
+            Severity.WARNING,
+            check_name,
+            "script(1) present but -qefc flags unsupported — PTY wrapping may not work correctly",
+        )
+    return DoctorResult(Severity.OK, check_name, "script(1) available with -qefc support")

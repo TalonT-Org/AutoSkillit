@@ -1248,3 +1248,27 @@ class TestComputeWriteEvidenceWithFileChanges:
         )
         assert evidence.file_changes_count == 0
         assert evidence.write_call_count == 1
+
+
+def test_build_skill_result_ansi_only_stdout_exit_143() -> None:
+    """ANSI-only stdout + exit 143 produces success=False, lifespan_started=False."""
+    ANSI_TUI_CLEANUP = (
+        "\x1b[?1006l\x1b[?1003l\x1b[?1002l\x1b[?1000l"
+        "\x1b[>4m\x1b[<u\x1b[?1004l\x1b[?2031l\x1b[?2004l"
+        "\x1b[?25h\x1b7\x1b[r\x1b8\x1b]0;\x07\x1b[?25h"
+    )
+    proc_result = SubprocessResult(
+        returncode=143,
+        stdout=ANSI_TUI_CLEANUP,
+        stderr="",
+        termination=TerminationReason.NATURAL_EXIT,
+        pid=12345,
+    )
+    skill_result = _build_skill_result(
+        result=proc_result,
+        backend=ClaudeCodeBackend(),
+        skill_command="test",
+        completion_marker="%%DONE%%",
+    )
+    assert skill_result.success is False
+    assert skill_result.lifespan_started is False

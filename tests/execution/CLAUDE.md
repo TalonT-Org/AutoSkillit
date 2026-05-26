@@ -10,6 +10,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `_merge_queue_helpers.py` | Merge-queue test helper factories — _make_watcher, _queue_state |
 | `conftest.py` | Shared fixtures and helpers for tests/execution/ |
 | `test_anomaly_detection.py` | Tests for post-hoc anomaly detection over ProcSnapshot data |
+| `test_boundary_pty_dispatch.py` | Layer-boundary integration tests for DefaultSubprocessRunner + PTY wrapping + Python shims |
 | `test_check_repo_merge_state.py` | Round-trip budget tests for fetch_repo_merge_state |
 | `test_ci.py` | L1 unit tests for execution/ci.py — CIWatcher service |
 | `test_ci_params.py` | Tests for CIRunScope query param composition and workflow scoping |
@@ -39,6 +40,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_headless_core.py` | Tests for headless_runner.py extracted helpers |
 | `test_headless_debug_logging.py` | Tests for debug logging instrumentation in headless.py |
 | `test_headless_dispatch.py` | Tests for headless.py dispatch flow: food truck dispatch, pack injection, executor protocol |
+| `test_headless_execute.py` | Tests for assert_headless_cmd CmdSpec validation gate |
 | `test_headless_env_injection.py` | Phase 2 tests: AUTOSKILLIT_HEADLESS=1 env var injection in headless.py |
 | `test_headless_env_scrub.py` | Launch-site env-scrub contract test for run_headless_core |
 | `test_headless_ordering.py` | AST-based structural test for post-session operation ordering in headless.py |
@@ -67,6 +69,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_process_env_boundary.py` | Boundary contract tests: MappingProxyType env coercion through subprocess execution |
 | `test_process_deadline_extension.py` | Tests for _watch_child_activity coroutine and deadline extension behavior |
 | `test_process_heartbeat.py` | Unit tests for _heartbeat, _has_active_api_connection, _has_active_child_processes, orphaned tool result detection |
+| `test_process_identity.py` | Tests for starttime_ticks=0 identity degradation warning in run_managed_async |
 | `test_process_idle_watchdog.py` | Tests for the stdout idle watchdog coroutine (_watch_stdout_idle) |
 | `test_process_jsonl.py` | Tests for JSONL marker detection utilities |
 | `test_process_kill.py` | Integration tests for process tree kill and async cancellation |

@@ -121,3 +121,19 @@ class TestClaudeCodeBackendAgentBackendEnv:
         monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
         spec = ClaudeCodeBackend().build_skill_session_cmd(**self.BASE)
         assert spec.env["AUTOSKILLIT_AGENT_BACKEND"] == "claude-code"
+
+
+def test_headless_env_hardening_constant_exists() -> None:
+    from autoskillit.execution.backends._claude_prompt import _HEADLESS_ENV_HARDENING
+
+    assert _HEADLESS_ENV_HARDENING["TERM"] == "dumb"
+    assert _HEADLESS_ENV_HARDENING["NO_COLOR"] == "1"
+
+
+def test_build_headless_cmd_injects_hardening() -> None:
+    from autoskillit.core import build_agent_env
+    from autoskillit.execution.backends._claude_prompt import _HEADLESS_ENV_HARDENING
+
+    env = dict(build_agent_env(base={}, extras=_HEADLESS_ENV_HARDENING))
+    assert env["TERM"] == "dumb"
+    assert env["NO_COLOR"] == "1"

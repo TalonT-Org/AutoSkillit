@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.core import (
+    CmdSpec,
     CodingAgentBackend,
     SkillResult,
     claude_code_project_dir,
@@ -36,6 +37,16 @@ def _session_log_dir(cwd: str) -> Path:
 
 def _resolve_pty_mode(backend: CodingAgentBackend) -> bool:
     return backend.capabilities.pty_required
+
+
+def assert_headless_cmd(spec: CmdSpec) -> None:
+    binary = Path(spec.cmd[0]).name if spec.cmd else ""
+    if binary != "claude":
+        return
+    if "-p" not in spec.cmd and "--print" not in spec.cmd:
+        raise ValueError(
+            f"CmdSpec for claude is missing -p flag — would enter TUI mode. cmd={spec.cmd!r}"
+        )
 
 
 def _resolve_session_log_dir(cwd: str, backend: CodingAgentBackend) -> Path | None:

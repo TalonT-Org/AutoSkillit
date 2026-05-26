@@ -130,6 +130,18 @@ def reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
                     continue
                 except psutil.AccessDenied:
                     identity_confirmed = False
+            elif (
+                dispatch.dispatched_starttime_ticks == 0 and dispatch.dispatched_create_time > 0.0
+            ):
+                try:
+                    actual_ct = psutil.Process(pid).create_time()
+                    identity_confirmed = abs(actual_ct - dispatch.dispatched_create_time) < 1.0
+                    logger.info("reap: ticks=0 fallback to create_time for %s pid=%d", name, pid)
+                except psutil.NoSuchProcess:
+                    _mark_dead_pid(dry_run, name, pid, dispatch, m)
+                    continue
+                except psutil.AccessDenied:
+                    identity_confirmed = False
             else:
                 identity_confirmed = False
 

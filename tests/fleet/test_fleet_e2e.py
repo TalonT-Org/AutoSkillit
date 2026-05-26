@@ -69,6 +69,15 @@ elif mode == "no_sentinel":
 elif mode == "sleep_then_exit":
     time.sleep(sleep_sec)
     text = _sentinel('{"success": true, "reason": ""}')
+elif mode == "tui_output":
+    sys.stdout.buffer.write(
+        b"\x1b[?1006l\x1b[?1003l\x1b[?1002l\x1b[?1000l"
+        b"\x1b[>4m\x1b[<u\x1b[?1004l\x1b[?2031l\x1b[?2004l"
+        b"\x1b[?25h\x1b\x37\x1b[r\x1b\x38\x1b]0;\x07\x1b[?25h"
+    )
+    sys.stdout.buffer.flush()
+    import signal
+    os.kill(os.getpid(), signal.SIGTERM)
 else:
     text = ""
 
@@ -1090,3 +1099,16 @@ async def test_fleet_auto_gate_boot_reaps_orphan(tmp_path: Path) -> None:
     finally:
         proc.terminate()
         proc.wait()
+
+
+@pytest.mark.anyio
+async def test_tui_output_shim_classified_as_no_result(
+    fleet_runtime: FleetRuntime,
+) -> None:
+    """dispatch with TUI-only output → fleet_l3_no_result_block."""
+    rt = fleet_runtime
+    rt.add_recipe("recipe-tui")
+
+    result = await rt.dispatch("recipe-tui", shim_mode="tui_output")
+    assert result["success"] is False
+    assert result["reason"] == "fleet_l3_no_result_block"

@@ -66,6 +66,7 @@ def _write_pid(
     starttime_ticks: int,
     sidecar_path: str | None = None,
     dispatched_create_time: float = 0.0,
+    identity_degraded: bool = False,
 ) -> None:
     """on_spawn callback: atomically mark dispatch as running with dispatched_pid."""
     from autoskillit.core import read_boot_id
@@ -81,6 +82,7 @@ def _write_pid(
             boot_id=read_boot_id() or "",
             dispatched_create_time=dispatched_create_time,
             sidecar_path=sidecar_path,
+            identity_degraded=identity_degraded,
         )
     except Exception:
         logger.warning("_write_pid: failed to mark dispatch running", exc_info=True)
@@ -552,7 +554,14 @@ async def _run_dispatch(
         except psutil.NoSuchProcess:
             create_time = 0.0
         _write_pid(
-            state_path, effective_name, dispatch_id, pid, ticks, dispatch_sidecar_path, create_time
+            state_path,
+            effective_name,
+            dispatch_id,
+            pid,
+            ticks,
+            dispatch_sidecar_path,
+            create_time,
+            identity_degraded=(ticks == 0),
         )
 
     marker_dir: Path | None = None

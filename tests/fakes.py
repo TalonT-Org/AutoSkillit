@@ -710,6 +710,7 @@ class MockSubprocessRunner(SubprocessRunner):
             pid=99999,
         )
         self.call_args_list: list[tuple] = []  # type: ignore[type-arg]
+        self.last_pty_mode: bool | None = None
 
     def push(self, result: SubprocessResult) -> None:
         """Queue a result to be returned by the next __call__."""
@@ -728,6 +729,7 @@ class MockSubprocessRunner(SubprocessRunner):
         **kwargs: object,
     ) -> SubprocessResult:
         self.call_args_list.append((cmd, cwd, timeout, kwargs))
+        self.last_pty_mode = bool(kwargs.get("pty_mode", False))
         result = self._queue.popleft() if self._queue else self._default
         on_pid_resolved = kwargs.get("on_pid_resolved")
         if callable(on_pid_resolved) and result.pid > 0:

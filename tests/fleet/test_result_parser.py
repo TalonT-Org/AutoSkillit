@@ -518,3 +518,14 @@ def test_parse_additional_jsonl_paths_nonexistent_skipped(tmp_path: Path) -> Non
     )
     assert result.outcome == "completed_clean"
     assert result.payload["summary"] == "existing"
+
+
+def test_ansi_only_stdout_no_sentinel() -> None:
+    """Pure ANSI TUI cleanup bytes produce outcome='no_sentinel', no crash."""
+    ANSI_TUI_CLEANUP = (
+        "\x1b[?1006l\x1b[?1003l\x1b[?1002l\x1b[?1000l"
+        "\x1b[>4m\x1b[<u\x1b[?1004l\x1b[?2031l\x1b[?2004l"
+        "\x1b[?25h\x1b7\x1b[r\x1b8\x1b]0;\x07\x1b[?25h"
+    )
+    result = parse_l3_result_block(ANSI_TUI_CLEANUP, DISPATCH_ID)
+    assert result.outcome == "no_sentinel"

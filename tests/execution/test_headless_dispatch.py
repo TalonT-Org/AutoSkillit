@@ -59,6 +59,9 @@ class TestDispatchFoodTruck:
         assert env is not None
         assert env["AUTOSKILLIT_SESSION_TYPE"] == "orchestrator"
         assert env["AUTOSKILLIT_HEADLESS"] == "1"
+        assert env["TERM"] == "dumb"
+        assert env["NO_COLOR"] == "1"
+        assert runner.last_pty_mode is True
         assert "--tools" in cmd
         assert "AskUserQuestion" in cmd
 
@@ -504,3 +507,11 @@ def test_default_executor_satisfies_protocol_with_dispatch(minimal_ctx) -> None:
 
     executor = DefaultHeadlessExecutor(minimal_ctx)
     assert isinstance(executor, HeadlessExecutor)
+
+
+def test_build_interactive_cmd_no_headless_hardening() -> None:
+    from autoskillit.execution.backends.claude import ClaudeCodeBackend
+
+    spec = ClaudeCodeBackend().build_interactive_cmd()
+    assert spec.env.get("TERM") != "dumb"
+    assert "NO_COLOR" not in spec.env

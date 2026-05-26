@@ -50,7 +50,6 @@ def validate_skill_frontmatter(frontmatter: dict[str, Any], skill_name: str) -> 
     """
     errors: list[str] = []
 
-    # --- name ---
     name = frontmatter.get("name")
     if not isinstance(name, str) or not name:
         errors.append("frontmatter missing required 'name' field")
@@ -65,15 +64,15 @@ def validate_skill_frontmatter(frontmatter: dict[str, Any], skill_name: str) -> 
                 " (lowercase letters, digits, hyphens only)"
             )
 
-    # --- description ---
     desc = frontmatter.get("description")
     if not isinstance(desc, str) or not desc:
         errors.append("frontmatter missing required 'description' field")
-    elif len(desc) > _DESCRIPTION_MAX_LEN:
-        errors.append(
-            f"'description' exceeds {_DESCRIPTION_MAX_LEN} character limit (got {len(desc)})"
-        )
-    elif "<" in desc or ">" in desc:
-        errors.append("'description' must not contain '<' or '>' characters")
+    else:
+        if len(desc) > _DESCRIPTION_MAX_LEN:
+            errors.append(
+                f"'description' exceeds {_DESCRIPTION_MAX_LEN} character limit (got {len(desc)})"
+            )
+        if "<" in desc or ">" in desc:
+            errors.append("'description' must not contain '<' or '>' characters")
 
     return errors

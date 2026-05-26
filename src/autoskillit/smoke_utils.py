@@ -544,12 +544,7 @@ def parse_agent_eval_manifests(
     variant_manifest: str,
     output_dir: str,
 ) -> dict[str, str]:
-    """Parse agent-eval manifests and create eval run directory structure.
-
-    Reads canary and variant manifests, resolves prompt_template with prompt_vars
-    (including _file indirection), creates per-canary resolved.json and
-    resolved_prompt.txt, and writes manifest_index.json.
-    """
+    """Parse agent-eval manifests, resolve prompt vars, and create eval run directory structure."""
     from datetime import datetime
 
     from autoskillit.core import atomic_write
@@ -625,7 +620,7 @@ def parse_agent_eval_manifests(
         except KeyError as exc:
             return {"success": "false", "error": f"Template variable not resolved: {exc}"}
 
-        (canary_dir / "resolved_prompt.txt").write_text(resolved_prompt)
+        atomic_write(canary_dir / "resolved_prompt.txt", resolved_prompt)
 
         variants_dict = {}
         for v in variants:
@@ -667,11 +662,7 @@ def build_agent_eval_context(
     output_paths_json: str,
     eval_run_dir: str,
 ) -> dict[str, str]:
-    """Assemble eval_context.json from resolved manifest and output paths.
-
-    Reads the resolved.json for the given canary, builds the eval_context dict
-    with reference and candidate entries, and writes eval_context.json.
-    """
+    """Assemble eval_context.json from resolved manifest and variant output paths."""
     from autoskillit.core import atomic_write
 
     resolved_path = Path(eval_run_dir) / canary_id / "resolved.json"

@@ -32,6 +32,7 @@ def _load_skill_contracts() -> dict:
 
 def test_clone_commit_skills_have_write_behavior_conditional():
     """Every skill in CLONE_COMMIT_SKILLS must have write_behavior: conditional."""
+    assert CLONE_COMMIT_SKILLS, "CLONE_COMMIT_SKILLS must not be empty"
     contracts = _load_skill_contracts()
     for skill_name in CLONE_COMMIT_SKILLS:
         contract = contracts.get(skill_name, {})
@@ -42,6 +43,7 @@ def test_clone_commit_skills_have_write_behavior_conditional():
 
 def test_clone_commit_skills_not_read_only():
     """No skill in CLONE_COMMIT_SKILLS should have read_only: true."""
+    assert CLONE_COMMIT_SKILLS, "CLONE_COMMIT_SKILLS must not be empty"
     contracts = _load_skill_contracts()
     for skill_name in CLONE_COMMIT_SKILLS:
         contract = contracts.get(skill_name, {})

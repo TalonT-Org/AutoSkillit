@@ -74,3 +74,26 @@ def test_all_backends_implement_food_truck_cmd():
         assert callable(getattr(cls, "build_food_truck_cmd")), (
             f"{name} backend build_food_truck_cmd must be callable"
         )
+
+
+def test_coding_agent_backend_protocol_includes_validate_session_layout():
+    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+
+    assert hasattr(CodingAgentBackend, "validate_session_layout"), (
+        "CodingAgentBackend protocol must define validate_session_layout"
+    )
+    assert callable(getattr(CodingAgentBackend, "validate_session_layout")), (
+        "validate_session_layout must be callable"
+    )
+
+
+def test_all_backends_implement_validate_session_layout():
+    from autoskillit.execution.backends import BACKEND_REGISTRY
+
+    for name, cls in BACKEND_REGISTRY.items():
+        assert hasattr(cls, "validate_session_layout"), (
+            f"{name} backend must implement validate_session_layout"
+        )
+        assert callable(getattr(cls, "validate_session_layout")), (
+            f"{name} backend validate_session_layout must be callable"
+        )

@@ -613,7 +613,15 @@ class DefaultSessionSkillManager:
                     f"This indicates a gating conflict — check feature gates, "
                     f"disabled categories, or pack visibility."
                 )
-        # P3-A9: Codex branch will add codex-home layout validation here
+        if backend is not None:
+            layout_errors = backend.validate_session_layout(session_skills_dir)
+            for err in layout_errors:
+                _log.warning(
+                    "session_layout_validation",
+                    session_id=session_id,
+                    error=err,
+                    backend=backend.name,
+                )
         return ValidatedAddDir(path=str(session_skills_dir))
 
     def activate_skill_deps(self, session_id: str, skill_name: str) -> bool:

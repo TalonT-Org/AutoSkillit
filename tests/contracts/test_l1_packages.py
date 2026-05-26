@@ -44,6 +44,10 @@ def test_workspace_package_exports() -> None:
     )
 
 
+def test_report_package_exports() -> None:
+    from autoskillit.report import HTML_TEMPLATE, VALIDATION_KEYWORDS, main  # noqa: F401
+
+
 def test_failure_record_in_core_types() -> None:
     from autoskillit.core.types import FailureRecord
 

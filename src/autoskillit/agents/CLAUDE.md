@@ -12,6 +12,7 @@ Bundled agent definition markdown files that serve as both **plugin agents**
 | `plan-interface-mapper.md` | Adversarial agent: variable/data-flow tracer — builds SET/READ tables for wrong-variable detection |
 | `plan-registry-tracer.md` | Adversarial agent: registry/artifact auditor — LSP + tree-sitter + grep symbol tracing |
 | `wp-elaborator.md` | Pipeline agent: work-package elaboration — codebase analysis and structured JSON output |
+| `pipeline-health-scanner.md` | Pipeline agent: session log scanner — reads session data, investigates anomalies, reports with adversarial validation |
 
 ## Layout
 
@@ -48,6 +49,7 @@ agent definitions are readable via `ReadMcpResourceTool` at `agent://{pack}/{nam
 |------|-----|--------|---------|
 | `plan-review` | `plan-review` | 3 adversarial reviewers | make-plan Steps 6-9, rectify Steps 5-7 |
 | _(none)_ | _(none)_ | `wp-elaborator` | planner-elaborate-wps (subagent_type-only) |
+| _(none)_ | _(none)_ | `pipeline-health-scanner` | analyze-pipeline-health (subagent_type-only) |
 
 ## Adding Agents
 

@@ -81,6 +81,14 @@ ingredients:
       string).
     default: "6"
     hidden: true
+  post_run_diagnostics:
+    description: Run diagnostic analysis after pipeline completion
+    default: "false"
+    hidden: true
+  kitchen_id:
+    description: Kitchen session identifier (auto-injected)
+    default: ""
+    hidden: true
   depth:
     description: "Investigation depth mode"
     default: "standard"
@@ -927,8 +935,23 @@ steps:
       clone_path: "${{ context.work_dir }}"
       status: "error"
       step_name: register_clone_no_ci
+    on_success: run_diagnostic_no_ci
+    on_failure: run_diagnostic_no_ci
+
+  run_diagnostic_no_ci:
+    description: "Run post-pipeline diagnostic analysis on session logs (no-CI path)"
+    tool: run_skill
+    optional: true
+    skip_when_false: "inputs.post_run_diagnostics"
+    with:
+      skill_command: "/autoskillit:analyze-pipeline-health ${{ inputs.kitchen_id }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "post_run_diagnostics"
     on_success: escalate_stop_no_ci
     on_failure: escalate_stop_no_ci
+    on_context_limit: escalate_stop_no_ci
+    note: >
+      Diagnostic failure never blocks pipeline completion.
 
   escalate_stop_no_ci:
     action: stop
@@ -1675,13 +1698,28 @@ steps:
       clone_path: "${{ context.work_dir }}"
       status: "unconfirmed"
       step_name: register_clone_unconfirmed
-    on_success: done_unconfirmed
-    on_failure: done_unconfirmed
+    on_success: run_diagnostic_unconfirmed
+    on_failure: run_diagnostic_unconfirmed
     note: >
       Called when a merge-wait step times out before merge is confirmed.
       Does NOT call release_issue — the in-progress label stays on the issue
       so operators can see the PR is still actively queued. The clone is
       preserved (status: unconfirmed) for human inspection.
+
+  run_diagnostic_unconfirmed:
+    description: "Run post-pipeline diagnostic analysis on session logs (unconfirmed path)"
+    tool: run_skill
+    optional: true
+    skip_when_false: "inputs.post_run_diagnostics"
+    with:
+      skill_command: "/autoskillit:analyze-pipeline-health ${{ inputs.kitchen_id }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "post_run_diagnostics"
+    on_success: done_unconfirmed
+    on_failure: done_unconfirmed
+    on_context_limit: done_unconfirmed
+    note: >
+      Diagnostic failure never blocks pipeline completion.
 
   done_unconfirmed:
     action: stop
@@ -1742,8 +1780,8 @@ steps:
       clone_path: "${{ context.work_dir }}"
       status: "success"
       step_name: register_clone_success
-    on_success: done
-    on_failure: done
+    on_success: run_diagnostic
+    on_failure: run_diagnostic
 
   register_clone_failure:
     description: "Register clone as preserved (error pipeline)"
@@ -1752,8 +1790,39 @@ steps:
       clone_path: "${{ context.work_dir }}"
       status: "error"
       step_name: register_clone_failure
+    on_success: run_diagnostic_error
+    on_failure: run_diagnostic_error
+
+  run_diagnostic:
+    description: "Run post-pipeline diagnostic analysis on session logs"
+    tool: run_skill
+    optional: true
+    skip_when_false: "inputs.post_run_diagnostics"
+    with:
+      skill_command: "/autoskillit:analyze-pipeline-health ${{ inputs.kitchen_id }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "post_run_diagnostics"
+    on_success: done
+    on_failure: done
+    on_context_limit: done
+    note: >
+      Diagnostic failure never blocks pipeline completion. Both on_failure and
+      on_context_limit route to the same terminal as on_success.
+
+  run_diagnostic_error:
+    description: "Run post-pipeline diagnostic analysis on session logs (error path)"
+    tool: run_skill
+    optional: true
+    skip_when_false: "inputs.post_run_diagnostics"
+    with:
+      skill_command: "/autoskillit:analyze-pipeline-health ${{ inputs.kitchen_id }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "post_run_diagnostics"
     on_success: escalate_stop
     on_failure: escalate_stop
+    on_context_limit: escalate_stop
+    note: >
+      Diagnostic failure never blocks pipeline completion.
 
   done:
     action: stop

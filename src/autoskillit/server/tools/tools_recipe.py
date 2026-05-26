@@ -198,12 +198,17 @@ async def load_recipe(
             return json.dumps({"error": "Server not initialized"})
         suppressed = tool_ctx.config.migration.suppressed
         _defaults = resolve_ingredient_defaults(tool_ctx.project_dir)
+        _auto_overrides: dict[str, str] = {
+            "kitchen_id": tool_ctx.kitchen_id,
+            "post_run_diagnostics": _defaults.get("post_run_diagnostics", "false"),
+        }
+        _merged_overrides = {**_auto_overrides, **(overrides or {})}
         result = tool_ctx.recipes.load_and_validate(
             name,
             tool_ctx.project_dir,
             suppressed=suppressed,
             resolved_defaults=_defaults,
-            ingredient_overrides=overrides,
+            ingredient_overrides=_merged_overrides,
             temp_dir=tool_ctx.temp_dir,
             temp_dir_relpath=temp_dir_display_str(tool_ctx.config.workspace.temp_dir),
         )

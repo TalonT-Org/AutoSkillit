@@ -512,5 +512,39 @@ def test_tools_recipe_does_not_import_raw_ctx():
             if node.module and "_state" in node.module:
                 names = [alias.name for alias in node.names]
                 assert "_ctx" not in names, (
-                    "tools_recipe.py must not import raw _ctx — use _get_ctx_or_none()"
+                    "tools_recipe.py must not import _ctx directly from server._state"
                 )
+
+
+# DIAG_C5
+@pytest.mark.anyio
+async def test_load_recipe_injects_hidden_ingredient_overrides(tool_ctx_kitchen_open, monkeypatch):
+    """load_recipe injects kitchen_id and post_run_diagnostics into ingredient_overrides."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from autoskillit.server.tools.tools_recipe import load_recipe
+
+    tool_ctx_kitchen_open.recipes = MagicMock()
+    tool_ctx_kitchen_open.recipes.load_and_validate.return_value = {
+        "content": "name: demo
+steps:
+  do:
+    tool: run_cmd
+",
+        "valid": True,
+        "suggestions": [],
+        "diagram": None,
+        "ingredients_table": "--- INGREDIENTS TABLE ---
+  task  required
+--- END TABLE ---",
+    }
+    tool_ctx_kitchen_open.recipes.find.return_value = None
+    tool_ctx_kitchen_open.kitchen_id = "test-kitchen-xyz"
+
+    with patch("autoskillit.server.tools.tools_recipe._get_ctx_or_none", return_value=tool_ctx_kitchen_open):
+        await load_recipe(name="demo")
+
+    call_kwargs = tool_ctx_kitchen_open.recipes.load_and_validate.call_args.kwargs
+    overrides = call_kwargs["ingredient_overrides"]
+    assert overrides["kitchen_id"] == "test-kitchen-xyz"
+    assert overrides["post_run_diagnostics"] == "false"

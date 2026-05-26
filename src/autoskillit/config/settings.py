@@ -25,6 +25,7 @@ from autoskillit.config._config_dataclasses import (
     ClassifyFixConfig,
     ConfigSchemaError,
     CoreRunConfig,
+    DiagnosticsConfig,
     FleetConfig,
     GitHubConfig,
     ImplementGateConfig,
@@ -120,6 +121,7 @@ __all__ = [
     "ClassifyFixConfig",
     "ConfigSchemaError",
     "CoreRunConfig",
+    "DiagnosticsConfig",
     "FleetConfig",
     "GitHubConfig",
     "ImplementGateConfig",
@@ -186,6 +188,7 @@ class AutomationConfig:
     github: GitHubConfig = field(default_factory=GitHubConfig)
     report_bug: ReportBugConfig = field(default_factory=ReportBugConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
+    diagnostics: DiagnosticsConfig = field(default_factory=DiagnosticsConfig)
     linux_tracing: LinuxTracingConfig = field(default_factory=LinuxTracingConfig)
     mcp_response: McpResponseConfig = field(default_factory=McpResponseConfig)
     branching: BranchingConfig = field(default_factory=BranchingConfig)
@@ -305,6 +308,7 @@ class AutomationConfig:
         gh = sec("github")
         rb = sec("report_bug")
         lg = sec("logging")
+        dg = sec("diagnostics")
         lt = sec("linux_tracing")
         mr = sec("mcp_response")
         br = sec("branching")
@@ -335,6 +339,7 @@ class AutomationConfig:
         _gh = _field_defaults(GitHubConfig)
         _rb = _field_defaults(ReportBugConfig)
         _lg = _field_defaults(LoggingConfig)
+        _dg = _field_defaults(DiagnosticsConfig)
         _lt = _field_defaults(LinuxTracingConfig)
         _mr = _field_defaults(McpResponseConfig)
         _br = _field_defaults(BranchingConfig)
@@ -473,6 +478,9 @@ class AutomationConfig:
                     if (_jo := val(lg, "json_output", _lg["json_output"])) is not None
                     else None
                 ),
+            ),
+            diagnostics=DiagnosticsConfig(
+                post_run_analysis=bool(val(dg, "post_run_analysis", _dg["post_run_analysis"])),
             ),
             linux_tracing=LinuxTracingConfig(
                 enabled=bool(val(lt, "enabled", _lt["enabled"])),

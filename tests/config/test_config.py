@@ -47,6 +47,11 @@ class TestDefaultConfig:
         assert cfg.model.model_override is None
         assert cfg.model.provider == "anthropic"
 
+    def test_diagnostics_config_defaults(self):
+        """DIAG_C1: DiagnosticsConfig.post_run_analysis defaults to False."""
+        cfg = AutomationConfig()
+        assert cfg.diagnostics.post_run_analysis is False
+
     def test_model_provider_custom(self):
         """MOD_C4: CoreRunConfig accepts custom provider."""
         from autoskillit.config import CoreRunConfig
@@ -167,6 +172,16 @@ class TestLoadConfig:
         assert cfg.safety.protected_branches == ["main", "production"]
         assert cfg.worktree_setup.command == ["task", "install-worktree"]
 
+    def test_load_diagnostics_config(self, tmp_path):
+        """DIAG_C2: diagnostics.post_run_analysis can be set via YAML."""
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text(
+            yaml.dump({"diagnostics": {"post_run_analysis": True}})
+        )
+        cfg = load_config(tmp_path)
+        assert cfg.diagnostics.post_run_analysis is True
+
     def test_partial_yaml_preserves_defaults(self, tmp_path):
         """C4: YAML with only test_check.command -> other fields keep defaults."""
         config_dir = tmp_path / ".autoskillit"
@@ -274,6 +289,11 @@ class TestLoadConfig:
         assert cfg.model.model_override is None
         assert cfg.model.provider == "anthropic"
 
+    def test_diagnostics_config_defaults(self):
+        """DIAG_C1: DiagnosticsConfig.post_run_analysis defaults to False."""
+        cfg = AutomationConfig()
+        assert cfg.diagnostics.post_run_analysis is False
+
     def test_yaml_loads_model_provider(self, tmp_path):
         """MOD_C5: YAML model.provider loads into CoreRunConfig.provider."""
         config_dir = tmp_path / ".autoskillit"
@@ -321,6 +341,16 @@ class TestLoadConfig:
         (config_dir / "config.yaml").write_text(yaml.dump(config_data))
         cfg = load_config(tmp_path)
         assert cfg.worktree_setup.command == ["task", "install-worktree"]
+
+    def test_load_diagnostics_config(self, tmp_path):
+        """DIAG_C2: diagnostics.post_run_analysis can be set via YAML."""
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text(
+            yaml.dump({"diagnostics": {"post_run_analysis": True}})
+        )
+        cfg = load_config(tmp_path)
+        assert cfg.diagnostics.post_run_analysis is True
 
     def test_partial_config_preserves_worktree_setup_default(self, tmp_path):
         """WS_C3: YAML without worktree_setup -> command stays None."""

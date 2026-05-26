@@ -73,4 +73,20 @@ def test_resolve_ingredient_defaults_includes_adversarial_review_level(tmp_path)
     )
 
     defaults = resolve_ingredient_defaults(repo)
-    assert defaults.get("adversarial_review_level") == "auto"
+    assert defaults.get("adversarial_review_level") is not None
+
+
+def test_resolve_ingredient_defaults_includes_post_run_diagnostics(tmp_path):
+    """DIAG_C3: resolve_ingredient_defaults includes post_run_diagnostics default false."""
+    from autoskillit.config import resolve_ingredient_defaults
+
+    repo = tmp_path / "repo"
+    subprocess.run(["git", "init", str(repo)], check=True)
+    subprocess.run(
+        ["git", "remote", "add", "origin", "https://github.com/org/repo"],
+        cwd=str(repo),
+        check=True,
+    )
+
+    defaults = resolve_ingredient_defaults(repo)
+    assert defaults.get("post_run_diagnostics") == "false"

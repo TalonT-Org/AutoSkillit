@@ -22,6 +22,14 @@ ingredients:
   plans_dir:
     description: Plan files for audit
     default: "{{AUTOSKILLIT_TEMP}}/merge-prs"
+  post_run_diagnostics:
+    description: Run diagnostic analysis after pipeline completion
+    default: "false"
+    hidden: true
+  kitchen_id:
+    description: Kitchen session identifier (auto-injected)
+    default: ""
+    hidden: true
 
 kitchen_rules:
 - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the orchestrator. All work is delegated through run_skill and run_cmd."
@@ -1512,8 +1520,8 @@ steps:
       clone_path: "${{ context.work_dir }}"
       status: "success"
       step_name: register_clone_success
-    on_success: done
-    on_failure: done
+    on_success: run_diagnostic
+    on_failure: run_diagnostic
 
   register_clone_failure:
     description: "Register clone as preserved (error pipeline)"
@@ -1522,8 +1530,39 @@ steps:
       clone_path: "${{ context.work_dir }}"
       status: "error"
       step_name: register_clone_failure
+    on_success: run_diagnostic_error
+    on_failure: run_diagnostic_error
+
+  run_diagnostic:
+    description: "Run post-pipeline diagnostic analysis on session logs"
+    tool: run_skill
+    optional: true
+    skip_when_false: "inputs.post_run_diagnostics"
+    with:
+      skill_command: "/autoskillit:analyze-pipeline-health ${{ inputs.kitchen_id }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "post_run_diagnostics"
+    on_success: done
+    on_failure: done
+    on_context_limit: done
+    note: >
+      Diagnostic failure never blocks pipeline completion. Both on_failure and
+      on_context_limit route to the same terminal as on_success.
+
+  run_diagnostic_error:
+    description: "Run post-pipeline diagnostic analysis on session logs (error path)"
+    tool: run_skill
+    optional: true
+    skip_when_false: "inputs.post_run_diagnostics"
+    with:
+      skill_command: "/autoskillit:analyze-pipeline-health ${{ inputs.kitchen_id }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "post_run_diagnostics"
     on_success: escalate_stop
     on_failure: escalate_stop
+    on_context_limit: escalate_stop
+    note: >
+      Diagnostic failure never blocks pipeline completion.
 
   done:
     action: stop

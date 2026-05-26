@@ -21,3 +21,7 @@ def test_fleet_session_importable():
 
 def test_fleet_facade_exports_fleet_app():
     from autoskillit.cli.fleet import fleet_app, render_fleet_error  # noqa: F401
+
+
+def test_dispatch_reaper_importable():
+    from autoskillit.fleet import reap_stale_dispatches, reap_stale_dispatches_async  # noqa: F401

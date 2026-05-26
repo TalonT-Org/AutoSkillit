@@ -14,6 +14,7 @@ IL-2 fleet campaign layer — parallel issue dispatch, semaphore, sidecar, liven
 | `_prompts.py` | Prompt builder for L2 fleet dispatch sessions — assembles admiral dispatch instruction block from SKILL.md sections |
 | `result_parser.py` | L2 result block parser with Channel B JSONL fallback |
 | `sidecar.py` | Per-issue JSONL sidecar — `IssueSidecarEntry`, append/read/`compute_remaining` helpers |
+| `_dispatch_reaper.py` | Stale dispatch process reaping — `reap_stale_dispatches()`, `reap_stale_dispatches_async()` |
 | `_label_cleanup.py` | Infrastructure-level label cleanup — `cleanup_orphaned_labels`, `sweep_stale_dispatch_labels`, `discover_campaign_state_files` |
 | `_liveness.py` | `is_dispatch_session_alive()` — boot_id + starttime_ticks liveness gate |
 | `_semaphore.py` | `FleetSemaphore` — configurable `asyncio.BoundedSemaphore` implementing `FleetLock` |
@@ -30,6 +31,7 @@ IL-2 fleet campaign layer — parallel issue dispatch, semaphore, sidecar, liven
 
 | File | Purpose |
 |------|---------|
+| `tests/fleet/test_dispatch_reaper.py` | Tests for `reap_stale_dispatches` — all reap scenarios including create_time fallback, dry-run, idempotency |
 | `tests/fleet/test_state_lock_contract.py` | Locking contract tests — AST scan for flock targets, flock acquisition per mutation, cross-caller concurrency |
 | `tests/fleet/test_state_recovery.py` | Tests for `derive_orchestrator_resume_spec` |
 | `tests/fleet/test_campaign_capture.py` | Campaign capture extraction and ingredient interpolation tests |

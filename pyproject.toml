@@ -336,6 +336,11 @@ forbidden_modules = [
     "autoskillit.cli",
     "autoskillit.report",
 ]
+ignore_imports = [
+    # _dispatch_reaper calls kill_process_tree for orphan reaping; psutil is non-stdlib
+    # so the reaper cannot live in core/. This mirrors the workspace path-utility exception.
+    "autoskillit.fleet._dispatch_reaper -> autoskillit.execution",
+]
 
 # IL-011 | _dag_ops: shared DAG primitives with no planner-internal imports
 [[tool.importlinter.contracts]]

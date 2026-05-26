@@ -936,7 +936,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         1200,
         "REQ-CNST-010-E7: agent-eval + skill-eval smoke functions + consolidate_health_reports — "
         "parse_agent_eval_manifests and build_agent_eval_context parallel "
-        "parse_eval_manifests/build_eval_context; consolidate_health_reports added for L3 "
+        "parse_eval_manifests/build_eval_context; consolidate_health_reports added for campaign "
         "diagnostic aggregation; shared helpers extracted but residual size from three domains",
     ),
 }

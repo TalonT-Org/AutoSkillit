@@ -127,7 +127,7 @@ def test_il003_pipeline_config_exception_documented() -> None:
 
 
 def test_il_contract_count_is_guarded() -> None:
-    """All 9 IL-* contracts must be present in pyproject.toml.
+    """All 11 IL-* contracts must be present in pyproject.toml.
 
     Silently removing a contract from pyproject.toml would cause lint-imports
     to stop enforcing that layer boundary with no pytest signal. This test

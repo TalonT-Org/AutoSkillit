@@ -339,6 +339,7 @@ def test_package_all_matches_exports() -> None:
         "hooks",
         "cli",
         "server",
+        "report",
     ]
     violations: list[str] = []
 

@@ -521,19 +521,35 @@ def test_init_files_are_pure_facades() -> None:
     """P14-2: Sub-package __init__.py files must not define FunctionDef or AsyncFunctionDef
     at module scope. They must be pure re-export facades.
 
-    After groupE (P14-1), server/__init__.py is a pure facade. This test enforces the
-    same constraint across all immediate sub-package __init__.py files.
+    Scans all __init__.py files recursively, including nested sub-packages.
 
     Exempt: src/autoskillit/__init__.py (package root, defines __version__ at module scope).
     """
+    # TODO: remove exemptions below once business-logic functions are refactored out
+    # of these __init__.py files into dedicated modules (P14-2 architectural debt).
+    _EXEMPT_INITS = frozenset(
+        {
+            Path("cli/fleet/__init__.py"),
+            Path("cli/doctor/__init__.py"),
+            Path("execution/process/__init__.py"),
+            Path("execution/headless/__init__.py"),
+            Path("execution/backends/__init__.py"),
+        }
+    )
+
     violations: list[str] = []
 
-    for init_file in SRC_ROOT.glob("*/__init__.py"):
+    for init_file in SRC_ROOT.rglob("__init__.py"):
+        if init_file.parent == SRC_ROOT:
+            continue
+        rel = init_file.relative_to(SRC_ROOT)
+        if rel in _EXEMPT_INITS:
+            continue
         source = init_file.read_text(encoding="utf-8")
         tree = ast.parse(source, filename=str(init_file))
         for node in tree.body:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                # PEP 562 protocol functions are allowed in lazy-loading facades
+                # PEP 562 module protocol functions are allowed at module scope
                 if node.name in ("__getattr__", "__dir__"):
                     continue
                 violations.append(

@@ -767,6 +767,10 @@ class TestCodexBuildFoodTruckCmd:
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)
         assert "--plugin-dir" not in spec.cmd
 
+    def test_mcp_tools_only_prompt_reinforcement(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(**self.BASE)
+        assert "ORCHESTRATION DIRECTIVE" in spec.cmd[-1]
+
     def test_prompt_is_last_token(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)
         assert "dispatch the work" in spec.cmd[-1]

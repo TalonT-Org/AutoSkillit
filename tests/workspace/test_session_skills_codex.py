@@ -9,8 +9,8 @@ import pytest
 
 from autoskillit.core import ValidatedAddDir
 from autoskillit.workspace.session_skills import (
-    CODEX_SKILLS_SUBDIR,
     _SKILLS_SUBDIR,
+    CODEX_SKILLS_SUBDIR,
 )
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
@@ -29,16 +29,18 @@ def codex_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     backend = MagicMock()
     backend.name = "codex"
 
-    return type("CodexEnv", (), {
-        "fake_home": fake_home,
-        "codex_dir": codex_dir,
-        "backend": backend,
-    })()
+    return type(
+        "CodexEnv",
+        (),
+        {
+            "fake_home": fake_home,
+            "codex_dir": codex_dir,
+            "backend": backend,
+        },
+    )()
 
 
-def test_codex_init_session_creates_skills_subdir(
-    make_session_skill_manager, codex_env
-) -> None:
+def test_codex_init_session_creates_skills_subdir(make_session_skill_manager, codex_env) -> None:
     mgr = make_session_skill_manager()
     session_path = mgr.init_session("sid", cook_session=True, backend=codex_env.backend)
     skill_files = list((session_path / CODEX_SKILLS_SUBDIR).glob("*/SKILL.md"))
@@ -46,9 +48,7 @@ def test_codex_init_session_creates_skills_subdir(
     assert not (session_path / _SKILLS_SUBDIR).exists()
 
 
-def test_codex_init_session_copies_config_toml(
-    make_session_skill_manager, codex_env
-) -> None:
+def test_codex_init_session_copies_config_toml(make_session_skill_manager, codex_env) -> None:
     mgr = make_session_skill_manager()
     session_path = mgr.init_session("sid", cook_session=True, backend=codex_env.backend)
     copied = session_path / "config.toml"
@@ -56,9 +56,7 @@ def test_codex_init_session_copies_config_toml(
     assert copied.read_text() == "[codex]\nmodel = 'o3'\n"
 
 
-def test_codex_init_session_copies_auth_json(
-    make_session_skill_manager, codex_env
-) -> None:
+def test_codex_init_session_copies_auth_json(make_session_skill_manager, codex_env) -> None:
     (codex_env.codex_dir / "auth.json").write_text('{"token": "test"}')
     mgr = make_session_skill_manager()
     session_path = mgr.init_session("sid", cook_session=True, backend=codex_env.backend)
@@ -67,9 +65,7 @@ def test_codex_init_session_copies_auth_json(
     assert copied.read_text() == '{"token": "test"}'
 
 
-def test_codex_init_session_copies_env_if_present(
-    make_session_skill_manager, codex_env
-) -> None:
+def test_codex_init_session_copies_env_if_present(make_session_skill_manager, codex_env) -> None:
     (codex_env.codex_dir / ".env").write_text("API_KEY=secret\n")
     mgr = make_session_skill_manager()
     session_path = mgr.init_session("sid", cook_session=True, backend=codex_env.backend)
@@ -78,9 +74,7 @@ def test_codex_init_session_copies_env_if_present(
     assert copied.read_text() == "API_KEY=secret\n"
 
 
-def test_codex_init_session_skips_env_if_absent(
-    make_session_skill_manager, codex_env
-) -> None:
+def test_codex_init_session_skips_env_if_absent(make_session_skill_manager, codex_env) -> None:
     mgr = make_session_skill_manager()
     session_path = mgr.init_session("sid", cook_session=True, backend=codex_env.backend)
     assert not (session_path / ".env").exists()

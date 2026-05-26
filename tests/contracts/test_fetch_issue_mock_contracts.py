@@ -42,7 +42,7 @@ def _collect_failures(test_file: Path) -> list[str]:
             if isinstance(k, ast.Constant) and isinstance(k.value, str)
         }
         if "success" in keys and "state" not in keys:
-            failures.append(f"{test_file.name}:{lineno} {label} missing \'state\' key")
+            failures.append(f"{test_file.name}:{lineno} {label} missing 'state' key")
 
     def _check_value(value_node: ast.expr, lineno: int, label: str) -> None:
         if isinstance(value_node, ast.Dict):
@@ -53,8 +53,8 @@ def _collect_failures(test_file: Path) -> list[str]:
                 var_lineno, has_state = variable_dicts[var_name]
                 if not has_state:
                     failures.append(
-                        f"{test_file.name}:{lineno} variable \'{var_name}\' "
-                        f"(defined at line {var_lineno}) missing \'state\' key"
+                        f"{test_file.name}:{lineno} variable '{var_name}' "
+                        f"(defined at line {var_lineno}) missing 'state' key"
                     )
 
     for node in ast.walk(tree):
@@ -94,6 +94,4 @@ def test_all_fetch_issue_mocks_include_state_field() -> None:
     for test_file in test_files:
         all_failures.extend(_collect_failures(test_file))
 
-    assert not all_failures, (
-        "fetch_issue mocks missing \'state\' key:\n" + "\n".join(all_failures)
-    )
+    assert not all_failures, "fetch_issue mocks missing 'state' key:\n" + "\n".join(all_failures)

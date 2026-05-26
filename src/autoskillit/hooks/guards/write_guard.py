@@ -61,6 +61,7 @@ _BASH_TARGET_PATTERNS_RELATIVE: list[re.Pattern[str]] = [
     ),
     # mv src dst  or  cp src dst  (relative destination)
     re.compile(r"\b(?:mv|cp)\s+\S+\s+([^\s;|&>/][^\s;|&>]*)"),
+    re.compile(r"\bmv\s+([^\s;|&>/][^\s;|&>]*)\s+\S+"),
     # rm relative/file  or  unlink relative/file
     re.compile(r"\b(?:rm|unlink)\s+(?:-\S+\s+)*([^\s;|&>/][^\s;|&>]*)"),
 ]
@@ -84,8 +85,7 @@ def _extract_bash_write_targets(command: str) -> list[str] | None:
     cwd = os.environ.get("AUTOSKILLIT_CWD", "")
     if cwd:
         for pattern in _BASH_TARGET_PATTERNS_RELATIVE:
-            m = pattern.search(command)
-            if m:
+            for m in pattern.finditer(command):
                 rel_path = m.group(1)
                 if not rel_path.startswith("/") and rel_path not in _PSEUDO_DEVICE_PATHS:
                     targets.append(os.path.join(cwd, rel_path))

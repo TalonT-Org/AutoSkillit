@@ -449,6 +449,8 @@ async def test_run_skill_backend_override_codex_with_anthropic_base_url(
     fake_backend = MagicMock(spec=CodingAgentBackend)
     type(fake_backend).name = property(lambda self: "codex")
     tool_ctx_kitchen_open.backend = fake_backend
+    # Skip Codex session init: copies ~/.codex/config.toml which is absent in CI
+    tool_ctx_kitchen_open.session_skill_manager = None
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
     monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: True)
     monkeypatch.setattr(
@@ -490,6 +492,7 @@ async def test_run_skill_backend_override_none_no_anthropic_base_url(
     fake_backend = MagicMock(spec=CodingAgentBackend)
     type(fake_backend).name = property(lambda self: "codex")
     tool_ctx_kitchen_open.backend = fake_backend
+    tool_ctx_kitchen_open.session_skill_manager = None
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
     monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: True)
     monkeypatch.setattr(
@@ -563,6 +566,7 @@ async def test_run_skill_backend_override_none_providers_disabled(
     fake_backend = MagicMock(spec=CodingAgentBackend)
     type(fake_backend).name = property(lambda self: "codex")
     tool_ctx_kitchen_open.backend = fake_backend
+    tool_ctx_kitchen_open.session_skill_manager = None
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
     monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: False)
 

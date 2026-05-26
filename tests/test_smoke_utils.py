@@ -1978,6 +1978,8 @@ def test_consolidate_health_reports_does_not_mutate_source_dicts(tmp_path):
     assert "dispatch_id" not in original_finding
     # Verify the result has the dispatch_id in findings
     assert "dispatch-a" in result["summary"]
+
+
 # ---------------------------------------------------------------------------
 # T_FACADE_1–T_FACADE_2: smoke_utils package facade verification
 # ---------------------------------------------------------------------------

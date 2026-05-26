@@ -677,3 +677,32 @@ class TestCodexBuildInteractiveCmd:
         assert CodexFlags.MODEL in spec.cmd
         idx = spec.cmd.index(CodexFlags.MODEL)
         assert spec.cmd[idx + 1] == "o3"
+
+
+class TestCodexBuildSkillSessionCmdAgentBackend:
+    """Tests that AUTOSKILLIT_AGENT_BACKEND is injected into skill session env."""
+
+    BASE: dict[str, object] = {
+        "skill_command": "/test-skill",
+        "cwd": "/work",
+        "completion_marker": "%%DONE%%",
+        "model": None,
+        "plugin_source": None,
+        "output_format": OutputFormat.JSON,
+    }
+
+    def test_agent_backend_env_set(self) -> None:
+        spec = CodexBackend().build_skill_session_cmd(**self.BASE)
+        assert spec.env["AUTOSKILLIT_AGENT_BACKEND"] == "codex"
+
+    def test_agent_backend_overrides_parent_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "wrong-value")
+        spec = CodexBackend().build_skill_session_cmd(**self.BASE)
+        assert spec.env["AUTOSKILLIT_AGENT_BACKEND"] == "codex"
+
+    def test_agent_backend_present_without_parent_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
+        spec = CodexBackend().build_skill_session_cmd(**self.BASE)
+        assert spec.env["AUTOSKILLIT_AGENT_BACKEND"] == "codex"

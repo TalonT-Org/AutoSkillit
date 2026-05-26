@@ -13,6 +13,7 @@ import zstandard
 
 from autoskillit.core import (
     AGENT_BACKEND_CODEX,
+    AGENT_BACKEND_ENV_VAR,
     AUTOSKILLIT_PRIVATE_ENV_VARS,
     CAMPAIGN_ID_ENV_VAR,
     KITCHEN_SESSION_ID_ENV_VAR,
@@ -301,6 +302,7 @@ class CodexBackend:
             "AUTOSKILLIT_HEADLESS": "1",
             "AUTOSKILLIT_SESSION_TYPE": SESSION_TYPE_SKILL,
             "MAX_MCP_OUTPUT_TOKENS": _MAX_MCP_OUTPUT_TOKENS_VALUE,
+            AGENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
         }
         if scenario_step_name:
             extras["SCENARIO_STEP_NAME"] = scenario_step_name

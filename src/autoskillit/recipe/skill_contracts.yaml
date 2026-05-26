@@ -2233,6 +2233,12 @@ skills:
     - name: kitchen_id
       type: string
       required: true
+    - name: dispatch_id
+      type: string
+      required: false
+    - name: diagnostics_log_dir
+      type: string
+      required: false
     outputs: []
     read_only: true
 callable_contracts:
@@ -2263,14 +2269,17 @@ callable_contracts:
     - name: prev_issues_fixed_count
       type: str
       required: false
+
+  autoskillit.smoke_utils.consolidate_health_reports:
+    inputs:
+    - name: diagnostics_log_dir
+      type: str
+      required: true
+    - name: kitchen_id
+      type: str
+      required: true
     outputs:
-    - name: next_iteration
-      type: str
-    - name: max_exceeded
-      type: str
-    - name: zero_progress
-      type: str
-    - name: prev_issues_fixed_count
+    - name: summary
       type: str
   autoskillit.smoke_utils.check_review_loop:
     inputs:

@@ -36,6 +36,7 @@ from autoskillit.server._misc import (
     _hook_config_path,
     _prime_quota_cache,
     _quota_refresh_loop,
+    resolve_log_dir,
     resolve_provider,
 )
 from autoskillit.server._notify import track_response_size
@@ -402,6 +403,9 @@ async def open_kitchen(
             _auto_overrides: dict[str, str] = {
                 "kitchen_id": tool_ctx.kitchen_id,
                 "post_run_diagnostics": _defaults.get("post_run_diagnostics", "false"),
+                "is_fleet_dispatch": _defaults.get("is_fleet_dispatch", "false"),
+                "dispatch_id": _defaults.get("dispatch_id", ""),
+                "diagnostics_log_dir": str(resolve_log_dir(tool_ctx.config.linux_tracing.log_dir)),
             }
             _merged_overrides = {**_auto_overrides, **(overrides or {})}
             # Runtime enum check: output_mode must be validated before recipe loading

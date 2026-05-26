@@ -1,0 +1,55 @@
+name: consolidate-health-reports
+description: >-
+  Read per-dispatch health report JSON files from the diagnostics log directory,
+  filter by campaign_id (kitchen_id), and produce a consolidated summary for
+  the L3 campaign dispatcher.
+kind: food-truck
+recipe_version: "1.0.0"
+dispatch_only: true
+requires_packs:
+- github
+categories:
+  - orchestration-family
+
+kitchen_rules:
+  - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Agent,
+    WebFetch, WebSearch, NotebookEdit) from the orchestrator. All work is delegated
+    through run_python."
+  - "This recipe is a food truck dispatched by a campaign. Emit the L3 sentinel JSON
+    block exactly as instructed in the done step message."
+
+ingredients:
+  kitchen_id:
+    description: Kitchen session identifier (auto-injected, equals campaign_id)
+    default: ""
+    hidden: true
+  diagnostics_log_dir:
+    description: Resolved diagnostics log directory path (auto-injected)
+    default: ""
+    hidden: true
+
+steps:
+  consolidate:
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.consolidate_health_reports"
+      diagnostics_log_dir: "${{ inputs.diagnostics_log_dir }}"
+      kitchen_id: "${{ inputs.kitchen_id }}"
+    capture:
+      summary: "${{ result.summary }}"
+    on_success: done
+    on_failure: done_empty
+
+  done_empty:
+    action: stop
+    message: >-
+      Health report consolidation encountered an error. Emit the L3 sentinel
+      JSON block now with the available information.
+      Example sentinel: {"success": true, "health_summary": "Consolidation failed — see L2 session logs for individual reports."}
+
+  done:
+    action: stop
+    message: >-
+      Health reports consolidated. Emit your L3 sentinel JSON block now.
+      The sentinel must include: success=true, health_summary=${{ context.summary }}.
+      Example sentinel: {"success": true, "health_summary": "Pipeline health check: 3 dispatches analyzed, no issues found."}

@@ -102,6 +102,21 @@
       "description": "Investigation depth mode",
       "default": "standard",
       "hidden": true
+    },
+    "is_fleet_dispatch": {
+      "description": "Whether running as an L2 food truck dispatch (auto-injected)",
+      "default": "false",
+      "hidden": true
+    },
+    "dispatch_id": {
+      "description": "Fleet dispatch identifier (auto-injected, empty in non-fleet sessions)",
+      "default": "",
+      "hidden": true
+    },
+    "diagnostics_log_dir": {
+      "description": "Resolved diagnostics log directory path (auto-injected)",
+      "default": "",
+      "hidden": true
     }
   },
   "steps": {
@@ -1101,7 +1116,7 @@
       "optional": true,
       "skip_when_false": "inputs.post_run_diagnostics",
       "with": {
-        "skill_command": "/autoskillit:analyze-pipeline-health ${{ inputs.kitchen_id }}",
+        "skill_command": "/autoskillit:analyze-pipeline-health ${{ inputs.kitchen_id }} --dispatch-id=${{ inputs.dispatch_id }} --diagnostics-log-dir=${{ inputs.diagnostics_log_dir }}",
         "cwd": "${{ context.work_dir }}",
         "step_name": "post_run_diagnostics"
       },
@@ -1943,7 +1958,7 @@
       "optional": true,
       "skip_when_false": "inputs.post_run_diagnostics",
       "with": {
-        "skill_command": "/autoskillit:analyze-pipeline-health ${{ inputs.kitchen_id }}",
+        "skill_command": "/autoskillit:analyze-pipeline-health ${{ inputs.kitchen_id }} --dispatch-id=${{ inputs.dispatch_id }} --diagnostics-log-dir=${{ inputs.diagnostics_log_dir }}",
         "cwd": "${{ context.work_dir }}",
         "step_name": "post_run_diagnostics"
       },
@@ -2025,7 +2040,7 @@
       "optional": true,
       "skip_when_false": "inputs.post_run_diagnostics",
       "with": {
-        "skill_command": "/autoskillit:analyze-pipeline-health ${{ inputs.kitchen_id }}",
+        "skill_command": "/autoskillit:analyze-pipeline-health ${{ inputs.kitchen_id }} --dispatch-id=${{ inputs.dispatch_id }} --diagnostics-log-dir=${{ inputs.diagnostics_log_dir }}",
         "cwd": "${{ context.work_dir }}",
         "step_name": "post_run_diagnostics"
       },
@@ -2041,7 +2056,7 @@
       "optional": true,
       "skip_when_false": "inputs.post_run_diagnostics",
       "with": {
-        "skill_command": "/autoskillit:analyze-pipeline-health ${{ inputs.kitchen_id }}",
+        "skill_command": "/autoskillit:analyze-pipeline-health ${{ inputs.kitchen_id }} --dispatch-id=${{ inputs.dispatch_id }} --diagnostics-log-dir=${{ inputs.diagnostics_log_dir }}",
         "cwd": "${{ context.work_dir }}",
         "step_name": "post_run_diagnostics"
       },

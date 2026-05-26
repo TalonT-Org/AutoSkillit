@@ -14,7 +14,7 @@ from autoskillit.core import get_logger, temp_dir_display_str
 from autoskillit.pipeline import GATED_TOOLS, UNGATED_TOOLS  # noqa: F401
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
-from autoskillit.server._misc import _apply_triage_gate
+from autoskillit.server._misc import _apply_triage_gate, resolve_log_dir
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._state import _get_ctx_or_none
 
@@ -201,6 +201,9 @@ async def load_recipe(
         _auto_overrides: dict[str, str] = {
             "kitchen_id": tool_ctx.kitchen_id,
             "post_run_diagnostics": _defaults.get("post_run_diagnostics", "false"),
+            "is_fleet_dispatch": _defaults.get("is_fleet_dispatch", "false"),
+            "dispatch_id": _defaults.get("dispatch_id", ""),
+            "diagnostics_log_dir": str(resolve_log_dir(tool_ctx.config.linux_tracing.log_dir)),
         }
         _merged_overrides = {**_auto_overrides, **(overrides or {})}
         result = tool_ctx.recipes.load_and_validate(

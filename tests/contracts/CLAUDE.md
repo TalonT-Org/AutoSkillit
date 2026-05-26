@@ -76,6 +76,8 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_triage_contracts.py` | Contract tests for triage-issues --enrich flag and requirement enrichment behavior |
 | `test_triage_issues_contracts.py` | Contract tests for triage-issues body-file safety (gh issue edit --body-file) |
 | `test_version_consistency.py` | Cross-file version consistency: pyproject.toml, __init__.__version__, plugin.json, bundled recipe versions |
+| `test_zero_change_circuit_breaker_contracts.py` | Contract tests: zero-change circuit breaker in implementation/remediation recipes |
+| `test_fetch_issue_mock_contracts.py` | Contract test: all fetch_issue mock return values must include a 'state' field |
 
 ## Architecture Notes
 

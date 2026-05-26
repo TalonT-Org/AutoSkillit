@@ -94,6 +94,8 @@ class GitHubFetcher(Protocol):
         description: str = "",
     ) -> dict[str, Any]: ...
 
+    async def close_issue(self, owner: str, repo: str, issue_number: int) -> dict[str, Any]: ...
+
 
 @runtime_checkable
 class CIWatcher(Protocol):

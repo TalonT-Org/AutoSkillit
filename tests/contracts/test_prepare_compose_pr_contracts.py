@@ -72,3 +72,32 @@ def test_compose_pr_gh_degrades_gracefully():
     text = COMPOSE_PR.read_text()
     assert "gh auth status" in text
     assert "empty" in text.lower() or "pr_url =" in text
+
+
+RECIPES_DIR = Path(__file__).parents[2] / "src" / "autoskillit" / "recipes"
+
+
+def test_compose_pr_skill_command_includes_issue_number() -> None:
+    """compose_pr skill_command must structurally include context.issue_number."""
+    import yaml
+
+    data = yaml.safe_load((RECIPES_DIR / "implementation.yaml").read_text())
+    skill_command = data["steps"]["compose_pr"]["with"]["skill_command"]
+    assert "${{ context.issue_number }}" in skill_command, (
+        f"compose_pr skill_command must include"
+        f" ${{{{ context.issue_number }}}} as a positional arg, "
+        f"not rely on with: metadata. Got: {skill_command!r}"
+    )
+
+
+def test_prepare_pr_skill_command_includes_issue_number() -> None:
+    """prepare_pr skill_command must structurally include context.issue_number."""
+    import yaml
+
+    data = yaml.safe_load((RECIPES_DIR / "implementation.yaml").read_text())
+    skill_command = data["steps"]["prepare_pr"]["with"]["skill_command"]
+    assert "${{ context.issue_number }}" in skill_command, (
+        f"prepare_pr skill_command must include"
+        f" ${{{{ context.issue_number }}}} as a positional arg, "
+        f"not rely on with: metadata. Got: {skill_command!r}"
+    )

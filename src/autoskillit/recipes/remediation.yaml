@@ -245,7 +245,7 @@ steps:
       branch_name: "${{ result.branch_name }}"
     retries: 0
     on_context_limit: retry_worktree
-    on_success: test
+    on_success: check_changes
     on_failure: release_issue_failure
 
   retry_worktree:
@@ -263,11 +263,36 @@ steps:
       phases_implemented: "${{ result.phases_implemented }}"
     on_result:
     - when: "${{ result.phases_implemented }} > 0"
-      route: test
-    - route: test
-    on_context_limit: test
+      route: check_changes
+    - route: check_changes
+    on_context_limit: check_changes
     on_exhausted: release_issue_failure
     on_failure: release_issue_failure
+
+  check_changes:
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.detect_zero_changes"
+      worktree_path: "${{ context.implementation_ref }}"
+      base_branch: "${{ inputs.base_branch }}"
+    capture:
+      has_changes: "${{ result.has_changes }}"
+      commit_count: "${{ result.commit_count }}"
+    on_result:
+    - when: "${{ result.has_changes }} == false"
+      route: close_issue_no_changes
+    - route: test
+    on_failure: release_issue_failure
+
+  close_issue_no_changes:
+    tool: release_issue
+    optional: true
+    skip_when_false: inputs.issue_url
+    with:
+      issue_url: "${{ inputs.issue_url }}"
+      close_issue: "true"
+    on_success: done
+    on_failure: done
 
   test:
     tool: test_check
@@ -473,10 +498,9 @@ steps:
     model: ""
     retries: 1
     with:
-      skill_command: "/autoskillit:prepare-pr ${{ context.plan_path }} ${{ inputs.run_name }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:prepare-pr ${{ context.plan_path }} ${{ inputs.run_name }} ${{ inputs.base_branch }} ${{ context.issue_number }}"
       cwd: "${{ context.work_dir }}"
       step_name: "prepare_pr"
-      issue_number: "${{ context.issue_number }}"
     capture:
       prep_path: "${{ result.prep_path }}"
       selected_lenses: "${{ result.selected_lenses }}"
@@ -495,8 +519,7 @@ steps:
     note: >
       Reads plan, runs git diff, classifies changed files, selects 1–3 arch-lens slugs,
       writes one PR context file per lens, and writes a PR prep file. Does NOT invoke
-      arch-lens skills. If context.issue_number is a non-empty string, append it as the
-      4th positional argument so prepare-pr fetches requirements from the closing issue.
+      arch-lens skills.
 
   run_arch_lenses:
     tool: run_skill
@@ -528,10 +551,9 @@ steps:
     tool: run_skill
     model: ""
     with:
-      skill_command: "/autoskillit:compose-pr ${{ context.prep_path }} \"${{ context.all_diagram_paths }}\" ${{ context.work_dir }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:compose-pr ${{ context.prep_path }} \"${{ context.all_diagram_paths }}\" ${{ context.work_dir }} ${{ inputs.base_branch }} ${{ context.issue_number }}"
       cwd: "${{ context.work_dir }}"
       step_name: "compose_pr"
-      issue_number: "${{ context.issue_number }}"
     capture:
       pr_url: "${{ result.pr_url }}"
     on_result:
@@ -545,8 +567,7 @@ steps:
     note: >
       Reads the PR prep file, validates arch-lens diagrams (must contain ★ or ●),
       composes the PR body, and runs gh pr create. Degrades gracefully if gh is
-      unavailable (emits pr_url=). If context.issue_number is set, append it as the
-      5th positional argument for Closes #N injection in the PR body.
+      unavailable (emits pr_url=).
 
   guard_pr_url:
     action: route

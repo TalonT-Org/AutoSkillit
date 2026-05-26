@@ -168,7 +168,7 @@ _TOOL_PARAMS: dict[str, frozenset[str]] = {
     "enrich_issues": frozenset({"issue_number", "batch", "dry_run", "repo"}),
     "claim_issue": frozenset({"issue_url", "label", "allow_reentry"}),
     "release_issue": frozenset(
-        {"issue_url", "label", "target_branch", "staged_label", "fail_label"}
+        {"issue_url", "label", "target_branch", "staged_label", "fail_label", "close_issue"}
     ),
     "fetch_github_issue": frozenset({"issue_url", "include_comments"}),
     "get_issue_title": frozenset({"issue_url"}),
@@ -377,7 +377,8 @@ def _check_release_issue_requires_disposition(ctx: ValidationContext) -> list[Ru
             continue
         has_fail_label = bool(step.with_args.get("fail_label"))
         has_target_branch = bool(step.with_args.get("target_branch"))
-        if not has_fail_label and not has_target_branch:
+        has_close_issue = bool(step.with_args.get("close_issue"))
+        if not has_fail_label and not has_target_branch and not has_close_issue:
             findings.append(
                 RuleFinding(
                     rule="release-issue-requires-disposition",

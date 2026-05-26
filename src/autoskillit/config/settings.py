@@ -322,6 +322,8 @@ class AutomationConfig:
         fr = sec("fleet")
         pvd = sec("providers")
         ab = sec("agent_backend")
+        if isinstance(ab, str):
+            ab = {"backend": ab}
         feat = sec("features")
 
         _tc = _field_defaults(TestCheckConfig)

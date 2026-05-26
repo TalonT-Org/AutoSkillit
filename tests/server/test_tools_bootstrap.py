@@ -165,7 +165,7 @@ class TestClaimAndResolveIssue:
             return_value={"success": True, "number": 42, "title": "Fix bug", "slug": "fix-bug"}
         )
         tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(
-            return_value={"success": True, "labels": []}
+            return_value={"success": True, "state": "open", "labels": []}
         )
         tool_ctx_kitchen_open.github_client.ensure_label = AsyncMock(
             return_value={"success": True}
@@ -186,6 +186,7 @@ class TestClaimAndResolveIssue:
         tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(
             return_value={
                 "success": True,
+                "state": "open",
                 "labels": [{"name": "in-progress"}],
             }
         )
@@ -204,6 +205,7 @@ class TestClaimAndResolveIssue:
         tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(
             return_value={
                 "success": True,
+                "state": "open",
                 "labels": [{"name": "in-progress"}],
             }
         )
@@ -236,7 +238,7 @@ class TestClaimAndResolveIssue:
             return_value={"success": True, "number": 42, "title": "X", "slug": "x"}
         )
         tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(
-            return_value={"success": True, "labels": []}
+            return_value={"success": True, "state": "open", "labels": []}
         )
         tool_ctx_kitchen_open.github_client.ensure_label = AsyncMock(
             return_value={"success": True}
@@ -255,7 +257,7 @@ class TestClaimAndResolveIssue:
             return_value={"success": True, "number": 42, "title": "Fix bug", "slug": "fix-bug"}
         )
         tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(
-            return_value={"success": True, "labels": []}
+            return_value={"success": True, "state": "open", "labels": []}
         )
         tool_ctx_kitchen_open.github_client.ensure_label = AsyncMock(
             return_value={"success": True}
@@ -284,7 +286,7 @@ class TestClaimAndResolveIssue:
             return_value={"success": True, "number": 42, "title": "Fix bug", "slug": "fix-bug"}
         )
         tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(
-            return_value={"success": True, "labels": []}
+            return_value={"success": True, "state": "open", "labels": []}
         )
         tool_ctx_kitchen_open.github_client.ensure_label = AsyncMock(
             return_value={"success": True}

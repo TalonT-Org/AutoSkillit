@@ -2781,6 +2781,20 @@ callable_contracts:
     - name: audit_run_dir
       type: directory_path
 
+  autoskillit.smoke_utils.detect_zero_changes:
+    inputs:
+    - name: worktree_path
+      type: directory_path
+      required: true
+    - name: base_branch
+      type: str
+      required: true
+    outputs:
+    - name: has_changes
+      type: str
+    - name: commit_count
+      type: str
+
 tool_output_contracts:
   wait_for_ci:
     result_field: conclusion

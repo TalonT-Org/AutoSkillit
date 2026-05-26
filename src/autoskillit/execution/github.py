@@ -695,3 +695,29 @@ class DefaultGitHubFetcher:
             return {"success": False, "error": f"Request error: {exc}"}
         self._label_cache.add(cache_key)
         return {"success": True, "created": True}
+
+    async def close_issue(self, owner: str, repo: str, issue_number: int) -> dict[str, Any]:
+        """Close a GitHub issue via PATCH. Returns {success}. Never raises."""
+        await self._throttle_mutating()
+        try:
+            async with make_tracked_httpx_client(
+                self._tracker,
+                timeout=httpx.Timeout(15.0, connect=5.0),
+                headers=github_headers(self._resolve_token()),
+                base_url=self._base_url,
+            ) as client:
+                resp = await client.patch(
+                    f"/repos/{owner}/{repo}/issues/{issue_number}",
+                    json={"state": "closed"},
+                )
+                resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            logger.warning("github close_issue http error", status=exc.response.status_code)
+            return {
+                "success": False,
+                "error": f"HTTP {exc.response.status_code}: {exc.response.text[:200]}",
+            }
+        except httpx.RequestError as exc:
+            logger.warning("github close_issue request error", error=str(exc))
+            return {"success": False, "error": f"Request error: {exc}"}
+        return {"success": True}

@@ -381,6 +381,7 @@ class TestRunDoctorBackendWiring:
         from autoskillit.core import Severity
 
         monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
         (tmp_path / ".autoskillit").mkdir()
         (tmp_path / ".autoskillit" / "config.yaml").write_text(
             "agent_backend:\n  backend: aider\n"

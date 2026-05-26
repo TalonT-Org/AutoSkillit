@@ -318,10 +318,13 @@ class TestTouchDispatchMarker:
     @pytest.mark.anyio
     async def test_touch_dispatch_marker_creates_heartbeat_loop(self, tmp_path: Path) -> None:
         """Heartbeat loop refreshes mtime until trigger is set."""
+        import os
+
         from autoskillit.fleet._api import _touch_dispatch_marker
 
         marker = tmp_path / "test.marker"
         marker.touch()
+        os.utime(marker, (0, 0))  # Set to epoch 0 so any real touch shows as newer
         original_mtime_ns = marker.stat().st_mtime_ns
 
         trigger = anyio.Event()

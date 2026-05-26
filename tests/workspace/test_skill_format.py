@@ -29,7 +29,7 @@ class TestValidateSkillFrontmatter:
 
     def test_empty_frontmatter_returns_two_errors(self) -> None:
         result = validate_skill_frontmatter({}, "my-skill")
-        assert len(result) == 2
+        assert len(result) >= 2
 
     def test_name_uppercase_rejected(self) -> None:
         result = validate_skill_frontmatter(

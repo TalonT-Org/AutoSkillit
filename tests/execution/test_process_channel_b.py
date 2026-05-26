@@ -241,7 +241,7 @@ class TestChannelBDrainWait:
         natural_exit_grace_seconds=0.1: script never exits naturally (time.sleep(3600)),
         so shorten grace window to reduce total test time and avoid asyncio-waitpid
         thread contention under CI load (default 3.0s grace + 3.0s kill = 6s total).
-        _session_id_timeout=0.5: 0.01s was too tight — under xdist -n 4 load the
+        _session_id_timeout=3.0: 0.5s was too tight under heavy xdist load — the
         event loop may not schedule the monitor coroutine before the timeout expires,
         preventing Phase 1 from starting and causing a spurious timed_out result.
         """
@@ -260,7 +260,7 @@ class TestChannelBDrainWait:
             natural_exit_grace_seconds=0.1,
             _phase1_poll=0.01,
             _phase2_poll=0.05,
-            _session_id_timeout=0.5,
+            _session_id_timeout=3.0,
             _phase1_timeout=250,
         )
 

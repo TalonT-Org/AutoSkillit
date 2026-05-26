@@ -318,7 +318,11 @@ async def run_skill(
         profile_name_out: str = ""
         effective_model = model
 
-        from autoskillit.core import is_feature_enabled
+        from autoskillit.core import (
+            AGENT_BACKEND_CLAUDE_CODE,
+            AGENT_BACKEND_CODEX,
+            is_feature_enabled,
+        )
 
         _cfg = _get_config()
         if is_feature_enabled(
@@ -357,6 +361,17 @@ async def run_skill(
                         _step_mo = _mo_recipe_map.get("*")
                     if _step_mo:
                         effective_model = _step_mo
+
+        backend_override: str | None = (
+            AGENT_BACKEND_CLAUDE_CODE
+            if (
+                provider_extras
+                and "ANTHROPIC_BASE_URL" in provider_extras
+                and tool_ctx.backend is not None
+                and tool_ctx.backend.name == AGENT_BACKEND_CODEX
+            )
+            else None
+        )
 
         # Look up artifact validation patterns from skill contract
         expected_output_patterns: list[str] = []
@@ -551,6 +566,7 @@ async def run_skill(
                 write_watch_dirs=write_watch_dirs,
                 provider_extras=provider_extras,
                 profile_name=profile_name_out,
+                backend_override=backend_override,
                 resume_session_id=resume_session_id,
             )
             if skill_result.success:

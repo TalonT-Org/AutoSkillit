@@ -433,3 +433,148 @@ async def test_run_skill_no_provider_profile_injected_for_default_step(
 
     assert captured.get("provider_extras") is None
     assert captured.get("profile_name") == ""
+
+
+@pytest.mark.anyio
+async def test_run_skill_backend_override_codex_with_anthropic_base_url(
+    tool_ctx_kitchen_open, tmp_path, monkeypatch
+) -> None:
+    from unittest.mock import MagicMock
+
+    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    fake_backend = MagicMock(spec=CodingAgentBackend)
+    type(fake_backend).name = property(lambda self: "codex")
+    tool_ctx_kitchen_open.backend = fake_backend
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: True)
+    monkeypatch.setattr(
+        "autoskillit.server._guards._resolve_provider_profile",
+        lambda *a, **kw: (
+            "bedrock",
+            {
+                "ANTHROPIC_BASE_URL": "https://bedrock.us-east-1.amazonaws.com",
+                "AWS_REGION": "us-east-1",
+            },
+        ),
+    )
+
+    captured: dict = {}
+    original_run = executor.run
+
+    async def spy_run(*args, **kwargs):
+        captured.update(kwargs)
+        return await original_run(*args, **kwargs)
+
+    monkeypatch.setattr(executor, "run", spy_run)
+
+    await run_skill("/autoskillit:probe", str(tmp_path))
+
+    assert captured.get("backend_override") == "claude-code"
+
+
+@pytest.mark.anyio
+async def test_run_skill_backend_override_none_no_anthropic_base_url(
+    tool_ctx_kitchen_open, tmp_path, monkeypatch
+) -> None:
+    from unittest.mock import MagicMock
+
+    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    fake_backend = MagicMock(spec=CodingAgentBackend)
+    type(fake_backend).name = property(lambda self: "codex")
+    tool_ctx_kitchen_open.backend = fake_backend
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: True)
+    monkeypatch.setattr(
+        "autoskillit.server._guards._resolve_provider_profile",
+        lambda *a, **kw: ("minimax", {"BASE_URL": "https://api.minimax.chat/v1"}),
+    )
+
+    captured: dict = {}
+    original_run = executor.run
+
+    async def spy_run(*args, **kwargs):
+        captured.update(kwargs)
+        return await original_run(*args, **kwargs)
+
+    monkeypatch.setattr(executor, "run", spy_run)
+
+    await run_skill("/autoskillit:probe", str(tmp_path))
+
+    assert captured.get("backend_override") is None
+
+
+@pytest.mark.anyio
+async def test_run_skill_backend_override_none_claude_code_backend(
+    tool_ctx_kitchen_open, tmp_path, monkeypatch
+) -> None:
+    from unittest.mock import MagicMock
+
+    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    fake_backend = MagicMock(spec=CodingAgentBackend)
+    type(fake_backend).name = property(lambda self: "claude-code")
+    tool_ctx_kitchen_open.backend = fake_backend
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: True)
+    monkeypatch.setattr(
+        "autoskillit.server._guards._resolve_provider_profile",
+        lambda *a, **kw: (
+            "bedrock",
+            {"ANTHROPIC_BASE_URL": "https://bedrock.us-east-1.amazonaws.com"},
+        ),
+    )
+
+    captured: dict = {}
+    original_run = executor.run
+
+    async def spy_run(*args, **kwargs):
+        captured.update(kwargs)
+        return await original_run(*args, **kwargs)
+
+    monkeypatch.setattr(executor, "run", spy_run)
+
+    await run_skill("/autoskillit:probe", str(tmp_path))
+
+    assert captured.get("backend_override") is None
+
+
+@pytest.mark.anyio
+async def test_run_skill_backend_override_none_providers_disabled(
+    tool_ctx_kitchen_open, tmp_path, monkeypatch
+) -> None:
+    from unittest.mock import MagicMock
+
+    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    fake_backend = MagicMock(spec=CodingAgentBackend)
+    type(fake_backend).name = property(lambda self: "codex")
+    tool_ctx_kitchen_open.backend = fake_backend
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: False)
+
+    captured: dict = {}
+    original_run = executor.run
+
+    async def spy_run(*args, **kwargs):
+        captured.update(kwargs)
+        return await original_run(*args, **kwargs)
+
+    monkeypatch.setattr(executor, "run", spy_run)
+
+    await run_skill("/autoskillit:probe", str(tmp_path))
+
+    assert captured.get("backend_override") is None

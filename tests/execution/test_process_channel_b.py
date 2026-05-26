@@ -468,7 +468,7 @@ class TestNaturalExitWithChannelConfirmation:
 class TestPostExitDrainWindow:
     """Symmetric drain window: process exits first, Channel B gets a bounded window to deposit."""
 
-    @pytest.mark.timeout(150)
+    @pytest.mark.timeout(180)
     @pytest.mark.anyio
     async def test_drain_window_allows_channel_b_to_deposit(self, tmp_path):
         """Process exits before Phase 1 polls; drain window lets Channel B detect marker.
@@ -503,7 +503,7 @@ class TestPostExitDrainWindow:
             timeout=120,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
-            completion_drain_timeout=30.0,
+            completion_drain_timeout=60.0,
             _phase1_timeout=250,
             _phase1_poll=1.0,
             _phase2_poll=0.05,

@@ -1025,3 +1025,68 @@ async def test_end_to_end_resumable_dispatch_uses_resume_flag(
     assert "--resume" in cmd
     idx = cmd.index("--resume")
     assert cmd[idx + 1] == "test-session-id"
+
+
+@pytest.mark.asyncio
+async def test_fleet_auto_gate_boot_reaps_orphan(tmp_path: Path) -> None:
+    """_fleet_auto_gate_boot must reap orphan dispatches during boot."""
+    import json
+    import subprocess
+    import time
+    from unittest.mock import MagicMock, patch
+
+    from autoskillit.fleet import DispatchRecord, DispatchStatus, read_state, write_initial_state
+    from autoskillit.server._lifespan import _fleet_auto_gate_boot
+
+    proc = subprocess.Popen(["sleep", "999"])
+    try:
+        pid = proc.pid
+        sp = tmp_path / "state.json"
+        write_initial_state(
+            sp,
+            "cid-boot-reap",
+            "boot-reap-campaign",
+            "/m.yaml",
+            [DispatchRecord(name="d1")],
+        )
+        raw = json.loads(sp.read_text())
+        raw["dispatches"][0].update(
+            {
+                "status": "running",
+                "dispatch_id": "did-boot-reap",
+                "dispatched_pid": pid,
+                "dispatched_starttime_ticks": 0,
+                "dispatched_boot_id": "",
+                "dispatched_create_time": 0.0,
+                "started_at": time.time() - 60,
+            }
+        )
+        sp.write_text(json.dumps(raw))
+
+        ctx = MagicMock()
+        ctx.project_dir = tmp_path
+        ctx.gate = MagicMock()
+        ctx.gate.enable = MagicMock()
+        ctx.github_client = None
+        ctx.config = None
+
+        with (
+            patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=False),
+            patch("autoskillit.fleet._dispatch_reaper.read_boot_id", return_value=None),
+            patch("autoskillit.fleet._dispatch_reaper.kill_process_tree"),
+            patch("autoskillit.server._lifespan.resolve_kitchen_id", return_value="kitchen-test"),
+            patch(
+                "autoskillit.fleet._label_cleanup.discover_campaign_state_files",
+                return_value=[sp],
+            ),
+            patch("autoskillit.core.register_active_kitchen"),
+        ):
+            await _fleet_auto_gate_boot(ctx)
+
+        state = read_state(sp)
+        assert state is not None
+        assert state.dispatches[0].status == DispatchStatus.INTERRUPTED
+        assert state.dispatches[0].reason == "reaped_dead_pid"
+    finally:
+        proc.terminate()
+        proc.wait()

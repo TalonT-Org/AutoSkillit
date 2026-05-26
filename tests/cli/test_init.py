@@ -313,6 +313,67 @@ class TestCLIInit:
         )
 
 
+class TestCodexInitFlow:
+    """End-to-end Codex init: config.toml hooks + MCP registration."""
+
+    @pytest.fixture(autouse=True)
+    def _pre_commit_with_scanner(self, tmp_path: Path) -> None:
+        (tmp_path / ".pre-commit-config.yaml").write_text(
+            "repos:\n  - repo: dummy\n    hooks:\n      - id: gitleaks\n"
+        )
+
+    @pytest.fixture(autouse=True)
+    def _codex_backend_config(self, tmp_path: Path) -> None:
+        cfg_dir = tmp_path / ".autoskillit"
+        cfg_dir.mkdir(parents=True, exist_ok=True)
+        (cfg_dir / "config.yaml").write_text(
+            'test_check:\n  command: ["task", "test-all"]\nagent_backend:\n  backend: codex\n'
+        )
+
+    def test_codex_config_toml_hook_entries(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import tomllib
+
+        from autoskillit.hook_registry import HOOKS_DIR
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        cli.init(scope="user", test_command="task test-all")
+
+        config_path = tmp_path / ".codex" / "config.toml"
+        assert config_path.exists()
+        data = tomllib.loads(config_path.read_text())
+
+        hooks = data.get("hooks", [])
+        assert len(hooks) > 0
+        hooks_dir_str = str(HOOKS_DIR)
+        hook_commands = [
+            hook.get("command", "") for entry in hooks for hook in entry.get("hooks", [])
+        ]
+        assert any(hooks_dir_str in cmd for cmd in hook_commands)
+        assert data["mcp_servers"]["autoskillit"]["command"] == "autoskillit"
+
+    def test_codex_config_toml_idempotent(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import tomllib
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        cli.init(scope="user", test_command="task test-all")
+
+        config_path = tmp_path / ".codex" / "config.toml"
+        first_data = tomllib.loads(config_path.read_text())
+        first_hook_count = len(first_data.get("hooks", []))
+
+        cli.init(scope="user", test_command="task test-all")
+
+        second_data = tomllib.loads(config_path.read_text())
+        second_hook_count = len(second_data.get("hooks", []))
+        assert first_hook_count == second_hook_count
+
+
 class TestEnsureProjectTemp:
     """N5: ensure_project_temp moved from config.py to _io.py."""
 

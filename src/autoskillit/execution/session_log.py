@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 from autoskillit.core import (
     atomic_write,
     claude_code_log_path,
+    default_log_dir,
     get_logger,
     iter_merged_assistant_turns,
     write_versioned_json,
@@ -58,8 +59,6 @@ def resolve_log_dir(log_dir: str) -> Path:
     """Resolve session log directory. Empty string = platform default."""
     if log_dir:
         return Path(log_dir).expanduser()
-    from autoskillit.core.paths import default_log_dir
-
     return default_log_dir()
 
 

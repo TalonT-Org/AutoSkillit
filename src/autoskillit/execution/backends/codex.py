@@ -30,6 +30,7 @@ from autoskillit.core import (
     SessionCheckpoint,
     SkillSessionConfig,
     ValidatedAddDir,
+    default_log_dir,
     extract_skill_name,
     get_logger,
 )
@@ -116,8 +117,6 @@ class CodexSessionLocator:
     def locate_session(self, session_id: str, codex_home: Path | None = None) -> Path | None:
         if not session_id or session_id.startswith(("no_session_", "crashed_")):
             return None
-
-        from autoskillit.core.paths import default_log_dir
 
         candidates: list[Path] = []
         # 1. Permanent storage (symlink target) — checked first because

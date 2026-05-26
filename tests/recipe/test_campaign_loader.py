@@ -283,7 +283,14 @@ def test_promote_to_main_campaign_dispatch_chain():
     path = pkg_root() / "recipes" / "campaigns" / "promote-to-main.yaml"
     recipe = load_recipe(path)
     names = [d.name for d in recipe.dispatches]
-    assert names == ["full-audit", "review-gate", "build-map", "implement-findings", "promote"]
+    assert names == [
+        "full-audit",
+        "review-gate",
+        "build-map",
+        "implement-findings",
+        "promote",
+        "consolidate-diagnostics",
+    ]
     gate_dispatches = [d for d in recipe.dispatches if d.gate]
     assert len(gate_dispatches) == 1
     gd = gate_dispatches[0]

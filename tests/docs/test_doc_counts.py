@@ -245,10 +245,11 @@ def test_doctor_check_count_is_31() -> None:
     assert count == 37, f"Expected 37 doctor checks; found {count}"
 
 
-def test_bundled_recipe_count_is_14() -> None:
+def test_bundled_recipe_count_is_15() -> None:
     recipes = _bundled_recipes()
     expected = [
         "bem-wrapper",
+        "consolidate-health-reports",
         "full-audit",
         "implement-findings",
         "implementation",

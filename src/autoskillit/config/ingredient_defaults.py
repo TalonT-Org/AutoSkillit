@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
-from autoskillit.core import FLEET_MENU_TOOLS, get_logger, is_feature_enabled
+from autoskillit.core import DISPATCH_ID_ENV_VAR, FLEET_MENU_TOOLS, get_logger, is_feature_enabled
 
 logger = get_logger(__name__)
 
@@ -138,5 +139,9 @@ def resolve_ingredient_defaults(project_dir: Path) -> dict[str, str]:
         resolved["local_review_rounds"] = "0"
         resolved["adversarial_review_level"] = "auto"
         resolved["post_run_diagnostics"] = "false"
+
+    # Fleet dispatch detection — reads env vars, not config, so must run unconditionally.
+    resolved["is_fleet_dispatch"] = "true" if os.environ.get(DISPATCH_ID_ENV_VAR) else "false"
+    resolved["dispatch_id"] = os.environ.get(DISPATCH_ID_ENV_VAR, "")
 
     return resolved

@@ -14,6 +14,7 @@ allowed_recipes:
   - bem-wrapper
   - implement-findings
   - promote-to-main-wrapper
+  - consolidate-health-reports
 
 ingredients:
   source_dir:
@@ -32,6 +33,18 @@ ingredients:
   model_context_window:
     description: "Model context window in tokens; set to 1000000 for Opus 1M"
     default: "200000"
+    hidden: true
+  post_run_diagnostics:
+    description: Run diagnostic analysis after pipeline completion
+    default: "false"
+    hidden: true
+  kitchen_id:
+    description: Kitchen session identifier (auto-injected)
+    default: ""
+    hidden: true
+  diagnostics_log_dir:
+    description: Resolved diagnostics log directory path (auto-injected)
+    default: ""
     hidden: true
 
 dispatches:
@@ -89,6 +102,17 @@ dispatches:
       verdict: "${{ result.verdict }}"
     depends_on:
       - implement-findings
+
+  - name: consolidate-diagnostics
+    recipe: consolidate-health-reports
+    task: "Consolidate pipeline health reports from all dispatches in this campaign."
+    skip_when: "${{ inputs.post_run_diagnostics }} == false"
+    ingredients:
+      kitchen_id: "${{ inputs.kitchen_id }}"
+      diagnostics_log_dir: "${{ inputs.diagnostics_log_dir }}"
+    capture: {}
+    depends_on:
+      - promote
 
 kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,

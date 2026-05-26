@@ -283,12 +283,16 @@ async def test_open_kitchen_injects_hidden_ingredient_overrides(tmp_path, monkey
                     ):
                         from autoskillit.server.tools.tools_kitchen import open_kitchen
 
+                        mock_ctx.config.linux_tracing.log_dir = ""
                         await open_kitchen(name="demo", ctx=mock_ctx)
 
     call_kwargs = mock_ctx.recipes.load_and_validate.call_args.kwargs
     overrides = call_kwargs["ingredient_overrides"]
     assert overrides["kitchen_id"] == "test-kitchen-abc"
     assert overrides["post_run_diagnostics"] == "false"
+    assert overrides["is_fleet_dispatch"] == "false"
+    assert overrides["dispatch_id"] == ""
+    assert overrides["diagnostics_log_dir"]  # non-empty string
 
 
 @pytest.mark.anyio

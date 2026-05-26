@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+from unittest.mock import patch
 
 import pytest
 
@@ -90,3 +91,76 @@ def test_resolve_ingredient_defaults_includes_post_run_diagnostics(tmp_path):
 
     defaults = resolve_ingredient_defaults(repo)
     assert defaults.get("post_run_diagnostics") == "false"
+
+
+def test_resolve_ingredient_defaults_includes_is_fleet_dispatch_false(tmp_path):
+    """T1.1: resolve_ingredient_defaults includes is_fleet_dispatch=false when no DISPATCH_ID env var."""
+    from autoskillit.config import resolve_ingredient_defaults
+
+    repo = tmp_path / "repo"
+    subprocess.run(["git", "init", str(repo)], check=True)
+    subprocess.run(
+        ["git", "remote", "add", "origin", "https://github.com/org/repo"],
+        cwd=str(repo),
+        check=True,
+    )
+
+    defaults = resolve_ingredient_defaults(repo)
+    assert defaults.get("is_fleet_dispatch") == "false"
+
+
+def test_resolve_ingredient_defaults_includes_is_fleet_dispatch_true(tmp_path, monkeypatch):
+    """T1.2: resolve_ingredient_defaults includes is_fleet_dispatch=true when DISPATCH_ID env var is set."""
+    from autoskillit.config import resolve_ingredient_defaults
+
+    repo = tmp_path / "repo"
+    subprocess.run(["git", "init", str(repo)], check=True)
+    subprocess.run(
+        ["git", "remote", "add", "origin", "https://github.com/org/repo"],
+        cwd=str(repo),
+        check=True,
+    )
+    monkeypatch.setenv("AUTOSKILLIT_DISPATCH_ID", "test-dispatch-123")
+
+    defaults = resolve_ingredient_defaults(repo)
+    assert defaults.get("is_fleet_dispatch") == "true"
+    assert defaults.get("dispatch_id") == "test-dispatch-123"
+
+
+def test_resolve_ingredient_defaults_includes_dispatch_id_empty_when_absent(tmp_path):
+    """T1.3: resolve_ingredient_defaults includes dispatch_id empty string when no DISPATCH_ID env var."""
+    from autoskillit.config import resolve_ingredient_defaults
+
+    repo = tmp_path / "repo"
+    subprocess.run(["git", "init", str(repo)], check=True)
+    subprocess.run(
+        ["git", "remote", "add", "origin", "https://github.com/org/repo"],
+        cwd=str(repo),
+        check=True,
+    )
+
+    defaults = resolve_ingredient_defaults(repo)
+    assert defaults.get("dispatch_id") == ""
+
+
+def test_resolve_ingredient_defaults_fleet_keys_survive_config_failure(tmp_path, monkeypatch):
+    """T1.4: Fleet env-var keys resolve even when load_config() fails."""
+    from autoskillit.config import resolve_ingredient_defaults
+
+    repo = tmp_path / "repo"
+    subprocess.run(["git", "init", str(repo)], check=True)
+    subprocess.run(
+        ["git", "remote", "add", "origin", "https://github.com/org/repo"],
+        cwd=str(repo),
+        check=True,
+    )
+    monkeypatch.setenv("AUTOSKILLIT_DISPATCH_ID", "dispatch-456")
+
+    with patch(
+        "autoskillit.config.settings.load_config",
+        side_effect=RuntimeError("config error"),
+    ):
+        defaults = resolve_ingredient_defaults(repo)
+
+    assert defaults.get("is_fleet_dispatch") == "true"
+    assert defaults.get("dispatch_id") == "dispatch-456"

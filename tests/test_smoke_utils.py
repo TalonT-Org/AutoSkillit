@@ -16,6 +16,7 @@ from autoskillit.smoke_utils import (
     check_loop_with_progress,
     check_review_loop,
     compile_eval_scorecard,
+    consolidate_health_reports,
     enrich_diff_context,
     parse_agent_eval_manifests,
     parse_eval_manifests,
@@ -1890,3 +1891,86 @@ def test_build_agent_eval_context_default_reference_type_is_patch(tmp_path: Path
     assert result["success"] == "true"
     ctx = json.loads(Path(result["eval_context_path"]).read_text())
     assert ctx["reference"]["artifact_type"] == "patch"
+
+
+# T3.1
+def test_consolidate_health_reports_filters_by_campaign_id(tmp_path):
+    """T3.1: consolidate_health_reports filters by kitchen_id and aggregates findings."""
+
+    reports_dir = tmp_path / "health-reports"
+    reports_dir.mkdir()
+
+    # Create two dispatch reports for different campaigns
+    dispatch_a = {
+        "kitchen_id": "campaign-1",
+        "dispatch_id": "dispatch-a",
+        "findings": [
+            {"severity": "confirmed_bug", "step_group": "implement", "summary": "Bug in foo"},
+        ],
+    }
+    dispatch_b = {
+        "kitchen_id": "campaign-2",
+        "dispatch_id": "dispatch-b",
+        "findings": [
+            {"severity": "regression", "step_group": "test", "summary": "Test regression in bar"},
+        ],
+    }
+
+    (reports_dir / "dispatch-a_health_report.json").write_text(json.dumps(dispatch_a))
+    (reports_dir / "dispatch-b_health_report.json").write_text(json.dumps(dispatch_b))
+
+    result = consolidate_health_reports(diagnostics_log_dir=str(tmp_path), kitchen_id="campaign-1")
+
+    assert "dispatch-a" in result["summary"]
+    assert "Bug in foo" in result["summary"]
+    assert "dispatch-b" not in result["summary"]
+    assert "Test regression" not in result["summary"]
+
+
+# T3.2
+def test_consolidate_health_reports_empty_dir(tmp_path):
+    """T3.2: consolidate_health_reports returns 'no reports found' for empty directory."""
+
+    reports_dir = tmp_path / "health-reports"
+    reports_dir.mkdir()
+
+    result = consolidate_health_reports(diagnostics_log_dir=str(tmp_path), kitchen_id="campaign-1")
+
+    assert "no health reports found" in result["summary"].lower()
+
+
+# T3.3
+def test_consolidate_health_reports_no_dir(tmp_path):
+    """T3.3: consolidate_health_reports returns 'no directory' when health-reports does not exist."""
+
+    result = consolidate_health_reports(diagnostics_log_dir=str(tmp_path), kitchen_id="campaign-1")
+
+    assert "no health reports directory found" in result["summary"].lower()
+
+
+# T3.4
+def test_consolidate_health_reports_does_not_mutate_source_dicts(tmp_path):
+    """T3.4: consolidate_health_reports does not mutate source finding dicts."""
+
+    reports_dir = tmp_path / "health-reports"
+    reports_dir.mkdir()
+
+    original_finding = {
+        "severity": "confirmed_bug",
+        "step_group": "implement",
+        "summary": "Bug in foo",
+    }
+    dispatch_a = {
+        "kitchen_id": "campaign-1",
+        "dispatch_id": "dispatch-a",
+        "findings": [original_finding],
+    }
+
+    (reports_dir / "dispatch-a_health_report.json").write_text(json.dumps(dispatch_a))
+
+    result = consolidate_health_reports(diagnostics_log_dir=str(tmp_path), kitchen_id="campaign-1")
+
+    # Verify the original finding dict was not mutated (no dispatch_id key added)
+    assert "dispatch_id" not in original_finding
+    # Verify the result has the dispatch_id in findings
+    assert "dispatch-a" in result["summary"]

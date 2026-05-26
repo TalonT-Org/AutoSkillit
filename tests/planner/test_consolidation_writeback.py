@@ -420,3 +420,87 @@ def test_consolidate_wps_wp_index_in_work_packages(tmp_path: Path) -> None:
 
     assert (tmp_path / "work_packages" / "wp_index.json").exists()
     assert not (tmp_path / "wp_index.json").exists()
+
+
+def test_lifecycle_registry_includes_voided_wps(tmp_path: Path) -> None:
+    """voided_wps key is supported by lifecycle registry read/write."""
+    from autoskillit.planner.lifecycle import load_lifecycle_registry, record_lifecycle_event
+
+    record_lifecycle_event(
+        tmp_path,
+        "voided_wps",
+        {"P1-A2-WP1": {"merged_into": "P1-A1-WP1", "reason": "subsumed"}},
+    )
+    registry = load_lifecycle_registry(tmp_path)
+    assert "voided_wps" in registry
+    assert "P1-A2-WP1" in registry["voided_wps"]
+    assert registry["voided_wps"]["P1-A2-WP1"]["merged_into"] == "P1-A1-WP1"
+
+    empty_registry = load_lifecycle_registry(tmp_path / "nonexistent")
+    assert empty_registry["voided_wps"] == {}
+
+
+def test_consolidate_wps_deletes_voided_wp_result_files(tmp_path: Path) -> None:
+    """Voided WP result files are deleted and depends_on references are cleaned."""
+    wp1 = make_wp_result("P1-A1-WP1", depends_on=["P1-A2-WP1"])
+    wp3 = make_wp_result("P1-A1-WP2")
+    refined_wps = make_refined_wps(tmp_path, [wp1, wp3])
+
+    wp_dir = tmp_path / "work_packages"
+    wp_dir.mkdir(parents=True, exist_ok=True)
+    # Write WP2 result file (leftover from elaboration, pre-refinement)
+    write_json(wp_dir / "P1-A2-WP1_result.json", make_wp_result("P1-A2-WP1"))
+
+    # Record voided_wps in lifecycle registry
+    from autoskillit.planner.lifecycle import record_lifecycle_event
+
+    record_lifecycle_event(
+        tmp_path,
+        "voided_wps",
+        {"P1-A2-WP1": {"merged_into": "P1-A1-WP1", "reason": "subsumed"}},
+    )
+
+    consolidate_wps(str(refined_wps), str(tmp_path))
+
+    # Voided WP result file should be deleted
+    assert not (wp_dir / "P1-A2-WP1_result.json").exists()
+
+    # depends_on should be cleaned
+    consolidated = json.loads((tmp_path / "consolidated_wps.json").read_text())
+    wp1_out = next(wp for wp in consolidated["work_packages"] if wp["id"] == "P1-A1-WP1")
+    assert "P1-A2-WP1" not in wp1_out["depends_on"]
+
+
+def test_fallback_groups_api_relationship_clustering(tmp_path: Path) -> None:
+    """WPs with API producer/consumer relationships are clustered in fallback."""
+    wps = [
+        make_wp_result(
+            "P1-A1-WP1",
+            apis_defined=["module.func_a"],
+            files_touched=["src/a.py"],
+            deliverables=["src/a.py"],
+        ),
+        make_wp_result(
+            "P1-A1-WP2",
+            apis_consumed=["module.func_a"],
+            files_touched=["src/b.py"],
+            deliverables=["src/b.py"],
+        ),
+        make_wp_result("P1-A1-WP3", files_touched=["src/c.py"], deliverables=["src/c.py"]),
+        make_wp_result("P1-A1-WP4", files_touched=["src/d.py"], deliverables=["src/d.py"]),
+        make_wp_result("P1-A1-WP5", files_touched=["src/e.py"], deliverables=["src/e.py"]),
+    ]
+    refined_wps = make_refined_wps(tmp_path, wps)
+
+    consolidate_wps(str(refined_wps), str(tmp_path))
+
+    consolidated = json.loads((tmp_path / "consolidated_wps.json").read_text())
+    output_ids = [wp["id"] for wp in consolidated["work_packages"]]
+
+    # WP1 and WP2 should be merged (API relationship)
+    assert "P1-A1-WP1" in output_ids  # primary (earlier ID)
+    assert "P1-A1-WP2" not in output_ids  # absorbed into WP1
+    # WP3, WP4, WP5 remain unmerged
+    assert "P1-A1-WP3" in output_ids
+    assert "P1-A1-WP4" in output_ids
+    assert "P1-A1-WP5" in output_ids

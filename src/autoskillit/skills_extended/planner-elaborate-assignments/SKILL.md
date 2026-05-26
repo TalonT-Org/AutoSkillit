@@ -91,6 +91,7 @@ Each L0 receives a self-contained prompt that:
 4. Instructs the L0 to use Grep/Glob/Read for codebase analysis (no sub-subagents)
 5. Instructs the L0 to decompose into 1–5 work packages
 6. Instructs the L0 to return results as JSON between triple-backtick json fences
+7. Includes inseparability rules: "Do not propose a separate WP for tests of code introduced in a sibling WP. Tests for new code belong in the same WP as the implementation. If a WP changes a function signature, all call-site updates within the same assignment belong in that WP."
 
 Each L0 MUST:
 - Use Grep/Glob/Read for codebase analysis (no sub-subagent spawning — they are actual leaf nodes)

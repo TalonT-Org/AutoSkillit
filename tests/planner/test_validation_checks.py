@@ -16,7 +16,10 @@ from autoskillit.planner.validation import (
     validate_plan,
 )
 from tests.planner.conftest import (
+    make_assignment_result,
     make_minimal_output_dir,
+    make_phase_result,
+    make_wp_result,
     write_json,
 )
 
@@ -359,6 +362,92 @@ def test_validate_plan_reads_finalized_manifest(tmp_path: Path) -> None:
     make_minimal_output_dir(tmp_path)
     wp_dir = tmp_path / "work_packages"
     finalize_wp_manifest(str(wp_dir), str(tmp_path))
+
+    result = validate_plan(str(tmp_path))
+    assert result["verdict"] == "pass"
+
+
+def test_check_dep_references_skips_voided_wp_ids() -> None:
+    """Deps to voided WPs are not flagged as dangling references."""
+    from autoskillit.planner.validation import _check_dep_references
+
+    wp_results = {
+        "P1-A1-WP1": {"depends_on": ["P1-A2-WP1"]},
+    }
+    lifecycle_registry = {
+        "voided_wps": {"P1-A2-WP1": {"merged_into": "P1-A1-WP1", "reason": "subsumed"}},
+    }
+    findings = _check_dep_references(wp_results, lifecycle_registry)
+    assert len(findings) == 0
+
+
+def test_check_dep_references_still_flags_truly_dangling() -> None:
+    """Deps to unknown WPs not in voided_wps are still flagged."""
+    from autoskillit.planner.validation import _check_dep_references
+
+    wp_results = {
+        "P1-A1-WP1": {"depends_on": ["P1-A2-WP1", "P1-A3-WP1"]},
+    }
+    lifecycle_registry = {
+        "voided_wps": {"P1-A2-WP1": {"merged_into": "P1-A1-WP1", "reason": "subsumed"}},
+    }
+    findings = _check_dep_references(wp_results, lifecycle_registry)
+    assert len(findings) == 1
+    assert "P1-A3-WP1" in findings[0]["message"]
+
+
+def test_check_assignment_completeness_all_wps_voided(tmp_path: Path) -> None:
+    """Assignments with all WPs voided are exempt from completeness check."""
+    from autoskillit.planner.validation import _check_assignment_completeness
+
+    assignment_results = {
+        "P1-A1": {"phase_number": 1, "assignment_number": 1},
+        "P1-A2": {"phase_number": 1, "assignment_number": 2},
+    }
+    wp_results = {
+        "P1-A1-WP1": {"id": "P1-A1-WP1", "depends_on": []},
+    }
+    lifecycle_registry = {
+        "voided_assignments": [],
+        "absorbed": {},
+        "voided_wps": {"P1-A2-WP1": {"merged_into": "P1-A1-WP1", "reason": "subsumed"}},
+    }
+    findings = _check_assignment_completeness(assignment_results, wp_results, lifecycle_registry)
+    assert len(findings) == 0
+
+
+def test_validate_plan_with_voided_wps_passes(tmp_path: Path) -> None:
+    """Full validate_plan passes when voided WPs are properly registered."""
+    from autoskillit.planner.lifecycle import record_lifecycle_event
+
+    # Create minimal output structure using proper helpers
+    phases_dir = tmp_path / "phases"
+    phases_dir.mkdir(parents=True)
+    write_json(phases_dir / "P1_result.json", make_phase_result(1))
+
+    assignments_dir = tmp_path / "assignments"
+    assignments_dir.mkdir(parents=True)
+    write_json(assignments_dir / "P1-A1_result.json", make_assignment_result(1, 1))
+    write_json(assignments_dir / "P1-A2_result.json", make_assignment_result(1, 2))
+
+    wp_dir = tmp_path / "work_packages"
+    wp_dir.mkdir(parents=True)
+    write_json(
+        wp_dir / "P1-A1-WP1_result.json", make_wp_result("P1-A1-WP1", deliverables=["src/a.py"])
+    )
+
+    # Void the second WP
+    record_lifecycle_event(
+        tmp_path,
+        "voided_wps",
+        {"P1-A2-WP1": {"merged_into": "P1-A1-WP1", "reason": "subsumed"}},
+    )
+    # Delete its result file
+    wp2_file = tmp_path / "work_packages" / "P1-A2-WP1_result.json"
+    if wp2_file.exists():
+        wp2_file.unlink()
+
+    from autoskillit.planner.validation import validate_plan
 
     result = validate_plan(str(tmp_path))
     assert result["verdict"] == "pass"

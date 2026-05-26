@@ -23,6 +23,12 @@ Read the task description from the task file path provided in your prompt. Every
 
 Produce exactly 1-5 deliverables (hard constraint). If the WP naturally spans more than 5 files, group related files into logical deliverables (e.g., "test suite for module X" rather than individual test files).
 
+## Inseparability Rules
+
+1. If this WP implements a new method/class, its unit tests MUST be in this WP's deliverables
+2. If this WP changes a function signature, all call-site updates within the same phase MUST be in this WP (cross-phase call-site updates remain as separate WPs with explicit `depends_on`)
+3. If this WP adds a flag/enum member, the corresponding test updates MUST be in this WP
+
 ## Output Format
 
 Return your result as a single JSON object between ```json and ``` fences. The JSON must contain all of the following fields:

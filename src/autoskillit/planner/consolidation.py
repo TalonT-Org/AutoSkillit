@@ -12,7 +12,7 @@ import regex as re
 from autoskillit.core import atomic_write, write_versioned_json
 from autoskillit.planner._dag_ops import break_cycles_greedy_fas, filter_self_references
 from autoskillit.planner._sort_utils import _natural_sort_key
-from autoskillit.planner.lifecycle import record_lifecycle_event
+from autoskillit.planner.lifecycle import load_lifecycle_registry, record_lifecycle_event
 from autoskillit.planner.schema import validate_wp_result
 
 _ASSIGNMENT_RE = re.compile(r"^(P\d+-A\d+)-")
@@ -134,7 +134,7 @@ def _rewrite_deps(
 
 
 def _cluster_by_shared_files(wps: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
-    """Cluster WPs that share at least one files_touched entry."""
+    """Cluster WPs that share files_touched or have API producer/consumer relationships."""
     parent: dict[str, str] = {wp["id"]: wp["id"] for wp in wps}
 
     def find(x: str) -> str:
@@ -155,6 +155,16 @@ def _cluster_by_shared_files(wps: list[dict[str, Any]]) -> list[list[dict[str, A
     for wp_ids in file_to_wps.values():
         for i in range(1, len(wp_ids)):
             union(wp_ids[0], wp_ids[i])
+
+    # Pass 2: API producer/consumer relationships
+    api_producers: dict[str, list[str]] = {}
+    for wp in wps:
+        for api in wp.get("apis_defined", []):
+            api_producers.setdefault(api, []).append(wp["id"])
+    for wp in wps:
+        for api in wp.get("apis_consumed", []):
+            for producer_id in api_producers.get(api, []):
+                union(wp["id"], producer_id)
 
     clusters: dict[str, list[dict[str, Any]]] = {}
     for wp in wps:
@@ -289,6 +299,14 @@ def consolidate_wps(
     broken_edges = break_cycles_greedy_fas(output_wps)
 
     planner_path = Path(planner_dir)
+
+    # Clean up depends_on references to voided WPs
+    registry = load_lifecycle_registry(planner_path)
+    voided_wp_ids = set(registry.get("voided_wps", {}).keys())
+    if voided_wp_ids:
+        for wp in output_wps:
+            wp["depends_on"] = [d for d in wp.get("depends_on", []) if d not in voided_wp_ids]
+
     consolidated_path = planner_path / "consolidated_wps.json"
     write_versioned_json(
         consolidated_path,
@@ -327,6 +345,12 @@ def consolidate_wps(
                 if absorbed_id in source_to_merged
             }
             record_lifecycle_event(planner_path, "absorbed", absorbed_data)
+
+        # Delete voided WP result files
+        for voided_id in voided_wp_ids:
+            result_file = wp_dir / f"{voided_id}_result.json"
+            if result_file.exists():
+                result_file.unlink()
 
     if broken_edges:
         edges_path = planner_path / "broken_cycle_edges.json"

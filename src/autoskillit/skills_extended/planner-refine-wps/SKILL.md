@@ -53,7 +53,7 @@ suggestions, resolves conflicts, and writes `refined_wps.json`.
 
 **ALWAYS:**
 - Spawn one L0 per phase (NOT per WP) — each L0 reviews ALL WPs in its phase against the full WP set
-- Validate each L0 response for `phase_id`, `wp_changes` (array), `cross_phase_deps` (array), `deliverable_conflicts` (array), `api_mismatches` (array)
+- Validate each L0 response for `phase_id`, `wp_changes` (array), `cross_phase_deps` (array), `deliverable_conflicts` (array), `api_mismatches` (array), `subsumption_pairs` (array)
 - Log `WARNING` to stdout for any L0 response that fails validation (skip that phase)
 - Log `CRITICAL` to stdout for any L0 subagent that fails entirely (proceed with N-1 suggestions)
 - When two WPs claim the same deliverable file, assign ownership to the WP with the numerically earlier ID using natural sort (e.g., `P1-A1-WP1` beats `P2-A1-WP1`)
@@ -113,9 +113,11 @@ For each phase, build a context packet containing:
 - The full serialized `combined_wps.json` content (all WPs visible for cross-phase awareness)
 - The `PhaseElaborated` entry for the phase from `$2`
 - The `AssignmentElaborated` entries for all assignments in this phase from `$3`
+- The `overlap_notes` field from the `AssignmentElaborated` entries for this phase (use as a prior signal — if an assignment's overlap_notes flag a relationship with another assignment, scrutinize their WPs for subsumption)
 - The `target_phase_id`
 - The list of WP IDs assigned to this L0 (the WPs in this phase)
 - Instructions: review this phase's WPs against the full WP set; return structured suggestions only — do NOT edit files
+- Use `overlap_notes` from assignment elaboration as a prior signal — if an assignment's overlap_notes flag a relationship with another assignment, scrutinize their WPs for subsumption and report matches in `subsumption_pairs`
 
 ### Step 3: Spawn parallel L0 subagents
 
@@ -139,6 +141,9 @@ deliverable_conflicts = [
 api_mismatches = [
   {"consumer_wp": "P2-A1-WP1", "producer_wp": "P1-A1-WP2", "api": "SessionModel.create", "mismatch": "Consumer expects (user_id, token) but producer defines (user_id)"}
 ]
+subsumption_pairs = [
+  {"consumer_wp": "P6-A3-WP1", "subsumed_wp": "P8-A5-WP1", "reason": "WP1 implements build_interactive_cmd and will naturally produce tests; WP2's sole purpose is to add those tests"}
+]
 ```
 
 Each L0 receives instructions to use Grep/Glob/Read for codebase analysis but NOT
@@ -152,6 +157,7 @@ For each L0 response:
 - `cross_phase_deps` must be a valid JSON array (may be empty `[]`)
 - `deliverable_conflicts` must be a valid JSON array (may be empty `[]`)
 - `api_mismatches` must be a valid JSON array (may be empty `[]`)
+- `subsumption_pairs` must be a valid JSON array (may be empty `[]`)
 
 On `phase_id` mismatch (field present but does not match expected ID):
 ```
@@ -169,6 +175,17 @@ CRITICAL: L0 for {phase_id} failed — proceeding with N-1 suggestions
 ```
 
 ### Step 5: Resolve conflicts
+
+Collect all `subsumption_pairs` from validated L0 responses. For each pair:
+1. Promote the subsumed WP's unique deliverables to the consumer WP (those not already in the consumer's list)
+2. Append the subsumed WP's unique acceptance criteria to the consumer WP
+3. Remove the subsumed WP from the output WP list
+4. Update all `depends_on` references: any WP that depended on the subsumed WP should instead depend on the consumer WP
+5. Write voided_wps entry to `$4/work_packages/lifecycle_registry.json`:
+   Read existing registry (or create with defaults `{"voided_phases": [], "voided_assignments": [], "absorbed": {}, "voided_wps": {}}`).
+   Add to `voided_wps`: `{subsumed_id: {"merged_into": consumer_id, "reason": reason}}`.
+   Write back with `schema_version: 1`.
+6. Log: `WP SUBSUMED: {subsumed_id} → {consumer_id} ({reason})`
 
 Collect all `deliverable_conflicts` from validated L0 responses. For each
 conflict where two WPs claim the same deliverable file, assign ownership to the

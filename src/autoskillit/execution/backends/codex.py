@@ -18,7 +18,9 @@ from autoskillit.core import (
     KITCHEN_SESSION_ID_ENV_VAR,
     SESSION_TYPE_SKILL,
     BackendCapabilities,
+    BareResume,
     CmdSpec,
+    NamedResume,
     NoResume,
     OutputFormat,
     PluginSource,
@@ -67,6 +69,7 @@ class CodexFlags(StrEnum):
     RESUME_SUBCOMMAND = "resume"
     LAST = "--last"
     CONFIG_OVERRIDE = "-c"
+    DANGEROUSLY_BYPASS = "--dangerously-bypass-approvals-and-sandbox"
 
 
 CODEX_ENV_DENYLIST: frozenset[str] = frozenset(
@@ -382,7 +385,26 @@ class CodexBackend:
         env_extras: Mapping[str, str] | None = None,
         required_env: frozenset[str] | None = None,
     ) -> CmdSpec:
-        raise NotImplementedError("Codex interactive mode is implemented in P6-A3")
+        cmd: list[str] = []
+        match resume_spec:
+            case NoResume():
+                cmd = ["codex", CodexFlags.DANGEROUSLY_BYPASS]
+            case NamedResume(session_id=sid):
+                cmd = ["codex", CodexFlags.RESUME_SUBCOMMAND, sid, CodexFlags.DANGEROUSLY_BYPASS]
+            case BareResume():
+                cmd = ["codex", CodexFlags.RESUME_SUBCOMMAND, CodexFlags.DANGEROUSLY_BYPASS]
+        if model:
+            cmd += [CodexFlags.MODEL, model]
+        # plugin_source: explicit no-op for Codex
+        for d in add_dirs:
+            cmd += [CodexFlags.ADD_DIR, str(d)]
+        if system_prompt is not None and isinstance(resume_spec, NoResume):
+            cmd += [CodexFlags.CONFIG_OVERRIDE, f"developer_instructions={system_prompt}"]
+        if initial_prompt is not None:
+            cmd.append(initial_prompt)
+        base_env = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
+        env = CodexEnvPolicy().build_env(base_env, extras=env_extras, required=required_env)
+        return CmdSpec(cmd=tuple(cmd), env=env)
 
     def build_resume_cmd(
         self,

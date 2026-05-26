@@ -54,6 +54,7 @@ class TestCodexFlags:
             "RESUME_SUBCOMMAND",
             "LAST",
             "CONFIG_OVERRIDE",
+            "DANGEROUSLY_BYPASS",
         }
         actual = {m.name for m in CodexFlags}
         assert actual == expected
@@ -179,9 +180,9 @@ class TestCodexBackendCommands:
         spec = CodexBackend().build_resume_cmd(resume_session_id="s1", prompt="go")
         assert "--json" in spec.cmd
 
-    def test_build_interactive_cmd_raises(self) -> None:
-        with pytest.raises(NotImplementedError):
-            CodexBackend().build_interactive_cmd()
+    def test_build_interactive_cmd_returns_cmd_spec(self) -> None:
+        spec = CodexBackend().build_interactive_cmd()
+        assert isinstance(spec, CmdSpec)
 
 
 class TestCodexBackendFactories:
@@ -599,3 +600,80 @@ class TestCodexBuildSkillSessionCmdConfigAdapter:
         )
         assert isinstance(spec, CmdSpec)
         assert any("/test-skill" in s for s in spec.cmd)
+
+
+class TestCodexBuildInteractiveCmd:
+    def test_dangerously_bypass_value(self) -> None:
+        assert str(CodexFlags.DANGEROUSLY_BYPASS) == "--dangerously-bypass-approvals-and-sandbox"
+
+    def test_no_resume_produces_correct_base_command(self) -> None:
+        spec = CodexBackend().build_interactive_cmd()
+        assert spec.cmd[0] == "codex"
+        assert CodexFlags.DANGEROUSLY_BYPASS in spec.cmd
+        assert CodexFlags.RESUME_SUBCOMMAND not in spec.cmd
+
+    def test_named_resume_produces_resume_subcommand_with_session_id(self) -> None:
+        from autoskillit.core import NamedResume
+
+        spec = CodexBackend().build_interactive_cmd(resume_spec=NamedResume(session_id="abc"))
+        assert spec.cmd[0] == "codex"
+        assert spec.cmd[1] == CodexFlags.RESUME_SUBCOMMAND
+        assert spec.cmd[2] == "abc"
+        assert CodexFlags.DANGEROUSLY_BYPASS in spec.cmd
+
+    def test_bare_resume_produces_resume_subcommand_without_session_id(self) -> None:
+        from autoskillit.core import BareResume
+
+        spec = CodexBackend().build_interactive_cmd(resume_spec=BareResume())
+        assert spec.cmd[0] == "codex"
+        assert spec.cmd[1] == CodexFlags.RESUME_SUBCOMMAND
+        assert CodexFlags.DANGEROUSLY_BYPASS in spec.cmd
+        assert "abc" not in spec.cmd
+
+    def test_system_prompt_with_no_resume_appends_config_override(self) -> None:
+        spec = CodexBackend().build_interactive_cmd(system_prompt="foo")
+        assert CodexFlags.CONFIG_OVERRIDE in spec.cmd
+        idx = spec.cmd.index(CodexFlags.CONFIG_OVERRIDE)
+        assert spec.cmd[idx + 1] == "developer_instructions=foo"
+
+    def test_system_prompt_with_named_resume_does_not_append_config_override(self) -> None:
+        from autoskillit.core import NamedResume
+
+        spec = CodexBackend().build_interactive_cmd(
+            resume_spec=NamedResume(session_id="s1"), system_prompt="foo"
+        )
+        assert CodexFlags.CONFIG_OVERRIDE not in spec.cmd
+
+    def test_add_dirs_appends_add_dir_for_each_entry(self) -> None:
+        spec = CodexBackend().build_interactive_cmd(add_dirs=["/a", "/b"])
+        assert (CodexFlags.ADD_DIR, "/a") == (
+            spec.cmd[spec.cmd.index(CodexFlags.ADD_DIR)],
+            spec.cmd[spec.cmd.index(CodexFlags.ADD_DIR) + 1],
+        )
+
+    def test_initial_prompt_is_final_element(self) -> None:
+        spec = CodexBackend().build_interactive_cmd(initial_prompt="hello")
+        assert spec.cmd[-1] == "hello"
+
+    def test_plugin_source_is_silently_ignored(self) -> None:
+        from pathlib import Path
+
+        from autoskillit.core import DirectInstall
+
+        spec = CodexBackend().build_interactive_cmd(
+            plugin_source=DirectInstall(plugin_dir=Path("/x"))
+        )
+        assert "--plugin-dir" not in spec.cmd
+        assert "/x" not in spec.cmd
+
+    def test_env_excludes_headless_vars(self, monkeypatch) -> None:
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "secret")
+        monkeypatch.setenv("HOME", "/home/user")
+        spec = CodexBackend().build_interactive_cmd()
+        assert "ANTHROPIC_API_KEY" not in spec.env
+
+    def test_model_flag_appended_when_provided(self) -> None:
+        spec = CodexBackend().build_interactive_cmd(model="o3")
+        assert CodexFlags.MODEL in spec.cmd
+        idx = spec.cmd.index(CodexFlags.MODEL)
+        assert spec.cmd[idx + 1] == "o3"

@@ -39,6 +39,14 @@ WORKTREE_SKILLS: frozenset[str] = frozenset(
     }
 )
 
+CLONE_COMMIT_SKILLS: frozenset[str] = frozenset(
+    {
+        "resolve-failures",
+        "resolve-review",
+        "resolve-merge-conflicts",
+    }
+)
+
 _GIT_TIMEOUT: float = 10.0
 
 
@@ -63,6 +71,11 @@ class ContaminationReport:
 def is_worktree_skill(skill_command: str) -> bool:
     """Return True if skill_command invokes a worktree-creating skill."""
     return any(name in skill_command for name in WORKTREE_SKILLS)
+
+
+def is_clone_commit_skill(skill_command: str) -> bool:
+    """Return True if skill_command invokes a skill that legitimately commits to clones."""
+    return any(name in skill_command for name in CLONE_COMMIT_SKILLS)
 
 
 async def snapshot_clone_state(cwd: str, runner: SubprocessRunner) -> CloneSnapshot | None:
@@ -234,6 +247,8 @@ async def check_and_revert_clone_contamination(
     if snapshot is None:
         return skill_result, False
     if skill_result.success and not readonly_skill:
+        return skill_result, False
+    if skill_result.success and is_clone_commit_skill(skill_command):
         return skill_result, False
     if skill_result.worktree_path is not None:
         return skill_result, False

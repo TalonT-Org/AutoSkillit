@@ -25,7 +25,6 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
         ("fleet", "FLEET", False, False),
         ("FLEET", "FLEET", False, False),
         ("fleet", "FLEET", False, True),
-        ("leaf", "SKILL", True, False),
     ],
     ids=[
         "orchestrator",
@@ -36,7 +35,6 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
         "fleet",
         "fleet-case-insensitive",
         "fleet-no-warning",
-        "leaf-deprecated-suppressed",
     ],
 )
 def test_session_type_resolver(
@@ -122,14 +120,12 @@ def test_session_type_env_var_constant():
 # ---------------------------------------------------------------------------
 
 
-def test_leaf_value_maps_to_skill_with_deprecation_warning(monkeypatch):
-    from autoskillit.core import SessionType, session_type
+def test_leaf_value_raises_value_error(monkeypatch):
+    from autoskillit.core import session_type
 
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaf")
-    with pytest.warns(DeprecationWarning, match="leaf") as warning_list:
-        result = session_type()
-    assert result is SessionType.SKILL
-    assert "SKILL" in str(warning_list[0].message)
+    with pytest.raises(ValueError, match="leaf.*removed"):
+        session_type()
 
 
 # ---------------------------------------------------------------------------

@@ -190,3 +190,28 @@ if not all(
         "FeatureDef.tool_tags contains a tag not present in TOOL_SUBSET_TAGS values. "
         "Add the tag to the appropriate tool entry in TOOL_SUBSET_TAGS first."
     )
+
+# Guard: DEPRECATED features must have sunset_date
+_DEPRECATED_WITHOUT_SUNSET = [
+    k
+    for k, defn in FEATURE_REGISTRY.items()
+    if defn.lifecycle == FeatureLifecycle.DEPRECATED and defn.sunset_date is None
+]
+if _DEPRECATED_WITHOUT_SUNSET:
+    raise AssertionError(
+        f"DEPRECATED features must have a sunset_date. Missing: {_DEPRECATED_WITHOUT_SUNSET}"
+    )
+del _DEPRECATED_WITHOUT_SUNSET
+
+# Guard: DEPRECATED features must not be default_enabled=True
+_DEPRECATED_DEFAULT_ENABLED = [
+    k
+    for k, defn in FEATURE_REGISTRY.items()
+    if defn.lifecycle == FeatureLifecycle.DEPRECATED and defn.default_enabled
+]
+if _DEPRECATED_DEFAULT_ENABLED:
+    raise AssertionError(
+        "DEPRECATED features must not be default_enabled=True. "
+        f"Violations: {_DEPRECATED_DEFAULT_ENABLED}"
+    )
+del _DEPRECATED_DEFAULT_ENABLED

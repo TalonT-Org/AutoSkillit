@@ -689,3 +689,110 @@ def test_fleet_still_promoted_by_experimental_blanket():
     from autoskillit.core.feature_flags import is_feature_enabled
 
     assert is_feature_enabled("fleet", {}, experimental_enabled=True) is True
+
+
+# -- T-DEPRECATED: lifecycle gating --
+
+
+def test_deprecated_features_must_have_sunset_date():
+    """DEPRECATED lifecycle features must carry a sunset_date."""
+    from autoskillit.core.types._type_constants_features import FEATURE_REGISTRY
+    from autoskillit.core.types._type_enums import FeatureLifecycle
+
+    violations = [
+        k
+        for k, defn in FEATURE_REGISTRY.items()
+        if defn.lifecycle == FeatureLifecycle.DEPRECATED and defn.sunset_date is None
+    ]
+    assert not violations, f"DEPRECATED features without sunset_date: {violations}"
+
+
+def test_deprecated_features_not_default_enabled():
+    """DEPRECATED lifecycle features must not be default_enabled=True."""
+    from autoskillit.core.types._type_constants_features import FEATURE_REGISTRY
+    from autoskillit.core.types._type_enums import FeatureLifecycle
+
+    violations = [
+        k
+        for k, defn in FEATURE_REGISTRY.items()
+        if defn.lifecycle == FeatureLifecycle.DEPRECATED and defn.default_enabled
+    ]
+    assert not violations, f"DEPRECATED features with default_enabled=True: {violations}"
+
+
+def test_is_feature_enabled_deprecated_emits_warning(monkeypatch):
+    """DEPRECATED feature emits DeprecationWarning when resolved as enabled."""
+    from datetime import date, timedelta
+
+    import autoskillit.core.types._type_constants_features as tc
+    from autoskillit.core.feature_flags import is_feature_enabled
+    from autoskillit.core.types._type_constants_features import FeatureDef
+    from autoskillit.core.types._type_enums import FeatureLifecycle
+
+    depr_def = FeatureDef(
+        lifecycle=FeatureLifecycle.DEPRECATED,
+        description="deprecated test feature",
+        tool_tags=frozenset(),
+        skill_categories=frozenset(),
+        import_package=None,
+        default_enabled=False,
+        sunset_date=date.today() + timedelta(days=30),
+    )
+    monkeypatch.setitem(tc.FEATURE_REGISTRY, "test_depr_feat", depr_def)
+    with pytest.warns(DeprecationWarning, match="test_depr_feat"):
+        result = is_feature_enabled(
+            "test_depr_feat", {"test_depr_feat": True}, experimental_enabled=False
+        )
+    assert result is True
+
+
+def test_is_feature_enabled_deprecated_disabled_no_warning(monkeypatch):
+    """DEPRECATED feature does NOT warn when resolved as disabled."""
+    import warnings
+    from datetime import date, timedelta
+
+    import autoskillit.core.types._type_constants_features as tc
+    from autoskillit.core.feature_flags import is_feature_enabled
+    from autoskillit.core.types._type_constants_features import FeatureDef
+    from autoskillit.core.types._type_enums import FeatureLifecycle
+
+    depr_def = FeatureDef(
+        lifecycle=FeatureLifecycle.DEPRECATED,
+        description="deprecated test feature",
+        tool_tags=frozenset(),
+        skill_categories=frozenset(),
+        import_package=None,
+        default_enabled=False,
+        sunset_date=date.today() + timedelta(days=30),
+    )
+    monkeypatch.setitem(tc.FEATURE_REGISTRY, "test_depr_feat", depr_def)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        result = is_feature_enabled("test_depr_feat", {}, experimental_enabled=False)
+    assert result is False
+    depr_warnings = [w for w in caught if issubclass(w.category, DeprecationWarning)]
+    assert len(depr_warnings) == 0
+
+
+def test_build_features_dict_warns_enabling_deprecated_feature(monkeypatch):
+    """_build_features_dict emits DeprecationWarning for explicitly enabling DEPRECATED."""
+    from datetime import date, timedelta
+
+    import autoskillit.core.types._type_constants_features as tc
+    from autoskillit.config.settings import AutomationConfig
+    from autoskillit.core.types._type_constants_features import FeatureDef
+    from autoskillit.core.types._type_enums import FeatureLifecycle
+
+    depr_def = FeatureDef(
+        lifecycle=FeatureLifecycle.DEPRECATED,
+        description="deprecated config test",
+        tool_tags=frozenset(),
+        skill_categories=frozenset(),
+        import_package=None,
+        default_enabled=False,
+        sunset_date=date.today() + timedelta(days=30),
+    )
+    monkeypatch.setitem(tc.FEATURE_REGISTRY, "test_depr_cfg", depr_def)
+    with pytest.warns(DeprecationWarning, match="test_depr_cfg"):
+        result, _ = AutomationConfig._build_features_dict({"test_depr_cfg": True})
+    assert result["test_depr_cfg"] is True

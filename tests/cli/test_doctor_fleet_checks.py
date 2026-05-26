@@ -41,17 +41,16 @@ class TestGroupMFranchiseDoctorChecks:
         assert result.severity == Severity.WARNING
         assert result.check == "ambient_session_type_skill"
 
-    # M2b: SESSION_TYPE=leaf (deprecated) → WARN with DeprecationWarning
-    def test_check_ambient_session_type_skill_warns_when_leaf_deprecated(
+    # M2b: SESSION_TYPE=leaf (removed) → ERROR
+    def test_check_ambient_session_type_skill_errors_when_leaf(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         from autoskillit.cli.doctor import _check_ambient_session_type_skill
         from autoskillit.core import Severity
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaf")
-        with pytest.warns(DeprecationWarning, match="deprecated"):
-            result = _check_ambient_session_type_skill()
-        assert result.severity == Severity.WARNING
+        result = _check_ambient_session_type_skill()
+        assert result.severity == Severity.ERROR
         assert result.check == "ambient_session_type_skill"
 
     # M3: SESSION_TYPE=orchestrator → OK (not this check's concern)

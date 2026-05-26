@@ -33,7 +33,7 @@ def main() -> None:
     session_type = raw_session_type.lower()
     if session_type in ("orchestrator", "fleet"):
         sys.exit(0)  # permitted tiers — not a skill session
-    # skill, leaf (deprecated), unset → deny below; unrecognized non-empty values also denied
+    # skill, leaf (removed), unset → deny below; unrecognized non-empty values also denied
     _unrecognized_tier = bool(session_type) and session_type not in ("skill", "leaf")
 
     tool_name: str = data.get("tool_name", "")

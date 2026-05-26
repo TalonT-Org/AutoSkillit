@@ -63,7 +63,7 @@ def test_guard_denies_skill_tier(tool_name):
 
 @pytest.mark.parametrize("tool_name", _ORCHESTRATION_TOOLS)
 def test_guard_denies_deprecated_leaf_tier(tool_name):
-    """Backward compat: SESSION_TYPE=leaf (old value) is also denied."""
+    """SESSION_TYPE=leaf (removed value) is also denied."""
     response = _run_guard_headless(
         {"tool_name": f"mcp__autoskillit__{tool_name}"}, session_type="leaf"
     )

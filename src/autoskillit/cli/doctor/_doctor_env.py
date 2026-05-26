@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import warnings
 
 from autoskillit.core import SESSION_TYPE_ENV_VAR, Severity, get_logger
 
@@ -17,17 +16,11 @@ def _check_ambient_session_type_skill() -> DoctorResult:
     raw = os.environ.get(SESSION_TYPE_ENV_VAR, "")
     raw_lower = raw.lower()
     if raw_lower == "leaf":
-        warnings.warn(
-            "AUTOSKILLIT_SESSION_TYPE='leaf' is deprecated. Use 'skill' instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
         return DoctorResult(
-            Severity.WARNING,
+            Severity.ERROR,
             "ambient_session_type_skill",
-            "Ambient SESSION_TYPE=leaf detected (deprecated). "
-            "Update to SESSION_TYPE=skill. Fleet sessions should set "
-            "SESSION_TYPE=skill only in launched subprocesses.",
+            "Ambient SESSION_TYPE=leaf detected — this value has been removed. "
+            "Use SESSION_TYPE=skill instead.",
         )
     if raw_lower == "skill":
         return DoctorResult(

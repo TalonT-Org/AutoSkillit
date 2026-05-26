@@ -1248,6 +1248,10 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/execution/test_headless_provider_forwarding.py": frozenset({"autoskillit.pipeline"}),
     # planner write isolation integration test verifies audit log entries from clone guard
     "tests/execution/test_planner_write_isolation.py": frozenset({"autoskillit.pipeline"}),
+    # clone guard integration test uses DefaultAuditLog for check_and_revert_clone_contamination
+    "tests/execution/test_headless_clone_guard_integration.py": frozenset(
+        {"autoskillit.pipeline"}
+    ),
 }
 
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pathlib
+
 import pytest
 import yaml
 
@@ -46,6 +48,3 @@ def test_clone_commit_skills_not_read_only():
         assert contract.get("read_only") is not True, (
             f"{skill_name} in CLONE_COMMIT_SKILLS must not have read_only: true"
         )
-
-
-import pathlib

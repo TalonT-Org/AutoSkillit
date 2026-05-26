@@ -29,6 +29,7 @@ CLI command, subcommand, and interactive workflow tests.
 | `test_cook_workspace.py` | Tests: cook CLI workspace init and clean commands |
 | `test_doctor.py` | Tests for CLI doctor command and related utilities |
 | `test_doctor_backend_guards.py` | Tests for doctor backend guard checks (stale MCP, MCP registered, process state) and run_doctor backend wiring |
+| `test_doctor_codex_mcp.py` | Tests for _check_mcp_server_registered Codex branch — monkeypatch-based, no filesystem I/O |
 | `test_doctor_fleet_checks.py` | Tests for fleet doctor checks — Group M ambient env/infra/campaign, Group N feature gates and registry |
 | `test_doctor_migration.py` | Tests for doctor quota cache schema, install classification, version consistency, and drift |
 | `test_doctor_scripts.py` | Tests for doctor script/recipe version health checks |

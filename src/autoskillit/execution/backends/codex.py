@@ -517,8 +517,8 @@ class CodexBackend:
         if not config_path.is_file():
             errors.append(f"config.toml does not exist: {config_path}")
         else:
-            tomc_content = config_path.read_text(encoding="utf-8")
-            if "[mcp_servers.autoskillit]" not in tomc_content:
+            toml_content = config_path.read_text(encoding="utf-8")
+            if "[mcp_servers.autoskillit]" not in toml_content:
                 errors.append("config.toml missing [mcp_servers.autoskillit] section")
 
         auth_path = session_dir / "auth.json"

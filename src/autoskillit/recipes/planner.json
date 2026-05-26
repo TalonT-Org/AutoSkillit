@@ -387,7 +387,8 @@
         "output_dir": "${{ context.planner_dir }}"
       },
       "capture": {
-        "verdict": "${{ result.verdict }}"
+        "verdict": "${{ result.verdict }}",
+        "warning_count": "${{ result.warning_count }}"
       },
       "on_success": "check_verdict",
       "on_failure": "escalate_stop"
@@ -467,7 +468,7 @@
     },
     "done": {
       "action": "stop",
-      "message": "Planning complete. Plan artifacts written to ${{ context.planner_dir }}/. Use compile output to create GitHub issues and milestones. Emit the L3 result sentinel JSON block now with success=true. Example sentinel: {\"success\": true, \"reason\": \"planning complete\"}"
+      "message": "Planning complete. Plan artifacts written to ${{ context.planner_dir }}/. Validation warnings: ${{ context.warning_count }}. Use compile output to create GitHub issues and milestones. Emit the L3 result sentinel JSON block now with success=true. Example sentinel: {\"success\": true, \"reason\": \"planning complete\"}"
     },
     "escalate_stop": {
       "action": "stop",

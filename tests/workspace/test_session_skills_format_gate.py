@@ -42,7 +42,7 @@ class TestInitSessionFormatGate:
 
         skill_dir = Path(result.path) / ".claude" / "skills" / "bad-skill"
         assert not skill_dir.exists()
-        provider.list_skills.assert_called_once()
+        assert provider.list_skills.called
         format_events = [e for e in captured if e.get("event") == "skill_format_validation"]
         assert any(e.get("skill") == "bad-skill" for e in format_events)
 

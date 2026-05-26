@@ -933,10 +933,11 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "co-located with the execution engine that calls them",
     ),
     "smoke_utils.py": (
-        1100,
-        "REQ-CNST-010-E7: agent-eval + skill-eval smoke functions — parse_agent_eval_manifests "
-        "and build_agent_eval_context parallel parse_eval_manifests/build_eval_context; "
-        "shared helpers extracted but residual size from two eval domains",
+        1200,
+        "REQ-CNST-010-E7: agent-eval + skill-eval smoke functions + consolidate_health_reports — "
+        "parse_agent_eval_manifests and build_agent_eval_context parallel "
+        "parse_eval_manifests/build_eval_context; consolidate_health_reports added for L3 "
+        "diagnostic aggregation; shared helpers extracted but residual size from three domains",
     ),
 }
 

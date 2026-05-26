@@ -832,6 +832,7 @@ def check_commits_ahead(cwd: str, base_branch: str) -> dict[str, str]:
         capture_output=True,
         text=True,
         check=True,
+        timeout=30,
     )
     count = int(result.stdout.strip())
     return {"has_commits": "true" if count > 0 else "false"}

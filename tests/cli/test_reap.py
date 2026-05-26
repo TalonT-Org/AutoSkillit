@@ -16,7 +16,7 @@ def test_reap_delegates_to_dispatch_reaper(tmp_path: Path) -> None:
     sp = tmp_path / "state.json"
     sp.write_text("{}")
 
-    with patch("autoskillit.cli.fleet._fleet_lifecycle.reap_stale_dispatches") as mock_reap:
+    with patch("autoskillit.fleet.reap_stale_dispatches") as mock_reap:
         _reap_stale_dispatches(sp, dry_run=True)
 
     mock_reap.assert_called_once_with(sp, dry_run=True)

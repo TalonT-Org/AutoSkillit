@@ -44,7 +44,7 @@ def _make_synthetic_provider(
         skill_dir.mkdir()
         deps = spec.get("deps", [])
         categories = spec.get("categories", [])
-        fm_lines = [f"name: {name}"]
+        fm_lines = [f"name: {name}", f"description: Synthetic {name} skill for testing."]
         if categories:
             fm_lines.append(f"categories: [{', '.join(categories)}]")
         if deps:

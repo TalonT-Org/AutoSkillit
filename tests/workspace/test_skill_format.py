@@ -57,9 +57,7 @@ class TestValidateSkillFrontmatter:
         assert any("64" in err for err in result)
 
     def test_name_directory_mismatch_rejected(self) -> None:
-        result = validate_skill_frontmatter(
-            {"name": "foo", "description": "A skill"}, "bar"
-        )
+        result = validate_skill_frontmatter({"name": "foo", "description": "A skill"}, "bar")
         assert any("foo" in err and "bar" in err for err in result)
 
     def test_description_too_long_rejected(self) -> None:

@@ -23,18 +23,14 @@ pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
 
 class TestInitSessionFormatGate:
-    def test_init_session_skips_skill_with_missing_description(
-        self, tmp_path: Path
-    ) -> None:
+    def test_init_session_skips_skill_with_missing_description(self, tmp_path: Path) -> None:
         provider = MagicMock(spec=SkillsDirectoryProvider)
         skill_info = MagicMock()
         skill_info.name = "bad-skill"
         skill_info.source = SkillSource.BUNDLED_EXTENDED
         skill_info.categories = []
         provider.list_skills.return_value = [skill_info]
-        provider.get_skill_content.return_value = (
-            "---\nname: bad-skill\n---\nBody"
-        )
+        provider.get_skill_content.return_value = "---\nname: bad-skill\n---\nBody"
 
         manager = DefaultSessionSkillManager(provider, tmp_path)
         config = make_test_config(
@@ -46,18 +42,14 @@ class TestInitSessionFormatGate:
         skill_dir = Path(result.path) / ".claude" / "skills" / "bad-skill"
         assert not skill_dir.exists()
 
-    def test_init_session_logs_warning_on_invalid_frontmatter(
-        self, tmp_path: Path
-    ) -> None:
+    def test_init_session_logs_warning_on_invalid_frontmatter(self, tmp_path: Path) -> None:
         provider = MagicMock(spec=SkillsDirectoryProvider)
         skill_info = MagicMock()
         skill_info.name = "bad-skill"
         skill_info.source = SkillSource.BUNDLED_EXTENDED
         skill_info.categories = []
         provider.list_skills.return_value = [skill_info]
-        provider.get_skill_content.return_value = (
-            "---\nname: bad-skill\n---\nBody"
-        )
+        provider.get_skill_content.return_value = "---\nname: bad-skill\n---\nBody"
 
         manager = DefaultSessionSkillManager(provider, tmp_path)
         config = make_test_config(
@@ -67,14 +59,10 @@ class TestInitSessionFormatGate:
         with structlog.testing.capture_logs() as captured:
             manager.init_session("sess1", config=config)
 
-        format_events = [
-            e for e in captured if e.get("event") == "skill_format_validation"
-        ]
+        format_events = [e for e in captured if e.get("event") == "skill_format_validation"]
         assert len(format_events) >= 1
 
-    def test_init_session_writes_skill_with_valid_frontmatter(
-        self, tmp_path: Path
-    ) -> None:
+    def test_init_session_writes_skill_with_valid_frontmatter(self, tmp_path: Path) -> None:
         provider = MagicMock(spec=SkillsDirectoryProvider)
         skill_info = MagicMock()
         skill_info.name = "good-skill"
@@ -104,9 +92,7 @@ class TestInitSessionFormatGate:
         skill_info.source = SkillSource.BUNDLED_EXTENDED
         skill_info.categories = []
         provider.list_skills.return_value = [skill_info]
-        provider.get_skill_content.return_value = (
-            "---\nname: bad-skill\n---\nBody"
-        )
+        provider.get_skill_content.return_value = "---\nname: bad-skill\n---\nBody"
 
         manager = DefaultSessionSkillManager(provider, tmp_path)
         config = make_test_config(
@@ -122,18 +108,14 @@ class TestInitSessionFormatGate:
 
 
 class TestActivateWithDepsFormatGate:
-    def test_activate_with_deps_skips_format_invalid_skill(
-        self, tmp_path: Path
-    ) -> None:
+    def test_activate_with_deps_skips_format_invalid_skill(self, tmp_path: Path) -> None:
         provider = MagicMock(spec=SkillsDirectoryProvider)
         skill_info = MagicMock()
         skill_info.name = "bad-skill"
         skill_info.source = SkillSource.BUNDLED_EXTENDED
         skill_info.categories = []
         provider.list_skills.return_value = [skill_info]
-        provider.get_skill_content.return_value = (
-            "---\nname: bad-skill\n---\nBody"
-        )
+        provider.get_skill_content.return_value = "---\nname: bad-skill\n---\nBody"
         provider.resolver.resolve.return_value = skill_info
 
         manager = DefaultSessionSkillManager(provider, tmp_path)
@@ -144,18 +126,14 @@ class TestActivateWithDepsFormatGate:
         result = manager.activate_skill_deps("sess1", "bad-skill")
         assert result is False
 
-    def test_activate_with_deps_logs_warning_on_invalid_frontmatter(
-        self, tmp_path: Path
-    ) -> None:
+    def test_activate_with_deps_logs_warning_on_invalid_frontmatter(self, tmp_path: Path) -> None:
         provider = MagicMock(spec=SkillsDirectoryProvider)
         skill_info = MagicMock()
         skill_info.name = "bad-skill"
         skill_info.source = SkillSource.BUNDLED_EXTENDED
         skill_info.categories = []
         provider.list_skills.return_value = [skill_info]
-        provider.get_skill_content.return_value = (
-            "---\nname: bad-skill\n---\nBody"
-        )
+        provider.get_skill_content.return_value = "---\nname: bad-skill\n---\nBody"
         provider.resolver.resolve.return_value = skill_info
 
         manager = DefaultSessionSkillManager(provider, tmp_path)
@@ -165,7 +143,5 @@ class TestActivateWithDepsFormatGate:
         with structlog.testing.capture_logs() as captured:
             manager.activate_skill_deps("sess1", "bad-skill")
 
-        format_events = [
-            e for e in captured if e.get("event") == "skill_format_validation"
-        ]
+        format_events = [e for e in captured if e.get("event") == "skill_format_validation"]
         assert len(format_events) >= 1

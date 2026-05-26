@@ -80,6 +80,16 @@ async def claim_issue(
         if not result.get("success"):
             return json.dumps({"success": False, "error": result.get("error", "fetch failed")})
 
+        issue_state = result.get("state", "open").lower()
+        if issue_state == "closed":
+            return json.dumps(
+                {
+                    "success": True,
+                    "claimed": False,
+                    "reason": "issue is closed",
+                }
+            )
+
         current_labels = _extract_label_names(result.get("labels", []))
         decision = await _try_claim_with_liveness(
             issue_url=issue_url,
@@ -154,6 +164,7 @@ async def release_issue(
     target_branch: str | None = None,
     staged_label: str | None = None,
     fail_label: str | None = None,
+    close_issue: str | None = None,
 ) -> str:
     """Remove the in-progress label from a GitHub issue to release it.
 
@@ -356,6 +367,8 @@ async def release_issue(
                         "error": f"Failed to remove label: {swap_result.get('error', '?')}",
                     }
                 )
+            if close_issue == "true":
+                await tool_ctx.github_client.close_issue(owner, repo, issue_number)
 
         return json.dumps(
             {

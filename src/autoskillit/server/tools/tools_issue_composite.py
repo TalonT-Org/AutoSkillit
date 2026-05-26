@@ -103,6 +103,21 @@ async def claim_and_resolve_issue(
                 }
             )
 
+        issue_state = fetch_result.get("state", "open").lower()
+        if issue_state == "closed":
+            claim_ms = int((time.monotonic() - _claim_start) * 1000)
+            return json.dumps(
+                {
+                    "success": True,
+                    "claimed": False,
+                    "reason": "issue is closed",
+                    "issue_number": issue_number,
+                    "issue_title": issue_title,
+                    "issue_slug": issue_slug,
+                    "timings": {"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms},
+                }
+            )
+
         current_labels = _extract_label_names(fetch_result.get("labels", []))
         decision = await _try_claim_with_liveness(
             issue_url=issue_url,

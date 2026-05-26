@@ -349,7 +349,7 @@ SUBPKG_CASCADE_EXECUTION: dict[str, frozenset[str]] = {
             "smoke_utils",
         }
     ),
-    "backends": frozenset({"execution"}),
+    "backends": frozenset({"execution", "integration"}),
 }
 
 MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {

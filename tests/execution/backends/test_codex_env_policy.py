@@ -4,7 +4,7 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS, EnvPolicy
+from autoskillit.core import AGENT_BACKEND_ENV_VAR, AUTOSKILLIT_PRIVATE_ENV_VARS, EnvPolicy
 from autoskillit.execution.backends.codex import CodexEnvPolicy
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -102,3 +102,18 @@ class TestCodexEnvPolicy:
         base = {"AUTOSKILLIT_AGENT_BACKEND": "codex", "PATH": "/usr/bin"}
         result = policy.build_env(base)
         assert result["AUTOSKILLIT_AGENT_BACKEND"] == "codex"
+
+    def test_agent_backend_not_in_base_env(self) -> None:
+        policy = CodexEnvPolicy()
+        base = {"AUTOSKILLIT_AGENT_BACKEND": "codex", "PATH": "/usr/bin"}
+        result = policy.build_env(base)
+        assert "AUTOSKILLIT_AGENT_BACKEND" not in result
+
+    def test_agent_backend_passes_through_extras(self) -> None:
+        policy = CodexEnvPolicy()
+        base = {"PATH": "/usr/bin"}
+        result = policy.build_env(base, extras={"AUTOSKILLIT_AGENT_BACKEND": "codex"})
+        assert result["AUTOSKILLIT_AGENT_BACKEND"] == "codex"
+
+    def test_agent_backend_not_in_private_env_vars(self) -> None:
+        assert AGENT_BACKEND_ENV_VAR not in AUTOSKILLIT_PRIVATE_ENV_VARS

@@ -473,7 +473,10 @@ class CodexBackend:
         if initial_prompt is not None:
             cmd.append(initial_prompt)
         base_env = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
-        env = CodexEnvPolicy().build_env(base_env, extras=env_extras, required=required_env)
+        merged_extras: dict[str, str] = dict(env_extras) if env_extras else {}
+        if add_dirs:
+            merged_extras.setdefault("CODEX_HOME", str(add_dirs[0]))
+        env = CodexEnvPolicy().build_env(base_env, extras=merged_extras, required=required_env)
         return CmdSpec(cmd=tuple(cmd), env=env)
 
     def build_resume_cmd(

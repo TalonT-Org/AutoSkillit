@@ -56,13 +56,23 @@ def test_codex_init_session_copies_config_toml(make_session_skill_manager, codex
     assert copied.read_text() == "[codex]\nmodel = 'o3'\n"
 
 
-def test_codex_init_session_copies_auth_json(make_session_skill_manager, codex_env) -> None:
+def test_codex_init_session_symlinks_auth_json(make_session_skill_manager, codex_env) -> None:
     (codex_env.codex_dir / "auth.json").write_text('{"token": "test"}')
     mgr = make_session_skill_manager()
     session_path = mgr.init_session("sid", cook_session=True, backend=codex_env.backend)
-    copied = session_path / "auth.json"
-    assert copied.exists()
-    assert copied.read_text() == '{"token": "test"}'
+    auth = session_path / "auth.json"
+    assert auth.is_symlink()
+    assert auth.resolve() == (codex_env.codex_dir / "auth.json").resolve()
+    assert auth.read_text() == '{"token": "test"}'
+
+
+def test_codex_init_session_auth_json_symlink_target_absent(
+    make_session_skill_manager, codex_env
+) -> None:
+    mgr = make_session_skill_manager()
+    session_path = mgr.init_session("sid", cook_session=True, backend=codex_env.backend)
+    assert not (session_path / "auth.json").exists()
+    assert not (session_path / "auth.json").is_symlink()
 
 
 def test_codex_init_session_copies_env_if_present(make_session_skill_manager, codex_env) -> None:
@@ -86,6 +96,18 @@ def test_codex_init_session_auth_json_missing_no_crash(
     mgr = make_session_skill_manager()
     session_path = mgr.init_session("sid", cook_session=True, backend=codex_env.backend)
     assert not (session_path / "auth.json").exists()
+
+
+def test_codex_init_session_creates_sessions_symlink(
+    make_session_skill_manager, codex_env
+) -> None:
+    mgr = make_session_skill_manager()
+    session_path = mgr.init_session("sid", cook_session=True, backend=codex_env.backend)
+    sessions_link = session_path / "sessions"
+    assert sessions_link.is_symlink()
+    target = sessions_link.resolve()
+    assert target.is_dir()
+    assert str(target).endswith("codex-sessions")
 
 
 def test_codex_init_session_config_toml_missing_raises(

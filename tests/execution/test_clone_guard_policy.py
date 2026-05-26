@@ -40,6 +40,7 @@ def test_policy_for_clone_commit_skill_readonly_success():
         is_worktree=False,
     )
     assert policy.should_fire(success=True) is False
+    assert policy.should_fire(success=False) is True
 
 
 def test_policy_for_normal_write_skill():
@@ -51,6 +52,7 @@ def test_policy_for_normal_write_skill():
     )
     assert policy.should_fire(success=True) is True
     assert policy.should_fire(success=False) is True
+    assert policy.selective_revert is True
 
 
 def test_policy_for_worktree_skill():

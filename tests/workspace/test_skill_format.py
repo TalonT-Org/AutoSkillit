@@ -35,19 +35,19 @@ class TestValidateSkillFrontmatter:
         result = validate_skill_frontmatter(
             {"name": "MySkill", "description": "A skill"}, "MySkill"
         )
-        assert any("^[a-z0-9-]+$" in err for err in result)
+        assert any("lowercase" in err for err in result)
 
     def test_name_spaces_rejected(self) -> None:
         result = validate_skill_frontmatter(
             {"name": "my skill", "description": "A skill"}, "my skill"
         )
-        assert any("^[a-z0-9-]+$" in err for err in result)
+        assert any("lowercase" in err for err in result)
 
     def test_name_underscore_rejected(self) -> None:
         result = validate_skill_frontmatter(
             {"name": "my_skill", "description": "A skill"}, "my_skill"
         )
-        assert any("^[a-z0-9-]+$" in err for err in result)
+        assert any("lowercase" in err for err in result)
 
     def test_name_too_long_rejected(self) -> None:
         long_name = "a" * 65

@@ -15,9 +15,14 @@ from autoskillit.workspace.skill_format import (
 )
 from tests.contracts.conftest import _all_skill_mds
 
+_SKILL_MDS = _all_skill_mds()
+
 
 class TestSkillFormatCompliance:
-    @pytest.mark.parametrize("skill_name,content", _all_skill_mds())
+    def test_skill_mds_collection_nonempty(self) -> None:
+        assert _SKILL_MDS, "No bundled SKILL.md files found — check package installation"
+
+    @pytest.mark.parametrize("skill_name,content", _SKILL_MDS)
     def test_skill_md_has_valid_frontmatter(self, skill_name: str, content: str) -> None:
         fm = parse_frontmatter_content(content)
         errors = validate_skill_frontmatter(fm, skill_name)

@@ -34,7 +34,9 @@ logger = get_logger(__name__)
 
 WORKTREE_SKILLS: frozenset[str] = frozenset(
     {
+        "implement-worktree",
         "implement-worktree-no-merge",
+        "implement-experiment",
         "retry-worktree",
     }
 )

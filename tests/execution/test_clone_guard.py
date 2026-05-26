@@ -86,6 +86,12 @@ class TestIsWorktreeSkillPositive:
             "/path/to/skills_extended/implement-worktree-no-merge/SKILL.md some args"
         )
 
+    def test_implement_worktree(self):
+        assert is_worktree_skill("implement-worktree")
+
+    def test_implement_experiment(self):
+        assert is_worktree_skill("implement-experiment")
+
 
 # ---------------------------------------------------------------------------
 # T2: is_worktree_skill negative cases
@@ -99,9 +105,6 @@ class TestIsWorktreeSkillNegative:
 
     def test_open_pr(self):
         assert not is_worktree_skill("/autoskillit:open-pr")
-
-    def test_implement_worktree_without_no_merge(self):
-        assert not is_worktree_skill("implement-worktree")
 
 
 # ---------------------------------------------------------------------------

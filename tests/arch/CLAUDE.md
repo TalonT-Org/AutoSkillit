@@ -34,6 +34,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_gfm_rendering_guard.py` | Architectural guard: GFM table rendering must route through _render_gfm_table |
 | `test_headless_split.py` | Structural guards for the test_headless.py split (P1-F01 audit fix) |
 | `test_skill_result_construction_guard.py` | AST guard: every SkillResult() construction must include kill_reason keyword arg |
+| `test_skill_registries.py` | Architectural tests for skill registry completeness |
 | `test_import_layer_labels.py` | Regression guard: no bare L-number labels in import-layer contexts |
 | `test_import_linter_contracts.py` | Tests verifying import-linter contract documentation (REQ-ARCH-007) |
 | `test_import_paths.py` | Structural import-path compliance tests (REQ-IMP-001, REQ-IMP-002) |

@@ -810,6 +810,7 @@ def detect_zero_changes(worktree_path: str, base_branch: str) -> dict[str, str]:
         capture_output=True,
         text=True,
         check=True,
+        timeout=60,
     )
     count = int(result.stdout.strip())
     return {"has_changes": "true" if count > 0 else "false", "commit_count": str(count)}

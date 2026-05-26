@@ -375,6 +375,7 @@ class TestRegisterAllBackendBranching:
         import autoskillit.core.paths as _core_paths
         from autoskillit.cli._init_helpers import _register_all
 
+        monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
         self._write_config(tmp_path, "codex")
 
         monkeypatch.setattr(_hooks_mod, "sweep_all_scopes_for_orphans", lambda p: None)

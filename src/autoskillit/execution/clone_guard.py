@@ -34,7 +34,9 @@ logger = get_logger(__name__)
 
 WORKTREE_SKILLS: frozenset[str] = frozenset(
     {
+        "implement-worktree",
         "implement-worktree-no-merge",
+        "implement-experiment",
         "retry-worktree",
     }
 )
@@ -66,6 +68,40 @@ class ContaminationReport:
     uncommitted_files: list[str]
     direct_commits: bool
     reverted: bool
+
+
+@dataclass(frozen=True, slots=True)
+class CloneGuardPolicy:
+    """Structured session permission policy for the clone guard."""
+
+    _fire_on_success: bool
+    selective_revert: bool
+    should_snapshot: bool
+
+    def should_fire(self, success: bool) -> bool:
+        if not success:
+            return True
+        return self._fire_on_success
+
+
+def build_clone_guard_policy(
+    *,
+    readonly_skill: bool,
+    has_write_scope: bool,
+    is_clone_commit: bool,
+    is_worktree: bool,
+) -> CloneGuardPolicy:
+    """Build a CloneGuardPolicy from session properties."""
+    fire_on_success = (
+        not is_clone_commit and not is_worktree and (readonly_skill or has_write_scope)
+    )
+    selective_revert = readonly_skill or has_write_scope
+    should_snapshot = is_worktree or readonly_skill or has_write_scope
+    return CloneGuardPolicy(
+        _fire_on_success=fire_on_success,
+        selective_revert=selective_revert,
+        should_snapshot=should_snapshot,
+    )
 
 
 def is_worktree_skill(skill_command: str) -> bool:
@@ -229,14 +265,13 @@ async def check_and_revert_clone_contamination(
     audit: AuditLog | None,
     skill_command: str = "",
     *,
-    readonly_skill: bool = False,
+    policy: CloneGuardPolicy,
     exclude_prefix: str = ".autoskillit/",
 ) -> tuple[SkillResult, bool]:
     """Top-level guard: detect and revert clone contamination.
 
-    For worktree skills, fires only on failure. For read-only or write-scoped
-    skills (``readonly_skill=True``), fires on both success and failure to catch
-    any stray writes that bypassed import layer 1 (IL-1).
+    Uses *policy* to decide whether to fire based on skill success/failure
+    and how to revert (selective vs full reset).
 
     *exclude_prefix* is passed to ``revert_contamination`` when doing a selective
     revert — files under this prefix are preserved (not reverted).
@@ -246,9 +281,7 @@ async def check_and_revert_clone_contamination(
     """
     if snapshot is None:
         return skill_result, False
-    if skill_result.success and not readonly_skill:
-        return skill_result, False
-    if skill_result.success and is_clone_commit_skill(skill_command):
+    if not policy.should_fire(skill_result.success):
         return skill_result, False
     if skill_result.worktree_path is not None:
         return skill_result, False
@@ -258,8 +291,22 @@ async def check_and_revert_clone_contamination(
         return skill_result, False
 
     report = await revert_contamination(
-        snapshot, report, cwd, runner, selective=readonly_skill, exclude_prefix=exclude_prefix
+        snapshot,
+        report,
+        cwd,
+        runner,
+        selective=policy.selective_revert,
+        exclude_prefix=exclude_prefix,
     )
+
+    if report.reverted:
+        skill_result = dataclasses.replace(
+            skill_result,
+            success=False,
+            subtype="clone_contamination",
+            needs_retry=True,
+            retry_reason=RetryReason.CLONE_CONTAMINATION,
+        )
 
     if audit is not None:
         audit.record_failure(

@@ -14,6 +14,7 @@ import pytest
 
 from autoskillit.core.types import RetryReason, SkillResult, SubprocessResult, TerminationReason
 from autoskillit.execution.clone_guard import (
+    build_clone_guard_policy,
     check_and_revert_clone_contamination,
     snapshot_clone_state,
 )
@@ -111,7 +112,12 @@ async def test_planner_session_source_write_detected_and_reverted(git_repo: Path
         runner,  # type: ignore[arg-type]
         audit,
         skill_command="/autoskillit:planner-elaborate-wps",
-        readonly_skill=True,
+        policy=build_clone_guard_policy(
+            readonly_skill=True,
+            has_write_scope=True,
+            is_clone_commit=False,
+            is_worktree=False,
+        ),
         exclude_prefix=".autoskillit/",
     )
 

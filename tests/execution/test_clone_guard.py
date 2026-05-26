@@ -15,6 +15,7 @@ from autoskillit.core.types import (
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.clone_guard import (
     CloneSnapshot,
+    build_clone_guard_policy,
     check_and_revert_clone_contamination,
     detect_contamination,
     is_worktree_skill,
@@ -26,6 +27,13 @@ from autoskillit.pipeline.audit import DefaultAuditLog
 from tests.fakes import MockSubprocessRunner
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+_DEFAULT_POLICY = build_clone_guard_policy(
+    readonly_skill=False,
+    has_write_scope=False,
+    is_clone_commit=False,
+    is_worktree=False,
+)
 
 
 def _git_result(stdout: str = "", returncode: int = 0) -> SubprocessResult:
@@ -78,6 +86,12 @@ class TestIsWorktreeSkillPositive:
             "/path/to/skills_extended/implement-worktree-no-merge/SKILL.md some args"
         )
 
+    def test_implement_worktree(self):
+        assert is_worktree_skill("implement-worktree")
+
+    def test_implement_experiment(self):
+        assert is_worktree_skill("implement-experiment")
+
 
 # ---------------------------------------------------------------------------
 # T2: is_worktree_skill negative cases
@@ -91,9 +105,6 @@ class TestIsWorktreeSkillNegative:
 
     def test_open_pr(self):
         assert not is_worktree_skill("/autoskillit:open-pr")
-
-    def test_implement_worktree_without_no_merge(self):
-        assert not is_worktree_skill("implement-worktree")
 
 
 # ---------------------------------------------------------------------------
@@ -281,6 +292,12 @@ async def test_guard_full_flow_contamination_detected(tmp_path):
         runner,
         audit,
         skill_command="/autoskillit:implement-worktree-no-merge plan.md",
+        policy=build_clone_guard_policy(
+            readonly_skill=False,
+            has_write_scope=False,
+            is_clone_commit=False,
+            is_worktree=True,
+        ),
     )
     assert reverted
     assert len(runner.call_args_list) == 4  # 2 detect + 2 revert
@@ -301,7 +318,12 @@ async def test_guard_skipped_when_success(tmp_path):
     skill_result = _make_skill_result(success=True, worktree_path=None)
 
     result, reverted = await check_and_revert_clone_contamination(
-        snapshot, skill_result, str(tmp_path), runner, None
+        snapshot,
+        skill_result,
+        str(tmp_path),
+        runner,
+        None,
+        policy=_DEFAULT_POLICY,
     )
     assert not reverted
     assert len(runner.call_args_list) == 0
@@ -317,7 +339,12 @@ async def test_guard_skipped_when_worktree_created(tmp_path):
     skill_result = _make_skill_result(success=False, worktree_path="/some/worktree")
 
     result, reverted = await check_and_revert_clone_contamination(
-        snapshot, skill_result, str(tmp_path), runner, None
+        snapshot,
+        skill_result,
+        str(tmp_path),
+        runner,
+        None,
+        policy=_DEFAULT_POLICY,
     )
     assert not reverted
     assert len(runner.call_args_list) == 0
@@ -332,7 +359,12 @@ async def test_guard_skipped_when_no_snapshot(tmp_path):
     skill_result = _make_skill_result(success=False, worktree_path=None)
 
     result, reverted = await check_and_revert_clone_contamination(
-        None, skill_result, str(tmp_path), runner, None
+        None,
+        skill_result,
+        str(tmp_path),
+        runner,
+        None,
+        policy=_DEFAULT_POLICY,
     )
     assert not reverted
     assert len(runner.call_args_list) == 0
@@ -395,6 +427,12 @@ async def test_audit_log_records_contamination(tmp_path):
         runner,
         audit,
         skill_command="/autoskillit:implement-worktree-no-merge plan.md",
+        policy=build_clone_guard_policy(
+            readonly_skill=False,
+            has_write_scope=False,
+            is_clone_commit=False,
+            is_worktree=True,
+        ),
     )
 
     records = audit.get_report()
@@ -429,10 +467,17 @@ async def test_readonly_check_fires_on_success(tmp_path):
         runner,
         None,
         skill_command="/autoskillit:investigate foo",
-        readonly_skill=True,
+        policy=build_clone_guard_policy(
+            readonly_skill=True,
+            has_write_scope=False,
+            is_clone_commit=False,
+            is_worktree=False,
+        ),
     )
     assert reverted
-    assert result is skill_result
+    assert result is not skill_result
+    assert result.success is False
+    assert result.subtype == "clone_contamination"
 
 
 # ---------------------------------------------------------------------------
@@ -531,7 +576,12 @@ async def test_contamination_check_fires_on_success_when_write_scoped(tmp_path):
         str(tmp_path),
         runner,
         audit=None,
-        readonly_skill=True,
+        policy=build_clone_guard_policy(
+            readonly_skill=True,
+            has_write_scope=True,
+            is_clone_commit=False,
+            is_worktree=False,
+        ),
     )
     assert reverted
 
@@ -574,6 +624,105 @@ async def test_snapshot_not_taken_without_write_scope_or_readonly(tmp_path):
         str(tmp_path),
         MockSubprocessRunner(),
         audit=None,
-        readonly_skill=False,
+        policy=_DEFAULT_POLICY,
     )
     assert not reverted
+
+
+# ---------------------------------------------------------------------------
+# Test 6.1: result mutated on contamination revert
+# ---------------------------------------------------------------------------
+@pytest.mark.anyio
+async def test_result_mutated_on_contamination_revert(tmp_path):
+    """When contamination is reverted, SkillResult should be mutated to indicate failure."""
+    runner = MockSubprocessRunner()
+    runner.push(_git_result(stdout="def456\n"))  # detect: rev-parse HEAD (moved)
+    runner.push(_git_result(stdout=" M file.py\n"))  # detect: status (dirty)
+    runner.push(_git_result())  # revert: checkout -- .
+    runner.push(_git_result())  # revert: clean -fd
+
+    snapshot = CloneSnapshot(head_sha="abc123")
+    skill_result = _make_skill_result(success=True, worktree_path=None)
+
+    result, reverted = await check_and_revert_clone_contamination(
+        snapshot,
+        skill_result,
+        str(tmp_path),
+        runner,
+        None,
+        skill_command="/autoskillit:investigate foo",
+        policy=build_clone_guard_policy(
+            readonly_skill=True,
+            has_write_scope=False,
+            is_clone_commit=False,
+            is_worktree=False,
+        ),
+    )
+    assert reverted
+    assert result is not skill_result
+    assert result.success is False
+    assert result.subtype == "clone_contamination"
+
+
+# ---------------------------------------------------------------------------
+# Test 6.2: result not mutated when no contamination
+# ---------------------------------------------------------------------------
+@pytest.mark.anyio
+async def test_result_not_mutated_when_no_contamination(tmp_path):
+    """When no contamination is found, SkillResult is returned unchanged."""
+    runner = MockSubprocessRunner()
+    runner.push(_git_result(stdout="abc123\n"))  # detect: same HEAD
+    runner.push(_git_result(stdout=""))  # detect: clean status
+
+    snapshot = CloneSnapshot(head_sha="abc123")
+    skill_result = _make_skill_result(success=True, worktree_path=None)
+
+    result, reverted = await check_and_revert_clone_contamination(
+        snapshot,
+        skill_result,
+        str(tmp_path),
+        runner,
+        None,
+        skill_command="/autoskillit:investigate foo",
+        policy=build_clone_guard_policy(
+            readonly_skill=True,
+            has_write_scope=False,
+            is_clone_commit=False,
+            is_worktree=False,
+        ),
+    )
+    assert not reverted
+    assert result is skill_result
+
+
+# ---------------------------------------------------------------------------
+# Test 6.3: needs_retry set on revert
+# ---------------------------------------------------------------------------
+@pytest.mark.anyio
+async def test_result_needs_retry_set_on_revert(tmp_path):
+    """When contamination is reverted, needs_retry and retry_reason are set."""
+    runner = MockSubprocessRunner()
+    runner.push(_git_result(stdout="def456\n"))  # detect: rev-parse HEAD (moved)
+    runner.push(_git_result(stdout=" M file.py\n"))  # detect: status (dirty)
+    runner.push(_git_result())  # revert: reset --hard
+    runner.push(_git_result())  # revert: clean -fd
+
+    snapshot = CloneSnapshot(head_sha="abc123")
+    skill_result = _make_skill_result(success=False, worktree_path=None)
+
+    result, reverted = await check_and_revert_clone_contamination(
+        snapshot,
+        skill_result,
+        str(tmp_path),
+        runner,
+        None,
+        policy=build_clone_guard_policy(
+            readonly_skill=False,
+            has_write_scope=False,
+            is_clone_commit=False,
+            is_worktree=True,
+        ),
+    )
+    assert reverted
+    assert result.needs_retry is True
+    assert result.retry_reason == RetryReason.CLONE_CONTAMINATION

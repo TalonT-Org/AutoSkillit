@@ -9,6 +9,7 @@ import pytest
 
 from autoskillit.core import RetryReason, SkillResult
 from autoskillit.pipeline.gate import DefaultGateState
+from autoskillit.server.tools.tools_issue_composite import claim_and_resolve_issue
 from autoskillit.server.tools.tools_issue_headless import (
     _build_enrich_skill_command,
     _build_headless_error_response,
@@ -394,6 +395,100 @@ async def test_release_issue_stages_when_different_branch(
     assert result["success"] is True
     assert result["staged"] is True
     assert result["staged_label"] == "staged"
+
+
+# ---------------------------------------------------------------------------
+# State guard tests (1A)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_claim_and_resolve_rejects_closed_issue(tool_ctx_kitchen_open) -> None:
+    """State guard: claim_and_resolve_issue returns claimed=False for closed issues."""
+    tool_ctx_kitchen_open.github_client = AsyncMock()
+    tool_ctx_kitchen_open.github_client.fetch_title = AsyncMock(
+        return_value={"success": True, "number": 42, "title": "Fix bug", "slug": "fix-bug"}
+    )
+    tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(
+        return_value={"success": True, "state": "closed", "labels": []}
+    )
+
+    result = json.loads(await claim_and_resolve_issue("https://github.com/owner/repo/issues/42"))
+    assert result["success"] is True
+    assert result["claimed"] is False
+    assert result["reason"] == "issue is closed"
+
+
+@pytest.mark.anyio
+async def test_claim_issue_rejects_closed_issue(tool_ctx_kitchen_open) -> None:
+    """State guard: claim_issue returns claimed=False for closed issues."""
+    tool_ctx_kitchen_open.github_client = AsyncMock()
+    tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(
+        return_value={"success": True, "state": "closed", "labels": []}
+    )
+
+    result = json.loads(await claim_issue("https://github.com/owner/repo/issues/42"))
+    assert result["success"] is True
+    assert result["claimed"] is False
+    assert result["reason"] == "issue is closed"
+
+
+@pytest.mark.anyio
+async def test_claim_and_resolve_accepts_open_issue(tool_ctx_kitchen_open) -> None:
+    """Regression guard: claim_and_resolve_issue proceeds normally for open issues."""
+    tool_ctx_kitchen_open.github_client = AsyncMock()
+    tool_ctx_kitchen_open.github_client.fetch_title = AsyncMock(
+        return_value={"success": True, "number": 42, "title": "Fix bug", "slug": "fix-bug"}
+    )
+    tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(
+        return_value={"success": True, "state": "open", "labels": []}
+    )
+    tool_ctx_kitchen_open.github_client.ensure_label = AsyncMock(return_value={"success": True})
+    tool_ctx_kitchen_open.github_client.swap_labels = AsyncMock(return_value={"success": True})
+
+    result = json.loads(await claim_and_resolve_issue("https://github.com/owner/repo/issues/42"))
+    assert result["success"] is True
+    assert result["claimed"] is True
+
+
+# ---------------------------------------------------------------------------
+# release_issue close_issue flag tests (1E)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_release_issue_with_close_flag_closes_issue(tool_ctx_kitchen_open) -> None:
+    """close_issue='true' causes release_issue to call github_client.close_issue."""
+    tool_ctx_kitchen_open.github_client = AsyncMock()
+    tool_ctx_kitchen_open.github_client.swap_labels = AsyncMock(return_value={"success": True})
+    tool_ctx_kitchen_open.github_client.close_issue = AsyncMock(return_value={"success": True})
+
+    result = json.loads(
+        await release_issue(
+            "https://github.com/owner/repo/issues/42",
+            close_issue="true",
+        )
+    )
+    assert result["success"] is True
+    tool_ctx_kitchen_open.github_client.close_issue.assert_called_once_with("owner", "repo", 42)
+
+
+@pytest.mark.anyio
+async def test_release_issue_without_close_flag_does_not_close(tool_ctx_kitchen_open) -> None:
+    """Regression guard: release_issue without close_issue does not call close_issue."""
+    tool_ctx_kitchen_open.github_client = AsyncMock()
+    tool_ctx_kitchen_open.github_client.ensure_label = AsyncMock(return_value={"success": True})
+    tool_ctx_kitchen_open.github_client.swap_labels = AsyncMock(return_value={"success": True})
+    promotion_target = tool_ctx_kitchen_open.config.branching.promotion_target
+
+    result = json.loads(
+        await release_issue(
+            "https://github.com/owner/repo/issues/42",
+            target_branch=promotion_target,
+        )
+    )
+    assert result["success"] is True
+    tool_ctx_kitchen_open.github_client.close_issue.assert_not_called()
 
 
 def _make_mock_tool_ctx_for_project_dir(project_dir):

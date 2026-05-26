@@ -68,6 +68,40 @@ class ContaminationReport:
     reverted: bool
 
 
+@dataclass(frozen=True, slots=True)
+class CloneGuardPolicy:
+    """Structured session permission policy for the clone guard."""
+
+    _fire_on_success: bool
+    selective_revert: bool
+    should_snapshot: bool
+
+    def should_fire(self, success: bool) -> bool:
+        if not success:
+            return True
+        return self._fire_on_success
+
+
+def build_clone_guard_policy(
+    *,
+    readonly_skill: bool,
+    has_write_scope: bool,
+    is_clone_commit: bool,
+    is_worktree: bool,
+) -> CloneGuardPolicy:
+    """Build a CloneGuardPolicy from session properties."""
+    fire_on_success = (
+        not is_clone_commit and not is_worktree and (readonly_skill or has_write_scope)
+    )
+    selective_revert = readonly_skill or has_write_scope
+    should_snapshot = is_worktree or readonly_skill or has_write_scope
+    return CloneGuardPolicy(
+        _fire_on_success=fire_on_success,
+        selective_revert=selective_revert,
+        should_snapshot=should_snapshot,
+    )
+
+
 def is_worktree_skill(skill_command: str) -> bool:
     """Return True if skill_command invokes a worktree-creating skill."""
     return any(name in skill_command for name in WORKTREE_SKILLS)

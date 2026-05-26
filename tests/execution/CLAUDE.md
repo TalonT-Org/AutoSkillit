@@ -33,6 +33,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_github_api_tracking_http.py` | GitHub API tracking HTTP tests |
 | `test_github_headers.py` | Tests for the shared github_headers helper and its adoption by all three classes |
 | `test_headless_add_dirs.py` | Tests for run_headless_core multi-path --add-dir support (T-OVR-012..013) |
+| `test_headless_backend_mixing.py` | Integration tests for per-step backend mixing — Codex ctx.backend bypassed when backend_override='claude-code', CmdSpec env verification, DefaultHeadlessExecutor end-to-end |
 | `test_headless_backend_resolution.py` | Tests for _resolve_pty_mode and _resolve_session_log_dir capability-driven helpers |
 | `test_headless_backend_override.py` | Tests verifying run_headless_core delegates build_skill_session_cmd, env policy, and stream_parser to the backend resolved from backend_override |
 | `test_headless_core.py` | Tests for headless_runner.py extracted helpers |

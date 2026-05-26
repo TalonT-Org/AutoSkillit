@@ -24,10 +24,11 @@ Workspace cleanup, clone lifecycle, session skills, and worktree tests.
 | `test_session_skills_features.py` | Phase 2 tests: session_skills module — feature-gate skill filtering |
 | `test_session_skills_filtering.py` | Phase 2 tests: session_skills module — subset/disabled-category and pack filtering |
 | `test_session_skills_provider.py` | Phase 2 tests: session_skills module — provider and core manager |
+| `test_session_skills_codex.py` | Tests for Codex-specific session skill layout, config file copying, and backend regression guard |
 | `test_skill_content_substitution.py` | Tests for SkillsDirectoryProvider.get_skill_content placeholder substitution |
 | `test_skills.py` | Tests for skill resolution hierarchy |
 | `test_worktree.py` | Worktree tests |
 
 ## Architecture Notes
 
-`conftest.py` provides shared fixtures for workspace tests. The `test_clone_*.py` files are split by concern from the original test_clone.py: core clone_repo behavior, push_to_remote, remote resolution/probing, and detect helpers. The `test_session_skills_*.py` files are split by concern across five files testing different aspects of the `session_skills` module.
+`conftest.py` provides shared fixtures for workspace tests. The `test_clone_*.py` files are split by concern from the original test_clone.py: core clone_repo behavior, push_to_remote, remote resolution/probing, and detect helpers. The `test_session_skills_*.py` files are split by concern across six files testing different aspects of the `session_skills` module.

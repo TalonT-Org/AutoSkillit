@@ -7,6 +7,11 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.workspace.session_skills import (
+    DefaultSessionSkillManager,
+    SkillsDirectoryProvider,
+)
+
 
 @pytest.fixture
 def bare_remote(tmp_path: Path) -> Path:
@@ -93,3 +98,14 @@ def git_repo(tmp_path: Path) -> Path:
         capture_output=True,
     )
     return repo
+
+
+@pytest.fixture
+def make_session_skill_manager(tmp_path: Path):
+    """Factory fixture returning a DefaultSessionSkillManager."""
+
+    def _factory(*, ephemeral_root: Path | None = None) -> DefaultSessionSkillManager:
+        provider = SkillsDirectoryProvider()
+        return DefaultSessionSkillManager(provider, ephemeral_root=ephemeral_root or tmp_path)
+
+    return _factory

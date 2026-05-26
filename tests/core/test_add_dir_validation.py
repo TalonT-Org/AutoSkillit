@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
 from autoskillit.core import ValidatedAddDir
-from autoskillit.core.claude_conventions import LayoutError, validate_add_dir
+from autoskillit.core.claude_conventions import (
+    LayoutError,
+    validate_add_dir,
+    validate_project_local_skill_dir,
+)
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
@@ -58,3 +63,49 @@ class TestValidateAddDir:
         skills_ext = pkg_root() / "skills_extended"
         with pytest.raises(LayoutError):
             validate_add_dir(skills_ext)
+
+
+class TestValidateProjectLocalSkillDir:
+    """validate_project_local_skill_dir: None for codex, delegates to validate_add_dir for claude."""
+
+    @staticmethod
+    def _make_backend(name: str) -> MagicMock:
+        b = MagicMock()
+        b.name = name
+        return b
+
+    def test_claude_backend_claude_layout_returns_validated_add_dir(self, tmp_path: Path) -> None:
+        skill_dir = tmp_path / ".claude" / "skills" / "test-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("# Test")
+        result = validate_project_local_skill_dir(tmp_path, self._make_backend("claude-code"))
+        assert isinstance(result, ValidatedAddDir)
+
+    def test_codex_backend_returns_none(self, tmp_path: Path) -> None:
+        skill_dir = tmp_path / ".claude" / "skills" / "test-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("# Test")
+        result = validate_project_local_skill_dir(tmp_path, self._make_backend("codex"))
+        assert result is None
+
+    def test_claude_backend_codex_layout_returns_none(self, tmp_path: Path) -> None:
+        codex_skill = tmp_path / ".codex" / "skills" / "test-skill"
+        codex_skill.mkdir(parents=True)
+        (codex_skill / "SKILL.md").write_text("# Test")
+        result = validate_project_local_skill_dir(tmp_path, self._make_backend("claude-code"))
+        assert result is None
+
+    def test_codex_backend_claude_layout_returns_none(self, tmp_path: Path) -> None:
+        skill_dir = tmp_path / ".claude" / "skills" / "test-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("# Test")
+        result = validate_project_local_skill_dir(tmp_path, self._make_backend("codex"))
+        assert result is None
+
+    def test_empty_dir_returns_none_claude(self, tmp_path: Path) -> None:
+        result = validate_project_local_skill_dir(tmp_path, self._make_backend("claude-code"))
+        assert result is None
+
+    def test_empty_dir_returns_none_codex(self, tmp_path: Path) -> None:
+        result = validate_project_local_skill_dir(tmp_path, self._make_backend("codex"))
+        assert result is None

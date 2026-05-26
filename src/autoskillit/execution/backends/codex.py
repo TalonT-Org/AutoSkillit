@@ -21,6 +21,7 @@ from autoskillit.core import (
     SESSION_TYPE_SKILL,
     BackendCapabilities,
     BareResume,
+    ClaudeDirectoryConventions,
     CmdSpec,
     NamedResume,
     NoResume,
@@ -581,3 +582,30 @@ class CodexBackend:
             base.update(env_extras)
         env = self.env_policy().build_env(base)
         return CmdSpec(cmd=tuple(cmd), env=env)
+
+    def validate_session_layout(self, session_dir: Path) -> list[str]:
+        errors: list[str] = []
+
+        skills_dir = session_dir / ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR
+        if not skills_dir.is_dir():
+            errors.append(f"skills directory does not exist: {skills_dir}")
+        elif not any(skills_dir.iterdir()):
+            errors.append(f"skills directory is empty: {skills_dir}")
+
+        config_path = session_dir / "config.toml"
+        if not config_path.is_file():
+            errors.append(f"config.toml does not exist: {config_path}")
+        else:
+            toml_content = config_path.read_text(encoding="utf-8")
+            if "[mcp_servers.autoskillit]" not in toml_content:
+                errors.append("config.toml missing [mcp_servers.autoskillit] section")
+
+        auth_path = session_dir / "auth.json"
+        if auth_path.exists() and not auth_path.is_symlink():
+            errors.append(f"auth.json must be a symlink, not a regular file: {auth_path}")
+
+        sessions_path = session_dir / "sessions"
+        if sessions_path.exists() and not sessions_path.is_symlink():
+            errors.append(f"sessions/ must be a symlink, not a regular directory: {sessions_path}")
+
+        return errors

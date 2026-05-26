@@ -43,6 +43,10 @@ from autoskillit.workspace.session_skills import (
     SkillsDirectoryProvider,
     resolve_ephemeral_root,
 )
+from autoskillit.workspace.skill_format import (
+    parse_frontmatter_content,
+    validate_skill_frontmatter,
+)
 from autoskillit.workspace.skills import (
     DefaultSkillResolver,
     bundled_skills_dir,
@@ -92,4 +96,6 @@ __all__ = [
     "remove_clone",
     "resolve_ephemeral_root",
     "WORKTREES_DIR",
+    "parse_frontmatter_content",
+    "validate_skill_frontmatter",
 ]

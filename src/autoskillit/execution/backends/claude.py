@@ -18,6 +18,7 @@ from autoskillit.core import (
     BackendCapabilities,
     BackendEventKind,
     BareResume,
+    ClaudeDirectoryConventions,
     ClaudeEventData,
     ClaudeFlags,
     CmdSpec,
@@ -35,6 +36,7 @@ from autoskillit.core import (
     build_agent_env,
     extract_skill_name,
     fast_loads,
+    pkg_root,
 )
 from autoskillit.execution.backends._claude_prompt import (
     _HEADLESS_ENV_HARDENING,
@@ -646,3 +648,29 @@ class ClaudeCodeBackend:
             cmd += [ClaudeFlags.RESUME, resume_session_id]
 
         return CmdSpec(cmd=tuple(cmd), env=spec.env)
+
+    def validate_session_layout(self, session_dir: Path) -> list[str]:
+        errors: list[str] = []
+        skills_dir = session_dir / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
+        if not skills_dir.is_dir():
+            errors.append(f"skills directory does not exist: {skills_dir}")
+        else:
+            skill_dirs = [d for d in skills_dir.iterdir() if d.is_dir()]
+            if not skill_dirs:
+                errors.append(f"skills directory is empty: {skills_dir}")
+
+            bundled_dir = pkg_root() / "skills"
+            if bundled_dir.is_dir():
+                bundled_names = {
+                    d.name
+                    for d in bundled_dir.iterdir()
+                    if d.is_dir() and (d / "SKILL.md").is_file()
+                }
+                for sd in skill_dirs:
+                    if sd.name in bundled_names:
+                        errors.append(
+                            f"BUNDLED skill {sd.name!r} should not be in ephemeral dir "
+                            f"(served via --plugin-dir)"
+                        )
+
+        return errors

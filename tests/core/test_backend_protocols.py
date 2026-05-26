@@ -138,6 +138,8 @@ def test_stub_class_satisfies_coding_agent_backend():
             required_env: frozenset[str] | None = None,
         ) -> CmdSpec: ...
 
+        def validate_session_layout(self, session_dir: Path) -> list[str]: ...
+
     assert isinstance(_Backend(), CodingAgentBackend)
 
 

@@ -41,6 +41,8 @@ def test_workspace_package_exports() -> None:
         SkillResolver,
         bundled_skills_dir,
         bundled_skills_extended_dir,
+        parse_frontmatter_content,
+        validate_skill_frontmatter,
     )
 
 

@@ -1,5 +1,6 @@
 ---
 name: troubleshoot-experiment
+description: Read session logs and process traces for a failed research pipeline step, classify failure, and emit is_fixable signal.
 categories: [research]
 hooks:
   PreToolUse:

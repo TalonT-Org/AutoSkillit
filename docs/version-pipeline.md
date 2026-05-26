@@ -19,7 +19,7 @@ Pre-commit enforcement: `sync_versions.py --check` (exits 1 if any artifact is o
 - **Action:** `MAJOR.MINOR.(PATCH+1)` on `develop`
 - **Calls `sync_versions.py`:** yes
 - **Staged files:** `pyproject.toml`, `src/autoskillit/.claude-plugin/plugin.json`, `uv.lock`
-- **Concurrency:** serialized (`cancel-in-progress: false`)
+- **Concurrency:** cancel-in-progress (`cancel-in-progress: true`) — safe because each run independently reads the current version
 
 ### `version-bump.yml`
 
@@ -29,6 +29,7 @@ Pre-commit enforcement: `sync_versions.py --check` (exits 1 if any artifact is o
   - `develop` → `MAJOR.(MINOR+1).1` (forward-bumped to stay ahead of main)
 - **Calls `sync_versions.py`:** yes (on both `main` and `develop` in sequence)
 - **Guard:** rejects if `new_develop <= old_develop` (downgrade protection)
+- **Concurrency:** serialized (`cancel-in-progress: false`) — must complete both main and develop pushes atomically
 
 ### `release.yml`
 

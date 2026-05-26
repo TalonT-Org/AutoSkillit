@@ -8,17 +8,17 @@ The correct input parameter for pinning the uv version is `version`, not `uv-ver
 
 ```yaml
 # CORRECT — SHA-pinned with version comment
-- uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+- uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
   with:
     version: "0.9.21"
 
 # WRONG — floating tag, vulnerable to tag mutation
-- uses: astral-sh/setup-uv@v7
+- uses: astral-sh/setup-uv@v8
   with:
     version: "0.9.21"
 
 # WRONG — silently ignored, installs latest uv instead of pinned version
-- uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+- uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
   with:
     uv-version: "0.9.21"
 ```
@@ -31,7 +31,7 @@ Jobs that do not run `uv sync` MUST disable setup-uv caching to avoid poisoning 
 wheel cache consumed by downstream jobs:
 
 ```yaml
-- uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+- uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
   with:
     version: "0.9.21"
     enable-cache: false   # required for jobs that skip uv sync

@@ -8,7 +8,7 @@ import regex as re
 
 from autoskillit.core import get_logger, load_yaml
 
-_log = get_logger(__name__)
+logger = get_logger(__name__)
 
 __all__ = ["parse_frontmatter_content", "validate_skill_frontmatter"]
 
@@ -32,7 +32,7 @@ def parse_frontmatter_content(content: str) -> dict[str, Any]:
     try:
         return load_yaml(yaml_block) or {}
     except Exception:
-        _log.warning("parse_frontmatter_malformed_yaml", exc_info=True)
+        logger.warning("parse_frontmatter_malformed_yaml", exc_info=True)
         return {}
 
 

@@ -15,6 +15,7 @@ from autoskillit.core.types import (
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.clone_guard import (
     CloneSnapshot,
+    build_clone_guard_policy,
     check_and_revert_clone_contamination,
     detect_contamination,
     is_worktree_skill,
@@ -26,6 +27,13 @@ from autoskillit.pipeline.audit import DefaultAuditLog
 from tests.fakes import MockSubprocessRunner
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+_DEFAULT_POLICY = build_clone_guard_policy(
+    readonly_skill=False,
+    has_write_scope=False,
+    is_clone_commit=False,
+    is_worktree=False,
+)
 
 
 def _git_result(stdout: str = "", returncode: int = 0) -> SubprocessResult:
@@ -281,6 +289,12 @@ async def test_guard_full_flow_contamination_detected(tmp_path):
         runner,
         audit,
         skill_command="/autoskillit:implement-worktree-no-merge plan.md",
+        policy=build_clone_guard_policy(
+            readonly_skill=False,
+            has_write_scope=False,
+            is_clone_commit=False,
+            is_worktree=True,
+        ),
     )
     assert reverted
     assert len(runner.call_args_list) == 4  # 2 detect + 2 revert
@@ -301,7 +315,12 @@ async def test_guard_skipped_when_success(tmp_path):
     skill_result = _make_skill_result(success=True, worktree_path=None)
 
     result, reverted = await check_and_revert_clone_contamination(
-        snapshot, skill_result, str(tmp_path), runner, None
+        snapshot,
+        skill_result,
+        str(tmp_path),
+        runner,
+        None,
+        policy=_DEFAULT_POLICY,
     )
     assert not reverted
     assert len(runner.call_args_list) == 0
@@ -317,7 +336,12 @@ async def test_guard_skipped_when_worktree_created(tmp_path):
     skill_result = _make_skill_result(success=False, worktree_path="/some/worktree")
 
     result, reverted = await check_and_revert_clone_contamination(
-        snapshot, skill_result, str(tmp_path), runner, None
+        snapshot,
+        skill_result,
+        str(tmp_path),
+        runner,
+        None,
+        policy=_DEFAULT_POLICY,
     )
     assert not reverted
     assert len(runner.call_args_list) == 0
@@ -332,7 +356,12 @@ async def test_guard_skipped_when_no_snapshot(tmp_path):
     skill_result = _make_skill_result(success=False, worktree_path=None)
 
     result, reverted = await check_and_revert_clone_contamination(
-        None, skill_result, str(tmp_path), runner, None
+        None,
+        skill_result,
+        str(tmp_path),
+        runner,
+        None,
+        policy=_DEFAULT_POLICY,
     )
     assert not reverted
     assert len(runner.call_args_list) == 0
@@ -395,6 +424,12 @@ async def test_audit_log_records_contamination(tmp_path):
         runner,
         audit,
         skill_command="/autoskillit:implement-worktree-no-merge plan.md",
+        policy=build_clone_guard_policy(
+            readonly_skill=False,
+            has_write_scope=False,
+            is_clone_commit=False,
+            is_worktree=True,
+        ),
     )
 
     records = audit.get_report()
@@ -429,7 +464,12 @@ async def test_readonly_check_fires_on_success(tmp_path):
         runner,
         None,
         skill_command="/autoskillit:investigate foo",
-        readonly_skill=True,
+        policy=build_clone_guard_policy(
+            readonly_skill=True,
+            has_write_scope=False,
+            is_clone_commit=False,
+            is_worktree=False,
+        ),
     )
     assert reverted
     assert result is skill_result
@@ -531,7 +571,12 @@ async def test_contamination_check_fires_on_success_when_write_scoped(tmp_path):
         str(tmp_path),
         runner,
         audit=None,
-        readonly_skill=True,
+        policy=build_clone_guard_policy(
+            readonly_skill=True,
+            has_write_scope=True,
+            is_clone_commit=False,
+            is_worktree=False,
+        ),
     )
     assert reverted
 
@@ -574,6 +619,6 @@ async def test_snapshot_not_taken_without_write_scope_or_readonly(tmp_path):
         str(tmp_path),
         MockSubprocessRunner(),
         audit=None,
-        readonly_skill=False,
+        policy=_DEFAULT_POLICY,
     )
     assert not reverted

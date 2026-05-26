@@ -35,8 +35,46 @@ class HookDef:
             )
 
 
+# ---------------------------------------------------------------------------
+# Codex Compatibility Table
+#
+# Status values:
+#   works-as-is    — Hook works correctly under Codex without changes.
+#   degraded       — Hook runs but with reduced functionality under Codex.
+#   fix-required   — Hook needs code changes for Codex compatibility.
+#   not-applicable — Hook targets a tool/event that Codex does not support.
+#
+# Hook (primary script)                  | Status
+# ---------------------------------------|----------------
+# skill_cmd_guard (+ quota, skill_cmd)   | works-as-is
+# remove_clone_guard                     | works-as-is
+# open_kitchen_guard                     | works-as-is
+# ask_user_question_guard                | not-applicable
+# branch_protection_guard (merge)        | works-as-is
+# branch_protection_guard (push)         | works-as-is
+# unsafe_install_guard                   | works-as-is
+# pr_create_guard                        | works-as-is
+# planner_gh_discovery_guard             | works-as-is
+# generated_file_write_guard             | works-as-is
+# write_guard                            | fix-required
+# planner_result_naming_guard            | works-as-is
+# recipe_write_advisor                   | works-as-is
+# grep_pattern_lint_guard               | not-applicable
+# mcp_health_advisor                     | degraded
+# skill_orchestration_guard              | works-as-is
+# fleet_dispatch_guard (+ resume_own.)   | works-as-is
+# pretty_output_hook                     | works-as-is
+# token_summary_hook (+ quota_post)       | works-as-is
+# review_gate_post_hook                  | works-as-is
+# lint_after_edit_hook                   | degraded
+# skill_load_post_hook                   | not-applicable
+# skill_load_guard                       | fix-required
+# review_loop_gate                       | works-as-is
+# session_start_hook                     | works-as-is
+# ---------------------------------------------------------------------------
+
 HOOK_REGISTRY: list[HookDef] = [
-    HookDef(
+    HookDef(  # codex: works-as-is
         matcher="mcp__.*autoskillit.*__run_skill.*",
         scripts=[
             "guards/skill_cmd_guard.py",
@@ -44,34 +82,34 @@ HOOK_REGISTRY: list[HookDef] = [
             "guards/skill_command_guard.py",
         ],
     ),
-    HookDef(
+    HookDef(  # codex: works-as-is
         matcher="mcp__.*autoskillit.*__remove_clone",
         scripts=["guards/remove_clone_guard.py"],
     ),
-    HookDef(
+    HookDef(  # codex: works-as-is
         matcher=r"mcp__.*autoskillit.*__open_kitchen.*",
         scripts=["guards/open_kitchen_guard.py"],
         timeout_seconds=5,
     ),
-    HookDef(
+    HookDef(  # codex: not-applicable
         matcher="AskUserQuestion",
         scripts=["guards/ask_user_question_guard.py"],
         timeout_seconds=5,
         session_scope="headless_only",
     ),
-    HookDef(
+    HookDef(  # codex: works-as-is
         matcher=r"mcp__.*autoskillit.*__merge_worktree",
         scripts=["guards/branch_protection_guard.py"],
     ),
-    HookDef(
+    HookDef(  # codex: works-as-is
         matcher=r"mcp__.*autoskillit.*__push_to_remote",
         scripts=["guards/branch_protection_guard.py"],
     ),
-    HookDef(
+    HookDef(  # codex: works-as-is
         matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
         scripts=["guards/unsafe_install_guard.py"],
     ),
-    HookDef(
+    HookDef(  # codex: works-as-is
         matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
         scripts=["guards/pr_create_guard.py"],
         # Must stay in sync with _EXEMPT_SKILLS in guards/pr_create_guard.py —
@@ -89,85 +127,85 @@ HOOK_REGISTRY: list[HookDef] = [
         # stdlib-only boundary on hook scripts prevents a shared import.
         exempt_session_types=frozenset({"orchestrator"}),
     ),
-    HookDef(
+    HookDef(  # codex: works-as-is
         matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
         scripts=["guards/planner_gh_discovery_guard.py"],
         session_scope="headless_only",
     ),
-    HookDef(
+    HookDef(  # codex: works-as-is
         matcher=r"Write|Edit",
         scripts=["guards/generated_file_write_guard.py"],
     ),
-    HookDef(
+    HookDef(  # codex: fix-required
         matcher=r"Write|Edit|Bash|mcp__.*autoskillit.*__run_cmd",
         scripts=["guards/write_guard.py"],
         session_scope="headless_only",
     ),
-    HookDef(
+    HookDef(  # codex: works-as-is
         matcher=r"Write|Edit",
         scripts=["guards/planner_result_naming_guard.py"],
         session_scope="headless_only",
     ),
-    HookDef(
+    HookDef(  # codex: works-as-is
         matcher=r"Write|Edit",
         scripts=["guards/recipe_write_advisor.py"],
         session_scope="interactive_only",
     ),
-    HookDef(
+    HookDef(  # codex: not-applicable
         matcher=r"Grep",
         scripts=["guards/grep_pattern_lint_guard.py"],
     ),
-    HookDef(
+    HookDef(  # codex: degraded
         matcher=r"Bash|Write|Edit|Read|Glob|Grep",
         scripts=["guards/mcp_health_advisor.py"],
         timeout_seconds=5,
         session_scope="interactive_only",
     ),
-    HookDef(
+    HookDef(  # codex: works-as-is
         matcher=r"mcp__.*autoskillit.*__(run_skill|run_cmd|run_python).*",
         scripts=["guards/skill_orchestration_guard.py"],
         session_scope="headless_only",
     ),
-    HookDef(
+    HookDef(  # codex: works-as-is
         matcher=r"(mcp__.*autoskillit.*__)?dispatch_food_truck",
         scripts=["guards/fleet_dispatch_guard.py", "guards/resume_ownership_guard.py"],
     ),
-    HookDef(
+    HookDef(  # codex: works-as-is
         event_type="PostToolUse",
         matcher="mcp__.*autoskillit.*",
         scripts=["formatters/pretty_output_hook.py"],
     ),
-    HookDef(
+    HookDef(  # codex: works-as-is
         event_type="PostToolUse",
         matcher=r"mcp__.*autoskillit.*__run_skill.*",
         scripts=["token_summary_hook.py", "quota_post_hook.py"],
     ),
-    HookDef(
+    HookDef(  # codex: works-as-is
         event_type="PostToolUse",
         matcher=r"mcp__.*autoskillit.*__(run_skill|run_python).*",
         scripts=["review_gate_post_hook.py"],
     ),
-    HookDef(
+    HookDef(  # codex: degraded
         event_type="PostToolUse",
         matcher=r"Write|Edit",
         scripts=["lint_after_edit_hook.py"],
         session_scope="headless_only",
     ),
-    HookDef(
+    HookDef(  # codex: not-applicable
         event_type="PostToolUse",
         matcher="Skill",
         scripts=["skill_load_post_hook.py"],
     ),
-    HookDef(
+    HookDef(  # codex: fix-required
         matcher=r"Read|Write|Edit|Bash|Grep|Glob",
         scripts=["guards/skill_load_guard.py"],
         session_scope="headless_only",
     ),
-    HookDef(
+    HookDef(  # codex: works-as-is
         matcher=r"mcp__.*autoskillit.*__(wait_for_ci|enqueue_pr)",
         scripts=["guards/review_loop_gate.py"],
     ),
-    HookDef(
+    HookDef(  # codex: works-as-is
         event_type="SessionStart",
         scripts=["session_start_hook.py"],
         session_scope="interactive_only",

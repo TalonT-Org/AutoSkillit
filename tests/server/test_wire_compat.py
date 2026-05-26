@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import pytest
+from fastmcp.server.middleware import MiddlewareContext
+
+from autoskillit.server._wire_compat import ClaudeCodeCompatMiddleware
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -113,3 +118,78 @@ class TestClaudeCodeCompatMiddlewareEdgeCases:
         assert result[0].title is None
         assert result[1].output_schema is None
         assert result[1].title is None
+
+
+class TestClaudeCodeCompatMiddlewareDispatchChain:
+    """Dispatch-chain coverage: __call__ → _dispatch_handler → on_list_tools.
+
+    Unlike TestClaudeCodeCompatMiddlewareEdgeCases (which calls on_list_tools
+    directly), these tests drive the middleware through Middleware.__call__ so
+    that _dispatch_handler routing is exercised. A FastMCP dispatch change that
+    breaks method→hook routing will be caught here.
+    """
+
+    @pytest.mark.anyio
+    async def test_tools_list_dispatches_through_chain(self):
+        mw = ClaudeCodeCompatMiddleware()
+
+        tool = MagicMock()
+        tool.name = "chain_tool"
+        tool.output_schema = {"type": "string"}
+        tool.title = "Chain Tool"
+        tool.model_copy.return_value = MagicMock(
+            name="chain_tool",
+            output_schema=None,
+            title=None,
+        )
+
+        ctx = MiddlewareContext(message=MagicMock(), method="tools/list", type="request")
+
+        async def call_next(context):
+            return [tool]
+
+        result = await mw(ctx, call_next)
+
+        tool.model_copy.assert_called_once_with(
+            update={"output_schema": None, "title": None},
+        )
+        assert result[0].output_schema is None
+        assert result[0].title is None
+
+    @pytest.mark.anyio
+    async def test_non_tools_list_method_is_passthrough(self):
+        mw = ClaudeCodeCompatMiddleware()
+
+        sentinel = object()
+        ctx = MiddlewareContext(message=MagicMock(), method="resources/list", type="request")
+
+        async def call_next(context):
+            return sentinel
+
+        result = await mw(ctx, call_next)
+        assert result is sentinel
+
+    @pytest.mark.anyio
+    async def test_dispatch_chain_preserves_annotations(self):
+        mw = ClaudeCodeCompatMiddleware()
+
+        tool = MagicMock()
+        tool.name = "annotated_tool"
+        tool.output_schema = {"type": "string"}
+        tool.title = "Annotated"
+        tool.annotations = MagicMock(readOnlyHint=True)
+        copy = MagicMock()
+        copy.name = "annotated_tool"
+        copy.output_schema = None
+        copy.title = None
+        copy.annotations = MagicMock(readOnlyHint=True)
+        tool.model_copy.return_value = copy
+
+        ctx = MiddlewareContext(message=MagicMock(), method="tools/list", type="request")
+
+        async def call_next(context):
+            return [tool]
+
+        result = await mw(ctx, call_next)
+        assert result[0].annotations is not None
+        assert result[0].annotations.readOnlyHint is True

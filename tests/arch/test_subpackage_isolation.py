@@ -932,13 +932,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "a 16th fleet/ module (sub-package file ceiling); keeps dispatch-related helpers "
         "co-located with the execution engine that calls them",
     ),
-    "smoke_utils.py": (
-        1200,
-        "REQ-CNST-010-E7: agent-eval + skill-eval smoke functions + consolidate_health_reports — "
-        "parse_agent_eval_manifests and build_agent_eval_context parallel "
-        "parse_eval_manifests/build_eval_context; consolidate_health_reports added for campaign "
-        "diagnostic aggregation; shared helpers extracted but residual size from three domains",
-    ),
 }
 
 
@@ -1012,19 +1005,33 @@ def test_core_has_no_autoskillit_imports() -> None:
 
 def test_isolated_modules_do_not_import_server_or_cli() -> None:
     """REQ-CNST-007: Root-level isolated modules must not import from server/ or cli/."""
-    isolated = ["_llm_triage.py", "smoke_utils.py", "version.py"]
+    isolated_files = ["_llm_triage.py", "version.py"]
+    isolated_packages = ["smoke_utils"]
     forbidden_prefixes = ("autoskillit.server", "autoskillit.cli")
     violations: list[str] = []
-    for filename in isolated:
-        py_file = SRC_ROOT / filename
-        if not py_file.exists():
-            continue
+
+    def _check_file(py_file: Path, label: str) -> None:
         tree = ast.parse(py_file.read_text())
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.module:
                 mod = node.module
                 if any(mod == f or mod.startswith(f + ".") for f in forbidden_prefixes):
-                    violations.append(f"{filename}:{node.lineno}: imports {mod}")
+                    violations.append(f"{label}:{node.lineno}: imports {mod}")
+
+    for filename in isolated_files:
+        py_file = SRC_ROOT / filename
+        if not py_file.exists():
+            continue
+        _check_file(py_file, filename)
+
+    for pkg_name in isolated_packages:
+        pkg_dir = SRC_ROOT / pkg_name
+        if not pkg_dir.is_dir():
+            continue
+        for py_file in sorted(pkg_dir.glob("*.py")):
+            label = f"{pkg_name}/{py_file.name}"
+            _check_file(py_file, label)
+
     assert not violations, "Root-level isolated modules import server/ or cli/:\n" + "\n".join(
         f"  {v}" for v in violations
     )

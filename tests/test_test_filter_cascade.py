@@ -31,7 +31,7 @@ class TestCascadeNewEntries:
             ),
             # Conservative: smoke_utils cascades into recipe + direct test file
             (
-                "src/autoskillit/smoke_utils.py",
+                "src/autoskillit/smoke_utils/__init__.py",
                 FilterMode.CONSERVATIVE,
                 ["recipe", "test_smoke_utils.py"],
                 ["recipe", "test_smoke_utils.py"],
@@ -59,7 +59,7 @@ class TestCascadeNewEntries:
             ),
             # Aggressive: smoke_utils scoped to its direct test file
             (
-                "src/autoskillit/smoke_utils.py",
+                "src/autoskillit/smoke_utils/__init__.py",
                 FilterMode.AGGRESSIVE,
                 ["test_smoke_utils.py"],
                 ["test_smoke_utils.py"],

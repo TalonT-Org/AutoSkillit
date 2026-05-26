@@ -46,6 +46,4 @@ class TestStarttimeTicksZeroWarning:
         warning_events = [
             log["event"] for log in logs if log.get("event") == "starttime_ticks_zero"
         ]
-        assert warning_events, (
-            f"Expected 'starttime_ticks_zero' warning in logs, captured: {logs}"
-        )
+        assert warning_events, f"Expected 'starttime_ticks_zero' warning in logs, captured: {logs}"

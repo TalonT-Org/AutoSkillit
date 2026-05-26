@@ -83,9 +83,7 @@ class TestBoundaryPtyDispatch:
         )
 
     @pytest.mark.anyio
-    async def test_execute_headless_real_runner_ansi_shim(
-        self, tool_ctx, tmp_path: Path
-    ) -> None:
+    async def test_execute_headless_real_runner_ansi_shim(self, tool_ctx, tmp_path: Path) -> None:
         """_execute_claude_headless + DefaultSubprocessRunner + ANSI shim:
         Result: success=False, lifespan_started=False."""
         from autoskillit.core import CmdSpec

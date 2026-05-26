@@ -18,9 +18,7 @@ class TestNudgePtyMode:
     """_attempt_contract_nudge propagates pty_mode to the runner."""
 
     @pytest.mark.anyio
-    async def test_nudge_passes_pty_mode_for_claude_backend(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_nudge_passes_pty_mode_for_claude_backend(self, tmp_path: Path) -> None:
         """_attempt_contract_nudge passes pty_mode=True to runner for ClaudeCode backend."""
         from autoskillit.execution.headless._headless_recovery import _attempt_contract_nudge
         from tests.execution.conftest import _mock_backend

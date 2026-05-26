@@ -222,3 +222,32 @@ def test_fmt_run_skill_contradictory_subtype_never_renders_fail_success():
     assert f"{cross} success" not in interactive_out, (
         f"Interactive mode rendered contradictory '{cross} success': {interactive_out!r}"
     )
+
+
+def test_typeddict_covers_to_json_keys() -> None:
+    """RunSkillResult TypedDict must cover every key emitted by SkillResult.to_json().
+
+    Uses two instances to cover both conditional (worktree_path) and unconditional
+    fields. Any field added to to_json() without a matching TypedDict entry will fail
+    this test, preventing silent drift between the typed contract and the wire format.
+    """
+    import dataclasses
+    import json
+    import typing
+
+    from autoskillit.core.types._type_results import SkillResult
+    from autoskillit.server.tools._types import RunSkillResult
+
+    r1 = SkillResult.crashed(Exception("test"))
+    r2 = dataclasses.replace(r1, worktree_path="/tmp/test-worktree")
+
+    all_json_keys: set[str] = set()
+    for r in (r1, r2):
+        all_json_keys.update(json.loads(r.to_json()).keys())
+
+    typeddict_keys = set(typing.get_type_hints(RunSkillResult))
+    missing = all_json_keys - typeddict_keys
+    assert not missing, (
+        f"SkillResult.to_json() emits keys absent from RunSkillResult TypedDict: "
+        f"{sorted(missing)}. Add them to server/tools/_types.py RunSkillResult."
+    )

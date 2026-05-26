@@ -408,3 +408,88 @@ def test_setup_environment_env_mode_examples_cover_all_modes(
     example_text = "\n".join(examples)
     for mode in ("none", "docker", "micromamba-host", "unavailable"):
         assert f"env_mode = {mode}" in example_text, f"missing example for env_mode={mode}"
+
+
+def test_negative_examples_rejected(skills: dict[str, Any]) -> None:
+    """For every skill with negative_examples, each negative example must fail at least
+    one pattern.
+
+    Negative examples represent outputs that MUST NOT pass contract validation.
+    If all patterns match a negative example, the contract has a false positive.
+    """
+    failures = []
+    for skill_name, contract in skills.items():
+        patterns = contract.get("expected_output_patterns", [])
+        neg_examples = contract.get("negative_examples", [])
+        if not patterns or not neg_examples:
+            continue
+        for neg_ex in neg_examples:
+            if all(re.search(p, neg_ex) for p in patterns):
+                failures.append(
+                    f"Skill '{skill_name}': negative example matched ALL patterns "
+                    f"(must fail at least one):\n  {neg_ex!r}"
+                )
+    assert not failures, "Negative examples passed all contract patterns:\n" + "\n".join(failures)
+
+
+# Matches both \s* and [ \t]* whitespace quantifier forms as they appear in loaded YAML strings.
+_TOKEN_VALUE_RE = re.compile(r"^([\w-]+)(?:\\s\*|\[ \\t\]\*)=(?:\\s\*|\[ \\t\]\*)(.+)$")
+
+
+def test_patterns_reject_empty_token_values(skills: dict[str, Any]) -> None:
+    """Mandatory value patterns must reject the empty-value case.
+
+    For each pattern with an extractable token=value form, verify that
+    an empty value (\'{token} = \\n\') does not produce a false match.
+    Patterns whose value group allows empty (re.fullmatch succeeds) are exempt.
+    """
+    failures = []
+    for skill_name, contract in skills.items():
+        for pattern in contract.get("expected_output_patterns", []):
+            m = _TOKEN_VALUE_RE.match(pattern)
+            if not m:
+                continue
+            token_name, value_group = m.group(1), m.group(2)
+            try:
+                if re.fullmatch(value_group, ""):
+                    continue
+            except re.error:
+                continue
+            synthetic = f"{token_name} = \n"
+            if re.search(pattern, synthetic):
+                failures.append(
+                    f"Skill '{skill_name}': pattern {pattern!r} matched empty value "
+                    f"synthetic input {synthetic!r}"
+                )
+    assert not failures, (
+        "Patterns matched empty token values (mandatory patterns must reject empty values):\n"
+        + "\n".join(failures)
+    )
+
+
+def test_cross_newline_patterns_anchored(skills: dict[str, Any]) -> None:
+    r"""Patterns using \s* adjacent to = must not match cross-newline token values.
+
+    A pattern like 'token\s*=\s*\S+' with \s* (which matches newlines) allows
+    cross-newline false positives: 'token = \nother_token = value' matches because
+    \s* consumes the newline and \S+ latches onto 'other_token'. Patterns using
+    [ \t]* (horizontal whitespace only) are exempt.
+    """
+    failures = []
+    for skill_name, contract in skills.items():
+        for pattern in contract.get("expected_output_patterns", []):
+            m = _TOKEN_VALUE_RE.match(pattern)
+            if not m:
+                continue
+            token_name = m.group(1)
+            if "\\s*" not in pattern:
+                continue
+            synthetic = f"{token_name} = \nother_token = something\n%%ORDER_UP%%"
+            if re.search(pattern, synthetic):
+                failures.append(
+                    f"Skill '{skill_name}': pattern {pattern!r} matched cross-newline "
+                    r"input (\s* consumes newlines — use [ \t]* instead)"
+                )
+    assert not failures, (
+        r"Patterns with \s* matched cross-newline inputs:" + "\n" + "\n".join(failures)
+    )

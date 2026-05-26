@@ -23,6 +23,7 @@ def _run_guard(
     provider_profile: str | None = None,
     headless: bool = False,
     session_type: str | None = None,
+    agent_backend: str | None = None,
 ) -> str:
     """Run skill_load_guard.main(), return stdout."""
     from autoskillit.hooks.guards.skill_load_guard import main
@@ -46,6 +47,11 @@ def _run_guard(
         env_updates["AUTOSKILLIT_SESSION_TYPE"] = session_type
     else:
         env_removals.append("AUTOSKILLIT_SESSION_TYPE")
+
+    if agent_backend is not None:
+        env_updates["AUTOSKILLIT_AGENT_BACKEND"] = agent_backend
+    else:
+        env_removals.append("AUTOSKILLIT_AGENT_BACKEND")
 
     base_env = {k: v for k, v in os.environ.items() if k not in env_removals}
     base_env.update(env_updates)
@@ -310,3 +316,58 @@ def test_guard_records_denial_when_below_threshold(tmp_path):
     deny_dir = tmp_path / ".autoskillit" / "temp" / f"skill_guard_{session_id}_denials"
     assert deny_dir.exists()
     assert len(list(deny_dir.iterdir())) == 1
+
+
+def test_codex_backend_early_exit(tmp_path):
+    """T2-17: Codex backend triggers early exit even when all denial conditions are met."""
+    out = _run_guard(
+        _make_event("Read"),
+        tmp_dir=tmp_path,
+        provider_profile="minimax",
+        headless=True,
+        session_type="skill",
+        agent_backend="codex",
+    )
+    assert not out.strip()
+
+
+@pytest.mark.parametrize("provider_profile", ["minimax", "anthropic", "", None])
+def test_codex_backend_ignores_provider_profile(tmp_path, provider_profile):
+    """T2-18: Codex bypass fires regardless of provider profile value."""
+    out = _run_guard(
+        _make_event("Read"),
+        tmp_dir=tmp_path,
+        provider_profile=provider_profile,
+        headless=True,
+        session_type="skill",
+        agent_backend="codex",
+    )
+    assert not out.strip()
+
+
+def test_non_codex_backend_still_denies(tmp_path):
+    """T2-19: claude-code backend does NOT trigger early exit - deny proceeds."""
+    out = _run_guard(
+        _make_event("Read"),
+        tmp_dir=tmp_path,
+        provider_profile="minimax",
+        headless=True,
+        session_type="skill",
+        agent_backend="claude-code",
+    )
+    response = json.loads(out)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_absent_backend_still_denies(tmp_path):
+    """T2-20: Missing AUTOSKILLIT_AGENT_BACKEND does NOT trigger early exit."""
+    out = _run_guard(
+        _make_event("Read"),
+        tmp_dir=tmp_path,
+        provider_profile="minimax",
+        headless=True,
+        session_type="skill",
+        agent_backend=None,
+    )
+    response = json.loads(out)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "deny"

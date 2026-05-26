@@ -11,7 +11,7 @@ logger = get_logger(__name__)
 
 
 def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
-    from autoskillit.fleet._dispatch_reaper import reap_stale_dispatches  # noqa: PLC0415
+    from autoskillit.fleet import reap_stale_dispatches  # noqa: PLC0415
 
     reap_stale_dispatches(state_path, dry_run=dry_run)
 

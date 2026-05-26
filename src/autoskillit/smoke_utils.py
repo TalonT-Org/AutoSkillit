@@ -539,6 +539,212 @@ def parse_eval_manifests(
     }
 
 
+def parse_agent_eval_manifests(
+    canary_manifest: str,
+    variant_manifest: str,
+    output_dir: str,
+) -> dict[str, str]:
+    """Parse agent-eval manifests and create eval run directory structure.
+
+    Reads canary and variant manifests, resolves prompt_template with prompt_vars
+    (including _file indirection), creates per-canary resolved.json and
+    resolved_prompt.txt, and writes manifest_index.json.
+    """
+    from datetime import datetime
+
+    from autoskillit.core import atomic_write
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    eval_run_dir = Path(output_dir) / "runs" / timestamp
+    eval_run_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        canaries = _load_json(canary_manifest)
+        variants = _load_json(variant_manifest)
+    except (OSError, json.JSONDecodeError) as exc:
+        return {"success": "false", "error": f"Failed to read manifest: {exc}"}
+
+    canary_ids = []
+    variant_ids = []
+
+    for c in canaries:
+        cid = c.get("id")
+        if not cid:
+            return {"success": "false", "error": "Canary missing 'id' field"}
+        canary_ids.append(cid)
+
+    for v in variants:
+        vid = v.get("id")
+        if not vid:
+            return {"success": "false", "error": "Variant missing 'id' field"}
+        variant_ids.append(vid)
+
+    variant_labels = {v["id"]: v.get("label", v["id"]) for v in variants}
+
+    for canary in canaries:
+        canary_id = canary["id"]
+
+        if "agent_name" not in canary:
+            return {"success": "false", "error": f"Canary {canary_id} missing agent_name"}
+
+        if "prompt_template" not in canary:
+            return {"success": "false", "error": f"Canary {canary_id} missing prompt_template"}
+
+        canary_dir = eval_run_dir / canary_id
+        canary_dir.mkdir(parents=True, exist_ok=True)
+
+        resolved_vars = {}
+        for key, value in canary.get("prompt_vars", {}).items():
+            if key.endswith("_file"):
+                bare_key = key[:-5]
+                if bare_key in resolved_vars:
+                    return {
+                        "success": "false",
+                        "error": (
+                            f"prompt_vars collision: '{bare_key}' defined both "
+                            "directly and via _file indirection"
+                        ),
+                    }
+                try:
+                    resolved_vars[bare_key] = Path(value).read_text()
+                except OSError as exc:
+                    return {"success": "false", "error": f"Failed to read {key} file: {exc}"}
+            else:
+                if key in resolved_vars:
+                    return {
+                        "success": "false",
+                        "error": (
+                            f"prompt_vars collision: '{key}' defined both "
+                            "directly and via _file indirection"
+                        ),
+                    }
+                resolved_vars[key] = value
+
+        try:
+            resolved_prompt = str(canary["prompt_template"]).format_map(resolved_vars)
+        except KeyError as exc:
+            return {"success": "false", "error": f"Template variable not resolved: {exc}"}
+
+        (canary_dir / "resolved_prompt.txt").write_text(resolved_prompt)
+
+        variants_dict = {}
+        for v in variants:
+            vid = v["id"]
+            variants_dict[vid] = {
+                "label": v.get("label", vid),
+                "agent_file": v.get("agent_file"),
+            }
+            (canary_dir / vid).mkdir(parents=True, exist_ok=True)
+
+        resolved = dict(canary)
+        resolved["resolved_prompt"] = resolved_prompt
+        resolved["variants"] = variants_dict
+
+        atomic_write(canary_dir / "resolved.json", json.dumps(resolved, indent=2))
+
+    manifest_index: dict[str, object] = {
+        "canary_ids": canary_ids,
+        "variant_ids": variant_ids,
+        "variant_labels": variant_labels,
+    }
+    for cid in canary_ids:
+        manifest_index[f"path_{cid}"] = str(eval_run_dir / cid)
+
+    manifest_index_path = eval_run_dir / "manifest_index.json"
+    atomic_write(manifest_index_path, json.dumps(manifest_index, indent=2))
+
+    return {
+        "success": "true",
+        "eval_run_dir": str(eval_run_dir),
+        "canary_count": str(len(canary_ids)),
+        "variant_count": str(len(variant_ids)),
+        "manifest_index_path": str(manifest_index_path),
+    }
+
+
+def build_agent_eval_context(
+    canary_id: str,
+    output_paths_json: str,
+    eval_run_dir: str,
+) -> dict[str, str]:
+    """Assemble eval_context.json from resolved manifest and output paths.
+
+    Reads the resolved.json for the given canary, builds the eval_context dict
+    with reference and candidate entries, and writes eval_context.json.
+    """
+    from autoskillit.core import atomic_write
+
+    resolved_path = Path(eval_run_dir) / canary_id / "resolved.json"
+    try:
+        resolved = json.loads(resolved_path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        return {"success": "false", "error": f"Failed to read resolved.json: {exc}"}
+
+    try:
+        output_paths = json.loads(output_paths_json)
+    except json.JSONDecodeError as exc:
+        return {"success": "false", "error": f"Failed to parse output_paths_json: {exc}"}
+
+    subject = resolved.get("agent_name", "")
+
+    reference_path_raw = resolved.get("reference_path")
+    if not reference_path_raw:
+        return {
+            "success": "false",
+            "error": f"Canary {canary_id} resolved.json missing reference_path",
+        }
+    reference_path = Path(reference_path_raw).resolve()
+
+    candidates = []
+    for variant_id, path in output_paths.items():
+        variant_meta = resolved.get("variants", {}).get(variant_id, {})
+        label = variant_meta.get("label", variant_id)
+        if path is not None:
+            candidates.append(
+                {
+                    "id": variant_id,
+                    "path": str(Path(path).resolve()),
+                    "label": label,
+                    "status": "completed",
+                }
+            )
+        else:
+            candidates.append(
+                {
+                    "id": variant_id,
+                    "path": None,
+                    "label": label,
+                    "status": "failed",
+                }
+            )
+
+    codebase_root = ""
+    eval_run_path = Path(eval_run_dir)
+    for parent in eval_run_path.parents:
+        if (parent / ".git").exists():
+            codebase_root = str(parent)
+            break
+
+    eval_context = {
+        "eval_id": resolved.get("id", canary_id),
+        "subject": subject,
+        "gap_description": resolved.get("gap_description", ""),
+        "detection_criteria": resolved.get("detection_criteria", []),
+        "reference": {
+            "path": str(reference_path),
+            "label": "Input context for agent evaluation",
+            "artifact_type": resolved.get("reference_type", "patch"),
+        },
+        "candidates": candidates,
+        "codebase_root": codebase_root,
+        "eval_run_dir": str(eval_run_path.resolve()),
+    }
+
+    out_path = eval_run_path / canary_id / "eval_context.json"
+    atomic_write(out_path, json.dumps(eval_context, indent=2))
+    return {"success": "true", "eval_context_path": str(out_path)}
+
+
 def build_eval_context(
     canary_id: str,
     plan_paths_json: str,

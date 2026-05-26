@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from autoskillit.smoke_utils import (
     annotate_pr_diff,
+    build_agent_eval_context,
     build_eval_context,
     check_bug_report_non_empty,
     check_loop_iteration,
@@ -16,6 +17,7 @@ from autoskillit.smoke_utils import (
     check_review_loop,
     compile_eval_scorecard,
     enrich_diff_context,
+    parse_agent_eval_manifests,
     parse_eval_manifests,
     patch_pr_token_summary,
 )
@@ -1501,3 +1503,390 @@ def test_compile_eval_scorecard_empty_run_dir(tmp_path: Path) -> None:
     assert result["pass_rate"] == "0.0"
     assert result["passed_runs"] == "0"
     assert result["total_runs"] == "4"
+
+
+# ---------------------------------------------------------------------------
+# T_PAEM1–T_PAEM9: parse_agent_eval_manifests tests
+# ---------------------------------------------------------------------------
+
+
+# T_PAEM1
+def test_parse_agent_eval_manifests_creates_directory_tree(tmp_path: Path) -> None:
+    prompt_file = tmp_path / "diff.patch"
+    prompt_file.write_text("+added line")
+    canary_manifest = [
+        {
+            "id": "RA1",
+            "agent_name": "pr-review-auditor",
+            "prompt_template": "Review this diff:\n\n{diff_content}",
+            "prompt_vars": {"diff_content_file": str(prompt_file)},
+            "reference_path": str(prompt_file),
+            "reference_type": "patch",
+            "gap_description": "False positive on style",
+            "detection_criteria": ["Does not flag style issues"],
+        }
+    ]
+    variant_manifest = [
+        {"id": "baseline", "label": "Baseline", "agent_file": "/path/to/baseline.md"},
+    ]
+    result = parse_agent_eval_manifests(
+        json.dumps(canary_manifest), json.dumps(variant_manifest), str(tmp_path)
+    )
+    assert result["success"] == "true"
+    eval_run_dir = Path(result["eval_run_dir"])
+    assert (eval_run_dir / "RA1" / "resolved.json").is_file()
+    assert (eval_run_dir / "RA1" / "resolved_prompt.txt").is_file()
+    assert (eval_run_dir / "manifest_index.json").is_file()
+
+
+# T_PAEM2
+def test_parse_agent_eval_manifests_resolves_file_vars(tmp_path: Path) -> None:
+    diff_file = tmp_path / "diff.patch"
+    diff_file.write_text("+added line\n-removed line")
+    canary_manifest = [
+        {
+            "id": "RA1",
+            "agent_name": "test-agent",
+            "prompt_template": "Review:\n{diff_content}\nDimension: {dimension}",
+            "prompt_vars": {"diff_content_file": str(diff_file), "dimension": "bugs"},
+            "reference_path": str(diff_file),
+            "reference_type": "patch",
+            "detection_criteria": ["Finds the bug"],
+        }
+    ]
+    variant_manifest = [{"id": "v1", "label": "V1", "agent_file": "/v1.md"}]
+    result = parse_agent_eval_manifests(
+        json.dumps(canary_manifest), json.dumps(variant_manifest), str(tmp_path)
+    )
+    assert result["success"] == "true"
+    eval_run_dir = Path(result["eval_run_dir"])
+    resolved_prompt = (eval_run_dir / "RA1" / "resolved_prompt.txt").read_text()
+    assert "+added line" in resolved_prompt
+    assert "Dimension: bugs" in resolved_prompt
+    resolved = json.loads((eval_run_dir / "RA1" / "resolved.json").read_text())
+    assert resolved["resolved_prompt"] == resolved_prompt
+
+
+# T_PAEM3
+def test_parse_agent_eval_manifests_writes_manifest_index(tmp_path: Path) -> None:
+    canary_manifest = [
+        {
+            "id": "RA1",
+            "agent_name": "test-agent",
+            "prompt_template": "test",
+            "prompt_vars": {},
+            "reference_path": "/ref",
+            "reference_type": "patch",
+            "detection_criteria": ["test"],
+        }
+    ]
+    variant_manifest = [
+        {"id": "baseline", "label": "Baseline", "agent_file": "/baseline.md"},
+        {"id": "v1", "label": "Variant 1", "agent_file": "/v1.md"},
+    ]
+    result = parse_agent_eval_manifests(
+        json.dumps(canary_manifest), json.dumps(variant_manifest), str(tmp_path)
+    )
+    assert result["success"] == "true"
+    index = json.loads(Path(result["manifest_index_path"]).read_text())
+    assert index["canary_ids"] == ["RA1"]
+    assert index["variant_ids"] == ["baseline", "v1"]
+    assert "baseline" in index["variant_labels"]
+
+
+# T_PAEM4
+def test_parse_agent_eval_manifests_unreadable_file_var(tmp_path: Path) -> None:
+    canary_manifest = [
+        {
+            "id": "RA1",
+            "agent_name": "test-agent",
+            "prompt_template": "{content}",
+            "prompt_vars": {"content_file": "/nonexistent/file.txt"},
+            "reference_path": "/ref",
+            "reference_type": "patch",
+            "detection_criteria": ["test"],
+        }
+    ]
+    variant_manifest = [{"id": "v1", "label": "V1", "agent_file": "/v1.md"}]
+    result = parse_agent_eval_manifests(
+        json.dumps(canary_manifest), json.dumps(variant_manifest), str(tmp_path)
+    )
+    assert result["success"] == "false"
+    assert "error" in result
+
+
+# T_PAEM5
+def test_parse_agent_eval_manifests_missing_prompt_template(tmp_path: Path) -> None:
+    canary_manifest = [
+        {
+            "id": "RA1",
+            "agent_name": "test-agent",
+            "prompt_vars": {},
+            "reference_path": "/ref",
+            "reference_type": "patch",
+            "detection_criteria": ["test"],
+        }
+    ]
+    variant_manifest = [{"id": "v1", "label": "V1", "agent_file": "/v1.md"}]
+    result = parse_agent_eval_manifests(
+        json.dumps(canary_manifest), json.dumps(variant_manifest), str(tmp_path)
+    )
+    assert result["success"] == "false"
+
+
+# T_PAEM6
+def test_parse_agent_eval_manifests_resolved_has_variant_agent_files(tmp_path: Path) -> None:
+    canary_manifest = [
+        {
+            "id": "RA1",
+            "agent_name": "test-agent",
+            "prompt_template": "test prompt",
+            "prompt_vars": {},
+            "reference_path": "/ref",
+            "reference_type": "patch",
+            "detection_criteria": ["test"],
+        }
+    ]
+    variant_manifest = [
+        {"id": "baseline", "label": "Baseline", "agent_file": "/path/baseline.md"},
+        {"id": "v1", "label": "Focused", "agent_file": "/path/v1.md"},
+    ]
+    result = parse_agent_eval_manifests(
+        json.dumps(canary_manifest), json.dumps(variant_manifest), str(tmp_path)
+    )
+    assert result["success"] == "true"
+    eval_run_dir = Path(result["eval_run_dir"])
+    resolved = json.loads((eval_run_dir / "RA1" / "resolved.json").read_text())
+    assert resolved["variants"]["baseline"]["agent_file"] == "/path/baseline.md"
+    assert resolved["variants"]["v1"]["agent_file"] == "/path/v1.md"
+    assert resolved["variants"]["baseline"]["label"] == "Baseline"
+
+
+# T_PAEM7
+def test_parse_agent_eval_manifests_missing_agent_name(tmp_path: Path) -> None:
+    canary_manifest = [
+        {
+            "id": "RA1",
+            "prompt_template": "test",
+            "prompt_vars": {},
+            "reference_path": "/ref",
+            "reference_type": "patch",
+            "detection_criteria": ["test"],
+        }
+    ]
+    variant_manifest = [{"id": "v1", "label": "V1", "agent_file": "/v1.md"}]
+    result = parse_agent_eval_manifests(
+        json.dumps(canary_manifest), json.dumps(variant_manifest), str(tmp_path)
+    )
+    assert result["success"] == "false"
+    assert "agent_name" in result["error"]
+
+
+# T_PAEM8
+def test_parse_agent_eval_manifests_template_var_not_resolved(tmp_path: Path) -> None:
+    canary_manifest = [
+        {
+            "id": "RA1",
+            "agent_name": "test-agent",
+            "prompt_template": "Review: {missing_var}",
+            "prompt_vars": {"other": "value"},
+            "reference_path": "/ref",
+            "reference_type": "patch",
+            "detection_criteria": ["test"],
+        }
+    ]
+    variant_manifest = [{"id": "v1", "label": "V1", "agent_file": "/v1.md"}]
+    result = parse_agent_eval_manifests(
+        json.dumps(canary_manifest), json.dumps(variant_manifest), str(tmp_path)
+    )
+    assert result["success"] == "false"
+    assert "error" in result
+
+
+# T_PAEM9
+def test_parse_agent_eval_manifests_file_var_collision(tmp_path: Path) -> None:
+    diff_file = tmp_path / "diff.patch"
+    diff_file.write_text("diff content")
+    canary_manifest = [
+        {
+            "id": "RA1",
+            "agent_name": "test-agent",
+            "prompt_template": "{content}",
+            "prompt_vars": {"content": "direct", "content_file": str(diff_file)},
+            "reference_path": "/ref",
+            "reference_type": "patch",
+            "detection_criteria": ["test"],
+        }
+    ]
+    variant_manifest = [{"id": "v1", "label": "V1", "agent_file": "/v1.md"}]
+    result = parse_agent_eval_manifests(
+        json.dumps(canary_manifest), json.dumps(variant_manifest), str(tmp_path)
+    )
+    assert result["success"] == "false"
+    assert "collision" in result["error"].lower()
+
+
+# ---------------------------------------------------------------------------
+# T_BAEC1–T_BAEC6: build_agent_eval_context tests
+# ---------------------------------------------------------------------------
+
+
+# T_BAEC1
+def test_build_agent_eval_context_writes_eval_context(tmp_path: Path) -> None:
+    eval_run_dir = tmp_path / "eval_run"
+    eval_run_dir.mkdir()
+    canary_dir = eval_run_dir / "RA1"
+    canary_dir.mkdir()
+    (canary_dir / "resolved.json").write_text(
+        json.dumps(
+            {
+                "id": "RA1",
+                "agent_name": "pr-review-auditor",
+                "gap_description": "False positive on style",
+                "detection_criteria": ["Does not flag style"],
+                "reference_path": "/path/to/diff.patch",
+                "reference_type": "patch",
+                "variants": {"baseline": {"label": "Baseline", "agent_file": "/baseline.md"}},
+            }
+        )
+    )
+    output_file = tmp_path / "output.json"
+    output_file.write_text('{"result": "ok"}')
+    result = build_agent_eval_context(
+        canary_id="RA1",
+        output_paths_json=json.dumps({"baseline": str(output_file)}),
+        eval_run_dir=str(eval_run_dir),
+    )
+    assert result["success"] == "true"
+    ctx = json.loads(Path(result["eval_context_path"]).read_text())
+    assert ctx["eval_id"] == "RA1"
+    assert ctx["subject"] == "pr-review-auditor"
+    assert ctx["reference"]["artifact_type"] == "patch"
+    assert ctx["reference"]["label"] == "Input context for agent evaluation"
+    assert len(ctx["candidates"]) == 1
+    assert ctx["candidates"][0]["status"] == "completed"
+
+
+# T_BAEC2
+def test_build_agent_eval_context_handles_null_output(tmp_path: Path) -> None:
+    eval_run_dir = tmp_path / "eval_run"
+    eval_run_dir.mkdir()
+    canary_dir = eval_run_dir / "RA1"
+    canary_dir.mkdir()
+    (canary_dir / "resolved.json").write_text(
+        json.dumps(
+            {
+                "id": "RA1",
+                "agent_name": "test-agent",
+                "gap_description": "test",
+                "detection_criteria": ["test"],
+                "reference_path": "/ref",
+                "reference_type": "patch",
+                "variants": {"v1": {"label": "V1", "agent_file": "/v1.md"}},
+            }
+        )
+    )
+    result = build_agent_eval_context(
+        canary_id="RA1",
+        output_paths_json=json.dumps({"v1": None}),
+        eval_run_dir=str(eval_run_dir),
+    )
+    assert result["success"] == "true"
+    ctx = json.loads(Path(result["eval_context_path"]).read_text())
+    assert ctx["candidates"][0]["status"] == "failed"
+    assert ctx["candidates"][0]["path"] is None
+
+
+# T_BAEC3
+def test_build_agent_eval_context_uses_agent_name_as_subject(tmp_path: Path) -> None:
+    eval_run_dir = tmp_path / "eval_run"
+    eval_run_dir.mkdir()
+    canary_dir = eval_run_dir / "RA1"
+    canary_dir.mkdir()
+    (canary_dir / "resolved.json").write_text(
+        json.dumps(
+            {
+                "id": "RA1",
+                "agent_name": "review-intent-validator",
+                "gap_description": "test",
+                "detection_criteria": ["test"],
+                "reference_path": "/ref",
+                "reference_type": "patch",
+                "variants": {},
+            }
+        )
+    )
+    result = build_agent_eval_context(
+        canary_id="RA1",
+        output_paths_json="{}",
+        eval_run_dir=str(eval_run_dir),
+    )
+    assert result["success"] == "true"
+    ctx = json.loads(Path(result["eval_context_path"]).read_text())
+    assert ctx["subject"] == "review-intent-validator"
+
+
+# T_BAEC4
+def test_build_agent_eval_context_missing_resolved(tmp_path: Path) -> None:
+    eval_run_dir = tmp_path / "eval_run"
+    eval_run_dir.mkdir()
+    result = build_agent_eval_context(
+        canary_id="RA1",
+        output_paths_json="{}",
+        eval_run_dir=str(eval_run_dir),
+    )
+    assert result["success"] == "false"
+
+
+# T_BAEC5
+def test_build_agent_eval_context_missing_reference_path(tmp_path: Path) -> None:
+    eval_run_dir = tmp_path / "eval_run"
+    eval_run_dir.mkdir()
+    canary_dir = eval_run_dir / "RA1"
+    canary_dir.mkdir()
+    (canary_dir / "resolved.json").write_text(
+        json.dumps(
+            {
+                "id": "RA1",
+                "agent_name": "test-agent",
+                "gap_description": "test",
+                "detection_criteria": ["test"],
+                "variants": {},
+            }
+        )
+    )
+    result = build_agent_eval_context(
+        canary_id="RA1",
+        output_paths_json="{}",
+        eval_run_dir=str(eval_run_dir),
+    )
+    assert result["success"] == "false"
+    assert "reference_path" in result["error"]
+
+
+# T_BAEC6
+def test_build_agent_eval_context_default_reference_type_is_patch(tmp_path: Path) -> None:
+    eval_run_dir = tmp_path / "eval_run"
+    eval_run_dir.mkdir()
+    canary_dir = eval_run_dir / "RA1"
+    canary_dir.mkdir()
+    (canary_dir / "resolved.json").write_text(
+        json.dumps(
+            {
+                "id": "RA1",
+                "agent_name": "test-agent",
+                "gap_description": "test",
+                "detection_criteria": ["test"],
+                "reference_path": "/ref",
+                "variants": {},
+            }
+        )
+    )
+    result = build_agent_eval_context(
+        canary_id="RA1",
+        output_paths_json="{}",
+        eval_run_dir=str(eval_run_dir),
+    )
+    assert result["success"] == "true"
+    ctx = json.loads(Path(result["eval_context_path"]).read_text())
+    assert ctx["reference"]["artifact_type"] == "patch"

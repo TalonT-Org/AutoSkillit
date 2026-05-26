@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
+
+import pytest
 
 from autoskillit.hook_registry import (
     HOOK_REGISTRY,
@@ -350,3 +353,94 @@ def test_find_broken_hook_scripts_dispatcher_missing(tmp_path: Path) -> None:
     broken = find_broken_hook_scripts(settings)
     assert len(broken) == 1
     assert "_dispatch.py" in broken[0]
+
+
+# ---------------------------------------------------------------------------
+# HR-CODEX: Codex compatibility annotation tests
+# ---------------------------------------------------------------------------
+
+
+# HR-CODEX-1: every HookDef entry must have a # codex: comment
+@pytest.mark.layer("hooks")
+@pytest.mark.small
+def test_hook_registry_has_codex_comments() -> None:
+    """Every HookDef entry in HOOK_REGISTRY must have a '# codex:' trailing comment."""
+    import importlib
+    from pathlib import Path
+
+    source_path = Path(importlib.import_module("autoskillit.hook_registry").__file__)
+    source = source_path.read_text(encoding="utf-8")
+
+    # Count HookDef( occurrences and # codex: occurrences
+    hookdef_lines = [line for line in source.splitlines() if "HookDef(" in line]
+    codex_lines = [line for line in source.splitlines() if "# codex:" in line]
+
+    assert len(hookdef_lines) == len(HOOK_REGISTRY), (
+        f"Expected {len(HOOK_REGISTRY)} HookDef( lines, found {len(hookdef_lines)}"
+    )
+    assert len(codex_lines) == len(HOOK_REGISTRY), (
+        f"Expected {len(HOOK_REGISTRY)} '# codex:' comments, found {len(codex_lines)}"
+    )
+
+    # Every HookDef( line must also contain # codex:
+    missing = [line.strip() for line in hookdef_lines if "# codex:" not in line]
+    assert not missing, f"HookDef lines missing '# codex:' comment: {missing}"
+
+
+# HR-CODEX-2: degraded hook set must match expected
+@pytest.mark.layer("hooks")
+@pytest.mark.small
+def test_degraded_hooks_are_expected() -> None:
+    """The set of hooks with '# codex: degraded' must equal the expected set."""
+    import importlib
+    from pathlib import Path
+
+    source_path = Path(importlib.import_module("autoskillit.hook_registry").__file__)
+    source = source_path.read_text(encoding="utf-8")
+
+    _EXPECTED_DEGRADED = {"lint_after_edit_hook", "mcp_health_advisor"}
+
+    degraded_scripts: set[str] = set()
+    lines = source.splitlines()
+    for i, line in enumerate(lines):
+        if "# codex: degraded" in line:
+            # Scan forward from HookDef( line to find the scripts= list
+            for j in range(i, min(i + 10, len(lines))):
+                if "scripts=" in lines[j]:
+                    # Extract script basenames
+                    for match in re.finditer(r'"([^"]+\.py)"', lines[j]):
+                        script = match.group(1).rsplit("/", 1)[-1].removesuffix(".py")
+                        degraded_scripts.add(script)
+                    break
+
+    assert degraded_scripts == _EXPECTED_DEGRADED, (
+        f"Expected degraded hooks {_EXPECTED_DEGRADED}, found {degraded_scripts}"
+    )
+
+
+# HR-CODEX-3: skill_load_guard.py must reference AUTOSKILLIT_AGENT_BACKEND
+@pytest.mark.layer("hooks")
+@pytest.mark.small
+def test_skill_load_guard_has_codex_bypass() -> None:
+    """skill_load_guard.py must contain AUTOSKILLIT_AGENT_BACKEND for Codex bypass."""
+    import importlib
+    from pathlib import Path
+
+    mod = importlib.import_module("autoskillit.hooks.guards.skill_load_guard")
+    source_path = Path(mod.__file__)
+    source = source_path.read_text(encoding="utf-8")
+    assert "AUTOSKILLIT_AGENT_BACKEND" in source
+
+
+# HR-CODEX-4: write_guard.py must handle apply_patch tool
+@pytest.mark.layer("hooks")
+@pytest.mark.small
+def test_write_guard_handles_apply_patch() -> None:
+    """write_guard.py must contain apply_patch handling for Codex compatibility."""
+    import importlib
+    from pathlib import Path
+
+    mod = importlib.import_module("autoskillit.hooks.guards.write_guard")
+    source_path = Path(mod.__file__)
+    source = source_path.read_text(encoding="utf-8")
+    assert "apply_patch" in source

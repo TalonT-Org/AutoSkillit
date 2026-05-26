@@ -5,6 +5,10 @@ on:
     types: [closed]
     branches: [main]
 
+
+concurrency:
+  group: version-bump-promote
+  cancel-in-progress: false
 jobs:
   minor-bump-on-promote:
     permissions:
@@ -22,12 +26,11 @@ jobs:
           token: ${{ secrets.GH_PAT }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           version: "0.9.21"
+          enable-cache: false
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
 
       - name: Compute new minor version
         id: version

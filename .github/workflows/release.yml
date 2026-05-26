@@ -19,9 +19,10 @@ jobs:
           fetch-depth: 0
 
       - name: Install uv
-        uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           version: "0.9.21"
+          enable-cache: false
 
       - name: Compute new minor version
         id: version
@@ -53,6 +54,8 @@ jobs:
       - name: Sync plugin.json and recipe versions
         run: python3 scripts/sync_versions.py
 
+      - name: Configure git auth for private deps
+        run: git config --global url."https://${{ secrets.GH_USER }}:${{ secrets.GH_PAT }}@github.com/TalonT-Org/".insteadOf "https://github.com/TalonT-Org/"
       - name: Regenerate uv.lock
         run: uv lock
 

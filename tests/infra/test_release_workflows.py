@@ -225,7 +225,36 @@ class TestVersionBumpWorkflow:
             "no force-push means no protection changes are needed"
         )
 
+    def test_has_concurrency_group(self):
+        """version-bump.yml must declare a concurrency group to serialize runs."""
+        wf = _load(VERSION_BUMP_WORKFLOW)
+        assert wf.get("concurrency") is not None, (
+            "version-bump.yml must declare a concurrency group — "
+            "without it, simultaneous promotions race on the two-phase push"
+        )
 
+    def test_concurrency_group_name(self):
+        """Concurrency group name must be a fixed string."""
+        wf = _load(VERSION_BUMP_WORKFLOW)
+        concurrency = wf.get("concurrency", {})
+        group = concurrency.get("group", "")
+        assert group == "version-bump-promote", (
+            f"concurrency.group must be 'version-bump-promote' (got {group!r})"
+        )
+
+    def test_concurrency_cancel_in_progress_is_false(self):
+        """cancel-in-progress must be false — two-phase workflow must not be cancelled mid-run."""
+        wf = _load(VERSION_BUMP_WORKFLOW)
+        concurrency = wf.get("concurrency", {})
+        cancel = concurrency.get("cancel-in-progress", None)
+        assert cancel is False, (
+            f"concurrency.cancel-in-progress must be false (got {cancel!r}) — "
+            "true would cancel between main and develop pushes, "
+            "leaving permanently inconsistent state"
+        )
+
+
+# ── patch-bump-develop.yml ────────────────────────────────────────────────────
 # ── patch-bump-develop.yml ────────────────────────────────────────────────────
 
 
@@ -356,15 +385,16 @@ class TestPatchBumpDevelopWorkflow:
             "a fixed group name ensures all simultaneous batch runs queue behind one another"
         )
 
-    def test_concurrency_cancel_in_progress_is_false(self):
-        """cancel-in-progress must be false so every queued run executes its bump."""
+    def test_concurrency_cancel_in_progress_is_true(self):
+        """cancel-in-progress must be true to prevent non-fast-forward races."""
         wf = _load(PATCH_BUMP_DEVELOP_WORKFLOW)
         concurrency = wf.get("concurrency", {})
         cancel = concurrency.get("cancel-in-progress", None)
-        assert cancel is False, (
-            f"concurrency.cancel-in-progress must be false (got {cancel!r}) — "
-            "true would cancel intermediate runs, silently skipping version bumps "
-            "for all but the last PR in a merge queue batch"
+        assert cancel is True, (
+            f"concurrency.cancel-in-progress must be true (got {cancel!r}) — "
+            "false causes non-fast-forward rejections when multiple PRs merge "
+            "within seconds; true is safe because each run independently reads "
+            "the current version from develop"
         )
 
 

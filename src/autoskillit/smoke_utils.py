@@ -850,6 +850,7 @@ def close_issue_already_done(issue_url: str) -> dict[str, str]:
         ["gh", "issue", "edit", issue_url, "--remove-label", "in-progress"],
         capture_output=True,
         check=False,
+        timeout=60,
     )
     subprocess.run(
         [
@@ -862,5 +863,6 @@ def close_issue_already_done(issue_url: str) -> dict[str, str]:
         ],
         capture_output=True,
         check=False,
+        timeout=60,
     )
     return {"closed": "true"}

@@ -106,6 +106,7 @@ class TestCodexLayoutValidation:
 
         skills_dir = tmp_path / "skills"
         skills_dir.mkdir(parents=True)
+        (skills_dir / "some-skill").mkdir()
 
         backend = CodexBackend()
         errors = backend.validate_session_layout(tmp_path)

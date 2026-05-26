@@ -277,9 +277,13 @@ async def test_open_kitchen_injects_hidden_ingredient_overrides(tmp_path, monkey
                 "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
             ):
                 with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
-                    from autoskillit.server.tools.tools_kitchen import open_kitchen
+                    with patch(
+                        "autoskillit.server.tools.tools_kitchen.resolve_kitchen_id",
+                        return_value="test-kitchen-abc",
+                    ):
+                        from autoskillit.server.tools.tools_kitchen import open_kitchen
 
-                    await open_kitchen(name="demo", ctx=mock_ctx)
+                        await open_kitchen(name="demo", ctx=mock_ctx)
 
     call_kwargs = mock_ctx.recipes.load_and_validate.call_args.kwargs
     overrides = call_kwargs["ingredient_overrides"]

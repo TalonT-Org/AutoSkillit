@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -61,7 +59,6 @@ class TestClaudeCodeLayoutValidation:
 
         backend = ClaudeCodeBackend()
         errors = backend.validate_session_layout(tmp_path)
-        assert len(errors) > 0
         assert any("BUNDLED" in e and skill_name in e for e in errors)
 
 
@@ -74,13 +71,11 @@ class TestCodexLayoutValidation:
         (skills_dir / "some-skill").mkdir()
         config_content = "[mcp_servers.autoskillit]\nname = 'autoskillit'\n"
         (tmp_path / "config.toml").write_text(config_content)
-        auth_src = Path.home() / ".codex" / "auth.json"
-        if auth_src.exists():
-            (tmp_path / "auth.json").symlink_to(auth_src)
-        sessions_target = (
-            Path.home() / ".local" / "share" / "autoskillit" / "logs" / "codex-sessions"
-        )
-        sessions_target.mkdir(parents=True, exist_ok=True)
+        auth_target = tmp_path / "auth-source.json"
+        auth_target.write_text("{}")
+        (tmp_path / "auth.json").symlink_to(auth_target)
+        sessions_target = tmp_path / "sessions-target"
+        sessions_target.mkdir()
         (tmp_path / "sessions").symlink_to(sessions_target)
 
         backend = CodexBackend()

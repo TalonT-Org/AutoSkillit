@@ -77,7 +77,9 @@ class TestCodexLayoutValidation:
         auth_src = Path.home() / ".codex" / "auth.json"
         if auth_src.exists():
             (tmp_path / "auth.json").symlink_to(auth_src)
-        sessions_target = Path.home() / ".local" / "share" / "autoskillit" / "logs" / "codex-sessions"
+        sessions_target = (
+            Path.home() / ".local" / "share" / "autoskillit" / "logs" / "codex-sessions"
+        )
         sessions_target.mkdir(parents=True, exist_ok=True)
         (tmp_path / "sessions").symlink_to(sessions_target)
 

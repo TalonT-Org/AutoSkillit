@@ -531,3 +531,127 @@ class TestRegisterAllCodexMcpRegistration:
         codex_mock = self._setup(monkeypatch, tmp_path, "claude-code")
         _register_all("user", tmp_path)
         codex_mock.assert_called_once()
+
+
+class TestRegisterAllDualRegistration:
+    """Dual registration: both Claude Code and Codex MCP called unconditionally."""
+
+    def _setup(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        *,
+        plugin_ok: bool = False,
+        codex_side_effect: object = True,
+    ) -> tuple[MagicMock, MagicMock, MagicMock]:
+        """Stub collaborators; return (mcp_mock, evict_mock, codex_mock)."""
+        import autoskillit.cli._hooks as _hooks_mod
+        import autoskillit.core.paths as _core_paths
+
+        monkeypatch.setattr(_hooks_mod, "sweep_all_scopes_for_orphans", lambda p: None)
+        monkeypatch.setattr(_hooks_mod, "sync_hooks_to_settings", lambda p: None)
+        monkeypatch.setattr(_hooks_mod, "_evict_stale_autoskillit_hooks", lambda p: None)
+        monkeypatch.setattr(
+            _hooks_mod, "_claude_settings_path", lambda s: tmp_path / "settings.json"
+        )
+        monkeypatch.setattr(_core_paths, "pkg_root", lambda: tmp_path / "pkg")
+        (tmp_path / "pkg").mkdir(exist_ok=True)
+
+        mcp_mock = MagicMock()
+        monkeypatch.setattr("autoskillit.cli._init_helpers._register_mcp_server", mcp_mock)
+        monkeypatch.setattr(
+            "autoskillit.cli._init_helpers._user_claude_json_path",
+            lambda: tmp_path / ".claude.json",
+        )
+        monkeypatch.setattr(
+            "autoskillit.cli._init_helpers._create_secrets_template", lambda p: None
+        )
+        monkeypatch.setattr("autoskillit.cli._init_helpers._prompt_github_repo", lambda: None)
+
+        evict_mock = MagicMock(return_value=False)
+        monkeypatch.setattr("autoskillit.cli._init_helpers.evict_direct_mcp_entry", evict_mock)
+
+        monkeypatch.setattr("sys.stdin", MagicMock(isatty=lambda: False))
+        monkeypatch.setattr("autoskillit.core.ensure_project_temp", lambda p: tmp_path / "temp")
+        monkeypatch.setattr(
+            "autoskillit.cli._init_helpers._is_plugin_installed",
+            lambda **kwargs: plugin_ok,
+        )
+
+        mock_config = MagicMock()
+        mock_config.agent_backend.backend = "claude-code"
+        monkeypatch.setattr("autoskillit.config.load_config", lambda p=None: mock_config)
+
+        if isinstance(codex_side_effect, type) and issubclass(codex_side_effect, BaseException):
+            codex_mock = MagicMock(side_effect=codex_side_effect("boom"))
+        else:
+            codex_mock = MagicMock(return_value=codex_side_effect)
+        monkeypatch.setattr("autoskillit.execution.ensure_codex_mcp_registered", codex_mock)
+
+        return mcp_mock, evict_mock, codex_mock
+
+    def test_both_called_plugin_not_installed(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from autoskillit.cli._init_helpers import _register_all
+
+        mcp_mock, _evict, codex_mock = self._setup(monkeypatch, tmp_path, plugin_ok=False)
+        _register_all("user", tmp_path)
+        mcp_mock.assert_called_once()
+        codex_mock.assert_called_once()
+
+    def test_both_called_plugin_installed(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from autoskillit.cli._init_helpers import _register_all
+
+        _mcp, evict_mock, codex_mock = self._setup(monkeypatch, tmp_path, plugin_ok=True)
+        _register_all("user", tmp_path)
+        evict_mock.assert_called_once()
+        codex_mock.assert_called_once()
+
+    def test_codex_exception_does_not_abort(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        import logging
+
+        from autoskillit.cli._init_helpers import _register_all
+
+        _mcp, _evict, codex_mock = self._setup(
+            monkeypatch, tmp_path, codex_side_effect=RuntimeError
+        )
+        with caplog.at_level(logging.WARNING, logger="autoskillit.cli._init_helpers"):
+            _register_all("user", tmp_path)
+        codex_mock.assert_called_once()
+        captured = capsys.readouterr()
+        assert "AUTOSKILLIT" in captured.out
+        assert "failed" in captured.out
+        assert "Codex MCP registration failed" in caplog.text
+
+    def test_plugin_ok_fires_evict_and_codex(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from autoskillit.cli._init_helpers import _register_all
+
+        _mcp, evict_mock, codex_mock = self._setup(monkeypatch, tmp_path, plugin_ok=True)
+        _register_all("user", tmp_path)
+        evict_mock.assert_called_once()
+        codex_mock.assert_called_once()
+
+    def test_summary_contains_both_status_tokens(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        from autoskillit.cli._init_helpers import _register_all
+
+        self._setup(monkeypatch, tmp_path, plugin_ok=False)
+        _register_all("user", tmp_path)
+        out = capsys.readouterr().out
+        assert "plugin" in out
+        assert "codex mcp" in out

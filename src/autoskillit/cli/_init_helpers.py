@@ -490,7 +490,12 @@ def _register_all(
 
     from autoskillit.execution import ensure_codex_mcp_registered  # noqa: PLC0415
 
-    codex_registered = ensure_codex_mcp_registered()
+    try:
+        codex_registered = ensure_codex_mcp_registered()
+        codex_status = "registered" if codex_registered else "ok"
+    except Exception:
+        codex_status = "failed"
+        logger.warning("Codex MCP registration failed", exc_info=True)
 
     # Prompt for github.default_repo if running interactively
     github_repo = None
@@ -539,8 +544,10 @@ def _register_all(
             print(f"  {_Y}{'plugin':>12}{_R}  {_G}registered via ~/.claude.json{_R}")
         print(f"  {_Y}{'hooks':>12}{_R}  {_G}synced{_R} {_D}({scope} scope){_R}")
 
-    _codex_tag = "registered" if codex_registered else "ok"
-    print(f"  {_Y}{'codex mcp':>12}{_R}  {_G}{_codex_tag}{_R}")
+    if codex_status == "failed":
+        print(f"  {_Y}{'codex mcp':>12}{_R}  {_Y}{codex_status}{_R}")
+    else:
+        print(f"  {_Y}{'codex mcp':>12}{_R}  {_G}{codex_status}{_R}")
 
     print()
     _print_next_steps(context="init")

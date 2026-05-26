@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import pytest
+from fastmcp.server.middleware import MiddlewareContext
+
+from autoskillit.server._wire_compat import ClaudeCodeCompatMiddleware
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -126,12 +131,6 @@ class TestClaudeCodeCompatMiddlewareDispatchChain:
 
     @pytest.mark.anyio
     async def test_tools_list_dispatches_through_chain(self):
-        from unittest.mock import MagicMock
-
-        from fastmcp.server.middleware import MiddlewareContext
-
-        from autoskillit.server._wire_compat import ClaudeCodeCompatMiddleware
-
         mw = ClaudeCodeCompatMiddleware()
 
         tool = MagicMock()
@@ -159,12 +158,6 @@ class TestClaudeCodeCompatMiddlewareDispatchChain:
 
     @pytest.mark.anyio
     async def test_non_tools_list_method_is_passthrough(self):
-        from unittest.mock import MagicMock
-
-        from fastmcp.server.middleware import MiddlewareContext
-
-        from autoskillit.server._wire_compat import ClaudeCodeCompatMiddleware
-
         mw = ClaudeCodeCompatMiddleware()
 
         sentinel = object()
@@ -178,12 +171,6 @@ class TestClaudeCodeCompatMiddlewareDispatchChain:
 
     @pytest.mark.anyio
     async def test_dispatch_chain_preserves_annotations(self):
-        from unittest.mock import MagicMock
-
-        from fastmcp.server.middleware import MiddlewareContext
-
-        from autoskillit.server._wire_compat import ClaudeCodeCompatMiddleware
-
         mw = ClaudeCodeCompatMiddleware()
 
         tool = MagicMock()

@@ -53,6 +53,18 @@ _BASH_TARGET_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"\b(?:rm|unlink)\s+(?:-\S+\s+)*(/[^\s;|&>]+)"),
 ]
 
+_BASH_TARGET_PATTERNS_RELATIVE: list[re.Pattern[str]] = [
+    # sed -i 's/x/y/' relative/file
+    re.compile(
+        r"\bsed\s+(?:\S+\s+)*(?:-i\S*|--in-place\S*)\s+"
+        r"(?:'[^']*'|\"[^\"]*\"|\S+)\s+([^\s;|&>/][^\s;|&>]*)"
+    ),
+    # mv src dst  or  cp src dst  (relative destination)
+    re.compile(r"\b(?:mv|cp)\s+\S+\s+([^\s;|&>/][^\s;|&>]*)"),
+    # rm relative/file  or  unlink relative/file
+    re.compile(r"\b(?:rm|unlink)\s+(?:-\S+\s+)*([^\s;|&>/][^\s;|&>]*)"),
+]
+
 
 def _extract_bash_write_targets(command: str) -> list[str] | None:
     """Return absolute target paths from a bash command, or None if no write command found.
@@ -69,6 +81,14 @@ def _extract_bash_write_targets(command: str) -> list[str] | None:
             path = m.group(1)
             if path not in _PSEUDO_DEVICE_PATHS:
                 targets.append(path)
+    cwd = os.environ.get("AUTOSKILLIT_CWD", "")
+    if cwd:
+        for pattern in _BASH_TARGET_PATTERNS_RELATIVE:
+            m = pattern.search(command)
+            if m:
+                rel_path = m.group(1)
+                if not rel_path.startswith("/") and rel_path not in _PSEUDO_DEVICE_PATHS:
+                    targets.append(os.path.join(cwd, rel_path))
     return targets
 
 

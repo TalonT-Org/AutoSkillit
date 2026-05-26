@@ -535,6 +535,8 @@ class ClaudeCodeBackend:
             extras[KITCHEN_SESSION_ID_ENV_VAR] = kitchen_session_id
         if allowed_write_prefix:
             extras["AUTOSKILLIT_ALLOWED_WRITE_PREFIX"] = allowed_write_prefix
+        if cwd:
+            extras["AUTOSKILLIT_CWD"] = cwd
         extras["AUTOSKILLIT_SKILL_NAME"] = extract_skill_name(skill_command) or ""
         if provider_extras:
             for k, v in provider_extras.items():
@@ -620,6 +622,8 @@ class ClaudeCodeBackend:
             extras[KITCHEN_SESSION_ID_ENV_VAR] = kitchen_session_id
         if allowed_write_prefix:
             extras["AUTOSKILLIT_ALLOWED_WRITE_PREFIX"] = allowed_write_prefix
+        if cwd:
+            extras["AUTOSKILLIT_CWD"] = cwd
         if env_extras:
             for k, v in env_extras.items():
                 if k not in ("AUTOSKILLIT_SESSION_TYPE", "AUTOSKILLIT_HEADLESS"):

@@ -376,3 +376,43 @@ class TestWriteGuardRealisticCommands:
     def test_tee_dev_null_allowed(self):
         result = _run_hook(_build_bash_event("cmd | tee /dev/null"))
         assert result == ""
+
+
+class TestRelativePathResolution:
+    """Tests for relative path resolution via AUTOSKILLIT_CWD."""
+
+    def test_relative_sed_path_resolved_against_cwd(self, monkeypatch: pytest.MonkeyPatch):
+        """sed -i with relative path should be resolved against AUTOSKILLIT_CWD and denied."""
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
+        result = _extract_bash_write_targets("sed -i 's/x/y/' tests/foo.py")
+        assert result is not None
+        assert "/workspace/tests/foo.py" in result
+
+    def test_relative_rm_path_resolved_against_cwd(self, monkeypatch: pytest.MonkeyPatch):
+        """rm with relative path should be resolved against AUTOSKILLIT_CWD."""
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
+        result = _extract_bash_write_targets("rm tests/foo.py")
+        assert result is not None
+        assert "/workspace/tests/foo.py" in result
+
+    def test_relative_path_within_prefix_allowed(self, monkeypatch: pytest.MonkeyPatch):
+        """Relative path within the allowed prefix should resolve and be allowed."""
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
+        result = _extract_bash_write_targets("sed -i 's/x/y/' .autoskillit/temp/skill/output.txt")
+        assert result is not None
+        assert "/workspace/.autoskillit/temp/skill/output.txt" in result
+
+    def test_no_cwd_env_skips_relative_resolution(self, monkeypatch: pytest.MonkeyPatch):
+        """Without AUTOSKILLIT_CWD, relative paths are not resolved (fail-open)."""
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        monkeypatch.delenv("AUTOSKILLIT_CWD", raising=False)
+        result = _extract_bash_write_targets("sed -i 's/x/y/' tests/foo.py")
+        assert result is not None
+        assert result == []

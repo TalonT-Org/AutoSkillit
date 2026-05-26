@@ -33,8 +33,8 @@ def main() -> None:
     session_type = raw_session_type.lower()
     if session_type in ("orchestrator", "fleet"):
         sys.exit(0)  # permitted tiers — not a skill session
-    # skill, leaf, unset → deny below; unrecognized non-empty values also denied
-    _unrecognized_tier = bool(session_type) and session_type not in ("skill", "leaf")
+    # skill, unset → deny below; unrecognized non-empty values also denied
+    _unrecognized_tier = bool(session_type) and session_type != "skill"
 
     tool_name: str = data.get("tool_name", "")
     # MCP tool names are prefixed: mcp__<server>__<tool>

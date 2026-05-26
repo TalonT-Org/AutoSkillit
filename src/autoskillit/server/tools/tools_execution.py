@@ -227,6 +227,9 @@ async def run_skill(
     - "zero_writes": skill made no writes despite write expectation — route to on_failure.
     - "thinking_stall": model produced thinking blocks only, no text/tool output — route to
       on_context_limit if lifespan_started, else on_failure.
+    - "contract_recovery": model completed and wrote artifacts but structured output failed
+      pattern validation and nudge could not recover — route to on_context_limit if
+      has_progress_evidence, else on_failure.
 
     This is the correct MCP tool to delegate work to a headless session during
     pipeline execution. NEVER use native tools (Read, Grep, Glob, Edit, Write,

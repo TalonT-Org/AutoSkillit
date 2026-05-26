@@ -22,7 +22,7 @@ skills:
     - name: retry_delay
       type: integer
     expected_output_patterns:
-    - "is_fixable\\s*=\\s*(true|false)"
+    - "is_fixable[ \\t]*=[ \\t]*(true|false)"
     pattern_examples:
     - "diagnosis_path = /tmp/diagnosis.md\nfailure_type = stale_timeout\nis_fixable = true\n%%ORDER_UP%%"
     - "diagnosis_path = /tmp/diagnosis.md\nfailure_type = transient_api\nis_fixable = true\nretry_delay = 120\n%%ORDER_UP%%"
@@ -50,8 +50,8 @@ skills:
     - name: is_fixable
       type: string
     expected_output_patterns:
-    - "diagnosis_path\\s*=\\s*(?:/.+)?"
-    - "failure_subtype\\s*=\\s*(flaky|timing_race|deterministic|fixture|import|env|unknown)"
+    - "diagnosis_path[ \\t]*=[ \\t]*(?:/.+)?"
+    - "failure_subtype[ \\t]*=[ \\t]*(flaky|timing_race|deterministic|fixture|import|env|unknown)"
     pattern_examples:
     - "diagnosis_path = /tmp/diagnosis.md\nfailure_type = test\nfailure_subtype = deterministic\nis_fixable = true\n%%ORDER_UP%%"
     - "diagnosis_path = /tmp/diagnosis.md\nfailure_type = test\nfailure_subtype = flaky\nis_fixable = false\n%%ORDER_UP%%"
@@ -80,8 +80,8 @@ skills:
     - name: revision_guidance
       type: file_path
     expected_output_patterns:
-    - "resolution\\s*=\\s*(revised|failed)"
-    - "(?:revision_guidance\\s*=\\s*/.+|resolution\\s*=\\s*failed)"
+    - "resolution[ \\t]*=[ \\t]*(revised|failed)"
+    - "(?:revision_guidance[ \\t]*=[ \\t]*/.+|resolution[ \\t]*=[ \\t]*failed)"
     pattern_examples:
     - "resolution = revised\nrevision_guidance = /tmp/guidance.md\n%%ORDER_UP%%"
     - "resolution = failed\n%%ORDER_UP%%"
@@ -113,7 +113,7 @@ skills:
       type: integer
     write_behavior: conditional
     write_expected_when:
-    - "verdict\\s*=\\s*real_fix"
+    - "verdict[ \\t]*=[ \\t]*real_fix"
   resolve-merge-conflicts:
     inputs:
     - name: worktree_path
@@ -137,12 +137,12 @@ skills:
     - name: escalation_reason
       type: string
     expected_output_patterns:
-    - "worktree_path\\s*=\\s*/.+"
+    - "worktree_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "worktree_path = /tmp/worktrees/impl-foo-20260316\n%%ORDER_UP%%"
     write_behavior: conditional
     write_expected_when:
-    - "conflict_report_path\\s*=\\s*/.+"
+    - "conflict_report_path[ \\t]*=[ \\t]*/.+"
   resolve-review:
     inputs:
     - name: feature_branch
@@ -174,7 +174,7 @@ skills:
       required: false
     write_behavior: conditional
     write_expected_when:
-    - "verdict\\s*=\\s*real_fix"
+    - "verdict[ \\t]*=[ \\t]*real_fix"
   dry-walkthrough:
     inputs:
     - name: plan_path
@@ -193,7 +193,7 @@ skills:
     - name: branch_name
       type: string
     expected_output_patterns:
-    - "worktree_path\\s*=\\s*/.+"
+    - "worktree_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "worktree_path = /tmp/worktrees/impl-foo-20260316\n%%ORDER_UP%%"
     write_behavior: always
@@ -208,7 +208,7 @@ skills:
     - name: branch_name
       type: string
     expected_output_patterns:
-    - "worktree_path\\s*=\\s*/.+"
+    - "worktree_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "worktree_path = /tmp/worktrees/impl-foo-20260316\n%%ORDER_UP%%"
     write_behavior: always
@@ -221,7 +221,7 @@ skills:
     - name: investigation_path
       type: file_path
     expected_output_patterns:
-    - "investigation_path\\s*=\\s*/.+"
+    - "investigation_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "investigation_path = /tmp/investigation.md\n%%ORDER_UP%%"
     read_only: true
@@ -238,7 +238,7 @@ skills:
     - name: group_files
       type: file_path_list
     expected_output_patterns:
-    - "groups_path\\s*=\\s*/.+"
+    - "groups_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "groups_path = /tmp/groups.json\n%%ORDER_UP%%"
     write_behavior: always
@@ -253,7 +253,7 @@ skills:
     - name: plan_parts
       type: file_path_list
     expected_output_patterns:
-    - "plan_path\\s*=\\s*/.+"
+    - "plan_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "plan_path = /tmp/plan.md\n%%ORDER_UP%%"
     write_behavior: always
@@ -263,7 +263,7 @@ skills:
     - name: recipe_path
       type: file_path
     expected_output_patterns:
-    - "recipe_path\\s*=\\s*/.+"
+    - "recipe_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "recipe_path = /tmp/recipe.yaml\n%%ORDER_UP%%"
     write_behavior: always
@@ -273,7 +273,7 @@ skills:
     - name: campaign_path
       type: file_path
     expected_output_patterns:
-    - "campaign_path\\s*=\\s*/.+"
+    - "campaign_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "campaign_path = /home/user/project/.autoskillit/recipes/campaigns/my-campaign.yaml\n%%ORDER_UP%%"
     write_behavior: always
@@ -308,7 +308,7 @@ skills:
     - name: plan_parts
       type: file_path_list
     expected_output_patterns:
-    - "plan_path\\s*=\\s*/.+"
+    - "plan_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "plan_path = /tmp/plan.md\n%%ORDER_UP%%"
     write_behavior: always
@@ -328,12 +328,12 @@ skills:
     - name: phases_implemented
       type: integer
     expected_output_patterns:
-    - "worktree_path\\s*=\\s*/.+"
+    - "worktree_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "worktree_path = /tmp/worktrees/impl-foo-20260316\nbranch_name = feature/123\nphases_implemented = 2\n%%ORDER_UP%%"
     write_behavior: conditional
     write_expected_when:
-    - "phases_implemented\\s*=\\s*[1-9][0-9]*"
+    - "phases_implemented[ \\t]*=[ \\t]*[1-9][0-9]*"
   review-approach:
     inputs:
     - name: plan_path
@@ -343,7 +343,7 @@ skills:
     - name: review_path
       type: file_path
     expected_output_patterns:
-    - "review_path\\s*=\\s*/.+"
+    - "review_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "review_path = /tmp/review.md\n%%ORDER_UP%%"
   audit-friction:
@@ -366,7 +366,7 @@ skills:
     - name: remediation_path
       type: file_path
     expected_output_patterns:
-    - "verdict\\s*=\\s*(GO|NO GO)"
+    - "verdict[ \\t]*=[ \\t]*(GO|NO GO)"
     pattern_examples:
     - "verdict = GO\n%%ORDER_UP%%"
     - "verdict = NO GO\nremediation_path = /tmp/remediation.md\n%%ORDER_UP%%"
@@ -397,7 +397,7 @@ skills:
     - name: queue_mode
       type: string
     expected_output_patterns:
-    - "pr_order_file\\s*=\\s*.+"
+    - "pr_order_file[ \\t]*=[ \\t]*(\\S[^\\n]*|none)"
     pattern_examples:
     - "pr_order_file = /tmp/pr_order.json\n%%ORDER_UP%%"
   merge-pr:
@@ -429,7 +429,7 @@ skills:
     - name: conflict_report_path
       type: file_path
     expected_output_patterns:
-    - "merged\\s*=\\s*(true|false)"
+    - "merged[ \\t]*=[ \\t]*(true|false)"
     pattern_examples:
     - "merged = true\n%%ORDER_UP%%"
     - "merged = false\n%%ORDER_UP%%"
@@ -479,14 +479,18 @@ skills:
     - name: lens_context_paths
       type: string
     expected_output_patterns:
-    - "prep_path\\s*=\\s*/.+"
-    - "selected_lenses\\s*=\\s*\\S+"
-    - "lens_context_paths\\s*=\\s*/.+"
+    - "prep_path[ \\t]*=[ \\t]*/.+"
+    - "selected_lenses[ \\t]*=[ \\t]*(\\S[^\\n]*|none)"
+    - "lens_context_paths[ \\t]*=[ \\t]*(\\S[^\\n]*|none)"
     pattern_examples:
     - "prep_path = /abs/path/pr_prep_2026-04-07_120000.md\nselected_lenses = module-dependency,process-flow\nlens_context_paths = /abs/ctx1.md,/abs/ctx2.md\n%%ORDER_UP%%"
+    - "prep_path = /abs/path/prep.md\nselected_lenses = none\nlens_context_paths = none\n%%ORDER_UP%%"
+    negative_examples:
+    - "prep_path = /abs/path/prep.md\nselected_lenses = \nlens_context_paths = \n%%ORDER_UP%%"
+    - "prep_path = /abs/path/prep.md\nselected_lenses = \nlens_context_paths\n%%ORDER_UP%%"
     write_behavior: conditional
     write_expected_when:
-    - "prep_path\\s*=\\s*/.+"
+    - "prep_path[ \\t]*=[ \\t]*/.+"
 
   compose-pr:
     inputs:
@@ -509,13 +513,13 @@ skills:
     - name: pr_url
       type: string
     expected_output_patterns:
-    - "pr_url\\s*=\\s*(https://github\\.com/.*/pull/\\d+)?"
+    - "pr_url[ \\t]*=[ \\t]*(https://github\\.com/.*/pull/\\d+)?"
     pattern_examples:
     - "pr_url = https://github.com/owner/repo/pull/42\n%%ORDER_UP%%"
     - "pr_url = \n%%ORDER_UP%%"
     write_behavior: conditional
     write_expected_when:
-    - "pr_url\\s*=\\s*https://"
+    - "pr_url[ \\t]*=[ \\t]*https://"
 
   open-integration-pr:
     inputs:
@@ -556,7 +560,7 @@ skills:
     - name: recipe_distribution
       type: string
     expected_output_patterns:
-    - "triage_report\\s*=\\s*.+"
+    - "triage_report[ \\t]*=[ \\t]*(\\S[^\\n]*|none)"
     pattern_examples:
     - "triage_report = .autoskillit/temp/triage-issues/triage_report_20260310_120000.md\n%%ORDER_UP%%"
 
@@ -594,8 +598,8 @@ skills:
       type: string
       description: "Written when mode=local. Path to local_findings_{pr_number}.json output."
     expected_output_patterns:
-    - "verdict\\s*=\\s*(approved|approved_with_comments|changes_requested|needs_human)"
-    - "(?:%%REVIEW_GATE::(LOOP_REQUIRED|CLEAR)%%|verdict\\s*=\\s*approved_with_comments)"
+    - "verdict[ \\t]*=[ \\t]*(approved|approved_with_comments|changes_requested|needs_human)"
+    - "(?:%%REVIEW_GATE::(LOOP_REQUIRED|CLEAR)%%|verdict[ \\t]*=[ \\t]*approved_with_comments)"
     pattern_examples:
     - "verdict = approved\n%%REVIEW_GATE::CLEAR%%\n%%ORDER_UP%%"
     - "verdict = approved_with_comments\n%%ORDER_UP%%"
@@ -617,7 +621,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -636,7 +640,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -655,7 +659,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -674,7 +678,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -693,7 +697,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -712,7 +716,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -731,7 +735,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -750,7 +754,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -769,7 +773,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -788,7 +792,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -807,7 +811,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -826,7 +830,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -845,7 +849,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -864,7 +868,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -883,7 +887,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -902,7 +906,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -921,7 +925,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -940,7 +944,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -959,7 +963,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -978,7 +982,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -997,7 +1001,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -1016,7 +1020,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -1035,7 +1039,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -1054,7 +1058,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -1073,7 +1077,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -1092,7 +1096,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -1111,7 +1115,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -1130,7 +1134,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -1149,7 +1153,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -1168,7 +1172,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -1187,7 +1191,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -1263,8 +1267,8 @@ skills:
     - name: scope_directions
       type: file_path
     expected_output_patterns:
-    - "scope_report\\s*=\\s*/.+"
-    - "scope_directions\\s*=\\s*/.+"
+    - "scope_report[ \\t]*=[ \\t]*/.+"
+    - "scope_directions[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "scope_report = /tmp/scope_report.md\nscope_directions = /tmp/scope_directions.json\n%%ORDER_UP%%"
     write_behavior: always
@@ -1284,7 +1288,7 @@ skills:
     - name: selected_directions
       type: file_path
     expected_output_patterns:
-    - "selected_directions\\s*=\\s*/.+"
+    - "selected_directions[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "selected_directions = /tmp/selected_directions.json\n%%ORDER_UP%%"
     write_behavior: always
@@ -1304,7 +1308,7 @@ skills:
     - name: experiment_plan
       type: file_path
     expected_output_patterns:
-    - "experiment_plan\\s*=\\s*/.+"
+    - "experiment_plan[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "experiment_plan = /tmp/experiment_plan.md\n%%ORDER_UP%%"
     write_behavior: always
@@ -1334,8 +1338,8 @@ skills:
     - name: visualization_plan_trace_path
       type: file_path
     expected_output_patterns:
-    - "visualization_plan_path\\s*=\\s*/.+"
-    - "report_plan_path\\s*=\\s*/.+"
+    - "visualization_plan_path[ \\t]*=[ \\t]*/.+"
+    - "report_plan_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "visualization_plan_path = /tmp/plan-visualization/visualization-plan.md\nreport_plan_path = /tmp/plan-visualization/report-plan.md\n%%ORDER_UP%%"
     write_behavior: always
@@ -1351,8 +1355,8 @@ skills:
     - name: resource_report
       type: file_path
     expected_output_patterns:
-    - "verdict\\s*=\\s*(PASS|WARN|FAIL)"
-    - "resource_report\\s*=\\s*/.+"
+    - "verdict[ \\t]*=[ \\t]*(PASS|WARN|FAIL)"
+    - "resource_report[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "verdict = PASS\nresource_report = /tmp/stage-data/resource_feasibility_2026-04-13_120000.md\n%%ORDER_UP%%"
     write_behavior: always
@@ -1368,8 +1372,8 @@ skills:
     - name: download_report
       type: file_path
     expected_output_patterns:
-    - "verdict\\s*=\\s*(PASS|WARN|FAIL)"
-    - "download_report\\s*=\\s*\\S+/download-data/.+"
+    - "verdict[ \\t]*=[ \\t]*(PASS|WARN|FAIL)"
+    - "download_report[ \\t]*=[ \\t]*\\S+/download-data/.+"
     pattern_examples:
     - "verdict = PASS\ndownload_report = /tmp/download-data/download_report_2026-05-10_120000.md\n%%ORDER_UP%%"
     - "verdict = WARN\ndownload_report = /tmp/download-data/download_report_2026-05-10_120000.md\n%%ORDER_UP%%"
@@ -1392,9 +1396,9 @@ skills:
     - name: verdict
       type: string
     expected_output_patterns:
-    - "env_mode\\s*=\\s*(none|docker|micromamba-host|unavailable)"
-    - "env_report\\s*=\\s*/.+"
-    - "verdict\\s*=\\s*(PASS|WARN|FAIL)"
+    - "env_mode[ \\t]*=[ \\t]*(none|docker|micromamba-host|unavailable)"
+    - "env_report[ \\t]*=[ \\t]*/.+"
+    - "verdict[ \\t]*=[ \\t]*(PASS|WARN|FAIL)"
     pattern_examples:
     - "env_mode = none\nenv_report = /tmp/setup-environment/env_setup_report.md\nverdict = PASS\n%%ORDER_UP%%"
     - "env_mode = docker\nenv_report = /tmp/setup-environment/env_setup_report.md\nverdict = PASS\n%%ORDER_UP%%"
@@ -1413,7 +1417,7 @@ skills:
     - name: branch_name
       type: string
     expected_output_patterns:
-    - "worktree_path\\s*=\\s*/.+"
+    - "worktree_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "worktree_path = /tmp/worktrees/research-20260101-120000\n%%ORDER_UP%%"
     write_behavior: always
@@ -1437,9 +1441,9 @@ skills:
     - name: blocked_hypotheses
       type: string
     expected_output_patterns:
-    - "results_path\\s*=\\s*/.+"
-    - "group_manifest\\s*=\\s*/.+"
-    - "verdict\\s*=\\s*(CONCLUSIVE|INCONCLUSIVE|BLOCKED)"
+    - "results_path[ \\t]*=[ \\t]*/.+"
+    - "group_manifest[ \\t]*=[ \\t]*/.+"
+    - "verdict[ \\t]*=[ \\t]*(CONCLUSIVE|INCONCLUSIVE|BLOCKED)"
     pattern_examples:
     - "results_path = /tmp/run-experiment/results.md group_manifest = /tmp/run-experiment/group_manifest.json verdict = CONCLUSIVE\n%%ORDER_UP%%"
     - "results_path = /tmp/run-experiment/results.md group_manifest = /tmp/run-experiment/group_manifest.json verdict = INCONCLUSIVE\n%%ORDER_UP%%"
@@ -1461,7 +1465,7 @@ skills:
     - name: report_path
       type: file_path
     expected_output_patterns:
-    - "report_path\\s*=\\s*/.+"
+    - "report_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "report_path = /tmp/research/report.md\n%%ORDER_UP%%"
     write_behavior: always
@@ -1488,11 +1492,15 @@ skills:
     - name: lens_context_paths
       type: string
     expected_output_patterns:
-    - "prep_path\\s*=\\s*/.+"
-    - "selected_lenses\\s*=\\s*\\S+"
-    - "lens_context_paths\\s*=\\s*/.+"
+    - "prep_path[ \\t]*=[ \\t]*/.+"
+    - "selected_lenses[ \\t]*=[ \\t]*(\\S[^\\n]*|none)"
+    - "lens_context_paths[ \\t]*=[ \\t]*(\\S[^\\n]*|none)"
     pattern_examples:
     - "prep_path = /abs/path/pr_prep_2026-04-07_101349.md\nselected_lenses = fair-comparison,estimand-clarity\nlens_context_paths = /abs/ctx1.md,/abs/ctx2.md\n%%ORDER_UP%%"
+    - "prep_path = /abs/path/prep.md\nselected_lenses = none\nlens_context_paths = none\n%%ORDER_UP%%"
+    negative_examples:
+    - "prep_path = /abs/path/prep.md\nselected_lenses = \nlens_context_paths = \n%%ORDER_UP%%"
+    - "prep_path = /abs/path/prep.md\nselected_lenses = \nlens_context_paths\n%%ORDER_UP%%"
     write_behavior: always
 
   compose-research-pr:
@@ -1516,7 +1524,7 @@ skills:
     - name: pr_url
       type: string
     expected_output_patterns:
-    - "pr_url\\s*=\\s*(https://github\\.com/.*/pull/\\d+)?"
+    - "pr_url[ \\t]*=[ \\t]*(https://github\\.com/.*/pull/\\d+)?"
     pattern_examples:
     - "pr_url = https://github.com/owner/repo/pull/42\n%%ORDER_UP%%"
     - "pr_url = \n%%ORDER_UP%%"
@@ -1544,8 +1552,8 @@ skills:
     - name: classification_timestamp
       type: string
     expected_output_patterns:
-    - "verdict\\s*=\\s*(GO|REVISE|STOP)"
-    - "(?:experiment_type\\s*=\\s*\\S+|verdict\\s*=\\s*STOP)"
+    - "verdict[ \\t]*=[ \\t]*(GO|REVISE|STOP)"
+    - "(?:experiment_type[ \\t]*=[ \\t]*(\\S[^\\n]*|none)|verdict[ \\t]*=[ \\t]*STOP)"
     pattern_examples:
     - "verdict = GO\nexperiment_type = benchmark\nevaluation_dashboard = /tmp/eval.md\nrevision_guidance = /tmp/guidance.md\n%%ORDER_UP%%"
     - "verdict = REVISE\nexperiment_type = benchmark\nrevision_guidance = /tmp/guidance.md\n%%ORDER_UP%%"
@@ -1572,7 +1580,7 @@ skills:
       type: string
       allowed_values: [approved, changes_requested, needs_human]
     expected_output_patterns:
-    - "verdict\\s*=\\s*(approved|changes_requested|needs_human)"
+    - "verdict[ \\t]*=[ \\t]*(approved|changes_requested|needs_human)"
     pattern_examples:
     - "verdict = approved\n%%ORDER_UP%%"
     - "verdict = changes_requested\n%%ORDER_UP%%"
@@ -1594,7 +1602,7 @@ skills:
       type: string
       allowed_values: [approved, changes_requested, needs_human]
     expected_output_patterns:
-    - "verdict\\s*=\\s*(approved|changes_requested|needs_human)"
+    - "verdict[ \\t]*=[ \\t]*(approved|changes_requested|needs_human)"
     pattern_examples:
     - "verdict = approved\n%%ORDER_UP%%"
     - "verdict = changes_requested\n%%ORDER_UP%%"
@@ -1621,7 +1629,7 @@ skills:
     - name: fixes_applied
       type: integer
     expected_output_patterns:
-    - "needs_rerun\\s*=\\s*(true|false)"
+    - "needs_rerun[ \\t]*=[ \\t]*(true|false)"
     pattern_examples:
     - "needs_rerun = true\nverdict = real_fix\nfixes_applied = 2\n%%ORDER_UP%%"
     - "needs_rerun = false\nverdict = already_green\nfixes_applied = 0\n%%ORDER_UP%%"
@@ -1629,7 +1637,7 @@ skills:
     - "needs_rerun = false\nverdict = ci_only_failure\nfixes_applied = 0\n%%ORDER_UP%%"
     write_behavior: conditional
     write_expected_when:
-    - "verdict\\s*=\\s*real_fix"
+    - "verdict[ \\t]*=[ \\t]*real_fix"
 
   resolve-research-review:
     inputs:
@@ -1652,7 +1660,7 @@ skills:
     - name: fixes_applied
       type: integer
     expected_output_patterns:
-    - "needs_rerun\\s*=\\s*(true|false)"
+    - "needs_rerun[ \\t]*=[ \\t]*(true|false)"
     pattern_examples:
     - "needs_rerun = true\nverdict = real_fix\nfixes_applied = 2\n%%ORDER_UP%%"
     - "needs_rerun = false\nverdict = already_green\nfixes_applied = 0\n%%ORDER_UP%%"
@@ -1660,7 +1668,7 @@ skills:
     - "needs_rerun = false\nverdict = ci_only_failure\nfixes_applied = 0\n%%ORDER_UP%%"
     write_behavior: conditional
     write_expected_when:
-    - "verdict\\s*=\\s*real_fix"
+    - "verdict[ \\t]*=[ \\t]*real_fix"
 
   vis-lens-always-on:
     inputs:
@@ -1677,7 +1685,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -1696,7 +1704,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -1715,7 +1723,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -1734,7 +1742,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -1753,7 +1761,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -1772,7 +1780,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -1791,7 +1799,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -1810,7 +1818,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
@@ -1829,7 +1837,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
   vis-lens-caption-annot:
@@ -1847,7 +1855,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
   vis-lens-story-arc:
@@ -1865,7 +1873,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
   vis-lens-reproducibility:
@@ -1883,7 +1891,7 @@ skills:
     - name: diagram_path
       type: file_path
     expected_output_patterns:
-    - "diagram_path\\s*=\\s*/.+"
+    - "diagram_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
   build-execution-map:
@@ -1906,7 +1914,7 @@ skills:
     - name: review_approach_candidates
       type: string
     expected_output_patterns:
-    - "execution_map\\s*=\\s*/.+"
+    - "execution_map[ \\t]*=[ \\t]*/.+"
     pattern_examples:
     - "execution_map = /tmp/build-execution-map/execution_map_2026-04-22_190000.json\nexecution_map_report = /tmp/build-execution-map/execution_map_report_2026-04-22_190000.md\ngroup_count = 3\ntotal_issues = 5\ndispatched_count = 4\ndeferred_count = 1\nhas_deferred = true"
     write_behavior: always
@@ -1928,12 +1936,12 @@ skills:
     - name: html_path
       type: file_path
     expected_output_patterns:
-    - "html_path\\s*=\\s*\\S+"
+    - "html_path[ \\t]*=[ \\t]*\\S+"
     pattern_examples:
     - "html_path = /tmp/research/report.html\n%%ORDER_UP%%"
     write_behavior: conditional
     write_expected_when:
-    - "html_path\\s*=\\s*\\S+"
+    - "html_path[ \\t]*=[ \\t]*\\S+"
   planner-analyze:
     inputs: []
     outputs: []
@@ -1958,7 +1966,7 @@ skills:
       type: int
       required: true
     expected_output_patterns:
-    - "phase_manifest_path\\s*=\\s*\\S+"
+    - "phase_manifest_path[ \\t]*=[ \\t]*\\S+"
     pattern_examples:
     - "phase_manifest_path = /tmp/autoskillit/planner/run-20260101-120000/phases/phase_manifest.json\n%%ORDER_UP%%"
     write_behavior: always
@@ -1977,7 +1985,7 @@ skills:
       - name: elab_result_path
         type: file_path
     expected_output_patterns:
-      - "elab_result_path\\s*=\\s*\\S+"
+      - "elab_result_path[ \\t]*=[ \\t]*\\S+"
     pattern_examples:
       - "elab_result_path = /tmp/autoskillit/planner/run-20260101-120000/phases/P1_result.json\n%%ORDER_UP%%"
     write_behavior: always
@@ -1993,7 +2001,7 @@ skills:
       - name: phase_assignments_result_dir
         type: directory_path
     expected_output_patterns:
-      - "phase_assignments_result_dir\\s*=\\s*\\S+"
+      - "phase_assignments_result_dir[ \\t]*=[ \\t]*\\S+"
     pattern_examples:
       - "phase_assignments_result_dir = /tmp/autoskillit/planner/run-20260101-120000/assignments\n%%ORDER_UP%%"
     write_behavior: always
@@ -2009,7 +2017,7 @@ skills:
       - name: phase_wps_result_dir
         type: directory_path
     expected_output_patterns:
-      - "phase_wps_result_dir\\s*=\\s*\\S+"
+      - "phase_wps_result_dir[ \\t]*=[ \\t]*\\S+"
     pattern_examples:
       - "phase_wps_result_dir = /tmp/autoskillit/planner/run-20260101-120000/work_packages\n%%ORDER_UP%%"
     write_behavior: always
@@ -2038,7 +2046,7 @@ skills:
       - name: refined_plan_path
         type: file_path
     expected_output_patterns:
-      - "refined_plan_path\\s*=\\s*\\S+"
+      - "refined_plan_path[ \\t]*=[ \\t]*\\S+"
     pattern_examples:
       - "refined_plan_path = /tmp/autoskillit/planner/run-20260101-120000/refined_plan.json\n%%ORDER_UP%%"
     write_behavior: always
@@ -2057,7 +2065,7 @@ skills:
       - name: phase_refined_path
         type: file_path
     expected_output_patterns:
-      - "phase_refined_path\\s*=\\s*\\S+"
+      - "phase_refined_path[ \\t]*=[ \\t]*\\S+"
     pattern_examples:
       - "phase_refined_path = /tmp/autoskillit/planner/run-20260101-120000/refine_contexts/P1_result.json\n%%ORDER_UP%%"
     write_behavior: always
@@ -2079,7 +2087,7 @@ skills:
       - name: refined_wps_path
         type: file_path
     expected_output_patterns:
-      - "refined_wps_path\\s*=\\s*\\S+"
+      - "refined_wps_path[ \\t]*=[ \\t]*\\S+"
     pattern_examples:
       - "refined_wps_path = /tmp/autoskillit/planner/run-20260101-120000/refined_wps.json\n%%ORDER_UP%%"
     write_behavior: always
@@ -2110,8 +2118,8 @@ skills:
       - name: alignment_finding_count
         type: str
     expected_output_patterns:
-      - "alignment_findings_path\\s*=\\s*\\S+"
-      - "alignment_finding_count\\s*=\\s*\\d+"
+      - "alignment_findings_path[ \\t]*=[ \\t]*\\S+"
+      - "alignment_finding_count[ \\t]*=[ \\t]*\\d+"
     pattern_examples:
       - "alignment_findings_path = /tmp/autoskillit/planner/run-20260101-120000/task_alignment.json\nalignment_finding_count = 0\n%%ORDER_UP%%"
     write_behavior: always
@@ -2127,7 +2135,7 @@ skills:
       - name: review_approach_assessment_path
         type: file_path
     expected_output_patterns:
-      - "review_approach_assessment_path\\s*=\\s*\\S+"
+      - "review_approach_assessment_path[ \\t]*=[ \\t]*\\S+"
     pattern_examples:
       - "review_approach_assessment_path = /tmp/autoskillit/planner/run-20260101-120000/review_approach_assessment.json\n%%ORDER_UP%%"
     write_behavior: always
@@ -2137,7 +2145,7 @@ skills:
       - name: audit_report_path
         type: file_path
     expected_output_patterns:
-      - "audit_report_path\\s*=\\s*\\S+"
+      - "audit_report_path[ \\t]*=[ \\t]*\\S+"
     pattern_examples:
       - "audit_report_path = /tmp/autoskillit/audit-tests/test_audit_2026-04-28_120000.md\n%%ORDER_UP%%"
     write_behavior: always
@@ -2152,13 +2160,13 @@ skills:
       - name: verdict
         type: string
     expected_output_patterns:
-      - "validated_report_path\\s*=\\s*\\S+"
-      - "verdict\\s*=\\s*\\S+"
+      - "validated_report_path[ \\t]*=[ \\t]*\\S+"
+      - "verdict[ \\t]*=[ \\t]*\\S+"
     pattern_examples:
       - "validated_report_path = /tmp/autoskillit/validate-audit-2026-04-28_120000/validated_report_tests.md\nverdict = validated"
     write_behavior: conditional
     write_expected_when:
-      - "verdict\\s*=\\s*validated"
+      - "verdict[ \\t]*=[ \\t]*validated"
   validate-test-audit:
     inputs:
       - name: audit_report_path
@@ -2170,13 +2178,13 @@ skills:
       - name: verdict
         type: str
     expected_output_patterns:
-      - "validated_report_path\\s*=\\s*\\S+"
-      - "verdict\\s*=\\s*\\S+"
+      - "validated_report_path[ \\t]*=[ \\t]*\\S+"
+      - "verdict[ \\t]*=[ \\t]*\\S+"
     pattern_examples:
       - "validated_report_path = /tmp/autoskillit/validate-audit-2026-05-05_140000/validated_report_tests.md\nverdict = validated"
     write_behavior: conditional
     write_expected_when:
-      - "verdict\\s*=\\s*validated"
+      - "verdict[ \\t]*=[ \\t]*validated"
   file-audit-issues:
     inputs:
       - name: run_dir
@@ -2189,7 +2197,7 @@ skills:
         type: integer
     expected_output_patterns:
       - "issue_urls\\s*="
-      - "issue_count\\s*=\\s*\\d+"
+      - "issue_count[ \\t]*=[ \\t]*\\d+"
     pattern_examples:
       - "issue_urls = https://github.com/org/repo/issues/100,https://github.com/org/repo/issues/101\nissue_count = 2"
     write_behavior: always
@@ -2212,14 +2220,14 @@ skills:
     - name: pr_body_path
       type: file_path
     expected_output_patterns:
-    - "verdict\\s*=\\s*(created|dry_run|preflight_failed)"
+    - "verdict[ \\t]*=[ \\t]*(created|dry_run|preflight_failed)"
     pattern_examples:
     - "pr_url = https://github.com/org/repo/pull/42\nverdict = created\ncategory_summary = 14 fixes, 3 features\n%%ORDER_UP%%"
     - "pr_url = \nverdict = dry_run\ncategory_summary = 14 fixes, 3 features\n%%ORDER_UP%%"
     - "pr_url = \nverdict = preflight_failed\ncategory_summary = \n%%ORDER_UP%%"
     write_behavior: conditional
     write_expected_when:
-    - "verdict\\s*=\\s*created"
+    - "verdict[ \\t]*=[ \\t]*created"
   analyze-pipeline-health:
     inputs:
     - name: kitchen_id
@@ -2794,6 +2802,25 @@ callable_contracts:
       type: str
     - name: commit_count
       type: str
+  autoskillit.smoke_utils.check_commits_ahead:
+    inputs:
+    - name: cwd
+      type: directory_path
+      required: true
+    - name: base_branch
+      type: string
+      required: true
+    outputs:
+    - name: has_commits
+      type: string
+  autoskillit.smoke_utils.close_issue_already_done:
+    inputs:
+    - name: issue_url
+      type: string
+      required: true
+    outputs:
+    - name: closed
+      type: string
 
 tool_output_contracts:
   wait_for_ci:

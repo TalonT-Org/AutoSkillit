@@ -565,7 +565,9 @@ class AutomationConfig:
                 ),
             ),
             agent_backend=AgentBackendConfig(
-                backend=str(val(ab, "backend", _ab["backend"])),
+                backend=str(
+                    ab if isinstance(ab, str) and ab else val(ab, "backend", _ab["backend"])
+                ),
             ),
             features=_features_dict,
             experimental_enabled=_exp_enabled,

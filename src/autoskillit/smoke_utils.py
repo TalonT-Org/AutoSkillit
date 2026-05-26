@@ -814,3 +814,55 @@ def detect_zero_changes(worktree_path: str, base_branch: str) -> dict[str, str]:
     )
     count = int(result.stdout.strip())
     return {"has_changes": "true" if count > 0 else "false", "commit_count": str(count)}
+
+
+def check_commits_ahead(cwd: str, base_branch: str) -> dict[str, str]:
+    """Return {"has_commits": "true"/"false"} based on commits ahead of base_branch.
+
+    Used by the check_has_commits recipe guard to short-circuit pipelines on
+    zero-changes branches (feature already merged).
+    """
+    if not base_branch:
+        raise ValueError("base_branch must be non-empty")
+    import subprocess  # noqa: PLC0415
+
+    result = subprocess.run(
+        ["git", "rev-list", "--count", f"{base_branch}..HEAD"],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=30,
+    )
+    count = int(result.stdout.strip())
+    return {"has_commits": "true" if count > 0 else "false"}
+
+
+def close_issue_already_done(issue_url: str) -> dict[str, str]:
+    """Remove in-progress label and close issue as already-implemented.
+
+    Called by close_issue_already_done recipe step when check_has_commits
+    detects zero commits ahead of base (feature already merged).
+    """
+    import subprocess  # noqa: PLC0415
+
+    subprocess.run(
+        ["gh", "issue", "edit", issue_url, "--remove-label", "in-progress"],
+        capture_output=True,
+        check=False,
+        timeout=60,
+    )
+    subprocess.run(
+        [
+            "gh",
+            "issue",
+            "close",
+            issue_url,
+            "--comment",
+            "Closing: branch has zero commits ahead of base — feature already implemented.",
+        ],
+        capture_output=True,
+        check=False,
+        timeout=60,
+    )
+    return {"closed": "true"}

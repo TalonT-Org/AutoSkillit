@@ -59,6 +59,8 @@ def _fmt_run_skill(data: dict, pipeline: bool) -> str:
         lines.append(f"needs_retry: {data.get('needs_retry', False)}")
         if data.get("retry_reason") and data["retry_reason"] != "none":
             lines.append(f"retry_reason: {data['retry_reason']}")
+        if data.get("needs_retry") and "has_progress_evidence" in data:
+            lines.append(f"has_progress_evidence: {data['has_progress_evidence']}")
         worktree = data.get("worktree_path", "")
         if worktree:
             lines.append(f"worktree_path: {worktree}")
@@ -83,6 +85,8 @@ def _fmt_run_skill(data: dict, pipeline: bool) -> str:
     retry_reason = data.get("retry_reason", "none")
     if retry_reason and retry_reason != "none":
         lines.append(f"retry_reason: {retry_reason}")
+    if data.get("needs_retry") and "has_progress_evidence" in data:
+        lines.append(f"has_progress_evidence: {data['has_progress_evidence']}")
     worktree = data.get("worktree_path", "")
     if worktree:
         lines.append(f"worktree_path: {worktree}")
@@ -216,6 +220,9 @@ _FMT_RUN_SKILL_RENDERED: frozenset[str] = frozenset(
         "result",
         "stderr",
         "token_usage",
+        "has_progress_evidence",
+        "provider_used",
+        "provider_fallback",
     }
 )
 _FMT_RUN_SKILL_SUPPRESSED: frozenset[str] = frozenset(
@@ -231,6 +238,10 @@ _FMT_RUN_SKILL_SUPPRESSED: frozenset[str] = frozenset(
         "lifespan_started",
         "order_id",
         "infra_exit_category",
+        "api_retry_count",
+        "api_retry_last_error",
+        "api_retry_last_status",
+        "api_retry_exhausted",
     }
 )
 

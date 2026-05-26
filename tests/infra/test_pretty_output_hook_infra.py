@@ -16,6 +16,10 @@ from tests.infra._pretty_output_helpers import (
     _wrap_for_claude_code,
     _wrap_plain_str_for_claude_code,
 )
+from tests.infra.conftest import (
+    _FORMATTER_COVERAGE_REGISTRY,
+    FormatterCoverageDef,
+)
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
@@ -221,4 +225,58 @@ def test_fmt_run_skill_contradictory_subtype_never_renders_fail_success():
     cross = "\u2717"
     assert f"{cross} success" not in interactive_out, (
         f"Interactive mode rendered contradictory '{cross} success': {interactive_out!r}"
+    )
+
+
+def test_typeddict_covers_to_json_keys() -> None:
+    """RunSkillResult TypedDict must cover every key emitted by SkillResult.to_json().
+
+    Uses two instances to cover both conditional (worktree_path) and unconditional
+    fields. Any field added to to_json() without a matching TypedDict entry will fail
+    this test, preventing silent drift between the typed contract and the wire format.
+    """
+    import dataclasses
+    import json
+    import typing
+
+    from autoskillit.core.types._type_results import SkillResult
+    from autoskillit.server.tools._types import RunSkillResult
+
+    r1 = SkillResult.crashed(Exception("test"))
+    r2 = dataclasses.replace(r1, worktree_path="/tmp/test-worktree")
+
+    all_json_keys: set[str] = set()
+    for r in (r1, r2):
+        all_json_keys.update(json.loads(r.to_json()).keys())
+
+    typeddict_keys = set(typing.get_type_hints(RunSkillResult))
+    missing = all_json_keys - typeddict_keys
+    assert not missing, (
+        f"SkillResult.to_json() emits keys absent from RunSkillResult TypedDict: "
+        f"{sorted(missing)}. Add them to server/tools/_types.py RunSkillResult."
+    )
+
+
+@pytest.mark.parametrize(
+    "tool_name,entry",
+    list(_FORMATTER_COVERAGE_REGISTRY.items()),
+    ids=list(_FORMATTER_COVERAGE_REGISTRY),
+)
+def test_typeddict_covers_json_producer_keys(tool_name: str, entry: FormatterCoverageDef) -> None:
+    """Each formatter with a json_producer must have TypedDict keys covering all JSON keys.
+
+    Entries without json_producer are skipped. This generalizes test_typeddict_covers_to_json_keys
+    to all formatter registry entries, enabling future formatters to opt in by declaring a
+    json_producer in their FormatterCoverageDef.
+    """
+    import typing
+
+    if entry.json_producer is None:
+        pytest.skip("no json_producer declared for this formatter")
+    json_keys = set(entry.json_producer().keys())
+    typeddict_keys = set(typing.get_type_hints(entry.typed_dict))
+    missing = json_keys - typeddict_keys
+    assert not missing, (
+        f"{tool_name}: json_producer keys absent from TypedDict: {sorted(missing)}. "
+        "Add them to the TypedDict in server/tools/_types.py."
     )

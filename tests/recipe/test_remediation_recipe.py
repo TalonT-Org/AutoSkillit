@@ -151,12 +151,12 @@ def test_remediation_next_or_done_routes_more_parts_to_dry_walkthrough(recipe) -
 
 
 def test_remediation_next_or_done_routes_done_to_push(recipe) -> None:
-    """T_REM_MP3: next_or_done fallthrough must route to push (all parts complete)."""
+    """T_REM_MP3: next_or_done fallthrough must route to check_has_commits (all parts complete)."""
     step = recipe.steps["next_or_done"]
     assert step.on_result is not None
     conds = step.on_result.conditions
-    assert any(c.route == "push" for c in conds), (
-        "next_or_done must have a fallthrough condition routing to push"
+    assert any(c.route == "check_has_commits" for c in conds), (
+        "next_or_done must have a fallthrough condition routing to check_has_commits"
     )
 
 

@@ -16,12 +16,10 @@ pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 # Reasons excluded from orchestrator-prompt routing check:
 # - NONE: not a retry scenario, no routing needed
 # - BUDGET_EXHAUSTED: caps other reasons; orchestrator never sees it directly
-# - CONTRACT_RECOVERY: handled by infrastructure nudge in headless/__init__.py
 # - CLONE_CONTAMINATION: handled by clone_guard infrastructure
 _ROUTING_EXCLUDED = {
     RetryReason.NONE,
     RetryReason.BUDGET_EXHAUSTED,
-    RetryReason.CONTRACT_RECOVERY,
     RetryReason.CLONE_CONTAMINATION,
 }
 
@@ -37,6 +35,7 @@ _EXPECTED_ROUTES: dict[RetryReason, tuple[str, str | None]] = {
     RetryReason.IDLE_STALL: ("on_context_limit", "lifespan_started"),
     RetryReason.EARLY_STOP: ("on_context_limit", "has_progress_evidence"),
     RetryReason.ZERO_WRITES: ("on_context_limit", "has_progress_evidence"),
+    RetryReason.CONTRACT_RECOVERY: ("on_context_limit", "has_progress_evidence"),
 }
 
 

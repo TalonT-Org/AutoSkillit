@@ -205,13 +205,13 @@ def test_exp_lens_context_path_remains_optional(skills: dict[str, Any], skill_na
 
 def test_skill_contracts_yaml_includes_prepare_research_pr(skills):
     """prepare-research-pr must be registered with prep_path output pattern."""
-    _assert_skill_has_patterns(skills, "prepare-research-pr", r"prep_path\s*=\s*/.+")
+    _assert_skill_has_patterns(skills, "prepare-research-pr", r"prep_path[ \t]*=[ \t]*/.+")
 
 
 def test_skill_contracts_yaml_includes_compose_research_pr(skills):
     """compose-research-pr must be registered with pr_url output pattern."""
     _assert_skill_has_patterns(
-        skills, "compose-research-pr", r"pr_url\s*=\s*(https://github\.com/.*/pull/\d+)?"
+        skills, "compose-research-pr", r"pr_url[ \t]*=[ \t]*(https://github\.com/.*/pull/\d+)?"
     )
 
 
@@ -353,7 +353,7 @@ def test_review_gate_loop_required_pattern_in_review_pr_contracts(skills):
     assert "review-pr" in skills
     patterns = skills["review-pr"].get("expected_output_patterns", [])
     conditional_pattern = (
-        "(?:%%REVIEW_GATE::(LOOP_REQUIRED|CLEAR)%%|verdict\\s*=\\s*approved_with_comments)"
+        "(?:%%REVIEW_GATE::(LOOP_REQUIRED|CLEAR)%%|verdict[ \\t]*=[ \\t]*approved_with_comments)"
     )
     assert conditional_pattern in patterns, (
         f"review-pr gate pattern must use OR-conditional form so that approved_with_comments "
@@ -391,7 +391,7 @@ def test_review_gate_clear_pattern_in_review_pr_contracts(skills):
 def test_skill_contracts_yaml_includes_setup_environment(skills: dict[str, Any]) -> None:
     """setup-environment must be registered with env_mode and verdict patterns."""
     _assert_skill_has_patterns(
-        skills, "setup-environment", r"env_mode\s*=\s*(none|docker|micromamba-host|unavailable)"
+        skills, "setup-environment", r"env_mode[ \t]*=[ \t]*(none|docker|micromamba-host|unavailable)"
     )
     contract = skills["setup-environment"]
     patterns = contract["expected_output_patterns"]

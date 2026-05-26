@@ -19,7 +19,7 @@ from tests.conftest import _make_result
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
-FIXTURE_CONDITIONAL_PATTERN = r"verdict\s*=\s*real_fix"
+FIXTURE_CONDITIONAL_PATTERN = r"verdict[ \t]*=[ \t]*real_fix"
 
 
 def _ndjson_with_tool_uses(tool_names: list[str]) -> str:
@@ -179,7 +179,7 @@ class TestZeroWriteDetection:
             skill_command="/autoskillit:resolve-failures /tmp/wt /tmp/plan.md main",
             write_behavior=WriteBehaviorSpec(
                 mode="conditional",
-                expected_when=(r"verdict\s*=\s*real_fix",),
+                expected_when=(r"verdict[ \t]*=[ \t]*real_fix",),
             ),
             backend=ClaudeCodeBackend(),
         )
@@ -210,7 +210,7 @@ class TestZeroWriteDetection:
             skill_command="/autoskillit:resolve-failures /tmp/wt /tmp/plan.md main",
             write_behavior=WriteBehaviorSpec(
                 mode="conditional",
-                expected_when=(r"verdict\s*=\s*real_fix",),
+                expected_when=(r"verdict[ \t]*=[ \t]*real_fix",),
             ),
             backend=ClaudeCodeBackend(),
         )
@@ -240,7 +240,7 @@ class TestZeroWriteDetection:
             skill_command="/autoskillit:resolve-failures /tmp/wt /tmp/plan.md main",
             write_behavior=WriteBehaviorSpec(
                 mode="conditional",
-                expected_when=(r"verdict\s*=\s*real_fix",),
+                expected_when=(r"verdict[ \t]*=[ \t]*real_fix",),
             ),
             backend=ClaudeCodeBackend(),
         )
@@ -781,7 +781,7 @@ class TestGitWritesDetection:
             skill_command="/autoskillit:resolve-failures /tmp/wt /tmp/plan.md main",
             write_behavior=WriteBehaviorSpec(
                 mode="conditional",
-                expected_when=(r"verdict\s*=\s*real_fix",),
+                expected_when=(r"verdict[ \t]*=[ \t]*real_fix",),
             ),
             git_writes_detected=True,
             backend=ClaudeCodeBackend(),

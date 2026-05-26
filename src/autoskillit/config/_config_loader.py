@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -161,6 +162,12 @@ def _make_dynaconf(project_dir: Path | None = None) -> Dynaconf:
         tmp.write(dump_yaml_str(merged))
         tmp_path = Path(tmp.name)
 
+    # AUTOSKILLIT_AGENT_BACKEND flat env var (used by hook subprocesses to detect
+    # the active backend) clashes with Dynaconf: a flat section override replaces
+    # the agent_backend dict, suppressing nested env vars and file config. Pop it
+    # before Dynaconf loads and restore it after so that AUTOSKILLIT_AGENT_BACKEND__BACKEND
+    # (nested) and YAML file config are not silently overridden.
+    _flat_backend = os.environ.pop("AUTOSKILLIT_AGENT_BACKEND", None)
     try:
         d = Dynaconf(
             envvar_prefix="AUTOSKILLIT",
@@ -173,6 +180,8 @@ def _make_dynaconf(project_dir: Path | None = None) -> Dynaconf:
         d.as_dict()  # trigger eager load so the temp file can be safely deleted
     finally:
         tmp_path.unlink(missing_ok=True)
+        if _flat_backend is not None:
+            os.environ["AUTOSKILLIT_AGENT_BACKEND"] = _flat_backend
 
     return d
 

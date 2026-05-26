@@ -932,6 +932,12 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "a 16th fleet/ module (sub-package file ceiling); keeps dispatch-related helpers "
         "co-located with the execution engine that calls them",
     ),
+    "smoke_utils.py": (
+        1100,
+        "REQ-CNST-010-E7: agent-eval + skill-eval smoke functions — parse_agent_eval_manifests "
+        "and build_agent_eval_context parallel parse_eval_manifests/build_eval_context; "
+        "shared helpers extracted but residual size from two eval domains",
+    ),
 }
 
 

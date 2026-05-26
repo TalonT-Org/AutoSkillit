@@ -1,0 +1,170 @@
+name: agent-eval
+autoskillit_version: "0.10.327"
+description: >-
+  Test agent definition variants against canary test cases. For each canary,
+  stages each variant agent file temporarily, runs it via eval-agent wrapper,
+  then invokes a judge to evaluate outputs against detection criteria. Produces
+  a comparative scorecard. Unlike skill-eval, variants are independent read-only
+  invocations and can run in parallel.
+summary: >-
+  parse_manifests > run_canaries > compile_scorecard > done
+
+ingredients:
+  canary_manifest:
+    description: >-
+      Path to JSON file defining canary test cases. Each entry has id,
+      agent_name, prompt_template, prompt_vars, reference_path,
+      reference_type, gap_description, and detection_criteria.
+    required: true
+  variant_manifest:
+    description: >-
+      Path to JSON file defining agent variants. Each entry has id, label,
+      agent_file (path to .md definition — required for all variants
+      including baseline), and description.
+    required: true
+  source_dir:
+    description: >-
+      Path to the source project directory. Used as cwd for judge-eval
+      (project-local skill discovered via cwd) and as the base for
+      staging agent files into src/autoskillit/agents/.
+    required: true
+  output_dir:
+    description: >-
+      Base directory for eval run output. Defaults to
+      {{AUTOSKILLIT_TEMP}}/agent-eval.
+    default: "{{AUTOSKILLIT_TEMP}}/agent-eval"
+  max_parallel:
+    description: >-
+      Max concurrent canary x variant evaluations (global concurrency limit).
+    default: "3"
+
+kitchen_rules:
+  - >-
+    NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
+    Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the orchestrator. All
+    file operations are delegated through run_skill, run_cmd, or run_python.
+  - >-
+    PARALLEL EXECUTION: Canary x variant combinations are independent and
+    SHOULD run in parallel up to inputs.max_parallel. Unlike skill-eval,
+    there is no shared clone — each invocation is read-only.
+  - >-
+    VARIANT STAGING: Before each eval-agent run, stage the variant agent
+    file to {source_dir}/src/autoskillit/agents/{agent_name}-eval-{variant_id}.md
+    using run_cmd cp. After the run (success OR failure), remove the staged
+    file using run_cmd rm. Cleanup MUST execute on both paths to prevent
+    orphaned agent files in the codebase.
+  - >-
+    JUDGE CWD: Always run /judge-eval with cwd set to inputs.source_dir.
+    The judge-eval skill is project-local and discovered via CWD.
+  - >-
+    FAILED VARIANTS: If a variant run_skill fails, record the variant as
+    {"variant_id": null} in the output_paths accumulator. Do not abort the canary.
+  - >-
+    OUTPUT CAPTURE: After each variant run_skill, copy the output file to
+    {eval_run_dir}/{canary_id}/{variant_id}/output.json using run_cmd.
+  - >-
+    STATISTICAL CONFIDENCE: Each canary x variant combination runs once per
+    recipe invocation. For statistical confidence, run the recipe multiple
+    times and compare scorecards across runs.
+
+steps:
+  parse_manifests:
+    python: "autoskillit.smoke_utils.parse_agent_eval_manifests"
+    with:
+      canary_manifest: "${{ inputs.canary_manifest }}"
+      variant_manifest: "${{ inputs.variant_manifest }}"
+      output_dir: "${{ inputs.output_dir }}"
+    capture:
+      eval_run_dir: "${{ result.eval_run_dir }}"
+      canary_count: "${{ result.canary_count }}"
+      variant_count: "${{ result.variant_count }}"
+      manifest_index_path: "${{ result.manifest_index_path }}"
+    on_success: run_canaries
+    on_failure: escalate
+    note: >-
+      Deterministic step. Reads canary and variant manifest JSON files, resolves
+      prompt_template with prompt_vars (_file indirection), creates per-canary
+      resolved.json and resolved_prompt.txt, and writes manifest_index.json.
+
+  run_canaries:
+    tool: run_skill
+    with:
+      skill_command: "placeholder — see note for orchestration logic"
+    on_success: compile_scorecard
+    on_failure: escalate
+    note: >-
+      LLM-ORCHESTRATED STEP — do NOT literally run the skill_command above.
+      Instead, follow these instructions using MCP tool calls directly:
+
+
+      1. Read the manifest index: run_cmd cat {context.manifest_index_path}
+         Parse the JSON to get canary_ids, variant_ids, and directory paths.
+
+
+      2. FOR EACH CANARY x VARIANT PAIR (up to inputs.max_parallel in parallel):
+
+         a. Read the canary's resolved data:
+            run_cmd cat {eval_run_dir}/{canary_id}/resolved.json
+
+         b. Get the variant's agent_file path from the resolved data:
+            resolved["variants"][variant_id]["agent_file"]
+            Get the agent_name from resolved data:
+            resolved["agent_name"]
+
+         c. Stage the variant agent file:
+            run_cmd cp {agent_file} {inputs.source_dir}/src/autoskillit/agents/{agent_name}-eval-{variant_id}.md
+
+         d. Run the eval-agent wrapper:
+            run_skill /autoskillit:eval-agent --agent-name {agent_name}-eval-{variant_id} --prompt-file {eval_run_dir}/{canary_id}/resolved_prompt.txt
+            cwd = inputs.source_dir
+
+         e. On SUCCESS:
+            Copy output to {eval_run_dir}/{canary_id}/{variant_id}/output.json via run_cmd cp
+            Record in output_paths accumulator: {variant_id: copied_path}
+
+         f. On FAILURE:
+            Record in output_paths accumulator: {variant_id: null}
+
+         g. ALWAYS (success or failure):
+            Cleanup staged agent file:
+            run_cmd rm {inputs.source_dir}/src/autoskillit/agents/{agent_name}-eval-{variant_id}.md
+
+
+      3. After ALL VARIANTS for a canary complete:
+
+         a. run_python: autoskillit.smoke_utils.build_agent_eval_context
+            canary_id={canary_id}
+            output_paths_json={JSON string of output_paths accumulator}
+            eval_run_dir={context.eval_run_dir}
+
+         b. run_skill: /judge-eval {eval_run_dir}/{canary_id}/eval_context.json
+            cwd = inputs.source_dir
+
+
+      4. After ALL canaries complete, this step is done — proceed to
+         compile_scorecard.
+
+  compile_scorecard:
+    python: "autoskillit.smoke_utils.compile_eval_scorecard"
+    with:
+      eval_run_dir: "${{ context.eval_run_dir }}"
+      canary_manifest: "${{ inputs.canary_manifest }}"
+      variant_manifest: "${{ inputs.variant_manifest }}"
+    capture:
+      scorecard_path: "${{ result.scorecard_path }}"
+      pass_rate: "${{ result.pass_rate }}"
+      total_runs: "${{ result.total_runs }}"
+      passed_runs: "${{ result.passed_runs }}"
+    on_success: done
+    on_failure: escalate
+    note: >-
+      Deterministic step. Walks verdict.json files in the eval run directory,
+      aggregates results, and produces scorecard.json + scorecard.md.
+      Reused unchanged from skill-eval.
+
+  done:
+    action: stop
+    message: >-
+      Agent evaluation complete. Pass rate: ${{ context.pass_rate }}
+      (${{ context.passed_runs }}/${{ context.total_runs }}).
+      Scorecard: ${{ context.scorecard_path }}

@@ -106,3 +106,27 @@ class TestCodexInteractiveCmdAddDirs:
     def test_empty_list_excludes_add_dir(self) -> None:
         spec = CodexBackend().build_interactive_cmd(add_dirs=[])
         assert CodexFlags.ADD_DIR not in spec.cmd
+        assert "CODEX_HOME" not in spec.env
+
+
+class TestCodexInteractiveCmdCodexHome:
+    def test_add_dirs_injects_codex_home_env(self) -> None:
+        spec = CodexBackend().build_interactive_cmd(add_dirs=[Path("/session/dir")])
+        assert spec.env["CODEX_HOME"] == "/session/dir"
+
+    def test_codex_home_uses_first_add_dir(self) -> None:
+        spec = CodexBackend().build_interactive_cmd(
+            add_dirs=[Path("/first"), Path("/second")],
+        )
+        assert spec.env["CODEX_HOME"] == "/first"
+
+    def test_empty_add_dirs_excludes_codex_home(self) -> None:
+        spec = CodexBackend().build_interactive_cmd(add_dirs=[])
+        assert "CODEX_HOME" not in spec.env
+
+    def test_caller_env_extras_takes_precedence(self) -> None:
+        spec = CodexBackend().build_interactive_cmd(
+            add_dirs=[Path("/session/dir")],
+            env_extras={"CODEX_HOME": "/override"},
+        )
+        assert spec.env["CODEX_HOME"] == "/override"

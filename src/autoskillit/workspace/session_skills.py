@@ -526,15 +526,30 @@ class DefaultSessionSkillManager:
                     "codex_config_copy_missing", src=str(codex_home_source / "config.toml")
                 )
                 raise
-            try:
-                shutil.copy2(codex_home_source / "auth.json", session_skills_dir / "auth.json")
-                logger.debug("codex_auth_copy", src=str(codex_home_source / "auth.json"))
-            except FileNotFoundError:
-                logger.warning("codex_auth_copy_missing", src=str(codex_home_source / "auth.json"))
+            auth_source = codex_home_source / "auth.json"
+            auth_dest = session_skills_dir / "auth.json"
+            if auth_source.exists():
+                try:
+                    auth_dest.symlink_to(auth_source.resolve())
+                    logger.debug("codex_auth_symlink", src=str(auth_source), dest=str(auth_dest))
+                except OSError:
+                    logger.warning("codex_auth_symlink_failed", src=str(auth_source))
+            else:
+                logger.warning("codex_auth_copy_missing", src=str(auth_source))
             env_source = codex_home_source / ".env"
             if env_source.exists():
                 shutil.copy2(env_source, session_skills_dir / ".env")
                 logger.debug("codex_env_copy", src=str(env_source))
+            sessions_target = (
+                Path.home() / ".local" / "share" / "autoskillit" / "logs" / "codex-sessions"
+            )
+            sessions_target.mkdir(parents=True, exist_ok=True)
+            sessions_link = session_skills_dir / "sessions"
+            try:
+                sessions_link.symlink_to(sessions_target)
+                logger.debug("codex_sessions_symlink", target=str(sessions_target))
+            except OSError:
+                logger.warning("codex_sessions_symlink_failed", target=str(sessions_target))
         for skill_info in self._provider.list_skills():
             if allow_only is not None and skill_info.name not in allow_only:
                 _log.debug("init_session_allow_only_skip", skill=skill_info.name)

@@ -36,12 +36,14 @@ def _collect_failures(test_file: Path) -> list[str]:
     failures = []
 
     def _check_dict(dict_node: ast.Dict, lineno: int, label: str) -> None:
-        keys = {
-            k.value
-            for k in dict_node.keys
+        keys_and_values = {
+            k.value: v
+            for k, v in zip(dict_node.keys, dict_node.values)
             if isinstance(k, ast.Constant) and isinstance(k.value, str)
         }
-        if "success" in keys and "state" not in keys:
+        success_val = keys_and_values.get("success")
+        is_success_true = isinstance(success_val, ast.Constant) and success_val.value is True
+        if is_success_true and "state" not in keys_and_values:
             failures.append(f"{test_file.name}:{lineno} {label} missing 'state' key")
 
     def _check_value(value_node: ast.expr, lineno: int, label: str) -> None:

@@ -17,6 +17,7 @@ from autoskillit.core import (
     AUTOSKILLIT_PRIVATE_ENV_VARS,
     CAMPAIGN_ID_ENV_VAR,
     KITCHEN_SESSION_ID_ENV_VAR,
+    SESSION_TYPE_ORCHESTRATOR,
     SESSION_TYPE_SKILL,
     BackendCapabilities,
     BareResume,
@@ -177,7 +178,7 @@ class CodexBackend:
             supports_claude_format_stdout=False,
             exit_code_is_terminal=True,
             mcp_config_capable=True,
-            food_truck_capable=False,
+            food_truck_capable=True,
             completion_record_types=frozenset({"turn.completed", "turn.failed", "error"}),
             session_record_types=frozenset(),
         )
@@ -371,9 +372,76 @@ class CodexBackend:
         sentinel_contract: str = "",
         resume_message: str | None = None,
     ) -> CmdSpec:
-        raise NotImplementedError(
-            "Codex CLI does not support L2 orchestrator (food truck) sessions"
+        _plugin_source = plugin_source  # noqa: F841  # no-op: Codex has no --plugin-dir
+        _output_format = output_format  # noqa: F841  # no-op: --json is unconditional
+        _exit_ms = exit_after_stop_delay_ms  # noqa: F841  # no-op: Claude-only
+        _stream_ms = stream_idle_timeout_ms  # noqa: F841  # no-op: Claude-only
+
+        if resume_session_id:
+            effective_prompt = _compose_resume_prompt(
+                base_prompt=orchestrator_prompt,
+                resume_checkpoint=resume_checkpoint,
+                sentinel_contract=sentinel_contract,
+                resume_message=resume_message,
+            )
+        else:
+            effective_prompt = orchestrator_prompt
+
+        prompt = _inject_completion_reminder(
+            _inject_narration_suppression(
+                _inject_cwd_anchor(
+                    _inject_completion_directive(effective_prompt, completion_marker),
+                    cwd,
+                    temp_dir_relpath=temp_dir_relpath,
+                )
+            ),
+            completion_marker,
         )
+
+        extras: dict[str, str] = {
+            "AUTOSKILLIT_HEADLESS": "1",
+            "AUTOSKILLIT_SESSION_TYPE": SESSION_TYPE_ORCHESTRATOR,
+            "MAX_MCP_OUTPUT_TOKENS": _MAX_MCP_OUTPUT_TOKENS_VALUE,
+        }
+        if scenario_step_name:
+            extras["SCENARIO_STEP_NAME"] = scenario_step_name
+        campaign_id = os.environ.get(CAMPAIGN_ID_ENV_VAR)
+        if campaign_id:
+            extras[CAMPAIGN_ID_ENV_VAR] = campaign_id
+        kitchen_session_id = os.environ.get(KITCHEN_SESSION_ID_ENV_VAR)
+        if kitchen_session_id:
+            extras[KITCHEN_SESSION_ID_ENV_VAR] = kitchen_session_id
+        if completion_marker:
+            extras["AUTOSKILLIT_COMPLETION_MARKER"] = completion_marker
+        if allowed_write_prefix:
+            extras["AUTOSKILLIT_ALLOWED_WRITE_PREFIX"] = allowed_write_prefix
+        if env_extras:
+            for k, v in env_extras.items():
+                if k not in ("AUTOSKILLIT_SESSION_TYPE", "AUTOSKILLIT_HEADLESS"):
+                    extras[k] = v
+
+        filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
+        env = CodexEnvPolicy().build_env(filtered_base, extras=extras)
+
+        cmd: list[str] = [
+            "codex",
+            "exec",
+            CodexFlags.JSON,
+            CodexFlags.SANDBOX,
+            "read-only",
+            CodexFlags.ASK_FOR_APPROVAL_SHORT,
+            "never",
+            CodexFlags.CONFIG_OVERRIDE,
+            "web_search=disabled",
+        ]
+        if model:
+            cmd += [CodexFlags.MODEL, model]
+        if resume_session_id:
+            cmd.append(CodexFlags.RESUME_SUBCOMMAND)
+            cmd.append(resume_session_id)
+        cmd.append(prompt)
+
+        return CmdSpec(cmd=tuple(cmd), env=env, cwd=cwd)
 
     def build_interactive_cmd(
         self,

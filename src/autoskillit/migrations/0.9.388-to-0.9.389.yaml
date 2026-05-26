@@ -3,18 +3,17 @@ to_version: "0.9.389"
 description: >
   Rename L1 session terminology from "leaf" to "skill". SessionType.LEAF
   is replaced by SessionType.SKILL; the wire value changes from "leaf" to
-  "skill". The old "leaf" value is recognized with a DeprecationWarning for
-  one release cycle.
+  "skill". The old "leaf" value was recognized with a DeprecationWarning
+  for one release cycle; it now raises ValueError.
 changes:
   - id: session-type-leaf-to-skill
     description: >
       SessionType.LEAF renamed to SessionType.SKILL; wire value "leaf"
       deprecated in favor of "skill".
     instruction: |
-      AUTOSKILLIT_SESSION_TYPE=leaf is still accepted but emits a
-      DeprecationWarning and maps to SessionType.SKILL. Update any
-      scripts or config that sets SESSION_TYPE=leaf to use SESSION_TYPE=skill.
-      The old value will be removed in a future release.
+      AUTOSKILLIT_SESSION_TYPE=leaf is no longer accepted and raises
+      ValueError. Update any scripts or config that sets
+      SESSION_TYPE=leaf to use SESSION_TYPE=skill.
 
   - id: build-leaf-headless-cmd-renamed
     description: >

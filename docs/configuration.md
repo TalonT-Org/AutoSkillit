@@ -392,7 +392,7 @@ Features are gated by lifecycle state. The `features:` config section and
 |-----------|----------|---------------|
 | STABLE | On everywhere | Yes — opt out via `features: {name: false}` |
 | EXPERIMENTAL | On when `experimental_enabled: true` (default on develop; off on main) | Yes — per-feature entry overrides blanket |
-| DEPRECATED | Follows `default_enabled`; may be removed without warning | Yes |
+| DEPRECATED | Emits `DeprecationWarning` when enabled; must have `sunset_date`; `default_enabled` must be `False` | Yes |
 | DISABLED | Always off; cannot be enabled | No — config entry setting `true` is rejected |
 
 ### Blanket Toggle

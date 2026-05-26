@@ -160,6 +160,7 @@ def fleet_error(
 def session_type() -> SessionType:
     """Resolve current session type from AUTOSKILLIT_SESSION_TYPE env var.
 
+    Raises ValueError for the removed 'leaf' alias.
     Fail-closed: returns SKILL on unset or invalid values.
     Transitional bridge: HEADLESS=1 without SESSION_TYPE emits DeprecationWarning.
     """
@@ -167,13 +168,9 @@ def session_type() -> SessionType:
     if raw:
         raw_lower = raw.lower()
         if raw_lower == "leaf":
-            warnings.warn(
-                "AUTOSKILLIT_SESSION_TYPE='leaf' is deprecated. "
-                "Use 'skill' instead. Mapped to SessionType.SKILL.",
-                DeprecationWarning,
-                stacklevel=2,
+            raise ValueError(
+                "AUTOSKILLIT_SESSION_TYPE='leaf' has been removed. Use 'skill' instead."
             )
-            return SessionType.SKILL
         try:
             return SessionType(raw_lower)
         except ValueError:

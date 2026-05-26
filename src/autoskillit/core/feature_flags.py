@@ -7,6 +7,8 @@ full AutomationConfig to keep core/ free of config/ imports.
 
 from __future__ import annotations
 
+import warnings
+
 from .types._type_constants_features import FEATURE_REGISTRY
 from .types._type_enums import FeatureLifecycle
 
@@ -48,12 +50,23 @@ def is_feature_enabled(
     if defn.lifecycle == FeatureLifecycle.DISABLED:
         return False
     if name in features:
-        return features[name]
-    if experimental_enabled and defn.lifecycle == FeatureLifecycle.EXPERIMENTAL:
+        result = features[name]
+    elif experimental_enabled and defn.lifecycle == FeatureLifecycle.EXPERIMENTAL:
         if defn.requires_backend_alignment:
-            return defn.default_enabled
-        return True
-    return defn.default_enabled
+            result = defn.default_enabled
+        else:
+            result = True
+    else:
+        result = defn.default_enabled
+    if result and defn.lifecycle == FeatureLifecycle.DEPRECATED:
+        warnings.warn(
+            f"Feature {name!r} has lifecycle DEPRECATED"
+            f" (sunset: {defn.sunset_date}). "
+            "It will be removed in a future release.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    return result
 
 
 def _collect_disabled_feature_tags(

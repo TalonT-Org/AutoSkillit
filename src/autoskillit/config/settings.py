@@ -11,6 +11,7 @@ Resolution order (low → high priority):
 from __future__ import annotations
 
 import dataclasses
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -245,6 +246,14 @@ class AutomationConfig:
                     raise ConfigSchemaError(
                         f"Feature {name!r} has lifecycle DISABLED"
                         " and cannot be explicitly enabled."
+                    )
+                if FEATURE_REGISTRY[name].lifecycle == FeatureLifecycle.DEPRECATED:
+                    warnings.warn(
+                        f"Feature {name!r} has lifecycle DEPRECATED"
+                        f" (sunset: {FEATURE_REGISTRY[name].sunset_date}). "
+                        "Consider removing this override before the sunset date.",
+                        DeprecationWarning,
+                        stacklevel=2,
                     )
             result[name] = value
 

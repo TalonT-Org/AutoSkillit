@@ -71,7 +71,7 @@ def test_fleet_dispatch_rejects_skill_session_type(monkeypatch: pytest.MonkeyPat
 def test_fleet_dispatch_rejects_deprecated_leaf_session_type(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """fleet dispatch exits 1 when ambient SESSION_TYPE is deprecated 'leaf'."""
+    """fleet dispatch exits 1 when ambient SESSION_TYPE is removed 'leaf'."""
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaf")
     monkeypatch.delenv("CLAUDECODE", raising=False)
     with pytest.raises(SystemExit, match="1"):

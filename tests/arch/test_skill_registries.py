@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import yaml
-
 import pytest
+import yaml
 
 from autoskillit.execution.clone_guard import CLONE_COMMIT_SKILLS, WORKTREE_SKILLS
 from autoskillit.recipe.rules.rules_worktree import _WORKTREE_MODIFYING_SKILLS
@@ -22,6 +21,7 @@ def test_worktree_skills_complete():
 
 def _load_skill_contracts() -> dict:
     import autoskillit.recipe
+
     contracts_path = pathlib.Path(autoskillit.recipe.__file__).parent / "skill_contracts.yaml"
     with open(contracts_path) as f:
         data = yaml.safe_load(f)

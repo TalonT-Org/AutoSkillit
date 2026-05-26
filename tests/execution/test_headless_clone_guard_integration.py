@@ -39,7 +39,12 @@ def _git(cwd: Path, *args: str) -> None:
 
 class RealGitRunner:
     async def __call__(
-        self, cmd: list[str], *, cwd: Path, timeout: float, **_kwargs: object,
+        self,
+        cmd: list[str],
+        *,
+        cwd: Path,
+        timeout: float,
+        **_kwargs: object,
     ) -> SubprocessResult:
         result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout)
         return SubprocessResult(
@@ -77,7 +82,10 @@ async def test_resolve_failures_commits_survive_on_success(git_repo: Path) -> No
     _git(git_repo, "commit", "-m", "fix: resolve failure")
 
     policy = build_clone_guard_policy(
-        readonly_skill=False, has_write_scope=True, is_clone_commit=True, is_worktree=False,
+        readonly_skill=False,
+        has_write_scope=True,
+        is_clone_commit=True,
+        is_worktree=False,
     )
     _, reverted = await check_and_revert_clone_contamination(
         snapshot,
@@ -91,7 +99,10 @@ async def test_resolve_failures_commits_survive_on_success(git_repo: Path) -> No
     assert not reverted, "resolve-failures commits should survive on success"
 
     head = subprocess.run(
-        ["git", "rev-parse", "HEAD"], cwd=git_repo, capture_output=True, text=True,
+        ["git", "rev-parse", "HEAD"],
+        cwd=git_repo,
+        capture_output=True,
+        text=True,
     )
     assert head.stdout.strip() != snapshot.head_sha
 
@@ -107,7 +118,10 @@ async def test_planner_commits_reverted_on_success(git_repo: Path) -> None:
     (git_repo / "src" / "main.rs").write_text("fn main() { /* planner was here */ }")
 
     policy = build_clone_guard_policy(
-        readonly_skill=False, has_write_scope=True, is_clone_commit=False, is_worktree=False,
+        readonly_skill=False,
+        has_write_scope=True,
+        is_clone_commit=False,
+        is_worktree=False,
     )
     _, reverted = await check_and_revert_clone_contamination(
         snapshot,
@@ -121,6 +135,9 @@ async def test_planner_commits_reverted_on_success(git_repo: Path) -> None:
     assert reverted, "Planner contamination should be detected and reverted"
 
     status = subprocess.run(
-        ["git", "status", "--porcelain"], cwd=git_repo, capture_output=True, text=True,
+        ["git", "status", "--porcelain"],
+        cwd=git_repo,
+        capture_output=True,
+        text=True,
     )
     assert status.stdout.strip() == ""

@@ -27,10 +27,10 @@ jobs:
             echo 'matrix=["ubuntu-latest"]' >> $GITHUB_OUTPUT
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
         with:
           version: "0.9.21"
           enable-cache: false
@@ -54,17 +54,17 @@ jobs:
         shard: [execution, general]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
         with:
           version: "0.9.21"
 
       - name: Install go-task
-        uses: arduino/setup-task@v2
+        uses: arduino/setup-task@24c5e13bce349197642746563945fcdf9355e8f4 # v2
         with:
           version: "3.43.3"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
@@ -80,7 +80,7 @@ jobs:
         run: git config --global url."https://${{ secrets.GH_USER }}:${{ secrets.GH_PAT }}@github.com/TalonT-Org/".insteadOf "https://github.com/TalonT-Org/"
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
 
       - name: Install dependencies
         run: uv sync --locked --extra dev
@@ -130,7 +130,7 @@ jobs:
 
       - name: Upload filter stats
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: filter-stats-${{ matrix.os }}-${{ matrix.shard }}
           path: .autoskillit/temp/filter-stats.json

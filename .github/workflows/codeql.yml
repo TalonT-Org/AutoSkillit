@@ -16,8 +16,8 @@ jobs:
       matrix:
         language: [python, actions]
     steps:
-      - uses: actions/checkout@v4
-      - uses: github/codeql-action/init@v3
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: github/codeql-action/init@fee9466b8957867761f2d78f922ab084e3e2dd17 # v3
         with:
           languages: ${{ matrix.language }}
-      - uses: github/codeql-action/analyze@v3
+      - uses: github/codeql-action/analyze@fee9466b8957867761f2d78f922ab084e3e2dd17 # v3

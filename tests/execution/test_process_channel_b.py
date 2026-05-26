@@ -241,9 +241,11 @@ class TestChannelBDrainWait:
         natural_exit_grace_seconds=0.1: script never exits naturally (time.sleep(3600)),
         so shorten grace window to reduce total test time and avoid asyncio-waitpid
         thread contention under CI load (default 3.0s grace + 3.0s kill = 6s total).
-        _session_id_timeout=3.0: 0.5s was too tight under heavy xdist load — the
-        event loop may not schedule the monitor coroutine before the timeout expires,
-        preventing Phase 1 from starting and causing a spurious timed_out result.
+        _session_id_timeout=30.0: increased from 0.5s → 3.0s → 30.0s — under
+        heavy xdist load the event loop may not schedule the monitor coroutine
+        before the timeout expires, preventing Phase 1 from starting and causing
+        a spurious timed_out result; 30.0s gives adequate headroom within the
+        pytest.mark.timeout(150) outer guard.
         """
         session_dir = tmp_path / "session"
         session_dir.mkdir()
@@ -260,7 +262,7 @@ class TestChannelBDrainWait:
             natural_exit_grace_seconds=0.1,
             _phase1_poll=0.01,
             _phase2_poll=0.05,
-            _session_id_timeout=3.0,
+            _session_id_timeout=30.0,
             _phase1_timeout=250,
         )
 

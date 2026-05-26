@@ -26,7 +26,7 @@ PreToolUse guard scripts — standalone Python processes enforcing tool-call pol
 | `skill_cmd_guard.py` | Validates `skill_command` path argument format |
 | `skill_command_guard.py` | Blocks `run_skill` with non-slash `skill_command` |
 | `unsafe_install_guard.py` | Blocks `pip install -e` targeting system Python |
-| `skill_load_guard.py` | Denies native tools until Skill tool is called in non-Anthropic headless skill sessions; exempts subagents via `agent_id` |
+| `skill_load_guard.py` | Denies native tools until Skill tool is called in non-Anthropic headless skill sessions; bypasses for Codex backend (`AUTOSKILLIT_AGENT_BACKEND=codex`) and subagents (`agent_id`) |
 | `write_guard.py` | Blocks Write/Edit/Bash/apply_patch outside allowed prefix in write-scoped sessions |
 
 ## Architecture Notes

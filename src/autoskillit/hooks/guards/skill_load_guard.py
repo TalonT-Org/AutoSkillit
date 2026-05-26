@@ -9,6 +9,11 @@ When gated, checks for ``.autoskillit/temp/skill_guard_{session_id}.flag``.
 If absent, denies with a directive message instructing the model to call
 the Skill tool first.
 
+Bypass conditions (early-exit before the gate):
+- ``agent_id`` present in hook payload — subagent exemption
+- ``AUTOSKILLIT_AGENT_BACKEND == "codex"`` (case-insensitive) — Codex backends
+  cannot respond to Skill tool directives and would deadlock
+
 Known limitation: when the model invokes Skill + native tools in a single
 parallel message, the native tools fire PreToolUse before the Skill PostToolUse
 writes the flag. This costs one wasted turn but self-resolves on the next turn.
@@ -92,6 +97,10 @@ def main() -> None:
         sys.exit(0)
 
     if data.get("agent_id"):
+        sys.exit(0)
+
+    backend = os.environ.get("AUTOSKILLIT_AGENT_BACKEND", "").strip()
+    if backend.casefold() == "codex":
         sys.exit(0)
 
     profile = os.environ.get("AUTOSKILLIT_PROVIDER_PROFILE", "").strip()

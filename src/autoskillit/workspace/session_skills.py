@@ -581,7 +581,11 @@ class DefaultSessionSkillManager:
             if gated and (allow_only is None or skill_info.name not in allow_only):
                 logger.debug("init_session_tier2_omit", skill=skill_info.name)
                 continue
-            content = self._provider.get_skill_content(skill_info.name, gated=False)
+            try:
+                content = self._provider.get_skill_content(skill_info.name, gated=False)
+            except FileNotFoundError:
+                logger.warning("init_session_skill_content_missing", skill=skill_info.name)
+                continue
             fm = parse_frontmatter_content(content)
             fm_errors = validate_skill_frontmatter(fm, skill_info.name)
             if fm_errors:

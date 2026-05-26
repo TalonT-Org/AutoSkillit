@@ -525,6 +525,8 @@ def test_init_files_are_pure_facades() -> None:
 
     Exempt: src/autoskillit/__init__.py (package root, defines __version__ at module scope).
     """
+    # TODO: remove exemptions below once business-logic functions are refactored out
+    # of these __init__.py files into dedicated modules (P14-2 architectural debt).
     _EXEMPT_INITS = frozenset(
         {
             Path("cli/fleet/__init__.py"),
@@ -547,6 +549,7 @@ def test_init_files_are_pure_facades() -> None:
         tree = ast.parse(source, filename=str(init_file))
         for node in tree.body:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                # PEP 562 module protocol functions are allowed at module scope
                 if node.name in ("__getattr__", "__dir__"):
                     continue
                 violations.append(

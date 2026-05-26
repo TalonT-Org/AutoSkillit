@@ -59,6 +59,7 @@ from .paths import is_generated_path as is_generated_path
 from .paths import is_git_main_checkout as is_git_main_checkout
 from .paths import is_git_worktree as is_git_worktree
 from .paths import pkg_root as pkg_root
+from .paths import default_log_dir as default_log_dir
 from .paths import resolve_main_worktree as resolve_main_worktree
 from .runtime._linux_proc import is_session_alive as is_session_alive
 from .runtime._linux_proc import read_boot_id as read_boot_id

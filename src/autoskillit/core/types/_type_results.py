@@ -460,6 +460,7 @@ class SessionIndexEntry(TypedDict):
     campaign_id: str
     dispatch_id: str
     claude_code_log: str
+    codex_log: str | None  # path to Codex rollout NDJSON, or None for non-Codex sessions
     skill_command: str
     success: bool
     subtype: str

@@ -140,3 +140,17 @@ def test_claude_backend_still_uses_dot_claude_layout(make_session_skill_manager)
     skill_files = list((session_path / _SKILLS_SUBDIR).glob("*/SKILL.md"))
     assert len(skill_files) > 0
     assert not (session_path / CODEX_SKILLS_SUBDIR).exists()
+
+
+def test_codex_init_session_sessions_symlink_respects_xdg(
+    make_session_skill_manager, codex_env, monkeypatch, tmp_path
+):
+    xdg_dir = tmp_path / "custom_xdg"
+    monkeypatch.setenv("XDG_DATA_HOME", str(xdg_dir))
+    mgr = make_session_skill_manager()
+    session_path = mgr.init_session("sid", cook_session=True, backend=codex_env.backend)
+    sessions_link = session_path / "sessions"
+    assert sessions_link.is_symlink()
+    target = sessions_link.resolve()
+    expected = xdg_dir / "autoskillit" / "logs" / "codex-sessions"
+    assert target == expected

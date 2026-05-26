@@ -14,8 +14,23 @@ Design rationale:
 from __future__ import annotations
 
 import importlib.resources as ir
+import os
 import subprocess
+import sys
 from pathlib import Path
+
+
+def default_log_dir() -> Path:
+    """Platform-default session diagnostics log directory (XDG-aware).
+
+    Linux: $XDG_DATA_HOME/autoskillit/logs (fallback ~/.local/share/autoskillit/logs)
+    macOS: ~/Library/Application Support/autoskillit/logs
+    """
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "autoskillit" / "logs"
+    xdg = os.environ.get("XDG_DATA_HOME")
+    base = Path(xdg) if xdg else Path.home() / ".local" / "share"
+    return base / "autoskillit" / "logs"
 
 
 def pkg_root() -> Path:

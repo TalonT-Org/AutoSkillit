@@ -100,7 +100,7 @@ generic_automation_mcp/
 **Session diagnostics logs** — per-backend log paths and session identification:
 
 - **Claude Code**: Logs live at `~/.local/share/autoskillit/logs/` (Linux) or `~/Library/Application Support/autoskillit/logs/` (macOS). Override with `linux_tracing.log_dir`. Session directories are named by the agent session ID when available (resolved from stdout or, for Claude Code backends, from the session JSONL filename via Channel B (the JSONL side-channel stream)). Fallback: `no_session_{timestamp}`. Query the index: `jq 'select(.success == false)' ~/.local/share/autoskillit/logs/sessions.jsonl`.
-- **Codex**: Session log discovery is not yet wired (`CodexSessionLocator` returns `None`; `session_record_types` is empty). The `thread_id` (from the `thread.started` NDJSON event) is the canonical session identifier for Codex backends.
+- **Codex**: Session log discovery uses `CodexSessionLocator` which searches `rollout-*.jsonl` files in `default_log_dir()/codex-sessions/` (permanent storage) and `$CODEX_HOME/sessions/` (ephemeral), matching by `thread_id` from the `thread.started` NDJSON event. Session logs are preserved via a symlink from the ephemeral `$CODEX_HOME/sessions/` to permanent storage during `init_session()`.
 
 **Import layer vs. orchestration level — disambiguation table:**
 
@@ -117,4 +117,4 @@ generic_automation_mcp/
 **Per-backend session identification:**
 
 - **Claude Code**: Session directories are named by the agent session ID (resolved from stdout or from the session JSONL filename via Channel B). Fallback: `no_session_{timestamp}`.
-- **Codex**: The canonical session identifier is the `thread_id` from the `thread.started` NDJSON event. `CodexSessionLocator` returns `None`; `session_record_types` is empty (log discovery not yet wired).
+- **Codex**: The canonical session identifier is the `thread_id` from the `thread.started` NDJSON event, extracted by `CodexStreamParser`. `CodexSessionLocator` searches `rollout-*.jsonl` files in permanent storage (`codex-sessions/`) and ephemeral `$CODEX_HOME/sessions/`. Logs are registered in `sessions.jsonl` via the `codex_log` field.

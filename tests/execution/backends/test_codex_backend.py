@@ -99,6 +99,9 @@ class TestCodexBackend:
     def test_capabilities_session_record_types_empty(self) -> None:
         assert CodexBackend().capabilities.session_record_types == frozenset()
 
+    def test_capabilities_food_truck_true(self) -> None:
+        assert CodexBackend().capabilities.food_truck_capable is True
+
     def test_binary_name(self) -> None:
         assert CodexBackend().binary_name() == "codex"
 
@@ -268,7 +271,7 @@ class TestCodexBackendProtocol:
             ("session_resume_capable", True),
             ("skill_injection_capable", True),
             ("mcp_config_capable", True),
-            ("food_truck_capable", False),
+            ("food_truck_capable", True),
         ],
     )
     def test_capability_flag(self, attr: str, expected: bool) -> None:

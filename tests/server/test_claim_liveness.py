@@ -32,6 +32,7 @@ def _mock_client_with_in_progress_label() -> AsyncMock:
     client = AsyncMock()
     client.fetch_issue.return_value = {
         "success": True,
+        "state": "open",
         "labels": [{"name": "in-progress"}],
     }
     client.fetch_title.return_value = {

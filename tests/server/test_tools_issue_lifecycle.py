@@ -288,6 +288,7 @@ async def test_claim_issue_already_claimed_returns_not_claimed(
     """Label already present, allow_reentry=False → claimed=False."""
     issue_data = {
         "success": True,
+        "state": "open",
         "labels": [{"name": "autoskillit:in-progress"}],
     }
     tool_ctx_kitchen_open.github_client = AsyncMock()
@@ -309,6 +310,7 @@ async def test_claim_issue_reentry_allowed(tool_ctx_kitchen_open) -> None:
     """Label already present, allow_reentry=True → claimed=True, reentry=True."""
     issue_data = {
         "success": True,
+        "state": "open",
         "labels": [{"name": "autoskillit:in-progress"}],
     }
     tool_ctx_kitchen_open.github_client = AsyncMock()
@@ -329,7 +331,7 @@ async def test_claim_issue_reentry_allowed(tool_ctx_kitchen_open) -> None:
 @pytest.mark.anyio
 async def test_claim_issue_success(tool_ctx_kitchen_open) -> None:
     """Label not present → applies label, claimed=True."""
-    issue_data = {"success": True, "labels": []}
+    issue_data = {"success": True, "state": "open", "labels": []}
     tool_ctx_kitchen_open.github_client = AsyncMock()
     tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(return_value=issue_data)
     tool_ctx_kitchen_open.github_client.ensure_label = AsyncMock(return_value={"success": True})

@@ -42,6 +42,7 @@ class TestClaimIssueWhitelist:
         mock_client = AsyncMock()
         mock_client.fetch_issue.return_value = {
             "success": True,
+            "state": "open",
             "labels": [],
         }
         mock_client.ensure_label.return_value = {"success": True, "created": True}
@@ -63,7 +64,7 @@ class TestClaimIssueWhitelist:
         """claim_issue with empty allowed_labels proceeds without restriction."""
         tool_ctx_kitchen_open.config.github.allowed_labels = []
         mock_client = AsyncMock()
-        mock_client.fetch_issue.return_value = {"success": True, "labels": []}
+        mock_client.fetch_issue.return_value = {"success": True, "state": "open", "labels": []}
         mock_client.ensure_label.return_value = {"success": True, "created": True}
         mock_client.swap_labels.return_value = {"success": True, "labels": ["any-label"]}
         monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", mock_client)
@@ -81,7 +82,7 @@ class TestClaimIssueWhitelist:
         """claim_issue with label=queued succeeds when allowed_labels defaults to empty."""
         tool_ctx_kitchen_open.config.github.allowed_labels = []
         mock_client = AsyncMock()
-        mock_client.fetch_issue.return_value = {"success": True, "labels": []}
+        mock_client.fetch_issue.return_value = {"success": True, "state": "open", "labels": []}
         mock_client.ensure_label.return_value = {"success": True, "created": True}
         mock_client.swap_labels.return_value = {"success": True, "labels": ["queued"]}
         monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", mock_client)

@@ -94,6 +94,7 @@ class TestClaimIssueFailLabelCleanup:
         mock_client = AsyncMock()
         mock_client.fetch_issue.return_value = {
             "success": True,
+            "state": "open",
             "labels": [{"name": "bug"}],
         }
         mock_client.ensure_label.return_value = {"success": True, "created": False}

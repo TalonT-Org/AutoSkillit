@@ -195,6 +195,18 @@ class TestSkillMdPresence:
             "'You are a READ-ONLY analysis agent' or 'Do NOT use Write, Edit, or Bash'."
         )
 
+    def test_wp_elaborator_has_inseparability_rules(self) -> None:
+        """wp-elaborator.md agent definition must include inseparability rules."""
+        agent_path = (
+            Path(__file__).parent.parent.parent / "src/autoskillit/agents/wp-elaborator.md"
+        )
+        assert agent_path.exists(), f"wp-elaborator.md not found at {agent_path}"
+        content = agent_path.read_text()
+        assert "Inseparability" in content, (
+            "wp-elaborator.md must include an 'Inseparability Rules' section "
+            "preventing impl/test WP splits."
+        )
+
     def test_l0_prompt_template_contains_json_only_framing(self, skill_md: str) -> None:
         lower = skill_md.lower()
         has_json_only = (

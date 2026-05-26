@@ -18,7 +18,12 @@ def record_lifecycle_event(planner_dir: Path, key: str, data: list[str] | dict[s
     wp_dir.mkdir(parents=True, exist_ok=True)
     registry_path = wp_dir / _REGISTRY_FILENAME
 
-    existing: dict[str, Any] = {"voided_phases": [], "voided_assignments": [], "absorbed": {}}
+    existing: dict[str, Any] = {
+        "voided_phases": [],
+        "voided_assignments": [],
+        "absorbed": {},
+        "voided_wps": {},
+    }
     if registry_path.exists():
         loaded = read_versioned_json(registry_path, LIFECYCLE_REGISTRY_VERSION)
         if loaded:
@@ -26,6 +31,7 @@ def record_lifecycle_event(planner_dir: Path, key: str, data: list[str] | dict[s
                 "voided_phases": loaded.get("voided_phases", []),
                 "voided_assignments": loaded.get("voided_assignments", []),
                 "absorbed": loaded.get("absorbed", {}),
+                "voided_wps": loaded.get("voided_wps", {}),
             }
         else:
             logger.warning(
@@ -57,6 +63,7 @@ def load_lifecycle_registry(planner_dir: Path) -> dict[str, Any]:
                 "voided_phases": loaded.get("voided_phases", []),
                 "voided_assignments": loaded.get("voided_assignments", []),
                 "absorbed": loaded.get("absorbed", {}),
+                "voided_wps": loaded.get("voided_wps", {}),
             }
 
     legacy_path = wp_dir / _LEGACY_FILENAME
@@ -68,6 +75,7 @@ def load_lifecycle_registry(planner_dir: Path) -> dict[str, Any]:
                 "voided_phases": [],
                 "voided_assignments": [],
                 "absorbed": loaded.get("absorbed", {}),
+                "voided_wps": {},
             }
 
-    return {"voided_phases": [], "voided_assignments": [], "absorbed": {}}
+    return {"voided_phases": [], "voided_assignments": [], "absorbed": {}, "voided_wps": {}}

@@ -190,11 +190,22 @@ def _check_assignment_completeness(
                     absorbed_pairs.add((int(parts[0][1:]), int(parts[1][1:])))
                 except ValueError:
                     logger.warning("malformed_absorbed_id", absorbed_id=absorbed_id)
+    voided_wp_pairs: set[tuple[int, int]] = set()
+    if lifecycle_registry and isinstance(lifecycle_registry.get("voided_wps"), dict):
+        for voided_id in lifecycle_registry["voided_wps"]:
+            parts = voided_id.split("-")
+            if len(parts) >= 2:
+                try:
+                    voided_wp_pairs.add((int(parts[0][1:]), int(parts[1][1:])))
+                except ValueError:
+                    logger.warning("malformed_voided_wp_id", voided_wp_id=voided_id)
     for assign_id, assign in assignment_results.items():
         if assign_id in voided_assign_ids:
             continue
         pair = (assign["phase_number"], assign["assignment_number"])
         if pair in absorbed_pairs:
+            continue
+        if pair in voided_wp_pairs:
             continue
         if pair not in wp_pairs:
             findings.append(
@@ -207,11 +218,15 @@ def _check_assignment_completeness(
     return findings
 
 
-def _check_dep_references(wp_results: dict[str, dict]) -> list[ValidationFinding]:
+def _check_dep_references(
+    wp_results: dict[str, dict],
+    lifecycle_registry: dict[str, Any] | None = None,
+) -> list[ValidationFinding]:
+    voided_wp_ids = set((lifecycle_registry or {}).get("voided_wps", {}).keys())
     findings: list[ValidationFinding] = []
     for wp_id, wp in wp_results.items():
         for dep in wp.get("depends_on", []):
-            if dep not in wp_results:
+            if dep not in wp_results and dep not in voided_wp_ids:
                 findings.append(
                     {
                         "message": f"WP {wp_id} depends on unknown WP {dep}",
@@ -426,7 +441,7 @@ def validate_plan(output_dir: str) -> dict[str, str]:
     all_findings.extend(
         _check_assignment_completeness(assignment_results, wp_results, lifecycle_registry)
     )
-    all_findings.extend(_check_dep_references(wp_results))
+    all_findings.extend(_check_dep_references(wp_results, lifecycle_registry))
     all_findings.extend(_check_dep_id_format(wp_results))
     all_findings.extend(_check_dag_acyclic(wp_results))
     all_findings.extend(_check_sizing_bounds(wp_results))

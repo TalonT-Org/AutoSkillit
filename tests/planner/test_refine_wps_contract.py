@@ -143,6 +143,20 @@ class TestSkillMdPresence:
                 f"SKILL.md must document L0 structured response field: {field}."
             )
 
+    def test_skill_md_has_subsumption_pairs_field(self, skill_md: str) -> None:
+        """SKILL.md must document the subsumption_pairs L0 response field."""
+        assert "subsumption_pairs" in skill_md, (
+            "SKILL.md must document 'subsumption_pairs' as an L0 structured "
+            "response field for subsumption detection."
+        )
+
+    def test_skill_md_has_overlap_notes_context(self, skill_md: str) -> None:
+        """SKILL.md must reference overlap_notes in L0 context packets."""
+        assert "overlap_notes" in skill_md, (
+            "SKILL.md must document 'overlap_notes' injection from assignment "
+            "elaboration results into L0 context packets."
+        )
+
     def test_skill_md_has_batch_limit_spec(self, skill_md: str) -> None:
         """SKILL.md must specify the L0 batch ceiling of 6."""
         assert "Spawn more than 6" in skill_md, (

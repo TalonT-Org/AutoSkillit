@@ -141,6 +141,13 @@ class TestSkillMdPresence:
             "'You are a READ-ONLY analysis agent' or 'Do NOT use Write, Edit, or Bash'."
         )
 
+    def test_skill_md_has_inseparability_rules(self, skill_md: str) -> None:
+        """SKILL.md must include inseparability rules for WP decomposition."""
+        assert "inseparability" in skill_md.lower(), (
+            "SKILL.md must include inseparability rules that prevent splitting "
+            "implementation from its tests into separate WPs."
+        )
+
     def test_l0_prompt_template_contains_json_only_framing(self, skill_md: str) -> None:
         lower = skill_md.lower()
         has_json_only = (

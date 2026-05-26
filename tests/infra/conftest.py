@@ -7,6 +7,7 @@ in test_pretty_output_hook_infra.py.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import NamedTuple
 
 
@@ -14,6 +15,22 @@ class FormatterCoverageDef(NamedTuple):
     typed_dict: type
     rendered: frozenset[str]
     suppressed: frozenset[str]
+    json_producer: Callable[[], dict] | None = None
+
+
+def _run_skill_json_producer() -> dict:
+    """Return union of all JSON keys from SkillResult.to_json() outputs."""
+    import dataclasses
+    import json
+
+    from autoskillit.core.types._type_results import SkillResult
+
+    r1 = SkillResult.crashed(Exception("test"))
+    r2 = dataclasses.replace(r1, worktree_path="/tmp/test-worktree")
+    result: dict = {}
+    for r in (r1, r2):
+        result.update(json.loads(r.to_json()))
+    return result
 
 
 def _build_registry() -> dict[str, FormatterCoverageDef]:
@@ -59,6 +76,7 @@ def _build_registry() -> dict[str, FormatterCoverageDef]:
             typed_dict=RunSkillResult,
             rendered=_FMT_RUN_SKILL_RENDERED,
             suppressed=_FMT_RUN_SKILL_SUPPRESSED,
+            json_producer=_run_skill_json_producer,
         ),
         "run_cmd": FormatterCoverageDef(
             typed_dict=RunCmdResult,

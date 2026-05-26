@@ -16,6 +16,10 @@ from tests.infra._pretty_output_helpers import (
     _wrap_for_claude_code,
     _wrap_plain_str_for_claude_code,
 )
+from tests.infra.conftest import (
+    _FORMATTER_COVERAGE_REGISTRY,
+    FormatterCoverageDef,
+)
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
@@ -250,4 +254,29 @@ def test_typeddict_covers_to_json_keys() -> None:
     assert not missing, (
         f"SkillResult.to_json() emits keys absent from RunSkillResult TypedDict: "
         f"{sorted(missing)}. Add them to server/tools/_types.py RunSkillResult."
+    )
+
+
+@pytest.mark.parametrize(
+    "tool_name,entry",
+    list(_FORMATTER_COVERAGE_REGISTRY.items()),
+    ids=list(_FORMATTER_COVERAGE_REGISTRY),
+)
+def test_typeddict_covers_json_producer_keys(tool_name: str, entry: FormatterCoverageDef) -> None:
+    """Each formatter with a json_producer must have TypedDict keys covering all JSON keys.
+
+    Entries without json_producer are skipped. This generalizes test_typeddict_covers_to_json_keys
+    to all formatter registry entries, enabling future formatters to opt in by declaring a
+    json_producer in their FormatterCoverageDef.
+    """
+    import typing
+
+    if entry.json_producer is None:
+        pytest.skip("no json_producer declared for this formatter")
+    json_keys = set(entry.json_producer().keys())
+    typeddict_keys = set(typing.get_type_hints(entry.typed_dict))
+    missing = json_keys - typeddict_keys
+    assert not missing, (
+        f"{tool_name}: json_producer keys absent from TypedDict: {sorted(missing)}. "
+        "Add them to the TypedDict in server/tools/_types.py."
     )

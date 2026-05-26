@@ -324,6 +324,8 @@ class AutomationConfig:
         ab = sec("agent_backend")
         if isinstance(ab, str):
             ab = {"backend": ab}
+        elif isinstance(ab, dict):
+            ab = {k.lower(): v for k, v in ab.items()}
         feat = sec("features")
 
         _tc = _field_defaults(TestCheckConfig)

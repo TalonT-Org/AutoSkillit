@@ -20,6 +20,7 @@ import asyncio as _asyncio
 import os
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from autoskillit.core import (
@@ -208,20 +209,32 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
     except Exception:
         logger.warning("fleet_auto_gate_boot_registry_failed", exc_info=True)
 
+    _campaign_state_paths: list[Path] = []
     try:
-        from autoskillit.fleet import (  # noqa: PLC0415
-            discover_campaign_state_files,
-            sweep_stale_dispatch_labels,
-        )
+        from autoskillit.fleet import discover_campaign_state_files  # noqa: PLC0415
 
         _campaign_state_paths = discover_campaign_state_files(ctx.project_dir)
-        if _campaign_state_paths and ctx.github_client is not None:
+    except Exception:
+        logger.warning("fleet_auto_gate_boot_state_discovery_failed", exc_info=True)
+
+    if _campaign_state_paths:
+        try:
+            from autoskillit.fleet import reap_stale_dispatches_async  # noqa: PLC0415
+
+            await reap_stale_dispatches_async(_campaign_state_paths)
+        except Exception:
+            logger.warning("fleet_auto_gate_boot_reap_failed", exc_info=True)
+
+    if _campaign_state_paths and ctx.github_client is not None:
+        try:
+            from autoskillit.fleet import sweep_stale_dispatch_labels  # noqa: PLC0415
+
             create_background_task(
                 sweep_stale_dispatch_labels(_campaign_state_paths, ctx.github_client),
                 label="startup_label_recovery_sweep",
             )
-    except Exception:
-        logger.warning("fleet_auto_gate_boot_label_recovery_failed", exc_info=True)
+        except Exception:
+            logger.warning("fleet_auto_gate_boot_label_recovery_failed", exc_info=True)
 
 
 async def _food_truck_auto_gate_boot(ctx: Any) -> None:
@@ -307,17 +320,25 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
         logger.warning("food_truck_auto_gate_boot_registry_failed", exc_info=True)
 
     try:
-        from autoskillit.fleet import (  # noqa: PLC0415
-            discover_campaign_state_files,
-            sweep_stale_dispatch_labels,
-        )
+        from autoskillit.fleet import discover_campaign_state_files  # noqa: PLC0415
 
         _campaign_state_paths = discover_campaign_state_files(ctx.project_dir)
     except Exception:
         logger.warning("food_truck_auto_gate_boot_state_discovery_failed", exc_info=True)
         return
+
+    if _campaign_state_paths:
+        try:
+            from autoskillit.fleet import reap_stale_dispatches_async  # noqa: PLC0415
+
+            await reap_stale_dispatches_async(_campaign_state_paths)
+        except Exception:
+            logger.warning("food_truck_auto_gate_boot_reap_failed", exc_info=True)
+
     try:
         if _campaign_state_paths and ctx.github_client is not None:
+            from autoskillit.fleet import sweep_stale_dispatch_labels  # noqa: PLC0415
+
             create_background_task(
                 sweep_stale_dispatch_labels(_campaign_state_paths, ctx.github_client),
                 label="startup_label_recovery_sweep",

@@ -845,7 +845,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "cli": 21,
         "hooks": 10,
         "pipeline": 12,
-        "fleet": 19,
+        "fleet": 20,  # REQ-CNST-003-E9: _dispatch_reaper.py added for boot-time orphan reaping
         "recipe/rules": 46,
         "server/tools": 22,
         "hooks/guards": 22,

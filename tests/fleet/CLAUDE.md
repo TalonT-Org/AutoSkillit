@@ -9,6 +9,7 @@ Fleet campaign dispatch, state persistence, and sidecar tests.
 | `__init__.py` | empty |
 | `_helpers.py` | Shared helpers for tests/fleet/ test modules |
 | `conftest.py` | Shared fixtures for tests/fleet/ |
+| `test_dispatch_reaper.py` | Tests for `fleet._dispatch_reaper.reap_stale_dispatches` — orphan kill, dead pid, recycled pid, create_time fallback, dry-run, idempotency |
 | `test_api.py` | Tests for fleet._api module (Group J) |
 | `test_api_split_integrity.py` | Structural guard: fleet `_api.py` split — verifies new modules export expected symbols and public API surface is preserved |
 | `test_api_dispatch_marker.py` | Tests for _run_dispatch marker lifecycle and _touch_dispatch_marker heartbeat |

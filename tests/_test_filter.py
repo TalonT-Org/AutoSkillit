@@ -568,6 +568,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "migration",
             "server",
             "cli",
+            "fleet",
             "infra/test_pretty_output_hook_infra.py",
             "_llm_triage",
             "smoke_utils",
@@ -670,6 +671,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             # file-level: fleet tests that import server tool handlers directly
             "fleet/test_api.py",
             "fleet/test_dispatch_crash_diagnostics.py",
+            "fleet/test_fleet_e2e.py",
             "fleet/test_pack_enforcement.py",
             "fleet/test_gate_state_persistence.py",
             "fleet/test_dispatch_identity_continuity.py",

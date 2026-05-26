@@ -7,6 +7,9 @@ import pytest
 
 from autoskillit.core import (
     AGENT_BACKEND_CODEX,
+    CAMPAIGN_ID_ENV_VAR,
+    KITCHEN_SESSION_ID_ENV_VAR,
+    SESSION_TYPE_ORCHESTRATOR,
     SESSION_TYPE_SKILL,
     BackendCapabilities,
     CmdSpec,
@@ -709,3 +712,148 @@ class TestCodexBuildSkillSessionCmdAgentBackend:
         monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
         spec = CodexBackend().build_skill_session_cmd(**self.BASE)
         assert spec.env["AUTOSKILLIT_AGENT_BACKEND"] == "codex"
+
+
+class TestCodexBuildFoodTruckCmd:
+    BASE: dict[str, object] = {
+        "orchestrator_prompt": "dispatch the work",
+        "plugin_source": DirectInstall(plugin_dir=Path("/pkg")),
+        "cwd": "/work",
+        "completion_marker": "%%DONE%%",
+    }
+
+    @pytest.fixture(autouse=True)
+    def _clean_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
+        monkeypatch.delenv("AUTOSKILLIT_KITCHEN_SESSION_ID", raising=False)
+
+    # --- Structural / flag tests (non-resume) ---
+
+    def test_cmd_0_is_codex(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(**self.BASE)
+        assert spec.cmd[0] == "codex"
+
+    def test_cmd_1_is_exec(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(**self.BASE)
+        assert spec.cmd[1] == "exec"
+
+    def test_json_flag_present(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(**self.BASE)
+        assert "--json" in spec.cmd
+
+    def test_sandbox_read_only(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(**self.BASE)
+        assert "--sandbox" in spec.cmd
+        idx = spec.cmd.index("--sandbox")
+        assert spec.cmd[idx + 1] == "read-only"
+
+    def test_config_override_web_search_disabled(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(**self.BASE)
+        assert "-c" in spec.cmd
+        idx = spec.cmd.index("-c")
+        assert spec.cmd[idx + 1] == "web_search=disabled"
+
+    def test_approval_never(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(**self.BASE)
+        assert "-a" in spec.cmd
+        idx = spec.cmd.index("-a")
+        assert spec.cmd[idx + 1] == "never"
+
+    def test_no_add_dir_flag(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(**self.BASE)
+        assert "--add-dir" not in spec.cmd
+
+    def test_no_plugin_dir_flag(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(**self.BASE)
+        assert "--plugin-dir" not in spec.cmd
+
+    def test_prompt_is_last_token(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(**self.BASE)
+        assert "dispatch the work" in spec.cmd[-1]
+
+    def test_returns_cmdspec_with_tuple_cmd(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(**self.BASE)
+        assert isinstance(spec, CmdSpec)
+        assert isinstance(spec.cmd, tuple)
+
+    # --- Env var tests ---
+
+    def test_headless_env_set(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(**self.BASE)
+        assert spec.env["AUTOSKILLIT_HEADLESS"] == "1"
+
+    def test_session_type_orchestrator(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(**self.BASE)
+        assert spec.env["AUTOSKILLIT_SESSION_TYPE"] == SESSION_TYPE_ORCHESTRATOR
+
+    def test_campaign_id_present_when_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_ID", "camp-123")
+        spec = CodexBackend().build_food_truck_cmd(**self.BASE)
+        assert spec.env[CAMPAIGN_ID_ENV_VAR] == "camp-123"
+
+    def test_campaign_id_absent_when_not_set(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(**self.BASE)
+        assert CAMPAIGN_ID_ENV_VAR not in spec.env
+
+    def test_kitchen_session_id_present_when_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("AUTOSKILLIT_KITCHEN_SESSION_ID", "ks-456")
+        spec = CodexBackend().build_food_truck_cmd(**self.BASE)
+        assert spec.env[KITCHEN_SESSION_ID_ENV_VAR] == "ks-456"
+
+    def test_kitchen_session_id_absent_when_not_set(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(**self.BASE)
+        assert KITCHEN_SESSION_ID_ENV_VAR not in spec.env
+
+    def test_completion_marker_env_set(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(**self.BASE)
+        assert spec.env["AUTOSKILLIT_COMPLETION_MARKER"] == "%%DONE%%"
+
+    def test_provider_profile_absent(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(**self.BASE)
+        assert "AUTOSKILLIT_PROVIDER_PROFILE" not in spec.env
+
+    # --- Resume path tests ---
+
+    def test_resume_subcommand_present(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(
+            **{**self.BASE, "resume_session_id": "sess-abc"},
+        )
+        assert "resume" in spec.cmd
+
+    def test_resume_session_id_follows_resume(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(
+            **{**self.BASE, "resume_session_id": "sess-abc"},
+        )
+        idx = spec.cmd.index("resume")
+        assert spec.cmd[idx + 1] == "sess-abc"
+
+    def test_resume_prompt_is_last(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(
+            **{**self.BASE, "resume_session_id": "sess-abc"},
+        )
+        assert "dispatch the work" in spec.cmd[-1]
+
+    def test_resume_json_flag_present(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(
+            **{**self.BASE, "resume_session_id": "sess-abc"},
+        )
+        assert "--json" in spec.cmd
+
+    def test_resume_cmd_structure(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(
+            **{**self.BASE, "resume_session_id": "sess-abc"},
+        )
+        assert spec.cmd[0] == "codex"
+        assert spec.cmd[1] == "exec"
+        assert "--json" in spec.cmd
+        resume_idx = spec.cmd.index("resume")
+        assert spec.cmd[resume_idx + 1] == "sess-abc"
+        assert "dispatch the work" in spec.cmd[-1]
+
+    def test_no_resume_when_none(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(**self.BASE)
+        assert "resume" not in spec.cmd
+
+    def test_non_resume_json_present(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(**self.BASE)
+        assert "--json" in spec.cmd

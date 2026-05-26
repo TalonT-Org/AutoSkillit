@@ -109,6 +109,7 @@ class DispatchRecord:
     dispatched_starttime_ticks: int = 0
     dispatched_boot_id: str = ""
     dispatched_create_time: float = 0.0
+    identity_degraded: bool = False
     reason: str = ""
     diagnostic_message: str = ""
     kill_reason: str = ""
@@ -137,6 +138,7 @@ class DispatchRecord:
             "dispatched_starttime_ticks": self.dispatched_starttime_ticks,
             "dispatched_boot_id": self.dispatched_boot_id,
             "dispatched_create_time": self.dispatched_create_time,
+            "identity_degraded": self.identity_degraded,
             "reason": self.reason,
             "diagnostic_message": self.diagnostic_message,
             "kill_reason": self.kill_reason,
@@ -191,6 +193,7 @@ class DispatchRecord:
                 d.get("dispatched_boot_id") or d.get("l3_boot_id") or d.get("l2_boot_id", "")
             ),
             dispatched_create_time=d.get("dispatched_create_time", 0.0),
+            identity_degraded=d.get("identity_degraded", False),
             reason=d.get("reason", ""),
             diagnostic_message=d.get("diagnostic_message", ""),
             kill_reason=d.get("kill_reason", ""),

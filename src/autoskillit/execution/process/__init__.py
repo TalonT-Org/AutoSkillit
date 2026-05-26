@@ -297,6 +297,12 @@ async def run_managed_async(
                     _ticks = _target.starttime_ticks or 0
                 if _ticks == 0:
                     _ticks = read_starttime_ticks(_observed_pid) or 0
+                if _ticks == 0:
+                    logger.warning(
+                        "starttime_ticks_zero",
+                        pid=_observed_pid,
+                        msg="Process identity verification degraded — starttime_ticks=0",
+                    )
                 on_pid_resolved(_observed_pid, _ticks)
 
             termination = TerminationReason.NATURAL_EXIT

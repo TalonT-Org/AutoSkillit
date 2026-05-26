@@ -6,6 +6,10 @@ import shlex
 import shutil
 import sys
 
+import structlog
+
+logger = structlog.get_logger()
+
 
 def pty_wrap_command(cmd: list[str]) -> list[str]:
     """Wrap a command with ``script`` to provide a PTY.
@@ -18,6 +22,9 @@ def pty_wrap_command(cmd: list[str]) -> list[str]:
     """
     script_path = shutil.which("script")
     if script_path is None:
+        logger.warning(
+            "script_binary_not_found", msg="PTY wrapping unavailable — script(1) not installed"
+        )
         return cmd
     if sys.platform == "darwin":
         # BSD script: transcript file precedes the command; args passed directly

@@ -355,6 +355,7 @@ def mark_dispatch_running(
     boot_id: str = "",
     dispatched_create_time: float = 0.0,
     sidecar_path: str | None = None,
+    identity_degraded: bool = False,
 ) -> None:
     """Atomically mark a dispatch as running with its dispatch_id and dispatched_pid."""
     with CampaignStateMutator(state_path) as m:
@@ -371,6 +372,7 @@ def mark_dispatch_running(
                 d.dispatched_starttime_ticks = starttime_ticks
                 d.dispatched_boot_id = boot_id
                 d.dispatched_create_time = dispatched_create_time
+                d.identity_degraded = identity_degraded
                 d.started_at = time.time()
                 d.sidecar_path = sidecar_path
                 m.mark_dirty()

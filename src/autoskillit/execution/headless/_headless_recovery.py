@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 import regex as re
 
 from autoskillit.core import CliSubtype, OutputFormat, RetryReason, SkillResult, get_logger
-from autoskillit.execution.headless._headless_helpers import assert_headless_cmd
+from autoskillit.execution.headless._headless_helpers import _resolve_pty_mode, assert_headless_cmd
 from autoskillit.execution.headless._headless_path_tokens import _RECOVERABLE_PATH_TOKENS
 from autoskillit.execution.process import _marker_is_standalone
 from autoskillit.execution.session import (
@@ -273,6 +273,7 @@ async def _attempt_contract_nudge(
             cwd=Path(cwd),
             timeout=_NUDGE_TIMEOUT,
             env=spec.env,
+            pty_mode=_resolve_pty_mode(backend),
         )
     except OSError:
         logger.debug("nudge_runner_failed", exc_info=True)

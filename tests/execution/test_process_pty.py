@@ -897,3 +897,27 @@ class TestAdjudicationGuards:
         )
         assert skill_result.needs_retry is True
         assert skill_result.success is False
+
+
+class TestPtyWrapCommandWarning:
+    """pty_wrap_command emits a structlog warning when script(1) is not found."""
+
+    def test_pty_wrap_command_logs_warning_when_script_missing(self) -> None:
+        """pty_wrap_command emits script_binary_not_found warning when script is unavailable."""
+        from unittest.mock import patch
+
+        import structlog.testing
+
+        cmd = ["claude", "-p", "test"]
+        with (
+            patch("shutil.which", return_value=None),
+            structlog.testing.capture_logs() as logs,
+        ):
+            result = pty_wrap_command(cmd)
+
+        assert result is cmd
+        warning_events = [log for log in logs if log.get("event") == "script_binary_not_found"]
+        assert warning_events, (
+            f"Expected 'script_binary_not_found' warning when script is missing, "
+            f"captured logs: {logs}"
+        )

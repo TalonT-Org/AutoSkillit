@@ -61,6 +61,7 @@ from ._doctor_runtime import (
     _check_claude_process_state_breakdown,
     _check_codex_version,
     _check_quota_cache_schema,
+    _check_script_binary,
 )
 from ._doctor_types import _NON_PROBLEM, DoctorResult
 
@@ -194,6 +195,9 @@ def run_doctor(*, output_json: bool = False) -> None:
 
     # Check 30: Codex CLI version gate
     results.append(_check_codex_version(backend=cfg.agent_backend.backend))
+
+    # Check 31: script(1) PTY binary availability
+    results.append(_check_script_binary())
 
     # Output
     if output_json:

@@ -37,10 +37,14 @@ class TestInitSessionFormatGate:
             skills=make_skills_config(tier1=[], tier2=[], tier3=[]),
             subsets=make_subsetsconfig(),
         )
-        result = manager.init_session("sess1", config=config)
+        with structlog.testing.capture_logs() as captured:
+            result = manager.init_session("sess1", config=config)
 
         skill_dir = Path(result.path) / ".claude" / "skills" / "bad-skill"
         assert not skill_dir.exists()
+        provider.list_skills.assert_called_once()
+        format_events = [e for e in captured if e.get("event") == "skill_format_validation"]
+        assert any(e.get("skill") == "bad-skill" for e in format_events)
 
     def test_init_session_logs_warning_on_invalid_frontmatter(self, tmp_path: Path) -> None:
         provider = MagicMock(spec=SkillsDirectoryProvider)
@@ -61,6 +65,7 @@ class TestInitSessionFormatGate:
 
         format_events = [e for e in captured if e.get("event") == "skill_format_validation"]
         assert len(format_events) >= 1
+        assert any(e.get("skill") == "bad-skill" for e in format_events)
 
     def test_init_session_writes_skill_with_valid_frontmatter(self, tmp_path: Path) -> None:
         provider = MagicMock(spec=SkillsDirectoryProvider)
@@ -145,3 +150,4 @@ class TestActivateWithDepsFormatGate:
 
         format_events = [e for e in captured if e.get("event") == "skill_format_validation"]
         assert len(format_events) >= 1
+        assert any(e.get("skill") == "bad-skill" for e in format_events)

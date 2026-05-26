@@ -78,7 +78,8 @@ generic_automation_mcp/
 
 | Package | IL | Purpose |
 |---|---|---|
-| `./` | — | Package root: `__init__`, `__main__`, `hook_registry`, `version`, `_test_filter`, `_llm_triage`, `smoke_utils` |
+| `./` | — | Package root: `__init__`, `__main__`, `hook_registry`, `version`, `_test_filter`, `_llm_triage` |
+| `smoke_utils/` | — | Callables for smoke-test pipeline `run_python` steps |
 | `core/` | IL-0 | Foundation — types/, runtime/, paths, IO, feature flags (zero autoskillit imports) |
 | `config/` | IL-1 | `AutomationConfig` + Dynaconf loader + 28 leaf dataclasses |
 | `pipeline/` | IL-1 | Pipeline state — `ToolContext` DI, gate, audit log, telemetry |

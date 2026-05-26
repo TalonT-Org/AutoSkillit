@@ -400,15 +400,15 @@ def test_subprocess_calls_have_timeout() -> None:
         src = py_file.read_text()
         tree = ast.parse(src)
         for node in ast.walk(tree):
-        if (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and node.func.attr == "run"
-        ):
-            kw_names = {kw.arg for kw in node.keywords}
-            assert "timeout" in kw_names, (
-                f"subprocess.run() at line {node.lineno} in smoke_utils.py missing timeout="
-            )
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "run"
+            ):
+                kw_names = {kw.arg for kw in node.keywords}
+                assert "timeout" in kw_names, (
+                    f"subprocess.run() at line {node.lineno} in {py_file.name} missing timeout="
+                )
 
 
 # ---------------------------------------------------------------------------

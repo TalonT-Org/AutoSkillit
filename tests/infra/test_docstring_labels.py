@@ -20,10 +20,10 @@ def test_headless_py_docstring_says_il1():
 
 
 def test_smoke_utils_documents_limitation():
-    """smoke_utils.py documents its file-path coupling limitation."""
-    src = (_REPO_ROOT / "src/autoskillit/smoke_utils.py").read_text()
+    """smoke_utils package documents its file-path coupling limitation."""
+    src = (_REPO_ROOT / "src/autoskillit/smoke_utils/__init__.py").read_text()
     assert "limitation" in src.lower() or "known" in src.lower(), (
-        "smoke_utils.py must document its path-coupling limitation"
+        "smoke_utils/__init__.py must document its path-coupling limitation"
     )
 
 

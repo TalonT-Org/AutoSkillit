@@ -21,6 +21,7 @@ from autoskillit.core import (
     SESSION_TYPE_SKILL,
     BackendCapabilities,
     BareResume,
+    ClaudeDirectoryConventions,
     CmdSpec,
     NamedResume,
     NoResume,
@@ -504,8 +505,6 @@ class CodexBackend:
         return CmdSpec(cmd=tuple(cmd), env=env)
 
     def validate_session_layout(self, session_dir: Path) -> list[str]:
-        from autoskillit.core import ClaudeDirectoryConventions
-
         errors: list[str] = []
 
         skills_dir = session_dir / ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR

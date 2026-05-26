@@ -94,3 +94,11 @@ class TestCodexEnvPolicy:
         policy = CodexEnvPolicy()
         with pytest.raises((FrozenInstanceError, TypeError, AttributeError)):
             policy.some_attr = "value"  # type: ignore[misc]
+
+    def test_agent_backend_not_stripped(self) -> None:
+        # AUTOSKILLIT_AGENT_BACKEND must pass through CodexEnvPolicy so that
+        # hook subprocesses and test runners can read the session identity.
+        policy = CodexEnvPolicy()
+        base = {"AUTOSKILLIT_AGENT_BACKEND": "codex", "PATH": "/usr/bin"}
+        result = policy.build_env(base)
+        assert result["AUTOSKILLIT_AGENT_BACKEND"] == "codex"

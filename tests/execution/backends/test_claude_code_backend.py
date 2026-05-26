@@ -9,6 +9,7 @@ from autoskillit.core import (
     CmdSpec,
     CodingAgentBackend,
     EnvPolicy,
+    OutputFormat,
     ResultParser,
     SessionLocator,
     StreamParser,
@@ -91,3 +92,32 @@ class TestClaudeCodeBackend:
     def test_write_tool_names_returns_write_edit(self) -> None:
         backend = ClaudeCodeBackend()
         assert backend.write_tool_names() == frozenset({"Write", "Edit"})
+
+
+class TestClaudeCodeBackendAgentBackendEnv:
+    """Tests that AUTOSKILLIT_AGENT_BACKEND is injected into skill session env."""
+
+    BASE: dict[str, object] = {
+        "skill_command": "/test-skill",
+        "cwd": "/work",
+        "completion_marker": "%%DONE%%",
+        "model": None,
+        "plugin_source": None,
+        "output_format": OutputFormat.JSON,
+    }
+
+    def test_agent_backend_env_set(self) -> None:
+        spec = ClaudeCodeBackend().build_skill_session_cmd(**self.BASE)
+        assert spec.env["AUTOSKILLIT_AGENT_BACKEND"] == "claude-code"
+
+    def test_agent_backend_overrides_parent_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "wrong-value")
+        spec = ClaudeCodeBackend().build_skill_session_cmd(**self.BASE)
+        assert spec.env["AUTOSKILLIT_AGENT_BACKEND"] == "claude-code"
+
+    def test_agent_backend_present_without_parent_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
+        spec = ClaudeCodeBackend().build_skill_session_cmd(**self.BASE)
+        assert spec.env["AUTOSKILLIT_AGENT_BACKEND"] == "claude-code"

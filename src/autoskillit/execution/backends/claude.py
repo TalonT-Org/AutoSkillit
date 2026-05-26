@@ -7,6 +7,7 @@ from pathlib import Path
 
 from autoskillit.core import (
     AGENT_BACKEND_CLAUDE_CODE,
+    AGENT_BACKEND_ENV_VAR,
     CAMPAIGN_ID_ENV_VAR,
     CLAUDE_CODE_CAPABILITIES,
     CONTEXT_EXHAUSTION_MARKER,
@@ -518,6 +519,7 @@ class ClaudeCodeBackend:
             "AUTOSKILLIT_SESSION_TYPE": SESSION_TYPE_SKILL,
             "MAX_MCP_OUTPUT_TOKENS": _MAX_MCP_OUTPUT_TOKENS_VALUE,
             "MCP_CONNECTION_NONBLOCKING": "0",
+            AGENT_BACKEND_ENV_VAR: AGENT_BACKEND_CLAUDE_CODE,
         }
         if exit_after_stop_delay_ms > 0:
             extras["CLAUDE_CODE_EXIT_AFTER_STOP_DELAY"] = str(exit_after_stop_delay_ms)

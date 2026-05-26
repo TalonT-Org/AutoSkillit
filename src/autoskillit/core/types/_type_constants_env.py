@@ -54,6 +54,12 @@ AGENT_BACKEND_ENV_VAR: str = "AUTOSKILLIT_AGENT_BACKEND"
 AGENT_BACKEND_CLAUDE_CODE: str = "claude-code"
 AGENT_BACKEND_CODEX: str = "codex"
 
+# AGENT_BACKEND_ENV_VAR is intentionally absent: it is not in
+# _HEADLESS_EXCLUSIVE_VARS (_claude_prompt.py) and removing it here
+# allows natural propagation through both scrub stages in codex.py's
+# build_skill_session_cmd (the _HEADLESS_EXCLUSIVE_VARS filter and
+# CodexEnvPolicy.build_env).  Backends inject the canonical value via
+# extras regardless.
 AUTOSKILLIT_PRIVATE_ENV_VARS: frozenset[str] = frozenset(
     {
         "AUTOSKILLIT_HEADLESS",
@@ -69,7 +75,6 @@ AUTOSKILLIT_PRIVATE_ENV_VARS: frozenset[str] = frozenset(
         "AUTOSKILLIT_CAMPAIGN_STATE_PATH",
         "AUTOSKILLIT_PROJECT_DIR",
         FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
-        AGENT_BACKEND_ENV_VAR,
         HEADLESS_AUTO_GATE_ENV_VAR,
         "AUTOSKILLIT_LAUNCH_ID",
         "AUTOSKILLIT_SKILL_NAME",

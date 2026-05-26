@@ -25,6 +25,8 @@ Workspace cleanup, clone lifecycle, session skills, and worktree tests.
 | `test_session_skills_filtering.py` | Phase 2 tests: session_skills module — subset/disabled-category and pack filtering |
 | `test_session_skills_provider.py` | Phase 2 tests: session_skills module — provider and core manager |
 | `test_session_skills_codex.py` | Tests for Codex-specific session skill layout, config file copying, and backend regression guard |
+| `test_skill_format.py` | Unit tests for skill frontmatter validation functions |
+| `test_session_skills_format_gate.py` | Format gate tests for init_session and activate_with_deps |
 | `test_skill_content_substitution.py` | Tests for SkillsDirectoryProvider.get_skill_content placeholder substitution |
 | `test_skills.py` | Tests for skill resolution hierarchy |
 | `test_worktree.py` | Worktree tests |

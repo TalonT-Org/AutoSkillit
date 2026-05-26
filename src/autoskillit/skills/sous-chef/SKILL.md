@@ -1,3 +1,7 @@
+---
+name: sous-chef
+description: Internal bootstrap document injected by open_kitchen into every orchestrator session.
+---
 <!-- Internal bootstrap document — not a user-invocable skill.
      Injected by open_kitchen() into every orchestrator session. -->
 

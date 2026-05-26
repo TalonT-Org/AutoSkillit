@@ -30,6 +30,10 @@ from autoskillit.core import (
     is_feature_enabled,
     pkg_root,
 )
+from autoskillit.workspace.skill_format import (
+    parse_frontmatter_content,
+    validate_skill_frontmatter,
+)
 from autoskillit.workspace.skills import (
     DefaultSkillResolver,
     SkillInfo,
@@ -550,6 +554,7 @@ class DefaultSessionSkillManager:
                 logger.debug("codex_sessions_symlink", target=str(sessions_target))
             except OSError:
                 logger.warning("codex_sessions_symlink_failed", target=str(sessions_target))
+        format_rejected: set[str] = set()
         for skill_info in self._provider.list_skills():
             if allow_only is not None and skill_info.name not in allow_only:
                 _log.debug("init_session_allow_only_skip", skill=skill_info.name)
@@ -578,9 +583,21 @@ class DefaultSessionSkillManager:
             if gated and (allow_only is None or skill_info.name not in allow_only):
                 _log.debug("init_session_tier2_omit", skill=skill_info.name)
                 continue
+            content = self._provider.get_skill_content(skill_info.name, gated=False)
+            fm = parse_frontmatter_content(content)
+            fm_errors = validate_skill_frontmatter(fm, skill_info.name)
+            if fm_errors:
+                for err in fm_errors:
+                    _log.warning(
+                        "skill_format_validation",
+                        skill=skill_info.name,
+                        error=err,
+                        backend=backend.name if backend is not None else "unknown",
+                    )
+                format_rejected.add(skill_info.name)
+                continue
             skill_dir = skills_base / skill_info.name
             skill_dir.mkdir(exist_ok=True)
-            content = self._provider.get_skill_content(skill_info.name, gated=False)
             atomic_write(skill_dir / "SKILL.md", content)
         if allow_only is not None and allow_only:
             written = {p.name for p in skills_base.iterdir() if p.is_dir()}
@@ -588,7 +605,7 @@ class DefaultSessionSkillManager:
                 s.name for s in self._provider.list_skills() if s.source == SkillSource.BUNDLED
             }
             gated_omitted = tier2_skills & allow_only
-            achievable = allow_only - overrides - bundled_names - gated_omitted
+            achievable = allow_only - overrides - bundled_names - gated_omitted - format_rejected
             if achievable and not (written & achievable):
                 raise RuntimeError(
                     f"init_session: allow_only={sorted(allow_only)!r} specified but "
@@ -632,6 +649,17 @@ class DefaultSessionSkillManager:
             try:
                 fetched = self._provider.get_skill_content(skill_name, gated=False)
             except FileNotFoundError:
+                return False
+            fm = parse_frontmatter_content(fetched)
+            fm_errors = validate_skill_frontmatter(fm, skill_name)
+            if fm_errors:
+                for err in fm_errors:
+                    logger.warning(
+                        "skill_format_validation",
+                        skill=skill_name,
+                        error=err,
+                        context="activate_deps",
+                    )
                 return False
             skill_dir.mkdir(parents=True, exist_ok=True)
             atomic_write(skill_md, fetched)

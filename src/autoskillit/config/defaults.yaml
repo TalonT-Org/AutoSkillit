@@ -115,6 +115,9 @@ logging:
   level: "INFO"
   json_output: null
 
+diagnostics:
+  post_run_analysis: false
+
 linux_tracing:
   enabled: true
   proc_interval: 5.0
@@ -275,6 +278,7 @@ skills:
     - report-bug
     - pipeline-summary
     - diagnose-ci
+    - analyze-pipeline-health
     - file-audit-issues
     - verify-diag
     - prepare-research-pr

@@ -565,15 +565,25 @@ def test_recipe_has_no_interactive_cleanup_steps(recipe_name: str) -> None:
     "recipe_name", ["implementation", "remediation", "implementation-groups", "merge-prs"]
 )
 def test_recipe_has_unconditional_register_steps(recipe_name: str) -> None:
-    """register_clone_success routes to done; register_clone_failure routes to escalate_stop."""
+    """register_clone_success routes to done (or an optional diagnostic step); same for failure."""
     recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
     assert "register_clone_success" in recipe.steps
     assert "register_clone_failure" in recipe.steps
     s = recipe.steps["register_clone_success"]
     f = recipe.steps["register_clone_failure"]
-    assert s.on_success == "done"
-    assert f.on_success == "escalate_stop"
-    assert f.on_failure == "escalate_stop"
+    # Accept direct routing to done/escalate_stop OR indirect via optional run_diagnostic steps
+    assert s.on_success in ("done", "run_diagnostic"), (
+        "register_clone_success.on_success must route to done or run_diagnostic, "
+        f"got {s.on_success!r}"
+    )
+    assert f.on_success in ("escalate_stop", "run_diagnostic_error"), (
+        "register_clone_failure.on_success must route to escalate_stop or "
+        f"run_diagnostic_error, got {f.on_success!r}"
+    )
+    assert f.on_failure in ("escalate_stop", "run_diagnostic_error"), (
+        "register_clone_failure.on_failure must route to escalate_stop or "
+        f"run_diagnostic_error, got {f.on_failure!r}"
+    )
     assert "check_defer_cleanup" not in recipe.steps
     assert "check_defer_on_failure" not in recipe.steps
 

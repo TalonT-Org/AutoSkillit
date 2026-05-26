@@ -252,6 +252,45 @@ async def test_open_kitchen_recipe_found_returns_envelope_with_content_and_ingre
     assert "--- INGREDIENTS TABLE ---" in result_str
 
 
+# DIAG_C4
+@pytest.mark.anyio
+async def test_open_kitchen_injects_hidden_ingredient_overrides(tmp_path, monkeypatch):
+    """open_kitchen injects kitchen_id and post_run_diagnostics into ingredient_overrides."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+    mock_ctx.recipes = MagicMock()
+    mock_ctx.recipes.load_and_validate.return_value = {
+        "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
+        "valid": True,
+        "suggestions": [],
+        "diagram": None,
+        "ingredients_table": "--- INGREDIENTS TABLE ---\n  task  required\n--- END TABLE ---",
+    }
+    mock_ctx.recipes.find.return_value = None
+    mock_ctx.config.migration.suppressed = []
+    mock_ctx.kitchen_id = "test-kitchen-abc"
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    with patch(
+                        "autoskillit.server.tools.tools_kitchen.resolve_kitchen_id",
+                        return_value="test-kitchen-abc",
+                    ):
+                        from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+                        await open_kitchen(name="demo", ctx=mock_ctx)
+
+    call_kwargs = mock_ctx.recipes.load_and_validate.call_args.kwargs
+    overrides = call_kwargs["ingredient_overrides"]
+    assert overrides["kitchen_id"] == "test-kitchen-abc"
+    assert overrides["post_run_diagnostics"] == "false"
+
+
 @pytest.mark.anyio
 async def test_open_kitchen_smoke_test_renders_resolved_base_branch(monkeypatch):
     """T7: open_kitchen smoke-test renders the config-resolved base_branch value."""

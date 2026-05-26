@@ -358,3 +358,14 @@ def test_wp_elaborator_is_packless():
     assert not agent_path.stem.startswith("plan-"), (
         "wp-elaborator.md must NOT start with 'plan-' (would collide with plan-review pack glob)"
     )
+
+
+# DIAG_C6: pipeline-health-scanner agent exists
+def test_pipeline_health_scanner_agent_exists():
+    """pipeline-health-scanner.md agent definition must exist with required frontmatter."""
+    from autoskillit.core import pkg_root
+
+    agent_path = pkg_root() / "agents" / "pipeline-health-scanner.md"
+    assert agent_path.is_file(), f"pipeline-health-scanner.md not found at {agent_path}"
+    content = agent_path.read_text()
+    assert "name: pipeline-health-scanner" in content

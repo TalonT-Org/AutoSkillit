@@ -288,6 +288,11 @@ class LoggingConfig:
 
 
 @dataclass
+class DiagnosticsConfig:
+    post_run_analysis: bool = False
+
+
+@dataclass
 class LinuxTracingConfig:
     enabled: bool = True
     proc_interval: float = 5.0

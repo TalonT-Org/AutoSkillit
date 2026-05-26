@@ -399,6 +399,11 @@ async def open_kitchen(
                 )
             suppressed = tool_ctx.config.migration.suppressed
             _defaults = resolve_ingredient_defaults(tool_ctx.project_dir)
+            _auto_overrides: dict[str, str] = {
+                "kitchen_id": tool_ctx.kitchen_id,
+                "post_run_diagnostics": _defaults.get("post_run_diagnostics", "false"),
+            }
+            _merged_overrides = {**_auto_overrides, **(overrides or {})}
             # Runtime enum check: output_mode must be validated before recipe loading
             if name == "research":
                 _om_value = (overrides or {}).get("output_mode")
@@ -417,7 +422,7 @@ async def open_kitchen(
                     tool_ctx.project_dir,
                     suppressed=suppressed,
                     resolved_defaults=_defaults,
-                    ingredient_overrides=overrides,
+                    ingredient_overrides=_merged_overrides,
                 )
             except ProcessStaleError as exc:
                 logger.warning("open_kitchen_failure", stage="process_stale", exc_info=True)

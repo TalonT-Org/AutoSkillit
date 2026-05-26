@@ -64,11 +64,11 @@ def test_agents_md_architecture_tree_has_subpackages() -> None:
         assert subpkg in content, f"AGENTS.md tree missing {subpkg}"
 
 
-def test_agents_md_dataclass_count_is_27() -> None:
+def test_agents_md_dataclass_count_is_28() -> None:
     assert AGENTS_MD.exists(), f"AGENTS.md not found at {AGENTS_MD}"
     content = AGENTS_MD.read_text()
-    assert "27 leaf dataclasses" in content
-    assert "24 leaf dataclasses" not in content
+    assert "28 leaf dataclasses" in content
+    assert "27 leaf dataclasses" not in content
 
 
 def test_claude_md_has_lsp_section() -> None:

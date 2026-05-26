@@ -39,6 +39,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_headless_core.py` | Tests for headless_runner.py extracted helpers |
 | `test_headless_debug_logging.py` | Tests for debug logging instrumentation in headless.py |
 | `test_headless_dispatch.py` | Tests for headless.py dispatch flow: food truck dispatch, pack injection, executor protocol |
+| `test_headless_execute.py` | Tests for assert_headless_cmd CmdSpec validation gate |
 | `test_headless_env_injection.py` | Phase 2 tests: AUTOSKILLIT_HEADLESS=1 env var injection in headless.py |
 | `test_headless_env_scrub.py` | Launch-site env-scrub contract test for run_headless_core |
 | `test_headless_ordering.py` | AST-based structural test for post-session operation ordering in headless.py |

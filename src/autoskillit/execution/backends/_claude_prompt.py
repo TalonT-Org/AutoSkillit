@@ -48,6 +48,15 @@ _SESSION_BASELINE_ENV: Mapping[str, str] = MappingProxyType(
     }
 )
 
+# Non-negotiable env overrides applied to every headless subprocess launch.
+# Injected after build_agent_env() so callers cannot clobber these values via
+# extras. Scoped to headless/resume commands only — never applied to interactive
+# sessions built by build_interactive_cmd().
+_HEADLESS_ENV_HARDENING: dict[str, str] = {
+    "TERM": "dumb",
+    "NO_COLOR": "1",
+}
+
 # Variables that _build_skill_session_cmd_impl controls exclusively. They must not
 # leak from the host process environment — the caller opts in via explicit
 # parameters (exit_after_stop_delay_ms, scenario_step_name, allowed_write_prefix, etc.).

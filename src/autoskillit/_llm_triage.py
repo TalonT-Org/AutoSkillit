@@ -131,11 +131,14 @@ async def _triage_batch(
         for flag in fmt.required_cli_flags:
             if flag not in triage_cmd:
                 triage_cmd.append(flag)
+        _triage_env = dict(build_agent_env())
+        _triage_env["TERM"] = "dumb"
+        _triage_env["NO_COLOR"] = "1"
         result: SubprocessResult = await run_managed_async(
             cmd=triage_cmd,
             cwd=Path.cwd(),
             timeout=30.0,
-            env=build_agent_env(),
+            env=_triage_env,
             pty_mode=True,
         )
         if result.termination == TerminationReason.TIMED_OUT:

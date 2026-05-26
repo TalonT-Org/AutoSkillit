@@ -37,6 +37,7 @@ from autoskillit.core import (
     fast_loads,
 )
 from autoskillit.execution.backends._claude_prompt import (
+    _HEADLESS_ENV_HARDENING,
     _HEADLESS_EXCLUSIVE_VARS,
     _MAX_MCP_OUTPUT_TOKENS_VALUE,
     _SESSION_BASELINE_ENV,
@@ -287,7 +288,9 @@ class ClaudeCodeBackend:
         cmd = ["claude", ClaudeFlags.PRINT, prompt, ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS]
         if model:
             cmd += [ClaudeFlags.MODEL, model]
-        return CmdSpec(cmd=tuple(cmd), env=build_agent_env(base=base, extras=env_extras))
+        env = dict(build_agent_env(base=base, extras=env_extras))
+        env.update(_HEADLESS_ENV_HARDENING)
+        return CmdSpec(cmd=tuple(cmd), env=env)
 
     def build_interactive_cmd(
         self,
@@ -400,10 +403,9 @@ class ClaudeCodeBackend:
         merged: dict[str, str] = dict(_SESSION_BASELINE_ENV)
         if env_extras:
             merged.update(env_extras)
-        return CmdSpec(
-            cmd=tuple(cmd),
-            env=build_agent_env(base={}, extras=merged),
-        )
+        env = dict(build_agent_env(base={}, extras=merged))
+        env.update(_HEADLESS_ENV_HARDENING)
+        return CmdSpec(cmd=tuple(cmd), env=env)
 
     def build_skill_session_cmd(
         self,

@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 import regex as re
 
 from autoskillit.core import CliSubtype, OutputFormat, RetryReason, SkillResult, get_logger
+from autoskillit.execution.headless._headless_helpers import assert_headless_cmd
 from autoskillit.execution.headless._headless_path_tokens import _RECOVERABLE_PATH_TOKENS
 from autoskillit.execution.process import _marker_is_standalone
 from autoskillit.execution.session import (
@@ -264,6 +265,7 @@ async def _attempt_contract_nudge(
         output_format=OutputFormat.JSON,
         env_extras=dict(provider_extras) if provider_extras else None,
     )
+    assert_headless_cmd(spec)
 
     try:
         nudge_result = await runner(

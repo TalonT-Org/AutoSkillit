@@ -39,3 +39,5 @@ async def test_run_headless_core_env_excludes_ide_vars(
     assert "CLAUDE_CODE_IDE_HOST_OVERRIDE" not in env
     assert env["CLAUDE_CODE_AUTO_CONNECT_IDE"] == "0"
     assert env["AUTOSKILLIT_HEADLESS"] == "1"
+    assert env["TERM"] == "dumb"
+    assert env["NO_COLOR"] == "1"

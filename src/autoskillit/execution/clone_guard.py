@@ -297,6 +297,15 @@ async def check_and_revert_clone_contamination(
         exclude_prefix=exclude_prefix,
     )
 
+    if report.reverted:
+        skill_result = dataclasses.replace(
+            skill_result,
+            success=False,
+            subtype="clone_contamination",
+            needs_retry=True,
+            retry_reason=RetryReason.CLONE_CONTAMINATION,
+        )
+
     if audit is not None:
         audit.record_failure(
             FailureRecord(

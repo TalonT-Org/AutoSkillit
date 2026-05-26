@@ -115,7 +115,7 @@ steps:
             run_cmd cp {agent_file} {inputs.source_dir}/src/autoskillit/agents/{agent_name}-eval-{variant_id}.md
 
          d. Run the eval-agent wrapper:
-            run_skill /autoskillit:eval-agent --agent-name {agent_name}-eval-{variant_id} --prompt-file {eval_run_dir}/{canary_id}/resolved_prompt.txt
+            run_skill /eval-agent --agent-name {agent_name}-eval-{variant_id} --prompt-file {eval_run_dir}/{canary_id}/resolved_prompt.txt
             cwd = inputs.source_dir
 
          e. On SUCCESS:

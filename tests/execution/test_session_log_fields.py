@@ -946,3 +946,73 @@ class TestApiRetryFields:
         api_retry_anomalies = [a for a in anomalies if a["kind"] == "api_retry_exhaustion"]
         assert len(api_retry_anomalies) == 1
         assert api_retry_anomalies[0]["detail"]["api_retry_count"] == 10
+
+
+class TestCodexLogFields:
+    """T5: codex_log_path parameter stores codex_log in sessions index."""
+
+    def test_flush_stores_codex_log_in_sessions_index(self, tmp_path):
+        codex_log = tmp_path / "codex-sessions" / "2026" / "05" / "26" / "rollout.jsonl"
+        codex_log.parent.mkdir(parents=True)
+        codex_log.write_text('{"type":"thread.started","thread_id":"tid"}\n')
+        flush_session_log(
+            log_dir=str(tmp_path),
+            codex_log_path=codex_log,
+            cwd="/some/worktree",
+            session_id="codex-session-001",
+            pid=12345,
+            skill_command="/autoskillit:implement",
+            success=True,
+            subtype="completed",
+            exit_code=0,
+            start_ts="2026-05-26T08:00:00",
+            proc_snapshots=None,
+            telemetry=SessionTelemetry.empty(),
+            provider_outcome=ProviderOutcome.none_used(),
+            recipe_identity=RecipeIdentity.empty(),
+        )
+        index = (tmp_path / "sessions.jsonl").read_text().strip()
+        entry = json.loads(index)
+        assert entry["codex_log"] == str(codex_log)
+        assert entry["claude_code_log"] is None
+
+    def test_flush_codex_log_null_when_not_provided(self, tmp_path):
+        flush_session_log(
+            log_dir=str(tmp_path),
+            cwd="/some/worktree",
+            session_id="cc-session-001",
+            pid=12345,
+            skill_command="/autoskillit:implement",
+            success=True,
+            subtype="completed",
+            exit_code=0,
+            start_ts="2026-05-26T08:00:00",
+            proc_snapshots=None,
+            telemetry=SessionTelemetry.empty(),
+            provider_outcome=ProviderOutcome.none_used(),
+            recipe_identity=RecipeIdentity.empty(),
+        )
+        index = (tmp_path / "sessions.jsonl").read_text().strip()
+        entry = json.loads(index)
+        assert entry["codex_log"] is None
+
+    def test_flush_codex_log_skips_claude_code_log_not_found_warning(self, tmp_path, caplog):
+        codex_log = tmp_path / "rollout.jsonl"
+        codex_log.write_text('{"type":"thread.started","thread_id":"tid"}\n')
+        flush_session_log(
+            log_dir=str(tmp_path),
+            codex_log_path=codex_log,
+            cwd="/some/worktree",
+            session_id="codex-session-002",
+            pid=12345,
+            skill_command="/autoskillit:implement",
+            success=True,
+            subtype="completed",
+            exit_code=0,
+            start_ts="2026-05-26T08:00:00",
+            proc_snapshots=None,
+            telemetry=SessionTelemetry.empty(),
+            provider_outcome=ProviderOutcome.none_used(),
+            recipe_identity=RecipeIdentity.empty(),
+        )
+        assert "claude_code_log_not_found" not in caplog.text

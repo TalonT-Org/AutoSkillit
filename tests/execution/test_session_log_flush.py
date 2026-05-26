@@ -243,7 +243,7 @@ def test_flush_session_log_retention_purges_oldest(tmp_path):
 
 def test_resolve_log_dir_default_linux(monkeypatch):
     """Empty log_dir on Linux (no XDG_DATA_HOME) uses ~/.local/share/autoskillit/logs."""
-    monkeypatch.setattr("autoskillit.execution.session_log.sys.platform", "linux")
+    monkeypatch.setattr("autoskillit.core.paths.sys.platform", "linux")
     monkeypatch.delenv("XDG_DATA_HOME", raising=False)
     result = resolve_log_dir("")
     assert result == Path.home() / ".local" / "share" / "autoskillit" / "logs"
@@ -251,7 +251,7 @@ def test_resolve_log_dir_default_linux(monkeypatch):
 
 def test_resolve_log_dir_xdg_override(monkeypatch):
     """XDG_DATA_HOME override is respected."""
-    monkeypatch.setattr("autoskillit.execution.session_log.sys.platform", "linux")
+    monkeypatch.setattr("autoskillit.core.paths.sys.platform", "linux")
     monkeypatch.setenv("XDG_DATA_HOME", "/custom/xdg")
     result = resolve_log_dir("")
     assert result == Path("/custom/xdg/autoskillit/logs")

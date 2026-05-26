@@ -99,8 +99,8 @@ class TestCodexBackend:
         expected = frozenset({"turn.completed", "turn.failed", "error"})
         assert CodexBackend().capabilities.completion_record_types == expected
 
-    def test_capabilities_session_record_types_empty(self) -> None:
-        assert CodexBackend().capabilities.session_record_types == frozenset()
+    def test_capabilities_session_record_types(self) -> None:
+        assert CodexBackend().capabilities.session_record_types == frozenset({"item.completed"})
 
     def test_capabilities_food_truck_true(self) -> None:
         assert CodexBackend().capabilities.food_truck_capable is True
@@ -285,8 +285,8 @@ class TestCodexBackendProtocol:
             {"turn.completed", "turn.failed", "error"}
         )
 
-    def test_session_record_types_empty(self) -> None:
-        assert CodexBackend().capabilities.session_record_types == frozenset()
+    def test_session_record_types(self) -> None:
+        assert CodexBackend().capabilities.session_record_types == frozenset({"item.completed"})
 
 
 class TestCodexHeadlessCmd:

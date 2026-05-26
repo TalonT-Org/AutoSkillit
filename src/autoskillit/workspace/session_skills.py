@@ -26,6 +26,7 @@ from autoskillit.core import (
     SkillSource,
     ValidatedAddDir,
     atomic_write,
+    default_log_dir,
     get_logger,
     is_feature_enabled,
     pkg_root,
@@ -540,9 +541,7 @@ class DefaultSessionSkillManager:
             if env_source.exists():
                 shutil.copy2(env_source, session_skills_dir / ".env")
                 logger.debug("codex_env_copy", src=str(env_source))
-            sessions_target = (
-                Path.home() / ".local" / "share" / "autoskillit" / "logs" / "codex-sessions"
-            )
+            sessions_target = default_log_dir() / "codex-sessions"
             sessions_target.mkdir(parents=True, exist_ok=True)
             sessions_link = session_skills_dir / "sessions"
             try:

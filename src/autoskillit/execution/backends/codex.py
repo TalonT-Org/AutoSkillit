@@ -30,6 +30,7 @@ from autoskillit.core import (
     SessionCheckpoint,
     SkillSessionConfig,
     ValidatedAddDir,
+    default_log_dir,
     extract_skill_name,
     get_logger,
 )
@@ -116,37 +117,111 @@ class CodexSessionLocator:
     def locate_session(self, session_id: str, codex_home: Path | None = None) -> Path | None:
         if not session_id or session_id.startswith(("no_session_", "crashed_")):
             return None
+
+        candidates: list[Path] = []
+        # 1. Permanent storage (symlink target) — checked first because
+        #    ephemeral CODEX_HOME may be cleaned up by the time we search
+        candidates.append(default_log_dir() / "codex-sessions")
+        # 2. Explicit codex_home or CODEX_HOME env var
         if codex_home is not None:
-            sessions_dir = codex_home / "sessions"
+            candidates.append(codex_home / "sessions")
         else:
             env_home = os.environ.get("CODEX_HOME")
             if env_home:
-                sessions_dir = Path(env_home) / "sessions"
-            else:
-                sessions_dir = Path.home() / ".codex" / "sessions"
-        if not sessions_dir.exists():
-            return None
-        for year_dir in sessions_dir.iterdir():
-            if not year_dir.is_dir():
+                candidates.append(Path(env_home) / "sessions")
+        # 3. Default Codex home (~/.codex/sessions/)
+        candidates.append(Path.home() / ".codex" / "sessions")
+
+        seen: set[str] = set()
+        for candidate in candidates:
+            try:
+                resolved = str(candidate.resolve()) if candidate.exists() else str(candidate)
+            except OSError:
                 continue
-            for month_dir in year_dir.iterdir():
-                if not month_dir.is_dir():
-                    continue
-                for day_dir in month_dir.iterdir():
-                    if not day_dir.is_dir():
-                        continue
-                    for entry in day_dir.iterdir():
-                        if entry.is_file() and entry.name == f"{session_id}.jsonl.zst":
-                            return entry
+            if resolved in seen or not candidate.exists():
+                continue
+            seen.add(resolved)
+            result = self._search_tree(candidate, session_id)
+            if result is not None:
+                return result
         return None
 
-    def read_session(self, path: Path) -> list[dict]:
+    def _search_tree(self, sessions_dir: Path, thread_id: str) -> Path | None:
+        """Walk YYYY/MM/DD/ date tree for rollout-*.jsonl matching thread_id."""
         try:
-            raw = path.read_bytes()
-            decompressed = zstandard.ZstdDecompressor().decompress(raw)
-            text = decompressed.decode("utf-8")
+            year_dirs = sorted(sessions_dir.iterdir(), reverse=True)
+        except OSError:
+            return None
+        for year_dir in year_dirs:
+            if not year_dir.is_dir():
+                continue
+            try:
+                month_dirs = sorted(year_dir.iterdir(), reverse=True)
+            except OSError:
+                continue
+            for month_dir in month_dirs:
+                if not month_dir.is_dir():
+                    continue
+                try:
+                    day_dirs = sorted(month_dir.iterdir(), reverse=True)
+                except OSError:
+                    continue
+                for day_dir in day_dirs:
+                    if not day_dir.is_dir():
+                        continue
+                    try:
+                        entries = list(day_dir.iterdir())
+                    except OSError:
+                        continue
+                    for entry in entries:
+                        if (
+                            entry.is_file()
+                            and entry.name.startswith("rollout-")
+                            and entry.name.endswith(".jsonl")
+                        ):
+                            if self._file_matches_thread(entry, thread_id):
+                                return entry
+        return None
+
+    @staticmethod
+    def _file_matches_thread(path: Path, thread_id: str) -> bool:
+        """Check if a rollout NDJSON file's thread.started event matches thread_id.
+
+        Only reads until the first parseable NDJSON object — thread.started is
+        always the first event in a Codex rollout file.
+        """
+        try:
+            with open(path, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        obj = json.loads(line)
+                    except json.JSONDecodeError:
+                        return False
+                    if isinstance(obj, dict) and obj.get("type") == "thread.started":
+                        return obj.get("thread_id", "") == thread_id
+                    return False
+        except OSError:
+            return False
+        return False
+
+    def read_session(self, path: Path) -> list[dict]:
+        """Read and parse a Codex session log file.
+
+        Handles both plain .jsonl (current Codex v0.133.0+) and
+        .jsonl.zst (legacy) formats based on file extension.
+        """
+        try:
+            if path.name.endswith(".zst"):
+                raw = path.read_bytes()
+                decompressed = zstandard.ZstdDecompressor().decompress(raw)
+                text = decompressed.decode("utf-8")
+            else:
+                text = path.read_text(encoding="utf-8")
         except Exception:
-            logger.warning("read_session: failed to decompress", path=str(path), exc_info=True)
+            logger.warning("read_session: failed to read", path=str(path), exc_info=True)
             return []
         result: list[dict] = []
         for line in text.splitlines():
@@ -180,7 +255,7 @@ class CodexBackend:
             mcp_config_capable=True,
             food_truck_capable=True,
             completion_record_types=frozenset({"turn.completed", "turn.failed", "error"}),
-            session_record_types=frozenset(),
+            session_record_types=frozenset({"item.completed"}),
         )
 
     def build_cmd(self, skill_command: str, cwd: str) -> CmdSpec:

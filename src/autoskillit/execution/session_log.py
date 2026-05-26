@@ -9,9 +9,7 @@ provides quick scanning across all sessions.
 from __future__ import annotations
 
 import json
-import os
 import shutil
-import sys
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -24,6 +22,7 @@ if TYPE_CHECKING:
 from autoskillit.core import (
     atomic_write,
     claude_code_log_path,
+    default_log_dir,
     get_logger,
     iter_merged_assistant_turns,
     write_versioned_json,
@@ -60,11 +59,7 @@ def resolve_log_dir(log_dir: str) -> Path:
     """Resolve session log directory. Empty string = platform default."""
     if log_dir:
         return Path(log_dir).expanduser()
-    if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / "autoskillit" / "logs"
-    xdg = os.environ.get("XDG_DATA_HOME")
-    base = Path(xdg) if xdg else Path.home() / ".local" / "share"
-    return base / "autoskillit" / "logs"
+    return default_log_dir()
 
 
 def write_telemetry_clear_marker(log_root: Path) -> None:
@@ -154,6 +149,7 @@ def flush_session_log(
     model_identifier: str = "",
     max_sessions: int | None = None,
     is_resume: bool = False,
+    codex_log_path: Path | None = None,
     telemetry: SessionTelemetry,
 ) -> None:
     """Flush session diagnostics to disk.
@@ -183,8 +179,12 @@ def flush_session_log(
     else:
         dir_name = f"no_session_{start_ts.replace(':', '-')}"
 
-    cc_log = claude_code_log_path(cwd, session_id)
-    cc_log_str: str | None = str(cc_log) if cc_log else None
+    if codex_log_path is not None:
+        cc_log = None
+        cc_log_str = None
+    else:
+        cc_log = claude_code_log_path(cwd, session_id)
+        cc_log_str = str(cc_log) if cc_log else None
 
     if cc_log and not cc_log.exists():
         logger.warning("claude_code_log_not_found", path=cc_log_str, session_id=session_id)
@@ -471,6 +471,7 @@ def flush_session_log(
         "campaign_id": campaign_id,
         "dispatch_id": dispatch_id,
         "claude_code_log": cc_log_str,
+        "codex_log": str(codex_log_path) if codex_log_path else None,
         "skill_command": skill_command[:100],
         "success": success,
         "subtype": subtype,

@@ -157,3 +157,28 @@ class TestPkgRoot:
         assert result.name == "autoskillit", (
             "pkg_root() must return the autoskillit package directory"
         )
+
+
+class TestDefaultLogDir:
+    def test_linux_no_xdg(self, monkeypatch):
+        monkeypatch.setattr("autoskillit.core.paths.sys.platform", "linux")
+        monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+        from autoskillit.core.paths import default_log_dir
+
+        result = default_log_dir()
+        assert result == Path.home() / ".local" / "share" / "autoskillit" / "logs"
+
+    def test_linux_xdg_override(self, monkeypatch):
+        monkeypatch.setattr("autoskillit.core.paths.sys.platform", "linux")
+        monkeypatch.setenv("XDG_DATA_HOME", "/custom/xdg")
+        from autoskillit.core.paths import default_log_dir
+
+        result = default_log_dir()
+        assert result == Path("/custom/xdg/autoskillit/logs")
+
+    def test_darwin(self, monkeypatch):
+        monkeypatch.setattr("autoskillit.core.paths.sys.platform", "darwin")
+        from autoskillit.core.paths import default_log_dir
+
+        result = default_log_dir()
+        assert result == Path.home() / "Library" / "Application Support" / "autoskillit" / "logs"

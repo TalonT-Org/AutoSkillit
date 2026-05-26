@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, cast
 import anyio
 
 from autoskillit.core import (
+    AGENT_BACKEND_CODEX,
     CAMPAIGN_ID_ENV_VAR,
     DISPATCH_ID_ENV_VAR,
     CmdSpec,
@@ -421,6 +422,15 @@ async def _execute_claude_headless(
     ):
         from autoskillit.execution.session_log import flush_session_log
 
+        _codex_log: Path | None = None
+        if _step_backend.name == AGENT_BACKEND_CODEX and skill_result.session_id:
+            try:
+                _codex_log = _step_backend.session_locator().locate_session(
+                    skill_result.session_id
+                )
+            except Exception:
+                logger.debug("codex_session_locate_failed", exc_info=True)
+
         try:
             flush_session_log(
                 log_dir=ctx.config.linux_tracing.log_dir,
@@ -486,6 +496,7 @@ async def _execute_claude_headless(
                 ),
                 max_sessions=ctx.config.linux_tracing.max_sessions,
                 is_resume="--resume" in spec.cmd,
+                codex_log_path=_codex_log,
             )
         except Exception:
             logger.debug("session_log_flush_failed", exc_info=True)

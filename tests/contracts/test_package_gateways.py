@@ -396,7 +396,6 @@ def test_root_module_allowlist() -> None:
             "_llm_triage.py",
             "_test_filter.py",
             "hook_registry.py",
-            "smoke_utils.py",
             "version.py",
         }
     )

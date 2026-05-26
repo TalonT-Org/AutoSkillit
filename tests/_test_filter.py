@@ -709,7 +709,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
     "planner": frozenset({"planner", "recipe"}),
     "_llm_triage": frozenset({"test_llm_triage.py", "server"}),
     "_test_filter": frozenset({"arch", "infra", "contracts"}),
-    "smoke_utils": frozenset({"test_smoke_utils.py", "recipe"}),
+    "smoke_utils": frozenset({"test_smoke_utils.py", "recipe", "smoke_utils"}),
     "version": frozenset({"test_version.py", "server", "cli"}),
 }
 

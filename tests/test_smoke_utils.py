@@ -127,7 +127,7 @@ def test_check_review_loop_has_no_subprocess_calls() -> None:
     """The simplified check_review_loop must not use subprocess at all."""
     import ast
 
-    src = Path("src/autoskillit/smoke_utils.py").read_text()
+    src = Path("src/autoskillit/smoke_utils/_review.py").read_text()
     tree = ast.parse(src)
 
     # Find the check_review_loop function node
@@ -395,9 +395,11 @@ def test_subprocess_calls_have_timeout() -> None:
     """All subprocess.run() calls in smoke_utils.py must have a timeout= argument."""
     import ast
 
-    src = Path("src/autoskillit/smoke_utils.py").read_text()
-    tree = ast.parse(src)
-    for node in ast.walk(tree):
+    pkg = Path("src/autoskillit/smoke_utils")
+    for py_file in sorted(pkg.glob("*.py")):
+        src = py_file.read_text()
+        tree = ast.parse(src)
+        for node in ast.walk(tree):
         if (
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Attribute)
@@ -840,7 +842,7 @@ def test_pts_includes_model_usage_breakdown(mock_run, _mock_sleep, tmp_path: Pat
 def test_section_re_consumes_all_three_sections() -> None:
     """section_re matches across all three telemetry sections."""
     from autoskillit.core import PR_TELEMETRY_SECTIONS
-    from autoskillit.smoke_utils import _PR_SECTION_RE
+    from autoskillit.smoke_utils._telemetry import _PR_SECTION_RE
 
     body = (
         "## Summary\nIntro\n\n"
@@ -860,7 +862,7 @@ def test_section_re_consumes_all_three_sections() -> None:
 def test_section_re_covers_all_pr_telemetry_sections() -> None:
     """Every section in PR_TELEMETRY_SECTIONS is consumed by section_re when all are present."""
     from autoskillit.core import PR_TELEMETRY_SECTIONS
-    from autoskillit.smoke_utils import _PR_SECTION_RE
+    from autoskillit.smoke_utils._telemetry import _PR_SECTION_RE
 
     parts = []
     for section in PR_TELEMETRY_SECTIONS:

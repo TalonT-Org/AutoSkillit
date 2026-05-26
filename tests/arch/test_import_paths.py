@@ -29,6 +29,8 @@ PACKAGES = frozenset(
         "config",
         "server",
         "cli",
+        "report",
+        "hooks",
     ]
 )
 

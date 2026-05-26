@@ -1,4 +1,9 @@
-"""RecordingSubprocessRunner and ReplayingSubprocessRunner — scenario I/O for headless sessions."""
+"""RecordingSubprocessRunner and ReplayingSubprocessRunner — scenario I/O for headless sessions.
+
+See docs/design/recording-replay-accepted-degradations.md for accepted
+degradations: Claude PTY cassette format incompatibility with Codex replay,
+and the unchanged Claude session recording path.
+"""
 
 from __future__ import annotations
 

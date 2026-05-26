@@ -20,6 +20,7 @@ Planner manifest, validation, compilation, and merge tests.
 | `test_manifests_expansion.py` | expand_assignments, expand_wps, resolve_task_input |
 | `test_merge_files.py` | merge_files and merge_tier_results (core merge operations) |
 | `test_merge_items.py` | extract_item and replace_item (item-level CRUD) |
+| `test_plan_metadata.py` | Tests for plan_id and source_commit stamping in plan.json, manifest.json, plan.md, and issue .md files |
 | `test_merge_snapshot.py` | build_plan_snapshot |
 | `test_merge_refine.py` | Refine contexts and merge_refined_assignments |
 | `test_pipeline_integration.py` | End-to-end pipeline integration tests |

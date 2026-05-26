@@ -95,8 +95,18 @@ def _render_issue_body(wp: dict, phase: dict, assignment: dict) -> str:
     return body
 
 
+def _stamp_front_matter(content: str, plan_id: str, source_commit: str) -> str:
+    return f"---\nplan_id: {plan_id}\nsource_commit: {source_commit}\n---\n\n{content}"
+
+
 def compile_plan(
-    output_dir: str, task_file_path: str, source_dir: str, task_label: str = "", **kwargs: Any
+    output_dir: str,
+    task_file_path: str,
+    source_dir: str,
+    task_label: str = "",
+    plan_id: str = "",
+    source_commit: str = "",
+    **kwargs: Any,
 ) -> dict[str, str]:
     task = Path(task_file_path).read_text(encoding="utf-8") if task_file_path else ""
     task_label = task_label or _derive_label(task, "")
@@ -173,6 +183,8 @@ def compile_plan(
                 },
             }
         body = _render_issue_body(wp, phase, assignment)
+        if plan_id:
+            body = _stamp_front_matter(body, plan_id, source_commit)
         issue_path = issues_dir / f"{wp_id}_issue.md"
         atomic_write(issue_path, body)
         issue_paths[wp_id] = str(issue_path)
@@ -202,17 +214,17 @@ def compile_plan(
             assignments_nested.append({**assign, "work_packages": wps_in_assign})
         phases_nested.append({**phase, "assignments": assignments_nested})
 
+    plan_payload: dict[str, Any] = {
+        "task": task,
+        "source_dir": source_dir,
+        "phases": phases_nested,
+        "execution_order": execution_order,
+    }
+    if plan_id:
+        plan_payload["plan_id"] = plan_id
+        plan_payload["source_commit"] = source_commit
     plan_json_path = root / "plan.json"
-    write_versioned_json(
-        plan_json_path,
-        {
-            "task": task,
-            "source_dir": source_dir,
-            "phases": phases_nested,
-            "execution_order": execution_order,
-        },
-        schema_version=1,
-    )
+    write_versioned_json(plan_json_path, plan_payload, schema_version=1)
 
     md_lines = [f"# Plan: {task_label}", ""]
     for phase in sorted(phase_results.values(), key=lambda p: p["phase_number"]):
@@ -230,19 +242,21 @@ def compile_plan(
             md_lines.append("")
 
     plan_md_path = root / "plan.md"
-    atomic_write(plan_md_path, "\n".join(md_lines))
+    plan_md_content = "\n".join(md_lines)
+    if plan_id:
+        plan_md_content = _stamp_front_matter(plan_md_content, plan_id, source_commit)
+    atomic_write(plan_md_path, plan_md_content)
 
+    manifest_payload: dict[str, Any] = {
+        "task": task,
+        "source_dir": source_dir,
+        "execution_order": execution_order,
+        "issues": issue_paths,
+    }
+    if plan_id:
+        manifest_payload["plan_id"] = plan_id
     manifest_path = root / "manifest.json"
-    write_versioned_json(
-        manifest_path,
-        {
-            "task": task,
-            "source_dir": source_dir,
-            "execution_order": execution_order,
-            "issues": issue_paths,
-        },
-        schema_version=1,
-    )
+    write_versioned_json(manifest_path, manifest_payload, schema_version=1)
 
     plan_parts = "\n".join(issue_paths[wp_id] for wp_id in execution_order)
 

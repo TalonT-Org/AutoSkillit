@@ -35,7 +35,7 @@ Example invocation:
 **NEVER:**
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
 - Modify any source code files
-- Use MCP tools (open_kitchen, run_skill, run_cmd, run_python) — this skill uses only native Claude Code tools
+- Use any MCP tools — this skill uses only native Claude Code tools
 - Create files outside `{{AUTOSKILLIT_TEMP}}/eval-agent/`
 - Run subagents in the background (`run_in_background: true` is prohibited)
 - Skip writing the output file on agent failure — always write a result

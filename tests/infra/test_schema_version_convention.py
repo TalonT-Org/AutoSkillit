@@ -142,24 +142,24 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/cli/update/_update_checks.py", 77),
     # _update_checks_fetch.py — fetch cache (extracted from _update_checks.py)
     ("src/autoskillit/cli/update/_update_checks_fetch.py", 58),
-    # smoke_utils.py — partitions, ranges, diff metrics, queue, enriched handoff,
-    # eval resolved/manifest/scorecard/eval_context, agent-eval resolved/manifest/context
-    ("src/autoskillit/smoke_utils.py", 71),
-    ("src/autoskillit/smoke_utils.py", 140),
-    # Lines 157 and 438 are list-payload write sites (dual membership: also in list_sites
+    # smoke_utils/_review.py — ranges, diff metrics, enriched handoff
+    ("src/autoskillit/smoke_utils/_review.py", 78),
+    ("src/autoskillit/smoke_utils/_review.py", 95),
+    ("src/autoskillit/smoke_utils/_review.py", 275),
+    # smoke_utils/_git.py — partitions, merge queue data
+    # Line 102 is a list-payload write site (dual membership: also in list_sites
     # in test_allowlist_includes_list_payloads_as_documented). The AST scanner catches
-    # them because it cannot distinguish list vs dict return types — intentional.
-    ("src/autoskillit/smoke_utils.py", 157),
-    ("src/autoskillit/smoke_utils.py", 438),
-    ("src/autoskillit/smoke_utils.py", 520),
-    ("src/autoskillit/smoke_utils.py", 531),
-    ("src/autoskillit/smoke_utils.py", 638),
-    ("src/autoskillit/smoke_utils.py", 649),
-    ("src/autoskillit/smoke_utils.py", 735),
-    ("src/autoskillit/smoke_utils.py", 821),
-    ("src/autoskillit/smoke_utils.py", 897),
-    ("src/autoskillit/smoke_utils.py", 992),
-    # planner/consolidation.py — individual WP result file writes (merged and absorbed WPs)
+    # it because it cannot distinguish list vs dict return types — intentional.
+    ("src/autoskillit/smoke_utils/_git.py", 50),
+    ("src/autoskillit/smoke_utils/_git.py", 102),
+    # smoke_utils/_eval.py — eval resolved/manifest/scorecard/eval_context, agent-eval
+    ("src/autoskillit/smoke_utils/_eval.py", 77),
+    ("src/autoskillit/smoke_utils/_eval.py", 88),
+    ("src/autoskillit/smoke_utils/_eval.py", 195),
+    ("src/autoskillit/smoke_utils/_eval.py", 206),
+    ("src/autoskillit/smoke_utils/_eval.py", 284),
+    ("src/autoskillit/smoke_utils/_eval.py", 424),
+    # planner/consolidation.py — broken_cycle_edges.json (list payload; AST scanner catches it)
     ("src/autoskillit/planner/consolidation.py", 333),
     # planner/consolidation.py — broken_cycle_edges.json (list payload; AST scanner catches it)
     ("src/autoskillit/planner/consolidation.py", 357),
@@ -227,8 +227,8 @@ class TestSchemaVersionConvention:
         """List-payload sites are included since the AST scanner can't distinguish return types."""
         # These sites write list payloads through function calls but are caught by the scanner
         list_sites = [
-            ("src/autoskillit/smoke_utils.py", 157),
-            ("src/autoskillit/smoke_utils.py", 438),
+            ("src/autoskillit/smoke_utils/_review.py", 78),
+            ("src/autoskillit/smoke_utils/_git.py", 102),
         ]
         for site in list_sites:
             assert site in _LEGACY_JSON_WRITES, (

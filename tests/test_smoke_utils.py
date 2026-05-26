@@ -7,6 +7,8 @@ import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from autoskillit.smoke_utils import (
     annotate_pr_diff,
     build_agent_eval_context,
@@ -127,7 +129,7 @@ def test_check_review_loop_has_no_subprocess_calls() -> None:
     """The simplified check_review_loop must not use subprocess at all."""
     import ast
 
-    src = Path("src/autoskillit/smoke_utils.py").read_text()
+    src = Path("src/autoskillit/smoke_utils/_review.py").read_text()
     tree = ast.parse(src)
 
     # Find the check_review_loop function node
@@ -395,18 +397,20 @@ def test_subprocess_calls_have_timeout() -> None:
     """All subprocess.run() calls in smoke_utils.py must have a timeout= argument."""
     import ast
 
-    src = Path("src/autoskillit/smoke_utils.py").read_text()
-    tree = ast.parse(src)
-    for node in ast.walk(tree):
-        if (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and node.func.attr == "run"
-        ):
-            kw_names = {kw.arg for kw in node.keywords}
-            assert "timeout" in kw_names, (
-                f"subprocess.run() at line {node.lineno} in smoke_utils.py missing timeout="
-            )
+    pkg = Path("src/autoskillit/smoke_utils")
+    for py_file in sorted(pkg.glob("*.py")):
+        src = py_file.read_text()
+        tree = ast.parse(src)
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "run"
+            ):
+                kw_names = {kw.arg for kw in node.keywords}
+                assert "timeout" in kw_names, (
+                    f"subprocess.run() at line {node.lineno} in {py_file.name} missing timeout="
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -840,7 +844,7 @@ def test_pts_includes_model_usage_breakdown(mock_run, _mock_sleep, tmp_path: Pat
 def test_section_re_consumes_all_three_sections() -> None:
     """section_re matches across all three telemetry sections."""
     from autoskillit.core import PR_TELEMETRY_SECTIONS
-    from autoskillit.smoke_utils import _PR_SECTION_RE
+    from autoskillit.smoke_utils._telemetry import _PR_SECTION_RE
 
     body = (
         "## Summary\nIntro\n\n"
@@ -860,7 +864,7 @@ def test_section_re_consumes_all_three_sections() -> None:
 def test_section_re_covers_all_pr_telemetry_sections() -> None:
     """Every section in PR_TELEMETRY_SECTIONS is consumed by section_re when all are present."""
     from autoskillit.core import PR_TELEMETRY_SECTIONS
-    from autoskillit.smoke_utils import _PR_SECTION_RE
+    from autoskillit.smoke_utils._telemetry import _PR_SECTION_RE
 
     parts = []
     for section in PR_TELEMETRY_SECTIONS:
@@ -1974,3 +1978,68 @@ def test_consolidate_health_reports_does_not_mutate_source_dicts(tmp_path):
     assert "dispatch_id" not in original_finding
     # Verify the result has the dispatch_id in findings
     assert "dispatch-a" in result["summary"]
+# ---------------------------------------------------------------------------
+# T_FACADE_1–T_FACADE_2: smoke_utils package facade verification
+# ---------------------------------------------------------------------------
+
+
+def test_smoke_utils_all_exports_complete() -> None:
+    """smoke_utils.__all__ must list all 19 public names."""
+    import autoskillit.smoke_utils as su
+
+    expected = {
+        "annotate_pr_diff",
+        "build_agent_eval_context",
+        "build_eval_context",
+        "check_bug_report_non_empty",
+        "check_commits_ahead",
+        "check_loop_iteration",
+        "check_loop_with_progress",
+        "check_review_loop",
+        "close_issue_already_done",
+        "compile_eval_scorecard",
+        "consolidate_health_reports",
+        "compute_domain_partitions",
+        "detect_zero_changes",
+        "enrich_diff_context",
+        "fetch_merge_queue_data",
+        "LOCAL_ROUND_EXEMPT_VERDICTS",
+        "parse_agent_eval_manifests",
+        "parse_eval_manifests",
+        "patch_pr_token_summary",
+        "try_load_json",
+    }
+    assert set(su.__all__) == expected
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "annotate_pr_diff",
+        "build_agent_eval_context",
+        "build_eval_context",
+        "check_bug_report_non_empty",
+        "check_commits_ahead",
+        "check_loop_iteration",
+        "check_loop_with_progress",
+        "check_review_loop",
+        "close_issue_already_done",
+        "compile_eval_scorecard",
+        "consolidate_health_reports",
+        "compute_domain_partitions",
+        "detect_zero_changes",
+        "enrich_diff_context",
+        "fetch_merge_queue_data",
+        "parse_agent_eval_manifests",
+        "parse_eval_manifests",
+        "patch_pr_token_summary",
+        "try_load_json",
+    ],
+)
+def test_smoke_utils_callable_resolvable_via_importlib(name: str) -> None:
+    """Every public callable is resolvable via the same importlib path recipes use."""
+    import importlib
+
+    mod = importlib.import_module("autoskillit.smoke_utils")
+    attr = getattr(mod, name)
+    assert callable(attr)

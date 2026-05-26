@@ -615,22 +615,21 @@ class TestRegisterAllDualRegistration:
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
         capsys: pytest.CaptureFixture[str],
-        caplog: pytest.LogCaptureFixture,
     ) -> None:
-        import logging
+        import structlog.testing
 
         from autoskillit.cli._init_helpers import _register_all
 
         _mcp, _evict, codex_mock = self._setup(
             monkeypatch, tmp_path, codex_side_effect=RuntimeError
         )
-        with caplog.at_level(logging.WARNING, logger="autoskillit.cli._init_helpers"):
+        with structlog.testing.capture_logs() as logs:
             _register_all("user", tmp_path)
         codex_mock.assert_called_once()
         captured = capsys.readouterr()
         assert "AUTOSKILLIT" in captured.out
         assert "failed" in captured.out
-        assert "Codex MCP registration failed" in caplog.text
+        assert any("Codex MCP registration failed" in str(log.get("event", "")) for log in logs)
 
     def test_plugin_ok_fires_evict_and_codex(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path

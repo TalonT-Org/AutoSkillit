@@ -391,7 +391,9 @@ def test_review_gate_clear_pattern_in_review_pr_contracts(skills):
 def test_skill_contracts_yaml_includes_setup_environment(skills: dict[str, Any]) -> None:
     """setup-environment must be registered with env_mode and verdict patterns."""
     _assert_skill_has_patterns(
-        skills, "setup-environment", r"env_mode[ \t]*=[ \t]*(none|docker|micromamba-host|unavailable)"
+        skills,
+        "setup-environment",
+        r"env_mode[ \t]*=[ \t]*(none|docker|micromamba-host|unavailable)",
     )
     contract = skills["setup-environment"]
     patterns = contract["expected_output_patterns"]

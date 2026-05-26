@@ -524,7 +524,7 @@ class TestGroupDApiContractPreservation:
         )
 
     def test_req_api_004_headless_subprocess_result_under_type_checking(self):
-        """execution/headless/_headless_execute.py must import SubprocessResult only under TYPE_CHECKING."""
+        """_headless_execute.py must import SubprocessResult only under TYPE_CHECKING."""
         source = (self._pkg_root() / "execution" / "headless" / "_headless_execute.py").read_text()
         assert "SubprocessResult" in source, (
             "SubprocessResult reference vanished from _headless_execute.py entirely"

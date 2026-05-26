@@ -336,6 +336,7 @@ class DefaultHeadlessExecutor:
         marker_dir: Path | None = None,
         session_id: str | None = None,
         resume_message: str | None = None,
+        backend_override: str | None = None,
     ) -> SkillResult:
         if self._ctx.backend is not None and not self._ctx.backend.capabilities.food_truck_capable:
             raise RuntimeError(

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import regex as _regex
 
 from autoskillit.core import DISPATCH_ID_ENV_VAR, PR_TELEMETRY_SECTIONS
@@ -107,3 +110,58 @@ def patch_pr_token_summary(
         }
 
     return {"success": "true", "sessions_loaded": str(count)}
+
+
+def consolidate_health_reports(*, diagnostics_log_dir: str, kitchen_id: str) -> dict:
+    """Consolidate per-dispatch health reports filtered by kitchen_id.
+
+    Writes a JSON report file to {diagnostics_log_dir}/health-reports/ when running
+    inside a food truck dispatch, persisting the report outside the clone filesystem.
+    """
+    reports_dir = Path(diagnostics_log_dir) / "health-reports"
+    if not reports_dir.is_dir():
+        return {"summary": "No health reports directory found. No diagnostics to consolidate."}
+
+    reports = []
+    for path in sorted(reports_dir.glob("*_health_report.json")):
+        try:
+            data = json.loads(path.read_text())
+            if data.get("kitchen_id") == kitchen_id:
+                reports.append(data)
+        except (json.JSONDecodeError, OSError):
+            continue
+
+    if not reports:
+        return {"summary": "No health reports found for this campaign."}
+
+    all_findings = []
+    for report in reports:
+        dispatch_id = report.get("dispatch_id", "unknown")
+        for finding in report.get("findings", []):
+            all_findings.append({**finding, "dispatch_id": dispatch_id})
+
+    if not all_findings:
+        return {
+            "summary": (
+                f"Pipeline health check: {len(reports)} dispatches analyzed, no issues found."
+            )
+        }
+
+    severity_order = {"confirmed_bug": 0, "regression": 1, "anomaly": 2, "informational": 3}
+    all_findings.sort(key=lambda f: severity_order.get(f.get("severity", ""), 99))
+
+    lines = [
+        "## Consolidated Pipeline Health Report",
+        "",
+        f"**Dispatches analyzed:** {len(reports)}",
+        f"**Total findings:** {len(all_findings)}",
+        "",
+    ]
+    for finding in all_findings:
+        sev = finding.get("severity", "unknown").upper()
+        lines.append(
+            f"- [{sev}] (dispatch {finding.get('dispatch_id', '?')}): "
+            f"{finding.get('summary', 'No summary')}"
+        )
+
+    return {"summary": "\n".join(lines)}

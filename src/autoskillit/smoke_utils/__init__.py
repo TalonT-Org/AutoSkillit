@@ -27,7 +27,7 @@ from autoskillit.smoke_utils._review import (
     check_review_loop,
     enrich_diff_context,
 )
-from autoskillit.smoke_utils._telemetry import patch_pr_token_summary
+from autoskillit.smoke_utils._telemetry import consolidate_health_reports, patch_pr_token_summary
 
 __all__ = [
     "LOCAL_ROUND_EXEMPT_VERDICTS",
@@ -40,6 +40,7 @@ __all__ = [
     "check_loop_with_progress",
     "check_review_loop",
     "close_issue_already_done",
+    "consolidate_health_reports",
     "compile_eval_scorecard",
     "compute_domain_partitions",
     "detect_zero_changes",

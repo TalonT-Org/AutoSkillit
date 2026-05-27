@@ -45,7 +45,7 @@ class TestResolvePayloadField:
         entry = CaptureEntrySpec(from_="${{ result.worktree_path }}", value_type="path")
         assert resolve_payload_field(entry) == "worktree_path"
 
+
 def test_value_type_is_required() -> None:
     with pytest.raises(TypeError, match="value_type"):
         CaptureEntrySpec(from_="${{ result.x }}")
-

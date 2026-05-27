@@ -14,7 +14,7 @@ pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature
 
 def _ce(from_: str, value_type: str = "string") -> CaptureEntrySpec:
     """Shorthand to build a CaptureEntrySpec in tests."""
-    return CaptureEntrySpec(from_=from_, value_type=value_type, value_type="string")
+    return CaptureEntrySpec(from_=from_, value_type=value_type)
 
 
 # ---------------------------------------------------------------------------
@@ -628,7 +628,9 @@ class TestCaptureFieldNameRoundTrip:
         from autoskillit.fleet._prompts import _build_food_truck_prompt
 
         capture_spec = {
-            "worktree_path": CaptureEntrySpec(from_="${{ result.worktree_path }}", value_type="string"),
+            "worktree_path": CaptureEntrySpec(
+                from_="${{ result.worktree_path }}", value_type="string"
+            ),
             "pr_url": CaptureEntrySpec(from_="${{ result.pr_url }}", value_type="string"),
         }
 
@@ -659,7 +661,9 @@ class TestCaptureFieldNameRoundTrip:
         from autoskillit.fleet._capture import _extract_captures
 
         capture_spec = {
-            "worktree_path": CaptureEntrySpec(from_="${{ result.worktree_path }}", value_type="string"),
+            "worktree_path": CaptureEntrySpec(
+                from_="${{ result.worktree_path }}", value_type="string"
+            ),
             "pr_url": CaptureEntrySpec(from_="${{ result.pr_url }}", value_type="string"),
         }
 
@@ -682,7 +686,9 @@ class TestCaptureFieldNameRoundTrip:
         from autoskillit.fleet._prompts import _build_food_truck_prompt
 
         capture_spec = {
-            "worktree-path": CaptureEntrySpec(from_="${{ result.worktree-path }}", value_type="string"),
+            "worktree-path": CaptureEntrySpec(
+                from_="${{ result.worktree-path }}", value_type="string"
+            ),
         }
 
         prompt = _build_food_truck_prompt(
@@ -721,7 +727,7 @@ def test_extract_path_type_rejects_empty_string():
     from autoskillit.fleet._capture import _extract_captures
 
     capture_spec = {
-        "p": CaptureEntrySpec(from_="${{ result.p }}", value_type="path", value_type="string"),
+        "p": CaptureEntrySpec(from_="${{ result.p }}", value_type="path"),
     }
     payload = {"p": ""}
 
@@ -737,7 +743,7 @@ def test_extract_url_type_rejects_empty_string():
     from autoskillit.fleet._capture import _extract_captures
 
     capture_spec = {
-        "u": CaptureEntrySpec(from_="${{ result.u }}", value_type="url", value_type="string"),
+        "u": CaptureEntrySpec(from_="${{ result.u }}", value_type="url"),
     }
     payload = {"u": ""}
 
@@ -752,7 +758,7 @@ def test_extract_optional_string_type_accepts_empty():
     from autoskillit.fleet._capture import _extract_captures
 
     capture_spec = {
-        "pr_url": CaptureEntrySpec(from_="${{ result.pr_url }}", value_type="optional_string", value_type="string"),
+        "pr_url": CaptureEntrySpec(from_="${{ result.pr_url }}", value_type="optional_string"),
     }
     payload = {"pr_url": ""}
 
@@ -766,7 +772,7 @@ def test_extract_path_type_rejects_nonexistent_path(tmp_path: Path):
     from autoskillit.fleet._capture import _extract_captures
 
     capture_spec = {
-        "p": CaptureEntrySpec(from_="${{ result.p }}", value_type="path", value_type="string"),
+        "p": CaptureEntrySpec(from_="${{ result.p }}", value_type="path"),
     }
     payload = {"p": str(tmp_path / "nonexistent")}
 

@@ -72,7 +72,7 @@ If positional arg 1 (context_path) is provided and the file exists, read it to o
 IV/DV tables, H0/H1 hypotheses, controlled variables, and success criteria. If positional
 arg 2 (experiment_plan_path) is provided and exists, read the experiment plan for full
 methodology. Use this structured context as the foundation for Steps 1-5; skip the CWD
-exploration for these fields if the context file supplies them.
+exploration for these fields if the context file supplies them. For any field absent from the context file, perform CWD exploration for that specific field only.
 
 ### Step 1: Launch Parallel Exploration Subagents
 
@@ -152,6 +152,101 @@ Use flowchart with:
 ### Step 5: Write Output
 
 Write the diagram to: `{{AUTOSKILLIT_TEMP}}/exp-lens-unit-interference/exp_diag_unit_interference_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+
+---
+
+## Output Template
+
+```markdown
+# Unit Interference Assessment: {Experiment Name}
+
+**Lens:** Unit Interference (Causal-Structural)
+**Question:** What is the unit, and can treatments spill over?
+**Date:** {YYYY-MM-DD}
+**Scope:** {What was analyzed}
+
+## Unit Hierarchy
+
+| Level | Entity | Shares With | Clustering Risk |
+|-------|--------|-------------|-----------------|
+| {level} | {entity} | {shared resources} | {High/Medium/Low} |
+
+## Interference Pathways
+
+| Pathway | Type | Mechanism | Magnitude | Mitigation |
+|---------|------|-----------|-----------|------------|
+| {pathway} | {Direct/Indirect} | {mechanism} | {High/Medium/Low} | {mitigation} |
+
+## Interference Diagram
+
+```mermaid
+%%{init: {'flowchart': {'nodeSpacing': 50, 'rankSpacing': 60, 'curve': 'basis'}}}%%
+flowchart TB
+    %% CLASS DEFINITIONS %%
+    classDef cli fill:#1a237e,stroke:#7986cb,stroke-width:2px,color:#fff;
+    classDef stateNode fill:#004d40,stroke:#4db6ac,stroke-width:2px,color:#fff;
+    classDef handler fill:#e65100,stroke:#ffb74d,stroke-width:2px,color:#fff;
+    classDef phase fill:#6a1b9a,stroke:#ba68c8,stroke-width:2px,color:#fff;
+    classDef newComponent fill:#2e7d32,stroke:#81c784,stroke-width:2px,color:#fff;
+    classDef output fill:#00695c,stroke:#4db6ac,stroke-width:2px,color:#fff;
+    classDef detector fill:#b71c1c,stroke:#ef5350,stroke-width:2px,color:#fff;
+    classDef gap fill:#ff6f00,stroke:#ffa726,stroke-width:2px,color:#000;
+    classDef integration fill:#c62828,stroke:#ef9a9a,stroke-width:2px,color:#fff;
+
+    subgraph ExperimentalUnits ["EXPERIMENTAL UNITS"]
+        EU1["Unit A<br/>━━━━━━━━━━<br/>Treatment group"]
+        EU2["Unit B<br/>━━━━━━━━━━<br/>Control group"]
+        ASSIGN["Treatment Assignment<br/>━━━━━━━━━━<br/>Randomization"]
+    end
+
+    subgraph ClusterStructure ["CLUSTER STRUCTURE"]
+        CL1["Cluster 1<br/>━━━━━━━━━━<br/>Group above unit"]
+        CL2["Cluster 2<br/>━━━━━━━━━━<br/>Group above unit"]
+    end
+
+    subgraph SharedResources ["SHARED RESOURCES"]
+        SR1["Shared Resource<br/>━━━━━━━━━━<br/>Cross-group access"]
+    end
+
+    subgraph InterferencePathways ["INTERFERENCE PATHWAYS"]
+        IP1["Spillover<br/>━━━━━━━━━━<br/>Treatment leakage"]
+        SUTVA["SUTVA Boundary<br/>━━━━━━━━━━<br/>Violation check"]
+    end
+
+    %% INTERFERENCE FLOWS %%
+    ASSIGN -->|"treats"| EU1
+    ASSIGN -->|"controls"| EU2
+    EU1 -->|"belongs to"| CL1
+    EU2 -->|"belongs to"| CL2
+    CL1 -->|"accesses"| SR1
+    CL2 -->|"accesses"| SR1
+    SR1 -.->|"spillover"| IP1
+    IP1 -.->|"violates"| SUTVA
+
+    %% CLASS ASSIGNMENTS %%
+    class EU1,EU2 cli;
+    class ASSIGN handler;
+    class CL1,CL2 phase;
+    class SR1 stateNode;
+    class IP1 gap;
+    class SUTVA detector;
+```
+
+**Color Legend:**
+| Color | Category | Description |
+|-------|----------|-------------|
+| Dark Blue | Units | Experimental units (atomic entities) |
+| Orange | Assignment | Treatment assignment mechanism |
+| Purple | Clusters | Group structure above unit level |
+| Teal | Shared Resources | Infrastructure accessible by both groups |
+| Amber | Interference | Spillover pathways |
+| Red | SUTVA | SUTVA boundary violation detection |
+
+## Recommendations
+
+- {Recommendation 1}
+- {Recommendation 2}
+```
 
 ---
 

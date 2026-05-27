@@ -71,7 +71,7 @@ If positional arg 1 (context_path) is provided and the file exists, read it to o
 IV/DV tables, H0/H1 hypotheses, controlled variables, and success criteria. If positional
 arg 2 (experiment_plan_path) is provided and exists, read the experiment plan for full
 methodology. Use this structured context as the foundation for Steps 1-5; skip the CWD
-exploration for these fields if the context file supplies them.
+exploration for these fields if the context file supplies them. For any field absent from the context file, perform CWD exploration for that specific field only.
 
 ### Step 1: Launch Parallel Exploration Subagents
 
@@ -113,6 +113,93 @@ For every deployment decision: Does the experiment provide sufficient evidence? 
 ### Step 5: Write Output
 
 Write the output to: `{{AUTOSKILLIT_TEMP}}/exp-lens-governance-risk/exp_diag_governance_risk_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+
+---
+
+## Output Template
+
+```markdown
+# Governance Risk Assessment: {Experiment Name}
+
+**Lens:** Governance Risk (Governance)
+**Question:** What risks arise from acting on this result?
+**Date:** {YYYY-MM-DD}
+**Scope:** {What was analyzed}
+
+## Risk Register
+
+| Risk | Affected Group | Severity | Likelihood | Monitored? | Evidence |
+|------|---------------|----------|------------|------------|----------|
+| {risk} | {group} | {High/Medium/Low} | {High/Medium/Low} | {Yes/No} | {evidence} |
+
+## Decision Sufficiency
+
+| Deployment Decision | Evidence Provided | Gaps | Subgroup Coverage |
+|--------------------|--------------------|------|-------------------|
+| {decision} | {evidence} | {gaps} | {coverage assessment} |
+
+## Governance Diagram
+
+```mermaid
+%%{init: {'flowchart': {'nodeSpacing': 50, 'rankSpacing': 60, 'curve': 'basis'}}}%%
+flowchart TB
+    %% CLASS DEFINITIONS %%
+    classDef cli fill:#1a237e,stroke:#7986cb,stroke-width:2px,color:#fff;
+    classDef stateNode fill:#004d40,stroke:#4db6ac,stroke-width:2px,color:#fff;
+    classDef handler fill:#e65100,stroke:#ffb74d,stroke-width:2px,color:#fff;
+    classDef phase fill:#6a1b9a,stroke:#ba68c8,stroke-width:2px,color:#fff;
+    classDef newComponent fill:#2e7d32,stroke:#81c784,stroke-width:2px,color:#fff;
+    classDef output fill:#00695c,stroke:#4db6ac,stroke-width:2px,color:#fff;
+    classDef detector fill:#b71c1c,stroke:#ef5350,stroke-width:2px,color:#fff;
+    classDef gap fill:#ff6f00,stroke:#ffa726,stroke-width:2px,color:#000;
+    classDef integration fill:#c62828,stroke:#ef9a9a,stroke-width:2px,color:#fff;
+
+    subgraph Results ["RESULTS"]
+        R1["Experimental Result<br/>━━━━━━━━━━<br/>Finding / metric"]
+        R2["Subgroup Result<br/>━━━━━━━━━━<br/>Disaggregated finding"]
+    end
+
+    subgraph Decisions ["DECISIONS"]
+        D1["Deployment Decision<br/>━━━━━━━━━━<br/>Go / No-go / Conditional"]
+        D2["Monitoring Plan<br/>━━━━━━━━━━<br/>Thresholds / rollback"]
+    end
+
+    subgraph StakeholderImpacts ["STAKEHOLDER IMPACTS"]
+        SI1["Affected Group<br/>━━━━━━━━━━<br/>Impact assessment"]
+        RISK["Identified Risk<br/>━━━━━━━━━━<br/>Severity × Likelihood"]
+        UNMON["Unmonitored Risk<br/>━━━━━━━━━━<br/>No tracking plan"]
+    end
+
+    %% GOVERNANCE FLOWS %%
+    R1 -->|"informs"| D1
+    R2 -->|"disaggregated"| D1
+    D1 -->|"requires"| D2
+    D1 -->|"affects"| SI1
+    D1 -->|"creates"| RISK
+    D1 -.->|"hidden"| UNMON
+
+    %% CLASS ASSIGNMENTS %%
+    class R1,R2 cli;
+    class D1,D2 phase;
+    class SI1 stateNode;
+    class RISK detector;
+    class UNMON gap;
+```
+
+**Color Legend:**
+| Color | Category | Description |
+|-------|----------|-------------|
+| Dark Blue | Results | Experimental results informing decisions |
+| Purple | Decisions | Deployment and monitoring decisions |
+| Teal | Stakeholders | Affected groups and impact assessments |
+| Red | Identified Risks | Monitored risks with severity ratings |
+| Amber | Unmonitored | Risks without tracking or monitoring plans |
+
+## Recommendations
+
+- {Recommendation 1}
+- {Recommendation 2}
+```
 
 ---
 

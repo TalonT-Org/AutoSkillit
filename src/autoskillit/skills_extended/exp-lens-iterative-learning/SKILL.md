@@ -72,7 +72,7 @@ If positional arg 1 (context_path) is provided and the file exists, read it to o
 IV/DV tables, H0/H1 hypotheses, controlled variables, and success criteria. If positional
 arg 2 (experiment_plan_path) is provided and exists, read the experiment plan for full
 methodology. Use this structured context as the foundation for Steps 1-5; skip the CWD
-exploration for these fields if the context file supplies them.
+exploration for these fields if the context file supplies them. For any field absent from the context file, perform CWD exploration for that specific field only.
 
 ### Step 1: Launch Parallel Exploration Subagents
 
@@ -116,9 +116,96 @@ Distinguish: Full factorial / Fractional factorial / One-factor-at-a-time / Adap
 
 Write the diagram to: `{{AUTOSKILLIT_TEMP}}/exp-lens-iterative-learning/exp_diag_iterative_learning_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
+
+## Output Template
+
+```markdown
+# Iterative Learning Design: {Experiment Name}
+
+**Lens:** Iterative Learning (Decision-Theoretic)
+**Question:** How does this maximize learning per cost?
+**Date:** {YYYY-MM-DD}
+**Scope:** {What was analyzed}
+
+## Design Space
+
+| Factor | Levels | Explored? | Interactions Probed? | Cost per Trial | Information Gain |
+|--------|--------|-----------|----------------------|----------------|------------------|
+| {factor} | {levels} | {Yes/No} | {Yes/No} | {cost} | {High/Medium/Low} |
+
+## Factor Space Diagram
+
+```mermaid
+%%{init: {'flowchart': {'nodeSpacing': 50, 'rankSpacing': 60, 'curve': 'basis'}}}%%
+flowchart LR
+    %% CLASS DEFINITIONS %%
+    classDef cli fill:#1a237e,stroke:#7986cb,stroke-width:2px,color:#fff;
+    classDef stateNode fill:#004d40,stroke:#4db6ac,stroke-width:2px,color:#fff;
+    classDef handler fill:#e65100,stroke:#ffb74d,stroke-width:2px,color:#fff;
+    classDef phase fill:#6a1b9a,stroke:#ba68c8,stroke-width:2px,color:#fff;
+    classDef newComponent fill:#2e7d32,stroke:#81c784,stroke-width:2px,color:#fff;
+    classDef output fill:#00695c,stroke:#4db6ac,stroke-width:2px,color:#fff;
+    classDef detector fill:#b71c1c,stroke:#ef5350,stroke-width:2px,color:#fff;
+    classDef gap fill:#ff6f00,stroke:#ffa726,stroke-width:2px,color:#000;
+    classDef integration fill:#c62828,stroke:#ef9a9a,stroke-width:2px,color:#fff;
+
+    subgraph FactorSpace ["FACTOR SPACE"]
+        F1["Factor 1<br/>━━━━━━━━━━<br/>Levels: {n}"]
+        F2["Factor 2<br/>━━━━━━━━━━<br/>Levels: {n}"]
+    end
+
+    subgraph ExplorationStrategy ["EXPLORATION STRATEGY"]
+        STRAT["Strategy<br/>━━━━━━━━━━<br/>{Factorial/Adaptive/OFAT}"]
+    end
+
+    subgraph ResultsSoFar ["RESULTS SO FAR"]
+        RES["Observations<br/>━━━━━━━━━━<br/>N trials completed"]
+    end
+
+    subgraph NextExperiments ["NEXT EXPERIMENTS"]
+        NEXT["Next Trial<br/>━━━━━━━━━━<br/>Recommended config"]
+    end
+
+    subgraph StoppingCriteria ["STOPPING CRITERIA"]
+        STOP["Stopping Rule<br/>━━━━━━━━━━<br/>Convergence / budget"]
+    end
+
+    %% LEARNING FLOWS %%
+    F1 -->|"input"| STRAT
+    F2 -->|"input"| STRAT
+    STRAT -->|"run"| RES
+    RES -->|"inform"| NEXT
+    NEXT -->|"check"| STOP
+    STOP -.->|"continue"| STRAT
+
+    %% CLASS ASSIGNMENTS %%
+    class F1,F2 cli;
+    class STRAT handler;
+    class RES stateNode;
+    class NEXT phase;
+    class STOP detector;
+```
+
+**Color Legend:**
+| Color | Category | Description |
+|-------|----------|-------------|
+| Dark Blue | Factors | Experimental factors and levels |
+| Orange | Strategy | Exploration strategy type |
+| Teal | Results | Observations and completed trials |
+| Purple | Next | Recommended next experiments |
+| Red | Stopping | Convergence and budget criteria |
+
+## Recommendations
+
+- {Recommendation 1}
+- {Recommendation 2}
+```
+
 ---
 
 ## Pre-Diagram Checklist
+
+
 
 Before creating the diagram, verify:
 

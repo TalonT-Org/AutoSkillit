@@ -28,8 +28,8 @@ from .codex_scenario_player import (
 )
 
 BACKEND_REGISTRY: dict[str, type[CodingAgentBackend]] = {
-    "claude-code": ClaudeCodeBackend,
-    "codex": CodexBackend,
+    "claude-code": ClaudeCodeBackend,  # type: ignore[dict-item]
+    "codex": CodexBackend,  # type: ignore[dict-item]
 }
 
 

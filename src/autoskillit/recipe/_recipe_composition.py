@@ -66,6 +66,7 @@ def _validate_no_dangling_routes(recipe: Recipe) -> list[str]:
                 errors.append(f"Step '{step_name}' routes to unknown step '{target}'")
     return errors
 
+
 FALSY_STRINGS: frozenset[str] = frozenset({"false", "0", "no", ""})
 
 

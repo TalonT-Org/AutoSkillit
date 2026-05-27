@@ -57,6 +57,9 @@ def _mock_backend(
     )
     backend.write_tool_names.return_value = frozenset({"Write", "Edit"})
     backend.result_parser.return_value = None
+    backend.version.return_value = ""
+    backend.list_plugins.side_effect = lambda: []
+    backend.validate_skill_content.side_effect = lambda: []
     return backend
 
 

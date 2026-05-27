@@ -118,6 +118,102 @@ Write the diagram to: `{{AUTOSKILLIT_TEMP}}/exp-lens-randomization-blocking/exp_
 
 ---
 
+## Output Template
+
+```markdown
+# Randomization & Blocking Design: {Experiment Name}
+
+**Lens:** Randomization & Blocking (Design-Structural)
+**Question:** Where does comparability come from?
+**Date:** {YYYY-MM-DD}
+**Scope:** {What was analyzed}
+
+## Allocation Flow
+
+| Unit | Assignment Mechanism | Blocking Factors | Strata Count | Replication Adequacy |
+|------|---------------------|-------------------|--------------|---------------------|
+| {unit} | {mechanism} | {factors} | {count} | {Adequate/Marginal/Inadequate} |
+
+## Comparability Analysis
+
+| Comparability Source | Strength | Pseudoreplication Risk | Confound |
+|---------------------|----------|----------------------|----------|
+| {source} | {Strong/Moderate/Weak} | {High/Medium/Low/None} | {confound or None} |
+
+## Allocation Diagram
+
+```mermaid
+%%{init: {'flowchart': {'nodeSpacing': 50, 'rankSpacing': 60, 'curve': 'basis'}}}%%
+flowchart TB
+    %% CLASS DEFINITIONS %%
+    classDef cli fill:#1a237e,stroke:#7986cb,stroke-width:2px,color:#fff;
+    classDef stateNode fill:#004d40,stroke:#4db6ac,stroke-width:2px,color:#fff;
+    classDef handler fill:#e65100,stroke:#ffb74d,stroke-width:2px,color:#fff;
+    classDef phase fill:#6a1b9a,stroke:#ba68c8,stroke-width:2px,color:#fff;
+    classDef newComponent fill:#2e7d32,stroke:#81c784,stroke-width:2px,color:#fff;
+    classDef output fill:#00695c,stroke:#4db6ac,stroke-width:2px,color:#fff;
+    classDef detector fill:#b71c1c,stroke:#ef5350,stroke-width:2px,color:#fff;
+    classDef gap fill:#ff6f00,stroke:#ffa726,stroke-width:2px,color:#000;
+    classDef integration fill:#c62828,stroke:#ef9a9a,stroke-width:2px,color:#fff;
+
+    subgraph PopulationPool ["POPULATION/POOL"]
+        POP["Population<br/>━━━━━━━━━━<br/>Eligible units"]
+        SCREEN["Screening<br/>━━━━━━━━━━<br/>Inclusion criteria"]
+    end
+
+    subgraph Blocking ["BLOCKING"]
+        BLOCK["Blocking Factor<br/>━━━━━━━━━━<br/>Strata definition"]
+        STRATA["Strata<br/>━━━━━━━━━━<br/>N strata"]
+    end
+
+    subgraph Randomization ["RANDOMIZATION"]
+        RAND["Assignment<br/>━━━━━━━━━━<br/>Mechanism"]
+    end
+
+    subgraph TreatmentArms ["TREATMENT ARMS"]
+        TX["Treatment<br/>━━━━━━━━━━<br/>N_tx units"]
+        CTRL["Control<br/>━━━━━━━━━━<br/>N_ctrl units"]
+    end
+
+    subgraph Analysis ["ANALYSIS"]
+        ANAL["Comparison<br/>━━━━━━━━━━<br/>Estimator"]
+    end
+
+    %% ALLOCATION FLOWS %%
+    POP -->|"screened"| SCREEN
+    SCREEN -->|"eligible"| BLOCK
+    BLOCK -->|"stratified"| STRATA
+    STRATA -->|"within-stratum"| RAND
+    RAND -->|"assigned"| TX
+    RAND -->|"assigned"| CTRL
+    TX -->|"measured"| ANAL
+    CTRL -->|"measured"| ANAL
+
+    %% CLASS ASSIGNMENTS %%
+    class POP,SCREEN cli;
+    class BLOCK,STRATA phase;
+    class RAND handler;
+    class TX,CTRL stateNode;
+    class ANAL output;
+```
+
+**Color Legend:**
+| Color | Category | Description |
+|-------|----------|-------------|
+| Dark Blue | Population | Eligible units and screening |
+| Purple | Blocking | Blocking factors and strata |
+| Orange | Randomization | Assignment mechanism |
+| Teal | Treatment Arms | Treatment and control groups |
+| Dark Teal | Analysis | Comparison and estimation |
+
+## Recommendations
+
+- {Recommendation 1}
+- {Recommendation 2}
+```
+
+---
+
 ## Pre-Diagram Checklist
 
 Before creating the diagram, verify:

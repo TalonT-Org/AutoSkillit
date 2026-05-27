@@ -115,6 +115,92 @@ Write the diagram to: `{{AUTOSKILLIT_TEMP}}/exp-lens-validity-threats/exp_diag_v
 
 ---
 
+## Output Template
+
+```markdown
+# Validity Threats Assessment: {Experiment Name}
+
+**Lens:** Validity Threats (Adversarial)
+**Question:** What alternative explanations survive?
+**Date:** {YYYY-MM-DD}
+**Scope:** {What was analyzed}
+
+## Campbell-Stanley Threat Matrix
+
+| Threat | Plausibility | Design Mitigation | Mitigation Strength | Residual Risk |
+|--------|-------------|--------------------|--------------------|---------------|
+| {threat} | {High/Medium/Low} | {mitigation} | {Strong/Moderate/Weak/None} | {High/Medium/Low} |
+
+## Alternative Explanations
+
+| Observation | Alternative Explanation | Ruling-Out Evidence | Verdict |
+|-------------|------------------------|---------------------|---------|
+| {observation} | {explanation} | {evidence} | {Ruled Out/Plausible/Cannot Rule Out} |
+
+## Validity Diagram
+
+```mermaid
+%%{init: {'flowchart': {'nodeSpacing': 50, 'rankSpacing': 60, 'curve': 'basis'}}}%%
+flowchart TB
+    %% CLASS DEFINITIONS %%
+    classDef cli fill:#1a237e,stroke:#7986cb,stroke-width:2px,color:#fff;
+    classDef stateNode fill:#004d40,stroke:#4db6ac,stroke-width:2px,color:#fff;
+    classDef handler fill:#e65100,stroke:#ffb74d,stroke-width:2px,color:#fff;
+    classDef phase fill:#6a1b9a,stroke:#ba68c8,stroke-width:2px,color:#fff;
+    classDef newComponent fill:#2e7d32,stroke:#81c784,stroke-width:2px,color:#fff;
+    classDef output fill:#00695c,stroke:#4db6ac,stroke-width:2px,color:#fff;
+    classDef detector fill:#b71c1c,stroke:#ef5350,stroke-width:2px,color:#fff;
+    classDef gap fill:#ff6f00,stroke:#ffa726,stroke-width:2px,color:#000;
+    classDef integration fill:#c62828,stroke:#ef9a9a,stroke-width:2px,color:#fff;
+
+    subgraph ThreatSources ["THREAT SOURCES"]
+        TS1["History / Maturation<br/>━━━━━━━━━━<br/>Temporal threats"]
+        TS2["Selection / Mortality<br/>━━━━━━━━━━<br/>Compositional threats"]
+        TS3["Instrumentation<br/>━━━━━━━━━━<br/>Measurement threats"]
+    end
+
+    subgraph DesignMitigations ["DESIGN MITIGATIONS"]
+        DM1["Randomization<br/>━━━━━━━━━━<br/>Assignment mechanism"]
+        DM2["Blinding<br/>━━━━━━━━━━<br/>Masking protocol"]
+        RO["Ruled Out<br/>━━━━━━━━━━<br/>Strong evidence"]
+    end
+
+    subgraph ResidualThreats ["RESIDUAL THREATS"]
+        RT1["Residual Threat<br/>━━━━━━━━━━<br/>Unmitigated risk"]
+    end
+
+    %% THREAT FLOWS %%
+    TS1 -->|"mitigated by"| DM1
+    TS2 -->|"mitigated by"| DM1
+    TS3 -->|"mitigated by"| DM2
+    DM1 -->|"rules out"| RO
+    DM2 -->|"rules out"| RO
+    TS1 -.->|"survives"| RT1
+    TS2 -.->|"survives"| RT1
+
+    %% CLASS ASSIGNMENTS %%
+    class TS1,TS2,TS3 detector;
+    class DM1,DM2 handler;
+    class RO output;
+    class RT1 gap;
+```
+
+**Color Legend:**
+| Color | Category | Description |
+|-------|----------|-------------|
+| Red | Threat Sources | Campbell-Stanley validity threats |
+| Orange | Mitigations | Design features addressing threats |
+| Dark Teal | Ruled Out | Threats with strong ruling-out evidence |
+| Amber | Residual | Unmitigated threats requiring attention |
+
+## Recommendations
+
+- {Recommendation 1}
+- {Recommendation 2}
+```
+
+---
+
 ## Campbell-Stanley Checklist
 
 Apply to every experiment:

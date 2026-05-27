@@ -752,8 +752,9 @@ def test_wait_for_direct_merge_int_pr_number(mock_sleep, mock_run_gh):
     )
     result = wait_for_direct_merge(pr_number=42, max_polls="1", poll_interval="1")  # type: ignore[arg-type]
     assert result["state"] == "merged"
-    # Verify the gh call was made with the PR number (coerced to str by str() guard)
     assert mock_run_gh.call_count >= 1
+    call_cmd = mock_run_gh.call_args[0][0]
+    assert "42" in call_cmd
 
 
 # ─── Multi-run accumulation tests for batch_create_issues ────────────────────
@@ -934,5 +935,6 @@ def test_force_push_int_review_pr_number(mock_sleep, mock_run_git, mock_run_gh, 
             poll_interval="1",
         )
     assert result["ok"] == "true"
-    # Verify gh pr view was called (coerced to str by str() guard)
     assert mock_run_gh.call_count >= 1
+    call_cmd = mock_run_gh.call_args[0][0]
+    assert "1958" in call_cmd

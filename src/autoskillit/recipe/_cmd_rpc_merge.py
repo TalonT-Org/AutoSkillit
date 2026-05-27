@@ -166,7 +166,8 @@ def force_push_and_wait_mergeability(
         raise RuntimeError(msg)
     for _ in range(int(max_polls)):
         r = run_gh(
-            ["pr", "view", str(review_pr_number), "--json", "mergeable", "-q", ".mergeable"]
+            ["pr", "view", str(review_pr_number), "--json", "mergeable", "-q", ".mergeable"],
+            cwd=work_dir,
         )
         if r.returncode != 0:
             time.sleep(int(poll_interval))

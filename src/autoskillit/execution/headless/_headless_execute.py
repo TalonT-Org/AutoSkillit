@@ -35,6 +35,7 @@ from autoskillit.execution.clone_guard import (
     GUARD_EXCLUDE_PREFIX,
     build_clone_guard_policy,
     check_and_revert_clone_contamination,
+    derive_exclude_prefix,
     is_clone_commit_skill,
     is_path_under_exclude,
     is_worktree_skill,
@@ -163,10 +164,15 @@ async def _execute_claude_headless(
 
     _readonly_skill = readonly_skill
     _has_write_scope = bool(write_watch_dirs)
+    _derived_prefix = derive_exclude_prefix(write_watch_dirs, Path(cwd))
+    _output_dir_is_cwd = bool(write_watch_dirs) and write_watch_dirs[0] == Path(cwd)
     _writes_under_exclude = bool(
         write_watch_dirs
-        and all(
-            is_path_under_exclude(d, Path(cwd), GUARD_EXCLUDE_PREFIX) for d in write_watch_dirs
+        and (
+            _output_dir_is_cwd
+            or all(
+                is_path_under_exclude(d, Path(cwd), GUARD_EXCLUDE_PREFIX) for d in write_watch_dirs
+            )
         )
     )
     _clone_guard_policy = build_clone_guard_policy(
@@ -391,13 +397,7 @@ async def _execute_claude_headless(
 
         _clone_reverted = False
         if _clone_snapshot is not None:
-            _exclude_prefix = ".autoskillit/"
-            if write_watch_dirs:
-                try:
-                    _rel = write_watch_dirs[0].relative_to(Path(cwd))
-                    _exclude_prefix = str(_rel.parts[0]) + "/"
-                except ValueError:
-                    pass
+            _exclude_prefix = _derived_prefix or GUARD_EXCLUDE_PREFIX
             skill_result, _clone_reverted = await check_and_revert_clone_contamination(
                 _clone_snapshot,
                 skill_result,

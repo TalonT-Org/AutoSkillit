@@ -156,3 +156,29 @@ def test_policy_for_write_scope_under_exclude():
     assert policy.should_fire(success=False) is True
     assert policy.selective_revert is True
     assert policy.should_snapshot is True
+
+
+def test_policy_output_dir_equals_cwd_suppresses_guard():
+    """output_dir == cwd: writes_under_exclude=True → guard suppressed on success."""
+    policy = build_clone_guard_policy(
+        readonly_skill=False,
+        has_write_scope=True,
+        is_clone_commit=False,
+        is_worktree=False,
+        writes_under_exclude=True,
+    )
+    assert policy.should_fire(success=True) is False
+    assert policy.should_fire(success=False) is True
+
+
+def test_policy_output_dir_outside_cwd_does_not_suppress_guard():
+    """outside-cwd write_watch_dirs: writes_under_exclude=False → guard fires on success."""
+    policy = build_clone_guard_policy(
+        readonly_skill=False,
+        has_write_scope=True,
+        is_clone_commit=False,
+        is_worktree=False,
+        writes_under_exclude=False,
+    )
+    assert policy.should_fire(success=True) is True
+    assert policy.should_fire(success=False) is True

@@ -59,3 +59,24 @@ def test_clone_guard_detection_revert_exclude_coherence():
         "Detection-revert coherence gap: revert_contamination accepts exclude_prefix "
         "but detect_contamination does not. Detection must filter excluded files."
     )
+
+
+def test_no_inline_path_parts_in_headless_execute():
+    """_headless_execute.py must not access .parts[N] inline; use derive_exclude_prefix()."""
+    import ast
+    import inspect
+
+    import autoskillit.execution.headless._headless_execute as mod
+
+    source = inspect.getsource(mod)
+    tree = ast.parse(source)
+    violations: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Subscript):
+            value = node.value
+            if isinstance(value, ast.Attribute) and value.attr == "parts":
+                violations.append(f"line {node.lineno}: inline .parts[N] access")
+    assert not violations, (
+        "_headless_execute.py contains inline .parts[N] accesses. "
+        "Use clone_guard.derive_exclude_prefix() instead:\n" + "\n".join(violations)
+    )

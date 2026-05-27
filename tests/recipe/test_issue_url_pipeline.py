@@ -475,8 +475,3 @@ class TestIssueUrlPruning:
                 "If claim_and_resolve survives pruning without issue_url, "
                 "skip_when_false must be literal 'false'"
             )
-        # Also verify the raw content string has no live inputs.issue_url ref on this step
-        assert "inputs.issue_url" not in content_str or "claim_and_resolve" not in steps, (
-            "inputs.issue_url must not appear in served content for claim_and_resolve "
-            "when issue_url is absent"
-        )

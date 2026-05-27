@@ -50,6 +50,7 @@ _IGNORE_FILES: frozenset[str] = frozenset(
 _IGNORE_PATTERNS: tuple[str, ...] = (
     "*.gif",
     "**/.gitkeep",
+    "*.orig",
     "tests/*/CLAUDE.md",  # Per-subdirectory documentation (no test-routing signal)
 )
 

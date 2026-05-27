@@ -174,6 +174,7 @@ forbidden_modules = [
     "autoskillit.server",
     "autoskillit.cli",
     "autoskillit.report",
+    "autoskillit.planner",
 ]
 
 # IL-002 | Lens: module-dependency | DS-001
@@ -193,6 +194,7 @@ forbidden_modules = [
     "autoskillit.server",
     "autoskillit.cli",
     "autoskillit.report",
+    "autoskillit.planner",
 ]
 
 # IL-003 | Lens: module-dependency | DS-001
@@ -219,6 +221,7 @@ forbidden_modules = [
     "autoskillit.server",
     "autoskillit.cli",
     "autoskillit.report",
+    "autoskillit.planner",
 ]
 
 # IL-004 | Lens: module-dependency | DS-001
@@ -238,6 +241,7 @@ forbidden_modules = [
     "autoskillit.server",
     "autoskillit.cli",
     "autoskillit.report",
+    "autoskillit.planner",
 ]
 
 # IL-005 | Lens: module-dependency | DS-001
@@ -257,6 +261,7 @@ forbidden_modules = [
     "autoskillit.server",
     "autoskillit.cli",
     "autoskillit.report",
+    "autoskillit.planner",
 ]
 
 # IL-006 | Lens: module-dependency | DS-001
@@ -275,6 +280,13 @@ forbidden_modules = [
     "autoskillit.server",
     "autoskillit.cli",
     "autoskillit.report",
+    "autoskillit.planner",
+]
+# EXCEPTION: rules_contracts uses a deferred function-body import of planner
+# for skill-schema validation (REQ-COMP-009). planner/ does not import recipe/,
+# so no cycle is introduced.
+ignore_imports = [
+    "autoskillit.recipe.rules.rules_contracts -> autoskillit.planner",
 ]
 
 # IL-007 | Lens: module-dependency | DS-001
@@ -293,7 +305,8 @@ forbidden_modules = [
 ]
 
 # IL-008 | Lens: module-dependency | DS-001
-# Rationale: The four IL-1 peers (config, pipeline, execution, workspace) form an
+# Rationale: The six IL-1 peers (config, pipeline, execution, workspace, report,
+# planner) form an
 # independent service tier. Lateral imports between them create hidden coupling
 # that prevents each package from being tested and deployed in isolation. The
 # independence contract makes this boundary machine-verifiable and surfaces any
@@ -307,6 +320,7 @@ modules = [
     "autoskillit.execution",
     "autoskillit.workspace",
     "autoskillit.report",
+    "autoskillit.planner",
 ]
 # EXCEPTION: autoskillit.pipeline.context may import autoskillit.config.
 # pipeline.context.ToolContext owns AutomationConfig as the DI wiring point.

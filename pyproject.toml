@@ -282,6 +282,12 @@ forbidden_modules = [
     "autoskillit.report",
     "autoskillit.planner",
 ]
+# EXCEPTION: rules_contracts uses a deferred function-body import of planner
+# for skill-schema validation (REQ-COMP-009). planner/ does not import recipe/,
+# so no cycle is introduced.
+ignore_imports = [
+    "autoskillit.recipe.rules.rules_contracts -> autoskillit.planner",
+]
 
 # IL-007 | Lens: module-dependency | DS-001
 # Rationale: migration/ must not import config or pipeline to stay independently
@@ -296,7 +302,6 @@ forbidden_modules = [
     "autoskillit.server",
     "autoskillit.cli",
     "autoskillit.report",
-    "autoskillit.planner",
 ]
 
 # IL-008 | Lens: module-dependency | DS-001

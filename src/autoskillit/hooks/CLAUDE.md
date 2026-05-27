@@ -17,6 +17,7 @@ Sub-packages: guards/ (see guards/CLAUDE.md), formatters/ (see formatters/CLAUDE
 | `session_start_hook.py` | Injects open-kitchen reminder on resume |
 | `skill_load_post_hook.py` | `PostToolUse`: writes skill-loaded flag for non-Anthropic provider guard |
 | `_hook_utils.py` | Shared stdlib-only utilities for hook scripts (e.g., `find_project_root`) |
+| `_command_classification.py` | Shared stdlib-only command classification primitives for guard scripts (interpreter/wrapper detection) |
 
 ## Architecture Notes
 

@@ -157,8 +157,9 @@ def test_write_guard_has_interpreter_detection() -> None:
     Must not rely solely on shell primitives.
     """
     source = (SRC_ROOT / "hooks" / "guards" / "write_guard.py").read_text()
-    assert "python" in source.lower(), (
-        "write_guard.py must contain interpreter detection logic for python/python3"
+    assert "python" in source.lower() or "_command_classification" in source, (
+        "write_guard.py must contain interpreter detection logic for python/python3 "
+        "or import it from _command_classification"
     )
     assert any(
         name in source
@@ -167,8 +168,10 @@ def test_write_guard_has_interpreter_detection() -> None:
             "_has_interpreter_write",
             "_IS_PYTHON_CMD_RE",
             "_PYTHON_WRITE_APIS_RE",
+            "has_interpreter_write",
+            "_command_classification",
         )
-    ), "write_guard.py must define an interpreter write detection mechanism"
+    ), "write_guard.py must define or import an interpreter write detection mechanism"
 
 
 def test_write_guard_tests_cover_required_command_families() -> None:
@@ -184,3 +187,48 @@ def test_write_guard_tests_cover_required_command_families() -> None:
         f"test_write_guard.py missing test coverage for command families: {missing}. "
         f"Every known file-writing command family must have deny-path test coverage."
     )
+
+
+COMMAND_CLASSIFYING_GUARDS = [
+    SRC_ROOT / "hooks" / "guards" / "write_guard.py",
+    SRC_ROOT / "hooks" / "guards" / "pr_create_guard.py",
+    SRC_ROOT / "hooks" / "guards" / "planner_gh_discovery_guard.py",
+    SRC_ROOT / "hooks" / "guards" / "unsafe_install_guard.py",
+]
+
+
+def test_command_classifying_guards_use_shared_primitive():
+    """Guards that classify Bash commands must import from _command_classification."""
+    for filepath in COMMAND_CLASSIFYING_GUARDS:
+        source = filepath.read_text()
+        assert "_command_classification" in source or "# EXEMPT: " in source, (
+            f"{filepath.name} classifies Bash commands but does not use "
+            f"the shared _command_classification module"
+        )
+
+
+def test_shared_command_classification_module_exists():
+    """The shared command classification module must exist for guards to import."""
+    module_path = SRC_ROOT / "hooks" / "_command_classification.py"
+    assert module_path.exists(), (
+        "hooks/_command_classification.py must exist — "
+        "it centralizes interpreter/wrapper detection for all command-classifying guards"
+    )
+
+
+@pytest.mark.parametrize(
+    "guard_file,bypass_family",
+    [
+        ("write_guard.py", "interpreter_write"),
+        ("pr_create_guard.py", "interpreter_subprocess"),
+        ("planner_gh_discovery_guard.py", "interpreter_subprocess"),
+        ("unsafe_install_guard.py", "interpreter_subprocess"),
+    ],
+)
+def test_guard_handles_bypass_family(guard_file: str, bypass_family: str) -> None:
+    """Each command-classifying guard must handle its relevant bypass families."""
+    source = (SRC_ROOT / "hooks" / "guards" / guard_file).read_text()
+    if bypass_family == "interpreter_write":
+        assert "has_interpreter_write" in source or "_command_classification" in source
+    elif bypass_family == "interpreter_subprocess":
+        assert "has_interpreter_wrapped_command" in source or "_command_classification" in source

@@ -8,6 +8,15 @@ run_cmd at all — they are blocked by skill_orchestration_guard.py).
 
 import json
 import sys
+from pathlib import Path
+
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+
+from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
+    has_interpreter_wrapped_command,
+)
 
 UNSAFE_INSTALL_DENY_TRIGGER: str = "Blocked: editable install without --python .venv"
 
@@ -35,6 +44,9 @@ def _is_unsafe_editable_install(cmd: str) -> bool:
             python_arg = tokens[i + 1]
             if python_arg.startswith(".venv") or "/.venv/" in python_arg:
                 return False
+    unsafe_targets = list(_UNSAFE_PATTERNS)
+    if has_interpreter_wrapped_command(cmd, target_commands=unsafe_targets):
+        return True
     return True
 
 

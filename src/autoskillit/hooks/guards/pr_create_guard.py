@@ -19,6 +19,10 @@ _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
+from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
+    has_interpreter_wrapped_command,
+    has_nested_shell,
+)
 from _hook_settings import read_merged_hook_config  # type: ignore[import-not-found]  # noqa: E402
 
 PR_CREATE_DENY_TRIGGER: str = "PR creation via run_cmd is prohibited"
@@ -67,6 +71,11 @@ def _is_gh_pr_create(cmd: str) -> bool:
             if tokens[i + 1] == "pr" and tokens[i + 2] == "create":
                 if i == 0 or tokens[i - 1] in _SHELL_OPS:
                     return True
+    if has_interpreter_wrapped_command(cmd, target_commands=["gh pr create"]):
+        return True
+    if has_nested_shell(cmd):
+        if "gh" in cmd and "pr" in cmd and "create" in cmd:
+            return True
     return False
 
 

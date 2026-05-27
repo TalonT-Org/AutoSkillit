@@ -7,6 +7,15 @@ import json
 import os
 import re
 import sys
+from pathlib import Path
+
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+
+from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
+    has_interpreter_write,
+)
 
 WRITE_GUARD_DENY_TRIGGER = "read-only skill session"
 
@@ -22,14 +31,6 @@ _IS_WRITE_CMD_RE = re.compile(
     r"|\bgit\s+reset\s+--hard"
     r"|\b(?:rm|unlink)\s+"
 )
-_IS_PYTHON_CMD_RE = re.compile(r"(?:^|&&|\|\||;)\s*(?:env\s+)?python3?\s+(?:-c\s|.*<<)")
-
-_PYTHON_WRITE_APIS_RE = re.compile(
-    r"\.write_text\s*\(|\.write_bytes\s*\("
-    r"|open\s*\([^)]*['\"][wWaA]\+?[bB]?['\"]"
-    r"|shutil\.(?:copy|move|copyfile|copytree)\s*\("
-)
-
 _PSEUDO_DEVICE_PATHS: frozenset[str] = frozenset(
     {
         "/dev/null",
@@ -158,7 +159,7 @@ def main() -> None:
         command = tool_input.get("command", "") or tool_input.get("cmd", "")
         # Interpreter-mediated write detection: deny unconditionally.
         # Path extraction is not attempted because interpreters construct paths dynamically.
-        if _IS_PYTHON_CMD_RE.search(command) and _PYTHON_WRITE_APIS_RE.search(command):
+        if has_interpreter_write(command):
             _deny(
                 f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER}. "
                 f"Interpreter-mediated file writes are not permitted."

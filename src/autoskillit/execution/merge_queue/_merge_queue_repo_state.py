@@ -134,6 +134,45 @@ def _has_merge_group_trigger(text: str) -> bool:
     return False
 
 
+def _has_pull_request_trigger_for_base(text: str, base_branch: str) -> bool:
+    """Return True if the workflow pull_request trigger fires for PRs targeting base_branch.
+
+    Parses YAML to inspect pull_request.branches / pull_request.branches-ignore filters.
+    Falls back to presence-only heuristic on YAML parse failure.
+    """
+    try:
+        parsed = load_yaml(text)
+    except YAMLError:
+        return "pull_request" in text
+
+    if not isinstance(parsed, dict):
+        return False
+
+    # PyYAML (YAML 1.1) parses the bare key `on` as boolean True.
+    # Accept both to be safe.
+    on_value = parsed.get(True, parsed.get("on"))
+    if on_value == "pull_request":
+        return True
+    if isinstance(on_value, list):
+        return "pull_request" in on_value
+    if not isinstance(on_value, dict) or "pull_request" not in on_value:
+        return False
+
+    pr_cfg = on_value["pull_request"]
+    if not isinstance(pr_cfg, dict) or not pr_cfg:
+        # pull_request: null or pull_request: {} — no branch filter, fires for all PRs
+        return True
+
+    branches = pr_cfg.get("branches")
+    branches_ignore = pr_cfg.get("branches-ignore")
+
+    if branches is not None:
+        return any(fnmatch.fnmatch(base_branch, pat) for pat in branches)
+    if branches_ignore is not None:
+        return not any(fnmatch.fnmatch(base_branch, pat) for pat in branches_ignore)
+    return True
+
+
 def _is_secondary_rate_limit(resp: httpx.Response) -> bool:
     """Return True when a 403 response is a GitHub secondary rate limit.
 
@@ -171,6 +210,7 @@ async def fetch_repo_merge_state(
     repo: str,
     branch: str,
     token: str | None,
+    base_branch: str | None = None,
 ) -> dict[str, bool | str | None]:
     """Fetch repository merge-state in a single GraphQL round-trip.
 
@@ -182,6 +222,10 @@ async def fetch_repo_merge_state(
     - ``ci_event``: ``"push"`` when any workflow declares a push trigger
       that fires for the given branch, or ``None`` otherwise (match-any —
       ci.py scope.event=None lets head_sha provide correctness).
+    - ``ci_applicable``: ``True`` when a push trigger matches the branch or a
+      pull_request trigger targets ``base_branch`` (when provided). ``False``
+      when ``base_branch`` is ``None`` and no push trigger fires — conservative
+      default preserves backward compatibility for callers that omit it.
 
     Null-handling:
     - ``mergeQueue is null`` → ``queue_available: False``  (no queue)
@@ -244,10 +288,11 @@ async def fetch_repo_merge_state(
         False if auto_merge_field_missing else bool(repo_data.get("autoMergeAllowed", False))
     )
 
-    # Scan workflow files for push and merge_group trigger declarations.
-    # Both flags are derived from the same Blob.text scan — no extra round-trips.
+    # Scan workflow files for push, pull_request, and merge_group trigger declarations.
+    # All flags are derived from the same Blob.text scan — no extra round-trips.
     merge_group_trigger = False
     has_push_trigger = False
+    has_pr_trigger = False
     workflows_tree = repo_data.get("object")
     if workflows_tree is not None:
         for entry in workflows_tree.get("entries", []):
@@ -259,9 +304,11 @@ async def fetch_repo_merge_state(
                 merge_group_trigger = True
             if _push_trigger_applies_to_branch(text, branch):
                 has_push_trigger = True
+            if base_branch is not None and _has_pull_request_trigger_for_base(text, base_branch):
+                has_pr_trigger = True
 
     ci_event: Literal["push"] | None = "push" if has_push_trigger else None
-    ci_applicable: bool = has_push_trigger or merge_group_trigger
+    ci_applicable: bool = has_push_trigger or has_pr_trigger
 
     return {
         "queue_available": queue_available,

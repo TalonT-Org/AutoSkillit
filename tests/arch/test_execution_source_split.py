@@ -108,7 +108,7 @@ SESSION_FSM_SIZE_BUDGETS = {
 MQ_SIZE_BUDGETS = {
     "merge_queue/__init__.py": 500,
     "merge_queue/_merge_queue_classifier.py": 175,
-    "merge_queue/_merge_queue_repo_state.py": 280,
+    "merge_queue/_merge_queue_repo_state.py": 320,
 }
 
 
@@ -202,5 +202,6 @@ def test_merge_queue_facade_does_not_define_repo_state():
         "async def fetch_repo_merge_state",
         "def _text_has_push_trigger",
         "def _has_merge_group_trigger",
+        "def _has_pull_request_trigger_for_base",
     ):
         assert sym not in src, f"{sym} must live in _merge_queue_repo_state.py"

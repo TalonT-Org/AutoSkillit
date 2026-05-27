@@ -118,6 +118,7 @@ async def check_repo_merge_state(
     cwd: str = ".",
     remote_url: str = "",
     step_name: str = "",
+    base_branch: str = "",
     ctx: Context = CurrentContext(),
 ) -> str:
     """Single GraphQL round-trip returning queue_available, merge_group_trigger,
@@ -132,14 +133,17 @@ async def check_repo_merge_state(
         cwd: Working directory for git remote resolution.
         remote_url: Full GitHub remote URL; parsed to owner/repo if provided.
         step_name: Step name for timing telemetry.
+        base_branch: PR target branch; enables pull_request trigger detection.
+            When empty, pull_request triggers are not evaluated (conservative).
 
     Returns a JSON object with keys:
     - ``queue_available``: branch has an active GitHub merge queue.
     - ``merge_group_trigger``: a CI workflow declares the merge_group event.
     - ``auto_merge_available``: repository has auto-merge enabled.
-    - ``ci_event``: ``"push"`` | ``"merge_group"`` | ``null`` — recommended
-      event to use when polling CI via wait_for_ci.
-    On any error, returns an error field alongside the four boolean/null defaults.
+    - ``ci_event``: ``"push"`` | ``null`` — recommended event for wait_for_ci.
+    - ``ci_applicable``: True when push or pull_request triggers apply to this
+      branch/base combination; False otherwise.
+    On any error, returns an error field alongside boolean/null defaults.
 
     Never raises.
     """
@@ -160,6 +164,7 @@ async def check_repo_merge_state(
                         "merge_group_trigger": False,
                         "auto_merge_available": False,
                         "ci_event": None,
+                        "ci_applicable": False,
                     }
                 )
             owner, repo = resolved_repo.split("/", 1)
@@ -173,6 +178,7 @@ async def check_repo_merge_state(
                 repo=repo,
                 branch=branch,
                 token=resolved_token,
+                base_branch=base_branch or None,
             )
             return json.dumps(state)
         except Exception as exc:
@@ -183,6 +189,7 @@ async def check_repo_merge_state(
                 "merge_group_trigger": False,
                 "auto_merge_available": False,
                 "ci_event": None,
+                "ci_applicable": False,
             }
             if isinstance(exc, httpx.HTTPStatusError):
                 envelope["http_status"] = exc.response.status_code
@@ -199,5 +206,6 @@ async def check_repo_merge_state(
                 "merge_group_trigger": False,
                 "auto_merge_available": False,
                 "ci_event": None,
+                "ci_applicable": False,
             }
         )

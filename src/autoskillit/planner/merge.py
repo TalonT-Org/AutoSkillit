@@ -344,8 +344,11 @@ def merge_tier_results(
             planner_dir, assignments, task_file_path, expected_phase_ids=expected_phase_ids
         )
         result["refine_context_paths"] = ",".join(context_paths)
-    if key == "work_packages":
-        merged_data = json.loads(Path(output_path).read_text(encoding="utf-8"))
+    elif key == "work_packages":
+        try:
+            merged_data = json.loads(Path(output_path).read_text(encoding="utf-8"))
+        except OSError as exc:
+            raise OSError(f"Failed to read merged output at {output_path}: {exc}") from exc
         work_packages = merged_data.get("work_packages", [])
         if not work_packages:
             logger.warning(
@@ -392,9 +395,11 @@ def merge_refined_assignments(
     for path in result_files:
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError) as exc:
+        except json.JSONDecodeError as exc:
             logger.warning("Skipping malformed result file %s: %s", path, exc)
             continue
+        except OSError:
+            raise
         all_assignments.extend(data.get("assignments", []))
 
     valid_assignments: list[dict[str, Any]] = []
@@ -473,9 +478,11 @@ def merge_refined_wps(
     for path in result_files:
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError) as exc:
+        except json.JSONDecodeError as exc:
             logger.warning("Skipping malformed result file %s: %s", path, exc)
             continue
+        except OSError:
+            raise
         all_wps.extend(data.get("work_packages", []))
 
     valid_wps: list[dict[str, Any]] = []

@@ -110,7 +110,6 @@ def test_tool_context_fleet_lock_field() -> None:
 
 
 def test_franchise_source_directory_gone() -> None:
-    """src/autoskillit/franchise/ must not contain any Python source files."""
     from autoskillit.core.paths import pkg_root
 
     franchise_dir = pkg_root() / "franchise"

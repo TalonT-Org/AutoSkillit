@@ -51,8 +51,8 @@ from autoskillit.execution.backends._claude_prompt import (
     _inject_completion_reminder,
     _inject_cwd_anchor,
     _inject_narration_suppression,
-    _marker_is_standalone,
 )
+from autoskillit.execution.process import _marker_is_standalone
 from autoskillit.execution.session import parse_session_result
 
 __all__ = [

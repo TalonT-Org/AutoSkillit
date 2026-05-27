@@ -16,13 +16,6 @@ from autoskillit.core import (
 )
 
 
-def _marker_is_standalone(text: str, marker: str) -> bool:
-    for text_line in text.splitlines():
-        if text_line.strip() == marker:
-            return True
-    return False
-
-
 def _extract_write_artifacts(tool_uses: list[dict[str, Any]]) -> list[str]:
     return [
         t.get("file_path", "")

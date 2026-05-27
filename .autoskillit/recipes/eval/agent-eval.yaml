@@ -88,6 +88,7 @@ steps:
 
   run_canaries:
     tool: run_skill
+    provider: minimax
     with:
       skill_command: "placeholder — see note for orchestration logic"
     on_success: compile_scorecard
@@ -139,6 +140,7 @@ steps:
 
          b. run_skill: /judge-eval {eval_run_dir}/{canary_id}/eval_context.json
             cwd = inputs.source_dir
+            model = opus[1m]
 
 
       4. After ALL canaries complete, this step is done — proceed to

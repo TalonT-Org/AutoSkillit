@@ -843,7 +843,8 @@
         "branch": "${{ context.merge_target }}",
         "cwd": "${{ context.work_dir }}",
         "remote_url": "${{ context.remote_url }}",
-        "step_name": "check_repo_ci_event"
+        "step_name": "check_repo_ci_event",
+        "base_branch": "${{ inputs.base_branch }}"
       },
       "capture": {
         "ci_event": "${{ result.ci_event }}",
@@ -866,7 +867,7 @@
         }
       ],
       "skip_when_false": "inputs.open_pr",
-      "note": "Short-circuits CI wait when no workflow trigger matches the feature branch. ci_applicable=false means neither push nor merge_group triggers apply, so wait_for_ci would exhaust its timeout budget with zero CI runs.\n"
+      "note": "Short-circuits CI wait when no workflow trigger matches the feature branch. ci_applicable=false means neither push nor pull_request triggers apply to this branch/base combination, so wait_for_ci would exhaust its timeout budget with zero CI runs.\n"
     },
     "check_pr_state": {
       "tool": "check_pr_mergeable",
@@ -954,7 +955,8 @@
         "branch": "${{ context.merge_target }}",
         "cwd": "${{ context.work_dir }}",
         "remote_url": "${{ context.remote_url }}",
-        "step_name": "handle_no_ci_runs"
+        "step_name": "handle_no_ci_runs",
+        "base_branch": "${{ inputs.base_branch }}"
       },
       "capture": {
         "ci_event": "${{ result.ci_event }}",
@@ -1110,7 +1112,8 @@
         "branch": "${{ inputs.base_branch }}",
         "cwd": "${{ context.work_dir }}",
         "remote_url": "${{ context.remote_url }}",
-        "step_name": "check_repo_merge_state"
+        "step_name": "check_repo_merge_state",
+        "base_branch": "${{ inputs.base_branch }}"
       },
       "capture": {
         "queue_available": "${{ result.queue_available }}",

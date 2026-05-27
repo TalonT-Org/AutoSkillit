@@ -170,3 +170,31 @@ def test_ci_event_capture_has_ci_applicable_guard(recipe_data) -> None:
     assert not violations, f"{recipe_name}: ci_event capture without ci_applicable:\n" + "\n".join(
         f"  - {v}" for v in violations
     )
+
+
+def test_check_repo_merge_state_with_ci_applicable_passes_base_branch(recipe_data) -> None:
+    """Every check_repo_merge_state step that captures ci_applicable must also pass base_branch.
+
+    ci_applicable requires base_branch to detect pull_request triggers. Steps that
+    capture ci_applicable without passing base_branch will silently get ci_applicable=False
+    for pull_request-only repos, causing false ci_watch skips.
+    """
+    recipe_name, data = recipe_data
+    steps = data.get("steps") or {}
+
+    violations = []
+    for step_name, step in steps.items():
+        tool = step.get("tool", "")
+        if "check_repo_merge_state" not in tool:
+            continue
+        capture = step.get("capture") or {}
+        if not any("ci_applicable" in k for k in capture):
+            continue
+        with_args = step.get("with") or {}
+        if "base_branch" not in with_args:
+            violations.append(step_name)
+
+    assert not violations, (
+        f"{recipe_name}: check_repo_merge_state steps capture ci_applicable "
+        f"but omit base_branch: {violations}"
+    )

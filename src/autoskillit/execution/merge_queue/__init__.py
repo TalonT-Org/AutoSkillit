@@ -46,6 +46,7 @@ from autoskillit.execution.merge_queue._merge_queue_repo_state import (
     _RATE_LIMIT_SECONDARY_MARKER,  # noqa: F401 — re-export for callers
     _REPO_STATE_QUERY,  # noqa: F401 — re-export for callers
     _has_merge_group_trigger,  # noqa: F401 — re-export for callers
+    _has_pull_request_trigger_for_base,  # noqa: F401 — re-export for callers
     _is_secondary_rate_limit,  # noqa: F401 — re-export for callers
     _push_trigger_applies_to_branch,  # noqa: F401 — re-export for callers
     _retry_after_seconds,  # noqa: F401 — re-export for callers

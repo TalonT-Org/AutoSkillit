@@ -133,6 +133,15 @@ _TOOL_PARAMS: dict[str, frozenset[str]] = {
             "cwd",
         }
     ),
+    "check_repo_merge_state": frozenset(
+        {
+            "branch",
+            "cwd",
+            "remote_url",
+            "step_name",
+            "base_branch",
+        }
+    ),
     # --- Git tools ---
     "create_unique_branch": frozenset(
         {

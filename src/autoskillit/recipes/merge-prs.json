@@ -983,7 +983,8 @@
         "branch": "${{ context.worktree_branch_name }}",
         "cwd": "${{ context.work_dir }}",
         "remote_url": "${{ context.remote_url }}",
-        "step_name": "derive_conflict_ci_event"
+        "step_name": "derive_conflict_ci_event",
+        "base_branch": "${{ inputs.base_branch }}"
       },
       "capture": {
         "conflict_ci_event": "${{ result.ci_event }}",
@@ -1004,7 +1005,7 @@
           "route": "wait_for_conflict_ci"
         }
       ],
-      "note": "Short-circuits CI wait when no workflow trigger matches the conflict resolution branch. ci_applicable=false means neither push nor merge_group triggers apply, so wait_for_ci would exhaust its timeout budget with zero CI runs.\n"
+      "note": "Short-circuits CI wait when no workflow trigger matches the conflict resolution branch. ci_applicable=false means neither push nor pull_request triggers apply to this branch/base combination, so wait_for_ci would exhaust its timeout budget with zero CI runs.\n"
     },
     "guard_ci_skip_conflict": {
       "tool": "run_python",
@@ -1092,7 +1093,8 @@
         "branch": "${{ context.worktree_branch_name }}",
         "cwd": "${{ context.work_dir }}",
         "remote_url": "${{ context.remote_url }}",
-        "step_name": "handle_conflict_no_runs"
+        "step_name": "handle_conflict_no_runs",
+        "base_branch": "${{ inputs.base_branch }}"
       },
       "capture": {
         "conflict_ci_event": "${{ result.ci_event }}",

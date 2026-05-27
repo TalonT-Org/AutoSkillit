@@ -35,7 +35,7 @@ def test_parse_int_field_raises_on_non_numeric() -> None:
 
 
 def test_parse_int_field_raises_on_none_value() -> None:
-    with pytest.raises(TypeError, match="Widget.*priority.*must be an integer"):
+    with pytest.raises(TypeError, match=r"Widget.*'\?'.*priority.*must be an integer"):
         parse_int_field({"priority": None}, "priority", 999, Path("test.yaml"), "Widget")
 
 

@@ -7,6 +7,7 @@ must come from a single HTTP round-trip to the GitHub GraphQL endpoint.
 
 from __future__ import annotations
 
+import inspect
 import textwrap
 
 import pytest
@@ -502,3 +503,21 @@ async def test_ci_applicable_matches_trigger_type(
     )
     result = await fetch_repo_merge_state(owner="o", repo="r", branch=branch, token=None)
     assert result["ci_applicable"] is expected_ci_applicable
+
+
+def test_ci_applicable_does_not_use_merge_group_trigger():
+    """Guard: ci_applicable must not be inflated by merge_group_trigger.
+
+    merge_group events only fire for gh-readonly-queue branches, not feature branches.
+    This test prevents future regressions where merge_group_trigger is re-added to
+    the ci_applicable formula.
+    """
+    source = inspect.getsource(fetch_repo_merge_state)
+    for line in source.splitlines():
+        stripped = line.split("#")[0]  # ignore comments
+        if "ci_applicable" in stripped and "=" in stripped:
+            assert "merge_group_trigger" not in stripped, (
+                "ci_applicable formula must not include merge_group_trigger — "
+                "merge_group events only fire for gh-readonly-queue branches, "
+                "not feature branches"
+            )

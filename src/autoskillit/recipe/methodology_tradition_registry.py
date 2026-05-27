@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from autoskillit.core import get_logger, load_yaml, pkg_root
-from autoskillit.recipe._registry_utils import _MISSING_MTIME, dir_mtime
+from autoskillit.recipe._registry_utils import _MISSING_MTIME, dir_mtime, parse_int_field
 
 logger = get_logger(__name__)
 
@@ -38,18 +38,6 @@ class MethodologyTraditionSpec:
     schema_version: str = ""
     priority: int = 999
     venue_specific_appendices: tuple[VenueAppendixDef, ...] = field(default_factory=tuple)
-
-
-def _parse_int_field(data: dict, field_name: str, default: int, source_path: Path) -> int:
-    val = data.get(field_name, default)
-    try:
-        return int(val)
-    except (ValueError, TypeError) as e:
-        name = data.get("name", "?")
-        raise TypeError(
-            f"Methodology tradition '{name}' field '{field_name}' must be an integer:"
-            f" {source_path}"
-        ) from e
 
 
 def _parse_methodology_tradition(data: dict, source_path: Path) -> MethodologyTraditionSpec:
@@ -100,7 +88,7 @@ def _parse_methodology_tradition(data: dict, source_path: Path) -> MethodologyTr
         ),
         anti_patterns=_coerce_dict_list("anti_patterns", data.get("anti_patterns", [])),
         schema_version=str(data.get("schema_version", "")),
-        priority=_parse_int_field(data, "priority", 999, source_path),
+        priority=parse_int_field(data, "priority", 999, source_path, "Methodology tradition"),
         venue_specific_appendices=_parse_venue_appendices(data, source_path),
     )
 

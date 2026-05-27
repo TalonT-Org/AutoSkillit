@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from autoskillit.core import get_logger, load_yaml, pkg_root
-from autoskillit.recipe._registry_utils import _MISSING_MTIME, dir_mtime
+from autoskillit.recipe._registry_utils import _MISSING_MTIME, dir_mtime, parse_int_field
 
 logger = get_logger(__name__)
 
@@ -28,17 +28,6 @@ class ExperimentTypeSpec:
     priority: int = 999
     is_fallback: bool = False
     dimension_weight_rationale: dict[str, str] = field(default_factory=dict)
-
-
-def _parse_int_field(data: dict, field: str, default: int, source_path: Path) -> int:
-    val = data.get(field, default)
-    try:
-        return int(val)
-    except (ValueError, TypeError) as e:
-        name = data.get("name", "?")
-        raise TypeError(
-            f"Experiment type '{name}' field '{field}' must be an integer: {source_path}"
-        ) from e
 
 
 def _parse_bool_field(data: dict, field: str, default: bool, source_path: Path) -> bool:
@@ -75,7 +64,7 @@ def _parse_experiment_type(data: dict, source_path: Path) -> ExperimentTypeSpec:
         red_team_focus=dict(data.get("red_team_focus", {})),
         l1_severity=dict(data.get("l1_severity", {})),
         schema_version=str(data.get("schema_version", "")),
-        priority=_parse_int_field(data, "priority", 999, source_path),
+        priority=parse_int_field(data, "priority", 999, source_path, "Experiment type"),
         is_fallback=_parse_bool_field(data, "is_fallback", False, source_path),
         dimension_weight_rationale=dict(data.get("dimension_weight_rationale", {})),
     )

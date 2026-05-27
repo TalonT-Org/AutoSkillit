@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -17,7 +18,9 @@ from autoskillit.execution.clone_guard import (
     CloneSnapshot,
     build_clone_guard_policy,
     check_and_revert_clone_contamination,
+    derive_exclude_prefix,
     detect_contamination,
+    is_path_under_exclude,
     is_worktree_skill,
     revert_contamination,
     snapshot_clone_state,
@@ -832,3 +835,49 @@ async def test_original_subtype_preserved_on_revert(tmp_path):
         ),
     )
     assert result.contamination.subtype == "context_exhaustion"
+
+
+# ---------------------------------------------------------------------------
+# TestIsPathUnderExclude — unit tests for existing helper (1a)
+# ---------------------------------------------------------------------------
+class TestIsPathUnderExclude:
+    def test_path_under_prefix(self, tmp_path):
+        assert is_path_under_exclude(tmp_path / ".autoskillit" / "temp", tmp_path, ".autoskillit/")
+
+    def test_path_not_under_prefix(self, tmp_path):
+        assert not is_path_under_exclude(tmp_path / "src" / "main.py", tmp_path, ".autoskillit/")
+
+    def test_path_equals_cwd(self, tmp_path):
+        assert not is_path_under_exclude(tmp_path, tmp_path, ".autoskillit/")
+
+    def test_path_outside_cwd(self, tmp_path):
+        assert not is_path_under_exclude(Path("/elsewhere"), tmp_path, ".autoskillit/")
+
+    def test_different_prefix(self, tmp_path):
+        assert is_path_under_exclude(tmp_path / "output" / "file.txt", tmp_path, "output/")
+
+
+# ---------------------------------------------------------------------------
+# TestDeriveExcludePrefix — unit tests for new helper (1b)
+# ---------------------------------------------------------------------------
+class TestDeriveExcludePrefix:
+    def test_subdir_of_cwd(self, tmp_path):
+        assert derive_exclude_prefix([tmp_path / "output"], tmp_path) == "output/"
+
+    def test_autoskillit_subdir(self, tmp_path):
+        assert (
+            derive_exclude_prefix([tmp_path / ".autoskillit" / "temp"], tmp_path)
+            == ".autoskillit/"
+        )
+
+    def test_equals_cwd(self, tmp_path):
+        assert derive_exclude_prefix([tmp_path], tmp_path) is None
+
+    def test_outside_cwd(self, tmp_path):
+        assert derive_exclude_prefix([Path("/elsewhere")], tmp_path) is None
+
+    def test_empty_watch_dirs(self, tmp_path):
+        assert derive_exclude_prefix([], tmp_path) is None
+
+    def test_uses_first_dir(self, tmp_path):
+        assert derive_exclude_prefix([tmp_path / "a", tmp_path / "b"], tmp_path) == "a/"

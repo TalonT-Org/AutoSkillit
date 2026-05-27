@@ -29,6 +29,8 @@ class AssignmentResult(TypedDict):
     goal: str
     technical_approach: str
     proposed_work_packages: list[dict[str, Any]]
+    dependency_notes: str
+    overlap_notes: str
 
 
 class WPResult(TypedDict):

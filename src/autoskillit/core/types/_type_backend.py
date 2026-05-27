@@ -36,6 +36,24 @@ class BackendCapabilities:
     food_truck_capable: bool
     completion_record_types: frozenset[str]
     session_record_types: frozenset[str]
+    triage_capable: bool = field(default=False)
+    record_capable: bool = field(default=False)
+    replay_capable: bool = field(default=False)
+    plugin_install_capable: bool = field(default=False)
+    anthropic_provider_capable: bool = field(default=False)
+    session_log_compressed: bool = field(default=False)
+    supports_context_exhaustion_detection: bool = field(default=False)
+    supports_api_retry_events: bool = field(default=False)
+    project_local_skills_capable: bool = field(default=False)
+    required_skill_fields: frozenset[str] = field(default_factory=frozenset)
+    required_session_files: frozenset[str] = field(default_factory=frozenset)
+    session_dir_symlinks: frozenset[str] = field(default_factory=frozenset)
+    applicable_guards: frozenset[str] = field(default_factory=frozenset)
+    env_denylist_prefixes: tuple[str, ...] = field(default=())
+    min_version: str = ""
+    version_check_command: str = ""
+    process_name: str = ""
+    skills_subdir: str = ""
 
 
 CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
@@ -50,6 +68,24 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     food_truck_capable=True,
     completion_record_types=frozenset({"result"}),
     session_record_types=frozenset({"assistant"}),
+    triage_capable=True,
+    record_capable=True,
+    replay_capable=True,
+    plugin_install_capable=True,
+    anthropic_provider_capable=True,
+    session_log_compressed=False,
+    supports_context_exhaustion_detection=True,
+    supports_api_retry_events=False,
+    project_local_skills_capable=True,
+    required_skill_fields=frozenset({"name", "description"}),
+    required_session_files=frozenset(),
+    session_dir_symlinks=frozenset(),
+    applicable_guards=frozenset({"skill_load_guard"}),
+    env_denylist_prefixes=(),
+    min_version="",
+    version_check_command="claude --version",
+    process_name="claude",
+    skills_subdir=".claude/skills",
 )
 
 

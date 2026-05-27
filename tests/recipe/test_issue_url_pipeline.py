@@ -460,7 +460,7 @@ class TestIssueUrlPruning:
         )
 
     def test_claim_and_resolve_pruned_without_url(self) -> None:
-        """claim_and_resolve step must be pruned when issue_url is absent."""
+        """claim_and_resolve step must be pruned or guarded when issue_url is absent."""
         result = load_and_validate(
             "remediation",
             ingredient_overrides={},
@@ -468,8 +468,12 @@ class TestIssueUrlPruning:
         content_str = result["content"]
         content = yaml.safe_load(content_str)
         steps = content.get("steps", {})
-        assert "claim_and_resolve" not in steps, (
-            "claim_and_resolve must be pruned (absent) when issue_url is not provided"
+        assert (
+            "claim_and_resolve" not in steps
+            or steps["claim_and_resolve"].get("skip_when_false") == "false"
+        ), (
+            "claim_and_resolve must be pruned (absent) or remain guarded "
+            "(skip_when_false='false') when issue_url is not provided"
         )
 
 

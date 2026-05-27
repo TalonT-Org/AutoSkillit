@@ -9,10 +9,13 @@ from autoskillit.planner.schema import (
     DELIVERABLE_BOUNDS,
     PHASE_REQUIRED_KEYS,
     WP_REQUIRED_KEYS,
+    AssignmentElaborated,
     AssignmentResult,
     PhaseResult,
     PhaseShort,
+    WPElaborated,
     WPResult,
+    parse_planner_id,
     validate_assignment_result,
     validate_phase_result,
     validate_wp_result,
@@ -190,3 +193,48 @@ def test_validate_wp_result_enforces_lower_bound_with_skip_upper_bound() -> None
             {"id": "P1-A1-WP1", "name": "WP", "deliverables": []},
             skip_upper_bound=True,
         )
+
+
+def test_validate_wp_result_injects_phase_id_and_assignment_id() -> None:
+    result = validate_wp_result({"id": "P1-A2-WP3", "name": "WP", "deliverables": ["f.py"]})
+    assert result["phase_id"] == "P1"
+    assert result["assignment_id"] == "P1-A2"
+
+
+def test_validate_wp_result_output_covers_wp_elaborated_required_keys() -> None:
+    result = validate_wp_result({"id": "P1-A1-WP1", "name": "WP", "deliverables": ["f.py"]})
+    missing = WPElaborated.__required_keys__ - result.keys()
+    assert not missing, f"validate_wp_result output missing WPElaborated keys: {missing}"
+
+
+def test_validate_assignment_result_output_covers_assignment_elaborated_required_keys() -> None:
+    result = validate_assignment_result(
+        {"id": "P1-A1", "name": "A", "proposed_work_packages": []}
+    )
+    missing = AssignmentElaborated.__required_keys__ - result.keys()
+    assert not missing, f"validate_assignment_result output missing AssignmentElaborated keys: {missing}"
+
+
+def test_make_wp_result_fixture_includes_ancestry_fields() -> None:
+    from tests.planner.conftest import make_wp_result
+
+    result = make_wp_result("P1-A1-WP1")
+    assert "phase_id" in result
+    assert "assignment_id" in result
+
+
+def test_parse_planner_id_phase() -> None:
+    assert parse_planner_id("P1") == (1,)
+
+
+def test_parse_planner_id_assignment() -> None:
+    assert parse_planner_id("P3-A7") == (3, 7)
+
+
+def test_parse_planner_id_wp() -> None:
+    assert parse_planner_id("P10-A2-WP5") == (10, 2, 5)
+
+
+def test_parse_planner_id_rejects_malformed() -> None:
+    with pytest.raises(ValueError):
+        parse_planner_id("bad")

@@ -64,7 +64,7 @@ def _assert_ci_steps(recipe) -> None:
     re_push = recipe.steps["re_push"]
     assert re_push.tool == "push_to_remote"
     assert re_push.on_success == "check_repo_ci_event"
-    assert re_push.on_failure == "release_issue_failure"
+    assert re_push.on_failure == "classify_push_failure"
 
     # check_ci_loop guard (loop bounding for ci_watch / handle_no_ci_runs cycle)
     assert "check_ci_loop" in recipe.steps, "ci_watch cycle must have check_ci_loop guard"

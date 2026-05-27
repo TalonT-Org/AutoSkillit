@@ -52,3 +52,31 @@ def test_upfront_claimed_is_hidden_in_recipe(recipe_name: str) -> None:
         f"upfront_claimed.hidden must be True in {recipe_name} "
         f"(it is set by process-issues, not by users)"
     )
+
+
+@pytest.mark.parametrize("recipe_name", BUNDLED_RECIPE_NAMES)
+def test_no_bundled_recipe_has_skip_when_false_on_hidden_ingredient(recipe_name: str) -> None:
+    """No bundled recipe step may use skip_when_false referencing a hidden ingredient.
+
+    This regression test catches any future recipe that introduces the pattern of
+    skip_when_false pointing at a hidden: true ingredient, which would have been
+    silently broken before server-side evaluation was added.
+    """
+    recipe_path = pkg_root() / "recipes" / f"{recipe_name}.yaml"
+    recipe = load_recipe(recipe_path)
+    violations = []
+    for step_name, step in recipe.steps.items():
+        if not step.skip_when_false:
+            continue
+        ref = step.skip_when_false
+        if not ref.startswith("inputs."):
+            continue
+        ingredient_name = ref[len("inputs.") :]
+        ing = recipe.ingredients.get(ingredient_name)
+        if ing is not None and ing.hidden:
+            msg = f"Step '{step_name}': skip_when_false refs hidden '{ingredient_name}'"
+            violations.append(msg)
+    assert violations == [], (
+        f"Recipe '{recipe_name}' has skip_when_false on hidden ingredients:\n"
+        + "\n".join(f"  - {v}" for v in violations)
+    )

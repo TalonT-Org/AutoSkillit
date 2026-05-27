@@ -94,3 +94,60 @@ def test_skip_when_false_referencing_undeclared_ingredient_fires() -> None:
     violations = run_semantic_rules(recipe)
     rule_findings = [v for v in violations if v.rule == "skip-when-false-undeclared"]
     assert len(rule_findings) == 1
+
+
+def test_skip_when_false_on_hidden_ingredient_fires_warning() -> None:
+    """skip-when-false-on-hidden rule fires WARNING when ingredient is hidden: true."""
+    recipe = Recipe(
+        name="test",
+        description="test",
+        steps={
+            "entry": RecipeStep(tool="run_cmd", on_success="guarded"),
+            "guarded": RecipeStep(
+                tool="run_skill",
+                optional=True,
+                skip_when_false="inputs.bar",
+                on_success="done",
+                on_failure="done",
+                with_args={"skill_command": "/autoskillit:foo /tmp/x.md", "cwd": "/tmp"},
+                on_context_limit="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        },
+        ingredients={
+            "bar": RecipeIngredient(description="Hidden flag", default="false", hidden=True)
+        },
+        kitchen_rules=["test"],
+    )
+    violations = run_semantic_rules(recipe)
+    findings = [v for v in violations if v.rule == "skip-when-false-on-hidden"]
+    assert len(findings) == 1
+    assert findings[0].severity == Severity.WARNING
+
+
+def test_skip_when_false_on_visible_ingredient_no_warning() -> None:
+    """skip-when-false-on-hidden rule does NOT fire when ingredient is visible."""
+    recipe = Recipe(
+        name="test",
+        description="test",
+        steps={
+            "entry": RecipeStep(tool="run_cmd", on_success="guarded"),
+            "guarded": RecipeStep(
+                tool="run_skill",
+                optional=True,
+                skip_when_false="inputs.bar",
+                on_success="done",
+                on_failure="done",
+                with_args={"skill_command": "/autoskillit:foo /tmp/x.md", "cwd": "/tmp"},
+                on_context_limit="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        },
+        ingredients={
+            "bar": RecipeIngredient(description="Visible flag", default="false", hidden=False)
+        },
+        kitchen_rules=["test"],
+    )
+    violations = run_semantic_rules(recipe)
+    findings = [v for v in violations if v.rule == "skip-when-false-on-hidden"]
+    assert findings == []

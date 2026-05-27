@@ -5,14 +5,13 @@ from __future__ import annotations
 import json
 import secrets
 import shutil
-import subprocess
 import time
 from datetime import UTC, datetime
 from pathlib import Path
 
 import regex as re
 
-from autoskillit.core import atomic_write, get_logger
+from autoskillit.core import atomic_write, get_logger, run_gh
 
 logger = get_logger(__name__)
 
@@ -35,21 +34,16 @@ def refetch_issues(issue_urls: str) -> dict[str, str]:
     if not parts:
         return {"issue_numbers": ""}
     query = "{" + " ".join(parts) + "}"
-    result = subprocess.run(
+    result = run_gh(
         [
-            "gh",
             "api",
             "graphql",
             "-f",
             f"query={query}",
             "--jq",
-            (
-                '[.data[] | select(.issue != null and .issue.state == "OPEN")'
-                ' | .issue.number | tostring] | join(" ")'
-            ),
-        ],
-        capture_output=True,
-        text=True,
+            '[.data[] | select(.issue != null and .issue.state == "OPEN") '
+            '| .issue.number | tostring] | join(" ")',
+        ]
     )
     if result.returncode != 0:
         msg = f"gh graphql failed: {result.stderr}"
@@ -160,11 +154,8 @@ def _strip_ticket_body(raw: str) -> str:
 
 def _resolve_repo_identity(cwd: str) -> tuple[str, str, str]:
     """Return (owner, repo_name, repo_node_id) for the given workspace."""
-    result = subprocess.run(
-        ["gh", "repo", "view", "--json", "owner,name", "-q", '.owner.login + " " + .name'],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
+    result = run_gh(
+        ["repo", "view", "--json", "owner,name", "-q", '.owner.login + " " + .name'], cwd=cwd
     )
     if result.returncode != 0:
         msg = f"gh repo view failed: {result.stderr}"
@@ -177,12 +168,7 @@ def _resolve_repo_identity(cwd: str) -> tuple[str, str, str]:
     safe_owner = json.dumps(owner)[1:-1]
     safe_repo = json.dumps(repo_name)[1:-1]
     query = f'{{ repository(owner: "{safe_owner}", name: "{safe_repo}") {{ id }} }}'
-    result = subprocess.run(
-        ["gh", "api", "graphql", "-f", f"query={query}"],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-    )
+    result = run_gh(["api", "graphql", "-f", f"query={query}"], cwd=cwd)
     if result.returncode != 0:
         msg = f"gh graphql repo ID query failed: {result.stderr}"
         raise RuntimeError(msg)
@@ -204,11 +190,7 @@ def _ensure_and_resolve_labels(cwd: str, owner: str, repo_name: str) -> list[str
         ("enhancement", "a2eeef"),
     ]
     for name, color in label_defs:
-        subprocess.run(
-            ["gh", "label", "create", name, "--force", "--color", color],
-            cwd=cwd,
-            capture_output=True,
-        )
+        run_gh(["label", "create", name, "--force", "--color", color], cwd=cwd)
         time.sleep(1)
     safe_owner = json.dumps(owner)[1:-1]
     safe_repo = json.dumps(repo_name)[1:-1]
@@ -217,12 +199,7 @@ def _ensure_and_resolve_labels(cwd: str, owner: str, repo_name: str) -> list[str
         f' impl: label(name: "recipe:implementation") {{ id }}'
         f' enh: label(name: "enhancement") {{ id }} }} }}'
     )
-    result = subprocess.run(
-        ["gh", "api", "graphql", "-f", f"query={query}"],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-    )
+    result = run_gh(["api", "graphql", "-f", f"query={query}"], cwd=cwd)
     if result.returncode != 0:
         msg = f"gh graphql label query failed: {result.stderr}"
         raise RuntimeError(msg)
@@ -329,13 +306,7 @@ def batch_create_issues(
             + "}"
         )
         payload = json.dumps({"query": mutation, "variables": variables})
-        result = subprocess.run(
-            ["gh", "api", "graphql", "--input", "-"],
-            input=payload,
-            cwd=workspace,
-            capture_output=True,
-            text=True,
-        )
+        result = run_gh(["api", "graphql", "--input", "-"], cwd=workspace, input_data=payload)
         if result.returncode != 0:
             msg = f"gh graphql createIssue failed: {result.stderr}"
             raise RuntimeError(msg)

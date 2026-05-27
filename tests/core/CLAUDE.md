@@ -13,6 +13,7 @@ Core layer (IL-0) unit tests — paths, IO, types, feature flags.
 | `test_branch_guard.py` | Tests for core.branch_guard — protected-branch validation |
 | `test_claude_env.py` | Unit tests for build_agent_env() — IDE env scrubbing at the subprocess launch boundary |
 | `test_build_agent_env.py` | Alias contract tests for build_agent_env / build_claude_env |
+| `test_cmd_runner.py` | Tests for core/_cmd_runner.py — CmdRunner protocol, default_cmd_runner, run_git, run_gh |
 | `test_core.py` | Tests for the core/ sub-package foundation layer |
 | `test_core_terminal_table.py` | Tests for core/_terminal_table.py — the L0 shared table primitive |
 | `test_ensure_project_temp_with_config.py` | Tests for ensure_project_temp with configurable override |

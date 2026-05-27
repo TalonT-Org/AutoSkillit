@@ -7,7 +7,7 @@ import subprocess
 from datetime import date
 from pathlib import Path
 
-from autoskillit.core import atomic_write, get_logger, is_generated_path
+from autoskillit.core import atomic_write, get_logger, is_generated_path, run_git
 
 logger = get_logger(__name__)
 
@@ -62,12 +62,7 @@ def check_dropped_healthy_loop(
 
 def main_repo_guard(clone_path: str) -> dict[str, str]:
     """Stash dirty state from the main repo before merge."""
-    result = subprocess.run(
-        ["git", "status", "--porcelain"],
-        cwd=clone_path,
-        capture_output=True,
-        text=True,
-    )
+    result = run_git(["status", "--porcelain"], cwd=clone_path)
     if result.returncode != 0:
         raise subprocess.CalledProcessError(
             result.returncode, result.args, result.stdout, result.stderr
@@ -78,13 +73,7 @@ def main_repo_guard(clone_path: str) -> dict[str, str]:
 
     # Detect and remove linked worktrees nested inside the clone.
     clone_resolved = Path(clone_path).resolve()
-    wt_list = subprocess.run(
-        ["git", "worktree", "list", "--porcelain"],
-        cwd=clone_path,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    wt_list = run_git(["worktree", "list", "--porcelain"], cwd=clone_path)
     if wt_list.returncode == 0:
         first = True
         for line in wt_list.stdout.splitlines():
@@ -95,27 +84,15 @@ def main_repo_guard(clone_path: str) -> dict[str, str]:
                 continue  # main worktree is always first in porcelain output
             wt_path = Path(line.split(" ", 1)[1].strip())
             if wt_path.resolve().is_relative_to(clone_resolved):
-                rm_result = subprocess.run(
-                    ["git", "worktree", "remove", "--force", str(wt_path)],
-                    cwd=clone_path,
-                    capture_output=True,
-                    text=True,
-                    check=False,
+                rm_result = run_git(
+                    ["worktree", "remove", "--force", str(wt_path)], cwd=clone_path
                 )
                 if rm_result.returncode != 0 and wt_path.exists():
                     shutil.rmtree(wt_path, ignore_errors=True)
 
-    stash_result = subprocess.run(
-        [
-            "git",
-            "stash",
-            "--include-untracked",
-            "-m",
-            "autoskillit: main_repo_guard pre-merge stash",
-        ],
+    stash_result = run_git(
+        ["stash", "--include-untracked", "-m", "autoskillit: main_repo_guard pre-merge stash"],
         cwd=clone_path,
-        capture_output=True,
-        text=True,
     )
     if stash_result.returncode != 0:
         logger.warning(
@@ -123,26 +100,14 @@ def main_repo_guard(clone_path: str) -> dict[str, str]:
             stash_result.returncode,
             stash_result.stderr.strip(),
         )
-        co = subprocess.run(
-            ["git", "checkout", "--", "."],
-            cwd=clone_path,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        co = run_git(["checkout", "--", "."], cwd=clone_path)
         if co.returncode != 0:
             logger.warning(
                 "git checkout force-clean failed (rc=%d): %s",
                 co.returncode,
                 co.stderr.strip(),
             )
-        cl = subprocess.run(
-            ["git", "clean", "-fd"],
-            cwd=clone_path,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        cl = run_git(["clean", "-fd"], cwd=clone_path)
         if cl.returncode != 0:
             logger.warning(
                 "git clean force-clean failed (rc=%d): %s",
@@ -151,13 +116,7 @@ def main_repo_guard(clone_path: str) -> dict[str, str]:
             )
         if co.returncode != 0 and cl.returncode != 0:
             return {"cleaned": "failed"}
-        verify = subprocess.run(
-            ["git", "status", "--porcelain"],
-            cwd=clone_path,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        verify = run_git(["status", "--porcelain"], cwd=clone_path)
         if verify.returncode == 0 and verify.stdout.strip():
             remaining = ", ".join(ln.strip() for ln in verify.stdout.splitlines() if ln.strip())[
                 :200
@@ -165,13 +124,7 @@ def main_repo_guard(clone_path: str) -> dict[str, str]:
             return {"cleaned": "failed", "remaining": remaining}
         return {"cleaned": "force"}
 
-    verify = subprocess.run(
-        ["git", "status", "--porcelain"],
-        cwd=clone_path,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    verify = run_git(["status", "--porcelain"], cwd=clone_path)
     if verify.returncode == 0 and verify.stdout.strip():
         remaining = ", ".join(ln.strip() for ln in verify.stdout.splitlines() if ln.strip())[:200]
         return {"cleaned": "failed", "remaining": remaining}
@@ -208,10 +161,8 @@ def commit_guard(worktree_path: str) -> dict[str, str]:
     if not files_to_add:
         return {"committed": "false"}
 
-    subprocess.run(["git", "add", "--", *files_to_add], cwd=worktree_path, check=True)
-    subprocess.run(
-        ["git", "commit", "-m", "chore: commit pending session changes"],
-        cwd=worktree_path,
-        check=True,
+    run_git(["add", "--", *files_to_add], cwd=worktree_path, check=True)
+    run_git(
+        ["commit", "-m", "chore: commit pending session changes"], cwd=worktree_path, check=True
     )
     return {"committed": "true"}

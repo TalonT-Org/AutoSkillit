@@ -530,89 +530,95 @@ async def bootstrap_clone(
                 run_name=run_name,
                 base_branch=base_branch,
             )
-        await _notify(
-            ctx,
-            "info",
-            f"bootstrap_clone: {source_dir!r} run_name={run_name!r} base_branch={base_branch!r}",
-            "autoskillit.bootstrap_clone",
-            extra={
-                "source_dir": source_dir,
-                "run_name": run_name,
-                "base_branch": base_branch,
-                "branch": branch,
-            },
-        )
-
-        from autoskillit.server import _get_ctx
-
-        tool_ctx = _get_ctx()
-        if tool_ctx.clone_mgr is None:
-            return json.dumps({"error": "Clone manager not configured"})
-
-        _total_start = time.monotonic()
-
-        _clone_start = time.monotonic()
-        try:
-            clone_result = await asyncio.to_thread(
-                tool_ctx.clone_mgr.clone_repo, source_dir, run_name, branch, strategy, remote_url
-            )
-        except (ValueError, RuntimeError) as exc:
             await _notify(
                 ctx,
-                "error",
-                "bootstrap_clone: clone failed",
+                "info",
+                f"bootstrap_clone: {source_dir!r}"
+                f" run_name={run_name!r} base_branch={base_branch!r}",
                 "autoskillit.bootstrap_clone",
-                extra={"reason": str(exc)},
-            )
-            return json.dumps({"error": str(exc)})
-        finally:
-            clone_ms = int((time.monotonic() - _clone_start) * 1000)
-
-        gate_error = _require_clone_success(clone_result, source_dir)
-        if gate_error is not None:
-            return gate_error
-
-        success = cast("CloneSuccessResult", clone_result)
-        clone_path: str = success["clone_path"]
-        resolved_remote_url: str = success.get("remote_url", remote_url)
-
-        _revparse_start = time.monotonic()
-        try:
-            rc, stdout, stderr = await _run_subprocess(
-                ["git", "rev-parse", base_branch],
-                cwd=clone_path,
-                timeout=30,
-            )
-        finally:
-            rev_parse_ms = int((time.monotonic() - _revparse_start) * 1000)
-
-        if rc != 0:
-            await _notify(
-                ctx,
-                "error",
-                "bootstrap_clone: rev-parse failed",
-                "autoskillit.bootstrap_clone",
-                extra={"stderr": stderr},
-            )
-            return json.dumps({"error": f"rev-parse failed: {stderr.strip()}"})
-
-        base_sha = stdout.strip()
-
-        if step_name:
-            tool_ctx.timing_log.record(step_name, time.monotonic() - _total_start)
-
-        return json.dumps(
-            {
-                "work_dir": clone_path,
-                "remote_url": resolved_remote_url,
-                "base_sha": base_sha,
-                "merge_target": base_branch,
-                "timings": {
-                    "clone_ms": clone_ms,
-                    "rev_parse_ms": rev_parse_ms,
+                extra={
+                    "source_dir": source_dir,
+                    "run_name": run_name,
+                    "base_branch": base_branch,
+                    "branch": branch,
                 },
-            }
-        )
+            )
+
+            from autoskillit.server import _get_ctx
+
+            tool_ctx = _get_ctx()
+            if tool_ctx.clone_mgr is None:
+                return json.dumps({"error": "Clone manager not configured"})
+
+            _total_start = time.monotonic()
+
+            _clone_start = time.monotonic()
+            try:
+                clone_result = await asyncio.to_thread(
+                    tool_ctx.clone_mgr.clone_repo,
+                    source_dir,
+                    run_name,
+                    branch,
+                    strategy,
+                    remote_url,
+                )
+            except (ValueError, RuntimeError) as exc:
+                await _notify(
+                    ctx,
+                    "error",
+                    "bootstrap_clone: clone failed",
+                    "autoskillit.bootstrap_clone",
+                    extra={"reason": str(exc)},
+                )
+                return json.dumps({"error": str(exc)})
+            finally:
+                clone_ms = int((time.monotonic() - _clone_start) * 1000)
+
+            gate_error = _require_clone_success(clone_result, source_dir)
+            if gate_error is not None:
+                return gate_error
+
+            success = cast("CloneSuccessResult", clone_result)
+            clone_path: str = success["clone_path"]
+            resolved_remote_url: str = success.get("remote_url", remote_url)
+
+            _revparse_start = time.monotonic()
+            try:
+                rc, stdout, stderr = await _run_subprocess(
+                    ["git", "rev-parse", base_branch],
+                    cwd=clone_path,
+                    timeout=30,
+                )
+            finally:
+                rev_parse_ms = int((time.monotonic() - _revparse_start) * 1000)
+
+            if rc != 0:
+                await _notify(
+                    ctx,
+                    "error",
+                    "bootstrap_clone: rev-parse failed",
+                    "autoskillit.bootstrap_clone",
+                    extra={"stderr": stderr},
+                )
+                return json.dumps({"error": f"rev-parse failed: {stderr.strip()}"})
+
+            base_sha = stdout.strip()
+
+            if step_name:
+                tool_ctx.timing_log.record(step_name, time.monotonic() - _total_start)
+
+            return json.dumps(
+                {
+                    "work_dir": clone_path,
+                    "remote_url": resolved_remote_url,
+                    "base_sha": base_sha,
+                    "merge_target": base_branch,
+                    "timings": {
+                        "clone_ms": clone_ms,
+                        "rev_parse_ms": rev_parse_ms,
+                    },
+                }
+            )
     except Exception as exc:
         logger.error("bootstrap_clone unhandled exception", exc_info=True)
         return json.dumps({"error": f"{type(exc).__name__}: {exc}"})

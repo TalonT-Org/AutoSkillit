@@ -107,3 +107,16 @@ def test_tool_context_fleet_lock_field() -> None:
     field_names = {f.name for f in fields(ToolContext)}
     assert "fleet_lock" in field_names
     assert "franchise_lock" not in field_names
+
+
+def test_franchise_source_directory_gone() -> None:
+    from autoskillit.core.paths import pkg_root
+
+    franchise_dir = pkg_root() / "franchise"
+    if not franchise_dir.exists():
+        return
+    py_files = list(franchise_dir.rglob("*.py"))
+    assert not py_files, (
+        f"Ghost franchise/ directory contains Python files: "
+        f"{[str(p.relative_to(franchise_dir)) for p in py_files]}"
+    )

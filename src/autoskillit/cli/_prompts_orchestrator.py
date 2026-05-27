@@ -194,9 +194,13 @@ CONTEXT LIMIT ROUTING — run_skill only (check BEFORE on_failure):
     not a context limit. No partial worktree progress should be resumed.
   - Fall through to on_failure regardless of whether on_context_limit is defined.
 - When run_skill returns "needs_retry: true" AND "retry_reason: clone_contamination":
-  - The clone guard detected modifications to the clone's git state (HEAD advanced or
-    uncommitted tracked files appeared). This is a clone integrity violation.
-  - Fall through to on_failure regardless of whether on_context_limit is defined.
+  - Route: Fall through to on_failure regardless of whether on_context_limit is defined.
+  - The clone has been reverted to its pre-session state — no partial progress to resume.
+  - Diagnostic note: Check pre_contamination_retry_reason in the run_skill JSON output.
+  - If pre_contamination_retry_reason is "resume" and infra_exit_category is
+    "context_exhausted", the session hit context limits before contamination was detected.
+  - Log this for diagnostics but still route to on_failure — the revert destroyed any
+    resumable state.
 - When run_skill returns "needs_retry: true" AND "retry_reason: thinking_stall":
   - The model consumed tokens (thinking blocks were present) but produced no text or tool output.
     If lifespan_started is true (model made tool calls before the thinking-only final turn),

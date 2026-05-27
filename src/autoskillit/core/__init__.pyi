@@ -207,6 +207,7 @@ from .types import CloneSuccessResult as CloneSuccessResult
 from .types import CmdSpec as CmdSpec
 from .types import CodexEventData as CodexEventData
 from .types import CodingAgentBackend as CodingAgentBackend
+from .types import ContaminationOutcome as ContaminationOutcome
 from .types import DatabaseReader as DatabaseReader
 from .types import DirectInstall as DirectInstall
 from .types import DispatchGateType as DispatchGateType

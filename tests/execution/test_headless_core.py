@@ -1006,6 +1006,8 @@ class TestBuildSkillResultCrossValidation:
         "api_retry_last_error",
         "api_retry_last_status",
         "api_retry_exhausted",
+        "pre_contamination_retry_reason",
+        "pre_contamination_subtype",
     }
 
     def test_expected_skill_keys_includes_provider(self):

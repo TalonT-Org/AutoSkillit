@@ -7,6 +7,15 @@ import json
 import os
 import re
 import sys
+from pathlib import Path
+
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+
+from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
+    has_interpreter_write,
+)
 
 WRITE_GUARD_DENY_TRIGGER = "read-only skill session"
 
@@ -148,11 +157,18 @@ def main() -> None:
 
     if tool_name == "Bash" or "run_cmd" in tool_name:
         command = tool_input.get("command", "") or tool_input.get("cmd", "")
+        # Interpreter-mediated write detection: deny unconditionally.
+        # Path extraction is not attempted because interpreters construct paths dynamically.
+        if has_interpreter_write(command):
+            _deny(
+                f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER}. "
+                f"Interpreter-mediated file writes are not permitted."
+            )
+            return
         targets = _extract_bash_write_targets(command)
         if targets is None:
             sys.exit(0)
         if not targets:
-            # Write command detected but path not extractable — fail-open.
             sys.exit(0)
         for target in targets:
             if not _within_prefix(target):

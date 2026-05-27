@@ -759,3 +759,76 @@ async def test_detect_contamination_external_head_with_excluded_files(tmp_path):
     assert report is not None
     assert report.direct_commits is True
     assert report.uncommitted_files == []
+
+
+# T-CG: Clone guard context preservation
+# ---------------------------------------------------------------------------
+@pytest.mark.anyio
+async def test_original_retry_reason_preserved_on_revert(tmp_path):
+    """When clone_guard fires, the original retry_reason must be recoverable."""
+    runner = MockSubprocessRunner()
+    runner.push(_git_result(stdout="def456\n"))  # detect: moved HEAD
+    runner.push(_git_result(stdout=" M f.py\n"))  # detect: dirty
+    runner.push(_git_result())  # revert: reset
+    runner.push(_git_result())  # revert: clean
+
+    snapshot = CloneSnapshot(head_sha="abc123")
+    original = _make_skill_result(success=False, needs_retry=True)
+    assert original.retry_reason == RetryReason.RESUME  # pre-condition
+
+    result, reverted = await check_and_revert_clone_contamination(
+        snapshot,
+        original,
+        str(tmp_path),
+        runner,
+        None,
+        policy=build_clone_guard_policy(
+            readonly_skill=False,
+            has_write_scope=False,
+            is_clone_commit=False,
+            is_worktree=True,
+        ),
+    )
+    assert reverted
+    assert result.retry_reason == RetryReason.CLONE_CONTAMINATION
+    assert result.contamination.retry_reason == RetryReason.RESUME
+
+
+@pytest.mark.anyio
+async def test_original_subtype_preserved_on_revert(tmp_path):
+    """When clone_guard fires, the original subtype must be recoverable."""
+    runner = MockSubprocessRunner()
+    runner.push(_git_result(stdout="def456\n"))
+    runner.push(_git_result(stdout=" M f.py\n"))
+    runner.push(_git_result())
+    runner.push(_git_result())
+
+    from autoskillit.core import WriteEvidence
+
+    snapshot = CloneSnapshot(head_sha="abc123")
+    original = SkillResult(
+        success=False,
+        result="",
+        session_id="s",
+        subtype="context_exhaustion",
+        is_error=True,
+        exit_code=1,
+        needs_retry=True,
+        retry_reason=RetryReason.RESUME,
+        stderr="",
+        evidence=WriteEvidence.none_observed(),
+    )
+    result, _ = await check_and_revert_clone_contamination(
+        snapshot,
+        original,
+        str(tmp_path),
+        runner,
+        None,
+        policy=build_clone_guard_policy(
+            readonly_skill=False,
+            has_write_scope=False,
+            is_clone_commit=False,
+            is_worktree=True,
+        ),
+    )
+    assert result.contamination.subtype == "context_exhaustion"

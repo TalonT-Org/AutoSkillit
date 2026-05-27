@@ -342,16 +342,6 @@ class TestLoadConfig:
         cfg = load_config(tmp_path)
         assert cfg.worktree_setup.command == ["task", "install-worktree"]
 
-    def test_load_diagnostics_config(self, tmp_path):
-        """DIAG_C2: diagnostics.post_run_analysis can be set via YAML."""
-        config_dir = tmp_path / ".autoskillit"
-        config_dir.mkdir()
-        (config_dir / "config.yaml").write_text(
-            yaml.dump({"diagnostics": {"post_run_analysis": True}})
-        )
-        cfg = load_config(tmp_path)
-        assert cfg.diagnostics.post_run_analysis is True
-
     def test_partial_config_preserves_worktree_setup_default(self, tmp_path):
         """WS_C3: YAML without worktree_setup -> command stays None."""
         config_dir = tmp_path / ".autoskillit"

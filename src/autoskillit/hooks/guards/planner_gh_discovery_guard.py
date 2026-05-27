@@ -15,6 +15,16 @@ import os
 import re
 import shlex
 import sys
+from pathlib import Path
+
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+
+from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
+    has_interpreter_wrapped_command,
+    has_nested_shell,
+)
 
 DISCOVERY_DENY_TRIGGER: str = "Planner skills cannot discover GitHub issues"
 
@@ -73,6 +83,13 @@ def _is_gh_discovery(cmd: str) -> bool:
                 return False
             if _API_LISTING_RE.search(endpoint):
                 return True
+    discovery_targets = [f"gh {sub} {cmd_}" for sub, cmd_ in _DISCOVERY_SUBCOMMANDS]
+    if has_interpreter_wrapped_command(cmd, target_commands=discovery_targets):
+        return True
+    if has_nested_shell(cmd):
+        cmd_lower = cmd.lower()
+        if any(sub in cmd_lower and c in cmd_lower for sub, c in _DISCOVERY_SUBCOMMANDS):
+            return True
     return False
 
 

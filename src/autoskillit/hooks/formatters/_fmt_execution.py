@@ -242,6 +242,8 @@ _FMT_RUN_SKILL_SUPPRESSED: frozenset[str] = frozenset(
         "api_retry_last_error",
         "api_retry_last_status",
         "api_retry_exhausted",
+        "pre_contamination_retry_reason",
+        "pre_contamination_subtype",
     }
 )
 

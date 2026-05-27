@@ -378,6 +378,123 @@ class TestWriteGuardRealisticCommands:
         assert result == ""
 
 
+class TestWriteGuardInterpreterBypass:
+    """write_guard must detect interpreter-mediated writes (python3 heredocs, -c flag)."""
+
+    PREFIX = "/clone/.autoskillit/temp/planner/"
+
+    @pytest.fixture(autouse=True)
+    def _enable_headless(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+
+    def test_python3_inline_write_denied(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)
+        event = _build_bash_event("python3 -c \"open('/clone/src/foo.py','w').write('x')\"")
+        result = _run_hook(event)
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_python3_heredoc_write_denied(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)
+        cmd = (
+            "python3 - << 'PYEOF'\n"
+            "from pathlib import Path\n"
+            "Path('/clone/src/foo.py').write_text('x')\n"
+            "PYEOF"
+        )
+        event = _build_bash_event(cmd)
+        result = _run_hook(event)
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_env_python3_write_denied(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)
+        event = _build_bash_event("env python3 -c \"open('/clone/src/foo.py','w').write('x')\"")
+        result = _run_hook(event)
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_python3_read_only_allowed(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)
+        event = _build_bash_event("python3 -c \"print(open('/clone/src/foo.py').read())\"")
+        result = _run_hook(event)
+        assert result == ""
+
+    def test_python3_explicit_read_mode_allowed(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)
+        event = _build_bash_event("python3 -c \"data = open('/clone/src/foo.py', 'r').read()\"")
+        result = _run_hook(event)
+        assert result == ""
+
+    def test_python3_pytest_allowed(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)
+        event = _build_bash_event("python3 -m pytest tests/")
+        result = _run_hook(event)
+        assert result == ""
+
+    def test_python3_write_text_denied(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)
+        event = _build_bash_event(
+            "python3 -c \"from pathlib import Path; Path('/clone/src/f.py').write_text('x')\""
+        )
+        result = _run_hook(event)
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_python3_write_bytes_denied(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)
+        event = _build_bash_event(
+            "python3 -c \"from pathlib import Path; Path('/clone/src/f.py').write_bytes(b'x')\""
+        )
+        result = _run_hook(event)
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_python3_append_mode_denied(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)
+        event = _build_bash_event("python3 -c \"open('/clone/src/f.py','a').write('x')\"")
+        result = _run_hook(event)
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_python3_shutil_copy_denied(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)
+        event = _build_bash_event(
+            "python3 -c \"import shutil; shutil.copy('/tmp/a', '/clone/src/f.py')\""
+        )
+        result = _run_hook(event)
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_python3_mixed_read_write_denied(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)
+        event = _build_bash_event(
+            "python3 -c \"data=open('/clone/src/a.py').read();"
+            " open('/clone/src/b.py','w').write(data)\""
+        )
+        result = _run_hook(event)
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_python_no_suffix_write_denied(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)
+        event = _build_bash_event("python -c \"open('/clone/src/foo.py','w').write('x')\"")
+        result = _run_hook(event)
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_python3_write_to_allowed_prefix_also_denied(self, monkeypatch: pytest.MonkeyPatch):
+        """Interpreter writes are denied unconditionally.
+
+        Target path cannot be reliably extracted from interpreter commands.
+        """
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)
+        event = _build_bash_event(f"python3 -c \"open('{self.PREFIX}out.txt','w').write('x')\"")
+        result = _run_hook(event)
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
 class TestRelativePathResolution:
     """Tests for relative path resolution via AUTOSKILLIT_CWD."""
 

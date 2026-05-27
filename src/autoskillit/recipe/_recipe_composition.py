@@ -13,6 +13,12 @@ from autoskillit.recipe.io import find_sub_recipe_by_name
 from autoskillit.recipe.io import load_recipe as _load_recipe_from_path
 from autoskillit.recipe.schema import Recipe, StepResultCondition, StepResultRoute  # noqa: F401
 
+FALSY_STRINGS: frozenset[str] = frozenset({"false", "0", "no", ""})
+
+
+def _is_ingredient_truthy(value: str) -> bool:
+    return bool(value) and value.lower() not in FALSY_STRINGS
+
 
 def _drop_sub_recipe_step(recipe: Any, step_name: str) -> Any:
     """Return a new Recipe with the named sub_recipe placeholder step removed."""
@@ -176,7 +182,7 @@ def _build_active_recipe(
         gate_default: str = (gate_ingredient.default or "false") if gate_ingredient else "false"
         gate_value = overrides.get(gate_name, gate_default)
 
-        if gate_value.lower() in ("true", "1", "yes"):
+        if _is_ingredient_truthy(gate_value):
             sr_path = find_sub_recipe_by_name(current_step.sub_recipe, project_dir)
             if sr_path is None:
                 raise FileNotFoundError(
@@ -240,7 +246,7 @@ def _prune_skipped_steps(
             # Literal value already resolved — evaluate directly without ingredient lookup
             value = ref
 
-        is_truthy = value.lower() in ("true", "1", "yes")
+        is_truthy = _is_ingredient_truthy(value)
         resolutions[step_name] = is_truthy
 
         if is_truthy:

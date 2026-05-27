@@ -15,6 +15,7 @@ Public API:
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -63,6 +64,31 @@ def is_path_under_exclude(path: Path, cwd: Path, prefix: str) -> bool:
         return str(rel.parts[0]) + "/" == prefix
     except ValueError:
         return False
+
+
+def derive_exclude_prefix(
+    write_watch_dirs: Sequence[Path],
+    cwd: Path,
+) -> str | None:
+    """Derive the exclude prefix from the first write-watch directory.
+
+    Returns the top-level directory name (with trailing slash) when
+    write_watch_dirs[0] is a proper subdirectory of cwd, or None when
+    write_watch_dirs is empty, write_watch_dirs[0] equals cwd (empty rel.parts),
+    or write_watch_dirs[0] is outside cwd (ValueError).
+
+    Callers must NOT use a None return as a proxy for guard suppression —
+    two semantically distinct cases both produce None.
+    """
+    if not write_watch_dirs:
+        return None
+    try:
+        rel = write_watch_dirs[0].relative_to(cwd)
+        if not rel.parts:
+            return None
+        return str(rel.parts[0]) + "/"
+    except ValueError:
+        return None
 
 
 @dataclass(frozen=True, slots=True)

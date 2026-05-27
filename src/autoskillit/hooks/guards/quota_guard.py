@@ -62,7 +62,7 @@ def main(*, cache_path_override: str | None = None) -> None:
         sys.exit(0)  # quota guard disabled for this session
     cache_path_str = settings.cache_path
     cache_max_age = settings.cache_max_age
-    log_dir = resolve_quota_log_dir()
+    log_dir = resolve_quota_log_dir(caller="quota_guard")
     ts = datetime.now(UTC).isoformat()
 
     profile = os.environ.get("AUTOSKILLIT_PROVIDER_PROFILE", "").strip()
@@ -75,6 +75,7 @@ def main(*, cache_path_override: str | None = None) -> None:
                 "cache_path": cache_path_str,
             },
             log_dir,
+            caller="quota_guard",
         )
         sys.exit(0)
 
@@ -87,6 +88,7 @@ def main(*, cache_path_override: str | None = None) -> None:
                 "cache_path": cache_path_str,
             },
             log_dir,
+            caller="quota_guard",
         )
         sys.exit(0)  # no fresh cache — fail open
 
@@ -106,6 +108,7 @@ def main(*, cache_path_override: str | None = None) -> None:
                 "cache_path": cache_path_str,
             },
             log_dir,
+            caller="quota_guard",
         )
         sys.exit(0)  # malformed cache — fail open
 
@@ -147,6 +150,7 @@ def main(*, cache_path_override: str | None = None) -> None:
                 "budget_exceeded": budget_exceeded,
             },
             log_dir,
+            caller="quota_guard",
         )
 
         if budget_exceeded:
@@ -204,6 +208,7 @@ def main(*, cache_path_override: str | None = None) -> None:
                 "utilization": utilization,
             },
             log_dir,
+            caller="quota_guard",
         )
     sys.exit(0)  # exit 0 so Claude Code parses the JSON decision
 

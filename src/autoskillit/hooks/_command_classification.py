@@ -1,8 +1,13 @@
-"""Shared command classification primitives for guard scripts."""
+"""Shared command classification primitives for guard scripts.
+
+Supported interpreters: python3?, perl, ruby, node.
+To add coverage for a new interpreter, update _INTERPRETER_RE only.
+"""
 
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 
 _INTERPRETER_RE = re.compile(
     r"(?:^|&&|\|\||;)\s*(?:env\s+)?(?:python3?|perl|ruby|node)\s+"
@@ -11,7 +16,7 @@ _INTERPRETER_RE = re.compile(
 
 _NESTED_SHELL_RE = re.compile(r"(?:^|&&|\|\||;)\s*(?:bash|sh|zsh|dash)\s+-c\s+")
 
-_PYTHON_WRITE_APIS_RE = re.compile(
+_WRITE_APIS_RE = re.compile(
     r"\.write_text\s*\(|\.write_bytes\s*\("
     r"|open\s*\([^)]*['\"][wWaA]\+?[bB]?['\"]"
     r"|shutil\.(?:copy|move|copyfile|copytree)\s*\("
@@ -26,10 +31,10 @@ _SUBPROCESS_APIS_RE = re.compile(
 def has_interpreter_write(command: str) -> bool:
     if not _INTERPRETER_RE.search(command):
         return False
-    return bool(_PYTHON_WRITE_APIS_RE.search(command))
+    return bool(_WRITE_APIS_RE.search(command))
 
 
-def has_interpreter_wrapped_command(command: str, *, target_commands: list[str]) -> bool:
+def has_interpreter_wrapped_command(command: str, *, target_commands: Sequence[str]) -> bool:
     if not _INTERPRETER_RE.search(command):
         return False
     if not _SUBPROCESS_APIS_RE.search(command):

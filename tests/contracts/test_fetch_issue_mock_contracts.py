@@ -17,7 +17,7 @@ def _collect_failures(test_file: Path) -> list[str]:
     tree = ast.parse(source)
 
     # Track dict literals assigned to named variables (for variable-based mocks)
-    variable_dicts: dict[str, tuple[int, bool]] = {}
+    variable_dicts: dict[str, tuple[int, bool, bool]] = {}
     for node in ast.walk(tree):
         if (
             isinstance(node, ast.Assign)
@@ -31,7 +31,7 @@ def _collect_failures(test_file: Path) -> list[str]:
                 for k in node.value.keys
                 if isinstance(k, ast.Constant) and isinstance(k.value, str)
             }
-            variable_dicts[var_name] = (node.lineno, "state" in keys and "body" in keys)
+            variable_dicts[var_name] = (node.lineno, "state" in keys, "body" in keys)
 
     failures = []
 
@@ -55,11 +55,16 @@ def _collect_failures(test_file: Path) -> list[str]:
         elif isinstance(value_node, ast.Name):
             var_name = value_node.id
             if var_name in variable_dicts:
-                var_lineno, has_state_and_body = variable_dicts[var_name]
-                if not has_state_and_body:
+                var_lineno, has_state, has_body = variable_dicts[var_name]
+                if not has_state:
                     failures.append(
                         f"{test_file.name}:{lineno} variable '{var_name}' "
-                        f"(defined at line {var_lineno}) missing 'state' and/or 'body' key"
+                        f"(defined at line {var_lineno}) missing 'state' key"
+                    )
+                if not has_body:
+                    failures.append(
+                        f"{test_file.name}:{lineno} variable '{var_name}' "
+                        f"(defined at line {var_lineno}) missing 'body' key"
                     )
 
     for node in ast.walk(tree):

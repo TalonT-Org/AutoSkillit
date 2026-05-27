@@ -1373,16 +1373,16 @@
       "on_result": [
         {
           "when": "${{ result.escalation_required }} == true",
-          "route": "release_issue_failure"
+          "route": "diagnose_ci"
         },
         {
           "route": "re_push_queue_fix"
         }
       ],
-      "on_failure": "release_issue_failure",
-      "on_context_limit": "release_issue_failure",
+      "on_failure": "diagnose_ci",
+      "on_context_limit": "diagnose_ci",
       "retries": 1,
-      "on_exhausted": "release_issue_failure",
+      "on_exhausted": "diagnose_ci",
       "skip_when_false": "inputs.open_pr",
       "note": "Resolves rebase conflicts on the feature branch after queue ejection. Only reached when the cheap rebase in queue_ejected_fix encountered conflicts. escalation_required=true → release_issue_failure for human review.\n"
     },
@@ -1619,16 +1619,16 @@
       "on_result": [
         {
           "when": "${{ result.escalation_required }} == true",
-          "route": "release_issue_failure"
+          "route": "diagnose_ci"
         },
         {
           "route": "re_push_direct_fix"
         }
       ],
-      "on_failure": "release_issue_failure",
-      "on_context_limit": "release_issue_failure",
+      "on_failure": "diagnose_ci",
+      "on_context_limit": "diagnose_ci",
       "retries": 1,
-      "on_exhausted": "release_issue_failure",
+      "on_exhausted": "diagnose_ci",
       "skip_when_false": "inputs.open_pr",
       "note": "Resolves rebase conflicts after direct-merge rejection. Only reached when the cheap rebase in direct_merge_conflict_fix encountered conflicts. escalation_required=true → release_issue_failure for human review.\n"
     },
@@ -1727,16 +1727,16 @@
       "on_result": [
         {
           "when": "${{ result.escalation_required }} == true",
-          "route": "release_issue_failure"
+          "route": "diagnose_ci"
         },
         {
           "route": "re_push_immediate_fix"
         }
       ],
-      "on_failure": "release_issue_failure",
-      "on_context_limit": "release_issue_failure",
+      "on_failure": "diagnose_ci",
+      "on_context_limit": "diagnose_ci",
       "retries": 1,
-      "on_exhausted": "release_issue_failure",
+      "on_exhausted": "diagnose_ci",
       "skip_when_false": "inputs.open_pr",
       "note": "Resolves rebase conflicts after immediate-merge rejection. Only reached when the cheap rebase in immediate_merge_conflict_fix encountered conflicts. escalation_required=true → release_issue_failure for human review.\n"
     },

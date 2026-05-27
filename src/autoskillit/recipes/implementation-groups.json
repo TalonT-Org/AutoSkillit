@@ -712,7 +712,7 @@
     "pre_review_rebase": {
       "tool": "run_cmd",
       "with": {
-        "cmd": "REMOTE=$(git -C ${{ context.work_dir }} remote get-url upstream 2>/dev/null | grep -qv \"^file://\" && echo upstream || echo origin) &&\ngit -C ${{ context.work_dir }} fetch \"$REMOTE\" &&\ngit -C ${{ context.work_dir }} rebase \"$REMOTE\"/${{ inputs.base_branch }}\n",
+        "cmd": "REMOTE=$((git -C ${{ context.work_dir }} remote get-url upstream | grep -qv \"^file://\") 2>/dev/null && echo upstream || echo origin) &&\ngit -C ${{ context.work_dir }} fetch \"$REMOTE\" &&\ngit -C ${{ context.work_dir }} rebase \"$REMOTE\"/${{ inputs.base_branch }}\n",
         "step_name": "pre_review_rebase"
       },
       "on_success": "re_push_review",

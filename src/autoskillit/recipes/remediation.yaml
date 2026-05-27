@@ -756,8 +756,8 @@ steps:
   pre_review_rebase:
     tool: run_cmd
     with:
-      cmd: 'REMOTE=$(git -C ${{ context.work_dir }} remote get-url upstream 2>/dev/null
-        | grep -qv "^file://" && echo upstream || echo origin) &&
+      cmd: 'REMOTE=$((git -C ${{ context.work_dir }} remote get-url upstream
+        | grep -qv "^file://") 2>/dev/null && echo upstream || echo origin) &&
 
         git -C ${{ context.work_dir }} fetch "$REMOTE" &&
 
@@ -1696,8 +1696,8 @@ steps:
   pre_resolve_rebase:
     tool: run_cmd
     with:
-      cmd: 'REMOTE=$(git -C ${{ context.work_dir }} remote get-url upstream 2>/dev/null
-        | grep -qv "^file://" && echo upstream || echo origin) &&
+      cmd: 'REMOTE=$((git -C ${{ context.work_dir }} remote get-url upstream
+        | grep -qv "^file://") 2>/dev/null && echo upstream || echo origin) &&
 
         git -C ${{ context.work_dir }} fetch "$REMOTE" &&
 

@@ -15,20 +15,10 @@ from autoskillit.config.settings import (
 pytestmark = [pytest.mark.layer("config"), pytest.mark.small]
 
 
-# ---------------------------------------------------------------------------
-# Helper test dataclass
-# ---------------------------------------------------------------------------
-
-
 @dataclasses.dataclass
 class SimpleConfig:
     x: int = 1
     y: str = "a"
-
-
-# ---------------------------------------------------------------------------
-# T1: test_coerce_value_int
-# ---------------------------------------------------------------------------
 
 
 def test_coerce_value_int() -> None:
@@ -39,11 +29,6 @@ def test_coerce_value_int() -> None:
     assert "x.y" in str(exc_info.value)
 
 
-# ---------------------------------------------------------------------------
-# T2: test_coerce_value_float
-# ---------------------------------------------------------------------------
-
-
 def test_coerce_value_float() -> None:
     assert _coerce_value(1.5, float, "x.y") == 1.5
     assert _coerce_value("2.5", float, "x.y") == 2.5
@@ -52,19 +37,9 @@ def test_coerce_value_float() -> None:
     assert "x.y" in str(exc_info.value)
 
 
-# ---------------------------------------------------------------------------
-# T3: test_coerce_value_bool
-# ---------------------------------------------------------------------------
-
-
 def test_coerce_value_bool() -> None:
     assert _coerce_value(True, bool, "x.y") is True
     assert _coerce_value(0, bool, "x.y") is False
-
-
-# ---------------------------------------------------------------------------
-# T4: test_coerce_value_str
-# ---------------------------------------------------------------------------
 
 
 def test_coerce_value_str() -> None:
@@ -72,38 +47,18 @@ def test_coerce_value_str() -> None:
     assert _coerce_value(42, str, "x.y") == "42"
 
 
-# ---------------------------------------------------------------------------
-# T5: test_coerce_value_list
-# ---------------------------------------------------------------------------
-
-
 def test_coerce_value_list() -> None:
     assert _coerce_value(["a", "b"], list[str], "x.y") == ["a", "b"]
     assert _coerce_value(("a",), list[str], "x.y") == ["a"]
-
-
-# ---------------------------------------------------------------------------
-# T6: test_coerce_value_set
-# ---------------------------------------------------------------------------
 
 
 def test_coerce_value_set() -> None:
     assert _coerce_value(["a", "b"], set[str], "x.y") == {"a", "b"}
 
 
-# ---------------------------------------------------------------------------
-# T7: test_coerce_value_dict_passthrough
-# ---------------------------------------------------------------------------
-
-
 def test_coerce_value_dict_passthrough() -> None:
     d = {"k": "v"}
     assert _coerce_value(d, dict[str, str], "x.y") is d
-
-
-# ---------------------------------------------------------------------------
-# T8: test_coerce_value_str_or_none
-# ---------------------------------------------------------------------------
 
 
 def test_coerce_value_str_or_none() -> None:
@@ -112,20 +67,10 @@ def test_coerce_value_str_or_none() -> None:
     assert _coerce_value(None, str | None, "x.y") is None
 
 
-# ---------------------------------------------------------------------------
-# T9: test_coerce_value_list_or_none
-# ---------------------------------------------------------------------------
-
-
 def test_coerce_value_list_or_none() -> None:
     assert _coerce_value(["a"], list[str] | None, "x.y") == ["a"]
     assert _coerce_value([], list[str] | None, "x.y") is None
     assert _coerce_value(None, list[str] | None, "x.y") is None
-
-
-# ---------------------------------------------------------------------------
-# T10: test_coerce_value_bool_or_none_preserves_false
-# ---------------------------------------------------------------------------
 
 
 def test_coerce_value_bool_or_none_preserves_false() -> None:
@@ -134,20 +79,10 @@ def test_coerce_value_bool_or_none_preserves_false() -> None:
     assert _coerce_value(None, bool | None, "x.y") is None
 
 
-# ---------------------------------------------------------------------------
-# T11: test_build_subconfig_simple
-# ---------------------------------------------------------------------------
-
-
 def test_build_subconfig_simple() -> None:
     result = _build_subconfig(SimpleConfig, {"x": 5, "y": "b"}, "simple")
     assert result.x == 5
     assert result.y == "b"
-
-
-# ---------------------------------------------------------------------------
-# T12: test_build_subconfig_missing_key_uses_default
-# ---------------------------------------------------------------------------
 
 
 def test_build_subconfig_missing_key_uses_default() -> None:
@@ -156,21 +91,11 @@ def test_build_subconfig_missing_key_uses_default() -> None:
     assert result.y == "a"
 
 
-# ---------------------------------------------------------------------------
-# T13: test_build_subconfig_yaml_key_alias
-# ---------------------------------------------------------------------------
-
-
 def test_build_subconfig_yaml_key_alias(monkeypatch: pytest.MonkeyPatch) -> None:
     # Temporarily add an alias for "simple.x" -> "aliased_x"
     monkeypatch.setitem(_YAML_KEY_ALIASES, ("simple", "x"), "aliased_x")
     result = _build_subconfig(SimpleConfig, {"aliased_x": 99}, "simple")
     assert result.x == 99
-
-
-# ---------------------------------------------------------------------------
-# T14: test_build_subconfig_field_override
-# ---------------------------------------------------------------------------
 
 
 def test_build_subconfig_field_override(monkeypatch: pytest.MonkeyPatch) -> None:

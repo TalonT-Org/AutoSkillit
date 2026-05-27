@@ -123,7 +123,9 @@ def test_init_session_includes_non_disabled_skills(tmp_path: Path) -> None:
     skill_dir = tmp_path / "skills" / "safe-skill"
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text(
-        "---\nname: safe-skill\ndescription: Safe skill for testing.\ncategories:\n  - audit\n---\n# Safe Skill\n"
+        "---\nname: safe-skill\n"
+        "description: Safe skill for testing.\n"
+        "categories:\n  - audit\n---\n# Safe Skill\n"
     )
 
     provider = MagicMock()
@@ -135,7 +137,11 @@ def test_init_session_includes_non_disabled_skills(tmp_path: Path) -> None:
             categories=frozenset({"audit"}),
         )
     ]
-    provider.get_skill_content.return_value = "---\nname: safe-skill\ndescription: Safe skill for testing.\ncategories:\n  - audit\n---\n# Safe Skill\n"
+    provider.get_skill_content.return_value = (
+        "---\nname: safe-skill\n"
+        "description: Safe skill for testing.\n"
+        "categories:\n  - audit\n---\n# Safe Skill\n"
+    )
 
     config = make_test_config(subsets=make_subsetsconfig(disabled=["github"]))
     root = tmp_path / "sessions"
@@ -336,7 +342,9 @@ def test_init_session_recipe_packs_enables_default_disabled(tmp_path: Path) -> N
     skill_dir = tmp_path / "skills" / "research-skill"
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text(
-        "---\nname: research-skill\ndescription: Research skill for testing.\ncategories:\n  - research\n---\n# Research Skill\n"
+        "---\nname: research-skill\n"
+        "description: Research skill for testing.\n"
+        "categories:\n  - research\n---\n# Research Skill\n"
     )
 
     provider = MagicMock()
@@ -348,7 +356,11 @@ def test_init_session_recipe_packs_enables_default_disabled(tmp_path: Path) -> N
             categories=frozenset({"research"}),
         )
     ]
-    provider.get_skill_content.return_value = "---\nname: research-skill\ndescription: Research skill for testing.\ncategories:\n  - research\n---\n# Research Skill\n"
+    provider.get_skill_content.return_value = (
+        "---\nname: research-skill\n"
+        "description: Research skill for testing.\n"
+        "categories:\n  - research\n---\n# Research Skill\n"
+    )
 
     root = tmp_path / "sessions"
     root.mkdir()

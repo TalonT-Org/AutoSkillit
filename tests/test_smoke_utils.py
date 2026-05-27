@@ -1945,7 +1945,8 @@ def test_consolidate_health_reports_empty_dir(tmp_path):
 
 # T3.3
 def test_consolidate_health_reports_no_dir(tmp_path):
-    """T3.3: consolidate_health_reports returns 'no directory' when health-reports does not exist."""
+    """T3.3: consolidate_health_reports returns 'no directory'
+    when health-reports does not exist."""
 
     result = consolidate_health_reports(diagnostics_log_dir=str(tmp_path), kitchen_id="campaign-1")
 

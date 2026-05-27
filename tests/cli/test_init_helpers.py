@@ -121,7 +121,8 @@ class TestInitBackendResolution:
 
 
 class TestRegisterAllBackendDispatch:
-    """Dispatch tests: codex calls ensure_codex_mcp_registered, claude-code calls _register_mcp_server."""
+    """Dispatch tests: codex calls ensure_codex_mcp_registered,
+    claude-code calls _register_mcp_server."""
 
     def _setup_register_all(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, backend_name: str

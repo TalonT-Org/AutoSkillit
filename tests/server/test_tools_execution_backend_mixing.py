@@ -18,7 +18,8 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 async def test_codex_backend_minimax_profile_with_anthropic_base_url_derives_override(
     tool_ctx_kitchen_open, tmp_path, monkeypatch
 ) -> None:
-    """Codex backend + minimax profile with ANTHROPIC_BASE_URL -> backend_override='claude-code'."""
+    """Codex backend + minimax profile with ANTHROPIC_BASE_URL
+    -> backend_override='claude-code'."""
     from unittest.mock import MagicMock
 
     from autoskillit.core.types._type_protocols_backend import CodingAgentBackend

@@ -519,7 +519,8 @@ class TestBuildTestScopeCoreCascade:
             assert excluded not in dir_names, f"narrow cascade should not include {excluded}"
 
     def test_type_protocols_backend_narrow_cascade(self, tmp_path: Path) -> None:
-        """_type_protocols_backend -> cascade of {"core", "execution", "pipeline", "cli", "workspace"} only."""
+        """_type_protocols_backend -> cascade of
+        {"core", "execution", "pipeline", "cli", "workspace"} only."""
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
             changed_files={"src/autoskillit/core/types/_type_protocols_backend.py"},

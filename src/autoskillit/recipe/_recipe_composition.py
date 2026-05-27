@@ -11,12 +11,16 @@ import regex as re
 from autoskillit.core import YAMLError
 from autoskillit.recipe.io import find_sub_recipe_by_name
 from autoskillit.recipe.io import load_recipe as _load_recipe_from_path
-from autoskillit.recipe.schema import Recipe, StepResultCondition, StepResultRoute  # noqa: F401
+from autoskillit.recipe.schema import (
+    _TERMINAL_TARGETS,
+    Recipe,
+    RecipeStep,
+    StepResultCondition,
+    StepResultRoute,
+)  # noqa: F401
 
-_TERMINAL_TARGETS: frozenset[str] = frozenset({"done", "escalate"})
 
-
-def _collect_all_route_targets(step: Any) -> set[str]:
+def _collect_all_route_targets(step: RecipeStep) -> set[str]:
     """Return all route target names from every routing field on step.
 
     Mirrors _extract_routing_edges() field enumeration but returns plain strings.
@@ -52,7 +56,7 @@ def _strip_step_block(raw: str, step_name: str) -> str:
     )
 
 
-def _validate_no_dangling_routes(recipe: Any) -> list[str]:
+def _validate_no_dangling_routes(recipe: Recipe) -> list[str]:
     """Return error strings for any route targets that do not exist in recipe.steps."""
     known = frozenset(recipe.steps.keys())
     errors: list[str] = []

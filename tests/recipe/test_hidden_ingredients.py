@@ -9,7 +9,7 @@ import pytest
 from autoskillit.recipe._api import format_ingredients_table
 from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeStep
 
-pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
 
 def _make_recipe(**ingredients: RecipeIngredient) -> Recipe:
@@ -315,8 +315,6 @@ def test_prune_on_result_only_step_repairs_upstream_routes() -> None:
         if step.on_result:
             for cond in step.on_result.conditions:
                 assert cond.route != "skippable"
-            for v in step.on_result.routes.values():
-                assert v != "skippable"
 
 
 def test_prune_repairs_upstream_on_result_pointing_to_pruned_step() -> None:

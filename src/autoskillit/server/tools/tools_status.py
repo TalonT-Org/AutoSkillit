@@ -44,7 +44,6 @@ async def kitchen_status() -> str:
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
         with structlog.contextvars.bound_contextvars(tool="kitchen_status"):
             from autoskillit.server import _get_config, _get_ctx, version_info
 
@@ -99,7 +98,6 @@ async def get_pipeline_report(clear: bool = False) -> str:
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
         with structlog.contextvars.bound_contextvars(tool="get_pipeline_report"):
             from autoskillit.server._state import _startup_ready
 
@@ -176,7 +174,6 @@ async def get_token_summary(clear: bool = False, format: str = "json", order_id:
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
         with structlog.contextvars.bound_contextvars(tool="get_token_summary"):
             from autoskillit.server import _get_ctx
 
@@ -238,7 +235,6 @@ async def get_timing_summary(clear: bool = False, format: str = "json", order_id
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
         with structlog.contextvars.bound_contextvars(tool="get_timing_summary"):
             from autoskillit.server import _get_ctx
 
@@ -284,7 +280,6 @@ async def analyze_tool_sequences(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
         with structlog.contextvars.bound_contextvars(tool="analyze_tool_sequences"):
             _valid_formats = {"table", "mermaid", "dot"}
             if format not in _valid_formats:
@@ -397,7 +392,6 @@ async def get_quota_events(n: int = 50) -> str:
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
         with structlog.contextvars.bound_contextvars(tool="get_quota_events"):
             from autoskillit.server import _get_ctx
 
@@ -439,7 +433,6 @@ async def write_telemetry_files(
         return gate
 
     try:
-        structlog.contextvars.clear_contextvars()
         with structlog.contextvars.bound_contextvars(
             tool="write_telemetry_files", output_dir=output_dir
         ):
@@ -523,7 +516,6 @@ async def read_db(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
         with structlog.contextvars.bound_contextvars(tool="read_db"):
             logger.info("read_db", db_path=db_path, query=query[:80])
             await _notify(

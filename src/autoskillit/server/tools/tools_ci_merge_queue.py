@@ -50,39 +50,38 @@ async def toggle_auto_merge(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(
+        with structlog.contextvars.bound_contextvars(
             tool="toggle_auto_merge", pr_number=pr_number, target_branch=target_branch
-        )
-        await _notify(
-            ctx,
-            "info",
-            f"Toggling auto-merge for PR #{pr_number} on {target_branch!r}",
-            "autoskillit.toggle_auto_merge",
-            extra={"pr_number": pr_number, "target_branch": target_branch},
-        )
-
-        from autoskillit.server import _get_ctx
-
-        tool_ctx = _get_ctx()
-
-        if tool_ctx.merge_queue_watcher is None:
-            return json.dumps(
-                {
-                    "success": False,
-                    "error": "merge_queue_watcher not configured (missing GITHUB_TOKEN?)",
-                }
+        ):
+            await _notify(
+                ctx,
+                "info",
+                f"Toggling auto-merge for PR #{pr_number} on {target_branch!r}",
+                "autoskillit.toggle_auto_merge",
+                extra={"pr_number": pr_number, "target_branch": target_branch},
             )
 
-        resolved_repo = await resolve_repo_from_remote(cwd, hint=remote_url or repo or None)
+            from autoskillit.server import _get_ctx
 
-        result = await tool_ctx.merge_queue_watcher.toggle(
-            pr_number=pr_number,
-            target_branch=target_branch,
-            repo=resolved_repo or None,
-            cwd=cwd,
-        )
-        return json.dumps(result)
+            tool_ctx = _get_ctx()
+
+            if tool_ctx.merge_queue_watcher is None:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "error": "merge_queue_watcher not configured (missing GITHUB_TOKEN?)",
+                    }
+                )
+
+            resolved_repo = await resolve_repo_from_remote(cwd, hint=remote_url or repo or None)
+
+            result = await tool_ctx.merge_queue_watcher.toggle(
+                pr_number=pr_number,
+                target_branch=target_branch,
+                repo=resolved_repo or None,
+                cwd=cwd,
+            )
+            return json.dumps(result)
     except Exception as exc:
         logger.error("toggle_auto_merge unhandled exception", exc_info=True)
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
@@ -123,48 +122,47 @@ async def enqueue_pr(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(
+        with structlog.contextvars.bound_contextvars(
             tool="enqueue_pr", pr_number=pr_number, target_branch=target_branch
-        )
-        await _notify(
-            ctx,
-            "info",
-            f"Enrolling PR #{pr_number} in merge queue on {target_branch!r}",
-            "autoskillit.enqueue_pr",
-            extra={"pr_number": pr_number, "target_branch": target_branch},
-        )
-
-        from autoskillit.server import _get_ctx
-
-        tool_ctx = _get_ctx()
-
-        if tool_ctx.merge_queue_watcher is None:
-            return json.dumps(
-                {
-                    "success": False,
-                    "error": "merge_queue_watcher not configured (missing GITHUB_TOKEN?)",
-                }
+        ):
+            await _notify(
+                ctx,
+                "info",
+                f"Enrolling PR #{pr_number} in merge queue on {target_branch!r}",
+                "autoskillit.enqueue_pr",
+                extra={"pr_number": pr_number, "target_branch": target_branch},
             )
 
-        resolved_repo = await resolve_repo_from_remote(cwd, hint=remote_url or repo or None)
+            from autoskillit.server import _get_ctx
 
-        _start = time.monotonic()
-        try:
-            result = await tool_ctx.merge_queue_watcher.enqueue(
-                pr_number=pr_number,
-                target_branch=target_branch,
-                repo=resolved_repo or None,
-                cwd=cwd,
-                auto_merge_available=auto_merge_available,
-            )
-            return json.dumps(result)
-        except Exception as exc:
-            logger.error("enqueue_pr watcher error", exc_info=True)
-            return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
-        finally:
-            if step_name:
-                tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
+            tool_ctx = _get_ctx()
+
+            if tool_ctx.merge_queue_watcher is None:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "error": "merge_queue_watcher not configured (missing GITHUB_TOKEN?)",
+                    }
+                )
+
+            resolved_repo = await resolve_repo_from_remote(cwd, hint=remote_url or repo or None)
+
+            _start = time.monotonic()
+            try:
+                result = await tool_ctx.merge_queue_watcher.enqueue(
+                    pr_number=pr_number,
+                    target_branch=target_branch,
+                    repo=resolved_repo or None,
+                    cwd=cwd,
+                    auto_merge_available=auto_merge_available,
+                )
+                return json.dumps(result)
+            except Exception as exc:
+                logger.error("enqueue_pr watcher error", exc_info=True)
+                return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+            finally:
+                if step_name:
+                    tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
     except Exception as exc:
         logger.error("enqueue_pr unhandled exception", exc_info=True)
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
@@ -240,57 +238,56 @@ async def wait_for_merge_queue(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(
+        with structlog.contextvars.bound_contextvars(
             tool="wait_for_merge_queue", pr_number=pr_number, target_branch=target_branch
-        )
-        await _notify(
-            ctx,
-            "info",
-            f"Waiting for PR #{pr_number} in merge queue on {target_branch!r}",
-            "autoskillit.wait_for_merge_queue",
-            extra={"pr_number": pr_number, "target_branch": target_branch},
-        )
-
-        from autoskillit.server import _get_ctx
-
-        tool_ctx = _get_ctx()
-
-        if tool_ctx.merge_queue_watcher is None:
-            if step_name:
-                tool_ctx.timing_log.record(step_name, 0.0)
-            return json.dumps(
-                {
-                    "success": False,
-                    "pr_state": "error",
-                    "reason": "merge_queue_watcher not configured (missing GITHUB_TOKEN?)",
-                }
+        ):
+            await _notify(
+                ctx,
+                "info",
+                f"Waiting for PR #{pr_number} in merge queue on {target_branch!r}",
+                "autoskillit.wait_for_merge_queue",
+                extra={"pr_number": pr_number, "target_branch": target_branch},
             )
 
-        resolved_repo = await resolve_repo_from_remote(cwd, hint=remote_url or repo or None)
+            from autoskillit.server import _get_ctx
 
-        _start = time.monotonic()
-        try:
-            result = await tool_ctx.merge_queue_watcher.wait(
-                pr_number=pr_number,
-                target_branch=target_branch,
-                repo=resolved_repo or None,
-                cwd=cwd,
-                timeout_seconds=timeout_seconds,
-                poll_interval=poll_interval,
-                stall_grace_period=stall_grace_period,
-                max_stall_retries=max_stall_retries,
-                not_in_queue_confirmation_cycles=not_in_queue_confirmation_cycles,
-                max_inconclusive_retries=max_inconclusive_retries,
-                auto_merge_available=auto_merge_available,
-            )
-            return json.dumps(result)
-        except Exception as exc:
-            logger.error("wait_for_merge_queue ci_watcher error", exc_info=True)
-            return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
-        finally:
-            if step_name:
-                tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
+            tool_ctx = _get_ctx()
+
+            if tool_ctx.merge_queue_watcher is None:
+                if step_name:
+                    tool_ctx.timing_log.record(step_name, 0.0)
+                return json.dumps(
+                    {
+                        "success": False,
+                        "pr_state": "error",
+                        "reason": "merge_queue_watcher not configured (missing GITHUB_TOKEN?)",
+                    }
+                )
+
+            resolved_repo = await resolve_repo_from_remote(cwd, hint=remote_url or repo or None)
+
+            _start = time.monotonic()
+            try:
+                result = await tool_ctx.merge_queue_watcher.wait(
+                    pr_number=pr_number,
+                    target_branch=target_branch,
+                    repo=resolved_repo or None,
+                    cwd=cwd,
+                    timeout_seconds=timeout_seconds,
+                    poll_interval=poll_interval,
+                    stall_grace_period=stall_grace_period,
+                    max_stall_retries=max_stall_retries,
+                    not_in_queue_confirmation_cycles=not_in_queue_confirmation_cycles,
+                    max_inconclusive_retries=max_inconclusive_retries,
+                    auto_merge_available=auto_merge_available,
+                )
+                return json.dumps(result)
+            except Exception as exc:
+                logger.error("wait_for_merge_queue ci_watcher error", exc_info=True)
+                return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+            finally:
+                if step_name:
+                    tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
     except Exception as exc:
         logger.error("wait_for_merge_queue unhandled exception", exc_info=True)
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})

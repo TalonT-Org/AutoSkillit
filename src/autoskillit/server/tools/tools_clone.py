@@ -72,48 +72,52 @@ async def clone_repo(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(tool="clone_repo", source_dir=source_dir)
-        logger.info("clone_repo", source_dir=source_dir, run_name=run_name, branch=branch)
-        await _notify(
-            ctx,
-            "info",
-            f"clone_repo: {source_dir!r} run_name={run_name!r} branch={branch!r}",
-            "autoskillit.clone_repo",
-            extra={
-                "source_dir": source_dir,
-                "run_name": run_name,
-                "branch": branch,
-                "strategy": strategy,
-                "remote_url": remote_url,
-            },
-        )
-
-        from autoskillit.server import _get_ctx
-
-        tool_ctx = _get_ctx()
-        if tool_ctx.clone_mgr is None:
-            return json.dumps({"error": "Clone manager not configured"})
-
-        _start = time.monotonic()
-        try:
-            result = await asyncio.to_thread(
-                tool_ctx.clone_mgr.clone_repo, source_dir, run_name, branch, strategy, remote_url
-            )
-        except (ValueError, RuntimeError) as exc:
+        with structlog.contextvars.bound_contextvars(tool="clone_repo", source_dir=source_dir):
+            logger.info("clone_repo", source_dir=source_dir, run_name=run_name, branch=branch)
             await _notify(
                 ctx,
-                "error",
-                "clone_repo failed",
+                "info",
+                f"clone_repo: {source_dir!r} run_name={run_name!r} branch={branch!r}",
                 "autoskillit.clone_repo",
-                extra={"reason": str(exc)},
+                extra={
+                    "source_dir": source_dir,
+                    "run_name": run_name,
+                    "branch": branch,
+                    "strategy": strategy,
+                    "remote_url": remote_url,
+                },
             )
-            return json.dumps({"error": str(exc)})
-        finally:
-            if step_name:
-                tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
-        return json.dumps(result)
+            from autoskillit.server import _get_ctx
+
+            tool_ctx = _get_ctx()
+            if tool_ctx.clone_mgr is None:
+                return json.dumps({"error": "Clone manager not configured"})
+
+            _start = time.monotonic()
+            try:
+                result = await asyncio.to_thread(
+                    tool_ctx.clone_mgr.clone_repo,
+                    source_dir,
+                    run_name,
+                    branch,
+                    strategy,
+                    remote_url,
+                )
+            except (ValueError, RuntimeError) as exc:
+                await _notify(
+                    ctx,
+                    "error",
+                    "clone_repo failed",
+                    "autoskillit.clone_repo",
+                    extra={"reason": str(exc)},
+                )
+                return json.dumps({"error": str(exc)})
+            finally:
+                if step_name:
+                    tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
+
+            return json.dumps(result)
     except Exception as exc:
         logger.error("clone_repo unhandled exception", exc_info=True)
         return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
@@ -144,30 +148,29 @@ async def remove_clone(
     try:
         if (gate := _require_enabled()) is not None:
             return gate
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(tool="remove_clone", clone_path=clone_path)
-        logger.info("remove_clone", clone_path=clone_path, keep=keep)
-        await _notify(
-            ctx,
-            "info",
-            f"remove_clone: {clone_path!r} keep={keep}",
-            "autoskillit.remove_clone",
-            extra={"clone_path": clone_path, "keep": keep},
-        )
+        with structlog.contextvars.bound_contextvars(tool="remove_clone", clone_path=clone_path):
+            logger.info("remove_clone", clone_path=clone_path, keep=keep)
+            await _notify(
+                ctx,
+                "info",
+                f"remove_clone: {clone_path!r} keep={keep}",
+                "autoskillit.remove_clone",
+                extra={"clone_path": clone_path, "keep": keep},
+            )
 
-        from autoskillit.server import _get_ctx
+            from autoskillit.server import _get_ctx
 
-        tool_ctx = _get_ctx()
-        if tool_ctx.clone_mgr is None:
-            return json.dumps({"removed": "false", "reason": "Clone manager not configured"})
+            tool_ctx = _get_ctx()
+            if tool_ctx.clone_mgr is None:
+                return json.dumps({"removed": "false", "reason": "Clone manager not configured"})
 
-        _start = time.monotonic()
-        try:
-            result = await asyncio.to_thread(tool_ctx.clone_mgr.remove_clone, clone_path, keep)
-            return json.dumps(result)
-        finally:
-            if step_name:
-                tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
+            _start = time.monotonic()
+            try:
+                result = await asyncio.to_thread(tool_ctx.clone_mgr.remove_clone, clone_path, keep)
+                return json.dumps(result)
+            finally:
+                if step_name:
+                    tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
     except Exception as exc:
         logger.error("remove_clone unhandled exception", exc_info=True)
         return json.dumps({"removed": "false", "reason": f"unexpected error: {exc}"})
@@ -210,72 +213,71 @@ async def push_to_remote(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(tool="push_to_remote", clone_path=clone_path)
-        logger.info(
-            "push_to_remote",
-            clone_path=clone_path,
-            source_dir=source_dir,
-            remote_url=remote_url,
-            branch=branch,
-        )
-        await _notify(
-            ctx,
-            "info",
-            f"push_to_remote: {clone_path!r} → branch={branch!r}",
-            "autoskillit.push_to_remote",
-            extra={
-                "clone_path": clone_path,
-                "source_dir": source_dir,
-                "remote_url": remote_url,
-                "branch": branch,
-            },
-        )
-
-        from autoskillit.server import _get_ctx
-
-        tool_ctx = _get_ctx()
-        clone_mgr = tool_ctx.clone_mgr
-        if clone_mgr is None:
-            return json.dumps({"error": "Clone manager not configured", "stderr": ""})
-
-        _start = time.monotonic()
-        try:
-            result = await asyncio.to_thread(
-                lambda: clone_mgr.push_to_remote(
-                    clone_path,
-                    source_dir,
-                    branch,
-                    remote_url=remote_url,
-                    protected_branches=tool_ctx.config.safety.protected_branches,
-                    force=force.strip().lower() == "true",
-                )
+        with structlog.contextvars.bound_contextvars(tool="push_to_remote", clone_path=clone_path):
+            logger.info(
+                "push_to_remote",
+                clone_path=clone_path,
+                source_dir=source_dir,
+                remote_url=remote_url,
+                branch=branch,
+            )
+            await _notify(
+                ctx,
+                "info",
+                f"push_to_remote: {clone_path!r} → branch={branch!r}",
+                "autoskillit.push_to_remote",
+                extra={
+                    "clone_path": clone_path,
+                    "source_dir": source_dir,
+                    "remote_url": remote_url,
+                    "branch": branch,
+                },
             )
 
-            if not result.get("success"):
-                await _notify(
-                    ctx,
-                    "error",
-                    "push_to_remote failed",
-                    "autoskillit.push_to_remote",
-                    extra={
-                        "stderr": result.get("stderr", ""),
-                        "error_type": result.get("error_type", ""),
-                    },
-                )
-                return json.dumps(
-                    {
-                        "success": False,
-                        "error": "push failed",
-                        "stderr": result.get("stderr", ""),
-                        "error_type": result.get("error_type", ""),
-                    }
+            from autoskillit.server import _get_ctx
+
+            tool_ctx = _get_ctx()
+            clone_mgr = tool_ctx.clone_mgr
+            if clone_mgr is None:
+                return json.dumps({"error": "Clone manager not configured", "stderr": ""})
+
+            _start = time.monotonic()
+            try:
+                result = await asyncio.to_thread(
+                    lambda: clone_mgr.push_to_remote(
+                        clone_path,
+                        source_dir,
+                        branch,
+                        remote_url=remote_url,
+                        protected_branches=tool_ctx.config.safety.protected_branches,
+                        force=force.strip().lower() == "true",
+                    )
                 )
 
-            return json.dumps(result)
-        finally:
-            if step_name:
-                tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
+                if not result.get("success"):
+                    await _notify(
+                        ctx,
+                        "error",
+                        "push_to_remote failed",
+                        "autoskillit.push_to_remote",
+                        extra={
+                            "stderr": result.get("stderr", ""),
+                            "error_type": result.get("error_type", ""),
+                        },
+                    )
+                    return json.dumps(
+                        {
+                            "success": False,
+                            "error": "push failed",
+                            "stderr": result.get("stderr", ""),
+                            "error_type": result.get("error_type", ""),
+                        }
+                    )
+
+                return json.dumps(result)
+            finally:
+                if step_name:
+                    tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
     except Exception as exc:
         logger.error("push_to_remote unhandled exception", exc_info=True)
         return json.dumps(
@@ -314,55 +316,57 @@ async def register_clone_status(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(tool="register_clone_status", clone_path=clone_path)
-        logger.info("register_clone_status", clone_path=clone_path, status=status)
+        with structlog.contextvars.bound_contextvars(
+            tool="register_clone_status", clone_path=clone_path
+        ):
+            logger.info("register_clone_status", clone_path=clone_path, status=status)
 
-        if status not in ("success", "error", "unconfirmed"):
-            return json.dumps(
-                {
-                    "registered": "false",
-                    "reason": (
-                        f"Invalid status '{status}'. Must be 'success', 'error', or 'unconfirmed'."
-                    ),
-                }
-            )
+            if status not in ("success", "error", "unconfirmed"):
+                return json.dumps(
+                    {
+                        "registered": "false",
+                        "reason": (
+                            f"Invalid status '{status}'."
+                            " Must be 'success', 'error', or 'unconfirmed'."
+                        ),
+                    }
+                )
 
-        from autoskillit.server import _get_ctx
+            from autoskillit.server import _get_ctx
 
-        tool_ctx = _get_ctx()
-        owner = os.environ.get(CAMPAIGN_ID_ENV_VAR, "") or tool_ctx.kitchen_id
-        if owner == "":
-            return json.dumps(
-                {
-                    "registered": "false",
-                    "reason": "no active kitchen (kitchen_id empty) — cannot register clone",
-                }
+            tool_ctx = _get_ctx()
+            owner = os.environ.get(CAMPAIGN_ID_ENV_VAR, "") or tool_ctx.kitchen_id
+            if owner == "":
+                return json.dumps(
+                    {
+                        "registered": "false",
+                        "reason": "no active kitchen (kitchen_id empty) — cannot register clone",
+                    }
+                )
+            _start = time.monotonic()
+            typed_status: Literal["success", "error", "unconfirmed"] = (
+                "success"
+                if status == "success"
+                else "unconfirmed"
+                if status == "unconfirmed"
+                else "error"
             )
-        _start = time.monotonic()
-        typed_status: Literal["success", "error", "unconfirmed"] = (
-            "success"
-            if status == "success"
-            else "unconfirmed"
-            if status == "unconfirmed"
-            else "error"
-        )
-        try:
-            result = await asyncio.to_thread(
-                clone_registry.register_clone,
-                clone_path,
-                typed_status,
-                owner,
-                registry_path,
-                tool_ctx.temp_dir,
-            )
-            return json.dumps(result)
-        except Exception as exc:
-            logger.warning("register_clone_status failed", exc_info=True)
-            return json.dumps({"registered": "false", "reason": str(exc)})
-        finally:
-            if step_name:
-                tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
+            try:
+                result = await asyncio.to_thread(
+                    clone_registry.register_clone,
+                    clone_path,
+                    typed_status,
+                    owner,
+                    registry_path,
+                    tool_ctx.temp_dir,
+                )
+                return json.dumps(result)
+            except Exception as exc:
+                logger.warning("register_clone_status failed", exc_info=True)
+                return json.dumps({"registered": "false", "reason": str(exc)})
+            finally:
+                if step_name:
+                    tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
     except Exception as exc:
         logger.error("register_clone_status unhandled exception", exc_info=True)
         return json.dumps({"registered": "false", "reason": f"{type(exc).__name__}: {exc}"})
@@ -401,55 +405,54 @@ async def batch_cleanup_clones(
     try:
         if (gate := _require_enabled()) is not None:
             return gate
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(tool="batch_cleanup_clones")
-        logger.info("batch_cleanup_clones", registry_path=registry_path, all_owners=all_owners)
+        with structlog.contextvars.bound_contextvars(tool="batch_cleanup_clones"):
+            logger.info("batch_cleanup_clones", registry_path=registry_path, all_owners=all_owners)
 
-        from autoskillit.server import _get_ctx
+            from autoskillit.server import _get_ctx
 
-        tool_ctx = _get_ctx()
-        if tool_ctx.clone_mgr is None:
-            return json.dumps(
-                {
-                    "deleted": [],
-                    "delete_failures": [],
-                    "preserved": [],
-                    "error": "Clone manager not configured",
-                }
-            )
-
-        is_escape_hatch = all_owners.strip().lower() == "true"
-        owner_filter_resolved: str | None
-        if is_escape_hatch:
-            owner_filter_resolved = None
-        elif owner_filter:
-            owner_filter_resolved = owner_filter
-        else:
-            owner_filter_resolved = tool_ctx.kitchen_id
-            if owner_filter_resolved == "":
+            tool_ctx = _get_ctx()
+            if tool_ctx.clone_mgr is None:
                 return json.dumps(
                     {
                         "deleted": [],
                         "delete_failures": [],
                         "preserved": [],
-                        "error": "no active kitchen (kitchen_id empty) — "
-                        "pass all_owners='true' or owner_filter to force-cleanup",
+                        "error": "Clone manager not configured",
                     }
                 )
 
-        _start = time.monotonic()
-        try:
-            result = await asyncio.to_thread(
-                clone_registry.batch_delete,
-                registry_path,
-                tool_ctx.clone_mgr.remove_clone,
-                tool_ctx.temp_dir,
-                owner_filter_resolved,
-            )
-            return json.dumps(result)
-        finally:
-            if step_name:
-                tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
+            is_escape_hatch = all_owners.strip().lower() == "true"
+            owner_filter_resolved: str | None
+            if is_escape_hatch:
+                owner_filter_resolved = None
+            elif owner_filter:
+                owner_filter_resolved = owner_filter
+            else:
+                owner_filter_resolved = tool_ctx.kitchen_id
+                if owner_filter_resolved == "":
+                    return json.dumps(
+                        {
+                            "deleted": [],
+                            "delete_failures": [],
+                            "preserved": [],
+                            "error": "no active kitchen (kitchen_id empty) — "
+                            "pass all_owners='true' or owner_filter to force-cleanup",
+                        }
+                    )
+
+            _start = time.monotonic()
+            try:
+                result = await asyncio.to_thread(
+                    clone_registry.batch_delete,
+                    registry_path,
+                    tool_ctx.clone_mgr.remove_clone,
+                    tool_ctx.temp_dir,
+                    owner_filter_resolved,
+                )
+                return json.dumps(result)
+            finally:
+                if step_name:
+                    tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
     except Exception as exc:
         logger.warning("batch_cleanup_clones failed", exc_info=True)
         return json.dumps({"deleted": [], "preserved": [], "error": str(exc)})
@@ -518,96 +521,104 @@ async def bootstrap_clone(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(
+        with structlog.contextvars.bound_contextvars(
             tool="bootstrap_clone", source_dir=source_dir, base_branch=base_branch
-        )
-        logger.info(
-            "bootstrap_clone", source_dir=source_dir, run_name=run_name, base_branch=base_branch
-        )
-        await _notify(
-            ctx,
-            "info",
-            f"bootstrap_clone: {source_dir!r} run_name={run_name!r} base_branch={base_branch!r}",
-            "autoskillit.bootstrap_clone",
-            extra={
-                "source_dir": source_dir,
-                "run_name": run_name,
-                "base_branch": base_branch,
-                "branch": branch,
-            },
-        )
-
-        from autoskillit.server import _get_ctx
-
-        tool_ctx = _get_ctx()
-        if tool_ctx.clone_mgr is None:
-            return json.dumps({"error": "Clone manager not configured"})
-
-        _total_start = time.monotonic()
-
-        _clone_start = time.monotonic()
-        try:
-            clone_result = await asyncio.to_thread(
-                tool_ctx.clone_mgr.clone_repo, source_dir, run_name, branch, strategy, remote_url
+        ):
+            logger.info(
+                "bootstrap_clone",
+                source_dir=source_dir,
+                run_name=run_name,
+                base_branch=base_branch,
             )
-        except (ValueError, RuntimeError) as exc:
             await _notify(
                 ctx,
-                "error",
-                "bootstrap_clone: clone failed",
+                "info",
+                f"bootstrap_clone: {source_dir!r}"
+                f" run_name={run_name!r} base_branch={base_branch!r}",
                 "autoskillit.bootstrap_clone",
-                extra={"reason": str(exc)},
-            )
-            return json.dumps({"error": str(exc)})
-        finally:
-            clone_ms = int((time.monotonic() - _clone_start) * 1000)
-
-        gate_error = _require_clone_success(clone_result, source_dir)
-        if gate_error is not None:
-            return gate_error
-
-        success = cast("CloneSuccessResult", clone_result)
-        clone_path: str = success["clone_path"]
-        resolved_remote_url: str = success.get("remote_url", remote_url)
-
-        _revparse_start = time.monotonic()
-        try:
-            rc, stdout, stderr = await _run_subprocess(
-                ["git", "rev-parse", base_branch],
-                cwd=clone_path,
-                timeout=30,
-            )
-        finally:
-            rev_parse_ms = int((time.monotonic() - _revparse_start) * 1000)
-
-        if rc != 0:
-            await _notify(
-                ctx,
-                "error",
-                "bootstrap_clone: rev-parse failed",
-                "autoskillit.bootstrap_clone",
-                extra={"stderr": stderr},
-            )
-            return json.dumps({"error": f"rev-parse failed: {stderr.strip()}"})
-
-        base_sha = stdout.strip()
-
-        if step_name:
-            tool_ctx.timing_log.record(step_name, time.monotonic() - _total_start)
-
-        return json.dumps(
-            {
-                "work_dir": clone_path,
-                "remote_url": resolved_remote_url,
-                "base_sha": base_sha,
-                "merge_target": base_branch,
-                "timings": {
-                    "clone_ms": clone_ms,
-                    "rev_parse_ms": rev_parse_ms,
+                extra={
+                    "source_dir": source_dir,
+                    "run_name": run_name,
+                    "base_branch": base_branch,
+                    "branch": branch,
                 },
-            }
-        )
+            )
+
+            from autoskillit.server import _get_ctx
+
+            tool_ctx = _get_ctx()
+            if tool_ctx.clone_mgr is None:
+                return json.dumps({"error": "Clone manager not configured"})
+
+            _total_start = time.monotonic()
+
+            _clone_start = time.monotonic()
+            try:
+                clone_result = await asyncio.to_thread(
+                    tool_ctx.clone_mgr.clone_repo,
+                    source_dir,
+                    run_name,
+                    branch,
+                    strategy,
+                    remote_url,
+                )
+            except (ValueError, RuntimeError) as exc:
+                await _notify(
+                    ctx,
+                    "error",
+                    "bootstrap_clone: clone failed",
+                    "autoskillit.bootstrap_clone",
+                    extra={"reason": str(exc)},
+                )
+                return json.dumps({"error": str(exc)})
+            finally:
+                clone_ms = int((time.monotonic() - _clone_start) * 1000)
+
+            gate_error = _require_clone_success(clone_result, source_dir)
+            if gate_error is not None:
+                return gate_error
+
+            success = cast("CloneSuccessResult", clone_result)
+            clone_path: str = success["clone_path"]
+            resolved_remote_url: str = success.get("remote_url", remote_url)
+
+            _revparse_start = time.monotonic()
+            try:
+                rc, stdout, stderr = await _run_subprocess(
+                    ["git", "rev-parse", base_branch],
+                    cwd=clone_path,
+                    timeout=30,
+                )
+            finally:
+                rev_parse_ms = int((time.monotonic() - _revparse_start) * 1000)
+
+            if rc != 0:
+                await _notify(
+                    ctx,
+                    "error",
+                    "bootstrap_clone: rev-parse failed",
+                    "autoskillit.bootstrap_clone",
+                    extra={"stderr": stderr},
+                )
+                return json.dumps({"error": f"rev-parse failed: {stderr.strip()}"})
+
+            base_sha = stdout.strip()
+
+            if step_name:
+                tool_ctx.timing_log.record(step_name, time.monotonic() - _total_start)
+
+            return json.dumps(
+                {
+                    "work_dir": clone_path,
+                    "remote_url": resolved_remote_url,
+                    "base_sha": base_sha,
+                    "merge_target": base_branch,
+                    "timings": {
+                        "clone_ms": clone_ms,
+                        "rev_parse_ms": rev_parse_ms,
+                    },
+                }
+            )
     except Exception as exc:
         logger.error("bootstrap_clone unhandled exception", exc_info=True)
         return json.dumps({"error": f"{type(exc).__name__}: {exc}"})

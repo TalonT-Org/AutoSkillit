@@ -182,73 +182,73 @@ async def prepare_issue(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(tool="prepare_issue", title=title[:60])
-        logger.info("prepare_issue", title=title[:60], dry_run=dry_run, split=split)
-        await _notify(
-            ctx,
-            "info",
-            f"prepare_issue: {title[:60]}",
-            "autoskillit.prepare_issue",
-            extra={"dry_run": dry_run, "split": split},
-        )
-
-        from autoskillit.server import _get_ctx
-
-        tool_ctx = _get_ctx()
-        if tool_ctx.executor is None:
-            return json.dumps({"success": False, "error": "Executor not configured"})
-
-        if labels:
-            if err := tool_ctx.config.github.check_labels_allowed(labels):
-                return json.dumps({"success": False, "error": err})
-
-        skill_command = _build_prepare_skill_command(title, body, repo, labels, dry_run, split)
-
-        expected_output_patterns: list[str] = []
-        if tool_ctx.output_pattern_resolver:
-            expected_output_patterns = list(tool_ctx.output_pattern_resolver(skill_command))
-
-        write_spec: WriteBehaviorSpec | None = None
-        if tool_ctx.write_expected_resolver:
-            write_spec = tool_ctx.write_expected_resolver(skill_command)
-
-        result = await tool_ctx.executor.run(
-            skill_command,
-            str(tool_ctx.project_dir),
-            expected_output_patterns=expected_output_patterns,
-            write_behavior=write_spec,
-        )
-
-        if not result.success:
-            return json.dumps(
-                _build_headless_error_response(result, error=_retry_reason_to_error(result))
+        with structlog.contextvars.bound_contextvars(tool="prepare_issue", title=title[:60]):
+            logger.info("prepare_issue", title=title[:60], dry_run=dry_run, split=split)
+            await _notify(
+                ctx,
+                "info",
+                f"prepare_issue: {title[:60]}",
+                "autoskillit.prepare_issue",
+                extra={"dry_run": dry_run, "split": split},
             )
 
-        if result.result is None or not result.result.strip():
-            return json.dumps(
-                _build_headless_error_response(
-                    result,
-                    error="session completed but output was empty (drain race)",
+            from autoskillit.server import _get_ctx
+
+            tool_ctx = _get_ctx()
+            if tool_ctx.executor is None:
+                return json.dumps({"success": False, "error": "Executor not configured"})
+
+            if labels:
+                if err := tool_ctx.config.github.check_labels_allowed(labels):
+                    return json.dumps({"success": False, "error": err})
+
+            skill_command = _build_prepare_skill_command(title, body, repo, labels, dry_run, split)
+
+            expected_output_patterns: list[str] = []
+            if tool_ctx.output_pattern_resolver:
+                expected_output_patterns = list(tool_ctx.output_pattern_resolver(skill_command))
+
+            write_spec: WriteBehaviorSpec | None = None
+            if tool_ctx.write_expected_resolver:
+                write_spec = tool_ctx.write_expected_resolver(skill_command)
+
+            result = await tool_ctx.executor.run(
+                skill_command,
+                str(tool_ctx.project_dir),
+                expected_output_patterns=expected_output_patterns,
+                write_behavior=write_spec,
+            )
+
+            if not result.success:
+                return json.dumps(
+                    _build_headless_error_response(result, error=_retry_reason_to_error(result))
                 )
+
+            if result.result is None or not result.result.strip():
+                return json.dumps(
+                    _build_headless_error_response(
+                        result,
+                        error="session completed but output was empty (drain race)",
+                    )
+                )
+
+            parsed = _parse_prepare_result(result.result)
+            # Distinguish block-parse failures (block absent or malformed JSON)
+            # from skill-level data.
+            # The sentinel errors from _parse_prepare_result signal a block-extraction failure —
+            # these are not the same as skill-internal errors embedded in a valid block.
+            if parsed.get("error") in _BLOCK_PARSE_ERRORS:
+                return json.dumps(_build_headless_error_response(result, error=parsed["error"]))
+
+            # Block parsed successfully. result.success=True is the authoritative signal —
+            # the parsed block's "success" field (if any) must not overwrite it.
+            return json.dumps(
+                {
+                    "success": True,
+                    "status": "complete",
+                    **_without_success_key(parsed),
+                }
             )
-
-        parsed = _parse_prepare_result(result.result)
-        # Distinguish block-parse failures (block absent or malformed JSON) from skill-level data.
-        # The sentinel errors from _parse_prepare_result signal a block-extraction failure —
-        # these are not the same as skill-internal errors embedded in a valid block.
-        if parsed.get("error") in _BLOCK_PARSE_ERRORS:
-            return json.dumps(_build_headless_error_response(result, error=parsed["error"]))
-
-        # Block parsed successfully. result.success=True is the authoritative signal —
-        # the parsed block's "success" field (if any) must not overwrite it.
-        return json.dumps(
-            {
-                "success": True,
-                "status": "complete",
-                **_without_success_key(parsed),
-            }
-        )
     except Exception as exc:
         logger.error("prepare_issue unhandled exception", exc_info=True)
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
@@ -288,69 +288,68 @@ async def enrich_issues(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(
+        with structlog.contextvars.bound_contextvars(
             tool="enrich_issues",
             issue_number=issue_number,
             batch=batch,
             dry_run=dry_run,
-        )
-        logger.info("enrich_issues", issue_number=issue_number, batch=batch, dry_run=dry_run)
-        await _notify(
-            ctx,
-            "info",
-            "enrich_issues: backfilling requirements on recipe:implementation issues",
-            "autoskillit.enrich_issues",
-            extra={"dry_run": dry_run},
-        )
-
-        from autoskillit.server import _get_ctx
-
-        tool_ctx = _get_ctx()
-        if tool_ctx.executor is None:
-            return json.dumps({"success": False, "error": "Executor not configured"})
-
-        skill_command = _build_enrich_skill_command(issue_number, batch, dry_run, repo)
-
-        expected_output_patterns: list[str] = []
-        if tool_ctx.output_pattern_resolver:
-            expected_output_patterns = list(tool_ctx.output_pattern_resolver(skill_command))
-
-        write_spec: WriteBehaviorSpec | None = None
-        if tool_ctx.write_expected_resolver:
-            write_spec = tool_ctx.write_expected_resolver(skill_command)
-
-        result = await tool_ctx.executor.run(
-            skill_command,
-            str(tool_ctx.project_dir),
-            expected_output_patterns=expected_output_patterns,
-            write_behavior=write_spec,
-        )
-
-        if not result.success:
-            return json.dumps(
-                _build_headless_error_response(result, error=_retry_reason_to_error(result))
+        ):
+            logger.info("enrich_issues", issue_number=issue_number, batch=batch, dry_run=dry_run)
+            await _notify(
+                ctx,
+                "info",
+                "enrich_issues: backfilling requirements on recipe:implementation issues",
+                "autoskillit.enrich_issues",
+                extra={"dry_run": dry_run},
             )
 
-        if result.result is None or not result.result.strip():
-            return json.dumps(
-                _build_headless_error_response(
-                    result,
-                    error="session completed but output was empty (drain race)",
+            from autoskillit.server import _get_ctx
+
+            tool_ctx = _get_ctx()
+            if tool_ctx.executor is None:
+                return json.dumps({"success": False, "error": "Executor not configured"})
+
+            skill_command = _build_enrich_skill_command(issue_number, batch, dry_run, repo)
+
+            expected_output_patterns: list[str] = []
+            if tool_ctx.output_pattern_resolver:
+                expected_output_patterns = list(tool_ctx.output_pattern_resolver(skill_command))
+
+            write_spec: WriteBehaviorSpec | None = None
+            if tool_ctx.write_expected_resolver:
+                write_spec = tool_ctx.write_expected_resolver(skill_command)
+
+            result = await tool_ctx.executor.run(
+                skill_command,
+                str(tool_ctx.project_dir),
+                expected_output_patterns=expected_output_patterns,
+                write_behavior=write_spec,
+            )
+
+            if not result.success:
+                return json.dumps(
+                    _build_headless_error_response(result, error=_retry_reason_to_error(result))
                 )
+
+            if result.result is None or not result.result.strip():
+                return json.dumps(
+                    _build_headless_error_response(
+                        result,
+                        error="session completed but output was empty (drain race)",
+                    )
+                )
+
+            parsed = _parse_enrich_result(result.result)
+            if parsed.get("error") in _BLOCK_PARSE_ERRORS:
+                return json.dumps(_build_headless_error_response(result, error=parsed["error"]))
+
+            return json.dumps(
+                {
+                    "success": True,
+                    "status": "complete",
+                    **_without_success_key(parsed),
+                }
             )
-
-        parsed = _parse_enrich_result(result.result)
-        if parsed.get("error") in _BLOCK_PARSE_ERRORS:
-            return json.dumps(_build_headless_error_response(result, error=parsed["error"]))
-
-        return json.dumps(
-            {
-                "success": True,
-                "status": "complete",
-                **_without_success_key(parsed),
-            }
-        )
     except Exception as exc:
         logger.error("enrich_issues unhandled exception", exc_info=True)
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})

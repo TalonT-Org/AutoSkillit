@@ -30,7 +30,9 @@ from .branch_guard import is_protected_branch as is_protected_branch
 from .claude_conventions import ClaudeDirectoryConventions as ClaudeDirectoryConventions
 from .claude_conventions import LayoutError as LayoutError
 from .claude_conventions import validate_add_dir as validate_add_dir
-from .claude_conventions import validate_project_local_skill_dir as validate_project_local_skill_dir
+from .claude_conventions import (
+    validate_project_local_skill_dir as validate_project_local_skill_dir,
+)
 from .claude_conventions import validate_worktree_path as validate_worktree_path
 from .feature_flags import _collect_disabled_feature_tags as _collect_disabled_feature_tags
 from .feature_flags import is_feature_enabled as is_feature_enabled
@@ -54,12 +56,12 @@ from .logging import get_logger as get_logger
 from .paths import GENERATED_FILES as GENERATED_FILES
 from .paths import claude_code_log_path as claude_code_log_path
 from .paths import claude_code_project_dir as claude_code_project_dir
+from .paths import default_log_dir as default_log_dir
 from .paths import find_latest_session_id as find_latest_session_id
 from .paths import is_generated_path as is_generated_path
 from .paths import is_git_main_checkout as is_git_main_checkout
 from .paths import is_git_worktree as is_git_worktree
 from .paths import pkg_root as pkg_root
-from .paths import default_log_dir as default_log_dir
 from .paths import resolve_main_worktree as resolve_main_worktree
 from .runtime._linux_proc import is_session_alive as is_session_alive
 from .runtime._linux_proc import read_boot_id as read_boot_id

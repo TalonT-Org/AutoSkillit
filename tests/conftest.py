@@ -104,6 +104,7 @@ def _structlog_to_null():
 
     structlog.configure(cache_logger_on_first_use=False)
     _flush_structlog_proxy_caches()
+    structlog.contextvars.clear_contextvars()
     with structlog.testing.capture_logs():
         yield
     structlog.reset_defaults()

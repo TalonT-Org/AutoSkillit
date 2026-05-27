@@ -51,77 +51,76 @@ async def test_check(
     Never raises.
     """
     try:
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(tool="test_check", cwd=worktree_path)
-        logger.info("test_check", worktree=worktree_path)
-        await _notify(
-            ctx,
-            "info",
-            f"test_check: {worktree_path}",
-            "autoskillit.test_check",
-            extra={"worktree": worktree_path},
-        )
-
-        from autoskillit.server import _get_ctx
-
-        tool_ctx = _get_ctx()
-        if tool_ctx.tester is None:
-            return json.dumps({"passed": False, "error": "Test runner not configured"})
-
-        resolved = os.path.realpath(worktree_path)
-        if not os.path.isdir(resolved):
-            logger.warning("test_check path does not exist", path=resolved)
-            return json.dumps(
-                {
-                    "passed": False,
-                    "error": f"Worktree path does not exist: {resolved}",
-                    "infrastructure_missing": True,
-                }
-            )
-        infra_issue = tool_ctx.tester.check_infrastructure(Path(resolved))
-        if infra_issue is not None:
-            logger.warning("test_check infrastructure missing", detail=infra_issue)
-            return json.dumps(
-                {
-                    "passed": False,
-                    "error": f"Test infrastructure not found: {infra_issue}",
-                    "infrastructure_missing": True,
-                }
+        with structlog.contextvars.bound_contextvars(tool="test_check", cwd=worktree_path):
+            logger.info("test_check", worktree=worktree_path)
+            await _notify(
+                ctx,
+                "info",
+                f"test_check: {worktree_path}",
+                "autoskillit.test_check",
+                extra={"worktree": worktree_path},
             )
 
-        _start = time.monotonic()
-        try:
-            test_result = await tool_ctx.tester.run(Path(resolved))
+            from autoskillit.server import _get_ctx
 
-            if not test_result.passed:
-                await _notify(
-                    ctx,
-                    "error",
-                    "test_check: tests failed",
-                    "autoskillit.test_check",
-                    extra={"worktree": worktree_path},
+            tool_ctx = _get_ctx()
+            if tool_ctx.tester is None:
+                return json.dumps({"passed": False, "error": "Test runner not configured"})
+
+            resolved = os.path.realpath(worktree_path)
+            if not os.path.isdir(resolved):
+                logger.warning("test_check path does not exist", path=resolved)
+                return json.dumps(
+                    {
+                        "passed": False,
+                        "error": f"Worktree path does not exist: {resolved}",
+                        "infrastructure_missing": True,
+                    }
+                )
+            infra_issue = tool_ctx.tester.check_infrastructure(Path(resolved))
+            if infra_issue is not None:
+                logger.warning("test_check infrastructure missing", detail=infra_issue)
+                return json.dumps(
+                    {
+                        "passed": False,
+                        "error": f"Test infrastructure not found: {infra_issue}",
+                        "infrastructure_missing": True,
+                    }
                 )
 
-            condensed_stdout, condensed_stderr = condense_test_output(test_result)
-            response = {
-                "passed": test_result.passed,
-                "stdout": truncate_text(condensed_stdout),
-                "stderr": truncate_text(condensed_stderr),
-            }
-            if test_result.duration_seconds is not None:
-                response["duration_seconds"] = round(test_result.duration_seconds, 2)
-            if test_result.filter_mode is not None:
-                response["filter_mode"] = test_result.filter_mode
-            if test_result.tests_selected is not None:
-                response["tests_selected"] = test_result.tests_selected
-            if test_result.tests_deselected is not None:
-                response["tests_deselected"] = test_result.tests_deselected
-            if test_result.full_run_reason is not None:
-                response["full_run_reason"] = test_result.full_run_reason
-            return json.dumps(response)
-        finally:
-            if step_name:
-                tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
+            _start = time.monotonic()
+            try:
+                test_result = await tool_ctx.tester.run(Path(resolved))
+
+                if not test_result.passed:
+                    await _notify(
+                        ctx,
+                        "error",
+                        "test_check: tests failed",
+                        "autoskillit.test_check",
+                        extra={"worktree": worktree_path},
+                    )
+
+                condensed_stdout, condensed_stderr = condense_test_output(test_result)
+                response = {
+                    "passed": test_result.passed,
+                    "stdout": truncate_text(condensed_stdout),
+                    "stderr": truncate_text(condensed_stderr),
+                }
+                if test_result.duration_seconds is not None:
+                    response["duration_seconds"] = round(test_result.duration_seconds, 2)
+                if test_result.filter_mode is not None:
+                    response["filter_mode"] = test_result.filter_mode
+                if test_result.tests_selected is not None:
+                    response["tests_selected"] = test_result.tests_selected
+                if test_result.tests_deselected is not None:
+                    response["tests_deselected"] = test_result.tests_deselected
+                if test_result.full_run_reason is not None:
+                    response["full_run_reason"] = test_result.full_run_reason
+                return json.dumps(response)
+            finally:
+                if step_name:
+                    tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
     except Exception as exc:
         logger.error("test_check unhandled exception", exc_info=True)
         return json.dumps({"passed": False, "error": f"{type(exc).__name__}: {exc}"})
@@ -152,58 +151,61 @@ async def reset_test_dir(
         return gate
     try:
         resolved = os.path.realpath(test_dir)
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(tool="reset_test_dir", cwd=resolved)
-        logger.info("reset_test_dir", resolved=str(resolved), force=force)
-        await _notify(
-            ctx,
-            "info",
-            f"reset_test_dir: {resolved}",
-            "autoskillit.reset_test_dir",
-            extra={"resolved": resolved, "force": force},
-        )
+        with structlog.contextvars.bound_contextvars(tool="reset_test_dir", cwd=resolved):
+            logger.info("reset_test_dir", resolved=str(resolved), force=force)
+            await _notify(
+                ctx,
+                "info",
+                f"reset_test_dir: {resolved}",
+                "autoskillit.reset_test_dir",
+                extra={"resolved": resolved, "force": force},
+            )
 
-        from autoskillit.server import _get_config, _get_ctx
+            from autoskillit.server import _get_config, _get_ctx
 
-        tool_ctx = _get_ctx()
-        _start = time.monotonic()
-        try:
-            if not os.path.isdir(resolved):
-                await _notify(
-                    ctx,
-                    "error",
-                    "reset_test_dir failed",
-                    "autoskillit.reset_test_dir",
-                    extra={"reason": "directory does not exist"},
-                )
-                return json.dumps({"error": f"Directory does not exist: {resolved}"})
+            tool_ctx = _get_ctx()
+            _start = time.monotonic()
+            try:
+                if not os.path.isdir(resolved):
+                    await _notify(
+                        ctx,
+                        "error",
+                        "reset_test_dir failed",
+                        "autoskillit.reset_test_dir",
+                        extra={"reason": "directory does not exist"},
+                    )
+                    return json.dumps({"error": f"Directory does not exist: {resolved}"})
 
-            marker_name = _get_config().safety.reset_guard_marker
-            marker_path = Path(resolved) / marker_name
-            if not force and not marker_path.is_file():
-                await _notify(
-                    ctx,
-                    "error",
-                    "reset_test_dir failed",
-                    "autoskillit.reset_test_dir",
-                    extra={"reason": "marker missing"},
-                )
-                return json.dumps(
-                    {
-                        "error": f"Safety: directory missing reset guard marker ({marker_name})",
-                        "hint": f"Create the marker with: autoskillit workspace init {resolved}",
-                    }
-                )
+                marker_name = _get_config().safety.reset_guard_marker
+                marker_path = Path(resolved) / marker_name
+                if not force and not marker_path.is_file():
+                    await _notify(
+                        ctx,
+                        "error",
+                        "reset_test_dir failed",
+                        "autoskillit.reset_test_dir",
+                        extra={"reason": "marker missing"},
+                    )
+                    return json.dumps(
+                        {
+                            "error": (
+                                f"Safety: directory missing reset guard marker ({marker_name})"
+                            ),
+                            "hint": (
+                                f"Create the marker with: autoskillit workspace init {resolved}"
+                            ),
+                        }
+                    )
 
-            if tool_ctx.workspace_mgr is None:
-                return json.dumps({"error": "Workspace manager not configured"})
+                if tool_ctx.workspace_mgr is None:
+                    return json.dumps({"error": "Workspace manager not configured"})
 
-            preserve = None if force else {marker_name}
-            cleanup = tool_ctx.workspace_mgr.delete_contents(Path(resolved), preserve=preserve)
-            return json.dumps({**cleanup.to_dict(), "forced": force})
-        finally:
-            if step_name:
-                tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
+                preserve = None if force else {marker_name}
+                cleanup = tool_ctx.workspace_mgr.delete_contents(Path(resolved), preserve=preserve)
+                return json.dumps({**cleanup.to_dict(), "forced": force})
+            finally:
+                if step_name:
+                    tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
     except Exception as exc:
         logger.error("reset_test_dir unhandled exception", exc_info=True)
         return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
@@ -224,88 +226,87 @@ async def reset_workspace(test_dir: str, ctx: Context = CurrentContext()) -> str
         return gate
     try:
         resolved = os.path.realpath(test_dir)
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(tool="reset_workspace", cwd=resolved)
-        logger.info("reset_workspace", resolved=str(resolved))
-        await _notify(
-            ctx,
-            "info",
-            f"reset_workspace: {resolved}",
-            "autoskillit.reset_workspace",
-            extra={"resolved": resolved},
-        )
-
-        if not os.path.isdir(resolved):
+        with structlog.contextvars.bound_contextvars(tool="reset_workspace", cwd=resolved):
+            logger.info("reset_workspace", resolved=str(resolved))
             await _notify(
                 ctx,
-                "error",
-                "reset_workspace failed",
+                "info",
+                f"reset_workspace: {resolved}",
                 "autoskillit.reset_workspace",
-                extra={"reason": "directory does not exist"},
-            )
-            return json.dumps({"error": f"Directory does not exist: {resolved}"})
-
-        from autoskillit.server import _get_config
-
-        marker_name = _get_config().safety.reset_guard_marker
-        marker_path = Path(resolved) / marker_name
-        if not marker_path.is_file():
-            await _notify(
-                ctx,
-                "error",
-                "reset_workspace failed",
-                "autoskillit.reset_workspace",
-                extra={"reason": "marker missing"},
-            )
-            return json.dumps(
-                {
-                    "error": f"Safety: directory missing reset guard marker ({marker_name})",
-                    "hint": f"Create the marker with: autoskillit workspace init {resolved}",
-                }
+                extra={"resolved": resolved},
             )
 
-        reset_cmd = _get_config().reset_workspace.command
-        if reset_cmd is None:
-            await _notify(
-                ctx,
-                "error",
-                "reset_workspace failed",
-                "autoskillit.reset_workspace",
-                extra={"reason": "not configured"},
+            if not os.path.isdir(resolved):
+                await _notify(
+                    ctx,
+                    "error",
+                    "reset_workspace failed",
+                    "autoskillit.reset_workspace",
+                    extra={"reason": "directory does not exist"},
+                )
+                return json.dumps({"error": f"Directory does not exist: {resolved}"})
+
+            from autoskillit.server import _get_config
+
+            marker_name = _get_config().safety.reset_guard_marker
+            marker_path = Path(resolved) / marker_name
+            if not marker_path.is_file():
+                await _notify(
+                    ctx,
+                    "error",
+                    "reset_workspace failed",
+                    "autoskillit.reset_workspace",
+                    extra={"reason": "marker missing"},
+                )
+                return json.dumps(
+                    {
+                        "error": f"Safety: directory missing reset guard marker ({marker_name})",
+                        "hint": f"Create the marker with: autoskillit workspace init {resolved}",
+                    }
+                )
+
+            reset_cmd = _get_config().reset_workspace.command
+            if reset_cmd is None:
+                await _notify(
+                    ctx,
+                    "error",
+                    "reset_workspace failed",
+                    "autoskillit.reset_workspace",
+                    extra={"reason": "not configured"},
+                )
+                return json.dumps({"error": "reset_workspace not configured for this project"})
+
+            returncode, stdout, stderr = await _run_subprocess(
+                reset_cmd,
+                cwd=resolved,
+                timeout=60,
             )
-            return json.dumps({"error": "reset_workspace not configured for this project"})
 
-        returncode, stdout, stderr = await _run_subprocess(
-            reset_cmd,
-            cwd=resolved,
-            timeout=60,
-        )
+            if returncode != 0:
+                await _notify(
+                    ctx,
+                    "error",
+                    "reset_workspace failed",
+                    "autoskillit.reset_workspace",
+                    extra={"reason": "reset command failed", "exit_code": returncode},
+                )
+                return json.dumps(
+                    {
+                        "error": "reset command failed",
+                        "exit_code": returncode,
+                        "stderr": truncate_text(stderr),
+                    }
+                )
 
-        if returncode != 0:
-            await _notify(
-                ctx,
-                "error",
-                "reset_workspace failed",
-                "autoskillit.reset_workspace",
-                extra={"reason": "reset command failed", "exit_code": returncode},
-            )
-            return json.dumps(
-                {
-                    "error": "reset command failed",
-                    "exit_code": returncode,
-                    "stderr": truncate_text(stderr),
-                }
-            )
+            from autoskillit.server import _get_ctx
 
-        from autoskillit.server import _get_ctx
+            tool_ctx = _get_ctx()
+            if tool_ctx.workspace_mgr is None:
+                return json.dumps({"error": "Workspace manager not configured"})
 
-        tool_ctx = _get_ctx()
-        if tool_ctx.workspace_mgr is None:
-            return json.dumps({"error": "Workspace manager not configured"})
-
-        preserve = set(_get_config().reset_workspace.preserve_dirs) | {marker_name}
-        cleanup = tool_ctx.workspace_mgr.delete_contents(Path(resolved), preserve=preserve)
-        return json.dumps(cleanup.to_dict())
+            preserve = set(_get_config().reset_workspace.preserve_dirs) | {marker_name}
+            cleanup = tool_ctx.workspace_mgr.delete_contents(Path(resolved), preserve=preserve)
+            return json.dumps(cleanup.to_dict())
     except Exception as exc:
         logger.error("reset_workspace unhandled exception", exc_info=True)
         return json.dumps({"error": f"{type(exc).__name__}: {exc}"})

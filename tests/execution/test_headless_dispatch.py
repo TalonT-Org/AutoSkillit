@@ -509,8 +509,11 @@ def test_default_executor_satisfies_protocol_with_dispatch(minimal_ctx) -> None:
     assert isinstance(executor, HeadlessExecutor)
 
 
-def test_build_interactive_cmd_no_headless_hardening() -> None:
+def test_build_interactive_cmd_no_headless_hardening(monkeypatch: pytest.MonkeyPatch) -> None:
     from autoskillit.execution.backends.claude import ClaudeCodeBackend
+
+    monkeypatch.setenv("TERM", "xterm-256color")
+    monkeypatch.delenv("NO_COLOR", raising=False)
 
     spec = ClaudeCodeBackend().build_interactive_cmd()
     assert spec.env.get("TERM") != "dumb"

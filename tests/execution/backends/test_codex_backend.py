@@ -105,6 +105,64 @@ class TestCodexBackend:
     def test_capabilities_food_truck_true(self) -> None:
         assert CodexBackend().capabilities.food_truck_capable is True
 
+    def test_capabilities_triage_capable_false(self) -> None:
+        assert CodexBackend().capabilities.triage_capable is False
+
+    def test_capabilities_record_capable_false(self) -> None:
+        assert CodexBackend().capabilities.record_capable is False
+
+    def test_capabilities_replay_capable_false(self) -> None:
+        assert CodexBackend().capabilities.replay_capable is False
+
+    def test_capabilities_plugin_install_capable_false(self) -> None:
+        assert CodexBackend().capabilities.plugin_install_capable is False
+
+    def test_capabilities_anthropic_provider_capable_false(self) -> None:
+        assert CodexBackend().capabilities.anthropic_provider_capable is False
+
+    def test_capabilities_session_log_compressed_false(self) -> None:
+        assert CodexBackend().capabilities.session_log_compressed is False
+
+    def test_capabilities_supports_context_exhaustion_detection_false(self) -> None:
+        assert CodexBackend().capabilities.supports_context_exhaustion_detection is False
+
+    def test_capabilities_supports_api_retry_events_false(self) -> None:
+        assert CodexBackend().capabilities.supports_api_retry_events is False
+
+    def test_capabilities_project_local_skills_capable_false(self) -> None:
+        assert CodexBackend().capabilities.project_local_skills_capable is False
+
+    def test_capabilities_required_skill_fields(self) -> None:
+        assert CodexBackend().capabilities.required_skill_fields == frozenset(
+            {"name", "description"}
+        )
+
+    def test_capabilities_required_session_files(self) -> None:
+        assert CodexBackend().capabilities.required_session_files == frozenset({"config.toml"})
+
+    def test_capabilities_session_dir_symlinks(self) -> None:
+        assert CodexBackend().capabilities.session_dir_symlinks == frozenset(
+            {"auth.json", "sessions"}
+        )
+
+    def test_capabilities_applicable_guards(self) -> None:
+        assert CodexBackend().capabilities.applicable_guards == frozenset()
+
+    def test_capabilities_env_denylist_prefixes(self) -> None:
+        assert CodexBackend().capabilities.env_denylist_prefixes == ("CLAUDE_CODE_",)
+
+    def test_capabilities_min_version(self) -> None:
+        assert CodexBackend().capabilities.min_version == "0.130.0"
+
+    def test_capabilities_version_check_command(self) -> None:
+        assert CodexBackend().capabilities.version_check_command == "codex --version"
+
+    def test_capabilities_process_name(self) -> None:
+        assert CodexBackend().capabilities.process_name == "codex"
+
+    def test_capabilities_skills_subdir(self) -> None:
+        assert CodexBackend().capabilities.skills_subdir == "skills"
+
     def test_binary_name(self) -> None:
         assert CodexBackend().binary_name() == "codex"
 

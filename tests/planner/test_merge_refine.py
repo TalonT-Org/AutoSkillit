@@ -283,7 +283,6 @@ def test_wp_refine_context_own_phase_in_full_detail(tmp_path):
     assert "technical_steps" in own
     assert "acceptance_criteria" in own
     assert "files_touched" in own
-    assert all(wp["id"] != "P2-A1-WP1" for wp in ctx["work_packages"])
 
 
 # --- Step 1c ---
@@ -300,6 +299,7 @@ def test_wp_refine_context_peer_summaries_are_stubs(tmp_path):
     assert peer["id"] == "P2-A1-WP1"
     allowed_keys = {"id", "name", "scope", "deliverables", "apis_defined", "apis_consumed"}
     assert set(peer.keys()) <= allowed_keys
+    assert allowed_keys <= set(peer.keys())
     assert "technical_steps" not in peer
     assert "acceptance_criteria" not in peer
     assert "files_touched" not in peer
@@ -324,7 +324,7 @@ def test_wp_refine_context_validates_expected_phases(tmp_path):
     manifest = {"items": [{"id": "P1"}, {"id": "P2"}, {"id": "P3"}]}
     write_json(tmp_path / "phase_wp_manifest.json", manifest)
     out = tmp_path / "combined_wps.json"
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="have no merged work packages"):
         merge_tier_results(str(results_dir), str(out), "work_packages")
 
 

@@ -71,7 +71,7 @@ If positional arg 1 (context_path) is provided and the file exists, read it to o
 IV/DV tables, H0/H1 hypotheses, controlled variables, and success criteria. If positional
 arg 2 (experiment_plan_path) is provided and exists, read the experiment plan for full
 methodology. Use this structured context as the foundation for Steps 1-5; skip the CWD
-exploration for these fields if the context file supplies them.
+exploration for these fields if the context file supplies them. For any field absent from the context file, perform CWD exploration for that specific field only.
 
 ### Step 1: Launch Parallel Exploration Subagents
 
@@ -119,9 +119,96 @@ Show Claims → HIGH/MEDIUM/LOW severity tests → Severity verdicts.
 
 Write the analysis to: `{{AUTOSKILLIT_TEMP}}/exp-lens-severity-testing/exp_diag_severity_testing_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
+
+## Output Template
+
+```markdown
+# Severity Testing Diagram: {Experiment Name}
+
+**Lens:** Severity Testing (Falsificationist)
+**Question:** Would this design have caught the error?
+**Date:** {YYYY-MM-DD}
+**Scope:** {What was analyzed}
+
+## Severity Assessment
+
+| Claim | Test | Negative Control? | Adversarial? | Severity | Theater? |
+|-------|------|--------------------|--------------|----------|----------|
+| {claim} | {test description} | {Yes/No} | {Yes/No} | {HIGH/MEDIUM/LOW} | {Yes/No} |
+
+## Severity-Flow Diagram
+
+```mermaid
+%%{init: {'flowchart': {'nodeSpacing': 50, 'rankSpacing': 60, 'curve': 'basis'}}}%%
+flowchart LR
+    %% CLASS DEFINITIONS %%
+    classDef cli fill:#1a237e,stroke:#7986cb,stroke-width:2px,color:#fff;
+    classDef stateNode fill:#004d40,stroke:#4db6ac,stroke-width:2px,color:#fff;
+    classDef handler fill:#e65100,stroke:#ffb74d,stroke-width:2px,color:#fff;
+    classDef phase fill:#6a1b9a,stroke:#ba68c8,stroke-width:2px,color:#fff;
+    classDef newComponent fill:#2e7d32,stroke:#81c784,stroke-width:2px,color:#fff;
+    classDef output fill:#00695c,stroke:#4db6ac,stroke-width:2px,color:#fff;
+    classDef detector fill:#b71c1c,stroke:#ef5350,stroke-width:2px,color:#fff;
+    classDef gap fill:#ff6f00,stroke:#ffa726,stroke-width:2px,color:#000;
+    classDef integration fill:#c62828,stroke:#ef9a9a,stroke-width:2px,color:#fff;
+
+    subgraph Claims ["CLAIMS"]
+        C1["Claim<br/>━━━━━━━━━━<br/>Primary hypothesis"]
+    end
+
+    subgraph SeverityTests ["SEVERITY TESTS"]
+        HIGH["HIGH Severity<br/>━━━━━━━━━━<br/>Adversarial test"]
+        MED["MEDIUM Severity<br/>━━━━━━━━━━<br/>Standard test"]
+        LOW["LOW Severity<br/>━━━━━━━━━━<br/>Easy-pass test"]
+    end
+
+    subgraph Verdicts ["VERDICTS"]
+        PASS["Pass<br/>━━━━━━━━━━<br/>Survives scrutiny"]
+        FAIL["Fail<br/>━━━━━━━━━━<br/>Insufficient severity"]
+        THEATER["Theater<br/>━━━━━━━━━━<br/>Confirmatory theater"]
+    end
+
+    %% SEVERITY FLOWS %%
+    C1 -->|"tested by"| HIGH
+    C1 -->|"tested by"| MED
+    C1 -->|"tested by"| LOW
+    HIGH -->|"verdict"| PASS
+    MED -->|"verdict"| PASS
+    LOW -->|"verdict"| FAIL
+    LOW -.->|"risk"| THEATER
+
+    %% CLASS ASSIGNMENTS %%
+    class C1 cli;
+    class HIGH detector;
+    class MED handler;
+    class LOW gap;
+    class PASS output;
+    class FAIL integration;
+    class THEATER phase;
+```
+
+**Color Legend:**
+| Color | Category | Description |
+|-------|----------|-------------|
+| Dark Blue | Claims | Hypotheses under scrutiny |
+| Red | High Severity | Adversarial and negative control tests |
+| Orange | Medium Severity | Standard tests with moderate rigor |
+| Amber | Low Severity | Easy-pass tests (potential theater) |
+| Dark Teal | Pass | Claims surviving severe testing |
+| Dark Red | Fail | Claims with insufficient test severity |
+| Purple | Theater | Confirmatory theater detected |
+
+## Recommendations
+
+- {Recommendation 1}
+- {Recommendation 2}
+```
+
 ---
 
 ## Pre-Diagram Checklist
+
+
 
 Before creating the diagram, verify:
 

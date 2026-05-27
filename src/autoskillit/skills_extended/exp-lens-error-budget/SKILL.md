@@ -73,7 +73,7 @@ If positional arg 1 (context_path) is provided and the file exists, read it to o
 IV/DV tables, H0/H1 hypotheses, controlled variables, and success criteria. If positional
 arg 2 (experiment_plan_path) is provided and exists, read the experiment plan for full
 methodology. Use this structured context as the foundation for Steps 1-5; skip the CWD
-exploration for these fields if the context file supplies them.
+exploration for these fields if the context file supplies them. For any field absent from the context file, perform CWD exploration for that specific field only.
 
 ### Step 1: Launch Parallel Exploration Subagents
 
@@ -121,9 +121,100 @@ If a diagram adds value, show Data → Tests → Thresholds → Conclusions, wit
 
 Write the analysis to: `{{AUTOSKILLIT_TEMP}}/exp-lens-error-budget/exp_diag_error_budget_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
+
+## Output Template
+
+```markdown
+# Error Budget Analysis: {Experiment Name}
+
+**Lens:** Error Budget (Statistical)
+**Question:** Are error risks sized and controlled?
+**Date:** {YYYY-MM-DD}
+**Scope:** {What was analyzed}
+
+## Error Budget
+
+| Test | α (per-test) | Family-wise α | Power (1-β) | MDE | Sequential Rule | Alignment |
+|------|-------------|---------------|-------------|-----|-----------------|-----------|
+| {test} | {α} | {α_fw} | {power} | {mde} | {rule or N/A} | {ALIGNED/CONVENTIONAL/MISALIGNED} |
+
+## Decision-Flow Diagram
+
+```mermaid
+%%{init: {'flowchart': {'nodeSpacing': 50, 'rankSpacing': 60, 'curve': 'basis'}}}%%
+flowchart LR
+    %% CLASS DEFINITIONS %%
+    classDef cli fill:#1a237e,stroke:#7986cb,stroke-width:2px,color:#fff;
+    classDef stateNode fill:#004d40,stroke:#4db6ac,stroke-width:2px,color:#fff;
+    classDef handler fill:#e65100,stroke:#ffb74d,stroke-width:2px,color:#fff;
+    classDef phase fill:#6a1b9a,stroke:#ba68c8,stroke-width:2px,color:#fff;
+    classDef newComponent fill:#2e7d32,stroke:#81c784,stroke-width:2px,color:#fff;
+    classDef output fill:#00695c,stroke:#4db6ac,stroke-width:2px,color:#fff;
+    classDef detector fill:#b71c1c,stroke:#ef5350,stroke-width:2px,color:#fff;
+    classDef gap fill:#ff6f00,stroke:#ffa726,stroke-width:2px,color:#000;
+    classDef integration fill:#c62828,stroke:#ef9a9a,stroke-width:2px,color:#fff;
+
+    subgraph Data ["DATA"]
+        SRC["Dataset<br/>━━━━━━━━━━<br/>N observations"]
+    end
+
+    subgraph Tests ["TESTS"]
+        T1["Statistical Test<br/>━━━━━━━━━━<br/>α = {value}"]
+        MULTI["Multiplicity Correction<br/>━━━━━━━━━━<br/>Family-wise control"]
+    end
+
+    subgraph Thresholds ["THRESHOLDS"]
+        ALPHA["α Threshold<br/>━━━━━━━━━━<br/>Significance level"]
+        POWER["Power Gate<br/>━━━━━━━━━━<br/>1-β = {value}"]
+        SEQ["Sequential Rule<br/>━━━━━━━━━━<br/>Monitoring boundary"]
+    end
+
+    subgraph Conclusions ["CONCLUSIONS"]
+        RESULT["Conclusion<br/>━━━━━━━━━━<br/>Decision"]
+    end
+
+    %% DECISION FLOWS %%
+    SRC -->|"input"| T1
+    T1 -->|"adjusted"| MULTI
+    MULTI -->|"p-value"| ALPHA
+    T1 -->|"effect size"| POWER
+    T1 -->|"interim"| SEQ
+    ALPHA -->|"decision"| RESULT
+    POWER -->|"adequacy"| RESULT
+    SEQ -->|"boundary"| RESULT
+
+    %% CLASS ASSIGNMENTS %%
+    class SRC cli;
+    class T1 handler;
+    class MULTI phase;
+    class ALPHA detector;
+    class POWER stateNode;
+    class SEQ gap;
+    class RESULT output;
+```
+
+**Color Legend:**
+| Color | Category | Description |
+|-------|----------|-------------|
+| Dark Blue | Data | Input datasets |
+| Orange | Tests | Statistical tests performed |
+| Purple | Multiplicity | Multiple comparison corrections |
+| Red | α Threshold | Significance decision thresholds |
+| Teal | Power | Statistical power assessments |
+| Amber | Sequential | Sequential monitoring rules |
+| Dark Teal | Conclusions | Final statistical decisions |
+
+## Recommendations
+
+- {Recommendation 1}
+- {Recommendation 2}
+```
+
 ---
 
 ## Pre-Diagram Checklist
+
+
 
 Before creating the diagram, verify:
 

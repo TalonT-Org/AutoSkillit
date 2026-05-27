@@ -2,8 +2,20 @@
 
 from __future__ import annotations
 
-from autoskillit.core import GATED_TOOLS, HEADLESS_TOOLS, TOOL_SUBSET_TAGS, UNGATED_TOOLS, Severity
+from autoskillit.core import (
+    GATED_TOOLS,
+    HEADLESS_TOOLS,
+    SKILL_TOOLS,
+    TOOL_SUBSET_TAGS,
+    UNGATED_TOOLS,
+    Severity,
+)
 from autoskillit.recipe._analysis import ValidationContext
+from autoskillit.recipe.contracts import (
+    get_skill_contract,
+    load_bundled_manifest,
+    resolve_skill_name,
+)
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 _ALL_TOOLS: frozenset[str] = GATED_TOOLS | UNGATED_TOOLS | HEADLESS_TOOLS
@@ -438,4 +450,73 @@ def _check_patch_token_summary_order_id(ctx: ValidationContext) -> list[RuleFind
                     ),
                 )
             )
+    return findings
+
+
+@semantic_rule(
+    name="push-after-edit-requires-force",
+    description=(
+        "push_to_remote steps reachable from a write-behavior skill "
+        "(always or conditional) must have force='true'."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_push_after_edit_requires_force(ctx: ValidationContext) -> list[RuleFinding]:
+    """Fire when a push_to_remote step follows a write-behavior skill without force='true'.
+
+    After a write-behavior skill applies and commits changes, the branch history has
+    diverged from the remote. A non-force push will be rejected as non-fast-forward.
+    """
+    try:
+        manifest = load_bundled_manifest()
+    except Exception:
+        return []
+
+    max_hops = 6
+    findings: list[RuleFinding] = []
+
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "push_to_remote":
+            continue
+        visited: set[str] = set()
+        queue: list[tuple[str, int]] = [(p, 1) for p in ctx.predecessors.get(step_name, set())]
+        found_write_skill: str | None = None
+        while queue and found_write_skill is None:
+            pred_name, depth = queue.pop(0)
+            if pred_name in visited or depth > max_hops:
+                continue
+            visited.add(pred_name)
+            pred = ctx.recipe.steps.get(pred_name)
+            if pred is None:
+                continue
+            if pred.tool in SKILL_TOOLS:
+                skill_cmd = (pred.with_args or {}).get("skill_command", "")
+                skill = resolve_skill_name(skill_cmd)
+                if skill:
+                    contract = get_skill_contract(skill, manifest)
+                    if (
+                        contract
+                        and contract.write_behavior in ("always", "conditional")
+                        and not contract.read_only
+                    ):
+                        found_write_skill = pred_name
+                        break
+            queue.extend((p, depth + 1) for p in ctx.predecessors.get(pred_name, set()))
+        if found_write_skill is not None and (
+            step.with_args.get("force", "").strip().lower() != "true"
+        ):
+            findings.append(
+                RuleFinding(
+                    rule="push-after-edit-requires-force",
+                    step_name=step_name,
+                    severity=Severity.ERROR,
+                    message=(
+                        f"push_to_remote step '{step_name}' follows write-behavior skill "
+                        f"step '{found_write_skill}' but is missing force='true'. "
+                        "A write-behavior skill rewrites commit history — a force push "
+                        "(--force-with-lease) is required to update the remote."
+                    ),
+                )
+            )
+
     return findings

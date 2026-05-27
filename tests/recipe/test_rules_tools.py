@@ -473,3 +473,119 @@ def test_release_issue_requires_disposition_passes_with_target_branch() -> None:
     findings = run_semantic_rules(recipe)
     hits = [f for f in findings if f.rule == "release-issue-requires-disposition"]
     assert not hits
+
+
+# ---------------------------------------------------------------------------
+# push-after-edit-requires-force rule tests
+# ---------------------------------------------------------------------------
+
+
+def _make_edit_then_push_recipe_tools(force: str | None = None) -> Recipe:
+    """Minimal recipe: run_skill (write-behavior) → push_to_remote."""
+    push_args: dict[str, str] = {"clone_path": "/tmp", "remote_url": "r", "branch": "b"}
+    if force is not None:
+        push_args["force"] = force
+    return Recipe(
+        name="test-recipe",
+        description="Test push-after-edit-requires-force rule.",
+        version="0.2.0",
+        kitchen_rules="Use run_skill only.",
+        steps={
+            "skill_step": RecipeStep(
+                tool="run_skill",
+                with_args={
+                    "skill_command": "/autoskillit:resolve-review branch base",
+                    "cwd": "/tmp",
+                    "output_dir": "/tmp",
+                },
+                on_success="push_step",
+                on_failure="done",
+            ),
+            "push_step": RecipeStep(
+                tool="push_to_remote",
+                with_args=push_args,
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        },
+    )
+
+
+def _patch_contract_for_push_rule(write_behavior: str, read_only: bool = False):
+    """Context manager that patches get_skill_contract for push-after-edit tests."""
+    from unittest.mock import MagicMock
+    from unittest.mock import patch as _patch
+
+    contract = MagicMock()
+    contract.write_behavior = write_behavior
+    contract.read_only = read_only
+    contract.write_expected_when = ["pat"] if write_behavior == "conditional" else []
+
+    return _patch(
+        "autoskillit.recipe.rules.rules_tools.get_skill_contract",
+        return_value=contract,
+    )
+
+
+def test_push_after_conditional_write_skill_without_force_fires() -> None:
+    """push-after-edit-requires-force fires ERROR: conditional-write before push without force."""
+    recipe = _make_edit_then_push_recipe_tools(force=None)
+    with _patch_contract_for_push_rule("conditional"):
+        findings = run_semantic_rules(recipe)
+    hits = [f for f in findings if f.rule == "push-after-edit-requires-force"]
+    assert hits, (
+        "push-after-edit-requires-force must fire when conditional-write skill "
+        "precedes a force-less push"
+    )
+    assert hits[0].severity == Severity.ERROR
+
+
+def test_push_after_always_write_skill_without_force_fires() -> None:
+    """push-after-edit-requires-force fires ERROR when always-write precedes push without force."""
+    recipe = _make_edit_then_push_recipe_tools(force=None)
+    with _patch_contract_for_push_rule("always"):
+        findings = run_semantic_rules(recipe)
+    hits = [f for f in findings if f.rule == "push-after-edit-requires-force"]
+    assert hits, "push-after-edit-requires-force must fire for write_behavior='always'"
+    assert hits[0].severity == Severity.ERROR
+
+
+def test_push_after_conditional_write_skill_with_force_passes() -> None:
+    """push-after-edit-requires-force does NOT fire when push has force='true'."""
+    recipe = _make_edit_then_push_recipe_tools(force="true")
+    with _patch_contract_for_push_rule("conditional"):
+        findings = run_semantic_rules(recipe)
+    hits = [f for f in findings if f.rule == "push-after-edit-requires-force"]
+    assert not hits, "push-after-edit-requires-force must not fire when force='true'"
+
+
+def test_push_after_readonly_skill_without_force_passes() -> None:
+    """push-after-edit-requires-force does NOT fire when the skill is read_only."""
+    recipe = _make_edit_then_push_recipe_tools(force=None)
+    with _patch_contract_for_push_rule("always", read_only=True):
+        findings = run_semantic_rules(recipe)
+    hits = [f for f in findings if f.rule == "push-after-edit-requires-force"]
+    assert not hits, "push-after-edit-requires-force must not fire for read_only skills"
+
+
+def test_all_bundled_recipes_pass_push_after_edit_rule() -> None:
+    """All bundled recipes must have zero push-after-edit-requires-force findings."""
+    from autoskillit.core import pkg_root
+    from autoskillit.recipe.io import load_recipe as _lr
+
+    recipes_dir = pkg_root() / "recipes"
+    recipe_files = sorted(recipes_dir.glob("*.yaml"))
+    assert recipe_files, "No bundled recipes found"
+
+    violations: list[str] = []
+    for recipe_path in recipe_files:
+        recipe = _lr(recipe_path)
+        findings = run_semantic_rules(recipe)
+        for f in findings:
+            if f.rule == "push-after-edit-requires-force":
+                violations.append(f"{recipe_path.name}:{f.step_name}: {f.message}")
+
+    assert not violations, (
+        "push-after-edit-requires-force fired on bundled recipes:\n" + "\n".join(violations)
+    )

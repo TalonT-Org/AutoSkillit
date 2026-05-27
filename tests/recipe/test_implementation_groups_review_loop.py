@@ -24,6 +24,12 @@ def test_check_review_loop_step_exists(recipe) -> None:
 
 
 # T_IG_LOOP2
+def test_pre_review_rebase_routes_to_re_push_review(recipe) -> None:
+    """pre_review_rebase on_success must route to re_push_review in implementation-groups."""
+    step = recipe.steps["pre_review_rebase"]
+    assert step.on_success == "re_push_review"
+
+
 def test_re_push_review_routes_to_check_review_loop(recipe) -> None:
     """re_push_review on_success must route to check_review_loop in implementation-groups
     recipe."""

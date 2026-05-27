@@ -16,7 +16,8 @@ _DENY_REASON = (
     "pr_number, cwd, current_iteration, max_iterations, and "
     "previous_verdict parameters BEFORE proceeding to "
     "wait_for_ci/enqueue_pr. "
-    "Recipe routing: re_push_review → on_success: check_review_loop."
+    "Recipe routing: resolve_review → pre_review_rebase → "
+    "re_push_review → on_success: check_review_loop."
 )
 
 _STATE_FILE_RELPATH = (".autoskillit", "temp", "review_gate_state.json")

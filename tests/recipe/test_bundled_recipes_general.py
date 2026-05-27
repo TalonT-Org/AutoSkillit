@@ -590,27 +590,66 @@ def test_recipe_has_unconditional_register_steps(recipe_name: str) -> None:
 
 @pytest.mark.parametrize(
     "recipe_name",
-    ["implementation.yaml", "implementation-groups.yaml", "remediation.yaml"],
+    [
+        "implementation.yaml",
+        "implementation-groups.yaml",
+        "remediation.yaml",
+        "merge-prs.yaml",
+    ],
 )
 def test_re_push_steps_have_force_true(recipe_name: str) -> None:
-    """All re_push/* steps must have force='true'.
+    """All push_to_remote steps following a write-behavior skill must have force='true'.
 
-    Post-rebase push requires --force-with-lease.
+    Structural discovery: no hardcoded step name list — catches any new push step.
     """
+    from autoskillit.core import SKILL_TOOLS
+    from autoskillit.recipe.contracts import (
+        get_skill_contract,
+        load_bundled_manifest,
+        resolve_skill_name,
+    )
+    from autoskillit.recipe.validator import make_validation_context
+
     recipe = load_recipe(builtin_recipes_dir() / recipe_name)
-    for step_name in (
-        "re_push",
-        "re_push_queue_fix",
-        "re_push_direct_fix",
-        "re_push_immediate_fix",
-    ):
-        assert step_name in recipe.steps, f"Expected step {step_name!r} in {recipe_name}"
-        step = recipe.steps[step_name]
-        assert step.tool == "push_to_remote"
-        assert step.with_args.get("force") == "true", (
-            f"{step_name} in {recipe_name} must include force='true' — "
-            "post-rebase push requires --force-with-lease"
-        )
+    ctx = make_validation_context(recipe)
+    manifest = load_bundled_manifest()
+    max_hops = 6
+
+    violations: list[str] = []
+    for step_name, step in recipe.steps.items():
+        if step.tool != "push_to_remote":
+            continue
+        visited: set[str] = set()
+        queue: list[tuple[str, int]] = [(p, 1) for p in ctx.predecessors.get(step_name, set())]
+        has_write_pred = False
+        while queue and not has_write_pred:
+            pred_name, depth = queue.pop(0)
+            if pred_name in visited or depth > max_hops:
+                continue
+            visited.add(pred_name)
+            pred = recipe.steps.get(pred_name)
+            if pred is None:
+                continue
+            if pred.tool in SKILL_TOOLS:
+                skill_cmd = (pred.with_args or {}).get("skill_command", "")
+                skill = resolve_skill_name(skill_cmd)
+                if skill:
+                    contract = get_skill_contract(skill, manifest)
+                    if (
+                        contract
+                        and contract.write_behavior in ("always", "conditional")
+                        and not contract.read_only
+                    ):
+                        has_write_pred = True
+                        break
+            queue.extend((p, depth + 1) for p in ctx.predecessors.get(pred_name, set()))
+        if has_write_pred and step.with_args.get("force", "").strip().lower() != "true":
+            violations.append(f"{step_name}: follows write-behavior skill without force='true'")
+
+    assert not violations, (
+        f"{recipe_name}: push steps after write-behavior skills need force='true':\n"
+        + "\n".join(violations)
+    )
 
 
 def test_bundled_recipes_have_no_ci_hardcoded_workflow() -> None:

@@ -328,3 +328,42 @@ def test_no_step_references_inputs_task_file(planner_recipe):
         assert "inputs.task_file" not in step_str, (
             f"Step {name!r} still references inputs.task_file"
         )
+
+
+# --- WP refine sharding tests (Steps 3b-3d, 4a) ---
+
+
+def test_refine_wps_recipe_step_uses_dispatch_items(planner_recipe):
+    step = planner_recipe.steps["refine_wps"]
+    assert "dispatch_items" in step.with_args, (
+        "refine_wps must use dispatch_items for per-phase parallel dispatch"
+    )
+    assert step.capture_list is not None, (
+        "refine_wps must use capture_list instead of capture for dispatch accumulation"
+    )
+
+
+def test_merge_wps_captures_wp_refine_context_paths(planner_recipe):
+    step = planner_recipe.steps["merge_wps"]
+    assert step.capture is not None, "merge_wps must have a capture block"
+    assert "wp_refine_context_paths" in step.capture, (
+        "merge_wps must capture wp_refine_context_paths for per-phase dispatch"
+    )
+
+
+def test_merge_refined_wps_step_exists(planner_recipe):
+    assert "merge_refined_wps" in planner_recipe.steps, (
+        "planner recipe must have a merge_refined_wps step"
+    )
+    step = planner_recipe.steps["merge_refined_wps"]
+    assert step.tool == "run_python"
+    assert step.with_args.get("callable") == "autoskillit.planner.merge.merge_refined_wps"
+
+
+@pytest.mark.parametrize("step_name", ["refine_assignments", "refine_wps"])
+def test_refine_tier_steps_all_use_dispatch_items(planner_recipe, step_name):
+    step = planner_recipe.steps[step_name]
+    assert "dispatch_items" in step.with_args, (
+        f"{step_name} must use dispatch_items for per-phase parallel dispatch. "
+        "All refine_* steps at the assignment/WP tier must shard by phase."
+    )

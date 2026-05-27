@@ -59,39 +59,40 @@ class TestContractRegistration:
         )
 
     def test_refined_wps_path_output_present(self, skill_contract: dict) -> None:
-        """outputs must declare refined_wps_path."""
+        """outputs must declare phase_wp_refined_path."""
         outputs = skill_contract.get("outputs", [])
         names = [o.get("name") for o in outputs]
-        assert "refined_wps_path" in names, f"refined_wps_path not in outputs. Found: {names}"
+        assert "phase_wp_refined_path" in names, (
+            f"phase_wp_refined_path not in outputs. Found: {names}"
+        )
 
     def test_refined_wps_path_type_is_file_path(self, skill_contract: dict) -> None:
-        """refined_wps_path output must have type file_path."""
+        """phase_wp_refined_path output must have type file_path."""
         outputs = skill_contract.get("outputs", [])
-        token = next((o for o in outputs if o.get("name") == "refined_wps_path"), None)
+        token = next((o for o in outputs if o.get("name") == "phase_wp_refined_path"), None)
         assert token is not None
         assert token.get("type") == "file_path", (
-            f"refined_wps_path type must be 'file_path', got {token.get('type')!r}. "
+            f"phase_wp_refined_path type must be 'file_path', got {token.get('type')!r}. "
             "Path-contamination detection requires file_path type."
         )
 
     def test_expected_output_pattern_present(self, skill_contract: dict) -> None:
-        """expected_output_patterns must include a pattern matching refined_wps_path."""
+        """expected_output_patterns must include a pattern matching phase_wp_refined_path."""
         patterns = skill_contract.get("expected_output_patterns", [])
-        assert any("refined_wps_path" in p for p in patterns), (
-            f"No expected_output_pattern referencing refined_wps_path. Found: {patterns}"
+        assert any("phase_wp_refined_path" in p for p in patterns), (
+            f"No expected_output_pattern referencing phase_wp_refined_path. Found: {patterns}"
         )
 
-    def test_four_inputs_declared(self, skill_contract: dict) -> None:
-        """Four inputs: combined_wps_path, refined_plan_path, etc."""
+    def test_three_inputs_declared(self, skill_contract: dict) -> None:
+        """Three inputs: context_file (per-phase context path), refined_plan_path, output_dir."""
         inputs = skill_contract.get("inputs", [])
-        assert len(inputs) == 4, (
-            f"Expected exactly 4 inputs, got {len(inputs)}: {[i.get('name') for i in inputs]}"
+        assert len(inputs) == 3, (
+            f"Expected exactly 3 inputs, got {len(inputs)}: {[i.get('name') for i in inputs]}"
         )
         input_names = {i.get("name") for i in inputs}
         assert input_names == {
-            "combined_wps_path",
+            "context_file",
             "refined_plan_path",
-            "refined_assignments_path",
             "output_dir",
         }, f"Unexpected input names: {input_names}"
 
@@ -125,9 +126,9 @@ class TestSkillMdPresence:
         )
 
     def test_skill_md_has_output_token(self, skill_md: str) -> None:
-        """SKILL.md must document the refined_wps_path output token."""
-        assert "refined_wps_path" in skill_md, (
-            "SKILL.md must document 'refined_wps_path = <path>' output token."
+        """SKILL.md must document the phase_wp_refined_path output token."""
+        assert "phase_wp_refined_path" in skill_md, (
+            "SKILL.md must document 'phase_wp_refined_path = <path>' output token."
         )
 
     def test_skill_md_has_l0_response_fields(self, skill_md: str) -> None:

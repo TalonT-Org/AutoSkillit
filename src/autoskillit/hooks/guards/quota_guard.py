@@ -28,9 +28,12 @@ _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
-from _hook_settings import resolve_quota_settings  # type: ignore[import-not-found]  # noqa: E402
-
-_AUTOSKILLIT_LOG_DIR_ENV = "AUTOSKILLIT_LOG_DIR"
+from _hook_settings import (  # noqa: E402
+    read_quota_cache,
+    resolve_quota_log_dir,
+    resolve_quota_settings,
+    write_quota_log_event,
+)  # type: ignore[import-not-found]
 
 # Emitted in deny messages; also referenced by orchestrator prompt QUOTA DENIAL ROUTING.
 # Changing this value requires updating _prompts.py and sous-chef/SKILL.md in the same commit.
@@ -39,60 +42,6 @@ QUOTA_GUARD_DENY_TRIGGER: str = "QUOTA WAIT REQUIRED"
 # Emitted when required sleep exceeds remaining session wall-clock budget.
 # Instructs the session to emit a clean sentinel and exit, rather than sleep-and-retry.
 QUOTA_BUDGET_EXCEEDED_TRIGGER: str = "QUOTA BUDGET EXCEEDED"
-
-
-def _read_quota_cache(cache_path_str: str, max_age: int) -> dict | None:
-    """Read quota cache file. Returns parsed data or None if missing/stale/corrupt."""
-    cache_path = Path(cache_path_str).expanduser()
-    if not cache_path.is_file():
-        return None
-    try:
-        data = json.loads(cache_path.read_text())
-        fetched = datetime.fromisoformat(data["fetched_at"])
-        age = (datetime.now(UTC) - fetched).total_seconds()
-        if age > max_age:
-            return None  # stale
-        return data
-    except (json.JSONDecodeError, KeyError, ValueError, OSError):
-        return None
-
-
-def _resolve_quota_log_dir() -> Path | None:
-    """Resolve the autoskillit log root directory. Returns None on any error.
-
-    Priority: AUTOSKILLIT_LOG_DIR env var > platform default.
-    Mirrors the logic in execution/session_log.py:resolve_log_dir().
-    """
-    try:
-        override = os.environ.get(_AUTOSKILLIT_LOG_DIR_ENV)
-        if override:
-            return Path(override)
-        if sys.platform == "darwin":
-            return Path.home() / "Library" / "Application Support" / "autoskillit" / "logs"
-        xdg = os.environ.get("XDG_DATA_HOME")
-        if xdg:
-            return Path(xdg) / "autoskillit" / "logs"
-        return Path.home() / ".local" / "share" / "autoskillit" / "logs"
-    except Exception:
-        return None
-
-
-def _write_quota_log_event(event: dict, log_dir: Path | None) -> None:
-    """Append a quota guard event to quota_events.jsonl at the log root.
-
-    Silently no-ops on any error — hook observability must never block run_skill.
-    Event schema: {ts, event, effective_threshold?, window_name?, utilization?,
-    sleep_seconds?, resets_at?, cache_path?}
-    """
-    if log_dir is None:
-        return
-    try:
-        log_dir.mkdir(parents=True, exist_ok=True)
-        line = json.dumps(event) + "\n"
-        with open(log_dir / "quota_events.jsonl", "a", encoding="utf-8") as f:
-            f.write(line)
-    except Exception:
-        pass  # Never block the hook on logging failure
 
 
 def main(*, cache_path_override: str | None = None) -> None:
@@ -113,12 +62,12 @@ def main(*, cache_path_override: str | None = None) -> None:
         sys.exit(0)  # quota guard disabled for this session
     cache_path_str = settings.cache_path
     cache_max_age = settings.cache_max_age
-    log_dir = _resolve_quota_log_dir()
+    log_dir = resolve_quota_log_dir(caller="quota_guard")
     ts = datetime.now(UTC).isoformat()
 
     profile = os.environ.get("AUTOSKILLIT_PROVIDER_PROFILE", "").strip()
     if profile and profile.casefold() != "anthropic":
-        _write_quota_log_event(
+        write_quota_log_event(
             {
                 "ts": ts,
                 "event": "provider_bypass",
@@ -126,18 +75,20 @@ def main(*, cache_path_override: str | None = None) -> None:
                 "cache_path": cache_path_str,
             },
             log_dir,
+            caller="quota_guard",
         )
         sys.exit(0)
 
-    cache = _read_quota_cache(cache_path_str, cache_max_age)
+    cache = read_quota_cache(cache_path_str, cache_max_age)
     if cache is None:
-        _write_quota_log_event(
+        write_quota_log_event(
             {
                 "ts": ts,
                 "event": "cache_miss",
                 "cache_path": cache_path_str,
             },
             log_dir,
+            caller="quota_guard",
         )
         sys.exit(0)  # no fresh cache — fail open
 
@@ -150,13 +101,14 @@ def main(*, cache_path_override: str | None = None) -> None:
         effective_threshold = float(binding.get("effective_threshold", 0.0))
         window_name = str(binding.get("window_name", "unknown"))
     except (KeyError, ValueError, TypeError):
-        _write_quota_log_event(
+        write_quota_log_event(
             {
                 "ts": ts,
                 "event": "parse_error",
                 "cache_path": cache_path_str,
             },
             log_dir,
+            caller="quota_guard",
         )
         sys.exit(0)  # malformed cache — fail open
 
@@ -186,7 +138,7 @@ def main(*, cache_path_override: str | None = None) -> None:
             except (ValueError, TypeError):
                 pass  # malformed deadline — fall through to normal deny
 
-        _write_quota_log_event(
+        write_quota_log_event(
             {
                 "ts": ts,
                 "event": "blocked_budget_exceeded" if budget_exceeded else "blocked",
@@ -198,6 +150,7 @@ def main(*, cache_path_override: str | None = None) -> None:
                 "budget_exceeded": budget_exceeded,
             },
             log_dir,
+            caller="quota_guard",
         )
 
         if budget_exceeded:
@@ -246,7 +199,7 @@ def main(*, cache_path_override: str | None = None) -> None:
                 )
             )
     else:
-        _write_quota_log_event(
+        write_quota_log_event(
             {
                 "ts": ts,
                 "event": "approved",
@@ -255,6 +208,7 @@ def main(*, cache_path_override: str | None = None) -> None:
                 "utilization": utilization,
             },
             log_dir,
+            caller="quota_guard",
         )
     sys.exit(0)  # exit 0 so Claude Code parses the JSON decision
 

@@ -14,6 +14,9 @@ These tests use ``tmp_path`` and ``monkeypatch`` for isolation — no global sta
 from __future__ import annotations
 
 import json
+import pathlib
+from datetime import UTC, datetime
+from unittest.mock import patch
 
 _ENV_VARS = (
     "AUTOSKILLIT_QUOTA_GUARD__CACHE_PATH",
@@ -212,3 +215,158 @@ def test_merged_hook_config_overlay_wins():
     assert merged["quota_guard"]["disabled"] is True
     assert merged["quota_guard"]["cache_max_age"] == 60
     assert merged["kitchen_id"] == "k1"
+
+
+# T-HS-10
+def test_read_quota_cache_returns_data_for_fresh_cache(tmp_path):
+    """Call read_quota_cache with a fresh cache file and assert it returns the parsed dict."""
+    from autoskillit.hooks._hook_settings import read_quota_cache
+
+    cache_file = tmp_path / "cache.json"
+    cache_file.write_text(json.dumps({"fetched_at": datetime.now(UTC).isoformat(), "binding": {}}))
+    result = read_quota_cache(str(cache_file), 300)
+    assert result is not None
+    assert "binding" in result
+
+
+# T-HS-11
+def test_read_quota_cache_returns_none_for_missing_file():
+    """Call read_quota_cache with a nonexistent path and assert it returns None."""
+    from autoskillit.hooks._hook_settings import read_quota_cache
+
+    result = read_quota_cache("/nonexistent/path.json", 300)
+    assert result is None
+
+
+# T-HS-12
+def test_read_quota_cache_returns_none_for_stale_cache(tmp_path):
+    """Cache 10 min old; read_quota_cache returns None for max_age=300."""
+    from autoskillit.hooks._hook_settings import read_quota_cache
+
+    cache_file = tmp_path / "cache.json"
+    old_time = datetime.now(UTC).timestamp() - 600  # 10 minutes ago
+    cache_file.write_text(
+        json.dumps(
+            {"fetched_at": datetime.fromtimestamp(old_time, tz=UTC).isoformat(), "binding": {}}
+        )
+    )
+    result = read_quota_cache(str(cache_file), 300)
+    assert result is None
+
+
+# T-HS-13
+def test_read_quota_cache_returns_none_for_corrupt_json(tmp_path):
+    """Write "not json" to a cache file and assert read_quota_cache returns None."""
+    from autoskillit.hooks._hook_settings import read_quota_cache
+
+    cache_file = tmp_path / "cache.json"
+    cache_file.write_text("not json")
+    result = read_quota_cache(str(cache_file), 300)
+    assert result is None
+
+
+# T-HS-14
+def test_read_quota_cache_returns_none_on_type_error(tmp_path):
+    """fetched_at: null triggers TypeError; read_quota_cache returns None."""
+    from autoskillit.hooks._hook_settings import read_quota_cache
+
+    cache_file = tmp_path / "cache.json"
+    cache_file.write_text(json.dumps({"fetched_at": None, "binding": {}}))
+    result = read_quota_cache(str(cache_file), 300)
+    assert result is None
+
+
+# T-HS-15
+def test_resolve_quota_log_dir_returns_platform_default(monkeypatch):
+    """Unset env vars; resolve_quota_log_dir returns a Path ending with autoskillit/logs."""
+    from autoskillit.hooks._hook_settings import resolve_quota_log_dir
+
+    monkeypatch.delenv("AUTOSKILLIT_LOG_DIR", raising=False)
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+    result = resolve_quota_log_dir()
+    assert result is not None
+    assert str(result).endswith("autoskillit/logs")
+
+
+# T-HS-16
+def test_resolve_quota_log_dir_respects_env_override(monkeypatch):
+    """AUTOSKILLIT_LOG_DIR=/tmp/custom; resolve_quota_log_dir returns Path("/tmp/custom")."""
+    from autoskillit.hooks._hook_settings import resolve_quota_log_dir
+
+    monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", "/tmp/custom")
+    result = resolve_quota_log_dir()
+    assert result == pathlib.Path("/tmp/custom")
+
+
+# T-HS-17
+def test_resolve_quota_log_dir_silent_when_no_caller(monkeypatch, capsys):
+    """Path.home raises; resolve_quota_log_dir() returns None, stderr empty (no caller)."""
+    from autoskillit.hooks._hook_settings import resolve_quota_log_dir
+
+    def raise_():
+        raise OSError("boom")
+
+    monkeypatch.setattr(pathlib.Path, "home", staticmethod(raise_))
+    result = resolve_quota_log_dir()
+    assert result is None
+    captured = capsys.readouterr()
+    assert captured.err == ""
+
+
+# T-HS-18
+def test_resolve_quota_log_dir_prints_stderr_with_caller(monkeypatch, capsys):
+    """Path.home raises; resolve_quota_log_dir(caller="test_hook") prints to stderr."""
+    from autoskillit.hooks._hook_settings import resolve_quota_log_dir
+
+    def raise_():
+        raise OSError("boom")
+
+    monkeypatch.setattr(pathlib.Path, "home", staticmethod(raise_))
+    result = resolve_quota_log_dir(caller="test_hook")
+    assert result is None
+    captured = capsys.readouterr()
+    assert "test_hook" in captured.err
+
+
+# T-HS-19
+def test_write_quota_log_event_writes_jsonl(tmp_path):
+    """write_quota_log_event writes JSON line to quota_events.jsonl."""
+    from autoskillit.hooks._hook_settings import write_quota_log_event
+
+    write_quota_log_event({"event": "test"}, tmp_path)
+    log_file = tmp_path / "quota_events.jsonl"
+    assert log_file.exists()
+    lines = log_file.read_text().splitlines()
+    assert len(lines) == 1
+    assert json.loads(lines[0])["event"] == "test"
+
+
+# T-HS-20
+def test_write_quota_log_event_noop_when_log_dir_none():
+    """Call write_quota_log_event with log_dir=None; assert no error and no output."""
+    from autoskillit.hooks._hook_settings import write_quota_log_event
+
+    # Should not raise
+    write_quota_log_event({"event": "test"}, None)
+
+
+# T-HS-21
+def test_write_quota_log_event_silent_when_no_caller(tmp_path, capsys):
+    """open raises; write_quota_log_event({}, tmp_path) stderr empty (no caller)."""
+    from autoskillit.hooks._hook_settings import write_quota_log_event
+
+    with patch("builtins.open", side_effect=OSError("disk full")):
+        write_quota_log_event({}, tmp_path)
+    captured = capsys.readouterr()
+    assert captured.err == ""
+
+
+# T-HS-22
+def test_write_quota_log_event_prints_stderr_with_caller(tmp_path, capsys):
+    """open raises; write_quota_log_event(..., caller="test_hook") prints to stderr."""
+    from autoskillit.hooks._hook_settings import write_quota_log_event
+
+    with patch("builtins.open", side_effect=OSError("disk full")):
+        write_quota_log_event({}, tmp_path, caller="test_hook")
+    captured = capsys.readouterr()
+    assert "test_hook" in captured.err

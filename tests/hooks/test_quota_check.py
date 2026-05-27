@@ -578,14 +578,14 @@ def test_hook_respects_should_block_false_when_class_disabled(tmp_path):
 
 
 def test_resolve_quota_log_dir_and_resolve_log_dir_in_sync(monkeypatch):
-    """_resolve_quota_log_dir() must produce the same path as resolve_log_dir('') for
+    """resolve_quota_log_dir() must produce the same path as resolve_log_dir('') for
     identical env inputs. Guards against independent evolution of the two implementations.
 
-    Constraint: these functions MUST NOT be merged — quota_guard.py is stdlib-only
-    and self-contained. This test is the canonical drift guard.
+    Constraint: this function MUST NOT be merged with execution/session_log.resolve_log_dir —
+    _hook_settings.py is stdlib-only and self-contained. This test is the canonical drift guard.
     """
     from autoskillit.execution.session_log import resolve_log_dir
-    from autoskillit.hooks.guards.quota_guard import _resolve_quota_log_dir
+    from autoskillit.hooks._hook_settings import resolve_quota_log_dir as _resolve_quota_log_dir
 
     # Case 1: platform default (no env overrides)
     monkeypatch.delenv("AUTOSKILLIT_LOG_DIR", raising=False)
@@ -594,10 +594,10 @@ def test_resolve_quota_log_dir_and_resolve_log_dir_in_sync(monkeypatch):
     quota_path = _resolve_quota_log_dir()
     session_path = resolve_log_dir("")
 
-    assert quota_path is not None, "_resolve_quota_log_dir() must not return None"
+    assert quota_path is not None, "resolve_quota_log_dir() must not return None"
     assert quota_path == session_path, (
         f"Log dir mismatch (no env overrides):\n"
-        f"  quota_check._resolve_quota_log_dir(): {quota_path}\n"
+        f"  _hook_settings.resolve_quota_log_dir(): {quota_path}\n"
         f"  session_log.resolve_log_dir(''): {session_path}"
     )
 

@@ -487,7 +487,7 @@ class TestIntegration:
         """Cache written by _write_cache must be readable and actionable by quota_guard.main().
 
         T-INT-1: Catches format drift between _write_cache (execution layer) and
-        _read_quota_cache (hook subprocess layer).
+        read_quota_cache (hook subprocess layer, _hook_settings.py).
         """
         import io
         from contextlib import redirect_stdout

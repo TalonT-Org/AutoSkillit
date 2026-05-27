@@ -16,7 +16,9 @@ Claude Code hook subprocesses.
 
 import json
 import os
+import sys
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 # Keep in sync with _HOOK_CONFIG_PATH_COMPONENTS in hooks/_fmt_primitives.py
@@ -183,3 +185,62 @@ def resolve_quota_settings(*, cache_path_override: str | None = None) -> QuotaHo
         buffer_seconds=buffer_seconds,
         disabled=disabled,
     )
+
+
+_AUTOSKILLIT_LOG_DIR_ENV = "AUTOSKILLIT_LOG_DIR"
+
+
+def read_quota_cache(cache_path_str: str, max_age: int) -> dict | None:
+    """Read quota cache file. Returns parsed data or None if missing/stale/corrupt."""
+    cache_path = Path(cache_path_str).expanduser()
+    if not cache_path.is_file():
+        return None
+    try:
+        data = json.loads(cache_path.read_text())
+        fetched = datetime.fromisoformat(data["fetched_at"])
+        age = (datetime.now(UTC) - fetched).total_seconds()
+        if age > max_age:
+            return None
+        return data
+    except (json.JSONDecodeError, KeyError, ValueError, OSError, TypeError):
+        return None
+
+
+def resolve_quota_log_dir(*, caller: str = "") -> Path | None:
+    """Resolve the autoskillit log root directory. Returns None on any error.
+
+    Priority: AUTOSKILLIT_LOG_DIR env var > platform default.
+    Mirrors the logic in execution/session_log.py:resolve_log_dir().
+    """
+    try:
+        override = os.environ.get(_AUTOSKILLIT_LOG_DIR_ENV)
+        if override:
+            return Path(override)
+        if sys.platform == "darwin":
+            return Path.home() / "Library" / "Application Support" / "autoskillit" / "logs"
+        xdg = os.environ.get("XDG_DATA_HOME")
+        if xdg:
+            return Path(xdg) / "autoskillit" / "logs"
+        return Path.home() / ".local" / "share" / "autoskillit" / "logs"
+    except Exception as exc:
+        if caller:
+            print(f"{caller}: failed to resolve log directory: {exc}", file=sys.stderr)
+        return None
+
+
+def write_quota_log_event(event: dict, log_dir: Path | None, *, caller: str = "") -> None:
+    """Append a quota event to quota_events.jsonl at the log root.
+
+    No-ops when ``log_dir`` is None. On write failure, prints to stderr when
+    ``caller`` is provided; otherwise silently returns.
+    """
+    if log_dir is None:
+        return
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+        line = json.dumps(event) + "\n"
+        with open(log_dir / "quota_events.jsonl", "a", encoding="utf-8") as f:
+            f.write(line)
+    except Exception as exc:
+        if caller:
+            print(f"{caller}: failed to write quota log event: {exc}", file=sys.stderr)

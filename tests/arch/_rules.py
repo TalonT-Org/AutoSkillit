@@ -82,6 +82,7 @@ _PRINT_EXEMPT = frozenset(
         "_validate.py",
         "_workspace.py",
         "branch_protection_guard.py",
+        "_hook_settings.py",
         "lint_after_edit_hook.py",
         "open_kitchen_guard.py",
         "pretty_output_hook.py",
@@ -100,6 +101,7 @@ _PRINT_EXEMPT = frozenset(
 # _onboarding.py: CLI helper with user-facing graceful degradation (fail-open UX, not a hook)
 _BROAD_EXCEPT_EXEMPT = frozenset(
     {
+        "_hook_settings.py",
         "_onboarding.py",
         "open_kitchen_guard.py",
         "pretty_output_hook.py",

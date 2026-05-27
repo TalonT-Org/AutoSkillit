@@ -151,3 +151,96 @@ def test_skip_when_false_on_visible_ingredient_no_warning() -> None:
     violations = run_semantic_rules(recipe)
     findings = [v for v in violations if v.rule == "skip-when-false-on-hidden"]
     assert findings == []
+
+
+# ---------------------------------------------------------------------------
+# skip-when-false-on-non-boolean tests
+# ---------------------------------------------------------------------------
+
+
+def test_skip_when_false_on_non_boolean_ingredient_fires_warning() -> None:
+    """skip-when-false-on-non-boolean fires WARNING when default is not 'true'/'false'."""
+    recipe = Recipe(
+        name="test",
+        description="test",
+        steps={
+            "entry": RecipeStep(tool="run_cmd", on_success="guarded"),
+            "guarded": RecipeStep(
+                tool="run_skill",
+                optional=True,
+                skip_when_false="inputs.issue_url",
+                on_success="done",
+                on_failure="done",
+                with_args={"skill_command": "/autoskillit:foo /tmp/x.md", "cwd": "/tmp"},
+                on_context_limit="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        },
+        ingredients={
+            "issue_url": RecipeIngredient(
+                description="GitHub issue URL", required=False, default=None
+            )
+        },
+        kitchen_rules=["test"],
+    )
+    violations = run_semantic_rules(recipe)
+    findings = [v for v in violations if v.rule == "skip-when-false-on-non-boolean"]
+    assert len(findings) == 1
+    assert findings[0].severity == Severity.WARNING
+    assert "issue_url" in findings[0].message
+
+
+def test_skip_when_false_on_boolean_ingredient_no_warning() -> None:
+    """skip-when-false-on-non-boolean does NOT fire when default is 'true' or 'false'."""
+    recipe = Recipe(
+        name="test",
+        description="test",
+        steps={
+            "entry": RecipeStep(tool="run_cmd", on_success="guarded"),
+            "guarded": RecipeStep(
+                tool="run_skill",
+                optional=True,
+                skip_when_false="inputs.open_pr",
+                on_success="done",
+                on_failure="done",
+                with_args={"skill_command": "/autoskillit:foo /tmp/x.md", "cwd": "/tmp"},
+                on_context_limit="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        },
+        ingredients={
+            "open_pr": RecipeIngredient(description="Open a PR", required=False, default="true")
+        },
+        kitchen_rules=["test"],
+    )
+    violations = run_semantic_rules(recipe)
+    findings = [v for v in violations if v.rule == "skip-when-false-on-non-boolean"]
+    assert findings == []
+
+
+def test_skip_when_false_on_required_no_default_no_warning() -> None:
+    """skip-when-false-on-non-boolean does NOT fire when ingredient is required with no default."""
+    recipe = Recipe(
+        name="test",
+        description="test",
+        steps={
+            "entry": RecipeStep(tool="run_cmd", on_success="guarded"),
+            "guarded": RecipeStep(
+                tool="run_skill",
+                optional=True,
+                skip_when_false="inputs.target",
+                on_success="done",
+                on_failure="done",
+                with_args={"skill_command": "/autoskillit:foo /tmp/x.md", "cwd": "/tmp"},
+                on_context_limit="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        },
+        ingredients={
+            "target": RecipeIngredient(description="Target", required=True, default=None)
+        },
+        kitchen_rules=["test"],
+    )
+    violations = run_semantic_rules(recipe)
+    findings = [v for v in violations if v.rule == "skip-when-false-on-non-boolean"]
+    assert findings == []

@@ -264,3 +264,37 @@ def test_sprint_prefix_sub_recipe_does_not_exist() -> None:
 
     sub_recipe_path = builtin_sub_recipes_dir() / "sprint-prefix.yaml"
     assert not sub_recipe_path.exists()
+
+
+def test_build_active_recipe_truthy_non_boolean_string_is_truthy(tmp_path: Path) -> None:
+    """_build_active_recipe gate evaluation treats non-boolean truthy strings correctly.
+
+    Specifically, non-empty strings not in the falsy set (false/0/no) must be treated
+    as truthy, enabling gate ingredients to hold URL-like or path-like values in future.
+    Currently all gate ingredients are boolean, but both evaluation sites must be consistent.
+    """
+    sub_dir = tmp_path / ".autoskillit" / "recipes" / "sub-recipes"
+    sub_dir.mkdir(parents=True)
+    sub_recipe_content = textwrap.dedent("""
+        name: test-sub
+        description: Sub recipe
+        kitchen_rules:
+          - no native tools
+        steps:
+          sub_step:
+            tool: run_cmd
+            with:
+              cmd: echo sub
+            on_success: done
+    """)
+    (sub_dir / "test-sub.yaml").write_text(sub_recipe_content)
+
+    # Use a non-boolean-but-truthy gate value: "enabled"
+    parent = _make_parent_recipe(gate_default="false")
+    active, combined = _build_active_recipe(parent, {"flag_mode": "enabled"}, tmp_path)
+    assert "test_entry" not in active.steps, (
+        "Sub-recipe placeholder must be replaced by merged steps when gate is truthy"
+    )
+    assert combined is not None
+    # At least one sub-recipe step must appear (prefixed)
+    assert any(name.startswith("test_sub_") for name in active.steps)

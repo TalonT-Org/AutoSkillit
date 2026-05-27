@@ -6,11 +6,11 @@ import pytest
 import yaml
 
 from autoskillit.core.types import Severity
-from autoskillit.recipe._api import validate_from_path
+from autoskillit.recipe._api import load_and_validate, validate_from_path
 from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 
-pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
 RECIPES_DIR = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "recipes"
 
@@ -438,3 +438,63 @@ def test_bundled_recipes_pass_release_issue_disposition_rule():
         findings = run_semantic_rules(recipe)
         hits = [f for f in findings if f.rule == "release-issue-requires-disposition"]
         assert not hits, f"{recipe_name}: {hits}"
+
+
+class TestIssueUrlPruning:
+    """Integration tests: _prune_skipped_steps behavior with issue_url in full pipeline."""
+
+    def test_claim_and_resolve_survives_pruning_with_url(self) -> None:
+        """claim_and_resolve step must survive pruning when issue_url is a real URL."""
+        result = load_and_validate(
+            "remediation",
+            ingredient_overrides={"issue_url": "https://github.com/org/repo/issues/42"},
+        )
+        content = yaml.safe_load(result["content"])
+        steps = content.get("steps", {})
+        assert "claim_and_resolve" in steps, (
+            "claim_and_resolve must be present when issue_url is a URL"
+        )
+        # skip_when_false must be stripped (step is mandatory after pruning)
+        assert "skip_when_false" not in steps["claim_and_resolve"], (
+            "skip_when_false must be cleared on claim_and_resolve when issue_url is provided"
+        )
+
+    def test_claim_and_resolve_pruned_without_url(self) -> None:
+        """claim_and_resolve step must be pruned or guarded when issue_url is absent."""
+        result = load_and_validate(
+            "remediation",
+            ingredient_overrides={},
+        )
+        content_str = result["content"]
+        content = yaml.safe_load(content_str)
+        steps = content.get("steps", {})
+        assert (
+            "claim_and_resolve" not in steps
+            or steps["claim_and_resolve"].get("skip_when_false") == "false"
+        ), (
+            "claim_and_resolve must be pruned (absent) or remain guarded "
+            "(skip_when_false='false') when issue_url is not provided"
+        )
+
+
+@pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "implementation-groups"])
+def test_bundled_recipes_fire_skip_when_false_non_boolean_warning_for_issue_url(
+    recipe_name: str,
+) -> None:
+    """Bundled recipes using skip_when_false: inputs.issue_url fire the non-boolean warning.
+
+    Documentation-of-known-state: the warning is expected and intentional. issue_url is
+    URL-typed; truthiness evaluation is correct after the Part A fix, but the pattern
+    is non-standard and the warning documents it for future recipe authors.
+    """
+    recipe = load_recipe(_recipe_path(recipe_name))
+    findings = run_semantic_rules(recipe)
+    hits = [
+        f
+        for f in findings
+        if f.rule == "skip-when-false-on-non-boolean" and "issue_url" in f.message
+    ]
+    assert len(hits) >= 1, (
+        f"{recipe_name}: expected at least one skip-when-false-on-non-boolean WARNING "
+        f"for issue_url but found none"
+    )

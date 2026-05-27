@@ -151,3 +151,46 @@ def _check_skip_when_false_on_hidden(ctx: ValidationContext) -> list[RuleFinding
                 )
             )
     return findings
+
+
+@semantic_rule(
+    name="skip-when-false-on-non-boolean",
+    description=(
+        "skip_when_false references an ingredient whose default is not in "
+        "{'true', 'false'}, indicating it carries a non-boolean value (URL, path, etc.). "
+        "skip_when_false evaluates presence via truthiness — any non-empty, non-falsy "
+        "string is truthy. This is correct behavior but differs from the boolean "
+        "true/false pattern most skip_when_false guards use."
+    ),
+    severity=Severity.WARNING,
+)
+def _check_skip_when_false_on_non_boolean(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if not step.skip_when_false:
+            continue
+        ref = step.skip_when_false
+        if not ref.startswith("inputs."):
+            continue
+        ingredient_name = ref[len("inputs.") :]
+        ing = ctx.recipe.ingredients.get(ingredient_name)
+        if ing is None:
+            continue
+        if ing.default in ("true", "false"):
+            continue
+        if ing.required and ing.default is None:
+            continue
+        findings.append(
+            RuleFinding(
+                rule="skip-when-false-on-non-boolean",
+                severity=Severity.WARNING,
+                step_name=step_name,
+                message=(
+                    f"Step '{step_name}': skip_when_false references '{ingredient_name}' "
+                    f"which is not a boolean ingredient (default: {ing.default!r}). "
+                    "Truthiness evaluation treats any non-empty, non-falsy string as "
+                    "truthy (presence check). Verify this is the intended behavior."
+                ),
+            )
+        )
+    return findings

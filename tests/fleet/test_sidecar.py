@@ -74,6 +74,14 @@ class TestIssueSidecarEntryFromDict:
         entry = IssueSidecarEntry.from_dict(data)
         assert entry.issue_url == URL1
 
+    def test_from_dict_non_string_issue_url_raises(self) -> None:
+        with pytest.raises(TypeError, match="issue_url must be str"):
+            IssueSidecarEntry.from_dict({"issue_url": 123, "status": "completed", "ts": TS})
+
+    def test_from_dict_non_string_status_raises(self) -> None:
+        with pytest.raises(TypeError, match="status must be str"):
+            IssueSidecarEntry.from_dict({"issue_url": URL1, "status": 42, "ts": TS})
+
 
 class TestAppendSidecarEntry:
     def test_creates_file_on_first_append(self, tmp_path: Path) -> None:

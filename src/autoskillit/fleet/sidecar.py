@@ -28,12 +28,21 @@ class IssueSidecarEntry:
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> IssueSidecarEntry:
+        issue_url = data["issue_url"]
+        if not isinstance(issue_url, str):
+            raise TypeError(f"issue_url must be str, got {type(issue_url).__name__!r}")
+        status = data["status"]
+        if not isinstance(status, str):
+            raise TypeError(f"status must be str, got {type(status).__name__!r}")
+        ts_raw = data.get("ts")
+        pr_url_raw = data.get("pr_url")
+        reason_raw = data.get("reason")
         return cls(
-            issue_url=data["issue_url"],  # type: ignore[arg-type]
-            status=data["status"],  # type: ignore[arg-type]
-            ts=data.get("ts", ""),  # type: ignore[arg-type]
-            pr_url=data.get("pr_url"),  # type: ignore[arg-type]
-            reason=data.get("reason"),  # type: ignore[arg-type]
+            issue_url=issue_url,
+            status=status,  # type: ignore[arg-type]
+            ts=str(ts_raw) if ts_raw is not None else "",
+            pr_url=str(pr_url_raw) if pr_url_raw is not None else None,
+            reason=str(reason_raw) if reason_raw is not None else None,
         )
 
 

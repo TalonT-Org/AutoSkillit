@@ -32,9 +32,11 @@ from autoskillit.core import (
 )
 from autoskillit.core import resolve_skill_temp_dir as _resolve_skill_temp_dir
 from autoskillit.execution.clone_guard import (
+    GUARD_EXCLUDE_PREFIX,
     build_clone_guard_policy,
     check_and_revert_clone_contamination,
     is_clone_commit_skill,
+    is_path_under_exclude,
     is_worktree_skill,
     snapshot_clone_state,
 )
@@ -161,11 +163,18 @@ async def _execute_claude_headless(
 
     _readonly_skill = readonly_skill
     _has_write_scope = bool(write_watch_dirs)
+    _writes_under_exclude = bool(
+        write_watch_dirs
+        and all(
+            is_path_under_exclude(d, Path(cwd), GUARD_EXCLUDE_PREFIX) for d in write_watch_dirs
+        )
+    )
     _clone_guard_policy = build_clone_guard_policy(
         readonly_skill=_readonly_skill,
         has_write_scope=_has_write_scope,
         is_clone_commit=is_clone_commit_skill(skill_command),
         is_worktree=is_worktree_skill(skill_command),
+        writes_under_exclude=_writes_under_exclude,
     )
     _clone_snapshot = None
     if (

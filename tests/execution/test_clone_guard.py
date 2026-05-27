@@ -726,3 +726,36 @@ async def test_result_needs_retry_set_on_revert(tmp_path):
     assert reverted
     assert result.needs_retry is True
     assert result.retry_reason == RetryReason.CLONE_CONTAMINATION
+
+
+# ---------------------------------------------------------------------------
+# Exclude-prefix filtering in detect_contamination
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_detect_contamination_ignores_excluded_files(tmp_path):
+    """Files under exclude_prefix should not count as contamination."""
+    runner = MockSubprocessRunner()
+    runner.push(_git_result(stdout="abc123\n"))  # rev-parse HEAD (same as snapshot)
+    runner.push(_git_result(stdout="?? .autoskillit/temp/planner/output.json\n"))  # status
+    snapshot = CloneSnapshot(head_sha="abc123")
+    report = await detect_contamination(
+        snapshot, str(tmp_path), runner, exclude_prefix=".autoskillit/"
+    )
+    assert report is None
+
+
+@pytest.mark.anyio
+async def test_detect_contamination_external_head_with_excluded_files(tmp_path):
+    """External HEAD advance with only excluded dirty files should report HEAD change only."""
+    runner = MockSubprocessRunner()
+    runner.push(_git_result(stdout="def456\n"))  # rev-parse HEAD (different from snapshot)
+    runner.push(_git_result(stdout="?? .autoskillit/temp/planner/output.json\n"))  # status
+    snapshot = CloneSnapshot(head_sha="abc123")
+    report = await detect_contamination(
+        snapshot, str(tmp_path), runner, exclude_prefix=".autoskillit/"
+    )
+    assert report is not None
+    assert report.direct_commits is True
+    assert report.uncommitted_files == []

@@ -38,18 +38,24 @@ def _uses_bound_contextvars(func_node: ast.AsyncFunctionDef) -> bool:
 
 
 def _try_except_is_inside_with_body(func_node: ast.AsyncFunctionDef) -> bool:
-    for child in ast.walk(func_node):
-        if not isinstance(child, ast.With):
+    # Use a manual queue instead of ast.walk to avoid descending into nested
+    # AsyncFunctionDef/FunctionDef nodes, which could produce false positives.
+    queue = list(ast.iter_child_nodes(func_node))
+    while queue:
+        child = queue.pop()
+        if isinstance(child, (ast.AsyncFunctionDef, ast.FunctionDef)):
             continue
-        for item in child.items:
-            call = item.context_expr
-            if (
-                isinstance(call, ast.Call)
-                and isinstance(call.func, ast.Attribute)
-                and call.func.attr == "bound_contextvars"
-            ):
-                if not any(isinstance(stmt, ast.Try) for stmt in child.body):
-                    return False
+        if isinstance(child, ast.With):
+            for item in child.items:
+                call = item.context_expr
+                if (
+                    isinstance(call, ast.Call)
+                    and isinstance(call.func, ast.Attribute)
+                    and call.func.attr == "bound_contextvars"
+                ):
+                    if not any(isinstance(stmt, ast.Try) for stmt in child.body):
+                        return False
+        queue.extend(ast.iter_child_nodes(child))
     return True
 
 

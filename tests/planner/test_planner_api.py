@@ -40,6 +40,7 @@ def test_planner_all_exports() -> None:
         "replace_item",
         "build_plan_snapshot",
         "merge_refined_assignments",
+        "merge_refined_wps",
         "PlanDocument",
         "PhaseShort",
         "PhaseElaborated",

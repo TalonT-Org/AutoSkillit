@@ -109,7 +109,7 @@ def test_process_issues_auto_detects_review_approach(skill_text: str) -> None:
     """process-issues must document auto-detection of review_approach marker."""
     lower = skill_text.lower()
     assert "review_approach" in lower
-    assert "<!-- review_approach: true -->" in skill_text or "review_approach_detected" in lower
+    assert "<!-- review_approach: true -->" in skill_text and "review_approach_detected" in lower
 
 
 def test_process_issues_review_approach_not_unconditionally_false(skill_text: str) -> None:

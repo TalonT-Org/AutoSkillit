@@ -48,7 +48,12 @@ def _mark_dead_pid(
         logger.info("reap: [MARKED]      %s  pid=%d  (process dead)", name, pid)
 
 
-def reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
+def reap_stale_dispatches(
+    state_path: Path,
+    *,
+    dry_run: bool = False,
+    skip_dispatch_ids: frozenset[str] | None = None,
+) -> None:
     """Reap stale RUNNING dispatches with PID-recycling-safe identity checks.
 
     Uses CampaignStateMutator (which holds _resume_lock + flock on .lock sidecar)
@@ -86,6 +91,13 @@ def reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
 
         for dispatch in running:
             name = dispatch.name
+            if skip_dispatch_ids and dispatch.dispatch_id in skip_dispatch_ids:
+                logger.info(
+                    "reap: [SKIPPED]     %s  dispatch_id=%s  (self-exclusion)",
+                    name,
+                    dispatch.dispatch_id,
+                )
+                continue
             pid = dispatch.dispatched_pid
 
             if pid == 0:
@@ -173,7 +185,16 @@ def reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
                     )
 
 
-async def reap_stale_dispatches_async(state_paths: list[Path]) -> None:
+async def reap_stale_dispatches_async(
+    state_paths: list[Path],
+    *,
+    skip_dispatch_ids: frozenset[str] | None = None,
+) -> None:
+    import functools  # noqa: PLC0415
+
     loop = asyncio.get_running_loop()
     for sp in state_paths:
-        await loop.run_in_executor(None, reap_stale_dispatches, sp)
+        await loop.run_in_executor(
+            None,
+            functools.partial(reap_stale_dispatches, sp, skip_dispatch_ids=skip_dispatch_ids),
+        )

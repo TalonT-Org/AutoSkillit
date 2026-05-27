@@ -26,6 +26,7 @@ def _make_running_state(
     tmp_path: Path,
     *,
     dispatch_name: str = "d1",
+    dispatch_id: str = "did-reap",
     dispatched_pid: int = 12345,
     dispatched_starttime_ticks: int = 1000,
     dispatched_boot_id: str = BOOT_ID,
@@ -39,7 +40,7 @@ def _make_running_state(
     raw["dispatches"][0].update(
         {
             "status": "running",
-            "dispatch_id": "did-reap",
+            "dispatch_id": dispatch_id,
             "dispatched_pid": dispatched_pid,
             "dispatched_starttime_ticks": dispatched_starttime_ticks,
             "dispatched_boot_id": dispatched_boot_id,
@@ -51,10 +52,12 @@ def _make_running_state(
     return sp
 
 
-def _reap(state_path: Path, *, dry_run: bool = False) -> None:
+def _reap(
+    state_path: Path, *, dry_run: bool = False, skip_dispatch_ids: frozenset[str] | None = None
+) -> None:
     from autoskillit.fleet import reap_stale_dispatches
 
-    reap_stale_dispatches(state_path, dry_run=dry_run)
+    reap_stale_dispatches(state_path, dry_run=dry_run, skip_dispatch_ids=skip_dispatch_ids)
 
 
 class TestReap:
@@ -333,3 +336,81 @@ class TestReap:
         state = read_state(sp)
         assert state is not None
         assert state.dispatches[0].reason == "reaped_orphan"
+
+    def test_reap_skips_dispatch_in_skip_set(self, tmp_path: Path) -> None:
+        sp = _make_running_state(
+            tmp_path,
+            dispatch_id="test-dispatch-id",
+            dispatched_pid=12345,
+            dispatched_starttime_ticks=1000,
+        )
+        with (
+            patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=True),
+            patch(
+                "autoskillit.fleet._dispatch_reaper.read_starttime_ticks",
+                return_value=1000,
+            ),
+            patch(
+                "autoskillit.fleet._dispatch_reaper.read_boot_id",
+                return_value=BOOT_ID,
+            ),
+            patch("autoskillit.fleet._dispatch_reaper.kill_process_tree") as mock_kill,
+        ):
+            _reap(sp, skip_dispatch_ids=frozenset({"test-dispatch-id"}))
+
+        mock_kill.assert_not_called()
+        state = read_state(sp)
+        assert state is not None
+        assert state.dispatches[0].status == DispatchStatus.RUNNING
+
+        with (
+            patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=True),
+            patch(
+                "autoskillit.fleet._dispatch_reaper.read_starttime_ticks",
+                return_value=1000,
+            ),
+            patch(
+                "autoskillit.fleet._dispatch_reaper.read_boot_id",
+                return_value=BOOT_ID,
+            ),
+            patch("autoskillit.fleet._dispatch_reaper.kill_process_tree") as mock_kill,
+        ):
+            _reap(sp)
+
+        mock_kill.assert_called_once_with(12345)
+        state = read_state(sp)
+        assert state is not None
+        assert state.dispatches[0].reason == "reaped_orphan"
+
+    def test_reap_self_referential_pid_survives_with_skip_guard(self, tmp_path: Path) -> None:
+        import os
+
+        sp = _make_running_state(
+            tmp_path,
+            dispatch_id="my-dispatch",
+            dispatched_pid=os.getpid(),
+            dispatched_starttime_ticks=1000,
+            dispatched_boot_id=BOOT_ID,
+        )
+        with (
+            patch("autoskillit.fleet._dispatch_reaper.read_starttime_ticks", return_value=1000),
+            patch("autoskillit.fleet._dispatch_reaper.read_boot_id", return_value=BOOT_ID),
+        ):
+            _reap(sp, skip_dispatch_ids=frozenset({"my-dispatch"}))
+
+        state = read_state(sp)
+        assert state is not None
+        assert state.dispatches[0].status == DispatchStatus.RUNNING
+
+    @pytest.mark.anyio
+    async def test_reap_async_forwards_skip_dispatch_ids(self, tmp_path: Path) -> None:
+
+        sp = tmp_path / "state.json"
+        sp.write_text("{}")
+
+        with patch("autoskillit.fleet._dispatch_reaper.reap_stale_dispatches") as mock_reap:
+            from autoskillit.fleet import reap_stale_dispatches_async
+
+            await reap_stale_dispatches_async([sp], skip_dispatch_ids=frozenset({"skip-me"}))
+
+        mock_reap.assert_called_once_with(sp, skip_dispatch_ids=frozenset({"skip-me"}))

@@ -50,6 +50,11 @@ _HEADLESS_ENV_HARDENING: dict[str, str] = {
     "NO_COLOR": "1",
 }
 
+# Keys excluded from the host env when building the interactive base env.
+# Kept separate from _HEADLESS_ENV_HARDENING so that future headless-only
+# additions to that set do not silently change interactive env filtering.
+_INTERACTIVE_ENV_EXCLUSIONS: frozenset[str] = frozenset(_HEADLESS_ENV_HARDENING)
+
 # Variables that _build_skill_session_cmd_impl controls exclusively. They must not
 # leak from the host process environment — the caller opts in via explicit
 # parameters (exit_after_stop_delay_ms, scenario_step_name, allowed_write_prefix, etc.).

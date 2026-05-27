@@ -41,6 +41,7 @@ from autoskillit.core import (
 from autoskillit.execution.backends._claude_prompt import (
     _HEADLESS_ENV_HARDENING,
     _HEADLESS_EXCLUSIVE_VARS,
+    _INTERACTIVE_ENV_EXCLUSIONS,
     _MAX_MCP_OUTPUT_TOKENS_VALUE,
     _SESSION_BASELINE_ENV,
     _apply_output_format,
@@ -373,7 +374,7 @@ class ClaudeCodeBackend:
         if env_extras:
             merged.update(env_extras)
         interactive_base = {
-            k: v for k, v in os.environ.items() if k not in _HEADLESS_ENV_HARDENING
+            k: v for k, v in os.environ.items() if k not in _INTERACTIVE_ENV_EXCLUSIONS
         }
         return CmdSpec(
             cmd=tuple(cmd),

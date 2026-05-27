@@ -43,7 +43,7 @@ def _command_inspecting_guard_scripts() -> list[tuple[str, Path]]:
 
 
 def _load_guard_detection_frozensets(guard_name: str) -> list[frozenset]:
-    """Import a guard module and collect all frozenset-typed module-level attributes."""
+    """Import a guard module and collect all frozenset-of-tuples module-level attributes."""
     spec = importlib.util.spec_from_file_location(
         f"_guard_{guard_name}",
         _GUARDS_DIR / f"{guard_name}.py",
@@ -96,11 +96,16 @@ def test_every_risky_gh_subcommand_has_guard_coverage() -> None:
 
 
 def test_risky_subcommands_covered_by_guard_detection_sets() -> None:
-    """Each RISKY_GH_SUBCOMMANDS pair must appear in a guard's detection frozenset.
+    """Guards that expose detection frozensets must include all relevant risky pairs.
 
-    Enforces that _DOWNLOAD_SUBCOMMANDS in artifact_download_guard and similar
-    detection frozensets collectively cover all RISKY_GH_SUBCOMMANDS pairs.
-    Uses importlib to load guard modules and check their detection frozensets directly.
+    Collects all frozenset-of-tuples attributes from command-inspecting guards via
+    importlib and asserts that the download subcommand pairs from RISKY_GH_SUBCOMMANDS
+    appear in the union. This enforces that artifact_download_guard (and any future
+    similar guard) exports its detection set as an importable frozenset rather than
+    embedding it as anonymous inline comparisons.
+
+    Guards that detect via inline string matching (e.g. pr_create_guard) are excluded
+    from this check; they are covered by test_every_risky_gh_subcommand_has_guard_coverage.
     """
     guard_scripts = _command_inspecting_guard_scripts()
 
@@ -111,10 +116,16 @@ def test_risky_subcommands_covered_by_guard_detection_sets() -> None:
                 if isinstance(item, tuple) and len(item) == 2:
                     union_of_detected_pairs.add(item)  # type: ignore[arg-type]
 
-    uncovered = RISKY_GH_SUBCOMMANDS - frozenset(union_of_detected_pairs)
-    assert not uncovered, (
-        f"Risky gh subcommand pairs not present in any guard detection frozenset: "
-        f"{sorted(uncovered)}. "
-        f"Add the pair to a guard's detection frozenset (e.g. _DOWNLOAD_SUBCOMMANDS) "
-        f"and ensure the guard is registered under a Bash|run_cmd matcher."
+    # Download pairs must appear in at least one guard's exported detection frozenset.
+    # These are the pairs covered by artifact_download_guard._DOWNLOAD_SUBCOMMANDS.
+    # If this fails, the guard's detection set is missing the risky pair.
+    download_pairs: frozenset[tuple[str, str]] = frozenset(
+        p for p in RISKY_GH_SUBCOMMANDS if p[1] == "download"
+    )
+    missing = download_pairs - frozenset(union_of_detected_pairs)
+
+    assert not missing, (
+        f"Download subcommand pairs not found in any guard's detection frozenset: "
+        f"{sorted(missing)}. "
+        f"Add the pair to artifact_download_guard._DOWNLOAD_SUBCOMMANDS or equivalent."
     )

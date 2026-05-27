@@ -9,6 +9,7 @@ from typing import Any
 import structlog
 
 from autoskillit.core import (
+    REVIEW_APPROACH_MARKER,
     _parse_issue_ref,
     get_logger,
 )
@@ -21,8 +22,6 @@ from autoskillit.server.tools._claim_helpers import (
 )
 
 logger = get_logger(__name__)
-
-_REVIEW_APPROACH_MARKER = "<!-- review_approach: true -->"
 
 
 def _extract_label_names(raw_labels: list[Any]) -> list[str]:
@@ -106,7 +105,7 @@ async def claim_and_resolve_issue(
             )
 
         issue_body = fetch_result.get("body", "")
-        review_approach_recommended = _REVIEW_APPROACH_MARKER in issue_body
+        review_approach_recommended = REVIEW_APPROACH_MARKER in issue_body
 
         issue_state = fetch_result.get("state", "open").lower()
         if issue_state == "closed":

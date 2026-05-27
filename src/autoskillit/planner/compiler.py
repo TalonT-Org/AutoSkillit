@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core import atomic_write, get_logger, write_versioned_json
+from autoskillit.core import REVIEW_APPROACH_MARKER, atomic_write, get_logger, write_versioned_json
 from autoskillit.planner._dag_ops import topological_sort
 from autoskillit.planner.manifests import _derive_label
 from autoskillit.planner.validation import (
@@ -93,7 +93,7 @@ def _render_issue_body(wp: dict, phase: dict, assignment: dict) -> str:
         reasoning = wp.get("review_approach_reasoning", "")
         body += (
             f"\n## Review Approach\n\n"
-            f"<!-- review_approach: true -->\n"
+            f"{REVIEW_APPROACH_MARKER}\n"
             f"> **review-approach recommended**: {reasoning}\n"
         )
     return body

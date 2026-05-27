@@ -19,6 +19,7 @@ __all__ = [
     "PR_TELEMETRY_SECTIONS",
     "KNOWN_CI_EVENTS",
     "DATA_MANIFEST_SOURCE_TYPES",
+    "REVIEW_APPROACH_MARKER",
     "SCOPE_DIRECTION_SOURCE_TYPES",
 ]
 
@@ -176,3 +177,5 @@ SCOPE_DIRECTION_SOURCE_TYPES: frozenset[str] = frozenset(
         "hybrid",
     }
 )
+
+REVIEW_APPROACH_MARKER: str = "<!-- review_approach: true -->"

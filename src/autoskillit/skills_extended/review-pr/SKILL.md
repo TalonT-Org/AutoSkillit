@@ -376,6 +376,25 @@ Subagent prompt template (dimensions 1–6):
 >
 > When a finding matches a prior resolved entry by file and approximate line (within ±5 lines):
 > SKIP it entirely — do not include it in your findings array.
+>
+> **Severity calibration (bugs dimension):**
+>
+> - **critical**: The code will produce wrong results, data loss, or silent corruption
+>   at runtime. Example: a context manager wrapping only the first line of a function
+>   body instead of the entire body — downstream code runs without the expected context.
+>
+> - **warning**: The code has a structural flaw that does not affect correctness today
+>   but will under foreseeable conditions (error paths, edge cases, future changes).
+>   Example: a try/except that catches a broad exception class but only handles one
+>   specific subtype.
+>
+> - **info**: Style, convention, or minor improvement that does not affect correctness.
+>   Example: an unused import, a redundant type annotation.
+>
+> **Grouping rule:** If N instances of the same structural pattern appear across
+> different functions or files, classify ALL at the highest severity any single
+> instance warrants. Do not downgrade duplicates to warning merely because they
+> are repetitive.
 
 Pass `prior_resolved_findings` and `prior_unresolved_findings` (both as JSON arrays) into each
 subagent prompt via template substitution, same as `annotated_diff_content`.

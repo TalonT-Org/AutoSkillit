@@ -128,8 +128,9 @@ async def get_pr_reviews(
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    try:
-        with structlog.contextvars.bound_contextvars(tool="get_pr_reviews", cwd=cwd):
+    structlog.contextvars.clear_contextvars()
+    with structlog.contextvars.bound_contextvars(tool="get_pr_reviews", cwd=cwd):
+        try:
             logger.info("get_pr_reviews", pr_number=pr_number, repo=repo)
             await _notify(
                 ctx,
@@ -165,9 +166,9 @@ async def get_pr_reviews(
                 reviews = _map_pr_view_reviews(data)
 
             return json.dumps({"reviews": reviews})
-    except Exception as exc:
-        logger.error("get_pr_reviews unhandled exception", exc_info=True)
-        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            logger.error("get_pr_reviews unhandled exception", exc_info=True)
+            return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
@@ -197,8 +198,9 @@ async def bulk_close_issues(
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    try:
-        with structlog.contextvars.bound_contextvars(tool="bulk_close_issues", cwd=cwd):
+    structlog.contextvars.clear_contextvars()
+    with structlog.contextvars.bound_contextvars(tool="bulk_close_issues", cwd=cwd):
+        try:
             logger.info("bulk_close_issues", count=len(issue_numbers))
             await _notify(
                 ctx,
@@ -210,6 +212,6 @@ async def bulk_close_issues(
 
             closed, failed = await _close_issues_sequentially(issue_numbers, comment, cwd)
             return json.dumps({"closed": closed, "failed": failed})
-    except Exception as exc:
-        logger.error("bulk_close_issues unhandled exception", exc_info=True)
-        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            logger.error("bulk_close_issues unhandled exception", exc_info=True)
+            return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})

@@ -33,7 +33,8 @@ class TestRunPythonObservability:
             processors=[structlog.contextvars.merge_contextvars]
         ) as logs:
             await run_python(callable="json.dumps", args={"obj": 1}, ctx=mock_ctx)
-        assert any(entry.get("tool") == "run_python" for entry in logs)
+        assert logs, "Expected at least one log record"
+        assert all(entry.get("tool") == "run_python" for entry in logs)
 
     @pytest.mark.anyio
     async def test_run_python_returns_failure_result_on_bad_module(self, tool_ctx, mock_ctx):

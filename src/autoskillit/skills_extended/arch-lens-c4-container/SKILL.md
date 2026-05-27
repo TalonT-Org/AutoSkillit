@@ -14,40 +14,10 @@ hooks:
 
 # C4 Container Architecture Lens
 
-**Cognitive Mode:** Anatomical
+**Philosophical Mode:** Anatomical
 **Primary Question:** "How is it built?"
 **Focus:** Static Structure, Containers, Technology Choices, External Integrations
 
-## When to Use
-
-- Need to understand the high-level technical building blocks
-- Documenting container boundaries and communication
-- Onboarding new team members to system architecture
-- User invokes `/autoskillit:arch-lens-c4-container` or `/autoskillit:make-arch-diag c4`
-
-## Critical Constraints
-
-**NEVER:**
-- Fabricate, invent, or embellish information not supported by the available evidence or code.
-
-- Modify any source code files
-- Include internal implementation details (that's for other lenses)
-- Show runtime behavior or state transitions
-- Run subagents in the background (`run_in_background: true` is prohibited)
-
-**ALWAYS:**
-- Focus on CONTAINERS (deployable units, not classes)
-- Show technology choices for each container
-- Identify external systems and integrations
-- BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
-- If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
-- After writing the diagram file, emit the **absolute path** as a structured output
-  token as your final output. Resolve the relative `temp/arch-lens-c4-container/...`
-  save path to absolute by prepending the full CWD:
-  ```
-  diagram_path = /absolute/cwd/temp/arch-lens-c4-container/{filename}.md
-  ```
-  This token is MANDATORY — the pipeline cannot proceed without it.
 
 ## Arguments
 
@@ -59,6 +29,40 @@ hooks:
   affected by these specific files. When absent, explore the full CWD.
 
 ---
+
+## When to Use
+
+- Need to understand the high-level technical building blocks
+- Documenting container boundaries and communication
+- Onboarding new team members to system architecture
+- User invokes `/autoskillit:arch-lens-c4-container` or `/autoskillit:make-arch-diag c4`
+
+## Critical Constraints
+
+**NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or the code.
+
+- Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for themselves
+- Create files outside `{{AUTOSKILLIT_TEMP}}/arch-lens-c4-container/`
+- Modify any source code files
+- Include internal implementation details (that's for other lenses)
+- Show runtime behavior or state transitions
+- Run subagents in the background (`run_in_background: true` is prohibited)
+
+**ALWAYS:**
+- Focus on CONTAINERS (deployable units, not classes)
+- Show technology choices for each container
+- Identify external systems and integrations
+- BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
+- If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
+- Write output to `{{AUTOSKILLIT_TEMP}}/arch-lens-c4-container/arch_diag_c4_container_{YYYY-MM-DD_HHMMSS}.md`
+- After writing the file, emit the structured output token as **literal plain text** with no
+  markdown formatting on the token name (the adjudicator performs a regex match):
+
+  ```
+  diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/arch-lens-c4-container/arch_diag_c4_container_{YYYY-MM-DD_HHMMSS}.md
+  ```
+
 
 ## Analysis Workflow
 

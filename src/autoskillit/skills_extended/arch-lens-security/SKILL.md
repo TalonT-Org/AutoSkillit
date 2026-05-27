@@ -14,9 +14,20 @@ hooks:
 
 # Security Architecture Lens
 
-**Cognitive Mode:** Security
+**Philosophical Mode:** Security
 **Primary Question:** "Where are the trust boundaries?"
 **Focus:** Trust Boundaries, Validation Layers, Path Contracts, Process Isolation
+
+## Arguments
+
+`/autoskillit:arch-lens-security [context_path]`
+
+- **context_path** (optional) — Absolute path to a PR context file containing new files
+  (★-prefixed) and modified files (●-prefixed) from the PR diff. When provided, read
+  this file before beginning analysis and focus the diagram on the architectural areas
+  affected by these specific files. When absent, explore the full CWD.
+
+---
 
 ## When to Use
 
@@ -30,6 +41,8 @@ hooks:
 **NEVER:**
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
 
+- Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for ourselves
+- Create files outside `{{AUTOSKILLIT_TEMP}}/arch-lens-security/`
 - Modify any source code files
 - Expose actual secrets or credentials
 - Show implementation details that could aid attacks
@@ -42,24 +55,14 @@ hooks:
 - Include process isolation mechanisms
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
-- After writing the diagram file, emit the **absolute path** as a structured output
-  token as your final output. Resolve the relative `temp/arch-lens-security/...`
-  save path to absolute by prepending the full CWD:
+- Write output to `{{AUTOSKILLIT_TEMP}}/arch-lens-security/arch_diag_security_{"{"}YYYY-MM-DD_HHMMSS{}}.md`
+- After writing the file, emit the structured output token as **literal plain text** with no
+  markdown formatting on the token name (the adjudicator performs a regex match):
+
   ```
-  diagram_path = /absolute/cwd/temp/arch-lens-security/{filename}.md
+  diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/arch-lens-security/arch_diag_security_{"{"}YYYY-MM-DD_HHMMSS{}}.md
   ```
-  This token is MANDATORY — the pipeline cannot proceed without it.
 
-## Arguments
-
-`/autoskillit:arch-lens-security [context_path]`
-
-- **context_path** (optional) — Absolute path to a PR context file containing new files
-  (★-prefixed) and modified files (●-prefixed) from the PR diff. When provided, read
-  this file before beginning analysis and focus the diagram on the architectural areas
-  affected by these specific files. When absent, explore the full CWD.
-
----
 
 ## Analysis Workflow
 

@@ -13,9 +13,18 @@ from __future__ import annotations
 import dataclasses
 import types
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypeVar, Union, get_args, get_origin, get_type_hints
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    TypeVar,
+    Union,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 
 from autoskillit.config._config_dataclasses import (
     _COMMAND_UNSET,
@@ -257,12 +266,12 @@ def _preprocess_agent_backend(raw: Any) -> dict[str, Any]:
 
 
 # Section-level pre-processors applied before _build_subconfig.
-_SECTION_PREPROCESSORS: dict[str, Any] = {
+_SECTION_PREPROCESSORS: dict[str, Callable[[Any], dict[str, Any]]] = {
     "agent_backend": _preprocess_agent_backend,
 }
 
 # Sections with fully custom builders (bypass _build_subconfig entirely).
-_SECTION_BUILDERS: dict[str, Any] = {
+_SECTION_BUILDERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "subsets": _build_subsets_config,
     "packs": _build_packs_config,
 }
@@ -286,6 +295,10 @@ def _build_subconfig(cls: type[_T], section: dict[str, Any], section_name: str) 
             continue
         yaml_key = _YAML_KEY_ALIASES.get(override_key, f.name)
         raw = section.get(yaml_key, defaults.get(f.name))
+        if raw is None and f.name not in defaults:
+            raise ConfigSchemaError(
+                f"{section_name}.{f.name} is required but absent from config and has no default."
+            )
         kwargs[f.name] = _coerce_value(raw, hints[f.name], f"{section_name}.{yaml_key}")
 
     return cls(**kwargs)  # type: ignore[return-value]
@@ -293,6 +306,16 @@ def _build_subconfig(cls: type[_T], section: dict[str, Any], section_name: str) 
 
 @dataclass
 class AutomationConfig:
+    """Root configuration dataclass for AutoSkillit.
+
+    Schema contract: all direct fields (except ``features`` and
+    ``experimental_enabled``) must use ``field(default_factory=<DataclassType>)``
+    where the factory is a dataclass, or be registered in ``_SECTION_BUILDERS``
+    for custom build logic. Any scalar or non-dataclass field not in
+    ``_SECTION_BUILDERS`` will raise ``ConfigSchemaError`` at load time in
+    ``from_dynaconf``.
+    """
+
     test_check: TestCheckConfig = field(default_factory=TestCheckConfig)
     classify_fix: ClassifyFixConfig = field(default_factory=ClassifyFixConfig)
     reset_workspace: ResetWorkspaceConfig = field(default_factory=ResetWorkspaceConfig)

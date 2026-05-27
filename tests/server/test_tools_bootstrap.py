@@ -275,9 +275,7 @@ class TestClaimAndResolveIssue:
         assert result["review_approach_recommended"] is True
 
     @pytest.mark.anyio
-    async def test_claim_and_resolve_returns_false_when_no_marker(
-        self, tool_ctx_kitchen_open
-    ):
+    async def test_claim_and_resolve_returns_false_when_no_marker(self, tool_ctx_kitchen_open):
         tool_ctx_kitchen_open.github_client = AsyncMock()
         tool_ctx_kitchen_open.github_client.fetch_title = AsyncMock(
             return_value={"success": True, "number": 42, "title": "Fix bug", "slug": "fix-bug"}

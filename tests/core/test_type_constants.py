@@ -436,3 +436,23 @@ def test_max_mcp_output_tokens_in_private_env_vars() -> None:
     from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS
 
     assert "MAX_MCP_OUTPUT_TOKENS" in AUTOSKILLIT_PRIVATE_ENV_VARS
+
+
+# ---------------------------------------------------------------------------
+# T1: Quota trigger constants exported from core
+# ---------------------------------------------------------------------------
+
+
+def test_quota_trigger_constants_exported() -> None:
+    """All four QUOTA_* trigger constants must be importable from autoskillit.core."""
+    from autoskillit.core import (
+        QUOTA_BUDGET_EXCEEDED_TRIGGER,
+        QUOTA_GUARD_DENY_TRIGGER,
+        QUOTA_POST_BUDGET_EXCEEDED_TRIGGER,
+        QUOTA_POST_WARNING_TRIGGER,
+    )
+
+    assert isinstance(QUOTA_GUARD_DENY_TRIGGER, str)
+    assert isinstance(QUOTA_BUDGET_EXCEEDED_TRIGGER, str)
+    assert isinstance(QUOTA_POST_WARNING_TRIGGER, str)
+    assert isinstance(QUOTA_POST_BUDGET_EXCEEDED_TRIGGER, str)

@@ -225,16 +225,20 @@ def _prune_skipped_steps(
         if step is None or not step.skip_when_false:
             continue
         ref = step.skip_when_false
-        if not ref.startswith("inputs."):
-            continue
-        ingredient_name = ref[len("inputs.") :]
 
-        # Resolve value: explicit override > recipe default > absent (falsy)
-        if ingredient_name in overrides:
-            value = overrides[ingredient_name]
+        if ref.startswith("inputs."):
+            ingredient_name = ref[len("inputs.") :]
+            # Resolve value: explicit override > recipe default > absent (falsy)
+            if ingredient_name in overrides:
+                value = str(overrides[ingredient_name])
+            else:
+                ing = working.ingredients.get(ingredient_name)
+                value = (
+                    str(ing.default) if ing is not None and ing.default is not None else "false"
+                )
         else:
-            ing = working.ingredients.get(ingredient_name)
-            value = (ing.default or "false") if ing is not None else "false"
+            # Literal value already resolved — evaluate directly without ingredient lookup
+            value = ref
 
         is_truthy = value.lower() in ("true", "1", "yes")
         resolutions[step_name] = is_truthy
@@ -244,23 +248,26 @@ def _prune_skipped_steps(
             new_steps[step_name] = dataclasses.replace(step, skip_when_false=None)
             working = dataclasses.replace(working, steps=new_steps)
         else:
-            # Redirect all routes pointing to the pruned step
+            # Redirect all routes pointing to the pruned step; guard against None redirect
             redirect = step.on_success
             new_steps = {}
             for name, s in working.steps.items():
                 if name == step_name:
                     continue
                 fixes: dict[str, Any] = {}
-                if s.on_success == step_name:
+                if s.on_success == step_name and redirect is not None:
                     fixes["on_success"] = redirect
-                if s.on_failure == step_name:
+                if s.on_failure == step_name and redirect is not None:
                     fixes["on_failure"] = redirect
-                if s.on_context_limit == step_name:
+                if s.on_context_limit == step_name and redirect is not None:
                     fixes["on_context_limit"] = redirect
-                if s.on_exhausted == step_name:
+                if s.on_exhausted == step_name and redirect is not None:
                     fixes["on_exhausted"] = redirect
                 new_steps[name] = dataclasses.replace(s, **fixes) if fixes else s
-            working = dataclasses.replace(working, steps=new_steps)
+            recipe_kwargs: dict[str, Any] = {"steps": new_steps}
+            if getattr(working, "entry", None) == step_name:
+                recipe_kwargs["entry"] = redirect
+            working = dataclasses.replace(working, **recipe_kwargs)
 
     return working, resolutions
 

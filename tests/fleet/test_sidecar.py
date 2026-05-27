@@ -35,6 +35,46 @@ class TestSidecarPath:
         assert p.parent.name == "dispatches"
 
 
+class TestIssueSidecarEntryFromDict:
+    def test_from_dict_required_fields(self) -> None:
+        data = {"issue_url": URL1, "status": "completed", "ts": TS}
+        entry = IssueSidecarEntry.from_dict(data)
+        assert entry.issue_url == URL1
+        assert entry.status == "completed"
+        assert entry.ts == TS
+        assert entry.pr_url is None
+        assert entry.reason is None
+
+    def test_from_dict_all_fields(self) -> None:
+        data = {
+            "issue_url": URL1,
+            "status": "failed",
+            "ts": TS,
+            "pr_url": "https://github.com/org/repo/pull/200",
+            "reason": "tests failed",
+        }
+        entry = IssueSidecarEntry.from_dict(data)
+        assert entry.issue_url == URL1
+        assert entry.status == "failed"
+        assert entry.ts == TS
+        assert entry.pr_url == "https://github.com/org/repo/pull/200"
+        assert entry.reason == "tests failed"
+
+    def test_from_dict_missing_ts_defaults_empty(self) -> None:
+        data = {"issue_url": URL1, "status": "completed"}
+        entry = IssueSidecarEntry.from_dict(data)
+        assert entry.ts == ""
+
+    def test_from_dict_missing_required_raises(self) -> None:
+        with pytest.raises(KeyError):
+            IssueSidecarEntry.from_dict({"status": "completed", "ts": TS})
+
+    def test_from_dict_ignores_extra_keys(self) -> None:
+        data = {"issue_url": URL1, "status": "completed", "ts": TS, "extra": "ignored"}
+        entry = IssueSidecarEntry.from_dict(data)
+        assert entry.issue_url == URL1
+
+
 class TestAppendSidecarEntry:
     def test_creates_file_on_first_append(self, tmp_path: Path) -> None:
         entry = IssueSidecarEntry(issue_url=URL1, status="completed", ts=TS)

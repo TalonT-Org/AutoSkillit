@@ -26,6 +26,16 @@ class IssueSidecarEntry:
     pr_url: str | None = None
     reason: str | None = None
 
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> IssueSidecarEntry:
+        return cls(
+            issue_url=data["issue_url"],  # type: ignore[arg-type]
+            status=data["status"],  # type: ignore[arg-type]
+            ts=data.get("ts", ""),  # type: ignore[arg-type]
+            pr_url=data.get("pr_url"),  # type: ignore[arg-type]
+            reason=data.get("reason"),  # type: ignore[arg-type]
+        )
+
 
 class SidecarReadResult(NamedTuple):
     entries: list[IssueSidecarEntry]
@@ -55,15 +65,7 @@ def read_sidecar(dispatch_id: str, project_dir: Path) -> list[IssueSidecarEntry]
             continue
         try:
             data = json.loads(line)
-            entries.append(
-                IssueSidecarEntry(
-                    issue_url=data["issue_url"],
-                    status=data["status"],
-                    ts=data.get("ts", ""),
-                    pr_url=data.get("pr_url"),
-                    reason=data.get("reason"),
-                )
-            )
+            entries.append(IssueSidecarEntry.from_dict(data))
         except (json.JSONDecodeError, KeyError) as exc:
             logger.debug("sidecar: skipping corrupt JSONL line", path=str(path), error=str(exc))
             continue
@@ -91,15 +93,7 @@ def read_sidecar_from_path(path: Path) -> SidecarReadResult:
             continue
         try:
             data = json.loads(line)
-            entries.append(
-                IssueSidecarEntry(
-                    issue_url=data["issue_url"],
-                    status=data["status"],
-                    ts=data.get("ts", ""),
-                    pr_url=data.get("pr_url"),
-                    reason=data.get("reason"),
-                )
-            )
+            entries.append(IssueSidecarEntry.from_dict(data))
         except (json.JSONDecodeError, KeyError) as exc:
             logger.debug("sidecar: skipping corrupt JSONL line", path=str(path), error=str(exc))
             continue

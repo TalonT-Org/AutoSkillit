@@ -14,6 +14,7 @@ import json
 import shlex
 import sys
 
+ARTIFACT_DOWNLOAD_DENY_TRIGGER: str = "gh artifact download without --dir is prohibited"
 # Shell-separator tokens that introduce a new subcommand.
 _SHELL_OPS: frozenset[str] = frozenset({"&&", "||", ";", "!", "|", "("})
 

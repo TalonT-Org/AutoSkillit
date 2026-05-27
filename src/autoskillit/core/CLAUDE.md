@@ -9,6 +9,7 @@ Sub-packages: types/ (see types/CLAUDE.md) and runtime/ (see runtime/CLAUDE.md).
 |------|---------|
 | `__init__.py` | Re-exports public surface |
 | `io.py` | `atomic_write`, `ensure_project_temp`, YAML helpers |
+| `_cmd_runner.py` | `CmdRunner` protocol, `default_cmd_runner`, `run_git`, `run_gh` — sync subprocess for git/gh CLI |
 | `_json.py` | Fast JSON via orjson (with stdlib fallback) — `fast_loads`, `fast_dumps` |
 | `logging.py` | Logging configuration |
 | `paths.py` | `pkg_root()`, `is_git_worktree()` |

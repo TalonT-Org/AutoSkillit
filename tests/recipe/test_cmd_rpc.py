@@ -393,16 +393,15 @@ def test_export_local_bundle(tmp_path):
 
 
 def test_refetch_issues_builds_query():
-    with patch("autoskillit.recipe._cmd_rpc_issues.subprocess.run") as mock_run:
-        mock_run.return_value = subprocess.CompletedProcess(
+    with patch("autoskillit.recipe._cmd_rpc_issues.run_gh") as mock_run_gh:
+        mock_run_gh.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="1 2", stderr=""
         )
         result = refetch_issues(
             issue_urls="https://github.com/org/repo/issues/1,https://github.com/org/repo/issues/2"
         )
     assert result["issue_numbers"] == "1 2"
-    call_args = mock_run.call_args[0][0]
-    assert "gh" in call_args
+    call_args = mock_run_gh.call_args[0][0]
     assert "graphql" in call_args
     query_arg = next(a for a in call_args if a.startswith("query="))
     assert "org" in query_arg
@@ -464,10 +463,10 @@ def test_batch_create_issues_discovers_ticket_bodies(tmp_path):
             f"validated: true\n\n# Title {n}\n\n| col1 | col2 |\n"
         )
     with (
-        patch("autoskillit.recipe._cmd_rpc_issues.subprocess.run") as mock_run,
+        patch("autoskillit.recipe._cmd_rpc_issues.run_gh") as mock_run_gh,
         patch("autoskillit.recipe._cmd_rpc_issues.time.sleep"),
     ):
-        mock_run.side_effect = _make_side_effect(
+        mock_run_gh.side_effect = _make_side_effect(
             issue_data=[
                 {"number": 1, "url": "https://github.com/org/repo/issues/1"},
                 {"number": 2, "url": "https://github.com/org/repo/issues/2"},
@@ -492,19 +491,19 @@ def test_batch_create_issues_strips_body_content(tmp_path):
         "**Exception note:** this is an exception.\n"
     )
     with (
-        patch("autoskillit.recipe._cmd_rpc_issues.subprocess.run") as mock_run,
+        patch("autoskillit.recipe._cmd_rpc_issues.run_gh") as mock_run_gh,
         patch("autoskillit.recipe._cmd_rpc_issues.time.sleep"),
     ):
-        mock_run.side_effect = _make_side_effect()
+        mock_run_gh.side_effect = _make_side_effect()
         batch_create_issues(workspace=str(tmp_path))
     # Find the createIssue mutation call
     mutation_call: dict[str, object] = {}
-    for call in mock_run.call_args_list:
+    for call in mock_run_gh.call_args_list:
         args = call[0][0]
         if "--input" in args:
-            mutation_call = json.loads(call[1].get("input", "{}"))
+            mutation_call = json.loads(call[1].get("input_data", "{}"))
             break
-    assert mutation_call, "no createIssue mutation call found in mock_run calls"
+    assert mutation_call, "no createIssue mutation call found in mock_run_gh calls"
     body = mutation_call["variables"]["i0"]["body"]
     assert ".autoskillit/" not in body
     assert "| CONTESTED |" not in body
@@ -521,20 +520,20 @@ def test_batch_create_issues_extracts_h1_title(tmp_path):
         "validated: true\n\n# Audit: Missing test coverage\n\nBody content."
     )
     with (
-        patch("autoskillit.recipe._cmd_rpc_issues.subprocess.run") as mock_run,
+        patch("autoskillit.recipe._cmd_rpc_issues.run_gh") as mock_run_gh,
         patch("autoskillit.recipe._cmd_rpc_issues.time.sleep"),
     ):
-        mock_run.side_effect = _make_side_effect()
+        mock_run_gh.side_effect = _make_side_effect()
         batch_create_issues(workspace=str(tmp_path))
     found = False
-    for call in mock_run.call_args_list:
+    for call in mock_run_gh.call_args_list:
         kwargs = call[1]
-        if kwargs.get("input"):
-            mutation_call = json.loads(kwargs["input"])
+        if kwargs.get("input_data"):
+            mutation_call = json.loads(kwargs["input_data"])
             assert mutation_call["variables"]["i0"]["title"] == "Audit: Missing test coverage"
             found = True
             break
-    assert found, "no createIssue mutation call found in mock_run calls"
+    assert found, "no createIssue mutation call found in mock_run_gh calls"
 
 
 def test_batch_create_issues_constructs_graphql_mutation(tmp_path):
@@ -543,10 +542,10 @@ def test_batch_create_issues_constructs_graphql_mutation(tmp_path):
     (va_dir / "ticket_body_tests_1_2026-01-01_120000.md").write_text("# Issue One\n\nBody one.")
     (va_dir / "ticket_body_tests_2_2026-01-01_120000.md").write_text("# Issue Two\n\nBody two.")
     with (
-        patch("autoskillit.recipe._cmd_rpc_issues.subprocess.run") as mock_run,
+        patch("autoskillit.recipe._cmd_rpc_issues.run_gh") as mock_run_gh,
         patch("autoskillit.recipe._cmd_rpc_issues.time.sleep"),
     ):
-        mock_run.side_effect = _make_side_effect(
+        mock_run_gh.side_effect = _make_side_effect(
             issue_data=[
                 {"number": 1, "url": "https://github.com/org/repo/issues/1"},
                 {"number": 2, "url": "https://github.com/org/repo/issues/2"},
@@ -554,10 +553,10 @@ def test_batch_create_issues_constructs_graphql_mutation(tmp_path):
         )
         batch_create_issues(workspace=str(tmp_path))
     found = False
-    for call in mock_run.call_args_list:
+    for call in mock_run_gh.call_args_list:
         kwargs = call[1]
-        if kwargs.get("input"):
-            mutation_call = json.loads(kwargs["input"])
+        if kwargs.get("input_data"):
+            mutation_call = json.loads(kwargs["input_data"])
             query = mutation_call["query"]
             variables = mutation_call["variables"]
             assert "issue0: createIssue" in query
@@ -568,7 +567,7 @@ def test_batch_create_issues_constructs_graphql_mutation(tmp_path):
             assert variables["i1"]["labelIds"] == ["L_1", "L_2"]
             found = True
             break
-    assert found, "no createIssue mutation call found in mock_run calls"
+    assert found, "no createIssue mutation call found in mock_run_gh calls"
 
 
 def test_batch_create_issues_chunks_large_batches(tmp_path):
@@ -579,7 +578,7 @@ def test_batch_create_issues_chunks_large_batches(tmp_path):
             f"# Issue {n + 1}\n\nBody {n + 1}."
         )
     with (
-        patch("autoskillit.recipe._cmd_rpc_issues.subprocess.run") as mock_run,
+        patch("autoskillit.recipe._cmd_rpc_issues.run_gh") as mock_run_gh,
         patch("autoskillit.recipe._cmd_rpc_issues.time.sleep"),
     ):
 
@@ -654,12 +653,12 @@ def test_batch_create_issues_chunks_large_batches(tmp_path):
 
             return side_effect
 
-        mock_run.side_effect = side_effect_factory()
+        mock_run_gh.side_effect = side_effect_factory()
         result = batch_create_issues(workspace=str(tmp_path), chunk_size="10")
     mutation_calls = sum(
         1
-        for call in mock_run.call_args_list
-        if call[1].get("input") and "createIssue" in call[1]["input"]
+        for call in mock_run_gh.call_args_list
+        if call[1].get("input_data") and "createIssue" in call[1]["input_data"]
     )
     assert mutation_calls == 3
     assert result["issue_count"] == "25"
@@ -680,15 +679,15 @@ def test_batch_create_issues_ignores_validation_summary_file(tmp_path):
         "## Validation Summary\nAll clear."
     )
     with (
-        patch("autoskillit.recipe._cmd_rpc_issues.subprocess.run") as mock_run,
+        patch("autoskillit.recipe._cmd_rpc_issues.run_gh") as mock_run_gh,
         patch("autoskillit.recipe._cmd_rpc_issues.time.sleep"),
     ):
-        mock_run.side_effect = _make_side_effect()
+        mock_run_gh.side_effect = _make_side_effect()
         batch_create_issues(workspace=str(tmp_path))
-    for call in mock_run.call_args_list:
+    for call in mock_run_gh.call_args_list:
         kwargs = call[1]
-        if kwargs.get("input"):
-            mutation_call = json.loads(kwargs["input"])
+        if kwargs.get("input_data"):
+            mutation_call = json.loads(kwargs["input_data"])
             body = mutation_call["variables"]["i0"]["body"]
             assert "## Validation Summary" not in body, (
                 "validation_summary content must not be appended to issue bodies"
@@ -697,7 +696,7 @@ def test_batch_create_issues_ignores_validation_summary_file(tmp_path):
                 "validation_summary content must not be appended to issue bodies"
             )
             return
-    pytest.fail("no createIssue mutation call found in mock_run calls")
+    pytest.fail("no createIssue mutation call found in mock_run_gh calls")
 
 
 def test_batch_create_issues_handles_no_tickets(tmp_path):
@@ -733,10 +732,10 @@ def test_batch_create_issues_handles_graphql_error(tmp_path):
         subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="rate limited"),
     ]
     with (
-        patch("autoskillit.recipe._cmd_rpc_issues.subprocess.run") as mock_run,
+        patch("autoskillit.recipe._cmd_rpc_issues.run_gh") as mock_run_gh,
         patch("autoskillit.recipe._cmd_rpc_issues.time.sleep"),
     ):
-        mock_run.side_effect = error_side_effect
+        mock_run_gh.side_effect = error_side_effect
         with pytest.raises(RuntimeError, match="rate limited"):
             batch_create_issues(workspace=str(tmp_path))
 
@@ -744,17 +743,18 @@ def test_batch_create_issues_handles_graphql_error(tmp_path):
 # ─── Type coercion: int pr_number for _cmd_rpc callables (Step 1c) ───────────
 
 
-@patch("autoskillit.recipe._cmd_rpc_merge.subprocess.run")
+@patch("autoskillit.recipe._cmd_rpc_merge.run_gh")
 @patch("autoskillit.recipe._cmd_rpc_merge.time.sleep")
-def test_wait_for_direct_merge_int_pr_number(mock_sleep, mock_run):
+def test_wait_for_direct_merge_int_pr_number(mock_sleep, mock_run_gh):
     """wait_for_direct_merge handles int pr_number from LLM JSON boundary."""
-    mock_run.return_value = subprocess.CompletedProcess(
+    mock_run_gh.return_value = subprocess.CompletedProcess(
         args=[], returncode=0, stdout="MERGED\n", stderr=""
     )
     result = wait_for_direct_merge(pr_number=42, max_polls="1", poll_interval="1")  # type: ignore[arg-type]
     assert result["state"] == "merged"
-    # Verify the gh call was made with the PR number (coerced to str by str() guard)
-    assert mock_run.call_count >= 1
+    assert mock_run_gh.call_count >= 1
+    call_cmd = mock_run_gh.call_args[0][0]
+    assert "42" in call_cmd
 
 
 # ─── Multi-run accumulation tests for batch_create_issues ────────────────────
@@ -779,10 +779,10 @@ def test_batch_create_issues_ignores_prior_run_files(tmp_path):
 
     # Call batch_create_issues — should return 3 issues
     with (
-        patch("autoskillit.recipe._cmd_rpc_issues.subprocess.run") as mock_run,
+        patch("autoskillit.recipe._cmd_rpc_issues.run_gh") as mock_run_gh,
         patch("autoskillit.recipe._cmd_rpc_issues.time.sleep"),
     ):
-        mock_run.side_effect = _make_side_effect(
+        mock_run_gh.side_effect = _make_side_effect(
             issue_data=[
                 {"number": 1, "url": "https://github.com/org/repo/issues/1"},
                 {"number": 2, "url": "https://github.com/org/repo/issues/2"},
@@ -801,10 +801,10 @@ def test_batch_create_issues_ignores_prior_run_files(tmp_path):
 
     # Call batch_create_issues WITHOUT audit_run_dir — globs all 5 files
     with (
-        patch("autoskillit.recipe._cmd_rpc_issues.subprocess.run") as mock_run,
+        patch("autoskillit.recipe._cmd_rpc_issues.run_gh") as mock_run_gh,
         patch("autoskillit.recipe._cmd_rpc_issues.time.sleep"),
     ):
-        mock_run.side_effect = _make_side_effect(
+        mock_run_gh.side_effect = _make_side_effect(
             issue_data=[
                 {"number": i, "url": f"https://github.com/org/repo/issues/{i}"}
                 for i in range(1, 6)
@@ -847,10 +847,10 @@ def test_batch_create_issues_scoped_to_audit_run_dir(tmp_path):
 
     # Call batch_create_issues scoped to run2_dir only
     with (
-        patch("autoskillit.recipe._cmd_rpc_issues.subprocess.run") as mock_run,
+        patch("autoskillit.recipe._cmd_rpc_issues.run_gh") as mock_run_gh,
         patch("autoskillit.recipe._cmd_rpc_issues.time.sleep"),
     ):
-        mock_run.side_effect = _make_side_effect(
+        mock_run_gh.side_effect = _make_side_effect(
             issue_data=[
                 {"number": 4, "url": "https://github.com/org/repo/issues/4"},
                 {"number": 5, "url": "https://github.com/org/repo/issues/5"},
@@ -884,10 +884,10 @@ def test_batch_create_issues_audit_run_dir_only(tmp_path):
     (scoped_dir / "ticket_body_tests_1_2026-05-06_130000.md").write_text("# Active Issue\n\nBody.")
 
     with (
-        patch("autoskillit.recipe._cmd_rpc_issues.subprocess.run") as mock_run,
+        patch("autoskillit.recipe._cmd_rpc_issues.run_gh") as mock_run_gh,
         patch("autoskillit.recipe._cmd_rpc_issues.time.sleep"),
     ):
-        mock_run.side_effect = _make_side_effect(
+        mock_run_gh.side_effect = _make_side_effect(
             issue_data=[{"number": 99, "url": "https://github.com/org/repo/issues/99"}]
         )
         result = batch_create_issues(workspace=str(tmp_path), audit_run_dir=str(scoped_dir))
@@ -915,15 +915,18 @@ def _raise_os_error(*_args, **_kwargs):
     raise OSError("Permission denied")
 
 
-@patch("autoskillit.recipe._cmd_rpc_merge.subprocess.run")
+@patch("autoskillit.recipe._cmd_rpc_merge.run_gh")
+@patch("autoskillit.recipe._cmd_rpc_merge.run_git")
 @patch("autoskillit.recipe._cmd_rpc_merge.time.sleep")
-def test_force_push_int_review_pr_number(mock_sleep, mock_run, tmp_path):
+def test_force_push_int_review_pr_number(mock_sleep, mock_run_git, mock_run_gh, tmp_path):
     """force_push_and_wait_mergeability handles int review_pr_number."""
     with patch("autoskillit.recipe._cmd_rpc_merge._detect_remote", return_value="origin"):
-        mock_run.side_effect = [
-            subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
-            subprocess.CompletedProcess(args=[], returncode=0, stdout="TRUE\n", stderr=""),
-        ]
+        mock_run_git.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+        mock_run_gh.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="TRUE\n", stderr=""
+        )
         result = force_push_and_wait_mergeability(
             work_dir=str(tmp_path),
             batch_branch="feat-x/42",
@@ -932,5 +935,6 @@ def test_force_push_int_review_pr_number(mock_sleep, mock_run, tmp_path):
             poll_interval="1",
         )
     assert result["ok"] == "true"
-    # Verify gh pr view was called (coerced to str by str() guard)
-    assert mock_run.call_count >= 2
+    assert mock_run_gh.call_count >= 1
+    call_cmd = mock_run_gh.call_args[0][0]
+    assert "1958" in call_cmd

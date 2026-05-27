@@ -3,22 +3,16 @@
 from __future__ import annotations
 
 import json
-import subprocess
 import time
 
-from autoskillit.core import get_logger
+from autoskillit.core import get_logger, run_gh, run_git
 
 logger = get_logger(__name__)
 
 
 def _detect_remote(cwd: str) -> str:
     """Detect preferred remote: upstream (non-file) or origin."""
-    result = subprocess.run(
-        ["git", "remote", "get-url", "upstream"],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-    )
+    result = run_git(["remote", "get-url", "upstream"], cwd=cwd)
     if result.returncode == 0 and not result.stdout.strip().startswith("file://"):
         return "upstream"
     return "origin"
@@ -30,27 +24,13 @@ def queue_ejected_fix(
 ) -> dict[str, str]:
     """Fetch and rebase onto base branch; return clean or conflicts."""
     remote = _detect_remote(work_dir)
-    fetch = subprocess.run(
-        ["git", "fetch", remote, base_branch],
-        cwd=work_dir,
-        capture_output=True,
-        text=True,
-    )
+    fetch = run_git(["fetch", remote, base_branch], cwd=work_dir)
     if fetch.returncode != 0:
         return {"status": "conflicts"}
-    rebase = subprocess.run(
-        ["git", "rebase", f"{remote}/{base_branch}"],
-        cwd=work_dir,
-        capture_output=True,
-        text=True,
-    )
+    rebase = run_git(["rebase", f"{remote}/{base_branch}"], cwd=work_dir)
     if rebase.returncode == 0:
         return {"status": "clean"}
-    subprocess.run(
-        ["git", "rebase", "--abort"],
-        cwd=work_dir,
-        capture_output=True,
-    )
+    run_git(["rebase", "--abort"], cwd=work_dir)
     return {"status": "conflicts"}
 
 
@@ -80,11 +60,7 @@ def wait_for_direct_merge(
     max_polls = max_polls or "90"
     poll_interval = poll_interval or "10"
     for _ in range(int(max_polls)):
-        result = subprocess.run(
-            ["gh", "pr", "view", str(pr_number), "--json", "state", "--jq", ".state"],
-            capture_output=True,
-            text=True,
-        )
+        result = run_gh(["pr", "view", str(pr_number), "--json", "state", "--jq", ".state"])
         if result.returncode != 0:
             time.sleep(int(poll_interval))
             continue
@@ -115,31 +91,12 @@ def attempt_cheap_rebase(
 ) -> dict[str, str]:
     """Checkout ejected branch and attempt rebase."""
     remote = _detect_remote(work_dir)
-    subprocess.run(
-        ["git", "fetch", remote, ejected_pr_branch],
-        cwd=work_dir,
-        capture_output=True,
-        check=True,
-    )
-    subprocess.run(
-        ["git", "checkout", ejected_pr_branch],
-        cwd=work_dir,
-        capture_output=True,
-        check=True,
-    )
-    rebase = subprocess.run(
-        ["git", "rebase", f"{remote}/{base_branch}"],
-        cwd=work_dir,
-        capture_output=True,
-        text=True,
-    )
+    run_git(["fetch", remote, ejected_pr_branch], cwd=work_dir, check=True)
+    run_git(["checkout", ejected_pr_branch], cwd=work_dir, check=True)
+    rebase = run_git(["rebase", f"{remote}/{base_branch}"], cwd=work_dir)
     if rebase.returncode == 0:
         return {"status": "clean"}
-    subprocess.run(
-        ["git", "rebase", "--abort"],
-        cwd=work_dir,
-        capture_output=True,
-    )
+    run_git(["rebase", "--abort"], cwd=work_dir)
     return {"status": "conflicts"}
 
 
@@ -152,21 +109,13 @@ def wait_for_review_pr_mergeability(
 
     max_polls = max_polls or "12"
     poll_interval = poll_interval or "15"
-    result = subprocess.run(
-        ["gh", "pr", "view", pr_url, "--json", "number", "-q", ".number"],
-        capture_output=True,
-        text=True,
-    )
+    result = run_gh(["pr", "view", pr_url, "--json", "number", "-q", ".number"])
     if result.returncode != 0:
         msg = f"failed to resolve PR number: {result.stderr}"
         raise RuntimeError(msg)
     pr_number = result.stdout.strip()
     for _ in range(int(max_polls)):
-        r = subprocess.run(
-            ["gh", "pr", "view", pr_number, "--json", "mergeable", "-q", ".mergeable"],
-            capture_output=True,
-            text=True,
-        )
+        r = run_gh(["pr", "view", pr_number, "--json", "mergeable", "-q", ".mergeable"])
         if r.returncode != 0:
             time.sleep(int(poll_interval))
             continue
@@ -184,29 +133,15 @@ def create_persistent_integration(
 ) -> dict[str, str]:
     """Create and push persistent integration branch from default branch."""
     remote = _detect_remote(work_dir)
-    result = subprocess.run(
-        ["git", "symbolic-ref", "refs/remotes/origin/HEAD"],
-        cwd=work_dir,
-        capture_output=True,
-        text=True,
-    )
+    result = run_git(["symbolic-ref", "refs/remotes/origin/HEAD"], cwd=work_dir)
     default_branch = "main"
     if result.returncode == 0:
         ref = result.stdout.strip()
         default_branch = ref.replace("refs/remotes/origin/", "")
-    subprocess.run(
-        ["git", "checkout", default_branch], cwd=work_dir, check=True, capture_output=True
-    )
-    subprocess.run(["git", "pull"], cwd=work_dir, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "checkout", "-b", base_branch], cwd=work_dir, check=True, capture_output=True
-    )
-    push = subprocess.run(
-        ["git", "push", remote, base_branch],
-        cwd=work_dir,
-        capture_output=True,
-        text=True,
-    )
+    run_git(["checkout", default_branch], cwd=work_dir, check=True)
+    run_git(["pull"], cwd=work_dir, check=True)
+    run_git(["checkout", "-b", base_branch], cwd=work_dir, check=True)
+    push = run_git(["push", remote, base_branch], cwd=work_dir)
     if push.returncode != 0:
         msg = f"push failed: {push.stderr}"
         raise RuntimeError(msg)
@@ -225,20 +160,14 @@ def force_push_and_wait_mergeability(
     max_polls = max_polls or "12"
     poll_interval = poll_interval or "15"
     remote = _detect_remote(work_dir)
-    push = subprocess.run(
-        ["git", "push", remote, batch_branch, "--force-with-lease"],
-        cwd=work_dir,
-        capture_output=True,
-        text=True,
-    )
+    push = run_git(["push", remote, batch_branch, "--force-with-lease"], cwd=work_dir)
     if push.returncode != 0:
         msg = f"force-push failed: {push.stderr}"
         raise RuntimeError(msg)
     for _ in range(int(max_polls)):
-        r = subprocess.run(
-            ["gh", "pr", "view", str(review_pr_number), "--json", "mergeable", "-q", ".mergeable"],
-            capture_output=True,
-            text=True,
+        r = run_gh(
+            ["pr", "view", str(review_pr_number), "--json", "mergeable", "-q", ".mergeable"],
+            cwd=work_dir,
         )
         if r.returncode != 0:
             time.sleep(int(poll_interval))
@@ -283,29 +212,12 @@ def proactive_rebase_next_pr(
 ) -> dict[str, str]:
     """Fetch, checkout, and rebase next PR branch."""
     remote = _detect_remote(work_dir)
-    subprocess.run(
-        ["git", "fetch", remote, next_pr_branch],
-        cwd=work_dir,
-        capture_output=True,
-        check=True,
+    run_git(["fetch", remote, next_pr_branch], cwd=work_dir, check=True)
+    run_git(
+        ["checkout", "-B", next_pr_branch, f"{remote}/{next_pr_branch}"], cwd=work_dir, check=True
     )
-    subprocess.run(
-        ["git", "checkout", "-B", next_pr_branch, f"{remote}/{next_pr_branch}"],
-        cwd=work_dir,
-        capture_output=True,
-        check=True,
-    )
-    rebase = subprocess.run(
-        ["git", "rebase", f"{remote}/{base_branch}"],
-        cwd=work_dir,
-        capture_output=True,
-        text=True,
-    )
+    rebase = run_git(["rebase", f"{remote}/{base_branch}"], cwd=work_dir)
     if rebase.returncode == 0:
         return {"status": "clean"}
-    subprocess.run(
-        ["git", "rebase", "--abort"],
-        cwd=work_dir,
-        capture_output=True,
-    )
+    run_git(["rebase", "--abort"], cwd=work_dir)
     return {"status": "conflicts"}

@@ -77,6 +77,7 @@ class TestModuleCascadeCore:
             "github_url",
             "paths",
             "_claude_env",
+            "_cmd_runner",
             "_version_snapshot",
             "claude_conventions",
             "_type_resume",

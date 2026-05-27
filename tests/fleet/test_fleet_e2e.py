@@ -1146,3 +1146,6 @@ async def test_success_dispatch_asserts_lifespan_and_token_usage(
         f"token_usage must be present when shim emits usage in NDJSON, got: {result}"
     )
     assert token_usage["input"] > 0, f"input must be > 0 from shim usage data, got: {token_usage}"
+    assert token_usage["output"] > 0, (
+        f"output must be > 0 from shim usage data, got: {token_usage}"
+    )

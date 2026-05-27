@@ -136,6 +136,7 @@ Summary: `needs_retry=true` + `retry_reason=resume` + `subtype=stale` → re-exe
          `needs_retry=true` + `retry_reason=completed_no_flush` + no `on_context_limit` → `on_failure`.
          `needs_retry=true` + `retry_reason=empty_output` → `on_failure`.
          `needs_retry=true` + `retry_reason=path_contamination` → `on_failure`.
+         `needs_retry=true` + `retry_reason=clone_contamination` → `on_failure`.
          `needs_retry=true` + `retry_reason=contract_recovery` + `has_progress_evidence=true` + step has `on_context_limit` → follow `on_context_limit`.
          `needs_retry=true` + `retry_reason=contract_recovery` + `has_progress_evidence=false` → `on_failure`.
          `needs_retry=true` + `retry_reason=thinking_stall` + `lifespan_started=true` + step has `on_context_limit` → follow `on_context_limit`.

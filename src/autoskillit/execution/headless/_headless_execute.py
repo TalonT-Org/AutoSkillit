@@ -63,6 +63,20 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+_GUARD_EXCLUDE_PREFIX = ".autoskillit/"
+
+
+def _is_path_under_exclude(path: Path, cwd: Path, prefix: str) -> bool:
+    """Return True if path is under cwd/prefix."""
+    try:
+        rel = path.relative_to(cwd)
+        if not rel.parts:
+            return False
+        return str(rel.parts[0]) + "/" == prefix
+    except ValueError:
+        return False
+
+
 async def _execute_claude_headless(
     spec: CmdSpec,
     cwd: str,
@@ -161,11 +175,18 @@ async def _execute_claude_headless(
 
     _readonly_skill = readonly_skill
     _has_write_scope = bool(write_watch_dirs)
+    _writes_under_exclude = bool(
+        write_watch_dirs
+        and all(
+            _is_path_under_exclude(d, Path(cwd), _GUARD_EXCLUDE_PREFIX) for d in write_watch_dirs
+        )
+    )
     _clone_guard_policy = build_clone_guard_policy(
         readonly_skill=_readonly_skill,
         has_write_scope=_has_write_scope,
         is_clone_commit=is_clone_commit_skill(skill_command),
         is_worktree=is_worktree_skill(skill_command),
+        writes_under_exclude=_writes_under_exclude,
     )
     _clone_snapshot = None
     if (

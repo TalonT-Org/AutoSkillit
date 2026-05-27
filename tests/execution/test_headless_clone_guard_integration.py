@@ -141,3 +141,47 @@ async def test_planner_commits_reverted_on_success(git_repo: Path) -> None:
         text=True,
     )
     assert status.stdout.strip() == ""
+
+
+@pytest.mark.anyio
+async def test_planner_excluded_write_scope_not_reverted_on_external_head_advance(
+    git_repo: Path,
+) -> None:
+    """Planner session: writes under .autoskillit/ + external HEAD advance = no revert."""
+    runner = RealGitRunner()
+    cwd = str(git_repo)
+
+    policy = build_clone_guard_policy(
+        readonly_skill=True,
+        has_write_scope=True,
+        is_clone_commit=False,
+        is_worktree=False,
+        writes_under_exclude=True,
+    )
+    assert policy.should_fire(success=True) is False
+
+    snapshot = await snapshot_clone_state(cwd, runner)  # type: ignore[arg-type]
+    assert snapshot is not None
+
+    # External HEAD advance (simulates Cursor editor sync)
+    (git_repo / "src" / "main.rs").write_text("fn main() { /* external edit */ }")
+    _git(git_repo, "add", ".")
+    _git(git_repo, "commit", "-m", "external: cursor sync")
+
+    # Session writes under .autoskillit/ only
+    temp_dir = git_repo / ".autoskillit" / "temp" / "planner"
+    temp_dir.mkdir(parents=True)
+    (temp_dir / "output.json").write_text("{}")
+
+    result, reverted = await check_and_revert_clone_contamination(
+        snapshot,
+        _make_skill_result(success=True),
+        cwd,
+        runner,  # type: ignore[arg-type]
+        DefaultAuditLog(),
+        skill_command="/autoskillit:planner-elaborate-wps",
+        policy=policy,
+        exclude_prefix=".autoskillit/",
+    )
+    assert result.success is True
+    assert not reverted, "Guard should not fire when writes_under_exclude=True"

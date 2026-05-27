@@ -103,8 +103,8 @@ async def test_planner_session_source_write_detected_and_reverted(git_repo: Path
     audit = DefaultAuditLog()
     skill_result = _make_skill_result(success=True, exit_code=0)
 
-    # _effective_readonly=True mirrors what headless/__init__.py computes when
-    # _has_write_scope=True (write_watch_dirs is non-empty for planner sessions).
+    # Planner session that writes OUTSIDE .autoskillit/ (source tree contamination).
+    # This is the legacy scenario — writes_under_exclude defaults to False.
     _, reverted = await check_and_revert_clone_contamination(
         snapshot,
         skill_result,
@@ -134,3 +134,65 @@ async def test_planner_session_source_write_detected_and_reverted(git_repo: Path
     records = audit.get_report_as_dicts()
     assert len(records) == 1
     assert records[0].get("subtype") == "clone_contamination"
+
+
+@pytest.mark.anyio
+async def test_planner_session_excluded_writes_not_reverted(git_repo: Path) -> None:
+    """Planner session writing only under .autoskillit/ should not trigger revert."""
+
+    class RealGitRunner:
+        async def __call__(
+            self,
+            cmd: list[str],
+            *,
+            cwd: Path,
+            timeout: float,
+            **_kwargs: object,
+        ) -> SubprocessResult:
+            result = subprocess.run(
+                cmd,
+                cwd=cwd,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+            return SubprocessResult(
+                returncode=result.returncode,
+                stdout=result.stdout,
+                stderr=result.stderr,
+                termination=TerminationReason.NATURAL_EXIT,
+                pid=0,
+            )
+
+    runner = RealGitRunner()
+    cwd = str(git_repo)
+
+    snapshot = await snapshot_clone_state(cwd, runner)  # type: ignore[arg-type]
+    assert snapshot is not None
+
+    # Write only under .autoskillit/
+    temp_dir = git_repo / ".autoskillit" / "temp" / "planner"
+    temp_dir.mkdir(parents=True)
+    (temp_dir / "output.json").write_text("{}")
+
+    audit = DefaultAuditLog()
+    skill_result = _make_skill_result(success=True, exit_code=0)
+
+    _, reverted = await check_and_revert_clone_contamination(
+        snapshot,
+        skill_result,
+        cwd,
+        runner,  # type: ignore[arg-type]
+        audit,
+        skill_command="/autoskillit:planner-elaborate-wps",
+        policy=build_clone_guard_policy(
+            readonly_skill=True,
+            has_write_scope=True,
+            is_clone_commit=False,
+            is_worktree=False,
+            writes_under_exclude=True,
+        ),
+        exclude_prefix=".autoskillit/",
+    )
+
+    assert not reverted, "Guard should not fire when writes_under_exclude=True"

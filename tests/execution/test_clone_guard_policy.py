@@ -141,3 +141,18 @@ def test_policy_selective_revert():
     ]:
         policy = build_clone_guard_policy(**kwargs)
         assert policy.selective_revert is expected, f"Failed for {kwargs}"
+
+
+def test_policy_for_write_scope_under_exclude():
+    """When write scope is entirely under exclude_prefix, guard must not fire on success."""
+    policy = build_clone_guard_policy(
+        readonly_skill=True,
+        has_write_scope=True,
+        is_clone_commit=False,
+        is_worktree=False,
+        writes_under_exclude=True,
+    )
+    assert policy.should_fire(success=True) is False
+    assert policy.should_fire(success=False) is True
+    assert policy.selective_revert is True
+    assert policy.should_snapshot is True

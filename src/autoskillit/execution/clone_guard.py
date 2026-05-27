@@ -90,10 +90,14 @@ def build_clone_guard_policy(
     has_write_scope: bool,
     is_clone_commit: bool,
     is_worktree: bool,
+    writes_under_exclude: bool = False,
 ) -> CloneGuardPolicy:
     """Build a CloneGuardPolicy from session properties."""
     fire_on_success = (
-        not is_clone_commit and not is_worktree and (readonly_skill or has_write_scope)
+        not is_clone_commit
+        and not is_worktree
+        and not writes_under_exclude
+        and (readonly_skill or has_write_scope)
     )
     selective_revert = readonly_skill or has_write_scope
     should_snapshot = is_worktree or readonly_skill or has_write_scope
@@ -135,8 +139,20 @@ async def snapshot_clone_state(cwd: str, runner: SubprocessRunner) -> CloneSnaps
     return CloneSnapshot(head_sha=head_sha)
 
 
+def _status_path_under_prefix(status_line: str, prefix: str) -> bool:
+    """Return True if the file path in a git status --porcelain line is under prefix."""
+    path_part = status_line[3:]  # Skip "XY " status chars
+    if " -> " in path_part:
+        path_part = path_part.split(" -> ")[-1]
+    return path_part.startswith(prefix)
+
+
 async def detect_contamination(
-    snapshot: CloneSnapshot, cwd: str, runner: SubprocessRunner
+    snapshot: CloneSnapshot,
+    cwd: str,
+    runner: SubprocessRunner,
+    *,
+    exclude_prefix: str = "",
 ) -> ContaminationReport | None:
     """Check whether the clone directory was contaminated during the session.
 
@@ -161,6 +177,11 @@ async def detect_contamination(
         logger.debug("detect_contamination_status_failed", returncode=status_result.returncode)
         return None
     status_lines = [line for line in status_result.stdout.splitlines() if line.strip()]
+
+    if exclude_prefix:
+        status_lines = [
+            line for line in status_lines if not _status_path_under_prefix(line, exclude_prefix)
+        ]
 
     direct_commits = bool(post_sha and post_sha != snapshot.head_sha)
     uncommitted = len(status_lines) > 0
@@ -286,7 +307,7 @@ async def check_and_revert_clone_contamination(
     if skill_result.worktree_path is not None:
         return skill_result, False
 
-    report = await detect_contamination(snapshot, cwd, runner)
+    report = await detect_contamination(snapshot, cwd, runner, exclude_prefix=exclude_prefix)
     if report is None:
         return skill_result, False
 

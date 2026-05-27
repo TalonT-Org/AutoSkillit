@@ -44,3 +44,18 @@ def test_check_and_revert_has_no_readonly_skill_param():
     assert "policy" in sig.parameters, (
         "check_and_revert_clone_contamination missing policy parameter"
     )
+
+
+def test_clone_guard_detection_revert_exclude_coherence():
+    """detect_contamination must accept exclude_prefix if revert_contamination does."""
+    import inspect
+
+    from autoskillit.execution.clone_guard import detect_contamination, revert_contamination
+
+    detect_sig = inspect.signature(detect_contamination)
+    revert_sig = inspect.signature(revert_contamination)
+    assert "exclude_prefix" in revert_sig.parameters
+    assert "exclude_prefix" in detect_sig.parameters, (
+        "Detection-revert coherence gap: revert_contamination accepts exclude_prefix "
+        "but detect_contamination does not. Detection must filter excluded files."
+    )

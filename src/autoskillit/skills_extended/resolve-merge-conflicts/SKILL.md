@@ -273,9 +273,26 @@ If pre-commit fails, apply all auto-fixable hooks in a single pass before re-run
 After applying all applicable fixes, re-stage any remaining modified files with
 `git -C {worktree_path} add -u` and re-run `pre-commit run --all-files`.
 
-If `pre-commit run --all-files` still fails after this second pass, the remaining
-failure is from a non-auto-fixable hook (e.g., `mypy`, `gitleaks`, `doc-counts`).
-Escalate immediately — do NOT loop:
+If `pre-commit run --all-files` still fails after this second pass, check whether all
+flagged violations are pre-existing on the integration target before escalating:
+
+```bash
+git -C {worktree_path} fetch $REMOTE {base_branch}
+git -C {worktree_path} diff $REMOTE/{base_branch} -- {flagged_file}
+```
+
+For each file flagged by the failing hook, check if the specific flagged lines are
+identical on `$REMOTE/{base_branch}`. If **all** flagged violations appear identically
+on the integration target (the branch introduced none of them), the failures are
+pre-existing — they exist on the integration target independent of this branch:
+
+- Log: `pre_existing_violations = true` with the list of files and hook names
+- Do **not** set `escalation_required = true`
+- Proceed to Step 5a (language-aware manifest validation)
+
+If **any** flagged violation is absent from the integration target (the branch
+introduced it), the remaining failure is from a non-auto-fixable hook (e.g., `mypy`,
+`gitleaks`, `doc-counts`). Escalate immediately — do NOT loop:
 
 ```
 escalation_required = true

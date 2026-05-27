@@ -13,6 +13,55 @@ from autoskillit.recipe.io import find_sub_recipe_by_name
 from autoskillit.recipe.io import load_recipe as _load_recipe_from_path
 from autoskillit.recipe.schema import Recipe, StepResultCondition, StepResultRoute  # noqa: F401
 
+_TERMINAL_TARGETS: frozenset[str] = frozenset({"done", "escalate"})
+
+
+def _collect_all_route_targets(step: Any) -> set[str]:
+    """Return all route target names from every routing field on step.
+
+    Mirrors _extract_routing_edges() field enumeration but returns plain strings.
+    """
+    targets: set[str] = set()
+    if step.on_success:
+        targets.add(step.on_success)
+    if step.on_failure:
+        targets.add(step.on_failure)
+    if step.on_context_limit:
+        targets.add(step.on_context_limit)
+    if step.on_exhausted:
+        targets.add(step.on_exhausted)
+    if step.on_result:
+        sr = step.on_result
+        if sr.conditions:
+            targets.update(c.route for c in sr.conditions)
+        elif sr.routes:
+            targets.update(sr.routes.values())
+    return targets
+
+
+def _strip_step_block(raw: str, step_name: str) -> str:
+    """Remove the entire YAML block for step_name from raw YAML content.
+
+    Matches the step header line (2-space indent) and all deeper-indented child lines.
+    """
+    escaped = re.escape(step_name)
+    return re.sub(
+        rf"(?m)^  {escaped}:[ \t]*\n(?:(?:  [ \t][^\n]*|[ \t]*)(?:\n|$))*",
+        "",
+        raw,
+    )
+
+
+def _validate_no_dangling_routes(recipe: Any) -> list[str]:
+    """Return error strings for any route targets that do not exist in recipe.steps."""
+    known = frozenset(recipe.steps.keys())
+    errors: list[str] = []
+    for step_name, step in recipe.steps.items():
+        for target in _collect_all_route_targets(step):
+            if target not in known and target not in _TERMINAL_TARGETS:
+                errors.append(f"Step '{step_name}' routes to unknown step '{target}'")
+    return errors
+
 
 def _drop_sub_recipe_step(recipe: Any, step_name: str) -> Any:
     """Return a new Recipe with the named sub_recipe placeholder step removed."""
@@ -248,8 +297,18 @@ def _prune_skipped_steps(
             new_steps[step_name] = dataclasses.replace(step, skip_when_false=None)
             working = dataclasses.replace(working, steps=new_steps)
         else:
-            # Redirect all routes pointing to the pruned step; guard against None redirect
-            redirect = step.on_success
+            # Redirect all routes pointing to the pruned step; guard against None redirect.
+            # For on_result-only steps (on_success is None), derive redirect from the
+            # default/else condition (when=None). For legacy routes format, no safe default
+            # exists — redirect stays None and _validate_no_dangling_routes catches dangling refs.
+            if step.on_success is not None:
+                redirect = step.on_success
+            elif step.on_result is not None and step.on_result.conditions:
+                redirect = next(
+                    (c.route for c in step.on_result.conditions if c.when is None), None
+                )
+            else:
+                redirect = None
             new_steps = {}
             for name, s in working.steps.items():
                 if name == step_name:
@@ -263,6 +322,28 @@ def _prune_skipped_steps(
                     fixes["on_context_limit"] = redirect
                 if s.on_exhausted == step_name and redirect is not None:
                     fixes["on_exhausted"] = redirect
+                if s.on_result is not None and redirect is not None:
+                    sr = s.on_result
+                    if sr.conditions:
+                        if any(c.route == step_name for c in sr.conditions):
+                            fixes["on_result"] = StepResultRoute(
+                                conditions=[
+                                    StepResultCondition(
+                                        when=c.when,
+                                        route=redirect if c.route == step_name else c.route,
+                                    )
+                                    for c in sr.conditions
+                                ]
+                            )
+                    elif sr.routes:
+                        if any(v == step_name for v in sr.routes.values()):
+                            fixes["on_result"] = StepResultRoute(
+                                field=sr.field,
+                                routes={
+                                    k: (redirect if v == step_name else v)
+                                    for k, v in sr.routes.items()
+                                },
+                            )
                 new_steps[name] = dataclasses.replace(s, **fixes) if fixes else s
             recipe_kwargs: dict[str, Any] = {"steps": new_steps}
             if getattr(working, "entry", None) == step_name:
@@ -292,19 +373,19 @@ def _resolve_skip_guards_in_content(
         if step is None or not step.skip_when_false:
             continue
         ref = step.skip_when_false
+        if not is_truthy:
+            # Strip the entire step block — applies to all falsy resolutions regardless of
+            # whether skip_when_false uses inputs.* or a literal value.
+            raw = _strip_step_block(raw, step_name)
+            continue
+        # Truthy: strip only the skip_when_false line so the step becomes mandatory.
+        # Only applicable to inputs.* refs (literal values are not surfaced in content).
         if not ref.startswith("inputs."):
             continue
         ingredient_name = re.escape(ref[len("inputs.") :])
-        if is_truthy:
-            raw = re.sub(
-                rf"(?m)^([ \t]+)skip_when_false:[ \t]+inputs\.{ingredient_name}[ \t]*\n",
-                "",
-                raw,
-            )
-        else:
-            raw = re.sub(
-                rf"(?m)^([ \t]+skip_when_false:[ \t]+)inputs\.{ingredient_name}[ \t]*$",
-                r'\1"false"',
-                raw,
-            )
+        raw = re.sub(
+            rf"(?m)^([ \t]+)skip_when_false:[ \t]+inputs\.{ingredient_name}[ \t]*\n",
+            "",
+            raw,
+        )
     return raw

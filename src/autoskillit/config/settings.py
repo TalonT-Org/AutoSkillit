@@ -236,7 +236,7 @@ _YAML_KEY_ALIASES: dict[tuple[str, str], str] = {
 # Custom field builders that bypass _coerce_value.
 # Signature: (section_dict, defaults_dict) -> coerced_value
 # The override is responsible for its own key lookup from section_dict.
-_FIELD_OVERRIDES: dict[tuple[str, str], Any] = {
+_FIELD_OVERRIDES: dict[tuple[str, str], Callable[[dict[str, Any], dict[str, Any]], Any]] = {
     # YAML key "default" with None-means-unset semantic
     ("model", "default_model"): lambda sec, defs: (
         str(sec["default"]) if sec.get("default") is not None else defs["default_model"]

@@ -7,7 +7,7 @@ from typing import Any
 
 import structlog
 
-from autoskillit.core import _parse_issue_ref, get_logger
+from autoskillit.core import REVIEW_APPROACH_MARKER, _parse_issue_ref, get_logger
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
 from autoskillit.server._notify import track_response_size
@@ -36,7 +36,7 @@ async def claim_issue(
     Checks if the issue already has the label (another session may be processing it),
     ensures the label exists in the repo, then applies it atomically.
 
-    Returns JSON with: success, claimed (bool), issue_number, label.
+    Returns JSON with: success, claimed (bool), issue_number, label, review_approach_recommended.
     When claimed=false, the issue is already being processed by another session.
     When allow_reentry=True and label already present, returns claimed=True with reentry=True.
     On gate closed or no token: {success: false, error: "..."}.
@@ -80,6 +80,7 @@ async def claim_issue(
         if not result.get("success"):
             return json.dumps({"success": False, "error": result.get("error", "fetch failed")})
 
+        review_approach_recommended = REVIEW_APPROACH_MARKER in (result.get("body") or "")
         issue_state = result.get("state", "open").lower()
         if issue_state == "closed":
             return json.dumps(
@@ -116,6 +117,7 @@ async def claim_issue(
                     "reentry": True,
                     "issue_number": issue_number,
                     "label": effective_label,
+                    "review_approach_recommended": review_approach_recommended,
                 }
             )
 
@@ -149,6 +151,7 @@ async def claim_issue(
                 "claimed": True,
                 "issue_number": issue_number,
                 "label": effective_label,
+                "review_approach_recommended": review_approach_recommended,
             }
         )
     except Exception as exc:

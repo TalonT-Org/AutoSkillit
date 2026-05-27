@@ -315,6 +315,27 @@ def test_render_issue_body_omits_research_section_when_not_recommended() -> None
     assert "## Review Approach" not in body
 
 
+def test_render_issue_body_includes_machine_readable_marker_when_recommended() -> None:
+    phase = make_phase_result(1)
+    assignment = make_assignment_result(1, 1)
+    wp = make_wp_result(
+        "P1-A1-WP1",
+        review_approach_recommended=True,
+        review_approach_reasoning="Multiple viable approaches.",
+    )
+    body = _render_issue_body(wp, phase, assignment)
+    assert "<!-- review_approach: true -->" in body
+    assert "## Review Approach" in body
+
+
+def test_render_issue_body_omits_marker_when_not_recommended() -> None:
+    phase = make_phase_result(1)
+    assignment = make_assignment_result(1, 1)
+    wp = make_wp_result("P1-A1-WP1")
+    body = _render_issue_body(wp, phase, assignment)
+    assert "<!-- review_approach: true -->" not in body
+
+
 def test_compile_plan_merges_assessment_when_file_present(tmp_path: Path) -> None:
     output_dir = _make_valid_output_dir(
         tmp_path, num_phases=1, with_dep_graph=False, dependency_chain=False

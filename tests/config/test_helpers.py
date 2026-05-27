@@ -94,7 +94,7 @@ def test_resolve_ingredient_defaults_includes_post_run_diagnostics(tmp_path):
 
 
 def test_resolve_ingredient_defaults_includes_is_fleet_dispatch_false(tmp_path):
-    """T1.1: resolve_ingredient_defaults includes is_fleet_dispatch=false when no DISPATCH_ID env var."""
+    """T1.1: resolve_ingredient_defaults includes is_fleet_dispatch=false with no DISPATCH_ID."""
     from autoskillit.config import resolve_ingredient_defaults
 
     repo = tmp_path / "repo"
@@ -110,7 +110,7 @@ def test_resolve_ingredient_defaults_includes_is_fleet_dispatch_false(tmp_path):
 
 
 def test_resolve_ingredient_defaults_includes_is_fleet_dispatch_true(tmp_path, monkeypatch):
-    """T1.2: resolve_ingredient_defaults includes is_fleet_dispatch=true when DISPATCH_ID env var is set."""
+    """T1.2: resolve_ingredient_defaults sets is_fleet_dispatch=true when DISPATCH_ID is set."""
     from autoskillit.config import resolve_ingredient_defaults
 
     repo = tmp_path / "repo"
@@ -128,7 +128,7 @@ def test_resolve_ingredient_defaults_includes_is_fleet_dispatch_true(tmp_path, m
 
 
 def test_resolve_ingredient_defaults_includes_dispatch_id_empty_when_absent(tmp_path):
-    """T1.3: resolve_ingredient_defaults includes dispatch_id empty string when no DISPATCH_ID env var."""
+    """T1.3: resolve_ingredient_defaults includes dispatch_id empty string when no DISPATCH_ID."""
     from autoskillit.config import resolve_ingredient_defaults
 
     repo = tmp_path / "repo"

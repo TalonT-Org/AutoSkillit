@@ -49,6 +49,7 @@ async def test_fetch_github_issue_success(tool_ctx_kitchen_open) -> None:
         "state": "open",
         "labels": [],
         "content": "## Body\nSome content.",
+        "body": "",
     }
     tool_ctx_kitchen_open.github_client = AsyncMock()
     tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(return_value=issue_data)
@@ -83,6 +84,7 @@ async def test_fetch_github_issue_bare_number_with_default_repo(
         "state": "open",
         "labels": [],
         "content": "content",
+        "body": "",
     }
     tool_ctx_kitchen_open.github_client = AsyncMock()
     tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(return_value=issue_data)
@@ -105,6 +107,7 @@ async def test_fetch_github_issue_delegates_to_client(tool_ctx_kitchen_open):
         "state": "open",
         "labels": [],
         "content": "# T",
+        "body": "",
     }
     tool_ctx_kitchen_open.github_client = mock_client
     result = json.loads(await fetch_github_issue("owner/repo#1"))

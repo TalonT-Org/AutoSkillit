@@ -340,6 +340,7 @@ class DefaultGitHubFetcher:
             "state": state,
             "labels": labels,
             "is_pull_request": is_pull_request,
+            "body": body,
             "content": content,
         }
 

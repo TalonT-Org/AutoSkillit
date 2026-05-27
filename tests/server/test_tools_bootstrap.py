@@ -165,7 +165,7 @@ class TestClaimAndResolveIssue:
             return_value={"success": True, "number": 42, "title": "Fix bug", "slug": "fix-bug"}
         )
         tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(
-            return_value={"success": True, "state": "open", "labels": []}
+            return_value={"success": True, "state": "open", "labels": [], "body": ""}
         )
         tool_ctx_kitchen_open.github_client.ensure_label = AsyncMock(
             return_value={"success": True}
@@ -188,6 +188,7 @@ class TestClaimAndResolveIssue:
                 "success": True,
                 "state": "open",
                 "labels": [{"name": "in-progress"}],
+                "body": "",
             }
         )
         result = json.loads(await claim_and_resolve_issue(issue_url="owner/repo#42"))
@@ -207,6 +208,7 @@ class TestClaimAndResolveIssue:
                 "success": True,
                 "state": "open",
                 "labels": [{"name": "in-progress"}],
+                "body": "",
             }
         )
         result = json.loads(
@@ -238,7 +240,7 @@ class TestClaimAndResolveIssue:
             return_value={"success": True, "number": 42, "title": "X", "slug": "x"}
         )
         tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(
-            return_value={"success": True, "state": "open", "labels": []}
+            return_value={"success": True, "state": "open", "labels": [], "body": ""}
         )
         tool_ctx_kitchen_open.github_client.ensure_label = AsyncMock(
             return_value={"success": True}
@@ -250,6 +252,50 @@ class TestClaimAndResolveIssue:
         assert "claim_ms" in result["timings"]
 
     @pytest.mark.anyio
+    async def test_claim_and_resolve_returns_review_approach_recommended(
+        self, tool_ctx_kitchen_open
+    ):
+        tool_ctx_kitchen_open.github_client = AsyncMock()
+        tool_ctx_kitchen_open.github_client.fetch_title = AsyncMock(
+            return_value={"success": True, "number": 42, "title": "Fix bug", "slug": "fix-bug"}
+        )
+        tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(
+            return_value={
+                "success": True,
+                "state": "open",
+                "labels": [],
+                "body": "## Review Approach\n\n<!-- review_approach: true -->\n> ...",
+            }
+        )
+        tool_ctx_kitchen_open.github_client.ensure_label = AsyncMock(
+            return_value={"success": True}
+        )
+        tool_ctx_kitchen_open.github_client.swap_labels = AsyncMock(return_value={"success": True})
+        result = json.loads(await claim_and_resolve_issue("owner/repo#42"))
+        assert result["review_approach_recommended"] is True
+
+    @pytest.mark.anyio
+    async def test_claim_and_resolve_returns_false_when_no_marker(self, tool_ctx_kitchen_open):
+        tool_ctx_kitchen_open.github_client = AsyncMock()
+        tool_ctx_kitchen_open.github_client.fetch_title = AsyncMock(
+            return_value={"success": True, "number": 42, "title": "Fix bug", "slug": "fix-bug"}
+        )
+        tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(
+            return_value={
+                "success": True,
+                "state": "open",
+                "labels": [],
+                "body": "Just a regular issue body.",
+            }
+        )
+        tool_ctx_kitchen_open.github_client.ensure_label = AsyncMock(
+            return_value={"success": True}
+        )
+        tool_ctx_kitchen_open.github_client.swap_labels = AsyncMock(return_value={"success": True})
+        result = json.loads(await claim_and_resolve_issue("owner/repo#42"))
+        assert result["review_approach_recommended"] is False
+
+    @pytest.mark.anyio
     async def test_claim_and_resolve_with_queued_label(self, tool_ctx_kitchen_open):
         """claim_and_resolve_issue with label=queued uses registry color and removes fail."""
         tool_ctx_kitchen_open.github_client = AsyncMock()
@@ -257,7 +303,7 @@ class TestClaimAndResolveIssue:
             return_value={"success": True, "number": 42, "title": "Fix bug", "slug": "fix-bug"}
         )
         tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(
-            return_value={"success": True, "state": "open", "labels": []}
+            return_value={"success": True, "state": "open", "labels": [], "body": ""}
         )
         tool_ctx_kitchen_open.github_client.ensure_label = AsyncMock(
             return_value={"success": True}
@@ -286,7 +332,7 @@ class TestClaimAndResolveIssue:
             return_value={"success": True, "number": 42, "title": "Fix bug", "slug": "fix-bug"}
         )
         tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(
-            return_value={"success": True, "state": "open", "labels": []}
+            return_value={"success": True, "state": "open", "labels": [], "body": ""}
         )
         tool_ctx_kitchen_open.github_client.ensure_label = AsyncMock(
             return_value={"success": True}

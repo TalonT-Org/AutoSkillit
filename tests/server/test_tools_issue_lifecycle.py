@@ -290,6 +290,7 @@ async def test_claim_issue_already_claimed_returns_not_claimed(
         "success": True,
         "state": "open",
         "labels": [{"name": "autoskillit:in-progress"}],
+        "body": "",
     }
     tool_ctx_kitchen_open.github_client = AsyncMock()
     tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(return_value=issue_data)
@@ -312,6 +313,7 @@ async def test_claim_issue_reentry_allowed(tool_ctx_kitchen_open) -> None:
         "success": True,
         "state": "open",
         "labels": [{"name": "autoskillit:in-progress"}],
+        "body": "",
     }
     tool_ctx_kitchen_open.github_client = AsyncMock()
     tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(return_value=issue_data)
@@ -331,7 +333,7 @@ async def test_claim_issue_reentry_allowed(tool_ctx_kitchen_open) -> None:
 @pytest.mark.anyio
 async def test_claim_issue_success(tool_ctx_kitchen_open) -> None:
     """Label not present → applies label, claimed=True."""
-    issue_data = {"success": True, "state": "open", "labels": []}
+    issue_data = {"success": True, "state": "open", "labels": [], "body": ""}
     tool_ctx_kitchen_open.github_client = AsyncMock()
     tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(return_value=issue_data)
     tool_ctx_kitchen_open.github_client.ensure_label = AsyncMock(return_value={"success": True})
@@ -412,7 +414,7 @@ async def test_claim_and_resolve_rejects_closed_issue(tool_ctx_kitchen_open) -> 
         return_value={"success": True, "number": 42, "title": "Fix bug", "slug": "fix-bug"}
     )
     tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(
-        return_value={"success": True, "state": "closed", "labels": []}
+        return_value={"success": True, "state": "closed", "labels": [], "body": ""}
     )
 
     result = json.loads(await claim_and_resolve_issue("https://github.com/owner/repo/issues/42"))
@@ -426,7 +428,7 @@ async def test_claim_issue_rejects_closed_issue(tool_ctx_kitchen_open) -> None:
     """State guard: claim_issue returns claimed=False for closed issues."""
     tool_ctx_kitchen_open.github_client = AsyncMock()
     tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(
-        return_value={"success": True, "state": "closed", "labels": []}
+        return_value={"success": True, "state": "closed", "labels": [], "body": ""}
     )
 
     result = json.loads(await claim_issue("https://github.com/owner/repo/issues/42"))
@@ -443,7 +445,7 @@ async def test_claim_and_resolve_accepts_open_issue(tool_ctx_kitchen_open) -> No
         return_value={"success": True, "number": 42, "title": "Fix bug", "slug": "fix-bug"}
     )
     tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(
-        return_value={"success": True, "state": "open", "labels": []}
+        return_value={"success": True, "state": "open", "labels": [], "body": ""}
     )
     tool_ctx_kitchen_open.github_client.ensure_label = AsyncMock(return_value={"success": True})
     tool_ctx_kitchen_open.github_client.swap_labels = AsyncMock(return_value={"success": True})

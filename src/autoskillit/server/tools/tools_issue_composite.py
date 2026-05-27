@@ -9,6 +9,7 @@ from typing import Any
 import structlog
 
 from autoskillit.core import (
+    REVIEW_APPROACH_MARKER,
     _parse_issue_ref,
     get_logger,
 )
@@ -103,6 +104,9 @@ async def claim_and_resolve_issue(
                 }
             )
 
+        issue_body = fetch_result.get("body") or ""
+        review_approach_recommended = REVIEW_APPROACH_MARKER in issue_body
+
         issue_state = fetch_result.get("state", "open").lower()
         if issue_state == "closed":
             claim_ms = int((time.monotonic() - _claim_start) * 1000)
@@ -114,6 +118,7 @@ async def claim_and_resolve_issue(
                     "issue_number": issue_number,
                     "issue_title": issue_title,
                     "issue_slug": issue_slug,
+                    "review_approach_recommended": review_approach_recommended,
                     "timings": {"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms},
                 }
             )
@@ -138,6 +143,7 @@ async def claim_and_resolve_issue(
                     "issue_number": issue_number,
                     "issue_title": issue_title,
                     "issue_slug": issue_slug,
+                    "review_approach_recommended": review_approach_recommended,
                     "timings": {"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms},
                 }
             )
@@ -152,6 +158,7 @@ async def claim_and_resolve_issue(
                     "issue_title": issue_title,
                     "issue_slug": issue_slug,
                     "label": effective_label,
+                    "review_approach_recommended": review_approach_recommended,
                     "timings": {"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms},
                 }
             )
@@ -197,6 +204,7 @@ async def claim_and_resolve_issue(
                 "issue_title": issue_title,
                 "issue_slug": issue_slug,
                 "label": effective_label,
+                "review_approach_recommended": review_approach_recommended,
                 "timings": {"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms},
             }
         )

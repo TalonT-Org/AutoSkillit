@@ -103,3 +103,20 @@ def test_prepare_pr_supports_run_name_title_prefix() -> None:
     assert "[FIX]" in content
     # Must document the run_name-based convention
     assert "run_name" in content
+
+
+def test_process_issues_auto_detects_review_approach(skill_text: str) -> None:
+    """process-issues must document auto-detection of review_approach marker."""
+    lower = skill_text.lower()
+    assert "review_approach" in lower
+    assert "<!-- review_approach: true -->" in skill_text and "review_approach_detected" in lower
+
+
+def test_process_issues_review_approach_not_unconditionally_false(skill_text: str) -> None:
+    """process-issues must reference auto-detection, not hardcode review_approach as false."""
+    lower = skill_text.lower()
+    assert (
+        "auto-detect" in lower
+        or "review_approach_detected" in lower
+        or "<!-- review_approach" in skill_text
+    )

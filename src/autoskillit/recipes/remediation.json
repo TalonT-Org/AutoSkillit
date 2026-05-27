@@ -1666,7 +1666,7 @@
         "force": "true"
       },
       "on_success": "redirect_merge",
-      "on_failure": "release_issue_failure",
+      "on_failure": "classify_push_failure",
       "skip_when_false": "inputs.open_pr"
     },
     "redirect_merge": {
@@ -1774,7 +1774,7 @@
         "force": "true"
       },
       "on_success": "remerge_immediate",
-      "on_failure": "release_issue_failure",
+      "on_failure": "classify_push_failure",
       "skip_when_false": "inputs.open_pr"
     },
     "remerge_immediate": {
@@ -1896,7 +1896,7 @@
         "force": "true"
       },
       "on_success": "check_repo_ci_event",
-      "on_failure": "release_issue_failure",
+      "on_failure": "classify_push_failure",
       "note": "Pushes the CI-fixed feature branch back to the remote after resolve_ci succeeds. Routes to check_repo_ci_event to derive ci_event before ci_watch verifies the fix. On push failure, escalates via release_issue_failure.\n"
     },
     "detect_ci_conflict": {

@@ -104,7 +104,7 @@ async def claim_and_resolve_issue(
                 }
             )
 
-        issue_body = fetch_result.get("body", "")
+        issue_body = fetch_result.get("body") or ""
         review_approach_recommended = REVIEW_APPROACH_MARKER in issue_body
 
         issue_state = fetch_result.get("state", "open").lower()

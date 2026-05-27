@@ -475,3 +475,26 @@ class TestIssueUrlPruning:
                 "If claim_and_resolve survives pruning without issue_url, "
                 "skip_when_false must be literal 'false'"
             )
+
+
+@pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "implementation-groups"])
+def test_bundled_recipes_fire_skip_when_false_non_boolean_warning_for_issue_url(
+    recipe_name: str,
+) -> None:
+    """Bundled recipes using skip_when_false: inputs.issue_url fire the non-boolean warning.
+
+    Documentation-of-known-state: the warning is expected and intentional. issue_url is
+    URL-typed; truthiness evaluation is correct after the Part A fix, but the pattern
+    is non-standard and the warning documents it for future recipe authors.
+    """
+    recipe = load_recipe(_recipe_path(recipe_name))
+    findings = run_semantic_rules(recipe)
+    hits = [
+        f
+        for f in findings
+        if f.rule == "skip-when-false-on-non-boolean" and "issue_url" in f.message
+    ]
+    assert len(hits) >= 1, (
+        f"{recipe_name}: expected at least one skip-when-false-on-non-boolean WARNING "
+        f"for issue_url but found none"
+    )

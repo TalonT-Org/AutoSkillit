@@ -208,6 +208,137 @@ def test_prune_skipped_steps_removes_step_and_cleans_routes() -> None:
         assert step.on_failure != "diag"
 
 
+def test_prune_skipped_steps_url_string_is_truthy() -> None:
+    """_prune_skipped_steps keeps step when override is a URL (non-boolean truthy string)."""
+    from autoskillit.recipe._recipe_composition import _prune_skipped_steps
+
+    recipe = Recipe(
+        name="test",
+        description="test",
+        ingredients={
+            "issue_url": RecipeIngredient(
+                description="URL of the issue",
+                required=False,
+            )
+        },
+        steps={
+            "claim_and_resolve": RecipeStep(
+                tool="claim_and_resolve_issue",
+                optional=True,
+                skip_when_false="inputs.issue_url",
+                on_success="done",
+                on_failure="done",
+                with_args={"issue_url": "inputs.issue_url"},
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        },
+        kitchen_rules=["test"],
+    )
+
+    pruned, resolutions = _prune_skipped_steps(
+        recipe, ingredient_overrides={"issue_url": "https://github.com/org/repo/issues/42"}
+    )
+    assert "claim_and_resolve" in pruned.steps
+    assert resolutions["claim_and_resolve"] is True
+    assert pruned.steps["claim_and_resolve"].skip_when_false is None
+
+
+def test_prune_skipped_steps_empty_string_is_falsy() -> None:
+    """_prune_skipped_steps prunes step for empty string, absent, 'false', and 'no' overrides."""
+    from autoskillit.recipe._recipe_composition import _prune_skipped_steps
+
+    recipe = Recipe(
+        name="test",
+        description="test",
+        ingredients={
+            "issue_url": RecipeIngredient(
+                description="URL of the issue",
+                required=False,
+            )
+        },
+        steps={
+            "claim_and_resolve": RecipeStep(
+                tool="claim_and_resolve_issue",
+                optional=True,
+                skip_when_false="inputs.issue_url",
+                on_success="done",
+                on_failure="done",
+                with_args={"issue_url": "inputs.issue_url"},
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        },
+        kitchen_rules=["test"],
+    )
+
+    for falsy_value in ("", "false", "no"):
+        pruned, resolutions = _prune_skipped_steps(
+            recipe, ingredient_overrides={"issue_url": falsy_value}
+        )
+        assert "claim_and_resolve" not in pruned.steps, (
+            f"Expected pruned for value={falsy_value!r}"
+        )
+        assert resolutions["claim_and_resolve"] is False
+
+    # Absent override (no default on ingredient) — also falsy
+    pruned_absent, resolutions_absent = _prune_skipped_steps(recipe, ingredient_overrides={})
+    assert "claim_and_resolve" not in pruned_absent.steps
+    assert resolutions_absent["claim_and_resolve"] is False
+
+
+@pytest.mark.parametrize(
+    "value,expected_truthy",
+    [
+        ("true", True),
+        ("True", True),
+        ("TRUE", True),
+        ("1", True),
+        ("yes", True),
+        ("Yes", True),
+        ("https://github.com/org/repo/issues/42", True),
+        ("/path/to/file.md", True),
+        ("some-branch-name", True),
+        ("enabled", True),
+        ("false", False),
+        ("False", False),
+        ("FALSE", False),
+        ("0", False),
+        ("no", False),
+        ("No", False),
+        ("", False),
+    ],
+)
+def test_prune_skipped_steps_truthiness_boundary(value: str, expected_truthy: bool) -> None:
+    """Full truthiness contract for _prune_skipped_steps ingredient evaluation."""
+    from autoskillit.recipe._recipe_composition import _prune_skipped_steps
+
+    recipe = Recipe(
+        name="test",
+        description="test",
+        ingredients={"flag": RecipeIngredient(description="A flag", required=False)},
+        steps={
+            "guarded": RecipeStep(
+                tool="run_cmd",
+                optional=True,
+                skip_when_false="inputs.flag",
+                on_success="done",
+                on_failure="done",
+                with_args={"cmd": "echo hi"},
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        },
+        kitchen_rules=["test"],
+    )
+    pruned, resolutions = _prune_skipped_steps(recipe, ingredient_overrides={"flag": value})
+    assert resolutions["guarded"] is expected_truthy, (
+        f"value={value!r}: expected truthy={expected_truthy}, got {resolutions['guarded']}"
+    )
+    if expected_truthy:
+        assert "guarded" in pruned.steps
+        assert pruned.steps["guarded"].skip_when_false is None
+    else:
+        assert "guarded" not in pruned.steps
+
+
 def test_load_and_validate_resolves_skip_guards_in_content(tmp_path: Path) -> None:
     """load_and_validate strips/resolves skip_when_false lines in content."""
     from autoskillit.recipe import load_and_validate

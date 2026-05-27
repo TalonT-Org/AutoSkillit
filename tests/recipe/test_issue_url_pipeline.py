@@ -6,7 +6,7 @@ import pytest
 import yaml
 
 from autoskillit.core.types import Severity
-from autoskillit.recipe._api import validate_from_path
+from autoskillit.recipe._api import load_and_validate, validate_from_path
 from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 
@@ -438,3 +438,45 @@ def test_bundled_recipes_pass_release_issue_disposition_rule():
         findings = run_semantic_rules(recipe)
         hits = [f for f in findings if f.rule == "release-issue-requires-disposition"]
         assert not hits, f"{recipe_name}: {hits}"
+
+
+class TestIssueUrlPruning:
+    """Integration tests: _prune_skipped_steps behavior with issue_url in full pipeline."""
+
+    def test_claim_and_resolve_survives_pruning_with_url(self) -> None:
+        """claim_and_resolve step must survive pruning when issue_url is a real URL."""
+        result = load_and_validate(
+            "remediation",
+            ingredient_overrides={"issue_url": "https://github.com/org/repo/issues/42"},
+        )
+        content = yaml.safe_load(result["content"])
+        steps = content.get("steps", {})
+        assert "claim_and_resolve" in steps, (
+            "claim_and_resolve must be present when issue_url is a URL"
+        )
+        # skip_when_false must be stripped (step is mandatory after pruning)
+        assert "skip_when_false" not in steps["claim_and_resolve"], (
+            "skip_when_false must be cleared on claim_and_resolve when issue_url is provided"
+        )
+
+    def test_claim_and_resolve_pruned_without_url(self) -> None:
+        """claim_and_resolve step must be pruned or remain guarded when issue_url is absent."""
+        result = load_and_validate(
+            "remediation",
+            ingredient_overrides={},
+        )
+        content_str = result["content"]
+        content = yaml.safe_load(content_str)
+        steps = content.get("steps", {})
+        # Either the step is absent (pruned) or skip_when_false is "false" (guarded)
+        if "claim_and_resolve" in steps:
+            step = steps["claim_and_resolve"]
+            assert step.get("skip_when_false") == "false", (
+                "If claim_and_resolve survives pruning without issue_url, "
+                "skip_when_false must be literal 'false'"
+            )
+        # Also verify the raw content string has no live inputs.issue_url ref on this step
+        assert "inputs.issue_url" not in content_str or "claim_and_resolve" not in steps, (
+            "inputs.issue_url must not appear in served content for claim_and_resolve "
+            "when issue_url is absent"
+        )

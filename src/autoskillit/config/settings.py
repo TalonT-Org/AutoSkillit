@@ -11,10 +11,20 @@ Resolution order (low → high priority):
 from __future__ import annotations
 
 import dataclasses
+import types
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    TypeVar,
+    Union,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 
 from autoskillit.config._config_dataclasses import (
     _COMMAND_UNSET,
@@ -56,7 +66,6 @@ from autoskillit.config._config_loader import (
     _build_packs_config,
     _build_subsets_config,
     _to_optional_commands,
-    _to_optional_list,
     load_config,
 )
 from autoskillit.core import (
@@ -153,14 +162,6 @@ __all__ = [
 ]
 
 
-def _parse_int_field(val: Any, config_key: str) -> int:
-    """Convert a config value to int, raising a descriptive ConfigSchemaError on failure."""
-    try:
-        return int(val)
-    except (TypeError, ValueError) as exc:
-        raise ConfigSchemaError(f"{config_key} must be an integer, got {val!r}") from exc
-
-
 def _field_defaults(cls: type) -> dict[str, Any]:
     """Extract default values from dataclass fields into a dict keyed by field name."""
     defaults: dict[str, Any] = {}
@@ -172,8 +173,149 @@ def _field_defaults(cls: type) -> dict[str, Any]:
     return defaults
 
 
+_T = TypeVar("_T")
+
+
+def _coerce_value(value: Any, target_type: type, context: str) -> Any:
+    """Coerce a raw config value to target_type based on its type annotation.
+
+    Raises ConfigSchemaError for int/float conversion failures, including context.
+    """
+    origin = get_origin(target_type)
+    args = get_args(target_type)
+
+    if origin is types.UnionType or origin is Union:
+        non_none = [a for a in args if a is not type(None)]
+        if type(None) in args and len(non_none) == 1:
+            inner = non_none[0]
+            if inner is bool:
+                return bool(value) if value is not None else None
+            if inner in (int, float):
+                return _coerce_value(value, inner, context) if value is not None else None
+            if not value:
+                return None
+            return _coerce_value(value, inner, context)
+        return value
+
+    if target_type is int:
+        try:
+            return int(value)
+        except (TypeError, ValueError) as exc:
+            raise ConfigSchemaError(f"{context} must be an integer, got {value!r}") from exc
+    if target_type is float:
+        try:
+            return float(value)
+        except (TypeError, ValueError) as exc:
+            raise ConfigSchemaError(f"{context} must be a number, got {value!r}") from exc
+    if target_type is bool:
+        return bool(value)
+    if target_type is str:
+        return str(value)
+    if origin is list:
+        try:
+            return list(value)
+        except TypeError as exc:
+            raise ConfigSchemaError(f"{context} must be iterable for list, got {value!r}") from exc
+    if origin is set:
+        try:
+            return set(value)
+        except TypeError as exc:
+            raise ConfigSchemaError(f"{context} must be iterable for set, got {value!r}") from exc
+    if origin is dict:
+        return value
+    return value
+
+
+# YAML key name differs from Python field name.
+# Key: (section_name, field_name), Value: yaml_key_name
+_YAML_KEY_ALIASES: dict[tuple[str, str], str] = {
+    ("model", "default_model"): "default",
+    ("model", "model_override"): "override",
+}
+
+# Custom field builders that bypass _coerce_value.
+# Signature: (section_dict, defaults_dict) -> coerced_value
+# The override is responsible for its own key lookup from section_dict.
+_FIELD_OVERRIDES: dict[tuple[str, str], Callable[[dict[str, Any], dict[str, Any]], Any]] = {
+    # YAML key "default" with None-means-unset semantic
+    ("model", "default_model"): lambda sec, defs: (
+        str(sec["default"]) if sec.get("default") is not None else defs["default_model"]
+    ),
+    # Sentinel for __post_init__ mutual-exclusion check with commands
+    ("test_check", "command"): lambda sec, defs: (
+        list(sec["command"]) if sec.get("command") is not None else _COMMAND_UNSET
+    ),
+    # Structural validation for nested list shape
+    ("test_check", "commands"): lambda sec, defs: _to_optional_commands(
+        sec.get("commands", defs.get("commands"))
+    ),
+    # Uppercase transform
+    ("logging", "level"): lambda sec, defs: str(sec.get("level", defs["level"])).upper(),
+}
+
+
+def _preprocess_agent_backend(raw: Any) -> dict[str, Any]:
+    """Normalize agent_backend section: string shorthand or lowercased dict."""
+    if isinstance(raw, str):
+        return {"backend": raw}
+    if isinstance(raw, dict):
+        return {k.lower(): v for k, v in raw.items()}
+    raise ConfigSchemaError(
+        f"agent_backend must be a string or mapping, got {type(raw).__name__!r}: {raw!r}"
+    )
+
+
+# Section-level pre-processors applied before _build_subconfig.
+_SECTION_PREPROCESSORS: dict[str, Callable[[Any], dict[str, Any]]] = {
+    "agent_backend": _preprocess_agent_backend,
+}
+
+# Sections with fully custom builders (bypass _build_subconfig entirely).
+_SECTION_BUILDERS: dict[str, Callable[[dict[str, Any]], Any]] = {
+    "subsets": _build_subsets_config,
+    "packs": _build_packs_config,
+}
+
+
+def _build_subconfig(cls: type[_T], section: dict[str, Any], section_name: str) -> _T:
+    """Build a sub-config dataclass from a raw Dynaconf section dict.
+
+    Uses dataclass field introspection and type annotations to auto-coerce
+    values. Fields listed in _FIELD_OVERRIDES use custom builders. Fields
+    listed in _YAML_KEY_ALIASES read from an alternate YAML key name.
+    """
+    defaults = _field_defaults(cls)
+    hints = get_type_hints(cls)
+    kwargs: dict[str, Any] = {}
+
+    for f in dataclasses.fields(cls):  # type: ignore[arg-type]
+        override_key = (section_name, f.name)
+        if override_key in _FIELD_OVERRIDES:
+            kwargs[f.name] = _FIELD_OVERRIDES[override_key](section, defaults)
+            continue
+        yaml_key = _YAML_KEY_ALIASES.get(override_key, f.name)
+        raw = section.get(yaml_key, defaults.get(f.name))
+        if raw is None and f.name not in defaults:
+            raise ConfigSchemaError(
+                f"{section_name}.{f.name} is required but absent from config and has no default."
+            )
+        kwargs[f.name] = _coerce_value(raw, hints[f.name], f"{section_name}.{yaml_key}")
+
+    return cls(**kwargs)  # type: ignore[return-value]
+
+
 @dataclass
 class AutomationConfig:
+    """Root configuration dataclass for AutoSkillit.
+
+    Schema contract: all direct fields (except ``features`` and
+    ``experimental_enabled``) must use ``field(default_factory=<DataclassType>)``
+    where the factory is a dataclass, or be registered in ``_SECTION_BUILDERS``
+    for custom build logic. Any scalar or non-dataclass field not in
+    ``_SECTION_BUILDERS`` will raise ``ConfigSchemaError`` at load time in
+    ``from_dynaconf``.
+    """
+
     test_check: TestCheckConfig = field(default_factory=TestCheckConfig)
     classify_fix: ClassifyFixConfig = field(default_factory=ClassifyFixConfig)
     reset_workspace: ResetWorkspaceConfig = field(default_factory=ResetWorkspaceConfig)
@@ -281,308 +423,48 @@ class AutomationConfig:
 
     @classmethod
     def from_dynaconf(cls, d: Dynaconf) -> AutomationConfig:
-        """Build a typed AutomationConfig from a loaded Dynaconf instance.
-
-        d.as_dict() returns UPPERCASE keys — map them explicitly.
-        Lists are converted to set where the dataclass field is set[str].
-        """
+        """Build a typed AutomationConfig from a loaded Dynaconf instance."""
         raw = d.as_dict()
 
         def sec(name: str) -> dict[str, Any]:
             return raw.get(name.upper(), {})
 
-        def val(section: dict[str, Any], key: str, default: Any) -> Any:
-            return section.get(key, default)
-
-        def _parse_int_config(value: Any, field_name: str) -> int:
-            try:
-                return int(value)
-            except (ValueError, TypeError) as exc:
-                raise ConfigSchemaError(
-                    f"Config field '{field_name}' must be an integer, got {value!r}"
-                ) from exc
-
-        tc = sec("test_check")
-        cf = sec("classify_fix")
-        rw = sec("reset_workspace")
-        ig = sec("implement_gate")
-        sf = sec("safety")
-        rd = sec("read_db")
-        rs = sec("run_skill")
-        mc = sec("model")
-        ws = sec("worktree_setup")
-        mi = sec("migration")
-        tu = sec("token_usage")
-        qg = sec("quota_guard")
-        gh = sec("github")
-        rb = sec("report_bug")
-        lg = sec("logging")
-        dg = sec("diagnostics")
-        lt = sec("linux_tracing")
-        mr = sec("mcp_response")
-        br = sec("branching")
-        ci = sec("ci")
-        rv = sec("review")
-        pn = sec("plan")
-        sk = sec("skills")
-        _sub = sec("subsets")
-        pk = sec("packs")
-        ws_raw = sec("workspace")
-        fr = sec("fleet")
-        pvd = sec("providers")
-        ab = sec("agent_backend")
-        if isinstance(ab, str):
-            ab = {"backend": ab}
-        elif isinstance(ab, dict):
-            ab = {k.lower(): v for k, v in ab.items()}
         feat = sec("features")
-
-        _tc = _field_defaults(TestCheckConfig)
-        _cf = _field_defaults(ClassifyFixConfig)
-        _rw = _field_defaults(ResetWorkspaceConfig)
-        _ig = _field_defaults(ImplementGateConfig)
-        _sf = _field_defaults(SafetyConfig)
-        _rd = _field_defaults(ReadDbConfig)
-        _rs = _field_defaults(RunSkillConfig)
-        _mc = _field_defaults(CoreRunConfig)
-        _ws = _field_defaults(WorktreeSetupConfig)
-        _mi = _field_defaults(MigrationConfig)
-        _tu = _field_defaults(TokenUsageConfig)
-        _qg = _field_defaults(QuotaGuardConfig)
-        _gh = _field_defaults(GitHubConfig)
-        _rb = _field_defaults(ReportBugConfig)
-        _lg = _field_defaults(LoggingConfig)
-        _dg = _field_defaults(DiagnosticsConfig)
-        _lt = _field_defaults(LinuxTracingConfig)
-        _mr = _field_defaults(McpResponseConfig)
-        _br = _field_defaults(BranchingConfig)
-        _ci = _field_defaults(CIConfig)
-        _rv = _field_defaults(ReviewConfig)
-        _pn = _field_defaults(PlanConfig)
-        _sk = _field_defaults(SkillsConfig)
-        _wsc = _field_defaults(WorkspaceConfig)
-        _fr = _field_defaults(FleetConfig)
-        _pvd = _field_defaults(ProvidersConfig)
-        _ab = _field_defaults(AgentBackendConfig)
-
-        _features_dict, _exp_enabled = AutomationConfig._build_features_dict(
+        features_dict, exp_enabled = AutomationConfig._build_features_dict(
             dict(feat) if isinstance(feat, dict) else {}
         )
 
-        _raw_command = val(tc, "command", None)
-        result = cls(
-            test_check=TestCheckConfig(
-                command=list(_raw_command) if _raw_command is not None else _COMMAND_UNSET,
-                timeout=int(val(tc, "timeout", _tc["timeout"])),
-                filter_mode=val(tc, "filter_mode", _tc["filter_mode"]) or None,
-                base_ref=val(tc, "base_ref", _tc["base_ref"]) or None,
-                commands=_to_optional_commands(val(tc, "commands", _tc["commands"])),
-            ),
-            classify_fix=ClassifyFixConfig(
-                path_prefixes=list(val(cf, "path_prefixes", _cf["path_prefixes"])),
-            ),
-            reset_workspace=ResetWorkspaceConfig(
-                command=_to_optional_list(val(rw, "command", _rw["command"])),
-                preserve_dirs=set(val(rw, "preserve_dirs", _rw["preserve_dirs"])),
-            ),
-            implement_gate=ImplementGateConfig(
-                marker=str(val(ig, "marker", _ig["marker"])),
-                skill_names=set(val(ig, "skill_names", _ig["skill_names"])),
-                allowed_plan_dirs=set(val(ig, "allowed_plan_dirs", _ig["allowed_plan_dirs"])),
-            ),
-            safety=SafetyConfig(
-                reset_guard_marker=str(val(sf, "reset_guard_marker", _sf["reset_guard_marker"])),
-                require_dry_walkthrough=bool(
-                    val(sf, "require_dry_walkthrough", _sf["require_dry_walkthrough"])
-                ),
-                test_gate_on_merge=bool(val(sf, "test_gate_on_merge", _sf["test_gate_on_merge"])),
-                protected_branches=list(val(sf, "protected_branches", _sf["protected_branches"])),
-            ),
-            read_db=ReadDbConfig(
-                timeout=int(val(rd, "timeout", _rd["timeout"])),
-                max_rows=int(val(rd, "max_rows", _rd["max_rows"])),
-            ),
-            run_skill=RunSkillConfig(
-                timeout=int(val(rs, "timeout", _rs["timeout"])),
-                stale_threshold=int(val(rs, "stale_threshold", _rs["stale_threshold"])),
-                completion_marker=str(val(rs, "completion_marker", _rs["completion_marker"])),
-                completion_drain_timeout=float(
-                    val(rs, "completion_drain_timeout", _rs["completion_drain_timeout"])
-                ),
-                exit_after_stop_delay_ms=int(
-                    val(rs, "exit_after_stop_delay_ms", _rs["exit_after_stop_delay_ms"])
-                ),
-                natural_exit_grace_seconds=float(
-                    val(rs, "natural_exit_grace_seconds", _rs["natural_exit_grace_seconds"])
-                ),
-                idle_output_timeout=int(
-                    val(rs, "idle_output_timeout", _rs["idle_output_timeout"])
-                ),
-                max_suppression_seconds=int(
-                    val(rs, "max_suppression_seconds", _rs["max_suppression_seconds"])
-                ),
-                stream_idle_timeout_ms=int(
-                    val(rs, "stream_idle_timeout_ms", _rs["stream_idle_timeout_ms"])
-                ),
-            ),
-            model=CoreRunConfig(
-                default_model=_d
-                if (_d := val(mc, "default", None)) is not None
-                else _mc["default_model"],
-                model_override=val(mc, "override", _mc["model_override"]) or None,
-                provider=str(val(mc, "provider", _mc["provider"])),
-                step_overrides=val(mc, "step_overrides", _mc["step_overrides"]),
-                recipe_overrides=val(mc, "recipe_overrides", _mc["recipe_overrides"]),
-            ),
-            worktree_setup=WorktreeSetupConfig(
-                command=_to_optional_list(val(ws, "command", _ws["command"])),
-            ),
-            migration=MigrationConfig(
-                suppressed=list(val(mi, "suppressed", _mi["suppressed"])),
-            ),
-            token_usage=TokenUsageConfig(
-                verbosity=str(val(tu, "verbosity", _tu["verbosity"])),
-            ),
-            quota_guard=QuotaGuardConfig(
-                enabled=bool(val(qg, "enabled", _qg["enabled"])),
-                short_window_enabled=bool(
-                    val(qg, "short_window_enabled", _qg["short_window_enabled"])
-                ),
-                long_window_enabled=bool(
-                    val(qg, "long_window_enabled", _qg["long_window_enabled"])
-                ),
-                short_window_threshold=float(
-                    val(qg, "short_window_threshold", _qg["short_window_threshold"])
-                ),
-                long_window_threshold=float(
-                    val(qg, "long_window_threshold", _qg["long_window_threshold"])
-                ),
-                long_window_patterns=list(
-                    val(qg, "long_window_patterns", _qg["long_window_patterns"])
-                ),
-                buffer_seconds=int(val(qg, "buffer_seconds", _qg["buffer_seconds"])),
-                cache_max_age=int(val(qg, "cache_max_age", _qg["cache_max_age"])),
-                cache_refresh_interval=int(
-                    val(qg, "cache_refresh_interval", _qg["cache_refresh_interval"])
-                ),
-                credentials_path=str(val(qg, "credentials_path", _qg["credentials_path"])),
-                cache_path=str(val(qg, "cache_path", _qg["cache_path"])),
-            ),
-            github=GitHubConfig(
-                token=val(gh, "token", _gh["token"]) or None,
-                default_repo=val(gh, "default_repo", _gh["default_repo"]) or None,
-                in_progress_label=str(val(gh, "in_progress_label", _gh["in_progress_label"])),
-                staged_label=str(val(gh, "staged_label", _gh["staged_label"])),
-                fail_label=str(val(gh, "fail_label", _gh["fail_label"])),
-                queued_label=str(val(gh, "queued_label", _gh["queued_label"])),
-                allowed_labels=list(val(gh, "allowed_labels", _gh["allowed_labels"])),
-            ),
-            report_bug=ReportBugConfig(
-                timeout=int(val(rb, "timeout", _rb["timeout"])),
-                model=val(rb, "model", _rb["model"]) or None,
-                report_dir=val(rb, "report_dir", _rb["report_dir"]) or None,
-                github_filing=bool(val(rb, "github_filing", _rb["github_filing"])),
-                github_labels=list(val(rb, "github_labels", _rb["github_labels"])),
-            ),
-            logging=LoggingConfig(
-                level=str(val(lg, "level", _lg["level"])).upper(),
-                json_output=(
-                    bool(_jo)
-                    if (_jo := val(lg, "json_output", _lg["json_output"])) is not None
-                    else None
-                ),
-            ),
-            diagnostics=DiagnosticsConfig(
-                post_run_analysis=bool(val(dg, "post_run_analysis", _dg["post_run_analysis"])),
-            ),
-            linux_tracing=LinuxTracingConfig(
-                enabled=bool(val(lt, "enabled", _lt["enabled"])),
-                proc_interval=float(val(lt, "proc_interval", _lt["proc_interval"])),
-                log_dir=str(val(lt, "log_dir", _lt["log_dir"])),
-                tmpfs_path=str(val(lt, "tmpfs_path", _lt["tmpfs_path"])),
-                max_sessions=int(val(lt, "max_sessions", _lt["max_sessions"])),
-            ),
-            mcp_response=McpResponseConfig(
-                alert_threshold_tokens=int(
-                    val(mr, "alert_threshold_tokens", _mr["alert_threshold_tokens"])
-                ),
-            ),
-            branching=BranchingConfig(
-                default_base_branch=str(
-                    val(br, "default_base_branch", _br["default_base_branch"])
-                ),
-                promotion_target=str(val(br, "promotion_target", _br["promotion_target"])),
-            ),
-            ci=CIConfig(
-                workflow=val(ci, "workflow", _ci["workflow"]) or None,
-                event=val(ci, "event", _ci["event"]) or None,
-            ),
-            review=ReviewConfig(
-                local_review_rounds=_parse_int_config(
-                    val(rv, "local_review_rounds", _rv["local_review_rounds"]),
-                    "review.local_review_rounds",
-                ),
-            ),
-            plan=PlanConfig(
-                adversarial_review_level=val(
-                    pn, "adversarial_review_level", _pn["adversarial_review_level"]
-                ),
-            ),
-            skills=SkillsConfig(
-                tier1=list(val(sk, "tier1", _sk["tier1"])),
-                tier2=list(val(sk, "tier2", _sk["tier2"])),
-                tier3=list(val(sk, "tier3", _sk["tier3"])),
-            ),
-            subsets=_build_subsets_config(_sub),
-            packs=_build_packs_config(pk),
-            workspace=WorkspaceConfig(
-                worktree_root=val(ws_raw, "worktree_root", _wsc["worktree_root"]) or None,
-                runs_root=val(ws_raw, "runs_root", _wsc["runs_root"]) or None,
-                temp_dir=val(ws_raw, "temp_dir", _wsc["temp_dir"]) or None,
-            ),
-            fleet=FleetConfig(
-                default_timeout_sec=int(
-                    val(fr, "default_timeout_sec", _fr["default_timeout_sec"])
-                ),
-                max_concurrent_dispatches=int(
-                    val(fr, "max_concurrent_dispatches", _fr["max_concurrent_dispatches"])
-                ),
-                max_total_issues=int(val(fr, "max_total_issues", _fr["max_total_issues"])),
-                enable_deadline_extension=bool(
-                    val(fr, "enable_deadline_extension", _fr["enable_deadline_extension"])
-                ),
-                max_extension_seconds=float(
-                    val(fr, "max_extension_seconds", _fr["max_extension_seconds"])
-                ),
-                idle_output_timeout=float(
-                    val(fr, "idle_output_timeout", _fr["idle_output_timeout"])
-                ),
-                acquire_timeout_sec=float(
-                    val(fr, "acquire_timeout_sec", _fr["acquire_timeout_sec"])
-                ),
-                max_issues_per_food_truck=int(
-                    val(fr, "max_issues_per_food_truck", _fr["max_issues_per_food_truck"])
-                ),
-            ),
-            providers=ProvidersConfig(
-                default_provider=val(pvd, "default_provider", _pvd["default_provider"]),
-                profiles=val(pvd, "profiles", _pvd["profiles"]),
-                step_overrides=val(pvd, "step_overrides", _pvd["step_overrides"]),
-                recipe_overrides=val(pvd, "recipe_overrides", _pvd["recipe_overrides"]),
-                model_overrides=val(pvd, "model_overrides", _pvd["model_overrides"]),
-                provider_retry_limit=_parse_int_field(
-                    val(pvd, "provider_retry_limit", _pvd["provider_retry_limit"]),
-                    "providers.provider_retry_limit",
-                ),
-            ),
-            agent_backend=AgentBackendConfig(
-                backend=str(
-                    ab if isinstance(ab, str) and ab else val(ab, "backend", _ab["backend"])
-                ),
-            ),
-            features=_features_dict,
-            experimental_enabled=_exp_enabled,
-        )
+        kwargs: dict[str, Any] = {}
+        for f in dataclasses.fields(cls):
+            if f.name in ("features", "experimental_enabled"):
+                continue
+
+            section_name = f.name
+            section_raw = sec(section_name)
+
+            preprocess = _SECTION_PREPROCESSORS.get(section_name)
+            if preprocess is not None:
+                section_raw = preprocess(section_raw)
+
+            builder = _SECTION_BUILDERS.get(section_name)
+            if builder is not None:
+                kwargs[section_name] = builder(section_raw)
+            else:
+                if f.default_factory is dataclasses.MISSING or not dataclasses.is_dataclass(
+                    f.default_factory
+                ):
+                    raise ConfigSchemaError(
+                        f"AutomationConfig field {f.name!r} has no dataclass factory; "
+                        f"add it to _SECTION_BUILDERS or handle it explicitly."
+                    )
+                kwargs[section_name] = _build_subconfig(
+                    f.default_factory, section_raw, section_name
+                )
+
+        kwargs["features"] = features_dict
+        kwargs["experimental_enabled"] = exp_enabled
+
+        result = cls(**kwargs)
         try:
             result.fleet.validate(
                 is_feature_enabled(
@@ -599,20 +481,11 @@ def _build_config_schema() -> dict[str, frozenset[str]]:
     """Derive a two-level schema map {section: {valid_field_names}} from AutomationConfig."""
     schema: dict[str, frozenset[str]] = {}
     for f in dataclasses.fields(AutomationConfig):
-        # Special case: features is a dict[str, bool]; valid sub-keys come from FEATURE_REGISTRY
         if f.name == "features":
             schema["features"] = frozenset(FEATURE_REGISTRY.keys()) | frozenset(
                 {"experimental_enabled"}
             )
             continue
-        # YAML uses short keys ('default', 'override') to keep user config concise;
-        # the Python fields use explicit names to avoid shadowing builtins.
-        if f.name == "model":
-            schema["model"] = frozenset(
-                {"default", "override", "provider", "step_overrides", "recipe_overrides"}
-            )
-            continue
-        # Skip the scalar experimental_enabled field — it is handled under the features section
         if f.name == "experimental_enabled":
             continue
         sub_type: type | None = None
@@ -622,11 +495,20 @@ def _build_config_schema() -> dict[str, frozenset[str]]:
                 sub_type = factory
         elif f.default is not dataclasses.MISSING and dataclasses.is_dataclass(f.default):
             sub_type = type(f.default)
-        schema[f.name] = (
-            frozenset(sf.name for sf in dataclasses.fields(sub_type))
-            if sub_type is not None
-            else frozenset()
-        )
+        if sub_type is not None:
+            yaml_keys: set[str] = set()
+            for sf in dataclasses.fields(sub_type):
+                alias = _YAML_KEY_ALIASES.get((f.name, sf.name))
+                yaml_keys.add(alias if alias is not None else sf.name)
+            # Also include YAML keys from field overrides that use different key names
+            for (sec_name, _field_name), _override in _FIELD_OVERRIDES.items():
+                if sec_name == f.name:
+                    alias = _YAML_KEY_ALIASES.get((sec_name, _field_name))
+                    if alias is not None:
+                        yaml_keys.add(alias)
+            schema[f.name] = frozenset(yaml_keys)
+        else:
+            schema[f.name] = frozenset()
     return schema
 
 

@@ -28,4 +28,5 @@ Configuration loading, defaults, and schema tests.
 | `test_timeout_coherence.py` | Tests for idle_output_timeout config coherence validation gate |
 | `test_subsets_config.py` | Tests for SubsetsConfig loading and validation |
 | `test_workspace_temp_dir_config.py` | Tests for workspace.temp_dir layered config resolution |
+| `test_subconfig_builder.py` | Tests for _coerce_value, _build_subconfig, YAML key aliases, and field overrides |
 | `test_write_config_layer.py` | Tests for write_config_layer atomic write and validation |

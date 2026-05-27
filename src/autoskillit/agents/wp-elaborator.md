@@ -36,7 +36,11 @@ Return your result as a single JSON object between ```json and ``` fences. The J
 ```json
 {
   "id": "P{N}-A{N}-WP{N}",
+  "phase_id": "P{N}",
+  "assignment_id": "P{N}-A{N}",
   "name": "...",
+  "scope": "...",
+  "estimated_files": ["..."],
   "goal": "...",
   "summary": "<=120 chars",
   "technical_steps": ["..."],

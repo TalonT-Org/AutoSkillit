@@ -10,7 +10,7 @@ from autoskillit.recipe._api import load_and_validate, validate_from_path
 from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 
-pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
 RECIPES_DIR = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "recipes"
 
@@ -460,7 +460,7 @@ class TestIssueUrlPruning:
         )
 
     def test_claim_and_resolve_pruned_without_url(self) -> None:
-        """claim_and_resolve step must be pruned or remain guarded when issue_url is absent."""
+        """claim_and_resolve step must be pruned when issue_url is absent."""
         result = load_and_validate(
             "remediation",
             ingredient_overrides={},
@@ -468,13 +468,9 @@ class TestIssueUrlPruning:
         content_str = result["content"]
         content = yaml.safe_load(content_str)
         steps = content.get("steps", {})
-        # Either the step is absent (pruned) or skip_when_false is "false" (guarded)
-        if "claim_and_resolve" in steps:
-            step = steps["claim_and_resolve"]
-            assert step.get("skip_when_false") == "false", (
-                "If claim_and_resolve survives pruning without issue_url, "
-                "skip_when_false must be literal 'false'"
-            )
+        assert "claim_and_resolve" not in steps, (
+            "claim_and_resolve must be pruned (absent) when issue_url is not provided"
+        )
 
 
 @pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "implementation-groups"])

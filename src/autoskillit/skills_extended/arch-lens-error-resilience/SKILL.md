@@ -14,9 +14,20 @@ hooks:
 
 # Error/Resilience Architecture Lens
 
-**Cognitive Mode:** Diagnostic
+**Philosophical Mode:** Diagnostic
 **Primary Question:** "How are failures handled?"
 **Focus:** Error Propagation, Recovery Mechanisms, Circuit Breakers, Validation Gates
+
+## Arguments
+
+`/autoskillit:arch-lens-error-resilience [context_path]`
+
+- **context_path** (optional) — Absolute path to a PR context file containing new files
+  (★-prefixed) and modified files (●-prefixed) from the PR diff. When provided, read
+  this file before beginning analysis and focus the diagram on the architectural areas
+  affected by these specific files. When absent, explore the full CWD.
+
+---
 
 ## When to Use
 
@@ -30,6 +41,8 @@ hooks:
 **NEVER:**
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
 
+- Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for ourselves
+- Create files outside `{{AUTOSKILLIT_TEMP}}/arch-lens-error-resilience/`
 - Modify any source code files
 - Show happy path details (that's process flow lens)
 - Ignore validation and fail-fast patterns
@@ -42,24 +55,14 @@ hooks:
 - Include exception hierarchy if present
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
-- After writing the diagram file, emit the **absolute path** as a structured output
-  token as your final output. Resolve the relative `temp/arch-lens-error-resilience/...`
-  save path to absolute by prepending the full CWD:
+- Write output to `{{AUTOSKILLIT_TEMP}}/arch-lens-error-resilience/arch_diag_error_resilience_{"{"}YYYY-MM-DD_HHMMSS{}}.md`
+- After writing the file, emit the structured output token as **literal plain text** with no
+  markdown formatting on the token name (the adjudicator performs a regex match):
+
   ```
-  diagram_path = /absolute/cwd/temp/arch-lens-error-resilience/{filename}.md
+  diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/arch-lens-error-resilience/arch_diag_error_resilience_{"{"}YYYY-MM-DD_HHMMSS{}}.md
   ```
-  This token is MANDATORY — the pipeline cannot proceed without it.
 
-## Arguments
-
-`/autoskillit:arch-lens-error-resilience [context_path]`
-
-- **context_path** (optional) — Absolute path to a PR context file containing new files
-  (★-prefixed) and modified files (●-prefixed) from the PR diff. When provided, read
-  this file before beginning analysis and focus the diagram on the architectural areas
-  affected by these specific files. When absent, explore the full CWD.
-
----
 
 ## Analysis Workflow
 

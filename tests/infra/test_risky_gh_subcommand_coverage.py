@@ -81,7 +81,7 @@ def test_every_risky_gh_subcommand_has_guard_coverage() -> None:
         for _guard_name, script_path in guard_scripts:
             source = script_path.read_text()
             if (f'"{sub1}"' in source and f'"{sub2}"' in source) or (
-                "'{sub1}'" in source and "'{sub2}'" in source
+                f"'{sub1}'" in source and f"'{sub2}'" in source
             ):
                 covered = True
                 break

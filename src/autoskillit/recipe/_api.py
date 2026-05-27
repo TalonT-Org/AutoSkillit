@@ -150,7 +150,7 @@ def _build_orchestration_rules(
         "STEP EXECUTION IS NOT DISCRETIONARY:\n"
         "You MUST execute every step the pipeline routes you to. "
         "skip_when_false ingredient references are resolved server-side before the recipe "
-        'is served. You may see literal "false" values (evaluate normally and skip) '
+        'is served. You may see literal "false" values (skip the step) '
         "or no skip_when_false field at all (step is mandatory). "
         "NEVER skip a step because the PR is small, the diff is trivial, or you judge "
         "the step unnecessary. NEVER replace recipe steps with manual tool calls. "

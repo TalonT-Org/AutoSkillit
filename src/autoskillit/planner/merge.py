@@ -196,7 +196,12 @@ def _write_wp_refine_contexts(
             )
 
     contexts_dir = planner_dir / "wp_refine_contexts"
-    contexts_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        contexts_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise OSError(
+            f"Failed to create wp_refine_contexts directory at {contexts_dir}: {exc}"
+        ) from exc
 
     _WP_PEER_STUB_KEYS = frozenset(
         {"id", "name", "scope", "deliverables", "apis_defined", "apis_consumed"}
@@ -366,6 +371,8 @@ def merge_tier_results(
                 raise ValueError(
                     f"Corrupted phase_wp_manifest.json at {manifest_path}: {exc}"
                 ) from exc
+            except OSError as exc:
+                raise ValueError(f"Cannot read {manifest_path}: {exc}") from exc
             manifest_items = manifest.get("items", [])
             if any(not item.get("id") for item in manifest_items):
                 raise ValueError(
@@ -485,7 +492,7 @@ def merge_refined_wps(
             raise
         all_wps.extend(data.get("work_packages", []))
 
-    valid_wps: list[dict[str, Any]] = []
+    _wps: list[dict[str, Any]] = []
     for wp in all_wps:
         if not wp.get("id"):
             logger.warning(
@@ -493,8 +500,15 @@ def merge_refined_wps(
                 wp.get("name", "<unknown>"),
             )
         else:
-            valid_wps.append(wp)
-    all_wps = valid_wps
+            _wps.append(wp)
+    all_wps = _wps
+
+    if not all_wps:
+        logger.warning(
+            "merge_refined_wps: no valid WPs collected from %d result file(s) in %s",
+            len(result_files),
+            contexts_dir,
+        )
 
     def _sort_key(wp_id: str) -> tuple[int, ...]:
         return tuple(int(n) for n in re.findall(r"\d+", wp_id))

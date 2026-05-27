@@ -348,6 +348,7 @@ _PARSE_STEP_HANDLED_FIELDS: frozenset[str] = frozenset(
         "idle_output_timeout",
         "block",  # Named block anchor; maps to step's block: key in YAML
         "pass_through",  # Captured outputs used for informational propagation only
+        "phoropter_family",
     }
 )
 if _PARSE_STEP_HANDLED_FIELDS != frozenset(RecipeStep.__dataclass_fields__):
@@ -631,6 +632,7 @@ def _parse_step(data: dict[str, Any]) -> RecipeStep:
         idle_output_timeout=data.get("idle_output_timeout"),
         block=data.get("block"),
         pass_through=_ensure_list(data.get("pass_through", [])),
+        phoropter_family=data.get("phoropter_family"),
     )
 
 

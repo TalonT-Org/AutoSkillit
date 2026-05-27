@@ -10,6 +10,7 @@ CI/CD configuration, security, guard coverage, and release sanity tests.
 | `_pretty_output_helpers.py` | Shared helpers for pretty_output hook tests |
 | `_token_summary_helpers.py` | Shared helpers for token_summary_appender hook tests |
 | `conftest.py` | FormatterCoverageDef NamedTuple and _FORMATTER_COVERAGE_REGISTRY — maps all 11 _FORMATTERS dispatch keys to TypedDict + frozenset pairs for meta-test enforcement |
+| `test_artifact_download_guard.py` | Tests for the artifact_download_guard PreToolUse hook |
 | `test_anyio_infra.py` | REQ-DEP-001 through REQ-DEP-004: anyio declared as direct dependency |
 | `test_ask_user_question_guard.py` | Tests for the ask_user_question_guard PreToolUse hook |
 | `test_branch_protection_guard.py` | Tests for hooks/branch_protection_guard.py — PreToolUse branch protection |
@@ -42,6 +43,7 @@ CI/CD configuration, security, guard coverage, and release sanity tests.
 | `test_pyproject_bounds.py` | Tests for pyproject.toml version lower bounds |
 | `test_pyproject_metadata.py` | Verify pyproject.toml contains required public release metadata |
 | `test_resume_ownership_guard.py` | Tests for resume_ownership_guard.py PreToolUse hook — ownership validation at resume |
+| `test_risky_gh_subcommand_coverage.py` | Structural enforcement: risky gh subcommands must have guard coverage |
 | `test_release_sanity.py` | Release-readiness sanity checks |
 | `test_release_workflows.py` | Structural contract tests for the release CI workflows |
 | `test_remove_clone_guard.py` | Tests for the remove_clone_guard PreToolUse hook |

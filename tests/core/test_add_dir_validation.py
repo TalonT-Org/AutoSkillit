@@ -66,7 +66,8 @@ class TestValidateAddDir:
 
 
 class TestValidateProjectLocalSkillDir:
-    """validate_project_local_skill_dir: None for codex, delegates to validate_add_dir for claude."""
+    """validate_project_local_skill_dir: None for codex,
+    delegates to validate_add_dir for claude."""
 
     @staticmethod
     def _make_backend(name: str) -> MagicMock:

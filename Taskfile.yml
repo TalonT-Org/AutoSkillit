@@ -308,6 +308,9 @@ tasks:
           uv pip install -e '.[dev]' --python .venv/bin/python
         fi
         echo "Done: $(.venv/bin/python --version)"
+        if command -v pre-commit >/dev/null 2>&1; then
+          pre-commit install --install-hooks 2>/dev/null || true
+        fi
 
   install-dev:
     desc: Install dev version of autoskillit from the develop branch

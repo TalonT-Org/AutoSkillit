@@ -55,6 +55,7 @@ class HookDef:
 # unsafe_install_guard                   | works-as-is
 # pr_create_guard                        | works-as-is
 # planner_gh_discovery_guard             | works-as-is
+# artifact_download_guard                | works-as-is
 # generated_file_write_guard             | works-as-is
 # write_guard                            | fix-required
 # planner_result_naming_guard            | works-as-is
@@ -131,6 +132,10 @@ HOOK_REGISTRY: list[HookDef] = [
         matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
         scripts=["guards/planner_gh_discovery_guard.py"],
         session_scope="headless_only",
+    ),
+    HookDef(  # codex: works-as-is
+        matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
+        scripts=["guards/artifact_download_guard.py"],
     ),
     HookDef(  # codex: works-as-is
         matcher=r"Write|Edit",
@@ -257,6 +262,20 @@ NEW_SUBDIR_BASENAMES: frozenset[str] = frozenset(
         "skill_load_guard.py",
         "resume_ownership_guard.py",
         "planner_result_naming_guard.py",
+        "artifact_download_guard.py",
+    }
+)
+
+# Risky gh CLI subcommand pairs that MUST have PreToolUse guard coverage.
+# test_risky_gh_subcommand_coverage.py enforces that every pair here is
+# detected by at least one command-inspecting guard registered under a
+# Bash|run_cmd matcher. Add new pairs when threat modeling identifies
+# risky gh subcommands; the coverage test will fail until a guard exists.
+RISKY_GH_SUBCOMMANDS: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("run", "download"),
+        ("release", "download"),
+        ("pr", "create"),
     }
 )
 

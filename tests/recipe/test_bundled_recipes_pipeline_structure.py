@@ -17,11 +17,12 @@ pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
 def _assert_ci_conflict_fix_on_context_limit(recipe) -> None:
-    """Shared assertion: ci_conflict_fix must abort via release_issue_failure on context limit."""
+    """Shared assertion: ci_conflict_fix routes to diagnose_ci on context limit
+    for CI log capture."""
     step = recipe.steps["ci_conflict_fix"]
-    assert step.on_context_limit == "release_issue_failure", (
-        "ci_conflict_fix is advisory; an incomplete conflict fix cannot be safely "
-        "pushed — abort via release_issue_failure"
+    assert step.on_context_limit == "diagnose_ci", (
+        "ci_conflict_fix on context limit must route to diagnose_ci before release_issue_failure "
+        "so CI log context is captured even when the conflict fix is incomplete"
     )
 
 
@@ -63,7 +64,7 @@ def _assert_ci_steps(recipe) -> None:
     re_push = recipe.steps["re_push"]
     assert re_push.tool == "push_to_remote"
     assert re_push.on_success == "check_repo_ci_event"
-    assert re_push.on_failure == "release_issue_failure"
+    assert re_push.on_failure == "classify_push_failure"
 
     # check_ci_loop guard (loop bounding for ci_watch / handle_no_ci_runs cycle)
     assert "check_ci_loop" in recipe.steps, "ci_watch cycle must have check_ci_loop guard"
@@ -185,13 +186,12 @@ class TestPipelineVariantInvariants:
 
     def test_ci_conflict_fix_routing(self, recipe) -> None:
         step = recipe.steps["ci_conflict_fix"]
-        assert step.on_failure == "release_issue_failure"
-        assert step.on_exhausted == "release_issue_failure"
+        assert step.on_failure == "diagnose_ci"
+        assert step.on_exhausted == "diagnose_ci"
         conditions = step.on_result.conditions if step.on_result else []
         routes = {c.when: c.route for c in conditions}
         assert any(
-            "escalation_required" in (w or "") and r == "release_issue_failure"
-            for w, r in routes.items()
+            "escalation_required" in (w or "") and r == "diagnose_ci" for w, r in routes.items()
         )
         default_routes = [r for w, r in routes.items() if w is None]
         assert default_routes == ["re_push"]

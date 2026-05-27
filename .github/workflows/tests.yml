@@ -38,6 +38,9 @@ jobs:
       - name: Verify lockfile is up to date
         run: uv lock --check
 
+      - name: Lint with ruff
+        run: uvx ruff check
+
       - name: Report tool versions
         run: |
           echo "uv: $(uv --version)"

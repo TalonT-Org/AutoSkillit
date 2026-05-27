@@ -1270,12 +1270,12 @@ steps:
       conflict_escalation_required: ${{ result.escalation_required }}
     on_result:
     - when: ${{ result.escalation_required }} == true
-      route: release_issue_failure
+      route: diagnose_ci
     - route: re_push_queue_fix
-    on_failure: release_issue_failure
-    on_context_limit: release_issue_failure
+    on_failure: diagnose_ci
+    on_context_limit: diagnose_ci
     retries: 1
-    on_exhausted: release_issue_failure
+    on_exhausted: diagnose_ci
     skip_when_false: inputs.open_pr
     note: 'Resolves rebase conflicts on the feature branch after queue ejection. Only
       reached when the cheap rebase in queue_ejected_fix encountered conflicts. escalation_required=true
@@ -1471,12 +1471,12 @@ steps:
       conflict_escalation_required: ${{ result.escalation_required }}
     on_result:
     - when: ${{ result.escalation_required }} == true
-      route: release_issue_failure
+      route: diagnose_ci
     - route: re_push_direct_fix
-    on_failure: release_issue_failure
-    on_context_limit: release_issue_failure
+    on_failure: diagnose_ci
+    on_context_limit: diagnose_ci
     retries: 1
-    on_exhausted: release_issue_failure
+    on_exhausted: diagnose_ci
     skip_when_false: inputs.open_pr
     note: 'Resolves rebase conflicts after direct-merge rejection. Only reached when
       the cheap rebase in direct_merge_conflict_fix encountered conflicts. escalation_required=true
@@ -1491,7 +1491,7 @@ steps:
       branch: ${{ context.merge_target }}
       force: 'true'
     on_success: redirect_merge
-    on_failure: release_issue_failure
+    on_failure: classify_push_failure
     skip_when_false: inputs.open_pr
   redirect_merge:
     tool: run_cmd
@@ -1574,12 +1574,12 @@ steps:
       conflict_escalation_required: ${{ result.escalation_required }}
     on_result:
     - when: ${{ result.escalation_required }} == true
-      route: release_issue_failure
+      route: diagnose_ci
     - route: re_push_immediate_fix
-    on_failure: release_issue_failure
-    on_context_limit: release_issue_failure
+    on_failure: diagnose_ci
+    on_context_limit: diagnose_ci
     retries: 1
-    on_exhausted: release_issue_failure
+    on_exhausted: diagnose_ci
     skip_when_false: inputs.open_pr
     note: 'Resolves rebase conflicts after immediate-merge rejection. Only reached
       when the cheap rebase in immediate_merge_conflict_fix encountered conflicts.
@@ -1594,7 +1594,7 @@ steps:
       branch: ${{ context.merge_target }}
       force: 'true'
     on_success: remerge_immediate
-    on_failure: release_issue_failure
+    on_failure: classify_push_failure
     skip_when_false: inputs.open_pr
   remerge_immediate:
     tool: run_cmd
@@ -1718,7 +1718,7 @@ steps:
       branch: ${{ context.merge_target }}
       force: 'true'
     on_success: check_repo_ci_event
-    on_failure: release_issue_failure
+    on_failure: classify_push_failure
     note: 'Pushes the CI-fixed feature branch back to the remote after resolve_ci
       succeeds. Routes to check_repo_ci_event to derive ci_event before ci_watch verifies
       the fix. On push failure, escalates via release_issue_failure.
@@ -1760,18 +1760,20 @@ steps:
       conflict_escalation_required: ${{ result.escalation_required }}
     on_result:
     - when: ${{ result.escalation_required }} == true
-      route: release_issue_failure
+      route: diagnose_ci
     - route: re_push
-    on_failure: release_issue_failure
-    on_context_limit: release_issue_failure
+    on_failure: diagnose_ci
+    on_context_limit: diagnose_ci
     retries: 1
-    on_exhausted: release_issue_failure
+    on_exhausted: diagnose_ci
     skip_when_false: inputs.open_pr
     note: 'Resolves a stale-base CI failure by rebasing the feature branch onto the
       latest integration HEAD. Mirrors queue_ejected_fix: on clean rebase or goal-aware
       conflict resolution, routes to re_push to re-trigger CI on the rebased branch.
-      On escalation (LOW confidence conflicts) or tool failure, routes to release_issue_failure.
-      retries: 1 bounds the loop; after 2 total attempts, escalates.
+      On escalation (LOW confidence conflicts), tool failure, context limit, or retry
+      exhaustion, routes to diagnose_ci for CI log capture before release_issue_failure.
+      diagnose_ci is best-effort (optional: true) — resolve_ci proceeds even without
+      diagnosis. retries: 1 bounds the loop; after 2 total attempts, escalates.
 
       '
   register_clone_unconfirmed:

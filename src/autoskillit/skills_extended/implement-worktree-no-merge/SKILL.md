@@ -39,6 +39,7 @@ The worktree is left intact for the orchestrator to test and merge separately.
 - Rebase onto the base branch
 - Clean up the worktree environment
 - Re-run tests just to see failures — grep the saved output file instead
+- Blame pre-commit or lint failures on "pre-existing issues" — ALL pre-commit checks must pass on the committed code
 - Pipe test output through `tail`, `head`, or other truncation commands
 - **Execute `git merge` commands** (including `--no-ff`, `--no-commit`, or any variant). All branch content must be applied via `git cherry-pick <commit>` for individual commits or `git checkout <branch> -- <file>` for specific files. `merge_worktree` requires linear commit history — merge commits cannot be rebased and will cause `WORKTREE_INTACT_MERGE_COMMITS_DETECTED` failure.
 - Run subagents in the background (`run_in_background: true` is prohibited)

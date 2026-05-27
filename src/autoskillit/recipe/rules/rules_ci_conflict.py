@@ -220,3 +220,112 @@ def _has_conflict_ancestor(
             return True
         queue.extend(ctx.predecessors.get(current, set()))
     return False
+
+
+# ---------------------------------------------------------------------------
+# conflict-escalation-missing-ci-diagnosis helpers
+# ---------------------------------------------------------------------------
+
+_CI_DIAGNOSIS_SKILLS: frozenset[str] = frozenset({"diagnose-ci"})
+
+
+def _is_ci_diagnosis_step(step: object) -> bool:
+    if getattr(step, "tool", None) != "run_skill":
+        return False
+    skill_cmd = (getattr(step, "with_args", {}) or {}).get("skill_command", "")
+    return isinstance(skill_cmd, str) and any(s in skill_cmd for s in _CI_DIAGNOSIS_SKILLS)
+
+
+def _collect_failure_targets(step: object, step_names: set[str]) -> set[str]:
+    """Collect all failure-condition routing targets for a step, filtered to valid step names."""
+    targets: set[str] = set()
+    on_failure = getattr(step, "on_failure", None)
+    if on_failure is not None and on_failure in step_names:
+        targets.add(on_failure)
+    on_context_limit = getattr(step, "on_context_limit", None)
+    if on_context_limit is not None and on_context_limit in step_names:
+        targets.add(on_context_limit)
+    on_exhausted = getattr(step, "on_exhausted", None)
+    if on_exhausted is not None and on_exhausted in step_names:
+        targets.add(on_exhausted)
+    on_result = getattr(step, "on_result", None)
+    if on_result is not None:
+        for cond in getattr(on_result, "conditions", []) or []:
+            when = getattr(cond, "when", None)
+            route = getattr(cond, "route", None)
+            if when is not None and "escalation_required" in when and route in step_names:
+                targets.add(route)
+    return targets
+
+
+@semantic_rule(
+    name="conflict-escalation-missing-ci-diagnosis",
+    description=(
+        "A conflict-resolution step (resolve-merge-conflicts) on a CI failure path "
+        "routes escalation/failure to a terminal without passing through a diagnose-ci "
+        "step. CI log diagnosis context is lost on escalation."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_conflict_escalation_missing_ci_diagnosis(ctx: ValidationContext) -> list[RuleFinding]:
+    step_names = set(ctx.recipe.steps.keys())
+
+    wait_for_ci_steps: set[str] = {
+        name for name, step in ctx.recipe.steps.items() if step.tool == "wait_for_ci"
+    }
+    diagnosis_steps: set[str] = {
+        name for name, step in ctx.recipe.steps.items() if _is_ci_diagnosis_step(step)
+    }
+    conflict_steps: set[str] = {
+        name for name, step in ctx.recipe.steps.items() if _is_conflict_resolution_step(step)
+    }
+
+    if not conflict_steps:
+        return []
+
+    # Forward BFS from each wait_for_ci.on_failure target.
+    # Barriers: wait_for_ci steps (avoid re-entering CI loops) + conflict steps (bound search
+    # so that conflict steps are reached but their successors are not — prevents indirect
+    # reachability via a conflict step's success path from falsely marking downstream
+    # merge-queue conflict steps as "on the CI failure path").
+    barriers = wait_for_ci_steps | conflict_steps
+    ci_failure_reachable: set[str] = set()
+    for wci_name in wait_for_ci_steps:
+        wci_step = ctx.recipe.steps[wci_name]
+        failure_target = wci_step.on_failure
+        if failure_target and failure_target in step_names:
+            ci_failure_reachable |= _bfs_without_barrier(ctx.step_graph, failure_target, barriers)
+
+    findings: list[RuleFinding] = []
+
+    for step_name in conflict_steps:
+        if step_name not in ci_failure_reachable:
+            continue
+
+        step = ctx.recipe.steps[step_name]
+        failure_targets = _collect_failure_targets(step, step_names)
+
+        for target in failure_targets:
+            reachable = _bfs_without_barrier(ctx.step_graph, target, diagnosis_steps)
+            unguarded_terminals = {
+                n
+                for n in reachable
+                if ctx.recipe.steps.get(n) is not None and ctx.recipe.steps[n].action == "stop"
+            }
+            if unguarded_terminals:
+                findings.append(
+                    RuleFinding(
+                        rule="conflict-escalation-missing-ci-diagnosis",
+                        severity=Severity.ERROR,
+                        step_name=step_name,
+                        message=(
+                            f"Step '{step_name}' routes conflict escalation/failure to "
+                            f"terminal(s) ({', '.join(sorted(unguarded_terminals))}) "
+                            f"without passing through a diagnose-ci step. "
+                            f"CI log context is lost on escalation."
+                        ),
+                    )
+                )
+                break
+
+    return findings

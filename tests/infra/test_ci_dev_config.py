@@ -7,6 +7,8 @@ their structural properties. If a gate is deleted from the config, a test fails.
 
 from __future__ import annotations
 
+import subprocess
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -85,6 +87,24 @@ class TestPreCommitConfig:
         assert hook.get("pass_filenames") is False, (
             "check-contract-freshness hook must use pass_filenames: false — "
             "the script does its own filesystem scan"
+        )
+
+    def test_per_file_ignores_e501_bounded(self):
+        """E501 exemptions in per-file-ignores must not exceed the established cap.
+
+        Adding new E501 exemptions grows technical debt — fix violations instead.
+        If this test fails, refactor the long lines rather than adding a new exemption.
+        """
+        with (REPO_ROOT / "pyproject.toml").open("rb") as f:
+            config = tomllib.load(f)
+        per_file_ignores = (
+            config.get("tool", {}).get("ruff", {}).get("lint", {}).get("per-file-ignores", {})
+        )
+        e501_count = sum(1 for rules in per_file_ignores.values() if "E501" in rules)
+        _E501_EXEMPTION_CAP = 18
+        assert e501_count <= _E501_EXEMPTION_CAP, (
+            f"E501 exemptions in per-file-ignores exceeded cap of {_E501_EXEMPTION_CAP}: "
+            f"found {e501_count} entries. Refactor long lines instead of adding exemptions."
         )
 
 
@@ -289,6 +309,19 @@ class TestCIWorkflow:
             "CI must trigger on push to stable branch — add 'stable' to push.branches in tests.yml"
         )
 
+    def test_ruff_check_in_preflight_job(self):
+        """CI preflight job must include a ruff check step.
+
+        Without ruff in CI, lint violations that bypass pre-commit reach the repository
+        unchallenged. If this test fails, add a 'uvx ruff check' step to the preflight job.
+        """
+        workflow = yaml.safe_load(CI_WORKFLOW.read_text())
+        preflight_steps = workflow["jobs"]["preflight"]["steps"]
+        assert any("ruff check" in step.get("run", "") for step in preflight_steps), (
+            "CI preflight job has no 'ruff check' step — "
+            "add it after the lockfile check to create a hard lint gate"
+        )
+
 
 class TestRecipeWorkflowField:
     def test_ci_watch_event_value_is_captured_or_absent(self):
@@ -445,3 +478,19 @@ class TestSetupUvVersionPin:
                             violations.append(f"{wf_path.name}:{job_name}: missing 'version' pin")
 
         assert not violations, "setup-uv version pin violations:\n" + "\n".join(violations)
+
+
+class TestRuffClean:
+    def test_ruff_check_clean(self):
+        """ruff check must exit 0 on the full codebase — no E501 or F811 violations.
+
+        This is the structural gate that ensures lint violations are fixed, not suppressed.
+        If this test fails, run 'uv run ruff check' locally to see violations and fix them.
+        """
+        result = subprocess.run(
+            ["uv", "run", "ruff", "check", str(REPO_ROOT)],
+            capture_output=True,
+            text=True,
+            cwd=str(REPO_ROOT),
+        )
+        assert result.returncode == 0, f"ruff check found violations:\n{result.stdout}"

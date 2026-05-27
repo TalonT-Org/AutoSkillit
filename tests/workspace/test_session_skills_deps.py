@@ -342,7 +342,8 @@ class TestActivateDepsResolution:
 
 class TestCopyOnActivate:
     def test_copy_on_activate_single_absent_skill(self, tmp_path: Path) -> None:
-        """Absence of SKILL.md triggers provider fetch; content is ungated after materialisation."""
+        """Absence of SKILL.md triggers provider fetch;
+        content is ungated after materialisation."""
         from unittest.mock import MagicMock
 
         session_id = "test-copy-on-activate"
@@ -350,7 +351,11 @@ class TestCopyOnActivate:
 
         def get_skill_content(name: str, gated: bool = False) -> str:
             if name == "absent-skill" and gated is False:
-                return "---\nname: absent-skill\ndescription: Absent skill for testing.\ndisable-model-invocation: true\n---\n# Body"
+                return (
+                    "---\nname: absent-skill\n"
+                    "description: Absent skill for testing.\n"
+                    "disable-model-invocation: true\n---\n# Body"
+                )
             raise FileNotFoundError(name)
 
         provider.get_skill_content.side_effect = get_skill_content
@@ -394,7 +399,11 @@ class TestCopyOnActivate:
 
         def get_skill_content(name: str, gated: bool = False) -> str:
             if name == "dep-skill" and not gated:
-                return "---\nname: dep-skill\ndescription: Dep skill for testing.\ndisable-model-invocation: true\n---\n# Dep Body"
+                return (
+                    "---\nname: dep-skill\n"
+                    "description: Dep skill for testing.\n"
+                    "disable-model-invocation: true\n---\n# Dep Body"
+                )
             raise FileNotFoundError(name)
 
         provider = MagicMock()
@@ -437,7 +446,9 @@ class TestCopyOnActivate:
         def get_skill_content(name: str, gated: bool = False) -> str:
             if name == "arch-lens-b" and not gated:
                 return (
-                    "---\nname: arch-lens-b\ndescription: Arch lens B skill for testing.\ncategories: [arch-lens]\n"
+                    "---\nname: arch-lens-b\n"
+                    "description: Arch lens B skill for testing.\n"
+                    "categories: [arch-lens]\n"
                     "disable-model-invocation: true\n---\n# Lens B"
                 )
             raise FileNotFoundError(name)
@@ -491,7 +502,11 @@ class TestCopyOnActivate:
 
         def get_skill_content(name: str, gated: bool = False) -> str:
             if name == "gated-skill" and gated is False:
-                return "---\nname: gated-skill\ndescription: Gated skill for testing.\ndisable-model-invocation: true\n---\n# Gated Body"
+                return (
+                    "---\nname: gated-skill\n"
+                    "description: Gated skill for testing.\n"
+                    "disable-model-invocation: true\n---\n# Gated Body"
+                )
             raise FileNotFoundError(name)
 
         provider.get_skill_content.side_effect = get_skill_content

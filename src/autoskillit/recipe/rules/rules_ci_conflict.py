@@ -268,10 +268,11 @@ def _collect_failure_targets(step: object, step_names: set[str]) -> set[str]:
     severity=Severity.ERROR,
 )
 def _check_conflict_escalation_missing_ci_diagnosis(ctx: ValidationContext) -> list[RuleFinding]:
-    from collections import deque
-
     step_names = set(ctx.recipe.steps.keys())
 
+    wait_for_ci_steps: set[str] = {
+        name for name, step in ctx.recipe.steps.items() if step.tool == "wait_for_ci"
+    }
     diagnosis_steps: set[str] = {
         name for name, step in ctx.recipe.steps.items() if _is_ci_diagnosis_step(step)
     }
@@ -282,28 +283,26 @@ def _check_conflict_escalation_missing_ci_diagnosis(ctx: ValidationContext) -> l
     if not conflict_steps:
         return []
 
+    # Forward BFS from each wait_for_ci.on_failure target.
+    # Barriers: wait_for_ci steps (avoid re-entering CI loops) + conflict steps (bound search
+    # so that conflict steps are reached but their successors are not — prevents indirect
+    # reachability via a conflict step's success path from falsely marking downstream
+    # merge-queue conflict steps as "on the CI failure path").
+    barriers = wait_for_ci_steps | conflict_steps
+    ci_failure_reachable: set[str] = set()
+    for wci_name in wait_for_ci_steps:
+        wci_step = ctx.recipe.steps[wci_name]
+        failure_target = wci_step.on_failure
+        if failure_target and failure_target in step_names:
+            ci_failure_reachable |= _bfs_without_barrier(ctx.step_graph, failure_target, barriers)
+
     findings: list[RuleFinding] = []
 
     for step_name in conflict_steps:
-        step = ctx.recipe.steps[step_name]
-
-        visited: set[str] = set()
-        queue: deque[str] = deque(ctx.predecessors.get(step_name, set()))
-        on_ci_path = False
-        while queue:
-            current = queue.popleft()
-            if current in visited:
-                continue
-            visited.add(current)
-            pred_step = ctx.recipe.steps.get(current)
-            if pred_step is not None and pred_step.tool == "wait_for_ci":
-                on_ci_path = True
-                break
-            queue.extend(ctx.predecessors.get(current, set()))
-
-        if not on_ci_path:
+        if step_name not in ci_failure_reachable:
             continue
 
+        step = ctx.recipe.steps[step_name]
         failure_targets = _collect_failure_targets(step, step_names)
 
         for target in failure_targets:

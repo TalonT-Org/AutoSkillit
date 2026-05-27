@@ -278,7 +278,7 @@ flagged violations are pre-existing on the integration target before escalating:
 
 ```bash
 git -C {worktree_path} fetch $REMOTE {base_branch}
-git -C {worktree_path} diff $REMOTE/{base_branch} -- {flagged_file}
+git -C {worktree_path} diff $REMOTE/{base_branch} -- $flagged_file
 ```
 
 For each file flagged by the failing hook, check if the specific flagged lines are

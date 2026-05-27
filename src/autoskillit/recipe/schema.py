@@ -120,6 +120,7 @@ class RecipeStep:
     pass_through: list[str] = field(
         default_factory=list
     )  # Captured output names used for informational propagation, not flow control
+    phoropter_family: str | None = None
 
     def __post_init__(self) -> None:
         if self.capture_list and self.retries > 0:

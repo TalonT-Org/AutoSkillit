@@ -6,6 +6,7 @@ import inspect as _inspect
 import pytest
 
 from autoskillit.core import GATED_TOOLS, UNGATED_TOOLS, Severity
+from autoskillit.recipe.contracts import SkillContract
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeStep
 
@@ -514,13 +515,15 @@ def _make_edit_then_push_recipe_tools(force: str | None = None) -> Recipe:
 
 def _patch_contract_for_push_rule(write_behavior: str, read_only: bool = False):
     """Context manager that patches get_skill_contract for push-after-edit tests."""
-    from unittest.mock import MagicMock
     from unittest.mock import patch as _patch
 
-    contract = MagicMock()
-    contract.write_behavior = write_behavior
-    contract.read_only = read_only
-    contract.write_expected_when = ["pat"] if write_behavior == "conditional" else []
+    contract = SkillContract(
+        inputs=[],
+        outputs=[],
+        write_behavior=write_behavior,
+        write_expected_when=["pat"] if write_behavior == "conditional" else [],
+        read_only=read_only,
+    )
 
     return _patch(
         "autoskillit.recipe.rules.rules_tools.get_skill_contract",

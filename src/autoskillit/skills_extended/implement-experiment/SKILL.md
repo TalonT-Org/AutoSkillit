@@ -52,6 +52,7 @@ tokens after the skill name for the first path-like token (starts with `/`,
 - Create experiment files outside the planned `research/` subfolder
 - Execute `git merge` commands (all branch content must be applied via
   `git cherry-pick` or `git checkout <branch> -- <file>`)
+- Blame pre-commit or lint failures on "pre-existing issues" — ALL pre-commit checks must pass on the committed code
 - Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**

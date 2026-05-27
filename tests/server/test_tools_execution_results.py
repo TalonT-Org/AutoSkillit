@@ -249,7 +249,8 @@ class TestGatedToolObservability:
             processors=[structlog.contextvars.merge_contextvars]
         ) as logs:
             await run_skill("/autoskillit:investigate task", "/tmp", ctx=mock_ctx)
-        assert any(entry.get("tool") == "run_skill" for entry in logs)
+        assert logs, "Expected at least one log record"
+        assert all(entry.get("tool") == "run_skill" for entry in logs)
 
     @pytest.mark.anyio
     async def test_run_skill_returns_failure_result_on_error_output(self, tool_ctx, mock_ctx):

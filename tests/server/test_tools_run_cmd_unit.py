@@ -35,7 +35,8 @@ class TestRunCmdObservability:
             processors=[structlog.contextvars.merge_contextvars]
         ) as logs:
             await run_cmd(cmd="echo ok", cwd="/tmp", ctx=mock_ctx)
-        assert any(entry.get("tool") == "run_cmd" for entry in logs)
+        assert logs, "Expected at least one log record"
+        assert all(entry.get("tool") == "run_cmd" for entry in logs)
 
     @pytest.mark.anyio
     async def test_run_cmd_returns_failure_result_on_nonzero_exit(

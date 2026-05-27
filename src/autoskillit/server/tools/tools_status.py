@@ -43,8 +43,9 @@ async def kitchen_status() -> str:
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    try:
-        with structlog.contextvars.bound_contextvars(tool="kitchen_status"):
+    structlog.contextvars.clear_contextvars()
+    with structlog.contextvars.bound_contextvars(tool="kitchen_status"):
+        try:
             from autoskillit.server import _get_config, _get_ctx, version_info
 
             info = version_info()
@@ -69,9 +70,9 @@ async def kitchen_status() -> str:
             )
             status["github_default_repo"] = _get_config().github.default_repo
             return json.dumps(status)
-    except Exception as exc:
-        logger.error("kitchen_status unhandled exception", exc_info=True)
-        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            logger.error("kitchen_status unhandled exception", exc_info=True)
+            return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
 @mcp.tool(
@@ -97,8 +98,9 @@ async def get_pipeline_report(clear: bool = False) -> str:
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    try:
-        with structlog.contextvars.bound_contextvars(tool="get_pipeline_report"):
+    structlog.contextvars.clear_contextvars()
+    with structlog.contextvars.bound_contextvars(tool="get_pipeline_report"):
+        try:
             from autoskillit.server._state import _startup_ready
 
             if _startup_ready is not None and not _startup_ready.is_set():
@@ -129,11 +131,16 @@ async def get_pipeline_report(clear: bool = False) -> str:
                     "failures": failures,
                 }
             )
-    except Exception as exc:
-        logger.error("get_pipeline_report unhandled exception", exc_info=True)
-        return json.dumps(
-            {"total_failures": 0, "failures": [], "error": f"{type(exc).__name__}: {exc}"}
-        )
+        except Exception as exc:
+            logger.error("get_pipeline_report unhandled exception", exc_info=True)
+            return json.dumps(
+                {
+                    "success": False,
+                    "total_failures": 0,
+                    "failures": [],
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+            )
 
 
 def _merge_wall_clock_seconds(steps: list[dict], timing_report: list[dict]) -> list[dict]:
@@ -173,8 +180,9 @@ async def get_token_summary(clear: bool = False, format: str = "json", order_id:
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    try:
-        with structlog.contextvars.bound_contextvars(tool="get_token_summary"):
+    structlog.contextvars.clear_contextvars()
+    with structlog.contextvars.bound_contextvars(tool="get_token_summary"):
+        try:
             from autoskillit.server import _get_ctx
 
             ctx = _get_ctx()
@@ -206,9 +214,9 @@ async def get_token_summary(clear: bool = False, format: str = "json", order_id:
                     "model_totals": model_totals,
                 }
             )
-    except Exception as exc:
-        logger.error("get_token_summary unhandled exception", exc_info=True)
-        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            logger.error("get_token_summary unhandled exception", exc_info=True)
+            return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
 @mcp.tool(
@@ -234,8 +242,9 @@ async def get_timing_summary(clear: bool = False, format: str = "json", order_id
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    try:
-        with structlog.contextvars.bound_contextvars(tool="get_timing_summary"):
+    structlog.contextvars.clear_contextvars()
+    with structlog.contextvars.bound_contextvars(tool="get_timing_summary"):
+        try:
             from autoskillit.server import _get_ctx
 
             steps = _get_ctx().timing_log.get_report(order_id=order_id)
@@ -249,9 +258,9 @@ async def get_timing_summary(clear: bool = False, format: str = "json", order_id
             if format == "table":
                 return TelemetryFormatter.format_timing_table(steps, total)
             return json.dumps({"steps": steps, "total": total})
-    except Exception as exc:
-        logger.error("get_timing_summary unhandled exception", exc_info=True)
-        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            logger.error("get_timing_summary unhandled exception", exc_info=True)
+            return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
 @mcp.tool(
@@ -279,8 +288,9 @@ async def analyze_tool_sequences(
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    try:
-        with structlog.contextvars.bound_contextvars(tool="analyze_tool_sequences"):
+    structlog.contextvars.clear_contextvars()
+    with structlog.contextvars.bound_contextvars(tool="analyze_tool_sequences"):
+        try:
             _valid_formats = {"table", "mermaid", "dot"}
             if format not in _valid_formats:
                 return json.dumps(
@@ -334,9 +344,9 @@ async def analyze_tool_sequences(
                     "rendering": rendering,
                 }
             )
-    except Exception as exc:
-        logger.error("analyze_tool_sequences unhandled exception", exc_info=True)
-        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            logger.error("analyze_tool_sequences unhandled exception", exc_info=True)
+            return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
 def _read_quota_events(log_root: Path, n: int) -> tuple[list[dict], int]:
@@ -391,17 +401,18 @@ async def get_quota_events(n: int = 50) -> str:
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    try:
-        with structlog.contextvars.bound_contextvars(tool="get_quota_events"):
+    structlog.contextvars.clear_contextvars()
+    with structlog.contextvars.bound_contextvars(tool="get_quota_events"):
+        try:
             from autoskillit.server import _get_ctx
 
             ctx = _get_ctx()
             log_root = resolve_log_dir(ctx.config.linux_tracing.log_dir)
             events, total = _read_quota_events(log_root, n)
             return json.dumps({"events": events, "total_count": total})
-    except Exception as exc:
-        logger.error("get_quota_events unhandled exception", exc_info=True)
-        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            logger.error("get_quota_events unhandled exception", exc_info=True)
+            return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
 @mcp.tool(
@@ -432,10 +443,11 @@ async def write_telemetry_files(
     if (gate := _require_enabled()) is not None:
         return gate
 
-    try:
-        with structlog.contextvars.bound_contextvars(
-            tool="write_telemetry_files", output_dir=output_dir
-        ):
+    structlog.contextvars.clear_contextvars()
+    with structlog.contextvars.bound_contextvars(
+        tool="write_telemetry_files", output_dir=output_dir
+    ):
+        try:
             logger.info("write_telemetry_files", output_dir=output_dir)
             await _notify(
                 ctx,
@@ -485,9 +497,9 @@ async def write_telemetry_files(
                     "mcp_response_metrics_path": str(mcp_path),
                 }
             )
-    except Exception as exc:
-        logger.error("write_telemetry_files unhandled exception", exc_info=True)
-        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            logger.error("write_telemetry_files unhandled exception", exc_info=True)
+            return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
@@ -515,8 +527,9 @@ async def read_db(
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    try:
-        with structlog.contextvars.bound_contextvars(tool="read_db"):
+    structlog.contextvars.clear_contextvars()
+    with structlog.contextvars.bound_contextvars(tool="read_db"):
+        try:
             logger.info("read_db", db_path=db_path, query=query[:80])
             await _notify(
                 ctx,
@@ -631,6 +644,6 @@ async def read_db(
                     extra={"error": type(exc).__name__},
                 )
                 return json.dumps({"success": False, "error": f"Query failed: {exc}"})
-    except Exception as exc:
-        logger.error("read_db unhandled exception", exc_info=True)
-        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            logger.error("read_db unhandled exception", exc_info=True)
+            return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})

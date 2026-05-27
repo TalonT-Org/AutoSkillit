@@ -28,7 +28,7 @@ ingredients:
     default: 'false'
   audit:
     description: Post-merge quality gate
-    default: 'false'
+    default: 'true'
   open_pr:
     description: PR instead of direct merge
     default: 'true'

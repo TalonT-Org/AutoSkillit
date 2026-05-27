@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
 import pytest
+import structlog.contextvars
+import structlog.testing
 
 if TYPE_CHECKING:
     from autoskillit.pipeline.timings import DefaultTimingLog
@@ -170,3 +174,14 @@ def build_ctx_open(build_ctx):
         return ctx
 
     return _factory
+
+
+@contextmanager
+def assert_all_logs_carry_context(*expected_keys: str) -> Generator[list[dict], None, None]:
+    with structlog.testing.capture_logs(
+        processors=[structlog.contextvars.merge_contextvars]
+    ) as logs:
+        yield logs
+    for entry in logs:
+        for key in expected_keys:
+            assert key in entry, f"Log record missing {key!r}: {entry}"

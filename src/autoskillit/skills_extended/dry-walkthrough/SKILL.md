@@ -113,6 +113,11 @@ For each phase, verify using subagents:
    the target test directory's existing isolation pattern (conftest autouse fixtures,
    setup/teardown) and confirm the plan's new tests comply. If the plan prescribes
    mutating shared state without specifying cleanup, flag it.
+10. If the plan describes wrapping existing code in a block statement (with/for/if/try),
+    does it specify the structural boundary the block covers (e.g., "extends from line N
+    to the except handler at line M" or "covers the entire try body")? If the plan
+    contains transformation language without an extent claim, flag it as incomplete.
+    Verify the stated boundary exists in the target file at the described location.
 ```
 
 ### Step 3: Check Cross-Phase Dependencies

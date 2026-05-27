@@ -369,13 +369,26 @@ def _has_toplevel_except_exception(func_node: ast.AsyncFunctionDef | ast.Functio
             idx += 1
         else:
             break
+    # Skip leading call expression statements (e.g. clear_contextvars())
+    while (
+        idx < len(stmts)
+        and isinstance(stmts[idx], ast.Expr)
+        and isinstance(stmts[idx].value, ast.Call)
+    ):
+        idx += 1
     if idx >= len(stmts):
         return False
     first = stmts[idx]
-    if not isinstance(first, ast.Try):
+    # Accept: direct try/except, or with-block wrapping a try/except at its top level
+    try_node: ast.Try | None = None
+    if isinstance(first, ast.Try):
+        try_node = first
+    elif isinstance(first, ast.With) and first.body and isinstance(first.body[0], ast.Try):
+        try_node = first.body[0]
+    if try_node is None:
         return False
     # Check that at least one handler catches Exception or BaseException
-    for handler in first.handlers:
+    for handler in try_node.handlers:
         if handler.type is None:  # bare except:
             return True
         if isinstance(handler.type, ast.Name) and handler.type.id in (

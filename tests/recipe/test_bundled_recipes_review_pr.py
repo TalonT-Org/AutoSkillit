@@ -144,6 +144,7 @@ class TestReviewPrRecipeIntegration:
 
     def test_pre_review_rebase_routes_to_re_push_review(self, recipe: object) -> None:
         """T_RP7b: pre_review_rebase on_success must route to re_push_review."""
+        assert "pre_review_rebase" in recipe.steps  # type: ignore[operator]
         step = recipe.steps["pre_review_rebase"]  # type: ignore[attr-defined]
         assert step.on_success == "re_push_review", (
             "pre_review_rebase must route on_success to re_push_review"

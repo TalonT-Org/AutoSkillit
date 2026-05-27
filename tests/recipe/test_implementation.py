@@ -107,6 +107,7 @@ def test_check_review_loop_has_on_failure(recipe) -> None:
 # T_IP_LOOP7
 def test_pre_review_rebase_routes_to_re_push_review(recipe) -> None:
     """pre_review_rebase on_success must route to re_push_review in implementation recipe."""
+    assert "pre_review_rebase" in recipe.steps
     step = recipe.steps["pre_review_rebase"]
     assert step.on_success == "re_push_review"
 

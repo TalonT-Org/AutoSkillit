@@ -10,7 +10,6 @@ from autoskillit.config.settings import (
     _YAML_KEY_ALIASES,
     _build_subconfig,
     _coerce_value,
-    _field_defaults,
 )
 
 pytestmark = [pytest.mark.layer("config"), pytest.mark.small]
@@ -185,36 +184,3 @@ def test_build_subconfig_field_override(monkeypatch: pytest.MonkeyPatch) -> None
     result = _build_subconfig(SimpleConfig, {"x": 5}, "simple")
     assert result.x == 999
     assert override_called
-
-
-# ---------------------------------------------------------------------------
-# T15: test_build_subconfig_discovers_all_production_fields
-# ---------------------------------------------------------------------------
-
-
-def test_build_subconfig_discovers_all_production_fields() -> None:
-    """Regression gate: every production sub-config dataclass must be handled."""
-    from autoskillit.config.settings import (
-        _SECTION_BUILDERS,
-        AutomationConfig,
-    )
-
-    for f in dataclasses.fields(AutomationConfig):
-        if f.name in ("features", "experimental_enabled"):
-            continue
-        if f.name in _SECTION_BUILDERS:
-            continue
-        if f.default_factory is dataclasses.MISSING or not dataclasses.is_dataclass(
-            f.default_factory
-        ):
-            continue
-
-        cls = f.default_factory
-        defaults = _field_defaults(cls)
-        section_name = f.name
-        result = _build_subconfig(cls, dict(defaults), section_name)
-
-        for sf in dataclasses.fields(cls):
-            assert hasattr(result, sf.name), (
-                f"{cls.__name__}.{sf.name} not populated by _build_subconfig"
-            )

@@ -192,7 +192,8 @@
         "step_name": "plan",
         "issue_url": "${{ inputs.issue_url }}",
         "issue_title": "${{ context.issue_title }}",
-        "adversarial_review_level": "${{ inputs.adversarial_review_level }}"
+        "adversarial_review_level": "${{ inputs.adversarial_review_level }}",
+        "output_dir": "."
       },
       "capture": {
         "plan_path": "${{ result.plan_path }}",
@@ -247,7 +248,8 @@
       "with": {
         "skill_command": "/autoskillit:implement-worktree-no-merge ${{ context.plan_path }}",
         "cwd": "${{ context.work_dir }}",
-        "step_name": "implement"
+        "step_name": "implement",
+        "output_dir": "."
       },
       "capture": {
         "worktree_path": "${{ result.worktree_path }}"

@@ -65,7 +65,8 @@
       "with": {
         "skill_command": "/autoskillit:select-directions ${{ context.scope_directions }} ${{ context.scope_report }} ${{ inputs.min_breadth }}",
         "cwd": "${{ inputs.source_dir }}",
-        "step_name": "select_directions"
+        "step_name": "select_directions",
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/select-directions"
       },
       "capture": {
         "selected_directions": "${{ result.selected_directions }}"

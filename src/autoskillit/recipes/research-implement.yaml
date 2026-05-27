@@ -163,6 +163,7 @@ steps:
       skill_command: "/autoskillit:make-plan ${{ context.group_files }}"
       cwd: "${{ inputs.worktree_path }}"
       step_name: plan_phase
+      output_dir: '.'
       group_files: "${{ context.group_files }}"
     capture:
       phase_plan_path: "${{ result.plan_path }}"
@@ -191,6 +192,7 @@ steps:
       skill_command: "/autoskillit:implement-experiment ${{ context.phase_plan_path }}"
       cwd: "${{ inputs.worktree_path }}"
       step_name: implement_phase
+      output_dir: '.'
     capture:
       worktree_path: "${{ result.worktree_path }}"
     retries: 0
@@ -369,6 +371,7 @@ steps:
       skill_command: "/autoskillit:run-experiment ${{ context.worktree_path }}"
       cwd: "${{ context.worktree_path }}"
       step_name: run_experiment
+      output_dir: '.'
     capture:
       experiment_results: "${{ result.results_path }}"
       experiment_verdict: "${{ result.verdict }}"
@@ -417,6 +420,7 @@ steps:
       skill_command: "/autoskillit:run-experiment ${{ context.worktree_path }} --adjust"
       cwd: "${{ context.worktree_path }}"
       step_name: adjust
+      output_dir: '.'
     capture:
       experiment_results: "${{ result.results_path }}"
       experiment_verdict: "${{ result.verdict }}"

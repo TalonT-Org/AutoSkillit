@@ -849,6 +849,7 @@ steps:
       skill_command: /autoskillit:make-plan ${{ context.task }}
       cwd: ${{ context.work_dir }}
       step_name: plan
+      output_dir: '.'
     capture:
       pr_plan_path: ${{ result.plan_path }}
     capture_list:
@@ -891,6 +892,7 @@ steps:
         }}
       cwd: ${{ context.work_dir }}
       step_name: implement
+      output_dir: '.'
     capture:
       worktree_path: ${{ result.worktree_path }}
       worktree_branch_name: ${{ result.branch_name }}

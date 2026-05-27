@@ -270,6 +270,7 @@ steps:
         }}
       cwd: ${{ context.work_dir }}
       step_name: implement
+      output_dir: '.'
     capture:
       implementation_ref: ${{ result.worktree_path }}
       worktree_path: ${{ result.worktree_path }}
@@ -428,6 +429,7 @@ steps:
       cwd: ${{ context.work_dir }}
       step_name: make_plan
       adversarial_review_level: ${{ inputs.adversarial_review_level }}
+      output_dir: '.'
     capture:
       plan_path: ${{ result.plan_path }}
     capture_list:

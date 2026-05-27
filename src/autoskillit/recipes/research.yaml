@@ -131,6 +131,7 @@ steps:
       skill_command: "/autoskillit:select-directions ${{ context.scope_directions }} ${{ context.scope_report }} ${{ inputs.min_breadth }}"
       cwd: "${{ inputs.source_dir }}"
       step_name: select_directions
+      output_dir: "{{AUTOSKILLIT_TEMP}}/select-directions"
     capture:
       selected_directions: "${{ result.selected_directions }}"
     on_success: plan_experiment
@@ -405,6 +406,7 @@ steps:
       skill_command: "/autoskillit:make-plan ${{ context.group_files }}"
       cwd: "${{ context.worktree_path }}"
       step_name: plan_phase
+      output_dir: '.'
       group_files: "${{ context.group_files }}"
     capture:
       phase_plan_path: "${{ result.plan_path }}"
@@ -430,6 +432,7 @@ steps:
       skill_command: "/autoskillit:implement-experiment ${{ context.phase_plan_path }}"
       cwd: "${{ context.worktree_path }}"
       step_name: implement_phase
+      output_dir: '.'
     capture:
       worktree_path: "${{ result.worktree_path }}"
     retries: 0
@@ -576,6 +579,7 @@ steps:
       skill_command: "/autoskillit:run-experiment ${{ context.worktree_path }}"
       cwd: "${{ context.worktree_path }}"
       step_name: run_experiment
+      output_dir: '.'
     capture:
       experiment_results: "${{ result.results_path }}"
       experiment_verdict: "${{ result.verdict }}"
@@ -624,6 +628,7 @@ steps:
       skill_command: "/autoskillit:run-experiment ${{ context.worktree_path }} --adjust"
       cwd: "${{ context.worktree_path }}"
       step_name: adjust
+      output_dir: '.'
     capture:
       experiment_results: "${{ result.results_path }}"
       experiment_verdict: "${{ result.verdict }}"
@@ -785,6 +790,7 @@ steps:
       skill_command: "/autoskillit:prepare-research-pr ${{ context.report_path }} ${{ context.experiment_plan }} ${{ context.worktree_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.worktree_path }}"
       step_name: prepare_research_pr
+      output_dir: '.'
     capture:
       prep_path: "${{ result.prep_path }}"
       selected_lenses: "${{ result.selected_lenses }}"
@@ -848,6 +854,7 @@ steps:
       skill_command: "/autoskillit:compose-research-pr ${{ context.prep_path }} \"${{ context.all_diagram_paths }}\" ${{ context.worktree_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.worktree_path }}"
       step_name: compose_research_pr
+      output_dir: '.'
     capture:
       pr_url: "${{ result.pr_url }}"
     on_success: guard_pr_url
@@ -995,6 +1002,7 @@ steps:
       skill_command: "/autoskillit:run-experiment ${{ context.worktree_path }} --adjust"
       cwd: "${{ context.worktree_path }}"
       step_name: re_run_experiment
+      output_dir: '.'
     capture:
       experiment_results: "${{ result.results_path }}"
       experiment_verdict: "${{ result.verdict }}"

@@ -878,7 +878,8 @@
       "with": {
         "skill_command": "/autoskillit:make-plan ${{ context.task }}",
         "cwd": "${{ context.work_dir }}",
-        "step_name": "plan"
+        "step_name": "plan",
+        "output_dir": "."
       },
       "capture": {
         "pr_plan_path": "${{ result.plan_path }}"
@@ -915,7 +916,8 @@
       "with": {
         "skill_command": "/autoskillit:implement-worktree-no-merge ${{ context.pr_plan_path }}",
         "cwd": "${{ context.work_dir }}",
-        "step_name": "implement"
+        "step_name": "implement",
+        "output_dir": "."
       },
       "capture": {
         "worktree_path": "${{ result.worktree_path }}",

@@ -206,6 +206,7 @@ steps:
       issue_url: ${{ inputs.issue_url }}
       issue_title: ${{ context.issue_title }}
       adversarial_review_level: ${{ inputs.adversarial_review_level }}
+      output_dir: '.'
     capture:
       plan_path: ${{ result.plan_path }}
       all_plan_paths: ${{ result.plan_path }}
@@ -272,6 +273,7 @@ steps:
         }}
       cwd: ${{ context.work_dir }}
       step_name: implement
+      output_dir: '.'
     capture:
       worktree_path: ${{ result.worktree_path }}
     retries: 0

@@ -99,124 +99,124 @@ async def wait_for_ci(
         with structlog.contextvars.bound_contextvars(tool="wait_for_ci"):
             logger.info("wait_for_ci", branch=branch, repo=repo or "(infer)")
 
-        from autoskillit.server import _get_ctx
+            from autoskillit.server import _get_ctx
 
-        tool_ctx = _get_ctx()
-        _timing_ctx = tool_ctx
-        if tool_ctx.ci_watcher is None:
-            if step_name:
-                tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
-            return json.dumps(
-                {
-                    "run_id": None,
-                    "conclusion": "error",
-                    "failed_jobs": [],
-                    "error": "CI watcher not configured",
-                }
+            tool_ctx = _get_ctx()
+            _timing_ctx = tool_ctx
+            if tool_ctx.ci_watcher is None:
+                if step_name:
+                    tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
+                return json.dumps(
+                    {
+                        "run_id": None,
+                        "conclusion": "error",
+                        "failed_jobs": [],
+                        "error": "CI watcher not configured",
+                    }
+                )
+
+            # Infer head_sha from cwd if not provided
+            _sha_inferred = head_sha is None
+            if _sha_inferred and cwd:
+                try:
+                    rc, stdout, _ = await _run_subprocess(
+                        ["git", "rev-parse", "HEAD"], cwd=cwd, timeout=5.0
+                    )
+                    if rc == 0:
+                        head_sha = stdout.strip()
+                except Exception:
+                    logger.warning("git rev-parse HEAD failed", exc_info=True)
+
+            if _sha_inferred and head_sha and cwd:
+                try:
+                    rc_b, branch_out, _ = await _run_subprocess(
+                        ["git", "branch", "--show-current"], cwd=cwd, timeout=5.0
+                    )
+                    if rc_b == 0:
+                        cwd_branch = branch_out.strip()
+                        if cwd_branch and cwd_branch != branch:
+                            logger.warning(
+                                "wait_for_ci: cwd branch does not match watched branch — "
+                                "head_sha may be from wrong branch",
+                                cwd_branch=cwd_branch,
+                                watched_branch=branch,
+                                inferred_sha=head_sha[:12],
+                                cwd=cwd,
+                            )
+                except Exception:
+                    logger.warning("wait_for_ci: failed to check cwd branch", exc_info=True)
+
+            scope = CIRunScope(
+                workflow=workflow or tool_ctx.default_ci_scope.workflow,
+                head_sha=head_sha,
+                event=event or tool_ctx.default_ci_scope.event,
             )
 
-        # Infer head_sha from cwd if not provided
-        _sha_inferred = head_sha is None
-        if _sha_inferred and cwd:
-            try:
-                rc, stdout, _ = await _run_subprocess(
-                    ["git", "rev-parse", "HEAD"], cwd=cwd, timeout=5.0
-                )
-                if rc == 0:
-                    head_sha = stdout.strip()
-            except Exception:
-                logger.warning("git rev-parse HEAD failed", exc_info=True)
+            resolved_repo = await resolve_repo_from_remote(cwd, hint=remote_url or repo or None)
 
-        if _sha_inferred and head_sha and cwd:
-            try:
-                rc_b, branch_out, _ = await _run_subprocess(
-                    ["git", "branch", "--show-current"], cwd=cwd, timeout=5.0
-                )
-                if rc_b == 0:
-                    cwd_branch = branch_out.strip()
-                    if cwd_branch and cwd_branch != branch:
-                        logger.warning(
-                            "wait_for_ci: cwd branch does not match watched branch — "
-                            "head_sha may be from wrong branch",
-                            cwd_branch=cwd_branch,
-                            watched_branch=branch,
-                            inferred_sha=head_sha[:12],
-                            cwd=cwd,
-                        )
-            except Exception:
-                logger.warning("wait_for_ci: failed to check cwd branch", exc_info=True)
-
-        scope = CIRunScope(
-            workflow=workflow or tool_ctx.default_ci_scope.workflow,
-            head_sha=head_sha,
-            event=event or tool_ctx.default_ci_scope.event,
-        )
-
-        resolved_repo = await resolve_repo_from_remote(cwd, hint=remote_url or repo or None)
-
-        await _notify(
-            ctx,
-            "info",
-            f"Watching CI for branch {branch}",
-            "autoskillit.wait_for_ci",
-            extra={
-                "repo": resolved_repo or "(infer)",
-                "head_sha": scope.head_sha or "(any)",
-                "workflow": scope.workflow or "(any)",
-            },
-        )
-
-        try:
-            result = await tool_ctx.ci_watcher.wait(
-                branch,
-                repo=resolved_repo or None,
-                scope=scope,
-                timeout_seconds=timeout_seconds,
-                lookback_seconds=lookback_seconds,
-                cwd=cwd,
-            )
-
-            # Include head_sha used for this CI check so orchestrators can verify
-            # CI results correspond to the current HEAD after a force-push.
-            if scope.head_sha:
-                result = {**result, "head_sha": scope.head_sha}
-
-            if auto_trigger and result.get("conclusion") == "no_runs":
-                result = await _auto_trigger_ci(
-                    branch=branch,
-                    cwd=cwd,
-                    result=result,
-                    scope=scope,
-                    resolved_repo=resolved_repo,
-                    tool_ctx=tool_ctx,
-                    timeout_seconds=timeout_seconds,
-                    lookback_seconds=lookback_seconds,
-                )
-
-            conclusion = result.get("conclusion", "unknown")
-            level: Literal["info", "error"] = "info" if conclusion == "success" else "error"
             await _notify(
                 ctx,
-                level,
-                f"CI result: {conclusion}",
+                "info",
+                f"Watching CI for branch {branch}",
                 "autoskillit.wait_for_ci",
-                extra={"run_id": result.get("run_id")},
+                extra={
+                    "repo": resolved_repo or "(infer)",
+                    "head_sha": scope.head_sha or "(any)",
+                    "workflow": scope.workflow or "(any)",
+                },
             )
 
-            return json.dumps(result)
-        except Exception as exc:
-            logger.error("wait_for_ci failed", exc_info=True)
-            return json.dumps(
-                {
-                    "run_id": None,
-                    "conclusion": "error",
-                    "failed_jobs": [],
-                    "error": f"{type(exc).__name__}: {exc}",
-                }
-            )
-        finally:
-            if step_name:
-                tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
+            try:
+                result = await tool_ctx.ci_watcher.wait(
+                    branch,
+                    repo=resolved_repo or None,
+                    scope=scope,
+                    timeout_seconds=timeout_seconds,
+                    lookback_seconds=lookback_seconds,
+                    cwd=cwd,
+                )
+
+                # Include head_sha used for this CI check so orchestrators can verify
+                # CI results correspond to the current HEAD after a force-push.
+                if scope.head_sha:
+                    result = {**result, "head_sha": scope.head_sha}
+
+                if auto_trigger and result.get("conclusion") == "no_runs":
+                    result = await _auto_trigger_ci(
+                        branch=branch,
+                        cwd=cwd,
+                        result=result,
+                        scope=scope,
+                        resolved_repo=resolved_repo,
+                        tool_ctx=tool_ctx,
+                        timeout_seconds=timeout_seconds,
+                        lookback_seconds=lookback_seconds,
+                    )
+
+                conclusion = result.get("conclusion", "unknown")
+                level: Literal["info", "error"] = "info" if conclusion == "success" else "error"
+                await _notify(
+                    ctx,
+                    level,
+                    f"CI result: {conclusion}",
+                    "autoskillit.wait_for_ci",
+                    extra={"run_id": result.get("run_id")},
+                )
+
+                return json.dumps(result)
+            except Exception as exc:
+                logger.error("wait_for_ci failed", exc_info=True)
+                return json.dumps(
+                    {
+                        "run_id": None,
+                        "conclusion": "error",
+                        "failed_jobs": [],
+                        "error": f"{type(exc).__name__}: {exc}",
+                    }
+                )
+            finally:
+                if step_name:
+                    tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
     except Exception as exc:
         logger.error("wait_for_ci unhandled exception", exc_info=True)
         if step_name and _timing_ctx is not None:

@@ -72,47 +72,49 @@ async def run_cmd(
     try:
         with structlog.contextvars.bound_contextvars(tool="run_cmd", cwd=cwd):
             logger.info("run_cmd", cmd=cmd[:80], cwd=cwd)
-        await _notify(
-            ctx, "info", f"run_cmd: {cmd[:80]}", "autoskillit.run_cmd", extra={"cwd": cwd}
-        )
-
-        from autoskillit.server import _get_ctx
-
-        tool_ctx = _get_ctx()
-        _start = time.monotonic()
-        try:
-            m = _PURE_SLEEP_RE.match(cmd.strip())
-            if m:
-                seconds = float(m.group("py_secs") or m.group("sh_secs"))
-                await asyncio.sleep(seconds)
-                return json.dumps({"success": True, "exit_code": 0, "stdout": "", "stderr": ""})
-            _env: dict[str, str] | None = (
-                {**os.environ, SCENARIO_STEP_NAME_ENV: step_name} if step_name else None
+            await _notify(
+                ctx, "info", f"run_cmd: {cmd[:80]}", "autoskillit.run_cmd", extra={"cwd": cwd}
             )
-            returncode, stdout, stderr = await _run_subprocess(
-                ["bash", "-c", cmd],
-                cwd=cwd,
-                timeout=float(timeout),
-                env=_env,
-            )
-            result = {
-                "success": returncode == 0,
-                "exit_code": returncode,
-                "stdout": truncate_text(stdout),
-                "stderr": truncate_text(stderr),
-            }
-            if not result["success"]:
-                await _notify(
-                    ctx,
-                    "error",
-                    "run_cmd failed",
-                    "autoskillit.run_cmd",
-                    extra={"exit_code": returncode},
+
+            from autoskillit.server import _get_ctx
+
+            tool_ctx = _get_ctx()
+            _start = time.monotonic()
+            try:
+                m = _PURE_SLEEP_RE.match(cmd.strip())
+                if m:
+                    seconds = float(m.group("py_secs") or m.group("sh_secs"))
+                    await asyncio.sleep(seconds)
+                    return json.dumps(
+                        {"success": True, "exit_code": 0, "stdout": "", "stderr": ""}
+                    )
+                _env: dict[str, str] | None = (
+                    {**os.environ, SCENARIO_STEP_NAME_ENV: step_name} if step_name else None
                 )
-            return json.dumps(result)
-        finally:
-            if step_name:
-                tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
+                returncode, stdout, stderr = await _run_subprocess(
+                    ["bash", "-c", cmd],
+                    cwd=cwd,
+                    timeout=float(timeout),
+                    env=_env,
+                )
+                result = {
+                    "success": returncode == 0,
+                    "exit_code": returncode,
+                    "stdout": truncate_text(stdout),
+                    "stderr": truncate_text(stderr),
+                }
+                if not result["success"]:
+                    await _notify(
+                        ctx,
+                        "error",
+                        "run_cmd failed",
+                        "autoskillit.run_cmd",
+                        extra={"exit_code": returncode},
+                    )
+                return json.dumps(result)
+            finally:
+                if step_name:
+                    tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
     except Exception as exc:
         logger.error("run_cmd unhandled exception", exc_info=True)
         return json.dumps(
@@ -157,25 +159,27 @@ async def run_python(
     try:
         with structlog.contextvars.bound_contextvars(tool="run_python"):
             logger.info("run_python", callable=callable, timeout=timeout)
-        await _notify(
-            ctx,
-            "info",
-            f"run_python: {callable}",
-            "autoskillit.run_python",
-            extra={"callable": callable},
-        )
-        from autoskillit.server.tools._execution_helpers import _import_and_call  # noqa: PLC0415
-
-        result = await _import_and_call(callable, args=args, timeout=float(timeout))
-        if not result.get("success"):
             await _notify(
                 ctx,
-                "error",
-                "run_python failed",
+                "info",
+                f"run_python: {callable}",
                 "autoskillit.run_python",
                 extra={"callable": callable},
             )
-        return json.dumps(result)
+            from autoskillit.server.tools._execution_helpers import (
+                _import_and_call,  # noqa: PLC0415
+            )
+
+            result = await _import_and_call(callable, args=args, timeout=float(timeout))
+            if not result.get("success"):
+                await _notify(
+                    ctx,
+                    "error",
+                    "run_python failed",
+                    "autoskillit.run_python",
+                    extra={"callable": callable},
+                )
+            return json.dumps(result)
     except Exception as exc:
         logger.error("run_python unhandled exception", exc_info=True)
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
@@ -289,322 +293,334 @@ async def run_skill(
     try:
         with structlog.contextvars.bound_contextvars(tool="run_skill", cwd=cwd):
             logger.info("run_skill", command=skill_command[:80], cwd=cwd)
-        await _notify(
-            ctx,
-            "info",
-            f"run_skill: {skill_command[:80]}",
-            "autoskillit.run_skill",
-            extra={"cwd": cwd, "model": model or "default"},
-        )
-
-        from autoskillit.server import _get_config, _get_ctx
-
-        # Auto-enrich order_id from the fleet dispatcher's env variable when the
-        # caller did not pass an explicit value. AUTOSKILLIT_DISPATCH_ID is injected
-        # by fleet/_api.py into every L2 food truck session environment and inherited by all
-        # sub-sessions, ensuring token log entries carry the correct order_id without
-        # requiring recipe authors to thread it through every run_skill call.
-        effective_order_id = order_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
-
-        if _get_config().safety.require_dry_walkthrough:
-            if (gate_error := _check_dry_walkthrough(skill_command, cwd)) is not None:
-                return gate_error
-
-        tool_ctx = _get_ctx()
-        if tool_ctx.executor is None:
-            return json.dumps({"success": False, "error": "Executor not configured"})
-
-        provider_extras: dict[str, str] | None = None
-        profile_name_out: str = ""
-        effective_model = model
-
-        from autoskillit.core import (
-            AGENT_BACKEND_CLAUDE_CODE,
-            AGENT_BACKEND_CODEX,
-            is_feature_enabled,
-        )
-
-        _cfg = _get_config()
-        if is_feature_enabled(
-            "providers", _cfg.features, experimental_enabled=_cfg.experimental_enabled
-        ):
-            from autoskillit.server._guards import (
-                _resolve_model_as_profile,
-                _resolve_provider_profile,
+            await _notify(
+                ctx,
+                "info",
+                f"run_skill: {skill_command[:80]}",
+                "autoskillit.run_skill",
+                extra={"cwd": cwd, "model": model or "default"},
             )
 
-            _profile, _env_dict = _resolve_provider_profile(
-                step_name or "",
-                tool_ctx.recipe_name or "",
-                _cfg.providers,
-                step_provider=step_provider or "",
+            from autoskillit.server import _get_config, _get_ctx
+
+            # Auto-enrich order_id from the fleet dispatcher's env variable when the
+            # caller did not pass an explicit value. AUTOSKILLIT_DISPATCH_ID is injected
+            # by fleet/_api.py into every L2 food truck session environment and inherited by all
+            # sub-sessions, ensuring token log entries carry the correct order_id without
+            # requiring recipe authors to thread it through every run_skill call.
+            effective_order_id = order_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
+
+            if _get_config().safety.require_dry_walkthrough:
+                if (gate_error := _check_dry_walkthrough(skill_command, cwd)) is not None:
+                    return gate_error
+
+            tool_ctx = _get_ctx()
+            if tool_ctx.executor is None:
+                return json.dumps({"success": False, "error": "Executor not configured"})
+
+            provider_extras: dict[str, str] | None = None
+            profile_name_out: str = ""
+            effective_model = model
+
+            from autoskillit.core import (
+                AGENT_BACKEND_CLAUDE_CODE,
+                AGENT_BACKEND_CODEX,
+                is_feature_enabled,
             )
-            if _profile != "anthropic":
-                provider_extras = _env_dict
-                profile_name_out = _profile
-            else:
-                effective_model, prof_name, prof_extras = _resolve_model_as_profile(
-                    model, _cfg.providers
+
+            _cfg = _get_config()
+            if is_feature_enabled(
+                "providers", _cfg.features, experimental_enabled=_cfg.experimental_enabled
+            ):
+                from autoskillit.server._guards import (
+                    _resolve_model_as_profile,
+                    _resolve_provider_profile,
                 )
-                if prof_extras is not None:
-                    provider_extras = prof_extras
-                    profile_name_out = prof_name
 
-        if _cfg.model.model_override:
-            effective_model = _cfg.model.model_override
-        else:
-            if tool_ctx.recipe_name:
-                _mo_recipe_map = _cfg.providers.model_overrides.get(tool_ctx.recipe_name)
-                if _mo_recipe_map:
-                    _step_mo = _mo_recipe_map.get(step_name) if step_name else None
-                    if _step_mo is None:
-                        _step_mo = _mo_recipe_map.get("*")
-                    if _step_mo:
-                        effective_model = _step_mo
+                _profile, _env_dict = _resolve_provider_profile(
+                    step_name or "",
+                    tool_ctx.recipe_name or "",
+                    _cfg.providers,
+                    step_provider=step_provider or "",
+                )
+                if _profile != "anthropic":
+                    provider_extras = _env_dict
+                    profile_name_out = _profile
+                else:
+                    effective_model, prof_name, prof_extras = _resolve_model_as_profile(
+                        model, _cfg.providers
+                    )
+                    if prof_extras is not None:
+                        provider_extras = prof_extras
+                        profile_name_out = prof_name
 
-        backend_override: str | None = (
-            AGENT_BACKEND_CLAUDE_CODE
-            if (
-                provider_extras
-                and "ANTHROPIC_BASE_URL" in provider_extras
-                and tool_ctx.backend is not None
-                and tool_ctx.backend.name == AGENT_BACKEND_CODEX
-            )
-            else None
-        )
+            if _cfg.model.model_override:
+                effective_model = _cfg.model.model_override
+            else:
+                if tool_ctx.recipe_name:
+                    _mo_recipe_map = _cfg.providers.model_overrides.get(tool_ctx.recipe_name)
+                    if _mo_recipe_map:
+                        _step_mo = _mo_recipe_map.get(step_name) if step_name else None
+                        if _step_mo is None:
+                            _step_mo = _mo_recipe_map.get("*")
+                        if _step_mo:
+                            effective_model = _step_mo
 
-        # Look up artifact validation patterns from skill contract
-        expected_output_patterns: list[str] = []
-        if tool_ctx.output_pattern_resolver:
-            expected_output_patterns = list(tool_ctx.output_pattern_resolver(skill_command))
-
-        # Look up write-expectation metadata from skill contract
-        from autoskillit.core import WriteBehaviorSpec
-
-        write_spec: WriteBehaviorSpec | None = None
-        if tool_ctx.write_expected_resolver:
-            write_spec = tool_ctx.write_expected_resolver(skill_command)
-
-        # Build validated add_dirs via DefaultSessionSkillManager
-        from pathlib import Path
-        from uuid import uuid4
-
-        from autoskillit.core import resolve_target_skill
-
-        # Resolve correct namespace and prepare for tier2 activation
-        resolved_command = skill_command
-        target_name: str | None = None
-        if tool_ctx.skill_resolver is not None:
-            resolved_command, target_name = resolve_target_skill(
-                skill_command, tool_ctx.skill_resolver
+            backend_override: str | None = (
+                AGENT_BACKEND_CLAUDE_CODE
+                if (
+                    provider_extras
+                    and "ANTHROPIC_BASE_URL" in provider_extras
+                    and tool_ctx.backend is not None
+                    and tool_ctx.backend.name == AGENT_BACKEND_CODEX
+                )
+                else None
             )
 
-        # Server-side recipe step parameter resolution.
-        # When a step_name is provided and the recipe's step definition is cached,
-        # auto-fill parameters the LLM may have omitted.
-        if step_name and tool_ctx.active_recipe_steps is not None:
-            _recipe_step = tool_ctx.active_recipe_steps.get(step_name)
-            if _recipe_step is not None:
-                if not output_dir and "output_dir" in _recipe_step.with_args:
-                    _recipe_output_dir = _recipe_step.with_args["output_dir"]
-                    # Skip values containing unresolved template references —
-                    # load() returns raw YAML without ingredient resolution,
-                    # so ${{ context.* }} placeholders may survive.
-                    if "${{" not in _recipe_output_dir:
-                        output_dir = _recipe_output_dir
+            # Look up artifact validation patterns from skill contract
+            expected_output_patterns: list[str] = []
+            if tool_ctx.output_pattern_resolver:
+                expected_output_patterns = list(tool_ctx.output_pattern_resolver(skill_command))
+
+            # Look up write-expectation metadata from skill contract
+            from autoskillit.core import WriteBehaviorSpec
+
+            write_spec: WriteBehaviorSpec | None = None
+            if tool_ctx.write_expected_resolver:
+                write_spec = tool_ctx.write_expected_resolver(skill_command)
+
+            # Build validated add_dirs via DefaultSessionSkillManager
+            from pathlib import Path
+            from uuid import uuid4
+
+            from autoskillit.core import resolve_target_skill
+
+            # Resolve correct namespace and prepare for tier2 activation
+            resolved_command = skill_command
+            target_name: str | None = None
+            if tool_ctx.skill_resolver is not None:
+                resolved_command, target_name = resolve_target_skill(
+                    skill_command, tool_ctx.skill_resolver
+                )
+
+            # Server-side recipe step parameter resolution.
+            # When a step_name is provided and the recipe's step definition is cached,
+            # auto-fill parameters the LLM may have omitted.
+            if step_name and tool_ctx.active_recipe_steps is not None:
+                _recipe_step = tool_ctx.active_recipe_steps.get(step_name)
+                if _recipe_step is not None:
+                    if not output_dir and "output_dir" in _recipe_step.with_args:
+                        _recipe_output_dir = _recipe_step.with_args["output_dir"]
+                        # Skip values containing unresolved template references —
+                        # load() returns raw YAML without ingredient resolution,
+                        # so ${{ context.* }} placeholders may survive.
+                        if "${{" not in _recipe_output_dir:
+                            output_dir = _recipe_output_dir
+                            logger.warning(
+                                "output_dir_resolved_from_recipe",
+                                step=step_name,
+                                output_dir=output_dir,
+                            )
+
+                    if stale_threshold is None and _recipe_step.stale_threshold is not None:
+                        stale_threshold = _recipe_step.stale_threshold
                         logger.warning(
-                            "output_dir_resolved_from_recipe",
+                            "stale_threshold_resolved_from_recipe",
                             step=step_name,
-                            output_dir=output_dir,
+                            value=stale_threshold,
                         )
 
-                if stale_threshold is None and _recipe_step.stale_threshold is not None:
-                    stale_threshold = _recipe_step.stale_threshold
-                    logger.warning(
-                        "stale_threshold_resolved_from_recipe",
-                        step=step_name,
-                        value=stale_threshold,
-                    )
-
-                if idle_output_timeout is None and _recipe_step.idle_output_timeout is not None:
-                    idle_output_timeout = _recipe_step.idle_output_timeout
-                    logger.warning(
-                        "idle_output_timeout_resolved_from_recipe",
-                        step=step_name,
-                        value=idle_output_timeout,
-                    )
-
-        write_watch_dirs: list[Path] = []
-        if output_dir:
-            resolved_dir = Path(output_dir)
-            if not resolved_dir.is_absolute():
-                resolved_dir = Path(cwd) / output_dir
-            write_watch_dirs.append(resolved_dir)
-
-        if not write_watch_dirs:
-            _default_temp = _resolve_skill_temp_dir(cwd, skill_command)
-            if _default_temp:
-                write_watch_dirs.append(_default_temp)
-
-        is_read_only = bool(
-            tool_ctx.read_only_resolver and tool_ctx.read_only_resolver(skill_command)
-        )
-        allowed_write_prefix = ""
-        if write_watch_dirs:
-            allowed_write_prefix = str(write_watch_dirs[0]) + "/"
-        elif is_read_only:
-            _skill_temp_name = target_name or ""
-            if _skill_temp_name:
-                allowed_write_prefix = os.path.join(
-                    cwd, ".autoskillit", "temp", _skill_temp_name, ""
-                )
-            else:
-                logger.warning(
-                    "read_only_skill_no_target_name",
-                    skill_command=skill_command[:100],
-                )
-
-        invocation_marker = f"%%ORDER_UP::{uuid4().hex[:8]}%%"
-
-        skill_add_dirs: list[ValidatedAddDir] = []
-        replay_snapshot_used = False
-        _runner = tool_ctx.runner
-        if (
-            step_name
-            and _runner is not None
-            and getattr(_runner, "skill_snapshots", None)
-            and hasattr(_runner, "restore_skill_snapshot")
-            and tool_ctx.ephemeral_root is not None
-        ):
-            _ephemeral_root = tool_ctx.ephemeral_root
-            session_id = f"headless-{uuid4().hex[:12]}"
-            _restored = _runner.restore_skill_snapshot(  # type: ignore[attr-defined]
-                step_name, _ephemeral_root, session_id
-            )
-            if _restored is not None:
-                skill_add_dirs.append(_restored)
-                replay_snapshot_used = True
-                logger.debug(
-                    "replay_skill_snapshot_restored",
-                    step=step_name,
-                    session_id=session_id,
-                )
-
-        if not replay_snapshot_used and tool_ctx.session_skill_manager is not None:
-            allow_only: frozenset[str] | None = None
-            if target_name:
-                closure = tool_ctx.session_skill_manager.compute_skill_closure(target_name)
-                allow_only = closure if closure else None
-
-            session_id = f"headless-{uuid4().hex[:12]}"
-            session_root = tool_ctx.session_skill_manager.init_session(
-                session_id,
-                cook_session=False,
-                config=tool_ctx.config,
-                project_dir=Path(cwd),
-                recipe_packs=tool_ctx.active_recipe_packs,
-                recipe_features=tool_ctx.active_recipe_features,
-                allow_only=allow_only,
-                backend=tool_ctx.backend,
-            )
-            skill_add_dirs.append(session_root)
-
-            if target_name:
-                tool_ctx.session_skill_manager.activate_skill_deps(session_id, target_name)
-                _is_known_skill = (
-                    tool_ctx.skill_resolver is not None
-                    and tool_ctx.skill_resolver.resolve(target_name) is not None
-                )
-                if _is_known_skill:
-                    _skill_md = (
-                        Path(session_root.path) / ".claude" / "skills" / target_name / "SKILL.md"
-                    )
-                    if not _skill_md.exists():
-                        logger.error(
-                            "target_skill_not_in_session",
-                            target=target_name,
-                            session_id=session_id,
-                            session_root=str(session_root.path),
+                    if (
+                        idle_output_timeout is None
+                        and _recipe_step.idle_output_timeout is not None
+                    ):
+                        idle_output_timeout = _recipe_step.idle_output_timeout
+                        logger.warning(
+                            "idle_output_timeout_resolved_from_recipe",
+                            step=step_name,
+                            value=idle_output_timeout,
                         )
-                        return SkillResult.crashed(
-                            exception=RuntimeError(
-                                f"Target skill {target_name!r} not available in session "
-                                f"{session_id!r}: SKILL.md not found after init_session + "
-                                f"activate_skill_deps. Check tier/feature/pack gating."
-                            ),
-                            skill_command=resolved_command,
-                            session_id=session_id,
-                            order_id=effective_order_id,
-                        ).to_json()
-        _local_dir = validate_project_local_skill_dir(Path(cwd), tool_ctx.backend)
-        if _local_dir is not None:
-            skill_add_dirs.append(_local_dir)
 
-        _start = time.monotonic()
-        try:
-            skill_result = await tool_ctx.executor.run(
-                resolved_command,
-                cwd,
-                model=effective_model,
-                add_dirs=skill_add_dirs,
-                step_name=step_name,
-                kitchen_id=tool_ctx.kitchen_id,
-                order_id=effective_order_id,
-                expected_output_patterns=expected_output_patterns,
-                write_behavior=write_spec,
-                stale_threshold=float(stale_threshold) if stale_threshold is not None else None,
-                idle_output_timeout=float(idle_output_timeout)
-                if idle_output_timeout is not None
-                else None,
-                completion_marker=invocation_marker,
-                recipe_name=tool_ctx.recipe_name,
-                recipe_content_hash=tool_ctx.recipe_content_hash,
-                recipe_composite_hash=tool_ctx.recipe_composite_hash,
-                recipe_version=tool_ctx.recipe_version,
-                allowed_write_prefix=allowed_write_prefix,
-                readonly_skill=is_read_only,
-                write_watch_dirs=write_watch_dirs,
-                provider_extras=provider_extras,
-                profile_name=profile_name_out,
-                backend_override=backend_override,
-                resume_session_id=resume_session_id,
-            )
-            if skill_result.success:
-                tool_ctx.audit.record_success(skill_command)
-                _clear_run_skill_state(tool_ctx.project_dir)
-            else:
-                await _notify(
-                    ctx,
-                    "error",
-                    "run_skill failed",
-                    "autoskillit.run_skill",
-                    extra={"exit_code": skill_result.exit_code, "subtype": skill_result.subtype},
-                )
-                _persist_run_skill_state(skill_result, tool_ctx.project_dir)
-            if effective_order_id:
-                skill_result.order_id = effective_order_id
-            from autoskillit.server._misc import (  # noqa: PLC0415
-                _refresh_quota_cache,
-            )
+            write_watch_dirs: list[Path] = []
+            if output_dir:
+                resolved_dir = Path(output_dir)
+                if not resolved_dir.is_absolute():
+                    resolved_dir = Path(cwd) / output_dir
+                write_watch_dirs.append(resolved_dir)
 
-            if tool_ctx.background is not None:
-                tool_ctx.background.submit(
-                    _refresh_quota_cache(tool_ctx.config.quota_guard),
-                    label="quota_post_run_refresh",
+            if not write_watch_dirs:
+                _default_temp = _resolve_skill_temp_dir(cwd, skill_command)
+                if _default_temp:
+                    write_watch_dirs.append(_default_temp)
+
+            is_read_only = bool(
+                tool_ctx.read_only_resolver and tool_ctx.read_only_resolver(skill_command)
+            )
+            allowed_write_prefix = ""
+            if write_watch_dirs:
+                allowed_write_prefix = str(write_watch_dirs[0]) + "/"
+            elif is_read_only:
+                _skill_temp_name = target_name or ""
+                if _skill_temp_name:
+                    allowed_write_prefix = os.path.join(
+                        cwd, ".autoskillit", "temp", _skill_temp_name, ""
+                    )
+                else:
+                    logger.warning(
+                        "read_only_skill_no_target_name",
+                        skill_command=skill_command[:100],
+                    )
+
+            invocation_marker = f"%%ORDER_UP::{uuid4().hex[:8]}%%"
+
+            skill_add_dirs: list[ValidatedAddDir] = []
+            replay_snapshot_used = False
+            _runner = tool_ctx.runner
+            if (
+                step_name
+                and _runner is not None
+                and getattr(_runner, "skill_snapshots", None)
+                and hasattr(_runner, "restore_skill_snapshot")
+                and tool_ctx.ephemeral_root is not None
+            ):
+                _ephemeral_root = tool_ctx.ephemeral_root
+                session_id = f"headless-{uuid4().hex[:12]}"
+                _restored = _runner.restore_skill_snapshot(  # type: ignore[attr-defined]
+                    step_name, _ephemeral_root, session_id
                 )
-            return skill_result.to_json()
-        except Exception as exc:
-            logger.error("run_skill executor raised unexpectedly", exc_info=True)
-            return SkillResult.crashed(
-                exception=exc,
-                skill_command=resolved_command,
-                order_id=effective_order_id,
-            ).to_json()
-        finally:
-            if step_name:
-                tool_ctx.timing_log.record(
-                    step_name, time.monotonic() - _start, order_id=effective_order_id
+                if _restored is not None:
+                    skill_add_dirs.append(_restored)
+                    replay_snapshot_used = True
+                    logger.debug(
+                        "replay_skill_snapshot_restored",
+                        step=step_name,
+                        session_id=session_id,
+                    )
+
+            if not replay_snapshot_used and tool_ctx.session_skill_manager is not None:
+                allow_only: frozenset[str] | None = None
+                if target_name:
+                    closure = tool_ctx.session_skill_manager.compute_skill_closure(target_name)
+                    allow_only = closure if closure else None
+
+                session_id = f"headless-{uuid4().hex[:12]}"
+                session_root = tool_ctx.session_skill_manager.init_session(
+                    session_id,
+                    cook_session=False,
+                    config=tool_ctx.config,
+                    project_dir=Path(cwd),
+                    recipe_packs=tool_ctx.active_recipe_packs,
+                    recipe_features=tool_ctx.active_recipe_features,
+                    allow_only=allow_only,
+                    backend=tool_ctx.backend,
                 )
+                skill_add_dirs.append(session_root)
+
+                if target_name:
+                    tool_ctx.session_skill_manager.activate_skill_deps(session_id, target_name)
+                    _is_known_skill = (
+                        tool_ctx.skill_resolver is not None
+                        and tool_ctx.skill_resolver.resolve(target_name) is not None
+                    )
+                    if _is_known_skill:
+                        _skill_md = (
+                            Path(session_root.path)
+                            / ".claude"
+                            / "skills"
+                            / target_name
+                            / "SKILL.md"
+                        )
+                        if not _skill_md.exists():
+                            logger.error(
+                                "target_skill_not_in_session",
+                                target=target_name,
+                                session_id=session_id,
+                                session_root=str(session_root.path),
+                            )
+                            return SkillResult.crashed(
+                                exception=RuntimeError(
+                                    f"Target skill {target_name!r} not available in session "
+                                    f"{session_id!r}: SKILL.md not found after init_session + "
+                                    f"activate_skill_deps. Check tier/feature/pack gating."
+                                ),
+                                skill_command=resolved_command,
+                                session_id=session_id,
+                                order_id=effective_order_id,
+                            ).to_json()
+            _local_dir = validate_project_local_skill_dir(Path(cwd), tool_ctx.backend)
+            if _local_dir is not None:
+                skill_add_dirs.append(_local_dir)
+
+            _start = time.monotonic()
+            try:
+                skill_result = await tool_ctx.executor.run(
+                    resolved_command,
+                    cwd,
+                    model=effective_model,
+                    add_dirs=skill_add_dirs,
+                    step_name=step_name,
+                    kitchen_id=tool_ctx.kitchen_id,
+                    order_id=effective_order_id,
+                    expected_output_patterns=expected_output_patterns,
+                    write_behavior=write_spec,
+                    stale_threshold=float(stale_threshold)
+                    if stale_threshold is not None
+                    else None,
+                    idle_output_timeout=float(idle_output_timeout)
+                    if idle_output_timeout is not None
+                    else None,
+                    completion_marker=invocation_marker,
+                    recipe_name=tool_ctx.recipe_name,
+                    recipe_content_hash=tool_ctx.recipe_content_hash,
+                    recipe_composite_hash=tool_ctx.recipe_composite_hash,
+                    recipe_version=tool_ctx.recipe_version,
+                    allowed_write_prefix=allowed_write_prefix,
+                    readonly_skill=is_read_only,
+                    write_watch_dirs=write_watch_dirs,
+                    provider_extras=provider_extras,
+                    profile_name=profile_name_out,
+                    backend_override=backend_override,
+                    resume_session_id=resume_session_id,
+                )
+                if skill_result.success:
+                    tool_ctx.audit.record_success(skill_command)
+                    _clear_run_skill_state(tool_ctx.project_dir)
+                else:
+                    await _notify(
+                        ctx,
+                        "error",
+                        "run_skill failed",
+                        "autoskillit.run_skill",
+                        extra={
+                            "exit_code": skill_result.exit_code,
+                            "subtype": skill_result.subtype,
+                        },
+                    )
+                    _persist_run_skill_state(skill_result, tool_ctx.project_dir)
+                if effective_order_id:
+                    skill_result.order_id = effective_order_id
+                from autoskillit.server._misc import (  # noqa: PLC0415
+                    _refresh_quota_cache,
+                )
+
+                if tool_ctx.background is not None:
+                    tool_ctx.background.submit(
+                        _refresh_quota_cache(tool_ctx.config.quota_guard),
+                        label="quota_post_run_refresh",
+                    )
+                return skill_result.to_json()
+            except Exception as exc:
+                logger.error("run_skill executor raised unexpectedly", exc_info=True)
+                return SkillResult.crashed(
+                    exception=exc,
+                    skill_command=resolved_command,
+                    order_id=effective_order_id,
+                ).to_json()
+            finally:
+                if step_name:
+                    tool_ctx.timing_log.record(
+                        step_name, time.monotonic() - _start, order_id=effective_order_id
+                    )
     except Exception as exc:
         logger.error("run_skill unhandled exception", exc_info=True)
         return SkillResult.crashed(

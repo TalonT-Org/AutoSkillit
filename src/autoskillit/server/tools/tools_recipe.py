@@ -49,10 +49,12 @@ async def list_recipes() -> str:
     try:
         with structlog.contextvars.bound_contextvars(tool="list_recipes"):
             tool_ctx = _get_ctx_or_none()
-        if tool_ctx is None or tool_ctx.recipes is None:
-            return json.dumps({"error": "kitchen not open — call open_kitchen first"})
-        result = tool_ctx.recipes.list_all(tool_ctx.project_dir, features=tool_ctx.config.features)
-        return json.dumps(result)
+            if tool_ctx is None or tool_ctx.recipes is None:
+                return json.dumps({"error": "kitchen not open — call open_kitchen first"})
+            result = tool_ctx.recipes.list_all(
+                tool_ctx.project_dir, features=tool_ctx.config.features
+            )
+            return json.dumps(result)
     except Exception:
         logger.error("list_recipes unhandled exception", exc_info=True)
         return json.dumps({"error": "internal error listing recipes — see server logs"})
@@ -192,34 +194,34 @@ async def load_recipe(
     try:
         with structlog.contextvars.bound_contextvars(tool="load_recipe"):
             tool_ctx = _get_ctx_or_none()
-        if tool_ctx is None or tool_ctx.recipes is None:
-            return json.dumps({"error": "Server not initialized"})
-        suppressed = tool_ctx.config.migration.suppressed
-        _defaults = resolve_ingredient_defaults(tool_ctx.project_dir)
-        _auto_overrides: dict[str, str] = {
-            "kitchen_id": tool_ctx.kitchen_id,
-            "post_run_diagnostics": _defaults.get("post_run_diagnostics", "false"),
-            "is_fleet_dispatch": _defaults.get("is_fleet_dispatch", "false"),
-            "dispatch_id": _defaults.get("dispatch_id", ""),
-            "diagnostics_log_dir": str(resolve_log_dir(tool_ctx.config.linux_tracing.log_dir)),
-        }
-        _merged_overrides = {**_auto_overrides, **(overrides or {})}
-        result = tool_ctx.recipes.load_and_validate(
-            name,
-            tool_ctx.project_dir,
-            suppressed=suppressed,
-            resolved_defaults=_defaults,
-            ingredient_overrides=_merged_overrides,
-            temp_dir=tool_ctx.temp_dir,
-            temp_dir_relpath=temp_dir_display_str(tool_ctx.config.workspace.temp_dir),
-        )
-        recipe_info = tool_ctx.recipes.find(name, tool_ctx.project_dir)
-        result = await _apply_triage_gate(result, name, recipe_info=recipe_info)
-        if ingredients_only:
-            result.pop("content", None)
-            result.pop("orchestration_rules", None)
-            result.pop("stop_step_semantics", None)
-        return json.dumps(result)
+            if tool_ctx is None or tool_ctx.recipes is None:
+                return json.dumps({"error": "Server not initialized"})
+            suppressed = tool_ctx.config.migration.suppressed
+            _defaults = resolve_ingredient_defaults(tool_ctx.project_dir)
+            _auto_overrides: dict[str, str] = {
+                "kitchen_id": tool_ctx.kitchen_id,
+                "post_run_diagnostics": _defaults.get("post_run_diagnostics", "false"),
+                "is_fleet_dispatch": _defaults.get("is_fleet_dispatch", "false"),
+                "dispatch_id": _defaults.get("dispatch_id", ""),
+                "diagnostics_log_dir": str(resolve_log_dir(tool_ctx.config.linux_tracing.log_dir)),
+            }
+            _merged_overrides = {**_auto_overrides, **(overrides or {})}
+            result = tool_ctx.recipes.load_and_validate(
+                name,
+                tool_ctx.project_dir,
+                suppressed=suppressed,
+                resolved_defaults=_defaults,
+                ingredient_overrides=_merged_overrides,
+                temp_dir=tool_ctx.temp_dir,
+                temp_dir_relpath=temp_dir_display_str(tool_ctx.config.workspace.temp_dir),
+            )
+            recipe_info = tool_ctx.recipes.find(name, tool_ctx.project_dir)
+            result = await _apply_triage_gate(result, name, recipe_info=recipe_info)
+            if ingredients_only:
+                result.pop("content", None)
+                result.pop("orchestration_rules", None)
+                result.pop("stop_step_semantics", None)
+            return json.dumps(result)
     except Exception as exc:
         logger.error("load_recipe unhandled exception", exc_info=True)
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
@@ -256,13 +258,13 @@ async def validate_recipe(script_path: str) -> str:
     try:
         with structlog.contextvars.bound_contextvars(tool="validate_recipe"):
             tool_ctx = _get_ctx_or_none()
-        if tool_ctx is None or tool_ctx.recipes is None:
-            return json.dumps({"valid": False, "errors": ["Server not initialized"]})
-        result = tool_ctx.recipes.validate_from_path(
-            Path(script_path),
-            temp_dir_relpath=temp_dir_display_str(tool_ctx.config.workspace.temp_dir),
-        )
-        return json.dumps(result)
+            if tool_ctx is None or tool_ctx.recipes is None:
+                return json.dumps({"valid": False, "errors": ["Server not initialized"]})
+            result = tool_ctx.recipes.validate_from_path(
+                Path(script_path),
+                temp_dir_relpath=temp_dir_display_str(tool_ctx.config.workspace.temp_dir),
+            )
+            return json.dumps(result)
     except Exception as exc:
         logger.error("validate_recipe unhandled exception", exc_info=True)
         return json.dumps({"valid": False, "errors": [f"{type(exc).__name__}: {exc}"]})
@@ -299,32 +301,32 @@ async def migrate_recipe(name: str, ctx: Context = CurrentContext()) -> str:
     try:
         with structlog.contextvars.bound_contextvars(tool="migrate_recipe", recipe_name=name):
             logger.info("migrate_recipe", recipe_name=name)
-        await _notify(
-            ctx,
-            "info",
-            f"migrate_recipe: {name}",
-            "autoskillit.migrate_recipe",
-            extra={"recipe_name": name},
-        )
+            await _notify(
+                ctx,
+                "info",
+                f"migrate_recipe: {name}",
+                "autoskillit.migrate_recipe",
+                extra={"recipe_name": name},
+            )
 
-        from autoskillit.server import _get_config, _get_ctx
+            from autoskillit.server import _get_config, _get_ctx
 
-        tool_ctx = _get_ctx()
+            tool_ctx = _get_ctx()
 
-        # Check suppression list before attempting migration
-        if name in _get_config().migration.suppressed:
-            return json.dumps({"status": "up_to_date", "name": name})
+            # Check suppression list before attempting migration
+            if name in _get_config().migration.suppressed:
+                return json.dumps({"status": "up_to_date", "name": name})
 
-        if tool_ctx.recipes is None:
-            return json.dumps({"error": "Recipe repository not configured"})
-        recipe = tool_ctx.recipes.find(name, tool_ctx.project_dir)
-        if recipe is None:
-            return json.dumps({"error": f"No recipe named '{name}' found"})
+            if tool_ctx.recipes is None:
+                return json.dumps({"error": "Recipe repository not configured"})
+            recipe = tool_ctx.recipes.find(name, tool_ctx.project_dir)
+            if recipe is None:
+                return json.dumps({"error": f"No recipe named '{name}' found"})
 
-        if tool_ctx.migrations is None:
-            return json.dumps({"error": "Migration service not configured", "name": name})
-        result = await tool_ctx.migrations.migrate(recipe.path)
-        return json.dumps(result)
+            if tool_ctx.migrations is None:
+                return json.dumps({"error": "Migration service not configured", "name": name})
+            result = await tool_ctx.migrations.migrate(recipe.path)
+            return json.dumps(result)
     except Exception as exc:
         logger.error("migrate_recipe unhandled exception", exc_info=True)
         return json.dumps({"error": f"{type(exc).__name__}: {exc}", "name": name})

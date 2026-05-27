@@ -207,179 +207,183 @@ async def release_issue(
 
             effective_label = label or tool_ctx.config.github.in_progress_label
 
-        try:
-            owner, repo, issue_number = _parse_issue_ref(issue_url)
-        except ValueError as exc:
-            return json.dumps({"success": False, "error": str(exc)})
+            try:
+                owner, repo, issue_number = _parse_issue_ref(issue_url)
+            except ValueError as exc:
+                return json.dumps({"success": False, "error": str(exc)})
 
-        # Determine if staging is needed
-        promotion_target = tool_ctx.config.branching.promotion_target
-        should_stage = target_branch is not None and target_branch != promotion_target
+            # Determine if staging is needed
+            promotion_target = tool_ctx.config.branching.promotion_target
+            should_stage = target_branch is not None and target_branch != promotion_target
 
-        staged = False
-        config_fail_label = tool_ctx.config.github.fail_label
-        effective_staged_label = staged_label or tool_ctx.config.github.staged_label
+            staged = False
+            config_fail_label = tool_ctx.config.github.fail_label
+            effective_staged_label = staged_label or tool_ctx.config.github.staged_label
 
-        if should_stage:
-            if err := tool_ctx.config.github.check_label_allowed(effective_staged_label):
+            if should_stage:
+                if err := tool_ctx.config.github.check_label_allowed(effective_staged_label):
+                    return json.dumps(
+                        {
+                            "success": False,
+                            "issue_number": issue_number,
+                            "label": effective_staged_label,
+                            "error": err,
+                        }
+                    )
+
+                if tool_ctx.config.github.state_for_label(effective_staged_label) is not None:
+                    staged_color, staged_description, remove_labels = (
+                        tool_ctx.config.github.resolve_label_metadata(effective_staged_label)
+                    )
+                else:
+                    staged_color = "0075ca"
+                    staged_description = (
+                        f"Implementation staged and waiting for promotion to {promotion_target}"
+                    )
+                    remove_labels = [
+                        effective_label,
+                        config_fail_label,
+                        tool_ctx.config.github.queued_label,
+                    ]
+
+                ensure_result = await tool_ctx.github_client.ensure_label(
+                    owner,
+                    repo,
+                    effective_staged_label,
+                    color=staged_color,
+                    description=staged_description,
+                )
+                if not ensure_result.get("success"):
+                    return json.dumps(
+                        {
+                            "success": False,
+                            "issue_number": issue_number,
+                            "label": effective_label,
+                            "error": (
+                                f"Failed to ensure staged label: {ensure_result.get('error', '?')}"
+                            ),
+                        }
+                    )
+
+                swap_result = await tool_ctx.github_client.swap_labels(
+                    owner,
+                    repo,
+                    issue_number,
+                    remove_labels=remove_labels,
+                    add_labels=[effective_staged_label],
+                )
+                if not swap_result.get("success"):
+                    return json.dumps(
+                        {
+                            "success": False,
+                            "issue_number": issue_number,
+                            "label": effective_label,
+                            "error": (
+                                f"Failed to apply staged label: {swap_result.get('error', '?')}"
+                            ),
+                        }
+                    )
+                staged = True
+            elif fail_label is not None:
+                if err := tool_ctx.config.github.check_label_allowed(fail_label):
+                    return json.dumps(
+                        {
+                            "success": False,
+                            "issue_number": issue_number,
+                            "label": fail_label,
+                            "error": err,
+                        }
+                    )
+
+                if tool_ctx.config.github.state_for_label(fail_label) is not None:
+                    fail_color, fail_description, remove_labels = (
+                        tool_ctx.config.github.resolve_label_metadata(fail_label)
+                    )
+                else:
+                    fail_color = "d73a4a"
+                    fail_description = "Recipe execution failed"
+                    remove_labels = [effective_label, tool_ctx.config.github.queued_label]
+
+                ensure_result = await tool_ctx.github_client.ensure_label(
+                    owner,
+                    repo,
+                    fail_label,
+                    color=fail_color,
+                    description=fail_description,
+                )
+                if not ensure_result.get("success"):
+                    return json.dumps(
+                        {
+                            "success": False,
+                            "issue_number": issue_number,
+                            "label": effective_label,
+                            "error": (
+                                f"Failed to ensure fail label: {ensure_result.get('error', '?')}"
+                            ),
+                        }
+                    )
+
+                swap_result = await tool_ctx.github_client.swap_labels(
+                    owner,
+                    repo,
+                    issue_number,
+                    remove_labels=remove_labels,
+                    add_labels=[fail_label],
+                )
+                if not swap_result.get("success"):
+                    return json.dumps(
+                        {
+                            "success": False,
+                            "issue_number": issue_number,
+                            "label": effective_label,
+                            "error": (
+                                f"Failed to apply fail label: {swap_result.get('error', '?')}"
+                            ),
+                        }
+                    )
+
                 return json.dumps(
                     {
-                        "success": False,
+                        "success": True,
                         "issue_number": issue_number,
-                        "label": effective_staged_label,
-                        "error": err,
+                        "label": effective_label,
+                        "failed": True,
+                        "fail_label": fail_label,
                     }
-                )
-
-            if tool_ctx.config.github.state_for_label(effective_staged_label) is not None:
-                staged_color, staged_description, remove_labels = (
-                    tool_ctx.config.github.resolve_label_metadata(effective_staged_label)
                 )
             else:
-                staged_color = "0075ca"
-                staged_description = (
-                    f"Implementation staged and waiting for promotion to {promotion_target}"
+                logger.warning(
+                    "release_issue bare removal (no fail_label or target_branch) for %s",
+                    issue_url,
                 )
-                remove_labels = [
-                    effective_label,
-                    config_fail_label,
-                    tool_ctx.config.github.queued_label,
-                ]
-
-            ensure_result = await tool_ctx.github_client.ensure_label(
-                owner,
-                repo,
-                effective_staged_label,
-                color=staged_color,
-                description=staged_description,
-            )
-            if not ensure_result.get("success"):
-                return json.dumps(
-                    {
-                        "success": False,
-                        "issue_number": issue_number,
-                        "label": effective_label,
-                        "error": (
-                            f"Failed to ensure staged label: {ensure_result.get('error', '?')}"
-                        ),
-                    }
+                swap_result = await tool_ctx.github_client.swap_labels(
+                    owner,
+                    repo,
+                    issue_number,
+                    remove_labels=tool_ctx.config.github.all_lifecycle_labels(),
+                    add_labels=[],
                 )
-
-            swap_result = await tool_ctx.github_client.swap_labels(
-                owner,
-                repo,
-                issue_number,
-                remove_labels=remove_labels,
-                add_labels=[effective_staged_label],
-            )
-            if not swap_result.get("success"):
-                return json.dumps(
-                    {
-                        "success": False,
-                        "issue_number": issue_number,
-                        "label": effective_label,
-                        "error": f"Failed to apply staged label: {swap_result.get('error', '?')}",
-                    }
-                )
-            staged = True
-        elif fail_label is not None:
-            if err := tool_ctx.config.github.check_label_allowed(fail_label):
-                return json.dumps(
-                    {
-                        "success": False,
-                        "issue_number": issue_number,
-                        "label": fail_label,
-                        "error": err,
-                    }
-                )
-
-            if tool_ctx.config.github.state_for_label(fail_label) is not None:
-                fail_color, fail_description, remove_labels = (
-                    tool_ctx.config.github.resolve_label_metadata(fail_label)
-                )
-            else:
-                fail_color = "d73a4a"
-                fail_description = "Recipe execution failed"
-                remove_labels = [effective_label, tool_ctx.config.github.queued_label]
-
-            ensure_result = await tool_ctx.github_client.ensure_label(
-                owner,
-                repo,
-                fail_label,
-                color=fail_color,
-                description=fail_description,
-            )
-            if not ensure_result.get("success"):
-                return json.dumps(
-                    {
-                        "success": False,
-                        "issue_number": issue_number,
-                        "label": effective_label,
-                        "error": (
-                            f"Failed to ensure fail label: {ensure_result.get('error', '?')}"
-                        ),
-                    }
-                )
-
-            swap_result = await tool_ctx.github_client.swap_labels(
-                owner,
-                repo,
-                issue_number,
-                remove_labels=remove_labels,
-                add_labels=[fail_label],
-            )
-            if not swap_result.get("success"):
-                return json.dumps(
-                    {
-                        "success": False,
-                        "issue_number": issue_number,
-                        "label": effective_label,
-                        "error": f"Failed to apply fail label: {swap_result.get('error', '?')}",
-                    }
-                )
+                if not swap_result.get("success"):
+                    return json.dumps(
+                        {
+                            "success": False,
+                            "issue_number": issue_number,
+                            "label": effective_label,
+                            "error": f"Failed to remove label: {swap_result.get('error', '?')}",
+                        }
+                    )
+                if close_issue == "true":
+                    await tool_ctx.github_client.close_issue(owner, repo, issue_number)
 
             return json.dumps(
                 {
                     "success": True,
                     "issue_number": issue_number,
                     "label": effective_label,
-                    "failed": True,
-                    "fail_label": fail_label,
+                    "staged": staged,
+                    "staged_label": effective_staged_label if staged else None,
                 }
             )
-        else:
-            logger.warning(
-                "release_issue bare removal (no fail_label or target_branch) for %s",
-                issue_url,
-            )
-            swap_result = await tool_ctx.github_client.swap_labels(
-                owner,
-                repo,
-                issue_number,
-                remove_labels=tool_ctx.config.github.all_lifecycle_labels(),
-                add_labels=[],
-            )
-            if not swap_result.get("success"):
-                return json.dumps(
-                    {
-                        "success": False,
-                        "issue_number": issue_number,
-                        "label": effective_label,
-                        "error": f"Failed to remove label: {swap_result.get('error', '?')}",
-                    }
-                )
-            if close_issue == "true":
-                await tool_ctx.github_client.close_issue(owner, repo, issue_number)
-
-        return json.dumps(
-            {
-                "success": True,
-                "issue_number": issue_number,
-                "label": effective_label,
-                "staged": staged,
-                "staged_label": effective_staged_label if staged else None,
-            }
-        )
     except Exception as exc:
         logger.error("release_issue unhandled exception", exc_info=True)
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})

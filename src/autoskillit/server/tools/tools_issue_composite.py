@@ -60,101 +60,149 @@ async def claim_and_resolve_issue(
         ):
             logger.info("claim_and_resolve_issue", issue_url=issue_url)
 
-        from autoskillit.server import _get_ctx
+            from autoskillit.server import _get_ctx
 
-        tool_ctx = _get_ctx()
-        if tool_ctx.github_client is None:
-            return json.dumps(
-                {"success": False, "error": "GitHub token required for label management"}
+            tool_ctx = _get_ctx()
+            if tool_ctx.github_client is None:
+                return json.dumps(
+                    {"success": False, "error": "GitHub token required for label management"}
+                )
+
+            effective_label = label or tool_ctx.config.github.in_progress_label
+
+            try:
+                owner, repo, issue_number = _parse_issue_ref(issue_url)
+            except ValueError as exc:
+                return json.dumps({"success": False, "error": str(exc)})
+
+            if err := tool_ctx.config.github.check_label_allowed(effective_label):
+                return json.dumps({"success": False, "error": err})
+
+            _fetch_title_start = time.monotonic()
+            title_result = await tool_ctx.github_client.fetch_title(issue_url)
+            fetch_title_ms = int((time.monotonic() - _fetch_title_start) * 1000)
+
+            if not title_result.get("success"):
+                return json.dumps(
+                    {"success": False, "error": title_result.get("error", "fetch_title failed")}
+                )
+
+            issue_title = title_result.get("title", "")
+            issue_slug = title_result.get("slug", "")
+
+            _claim_start = time.monotonic()
+            fetch_result = await tool_ctx.github_client.fetch_issue(
+                issue_url, include_comments=False
+            )
+            if not fetch_result.get("success"):
+                claim_ms = int((time.monotonic() - _claim_start) * 1000)
+                return json.dumps(
+                    {
+                        "success": False,
+                        "error": fetch_result.get("error", "fetch_issue failed"),
+                        "issue_number": issue_number,
+                        "issue_title": issue_title,
+                        "issue_slug": issue_slug,
+                        "timings": {"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms},
+                    }
+                )
+
+            issue_body = fetch_result.get("body") or ""
+            review_approach_recommended = REVIEW_APPROACH_MARKER in issue_body
+
+            issue_state = fetch_result.get("state", "open").lower()
+            if issue_state == "closed":
+                claim_ms = int((time.monotonic() - _claim_start) * 1000)
+                return json.dumps(
+                    {
+                        "success": True,
+                        "claimed": False,
+                        "reason": "issue is closed",
+                        "issue_number": issue_number,
+                        "issue_title": issue_title,
+                        "issue_slug": issue_slug,
+                        "review_approach_recommended": review_approach_recommended,
+                        "timings": {"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms},
+                    }
+                )
+
+            current_labels = _extract_label_names(fetch_result.get("labels", []))
+            decision = await _try_claim_with_liveness(
+                issue_url=issue_url,
+                issue_number=issue_number,
+                effective_label=effective_label,
+                current_labels=current_labels,
+                allow_reentry=allow_reentry,
+                github_client=tool_ctx.github_client,
+                campaign_state_paths=_get_campaign_state_paths(tool_ctx),
+            )
+            if not decision.claimed:
+                claim_ms = int((time.monotonic() - _claim_start) * 1000)
+                return json.dumps(
+                    {
+                        "success": True,
+                        "claimed": False,
+                        "reason": decision.reason,
+                        "issue_number": issue_number,
+                        "issue_title": issue_title,
+                        "issue_slug": issue_slug,
+                        "review_approach_recommended": review_approach_recommended,
+                        "timings": {"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms},
+                    }
+                )
+            if decision.reentry:
+                claim_ms = int((time.monotonic() - _claim_start) * 1000)
+                return json.dumps(
+                    {
+                        "success": True,
+                        "claimed": True,
+                        "reentry": True,
+                        "issue_number": issue_number,
+                        "issue_title": issue_title,
+                        "issue_slug": issue_slug,
+                        "label": effective_label,
+                        "review_approach_recommended": review_approach_recommended,
+                        "timings": {"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms},
+                    }
+                )
+
+            ensure_color, ensure_description, remove_labels = (
+                tool_ctx.config.github.resolve_label_metadata(effective_label)
             )
 
-        effective_label = label or tool_ctx.config.github.in_progress_label
-
-        try:
-            owner, repo, issue_number = _parse_issue_ref(issue_url)
-        except ValueError as exc:
-            return json.dumps({"success": False, "error": str(exc)})
-
-        if err := tool_ctx.config.github.check_label_allowed(effective_label):
-            return json.dumps({"success": False, "error": err})
-
-        _fetch_title_start = time.monotonic()
-        title_result = await tool_ctx.github_client.fetch_title(issue_url)
-        fetch_title_ms = int((time.monotonic() - _fetch_title_start) * 1000)
-
-        if not title_result.get("success"):
-            return json.dumps(
-                {"success": False, "error": title_result.get("error", "fetch_title failed")}
+            await tool_ctx.github_client.ensure_label(
+                owner,
+                repo,
+                effective_label,
+                color=ensure_color,
+                description=ensure_description,
             )
 
-        issue_title = title_result.get("title", "")
-        issue_slug = title_result.get("slug", "")
-
-        _claim_start = time.monotonic()
-        fetch_result = await tool_ctx.github_client.fetch_issue(issue_url, include_comments=False)
-        if not fetch_result.get("success"):
+            swap_result = await tool_ctx.github_client.swap_labels(
+                owner,
+                repo,
+                issue_number,
+                remove_labels=remove_labels,
+                add_labels=[effective_label],
+            )
             claim_ms = int((time.monotonic() - _claim_start) * 1000)
-            return json.dumps(
-                {
-                    "success": False,
-                    "error": fetch_result.get("error", "fetch_issue failed"),
-                    "issue_number": issue_number,
-                    "issue_title": issue_title,
-                    "issue_slug": issue_slug,
-                    "timings": {"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms},
-                }
-            )
 
-        issue_body = fetch_result.get("body") or ""
-        review_approach_recommended = REVIEW_APPROACH_MARKER in issue_body
+            if not swap_result.get("success"):
+                return json.dumps(
+                    {
+                        "success": False,
+                        "error": swap_result.get("error", "swap_labels failed"),
+                        "issue_number": issue_number,
+                        "issue_title": issue_title,
+                        "issue_slug": issue_slug,
+                        "timings": {"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms},
+                    }
+                )
 
-        issue_state = fetch_result.get("state", "open").lower()
-        if issue_state == "closed":
-            claim_ms = int((time.monotonic() - _claim_start) * 1000)
-            return json.dumps(
-                {
-                    "success": True,
-                    "claimed": False,
-                    "reason": "issue is closed",
-                    "issue_number": issue_number,
-                    "issue_title": issue_title,
-                    "issue_slug": issue_slug,
-                    "review_approach_recommended": review_approach_recommended,
-                    "timings": {"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms},
-                }
-            )
-
-        current_labels = _extract_label_names(fetch_result.get("labels", []))
-        decision = await _try_claim_with_liveness(
-            issue_url=issue_url,
-            issue_number=issue_number,
-            effective_label=effective_label,
-            current_labels=current_labels,
-            allow_reentry=allow_reentry,
-            github_client=tool_ctx.github_client,
-            campaign_state_paths=_get_campaign_state_paths(tool_ctx),
-        )
-        if not decision.claimed:
-            claim_ms = int((time.monotonic() - _claim_start) * 1000)
-            return json.dumps(
-                {
-                    "success": True,
-                    "claimed": False,
-                    "reason": decision.reason,
-                    "issue_number": issue_number,
-                    "issue_title": issue_title,
-                    "issue_slug": issue_slug,
-                    "review_approach_recommended": review_approach_recommended,
-                    "timings": {"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms},
-                }
-            )
-        if decision.reentry:
-            claim_ms = int((time.monotonic() - _claim_start) * 1000)
             return json.dumps(
                 {
                     "success": True,
                     "claimed": True,
-                    "reentry": True,
                     "issue_number": issue_number,
                     "issue_title": issue_title,
                     "issue_slug": issue_slug,
@@ -163,52 +211,6 @@ async def claim_and_resolve_issue(
                     "timings": {"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms},
                 }
             )
-
-        ensure_color, ensure_description, remove_labels = (
-            tool_ctx.config.github.resolve_label_metadata(effective_label)
-        )
-
-        await tool_ctx.github_client.ensure_label(
-            owner,
-            repo,
-            effective_label,
-            color=ensure_color,
-            description=ensure_description,
-        )
-
-        swap_result = await tool_ctx.github_client.swap_labels(
-            owner,
-            repo,
-            issue_number,
-            remove_labels=remove_labels,
-            add_labels=[effective_label],
-        )
-        claim_ms = int((time.monotonic() - _claim_start) * 1000)
-
-        if not swap_result.get("success"):
-            return json.dumps(
-                {
-                    "success": False,
-                    "error": swap_result.get("error", "swap_labels failed"),
-                    "issue_number": issue_number,
-                    "issue_title": issue_title,
-                    "issue_slug": issue_slug,
-                    "timings": {"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms},
-                }
-            )
-
-        return json.dumps(
-            {
-                "success": True,
-                "claimed": True,
-                "issue_number": issue_number,
-                "issue_title": issue_title,
-                "issue_slug": issue_slug,
-                "label": effective_label,
-                "review_approach_recommended": review_approach_recommended,
-                "timings": {"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms},
-            }
-        )
     except Exception as exc:
         logger.error("claim_and_resolve_issue unhandled exception", exc_info=True)
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})

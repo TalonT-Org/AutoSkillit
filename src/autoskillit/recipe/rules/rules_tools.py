@@ -14,6 +14,7 @@ from autoskillit.core import (
     get_logger,
 )
 from autoskillit.recipe._analysis import ValidationContext
+from autoskillit.recipe._rule_helpers import _MAX_HOPS
 from autoskillit.recipe.contracts import (
     get_skill_contract,
     load_bundled_manifest,
@@ -481,7 +482,7 @@ def _check_push_after_edit_requires_force(ctx: ValidationContext) -> list[RuleFi
         )
         return []
 
-    max_hops = 6
+    max_hops = _MAX_HOPS
     findings: list[RuleFinding] = []
 
     for step_name, step in ctx.recipe.steps.items():

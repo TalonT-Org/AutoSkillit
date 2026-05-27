@@ -170,3 +170,21 @@ def build_ctx_open(build_ctx):
         return ctx
 
     return _factory
+
+
+from collections.abc import Generator
+from contextlib import contextmanager
+
+import structlog.contextvars
+import structlog.testing
+
+
+@contextmanager
+def assert_all_logs_carry_context(*expected_keys: str) -> Generator[list[dict], None, None]:
+    with structlog.testing.capture_logs(
+        processors=[structlog.contextvars.merge_contextvars]
+    ) as logs:
+        yield logs
+    for entry in logs:
+        for key in expected_keys:
+            assert key in entry, f"Log record missing {key!r}: {entry}"

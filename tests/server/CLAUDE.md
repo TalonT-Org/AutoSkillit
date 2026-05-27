@@ -115,6 +115,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_track_response_size.py` | Tests for the track_response_size decorator in autoskillit.server._notify |
 | `test_wire_compat.py` | Wire compatibility tests |
 
+| `test_tools_observability_scope.py` | Tests for bound_contextvars exception scope completeness: exception-path coverage, AST structural guard, any() assertion ban |
 ## Architecture Notes
 
 `conftest.py` provides shared fixtures including `tool_ctx` (full-stack L3 context) used across server tests. `_helpers.py` provides shared test builder utilities. The `test_tools_execution_*.py` files test run_skill in focused slices (command, input gates, response, results, routing).

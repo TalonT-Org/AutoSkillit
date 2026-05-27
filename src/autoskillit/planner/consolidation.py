@@ -282,7 +282,7 @@ def consolidate_wps(
             if len(group.source_wp_ids) > 1:
                 groups_applied += 1
             merged_wp = _merge_group(group, wp_by_id)
-            validate_wp_result(merged_wp, skip_upper_bound=True)
+            merged_wp = validate_wp_result(merged_wp, skip_upper_bound=True)
             output_wps.append(merged_wp)
         else:
             output_wps.append(dict(wp))

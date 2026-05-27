@@ -24,6 +24,7 @@ from autoskillit.planner.schema import (
     PHASE_RESULT_FILE_RE,
     WP_RESULT_FILE_RE,
     ValidationFinding,
+    parse_planner_id,
     validate_assignment_result,
     validate_phase_result,
     validate_wp_result,
@@ -168,8 +169,9 @@ def _check_assignment_completeness(
     voided_assign_ids = set((lifecycle_registry or {}).get("voided_assignments", []))
     wp_pairs: set[tuple[int, int]] = set()
     for wp_id in wp_results:
-        parts = wp_id.split("-")
-        if len(parts) < 2:
+        try:
+            phase_num, assign_num = parse_planner_id(wp_id)[:2]
+        except ValueError:
             findings.append(
                 {
                     "message": f"WP {wp_id!r} has malformed id (expected PX-AY-WPZ)",
@@ -178,27 +180,21 @@ def _check_assignment_completeness(
                 }
             )
             continue
-        phase_num = int(parts[0][1:])
-        assign_num = int(parts[1][1:])
         wp_pairs.add((phase_num, assign_num))
     absorbed_pairs: set[tuple[int, int]] = set()
     if lifecycle_registry and isinstance(lifecycle_registry.get("absorbed"), dict):
         for absorbed_id in lifecycle_registry["absorbed"]:
-            parts = absorbed_id.split("-")
-            if len(parts) >= 2:
-                try:
-                    absorbed_pairs.add((int(parts[0][1:]), int(parts[1][1:])))
-                except ValueError:
-                    logger.warning("malformed_absorbed_id", absorbed_id=absorbed_id)
+            try:
+                absorbed_pairs.add(parse_planner_id(absorbed_id)[:2])
+            except ValueError:
+                logger.warning("malformed_absorbed_id", absorbed_id=absorbed_id)
     voided_wp_pairs: set[tuple[int, int]] = set()
     if lifecycle_registry and isinstance(lifecycle_registry.get("voided_wps"), dict):
         for voided_id in lifecycle_registry["voided_wps"]:
-            parts = voided_id.split("-")
-            if len(parts) >= 2:
-                try:
-                    voided_wp_pairs.add((int(parts[0][1:]), int(parts[1][1:])))
-                except ValueError:
-                    logger.warning("malformed_voided_wp_id", voided_wp_id=voided_id)
+            try:
+                voided_wp_pairs.add(parse_planner_id(voided_id)[:2])
+            except ValueError:
+                logger.warning("malformed_voided_wp_id", voided_wp_id=voided_id)
     for assign_id, assign in assignment_results.items():
         if assign_id in voided_assign_ids:
             continue

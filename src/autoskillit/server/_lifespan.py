@@ -331,7 +331,16 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
         try:
             from autoskillit.fleet import reap_stale_dispatches_async  # noqa: PLC0415
 
-            await reap_stale_dispatches_async(_campaign_state_paths)
+            _skip: frozenset[str] | None = None
+            try:
+                from autoskillit.core import DISPATCH_ID_ENV_VAR  # noqa: PLC0415
+
+                _own_dispatch_id = os.environ.get(DISPATCH_ID_ENV_VAR, "")
+                _skip = frozenset({_own_dispatch_id}) if _own_dispatch_id else None
+            except Exception:
+                logger.warning("food_truck_auto_gate_boot_self_exclusion_failed", exc_info=True)
+
+            await reap_stale_dispatches_async(_campaign_state_paths, skip_dispatch_ids=_skip)
         except Exception:
             logger.warning("food_truck_auto_gate_boot_reap_failed", exc_info=True)
 

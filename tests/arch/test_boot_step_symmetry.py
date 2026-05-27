@@ -26,6 +26,7 @@ _REQUIRED_BOOT_STEPS: list[tuple[str, tuple[str, ...]]] = [
         "_prime_quota_cache",
         ("_fleet_auto_gate_boot", "_food_truck_auto_gate_boot", "_skill_auto_gate_boot"),
     ),
+    ("DISPATCH_ID_ENV_VAR", ("_food_truck_auto_gate_boot",)),
 ]
 
 _BOOT_STEP_ORDERING: list[tuple[str, str, tuple[str, ...]]] = [

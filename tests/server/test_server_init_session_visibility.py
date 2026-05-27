@@ -881,6 +881,98 @@ class TestFoodTruckAutoGateBoot:
             f"create_background_task labels: {sweep_call_labels}"
         )
 
+    @pytest.mark.anyio
+    async def test_food_truck_auto_gate_boot_passes_self_exclusion(
+        self, tool_ctx, monkeypatch, tmp_path
+    ) -> None:
+        """Boot handler reads AUTOSKILLIT_DISPATCH_ID and passes it as skip set to reaper."""
+        import json as _json
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from autoskillit.core import DISPATCH_ID_ENV_VAR, FOOD_TRUCK_TOOL_TAGS_ENV_VAR
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server._lifespan import _food_truck_auto_gate_boot
+
+        dispatches_dir = tmp_path / ".autoskillit" / "temp" / "dispatches"
+        dispatches_dir.mkdir(parents=True)
+        (dispatches_dir / "campaign1.json").write_text(_json.dumps({}))
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        tool_ctx.quota_refresh_task = None
+        tool_ctx.project_dir = tmp_path
+        tool_ctx.github_client = AsyncMock()
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv(FOOD_TRUCK_TOOL_TAGS_ENV_VAR, "kitchen-core")
+        monkeypatch.setenv(DISPATCH_ID_ENV_VAR, "my-ft-dispatch")
+
+        mock_reap = AsyncMock()
+
+        with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+            with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
+                with patch(
+                    "autoskillit.pipeline.create_background_task", return_value=MagicMock()
+                ):
+                    with patch("autoskillit.core.register_active_kitchen"):
+                        with patch(
+                            "autoskillit.fleet.discover_campaign_state_files",
+                            return_value=[dispatches_dir / "campaign1.json"],
+                        ):
+                            with patch(
+                                "autoskillit.fleet.reap_stale_dispatches_async",
+                                mock_reap,
+                            ):
+                                await _food_truck_auto_gate_boot(tool_ctx)
+
+        mock_reap.assert_called_once_with(
+            [dispatches_dir / "campaign1.json"],
+            skip_dispatch_ids=frozenset({"my-ft-dispatch"}),
+        )
+
+    @pytest.mark.anyio
+    async def test_food_truck_auto_gate_boot_no_dispatch_id_passes_none(
+        self, tool_ctx, monkeypatch, tmp_path
+    ) -> None:
+        """When AUTOSKILLIT_DISPATCH_ID is unset, reaper is called with skip_dispatch_ids=None."""
+        import json as _json
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from autoskillit.core import DISPATCH_ID_ENV_VAR, FOOD_TRUCK_TOOL_TAGS_ENV_VAR
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server._lifespan import _food_truck_auto_gate_boot
+
+        dispatches_dir = tmp_path / ".autoskillit" / "temp" / "dispatches"
+        dispatches_dir.mkdir(parents=True)
+        (dispatches_dir / "campaign1.json").write_text(_json.dumps({}))
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        tool_ctx.quota_refresh_task = None
+        tool_ctx.project_dir = tmp_path
+        tool_ctx.github_client = AsyncMock()
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv(FOOD_TRUCK_TOOL_TAGS_ENV_VAR, "kitchen-core")
+        monkeypatch.delenv(DISPATCH_ID_ENV_VAR, raising=False)
+
+        mock_reap = AsyncMock()
+
+        with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+            with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
+                with patch(
+                    "autoskillit.pipeline.create_background_task", return_value=MagicMock()
+                ):
+                    with patch("autoskillit.core.register_active_kitchen"):
+                        with patch(
+                            "autoskillit.fleet.discover_campaign_state_files",
+                            return_value=[dispatches_dir / "campaign1.json"],
+                        ):
+                            with patch(
+                                "autoskillit.fleet.reap_stale_dispatches_async",
+                                mock_reap,
+                            ):
+                                await _food_truck_auto_gate_boot(tool_ctx)
+
+        mock_reap.assert_called_once_with(
+            [dispatches_dir / "campaign1.json"],
+            skip_dispatch_ids=None,
+        )
+
 
 @pytest.mark.feature("skill")
 class TestSkillAutoGateBoot:

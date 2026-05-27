@@ -26,6 +26,25 @@ class IssueSidecarEntry:
     pr_url: str | None = None
     reason: str | None = None
 
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> IssueSidecarEntry:
+        issue_url = data["issue_url"]
+        if not isinstance(issue_url, str):
+            raise TypeError(f"issue_url must be str, got {type(issue_url).__name__!r}")
+        status = data["status"]
+        if not isinstance(status, str):
+            raise TypeError(f"status must be str, got {type(status).__name__!r}")
+        ts_raw = data.get("ts")
+        pr_url_raw = data.get("pr_url")
+        reason_raw = data.get("reason")
+        return cls(
+            issue_url=issue_url,
+            status=status,  # type: ignore[arg-type]
+            ts=str(ts_raw) if ts_raw is not None else "",
+            pr_url=str(pr_url_raw) if pr_url_raw is not None else None,
+            reason=str(reason_raw) if reason_raw is not None else None,
+        )
+
 
 class SidecarReadResult(NamedTuple):
     entries: list[IssueSidecarEntry]
@@ -55,15 +74,7 @@ def read_sidecar(dispatch_id: str, project_dir: Path) -> list[IssueSidecarEntry]
             continue
         try:
             data = json.loads(line)
-            entries.append(
-                IssueSidecarEntry(
-                    issue_url=data["issue_url"],
-                    status=data["status"],
-                    ts=data.get("ts", ""),
-                    pr_url=data.get("pr_url"),
-                    reason=data.get("reason"),
-                )
-            )
+            entries.append(IssueSidecarEntry.from_dict(data))
         except (json.JSONDecodeError, KeyError) as exc:
             logger.debug("sidecar: skipping corrupt JSONL line", path=str(path), error=str(exc))
             continue
@@ -91,15 +102,7 @@ def read_sidecar_from_path(path: Path) -> SidecarReadResult:
             continue
         try:
             data = json.loads(line)
-            entries.append(
-                IssueSidecarEntry(
-                    issue_url=data["issue_url"],
-                    status=data["status"],
-                    ts=data.get("ts", ""),
-                    pr_url=data.get("pr_url"),
-                    reason=data.get("reason"),
-                )
-            )
+            entries.append(IssueSidecarEntry.from_dict(data))
         except (json.JSONDecodeError, KeyError) as exc:
             logger.debug("sidecar: skipping corrupt JSONL line", path=str(path), error=str(exc))
             continue

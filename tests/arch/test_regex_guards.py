@@ -17,6 +17,7 @@ that would false-positive on paths containing keyword-like substrings
 from __future__ import annotations
 
 import ast
+import pathlib
 from pathlib import Path
 
 import pytest
@@ -137,4 +138,49 @@ def test_write_guard_has_safe_path_filtering():
     assert "/dev/null" in source, "write_guard.py must contain a safe-path set including /dev/null"
     assert "_PSEUDO_DEVICE_PATHS" in source, (
         "write_guard.py must define _PSEUDO_DEVICE_PATHS constant"
+    )
+
+
+REQUIRED_WRITE_GUARD_TEST_FAMILIES = {
+    "python3",
+    "python",
+    "heredoc",
+    "sed",
+    "redirect",
+    "tee",
+}
+
+
+def test_write_guard_has_interpreter_detection() -> None:
+    """write_guard must detect interpreter-mediated writes (python3, python).
+
+    Must not rely solely on shell primitives.
+    """
+    source = (SRC_ROOT / "hooks" / "guards" / "write_guard.py").read_text()
+    assert "python" in source.lower(), (
+        "write_guard.py must contain interpreter detection logic for python/python3"
+    )
+    assert any(
+        name in source
+        for name in (
+            "_IS_INTERPRETER_WRITE_RE",
+            "_has_interpreter_write",
+            "_IS_PYTHON_CMD_RE",
+            "_PYTHON_WRITE_APIS_RE",
+        )
+    ), "write_guard.py must define an interpreter write detection mechanism"
+
+
+def test_write_guard_tests_cover_required_command_families() -> None:
+    """Write guard test file must have test cases for all known file-writing command families."""
+    test_source = (
+        pathlib.Path(__file__).parent.parent / "hooks" / "test_write_guard.py"
+    ).read_text()
+    missing = []
+    for family in REQUIRED_WRITE_GUARD_TEST_FAMILIES:
+        if family not in test_source.lower():
+            missing.append(family)
+    assert not missing, (
+        f"test_write_guard.py missing test coverage for command families: {missing}. "
+        f"Every known file-writing command family must have deny-path test coverage."
     )

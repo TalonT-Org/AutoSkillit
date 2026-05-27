@@ -22,6 +22,14 @@ _IS_WRITE_CMD_RE = re.compile(
     r"|\bgit\s+reset\s+--hard"
     r"|\b(?:rm|unlink)\s+"
 )
+_IS_PYTHON_CMD_RE = re.compile(r"(?:^|&&|\|\||;)\s*(?:env\s+)?python3?\s+(?:-c\s|.*<<)")
+
+_PYTHON_WRITE_APIS_RE = re.compile(
+    r"\.write_text\s*\(|\.write_bytes\s*\("
+    r"|open\s*\([^)]*['\"][wWaA]\+?[bB]?['\"]"
+    r"|shutil\.(?:copy|move|copyfile|copytree)\s*\("
+)
+
 _PSEUDO_DEVICE_PATHS: frozenset[str] = frozenset(
     {
         "/dev/null",
@@ -148,11 +156,18 @@ def main() -> None:
 
     if tool_name == "Bash" or "run_cmd" in tool_name:
         command = tool_input.get("command", "") or tool_input.get("cmd", "")
+        # Interpreter-mediated write detection: deny unconditionally.
+        # Path extraction is not attempted because interpreters construct paths dynamically.
+        if _IS_PYTHON_CMD_RE.search(command) and _PYTHON_WRITE_APIS_RE.search(command):
+            _deny(
+                f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER}. "
+                f"Interpreter-mediated file writes are not permitted."
+            )
+            return
         targets = _extract_bash_write_targets(command)
         if targets is None:
             sys.exit(0)
         if not targets:
-            # Write command detected but path not extractable — fail-open.
             sys.exit(0)
         for target in targets:
             if not _within_prefix(target):

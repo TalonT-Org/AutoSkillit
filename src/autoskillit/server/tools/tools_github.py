@@ -105,7 +105,7 @@ async def fetch_github_issue(
                 "fetch_github_issue unhandled exception",
                 exc_info=True,
             )
-            return json.dumps({"success": False, "error": str(exc)})
+            return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
 @mcp.tool(tags={"autoskillit", "github", "fleet-dispatch"}, annotations={"readOnlyHint": True})
@@ -128,30 +128,32 @@ async def get_issue_title(issue_url: str) -> str:
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    try:
-        from autoskillit.server import _get_config, _get_ctx
+    structlog.contextvars.clear_contextvars()
+    with structlog.contextvars.bound_contextvars(tool="get_issue_title"):
+        try:
+            from autoskillit.server import _get_config, _get_ctx
 
-        tool_ctx = _get_ctx()
-        if tool_ctx.github_client is None:
-            return json.dumps({"success": False, "error": "GitHub client not available."})
+            tool_ctx = _get_ctx()
+            if tool_ctx.github_client is None:
+                return json.dumps({"success": False, "error": "GitHub client not available."})
 
-        config = _get_config()
-        url = issue_url.strip()
-        if url.isdigit():
-            if not config.github.default_repo:
-                return json.dumps(
-                    {
-                        "success": False,
-                        "error": "Bare issue number requires github.default_repo in config.",
-                    }
-                )
-            url = f"{config.github.default_repo}#{url}"
+            config = _get_config()
+            url = issue_url.strip()
+            if url.isdigit():
+                if not config.github.default_repo:
+                    return json.dumps(
+                        {
+                            "success": False,
+                            "error": "Bare issue number requires github.default_repo in config.",
+                        }
+                    )
+                url = f"{config.github.default_repo}#{url}"
 
-        result = await tool_ctx.github_client.fetch_title(url)
-        return json.dumps(result)
-    except Exception as exc:
-        logger.error("get_issue_title unhandled exception", exc_info=True)
-        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+            result = await tool_ctx.github_client.fetch_title(url)
+            return json.dumps(result)
+        except Exception as exc:
+            logger.error("get_issue_title unhandled exception", exc_info=True)
+            return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})

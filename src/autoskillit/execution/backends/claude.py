@@ -372,9 +372,12 @@ class ClaudeCodeBackend:
         merged: dict[str, str] = dict(_SESSION_BASELINE_ENV)
         if env_extras:
             merged.update(env_extras)
+        interactive_base = {
+            k: v for k, v in os.environ.items() if k not in _HEADLESS_ENV_HARDENING
+        }
         return CmdSpec(
             cmd=tuple(cmd),
-            env=build_agent_env(extras=merged, required=required_env),
+            env=build_agent_env(base=interactive_base, extras=merged, required=required_env),
         )
 
     def build_resume_cmd(

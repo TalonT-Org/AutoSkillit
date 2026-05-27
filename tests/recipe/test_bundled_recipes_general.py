@@ -9,6 +9,7 @@ import structlog.testing
 
 from autoskillit.core import PACK_REGISTRY, SKILL_TOOLS, Severity
 from autoskillit.recipe._analysis import build_recipe_graph
+from autoskillit.recipe._rule_helpers import _MAX_HOPS
 from autoskillit.recipe._skill_helpers import _get_skill_category_map
 from autoskillit.recipe.contracts import load_bundled_manifest, resolve_skill_name
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
@@ -613,7 +614,7 @@ def test_re_push_steps_have_force_true(recipe_name: str) -> None:
     recipe = load_recipe(builtin_recipes_dir() / recipe_name)
     ctx = make_validation_context(recipe)
     manifest = load_bundled_manifest()
-    max_hops = 6
+    max_hops = _MAX_HOPS
 
     violations: list[str] = []
     for step_name, step in recipe.steps.items():

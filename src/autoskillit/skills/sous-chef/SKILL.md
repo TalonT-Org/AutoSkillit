@@ -199,16 +199,23 @@ When the user provides **more than one issue or task** in a single request:
 1. **If the user says "parallel"** (or "run in parallel", "simultaneously", "at the
    same time", "concurrently"):
 
-   a. **Build execution map first.** Call `run_skill` with `/autoskillit:build-execution-map`
+   a. **Build execution map first.** Call `run_skill` with `/autoskillit:build-execution-map --assess-review-approach`
       passing all issue numbers. This produces an `execution_map` JSON artifact at the
       emitted path.
 
-   b. **Read the execution map.** Parse the JSON to extract `groups` and `merge_order`.
+   b. **Read the execution map.** Parse the JSON to extract `groups`, `merge_order`,
+      and per-issue `review_approach_recommended` fields. Build a set
+      `review_approach_issues` containing the issue numbers where
+      `review_approach_recommended` is true.
 
    c. **Dispatch groups in order.** For each group in ascending `group` number:
       - If `parallel: true` → launch all issues in the group as independent pipeline
         sessions simultaneously, using the wavefront scheduling rule (defined in the section below).
+        When dispatching, include `review_approach: "true"` in ingredients for issues
+        whose issue number appears in `review_approach_issues`.
       - If `parallel: false` → run the group's issues one at a time in sequence.
+        When dispatching, include `review_approach: "true"` in ingredients for issues
+        whose issue number appears in `review_approach_issues`.
 
    d. **Merge-wait between groups.** Group N+1 must NOT begin cloning until ALL of
       Group N's PRs have merged to the base branch. This ensures every group's clones

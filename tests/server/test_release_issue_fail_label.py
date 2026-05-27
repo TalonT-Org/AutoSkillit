@@ -96,6 +96,7 @@ class TestClaimIssueFailLabelCleanup:
             "success": True,
             "state": "open",
             "labels": [{"name": "bug"}],
+            "body": "",
         }
         mock_client.ensure_label.return_value = {"success": True, "created": False}
         mock_client.swap_labels.return_value = {

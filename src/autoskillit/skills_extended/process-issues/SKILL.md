@@ -230,7 +230,12 @@ Processing X issues:
    The `run_name` encodes recipe origin for the `open-pr` skill, which derives
    the PR title prefix from it by convention (see `open-pr` SKILL.md).
 
-5. **Load the recipe:**
+5. **Detect review approach marker:**
+   Call `fetch_github_issue(issue_url)` to retrieve the issue content.
+   Search for `<!-- review_approach: true -->` marker in the issue body.
+   Set `review_approach_detected = "true"` if found, `"false"` otherwise.
+
+6. **Load the recipe:**
    ```
    load_recipe("{recipe_name}")
    ```
@@ -238,7 +243,7 @@ Processing X issues:
    follow each step in the recipe, calling the specified MCP tool with the
    specified `with:` arguments.
 
-6. **Execute the recipe** with these ingredient values:
+7. **Execute the recipe** with these ingredient values:
    - `task`: the issue title (the recipe's `make-plan` step detects `issue_url`
      and fetches full content internally)
    - `issue_url`: the constructed issue URL
@@ -246,14 +251,14 @@ Processing X issues:
    - `base_branch`: `"develop"` (or read `git rev-parse --abbrev-ref HEAD`)
    - `open_pr`: `"true"`
    - `audit`: `"true"`
-   - `review_approach`: `"false"`
+   - `review_approach`: the value of `review_approach_detected` (set in step 5)
    - `upfront_claimed`: `"true"`        ← always set for upfront-claimed issues
 
    The recipe's `claim_issue` step will receive `allow_reentry=true` (via the
    `upfront_claimed` ingredient) and recognize the pre-existing label as a
    valid reentry, returning `claimed=true` to proceed normally.
 
-7. **After recipe returns** (any outcome), append to completed_urls:
+8. **After recipe returns** (any outcome), append to completed_urls:
    ```
    completed_urls.append(issue_url)
    ```
@@ -261,7 +266,7 @@ Processing X issues:
    - On success path (`done` step reached): `{issue_number, recipe, status: success, pr_url}`
    - On failure path (`escalate_stop` reached): `{issue_number, recipe, status: failure, error}`
 
-8. **Optionally append completion status to issue body** (if `--status-updates` is active):
+9. **Optionally append completion status to issue body** (if `--status-updates` is active):
    ```bash
    PROCESS_BODY_FILE="{{AUTOSKILLIT_TEMP}}/process-issues/status_{number}_$(date +%s).md"
    mkdir -p "$(dirname "$PROCESS_BODY_FILE")"

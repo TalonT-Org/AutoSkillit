@@ -47,7 +47,7 @@ class TestClaimIssueTool:
     @pytest.mark.anyio
     async def test_claim_issue_success(self, tool_ctx_kitchen_open):
         mock_client = AsyncMock()
-        mock_client.fetch_issue.return_value = {"success": True, "state": "open", "labels": []}
+        mock_client.fetch_issue.return_value = {"success": True, "state": "open", "labels": [], "body": ""}
         mock_client.ensure_label.return_value = {"success": True, "created": True}
         mock_client.add_labels.return_value = {"success": True, "labels": ["in-progress"]}
         tool_ctx_kitchen_open.github_client = mock_client
@@ -63,6 +63,7 @@ class TestClaimIssueTool:
             "success": True,
             "state": "open",
             "labels": [{"name": "in-progress"}],
+            "body": "",
         }
         tool_ctx_kitchen_open.github_client = mock_client
         with patch(f"{_CLAIM_HELPERS}.find_dispatch_for_issue", return_value=None):
@@ -102,6 +103,7 @@ class TestClaimIssueTool:
             "success": True,
             "state": "open",
             "labels": [{"name": "in-progress"}],
+            "body": "",
         }
         tool_ctx_kitchen_open.github_client = mock_client
         result = json.loads(
@@ -122,6 +124,7 @@ class TestClaimIssueTool:
             "success": True,
             "state": "open",
             "labels": [{"name": "in-progress"}],
+            "body": "",
         }
         tool_ctx_kitchen_open.github_client = mock_client
         with patch(f"{_CLAIM_HELPERS}.find_dispatch_for_issue", return_value=None):
@@ -136,7 +139,7 @@ class TestClaimIssueTool:
     ):
         """allow_reentry=True with no pre-existing label performs normal claim."""
         mock_client = AsyncMock()
-        mock_client.fetch_issue.return_value = {"success": True, "state": "open", "labels": []}
+        mock_client.fetch_issue.return_value = {"success": True, "state": "open", "labels": [], "body": ""}
         mock_client.ensure_label.return_value = {"success": True, "created": True}
         mock_client.swap_labels.return_value = {"success": True, "labels": ["in-progress"]}
         tool_ctx_kitchen_open.github_client = mock_client
@@ -154,7 +157,7 @@ class TestClaimIssueTool:
     async def test_claim_issue_with_queued_label(self, tool_ctx_kitchen_open):
         """claim_issue with label=queued uses registry color/description and removes fail."""
         mock_client = AsyncMock()
-        mock_client.fetch_issue.return_value = {"success": True, "state": "open", "labels": []}
+        mock_client.fetch_issue.return_value = {"success": True, "state": "open", "labels": [], "body": ""}
         mock_client.ensure_label.return_value = {"success": True, "created": True}
         mock_client.swap_labels.return_value = {"success": True, "labels": ["queued"]}
         tool_ctx_kitchen_open.github_client = mock_client
@@ -178,7 +181,7 @@ class TestClaimIssueTool:
     async def test_claim_issue_default_removes_queued_and_fail(self, tool_ctx_kitchen_open):
         """claim_issue with default label removes both queued and fail labels."""
         mock_client = AsyncMock()
-        mock_client.fetch_issue.return_value = {"success": True, "state": "open", "labels": []}
+        mock_client.fetch_issue.return_value = {"success": True, "state": "open", "labels": [], "body": ""}
         mock_client.ensure_label.return_value = {"success": True, "created": True}
         mock_client.swap_labels.return_value = {"success": True, "labels": ["in-progress"]}
         tool_ctx_kitchen_open.github_client = mock_client

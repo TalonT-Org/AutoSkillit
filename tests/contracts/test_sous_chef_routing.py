@@ -437,3 +437,16 @@ def test_step_execution_section_has_anti_fabrication() -> None:
         "STEP EXECUTION section in sous-chef/SKILL.md must include anti-fabrication language "
         "(fabricat|embellish|invent|hallucinat)"
     )
+
+
+def test_sous_chef_propagates_review_approach_from_execution_map() -> None:
+    """sous-chef must propagate review_approach_recommended from execution map to food truck."""
+    text = _sous_chef_text()
+    assert "review_approach_recommended" in text
+    assert "review_approach" in text
+
+
+def test_sous_chef_passes_assess_review_approach_flag() -> None:
+    """sous-chef must pass --assess-review-approach to build-execution-map."""
+    text = _sous_chef_text()
+    assert "--assess-review-approach" in text

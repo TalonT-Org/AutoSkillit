@@ -1,4 +1,4 @@
-"""Contract test: all fetch_issue mock return values must include a \'state\' field."""
+"""Contract test: all fetch_issue mock return values must include a 'state' and 'body' field."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ def _collect_failures(test_file: Path) -> list[str]:
                 for k in node.value.keys
                 if isinstance(k, ast.Constant) and isinstance(k.value, str)
             }
-            variable_dicts[var_name] = (node.lineno, "state" in keys)
+            variable_dicts[var_name] = (node.lineno, "state" in keys and "body" in keys)
 
     failures = []
 
@@ -43,8 +43,11 @@ def _collect_failures(test_file: Path) -> list[str]:
         }
         success_val = keys_and_values.get("success")
         is_success_true = isinstance(success_val, ast.Constant) and success_val.value is True
-        if is_success_true and "state" not in keys_and_values:
-            failures.append(f"{test_file.name}:{lineno} {label} missing 'state' key")
+        if is_success_true:
+            if "state" not in keys_and_values:
+                failures.append(f"{test_file.name}:{lineno} {label} missing 'state' key")
+            if "body" not in keys_and_values:
+                failures.append(f"{test_file.name}:{lineno} {label} missing 'body' key")
 
     def _check_value(value_node: ast.expr, lineno: int, label: str) -> None:
         if isinstance(value_node, ast.Dict):
@@ -52,11 +55,11 @@ def _collect_failures(test_file: Path) -> list[str]:
         elif isinstance(value_node, ast.Name):
             var_name = value_node.id
             if var_name in variable_dicts:
-                var_lineno, has_state = variable_dicts[var_name]
-                if not has_state:
+                var_lineno, has_state_and_body = variable_dicts[var_name]
+                if not has_state_and_body:
                     failures.append(
                         f"{test_file.name}:{lineno} variable '{var_name}' "
-                        f"(defined at line {var_lineno}) missing 'state' key"
+                        f"(defined at line {var_lineno}) missing 'state' and/or 'body' key"
                     )
 
     for node in ast.walk(tree):
@@ -83,10 +86,10 @@ def _collect_failures(test_file: Path) -> list[str]:
     return failures
 
 
-def test_all_fetch_issue_mocks_include_state_field() -> None:
-    """Every fetch_issue mock return value must include a \'state\' key.
+def test_all_fetch_issue_mocks_include_state_and_body_field() -> None:
+    """Every fetch_issue mock return value must include a \'state\' and \'body\' key.
 
-    Prevents future tests from regressing to state-blind mocks, which caused the
+    Prevents future tests from regressing to state-blind or body-blind mocks, which caused the
     food-truck re-dispatch bug to go undetected across 7 test files.
     """
     test_files = [f for f in TESTS_DIR.rglob("test_*.py") if "fetch_issue" in f.read_text()]
@@ -96,4 +99,6 @@ def test_all_fetch_issue_mocks_include_state_field() -> None:
     for test_file in test_files:
         all_failures.extend(_collect_failures(test_file))
 
-    assert not all_failures, "fetch_issue mocks missing 'state' key:\n" + "\n".join(all_failures)
+    assert not all_failures, "fetch_issue mocks missing 'state' and/or 'body' key:\n" + "\n".join(
+        all_failures
+    )

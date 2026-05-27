@@ -91,7 +91,11 @@ def _render_issue_body(wp: dict, phase: dict, assignment: dict) -> str:
 """
     if wp.get("review_approach_recommended"):
         reasoning = wp.get("review_approach_reasoning", "")
-        body += f"\n## Review Approach\n\n> **review-approach recommended**: {reasoning}\n"
+        body += (
+            f"\n## Review Approach\n\n"
+            f"<!-- review_approach: true -->\n"
+            f"> **review-approach recommended**: {reasoning}\n"
+        )
     return body
 
 

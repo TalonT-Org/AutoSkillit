@@ -22,6 +22,8 @@ from autoskillit.server.tools._claim_helpers import (
 
 logger = get_logger(__name__)
 
+_REVIEW_APPROACH_MARKER = "<!-- review_approach: true -->"
+
 
 def _extract_label_names(raw_labels: list[Any]) -> list[str]:
     return [lbl["name"] if isinstance(lbl, dict) else str(lbl) for lbl in raw_labels if lbl]
@@ -103,6 +105,9 @@ async def claim_and_resolve_issue(
                 }
             )
 
+        issue_body = fetch_result.get("body", "")
+        review_approach_recommended = _REVIEW_APPROACH_MARKER in issue_body
+
         issue_state = fetch_result.get("state", "open").lower()
         if issue_state == "closed":
             claim_ms = int((time.monotonic() - _claim_start) * 1000)
@@ -114,6 +119,7 @@ async def claim_and_resolve_issue(
                     "issue_number": issue_number,
                     "issue_title": issue_title,
                     "issue_slug": issue_slug,
+                    "review_approach_recommended": review_approach_recommended,
                     "timings": {"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms},
                 }
             )
@@ -138,6 +144,7 @@ async def claim_and_resolve_issue(
                     "issue_number": issue_number,
                     "issue_title": issue_title,
                     "issue_slug": issue_slug,
+                    "review_approach_recommended": review_approach_recommended,
                     "timings": {"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms},
                 }
             )
@@ -152,6 +159,7 @@ async def claim_and_resolve_issue(
                     "issue_title": issue_title,
                     "issue_slug": issue_slug,
                     "label": effective_label,
+                    "review_approach_recommended": review_approach_recommended,
                     "timings": {"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms},
                 }
             )
@@ -197,6 +205,7 @@ async def claim_and_resolve_issue(
                 "issue_title": issue_title,
                 "issue_slug": issue_slug,
                 "label": effective_label,
+                "review_approach_recommended": review_approach_recommended,
                 "timings": {"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms},
             }
         )

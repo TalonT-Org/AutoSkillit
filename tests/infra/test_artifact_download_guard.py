@@ -182,3 +182,10 @@ class TestArtifactDownloadGuardEdgeCases:
     def test_allows_gh_run_download_in_quoted_string(self):
         out = _run_guard('echo "gh run download 123"')
         assert out.strip() == "", "Quoted string should not match"
+
+    def test_fails_open_when_env_var_precedes_gh(self):
+        # Guard checks tokens[i-1] in _SHELL_OPS to detect chained gh; a bare
+        # env-var assignment is not a shell operator, so this invocation is
+        # skipped. Documents the fail-open boundary for env-var prefixes.
+        out = _run_guard("VAR=1 gh run download 123")
+        assert out.strip() == "", "Env-var prefix before gh must fail open"

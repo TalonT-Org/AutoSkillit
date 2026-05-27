@@ -104,7 +104,9 @@ class TestResumeWithoutPriorDispatchId:
             quota_refresher=_noop_quota_refresher,
             resume_session_id="sess-123",
             prior_dispatch_id=None,
-            capture={"plan_path": CaptureEntrySpec(from_="${{ result.plan_path }}")},
+            capture={
+                "plan_path": CaptureEntrySpec(from_="${{ result.plan_path }}", value_type="string")
+            },
         )
 
         dispatches_dir = tool_ctx.temp_dir / "dispatches"

@@ -44,11 +44,10 @@ class CaptureEntrySpec:
         from_: The ``${{ result.<field_name> }}`` template string — what was previously
             the plain string value in the ``dict[str, str]`` capture spec.
         value_type: One of ``path``, ``url``, ``string``, ``optional_string``.
-            Defaults to ``string`` for backward compatibility during migration.
     """
 
     from_: str
-    value_type: str = "string"
+    value_type: str
 
     def __post_init__(self) -> None:
         if not self.from_ or not self.from_.strip():

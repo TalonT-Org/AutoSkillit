@@ -54,8 +54,8 @@ def test_prompt_capture_fields_match_extractor_expectations():
     from autoskillit.fleet._prompts import _build_food_truck_prompt
 
     capture_arg = {
-        "worktree_path": CaptureEntrySpec(from_="${{ result.worktree_path }}"),
-        "pr_url": CaptureEntrySpec(from_="${{ result.pr_url }}"),
+        "worktree_path": CaptureEntrySpec(from_="${{ result.worktree_path }}", value_type="string"),
+        "pr_url": CaptureEntrySpec(from_="${{ result.pr_url }}", value_type="string"),
     }
 
     prompt = _build_food_truck_prompt(
@@ -90,7 +90,7 @@ def test_prompt_capture_fields_do_not_use_capture_prefix():
     from autoskillit.fleet._prompts import _build_food_truck_prompt
 
     capture_arg = {
-        "worktree_path": CaptureEntrySpec(from_="${{ result.worktree_path }}"),
+        "worktree_path": CaptureEntrySpec(from_="${{ result.worktree_path }}", value_type="string"),
     }
 
     prompt = _build_food_truck_prompt(
@@ -130,24 +130,24 @@ def _build_prompt(capture_spec: dict[str, CaptureEntrySpec]) -> str:
     "capture_spec",
     [
         # Single field, underscore name
-        {"worktree_path": CaptureEntrySpec(from_="${{ result.worktree_path }}")},
+        {"worktree_path": CaptureEntrySpec(from_="${{ result.worktree_path }}", value_type="string")},
         # Two fields, mixed names
         {
-            "worktree_path": CaptureEntrySpec(from_="${{ result.worktree_path }}"),
-            "pr_url": CaptureEntrySpec(from_="${{ result.pr_url }}"),
+            "worktree_path": CaptureEntrySpec(from_="${{ result.worktree_path }}", value_type="string"),
+            "pr_url": CaptureEntrySpec(from_="${{ result.pr_url }}", value_type="string"),
         },
         # Hyphenated field name
-        {"worktree-path": CaptureEntrySpec(from_="${{ result.worktree-path }}")},
+        {"worktree-path": CaptureEntrySpec(from_="${{ result.worktree-path }}", value_type="string")},
         # Five fields (large campaign like research recipe)
         {
-            "worktree_path": CaptureEntrySpec(from_="${{ result.worktree_path }}"),
-            "pr_url": CaptureEntrySpec(from_="${{ result.pr_url }}"),
-            "report_path": CaptureEntrySpec(from_="${{ result.report_path }}"),
-            "branch_name": CaptureEntrySpec(from_="${{ result.branch_name }}"),
-            "summary": CaptureEntrySpec(from_="${{ result.summary }}"),
+            "worktree_path": CaptureEntrySpec(from_="${{ result.worktree_path }}", value_type="string"),
+            "pr_url": CaptureEntrySpec(from_="${{ result.pr_url }}", value_type="string"),
+            "report_path": CaptureEntrySpec(from_="${{ result.report_path }}", value_type="string"),
+            "branch_name": CaptureEntrySpec(from_="${{ result.branch_name }}", value_type="string"),
+            "summary": CaptureEntrySpec(from_="${{ result.summary }}", value_type="string"),
         },
         # Single-char field name
-        {"x": CaptureEntrySpec(from_="${{ result.x }}")},
+        {"x": CaptureEntrySpec(from_="${{ result.x }}", value_type="string")},
     ],
     ids=["single", "two-fields", "hyphenated", "five-fields", "single-char"],
 )
@@ -213,7 +213,7 @@ def test_typed_capture_round_trip_contract(value_type, test_value, tmp_path):
     resolved_value = str(tmp_path / "test_file") if test_value is None else test_value
 
     capture_spec = {
-        "result_field": CaptureEntrySpec(from_="${{ result.result_field }}", value_type=value_type)
+        "result_field": CaptureEntrySpec(from_="${{ result.result_field }}", value_type=value_type, value_type="string")
     }
     prompt = _build_prompt(capture_spec)
 
@@ -244,7 +244,7 @@ def test_non_result_template_fallback_asymmetry():
     # Build a capture spec with a non-result.* template
     # CaptureEntrySpec.__post_init__ only checks from_ is non-empty string,
     # so ${{ campaign.x }} is accepted (passes __post_init__, fails _RESULT_REF_RE)
-    capture_spec = {"campaign_x": CaptureEntrySpec(from_="${{ campaign.x }}")}
+    capture_spec = {"campaign_x": CaptureEntrySpec(from_="${{ campaign.x }}", value_type="string")}
     prompt = _build_prompt(capture_spec)
 
     # The prompt builder falls back to key name when resolve_payload_field returns None

@@ -129,6 +129,8 @@ def _normalize_capture_spec(
     if capture is None:
         return None
     return {
-        key: val if isinstance(val, CaptureEntrySpec) else CaptureEntrySpec(from_=val)
+        key: val
+        if isinstance(val, CaptureEntrySpec)
+        else CaptureEntrySpec(from_=val, value_type="string")
         for key, val in capture.items()
     }

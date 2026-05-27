@@ -55,28 +55,27 @@ def test_upfront_claimed_is_hidden_in_recipe(recipe_name: str) -> None:
 
 
 @pytest.mark.parametrize("recipe_name", BUNDLED_RECIPE_NAMES)
-def test_no_bundled_recipe_has_skip_when_false_on_hidden_ingredient(recipe_name: str) -> None:
-    """No bundled recipe step may use skip_when_false referencing a hidden ingredient.
+def test_bundled_recipe_content_has_no_unresolved_hidden_skip_guards(recipe_name: str) -> None:
+    """load_and_validate must not deliver unresolved hidden ingredient refs to the LLM.
 
-    This regression test catches any future recipe that introduces the pattern of
-    skip_when_false pointing at a hidden: true ingredient, which would have been
-    silently broken before server-side evaluation was added.
+    Regression guard: if server-side skip_when_false evaluation is accidentally
+    removed or bypassed, this test will catch it by finding inputs.* references
+    in skip_when_false fields of the served content.
     """
-    recipe_path = pkg_root() / "recipes" / f"{recipe_name}.yaml"
-    recipe = load_recipe(recipe_path)
-    violations = []
-    for step_name, step in recipe.steps.items():
-        if not step.skip_when_false:
-            continue
-        ref = step.skip_when_false
-        if not ref.startswith("inputs."):
-            continue
-        ingredient_name = ref[len("inputs.") :]
-        ing = recipe.ingredients.get(ingredient_name)
-        if ing is not None and ing.hidden:
-            msg = f"Step '{step_name}': skip_when_false refs hidden '{ingredient_name}'"
-            violations.append(msg)
-    assert violations == [], (
-        f"Recipe '{recipe_name}' has skip_when_false on hidden ingredients:\n"
-        + "\n".join(f"  - {v}" for v in violations)
+    from autoskillit.recipe import load_and_validate
+
+    result = load_and_validate(recipe_name)
+    recipe_content = result["content"]
+    # Parse the raw recipe to find hidden ingredients referenced by skip_when_false
+    recipe_obj = load_recipe(pkg_root() / "recipes" / f"{recipe_name}.yaml")
+    hidden_ing_names = {name for name, ing in recipe_obj.ingredients.items() if ing.hidden}
+    unresolved = []
+    for ing_name in hidden_ing_names:
+        ref = f"skip_when_false: inputs.{ing_name}"
+        if ref in recipe_content:
+            unresolved.append(ref)
+    assert unresolved == [], (
+        f"Recipe '{recipe_name}' content still has unresolved hidden ingredient refs "
+        f"in skip_when_false after load_and_validate: {unresolved}. "
+        f"Server-side evaluation may be broken."
     )

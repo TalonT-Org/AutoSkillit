@@ -91,7 +91,6 @@ def _build_orchestrator_prompt(
             f"{ingredients_table}\n\n"
             "The ingredient names above are authoritative. Use them verbatim when:\n"
             "- Collecting values from the user\n"
-            "- Evaluating skip_when_false conditions\n"
             "- Passing ingredients to pipeline steps via `with:` arguments\n\n"
         )
 
@@ -271,10 +270,10 @@ TWO FAILURE TIERS FOR PREDICATE-FORMAT STEPS:
 
 OPTIONAL STEP SEMANTICS:
 - optional: true means the step is SKIPPED (treated as bypassed) when its
-  skip_when_false ingredient is false. It does NOT mean failures are tolerated.
-- When skip_when_false evaluates to true (or is absent), the step is MANDATORY
-  and MUST execute. The ONLY reason to skip an optional step is skip_when_false
-  being false — no other reason is valid.
+  skip_when_false ingredient resolves to false. It does NOT mean failures are tolerated.
+- skip_when_false ingredient references are resolved server-side before the recipe
+  is served. You may see literal "false" values (skip the step) or no skip_when_false
+  field at all (step is mandatory). Never evaluate inputs.* references yourself.
 - A running optional step that returns success: false MUST follow on_failure.
   Never route a running optional step's failure to done.
 
@@ -282,8 +281,9 @@ STEP EXECUTION IS NOT DISCRETIONARY:
 - You MUST execute every step the pipeline routes you to.
 - NEVER skip a step because the PR is small, the diff is trivial, the change
   looks simple, or you judge the step unnecessary.
-- The ONLY mechanism for skipping a step is skip_when_false evaluating to false.
-  When skip_when_false evaluates to true (or is absent), the step is MANDATORY.
+- skip_when_false ingredient references are resolved server-side before the recipe
+  is served. You may see literal "false" values (evaluate and skip) or no
+  skip_when_false field at all (step is mandatory). The LLM never evaluates inputs.*.
 - Consequence: skipping PR review steps results in unreviewed code, missing diff
   annotations, and no architectural lens analysis — code reaches main without
   quality gates.

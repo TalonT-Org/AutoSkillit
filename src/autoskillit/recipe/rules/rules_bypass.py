@@ -113,3 +113,41 @@ def _advisory_step_missing_context_limit(ctx: ValidationContext) -> list[RuleFin
             )
         )
     return findings
+
+
+@semantic_rule(
+    name="skip-when-false-on-hidden",
+    description=(
+        "A step uses skip_when_false referencing a hidden ingredient. "
+        "Hidden ingredients are invisible to the LLM. This works because "
+        "skip_when_false is evaluated server-side, but the pattern is fragile — "
+        "prefer gate: on a sub_recipe step for hidden ingredient gating."
+    ),
+    severity=Severity.WARNING,
+)
+def _check_skip_when_false_on_hidden(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if not step.skip_when_false:
+            continue
+        ref = step.skip_when_false
+        if not ref.startswith("inputs."):
+            continue
+        ingredient_name = ref[len("inputs.") :]
+        ing = ctx.recipe.ingredients.get(ingredient_name)
+        if ing is not None and ing.hidden:
+            findings.append(
+                RuleFinding(
+                    rule="skip-when-false-on-hidden",
+                    severity=Severity.WARNING,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}': skip_when_false references hidden ingredient "
+                        f"'{ingredient_name}'. Hidden ingredients are invisible to the LLM. "
+                        "This works because skip_when_false is evaluated server-side, but the "
+                        "pattern is fragile — prefer gate: on a sub_recipe step for hidden "
+                        "ingredient gating."
+                    ),
+                )
+            )
+    return findings

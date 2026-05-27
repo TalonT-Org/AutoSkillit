@@ -42,6 +42,8 @@ from autoskillit.recipe._api_listing import (  # noqa: F401
 )
 from autoskillit.recipe._recipe_composition import (
     _build_active_recipe,
+    _prune_skipped_steps,
+    _resolve_skip_guards_in_content,
 )
 from autoskillit.recipe._recipe_ingredients import (
     ListRecipesResult,  # noqa: F401
@@ -147,8 +149,9 @@ def _build_orchestration_rules(
     parts = [
         "STEP EXECUTION IS NOT DISCRETIONARY:\n"
         "You MUST execute every step the pipeline routes you to. "
-        "The ONLY mechanism for skipping a step is skip_when_false evaluating to false. "
-        "When skip_when_false evaluates to true (or is absent), the step is MANDATORY. "
+        "skip_when_false ingredient references are resolved server-side before the recipe "
+        'is served. You may see literal "false" values (evaluate normally and skip) '
+        "or no skip_when_false field at all (step is mandatory). "
         "NEVER skip a step because the PR is small, the diff is trivial, or you judge "
         "the step unnecessary. NEVER replace recipe steps with manual tool calls. "
         "Consequence: skipping PR review steps results in unreviewed code, missing "
@@ -368,6 +371,15 @@ def load_and_validate(
             if name in _suppressed:
                 semantic_suggestions = filter_version_rule(semantic_suggestions)
             suggestions.extend(semantic_suggestions)
+
+            # Stage: skip_when_false pruning (Python-side evaluation)
+            _pre_prune_steps = dict(active_recipe.steps)
+            active_recipe, _skip_resolutions = _prune_skipped_steps(
+                active_recipe, ingredient_overrides
+            )
+            if _skip_resolutions:
+                raw = _resolve_skip_guards_in_content(raw, _skip_resolutions, _pre_prune_steps)
+            t0 = _t("prune_skipped_steps", t0, name)
 
             # Stage: contract card
             contract = load_recipe_card(name, recipes_dir)

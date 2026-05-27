@@ -15,7 +15,7 @@ import types
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypeVar, get_args, get_origin, get_type_hints
+from typing import TYPE_CHECKING, Any, TypeVar, Union, get_args, get_origin, get_type_hints
 
 from autoskillit.config._config_dataclasses import (
     _COMMAND_UNSET,
@@ -175,13 +175,13 @@ def _coerce_value(value: Any, target_type: type, context: str) -> Any:
     origin = get_origin(target_type)
     args = get_args(target_type)
 
-    if origin is types.UnionType:
+    if origin is types.UnionType or origin is Union:
         non_none = [a for a in args if a is not type(None)]
         if type(None) in args and len(non_none) == 1:
             inner = non_none[0]
             if inner is bool:
                 return bool(value) if value is not None else None
-            if not value:
+            if value is None:
                 return None
             return _coerce_value(value, inner, context)
         return value
@@ -201,9 +201,15 @@ def _coerce_value(value: Any, target_type: type, context: str) -> Any:
     if target_type is str:
         return str(value)
     if origin is list:
-        return list(value)
+        try:
+            return list(value)
+        except TypeError as exc:
+            raise ConfigSchemaError(f"{context} must be iterable for list, got {value!r}") from exc
     if origin is set:
-        return set(value)
+        try:
+            return set(value)
+        except TypeError as exc:
+            raise ConfigSchemaError(f"{context} must be iterable for set, got {value!r}") from exc
     if origin is dict:
         return value
     return value

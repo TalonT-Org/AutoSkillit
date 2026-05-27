@@ -72,9 +72,8 @@ async def clone_repo(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(tool="clone_repo", source_dir=source_dir)
-        logger.info("clone_repo", source_dir=source_dir, run_name=run_name, branch=branch)
+        with structlog.contextvars.bound_contextvars(tool="clone_repo", source_dir=source_dir):
+            logger.info("clone_repo", source_dir=source_dir, run_name=run_name, branch=branch)
         await _notify(
             ctx,
             "info",
@@ -144,9 +143,8 @@ async def remove_clone(
     try:
         if (gate := _require_enabled()) is not None:
             return gate
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(tool="remove_clone", clone_path=clone_path)
-        logger.info("remove_clone", clone_path=clone_path, keep=keep)
+        with structlog.contextvars.bound_contextvars(tool="remove_clone", clone_path=clone_path):
+            logger.info("remove_clone", clone_path=clone_path, keep=keep)
         await _notify(
             ctx,
             "info",
@@ -210,15 +208,14 @@ async def push_to_remote(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(tool="push_to_remote", clone_path=clone_path)
-        logger.info(
-            "push_to_remote",
-            clone_path=clone_path,
-            source_dir=source_dir,
-            remote_url=remote_url,
-            branch=branch,
-        )
+        with structlog.contextvars.bound_contextvars(tool="push_to_remote", clone_path=clone_path):
+            logger.info(
+                "push_to_remote",
+                clone_path=clone_path,
+                source_dir=source_dir,
+                remote_url=remote_url,
+                branch=branch,
+            )
         await _notify(
             ctx,
             "info",
@@ -314,9 +311,10 @@ async def register_clone_status(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(tool="register_clone_status", clone_path=clone_path)
-        logger.info("register_clone_status", clone_path=clone_path, status=status)
+        with structlog.contextvars.bound_contextvars(
+            tool="register_clone_status", clone_path=clone_path
+        ):
+            logger.info("register_clone_status", clone_path=clone_path, status=status)
 
         if status not in ("success", "error", "unconfirmed"):
             return json.dumps(
@@ -401,9 +399,8 @@ async def batch_cleanup_clones(
     try:
         if (gate := _require_enabled()) is not None:
             return gate
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(tool="batch_cleanup_clones")
-        logger.info("batch_cleanup_clones", registry_path=registry_path, all_owners=all_owners)
+        with structlog.contextvars.bound_contextvars(tool="batch_cleanup_clones"):
+            logger.info("batch_cleanup_clones", registry_path=registry_path, all_owners=all_owners)
 
         from autoskillit.server import _get_ctx
 
@@ -518,13 +515,15 @@ async def bootstrap_clone(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(
+        with structlog.contextvars.bound_contextvars(
             tool="bootstrap_clone", source_dir=source_dir, base_branch=base_branch
-        )
-        logger.info(
-            "bootstrap_clone", source_dir=source_dir, run_name=run_name, base_branch=base_branch
-        )
+        ):
+            logger.info(
+                "bootstrap_clone",
+                source_dir=source_dir,
+                run_name=run_name,
+                base_branch=base_branch,
+            )
         await _notify(
             ctx,
             "info",

@@ -59,9 +59,8 @@ async def merge_worktree(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(tool="merge_worktree", cwd=worktree_path)
-        logger.info("merge_worktree", path=worktree_path, base=base_branch)
+        with structlog.contextvars.bound_contextvars(tool="merge_worktree", cwd=worktree_path):
+            logger.info("merge_worktree", path=worktree_path, base=base_branch)
         await _notify(
             ctx,
             "info",
@@ -138,9 +137,8 @@ async def classify_fix(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(tool="classify_fix", cwd=worktree_path)
-        logger.info("classify_fix", worktree=worktree_path, base=base_branch)
+        with structlog.contextvars.bound_contextvars(tool="classify_fix", cwd=worktree_path):
+            logger.info("classify_fix", worktree=worktree_path, base=base_branch)
         await _notify(
             ctx,
             "info",
@@ -302,9 +300,8 @@ async def create_unique_branch(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(tool="create_unique_branch", cwd=cwd)
-        _display = base_branch_name if base_branch_name else slug
+        with structlog.contextvars.bound_contextvars(tool="create_unique_branch", cwd=cwd):
+            _display = base_branch_name if base_branch_name else slug
         logger.info(
             "create_unique_branch",
             slug=slug,
@@ -382,9 +379,8 @@ async def check_pr_mergeable(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(tool="check_pr_mergeable", cwd=cwd)
-        logger.info("check_pr_mergeable", pr_number=pr_number, repo=repo)
+        with structlog.contextvars.bound_contextvars(tool="check_pr_mergeable", cwd=cwd):
+            logger.info("check_pr_mergeable", pr_number=pr_number, repo=repo)
         await _notify(
             ctx,
             "info",
@@ -519,18 +515,17 @@ async def create_and_publish_branch(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(
+        with structlog.contextvars.bound_contextvars(
             tool="create_and_publish_branch",
             work_dir=work_dir,
             issue_number=issue_number,
-        )
-        logger.info(
-            "create_and_publish_branch",
-            issue_slug=issue_slug,
-            run_name=run_name,
-            issue_number=issue_number,
-        )
+        ):
+            logger.info(
+                "create_and_publish_branch",
+                issue_slug=issue_slug,
+                run_name=run_name,
+                issue_number=issue_number,
+            )
         await _notify(
             ctx,
             "info",

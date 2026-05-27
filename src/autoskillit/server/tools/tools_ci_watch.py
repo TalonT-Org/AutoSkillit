@@ -96,9 +96,8 @@ async def wait_for_ci(
                     "error": f"Invalid event {event!r}. Valid events: {sorted(KNOWN_CI_EVENTS)}",
                 }
             )
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(tool="wait_for_ci")
-        logger.info("wait_for_ci", branch=branch, repo=repo or "(infer)")
+        with structlog.contextvars.bound_contextvars(tool="wait_for_ci"):
+            logger.info("wait_for_ci", branch=branch, repo=repo or "(infer)")
 
         from autoskillit.server import _get_ctx
 

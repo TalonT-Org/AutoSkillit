@@ -51,9 +51,8 @@ async def test_check(
     Never raises.
     """
     try:
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(tool="test_check", cwd=worktree_path)
-        logger.info("test_check", worktree=worktree_path)
+        with structlog.contextvars.bound_contextvars(tool="test_check", cwd=worktree_path):
+            logger.info("test_check", worktree=worktree_path)
         await _notify(
             ctx,
             "info",
@@ -152,9 +151,8 @@ async def reset_test_dir(
         return gate
     try:
         resolved = os.path.realpath(test_dir)
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(tool="reset_test_dir", cwd=resolved)
-        logger.info("reset_test_dir", resolved=str(resolved), force=force)
+        with structlog.contextvars.bound_contextvars(tool="reset_test_dir", cwd=resolved):
+            logger.info("reset_test_dir", resolved=str(resolved), force=force)
         await _notify(
             ctx,
             "info",
@@ -224,9 +222,8 @@ async def reset_workspace(test_dir: str, ctx: Context = CurrentContext()) -> str
         return gate
     try:
         resolved = os.path.realpath(test_dir)
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(tool="reset_workspace", cwd=resolved)
-        logger.info("reset_workspace", resolved=str(resolved))
+        with structlog.contextvars.bound_contextvars(tool="reset_workspace", cwd=resolved):
+            logger.info("reset_workspace", resolved=str(resolved))
         await _notify(
             ctx,
             "info",

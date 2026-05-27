@@ -182,9 +182,8 @@ async def prepare_issue(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(tool="prepare_issue", title=title[:60])
-        logger.info("prepare_issue", title=title[:60], dry_run=dry_run, split=split)
+        with structlog.contextvars.bound_contextvars(tool="prepare_issue", title=title[:60]):
+            logger.info("prepare_issue", title=title[:60], dry_run=dry_run, split=split)
         await _notify(
             ctx,
             "info",
@@ -288,14 +287,13 @@ async def enrich_issues(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(
+        with structlog.contextvars.bound_contextvars(
             tool="enrich_issues",
             issue_number=issue_number,
             batch=batch,
             dry_run=dry_run,
-        )
-        logger.info("enrich_issues", issue_number=issue_number, batch=batch, dry_run=dry_run)
+        ):
+            logger.info("enrich_issues", issue_number=issue_number, batch=batch, dry_run=dry_run)
         await _notify(
             ctx,
             "info",

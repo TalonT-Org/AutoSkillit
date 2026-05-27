@@ -50,17 +50,16 @@ async def toggle_auto_merge(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(
+        with structlog.contextvars.bound_contextvars(
             tool="toggle_auto_merge", pr_number=pr_number, target_branch=target_branch
-        )
-        await _notify(
-            ctx,
-            "info",
-            f"Toggling auto-merge for PR #{pr_number} on {target_branch!r}",
-            "autoskillit.toggle_auto_merge",
-            extra={"pr_number": pr_number, "target_branch": target_branch},
-        )
+        ):
+            await _notify(
+                ctx,
+                "info",
+                f"Toggling auto-merge for PR #{pr_number} on {target_branch!r}",
+                "autoskillit.toggle_auto_merge",
+                extra={"pr_number": pr_number, "target_branch": target_branch},
+            )
 
         from autoskillit.server import _get_ctx
 
@@ -123,17 +122,16 @@ async def enqueue_pr(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(
+        with structlog.contextvars.bound_contextvars(
             tool="enqueue_pr", pr_number=pr_number, target_branch=target_branch
-        )
-        await _notify(
-            ctx,
-            "info",
-            f"Enrolling PR #{pr_number} in merge queue on {target_branch!r}",
-            "autoskillit.enqueue_pr",
-            extra={"pr_number": pr_number, "target_branch": target_branch},
-        )
+        ):
+            await _notify(
+                ctx,
+                "info",
+                f"Enrolling PR #{pr_number} in merge queue on {target_branch!r}",
+                "autoskillit.enqueue_pr",
+                extra={"pr_number": pr_number, "target_branch": target_branch},
+            )
 
         from autoskillit.server import _get_ctx
 
@@ -240,17 +238,16 @@ async def wait_for_merge_queue(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(
+        with structlog.contextvars.bound_contextvars(
             tool="wait_for_merge_queue", pr_number=pr_number, target_branch=target_branch
-        )
-        await _notify(
-            ctx,
-            "info",
-            f"Waiting for PR #{pr_number} in merge queue on {target_branch!r}",
-            "autoskillit.wait_for_merge_queue",
-            extra={"pr_number": pr_number, "target_branch": target_branch},
-        )
+        ):
+            await _notify(
+                ctx,
+                "info",
+                f"Waiting for PR #{pr_number} in merge queue on {target_branch!r}",
+                "autoskillit.wait_for_merge_queue",
+                extra={"pr_number": pr_number, "target_branch": target_branch},
+            )
 
         from autoskillit.server import _get_ctx
 

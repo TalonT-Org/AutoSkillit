@@ -79,24 +79,43 @@ class TestClaimIssueTool:
     # P5F4-T1
     @pytest.mark.anyio
     async def test_claim_issue_binds_structlog_context(self, tool_ctx_kitchen_open, monkeypatch):
-        """claim_issue must bind structlog context vars via bind_contextvars."""
+        """claim_issue must scope structlog context vars via bound_contextvars."""
+        from contextlib import contextmanager
+
         import structlog
 
         captured = {}
 
-        def fake_bind_contextvars(**kwargs):
+        @contextmanager
+        def fake_bound_contextvars(**kwargs):
             captured.update(kwargs)
+            yield
 
-        monkeypatch.setattr(structlog.contextvars, "bind_contextvars", fake_bind_contextvars)
-        monkeypatch.setattr(structlog.contextvars, "clear_contextvars", lambda: None)
+        monkeypatch.setattr(structlog.contextvars, "bound_contextvars", fake_bound_contextvars)
 
-        tool_ctx_kitchen_open.github_client = None  # triggers early return after bind
+        tool_ctx_kitchen_open.github_client = None  # triggers early return inside with block
 
         await claim_issue(issue_url="https://github.com/owner/repo/issues/1")
         assert captured == {
             "tool": "claim_issue",
             "issue_url": "https://github.com/owner/repo/issues/1",
         }
+
+    @pytest.mark.anyio
+    async def test_contextvars_cleaned_after_tool_return(self, tool_ctx_kitchen_open):
+        """bound_contextvars restores context after tool returns — no leakage."""
+        import structlog
+
+        structlog.contextvars.clear_contextvars()
+        tool_ctx_kitchen_open.github_client = None  # triggers early return
+
+        await claim_issue(issue_url="https://github.com/owner/repo/issues/1")
+
+        with structlog.testing.capture_logs(
+            processors=[structlog.contextvars.merge_contextvars]
+        ) as logs:
+            structlog.get_logger().info("probe")
+        assert "tool" not in logs[0], "tool contextvar leaked past tool function boundary"
 
     @pytest.mark.anyio
     async def test_claim_issue_allow_reentry_true_returns_claimed_true_when_already_labeled(
@@ -245,18 +264,21 @@ class TestReleaseIssueTool:
     # P5F4-T2
     @pytest.mark.anyio
     async def test_release_issue_binds_structlog_context(self, tool_ctx_kitchen_open, monkeypatch):
-        """release_issue must bind structlog context vars via bind_contextvars."""
+        """release_issue must scope structlog context vars via bound_contextvars."""
+        from contextlib import contextmanager
+
         import structlog
 
         captured = {}
 
-        def fake_bind_contextvars(**kwargs):
+        @contextmanager
+        def fake_bound_contextvars(**kwargs):
             captured.update(kwargs)
+            yield
 
-        monkeypatch.setattr(structlog.contextvars, "bind_contextvars", fake_bind_contextvars)
-        monkeypatch.setattr(structlog.contextvars, "clear_contextvars", lambda: None)
+        monkeypatch.setattr(structlog.contextvars, "bound_contextvars", fake_bound_contextvars)
 
-        tool_ctx_kitchen_open.github_client = None  # triggers early return after bind
+        tool_ctx_kitchen_open.github_client = None  # triggers early return inside with block
 
         await release_issue(issue_url="https://github.com/owner/repo/issues/1")
         assert captured == {

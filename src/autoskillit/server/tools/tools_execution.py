@@ -70,9 +70,8 @@ async def run_cmd(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(tool="run_cmd", cwd=cwd)
-        logger.info("run_cmd", cmd=cmd[:80], cwd=cwd)
+        with structlog.contextvars.bound_contextvars(tool="run_cmd", cwd=cwd):
+            logger.info("run_cmd", cmd=cmd[:80], cwd=cwd)
         await _notify(
             ctx, "info", f"run_cmd: {cmd[:80]}", "autoskillit.run_cmd", extra={"cwd": cwd}
         )
@@ -156,9 +155,8 @@ async def run_python(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(tool="run_python")
-        logger.info("run_python", callable=callable, timeout=timeout)
+        with structlog.contextvars.bound_contextvars(tool="run_python"):
+            logger.info("run_python", callable=callable, timeout=timeout)
         await _notify(
             ctx,
             "info",
@@ -289,9 +287,8 @@ async def run_skill(
             }
         )
     try:
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(tool="run_skill", cwd=cwd)
-        logger.info("run_skill", command=skill_command[:80], cwd=cwd)
+        with structlog.contextvars.bound_contextvars(tool="run_skill", cwd=cwd):
+            logger.info("run_skill", command=skill_command[:80], cwd=cwd)
         await _notify(
             ctx,
             "info",

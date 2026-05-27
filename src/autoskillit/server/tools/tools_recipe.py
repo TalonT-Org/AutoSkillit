@@ -47,9 +47,8 @@ async def list_recipes() -> str:
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(tool="list_recipes")
-        tool_ctx = _get_ctx_or_none()
+        with structlog.contextvars.bound_contextvars(tool="list_recipes"):
+            tool_ctx = _get_ctx_or_none()
         if tool_ctx is None or tool_ctx.recipes is None:
             return json.dumps({"error": "kitchen not open — call open_kitchen first"})
         result = tool_ctx.recipes.list_all(tool_ctx.project_dir, features=tool_ctx.config.features)
@@ -191,9 +190,8 @@ async def load_recipe(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(tool="load_recipe")
-        tool_ctx = _get_ctx_or_none()
+        with structlog.contextvars.bound_contextvars(tool="load_recipe"):
+            tool_ctx = _get_ctx_or_none()
         if tool_ctx is None or tool_ctx.recipes is None:
             return json.dumps({"error": "Server not initialized"})
         suppressed = tool_ctx.config.migration.suppressed
@@ -256,9 +254,8 @@ async def validate_recipe(script_path: str) -> str:
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(tool="validate_recipe")
-        tool_ctx = _get_ctx_or_none()
+        with structlog.contextvars.bound_contextvars(tool="validate_recipe"):
+            tool_ctx = _get_ctx_or_none()
         if tool_ctx is None or tool_ctx.recipes is None:
             return json.dumps({"valid": False, "errors": ["Server not initialized"]})
         result = tool_ctx.recipes.validate_from_path(
@@ -300,9 +297,8 @@ async def migrate_recipe(name: str, ctx: Context = CurrentContext()) -> str:
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(tool="migrate_recipe", recipe_name=name)
-        logger.info("migrate_recipe", recipe_name=name)
+        with structlog.contextvars.bound_contextvars(tool="migrate_recipe", recipe_name=name):
+            logger.info("migrate_recipe", recipe_name=name)
         await _notify(
             ctx,
             "info",

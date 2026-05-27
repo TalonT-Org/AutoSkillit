@@ -55,9 +55,10 @@ async def claim_and_resolve_issue(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(tool="claim_and_resolve_issue", issue_url=issue_url)
-        logger.info("claim_and_resolve_issue", issue_url=issue_url)
+        with structlog.contextvars.bound_contextvars(
+            tool="claim_and_resolve_issue", issue_url=issue_url
+        ):
+            logger.info("claim_and_resolve_issue", issue_url=issue_url)
 
         from autoskillit.server import _get_ctx
 

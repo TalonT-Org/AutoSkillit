@@ -54,106 +54,105 @@ async def claim_issue(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(tool="claim_issue", issue_url=issue_url)
-        logger.info("claim_issue", issue_url=issue_url)
+        with structlog.contextvars.bound_contextvars(tool="claim_issue", issue_url=issue_url):
+            logger.info("claim_issue", issue_url=issue_url)
 
-        from autoskillit.server import _get_ctx
+            from autoskillit.server import _get_ctx
 
-        tool_ctx = _get_ctx()
-        if tool_ctx.github_client is None:
-            return json.dumps(
-                {"success": False, "error": "GitHub token required for label management"}
+            tool_ctx = _get_ctx()
+            if tool_ctx.github_client is None:
+                return json.dumps(
+                    {"success": False, "error": "GitHub token required for label management"}
+                )
+
+            effective_label = label or tool_ctx.config.github.in_progress_label
+
+            try:
+                owner, repo, issue_number = _parse_issue_ref(issue_url)
+            except ValueError as exc:
+                return json.dumps({"success": False, "error": str(exc)})
+
+            if err := tool_ctx.config.github.check_label_allowed(effective_label):
+                return json.dumps({"success": False, "error": err})
+
+            result = await tool_ctx.github_client.fetch_issue(issue_url, include_comments=False)
+            if not result.get("success"):
+                return json.dumps({"success": False, "error": result.get("error", "fetch failed")})
+
+            review_approach_recommended = REVIEW_APPROACH_MARKER in (result.get("body") or "")
+            issue_state = result.get("state", "open").lower()
+            if issue_state == "closed":
+                return json.dumps(
+                    {
+                        "success": True,
+                        "claimed": False,
+                        "reason": "issue is closed",
+                    }
+                )
+
+            current_labels = _extract_label_names(result.get("labels", []))
+            decision = await _try_claim_with_liveness(
+                issue_url=issue_url,
+                issue_number=issue_number,
+                effective_label=effective_label,
+                current_labels=current_labels,
+                allow_reentry=allow_reentry,
+                github_client=tool_ctx.github_client,
+                campaign_state_paths=_get_campaign_state_paths(tool_ctx),
+            )
+            if not decision.claimed:
+                return json.dumps(
+                    {
+                        "success": True,
+                        "claimed": False,
+                        "reason": decision.reason,
+                    }
+                )
+            if decision.reentry:
+                return json.dumps(
+                    {
+                        "success": True,
+                        "claimed": True,
+                        "reentry": True,
+                        "issue_number": issue_number,
+                        "label": effective_label,
+                        "review_approach_recommended": review_approach_recommended,
+                    }
+                )
+
+            ensure_color, ensure_description, remove_labels = (
+                tool_ctx.config.github.resolve_label_metadata(effective_label)
             )
 
-        effective_label = label or tool_ctx.config.github.in_progress_label
-
-        try:
-            owner, repo, issue_number = _parse_issue_ref(issue_url)
-        except ValueError as exc:
-            return json.dumps({"success": False, "error": str(exc)})
-
-        if err := tool_ctx.config.github.check_label_allowed(effective_label):
-            return json.dumps({"success": False, "error": err})
-
-        result = await tool_ctx.github_client.fetch_issue(issue_url, include_comments=False)
-        if not result.get("success"):
-            return json.dumps({"success": False, "error": result.get("error", "fetch failed")})
-
-        review_approach_recommended = REVIEW_APPROACH_MARKER in (result.get("body") or "")
-        issue_state = result.get("state", "open").lower()
-        if issue_state == "closed":
-            return json.dumps(
-                {
-                    "success": True,
-                    "claimed": False,
-                    "reason": "issue is closed",
-                }
+            await tool_ctx.github_client.ensure_label(
+                owner,
+                repo,
+                effective_label,
+                color=ensure_color,
+                description=ensure_description,
             )
 
-        current_labels = _extract_label_names(result.get("labels", []))
-        decision = await _try_claim_with_liveness(
-            issue_url=issue_url,
-            issue_number=issue_number,
-            effective_label=effective_label,
-            current_labels=current_labels,
-            allow_reentry=allow_reentry,
-            github_client=tool_ctx.github_client,
-            campaign_state_paths=_get_campaign_state_paths(tool_ctx),
-        )
-        if not decision.claimed:
-            return json.dumps(
-                {
-                    "success": True,
-                    "claimed": False,
-                    "reason": decision.reason,
-                }
+            swap_result = await tool_ctx.github_client.swap_labels(
+                owner,
+                repo,
+                issue_number,
+                remove_labels=remove_labels,
+                add_labels=[effective_label],
             )
-        if decision.reentry:
+            if not swap_result.get("success"):
+                return json.dumps(
+                    {"success": False, "error": swap_result.get("error", "swap_labels failed")}
+                )
+
             return json.dumps(
                 {
                     "success": True,
                     "claimed": True,
-                    "reentry": True,
                     "issue_number": issue_number,
                     "label": effective_label,
                     "review_approach_recommended": review_approach_recommended,
                 }
             )
-
-        ensure_color, ensure_description, remove_labels = (
-            tool_ctx.config.github.resolve_label_metadata(effective_label)
-        )
-
-        await tool_ctx.github_client.ensure_label(
-            owner,
-            repo,
-            effective_label,
-            color=ensure_color,
-            description=ensure_description,
-        )
-
-        swap_result = await tool_ctx.github_client.swap_labels(
-            owner,
-            repo,
-            issue_number,
-            remove_labels=remove_labels,
-            add_labels=[effective_label],
-        )
-        if not swap_result.get("success"):
-            return json.dumps(
-                {"success": False, "error": swap_result.get("error", "swap_labels failed")}
-            )
-
-        return json.dumps(
-            {
-                "success": True,
-                "claimed": True,
-                "issue_number": issue_number,
-                "label": effective_label,
-                "review_approach_recommended": review_approach_recommended,
-            }
-        )
     except Exception as exc:
         logger.error("claim_issue unhandled exception", exc_info=True)
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
@@ -195,19 +194,18 @@ async def release_issue(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(tool="release_issue", issue_url=issue_url)
-        logger.info("release_issue", issue_url=issue_url)
+        with structlog.contextvars.bound_contextvars(tool="release_issue", issue_url=issue_url):
+            logger.info("release_issue", issue_url=issue_url)
 
-        from autoskillit.server import _get_ctx
+            from autoskillit.server import _get_ctx
 
-        tool_ctx = _get_ctx()
-        if tool_ctx.github_client is None:
-            return json.dumps(
-                {"success": False, "error": "GitHub token required for label management"}
-            )
+            tool_ctx = _get_ctx()
+            if tool_ctx.github_client is None:
+                return json.dumps(
+                    {"success": False, "error": "GitHub token required for label management"}
+                )
 
-        effective_label = label or tool_ctx.config.github.in_progress_label
+            effective_label = label or tool_ctx.config.github.in_progress_label
 
         try:
             owner, repo, issue_number = _parse_issue_ref(issue_url)

@@ -384,15 +384,18 @@ async def test_ci_applicable_true_when_push_trigger(httpx_mock):
 
 
 @pytest.mark.anyio
-async def test_ci_applicable_true_when_merge_group_only(httpx_mock):
-    """ci_applicable=True when merge_group trigger exists but push doesn't match."""
+async def test_ci_applicable_false_when_merge_group_only(httpx_mock):
+    """ci_applicable=False when only merge_group trigger exists.
+
+    merge_group events only fire for gh-readonly-queue branches, not feature branches.
+    """
     workflow_text = "on:\n  merge_group:\n"
     httpx_mock.add_response(
         url="https://api.github.com/graphql",
         json=_make_repo_state_response([("tests.yml", workflow_text)]),
     )
     result = await fetch_repo_merge_state(owner="o", repo="r", branch="feature/x", token=None)
-    assert result["ci_applicable"] is True
+    assert result["ci_applicable"] is False
     assert result["ci_event"] is None
 
 
@@ -407,3 +410,95 @@ async def test_ci_applicable_false_when_no_triggers(httpx_mock):
     result = await fetch_repo_merge_state(owner="o", repo="r", branch="main", token=None)
     assert result["ci_applicable"] is False
     assert result["ci_event"] is None
+
+
+@pytest.mark.anyio
+async def test_ci_applicable_true_when_pull_request_only(httpx_mock):
+    """ci_applicable=True when pull_request trigger targets the base branch."""
+    workflow_text = "on:\n  pull_request:\n    branches: [develop]\n"
+    httpx_mock.add_response(
+        url="https://api.github.com/graphql",
+        json=_make_repo_state_response([("tests.yml", workflow_text)]),
+    )
+    result = await fetch_repo_merge_state(
+        owner="o", repo="r", branch="feature/x", token=None, base_branch="develop"
+    )
+    assert result["ci_applicable"] is True
+    assert result["ci_event"] is None
+
+
+@pytest.mark.anyio
+async def test_ci_applicable_true_when_pr_plus_merge_group(httpx_mock):
+    """ci_applicable=True from pull_request trigger, not merge_group."""
+    workflow_text = textwrap.dedent("""        on:
+          push:
+            branches: [main, stable]
+          pull_request:
+            branches: [main, develop, stable]
+          merge_group:
+    """)
+    httpx_mock.add_response(
+        url="https://api.github.com/graphql",
+        json=_make_repo_state_response([("tests.yml", workflow_text)]),
+    )
+    result = await fetch_repo_merge_state(
+        owner="o", repo="r", branch="impl/20250527", token=None, base_branch="develop"
+    )
+    assert result["ci_applicable"] is True
+    assert result["ci_event"] is None
+    assert result["merge_group_trigger"] is True
+
+
+@pytest.mark.anyio
+async def test_ci_applicable_false_when_base_branch_not_provided_pull_request_only(httpx_mock):
+    """ci_applicable=False when pull_request-only repo called without base_branch.
+
+    Conservative behavior: if base branch is unknown, pull_request triggers cannot
+    be evaluated against branch filters, so ci_applicable=False.
+    """
+    workflow_text = "on:\n  pull_request:\n    branches: [develop]\n"
+    httpx_mock.add_response(
+        url="https://api.github.com/graphql",
+        json=_make_repo_state_response([("tests.yml", workflow_text)]),
+    )
+    result = await fetch_repo_merge_state(owner="o", repo="r", branch="feature/x", token=None)
+    assert result["ci_applicable"] is False
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "workflow_text, branch, expected_ci_applicable",
+    [
+        ("on: [push, merge_group]", "main", True),
+        ("on:\n  push:\n    branches: [main]\n  merge_group:", "main", True),
+        ("on:\n  push:\n    branches: [main]\n  merge_group:", "feature/x", False),
+        ("on: [merge_group]", "feature/x", False),
+        ("on: [pull_request]", "feature/x", False),
+        ("on:\n  schedule:\n    - cron: '0 0 * * *'", "main", False),
+        ("on: push", "any-branch", True),
+    ],
+    ids=[
+        "push_and_mg_push_applies",
+        "push_branches_match_with_mg",
+        "push_excluded_mg_present",
+        "mg_only",
+        "pr_only_no_base_branch",
+        "schedule_only",
+        "push_no_filter",
+    ],
+)
+async def test_ci_applicable_matches_trigger_type(
+    httpx_mock, workflow_text, branch, expected_ci_applicable
+):
+    """ci_applicable must reflect only branch-applicable triggers (push/pull_request).
+
+    merge_group_trigger must not inflate ci_applicable — merge_group events only
+    fire for gh-readonly-queue branches, not feature branches.
+    Calls without base_branch treat pull_request triggers as inapplicable (conservative).
+    """
+    httpx_mock.add_response(
+        url="https://api.github.com/graphql",
+        json=_make_repo_state_response([("tests.yml", workflow_text)]),
+    )
+    result = await fetch_repo_merge_state(owner="o", repo="r", branch=branch, token=None)
+    assert result["ci_applicable"] is expected_ci_applicable

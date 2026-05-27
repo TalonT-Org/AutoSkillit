@@ -4,6 +4,7 @@ import pytest
 
 from autoskillit.execution.merge_queue import (
     _has_merge_group_trigger,
+    _has_pull_request_trigger_for_base,
     _push_trigger_applies_to_branch,
 )
 
@@ -112,3 +113,49 @@ def test_merge_group_in_shell_string():
 
 def test_yaml_parse_failure_falls_back_to_heuristic():
     assert _has_merge_group_trigger("{invalid yaml merge_group") is True
+
+
+# ---------------------------------------------------------------------------
+# _has_pull_request_trigger_for_base tests
+# ---------------------------------------------------------------------------
+
+
+def test_pr_trigger_branches_matches_base():
+    text = "on:\n  pull_request:\n    branches: [develop]\n"
+    assert _has_pull_request_trigger_for_base(text, "develop") is True
+
+
+def test_pr_trigger_branches_excludes_other_base():
+    text = "on:\n  pull_request:\n    branches: [main]\n"
+    assert _has_pull_request_trigger_for_base(text, "develop") is False
+
+
+def test_pr_trigger_branches_ignore_allows_base():
+    text = "on:\n  pull_request:\n    branches-ignore: [release-*]\n"
+    assert _has_pull_request_trigger_for_base(text, "develop") is True
+
+
+def test_pr_trigger_no_branches_filter_matches_all():
+    text = "on:\n  pull_request:\n"
+    assert _has_pull_request_trigger_for_base(text, "develop") is True
+
+
+def test_pr_trigger_list_form_matches_all():
+    assert _has_pull_request_trigger_for_base("on: [pull_request]", "main") is True
+
+
+def test_pr_trigger_scalar_form_matches_all():
+    assert _has_pull_request_trigger_for_base("on: pull_request", "main") is True
+
+
+def test_no_pr_trigger_returns_false():
+    text = "on:\n  push:\n    branches: [main]\n"
+    assert _has_pull_request_trigger_for_base(text, "main") is False
+
+
+def test_pr_trigger_yaml_parse_failure_falls_back_to_substring():
+    assert _has_pull_request_trigger_for_base("{invalid yaml pull_request", "main") is True
+
+
+def test_pr_trigger_yaml_parse_failure_no_substring_returns_false():
+    assert _has_pull_request_trigger_for_base("{invalid yaml on: push", "main") is False

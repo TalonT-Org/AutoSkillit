@@ -48,6 +48,7 @@ import time
 dispatch_id = os.environ.get("AUTOSKILLIT_DISPATCH_ID", "unknown")
 mode = os.environ.get("CLAUDE_SHIM_MODE", "success")
 sleep_sec = float(os.environ.get("CLAUDE_SHIM_SLEEP_SEC", "10"))
+usage_data = {"input_tokens": 0, "output_tokens": 0}
 
 
 def _sentinel(payload: str) -> str:
@@ -78,6 +79,20 @@ elif mode == "tui_output":
     sys.stdout.buffer.flush()
     import signal
     os.kill(os.getpid(), signal.SIGTERM)
+elif mode == "success_with_lifespan":
+    assistant = {
+        "type": "assistant",
+        "message": {
+            "content": [
+                {"type": "tool_use", "name": "Read", "id": "toolu_test_shim"}
+            ],
+            "model": "test-model",
+            "usage": {"input_tokens": 100, "output_tokens": 50},
+        },
+    }
+    print(json.dumps(assistant), flush=True)
+    text = _sentinel('{"success": true, "reason": ""}')
+    usage_data = {"input_tokens": 100, "output_tokens": 50}
 else:
     text = ""
 
@@ -88,7 +103,7 @@ envelope = {
     "result": text,
     "session_id": "test-session-id",
     "errors": [],
-    "usage": {"input_tokens": 0, "output_tokens": 0},
+    "usage": usage_data,
 }
 print(json.dumps(envelope), flush=True)
 """
@@ -421,6 +436,9 @@ async def test_two_dispatch_happy_path(fleet_runtime: FleetRuntime) -> None:
 
     result_a = await rt.dispatch("recipe-a", shim_mode="success")
     assert result_a["success"] is True
+    assert result_a.get("lifespan_started") is not True, (
+        "plain success shim must not set lifespan_started"
+    )
 
     result_b = await rt.dispatch("recipe-b", shim_mode="success")
     assert result_b["success"] is True
@@ -1112,3 +1130,25 @@ async def test_tui_output_shim_classified_as_no_result(
     result = await rt.dispatch("recipe-tui", shim_mode="tui_output")
     assert result["success"] is False
     assert result["reason"] == "fleet_l3_no_result_block"
+
+
+@pytest.mark.anyio
+async def test_success_dispatch_asserts_lifespan_and_token_usage(
+    fleet_runtime: FleetRuntime,
+) -> None:
+    """Happy-path dispatch with tool_use asserts lifespan_started and token_usage."""
+    rt = fleet_runtime
+    rt.add_recipe("recipe-a")
+
+    result = await rt.dispatch("recipe-a", shim_mode="success_with_lifespan")
+    assert result["success"] is True
+    assert result.get("lifespan_started") is True
+
+    token_usage = result.get("token_usage")
+    assert token_usage is not None, (
+        f"token_usage must be present when shim emits usage in NDJSON, got: {result}"
+    )
+    assert token_usage["input"] > 0, f"input must be > 0 from shim usage data, got: {token_usage}"
+    assert token_usage["output"] > 0, (
+        f"output must be > 0 from shim usage data, got: {token_usage}"
+    )

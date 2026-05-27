@@ -50,6 +50,7 @@ def test_planner_all_exports() -> None:
         "ASSIGNMENT_REQUIRED_KEYS",
         "PHASE_REQUIRED_KEYS",
         "WP_REQUIRED_KEYS",
+        "parse_planner_id",
         "resolve_wp_id",
         "validate_refined_assignments",
         "validate_refined_plan",

@@ -10,6 +10,7 @@ import pytest
 from autoskillit.planner.merge import merge_files, merge_tier_results
 from tests.planner.conftest import (
     make_assignment_result,
+    make_wp_result,
     write_json,
     write_task_file,
 )
@@ -225,3 +226,18 @@ def test_merge_tier_results_raises_on_excluded_assignment_files(tmp_path: Path) 
 
     with pytest.raises(ValueError, match="excluded"):
         merge_tier_results(str(results_dir), str(out), "assignments")
+
+
+def test_merge_tier_results_work_packages_contain_ancestry_fields(tmp_path: Path) -> None:
+    wps_dir = tmp_path / "work_packages"
+    wps_dir.mkdir()
+    for wp_id in ("P1-A1-WP1", "P1-A1-WP2"):
+        write_json(wps_dir / f"{wp_id}_result.json", make_wp_result(wp_id))
+    out = tmp_path / "combined_wps.json"
+
+    merge_tier_results(str(wps_dir), str(out), "work_packages")
+
+    data = json.loads(out.read_text())
+    for wp in data["work_packages"]:
+        assert "phase_id" in wp, f"WP {wp['id']} missing phase_id"
+        assert "assignment_id" in wp, f"WP {wp['id']} missing assignment_id"

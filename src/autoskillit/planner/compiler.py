@@ -13,6 +13,7 @@ from typing import Any
 from autoskillit.core import REVIEW_APPROACH_MARKER, atomic_write, get_logger, write_versioned_json
 from autoskillit.planner._dag_ops import topological_sort
 from autoskillit.planner.manifests import _derive_label
+from autoskillit.planner.schema import parse_planner_id
 from autoskillit.planner.validation import (
     _load_assignment_results,
     _load_phase_results,
@@ -36,16 +37,6 @@ def _build_assignment_lookup(
     assignment_results: dict[str, dict],
 ) -> dict[tuple[int, int], dict]:
     return {(v["phase_number"], v["assignment_number"]): v for v in assignment_results.values()}
-
-
-def _parse_wp_id(wp_id: str) -> tuple[int, int, int]:
-    parts = wp_id.split("-")
-    if len(parts) != 3:
-        raise ValueError(f"Invalid WP id format (expected PX-AY-WPZ): {wp_id!r}")
-    try:
-        return int(parts[0][1:]), int(parts[1][1:]), int(parts[2][2:])
-    except (IndexError, ValueError) as exc:
-        raise ValueError(f"Invalid WP id format (expected PX-AY-WPZ): {wp_id!r}") from exc
 
 
 def _render_issue_body(wp: dict, phase: dict, assignment: dict) -> str:
@@ -165,7 +156,7 @@ def compile_plan(
     issue_paths: dict[str, str] = {}
     for wp_id in execution_order:
         wp = wp_results[wp_id]
-        phase_num, assign_num, _ = _parse_wp_id(wp_id)
+        phase_num, assign_num, _ = parse_planner_id(wp_id)
         if phase_num not in phase_lookup:
             raise RuntimeError(
                 f"WP {wp_id!r} references phase {phase_num} not in loaded phase results"
@@ -236,7 +227,7 @@ def compile_plan(
         md_lines.append(f"## Phase {phase_num}: {phase['name']}")
         md_lines.append("")
         for wp_id in execution_order:
-            pn, an, _ = _parse_wp_id(wp_id)
+            pn, an, _ = parse_planner_id(wp_id)
             if pn != phase_num:
                 continue
             wp = wp_results[wp_id]

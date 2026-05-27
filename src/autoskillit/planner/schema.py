@@ -29,11 +29,17 @@ class AssignmentResult(TypedDict):
     goal: str
     technical_approach: str
     proposed_work_packages: list[dict[str, Any]]
+    dependency_notes: str
+    overlap_notes: str
 
 
 class WPResult(TypedDict):
     id: str
+    phase_id: str
+    assignment_id: str
     name: str
+    scope: str
+    estimated_files: list[str]
     summary: str
     goal: str
     technical_steps: list[str]
@@ -184,6 +190,73 @@ ASSIGNMENT_REQUIRED_KEYS: frozenset[str] = frozenset({"id", "name", "proposed_wo
 WP_REQUIRED_KEYS: frozenset[str] = frozenset({"id", "name", "deliverables"})
 
 
+def parse_planner_id(entity_id: str) -> tuple[int, ...]:
+    """Parse a planner entity ID into numeric components.
+
+    Returns (phase_num,) for "P1",
+            (phase_num, assign_num) for "P1-A2",
+            (phase_num, assign_num, wp_num) for "P1-A2-WP3".
+    """
+    parts = entity_id.split("-")
+    try:
+        if len(parts) == 1:
+            return (int(parts[0][1:]),)
+        if len(parts) == 2:
+            return int(parts[0][1:]), int(parts[1][1:])
+        if len(parts) == 3:
+            return int(parts[0][1:]), int(parts[1][1:]), int(parts[2][2:])
+    except (IndexError, ValueError):
+        pass
+    raise ValueError(f"Cannot parse planner entity ID: {entity_id!r}")
+
+
+_WP_OUTPUT_KEYS: frozenset[str] = frozenset(
+    {
+        "id",
+        "phase_id",
+        "assignment_id",
+        "name",
+        "scope",
+        "estimated_files",
+        "summary",
+        "goal",
+        "technical_steps",
+        "files_touched",
+        "apis_defined",
+        "apis_consumed",
+        "depends_on",
+        "deliverables",
+        "acceptance_criteria",
+    }
+)
+if _WP_OUTPUT_KEYS != WPElaborated.__required_keys__:
+    raise RuntimeError(
+        "_WP_OUTPUT_KEYS out of sync with WPElaborated.\n"
+        f"Missing from output: {WPElaborated.__required_keys__ - _WP_OUTPUT_KEYS}\n"
+        f"Extra in output: {_WP_OUTPUT_KEYS - WPElaborated.__required_keys__}"
+    )
+
+_ASSIGNMENT_OUTPUT_KEYS: frozenset[str] = frozenset(
+    {
+        "id",
+        "phase_id",
+        "name",
+        "goal",
+        "technical_approach",
+        "proposed_work_packages",
+        "dependency_notes",
+        "overlap_notes",
+        "phase_number",
+        "assignment_number",
+    }
+)
+if not AssignmentElaborated.__required_keys__ <= _ASSIGNMENT_OUTPUT_KEYS:
+    raise RuntimeError(
+        "AssignmentElaborated required keys not covered by validate_assignment_result output.\n"
+        f"Missing: {AssignmentElaborated.__required_keys__ - _ASSIGNMENT_OUTPUT_KEYS}"
+    )
+
+
 def collect_tier_result_files(directory: Path, tier_re: re.Pattern[str]) -> list[Path]:
     """Collect ``*_result.json`` files matching the tier regex.
 
@@ -219,17 +292,6 @@ def _parse_phase_number(data: dict[str, Any]) -> int:
     return int(str(data["id"])[1:])
 
 
-def _parse_assignment_numbers(data: dict[str, Any]) -> tuple[int, int]:
-    raw_id = str(data["id"])
-    parts = raw_id.split("-")
-    if len(parts) < 2:
-        raise ValueError(f"Assignment id {raw_id!r} is missing '-' separator")
-    try:
-        return int(parts[0][1:]), int(parts[1][1:])
-    except ValueError:
-        raise ValueError(f"Assignment id {raw_id!r} has malformed numeric segment") from None
-
-
 def validate_phase_result(data: dict[str, Any]) -> dict[str, Any]:
     missing = PHASE_REQUIRED_KEYS - data.keys()
     if missing:
@@ -263,13 +325,21 @@ def validate_assignment_result(data: dict[str, Any]) -> dict[str, Any]:
     result: dict[str, Any] = dict(data)
 
     if "phase_number" not in result or "assignment_number" not in result:
-        pn, an = _parse_assignment_numbers(data)
+        assign_id = str(data["id"])
+        if not _ASSIGN_ID_RE.match(assign_id):
+            raise ValueError(
+                f"validate_assignment_result: assignment id {assign_id!r} "
+                "does not match expected PX-AY format"
+            )
+        pn, an = parse_planner_id(assign_id)
         result.setdefault("phase_number", pn)
         result.setdefault("assignment_number", an)
 
     result.setdefault("phase_id", f"P{result['phase_number']}")
     result.setdefault("goal", "")
     result.setdefault("technical_approach", "")
+    result.setdefault("dependency_notes", "")
+    result.setdefault("overlap_notes", "")
 
     return result
 
@@ -291,6 +361,10 @@ def validate_wp_result(
             f"validate_wp_result: WP id {wp_id!r} does not match expected PX-AY-WPZ format"
         )
 
+    pn, an, _wpn = parse_planner_id(wp_id)
+    result.setdefault("phase_id", f"P{pn}")
+    result.setdefault("assignment_id", f"P{pn}-A{an}")
+
     if not allow_stub:
         count = len(result.get("deliverables", []))
         lo, hi = DELIVERABLE_BOUNDS
@@ -310,6 +384,8 @@ def validate_wp_result(
     result.setdefault("apis_consumed", [])
     result.setdefault("depends_on", [])
     result.setdefault("acceptance_criteria", [])
+    result.setdefault("scope", "")
+    result.setdefault("estimated_files", [])
 
     return result
 

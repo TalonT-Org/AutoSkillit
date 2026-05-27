@@ -283,11 +283,15 @@ def test_retired_agent_names_lowercase():
         assert name == name.lower(), f"RETIRED_AGENT_NAMES entry '{name}' is not lowercase"
 
 
-# All 11 WPResult fields (used by T-NEW-2)
+# All 15 WPResult fields (used by T-NEW-2)
 _WP_RESULT_ALL_FIELDS = frozenset(
     {
         "id",
+        "phase_id",
+        "assignment_id",
         "name",
+        "scope",
+        "estimated_files",
         "summary",
         "goal",
         "technical_steps",

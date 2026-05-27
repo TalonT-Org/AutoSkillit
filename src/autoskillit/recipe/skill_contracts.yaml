@@ -2071,25 +2071,22 @@ skills:
     write_behavior: always
   planner-refine-wps:
     inputs:
-      - name: combined_wps_path
+      - name: context_file
         type: file_path
         required: true
       - name: refined_plan_path
-        type: file_path
-        required: true
-      - name: refined_assignments_path
         type: file_path
         required: true
       - name: output_dir
         type: directory_path
         required: true
     outputs:
-      - name: refined_wps_path
+      - name: phase_wp_refined_path
         type: file_path
     expected_output_patterns:
-      - "refined_wps_path[ \\t]*=[ \\t]*\\S+"
+      - "phase_wp_refined_path[ \\t]*=[ \\t]*\\S+"
     pattern_examples:
-      - "refined_wps_path = /tmp/autoskillit/planner/run-20260101-120000/refined_wps.json\n%%ORDER_UP%%"
+      - "phase_wp_refined_path = /tmp/autoskillit/planner/run-20260101-120000/wp_refine_contexts/P1_result.json\n%%ORDER_UP%%"
     write_behavior: always
   planner-consolidate-wps:
     inputs:
@@ -2490,6 +2487,21 @@ callable_contracts:
     - name: refine_context_paths
       type: str
       when: "key == 'assignments'"
+    - name: wp_refine_context_paths
+      type: str
+      when: "key == 'work_packages'"
+  autoskillit.planner.merge.merge_refined_wps:
+    inputs:
+      - name: planner_dir
+        type: directory_path
+        required: true
+    outputs:
+      - name: refined_wps_path
+        type: file_path
+      - name: item_count
+        type: str
+      - name: conflict_count
+        type: str
   autoskillit.planner.create_run_dir:
     inputs:
     - name: temp_dir

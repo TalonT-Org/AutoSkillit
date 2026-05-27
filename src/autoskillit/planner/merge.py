@@ -169,6 +169,66 @@ def _write_refine_contexts(
     return context_paths
 
 
+def _write_wp_refine_contexts(
+    planner_dir: Path,
+    work_packages: list[dict[str, Any]],
+    task_file_path: str,
+    expected_phase_ids: frozenset[str] | None = None,
+) -> list[str]:
+    phase_groups: dict[str, list[dict[str, Any]]] = {}
+    for wp in work_packages:
+        phase_id = wp.get("phase_id", "")
+        if phase_id:
+            phase_groups.setdefault(phase_id, []).append(wp)
+        else:
+            logger.warning(
+                "WP %r has no phase_id — skipped from wp refine contexts",
+                wp.get("id", "<unknown>"),
+            )
+
+    if expected_phase_ids is not None:
+        missing = expected_phase_ids - frozenset(phase_groups)
+        if missing:
+            raise ValueError(
+                f"Phases {sorted(missing)} have no merged work packages — "
+                f"expected={sorted(expected_phase_ids)}, "
+                f"found={sorted(phase_groups)}"
+            )
+
+    contexts_dir = planner_dir / "wp_refine_contexts"
+    contexts_dir.mkdir(parents=True, exist_ok=True)
+
+    _WP_PEER_STUB_KEYS = frozenset(
+        {"id", "name", "scope", "deliverables", "apis_defined", "apis_consumed"}
+    )
+
+    context_paths: list[str] = []
+    for phase_id in sorted(phase_groups):
+        if not re.fullmatch(r"[A-Za-z0-9_\-]+", phase_id):
+            raise ValueError(
+                f"phase_id {phase_id!r} contains disallowed characters — "
+                "only alphanumeric, underscore, and hyphen are permitted in context filenames"
+            )
+        own = phase_groups[phase_id]
+        peer_summaries: list[dict[str, Any]] = [
+            {k: v for k, v in wp.items() if k in _WP_PEER_STUB_KEYS}
+            for pid, peers in sorted(phase_groups.items())
+            if pid != phase_id
+            for wp in peers
+        ]
+        context: dict[str, Any] = {
+            "phase_id": phase_id,
+            "task_file_path": task_file_path,
+            "work_packages": own,
+            "peer_summaries": peer_summaries,
+        }
+        ctx_path = contexts_dir / f"context_{phase_id}.json"
+        write_versioned_json(ctx_path, context, schema_version=1)
+        context_paths.append(str(ctx_path))
+
+    return context_paths
+
+
 def extract_item(
     source_path: str,
     item_id: str,
@@ -284,6 +344,35 @@ def merge_tier_results(
             planner_dir, assignments, task_file_path, expected_phase_ids=expected_phase_ids
         )
         result["refine_context_paths"] = ",".join(context_paths)
+    if key == "work_packages":
+        merged_data = json.loads(Path(output_path).read_text(encoding="utf-8"))
+        work_packages = merged_data.get("work_packages", [])
+        if not work_packages:
+            logger.warning(
+                "merge_tier_results: no work_packages found in %s"
+                " — wp refine contexts will be empty",
+                output_path,
+            )
+        planner_dir = Path(output_path).parent
+        wp_expected_phase_ids: frozenset[str] | None = None
+        manifest_path = planner_dir / "phase_wp_manifest.json"
+        if manifest_path.exists():
+            try:
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    f"Corrupted phase_wp_manifest.json at {manifest_path}: {exc}"
+                ) from exc
+            manifest_items = manifest.get("items", [])
+            if any(not item.get("id") for item in manifest_items):
+                raise ValueError(
+                    f"Manifest item has missing or empty 'id' field at {manifest_path}"
+                )
+            wp_expected_phase_ids = frozenset(item["id"] for item in manifest_items)
+        context_paths = _write_wp_refine_contexts(
+            planner_dir, work_packages, task_file_path, expected_phase_ids=wp_expected_phase_ids
+        )
+        result["wp_refine_context_paths"] = ",".join(context_paths)
     return result
 
 
@@ -364,6 +453,71 @@ def merge_refined_assignments(
     return {
         "refined_assignments_path": str(output_path),
         "item_count": str(len(all_assignments)),
+        "conflict_count": str(conflict_count),
+    }
+
+
+def merge_refined_wps(
+    planner_dir: str,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    contexts_dir = Path(planner_dir) / "wp_refine_contexts"
+    result_files = sorted(contexts_dir.glob("*_result.json"))
+    if not result_files:
+        raise ValueError(
+            f"No *_result.json files found in {contexts_dir}. "
+            "Run refine_wps dispatch before calling this function."
+        )
+
+    all_wps: list[dict[str, Any]] = []
+    for path in result_files:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning("Skipping malformed result file %s: %s", path, exc)
+            continue
+        all_wps.extend(data.get("work_packages", []))
+
+    valid_wps: list[dict[str, Any]] = []
+    for wp in all_wps:
+        if not wp.get("id"):
+            logger.warning(
+                "merge_refined_wps: skipping wp with missing id: %r",
+                wp.get("name", "<unknown>"),
+            )
+        else:
+            valid_wps.append(wp)
+    all_wps = valid_wps
+
+    def _sort_key(wp_id: str) -> tuple[int, ...]:
+        return tuple(int(n) for n in re.findall(r"\d+", wp_id))
+
+    deliverable_owner: dict[str, str] = {}
+    for wp in all_wps:
+        wid = wp.get("id", "")
+        for d in wp.get("deliverables", []):
+            if d not in deliverable_owner or _sort_key(wid) < _sort_key(deliverable_owner[d]):
+                deliverable_owner[d] = wid
+
+    deliverable_claimants: dict[str, set[str]] = {}
+    for wp in all_wps:
+        wid = wp.get("id", "")
+        for d in wp.get("deliverables", []):
+            deliverable_claimants.setdefault(d, set()).add(wid)
+    conflict_count = sum(1 for claimants in deliverable_claimants.values() if len(claimants) > 1)
+
+    for wp in all_wps:
+        wid = wp.get("id", "")
+        wp["deliverables"] = [
+            d for d in wp.get("deliverables", []) if deliverable_owner.get(d) == wid
+        ]
+
+    output_path = Path(planner_dir) / "refined_wps.json"
+    write_versioned_json(output_path, {"work_packages": all_wps}, schema_version=1)
+
+    return {
+        "refined_wps_path": str(output_path),
+        "item_count": str(len(all_wps)),
         "conflict_count": str(conflict_count),
     }
 

@@ -42,12 +42,45 @@ def test_hook_config_path_single_source_of_truth():
     )
 
 
-def test_quota_budget_exceeded_trigger_consistency():
-    """QUOTA_BUDGET_EXCEEDED_TRIGGER must be identical in quota_guard and autoskillit.hooks."""
-    from autoskillit.hooks import QUOTA_BUDGET_EXCEEDED_TRIGGER
-    from autoskillit.hooks.guards.quota_guard import QUOTA_BUDGET_EXCEEDED_TRIGGER as _DIRECT
+def test_quota_guard_deny_trigger_sync():
+    """QUOTA_GUARD_DENY_TRIGGER must be identical in core and quota_guard."""
+    from autoskillit.core import QUOTA_GUARD_DENY_TRIGGER
+    from autoskillit.hooks.guards.quota_guard import QUOTA_GUARD_DENY_TRIGGER as _HOOK
 
-    assert QUOTA_BUDGET_EXCEEDED_TRIGGER == _DIRECT, (
+    assert QUOTA_GUARD_DENY_TRIGGER == _HOOK, (
+        f"QUOTA_GUARD_DENY_TRIGGER mismatch: "
+        f"core={QUOTA_GUARD_DENY_TRIGGER!r} vs quota_guard={_HOOK!r}"
+    )
+
+
+def test_quota_budget_exceeded_trigger_sync():
+    """QUOTA_BUDGET_EXCEEDED_TRIGGER must be identical in core and quota_guard."""
+    from autoskillit.core import QUOTA_BUDGET_EXCEEDED_TRIGGER
+    from autoskillit.hooks.guards.quota_guard import QUOTA_BUDGET_EXCEEDED_TRIGGER as _HOOK
+
+    assert QUOTA_BUDGET_EXCEEDED_TRIGGER == _HOOK, (
         f"QUOTA_BUDGET_EXCEEDED_TRIGGER mismatch: "
-        f"quota_guard={_DIRECT!r} vs hooks re-export={QUOTA_BUDGET_EXCEEDED_TRIGGER!r}"
+        f"core={QUOTA_BUDGET_EXCEEDED_TRIGGER!r} vs quota_guard={_HOOK!r}"
+    )
+
+
+def test_quota_post_warning_trigger_sync():
+    """QUOTA_POST_WARNING_TRIGGER must be identical in core and quota_post_hook."""
+    from autoskillit.core import QUOTA_POST_WARNING_TRIGGER
+    from autoskillit.hooks.quota_post_hook import QUOTA_POST_WARNING_TRIGGER as _HOOK
+
+    assert QUOTA_POST_WARNING_TRIGGER == _HOOK, (
+        f"QUOTA_POST_WARNING_TRIGGER mismatch: "
+        f"core={QUOTA_POST_WARNING_TRIGGER!r} vs quota_post_hook={_HOOK!r}"
+    )
+
+
+def test_quota_post_budget_exceeded_trigger_sync():
+    """QUOTA_POST_BUDGET_EXCEEDED_TRIGGER must be identical in core and quota_post_hook."""
+    from autoskillit.core import QUOTA_POST_BUDGET_EXCEEDED_TRIGGER
+    from autoskillit.hooks.quota_post_hook import QUOTA_POST_BUDGET_EXCEEDED_TRIGGER as _HOOK
+
+    assert QUOTA_POST_BUDGET_EXCEEDED_TRIGGER == _HOOK, (
+        f"QUOTA_POST_BUDGET_EXCEEDED_TRIGGER mismatch: "
+        f"core={QUOTA_POST_BUDGET_EXCEEDED_TRIGGER!r} vs quota_post_hook={_HOOK!r}"
     )

@@ -13,17 +13,15 @@ import regex as re
 
 from autoskillit.core import (
     ADMIRAL_DISPATCH_SECTIONS,
+    QUOTA_BUDGET_EXCEEDED_TRIGGER,
+    QUOTA_GUARD_DENY_TRIGGER,
+    QUOTA_POST_BUDGET_EXCEEDED_TRIGGER,
+    QUOTA_POST_WARNING_TRIGGER,
     ROUTING_AUTHORITY_CLAUSE,
     CaptureEntrySpec,
     get_logger,
     pkg_root,
     resolve_payload_field,
-)
-from autoskillit.hooks import (
-    QUOTA_BUDGET_EXCEEDED_TRIGGER,
-    QUOTA_GUARD_DENY_TRIGGER,
-    QUOTA_POST_BUDGET_EXCEEDED_TRIGGER,
-    QUOTA_POST_WARNING_TRIGGER,
 )
 
 logger = get_logger(__name__)

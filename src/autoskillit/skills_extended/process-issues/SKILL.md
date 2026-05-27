@@ -231,9 +231,10 @@ Processing X issues:
    the PR title prefix from it by convention (see `open-pr` SKILL.md).
 
 5. **Detect review approach marker:**
-   Call `fetch_github_issue(issue_url)` to retrieve the issue content.
-   Search for `<!-- review_approach: true -->` marker in the issue body.
-   Set `review_approach_detected = "true"` if found, `"false"` otherwise.
+   Read `review_approach_recommended` from the `claim_issue` result returned in step 3b-3.
+   (`review_approach_recommended` is `true` when the issue body contains `<!-- review_approach: true -->`.)
+   Set `review_approach_detected = "true"` if `review_approach_recommended` is `true`, `"false"` otherwise.
+   Do **not** call `fetch_github_issue` again — the issue body was already fetched by the step 3b-3 `claim_issue` call.
 
 6. **Load the recipe:**
    ```

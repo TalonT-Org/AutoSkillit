@@ -229,8 +229,6 @@ def test_merge_tier_results_raises_on_excluded_assignment_files(tmp_path: Path) 
 
 
 def test_merge_tier_results_work_packages_contain_ancestry_fields(tmp_path: Path) -> None:
-    from autoskillit.planner.merge import merge_tier_results
-
     wps_dir = tmp_path / "work_packages"
     wps_dir.mkdir()
     for wp_id in ("P1-A1-WP1", "P1-A1-WP2"):
@@ -238,8 +236,6 @@ def test_merge_tier_results_work_packages_contain_ancestry_fields(tmp_path: Path
     out = tmp_path / "combined_wps.json"
 
     merge_tier_results(str(wps_dir), str(out), "work_packages")
-
-    import json
 
     data = json.loads(out.read_text())
     for wp in data["work_packages"]:

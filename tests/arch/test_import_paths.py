@@ -392,19 +392,20 @@ def test_req_imp_010_init_helpers_no_toplevel_recipe_imports() -> None:
 
 
 def test_il008_il1_independence() -> None:
-    """IL-008: IL-1 sibling packages (config, pipeline, execution, workspace) must
-    not import from each other at runtime.
+    """IL-008: IL-1 sibling packages (config, pipeline, execution, workspace,
+    report, planner) must
+        not import from each other at runtime.
 
-    Exception: autoskillit.pipeline.context may import autoskillit.config.
-    pipeline.context.ToolContext owns AutomationConfig as the DI wiring point
-    (see pipeline/context.py and the IL-003 inline EXCEPTION comment).
-    config/ depends only on IL-0 (IL-002), so no cycle is introduced.
+        Exception: autoskillit.pipeline.context may import autoskillit.config.
+        pipeline.context.ToolContext owns AutomationConfig as the DI wiring point
+        (see pipeline/context.py and the IL-003 inline EXCEPTION comment).
+        config/ depends only on IL-0 (IL-002), so no cycle is introduced.
 
-    TYPE_CHECKING imports are excluded — pyproject.toml sets
-    exclude_type_checking_imports = true and _parse_imports() respects
-    the in_tc flag.
+        TYPE_CHECKING imports are excluded — pyproject.toml sets
+        exclude_type_checking_imports = true and _parse_imports() respects
+        the in_tc flag.
     """
-    L1_PKGS = frozenset({"config", "pipeline", "execution", "workspace"})
+    L1_PKGS = frozenset({"config", "pipeline", "execution", "workspace", "report", "planner"})
     # (importer_pkg, imported_pkg) tuples that are explicitly allowed
     ALLOWED: frozenset[tuple[str, str]] = frozenset({("pipeline", "config")})
 

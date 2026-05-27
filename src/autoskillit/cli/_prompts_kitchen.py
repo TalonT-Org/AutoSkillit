@@ -47,14 +47,15 @@ def _build_open_kitchen_prompt(mcp_prefix: str) -> str:
         "to receive the full recipe content and orchestration rules.\n\n"
         "OPTIONAL STEP SEMANTICS:\n"
         "- optional: true means the step is SKIPPED when its skip_when_false ingredient\n"
-        "  is false. When skip_when_false evaluates to true (or is absent), the step is\n"
-        "  MANDATORY. The ONLY reason to skip an optional step is skip_when_false being false.\n"
+        "  resolves to false. skip_when_false ingredient references are resolved\n"
+        '  server-side; you may see literal "false" (skip) or no field (mandatory).\n'
         "- A running optional step that returns success: false MUST follow on_failure.\n\n"
         "STEP EXECUTION IS NOT DISCRETIONARY:\n"
         "- You MUST execute every step the pipeline routes you to.\n"
         "- NEVER skip a step because the PR is small, the diff is trivial, the change\n"
         "  looks simple, or you judge the step unnecessary.\n"
-        "- The ONLY mechanism for skipping a step is skip_when_false evaluating to false.\n"
+        "- skip_when_false ingredient references are resolved server-side; you may see\n"
+        '  literal "false" (skip) or no skip_when_false field (mandatory).\n'
         "- Consequence: skipping PR review steps results in unreviewed code, missing diff\n"
         "  annotations, and no architectural lens analysis — code reaches main without\n"
         "  quality gates.\n\n"

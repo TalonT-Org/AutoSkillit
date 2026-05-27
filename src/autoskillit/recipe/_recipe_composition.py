@@ -196,3 +196,115 @@ def _build_active_recipe(
             working = _drop_sub_recipe_step(working, step_name)
 
     return working, combined
+
+
+def _prune_skipped_steps(
+    recipe: Any,
+    ingredient_overrides: dict[str, str] | None = None,
+) -> tuple[Any, dict[str, bool]]:
+    """Evaluate skip_when_false guards and prune steps Python-side.
+
+    Iterates all steps with a skip_when_false field. For each:
+    - Truthy value: clears skip_when_false on the step (step becomes mandatory).
+    - Falsy value: removes the step and repairs upstream routes.
+
+    Returns a tuple of (pruned_recipe, resolutions) where resolutions maps
+    step_name -> bool (True = kept, False = pruned).
+    """
+    overrides = ingredient_overrides or {}
+    resolutions: dict[str, bool] = {}
+    working = recipe
+
+    # Collect guarded steps from the original recipe (stable iteration order)
+    steps_to_check = [
+        name for name, step in recipe.steps.items() if step.skip_when_false is not None
+    ]
+
+    for step_name in steps_to_check:
+        step = working.steps.get(step_name)
+        if step is None or not step.skip_when_false:
+            continue
+        ref = step.skip_when_false
+
+        if ref.startswith("inputs."):
+            ingredient_name = ref[len("inputs.") :]
+            # Resolve value: explicit override > recipe default > absent (falsy)
+            if ingredient_name in overrides:
+                value = str(overrides[ingredient_name])
+            else:
+                ing = working.ingredients.get(ingredient_name)
+                value = (
+                    str(ing.default) if ing is not None and ing.default is not None else "false"
+                )
+        else:
+            # Literal value already resolved — evaluate directly without ingredient lookup
+            value = ref
+
+        is_truthy = value.lower() in ("true", "1", "yes")
+        resolutions[step_name] = is_truthy
+
+        if is_truthy:
+            new_steps = dict(working.steps)
+            new_steps[step_name] = dataclasses.replace(step, skip_when_false=None)
+            working = dataclasses.replace(working, steps=new_steps)
+        else:
+            # Redirect all routes pointing to the pruned step; guard against None redirect
+            redirect = step.on_success
+            new_steps = {}
+            for name, s in working.steps.items():
+                if name == step_name:
+                    continue
+                fixes: dict[str, Any] = {}
+                if s.on_success == step_name and redirect is not None:
+                    fixes["on_success"] = redirect
+                if s.on_failure == step_name and redirect is not None:
+                    fixes["on_failure"] = redirect
+                if s.on_context_limit == step_name and redirect is not None:
+                    fixes["on_context_limit"] = redirect
+                if s.on_exhausted == step_name and redirect is not None:
+                    fixes["on_exhausted"] = redirect
+                new_steps[name] = dataclasses.replace(s, **fixes) if fixes else s
+            recipe_kwargs: dict[str, Any] = {"steps": new_steps}
+            if getattr(working, "entry", None) == step_name:
+                recipe_kwargs["entry"] = redirect
+            working = dataclasses.replace(working, **recipe_kwargs)
+
+    return working, resolutions
+
+
+def _resolve_skip_guards_in_content(
+    raw: str,
+    resolutions: dict[str, bool],
+    original_steps: dict[str, Any],
+) -> str:
+    """Apply skip_when_false resolution decisions to the raw YAML content string.
+
+    For each resolved step:
+    - Truthy (step kept): strip the skip_when_false line so the step appears mandatory.
+    - Falsy (step pruned): replace the ingredient reference with literal "false" so
+      the LLM evaluates the literal and skips the step without needing ingredient visibility.
+    """
+    if not resolutions:
+        return raw
+
+    for step_name, is_truthy in resolutions.items():
+        step = original_steps.get(step_name)
+        if step is None or not step.skip_when_false:
+            continue
+        ref = step.skip_when_false
+        if not ref.startswith("inputs."):
+            continue
+        ingredient_name = re.escape(ref[len("inputs.") :])
+        if is_truthy:
+            raw = re.sub(
+                rf"(?m)^([ \t]+)skip_when_false:[ \t]+inputs\.{ingredient_name}[ \t]*\n",
+                "",
+                raw,
+            )
+        else:
+            raw = re.sub(
+                rf"(?m)^([ \t]+skip_when_false:[ \t]+)inputs\.{ingredient_name}[ \t]*$",
+                r'\1"false"',
+                raw,
+            )
+    return raw

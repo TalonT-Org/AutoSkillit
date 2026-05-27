@@ -510,13 +510,14 @@ def test_open_kitchen_prompt_contains_anti_skip_rule():
 
 
 def test_orchestrator_prompt_closes_optional_semantics():
-    """OPTIONAL STEP SEMANTICS must state that skip_when_false=false is the ONLY skip reason."""
+    """OPTIONAL STEP SEMANTICS must instruct the LLM to never evaluate inputs.*
+    references itself — skip_when_false is resolved server-side."""
     from autoskillit.cli._prompts import _build_orchestrator_prompt
 
     prompt = _build_orchestrator_prompt("test", mcp_prefix=DIRECT_PREFIX)
     idx = prompt.index("OPTIONAL STEP SEMANTICS")
     section = prompt[idx : idx + 500]
-    assert "ONLY" in section
+    assert "Never evaluate" in section
 
 
 # ING-1

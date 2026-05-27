@@ -667,8 +667,9 @@ every step at full fidelity regardless of session length.
 - NEVER skip a step because the PR is small, the diff is trivial, the change looks
   simple, or you judge the step unnecessary.
 - NEVER skip a step because you believe it has already been done or is redundant.
-- The ONLY mechanism for skipping a step is `skip_when_false` evaluating to false.
-  When `skip_when_false` evaluates to true (or is absent), the step MUST execute.
+- `skip_when_false` ingredient references are resolved server-side before the recipe
+  is served. The LLM sees literal `"false"` (evaluate and skip) or no `skip_when_false`
+  field at all (step is mandatory). Never evaluate `inputs.*` references yourself.
 - Consequence: skipping PR review steps results in unreviewed code, missing diff
   annotations, and no architectural lens analysis — code reaches main without
   quality gates. Skipping issue lifecycle steps breaks traceability.
@@ -685,7 +686,9 @@ every step at full fidelity regardless of session length.
 ### 3. The word "optional" in YAML
 
 `optional: true` on a recipe step does NOT mean the step is discretionary. It means:
-- The step is SKIPPED when its `skip_when_false` ingredient evaluates to false.
+- The step is SKIPPED when its `skip_when_false` ingredient resolves to false.
+  `skip_when_false` references are resolved server-side — the LLM sees literal
+  `"false"` or no field at all. Never evaluate `inputs.*` references yourself.
 - When the ingredient evaluates to true, the step is MANDATORY.
 - A running optional step that returns `success: false` MUST follow `on_failure`.
 

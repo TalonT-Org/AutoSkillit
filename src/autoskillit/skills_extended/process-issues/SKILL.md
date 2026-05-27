@@ -42,7 +42,8 @@ issues upfront, load recipe, execute session, collect result, report.
 - After loading a recipe via `load_recipe`, execute every step in the recipe's step
   graph in sequence. Never skip, replace, or improvise steps.
 - `optional: true` means the step is skipped ONLY when its `skip_when_false` ingredient
-  evaluates to false. When the ingredient is true, the step is mandatory.
+  resolves to false. `skip_when_false` references are resolved server-side — the LLM
+  sees literal `"false"` (skip) or no field at all (mandatory). Never evaluate `inputs.*`.
 - Follow `on_success`, `on_failure`, `on_result`, and `on_context_limit` routing exactly
   as declared in the recipe YAML.
 - NEVER replace recipe PR steps (`prepare_pr`, `run_arch_lenses`, `compose_pr`,

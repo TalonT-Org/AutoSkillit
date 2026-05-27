@@ -492,3 +492,22 @@ def test_resolve_merge_conflicts_step5_escalates_on_nonfixable_hooks(step5_secti
         "after all auto-fixes (ruff, sync_versions, uv lock) are applied — "
         "remaining failures from non-fixable hooks (mypy, gitleaks) require manual remediation"
     )
+
+
+def test_resolve_merge_conflicts_step5_pre_existing_failure_carve_out(skill_md: str) -> None:
+    """Step 5 must instruct checking for pre-existing violations on the integration target.
+
+    When all pre-commit failures are identical on the integration target (introduced by
+    upstream, not by the branch), escalating would mask the real CI failure rather than
+    surface it. The carve-out prevents false escalations.
+    """
+    step5_idx = skill_md.find("### Step 5 —")
+    step5a_idx = skill_md.find("### Step 5a —", step5_idx)
+    assert step5_idx != -1, "Step 5 section must be present in SKILL.md"
+    assert step5a_idx != -1, "Step 5a section must follow Step 5"
+    step5_text = skill_md[step5_idx:step5a_idx]
+    assert "pre-existing" in step5_text.lower() or "integration target" in step5_text.lower(), (
+        "Step 5 must describe checking whether pre-commit failures are pre-existing on the "
+        "integration target before escalating. Without this carve-out, failures introduced "
+        "by upstream (not the branch) trigger false escalations that mask the real CI failure."
+    )

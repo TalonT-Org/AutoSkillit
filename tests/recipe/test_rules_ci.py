@@ -1189,3 +1189,166 @@ def test_bundled_recipes_pass_ci_cwd_branch_context_mismatch() -> None:
             f"{yaml_path.stem}: ci-cwd-branch-context-mismatch fired: "
             f"{[f.message for f in matched]}"
         )
+
+
+# ---------------------------------------------------------------------------
+# conflict-escalation-missing-ci-diagnosis rule tests
+# ---------------------------------------------------------------------------
+
+_CONFLICT_ESCALATION_RULE = "conflict-escalation-missing-ci-diagnosis"
+
+
+def test_conflict_escalation_missing_ci_diagnosis_fires_on_terminal_escalation() -> None:
+    """ci_conflict_fix on CI failure path routes escalation to terminal → ERROR."""
+    wf = _make_workflow(
+        {
+            "ci_watch": {
+                "tool": "wait_for_ci",
+                "on_success": "done",
+                "on_failure": "ci_conflict_fix",
+                "with": {"event": "${{ context.ci_event }}", "branch": "main"},
+            },
+            "ci_conflict_fix": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:resolve-merge-conflicts work plan main"},
+                "on_result": [
+                    {"when": "${{ result.escalation_required }} == true", "route": "release"},
+                    {"route": "done"},
+                ],
+                "on_failure": "release",
+                "on_context_limit": "release",
+                "on_exhausted": "release",
+            },
+            "release": {"action": "stop", "message": "done"},
+            "done": {"action": "stop", "message": "done"},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    matched = [f for f in findings if f.rule == _CONFLICT_ESCALATION_RULE]
+    assert len(matched) >= 1
+    assert matched[0].severity == Severity.ERROR
+    assert matched[0].step_name == "ci_conflict_fix"
+
+
+def test_conflict_escalation_passes_when_routed_through_diagnose_ci() -> None:
+    """ci_conflict_fix routes escalation through diagnose_ci → no finding."""
+    wf = _make_workflow(
+        {
+            "ci_watch": {
+                "tool": "wait_for_ci",
+                "on_success": "done",
+                "on_failure": "ci_conflict_fix",
+                "with": {"event": "${{ context.ci_event }}", "branch": "main"},
+            },
+            "ci_conflict_fix": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:resolve-merge-conflicts work plan main"},
+                "on_result": [
+                    {"when": "${{ result.escalation_required }} == true", "route": "diagnose_ci"},
+                    {"route": "done"},
+                ],
+                "on_failure": "diagnose_ci",
+                "on_context_limit": "diagnose_ci",
+                "on_exhausted": "diagnose_ci",
+            },
+            "diagnose_ci": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:diagnose-ci branch - - tests.yml"},
+                "on_success": "resolve_ci",
+                "on_failure": "resolve_ci",
+            },
+            "resolve_ci": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:resolve-failures work plan main"},
+                "on_success": "release",
+                "on_failure": "release",
+            },
+            "release": {"action": "stop", "message": "done"},
+            "done": {"action": "stop", "message": "done"},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    matched = [f for f in findings if f.rule == _CONFLICT_ESCALATION_RULE]
+    assert not matched
+
+
+def test_conflict_escalation_silent_for_non_ci_path() -> None:
+    """rebase_conflict_fix not reachable from wait_for_ci → no conflict-escalation finding."""
+    wf = _make_workflow(
+        {
+            "merge_step": {
+                "tool": "run_cmd",
+                "with": {"cmd": "git merge origin/main"},
+                "on_success": "done",
+                "on_failure": "rebase_conflict_fix",
+            },
+            "rebase_conflict_fix": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:resolve-merge-conflicts work plan main"},
+                "on_result": [
+                    {"when": "${{ result.escalation_required }} == true", "route": "release"},
+                    {"route": "done"},
+                ],
+                "on_failure": "release",
+                "on_context_limit": "release",
+                "on_exhausted": "release",
+            },
+            "release": {"action": "stop", "message": "done"},
+            "done": {"action": "stop", "message": "done"},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    matched = [f for f in findings if f.rule == _CONFLICT_ESCALATION_RULE]
+    assert not matched
+
+
+def test_conflict_escalation_checks_on_context_limit() -> None:
+    """Rule fires if on_context_limit routes to terminal even when other paths go
+    through diagnose_ci."""
+    wf = _make_workflow(
+        {
+            "ci_watch": {
+                "tool": "wait_for_ci",
+                "on_success": "done",
+                "on_failure": "ci_conflict_fix",
+                "with": {"event": "${{ context.ci_event }}", "branch": "main"},
+            },
+            "ci_conflict_fix": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:resolve-merge-conflicts work plan main"},
+                "on_result": [
+                    {"when": "${{ result.escalation_required }} == true", "route": "diagnose_ci"},
+                    {"route": "done"},
+                ],
+                "on_failure": "diagnose_ci",
+                "on_context_limit": "release",
+                "on_exhausted": "diagnose_ci",
+            },
+            "diagnose_ci": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:diagnose-ci branch - - tests.yml"},
+                "on_success": "release",
+                "on_failure": "release",
+            },
+            "release": {"action": "stop", "message": "done"},
+            "done": {"action": "stop", "message": "done"},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    matched = [f for f in findings if f.rule == _CONFLICT_ESCALATION_RULE]
+    assert len(matched) >= 1
+
+
+@pytest.mark.parametrize(
+    "recipe_name",
+    ["remediation.yaml", "implementation.yaml", "implementation-groups.yaml"],
+)
+def test_bundled_recipes_no_conflict_escalation_missing_ci_diagnosis(recipe_name: str) -> None:
+    """All three bundled pipeline recipes must pass conflict-escalation-missing-ci-diagnosis."""
+    recipe = load_recipe(builtin_recipes_dir() / recipe_name)
+    findings = run_semantic_rules(recipe)
+    matched = [f for f in findings if f.rule == _CONFLICT_ESCALATION_RULE]
+    assert not matched, (
+        f"Recipe '{recipe_name}' has conflict-escalation-missing-ci-diagnosis findings: "
+        + ", ".join(f.message for f in matched)
+    )

@@ -25,59 +25,16 @@ _HOOKS_DIR = str(Path(__file__).resolve().parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
-from _hook_settings import resolve_quota_settings  # type: ignore[import-not-found]  # noqa: E402
-
-_AUTOSKILLIT_LOG_DIR_ENV = "AUTOSKILLIT_LOG_DIR"
+from _hook_settings import (  # noqa: E402
+    read_quota_cache,
+    resolve_quota_log_dir,
+    resolve_quota_settings,
+    write_quota_log_event,
+)  # type: ignore[import-not-found]
 
 # Emitted in post-tool output; referenced by orchestrator prompt and sous-chef SKILL.md.
 QUOTA_POST_WARNING_TRIGGER: str = "--- QUOTA WARNING ---"
 QUOTA_POST_BUDGET_EXCEEDED_TRIGGER: str = "QUOTA BUDGET EXCEEDED"
-
-
-def _read_quota_cache(cache_path_str: str, max_age: int) -> dict | None:
-    """Read quota cache file. Returns parsed data or None if missing/stale/corrupt."""
-    cache_path = Path(cache_path_str).expanduser()
-    if not cache_path.is_file():
-        return None
-    try:
-        data = json.loads(cache_path.read_text())
-        fetched = datetime.fromisoformat(data["fetched_at"])
-        age = (datetime.now(UTC) - fetched).total_seconds()
-        if age > max_age:
-            return None  # stale
-        return data
-    except (json.JSONDecodeError, KeyError, ValueError, OSError, TypeError):
-        return None
-
-
-def _resolve_quota_log_dir() -> Path | None:
-    """Resolve the autoskillit log root directory. Returns None on any error."""
-    try:
-        override = os.environ.get(_AUTOSKILLIT_LOG_DIR_ENV)
-        if override:
-            return Path(override)
-        if sys.platform == "darwin":
-            return Path.home() / "Library" / "Application Support" / "autoskillit" / "logs"
-        xdg = os.environ.get("XDG_DATA_HOME")
-        if xdg:
-            return Path(xdg) / "autoskillit" / "logs"
-        return Path.home() / ".local" / "share" / "autoskillit" / "logs"
-    except Exception as exc:
-        print(f"quota_post_hook: failed to resolve log directory: {exc}", file=sys.stderr)
-        return None
-
-
-def _write_quota_log_event(event: dict, log_dir: Path | None) -> None:
-    """Append a quota guard event to quota_events.jsonl at the log root."""
-    if log_dir is None:
-        return
-    try:
-        log_dir.mkdir(parents=True, exist_ok=True)
-        line = json.dumps(event) + "\n"
-        with open(log_dir / "quota_events.jsonl", "a", encoding="utf-8") as f:
-            f.write(line)
-    except Exception as exc:
-        print(f"quota_post_hook: failed to write quota log event: {exc}", file=sys.stderr)
 
 
 def _extract_run_skill_result(tool_response: str | dict) -> str:
@@ -121,12 +78,12 @@ def main(*, cache_path_override: str | None = None) -> None:
         sys.exit(0)  # quota guard disabled for this session
     cache_path_str = settings.cache_path
     cache_max_age = settings.cache_max_age
-    log_dir = _resolve_quota_log_dir()
+    log_dir = resolve_quota_log_dir(caller="quota_post_hook")
     ts = datetime.now(UTC).isoformat()
 
     profile = os.environ.get("AUTOSKILLIT_PROVIDER_PROFILE", "").strip()
     if profile and profile.casefold() != "anthropic":
-        _write_quota_log_event(
+        write_quota_log_event(
             {
                 "ts": ts,
                 "event": "post_provider_bypass",
@@ -135,10 +92,11 @@ def main(*, cache_path_override: str | None = None) -> None:
                 "cache_path": cache_path_str,
             },
             log_dir,
+            caller="quota_post_hook",
         )
         sys.exit(0)
 
-    cache = _read_quota_cache(cache_path_str, cache_max_age)
+    cache = read_quota_cache(cache_path_str, cache_max_age)
     if cache is None:
         sys.exit(0)
 
@@ -154,7 +112,7 @@ def main(*, cache_path_override: str | None = None) -> None:
         sys.exit(0)
 
     if not should_block:
-        _write_quota_log_event(
+        write_quota_log_event(
             {
                 "ts": ts,
                 "event": "post_check_pass",
@@ -164,6 +122,7 @@ def main(*, cache_path_override: str | None = None) -> None:
                 "tool_name": tool_name,
             },
             log_dir,
+            caller="quota_post_hook",
         )
         sys.exit(0)
 
@@ -224,7 +183,7 @@ def main(*, cache_path_override: str | None = None) -> None:
             f"'Quota at {utilization:.0f}%. Sleeping {n}s before next step.'"
         )
 
-    _write_quota_log_event(
+    write_quota_log_event(
         {
             "ts": ts,
             "event": "post_check_budget_exceeded" if budget_exceeded else "post_check_warning",
@@ -238,6 +197,7 @@ def main(*, cache_path_override: str | None = None) -> None:
             "remaining_budget": remaining_budget if remaining_budget != float("inf") else None,
         },
         log_dir,
+        caller="quota_post_hook",
     )
     print(
         json.dumps(

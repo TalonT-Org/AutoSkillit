@@ -185,14 +185,16 @@ def _check_assignment_completeness(
     if lifecycle_registry and isinstance(lifecycle_registry.get("absorbed"), dict):
         for absorbed_id in lifecycle_registry["absorbed"]:
             try:
-                absorbed_pairs.add(parse_planner_id(absorbed_id)[:2])
+                pn, an = parse_planner_id(absorbed_id)[:2]
+                absorbed_pairs.add((pn, an))
             except ValueError:
                 logger.warning("malformed_absorbed_id", absorbed_id=absorbed_id)
     voided_wp_pairs: set[tuple[int, int]] = set()
     if lifecycle_registry and isinstance(lifecycle_registry.get("voided_wps"), dict):
         for voided_id in lifecycle_registry["voided_wps"]:
             try:
-                voided_wp_pairs.add(parse_planner_id(voided_id)[:2])
+                pn, an = parse_planner_id(voided_id)[:2]
+                voided_wp_pairs.add((pn, an))
             except ValueError:
                 logger.warning("malformed_voided_wp_id", voided_wp_id=voided_id)
     for assign_id, assign in assignment_results.items():

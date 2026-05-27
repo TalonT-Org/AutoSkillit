@@ -208,11 +208,11 @@ def test_validate_wp_result_output_covers_wp_elaborated_required_keys() -> None:
 
 
 def test_validate_assignment_result_output_covers_assignment_elaborated_required_keys() -> None:
-    result = validate_assignment_result(
-        {"id": "P1-A1", "name": "A", "proposed_work_packages": []}
-    )
+    result = validate_assignment_result({"id": "P1-A1", "name": "A", "proposed_work_packages": []})
     missing = AssignmentElaborated.__required_keys__ - result.keys()
-    assert not missing, f"validate_assignment_result output missing AssignmentElaborated keys: {missing}"
+    assert not missing, (
+        f"validate_assignment_result output missing AssignmentElaborated keys: {missing}"
+    )
 
 
 def test_make_wp_result_fixture_includes_ancestry_fields() -> None:

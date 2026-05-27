@@ -824,7 +824,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
             blocks Write/Edit outside the allowed prefix in read-only skill sessions.
             _hook_utils.py provides shared stdlib-only utilities (e.g., find_project_root)
             for hook scripts that need common path resolution logic.
-            Exempt at 28 files.
+            _command_classification.py adds shared command classification primitives
+            (interpreter/wrapper detection) for all command-classifying guards.
+            Exempt at 11 files.
           pipeline/ — REQ-CNST-003-E7: pipeline/ added github_api_log.py for session-scoped
             GitHub API request tracking (DefaultGitHubApiLog accumulator + GitHubApiEntry).
             Exempt at 12 files.
@@ -843,7 +845,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "core": 20,
         "core/types": 27,
         "cli": 21,
-        "hooks": 10,
+        "hooks": 11,
         "pipeline": 12,
         "fleet": 20,  # REQ-CNST-003-E9: _dispatch_reaper.py added for boot-time orphan reaping
         "recipe/rules": 46,

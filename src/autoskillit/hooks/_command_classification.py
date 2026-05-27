@@ -9,9 +9,7 @@ _INTERPRETER_RE = re.compile(
     r"(?:-[ce]\s|.*<<)"
 )
 
-_NESTED_SHELL_RE = re.compile(
-    r"(?:^|&&|\|\||;)\s*(?:bash|sh|zsh|dash)\s+-c\s+"
-)
+_NESTED_SHELL_RE = re.compile(r"(?:^|&&|\|\||;)\s*(?:bash|sh|zsh|dash)\s+-c\s+")
 
 _PYTHON_WRITE_APIS_RE = re.compile(
     r"\.write_text\s*\(|\.write_bytes\s*\("

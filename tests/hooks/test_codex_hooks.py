@@ -104,7 +104,8 @@ class TestSyncHooksToCodexConfig:
     def test_sync_preserves_foreign_hooks(self, tmp_path):
         p = tmp_path / "config.toml"
         p.write_text(
-            '[[hooks]]\nevent = "PreToolUse"\n[[hooks.hooks]]\ncommand = "python3 /usr/local/guard.py"\n'
+            '[[hooks]]\nevent = "PreToolUse"\n'
+            '[[hooks.hooks]]\ncommand = "python3 /usr/local/guard.py"\n'
         )
         result = sync_hooks_to_codex_config(config_path=p)
         assert result is True
@@ -116,7 +117,8 @@ class TestSyncHooksToCodexConfig:
     def test_sync_replaces_stale(self, tmp_path):
         p = tmp_path / "config.toml"
         p.write_text(
-            '[[hooks]]\nevent = "PreToolUse"\n[[hooks.hooks]]\ncommand = "/autoskillit/hooks/_dispatch.py old"\n'
+            '[[hooks]]\nevent = "PreToolUse"\n'
+            '[[hooks.hooks]]\ncommand = "/autoskillit/hooks/_dispatch.py old"\n'
         )
         result = sync_hooks_to_codex_config(config_path=p)
         assert result is True

@@ -1261,13 +1261,19 @@
         "verdict": "${{ result.verdict }}",
         "remediation_path": "${{ result.remediation_path }}"
       },
-      "on_result": {
-        "field": "verdict",
-        "routes": {
-          "GO": "compute_domain_partitions",
-          "NO GO": "remediate"
+      "on_result": [
+        {
+          "when": "${{ result.verdict }} == GO",
+          "route": "compute_domain_partitions"
+        },
+        {
+          "when": "${{ result.verdict }} == NO GO",
+          "route": "remediate"
+        },
+        {
+          "route": "compute_domain_partitions"
         }
-      },
+      ],
       "on_failure": "register_clone_failure",
       "on_context_limit": "register_clone_failure",
       "optional": true,

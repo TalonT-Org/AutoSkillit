@@ -44,6 +44,7 @@ from autoskillit.recipe._recipe_composition import (
     _build_active_recipe,
     _prune_skipped_steps,
     _resolve_skip_guards_in_content,
+    _validate_no_dangling_routes,
 )
 from autoskillit.recipe._recipe_ingredients import (
     ListRecipesResult,  # noqa: F401
@@ -379,6 +380,12 @@ def load_and_validate(
             )
             if _skip_resolutions:
                 raw = _resolve_skip_guards_in_content(raw, _skip_resolutions, _pre_prune_steps)
+            # Post-prune: validate that no surviving step routes to a removed step.
+            # Must run inside try so active_recipe and errors are both in scope.
+            _dangling_errors = _validate_no_dangling_routes(active_recipe)
+            if _dangling_errors:
+                errors.extend(f"[post-prune] dangling route: {e}" for e in _dangling_errors)
+                raw = ""
             t0 = _t("prune_skipped_steps", t0, name)
 
             # Stage: contract card

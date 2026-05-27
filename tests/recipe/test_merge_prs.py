@@ -552,8 +552,11 @@ def test_pmp_resolve_review_integration_routes_to_re_push(recipe) -> None:
     )
     assert step.on_result is not None, "resolve_review_integration must have on_result: block"
     push_routes = [c.route for c in step.on_result.conditions if c.when and "real_fix" in c.when]
-    assert any("re_push_review_integration" in r for r in push_routes), (
-        "resolve_review_integration must route verdict=real_fix to re_push_review_integration"
+    assert any(
+        "re_push_review_integration" in r or "pre_review_rebase" in r for r in push_routes
+    ), (
+        "resolve_review_integration must route verdict=real_fix to re_push_review_integration "
+        "or pre_review_rebase (fetch+rebase before push)"
     )
 
 

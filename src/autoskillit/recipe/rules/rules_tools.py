@@ -9,6 +9,7 @@ from autoskillit.core import (
     TOOL_SUBSET_TAGS,
     UNGATED_TOOLS,
     Severity,
+    get_logger,
 )
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.contracts import (
@@ -17,6 +18,8 @@ from autoskillit.recipe.contracts import (
     resolve_skill_name,
 )
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
+
+logger = get_logger(__name__)
 
 _ALL_TOOLS: frozenset[str] = GATED_TOOLS | UNGATED_TOOLS | HEADLESS_TOOLS
 
@@ -470,6 +473,10 @@ def _check_push_after_edit_requires_force(ctx: ValidationContext) -> list[RuleFi
     try:
         manifest = load_bundled_manifest()
     except Exception:
+        logger.warning(
+            "push-after-edit-requires-force: failed to load manifest; skipping",
+            exc_info=True,
+        )
         return []
 
     max_hops = 6

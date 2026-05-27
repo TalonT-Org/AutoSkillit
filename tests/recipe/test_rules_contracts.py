@@ -709,7 +709,7 @@ def _make_write_contract(
 ) -> SkillContract:
     return SkillContract(
         inputs=[],
-        outputs=[{"name": "verdict", "type": "string"}] if write_behavior else [],
+        outputs=[],
         write_behavior=write_behavior,
         write_expected_when=["verdict\\s*=\\s*\\w+"] if write_behavior == "conditional" else [],
         read_only=read_only,

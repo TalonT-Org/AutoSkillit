@@ -424,7 +424,7 @@
       "with": {
         "skill_command": "/autoskillit:resolve-merge-conflicts '${{ context.ejected_pr_branch }}' '${{ inputs.base_branch }}'",
         "cwd": "${{ context.work_dir }}",
-        "output_dir": "${{ context.work_dir }}",
+        "output_dir": ".",
         "step_name": "resolve_ejected_conflicts"
       },
       "capture": {
@@ -720,7 +720,7 @@
       "with": {
         "skill_command": "/autoskillit:resolve-merge-conflicts '${{ context.next_pr_branch }}' '${{ inputs.base_branch }}'",
         "cwd": "${{ context.work_dir }}",
-        "output_dir": "${{ context.work_dir }}",
+        "output_dir": ".",
         "step_name": "resolve_proactive_rebase_conflicts"
       },
       "capture": {
@@ -1472,7 +1472,7 @@
       "with": {
         "skill_command": "/autoskillit:resolve-review ${{ context.batch_branch }} ${{ inputs.base_branch }}",
         "cwd": "${{ context.work_dir }}",
-        "output_dir": "${{ context.work_dir }}",
+        "output_dir": ".",
         "step_name": "resolve_review_integration"
       },
       "capture": {

@@ -459,7 +459,7 @@ steps:
     with:
       skill_command: "/autoskillit:prepare-pr ${{ context.all_plan_paths }} ${{ inputs.run_name }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
-      output_dir: "${{ context.work_dir }}"
+      output_dir: '.'
       step_name: "prepare_pr"
       issue_number: "${{ context.issue_number }}"
     capture:
@@ -516,7 +516,7 @@ steps:
     with:
       skill_command: "/autoskillit:compose-pr ${{ context.prep_path }} \"${{ context.all_diagram_paths }}\" ${{ context.work_dir }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
-      output_dir: "${{ context.work_dir }}"
+      output_dir: '.'
       step_name: "compose_pr"
       issue_number: "${{ context.issue_number }}"
     capture:
@@ -628,7 +628,7 @@ steps:
     with:
       skill_command: "/autoskillit:resolve-review ${{ context.merge_target }} ${{ inputs.base_branch }} mode=${{ context.review_mode }}"
       cwd: "${{ context.work_dir }}"
-      output_dir: "${{ context.work_dir }}"
+      output_dir: '.'
       step_name: "resolve_review"
     capture:
       verdict: "${{ result.verdict }}"
@@ -980,7 +980,7 @@ steps:
     with:
       skill_command: "/autoskillit:resolve-failures ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }} ${{ context.ci_conclusion }} ${{ context.ci_failed_jobs }} ${{ context.diagnosis_path }}"
       cwd: "${{ context.work_dir }}"
-      output_dir: "${{ context.work_dir }}"
+      output_dir: '.'
       step_name: "resolve_ci"
     capture:
       verdict: "${{ result.verdict }}"
@@ -1281,7 +1281,7 @@ steps:
     with:
       skill_command: "/autoskillit:resolve-merge-conflicts ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
-      output_dir: "${{ context.work_dir }}"
+      output_dir: '.'
       step_name: "resolve_queue_merge_conflicts"
     capture:
       conflict_escalation_required: "${{ result.escalation_required }}"
@@ -1487,7 +1487,7 @@ steps:
     with:
       skill_command: "/autoskillit:resolve-merge-conflicts ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
-      output_dir: "${{ context.work_dir }}"
+      output_dir: '.'
       step_name: "resolve_direct_merge_conflicts"
     capture:
       conflict_escalation_required: "${{ result.escalation_required }}"
@@ -1592,7 +1592,7 @@ steps:
     with:
       skill_command: "/autoskillit:resolve-merge-conflicts ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
-      output_dir: "${{ context.work_dir }}"
+      output_dir: '.'
       step_name: "resolve_immediate_merge_conflicts"
     capture:
       conflict_escalation_required: "${{ result.escalation_required }}"
@@ -1689,7 +1689,7 @@ steps:
     with:
       skill_command: "/autoskillit:resolve-merge-conflicts ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
-      output_dir: "${{ context.work_dir }}"
+      output_dir: '.'
       step_name: "ci_conflict_fix"
     capture:
       conflict_escalation_required: "${{ result.escalation_required }}"

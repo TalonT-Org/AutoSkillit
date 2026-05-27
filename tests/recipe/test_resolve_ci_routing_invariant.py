@@ -196,9 +196,9 @@ def test_resolve_ci_routes_flake_suspected_to_re_push(recipe_name: str) -> None:
         ]
         if not routes:
             continue
-        assert any("re_push" in r for r in routes), (
+        assert any("re_push" in r or "pre_review_rebase" in r for r in routes), (
             f"{recipe_name}/{step_name}: verdict=flake_suspected must route to "
-            f"a re_push step (retry), got routes: {routes}"
+            f"a re_push step or pre_review_rebase (retry path), got routes: {routes}"
         )
 
 

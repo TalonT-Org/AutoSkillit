@@ -472,6 +472,16 @@ class TestRecipeParser:
         step = _parse_step(data)
         assert step.idle_output_timeout == 0
 
+    def test_parse_step_reads_phoropter_family(self) -> None:
+        data = {"tool": "run_skill", "phoropter_family": "lens-a", "on_success": "done"}
+        step = _parse_step(data)
+        assert step.phoropter_family == "lens-a"
+
+    def test_parse_step_phoropter_family_defaults_to_none(self) -> None:
+        data = {"tool": "run_skill", "on_success": "done"}
+        step = _parse_step(data)
+        assert step.phoropter_family is None
+
     # MOD4
     def test_bundled_resolve_failures_steps_use_config_default(self) -> None:
         bd = builtin_recipes_dir()

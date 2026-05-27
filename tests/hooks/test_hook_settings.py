@@ -217,7 +217,6 @@ def test_merged_hook_config_overlay_wins():
     assert merged["kitchen_id"] == "k1"
 
 
-
 # T-HS-10
 def test_read_quota_cache_returns_data_for_fresh_cache(tmp_path):
     """Call read_quota_cache with a fresh cache file and assert it returns the parsed dict."""

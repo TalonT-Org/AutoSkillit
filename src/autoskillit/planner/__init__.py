@@ -21,6 +21,7 @@ from autoskillit.planner.merge import (
     extract_item,
     merge_files,
     merge_refined_assignments,
+    merge_refined_wps,
     merge_tier_results,
     replace_item,
 )
@@ -68,6 +69,7 @@ __all__ = [
     "PlannerManifestItem",
     "merge_files",
     "merge_refined_assignments",
+    "merge_refined_wps",
     "merge_tier_results",
     "extract_item",
     "replace_item",

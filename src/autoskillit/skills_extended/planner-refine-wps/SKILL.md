@@ -13,37 +13,37 @@ hooks:
 
 # planner-refine-wps
 
-L1 session that refines a `combined_wps.json` (a `PlanDocument` with all work
-packages in `WPElaborated` form) by spawning one L0 subagent per phase in
-parallel (batched to 6). Unlike the per-WP elaboration pass, this skill spawns
-one L0 per **phase** (not per WP). Each L0 reviews ALL WPs in its assigned phase
-against the full WP set, detecting cross-phase API mismatches, duplicate
-deliverables, missing dependencies, and scope overlap. The L1 collects structured
-suggestions, resolves conflicts, and writes `refined_wps.json`.
+L1 session that refines a single phase's work packages (from a per-phase context
+file produced by `merge_wps`) by spawning one L0 subagent per phase in parallel
+(batched to 6). Unlike the per-WP elaboration pass, this skill spawns one L0 per
+**phase** (not per WP). Each L0 reviews ALL WPs in its assigned phase against peer
+WP stubs for cross-phase awareness, detecting API mismatches, duplicate deliverables,
+missing dependencies, and scope overlap. The L1 collects structured suggestions,
+resolves conflicts, and writes `{phase_id}_result.json` to the `wp_refine_contexts/`
+directory.
 
 ## When to Use
 
-- Launched by the L2 planner recipe after the parallel WP elaboration merge step
-- Accepts `combined_wps.json`, `refined_plan.json`, and `refined_assignments.json`
-- Produces `refined_wps.json` as input for downstream planner steps (e.g. reconcile_deps)
+- Launched by the L2 planner recipe once per phase after the WP merge step
+- Accepts a per-phase context file from `wp_refine_contexts/`, `refined_plan.json`, and planner_dir
+- Produces `{phase_id}_result.json` as input for `merge_refined_wps`
 
 ## Arguments
 
-- **$1** — Absolute path to `combined_wps.json` (PlanDocument with `work_packages: list[WPElaborated]`)
+- **$1** — Absolute path to per-phase context file (`wp_refine_contexts/context_{phase_id}.json`)
 - **$2** — Absolute path to `refined_plan.json` (PlanDocument with phases as PhaseElaborated)
-- **$3** — Absolute path to `refined_assignments.json` (PlanDocument with assignments as AssignmentElaborated)
-- **$4** — Absolute path to the run-scoped planner directory (e.g., `{{AUTOSKILLIT_TEMP}}/planner/run-YYYYMMDD-HHMMSS`). Output is written to `$4/refined_wps.json`.
+- **$3** — Absolute path to the run-scoped planner directory (e.g., `{{AUTOSKILLIT_TEMP}}/planner/run-YYYYMMDD-HHMMSS`). Output is written to `$3/wp_refine_contexts/{phase_id}_result.json`.
 
 ## Critical Constraints
 
 **NEVER:**
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
 
-- Write any file outside `$4/`
-- Directly modify `combined_wps.json` ($1) — always write a new `refined_wps.json`
+- Write any file outside `$3/`
+- Directly modify the context file ($1) — always write a new `{phase_id}_result.json`
 - Allow an L0 subagent to write files directly (L0s return structured text only)
-- Emit `refined_wps_path` before writing `refined_wps.json`
-- Skip emitting `refined_wps_path` even if all L0s fail (write unchanged WPs, still emit)
+- Emit `phase_wp_refined_path` before writing `{phase_id}_result.json`
+- Skip emitting `phase_wp_refined_path` even if all L0s fail (write unchanged WPs, still emit)
 - Spawn more than 6 L0s in a single parallel batch
 - Spawn one L0 per WP — L0s operate per PHASE
 - Read `{{AUTOSKILLIT_TEMP}}` artifacts not passed as positional arguments
@@ -57,29 +57,32 @@ suggestions, resolves conflicts, and writes `refined_wps.json`.
 - Log `WARNING` to stdout for any L0 response that fails validation (skip that phase)
 - Log `CRITICAL` to stdout for any L0 subagent that fails entirely (proceed with N-1 suggestions)
 - When two WPs claim the same deliverable file, assign ownership to the WP with the numerically earlier ID using natural sort (e.g., `P1-A1-WP1` beats `P2-A1-WP1`)
-- Emit: `refined_wps_path = <absolute path to refined_wps.json>`
+- Emit: `phase_wp_refined_path = <absolute path to $3/wp_refine_contexts/{phase_id}_result.json>`
 
 ## Workflow
 
 ### Step 1: Parse inputs and validate
 
-Read `$1` (combined_wps.json). Parse as a `PlanDocument`. Extract all WP entries
-from `work_packages[]`. Fail immediately (exit non-zero) if `work_packages` is
-empty or the file is malformed — do not proceed to spawn L0s. The failure message
-must include the file path and the parse/validation error string:
+Read `$1` (per-phase context file: `wp_refine_contexts/context_{phase_id}.json`). Extract:
+- `phase_id` — the phase this session handles
+- `work_packages` — full `WPElaborated` objects for this phase
+- `peer_summaries` — stub dicts for WPs in all other phases
+- `task_file_path` — path to the task document
+
+Fail immediately (exit non-zero) if `work_packages` is empty or the file is malformed:
 ```
 FATAL: failed to parse {path}: {error_detail}
 ```
 
 Read `$2` (refined_plan.json). Build a map `phase_id → PhaseElaborated` for phase context.
-Read `$3` (refined_assignments.json). Build a map `assignment_id → AssignmentElaborated` for assignment context.
+The `$3` argument is the planner output directory; output is written to `$3/wp_refine_contexts/{phase_id}_result.json`.
 
-Input schema (PlanDocument with WPElaborated work packages):
+Input schema (per-phase context file):
 ```json
 {
   "schema_version": 1,
-  "task": "...",
-  "source_dir": "...",
+  "phase_id": "P1",
+  "task_file_path": "/path/to/task.md",
   "work_packages": [
     {
       "id": "P1-A1-WP1",
@@ -87,9 +90,6 @@ Input schema (PlanDocument with WPElaborated work packages):
       "phase_id": "P1",
       "name": "...",
       "scope": "...",
-      "estimated_files": ["..."],
-      "goal": "...",
-      "summary": "...",
       "technical_steps": ["..."],
       "files_touched": ["..."],
       "apis_defined": ["..."],
@@ -98,26 +98,33 @@ Input schema (PlanDocument with WPElaborated work packages):
       "deliverables": ["..."],
       "acceptance_criteria": ["..."]
     }
+  ],
+  "peer_summaries": [
+    {
+      "id": "P2-A1-WP1",
+      "name": "...",
+      "scope": "...",
+      "deliverables": ["..."],
+      "apis_defined": ["..."],
+      "apis_consumed": ["..."]
+    }
   ]
 }
 ```
 
-### Step 2: Group WPs by phase and build L0 context packets
+### Step 2: Build L0 context packets per phase
 
-Read the `task` field from the combined WPs document. Each L0 subagent reviewing a phase's
-WPs must verify that every WP's deliverables and scope serve the stated task. Flag WPs
-whose deliverables address concerns not mentioned in the task as scope creep.
+Read `task_file_path` from the context file to load the task description. Each L0 subagent
+reviews this phase's WPs against peer stubs for cross-phase awareness. Flag WPs whose
+deliverables address concerns not in the task as scope creep.
 
-Group WPs by `phase_id` (always populated; read directly from the field).
-For each phase, build a context packet containing:
-- The full serialized `combined_wps.json` content (all WPs visible for cross-phase awareness)
-- The `PhaseElaborated` entry for the phase from `$2`
-- The `AssignmentElaborated` entries for all assignments in this phase from `$3`
-- The `overlap_notes` field from the `AssignmentElaborated` entries for this phase (use as a prior signal — if an assignment's overlap_notes flag a relationship with another assignment, scrutinize their WPs for subsumption)
-- The `target_phase_id`
-- The list of WP IDs assigned to this L0 (the WPs in this phase)
-- Instructions: review this phase's WPs against the full WP set; return structured suggestions only — do NOT edit files
-- Use `overlap_notes` from assignment elaboration as a prior signal — if an assignment's overlap_notes flag a relationship with another assignment, scrutinize their WPs for subsumption and report matches in `subsumption_pairs`
+For each phase (one context file = one phase), build a context packet containing:
+- The full `work_packages` list from the context file (own phase's WPs in detail)
+- The `peer_summaries` list from the context file (other phases' WPs as stubs)
+- The `PhaseElaborated` entry for this phase from `$2`
+- The `target_phase_id` (from `context.phase_id`)
+- Instructions: review this phase's WPs against peer stubs; return structured suggestions only — do NOT edit files
+- Use `overlap_notes` from the PhaseElaborated entry as a prior signal for subsumption detection
 
 ### Step 3: Spawn parallel L0 subagents
 
@@ -228,12 +235,17 @@ Valid WPElaborated fields for changes: `goal`, `summary`, `technical_steps`,
 
 ### Step 7: Write output
 
-Write the updated `PlanDocument` to `$4/refined_wps.json`. The output schema is
-identical to the input `combined_wps.json` (a `PlanDocument` with
-`work_packages: list[WPElaborated]`).
+Write the updated work packages for this phase to `$3/wp_refine_contexts/{phase_id}_result.json`.
+The output schema:
+```json
+{
+  "schema_version": 1,
+  "work_packages": [ ... refined WPElaborated objects for this phase ... ]
+}
+```
 
 ### Step 8: Emit output token
 
 ```
-refined_wps_path = <absolute path to $4/refined_wps.json>
+phase_wp_refined_path = <absolute path to $3/wp_refine_contexts/{phase_id}_result.json>
 ```

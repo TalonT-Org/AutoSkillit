@@ -300,7 +300,7 @@ steps:
       task_file_path: "${{ context.task_file_path }}"
       source_dir: "${{ inputs.source_dir }}"
     capture:
-      combined_wps_path: "${{ result.merged_path }}"
+      wp_refine_context_paths: "${{ result.wp_refine_context_paths }}"
     on_success: refine_wps
     on_failure: escalate_stop
 
@@ -308,14 +308,26 @@ steps:
     tool: run_skill
     model: ""
     with:
-      skill_command: >
-        /autoskillit:planner-refine-wps
-        ${{ context.combined_wps_path }}
-        ${{ context.refined_plan_path }}
-        ${{ context.refined_assignments_path }}
-        ${{ context.planner_dir }}
+      skill_command: "/autoskillit:planner-refine-wps {context_path} ${{ context.refined_plan_path }} ${{ context.planner_dir }}"
       cwd: "${{ inputs.source_dir }}"
-      output_dir: "${{ context.planner_dir }}"
+      output_dir: "${{ context.planner_dir }}/wp_refine_contexts"
+      dispatch_items: "${{ context.wp_refine_context_paths }}"
+    capture_list:
+      phase_wp_refined_path: "${{ result.phase_wp_refined_path }}"
+    retries: 0
+    on_success: merge_refined_wps
+    on_failure: escalate_stop
+    note: >
+      PARALLEL DISPATCH: context.wp_refine_context_paths contains comma-separated paths
+      to per-phase WP context files. For each context_path, substitute it into
+      the {context_path} placeholder in skill_command and issue one run_skill call
+      in parallel. Accumulate results via capture_list.
+
+  merge_refined_wps:
+    tool: run_python
+    with:
+      callable: "autoskillit.planner.merge.merge_refined_wps"
+      planner_dir: "${{ context.planner_dir }}"
     capture:
       refined_wps_path: "${{ result.refined_wps_path }}"
     on_success: consolidate_wps_analyze

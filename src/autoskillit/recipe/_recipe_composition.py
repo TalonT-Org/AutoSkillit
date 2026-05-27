@@ -313,6 +313,13 @@ def _prune_skipped_steps(
             for name, s in working.steps.items():
                 if name == step_name:
                     continue
+                # Fast path: skip steps that do not reference the pruned step at all.
+                # _collect_all_route_targets is the single source of truth for routing
+                # field enumeration — adding a new routing field there automatically
+                # extends this guard's coverage.
+                if step_name not in _collect_all_route_targets(s):
+                    new_steps[name] = s
+                    continue
                 fixes: dict[str, Any] = {}
                 if s.on_success == step_name and redirect is not None:
                     fixes["on_success"] = redirect

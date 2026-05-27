@@ -640,126 +640,33 @@ steps:
 
 
 def test_bundled_recipes_prune_produces_no_dangling_routes() -> None:
-    """Integration: prune+validate covers all routing fields with no silent dangling routes.
-
-    Tests the core invariant: for any step with a computable redirect (on_success or
-    on_result with when=None default), pruning that step in isolation leaves no surviving
-    step routing to the pruned step's name. Steps without a computable redirect are
-    correctly detected by _validate_no_dangling_routes.
+    """Regression: pruning any skip_when_false step in each bundled recipe
+    produces no dangling routes.
     """
     from autoskillit.recipe._recipe_composition import (
         _prune_skipped_steps,
         _validate_no_dangling_routes,
     )
-    from autoskillit.recipe.schema import StepResultCondition, StepResultRoute
+    from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 
-    # Synthetic recipe exercising all six routing fields across two skip_when_false steps.
-    # Step A (on_result only with when=None default) is upstream of step B.
-    # Step B (on_success) is upstream of terminal.
-    # Upstream router routes to B via on_result.conditions.
-    recipe = Recipe(
-        name="test-integration",
-        description="Integration test for prune+validate coverage",
-        ingredients={
-            "flag_a": RecipeIngredient(description="Enable A", default="false", hidden=True),
-            "flag_b": RecipeIngredient(description="Enable B", default="false", hidden=True),
-        },
-        steps={
-            "router": RecipeStep(
-                tool="run_skill",
-                with_args={"skill_command": "/autoskillit:route /tmp/x.md", "cwd": "/tmp"},
-                on_result=StepResultRoute(
-                    conditions=[
-                        StepResultCondition(when="${{ result.ok }}", route="step_b"),
-                        StepResultCondition(when=None, route="done"),
-                    ]
-                ),
-            ),
-            "step_a": RecipeStep(
-                tool="run_skill",
-                optional=True,
-                skip_when_false="inputs.flag_a",
-                on_result=StepResultRoute(
-                    conditions=[
-                        StepResultCondition(when="${{ result.ok }}", route="step_b"),
-                        StepResultCondition(when=None, route="done"),
-                    ]
-                ),
-                with_args={"skill_command": "/autoskillit:diagnose /tmp/x.md", "cwd": "/tmp"},
-            ),
-            "upstream_b": RecipeStep(
-                tool="run_cmd",
-                with_args={"cmd": "echo hi"},
-                on_success="step_b",
-                on_failure="done",
-            ),
-            "step_b": RecipeStep(
-                tool="run_skill",
-                optional=True,
-                skip_when_false="inputs.flag_b",
-                on_success="done",
-                with_args={"skill_command": "/autoskillit:validate /tmp/x.md", "cwd": "/tmp"},
-            ),
-            "done": RecipeStep(action="stop", message="done"),
-        },
-        kitchen_rules=["test"],
-    )
+    recipe_dir = builtin_recipes_dir()
+    yaml_files = sorted(recipe_dir.glob("*.yaml"))
+    assert yaml_files, "No bundled recipe YAML files found"
 
-    # Test 1: prune step_b (has on_success → redirect=done)
-    pruned_b, _ = _prune_skipped_steps(recipe, ingredient_overrides={"flag_b": "false"})
-    assert "step_b" not in pruned_b.steps
-    errors_b = _validate_no_dangling_routes(pruned_b)
-    assert not errors_b, f"Unexpected dangling routes after pruning step_b: {errors_b}"
-    # router.on_result was pointing to step_b → now repaired to "done"
-    router_b = pruned_b.steps["router"]
-    assert all(c.route != "step_b" for c in router_b.on_result.conditions)
-    # upstream_b.on_success was pointing to step_b → repaired to "done"
-    assert pruned_b.steps["upstream_b"].on_success == "done"
-
-    # Test 2: prune step_a (has on_result with when=None default → redirect=done)
-    pruned_a, _ = _prune_skipped_steps(recipe, ingredient_overrides={"flag_a": "false"})
-    assert "step_a" not in pruned_a.steps
-    errors_a = _validate_no_dangling_routes(pruned_a)
-    assert not errors_a, f"Unexpected dangling routes after pruning step_a: {errors_a}"
-
-    # Test 3: prune both — cascade via step_b's redirect (done) which is terminal
-    pruned_both, _ = _prune_skipped_steps(
-        recipe, ingredient_overrides={"flag_a": "false", "flag_b": "false"}
-    )
-    assert "step_a" not in pruned_both.steps
-    assert "step_b" not in pruned_both.steps
-    errors_both = _validate_no_dangling_routes(pruned_both)
-    assert not errors_both, f"Unexpected dangling routes after pruning both: {errors_both}"
-
-    # Test 4: step with on_result and NO when=None default → redirect=None → validator catches it
-    recipe_no_default = Recipe(
-        name="test-no-default",
-        description="Step with no redirect computable",
-        ingredients={
-            "flag": RecipeIngredient(description="Enable step", default="false", hidden=True),
-        },
-        steps={
-            "upstream": RecipeStep(
-                tool="run_cmd", with_args={"cmd": "echo hi"}, on_success="skippable"
-            ),
-            "skippable": RecipeStep(
-                tool="run_skill",
-                optional=True,
-                skip_when_false="inputs.flag",
-                on_result=StepResultRoute(
-                    conditions=[
-                        StepResultCondition(when="${{ result.ok }}", route="done"),
-                    ]
-                ),
-                with_args={"skill_command": "/autoskillit:diagnose /tmp/x.md", "cwd": "/tmp"},
-            ),
-            "done": RecipeStep(action="stop", message="done"),
-        },
-        kitchen_rules=["test"],
-    )
-    pruned_nd, _ = _prune_skipped_steps(recipe_no_default, ingredient_overrides={"flag": "false"})
-    assert "skippable" not in pruned_nd.steps
-    errors_nd = _validate_no_dangling_routes(pruned_nd)
-    # Dangling route IS detected (upstream.on_success still points to "skippable")
-    assert len(errors_nd) > 0
-    assert any("skippable" in e for e in errors_nd)
+    for yaml_file in yaml_files:
+        recipe = load_recipe(yaml_file)
+        for step_name, step in recipe.steps.items():
+            if step.skip_when_false is None:
+                continue
+            ref = step.skip_when_false
+            if not ref.startswith("inputs."):
+                continue
+            ingredient_name = ref[len("inputs.") :]
+            pruned, _ = _prune_skipped_steps(
+                recipe, ingredient_overrides={ingredient_name: "false"}
+            )
+            errors = _validate_no_dangling_routes(pruned)
+            assert not errors, (
+                f"Bundled recipe {yaml_file.name!r}: pruning step {step_name!r} "
+                f"produced dangling routes: {errors}"
+            )

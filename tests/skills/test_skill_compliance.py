@@ -413,3 +413,26 @@ def test_no_background_subagent_in_spawning_skills(skill_dir: Path) -> None:
         "Add to its NEVER block: "
         "'- Run subagents in the background (`run_in_background: true` is prohibited)'"
     )
+
+
+_ANTI_BLAME_RE = re.compile(r"(?i)\bblame\b.*\bpre-existing\b")
+
+
+@pytest.mark.parametrize(
+    "skill_dir",
+    [d for d in _all_skill_dirs() if d.name.startswith(("implement-", "retry-"))],
+    ids=lambda d: d.name,
+)
+def test_implement_skills_have_anti_blame_prohibition(skill_dir: Path) -> None:
+    """All implement-* and retry-* skills must have the anti-blame
+    prohibition in their NEVER block."""
+    from tests._helpers import extract_never_block
+
+    text = (skill_dir / "SKILL.md").read_text()
+    never_block = extract_never_block(text)
+    assert never_block, f"{skill_dir.name}: implement-/retry- skill has no NEVER block"
+    assert _ANTI_BLAME_RE.search(never_block), (
+        f"{skill_dir.name}: NEVER block must include anti-blame prohibition. "
+        'Add: \'- Blame pre-commit or lint failures on "pre-existing issues" '
+        "\u2014 ALL pre-commit checks must pass on the committed code'"
+    )

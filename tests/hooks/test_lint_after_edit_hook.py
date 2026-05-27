@@ -270,6 +270,29 @@ class TestLintBehavior:
         updated = parsed["hookSpecificOutput"]["updatedToolResult"]
         assert LINT_ERROR_TRIGGER in updated
 
+    def test_autofix_ignore_flag_is_narrow(self):
+        """The --ignore flag in the ruff check --fix call must be 'F4', not a real rule code.
+
+        'F4' is a no-op prefix in ruff (prefix matching is not supported), which prevents
+        the auto-fix pass from suppressing real violations like F401, F811, or E501.
+        """
+        from pathlib import Path
+
+        hook_source = (
+            Path(__file__).parent.parent.parent
+            / "src"
+            / "autoskillit"
+            / "hooks"
+            / "lint_after_edit_hook.py"
+        ).read_text()
+        assert '"--ignore", "F4"' in hook_source or "'--ignore', 'F4'" in hook_source, (
+            "lint_after_edit_hook.py --ignore flag in auto-fix call changed from 'F4'"
+        )
+        for bad_rule in ("F401", "F811", "E501"):
+            assert f'"--ignore", "{bad_rule}"' not in hook_source, (
+                f"lint_after_edit_hook.py suppresses {bad_rule} in auto-fix pass"
+            )
+
 
 class TestOutputContract:
     """updatedToolResult must not contain the original tool_response content."""

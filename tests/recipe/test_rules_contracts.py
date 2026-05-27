@@ -716,9 +716,7 @@ def _make_write_contract(
     )
 
 
-def test_write_skill_reaching_push_without_source_output_dir_fires_conditional(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_write_skill_reaching_push_without_source_output_dir_fires_conditional() -> None:
     """Rule fires ERROR when conditional write skill has no output_dir and reaches push."""
     recipe = _make_write_push_recipe(output_dir=None, routes_to_push=True)
     contract = _make_write_contract(write_behavior="conditional")
@@ -735,9 +733,7 @@ def test_write_skill_reaching_push_without_source_output_dir_fires_conditional(
     assert hits[0].step_name == "skill_step"
 
 
-def test_write_skill_reaching_push_without_source_output_dir_fires_always(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_write_skill_reaching_push_without_source_output_dir_fires_always() -> None:
     """Rule fires ERROR when always-write skill has no output_dir and reaches push."""
     recipe = _make_write_push_recipe(output_dir=None, routes_to_push=True)
     contract = _make_write_contract(write_behavior="always")
@@ -751,9 +747,7 @@ def test_write_skill_reaching_push_without_source_output_dir_fires_always(
     assert hits[0].severity == Severity.ERROR
 
 
-def test_write_skill_reaching_push_with_output_dir_passes(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_write_skill_reaching_push_with_output_dir_passes() -> None:
     """Rule does NOT fire when output_dir is declared."""
     recipe = _make_write_push_recipe(output_dir="${{ context.work_dir }}", routes_to_push=True)
     contract = _make_write_contract(write_behavior="conditional")
@@ -766,9 +760,7 @@ def test_write_skill_reaching_push_with_output_dir_passes(
     assert not hits, "write-skill-requires-source-output-dir must not fire when output_dir is set"
 
 
-def test_write_skill_not_reaching_push_without_output_dir_passes(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_write_skill_not_reaching_push_without_output_dir_passes() -> None:
     """Rule does NOT fire when the skill does not reach push_to_remote."""
     recipe = _make_write_push_recipe(output_dir=None, routes_to_push=False)
     contract = _make_write_contract(write_behavior="conditional")
@@ -783,9 +775,7 @@ def test_write_skill_not_reaching_push_without_output_dir_passes(
     )
 
 
-def test_read_only_skill_without_output_dir_not_flagged(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_read_only_skill_without_output_dir_not_flagged() -> None:
     """Rule does NOT fire when the skill is read_only, even with write_behavior='always'."""
     recipe = _make_write_push_recipe(output_dir=None, routes_to_push=True)
     contract = _make_write_contract(write_behavior="always", read_only=True)

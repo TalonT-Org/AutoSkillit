@@ -221,6 +221,7 @@ forbidden_modules = [
     "autoskillit.server",
     "autoskillit.cli",
     "autoskillit.report",
+    "autoskillit.planner",
 ]
 
 # IL-004 | Lens: module-dependency | DS-001
@@ -240,6 +241,7 @@ forbidden_modules = [
     "autoskillit.server",
     "autoskillit.cli",
     "autoskillit.report",
+    "autoskillit.planner",
 ]
 
 # IL-005 | Lens: module-dependency | DS-001
@@ -259,6 +261,7 @@ forbidden_modules = [
     "autoskillit.server",
     "autoskillit.cli",
     "autoskillit.report",
+    "autoskillit.planner",
 ]
 
 # IL-006 | Lens: module-dependency | DS-001
@@ -277,6 +280,7 @@ forbidden_modules = [
     "autoskillit.server",
     "autoskillit.cli",
     "autoskillit.report",
+    "autoskillit.planner",
 ]
 
 # IL-007 | Lens: module-dependency | DS-001
@@ -292,6 +296,7 @@ forbidden_modules = [
     "autoskillit.server",
     "autoskillit.cli",
     "autoskillit.report",
+    "autoskillit.planner",
 ]
 
 # IL-008 | Lens: module-dependency | DS-001

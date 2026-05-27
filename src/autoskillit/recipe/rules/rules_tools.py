@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections import deque
+
 from autoskillit.core import (
     GATED_TOOLS,
     HEADLESS_TOOLS,
@@ -486,10 +488,12 @@ def _check_push_after_edit_requires_force(ctx: ValidationContext) -> list[RuleFi
         if step.tool != "push_to_remote":
             continue
         visited: set[str] = set()
-        queue: list[tuple[str, int]] = [(p, 1) for p in ctx.predecessors.get(step_name, set())]
+        queue: deque[tuple[str, int]] = deque(
+            (p, 1) for p in ctx.predecessors.get(step_name, set())
+        )
         found_write_skill: str | None = None
         while queue and found_write_skill is None:
-            pred_name, depth = queue.pop(0)
+            pred_name, depth = queue.popleft()
             if pred_name in visited or depth > max_hops:
                 continue
             visited.add(pred_name)
@@ -510,7 +514,7 @@ def _check_push_after_edit_requires_force(ctx: ValidationContext) -> list[RuleFi
                         break
             queue.extend((p, depth + 1) for p in ctx.predecessors.get(pred_name, set()))
         if found_write_skill is not None and (
-            step.with_args.get("force", "").strip().lower() != "true"
+            (step.with_args or {}).get("force", "").strip().lower() != "true"
         ):
             findings.append(
                 RuleFinding(

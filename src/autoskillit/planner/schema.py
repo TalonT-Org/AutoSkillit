@@ -325,7 +325,13 @@ def validate_assignment_result(data: dict[str, Any]) -> dict[str, Any]:
     result: dict[str, Any] = dict(data)
 
     if "phase_number" not in result or "assignment_number" not in result:
-        pn, an = parse_planner_id(str(data["id"]))[:2]
+        assign_id = str(data["id"])
+        if not _ASSIGN_ID_RE.match(assign_id):
+            raise ValueError(
+                f"validate_assignment_result: assignment id {assign_id!r} "
+                "does not match expected PX-AY format"
+            )
+        pn, an = parse_planner_id(assign_id)
         result.setdefault("phase_number", pn)
         result.setdefault("assignment_number", an)
 

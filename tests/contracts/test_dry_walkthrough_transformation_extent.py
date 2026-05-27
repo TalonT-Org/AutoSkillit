@@ -20,7 +20,7 @@ _SKILL_MD = (
 
 
 def test_dry_walkthrough_contains_transformation_extent_check():
-    """dry-walkthrough/SKILL.md Step 2 must include a block/statement transformation extent check."""
+    """dry-walkthrough/SKILL.md Step 2 must include a transformation extent check."""
     content = _SKILL_MD.read_text()
     assert re.search(
         r"block.statement.*transformation|structural.*boundary",

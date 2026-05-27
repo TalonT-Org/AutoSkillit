@@ -436,6 +436,9 @@ async def test_two_dispatch_happy_path(fleet_runtime: FleetRuntime) -> None:
 
     result_a = await rt.dispatch("recipe-a", shim_mode="success")
     assert result_a["success"] is True
+    assert result_a.get("lifespan_started") is not True, (
+        "plain success shim must not set lifespan_started"
+    )
 
     result_b = await rt.dispatch("recipe-b", shim_mode="success")
     assert result_b["success"] is True

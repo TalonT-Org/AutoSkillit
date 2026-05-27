@@ -134,7 +134,12 @@ async def get_pipeline_report(clear: bool = False) -> str:
         except Exception as exc:
             logger.error("get_pipeline_report unhandled exception", exc_info=True)
             return json.dumps(
-                {"total_failures": 0, "failures": [], "error": f"{type(exc).__name__}: {exc}"}
+                {
+                    "success": False,
+                    "total_failures": 0,
+                    "failures": [],
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
             )
 
 

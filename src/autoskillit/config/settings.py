@@ -181,7 +181,9 @@ def _coerce_value(value: Any, target_type: type, context: str) -> Any:
             inner = non_none[0]
             if inner is bool:
                 return bool(value) if value is not None else None
-            if value is None:
+            if inner in (int, float):
+                return _coerce_value(value, inner, context) if value is not None else None
+            if not value:
                 return None
             return _coerce_value(value, inner, context)
         return value

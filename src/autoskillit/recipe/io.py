@@ -5,12 +5,13 @@ from __future__ import annotations
 import json as _json
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from autoskillit.core import (
     CAPTURE_VALID_VALUE_TYPES,
     CORE_PACKS,
     CaptureEntrySpec,
+    CaptureValueType,
     DispatchGateType,
     LoadReport,
     LoadResult,
@@ -433,7 +434,9 @@ def _parse_capture_spec(capture_raw: Any) -> dict[str, CaptureEntrySpec]:
                         fallback="string",
                     )
                     effective_type = "string"
-                result[key] = CaptureEntrySpec(from_=from_, value_type=effective_type)
+                result[key] = CaptureEntrySpec(
+                    from_=from_, value_type=cast(CaptureValueType, effective_type)
+                )
             else:
                 logger.warning(
                     "capture_spec_malformed_longform",

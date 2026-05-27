@@ -49,7 +49,19 @@ CLONE_COMMIT_SKILLS: frozenset[str] = frozenset(
     }
 )
 
+GUARD_EXCLUDE_PREFIX = ".autoskillit/"
+
 _GIT_TIMEOUT: float = 10.0
+
+
+def is_path_under_exclude(path: Path, cwd: Path, prefix: str) -> bool:
+    try:
+        rel = path.relative_to(cwd)
+        if not rel.parts:
+            return False
+        return str(rel.parts[0]) + "/" == prefix
+    except ValueError:
+        return False
 
 
 @dataclass(frozen=True, slots=True)

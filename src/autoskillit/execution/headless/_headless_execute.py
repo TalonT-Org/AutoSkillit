@@ -32,9 +32,11 @@ from autoskillit.core import (
 )
 from autoskillit.core import resolve_skill_temp_dir as _resolve_skill_temp_dir
 from autoskillit.execution.clone_guard import (
+    GUARD_EXCLUDE_PREFIX,
     build_clone_guard_policy,
     check_and_revert_clone_contamination,
     is_clone_commit_skill,
+    is_path_under_exclude,
     is_worktree_skill,
     snapshot_clone_state,
 )
@@ -61,20 +63,6 @@ if TYPE_CHECKING:
     from autoskillit.pipeline.context import ToolContext
 
 logger = get_logger(__name__)
-
-
-_GUARD_EXCLUDE_PREFIX = ".autoskillit/"
-
-
-def _is_path_under_exclude(path: Path, cwd: Path, prefix: str) -> bool:
-    """Return True if path is under cwd/prefix."""
-    try:
-        rel = path.relative_to(cwd)
-        if not rel.parts:
-            return False
-        return str(rel.parts[0]) + "/" == prefix
-    except ValueError:
-        return False
 
 
 async def _execute_claude_headless(
@@ -178,7 +166,7 @@ async def _execute_claude_headless(
     _writes_under_exclude = bool(
         write_watch_dirs
         and all(
-            _is_path_under_exclude(d, Path(cwd), _GUARD_EXCLUDE_PREFIX) for d in write_watch_dirs
+            is_path_under_exclude(d, Path(cwd), GUARD_EXCLUDE_PREFIX) for d in write_watch_dirs
         )
     )
     _clone_guard_policy = build_clone_guard_policy(

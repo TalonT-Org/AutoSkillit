@@ -91,6 +91,7 @@ def _build_orchestrator_prompt(
             f"{ingredients_table}\n\n"
             "The ingredient names above are authoritative. Use them verbatim when:\n"
             "- Collecting values from the user\n"
+            "- Evaluating skip_when_false conditions\n"
             "- Passing ingredients to pipeline steps via `with:` arguments\n\n"
         )
 
@@ -190,9 +191,13 @@ CONTEXT LIMIT ROUTING — run_skill only (check BEFORE on_failure):
     not a context limit. No partial worktree progress should be resumed.
   - Fall through to on_failure regardless of whether on_context_limit is defined.
 - When run_skill returns "needs_retry: true" AND "retry_reason: clone_contamination":
-  - The clone guard detected modifications to the clone's git state (HEAD advanced or
-    uncommitted tracked files appeared). This is a clone integrity violation.
-  - Fall through to on_failure regardless of whether on_context_limit is defined.
+  - Route: Fall through to on_failure regardless of whether on_context_limit is defined.
+  - The clone has been reverted to its pre-session state — no partial progress to resume.
+  - Diagnostic note: Check pre_contamination_retry_reason in the run_skill JSON output.
+  - If pre_contamination_retry_reason is "resume" and infra_exit_category is
+    "context_exhausted", the session hit context limits before contamination was detected.
+  - Log this for diagnostics but still route to on_failure — the revert destroyed any
+    resumable state.
 - When run_skill returns "needs_retry: true" AND "retry_reason: thinking_stall":
   - The model consumed tokens (thinking blocks were present) but produced no text or tool output.
     If lifespan_started is true (model made tool calls before the thinking-only final turn),
@@ -274,10 +279,10 @@ TWO FAILURE TIERS FOR PREDICATE-FORMAT STEPS:
 
 OPTIONAL STEP SEMANTICS:
 - optional: true means the step is SKIPPED (treated as bypassed) when its
-  skip_when_false ingredient resolves to false. It does NOT mean failures are tolerated.
-- skip_when_false ingredient references are resolved server-side before the recipe
-  is served. You may see literal "false" values (skip the step) or no skip_when_false
-  field at all (step is mandatory). Never evaluate inputs.* references yourself.
+  skip_when_false ingredient is false. It does NOT mean failures are tolerated.
+- When skip_when_false evaluates to true (or is absent), the step is MANDATORY
+  and MUST execute. The ONLY reason to skip an optional step is skip_when_false
+  being false — no other reason is valid.
 - A running optional step that returns success: false MUST follow on_failure.
   Never route a running optional step's failure to done.
 
@@ -285,9 +290,8 @@ STEP EXECUTION IS NOT DISCRETIONARY:
 - You MUST execute every step the pipeline routes you to.
 - NEVER skip a step because the PR is small, the diff is trivial, the change
   looks simple, or you judge the step unnecessary.
-- skip_when_false ingredient references are resolved server-side before the recipe
-  is served. You may see literal "false" values (skip the step) or no
-  skip_when_false field at all (step is mandatory). The LLM never evaluates inputs.*.
+- The ONLY mechanism for skipping a step is skip_when_false evaluating to false.
+  When skip_when_false evaluates to true (or is absent), the step is MANDATORY.
 - Consequence: skipping PR review steps results in unreviewed code, missing diff
   annotations, and no architectural lens analysis — code reaches main without
   quality gates.

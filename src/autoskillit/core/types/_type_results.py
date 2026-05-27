@@ -19,6 +19,7 @@ from ._type_enums import KillReason, RetryReason, SessionOutcome
 T = TypeVar("T")
 
 __all__ = [
+    "ContaminationOutcome",
     "LoadReport",
     "LoadResult",
     "TestResult",
@@ -209,6 +210,17 @@ class ApiRetryOutcome:
 
 
 @dataclass(frozen=True, slots=True)
+class ContaminationOutcome:
+    """Pre-contamination context preserved when clone_guard fires.
+
+    Default values (NONE, "") indicate no contamination occurred.
+    """
+
+    retry_reason: RetryReason = RetryReason.NONE
+    subtype: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class WriteEvidence:
     """Bundled write evidence signals — either explicitly constructed or absent."""
 
@@ -270,6 +282,8 @@ class SkillResult:
     """Infrastructure exit classification bundle."""
     api_retry: ApiRetryOutcome = field(default_factory=ApiRetryOutcome)
     """API retry event accumulation bundle."""
+    contamination: ContaminationOutcome = field(default_factory=ContaminationOutcome)
+    """Pre-contamination context bundle — populated only when clone_guard fires."""
 
     def to_json(self) -> str:
         data: dict[str, Any] = {
@@ -300,6 +314,8 @@ class SkillResult:
             "api_retry_last_error": self.api_retry.last_error,
             "api_retry_last_status": self.api_retry.last_status,
             "api_retry_exhausted": self.api_retry.exhausted,
+            "pre_contamination_retry_reason": self.contamination.retry_reason,
+            "pre_contamination_subtype": self.contamination.subtype,
         }
         if self.worktree_path is not None:
             data["worktree_path"] = self.worktree_path

@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.core import (
+    ContaminationOutcome,
     FailureRecord,
     RetryReason,
     SkillResult,
@@ -339,6 +340,10 @@ async def check_and_revert_clone_contamination(
             subtype="clone_contamination",
             needs_retry=True,
             retry_reason=RetryReason.CLONE_CONTAMINATION,
+            contamination=ContaminationOutcome(
+                retry_reason=skill_result.retry_reason,
+                subtype=skill_result.subtype,
+            ),
         )
 
     if audit is not None:

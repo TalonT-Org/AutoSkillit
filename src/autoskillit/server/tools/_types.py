@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any, TypedDict
 
-from autoskillit.core import ModelTotalEntry
+from autoskillit.core import ModelTotalEntry, RetryReason
 
 __all__ = [
     "RunSkillResult",
@@ -59,7 +59,7 @@ class RunSkillResult(_RunSkillResultBase, total=False):
     api_retry_last_error: str
     api_retry_last_status: int
     api_retry_exhausted: bool
-    pre_contamination_retry_reason: str
+    pre_contamination_retry_reason: RetryReason
     pre_contamination_subtype: str
 
 

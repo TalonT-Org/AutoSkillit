@@ -178,6 +178,7 @@ from .types import BareResume as BareResume
 from .types import CampaignProtector as CampaignProtector
 from .types import CanonicalTokenUsage as CanonicalTokenUsage
 from .types import CaptureEntrySpec as CaptureEntrySpec
+from .types import CaptureValueType as CaptureValueType
 from .types import CaptureValueTypeError as CaptureValueTypeError
 from .types import ChannelBStatus as ChannelBStatus
 from .types import ChannelConfirmation as ChannelConfirmation

@@ -628,8 +628,10 @@ class TestCaptureFieldNameRoundTrip:
         from autoskillit.fleet._prompts import _build_food_truck_prompt
 
         capture_spec = {
-            "worktree_path": CaptureEntrySpec(from_="${{ result.worktree_path }}"),
-            "pr_url": CaptureEntrySpec(from_="${{ result.pr_url }}"),
+            "worktree_path": CaptureEntrySpec(
+                from_="${{ result.worktree_path }}", value_type="string"
+            ),
+            "pr_url": CaptureEntrySpec(from_="${{ result.pr_url }}", value_type="string"),
         }
 
         prompt = _build_food_truck_prompt(
@@ -659,8 +661,10 @@ class TestCaptureFieldNameRoundTrip:
         from autoskillit.fleet._capture import _extract_captures
 
         capture_spec = {
-            "worktree_path": CaptureEntrySpec(from_="${{ result.worktree_path }}"),
-            "pr_url": CaptureEntrySpec(from_="${{ result.pr_url }}"),
+            "worktree_path": CaptureEntrySpec(
+                from_="${{ result.worktree_path }}", value_type="string"
+            ),
+            "pr_url": CaptureEntrySpec(from_="${{ result.pr_url }}", value_type="string"),
         }
 
         synthetic_payload = {
@@ -682,7 +686,9 @@ class TestCaptureFieldNameRoundTrip:
         from autoskillit.fleet._prompts import _build_food_truck_prompt
 
         capture_spec = {
-            "worktree-path": CaptureEntrySpec(from_="${{ result.worktree-path }}"),
+            "worktree-path": CaptureEntrySpec(
+                from_="${{ result.worktree-path }}", value_type="string"
+            ),
         }
 
         prompt = _build_food_truck_prompt(

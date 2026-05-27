@@ -235,11 +235,15 @@ class TestSentinelFormat:
         "capture_arg",
         [
             {
-                "worktree_path": CaptureEntrySpec(from_="${{ result.worktree_path }}"),
+                "worktree_path": CaptureEntrySpec(
+                    from_="${{ result.worktree_path }}", value_type="string"
+                ),
             },
             {
-                "worktree_path": CaptureEntrySpec(from_="${{ result.worktree_path }}"),
-                "pr_url": CaptureEntrySpec(from_="${{ result.pr_url }}"),
+                "worktree_path": CaptureEntrySpec(
+                    from_="${{ result.worktree_path }}", value_type="string"
+                ),
+                "pr_url": CaptureEntrySpec(from_="${{ result.pr_url }}", value_type="string"),
             },
         ],
         ids=["1-key", "2-key"],

@@ -25,6 +25,7 @@ from autoskillit.core import (
     ValidatedAddDir,
 )
 from autoskillit.execution.backends.codex import (
+    CODEX_ENV_PREFIX_DENYLIST,
     CodexBackend,
     CodexEnvPolicy,
     CodexFlags,
@@ -149,7 +150,7 @@ class TestCodexBackend:
         assert CodexBackend().capabilities.applicable_guards == frozenset()
 
     def test_capabilities_env_denylist_prefixes(self) -> None:
-        assert CodexBackend().capabilities.env_denylist_prefixes == ("CLAUDE_CODE_",)
+        assert CodexBackend().capabilities.env_denylist_prefixes == CODEX_ENV_PREFIX_DENYLIST
 
     def test_capabilities_min_version(self) -> None:
         assert CodexBackend().capabilities.min_version == "0.130.0"

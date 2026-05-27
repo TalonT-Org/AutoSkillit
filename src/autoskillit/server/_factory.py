@@ -329,7 +329,7 @@ def make_context(
         if config.agent_backend.backend == "codex":
             from autoskillit.execution import CodexBackend
 
-            backend = CodexBackend()  # type: ignore[assignment]
+            backend = CodexBackend()
         else:
             logger.warning(
                 "codex_backend_flag_ignored",

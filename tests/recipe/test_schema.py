@@ -710,3 +710,37 @@ def test_parse_recipe_authority_none_when_absent(tmp_path) -> None:
     }
     recipe = _parse_recipe(data)
     assert recipe.ingredients["task"].authority is None
+
+
+def test_parse_recipe_preserves_authority_field_roundtrip(tmp_path) -> None:
+    """authority='config' survives a full parse -> dict -> parse cycle."""
+    import dataclasses
+
+    from autoskillit.recipe.io import _parse_recipe
+
+    data = {
+        "name": "auth-test",
+        "description": "d",
+        "steps": {"done": {"action": "stop", "message": "Done."}},
+        "ingredients": {
+            "base_branch": {
+                "description": "Merge target",
+                "default": "",
+                "authority": "config",
+            }
+        },
+    }
+    recipe1 = _parse_recipe(data)
+    assert recipe1.ingredients["base_branch"].authority == "config"
+
+    ing = recipe1.ingredients["base_branch"]
+    ing_dict = {k: v for k, v in dataclasses.asdict(ing).items() if v is not None}
+
+    data2 = {
+        "name": "auth-test",
+        "description": "d",
+        "steps": {"done": {"action": "stop", "message": "Done."}},
+        "ingredients": {"base_branch": ing_dict},
+    }
+    recipe2 = _parse_recipe(data2)
+    assert recipe2.ingredients["base_branch"].authority == "config"

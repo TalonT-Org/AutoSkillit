@@ -9,7 +9,7 @@ import pytest
 
 from autoskillit.server.tools.tools_recipe import list_recipes as list_recipes_tool
 from autoskillit.server.tools.tools_recipe import validate_recipe
-from tests.server._helpers import _PATCHED_DEFAULTS, _SERVER_ONLY_KEYS
+from tests.server._helpers import _PATCHED_DEFAULTS
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -523,7 +523,6 @@ async def test_load_recipe_injects_hidden_ingredient_overrides(tool_ctx_kitchen_
     """load_recipe injects all SERVER_AUTHORITATIVE_INGREDIENTS keys into ingredient_overrides."""
     from unittest.mock import MagicMock, patch
 
-    from autoskillit.config.ingredient_defaults import SERVER_AUTHORITATIVE_INGREDIENTS
     from autoskillit.server.tools.tools_recipe import load_recipe
 
     tool_ctx_kitchen_open.recipes = MagicMock()
@@ -550,23 +549,15 @@ async def test_load_recipe_injects_hidden_ingredient_overrides(tool_ctx_kitchen_
     call_kwargs = tool_ctx_kitchen_open.recipes.load_and_validate.call_args.kwargs
     overrides = call_kwargs["ingredient_overrides"]
     assert overrides["kitchen_id"] == "test-kitchen-xyz"
-    for key in SERVER_AUTHORITATIVE_INGREDIENTS:
-        assert overrides[key] == _PATCHED_DEFAULTS[key], (
-            f"SERVER_AUTHORITATIVE key {key!r}: expected {_PATCHED_DEFAULTS[key]!r}, "
-            f"got {overrides[key]!r}"
-        )
+    assert overrides["post_run_diagnostics"] == "false"
 
 
-# 1b (load_recipe)
 @pytest.mark.anyio
-async def test_auto_overrides_keys_match_server_authoritative_ingredients_recipe(
-    tool_ctx_kitchen_open,
-):
-    """_auto_overrides in load_recipe must contain exactly SERVER_AUTHORITATIVE_INGREDIENTS
-    plus server-only keys — no more, no less. Verified with no caller overrides."""
+async def test_load_recipe_config_authority_overrides_caller(tool_ctx_kitchen_open, monkeypatch):
+    """load_recipe: _config_layer overrides caller-supplied overrides for
+    config-authoritative keys."""
     from unittest.mock import MagicMock, patch
 
-    from autoskillit.config.ingredient_defaults import SERVER_AUTHORITATIVE_INGREDIENTS
     from autoskillit.server.tools.tools_recipe import load_recipe
 
     tool_ctx_kitchen_open.recipes = MagicMock()
@@ -575,7 +566,9 @@ async def test_auto_overrides_keys_match_server_authoritative_ingredients_recipe
         "valid": True,
         "suggestions": [],
         "diagram": None,
-        "ingredients_table": "--- INGREDIENTS TABLE ---\n  task  required\n--- END TABLE ---",
+        "ingredients_table": (
+            "--- INGREDIENTS TABLE ---\n  base_branch  develop\n--- END TABLE ---"
+        ),
     }
     tool_ctx_kitchen_open.recipes.find.return_value = None
     tool_ctx_kitchen_open.kitchen_id = "test-kitchen-xyz"
@@ -586,15 +579,63 @@ async def test_auto_overrides_keys_match_server_authoritative_ingredients_recipe
     ):
         with patch(
             "autoskillit.server.tools.tools_recipe.resolve_ingredient_defaults",
-            return_value=_PATCHED_DEFAULTS,
+            return_value={
+                "base_branch": "develop",
+                "post_run_diagnostics": "false",
+                "is_fleet_dispatch": "false",
+                "dispatch_id": "",
+            },
         ):
-            # No caller overrides — _merged_overrides == _auto_overrides
-            await load_recipe(name="demo")
+            await load_recipe(
+                name="demo",
+                overrides={"base_branch": "main"},
+            )
 
     call_kwargs = tool_ctx_kitchen_open.recipes.load_and_validate.call_args.kwargs
     overrides = call_kwargs["ingredient_overrides"]
-    config_resolvable_in_overrides = frozenset(overrides.keys()) - _SERVER_ONLY_KEYS
-    assert config_resolvable_in_overrides == SERVER_AUTHORITATIVE_INGREDIENTS, (
-        f"Mismatch: added={config_resolvable_in_overrides - SERVER_AUTHORITATIVE_INGREDIENTS}, "
-        f"missing={SERVER_AUTHORITATIVE_INGREDIENTS - config_resolvable_in_overrides}"
-    )
+    assert overrides["base_branch"] == "develop"
+
+
+@pytest.mark.anyio
+async def test_load_recipe_with_config_authority_ingredient(tool_ctx_kitchen_open, monkeypatch):
+    """load_recipe integration: config-authority keys override caller values end-to-end."""
+    from unittest.mock import MagicMock, patch
+
+    from autoskillit.server.tools.tools_recipe import load_recipe
+
+    tool_ctx_kitchen_open.recipes = MagicMock()
+    tool_ctx_kitchen_open.recipes.load_and_validate.return_value = {
+        "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
+        "valid": True,
+        "suggestions": [],
+        "diagram": None,
+        "ingredients_table": (
+            "--- INGREDIENTS TABLE ---\n  base_branch  develop\n--- END TABLE ---"
+        ),
+    }
+    tool_ctx_kitchen_open.recipes.find.return_value = None
+    tool_ctx_kitchen_open.kitchen_id = "test-kitchen-xyz"
+
+    with patch(
+        "autoskillit.server.tools.tools_recipe._get_ctx_or_none",
+        return_value=tool_ctx_kitchen_open,
+    ):
+        with patch(
+            "autoskillit.server.tools.tools_recipe.resolve_ingredient_defaults",
+            return_value={
+                "base_branch": "develop",
+                "post_run_diagnostics": "false",
+                "is_fleet_dispatch": "false",
+                "dispatch_id": "",
+            },
+        ):
+            result_str = await load_recipe(
+                name="demo",
+                overrides={"base_branch": "main"},
+            )
+
+    result = json.loads(result_str)
+    call_kwargs = tool_ctx_kitchen_open.recipes.load_and_validate.call_args.kwargs
+    overrides_passed = call_kwargs["ingredient_overrides"]
+    assert overrides_passed["base_branch"] == "develop"
+    assert result.get("success") is True or "error" not in result

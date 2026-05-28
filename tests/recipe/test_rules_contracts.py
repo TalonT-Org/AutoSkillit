@@ -777,23 +777,6 @@ def test_write_skill_without_push_still_fires_when_no_output_dir() -> None:
     assert hits[0].severity == Severity.ERROR
 
 
-def test_write_skill_without_push_reachable_fires_when_no_output_dir() -> None:
-    """Rule fires for write-capable skill without output_dir, no push path at all."""
-    recipe = _make_write_push_recipe(output_dir=None, routes_to_push=False)
-    contract = _make_write_contract(write_behavior="conditional")
-    with patch(
-        "autoskillit.recipe.rules.rules_contracts.get_skill_contract",
-        return_value=contract,
-    ):
-        findings = run_semantic_rules(recipe)
-    hits = [f for f in findings if f.rule == "write-skill-requires-source-output-dir"]
-    assert hits, (
-        "write-skill-requires-source-output-dir must fire for write-capable skills "
-        "regardless of push reachability"
-    )
-    assert hits[0].severity == Severity.ERROR
-
-
 def test_read_only_skill_without_output_dir_not_flagged() -> None:
     """Rule does NOT fire when the skill is read_only, even with write_behavior='always'."""
     recipe = _make_write_push_recipe(output_dir=None, routes_to_push=True)

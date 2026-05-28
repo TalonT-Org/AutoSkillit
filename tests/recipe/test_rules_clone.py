@@ -477,3 +477,34 @@ def test_clone_terminal_requires_registration_passes_with_registration() -> None
     findings = run_semantic_rules(recipe)
     rule_findings = [f for f in findings if f.rule == "clone-terminal-requires-registration"]
     assert rule_findings == []
+
+
+def test_clone_terminal_requires_registration_does_not_fire_for_failure_path_only_terminal() -> (
+    None
+):
+    """Rule does not fire when the unregistered terminal is only reachable via on_failure.
+
+    BFS starts from clone.on_success, not the clone step itself. A terminal reachable
+    only through the clone's on_failure path is excluded: if the clone failed, no clone
+    directory was created so registration is not required.
+    """
+    recipe = _make_recipe(
+        {
+            "clone": RecipeStep(
+                tool="bootstrap_clone",
+                with_args={"source_dir": "/repo", "base_branch": "main"},
+                on_success="register",
+                on_failure="done",  # failure path reaches terminal without registration
+            ),
+            "register": RecipeStep(
+                tool="register_clone_status",
+                with_args={"clone_path": "/repo", "status": "success"},
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="Complete."),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    rule_findings = [f for f in findings if f.rule == "clone-terminal-requires-registration"]
+    assert rule_findings == []

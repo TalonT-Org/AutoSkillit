@@ -170,7 +170,7 @@ class TestBundledRecipesPassFailureDomainCheck:
         ],
     )
     def test_rebase_routes_to_merge_conflict_skill(self, recipe_name, merge_step_name):
-        """rebase condition in each recipe routes to a step invoking resolve-merge-conflicts."""
+        """rebase condition routes (possibly via guard) to resolve-merge-conflicts."""
         from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 
         recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
@@ -183,6 +183,14 @@ class TestBundledRecipesPassFailureDomainCheck:
                 found_rebase = True
                 target_step = recipe.steps[cond.route]
                 skill_cmd = (target_step.with_args or {}).get("skill_command", "")
+                if not skill_cmd and target_step.tool == "run_python" and target_step.on_result:
+                    for inner in target_step.on_result.conditions:
+                        if inner.when and "max_exceeded" in inner.when:
+                            continue
+                        inner_step = recipe.steps.get(inner.route)
+                        if inner_step:
+                            skill_cmd = (inner_step.with_args or {}).get("skill_command", "")
+                        break
                 assert "resolve-merge-conflicts" in skill_cmd, (
                     f"{recipe_name}: rebase routes to '{cond.route}' which invokes "
                     f"'{skill_cmd}', expected resolve-merge-conflicts"

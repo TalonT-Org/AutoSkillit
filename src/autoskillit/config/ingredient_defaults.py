@@ -105,6 +105,20 @@ def iter_display_categories(
 
 _REMOTE_PRECEDENCE = ("upstream", "origin")
 
+# Keys from resolve_ingredient_defaults() that the server must inject as authoritative
+# overrides, preventing LLM-supplied values from winning. source_dir is excluded because
+# it is project-identity (the clone URL) and is legitimately caller-supplied in fleet dispatch.
+SERVER_AUTHORITATIVE_INGREDIENTS: frozenset[str] = frozenset(
+    {
+        "base_branch",
+        "local_review_rounds",
+        "adversarial_review_level",
+        "post_run_diagnostics",
+        "is_fleet_dispatch",
+        "dispatch_id",
+    }
+)
+
 
 def resolve_ingredient_defaults(project_dir: Path) -> dict[str, str]:
     """Resolve auto-detect ingredient values from the project environment."""

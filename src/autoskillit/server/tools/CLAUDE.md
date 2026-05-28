@@ -7,6 +7,7 @@ MCP `@mcp.tool()` handlers registered on import (16 tool modules).
 | File | Purpose |
 |------|---------|
 | `__init__.py` | Docstring-only — tools register via `@mcp.tool()` on import |
+| `_auto_overrides.py` | Shared `_build_auto_overrides()` factory for server-authoritative ingredient injection |
 | `_types.py` | TypedDict definitions for server tool JSON responses (RunSkillResult, RunCmdResult, etc.) |
 | `tools_kitchen.py` | `open_kitchen`, `close_kitchen` (gate lifecycle), `recipe://` MCP resource |
 | `tools_config.py` | `configure_fleet`, `configure_order` (session config overlay) |

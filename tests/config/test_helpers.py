@@ -164,3 +164,42 @@ def test_resolve_ingredient_defaults_fleet_keys_survive_config_failure(tmp_path,
 
     assert defaults.get("is_fleet_dispatch") == "true"
     assert defaults.get("dispatch_id") == "dispatch-456"
+
+
+def test_resolve_ingredient_defaults_base_branch_from_config(tmp_path):
+    """1d: base_branch must reflect cfg.branching.default_base_branch when config loads."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.config import resolve_ingredient_defaults
+
+    repo = tmp_path / "repo"
+    subprocess.run(["git", "init", str(repo)], check=True)
+    subprocess.run(
+        ["git", "remote", "add", "origin", "https://github.com/org/repo"],
+        cwd=str(repo),
+        check=True,
+    )
+    mock_cfg = MagicMock()
+    mock_cfg.branching.default_base_branch = "develop"
+    mock_cfg.review.local_review_rounds = 3
+    mock_cfg.plan.adversarial_review_level = "aggressive"
+    mock_cfg.diagnostics.post_run_analysis = False
+
+    with patch("autoskillit.config.settings.load_config", return_value=mock_cfg):
+        defaults = resolve_ingredient_defaults(repo)
+
+    assert defaults["base_branch"] == "develop"
+
+
+def test_server_authoritative_ingredients_covers_resolved_defaults(tmp_path):
+    """1a: Every config-resolvable key from resolve_ingredient_defaults must be declared
+    in SERVER_AUTHORITATIVE_INGREDIENTS."""
+    from autoskillit.config import SERVER_AUTHORITATIVE_INGREDIENTS, resolve_ingredient_defaults
+
+    subprocess.run(["git", "init", str(tmp_path)], check=True, capture_output=True)
+    defaults = resolve_ingredient_defaults(tmp_path)
+    config_resolvable = {k for k in defaults if k != "source_dir"}
+    missing = config_resolvable - SERVER_AUTHORITATIVE_INGREDIENTS
+    assert not missing, (
+        f"Config-resolvable keys missing from SERVER_AUTHORITATIVE_INGREDIENTS: {missing}"
+    )

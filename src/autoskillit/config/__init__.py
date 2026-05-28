@@ -9,6 +9,7 @@ from autoskillit.config._config_dataclasses import (
     _MAX_CONCURRENT_DISPATCHES as _MAX_CONCURRENT_DISPATCHES,
 )
 from autoskillit.config.ingredient_defaults import (
+    SERVER_AUTHORITATIVE_INGREDIENTS,
     iter_display_categories,
     resolve_ingredient_defaults,
 )
@@ -89,6 +90,7 @@ __all__ = [
     "iter_display_categories",
     "load_config",
     "resolve_ingredient_defaults",
+    "SERVER_AUTHORITATIVE_INGREDIENTS",
     "validate_layer_keys",
     "write_config_layer",
 ]

@@ -696,11 +696,14 @@ steps:
     on_context_limit: release_issue_failure
     optional: true
     skip_when_false: inputs.open_pr
-    note: 'Reads the PR prep file, validates arch-lens diagrams (must contain ★ or
+    note: >
+      Reads the PR prep file, validates arch-lens diagrams (must contain ★ or
       ●), composes the PR body, and runs gh pr create. Degrades gracefully if gh is
       unavailable (emits pr_url=).
 
-      '
+      synthesis_algorithm: null — arch-lens readings forwarded to compose_pr without
+      aggregation. Dial (prepare_pr) -> Apply (run_arch_lenses) -> Output (compose_pr).
+      Explicit null-synthesis is a deliberate choice, not an omission.
   guard_pr_url:
     action: route
     on_result:

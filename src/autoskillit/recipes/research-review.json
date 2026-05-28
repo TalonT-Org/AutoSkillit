@@ -149,7 +149,7 @@
       },
       "on_success": "route_pr_or_local",
       "on_failure": "route_pr_or_local",
-      "note": "Idempotent file staging step. Copies phase-group, phase-plan, and exp-lens diagram artifacts from the worktree temp directory into research/{slug}/artifacts/. Creates images/ and scripts/ subdirectories. No compression, no rename, no commit. Safe to run multiple times — cp overwrites are idempotent. Runs after run_experiment_lenses to capture all exp-lens diagrams written to AUTOSKILLIT_TEMP/exp-lens-*/.\n"
+      "note": "Idempotent file staging step. Copies phase-group, phase-plan, and exp-lens diagram artifacts from the worktree temp directory into research/{slug}/artifacts/. Creates images/ and scripts/ subdirectories. No compression, no rename, no commit. Safe to run multiple times — cp overwrites are idempotent. Runs after run_experiment_lenses to capture all exp-lens diagrams written to AUTOSKILLIT_TEMP/exp-lens-*/.\nsynthesis_algorithm: null — exp-lens readings forwarded to stage_bundle without aggregation. Dial (prepare_research_pr) -> Apply (run_experiment_lenses) -> Output (stage_bundle -> compose_research_pr). Explicit null-synthesis is a deliberate choice, not an omission.\n"
     },
     "route_pr_or_local": {
       "action": "route",

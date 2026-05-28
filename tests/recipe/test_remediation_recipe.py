@@ -42,10 +42,15 @@ def test_check_review_loop_step_exists(recipe) -> None:
 
 # T_REM_LOOP2
 def test_pre_review_rebase_routes_to_re_push_review(recipe) -> None:
-    """pre_review_rebase on_success must route to re_push_review in remediation recipe."""
+    """pre_review_rebase uses run_python and routes clean to re_push_review."""
     assert "pre_review_rebase" in recipe.steps
     step = recipe.steps["pre_review_rebase"]
-    assert step.on_success == "re_push_review"
+    assert step.tool == "run_python"
+    assert step.on_success is None, "routing is via on_result, not on_success"
+    assert step.on_result is not None
+    clean_routes = [c.route for c in step.on_result.conditions if c.when and "clean" in c.when]
+    assert "re_push_review" in clean_routes
+    assert step.on_failure == "resolve_pre_review_conflicts"
 
 
 def test_re_push_review_routes_to_check_review_loop(recipe) -> None:

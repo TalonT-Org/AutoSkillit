@@ -205,6 +205,14 @@ def advance_queue_pr(
     return {"current_pr_number": "done"}
 
 
+def review_path_rebase(
+    work_dir: str,
+    base_branch: str,
+) -> dict[str, str]:
+    """Fetch and rebase for review/resolve paths; return clean or conflicts."""
+    return queue_ejected_fix(work_dir=work_dir, base_branch=base_branch)
+
+
 def proactive_rebase_next_pr(
     work_dir: str,
     next_pr_branch: str,

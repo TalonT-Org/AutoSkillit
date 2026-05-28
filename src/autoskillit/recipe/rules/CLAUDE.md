@@ -21,7 +21,7 @@ Semantic validation rule modules for recipe analysis (46 rule files).
 | `rules_ci_guards.py` | CI applicability guards, self-loop, enqueue gate, cwd/branch mismatch |
 | `rules_ci_merge_queue.py` | Merge queue PR state routing completeness and conformance |
 | `rules_clone.py` | Clone/push dataflow rules: missing remote URL, local-strategy capture |
-| `rules_cmd.py` | `run_cmd` echo-capture alignment; git remote command detection |
+| `rules_cmd.py` | `run_cmd` echo-capture alignment; git remote command detection; bare git rebase without conflict routing detection |
 | `rules_contracts.py` | Skill contract completeness rules |
 | `rules_dataflow.py` | Capture key validation, dead output, weak constraint |
 | `rules_dataflow_callable.py` | Callable contract validation, signature mismatch, context gap |

@@ -396,3 +396,130 @@ def test_emit_alignment_non_bash_capture_still_flagged():
     findings = run_semantic_rules(recipe)
     codes = [f.rule for f in findings]
     assert "run-cmd-emit-alignment" in codes
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# run-cmd-bare-rebase-without-conflict-routing
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_bare_rebase_fires_on_terminal_on_failure():
+    """run_cmd git rebase with on_failure → terminal step → ERROR."""
+    recipe = _make_recipe(
+        {
+            "rebase_step": {
+                "tool": "run_cmd",
+                "with": {"cmd": "git fetch origin && git rebase origin/main"},
+                "on_success": "END",
+                "on_failure": "END",
+            }
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    codes = [f.rule for f in findings]
+    assert "run-cmd-bare-rebase-without-conflict-routing" in codes
+    finding = next(f for f in findings if f.rule == "run-cmd-bare-rebase-without-conflict-routing")
+    assert "rebase_step" in finding.step_name
+
+
+def test_bare_rebase_clean_when_run_python():
+    """run_python step (not run_cmd) does NOT trigger the rule."""
+    recipe = _make_recipe(
+        {
+            "rebase_step": {
+                "tool": "run_python",
+                "with": {
+                    "callable": "autoskillit.recipe._cmd_rpc.review_path_rebase",
+                    "work_dir": "/tmp",
+                    "base_branch": "main",
+                },
+                "on_result": [
+                    {"when": "${{ result.status }} == clean", "route": "END"},
+                    {"route": "END"},
+                ],
+                "on_failure": "END",
+            }
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    assert all(f.rule != "run-cmd-bare-rebase-without-conflict-routing" for f in findings)
+
+
+def test_bare_rebase_clean_when_on_failure_routes_to_conflict_resolution():
+    """run_cmd git rebase with on_failure → resolve-merge-conflicts → no finding."""
+    recipe = _make_recipe(
+        {
+            "rebase_step": {
+                "tool": "run_cmd",
+                "with": {"cmd": "git fetch origin && git rebase origin/main"},
+                "on_success": "END",
+                "on_failure": "resolve_conflicts",
+            },
+            "resolve_conflicts": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:resolve-merge-conflicts /work main"},
+                "on_success": "END",
+                "on_failure": "END",
+            },
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    assert all(f.rule != "run-cmd-bare-rebase-without-conflict-routing" for f in findings)
+
+
+def test_bare_rebase_clean_when_on_result_routes_to_conflict_resolution():
+    """run_cmd git rebase with on_result routing to resolve-merge-conflicts → no finding."""
+    recipe = _make_recipe(
+        {
+            "rebase_step": {
+                "tool": "run_cmd",
+                "with": {"cmd": "git fetch origin && git rebase origin/main"},
+                "on_result": [
+                    {"when": "${{ result.status }} == clean", "route": "END"},
+                    {"route": "resolve_conflicts"},
+                ],
+                "on_failure": "resolve_conflicts",
+            },
+            "resolve_conflicts": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:resolve-merge-conflicts /work main"},
+                "on_success": "END",
+                "on_failure": "END",
+            },
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    assert all(f.rule != "run-cmd-bare-rebase-without-conflict-routing" for f in findings)
+
+
+def test_bare_rebase_does_not_match_rebase_abort():
+    """run_cmd with git rebase --abort does NOT trigger the rule."""
+    recipe = _make_recipe(
+        {
+            "cleanup_step": {
+                "tool": "run_cmd",
+                "with": {"cmd": "git rebase --abort"},
+                "on_success": "END",
+                "on_failure": "END",
+            }
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    assert all(f.rule != "run-cmd-bare-rebase-without-conflict-routing" for f in findings)
+
+
+def test_bundled_recipes_have_no_bare_rebase_findings():
+    """All bundled recipes must have zero run-cmd-bare-rebase-without-conflict-routing findings."""
+    from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+
+    recipes_dir = builtin_recipes_dir()
+    for yaml_path in sorted(recipes_dir.glob("*.yaml")):
+        recipe = load_recipe(yaml_path)
+        findings = run_semantic_rules(recipe)
+        bare_rebase = [
+            f for f in findings if f.rule == "run-cmd-bare-rebase-without-conflict-routing"
+        ]
+        assert not bare_rebase, (
+            f"{yaml_path.name}: found bare rebase findings: "
+            f"{[(f.step_name, f.message) for f in bare_rebase]}"
+        )

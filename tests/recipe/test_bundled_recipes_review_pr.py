@@ -409,7 +409,10 @@ class TestLocalReviewRoundsAndMaxRetriesAlignment:
 
 
 class TestPreReviewRebaseConflictResolution:
-    """Verify pre_review_rebase uses run_python with conflict routing in all 4 recipes."""
+    """Verify pre_review_rebase uses run_python with conflict routing in 3 recipes.
+
+    merge-prs uses different step names; covered by standalone tests.
+    """
 
     @pytest.fixture(
         scope="class",

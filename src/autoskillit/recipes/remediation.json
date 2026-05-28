@@ -326,15 +326,18 @@
       "on_failure": "release_issue_failure"
     },
     "close_issue_no_changes": {
+      "description": "Release issue after zero-change detection — stages on non-default branch, closes on promotion target",
       "tool": "release_issue",
       "optional": true,
       "skip_when_false": "inputs.issue_url",
       "with": {
         "issue_url": "${{ inputs.issue_url }}",
+        "target_branch": "${{ inputs.base_branch }}",
         "close_issue": "true"
       },
-      "on_success": "done",
-      "on_failure": "done"
+      "on_success": "register_clone_success",
+      "on_failure": "register_clone_success",
+      "note": "Zero changes detected post-implement. Passes target_branch so release_issue stages on non-default branches (base_branch != promotion_target) or closes on the promotion target branch. close_issue is silently ignored by release_issue when staging applies (Branch 1 takes precedence over Branch 3). Routes to register_clone_success for clone cleanup and diagnostics."
     },
     "test": {
       "tool": "test_check",

@@ -9,6 +9,10 @@ clone-step dataflow rules
   local transport, remote_url is always empty, so any downstream consumer of
   context.remote_url will receive "". The rule fires at recipe-validation time
   (open_kitchen / load_recipe) before any runtime call.
+- clone-terminal-requires-registration: all terminal paths reachable from a
+  clone-creating step (bootstrap_clone / clone_repo) must pass through a
+  register_clone_status step before reaching an action:stop terminal. Detects
+  clone-directory leaks where no cleanup registration is recorded.
 """
 
 from __future__ import annotations
@@ -22,6 +26,7 @@ from autoskillit.core import (
     get_logger,
 )
 from autoskillit.recipe._analysis import ValidationContext
+from autoskillit.recipe._analysis_bfs import bfs_reachable
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 logger = get_logger(__name__)
@@ -201,5 +206,87 @@ def _check_clone_local_remote_url_capture(ctx: ValidationContext) -> list[RuleFi
                 message=explanation,
             )
         )
+
+    return findings
+
+
+_CLONE_CREATING_TOOLS: frozenset[str] = frozenset({"bootstrap_clone", "clone_repo"})
+
+
+@semantic_rule(
+    name="clone-terminal-requires-registration",
+    description=(
+        "All terminal paths in clone-creating recipes must pass through "
+        "register_clone_status before reaching an action: stop step. "
+        "Without registration, the clone directory leaks and diagnostics "
+        "are never run."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_clone_terminal_requires_registration(ctx: ValidationContext) -> list[RuleFinding]:
+    recipe = ctx.recipe
+
+    # Find the first clone-creating step; if none, rule does not apply.
+    clone_step_name: str | None = None
+    for step_name, step in recipe.steps.items():
+        if step.tool in _CLONE_CREATING_TOOLS:
+            clone_step_name = step_name
+            break
+    if clone_step_name is None:
+        return []
+
+    # Build a full routing graph (all edge types: on_success, on_failure, on_context_limit,
+    # on_result conditions). Barrier nodes are register_clone_status steps.
+    graph: dict[str, set[str]] = {}
+    barrier_steps: set[str] = set()
+    all_step_names = set(recipe.steps)
+
+    for sn, step in recipe.steps.items():
+        targets: set[str] = set()
+        if step.on_success and step.on_success in all_step_names:
+            targets.add(step.on_success)
+        if step.on_failure and step.on_failure in all_step_names:
+            targets.add(step.on_failure)
+        if step.on_context_limit and step.on_context_limit in all_step_names:
+            targets.add(step.on_context_limit)
+        if step.on_result:
+            for cond in step.on_result.conditions:
+                if cond.route and cond.route in all_step_names:
+                    targets.add(cond.route)
+            for route in step.on_result.routes.values():
+                if route in all_step_names:
+                    targets.add(route)
+        if step.on_exhausted and step.on_exhausted in all_step_names:
+            targets.add(step.on_exhausted)
+        graph[sn] = targets
+        if step.tool == "register_clone_status":
+            barrier_steps.add(sn)
+
+    # Remove outgoing edges from barrier nodes so BFS stops there.
+    for barrier in barrier_steps:
+        graph[barrier] = set()
+
+    # Find all steps reachable from the clone step (BFS with barriers suppressed).
+    reachable = bfs_reachable(graph, clone_step_name)
+
+    # Check if any reachable step is a terminal (action == "stop").
+    findings: list[RuleFinding] = []
+    for sn in reachable:
+        step = recipe.steps[sn]
+        if step.action == "stop":
+            findings.append(
+                RuleFinding(
+                    rule="clone-terminal-requires-registration",
+                    severity=Severity.ERROR,
+                    step_name=clone_step_name,
+                    message=(
+                        f"Clone step '{clone_step_name}' has a path to terminal step '{sn}' "
+                        f"that bypasses register_clone_status. All terminal paths from a "
+                        f"clone-creating step must pass through register_clone_status to "
+                        f"register the clone for batch cleanup and diagnostics."
+                    ),
+                )
+            )
+            break  # one finding per clone step is sufficient
 
     return findings

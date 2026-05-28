@@ -196,7 +196,7 @@ def test_load_from_log_dir_reads_configured_model(tmp_path: Path) -> None:
                 "cache_read_tokens": 0,
                 "timing_seconds": 10.0,
                 "configured_model": "claude-opus-4-6",
-                "model_identifier": "claude-opus-4-6",
+                "model_identifier": "claude-sonnet-4-6",
             }
         )
     )

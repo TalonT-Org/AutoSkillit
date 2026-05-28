@@ -359,8 +359,8 @@ async def _run_dispatch(
     if "task" in full_recipe.ingredients and "task" not in effective_ingredients:
         effective_ingredients = {"task": task, **effective_ingredients}
 
-    from autoskillit.config.ingredient_defaults import (
-        apply_config_authoritative_overrides,  # noqa: PLC0415
+    from autoskillit.config import (  # noqa: PLC0415
+        apply_config_authoritative_overrides,
     )
 
     effective_ingredients = apply_config_authoritative_overrides(

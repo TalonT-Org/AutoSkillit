@@ -188,3 +188,21 @@ def apply_config_authoritative_overrides(
         if key in resolved:
             result[key] = resolved[key]
     return result
+
+
+_CONFIG_AUTHORITY_KEYS: frozenset[str] = frozenset(
+    {
+        "base_branch",
+        "source_dir",
+        "local_review_rounds",
+        "adversarial_review_level",
+        "post_run_diagnostics",
+        "is_fleet_dispatch",
+        "dispatch_id",
+    }
+)
+
+
+def build_config_authoritative_layer(defaults: dict[str, str]) -> dict[str, str]:
+    """Return the config-authoritative ingredient values from a resolved defaults dict."""
+    return {k: v for k, v in defaults.items() if k in _CONFIG_AUTHORITY_KEYS}

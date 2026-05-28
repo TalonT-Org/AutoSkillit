@@ -15,7 +15,11 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit import __version__
-from autoskillit.config import iter_display_categories, resolve_ingredient_defaults
+from autoskillit.config import (
+    build_config_authoritative_layer,
+    iter_display_categories,
+    resolve_ingredient_defaults,
+)
 from autoskillit.core import (
     PIPELINE_FORBIDDEN_TOOLS,
     ProcessStaleError,
@@ -410,20 +414,7 @@ async def open_kitchen(
                 "kitchen_id": tool_ctx.kitchen_id,
                 "diagnostics_log_dir": str(resolve_log_dir(tool_ctx.config.linux_tracing.log_dir)),
             }
-            _config_layer: dict[str, str] = {
-                k: v
-                for k, v in _defaults.items()
-                if k
-                in {
-                    "base_branch",
-                    "source_dir",
-                    "local_review_rounds",
-                    "adversarial_review_level",
-                    "post_run_diagnostics",
-                    "is_fleet_dispatch",
-                    "dispatch_id",
-                }
-            }
+            _config_layer = build_config_authoritative_layer(_defaults)
             _merged_overrides = {**_session_overrides, **(overrides or {}), **_config_layer}
             # Runtime enum check: output_mode must be validated before recipe loading
             if name == "research":

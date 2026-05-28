@@ -252,10 +252,22 @@ async def test_open_kitchen_recipe_found_returns_envelope_with_content_and_ingre
     assert "--- INGREDIENTS TABLE ---" in result_str
 
 
+_PATCHED_DEFAULTS = {
+    "base_branch": "develop",
+    "local_review_rounds": "7",
+    "adversarial_review_level": "aggressive",
+    "post_run_diagnostics": "true",
+    "is_fleet_dispatch": "true",
+    "dispatch_id": "test-dispatch-999",
+}
+
+_SERVER_ONLY_KEYS = frozenset({"kitchen_id", "diagnostics_log_dir"})
+
+
 # DIAG_C4
 @pytest.mark.anyio
 async def test_open_kitchen_injects_hidden_ingredient_overrides(tmp_path, monkeypatch):
-    """open_kitchen injects kitchen_id and post_run_diagnostics into ingredient_overrides."""
+    """open_kitchen injects all SERVER_AUTHORITATIVE_INGREDIENTS keys into ingredient_overrides."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     mock_ctx.enable_components = AsyncMock()
@@ -281,18 +293,77 @@ async def test_open_kitchen_injects_hidden_ingredient_overrides(tmp_path, monkey
                         "autoskillit.server.tools.tools_kitchen.resolve_kitchen_id",
                         return_value="test-kitchen-abc",
                     ):
-                        from autoskillit.server.tools.tools_kitchen import open_kitchen
+                        with patch(
+                            "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
+                            return_value=_PATCHED_DEFAULTS,
+                        ):
+                            from autoskillit.server.tools.tools_kitchen import open_kitchen
 
-                        mock_ctx.config.linux_tracing.log_dir = ""
-                        await open_kitchen(name="demo", ctx=mock_ctx)
+                            mock_ctx.config.linux_tracing.log_dir = ""
+                            await open_kitchen(name="demo", ctx=mock_ctx)
+
+    from autoskillit.config.ingredient_defaults import SERVER_AUTHORITATIVE_INGREDIENTS
 
     call_kwargs = mock_ctx.recipes.load_and_validate.call_args.kwargs
     overrides = call_kwargs["ingredient_overrides"]
     assert overrides["kitchen_id"] == "test-kitchen-abc"
-    assert overrides["post_run_diagnostics"] == "false"
-    assert overrides["is_fleet_dispatch"] == "false"
-    assert overrides["dispatch_id"] == ""
     assert overrides["diagnostics_log_dir"]  # non-empty string
+    for key in SERVER_AUTHORITATIVE_INGREDIENTS:
+        assert overrides[key] == _PATCHED_DEFAULTS[key], (
+            f"SERVER_AUTHORITATIVE key {key!r}: expected {_PATCHED_DEFAULTS[key]!r}, "
+            f"got {overrides[key]!r}"
+        )
+
+
+# 1b
+@pytest.mark.anyio
+async def test_auto_overrides_keys_match_server_authoritative_ingredients(tmp_path, monkeypatch):
+    """_auto_overrides in open_kitchen must contain exactly SERVER_AUTHORITATIVE_INGREDIENTS
+    plus server-only keys (kitchen_id, diagnostics_log_dir) — no more, no less."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+    mock_ctx.recipes = MagicMock()
+    mock_ctx.recipes.load_and_validate.return_value = {
+        "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
+        "valid": True,
+        "suggestions": [],
+        "diagram": None,
+        "ingredients_table": "--- INGREDIENTS TABLE ---\n  task  required\n--- END TABLE ---",
+    }
+    mock_ctx.recipes.find.return_value = None
+    mock_ctx.config.migration.suppressed = []
+    mock_ctx.kitchen_id = "test-kitchen-abc"
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    with patch(
+                        "autoskillit.server.tools.tools_kitchen.resolve_kitchen_id",
+                        return_value="test-kitchen-abc",
+                    ):
+                        with patch(
+                            "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
+                            return_value=_PATCHED_DEFAULTS,
+                        ):
+                            from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+                            mock_ctx.config.linux_tracing.log_dir = ""
+                            # No caller overrides — _merged_overrides == _auto_overrides
+                            await open_kitchen(name="demo", ctx=mock_ctx)
+
+    from autoskillit.config.ingredient_defaults import SERVER_AUTHORITATIVE_INGREDIENTS
+
+    call_kwargs = mock_ctx.recipes.load_and_validate.call_args.kwargs
+    overrides = call_kwargs["ingredient_overrides"]
+    config_resolvable_in_overrides = frozenset(overrides.keys()) - _SERVER_ONLY_KEYS
+    assert config_resolvable_in_overrides == SERVER_AUTHORITATIVE_INGREDIENTS, (
+        f"Mismatch: added={config_resolvable_in_overrides - SERVER_AUTHORITATIVE_INGREDIENTS}, "
+        f"missing={SERVER_AUTHORITATIVE_INGREDIENTS - config_resolvable_in_overrides}"
+    )
 
 
 @pytest.mark.anyio

@@ -359,6 +359,14 @@ async def _run_dispatch(
     if "task" in full_recipe.ingredients and "task" not in effective_ingredients:
         effective_ingredients = {"task": task, **effective_ingredients}
 
+    from autoskillit.config.ingredient_defaults import (
+        apply_config_authoritative_overrides,  # noqa: PLC0415
+    )
+
+    effective_ingredients = apply_config_authoritative_overrides(
+        effective_ingredients, full_recipe.ingredients, tool_ctx.project_dir
+    )
+
     effective_name = dispatch_name or recipe
     dispatches_dir = tool_ctx.temp_dir / "dispatches"
     dispatches_dir.mkdir(parents=True, exist_ok=True)

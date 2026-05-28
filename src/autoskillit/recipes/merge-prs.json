@@ -144,8 +144,7 @@
       "with": {
         "callable": "autoskillit.recipe._cmd_rpc.create_persistent_integration",
         "work_dir": "${{ context.work_dir }}",
-        "base_branch": "${{ inputs.base_branch }}",
-        "output_dir": "."
+        "base_branch": "${{ inputs.base_branch }}"
       },
       "on_success": "fetch_merge_queue_data",
       "on_failure": "register_clone_failure",
@@ -156,8 +155,8 @@
       "with": {
         "callable": "autoskillit.smoke_utils.fetch_merge_queue_data",
         "base_branch": "${{ inputs.base_branch }}",
-        "output_dir": "{{AUTOSKILLIT_TEMP}}/merge-prs",
-        "cwd": "${{ context.work_dir }}"
+        "cwd": "${{ context.work_dir }}",
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/merge-prs"
       },
       "capture": {
         "merge_queue_data_path": "${{ result.merge_queue_data_path }}"
@@ -410,8 +409,7 @@
         "callable": "autoskillit.recipe._cmd_rpc.attempt_cheap_rebase",
         "work_dir": "${{ context.work_dir }}",
         "ejected_pr_branch": "${{ context.ejected_pr_branch }}",
-        "base_branch": "${{ inputs.base_branch }}",
-        "output_dir": "."
+        "base_branch": "${{ inputs.base_branch }}"
       },
       "on_result": [
         {
@@ -707,8 +705,7 @@
         "callable": "autoskillit.recipe._cmd_rpc.proactive_rebase_next_pr",
         "work_dir": "${{ context.work_dir }}",
         "next_pr_branch": "${{ context.next_pr_branch }}",
-        "base_branch": "${{ inputs.base_branch }}",
-        "output_dir": "."
+        "base_branch": "${{ inputs.base_branch }}"
       },
       "on_result": [
         {
@@ -997,8 +994,7 @@
         "cwd": "${{ context.work_dir }}",
         "remote_url": "${{ context.remote_url }}",
         "step_name": "derive_conflict_ci_event",
-        "base_branch": "${{ inputs.base_branch }}",
-        "output_dir": "."
+        "base_branch": "${{ inputs.base_branch }}"
       },
       "capture": {
         "conflict_ci_event": "${{ result.ci_event }}",
@@ -1108,8 +1104,7 @@
         "cwd": "${{ context.work_dir }}",
         "remote_url": "${{ context.remote_url }}",
         "step_name": "handle_conflict_no_runs",
-        "base_branch": "${{ inputs.base_branch }}",
-        "output_dir": "."
+        "base_branch": "${{ inputs.base_branch }}"
       },
       "capture": {
         "conflict_ci_event": "${{ result.ci_event }}",
@@ -1311,8 +1306,8 @@
         "callable": "autoskillit.smoke_utils.compute_domain_partitions",
         "batch_branch": "${{ context.batch_branch }}",
         "base_branch": "${{ inputs.base_branch }}",
-        "output_dir": "{{AUTOSKILLIT_TEMP}}/open-integration-pr",
-        "cwd": "${{ context.work_dir }}"
+        "cwd": "${{ context.work_dir }}",
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/open-integration-pr"
       },
       "capture": {
         "domain_partitions_path": "${{ result.domain_partitions_path }}"

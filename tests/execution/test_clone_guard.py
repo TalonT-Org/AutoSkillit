@@ -905,6 +905,7 @@ async def test_guard_fires_when_worktree_path_none_despite_real_worktree(tmp_pat
     runner = MockSubprocessRunner()
     wt_dir = tmp_path / "worktrees" / "impl-fix"
     wt_dir.mkdir(parents=True)
+    (wt_dir / ".git").write_text("gitdir: /tmp/fake/.git/worktrees/impl-fix\n")
 
     porcelain_post = f"worktree {tmp_path}\n\nworktree {wt_dir}\n"
 
@@ -997,6 +998,7 @@ async def test_recovered_worktree_path_is_validated(tmp_path):
     runner = MockSubprocessRunner()
     wt_dir = tmp_path / "worktrees" / "impl-fix"
     wt_dir.mkdir(parents=True)
+    (wt_dir / ".git").write_text("gitdir: /tmp/fake/.git/worktrees/impl-fix\n")
 
     porcelain_post = f"worktree {tmp_path}\n\nworktree {wt_dir}\n"
     snapshot = CloneSnapshot(head_sha="abc123", worktree_set=frozenset())
@@ -1018,9 +1020,10 @@ async def test_recovered_worktree_path_is_validated(tmp_path):
             is_worktree=True,
         ),
     )
-    assert result.worktree_path == str(wt_dir)
     from autoskillit.core import validate_worktree_path
 
+    assert result.worktree_path is not None
+    assert result.worktree_path == str(wt_dir)
     assert validate_worktree_path(result.worktree_path) is not None
 
 
@@ -1064,6 +1067,7 @@ async def test_worktree_recovery_on_success_path(tmp_path):
     runner = MockSubprocessRunner()
     wt_dir = tmp_path / "worktrees" / "impl-fix"
     wt_dir.mkdir(parents=True)
+    (wt_dir / ".git").write_text("gitdir: /tmp/fake/.git/worktrees/impl-fix\n")
 
     porcelain_post = f"worktree {tmp_path}\n\nworktree {wt_dir}\n"
     snapshot = CloneSnapshot(head_sha="abc123", worktree_set=frozenset())
@@ -1090,12 +1094,13 @@ async def test_worktree_recovery_on_success_path(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# T28: validate_worktree_path rejects non-worktree dir with verify_git
+# T28: validate_worktree_path accepts dir without verify_git, rejects with it
 # ---------------------------------------------------------------------------
-def test_validate_worktree_path_rejects_non_worktree_dir(tmp_path):
+def test_validate_worktree_path_verify_git_rejects_non_worktree_dir(tmp_path):
+    from autoskillit.core import validate_worktree_path
+
     regular_dir = tmp_path / "not-a-worktree"
     regular_dir.mkdir()
-    from autoskillit.core import validate_worktree_path
 
     assert validate_worktree_path(regular_dir) is not None
     assert validate_worktree_path(regular_dir, verify_git=True) is None

@@ -193,7 +193,7 @@ async def _detect_new_worktrees(
 
 def _recover_worktree_path(new_worktrees: list[str]) -> str | None:
     for path in new_worktrees:
-        validated = validate_worktree_path(path)
+        validated = validate_worktree_path(path, verify_git=True)
         if validated is not None:
             return validated.path
     return None

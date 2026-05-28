@@ -62,13 +62,14 @@ class TestWriteGuardWorktreeIntegration:
 
     @pytest.mark.anyio
     async def test_worktree_skill_prefix_derivation_includes_worktree_parent(
-        self, tmp_path: Path, tool_ctx_kitchen_open
+        self, tmp_path: Path, tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
     ):
         """run_skill for a worktree skill derives both clone and worktree parent prefixes."""
         from tests.fakes import InMemoryHeadlessExecutor
 
         executor = InMemoryHeadlessExecutor()
         tool_ctx_kitchen_open.executor = executor
+        monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
         clone_dir = tmp_path / "clone"
         clone_dir.mkdir()
 
@@ -87,13 +88,14 @@ class TestWriteGuardWorktreeIntegration:
 
     @pytest.mark.anyio
     async def test_non_worktree_skill_gets_single_prefix(
-        self, tmp_path: Path, tool_ctx_kitchen_open
+        self, tmp_path: Path, tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
     ):
         """Non-worktree skill gets only the cwd-based prefix."""
         from tests.fakes import InMemoryHeadlessExecutor
 
         executor = InMemoryHeadlessExecutor()
         tool_ctx_kitchen_open.executor = executor
+        monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
         clone_dir = tmp_path / "clone"
         clone_dir.mkdir()
 

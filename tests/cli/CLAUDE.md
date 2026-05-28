@@ -67,6 +67,7 @@ CLI command, subcommand, and interactive workflow tests.
 | `test_restart.py` | Tests for cli/_restart.py — NoReturn process restart contract |
 | `test_routing_completeness.py` | Enum routing completeness: every orchestrator-visible RetryReason must have a routing rule in the orchestrator prompt |
 | `test_serve_sigterm.py` | Regression guard: serve() uses event-loop-routed signal handling (issue #745) |
+| `test_serve_guard_deferral.py` | Tests for serve_with_signal_guard dispatch-aware deferral — active dispatch deferral, immediate cancel, timeout |
 | `test_session_launch.py` | Tests for cli/_session_launch.py — _run_interactive_session contract |
 | `test_session_picker.py` | Tests for cli/_session_picker.py |
 | `test_signal_guard.py` | Tests for _fleet_signal_guard in cli/_fleet.py (Group J) |

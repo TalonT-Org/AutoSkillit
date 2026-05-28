@@ -257,3 +257,35 @@ class TestClassifyDispatchOutcomeSidecarSynthesis:
         status, reason = classify_dispatch_outcome(parsed, skill_result)
         assert status == DispatchStatus.SUCCESS
         assert reason == ""
+
+
+class TestClassifyDispatchOutcomeParsedNone:
+    def test_parsed_none_with_progress_is_resumable(self):
+        skill_result = dataclasses.replace(
+            _DEFAULT_SKILL_RESULT,
+            session_id="sess-abc",
+            lifespan_started=True,
+        )
+        status, reason = classify_dispatch_outcome(None, skill_result, sidecar_exists=True)
+        assert status == DispatchStatus.RESUMABLE
+        assert reason == FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
+
+    def test_parsed_none_with_abandon_reason_is_failure(self):
+        skill_result = dataclasses.replace(
+            _DEFAULT_SKILL_RESULT,
+            session_id="sess-abc",
+            lifespan_started=True,
+            retry_reason="idle_stall",
+        )
+        status, reason = classify_dispatch_outcome(None, skill_result, sidecar_exists=True)
+        assert status == DispatchStatus.FAILURE
+        assert reason == FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
+
+    def test_parsed_none_without_progress_is_failure(self):
+        skill_result = dataclasses.replace(
+            _DEFAULT_SKILL_RESULT,
+            session_id="",
+        )
+        status, reason = classify_dispatch_outcome(None, skill_result, sidecar_exists=False)
+        assert status == DispatchStatus.FAILURE
+        assert reason == FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK

@@ -49,7 +49,11 @@ _RETRIABLE_NON_SUCCESS = _ALWAYS_BLOCKING_STATUSES | frozenset({DispatchStatus.F
 
 
 _RESUMABLE_RETRY_REASONS: frozenset[str] = frozenset(
-    {FleetErrorCode.FLEET_L3_TIMEOUT, FleetErrorCode.FLEET_QUOTA_EXHAUSTED}
+    {
+        FleetErrorCode.FLEET_L3_TIMEOUT,
+        FleetErrorCode.FLEET_QUOTA_EXHAUSTED,
+        FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK,
+    }
 )
 
 

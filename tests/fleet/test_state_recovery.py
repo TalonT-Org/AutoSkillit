@@ -310,3 +310,49 @@ class TestResumeCampaignFromStateDispatchId:
         state_path = tmp_path / "nonexistent.json"
         decision = resume_campaign_from_state(state_path, continue_on_failure=False)
         assert decision is None
+
+
+class TestNoResultBlockResumableEscalation:
+    def test_no_result_block_escalation_to_failure(self, tmp_path: Path) -> None:
+        from autoskillit.core import FleetErrorCode
+        from autoskillit.fleet.state import upsert_dispatch_record_by_name, write_initial_state
+        from autoskillit.fleet.state_recovery import (
+            MAX_CONSECUTIVE_RESUME_ATTEMPTS,
+            resume_campaign_from_state,
+        )
+
+        state_path = tmp_path / "no_result_esc.json"
+        write_initial_state(
+            state_path,
+            campaign_id="test-nrb",
+            campaign_name="test-no-result-block",
+            manifest_path="",
+            dispatches=[DispatchRecord(name="d1")],
+        )
+        history = [
+            {
+                "status": str(DispatchStatus.RESUMABLE),
+                "reason": FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK,
+            }
+            for _ in range(MAX_CONSECUTIVE_RESUME_ATTEMPTS)
+        ]
+        upsert_dispatch_record_by_name(
+            state_path,
+            DispatchRecord(
+                name="d1",
+                status=DispatchStatus.RESUMABLE,
+                dispatch_id="nrb-uuid",
+                dispatched_session_id="nrb-sess",
+                attempt_history=history,
+            ),
+        )
+
+        decision = resume_campaign_from_state(state_path, continue_on_failure=False)
+        assert decision is not None
+        assert decision.next_dispatch_name == ""
+
+        from autoskillit.fleet.state import read_state
+
+        state = read_state(state_path)
+        assert state is not None
+        assert state.dispatches[0].status == DispatchStatus.FAILURE

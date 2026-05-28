@@ -60,12 +60,11 @@ class TestWriteGuardWorktreeIntegration:
         result = _run_hook(event)
         assert result == ""
 
-    def test_worktree_skill_prefix_derivation_includes_worktree_parent(
+    @pytest.mark.anyio
+    async def test_worktree_skill_prefix_derivation_includes_worktree_parent(
         self, tmp_path: Path, tool_ctx_kitchen_open
     ):
         """run_skill for a worktree skill derives both clone and worktree parent prefixes."""
-        import asyncio
-
         from tests.fakes import InMemoryHeadlessExecutor
 
         executor = InMemoryHeadlessExecutor()
@@ -75,12 +74,10 @@ class TestWriteGuardWorktreeIntegration:
 
         from autoskillit.server.tools.tools_execution import run_skill
 
-        asyncio.get_event_loop().run_until_complete(
-            run_skill(
-                skill_command="/autoskillit:implement-worktree-no-merge plan.md",
-                cwd=str(clone_dir),
-                output_dir=".",
-            )
+        await run_skill(
+            skill_command="/autoskillit:implement-worktree-no-merge plan.md",
+            cwd=str(clone_dir),
+            output_dir=".",
         )
         assert len(executor.calls) == 1
         prefixes = executor.calls[0].allowed_write_prefixes
@@ -88,10 +85,11 @@ class TestWriteGuardWorktreeIntegration:
         worktree_parent = str((clone_dir.parent / "worktrees").resolve()) + "/"
         assert worktree_parent in prefixes
 
-    def test_non_worktree_skill_gets_single_prefix(self, tmp_path: Path, tool_ctx_kitchen_open):
+    @pytest.mark.anyio
+    async def test_non_worktree_skill_gets_single_prefix(
+        self, tmp_path: Path, tool_ctx_kitchen_open
+    ):
         """Non-worktree skill gets only the cwd-based prefix."""
-        import asyncio
-
         from tests.fakes import InMemoryHeadlessExecutor
 
         executor = InMemoryHeadlessExecutor()
@@ -101,12 +99,10 @@ class TestWriteGuardWorktreeIntegration:
 
         from autoskillit.server.tools.tools_execution import run_skill
 
-        asyncio.get_event_loop().run_until_complete(
-            run_skill(
-                skill_command="/autoskillit:dry-walkthrough plan.md",
-                cwd=str(clone_dir),
-                output_dir=".",
-            )
+        await run_skill(
+            skill_command="/autoskillit:dry-walkthrough plan.md",
+            cwd=str(clone_dir),
+            output_dir=".",
         )
         assert len(executor.calls) == 1
         prefixes = executor.calls[0].allowed_write_prefixes

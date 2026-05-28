@@ -288,6 +288,7 @@ from .types import TokenFactory as TokenFactory
 from .types import TokenLog as TokenLog
 from .types import ValidatedAddDir as ValidatedAddDir
 from .types import ValidatedWorktreePath as ValidatedWorktreePath
+from .types import WORKTREE_SKILLS as WORKTREE_SKILLS
 from .types import WorkspaceManager as WorkspaceManager
 from .types import WriteBehaviorSpec as WriteBehaviorSpec
 from .types import WriteEvidence as WriteEvidence

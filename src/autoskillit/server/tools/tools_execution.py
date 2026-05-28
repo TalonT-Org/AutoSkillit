@@ -197,6 +197,23 @@ def _clear_run_skill_state(project_dir: Path) -> None:
     clear_run_skill_state(project_dir)
 
 
+def _compute_write_prefixes(
+    write_watch_dirs: list[Path],
+    cwd: str,
+    skill_command: str,
+) -> tuple[str, tuple[str, ...]]:
+    from autoskillit.core import WORKTREE_SKILLS  # noqa: PLC0415
+
+    worktree_write_prefixes: list[str] = []
+    if write_watch_dirs and any(name in skill_command for name in WORKTREE_SKILLS):
+        worktree_parent = (Path(cwd).parent / "worktrees").resolve()
+        worktree_write_prefixes.append(str(worktree_parent) + "/")
+
+    base_prefixes = [str(d.resolve()) + "/" for d in write_watch_dirs]
+    all_prefixes = base_prefixes + worktree_write_prefixes
+    return base_prefixes[0] if base_prefixes else "", tuple(all_prefixes)
+
+
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
 @track_response_size("run_skill")
 async def run_skill(
@@ -453,23 +470,15 @@ async def run_skill(
                 if _default_temp:
                     write_watch_dirs.append(_default_temp)
 
-            from autoskillit.execution.clone_guard import is_worktree_skill  # noqa: PLC0415
-
-            worktree_write_prefixes: list[str] = []
-            if write_watch_dirs and is_worktree_skill(skill_command):
-                worktree_parent = (Path(cwd).parent / "worktrees").resolve()
-                worktree_write_prefixes.append(str(worktree_parent) + "/")
-
             is_read_only = bool(
                 tool_ctx.read_only_resolver and tool_ctx.read_only_resolver(skill_command)
             )
             allowed_write_prefix = ""
             allowed_write_prefixes: tuple[str, ...] = ()
             if write_watch_dirs:
-                base_prefixes = [str(d.resolve()) + "/" for d in write_watch_dirs]
-                all_prefixes = base_prefixes + worktree_write_prefixes
-                allowed_write_prefixes = tuple(all_prefixes)
-                allowed_write_prefix = base_prefixes[0]
+                allowed_write_prefix, allowed_write_prefixes = _compute_write_prefixes(
+                    write_watch_dirs, cwd, skill_command
+                )
             elif is_read_only:
                 _skill_temp_name = target_name or ""
                 if _skill_temp_name:

@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.core import (
+    WORKTREE_SKILLS,
     ContaminationOutcome,
     FailureRecord,
     RetryReason,
@@ -34,15 +35,6 @@ if TYPE_CHECKING:
     from autoskillit.core import AuditLog, SubprocessRunner
 
 logger = get_logger(__name__)
-
-WORKTREE_SKILLS: frozenset[str] = frozenset(
-    {
-        "implement-worktree",
-        "implement-worktree-no-merge",
-        "implement-experiment",
-        "retry-worktree",
-    }
-)
 
 CLONE_COMMIT_SKILLS: frozenset[str] = frozenset(
     {

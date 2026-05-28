@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.core.types import CliSubtype
+from autoskillit.recipe.schema import RecipeIngredient
 from tests.fakes import InMemoryHeadlessExecutor
 from tests.fleet._helpers import (
     _make_completed_clean,
@@ -290,6 +291,9 @@ class TestCompletedCleanPath:
         assert record["reason"] == "my-failure-reason"
 
 
+_SIDECAR_INGREDIENTS = {"issue_urls": RecipeIngredient(description="Issue URLs")}
+
+
 class TestSidecarBasedResultSynthesis:
     @pytest.mark.anyio
     async def test_no_sentinel_with_completed_sidecar_entries_is_not_failure(
@@ -299,7 +303,7 @@ class TestSidecarBasedResultSynthesis:
         from autoskillit.core import DispatchIdentity
         from autoskillit.fleet.sidecar import IssueSidecarEntry, append_sidecar_entry
 
-        _setup_dispatch(tool_ctx, monkeypatch)
+        _setup_dispatch(tool_ctx, monkeypatch, ingredients=_SIDECAR_INGREDIENTS)
 
         fixed_dispatch_id = "aaaabbbb-1111-2222-3333-ffffffffffff"
         _fixed_identity = DispatchIdentity.from_dispatch_id(fixed_dispatch_id)
@@ -336,7 +340,7 @@ class TestSidecarBasedResultSynthesis:
         from autoskillit.core import DispatchIdentity
         from autoskillit.fleet.sidecar import IssueSidecarEntry, append_sidecar_entry
 
-        _setup_dispatch(tool_ctx, monkeypatch)
+        _setup_dispatch(tool_ctx, monkeypatch, ingredients=_SIDECAR_INGREDIENTS)
 
         fixed_dispatch_id = "aaaabbbb-4444-5555-6666-ffffffffffff"
         _fixed_identity = DispatchIdentity.from_dispatch_id(fixed_dispatch_id)
@@ -371,7 +375,7 @@ class TestSidecarBasedResultSynthesis:
         from autoskillit.core import DispatchIdentity
         from autoskillit.fleet.sidecar import IssueSidecarEntry, append_sidecar_entry
 
-        _setup_dispatch(tool_ctx, monkeypatch)
+        _setup_dispatch(tool_ctx, monkeypatch, ingredients=_SIDECAR_INGREDIENTS)
 
         fixed_dispatch_id = "aaaabbbb-7777-8888-9999-ffffffffffff"
         _fixed_identity = DispatchIdentity.from_dispatch_id(fixed_dispatch_id)
@@ -415,7 +419,7 @@ class TestSidecarBasedResultSynthesis:
             _simple_prompt_builder,
         )
 
-        _setup_dispatch(tool_ctx, monkeypatch)
+        _setup_dispatch(tool_ctx, monkeypatch, ingredients=_SIDECAR_INGREDIENTS)
 
         fixed_dispatch_id = "aaaabbbb-cccc-dddd-eeee-ffffffffffff"
         _fixed_identity = DispatchIdentity.from_dispatch_id(fixed_dispatch_id)

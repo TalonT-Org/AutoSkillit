@@ -385,6 +385,7 @@ class DispatchCompleted:
     resume_checkpoint: dict[str, Any] = field(default_factory=dict)
     stderr: str = ""
     elapsed_seconds: float = 0.0
+    health_report: dict[str, Any] | None = None
 
     def to_envelope(self) -> str:
         d: dict[str, Any] = {
@@ -406,6 +407,8 @@ class DispatchCompleted:
             d["l3_parse_error"] = self.l3_parse_error
         if self.resume_checkpoint:
             d["resume_checkpoint"] = self.resume_checkpoint
+        if self.health_report is not None:
+            d["health_report"] = self.health_report
         return json.dumps(d)
 
 

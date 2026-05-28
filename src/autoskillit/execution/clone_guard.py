@@ -410,7 +410,7 @@ async def check_and_revert_clone_contamination(
                 logger.info(
                     "worktree_path_recovered_from_git",
                     recovered_path=recovered,
-                    token_extraction="failed",
+                    extraction_status="failed",
                 )
                 skill_result = dataclasses.replace(skill_result, worktree_path=recovered)
 

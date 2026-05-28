@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from autoskillit.core import SKILL_TOOLS, Severity
 from autoskillit.recipe._analysis import ValidationContext
+from autoskillit.recipe._recipe_composition import _is_ingredient_truthy
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 
@@ -193,4 +194,37 @@ def _check_skip_when_false_on_non_boolean(ctx: ValidationContext) -> list[RuleFi
                 ),
             )
         )
+    return findings
+
+
+@semantic_rule(
+    name="skip-guard-falsy-default",
+    description=(
+        "skip_when_false references an ingredient with a falsy or absent default. "
+        "In interactive cook sessions, this step will be deferred until the user "
+        "provides an override value."
+    ),
+    severity=Severity.WARNING,
+)
+def _check_skip_guard_falsy_default(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if not step.skip_when_false or not step.skip_when_false.startswith("inputs."):
+            continue
+        ingredient_name = step.skip_when_false[len("inputs.") :]
+        ing = ctx.recipe.ingredients.get(ingredient_name)
+        default = ing.default if ing else None
+        if default is None or not _is_ingredient_truthy(str(default)):
+            findings.append(
+                RuleFinding(
+                    rule="skip-guard-falsy-default",
+                    severity=Severity.WARNING,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}': skip_when_false references '{ingredient_name}' "
+                        f"with falsy default {default!r}. In interactive sessions, this step "
+                        f"will be deferred until the user provides an override."
+                    ),
+                )
+            )
     return findings

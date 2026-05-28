@@ -100,3 +100,50 @@ class TestPruneSkippedStepsDeferral:
         assert "review:" in result, "Deferred step block was stripped"
         assert "skip_when_false:" not in result, "skip_when_false line not stripped"
         assert "optional: true" in result, "optional: true must be preserved for deferred steps"
+
+
+@pytest.mark.small
+def test_semantic_rule_flags_falsy_default_skip_guard_ingredients():
+    """A semantic rule must produce a WARNING for skip_when_false ingredients
+    whose default is falsy (or absent). These will cause step deferral in
+    interactive sessions."""
+    from autoskillit.recipe.registry import run_semantic_rules
+
+    recipe = _make_recipe_with_skip_guard("review", "inputs.review_approach", default="false")
+    findings = run_semantic_rules(recipe)
+    skip_guard_findings = [f for f in findings if f.rule == "skip-guard-falsy-default"]
+    assert len(skip_guard_findings) == 1
+    assert skip_guard_findings[0].step_name == "review"
+
+
+@pytest.mark.medium
+@pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "implementation-groups"])
+def test_all_skip_when_false_ingredients_have_deferral_path(recipe_name):
+    """Every recipe ingredient referenced in a skip_when_false guard must
+    appear in deferred_guards when not provided in overrides."""
+    from autoskillit.recipe._api import load_and_validate
+    from autoskillit.recipe._recipe_composition import _is_ingredient_truthy
+
+    result = load_and_validate(recipe_name, ingredient_overrides={}, defer_unresolved=True)
+    deferred = result.get("deferred_guards", [])
+    deferred_ingredients = {g["ingredient"] for g in deferred}
+
+    from autoskillit.core import pkg_root
+    from autoskillit.recipe.io import find_recipe_by_name, load_recipe
+
+    info = find_recipe_by_name(recipe_name, pkg_root() / "recipes")
+    assert info is not None, f"Bundled recipe '{recipe_name}' not found"
+    recipe = load_recipe(info.path)
+
+    for step_name, step in recipe.steps.items():
+        if not step.skip_when_false or not step.skip_when_false.startswith("inputs."):
+            continue
+        ingredient_name = step.skip_when_false[len("inputs.") :]
+        ing = recipe.ingredients.get(ingredient_name)
+        default = ing.default if ing else None
+        if default is None or not _is_ingredient_truthy(str(default)):
+            assert ingredient_name in deferred_ingredients, (
+                f"Ingredient '{ingredient_name}' (step '{step_name}') in recipe "
+                f"'{recipe_name}' has falsy default {default!r} but was not deferred "
+                f"when no override was provided."
+            )

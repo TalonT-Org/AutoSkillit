@@ -48,6 +48,7 @@ from autoskillit.recipe._recipe_composition import (
     _validate_no_dangling_routes,
 )
 from autoskillit.recipe._recipe_ingredients import (
+    DeferredGuard,
     ListRecipesResult,  # noqa: F401
     LoadRecipeResult,
     OpenKitchenResult,  # noqa: F401
@@ -494,7 +495,7 @@ def load_and_validate(
     result["composite_hash"] = recipe.composite_hash if recipe else ""
     result["recipe_version"] = recipe.recipe_version if recipe else None
 
-    _deferred_guard_list: list[Any] = []
+    _deferred_guard_list: list[DeferredGuard] = []
     for _dg_step, _dg_resolved in _skip_resolutions.items() if _skip_resolutions else []:
         if _dg_resolved is None:
             _dg_step_obj = _pre_prune_steps.get(_dg_step)
@@ -512,9 +513,10 @@ def load_and_validate(
                 if _dg_ing_obj is not None and getattr(_dg_ing_obj, "default", None) is not None
                 else None
             )
-            _deferred_guard_list.append(
-                {"step": _dg_step, "ingredient": _dg_ingredient, "default": _dg_default}
-            )
+            if _dg_ingredient is not None:
+                _deferred_guard_list.append(
+                    {"step": _dg_step, "ingredient": _dg_ingredient, "default": _dg_default}
+                )
     if _deferred_guard_list:
         result["deferred_guards"] = _deferred_guard_list
 

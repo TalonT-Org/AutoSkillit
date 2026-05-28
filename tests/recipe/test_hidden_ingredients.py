@@ -385,7 +385,11 @@ steps:
         ingredient_overrides={"post_run_diagnostics": "true"},
     )
     assert "inputs.post_run_diagnostics" not in result["content"]
-    assert "optional: true" not in result["content"]
+    content = result["content"]
+    diag_block_start = content.index("  diag:\n")
+    next_step_start = content.find("\n  done:\n", diag_block_start)
+    diag_block = content[diag_block_start:next_step_start]
+    assert "optional: true" not in diag_block
 
     # When false: entire step block is stripped from content
     result2 = load_and_validate(

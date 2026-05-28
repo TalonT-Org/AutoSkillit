@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from enum import StrEnum
 from pathlib import Path
 
@@ -920,3 +921,57 @@ class TestCodexBuildFoodTruckCmd:
     def test_non_resume_json_present(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)
         assert "--json" in spec.cmd
+
+
+class TestCodexBackendVersion:
+    def test_version_returns_stripped_stdout(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def fake_run(cmd, *, capture_output, text, timeout):
+            result = subprocess.CompletedProcess(cmd, 0)
+            result.stdout = "  1.2.3\n"
+            result.stderr = ""
+            return result
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        assert CodexBackend().version() == "1.2.3"
+
+    def test_version_stderr_fallback_when_stdout_empty(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def fake_run(cmd, *, capture_output, text, timeout):
+            result = subprocess.CompletedProcess(cmd, 0)
+            result.stdout = ""
+            result.stderr = "1.2.3-stderr\n"
+            return result
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        assert CodexBackend().version() == "1.2.3-stderr"
+
+    def test_version_returns_empty_on_timeout(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def fake_run(cmd, *, capture_output, text, timeout):
+            raise subprocess.TimeoutExpired(cmd, timeout)
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        assert CodexBackend().version() == ""
+
+    def test_version_returns_empty_on_oserror(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def fake_run(cmd, *, capture_output, text, timeout):
+            raise OSError("not found")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        assert CodexBackend().version() == ""
+
+    def test_version_delegates_to_version_cmd(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        captured_cmd = None
+
+        def fake_run(cmd, *, capture_output, text, timeout):
+            nonlocal captured_cmd
+            captured_cmd = cmd
+            result = subprocess.CompletedProcess(cmd, 0)
+            result.stdout = "v1"
+            result.stderr = ""
+            return result
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        result = CodexBackend().version()
+        assert captured_cmd == ["codex", "--version"]
+        assert result == "v1"

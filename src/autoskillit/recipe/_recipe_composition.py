@@ -379,9 +379,9 @@ def _resolve_skip_guards_in_content(
     """Apply skip_when_false resolution decisions to the raw YAML content string.
 
     For each resolved step:
-    - Truthy (step kept): strip the skip_when_false line so the step appears mandatory.
-    - Falsy (step pruned): replace the ingredient reference with literal "false" so
-      the LLM evaluates the literal and skips the step without needing ingredient visibility.
+    - Truthy (step kept): strip skip_when_false and optional: true lines so the step
+      appears mandatory.
+    - Falsy (step pruned): strip the entire step block.
     """
     if not resolutions:
         return raw
@@ -392,12 +392,14 @@ def _resolve_skip_guards_in_content(
             continue
         ref = step.skip_when_false
         if not is_truthy:
-            # Strip the entire step block — applies to all falsy resolutions regardless of
-            # whether skip_when_false uses inputs.* or a literal value.
             raw = _strip_step_block(raw, step_name)
             continue
-        # Truthy: strip only the skip_when_false line so the step becomes mandatory.
-        # Only applicable to inputs.* refs (literal values are not surfaced in content).
+        escaped = re.escape(step_name)
+        raw = re.sub(
+            rf"(?m)^(  {escaped}:[ \t]*\n(?:(?:  [ \t][^\n]*|[ \t]*)(?:\n|$))*)",
+            lambda m: re.sub(r"(?m)^[ \t]+optional:[ \t]+(?:true|True)[ \t]*\n", "", m.group(0)),
+            raw,
+        )
         if not ref.startswith("inputs."):
             continue
         ingredient_name = re.escape(ref[len("inputs.") :])

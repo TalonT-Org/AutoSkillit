@@ -36,12 +36,9 @@ def _build_event(tool_name: str, file_path: str) -> dict:
 class TestWriteGuardWorktreeIntegration:
     """Verify write guard + worktree path interaction."""
 
-    @pytest.fixture(autouse=True)
-    def _enable_headless(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-
     def test_worktree_path_denied_with_single_prefix(self, monkeypatch: pytest.MonkeyPatch):
         """Regression lock: single prefix blocks worktree writes."""
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
         monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "/clone/")
         monkeypatch.delenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIXES", raising=False)
         event = _build_event("Edit", "/clone/../worktrees/impl-fix/src/main.py")
@@ -51,6 +48,7 @@ class TestWriteGuardWorktreeIntegration:
 
     def test_worktree_path_allowed_with_multi_prefix(self, monkeypatch: pytest.MonkeyPatch):
         """Multi-prefix allows worktree writes."""
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
         monkeypatch.setenv(
             "AUTOSKILLIT_ALLOWED_WRITE_PREFIXES",
             "/clone/:/parent/worktrees/",
@@ -65,6 +63,7 @@ class TestWriteGuardWorktreeIntegration:
         self, tmp_path: Path, tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
     ):
         """run_skill for a worktree skill derives both clone and worktree parent prefixes."""
+        monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
         from tests.fakes import InMemoryHeadlessExecutor
 
         executor = InMemoryHeadlessExecutor()
@@ -91,6 +90,7 @@ class TestWriteGuardWorktreeIntegration:
         self, tmp_path: Path, tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
     ):
         """Non-worktree skill gets only the cwd-based prefix."""
+        monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
         from tests.fakes import InMemoryHeadlessExecutor
 
         executor = InMemoryHeadlessExecutor()

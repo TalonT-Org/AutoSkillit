@@ -643,10 +643,12 @@ class CodexBackend:
                 text=True,
                 timeout=5,
             )
+            if result.returncode != 0:
+                return ""
             return result.stdout.strip() or result.stderr.strip()
         except subprocess.TimeoutExpired:
             return ""
-        except Exception:
+        except OSError:
             logger.warning("Failed to run %s --version", self.binary_name(), exc_info=True)
             return ""
 

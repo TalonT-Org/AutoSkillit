@@ -165,9 +165,7 @@ class TestMissingRequiredIngredient:
 
 class TestConfigAuthoritativeIngredientInjection:
     @pytest.mark.anyio
-    async def test_config_authoritative_base_branch_injected_at_dispatch(
-        self, tool_ctx, monkeypatch
-    ):
+    async def test_config_authoritative_base_branch_injected_at_dispatch(self, tool_ctx):
         """base_branch with authority='config' is injected from config even when not supplied."""
         from unittest.mock import patch
 
@@ -227,9 +225,7 @@ class TestConfigAuthoritativeIngredientInjection:
         assert captured["ingredients"]["base_branch"] == "develop"
 
     @pytest.mark.anyio
-    async def test_config_authoritative_base_branch_overrides_llm_value(
-        self, tool_ctx, monkeypatch
-    ):
+    async def test_config_authoritative_base_branch_overrides_llm_value(self, tool_ctx):
         """base_branch with authority='config' overrides LLM-supplied value."""
         from unittest.mock import patch
 

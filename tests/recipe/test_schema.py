@@ -672,7 +672,7 @@ def test_recipe_ingredient_authority_default_none() -> None:
     assert ing.authority is None
 
 
-def test_parse_recipe_preserves_authority_field(tmp_path) -> None:
+def test_parse_recipe_preserves_authority_field() -> None:
     """_parse_recipe must pass the authority field through from YAML."""
 
     from autoskillit.recipe.io import _parse_recipe
@@ -693,7 +693,7 @@ def test_parse_recipe_preserves_authority_field(tmp_path) -> None:
     assert recipe.ingredients["base_branch"].authority == "config"
 
 
-def test_parse_recipe_authority_none_when_absent(tmp_path) -> None:
+def test_parse_recipe_authority_none_when_absent() -> None:
     """_parse_recipe must leave authority=None when not declared in YAML."""
     from autoskillit.recipe.io import _parse_recipe
 
@@ -712,7 +712,7 @@ def test_parse_recipe_authority_none_when_absent(tmp_path) -> None:
     assert recipe.ingredients["task"].authority is None
 
 
-def test_parse_recipe_preserves_authority_field_roundtrip(tmp_path) -> None:
+def test_parse_recipe_preserves_authority_field_roundtrip() -> None:
     """authority='config' survives a full parse -> dict -> parse cycle."""
     import dataclasses
 

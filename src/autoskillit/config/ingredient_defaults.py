@@ -6,7 +6,7 @@ import os
 import subprocess
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Protocol
 
 from autoskillit.core import DISPATCH_ID_ENV_VAR, FLEET_MENU_TOOLS, get_logger, is_feature_enabled
 
@@ -163,24 +163,23 @@ def resolve_ingredient_defaults(project_dir: Path) -> dict[str, str]:
     return resolved
 
 
+class _HasAuthority(Protocol):
+    authority: str | None
+
+
 def apply_config_authoritative_overrides(
     effective_ingredients: dict[str, str],
-    recipe_ingredients: Mapping[str, Any],
+    recipe_ingredients: Mapping[str, _HasAuthority],
     project_dir: Path,
 ) -> dict[str, str]:
-    """Unconditionally set config-authoritative ingredient values.
-
-    For each recipe ingredient with authority="config", resolve the value
-    from project config and overwrite whatever the caller supplied.
-    Only injects values for ingredients the recipe actually declares.
-    """
+    """Prevent LLM-supplied values from winning for config-authoritative keys at fleet dispatch."""
     config_keys = [
         key
         for key, ing in recipe_ingredients.items()
         if getattr(ing, "authority", None) == "config"
     ]
     if not config_keys:
-        return effective_ingredients
+        return dict(effective_ingredients)
 
     resolved = resolve_ingredient_defaults(project_dir)
     result = dict(effective_ingredients)
@@ -196,19 +195,6 @@ def apply_config_authoritative_overrides(
     return result
 
 
-_CONFIG_AUTHORITY_KEYS: frozenset[str] = frozenset(
-    {
-        "base_branch",
-        "source_dir",
-        "local_review_rounds",
-        "adversarial_review_level",
-        "post_run_diagnostics",
-        "is_fleet_dispatch",
-        "dispatch_id",
-    }
-)
-
-
 def build_config_authoritative_layer(defaults: dict[str, str]) -> dict[str, str]:
-    """Return the config-authoritative ingredient values from a resolved defaults dict."""
-    return {k: v for k, v in defaults.items() if k in _CONFIG_AUTHORITY_KEYS}
+    """Return the server-authoritative ingredient values from a resolved defaults dict."""
+    return {k: v for k, v in defaults.items() if k in SERVER_AUTHORITATIVE_INGREDIENTS}

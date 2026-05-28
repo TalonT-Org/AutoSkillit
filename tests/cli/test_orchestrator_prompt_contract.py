@@ -207,3 +207,41 @@ class TestFirstActionDirectOpenKitchen:
         first_action = prompt[fa_start:fa_end]
         assert "Bash" not in first_action
         assert "sleep" not in first_action.lower()
+
+
+def test_cook_prompt_skip_guard_parity_with_fleet():
+    """The cook prompt must handle skip_when_false resolution at least as correctly as the
+    fleet prompt — which passes overrides to open_kitchen."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    cook_prompt = _build_orchestrator_prompt("remediation", mcp_prefix="mcp__autoskillit__")
+    cook_has_resolution = (
+        "overrides=" in cook_prompt
+        or "deferred" in cook_prompt.lower()
+        or "resolve" in cook_prompt.lower()
+    )
+    assert cook_has_resolution, (
+        "Fleet prompt passes overrides to open_kitchen but cook prompt has no "
+        "skip-guard resolution mechanism. Steps with skip_when_false defaults of 'false' "
+        "are irreversibly pruned before the user is asked for their preferences."
+    )
+
+
+def test_food_truck_prompt_passes_overrides_to_open_kitchen():
+    """The L2 food truck prompt must pass ingredient overrides to open_kitchen,
+    ensuring skip_when_false guards are resolved with actual values."""
+    from autoskillit.fleet._prompts import _build_food_truck_prompt
+
+    prompt = _build_food_truck_prompt(
+        recipe="remediation",
+        task="test-task",
+        ingredients={"review_approach": "true"},
+        mcp_prefix="mcp__autoskillit__",
+        dispatch_id="test-dispatch-id",
+        campaign_id="test-campaign-id",
+        l3_timeout_sec=600,
+    )
+    assert "overrides=" in prompt, (
+        "Food truck prompt does not pass overrides to open_kitchen. "
+        "Steps guarded by skip_when_false may be irreversibly pruned using defaults."
+    )

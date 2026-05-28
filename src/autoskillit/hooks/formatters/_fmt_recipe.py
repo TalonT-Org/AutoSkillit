@@ -41,6 +41,7 @@ _FMT_LOAD_RECIPE_SUPPRESSED: frozenset[str] = frozenset(
         "composite_hash",  # internal identity metadata
         "recipe_version",  # internal identity metadata
         "stop_step_semantics",  # delivered via open_kitchen response Channel B; not redisplayed
+        "deferred_guards",  # internal deferral metadata; not displayed to agent
     }
 )
 
@@ -179,6 +180,7 @@ _FMT_OPEN_KITCHEN_SUPPRESSED: frozenset[str] = frozenset(
         "recipe_version",  # internal identity metadata
         "stop_step_semantics",  # delivered via open_kitchen Channel B
         "hook_warning",  # edge-case diagnostic; not rendered in standard path
+        "deferred_guards",  # internal deferral metadata; not displayed to agent
     }
 )
 

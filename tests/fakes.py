@@ -391,6 +391,7 @@ class InMemoryRecipeRepository(RecipeRepository):
         ingredient_overrides: dict[str, str] | None = None,
         temp_dir: Path | None = None,
         temp_dir_relpath: str | None = None,
+        defer_unresolved: bool = False,
     ) -> dict[str, Any]:
         self.calls.append(
             {
@@ -402,6 +403,7 @@ class InMemoryRecipeRepository(RecipeRepository):
                 "ingredient_overrides": ingredient_overrides,
                 "temp_dir": temp_dir,
                 "temp_dir_relpath": temp_dir_relpath,
+                "defer_unresolved": defer_unresolved,
             }
         )
         if self._stale:

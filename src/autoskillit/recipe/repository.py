@@ -94,6 +94,7 @@ class DefaultRecipeRepository:
         ingredient_overrides: dict[str, str] | None = None,
         temp_dir: Path | None = None,
         temp_dir_relpath: str | None = None,
+        defer_unresolved: bool = False,
     ) -> dict[str, Any]:
         project_dir = Path(project_dir)
         result = self._get_list(project_dir)
@@ -110,6 +111,7 @@ class DefaultRecipeRepository:
                 ingredient_overrides=ingredient_overrides,
                 temp_dir=temp_dir,
                 temp_dir_relpath=temp_dir_relpath,
+                defer_unresolved=defer_unresolved,
             ),
         )
 

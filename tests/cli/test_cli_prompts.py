@@ -801,3 +801,14 @@ class TestPromptsReExporter:
             mod = importlib.import_module(name)
             assert hasattr(mod, "__all__"), f"{name} missing __all__"
             assert len(mod.__all__) > 0, f"{name}.__all__ is empty"
+
+
+def test_orchestrator_prompt_addresses_skip_guard_resolution():
+    """The cook prompt must instruct the LLM to resolve skip guards after collecting ingredients."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("remediation", mcp_prefix="mcp__autoskillit__")
+    assert "overrides=" in prompt or "resolve" in prompt.lower() or "deferred" in prompt.lower(), (
+        "Cook prompt calls open_kitchen without addressing skip_when_false resolution. "
+        "Steps guarded by skip_when_false will be irreversibly pruned using defaults."
+    )

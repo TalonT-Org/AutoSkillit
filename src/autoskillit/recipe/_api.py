@@ -48,6 +48,7 @@ from autoskillit.recipe._recipe_composition import (
     _validate_no_dangling_routes,
 )
 from autoskillit.recipe._recipe_ingredients import (
+    DeferredGuard,
     ListRecipesResult,  # noqa: F401
     LoadRecipeResult,
     OpenKitchenResult,  # noqa: F401
@@ -185,6 +186,7 @@ def load_and_validate(
     temp_dir: Path | None = None,
     temp_dir_relpath: str | None = None,
     lister: SkillLister | None = None,
+    defer_unresolved: bool = False,
 ) -> LoadRecipeResult:
     """Load a recipe by name and run full validation.
 
@@ -236,6 +238,7 @@ def load_and_validate(
         str(_pdir),
         tuple(sorted(suppressed)) if suppressed else (),
         tuple(sorted(ingredient_overrides.items())) if ingredient_overrides else (),
+        defer_unresolved,
         _exp_types_hash,
         _user_exp_hash,
         _method_traditions_hash,
@@ -289,6 +292,8 @@ def load_and_validate(
     valid = True
     recipe = None
     active_recipe = None
+    _skip_resolutions: dict[str, bool | None] = {}
+    _pre_prune_steps: dict[str, Any] = {}
 
     # Determine recipes_dir from source
     if match.source == RecipeSource.BUILTIN:
@@ -377,7 +382,7 @@ def load_and_validate(
             # Stage: skip_when_false pruning (Python-side evaluation)
             _pre_prune_steps = dict(active_recipe.steps)
             active_recipe, _skip_resolutions = _prune_skipped_steps(
-                active_recipe, ingredient_overrides
+                active_recipe, ingredient_overrides, defer_unresolved
             )
             if _skip_resolutions:
                 raw = _resolve_skip_guards_in_content(raw, _skip_resolutions, _pre_prune_steps)
@@ -489,6 +494,31 @@ def load_and_validate(
     result["content_hash"] = recipe.content_hash if recipe else ""
     result["composite_hash"] = recipe.composite_hash if recipe else ""
     result["recipe_version"] = recipe.recipe_version if recipe else None
+
+    _deferred_guard_list: list[DeferredGuard] = []
+    for _dg_step, _dg_resolved in _skip_resolutions.items() if _skip_resolutions else []:
+        if _dg_resolved is None:
+            _dg_step_obj = _pre_prune_steps.get(_dg_step)
+            _dg_ref = getattr(_dg_step_obj, "skip_when_false", None) if _dg_step_obj else None
+            _dg_ingredient = (
+                _dg_ref[len("inputs.") :] if _dg_ref and _dg_ref.startswith("inputs.") else _dg_ref
+            )
+            _dg_ing_obj = (
+                (active_recipe.ingredients or {}).get(_dg_ingredient)
+                if active_recipe and _dg_ingredient
+                else None
+            )
+            _dg_default = (
+                str(_dg_ing_obj.default)
+                if _dg_ing_obj is not None and getattr(_dg_ing_obj, "default", None) is not None
+                else None
+            )
+            if _dg_ingredient is not None:
+                _deferred_guard_list.append(
+                    {"step": _dg_step, "ingredient": _dg_ingredient, "default": _dg_default}
+                )
+    if _deferred_guard_list:
+        result["deferred_guards"] = _deferred_guard_list
 
     # Write to cache (only when recipe was found and fully processed)
     if match is not None:

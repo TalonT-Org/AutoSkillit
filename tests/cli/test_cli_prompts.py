@@ -812,3 +812,13 @@ def test_orchestrator_prompt_addresses_skip_guard_resolution():
         "Cook prompt calls open_kitchen without addressing skip_when_false resolution. "
         "Steps guarded by skip_when_false will be irreversibly pruned using defaults."
     )
+
+
+def test_build_open_kitchen_prompt_includes_post_dispatch_diagnostics():
+    from autoskillit.cli._prompts_kitchen import _build_open_kitchen_prompt
+
+    prompt = _build_open_kitchen_prompt(DIRECT_PREFIX)
+    assert "health_report" in prompt
+    assert "POST-DISPATCH DIAGNOSTICS" in prompt
+    assert "confirmed_bug" in prompt
+    assert "anomaly" in prompt

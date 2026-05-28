@@ -6,8 +6,9 @@ import functools
 import json
 import os
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from autoskillit.fleet import DispatchOutcome
@@ -18,9 +19,22 @@ from fastmcp.dependencies import CurrentContext
 from autoskillit.core import get_logger
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled, _require_fleet
+from autoskillit.server._misc import resolve_log_dir
 from autoskillit.server._notify import track_response_size
 
 logger = get_logger(__name__)
+
+
+def _read_health_report(diagnostics_log_dir: Path, dispatch_id: str) -> dict[str, Any] | None:
+    """Read the per-dispatch health report JSON written by analyze-pipeline-health."""
+    report_path = diagnostics_log_dir / "health-reports" / f"{dispatch_id}_health_report.json"
+    if not report_path.is_file():
+        return None
+    try:
+        return json.loads(report_path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return None
+
 
 _MAX_CALLER_INSTRUCTIONS_LEN = 2000
 
@@ -352,6 +366,12 @@ async def dispatch_food_truck(
                 continue_on_failure=continue_on_failure,
                 has_dispatch_name=bool(dispatch_name),
             )
+
+        if isinstance(outcome, DispatchCompleted) and outcome.dispatch_id:
+            diag_log_dir = resolve_log_dir(tool_ctx.config.linux_tracing.log_dir)
+            hr = _read_health_report(diag_log_dir, outcome.dispatch_id)
+            if hr is not None:
+                outcome = replace(outcome, health_report=hr)
 
         return outcome.to_envelope()
     except Exception as exc:

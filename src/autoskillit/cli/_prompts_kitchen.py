@@ -42,6 +42,18 @@ def _build_open_kitchen_prompt(mcp_prefix: str) -> str:
         "\"skip review\"), pass it via caller_instructions='<guidance>'.\n"
         "Do NOT call open_kitchen without ingredients_only=True when dispatching "
         "— the full recipe content is unnecessary for dispatch and wastes context.\n"
+        "\n\n"
+        "POST-DISPATCH DIAGNOSTICS:\n"
+        "After dispatch_food_truck returns, check the result envelope for a "
+        '"health_report" field:\n'
+        "- If health_report is absent or null: no diagnostic report was "
+        "generated. Skip this step.\n"
+        "- If health_report.findings is empty or all findings have severity "
+        '"informational": report to the user "Pipeline diagnostics clean '
+        '— no anomalies detected."\n'
+        '- If findings include "confirmed_bug", "regression", or '
+        '"anomaly": display each finding\'s severity, step_group, summary, '
+        "and evidence to the user so they can act on them.\n\n"
         "If the user wants to run a recipe interactively (pipeline execution), "
         f"call {mcp_prefix}open_kitchen(name='<recipe>') without ingredients_only "
         "to receive the full recipe content and orchestration rules.\n\n"

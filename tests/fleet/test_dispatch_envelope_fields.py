@@ -134,3 +134,80 @@ class TestDispatchStatusEnvelopeField:
         result = await _run(tool_ctx)
         assert "dispatch_status" in result
         assert result["dispatch_status"] == "resumable"
+
+
+class TestHealthReportEnvelopeField:
+    def test_envelope_includes_health_report_when_present(self):
+        from autoskillit.fleet import DispatchCompleted, DispatchStatus
+
+        completed = DispatchCompleted(
+            success=True,
+            dispatch_status=DispatchStatus.SUCCESS,
+            dispatch_id="test-id",
+            dispatched_session_id="sess-id",
+            reason="",
+            health_report={"findings": [], "summary": "clean"},
+        )
+        result = json.loads(completed.to_envelope())
+        assert "health_report" in result
+        assert result["health_report"]["summary"] == "clean"
+
+    def test_envelope_omits_health_report_when_none(self):
+        from autoskillit.fleet import DispatchCompleted, DispatchStatus
+
+        completed = DispatchCompleted(
+            success=True,
+            dispatch_status=DispatchStatus.SUCCESS,
+            dispatch_id="test-id",
+            dispatched_session_id="sess-id",
+            reason="",
+        )
+        result = json.loads(completed.to_envelope())
+        assert "health_report" not in result
+
+
+class TestReadHealthReport:
+    def test_returns_parsed_report_when_file_exists(self, tmp_path):
+        reports_dir = tmp_path / "health-reports"
+        reports_dir.mkdir()
+        report = {"kitchen_id": "k1", "dispatch_id": "d1", "findings": [], "summary": "ok"}
+        (reports_dir / "d1_health_report.json").write_text(json.dumps(report))
+        from autoskillit.server.tools.tools_fleet_dispatch import _read_health_report
+
+        result = _read_health_report(tmp_path, "d1")
+        assert result == report
+
+    def test_returns_none_when_file_missing(self, tmp_path):
+        from autoskillit.server.tools.tools_fleet_dispatch import _read_health_report
+
+        result = _read_health_report(tmp_path, "d1")
+        assert result is None
+
+    def test_returns_none_on_malformed_json(self, tmp_path):
+        reports_dir = tmp_path / "health-reports"
+        reports_dir.mkdir()
+        (reports_dir / "d1_health_report.json").write_text("not json")
+        from autoskillit.server.tools.tools_fleet_dispatch import _read_health_report
+
+        result = _read_health_report(tmp_path, "d1")
+        assert result is None
+
+
+class TestHealthReportDispatchEnrichment:
+    def test_dispatch_completed_enriched_with_health_report(self):
+        from dataclasses import replace
+
+        from autoskillit.fleet import DispatchCompleted, DispatchStatus
+
+        original = DispatchCompleted(
+            success=True,
+            dispatch_status=DispatchStatus.SUCCESS,
+            dispatch_id="test-id",
+            dispatched_session_id="sess-id",
+            reason="",
+        )
+        report = {"findings": [{"severity": "anomaly", "summary": "test"}]}
+        enriched = replace(original, health_report=report)
+        envelope = json.loads(enriched.to_envelope())
+        assert envelope["health_report"] == report
+        assert envelope["dispatch_id"] == "test-id"

@@ -8,7 +8,7 @@ clone → get_issue_title → claim_issue → compute_branch
 |
 +-- create_branch → push_merge_target
 |
-group → plan → review (optional)
+group → plan → review_approach (optional)
 |
 ┌────┤ FOR EACH PLAN PART:
 │    verify → implement ↔ [retry_worktree on context limit]

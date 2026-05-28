@@ -210,17 +210,17 @@
         "plan_parts": "${{ result.plan_parts }}"
       },
       "retries": 0,
-      "on_success": "review",
+      "on_success": "review_approach",
       "on_failure": "release_issue_failure",
       "note": "Produces plan in {{AUTOSKILLIT_TEMP}}/make-plan/. Glob plan_dir for *_part_*.md or single plan file. plan_parts context key contains the full ordered list of part files (sorted alphabetically). For a single-part plan, plan_parts has one entry equal to plan_path. REMEDIATION MODE: context.remediation_path is available when the orchestrator re-enters plan from the remediate step; pass it inline in the skill_command rather than as a named with: key. ACCUMULATION: all_plan_paths accumulates across any re-entries to the plan step (e.g. remediation). For a single-pass run, all_plan_paths equals plan_path (the capture block handles this automatically). ISSUE CONTEXT: If inputs.issue_url is a non-empty string, append it to the skill_command so the make-plan skill can detect and fetch the issue itself: \"/autoskillit:make-plan {task}\\n\\nGitHub Issue: {inputs.issue_url}\" The skill detects the URL pattern and calls fetch_github_issue internally. ADVERSARIAL REVIEW LEVEL: If inputs.adversarial_review_level is a non-empty string, append it to the skill_command: \"/autoskillit:make-plan {task}\\n\\nadversarial_review_level={inputs.adversarial_review_level}\"\n"
     },
-    "review": {
+    "review_approach": {
       "tool": "run_skill",
       "model": "",
       "with": {
         "skill_command": "/autoskillit:review-approach ${{ context.plan_path }}",
         "cwd": "${{ context.work_dir }}",
-        "step_name": "review",
+        "step_name": "review_approach",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/review-approach"
       },
       "capture": {

@@ -8,7 +8,7 @@ clone → get_issue_title → claim_issue → compute_branch
 |
 +-- create_branch → push_merge_target
 |
-investigate → rectify → review (optional)
+investigate → rectify → review_approach (optional)
 |
 dry_walkthrough → implement ↔ [retry_worktree on context limit]
 |

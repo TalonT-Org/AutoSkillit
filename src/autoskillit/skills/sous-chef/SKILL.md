@@ -264,7 +264,7 @@ or user says "parallel"). Within each batched round, pipeline steps have two spe
 `push_to_remote`
 
 **Slow steps** — headless sessions that take minutes:
-Any `run_skill` invocation (investigate, implement, audit, review, etc.)
+Any `run_skill` invocation (investigate, implement, audit, review_approach, etc.)
 
 ### Wavefront Scheduling Rule
 

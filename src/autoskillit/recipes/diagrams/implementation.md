@@ -9,7 +9,7 @@
       |
       plan
       |
-      +-- review (optional)
+      +-- review_approach (optional)
       |
  +----+ FOR EACH PLAN PART:
  |    |

@@ -221,7 +221,7 @@ steps:
     capture_list:
       plan_parts: ${{ result.plan_parts }}
     retries: 0
-    on_success: review
+    on_success: review_approach
     on_failure: release_issue_failure
     note: 'Produces plan in {{AUTOSKILLIT_TEMP}}/make-plan/. Glob plan_dir for *_part_*.md
       or single plan file. plan_parts context key contains the full ordered list of
@@ -239,13 +239,13 @@ steps:
       it to the skill_command: "/autoskillit:make-plan {task}\n\nadversarial_review_level={inputs.adversarial_review_level}"
 
       '
-  review:
+  review_approach:
     tool: run_skill
     model: ''
     with:
       skill_command: /autoskillit:review-approach ${{ context.plan_path }}
       cwd: ${{ context.work_dir }}
-      step_name: review
+      step_name: review_approach
       output_dir: '{{AUTOSKILLIT_TEMP}}/review-approach'
     capture:
       review_path: ${{ result.review_path }}

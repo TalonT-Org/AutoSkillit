@@ -244,3 +244,64 @@ def test_skip_when_false_on_required_no_default_no_warning() -> None:
     violations = run_semantic_rules(recipe)
     findings = [v for v in violations if v.rule == "skip-when-false-on-non-boolean"]
     assert findings == []
+
+
+# ---------------------------------------------------------------------------
+# hidden-input-ref-in-template rule tests
+# ---------------------------------------------------------------------------
+
+
+def test_hidden_input_ref_in_template_fires_warning() -> None:
+    """hidden-input-ref-in-template fires WARNING for hidden ${{ inputs.X }} templates."""
+    recipe = Recipe(
+        name="test",
+        description="test",
+        steps={
+            "entry": RecipeStep(tool="run_cmd", on_success="run_diag"),
+            "run_diag": RecipeStep(
+                tool="run_skill",
+                with_args={
+                    "skill_command": "/autoskillit:run-diagnostic ${{ inputs.kitchen_id }}",
+                    "cwd": "/tmp",
+                },
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        },
+        ingredients={
+            "kitchen_id": RecipeIngredient(description="Kitchen ID", default="", hidden=True)
+        },
+        kitchen_rules=["test"],
+    )
+    violations = run_semantic_rules(recipe)
+    findings = [v for v in violations if v.rule == "hidden-input-ref-in-template"]
+    assert len(findings) >= 1
+    assert findings[0].severity == Severity.WARNING
+    assert "kitchen_id" in findings[0].message
+
+
+def test_hidden_input_ref_in_template_visible_ingredient_no_warning() -> None:
+    """hidden-input-ref-in-template does NOT fire for visible ingredient references."""
+    recipe = Recipe(
+        name="test",
+        description="test",
+        steps={
+            "entry": RecipeStep(tool="run_cmd", on_success="do_work"),
+            "do_work": RecipeStep(
+                tool="run_skill",
+                with_args={
+                    "skill_command": "/autoskillit:implement ${{ inputs.task }}",
+                    "cwd": "/tmp",
+                },
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        },
+        ingredients={"task": RecipeIngredient(description="Task to implement", required=True)},
+        kitchen_rules=["test"],
+    )
+    violations = run_semantic_rules(recipe)
+    findings = [v for v in violations if v.rule == "hidden-input-ref-in-template"]
+    assert findings == []

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -423,8 +424,13 @@ def _assert_content_integrity(
         return
     try:
         parsed = load_yaml(raw) or {}
-    except YAMLError:
-        return  # malformed content is caught elsewhere
+    except YAMLError as exc:
+        warnings.warn(
+            f"content integrity check skipped — YAMLError parsing resolved content: {exc}",
+            RuntimeWarning,
+            stacklevel=3,
+        )
+        return
     parsed_steps: dict[str, Any] = parsed.get("steps", {}) or {}
     for step_name, is_truthy in resolutions.items():
         if not is_truthy:

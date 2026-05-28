@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._rule_helpers import _load_dispatch_target
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
-from autoskillit.recipe.schema import RecipeKind
+from autoskillit.recipe.schema import RecipeIngredient, RecipeKind
 
 if TYPE_CHECKING:
     pass
@@ -17,6 +18,17 @@ if TYPE_CHECKING:
 # dispatch task: field), so campaigns that rely on this injection pattern should not
 # be flagged for not explicitly forwarding them in the ingredients block.
 _AUTO_INJECTED_CAMPAIGN_INGREDIENTS: frozenset[str] = frozenset({"task"})
+
+
+def _get_auto_injected_ingredients(
+    recipe_ingredients: Mapping[str, RecipeIngredient],
+) -> frozenset[str]:
+    """Return ingredient keys that are auto-injected by the dispatch engine."""
+    return _AUTO_INJECTED_CAMPAIGN_INGREDIENTS | frozenset(
+        key
+        for key, ing in recipe_ingredients.items()
+        if getattr(ing, "authority", None) == "config"
+    )
 
 
 @semantic_rule(
@@ -77,7 +89,7 @@ def _check_campaign_dangling_ingredient(ctx: ValidationContext) -> list[RuleFind
             continue
         forwarded_keys = set(d.ingredients.keys())
         for ing_name in campaign_ingredients:
-            if ing_name in _AUTO_INJECTED_CAMPAIGN_INGREDIENTS:
+            if ing_name in _get_auto_injected_ingredients(target.ingredients):
                 continue
             if ing_name in target.ingredients and ing_name not in forwarded_keys:
                 findings.append(
@@ -115,9 +127,9 @@ def _check_dispatch_required_ingredient_provided(
         target = _load_dispatch_target(d, ctx.project_dir)
         if target is None:
             continue
-        effective_ingredients = set(d.ingredients.keys())
-        for auto in _AUTO_INJECTED_CAMPAIGN_INGREDIENTS:
-            effective_ingredients.add(auto)
+        effective_ingredients = set(d.ingredients.keys()) | _get_auto_injected_ingredients(
+            target.ingredients
+        )
         for key, ing in target.ingredients.items():
             if ing.required and ing.default is None and key not in effective_ingredients:
                 findings.append(

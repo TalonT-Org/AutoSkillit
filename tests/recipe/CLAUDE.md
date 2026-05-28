@@ -116,6 +116,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_rules_callable_inputs.py` | Tests for callable_inputs semantic validation rule |
 | `test_rules_callable_scope.py` | Tests for callable-requires-scoped-discovery semantic validation rule |
 | `test_rules_campaign.py` | Tests for campaign semantic validation rule |
+| `test_rules_campaign_ingredients.py` | Tests for campaign ingredient validation rules |
 | `test_rules_ci.py` | Tests for CI semantic validation rule |
 | `test_rules_ci_enqueue_gate.py` | Tests for `enqueue-missing-ci-gate` semantic rule |
 | `test_rules_ci_loops.py` | Tests for ci-timed-out-self-loop-unguarded and ci-conflict-path-missing-auto-trigger rules |

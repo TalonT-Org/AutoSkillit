@@ -17,7 +17,8 @@
     "source_dir": {
       "description": "Source repository",
       "required": false,
-      "default": ""
+      "default": "",
+      "authority": "config"
     },
     "run_name": {
       "description": "Run name prefix",
@@ -25,7 +26,8 @@
     },
     "base_branch": {
       "description": "Merge target",
-      "default": ""
+      "default": "",
+      "authority": "config"
     },
     "review_approach": {
       "description": "Research approaches first",
@@ -54,12 +56,14 @@
     "local_review_rounds": {
       "description": "Number of review-resolve cycles to run locally before switching to GitHub-backed review. 0 disables local mode entirely.",
       "type": "integer",
-      "default": "2"
+      "default": "2",
+      "authority": "config"
     },
     "adversarial_review_level": {
       "description": "Controls adversarial review depth in make-plan. \"auto\" estimates complexity and gates agents accordingly. \"full\" always runs all 3 agents. \"none\" skips adversarial review entirely.",
       "default": "auto",
-      "hidden": true
+      "hidden": true,
+      "authority": "config"
     },
     "issue_url": {
       "description": "GitHub issue to close on merge",

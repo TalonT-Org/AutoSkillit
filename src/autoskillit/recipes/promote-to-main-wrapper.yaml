@@ -20,11 +20,13 @@ ingredients:
   base_branch:
     description: "Target branch for the promotion PR. Must be a valid git branch name with no spaces or shell metacharacters."
     default: "main"
+    authority: config
   source_dir:
     description: >-
       Absolute path to the source repository. Required — no default prevents
       silent cwd inheritance from the MCP server when an empty string is passed.
     required: true
+    authority: config
 
 steps:
   promote:

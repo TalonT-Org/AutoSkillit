@@ -461,6 +461,7 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
                 default=inp_data.get("default"),
                 type=inp_data.get("type"),
                 hidden=bool(inp_data.get("hidden", False)),
+                authority=inp_data.get("authority"),
             )
 
     steps: dict[str, RecipeStep] = {}

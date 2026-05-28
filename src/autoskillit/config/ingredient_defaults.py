@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import os
 import subprocess
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Protocol
 
 from autoskillit.core import DISPATCH_ID_ENV_VAR, FLEET_MENU_TOOLS, get_logger, is_feature_enabled
 
@@ -159,3 +161,40 @@ def resolve_ingredient_defaults(project_dir: Path) -> dict[str, str]:
     resolved["dispatch_id"] = os.environ.get(DISPATCH_ID_ENV_VAR, "")
 
     return resolved
+
+
+class _HasAuthority(Protocol):
+    authority: str | None
+
+
+def apply_config_authoritative_overrides(
+    effective_ingredients: dict[str, str],
+    recipe_ingredients: Mapping[str, _HasAuthority],
+    project_dir: Path,
+) -> dict[str, str]:
+    """Prevent LLM-supplied values from winning for config-authoritative keys at fleet dispatch."""
+    config_keys = [
+        key
+        for key, ing in recipe_ingredients.items()
+        if getattr(ing, "authority", None) == "config"
+    ]
+    if not config_keys:
+        return dict(effective_ingredients)
+
+    resolved = resolve_ingredient_defaults(project_dir)
+    result = dict(effective_ingredients)
+    for key in config_keys:
+        if key in resolved:
+            result[key] = resolved[key]
+        else:
+            logger.warning(
+                "config-authority key %r not found in resolved defaults — "
+                "caller-supplied value retained (config-authoritative contract not enforced)",
+                key,
+            )
+    return result
+
+
+def build_config_authoritative_layer(defaults: dict[str, str]) -> dict[str, str]:
+    """Return the server-authoritative ingredient values from a resolved defaults dict."""
+    return {k: v for k, v in defaults.items() if k in SERVER_AUTHORITATIVE_INGREDIENTS}

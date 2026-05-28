@@ -306,9 +306,9 @@ async def test_open_kitchen_injects_hidden_ingredient_overrides(tmp_path, monkey
 
 # 1b
 @pytest.mark.anyio
-async def test_auto_overrides_keys_match_server_authoritative_ingredients(tmp_path, monkeypatch):
-    """_auto_overrides in open_kitchen must contain exactly SERVER_AUTHORITATIVE_INGREDIENTS
-    plus server-only keys (kitchen_id, diagnostics_log_dir) — no more, no less."""
+async def test_config_layer_keys_match_server_authoritative_ingredients(tmp_path, monkeypatch):
+    """build_config_authoritative_layer in open_kitchen must inject exactly
+    SERVER_AUTHORITATIVE_INGREDIENTS plus server-only keys (kitchen_id, diagnostics_log_dir)."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     mock_ctx.enable_components = AsyncMock()
@@ -395,6 +395,112 @@ async def test_open_kitchen_smoke_test_renders_resolved_base_branch(monkeypatch)
     # base_branch row must NOT show the YAML literal "main"
     base_branch_rows = [line for line in ing_table.splitlines() if "base_branch" in line]
     assert base_branch_rows, "base_branch row must appear in ingredients_table"
+    assert all("main" not in row for row in base_branch_rows)
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_config_authority_overrides_caller(tmp_path, monkeypatch):
+    """_config_layer overrides caller-supplied overrides for config-authoritative keys."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+    mock_ctx.recipes = MagicMock()
+    mock_ctx.recipes.load_and_validate.return_value = {
+        "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
+        "valid": True,
+        "suggestions": [],
+        "diagram": None,
+        "ingredients_table": (
+            "--- INGREDIENTS TABLE ---\n  base_branch  develop\n--- END TABLE ---"
+        ),
+    }
+    mock_ctx.recipes.find.return_value = None
+    mock_ctx.config.migration.suppressed = []
+    mock_ctx.kitchen_id = "test-kitchen-abc"
+    mock_ctx.config.linux_tracing.log_dir = ""
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    with patch(
+                        "autoskillit.server.tools.tools_kitchen.resolve_kitchen_id",
+                        return_value="test-kitchen-abc",
+                    ):
+                        with patch(
+                            "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
+                            return_value={
+                                "base_branch": "develop",
+                                "post_run_diagnostics": "false",
+                                "is_fleet_dispatch": "false",
+                                "dispatch_id": "",
+                            },
+                        ):
+                            from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+                            await open_kitchen(
+                                name="demo",
+                                overrides={"base_branch": "main"},
+                                ctx=mock_ctx,
+                            )
+
+    call_kwargs = mock_ctx.recipes.load_and_validate.call_args.kwargs
+    overrides = call_kwargs["ingredient_overrides"]
+    assert overrides["base_branch"] == "develop"
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_with_config_authority_ingredient(monkeypatch):
+    """Full open_kitchen path: config value wins over caller override in rendered output."""
+    import autoskillit.recipe._api_cache as cache_mod
+    from autoskillit.core import pkg_root
+    from autoskillit.recipe.repository import DefaultRecipeRepository
+
+    project_dir = pkg_root().parent.parent
+    monkeypatch.chdir(project_dir)
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", {})
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
+        lambda _: {
+            "base_branch": "develop",
+            "post_run_diagnostics": "false",
+            "is_fleet_dispatch": "false",
+            "dispatch_id": "",
+        },
+    )
+
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.project_dir = project_dir
+    mock_ctx.enable_components = AsyncMock()
+    mock_ctx.quota_refresh_task = None
+    mock_ctx.recipes = DefaultRecipeRepository()
+    mock_ctx.config.migration.suppressed = []
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+                    result_str = await open_kitchen(
+                        name="smoke-test",
+                        overrides={"base_branch": "main"},
+                        ctx=mock_ctx,
+                    )
+
+    parsed = json.loads(result_str)
+    assert parsed["success"] is True
+    ing_table = parsed.get("ingredients_table") or ""
+    assert ing_table, "ingredients_table must be present and non-empty"
+    base_branch_rows = [line for line in ing_table.splitlines() if "base_branch" in line]
+    assert base_branch_rows, "base_branch row must appear in ingredients_table"
+    assert all("develop" in row for row in base_branch_rows), (
+        "base_branch should show 'develop' (config value), not the caller's 'main'"
+    )
     assert all("main" not in row for row in base_branch_rows)
 
 

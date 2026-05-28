@@ -19,10 +19,12 @@ ingredients:
   base_branch:
     description: "Target branch for implementation PRs"
     default: "develop"
+    authority: config
   source_dir:
     description: "Source repository path"
     required: false
     default: ""
+    authority: config
   execution_map:
     description: >-
       Path to pre-computed BEM execution map JSON. When provided (campaign

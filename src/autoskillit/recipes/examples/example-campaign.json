@@ -15,7 +15,8 @@
     "source_dir": {
       "description": "Source repository path",
       "required": false,
-      "default": ""
+      "default": "",
+      "authority": "config"
     }
   },
   "dispatches": [

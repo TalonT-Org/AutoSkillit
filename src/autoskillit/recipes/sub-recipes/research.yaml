@@ -9,8 +9,10 @@ ingredients:
     description: Source repository (inherited from parent recipe context)
     required: false
     default: ""
+    authority: config
   base_branch:
     description: Merge target branch (inherited from parent recipe context)
     default: ""
+    authority: config
 
 steps: {}

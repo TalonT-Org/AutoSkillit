@@ -17,12 +17,14 @@ ingredients:
     description: Source repository
     required: false
     default: ''
+    authority: config
   run_name:
     description: Run name prefix
     default: impl
   base_branch:
     description: Merge target
     default: ''
+    authority: config
   review_approach:
     description: Research approaches first
     default: 'false'
@@ -53,12 +55,14 @@ ingredients:
       GitHub-backed review. 0 disables local mode entirely.
     type: integer
     default: '2'
+    authority: config
   adversarial_review_level:
     description: Controls adversarial review depth in make-plan. "auto" estimates
       complexity and gates agents accordingly. "full" always runs all 3 agents. "none"
       skips adversarial review entirely.
     default: auto
     hidden: true
+    authority: config
   issue_url:
     description: GitHub issue to close on merge
     required: false
@@ -83,6 +87,7 @@ ingredients:
     description: Run diagnostic analysis after pipeline completion
     default: 'false'
     hidden: true
+    authority: config
   kitchen_id:
     description: Kitchen session identifier (auto-injected)
     default: ''
@@ -91,10 +96,12 @@ ingredients:
     description: Whether running as an L2 food truck dispatch (auto-injected)
     default: 'false'
     hidden: true
+    authority: config
   dispatch_id:
     description: Fleet dispatch identifier (auto-injected, empty in non-fleet sessions)
     default: ''
     hidden: true
+    authority: config
   diagnostics_log_dir:
     description: Resolved diagnostics log directory path (auto-injected)
     default: ''

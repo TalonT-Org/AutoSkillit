@@ -13,7 +13,8 @@
     "source_dir": {
       "description": "Source repository",
       "required": false,
-      "default": ""
+      "default": "",
+      "authority": "config"
     },
     "run_name": {
       "description": "Run name prefix",
@@ -22,7 +23,8 @@
     "base_branch": {
       "description": "Branch that PRs target",
       "required": false,
-      "default": ""
+      "default": "",
+      "authority": "config"
     },
     "audit": {
       "description": "Post-merge quality gate",
@@ -35,7 +37,8 @@
     "post_run_diagnostics": {
       "description": "Run diagnostic analysis after pipeline completion",
       "default": "false",
-      "hidden": true
+      "hidden": true,
+      "authority": "config"
     },
     "kitchen_id": {
       "description": "Kitchen session identifier (auto-injected)",
@@ -45,12 +48,14 @@
     "is_fleet_dispatch": {
       "description": "Whether running as an L2 food truck dispatch (auto-injected)",
       "default": "false",
-      "hidden": true
+      "hidden": true,
+      "authority": "config"
     },
     "dispatch_id": {
       "description": "Fleet dispatch identifier (auto-injected, empty in non-fleet sessions)",
       "default": "",
-      "hidden": true
+      "hidden": true,
+      "authority": "config"
     },
     "diagnostics_log_dir": {
       "description": "Resolved diagnostics log directory path (auto-injected)",

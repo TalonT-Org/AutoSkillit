@@ -161,3 +161,320 @@ class TestMissingRequiredIngredient:
         )
 
         assert "task" not in captured["ingredients"]
+
+
+def _setup_config_authority_recipe(tool_ctx, recipe):
+    """Wire tool_ctx with the given Recipe for config-authority injection tests."""
+    from autoskillit.fleet import FleetSemaphore
+    from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
+
+    tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+    repo = InMemoryRecipeRepository()
+    recipe_info = _make_recipe_info("test-recipe")
+    repo.add_recipe("test-recipe", recipe_info)
+    repo.add_full_recipe(recipe_info.path, recipe)
+    tool_ctx.recipes = repo
+    tool_ctx.executor = InMemoryHeadlessExecutor()
+
+
+class TestConfigAuthoritativeIngredientInjection:
+    @pytest.mark.anyio
+    async def test_config_authoritative_base_branch_injected_at_dispatch(self, tool_ctx):
+        """base_branch with authority='config' is injected from config even when not supplied."""
+        from unittest.mock import patch
+
+        from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
+
+        _setup_config_authority_recipe(
+            tool_ctx,
+            Recipe(
+                name="test-recipe",
+                description="test",
+                kind=RecipeKind.STANDARD,
+                ingredients={
+                    "base_branch": RecipeIngredient(
+                        description="Merge target", default="", authority="config"
+                    )
+                },
+            ),
+        )
+        captured = {}
+
+        def _capture_prompt_builder(**kwargs):
+            captured.update(kwargs)
+            return "prompt"
+
+        from autoskillit.fleet._api import execute_dispatch
+
+        with patch(
+            "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
+            return_value={"base_branch": "develop"},
+        ):
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="t",
+                ingredients={},
+                dispatch_name=None,
+                timeout_sec=None,
+                prompt_builder=_capture_prompt_builder,
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
+            )
+
+        assert captured["ingredients"]["base_branch"] == "develop"
+
+    @pytest.mark.anyio
+    async def test_config_authoritative_base_branch_overrides_llm_value(self, tool_ctx):
+        """base_branch with authority='config' overrides LLM-supplied value."""
+        from unittest.mock import patch
+
+        from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
+
+        _setup_config_authority_recipe(
+            tool_ctx,
+            Recipe(
+                name="test-recipe",
+                description="test",
+                kind=RecipeKind.STANDARD,
+                ingredients={
+                    "base_branch": RecipeIngredient(
+                        description="Merge target", default="", authority="config"
+                    )
+                },
+            ),
+        )
+        captured = {}
+
+        def _capture_prompt_builder(**kwargs):
+            captured.update(kwargs)
+            return "prompt"
+
+        from autoskillit.fleet._api import execute_dispatch
+
+        with patch(
+            "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
+            return_value={"base_branch": "develop"},
+        ):
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="t",
+                ingredients={"base_branch": "main"},
+                dispatch_name=None,
+                timeout_sec=None,
+                prompt_builder=_capture_prompt_builder,
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
+            )
+
+        assert captured["ingredients"]["base_branch"] == "develop"
+
+    @pytest.mark.anyio
+    async def test_config_authoritative_injection_skips_undeclared_ingredients(self, tool_ctx):
+        """Config injection only applies to ingredients the recipe declares."""
+        from unittest.mock import patch
+
+        from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
+
+        _setup_config_authority_recipe(
+            tool_ctx,
+            Recipe(
+                name="test-recipe",
+                description="test",
+                kind=RecipeKind.STANDARD,
+                ingredients={
+                    "other_key": RecipeIngredient(description="other", default="x"),
+                },
+            ),
+        )
+        captured = {}
+
+        def _capture_prompt_builder(**kwargs):
+            captured.update(kwargs)
+            return "prompt"
+
+        from autoskillit.fleet._api import execute_dispatch
+
+        with patch(
+            "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
+            return_value={"base_branch": "develop"},
+        ):
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="t",
+                ingredients={},
+                dispatch_name=None,
+                timeout_sec=None,
+                prompt_builder=_capture_prompt_builder,
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
+            )
+
+        assert "base_branch" not in captured["ingredients"]
+
+    @pytest.mark.anyio
+    async def test_config_authoritative_ingredients_injected_for_all_resolved_keys(self, tool_ctx):
+        """All ingredients declared authority='config' receive config values,
+        not just base_branch."""
+        from unittest.mock import patch
+
+        from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
+
+        _setup_config_authority_recipe(
+            tool_ctx,
+            Recipe(
+                name="test-recipe",
+                description="test",
+                kind=RecipeKind.STANDARD,
+                ingredients={
+                    "base_branch": RecipeIngredient(
+                        description="Merge target", default="", authority="config"
+                    ),
+                    "source_dir": RecipeIngredient(
+                        description="Source directory", default="", authority="config"
+                    ),
+                    "local_review_rounds": RecipeIngredient(
+                        description="Review rounds", default="1", authority="config"
+                    ),
+                },
+            ),
+        )
+        captured: dict = {}
+
+        def _capture_prompt_builder(**kwargs):
+            captured.update(kwargs)
+            return "prompt"
+
+        from autoskillit.fleet._api import execute_dispatch
+
+        with patch(
+            "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
+            return_value={
+                "base_branch": "develop",
+                "source_dir": "/repo/src",
+                "local_review_rounds": "3",
+            },
+        ):
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="t",
+                ingredients={},
+                dispatch_name=None,
+                timeout_sec=None,
+                prompt_builder=_capture_prompt_builder,
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
+            )
+
+        assert captured["ingredients"]["base_branch"] == "develop"
+        assert captured["ingredients"]["source_dir"] == "/repo/src"
+        assert captured["ingredients"]["local_review_rounds"] == "3"
+
+    @pytest.mark.anyio
+    async def test_dispatch_with_config_authority_recipe_e2e(self, tool_ctx):
+        """State snapshot written by execute_dispatch records the config-injected base_branch."""
+        import json
+        from unittest.mock import patch
+
+        from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
+
+        _setup_config_authority_recipe(
+            tool_ctx,
+            Recipe(
+                name="test-recipe",
+                description="test",
+                kind=RecipeKind.STANDARD,
+                ingredients={
+                    "base_branch": RecipeIngredient(
+                        description="Merge target", default="", authority="config"
+                    )
+                },
+            ),
+        )
+        from autoskillit.fleet._api import execute_dispatch
+
+        with patch(
+            "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
+            return_value={"base_branch": "develop"},
+        ):
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="t",
+                ingredients={"base_branch": "main"},
+                dispatch_name=None,
+                timeout_sec=None,
+                prompt_builder=lambda **kw: "prompt",
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
+            )
+
+        dispatches_dir = tool_ctx.temp_dir / "dispatches"
+        state_files = list(dispatches_dir.glob("*.json"))
+        assert len(state_files) == 1, f"Expected 1 state file, found {len(state_files)}"
+        state = json.loads(state_files[0].read_text())
+        snapshot = state.get("recipe_snapshot") or {}
+        effective = snapshot.get("effective_ingredients", {})
+        assert effective.get("base_branch") == "develop", (
+            "State snapshot should record config value 'develop', got: "
+            f"{effective.get('base_branch')!r}"
+        )
+
+    @pytest.mark.anyio
+    async def test_config_authoritative_key_absent_from_defaults_retains_caller_value(
+        self, tool_ctx
+    ):
+        """When a config-authority key is absent from resolved defaults, the caller-supplied
+        value is retained and a warning is logged."""
+        from unittest.mock import patch
+
+        import structlog.testing
+
+        from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
+
+        _setup_config_authority_recipe(
+            tool_ctx,
+            Recipe(
+                name="test-recipe",
+                description="test",
+                kind=RecipeKind.STANDARD,
+                ingredients={
+                    "base_branch": RecipeIngredient(
+                        description="Merge target", default="", authority="config"
+                    )
+                },
+            ),
+        )
+        captured: dict = {}
+
+        def _capture_prompt_builder(**kwargs):
+            captured.update(kwargs)
+            return "prompt"
+
+        from autoskillit.fleet._api import execute_dispatch
+
+        with structlog.testing.capture_logs() as cap_logs:
+            with patch(
+                "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
+                return_value={},  # base_branch absent — simulates resolver not returning the key
+            ):
+                await execute_dispatch(
+                    tool_ctx=tool_ctx,
+                    recipe="test-recipe",
+                    task="t",
+                    ingredients={"base_branch": "caller-supplied"},
+                    dispatch_name=None,
+                    timeout_sec=None,
+                    prompt_builder=_capture_prompt_builder,
+                    quota_checker=_no_sleep_quota_checker,
+                    quota_refresher=_noop_quota_refresher,
+                )
+
+        assert captured["ingredients"]["base_branch"] == "caller-supplied"
+        assert any(
+            e.get("log_level") == "warning" and "config-authority key" in e.get("event", "")
+            for e in cap_logs
+        )

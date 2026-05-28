@@ -9,7 +9,7 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.config import resolve_ingredient_defaults
+from autoskillit.config import build_config_authoritative_layer, resolve_ingredient_defaults
 from autoskillit.core import get_logger, temp_dir_display_str
 from autoskillit.pipeline import GATED_TOOLS, UNGATED_TOOLS  # noqa: F401
 from autoskillit.server import mcp
@@ -17,7 +17,6 @@ from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import _apply_triage_gate, resolve_log_dir
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._state import _get_ctx_or_none
-from autoskillit.server.tools._auto_overrides import _build_auto_overrides
 
 logger = get_logger(__name__)
 
@@ -201,12 +200,12 @@ async def load_recipe(
                 return json.dumps({"error": "Server not initialized"})
             suppressed = tool_ctx.config.migration.suppressed
             _defaults = resolve_ingredient_defaults(tool_ctx.project_dir)
-            _auto_overrides = _build_auto_overrides(
-                _defaults,
-                tool_ctx.kitchen_id,
-                str(resolve_log_dir(tool_ctx.config.linux_tracing.log_dir)),
-            )
-            _merged_overrides = {**_auto_overrides, **(overrides or {})}
+            _session_overrides: dict[str, str] = {
+                "kitchen_id": tool_ctx.kitchen_id,
+                "diagnostics_log_dir": str(resolve_log_dir(tool_ctx.config.linux_tracing.log_dir)),
+            }
+            _config_layer = build_config_authoritative_layer(_defaults)
+            _merged_overrides = {**_session_overrides, **(overrides or {}), **_config_layer}
             result = tool_ctx.recipes.load_and_validate(
                 name,
                 tool_ctx.project_dir,

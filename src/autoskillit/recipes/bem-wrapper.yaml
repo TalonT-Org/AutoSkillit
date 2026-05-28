@@ -24,6 +24,7 @@ ingredients:
   base_branch:
     description: "Base branch for dependency analysis"
     default: "develop"
+    authority: config
 
 steps:
   refetch_issues:

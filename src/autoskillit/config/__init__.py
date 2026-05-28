@@ -10,6 +10,8 @@ from autoskillit.config._config_dataclasses import (
 )
 from autoskillit.config.ingredient_defaults import (
     SERVER_AUTHORITATIVE_INGREDIENTS,
+    apply_config_authoritative_overrides,
+    build_config_authoritative_layer,
     iter_display_categories,
     resolve_ingredient_defaults,
 )
@@ -91,6 +93,8 @@ __all__ = [
     "load_config",
     "resolve_ingredient_defaults",
     "SERVER_AUTHORITATIVE_INGREDIENTS",
+    "apply_config_authoritative_overrides",
+    "build_config_authoritative_layer",
     "validate_layer_keys",
     "write_config_layer",
 ]

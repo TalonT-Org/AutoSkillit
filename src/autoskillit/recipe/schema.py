@@ -42,11 +42,16 @@ class RecipeIngredient:
     default: str | None = None
     type: str | None = None
     hidden: bool = False  # When True, excluded from ingredients table shown to agent
+    authority: str | None = None  # "config" → value resolved from project config, not LLM
 
     def __post_init__(self) -> None:
         self.description = self.description.strip().replace("\n", " ")
         if self.default is not None:
             self.default = self.default.strip()
+        if self.authority is not None and self.authority != "config":
+            raise ValueError(
+                f"RecipeIngredient.authority must be None or 'config', got {self.authority!r}"
+            )
 
 
 @dataclass

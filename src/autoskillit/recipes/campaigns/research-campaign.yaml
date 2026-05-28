@@ -28,6 +28,7 @@ ingredients:
     description: Path to the project root
     required: true
     type: absolute_path
+    authority: config
   issue_url:
     description: >-
       Optional URL to an existing GitHub issue describing the research goal.
@@ -36,6 +37,7 @@ ingredients:
   base_branch:
     description: Branch to target for the research PR
     default: "main"
+    authority: config
   review_design:
     description: >-
       When 'true' (the default), run the review-design skill after plan_experiment

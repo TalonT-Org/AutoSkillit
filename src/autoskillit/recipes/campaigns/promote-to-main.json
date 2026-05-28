@@ -17,7 +17,8 @@
   "ingredients": {
     "source_dir": {
       "description": "Source repository path",
-      "required": true
+      "required": true,
+      "authority": "config"
     },
     "batch_branch": {
       "description": "Integration branch to promote",
@@ -25,7 +26,8 @@
     },
     "base_branch": {
       "description": "Target branch for promotion PR",
-      "default": "main"
+      "default": "main",
+      "authority": "config"
     },
     "max_issues_per_l2": {
       "description": "Max issues per L2 food truck",
@@ -40,7 +42,8 @@
     "post_run_diagnostics": {
       "description": "Run diagnostic analysis after pipeline completion",
       "default": "false",
-      "hidden": true
+      "hidden": true,
+      "authority": "config"
     },
     "kitchen_id": {
       "description": "Kitchen session identifier (auto-injected)",

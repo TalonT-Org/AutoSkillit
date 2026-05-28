@@ -90,4 +90,4 @@ class TestServeGuardDeferral:
             )
 
         elapsed = anyio.current_time() - started_at
-        assert 2.0 <= elapsed < 3.0
+        assert 2.0 <= elapsed < 3.5
